@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 440" role="img" aria-labelledby="pack-logo-hero-title pack-logo-hero-desc">
+  <title id="pack-logo-hero-title">Pack by ComplyEaze hero logo</title>
+  <desc id="pack-logo-hero-desc">An illustrated document and download mark beside the Pack wordmark for large marketing placements.</desc>
+  <defs>
+    <linearGradient id="sheet-blue" x1="118" y1="58" x2="398" y2="374" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#D8E9FF"/>
+      <stop offset="0.45" stop-color="#83B8FF"/>
+      <stop offset="1" stop-color="#2F80ED"/>
+    </linearGradient>
+    <linearGradient id="fold-blue" x1="320" y1="72" x2="430" y2="170" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#BEDAFF"/>
+      <stop offset="1" stop-color="#80B4F7"/>
+    </linearGradient>
+    <linearGradient id="download-blue" x1="300" y1="232" x2="432" y2="372" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2F80ED"/>
+      <stop offset="1" stop-color="#1556D8"/>
+    </linearGradient>
+    <linearGradient id="pack-navy" x1="500" y1="112" x2="1052" y2="268" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#082D68"/>
+      <stop offset="1" stop-color="#061943"/>
+    </linearGradient>
+    <filter id="soft-shadow" x="-18%" y="-18%" width="136%" height="150%">
+      <feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#0F4BA3" flood-opacity="0.1"/>
+    </filter>
+    <filter id="text-shadow" x="-4%" y="-8%" width="112%" height="124%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#0B1F4D" flood-opacity="0.08"/>
+    </filter>
+    <style>
+      .document-stroke { stroke: #B4D3FF; stroke-width: 3; }
+      .copy-line { fill: #BCD8FB; }
+      .pack-word { fill: url(#pack-navy); font-family: "Avenir Next", "Helvetica Neue", Arial, sans-serif; font-size: 164px; font-weight: 700; letter-spacing: 1.5px; }
+      .by-word { fill: #5F6F82; font-family: "Avenir Next", "Helvetica Neue", Arial, sans-serif; font-size: 56px; font-weight: 500; letter-spacing: 0; }
+      .brand-word { fill: #2F80ED; font-family: "Avenir Next", "Helvetica Neue", Arial, sans-serif; font-size: 58px; font-weight: 700; letter-spacing: 0; }
+    </style>
+  </defs>
+
+  <g id="document-download-mark" filter="url(#soft-shadow)" transform="translate(24 18) scale(0.94)">
+    <ellipse cx="268" cy="384" rx="160" ry="16" fill="#1C64D1" opacity="0.08"/>
+    <rect x="61" y="140" width="238" height="276" rx="30" transform="rotate(-4 180 278)" fill="url(#sheet-blue)" opacity="0.86"/>
+    <rect x="94" y="106" width="250" height="300" rx="31" transform="rotate(-2 219 256)" fill="#E6F1FF" opacity="0.88" class="document-stroke"/>
+    <path d="M178 66h179l86 86v194c0 18-14 32-32 32H178c-18 0-32-14-32-32V98c0-18 14-32 32-32z" fill="#FFFFFF" class="document-stroke"/>
+    <path d="M357 67v58c0 16 13 29 29 29h57z" fill="url(#fold-blue)"/>
+    <path d="M357 67v58c0 16 13 29 29 29h57" fill="none" stroke="#9FC5FA" stroke-width="2"/>
+    <rect x="192" y="163" width="112" height="12" rx="6" class="copy-line"/>
+    <rect x="192" y="208" width="194" height="12" rx="6" class="copy-line"/>
+    <rect x="192" y="253" width="194" height="12" rx="6" class="copy-line"/>
+    <rect x="192" y="298" width="104" height="12" rx="6" class="copy-line"/>
+    <circle cx="372" cy="330" r="77" fill="url(#download-blue)"/>
+    <circle cx="372" cy="330" r="77" fill="none" stroke="#1F6FE8" stroke-width="2"/>
+    <path d="M372 282v72" fill="none" stroke="#FFFFFF" stroke-width="13" stroke-linecap="round"/>
+    <path d="M342 329l30 30 31-30" fill="none" stroke="#FFFFFF" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M330 374h84" fill="none" stroke="#FFFFFF" stroke-width="13" stroke-linecap="round"/>
+  </g>
+
+  <g id="pack-wordmark" filter="url(#text-shadow)">
+    <text class="pack-word" x="488" y="240">Pack</text>
+    <text class="by-word" x="493" y="322">by</text>
+    <text class="brand-word" x="582" y="322">ComplyEaze</text>
+  </g>
+</svg>
