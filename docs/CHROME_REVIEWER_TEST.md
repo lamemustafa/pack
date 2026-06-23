@@ -8,7 +8,7 @@ GST Portal credentials.
 
 1. Install the unpacked extension from `.output/chrome-mv3`.
 2. Pin Pack and open the popup.
-3. Confirm the popup states that no Axal or ComplyEaze login is required.
+3. Confirm the popup opens without any Axal, ComplyEaze, or Pack account prompt.
 4. Open `Reviewer and local data tools`.
 5. Click `Run local reviewer demo`.
 6. Confirm Chrome downloads a Pack manifest, exception CSV, and synthetic index
@@ -37,4 +37,6 @@ The synthetic demo runs locally in the browser extension. It does not require an
 account, does not collect GST credentials, and does not upload GST documents or
 document contents to ComplyEaze. The live filed-return flow requires the user to
 open and authenticate to GST Portal directly; Pack does not ask reviewers or
-users to share GST credentials with ComplyEaze.
+users to share GST credentials with ComplyEaze. Live GST downloads do not yet
+generate a Pack manifest, exception CSV, or index file; those artifacts are
+limited to the synthetic reviewer demo in this alpha.

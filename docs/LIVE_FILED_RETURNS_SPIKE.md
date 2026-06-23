@@ -71,20 +71,12 @@ not a public launch path.
   Services/Returns menu and click only the fixed, allow-listed filed-returns
   candidate. It does not accept selectors, read form values, collect credentials
   or capture raw HTML.
-- Same-origin authenticated-shell probe: from `fowelcome`, Pack may request the
-  GST filing-snapshot endpoint with the user's existing browser session to
-  classify whether the session appears authenticated from status and content
-  type. It records only safe status signals and does not read or store the
-  response body.
-- Same-origin request-shape observer: content script samples browser performance
-  entries for GST same-origin requests, strips query/hash values, redacts
-  identifier-like path segments and stores only endpoint shapes in session
-  storage.
+- No production request-shape sampling or authenticated filing-snapshot probe:
+  V0 relies on visible page state and the browser download event only.
 - Popup: shows the primary guided download scope first, with only local reviewer
   demo and local-data controls kept behind a disclosure.
-- Keyboard command: `Alt+Shift+P` starts the same guided filed-return flow as
-  the popup's `Start download` button, using the default scope for the current
-  Indian financial year.
+- Keyboard command: disabled for V0. Start live downloads from the popup so the
+  selected FY and period remain visible before any portal action.
 - Fiscal scope: Pack offers filed-return financial years from the current Indian
   financial year back to `2017-18`. For FY `2017-18`, month-level selection
   starts at July because the relevant CGST return provisions took effect on
@@ -169,8 +161,6 @@ Pack should reach filed returns through one of these paths:
 1. Load or reload Pack from `.output/chrome-mv3` in Brave.
 2. Open Pack, keep filing as `GSTR-3B`, choose the financial year and period,
    then click `Start download`.
-   If the popup cannot be opened during local testing, press `Alt+Shift+P`;
-   this triggers the same background runner with the default private test scope.
 3. If no GST tab is available, Pack opens the GST login page. Sign in yourself;
    do not share credentials, OTPs, CAPTCHA responses, cookies or session data.
 4. After login, click `Start download` again. Pack should reuse the highest

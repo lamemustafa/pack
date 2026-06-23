@@ -1,7 +1,7 @@
 # Publication Readiness
 
-This checklist tracks what remains before publishing ComplyEaze Pack as a public
-GitHub repository and submitting the v0 Chrome Web Store package.
+This checklist tracks what remains before moving ComplyEaze Pack from
+open-source alpha to a broader public release and v0 Chrome Web Store package.
 
 ## Current Decision
 
@@ -36,10 +36,10 @@ GitHub repository and submitting the v0 Chrome Web Store package.
 - [x] Built-package verifier checks exact permissions, hosts, CSP, metadata, and
       icons.
 
-### Must Complete Before Public GitHub Launch
+### Must Complete Before Broad Public GitHub Launch
 
-- [ ] Create and configure `lamemustafa/pack`, matching the source metadata and
-      manifest homepage URL.
+- [x] Public repository exists at `lamemustafa/pack`, matching the source
+      metadata and manifest homepage URL.
 - [ ] Confirm `contact@complyeaze.com`, `security@complyeaze.com`, and any
       conduct/privacy contacts are monitored.
 - [ ] Confirm CODEOWNERS points to the right GitHub owner. It currently uses
@@ -50,8 +50,7 @@ GitHub repository and submitting the v0 Chrome Web Store package.
 - [ ] Ensure no `.output`, `.wxt`, `node_modules`, real GST PDFs, GSTIN-bearing
       filenames, portal screenshots, raw network captures, cookies, headers,
       OTPs, CAPTCHA data, or private notes are committed.
-- [ ] Push the verified local `master` branch and create a signed `v0.1.0` tag
-      after final launch verification.
+- [ ] Create a signed `v0.1.0` tag after final launch verification.
 - [ ] Publish release checksum and source commit for the release ZIP.
 
 ## Chrome Web Store Checklist
@@ -123,6 +122,6 @@ or the Government of India.
 ## Not Yet Launch-Ready Until
 
 The codebase can be open-sourced after final scan, contact confirmation, and
-initial commit setup. Chrome Web Store submission should wait for legal review,
-live public policy URLs, exact-ZIP manual QA, privacy declarations, and store
-assets/sign-offs.
+repository hygiene review. Chrome Web Store submission should wait for legal
+review, live public policy URLs, exact-ZIP manual QA, privacy declarations, live
+per-target result/manifest wiring, and store assets/sign-offs.

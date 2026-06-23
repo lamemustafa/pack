@@ -28,6 +28,8 @@ For each release candidate:
 - Confirm all demo data is synthetic and visibly labelled as synthetic.
 - Confirm no source file handles passwords, OTPs, CAPTCHA responses, cookies, or
   session tokens.
+- Confirm the production content script does not sample resource timing entries,
+  send request-shape telemetry, or probe authenticated GST endpoints.
 - Confirm the privacy policy, store declarations, and reviewer instructions
   still match actual runtime behavior.
 

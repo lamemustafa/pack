@@ -14,16 +14,17 @@ V0 is intentionally narrow:
 - no GST document upload in the local-download workflow;
 - no extension analytics or hidden telemetry;
 - exact GST host permissions only;
-- local manifest, index, and exception files for the selected job.
+- live local PDF downloads for selected filed GSTR-3B periods.
 
 ComplyEaze Pack is an independent third-party tool. It is not affiliated with,
 endorsed by, or operated by GSTN, CBIC, or the Government of India.
 
 ## Status
 
-This repository is preparing for the first open-source and Chrome Web Store v0
-release. The extension has a synthetic reviewer demo and a live GSTR-3B download
-path, but public launch still requires the manual gates in
+This public repository is an open-source alpha and is not Chrome Web Store ready.
+The extension has a synthetic reviewer demo and a live GSTR-3B PDF download path,
+but live manifest/index/exception-file generation is not wired yet. Public launch
+still requires the manual gates in
 [docs/PUBLICATION_READINESS.md](docs/PUBLICATION_READINESS.md).
 
 ## Install
@@ -89,7 +90,7 @@ scripts hang or hide failure details.
 ComplyEaze Pack uses WXT, Vite, React, and TypeScript.
 
 - `src/entrypoints/background.ts`: service worker, local demo downloads, and
-  bounded filed-return flow orchestration.
+  bounded filed-return PDF flow orchestration.
 - `src/entrypoints/content.ts`: passive GST context detection.
 - `src/entrypoints/popup`: React popup.
 - `src/entrypoints/options`: React options page.
@@ -101,7 +102,9 @@ ComplyEaze Pack uses WXT, Vite, React, and TypeScript.
 - `scripts/verify-extension-package.mjs`: built-package policy verification.
 
 The future UCP reuse surface is the Pack plan/result/archive-manifest contract,
-not shared credential or session handling.
+not shared credential or session handling. In the current alpha, that contract is
+exercised by the synthetic reviewer demo; the live GST path downloads PDFs and
+does not yet persist per-target `DownloadResult` records or a live manifest.
 
 ## Privacy Invariants
 
