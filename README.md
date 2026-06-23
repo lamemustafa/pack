@@ -36,6 +36,7 @@ Coming soon after Chrome Web Store review and release sign-off.
 ### From Source
 
 ```sh
+nvm use
 corepack enable
 pnpm install --frozen-lockfile
 pnpm exec wxt prepare
