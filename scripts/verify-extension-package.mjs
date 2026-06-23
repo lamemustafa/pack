@@ -102,7 +102,15 @@ const forbiddenBuiltArtifactPatterns = [
   /importScripts\s*\(/,
 ];
 
-const forbiddenPackSourcePatterns = [/session_token/i, /captcha_response/i, /password/i];
+const forbiddenPackSourcePatterns = [
+  /session_token/i,
+  /captcha_response/i,
+  /\bpassword\b/i,
+  /\botp_value\b/i,
+  /\bcookie_jar\b/i,
+  /\bcredential_store\b/i,
+  /\bapi_secret\b/i,
+];
 
 for (const file of await listFiles(outputDir)) {
   if (!/\.(js|json|html|css)$/.test(file)) continue;

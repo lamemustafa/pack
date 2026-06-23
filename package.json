@@ -31,7 +31,7 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "verify:package": "node scripts/verify-extension-package.mjs .output/chrome-mv3",
-    "verify": "prettier --check . && eslint . --max-warnings 0 && tsc --noEmit && vitest run && wxt build && node scripts/verify-extension-package.mjs .output/chrome-mv3",
+    "verify": "wxt prepare && prettier --check . && eslint . --max-warnings 0 && tsc --noEmit && vitest run && wxt build && node scripts/verify-extension-package.mjs .output/chrome-mv3",
     "verify:release": "wxt prepare && prettier --check . && eslint . --max-warnings 0 && tsc --noEmit && vitest run && wxt build && node scripts/verify-extension-package.mjs .output/chrome-mv3 && wxt zip"
   },
   "dependencies": {

@@ -33,7 +33,7 @@ export default defineConfig({
       extension_pages: PACK_EXTENSION_CSP,
     },
     action: {
-      default_title: "ComplyEaze Pack",
+      default_title: PACK_EXTENSION_SHORT_NAME,
     },
     commands: {
       "pack-start-filed-returns-download": {

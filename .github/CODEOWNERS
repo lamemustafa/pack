@@ -3,6 +3,7 @@
 /src/entrypoints/content.ts @complyeaze/pack-security
 /src/background/ @complyeaze/pack-security
 /src/connectors/ @complyeaze/pack-security
+/src/core/ @complyeaze/pack-security
 /src/extension/ @complyeaze/pack-security
 /scripts/ @complyeaze/pack-security
 /wxt.config.ts @complyeaze/pack-security
@@ -13,4 +14,6 @@
 /NOTICE @complyeaze/pack-legal
 /SECURITY.md @complyeaze/pack-security
 /TRADEMARKS.md @complyeaze/pack-legal
+/CONTRIBUTING.md @complyeaze/pack-legal
+/CODE_OF_CONDUCT.md @complyeaze/pack-legal
 /README.md @complyeaze/pack-maintainers
