@@ -16,6 +16,20 @@ export const FILED_RETURNS_MONTHS = [
   "February",
   "March",
 ] as const;
+const CALENDAR_MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+] as const;
 
 export type FiledReturnsMonth = (typeof FILED_RETURNS_MONTHS)[number];
 
@@ -25,8 +39,7 @@ export interface FiledReturnsPeriodOption {
 }
 
 export const DEFAULT_FILED_RETURNS_DOWNLOAD_SCOPE: FiledReturnsDownloadScope = {
-  financialYear: getCurrentIndianFinancialYear(),
-  period: "ALL",
+  ...getDefaultFiledReturnsPeriodScope(),
   returnType: "GSTR-3B",
 };
 
@@ -46,7 +59,7 @@ export function getFiledReturnsPeriodOptions(financialYear: string): FiledReturn
       : FILED_RETURNS_MONTHS;
 
   return [
-    { value: "ALL", label: "Entire financial year" },
+    { value: "ALL", label: "All currently available filed returns" },
     ...months.map((month) => ({ value: month, label: month })),
   ];
 }
@@ -62,7 +75,7 @@ export function normaliseFiledReturnsScope(
     (option) => option.value === scope.period,
   )
     ? scope.period
-    : "ALL";
+    : defaultPeriodForFinancialYear(financialYear);
 
   return {
     financialYear,
@@ -80,13 +93,47 @@ export function isSupportedFiledReturnsScope(input: FiledReturnsDownloadScope): 
   );
 }
 
-function getCurrentIndianFinancialYear(): string {
-  return formatFinancialYear(getIndianFinancialYearStartYear(new Date()));
+function getDefaultFiledReturnsPeriodScope(asOf = new Date()): {
+  financialYear: string;
+  period: FiledReturnsMonth;
+} {
+  const { year, monthIndex } = getIndianDateParts(asOf);
+  const previousMonthIndex = monthIndex === 0 ? 11 : monthIndex - 1;
+  const previousMonthYear = monthIndex === 0 ? year - 1 : year;
+  return {
+    financialYear: formatFinancialYear(
+      getFinancialYearStartYear(previousMonthYear, previousMonthIndex),
+    ),
+    period: CALENDAR_MONTHS[previousMonthIndex] as FiledReturnsMonth,
+  };
 }
 
 function getIndianFinancialYearStartYear(asOf: Date): number {
-  const month = asOf.getMonth();
-  return month >= 3 ? asOf.getFullYear() : asOf.getFullYear() - 1;
+  const { year, monthIndex } = getIndianDateParts(asOf);
+  return getFinancialYearStartYear(year, monthIndex);
+}
+
+function getFinancialYearStartYear(year: number, monthIndex: number): number {
+  return monthIndex >= 3 ? year : year - 1;
+}
+
+function defaultPeriodForFinancialYear(financialYear: string): FiledReturnsMonth {
+  const firstMonth = getFiledReturnsPeriodOptions(financialYear).find(
+    (option): option is FiledReturnsPeriodOption & { value: FiledReturnsMonth } =>
+      option.value !== "ALL",
+  );
+  return firstMonth?.value ?? GST_LAUNCH_MONTH;
+}
+
+function getIndianDateParts(asOf: Date): { year: number; monthIndex: number } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    month: "numeric",
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+  }).formatToParts(asOf);
+  const year = Number(parts.find((part) => part.type === "year")?.value);
+  const month = Number(parts.find((part) => part.type === "month")?.value);
+  return { year, monthIndex: month - 1 };
 }
 
 function formatFinancialYear(startYear: number): string {

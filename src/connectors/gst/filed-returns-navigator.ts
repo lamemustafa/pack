@@ -1,8 +1,6 @@
 import type { PortalNavigationResult } from "../../core/contracts";
 
 const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
-const GST_SERVICES_ORIGIN = "https://services.gst.gov.in";
-const FILING_SNAPSHOT_PROBE_URL = `${GST_SERVICES_ORIGIN}/returns/auth/api/filingsnapshot`;
 const MENU_REVEAL_DELAY_MS = 350;
 const DIALOG_SETTLE_DELAY_MS = 250;
 const MAX_DIALOG_DISMISSALS = 4;
@@ -61,7 +59,7 @@ export async function navigateToFiledReturnsPage(
   const blockedState = detectBlockedPortalState(documentRef);
   if (blockedState) return blockedState;
 
-  const safeSignals = await probeAuthenticatedLanding(documentRef);
+  const safeSignals: string[] = [];
   const dismissedDialogs = await dismissSafePostLoginDialogs(documentRef);
   safeSignals.push(...dismissedDialogs);
 
@@ -482,6 +480,13 @@ function getVisibleDialogRoots(documentRef: Document): HTMLElement[] {
   return dedupeElements(roots);
 }
 
+function getVisiblePostLoginDialogRoots(documentRef: Document): HTMLElement[] {
+  return getVisibleDialogRoots(documentRef).filter((root) => {
+    const text = root.innerText || root.textContent || "";
+    return SAFE_POST_LOGIN_DIALOG_PATTERNS.some((pattern) => pattern.test(text));
+  });
+}
+
 function getKnownPostLoginDialogRoots(documentRef: Document): HTMLElement[] {
   const roots: HTMLElement[] = [];
   const dismissiveElements = getClickableElements(documentRef).filter((element) => {
@@ -505,7 +510,7 @@ function getKnownPostLoginDialogRoots(documentRef: Document): HTMLElement[] {
 }
 
 function getVisibleDialogElements(documentRef: Document): HTMLElement[] {
-  return getVisibleDialogRoots(documentRef).flatMap((root) =>
+  return getVisiblePostLoginDialogRoots(documentRef).flatMap((root) =>
     Array.from(root.querySelectorAll(CLICKABLE_SELECTOR)).filter(
       (element): element is HTMLElement => isHtmlElement(root, element) && isVisible(element),
     ),
@@ -590,35 +595,11 @@ function detectBlockedPortalState(documentRef: Document): PortalNavigationResult
   };
 }
 
-async function probeAuthenticatedLanding(documentRef: Document): Promise<string[]> {
-  const windowRef = documentRef.defaultView;
-  if (!windowRef || windowRef.location.origin !== GST_SERVICES_ORIGIN) return [];
-  if (!/\/services\/auth\/fowelcome$/i.test(windowRef.location.pathname)) return [];
-
-  try {
-    const response = await windowRef.fetch(FILING_SNAPSHOT_PROBE_URL, {
-      credentials: "include",
-      cache: "no-store",
-      headers: {
-        accept: "application/json,text/plain,*/*",
-      },
-    });
-    const statusSignal = `filingsnapshot-status-${response.status}`;
-    const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
-    if (response.ok && !contentType.includes("text/html")) {
-      return ["auth-landing-probe-ok", statusSignal];
-    }
-    return ["auth-landing-probe-blocked", statusSignal];
-  } catch {
-    return ["auth-landing-probe-unavailable"];
-  }
-}
-
 function isVisible(element: HTMLElement): boolean {
   const style = element.ownerDocument.defaultView?.getComputedStyle(element);
   if (!style || style.display === "none" || style.visibility === "hidden") return false;
   const rect = element.getBoundingClientRect();
-  return rect.width > 0 || rect.height > 0 || element.offsetParent !== null || style.display !== "";
+  return rect.width > 0 || rect.height > 0 || element.offsetParent !== null;
 }
 
 function isHtmlElement(root: ParentNode, element: Element): element is HTMLElement {

@@ -77,8 +77,8 @@ describe("message boundary", () => {
           },
         ],
       }),
-    ).toBe(true);
-    expect(isPackMessage({ type: "PACK_GET_FILED_RETURNS_REQUEST_SHAPES" })).toBe(true);
+    ).toBe(false);
+    expect(isPackMessage({ type: "PACK_GET_FILED_RETURNS_REQUEST_SHAPES" })).toBe(false);
     expect(isPackMessage({ type: "PACK_RUN_SELECTOR", selector: "input[type=password]" })).toBe(
       false,
     );

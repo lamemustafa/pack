@@ -37,15 +37,6 @@ export default defineConfig({
       default_icon: PACK_EXTENSION_ACTION_DEFAULT_ICON,
       default_title: PACK_EXTENSION_SHORT_NAME,
     },
-    commands: {
-      "pack-start-filed-returns-download": {
-        suggested_key: {
-          default: "Alt+Shift+P",
-          mac: "Alt+Shift+P",
-        },
-        description: "Start Pack filed-return download",
-      },
-    },
     options_ui: {
       page: "options.html",
       open_in_tab: true,

@@ -1,10 +1,10 @@
 import { browser } from "wxt/browser";
+import { GST_CONNECTOR_DESCRIPTOR } from "../connectors/gst/constants";
 import { pickSupportedGstPortalTab } from "../connectors/gst/hosts";
 import type {
   FiledReturnsDownloadScope,
   FiledReturnsFlowSummary,
   PortalFlowStepResult,
-  PortalRequestShape,
 } from "../core/contracts";
 import type { PackMessage, PackMessageResponse } from "../core/messages";
 import {
@@ -21,16 +21,16 @@ const MAX_FLOW_STEP_MESSAGE_ATTEMPTS = 8;
 const MAX_FLOW_STEPS = 6;
 const MAX_FINANCIAL_YEAR_FLOW_STEPS = 80;
 const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
+const EXPECTED_FILED_RETURN_DOWNLOAD = {
+  expectedFileExtensions: [".pdf"],
+  expectedMimeTypes: ["application/pdf"],
+  expectedOrigins: GST_CONNECTOR_DESCRIPTOR.supportedOrigins,
+};
 
 export type ActiveGstTab = Browser.tabs.Tab & { id: number };
 
 export interface FiledReturnsFlowRunnerDeps {
   getActiveGstTab: () => Promise<ActiveGstTab | null>;
-  mergeRequestShapes: (
-    previous: readonly PortalRequestShape[],
-    incoming: readonly PortalRequestShape[],
-  ) => PortalRequestShape[];
-  readSessionValue: <T>(key: string) => Promise<T | null>;
   sendMessageToTabWithInjection: (
     tabId: number,
     message: Extract<
@@ -43,7 +43,6 @@ export interface FiledReturnsFlowRunnerDeps {
   storageKeys: {
     completion: string;
     observation: string;
-    requestShapes: string;
   };
 }
 
@@ -77,7 +76,7 @@ export async function startFiledReturnsDownloadFlow(
     ? MAX_FINANCIAL_YEAR_FLOW_STEPS
     : MAX_FLOW_STEPS;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    const downloadObservation = observeNextBrowserDownload(browser.downloads);
+    const downloadObservation = observeFiledReturnDownload();
     const stepScope = isEntireFinancialYearScope(scope)
       ? { ...scope, completedPeriods: [...completedPeriods] }
       : scope;
@@ -102,7 +101,7 @@ export async function startFiledReturnsDownloadFlow(
       downloadObservation.stop();
       await delay(RESULT_ROW_NAVIGATION_SETTLE_MS);
 
-      const detailDownloadObservation = observeNextBrowserDownload(browser.downloads);
+      const detailDownloadObservation = observeFiledReturnDownload();
       const triggerResponse = await runDownloadTriggerWithRetry(deps, activeTab.tab.id);
       if (!triggerResponse.ok || !("downloadTrigger" in triggerResponse)) {
         detailDownloadObservation.stop();
@@ -143,6 +142,7 @@ export async function startFiledReturnsDownloadFlow(
         flowStep: mergeFlowStepWithDownloadObservation(lastStep, observedDownload),
       };
       if (!isEntireFinancialYearScope(scope)) return mergedResponse;
+      if (mergedResponse.flowStep.state !== "downloaded") return mergedResponse;
 
       if (activePeriod) completedPeriods.add(activePeriod);
       activePeriod = null;
@@ -158,6 +158,7 @@ export async function startFiledReturnsDownloadFlow(
         flowStep: mergeFlowStepWithDownloadObservation(lastStep, observedDownload),
       };
       if (!isEntireFinancialYearScope(scope)) return mergedResponse;
+      if (mergedResponse.flowStep.state !== "downloaded") return mergedResponse;
 
       if (activePeriod) completedPeriods.add(activePeriod);
       activePeriod = null;
@@ -182,6 +183,13 @@ export async function startFiledReturnsDownloadFlow(
         "Pack started the filed-return flow but did not reach the download step yet. Wait for the GST portal to finish loading, then click Start download again.",
     },
   };
+}
+
+function observeFiledReturnDownload() {
+  return observeNextBrowserDownload(browser.downloads, {
+    ...EXPECTED_FILED_RETURN_DOWNLOAD,
+    armedAt: new Date(),
+  });
 }
 
 async function runDownloadTriggerWithRetry(
@@ -285,14 +293,6 @@ async function persistFlowResponse(
   if ("observation" in response && response.observation) {
     await browser.storage.session.set({
       [deps.storageKeys.observation]: response.observation,
-    });
-  }
-
-  if ("requestShapes" in response && response.requestShapes) {
-    const previous =
-      (await deps.readSessionValue<PortalRequestShape[]>(deps.storageKeys.requestShapes)) ?? [];
-    await browser.storage.session.set({
-      [deps.storageKeys.requestShapes]: deps.mergeRequestShapes(previous, response.requestShapes),
     });
   }
 }

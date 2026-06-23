@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_FILED_RETURNS_DOWNLOAD_SCOPE,
   getFiledReturnsFinancialYearOptions,
   getFiledReturnsPeriodOptions,
   isSupportedFiledReturnsScope,
@@ -46,9 +47,22 @@ describe("filed returns GST scope", () => {
       }),
     ).toEqual({
       financialYear: "2017-18",
-      period: "ALL",
+      period: "July",
       returnType: "GSTR-3B",
     });
+  });
+
+  it("defaults to a single completed Indian filing month instead of all periods", () => {
+    expect(DEFAULT_FILED_RETURNS_DOWNLOAD_SCOPE).toMatchObject({
+      period: expect.not.stringMatching(/^ALL$/),
+      returnType: "GSTR-3B",
+    });
+  });
+
+  it("uses India Standard Time around financial-year boundaries", () => {
+    expect(getFiledReturnsFinancialYearOptions(new Date("2026-03-31T20:00:00.000Z"))[0]).toBe(
+      "2026-27",
+    );
   });
 
   it("rejects unsupported fiscal years and months", () => {

@@ -12,6 +12,7 @@ import {
   findDialogDismissalCandidateIndex,
   findFiledReturnsNavigationCandidateIndex,
   findReturnDashboardCandidateIndex,
+  navigateToFiledReturnsPage,
   scoreFiledReturnsSummaryModalDismissalCandidate,
   scoreDialogDismissalCandidate,
   scoreFiledReturnsNavigationCandidate,
@@ -90,6 +91,48 @@ describe("filed returns navigation matcher", () => {
     expect(signals).toEqual(expect.arrayContaining(["dialog-remind-later"]));
     expect(remindClicked).toBe(1);
     expect(profileClicked).toBe(0);
+  });
+
+  it("does not dismiss unrelated visible post-login modals", async () => {
+    const documentRef = createDocument(`
+      <div class="modal show" style="display:block">
+        <h2>Unrelated portal operation</h2>
+        <button>Cancel</button>
+      </div>
+    `);
+    let cancelClicked = 0;
+    documentRef.querySelector("button")?.addEventListener("click", () => {
+      cancelClicked += 1;
+    });
+
+    const signals = await dismissSafePostLoginDialogs(documentRef);
+
+    expect(signals).toEqual([]);
+    expect(cancelClicked).toBe(0);
+  });
+
+  it("does not call authenticated GST snapshot probes during navigation", async () => {
+    const documentRef = createDocument(
+      `
+      <main>
+        <a>View Filed Returns</a>
+      </main>
+    `,
+      "https://services.gst.gov.in/services/auth/fowelcome",
+    );
+    const fetchCalls: string[] = [];
+    Object.defineProperty(documentRef.defaultView, "fetch", {
+      configurable: true,
+      value: async (url: string) => {
+        fetchCalls.push(url);
+        return { headers: new Headers(), ok: true, status: 200 };
+      },
+    });
+
+    const result = await navigateToFiledReturnsPage(documentRef);
+
+    expect(result.state).toBe("clicked");
+    expect(fetchCalls).toEqual([]);
   });
 
   it("finds the return dashboard entry before broader return actions", () => {
@@ -246,8 +289,26 @@ describe("filed returns navigation matcher", () => {
   });
 });
 
-function createDocument(body: string): Document {
-  return new JSDOM(`<!doctype html><html><body>${body}</body></html>`, {
+function createDocument(
+  body: string,
+  url = "https://return.gst.gov.in/returns/auth/gstr3b",
+): Document {
+  const dom = new JSDOM(`<!doctype html><html><body>${body}</body></html>`, {
     pretendToBeVisual: true,
-  }).window.document;
+  });
+  (dom as unknown as { reconfigure(options: { url: string }): void }).reconfigure({ url });
+  const windowRef = dom.window as unknown as Window & typeof globalThis;
+  windowRef.HTMLElement.prototype.getBoundingClientRect = () =>
+    ({
+      bottom: 10,
+      height: 10,
+      left: 0,
+      right: 10,
+      top: 0,
+      width: 10,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    }) as DOMRect;
+  return dom.window.document;
 }

@@ -7,11 +7,7 @@ import {
   navigateToFiledReturnsPage,
 } from "../connectors/gst/filed-returns-navigator";
 import { observeFiledReturnsPageText } from "../connectors/gst/filed-returns-observer";
-import { createSafeRequestShapes } from "../connectors/gst/request-shape-observer";
 import { isPackMessage, type PackMessageResponse } from "../core/messages";
-
-const REQUEST_SHAPE_SAMPLE_COUNT = 20;
-const REQUEST_SHAPE_SAMPLE_INTERVAL_MS = 1_500;
 
 export default defineContentScript({
   matches: [
@@ -33,7 +29,6 @@ export default defineContentScript({
 
     if (context.pageKind === "gst-filed-returns") {
       sendFiledReturnsObservation();
-      startFiledReturnsRequestShapeSampling();
     }
 
     browser.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
@@ -58,12 +53,10 @@ export default defineContentScript({
       if (message.type === "PACK_REFRESH_FILED_RETURNS_OBSERVATION") {
         void dismissKnownFiledReturnsSummaryModal(document)
           .then(() => {
-            const requestShapes = getFiledReturnsRequestShapes();
-            const observation = sendFiledReturnsObservation(requestShapes);
+            const observation = sendFiledReturnsObservation();
             sendResponse({
               ok: true,
               observation,
-              requestShapes,
             } satisfies PackMessageResponse);
           })
           .catch((error: unknown) =>
@@ -81,13 +74,11 @@ export default defineContentScript({
       if (message.type === "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD") {
         void triggerFiledGstr3bFiledPdfDownload(document)
           .then((downloadTrigger) => {
-            const requestShapes = getFiledReturnsRequestShapes();
-            const observation = sendFiledReturnsObservation(requestShapes);
+            const observation = sendFiledReturnsObservation();
             sendResponse({
               ok: true,
               downloadTrigger,
               observation,
-              requestShapes,
             } satisfies PackMessageResponse);
           })
           .catch((error: unknown) =>
@@ -103,13 +94,11 @@ export default defineContentScript({
       if (message.type === "PACK_RUN_FILED_RETURNS_DOWNLOAD_STEP") {
         void runFiledReturnsDownloadStep(document, message.payload)
           .then((flowStep) => {
-            const requestShapes = getFiledReturnsRequestShapes();
-            const observation = sendFiledReturnsObservation(requestShapes);
+            const observation = sendFiledReturnsObservation();
             sendResponse({
               ok: true,
               flowStep,
               observation,
-              requestShapes,
             } satisfies PackMessageResponse);
           })
           .catch((error: unknown) =>
@@ -127,10 +116,9 @@ export default defineContentScript({
   },
 });
 
-function sendFiledReturnsObservation(requestShapes = getFiledReturnsRequestShapes()) {
+function sendFiledReturnsObservation() {
   const observation = observeFiledReturnsPageText(document.body.innerText, {
     pathname: window.location.pathname,
-    requestPathShapes: requestShapes.map((shape) => shape.pathShape),
   });
 
   void browser.runtime
@@ -142,44 +130,4 @@ function sendFiledReturnsObservation(requestShapes = getFiledReturnsRequestShape
       // Service workers can be unavailable during extension reload.
     });
   return observation;
-}
-
-function startFiledReturnsRequestShapeSampling() {
-  let remaining = REQUEST_SHAPE_SAMPLE_COUNT;
-  const send = () => {
-    const requestShapes = getFiledReturnsRequestShapes();
-
-    if (requestShapes.length > 0) {
-      void browser.runtime
-        .sendMessage({
-          type: "PACK_FILED_RETURNS_REQUEST_SHAPES",
-          payload: requestShapes,
-        })
-        .catch(() => {
-          // Service workers can be unavailable during extension reload.
-        });
-    }
-    sendFiledReturnsObservation();
-  };
-
-  send();
-  const timer = window.setInterval(() => {
-    remaining -= 1;
-    send();
-    if (remaining <= 0) window.clearInterval(timer);
-  }, REQUEST_SHAPE_SAMPLE_INTERVAL_MS);
-}
-
-function getFiledReturnsRequestShapes() {
-  return createSafeRequestShapes(
-    performance.getEntriesByType("resource").map((entry) => {
-      const resourceEntry = entry as PerformanceResourceTiming;
-      return {
-        name: entry.name,
-        initiatorType: resourceEntry.initiatorType,
-        startTime: entry.startTime,
-      };
-    }),
-    window.location.origin,
-  );
 }

@@ -11,7 +11,6 @@ import type {
   FiledReturnsFlowSummary,
   PortalContext,
   PortalObservation,
-  PortalRequestShape,
 } from "../core/contracts";
 import { createArchiveManifest } from "../core/manifest";
 import { isPackMessage, type PackMessage, type PackMessageResponse } from "../core/messages";
@@ -19,17 +18,14 @@ import {
   startFiledReturnsDownloadFlow,
   type ActiveGstTab,
 } from "../background/filed-returns-flow-runner";
-import { DEFAULT_FILED_RETURNS_DOWNLOAD_SCOPE } from "../core/filed-returns-scope";
 
 const LAST_CONTEXT_KEY = "pack:last-context";
 const LAST_FILED_RETURNS_OBSERVATION_KEY = "pack:last-filed-returns-observation";
-const LAST_FILED_RETURNS_REQUEST_SHAPES_KEY = "pack:last-filed-returns-request-shapes";
 const LAST_FILED_RETURNS_FLOW_SUMMARY_KEY = "pack:last-filed-returns-flow-summary";
 const LAST_MANIFEST_KEY = "pack:last-manifest";
 const CONTENT_SCRIPT_FILE = "/content-scripts/content.js";
 const PRODUCT_VERSION = "0.1.0";
 const OFFICIAL_URL = "https://pack.complyeaze.com";
-const START_FILED_RETURNS_COMMAND = "pack-start-filed-returns-download";
 
 export default defineBackground(() => {
   browser.runtime.onInstalled.addListener(() => {
@@ -53,19 +49,6 @@ export default defineBackground(() => {
       );
     return true;
   });
-
-  browser.commands.onCommand.addListener((command) => {
-    if (command !== START_FILED_RETURNS_COMMAND) return;
-    void handleMessage(
-      {
-        type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",
-        payload: DEFAULT_FILED_RETURNS_DOWNLOAD_SCOPE,
-      } satisfies PackMessage,
-      {
-        id: browser.runtime.id,
-      },
-    ).catch(() => undefined);
-  });
 });
 
 async function handleMessage(
@@ -85,14 +68,6 @@ async function handleMessage(
       await browser.storage.session.set({ [LAST_FILED_RETURNS_OBSERVATION_KEY]: message.payload });
       return { ok: true, observation: message.payload };
     }
-    case "PACK_FILED_RETURNS_REQUEST_SHAPES": {
-      if (sender.id !== browser.runtime.id) return { ok: false, error: "Invalid Pack sender." };
-      const previous =
-        (await readSessionValue<PortalRequestShape[]>(LAST_FILED_RETURNS_REQUEST_SHAPES_KEY)) ?? [];
-      const merged = mergeRequestShapes(previous, message.payload);
-      await browser.storage.session.set({ [LAST_FILED_RETURNS_REQUEST_SHAPES_KEY]: merged });
-      return { ok: true, requestShapes: merged };
-    }
     case "PACK_GET_CONTEXT":
       return { ok: true, context: await readSessionValue<PortalContext>(LAST_CONTEXT_KEY) };
     case "PACK_GET_FILED_RETURNS_OBSERVATION":
@@ -108,24 +83,13 @@ async function handleMessage(
           LAST_FILED_RETURNS_FLOW_SUMMARY_KEY,
         ),
       };
-    case "PACK_GET_FILED_RETURNS_REQUEST_SHAPES":
-      await refreshActiveFiledReturnsObservation();
-      return {
-        ok: true,
-        requestShapes:
-          (await readSessionValue<PortalRequestShape[]>(LAST_FILED_RETURNS_REQUEST_SHAPES_KEY)) ??
-          [],
-      };
     case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
       return startFiledReturnsDownloadFlow(message.payload, {
         getActiveGstTab,
-        mergeRequestShapes,
-        readSessionValue,
         sendMessageToTabWithInjection,
         storageKeys: {
           completion: LAST_FILED_RETURNS_FLOW_SUMMARY_KEY,
           observation: LAST_FILED_RETURNS_OBSERVATION_KEY,
-          requestShapes: LAST_FILED_RETURNS_REQUEST_SHAPES_KEY,
         },
       });
     case "PACK_START_SYNTHETIC_DEMO":
@@ -154,14 +118,6 @@ async function refreshActiveFiledReturnsObservation(): Promise<void> {
   if ("observation" in response && response.observation) {
     await browser.storage.session.set({
       [LAST_FILED_RETURNS_OBSERVATION_KEY]: response.observation,
-    });
-  }
-
-  if ("requestShapes" in response && response.requestShapes) {
-    const previous =
-      (await readSessionValue<PortalRequestShape[]>(LAST_FILED_RETURNS_REQUEST_SHAPES_KEY)) ?? [];
-    await browser.storage.session.set({
-      [LAST_FILED_RETURNS_REQUEST_SHAPES_KEY]: mergeRequestShapes(previous, response.requestShapes),
     });
   }
 }
@@ -194,13 +150,19 @@ async function sendMessageToTabWithInjection(
 ): Promise<PackMessageResponse> {
   try {
     return (await browser.tabs.sendMessage(tabId, message)) as PackMessageResponse;
-  } catch {
+  } catch (error) {
+    if (!isMissingReceivingEndError(error)) throw error;
     await browser.scripting.executeScript({
       files: [CONTENT_SCRIPT_FILE],
       target: { tabId },
     });
     return browser.tabs.sendMessage(tabId, message) as Promise<PackMessageResponse>;
   }
+}
+
+function isMissingReceivingEndError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /receiving end does not exist|could not establish connection/i.test(message);
 }
 
 async function startSyntheticDemo(): Promise<PackMessageResponse> {
@@ -251,15 +213,4 @@ function base64Encode(value: string): string {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary);
-}
-
-function mergeRequestShapes(
-  previous: readonly PortalRequestShape[],
-  incoming: readonly PortalRequestShape[],
-): PortalRequestShape[] {
-  const dedupe = new Map<string, PortalRequestShape>();
-  for (const shape of [...previous, ...incoming]) {
-    dedupe.set(`${shape.origin}|${shape.pathShape}|${shape.initiatorType}`, shape);
-  }
-  return [...dedupe.values()].slice(-80);
 }

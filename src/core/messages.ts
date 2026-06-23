@@ -7,18 +7,15 @@ import type {
   PortalFlowStepResult,
   PortalNavigationResult,
   PortalObservation,
-  PortalRequestShape,
 } from "./contracts";
 import { isSupportedFiledReturnsScope } from "./filed-returns-scope";
 
 export type PackMessage =
   | { type: "PACK_CONTENT_CONTEXT"; payload: PortalContext }
   | { type: "PACK_FILED_RETURNS_OBSERVATION"; payload: PortalObservation }
-  | { type: "PACK_FILED_RETURNS_REQUEST_SHAPES"; payload: PortalRequestShape[] }
   | { type: "PACK_GET_CONTEXT" }
   | { type: "PACK_GET_FILED_RETURNS_OBSERVATION" }
   | { type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" }
-  | { type: "PACK_GET_FILED_RETURNS_REQUEST_SHAPES" }
   | { type: "PACK_REFRESH_FILED_RETURNS_OBSERVATION" }
   | { type: "PACK_NAVIGATE_FILED_RETURNS" }
   | { type: "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD" }
@@ -33,22 +30,18 @@ export type PackMessageResponse =
   | {
       ok: true;
       observation: PortalObservation | null;
-      requestShapes?: PortalRequestShape[];
     }
-  | { ok: true; requestShapes: PortalRequestShape[] }
   | { ok: true; navigation: PortalNavigationResult }
   | {
       ok: true;
       downloadTrigger: PortalDownloadTriggerResult;
       observation?: PortalObservation | null;
-      requestShapes?: PortalRequestShape[];
     }
   | {
       ok: true;
       flowStep: PortalFlowStepResult;
       flowSummary?: FiledReturnsFlowSummary;
       observation?: PortalObservation | null;
-      requestShapes?: PortalRequestShape[];
     }
   | { ok: true; flowSummary: FiledReturnsFlowSummary | null }
   | { ok: true; manifest: ArchiveManifest | null }
@@ -64,12 +57,9 @@ export function isPackMessage(input: unknown): input is PackMessage {
       return isRecord(input.payload);
     case "PACK_FILED_RETURNS_OBSERVATION":
       return isPortalObservation(input.payload);
-    case "PACK_FILED_RETURNS_REQUEST_SHAPES":
-      return Array.isArray(input.payload) && input.payload.every(isPortalRequestShape);
     case "PACK_GET_CONTEXT":
     case "PACK_GET_FILED_RETURNS_OBSERVATION":
     case "PACK_GET_FILED_RETURNS_FLOW_SUMMARY":
-    case "PACK_GET_FILED_RETURNS_REQUEST_SHAPES":
     case "PACK_REFRESH_FILED_RETURNS_OBSERVATION":
     case "PACK_NAVIGATE_FILED_RETURNS":
     case "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD":
@@ -127,15 +117,5 @@ function isPortalObservation(input: unknown): input is PortalObservation {
     typeof input.safeMessage === "string" &&
     Array.isArray(input.safeSignals) &&
     input.safeSignals.every((signal) => typeof signal === "string")
-  );
-}
-
-function isPortalRequestShape(input: unknown): input is PortalRequestShape {
-  return (
-    isRecord(input) &&
-    typeof input.connectorId === "string" &&
-    typeof input.origin === "string" &&
-    typeof input.pathShape === "string" &&
-    typeof input.initiatorType === "string"
   );
 }

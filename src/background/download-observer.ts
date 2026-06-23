@@ -3,6 +3,11 @@ import type {
   PortalFlowStepResult,
   UserActionRequired,
 } from "../core/contracts";
+import {
+  isExpectedDownloadCandidate,
+  isPotentialDownloadCandidate,
+  type DownloadObservationContext,
+} from "./download-correlation";
 
 const DEFAULT_DOWNLOAD_WAIT_MS = 30_000;
 
@@ -22,6 +27,12 @@ export interface DownloadCreatedItem {
   bytesReceived?: number | undefined;
   fileSize?: number | undefined;
   totalBytes?: number | undefined;
+  filename?: string | undefined;
+  finalUrl?: string | undefined;
+  mime?: string | undefined;
+  referrer?: string | undefined;
+  startTime?: string | undefined;
+  url?: string | undefined;
 }
 
 export interface DownloadDelta {
@@ -52,8 +63,14 @@ export interface ActiveDownloadObservation {
 
 export function observeNextBrowserDownload(
   downloads: DownloadObservationApi,
-  timeoutMs = DEFAULT_DOWNLOAD_WAIT_MS,
+  contextOrTimeoutMs?: DownloadObservationContext | number,
+  maybeTimeoutMs = DEFAULT_DOWNLOAD_WAIT_MS,
 ): ActiveDownloadObservation {
+  const context =
+    typeof contextOrTimeoutMs === "number" || contextOrTimeoutMs === undefined
+      ? null
+      : contextOrTimeoutMs;
+  const timeoutMs = typeof contextOrTimeoutMs === "number" ? contextOrTimeoutMs : maybeTimeoutMs;
   let candidateId: number | null = null;
   let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
   let settled = false;
@@ -84,8 +101,9 @@ export function observeNextBrowserDownload(
   };
 
   const resolveCreatedItem = async (item: DownloadCreatedItem) => {
+    if (context && !isPotentialDownloadCandidate(item, context)) return;
     if (item.state === "complete") {
-      settle(await completedObservation(downloads, item.id));
+      settle(await completedObservation(downloads, item.id, context));
       return;
     }
     if (item.state === "interrupted") {
@@ -95,6 +113,7 @@ export function observeNextBrowserDownload(
 
   function onCreated(item: DownloadCreatedItem) {
     if (candidateId !== null) return;
+    if (context && !isPotentialDownloadCandidate(item, context)) return;
     candidateId = item.id;
     void resolveCreatedItem(item);
   }
@@ -102,7 +121,7 @@ export function observeNextBrowserDownload(
   function onChanged(delta: DownloadDelta) {
     if (candidateId === null || delta.id !== candidateId) return;
     if (delta.state?.current === "complete") {
-      void completedObservation(downloads, delta.id).then(settle);
+      void completedObservation(downloads, delta.id, context).then(settle);
       return;
     }
     if (delta.state?.current === "interrupted") {
@@ -132,9 +151,16 @@ export function observeNextBrowserDownload(
 export async function completedObservation(
   downloads: Pick<DownloadObservationApi, "search">,
   downloadId: number,
+  context: DownloadObservationContext | null = null,
 ): Promise<SafeDownloadObservation> {
   const [item] = await downloads.search({ id: downloadId });
+  if (!item) return unconfirmedObservation("browser-download-search-missing");
+  if (context && !isExpectedDownloadCandidate(item, context)) {
+    return unconfirmedObservation("browser-download-correlation-rejected");
+  }
   const knownSize = firstKnownSize(item);
+
+  if (knownSize === null) return unconfirmedObservation("browser-download-size-unknown");
 
   if (knownSize === 0) {
     return {
@@ -155,10 +181,25 @@ export async function completedObservation(
     safeSignals: [
       "browser-download-created",
       "browser-download-completed",
+      `browser-download-id:${downloadId}`,
       ...(knownSize && knownSize > 0 ? ["browser-download-non-empty"] : []),
     ],
     safeMessage:
       "The browser reported that the filed GSTR-3B download completed. Check the local downloads folder for the GST Portal PDF.",
+  };
+}
+
+function unconfirmedObservation(signal: string): SafeDownloadObservation {
+  return {
+    state: "not-observed",
+    safeSignals: ["browser-download-created", signal],
+    safeMessage:
+      "Pack saw a browser download event, but could not prove it was a non-empty filed GSTR-3B PDF from the GST Portal. Retry from the GST Portal detail page.",
+    userAction: {
+      type: "RETRY_PORTAL_GENERATION",
+      message: "Retry the filed GSTR-3B download from the GST Portal detail page.",
+      canResume: true,
+    },
   };
 }
 
