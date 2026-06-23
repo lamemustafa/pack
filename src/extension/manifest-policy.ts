@@ -11,7 +11,7 @@ export const PACK_EXTENSION_SHORT_NAME = "ComplyEaze Pack";
 export const PACK_EXTENSION_DESCRIPTION =
   "Download filed GSTR-3B PDFs locally from your GST Portal session.";
 export const PACK_EXTENSION_CSP = "script-src 'self'; object-src 'self'";
-export const PACK_EXTENSION_HOMEPAGE_URL = "https://github.com/lamemustafa/complyeaze-pack";
+export const PACK_EXTENSION_HOMEPAGE_URL = "https://github.com/lamemustafa/pack";
 export const PACK_EXTENSION_ICONS = {
   "16": "icons/icon-16.png",
   "32": "icons/icon-32.png",

@@ -1,7 +1,7 @@
 blank_issues_enabled: false
 contact_links:
   - name: Security vulnerability
-    url: https://github.com/lamemustafa/complyeaze-pack/security/policy
+    url: https://github.com/lamemustafa/pack/security/policy
     about: Report security issues privately. Do not open a public issue.
   - name: Sensitive support request
     url: mailto:contact@complyeaze.com

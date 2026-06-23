@@ -17,7 +17,7 @@ describe("extension permission posture", () => {
     expect(PACK_EXTENSION_DESCRIPTION).toBe(
       "Download filed GSTR-3B PDFs locally from your GST Portal session.",
     );
-    expect(PACK_EXTENSION_HOMEPAGE_URL).toBe("https://github.com/lamemustafa/complyeaze-pack");
+    expect(PACK_EXTENSION_HOMEPAGE_URL).toBe("https://github.com/lamemustafa/pack");
     expect(PACK_EXTENSION_ICONS).toEqual({
       "16": "icons/icon-16.png",
       "32": "icons/icon-32.png",

@@ -1,10 +1,11 @@
 # ComplyEaze Pack
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![CI](https://github.com/lamemustafa/complyeaze-pack/actions/workflows/ci.yml/badge.svg)](https://github.com/lamemustafa/complyeaze-pack/actions/workflows/ci.yml)
+[![CI](https://github.com/lamemustafa/pack/actions/workflows/ci.yml/badge.svg)](https://github.com/lamemustafa/pack/actions/workflows/ci.yml)
 
-ComplyEaze Pack is a local-first Chrome MV3 browser extension for downloading
-filed GSTR-3B PDFs from an authorised GST Portal browser session.
+ComplyEaze Pack is a local-first Chrome MV3 browser extension for collecting
+compliance portal documents from an authorised browser session. V0 starts with
+filed GSTR-3B PDFs from the GST Portal.
 
 V0 is intentionally narrow:
 

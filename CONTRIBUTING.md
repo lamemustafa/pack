@@ -20,8 +20,8 @@ vulnerability, follow [SECURITY.md](SECURITY.md) and report privately.
 ## Development Setup
 
 ```sh
-git clone https://github.com/lamemustafa/complyeaze-pack.git
-cd complyeaze-pack
+git clone https://github.com/lamemustafa/pack.git
+cd pack
 corepack enable
 pnpm install --frozen-lockfile
 pnpm exec wxt prepare

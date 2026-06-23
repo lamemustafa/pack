@@ -38,8 +38,8 @@ GitHub repository and submitting the v0 Chrome Web Store package.
 
 ### Must Complete Before Public GitHub Launch
 
-- [ ] Create and configure `lamemustafa/complyeaze-pack`, matching the source
-      metadata and manifest homepage URL.
+- [ ] Create and configure `lamemustafa/pack`, matching the source metadata and
+      manifest homepage URL.
 - [ ] Confirm `contact@complyeaze.com`, `security@complyeaze.com`, and any
       conduct/privacy contacts are monitored.
 - [ ] Confirm CODEOWNERS points to the right GitHub owner. It currently uses
