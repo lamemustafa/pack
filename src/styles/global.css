@@ -36,6 +36,18 @@ body {
   padding: 32px 20px;
 }
 
+.brand-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-mark {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+}
+
 .eyebrow {
   margin: 0 0 4px;
   color: #556070;

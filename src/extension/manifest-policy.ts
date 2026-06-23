@@ -18,3 +18,5 @@ export const PACK_EXTENSION_ICONS = {
   "48": "icons/icon-48.png",
   "128": "icons/icon-128.png",
 } as const;
+
+export const PACK_EXTENSION_ACTION_DEFAULT_ICON = PACK_EXTENSION_ICONS;

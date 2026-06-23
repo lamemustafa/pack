@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   PACK_EXTENSION_CSP,
+  PACK_EXTENSION_ACTION_DEFAULT_ICON,
   PACK_EXTENSION_DESCRIPTION,
   PACK_EXTENSION_HOMEPAGE_URL,
   PACK_EXTENSION_ICONS,
@@ -33,6 +34,7 @@ export default defineConfig({
       extension_pages: PACK_EXTENSION_CSP,
     },
     action: {
+      default_icon: PACK_EXTENSION_ACTION_DEFAULT_ICON,
       default_title: PACK_EXTENSION_SHORT_NAME,
     },
     commands: {

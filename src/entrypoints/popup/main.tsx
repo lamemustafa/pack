@@ -130,9 +130,12 @@ function App() {
 
   return (
     <main className="popup-shell">
-      <header>
-        <p className="eyebrow">ComplyEaze Pack</p>
-        <h1>GST Return Pack</h1>
+      <header className="brand-header">
+        <img className="brand-mark" src="/icons/icon-48.png" alt="" aria-hidden="true" />
+        <div>
+          <p className="eyebrow">ComplyEaze Pack</p>
+          <h1>GST Return Pack</h1>
+        </div>
       </header>
 
       <section className="state" aria-live="polite">

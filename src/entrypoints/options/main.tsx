@@ -24,7 +24,13 @@ function OptionsPage() {
 
   return (
     <main className="options-shell">
-      <h1>Pack Options</h1>
+      <header className="brand-header">
+        <img className="brand-mark" src="/icons/icon-48.png" alt="" aria-hidden="true" />
+        <div>
+          <p className="eyebrow">ComplyEaze Pack</p>
+          <h1>Pack Options</h1>
+        </div>
+      </header>
       <p>{status}</p>
       <button type="button" disabled={busy} onClick={() => void clearLocalData()}>
         {busy ? "Clearing..." : "Clear local Pack data"}

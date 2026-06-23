@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   PACK_EXTENSION_CSP,
+  PACK_EXTENSION_ACTION_DEFAULT_ICON,
   PACK_EXTENSION_DESCRIPTION,
   PACK_EXTENSION_HOMEPAGE_URL,
   PACK_EXTENSION_ICONS,
@@ -24,6 +25,7 @@ describe("extension permission posture", () => {
       "48": "icons/icon-48.png",
       "128": "icons/icon-128.png",
     });
+    expect(PACK_EXTENSION_ACTION_DEFAULT_ICON).toEqual(PACK_EXTENSION_ICONS);
   });
 
   it("keeps the V0 permission set narrow", () => {
