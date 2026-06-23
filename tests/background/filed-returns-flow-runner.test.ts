@@ -1,0 +1,316 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { PackMessageResponse } from "../../src/core/messages";
+import {
+  startFiledReturnsDownloadFlow,
+  type ActiveGstTab,
+  type FiledReturnsFlowRunnerDeps,
+} from "../../src/background/filed-returns-flow-runner";
+import { browser } from "wxt/browser";
+
+vi.mock("wxt/browser", () => ({
+  browser: {
+    downloads: {},
+    storage: {
+      session: {
+        set: vi.fn(async () => undefined),
+      },
+    },
+    tabs: {
+      create: vi.fn(async () => undefined),
+      goBack: vi.fn(async () => undefined),
+      query: vi.fn(async () => []),
+      update: vi.fn(async () => undefined),
+    },
+    windows: {
+      update: vi.fn(async () => undefined),
+    },
+  },
+}));
+
+vi.mock("../../src/background/download-observer", () => ({
+  observeNextBrowserDownload: vi.fn(() => ({
+    promise: Promise.resolve({
+      state: "completed",
+      safeSignals: ["browser-download-completed"],
+      safeMessage: "Completed.",
+    }),
+    stop: vi.fn(),
+  })),
+  mergeFlowStepWithDownloadObservation: vi.fn((step) => ({
+    ...step,
+    state: "downloaded",
+    safeSignals: [...step.safeSignals, "browser-download-completed"],
+    safeMessage: "Completed.",
+  })),
+}));
+
+const ACTIVE_GST_TAB = {
+  id: 17,
+  active: true,
+  highlighted: true,
+  incognito: false,
+  index: 0,
+  pinned: false,
+  selected: true,
+  windowId: 1,
+  url: "https://return.gst.gov.in/returns/auth/efiledReturns",
+} as ActiveGstTab;
+
+describe("filed returns flow runner", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("continues a full-year flow after a month download and marks that period complete", async () => {
+    const responses: PackMessageResponse[] = [
+      {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+          state: "clicked",
+          safeSignals: ["filed-return-result-view-clicked", "filed-return-result-period:March"],
+          safeMessage: "Opened.",
+        },
+      },
+      {
+        ok: true,
+        downloadTrigger: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+          state: "clicked",
+          safeSignals: ["filed-gstr3b-download-clicked"],
+          safeMessage: "Clicked download.",
+        },
+      },
+      {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+          state: "clicked",
+          safeSignals: ["filed-return-detail-back-clicked"],
+          safeMessage: "Returned.",
+        },
+      },
+      {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+          state: "downloaded",
+          safeSignals: ["filed-return-financial-year-complete"],
+          safeMessage: "Complete.",
+        },
+      },
+    ];
+    const sendMessageToTabWithInjection = vi.fn<
+      FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
+    >(async () => responses.shift() ?? { ok: false, error: "Unexpected call." });
+
+    const response = await startFiledReturnsDownloadFlow(
+      {
+        financialYear: "2025-26",
+        period: "ALL",
+        returnType: "GSTR-3B",
+      },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        mergeRequestShapes: vi.fn((_, incoming) => [...incoming]),
+        readSessionValue: vi.fn(async () => null),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          observation: "observation",
+          requestShapes: "requestShapes",
+        },
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "downloaded",
+        safeSignals: ["filed-return-financial-year-complete"],
+      },
+    });
+    expect(browser.tabs.goBack).not.toHaveBeenCalled();
+    expect(sendMessageToTabWithInjection).toHaveBeenLastCalledWith(
+      17,
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          completedPeriods: ["March"],
+        }),
+      }),
+    );
+    expect(browser.storage.session.set).toHaveBeenCalledWith({
+      completion: expect.objectContaining({
+        completedAt: expect.any(String),
+        scope: {
+          financialYear: "2025-26",
+          period: "ALL",
+          returnType: "GSTR-3B",
+        },
+        status: "complete",
+        completedPeriods: ["March"],
+        flowStep: expect.objectContaining({
+          safeSignals: ["filed-return-financial-year-complete"],
+        }),
+      }),
+    });
+  }, 12_000);
+
+  it("marks the period complete when a full-year run starts on a detail page", async () => {
+    const responses: PackMessageResponse[] = [
+      {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+          state: "clicked",
+          safeSignals: ["filed-gstr3b-download-clicked", "filed-return-detail-period:March"],
+          safeMessage: "Clicked download.",
+        },
+      },
+      {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+          state: "clicked",
+          safeSignals: ["filed-return-detail-back-clicked"],
+          safeMessage: "Returned.",
+        },
+      },
+      {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+          state: "downloaded",
+          safeSignals: ["filed-return-financial-year-complete"],
+          safeMessage: "Complete.",
+        },
+      },
+    ];
+    const sendMessageToTabWithInjection = vi.fn<
+      FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
+    >(async () => responses.shift() ?? { ok: false, error: "Unexpected call." });
+
+    const response = await startFiledReturnsDownloadFlow(
+      {
+        financialYear: "2025-26",
+        period: "ALL",
+        returnType: "GSTR-3B",
+      },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        mergeRequestShapes: vi.fn((_, incoming) => [...incoming]),
+        readSessionValue: vi.fn(async () => null),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          observation: "observation",
+          requestShapes: "requestShapes",
+        },
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "downloaded",
+        safeSignals: ["filed-return-financial-year-complete"],
+      },
+    });
+    expect(sendMessageToTabWithInjection).toHaveBeenLastCalledWith(
+      17,
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          completedPeriods: ["March"],
+        }),
+      }),
+    );
+  }, 12_000);
+
+  it("retries a flow step when GST navigation temporarily disconnects the content script", async () => {
+    const responses: Array<PackMessageResponse | Error> = [
+      {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+          state: "clicked",
+          safeSignals: ["filed-return-result-view-clicked", "filed-return-result-period:March"],
+          safeMessage: "Opened.",
+        },
+      },
+      new Error("Could not establish connection. Receiving end does not exist."),
+      {
+        ok: true,
+        downloadTrigger: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+          state: "clicked",
+          safeSignals: ["filed-gstr3b-download-clicked"],
+          safeMessage: "Clicked download.",
+        },
+      },
+      {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+          state: "clicked",
+          safeSignals: ["filed-return-detail-back-clicked"],
+          safeMessage: "Returned.",
+        },
+      },
+      {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+          state: "downloaded",
+          safeSignals: ["filed-return-financial-year-complete"],
+          safeMessage: "Complete.",
+        },
+      },
+    ];
+    const sendMessageToTabWithInjection = vi.fn<
+      FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
+    >(async () => {
+      const response = responses.shift();
+      if (response instanceof Error) throw response;
+      return response ?? { ok: false, error: "Unexpected call." };
+    });
+
+    const response = await startFiledReturnsDownloadFlow(
+      {
+        financialYear: "2025-26",
+        period: "ALL",
+        returnType: "GSTR-3B",
+      },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        mergeRequestShapes: vi.fn((_, incoming) => [...incoming]),
+        readSessionValue: vi.fn(async () => null),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          observation: "observation",
+          requestShapes: "requestShapes",
+        },
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "downloaded",
+        safeSignals: ["filed-return-financial-year-complete"],
+      },
+    });
+    expect(sendMessageToTabWithInjection).toHaveBeenCalledTimes(5);
+  }, 12_000);
+});

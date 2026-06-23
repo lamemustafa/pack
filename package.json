@@ -1,0 +1,62 @@
+{
+  "name": "@complyeaze/pack",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ComplyEaze Pack: local-first GST GSTR-3B downloader browser extension.",
+  "type": "module",
+  "homepage": "https://github.com/complyeaze/pack#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/complyeaze/pack.git"
+  },
+  "bugs": {
+    "url": "https://github.com/complyeaze/pack/issues"
+  },
+  "author": "ComplyEaze <contact@complyeaze.com>",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@11.1.2",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "wxt",
+    "dev:firefox": "wxt --browser firefox",
+    "build": "wxt build",
+    "build:firefox": "wxt build --browser firefox",
+    "zip": "wxt zip",
+    "wxt:prepare": "wxt prepare",
+    "compile": "tsc --noEmit",
+    "lint": "eslint . --max-warnings 0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "verify:package": "node scripts/verify-extension-package.mjs .output/chrome-mv3",
+    "verify": "prettier --check . && eslint . --max-warnings 0 && tsc --noEmit && vitest run && wxt build && node scripts/verify-extension-package.mjs .output/chrome-mv3",
+    "verify:release": "wxt prepare && prettier --check . && eslint . --max-warnings 0 && tsc --noEmit && vitest run && wxt build && node scripts/verify-extension-package.mjs .output/chrome-mv3 && wxt zip"
+  },
+  "dependencies": {
+    "@wxt-dev/module-react": "^1.1.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/chrome": "^0.0.320",
+    "@types/node": "^24.0.3",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.35.0",
+    "@typescript-eslint/parser": "^8.35.0",
+    "eslint": "^9.29.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-react": "^7.37.4",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "globals": "^17.0.0",
+    "jsdom": "^29.0.0",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.35.0",
+    "vitest": "^2.1.9",
+    "wxt": "^0.20.26"
+  }
+}

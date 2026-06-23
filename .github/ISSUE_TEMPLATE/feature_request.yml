@@ -1,0 +1,41 @@
+name: Feature request
+description: Suggest a scoped ComplyEaze Pack improvement.
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include real taxpayer data, credentials, portal screenshots, raw
+        network responses, or downloaded GST documents. Features that add portal
+        support, permissions, network calls, analytics, cloud upload, or legal
+        wording changes need a design issue before implementation.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user workflow or compatibility gap does this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+  - type: dropdown
+    id: data_flow
+    attributes:
+      label: Does this change permissions, storage, uploads, or data handling?
+      options:
+        - "No"
+        - "Yes"
+        - "Not sure"
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false

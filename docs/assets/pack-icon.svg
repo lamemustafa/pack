@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">ComplyEaze Pack icon</title>
+  <desc id="desc">A document stack with a download arrow.</desc>
+  <rect width="512" height="512" rx="104" fill="#0b3b95" />
+  <rect x="76" y="138" width="236" height="270" rx="34" fill="#79aef7" opacity="0.5" transform="rotate(-7 194 273)" />
+  <rect x="104" y="116" width="236" height="292" rx="34" fill="#b8d7ff" opacity="0.7" transform="rotate(-3 222 262)" />
+  <path d="M158 84h170l78 78v230a36 36 0 0 1-36 36H158a36 36 0 0 1-36-36V120a36 36 0 0 1 36-36Z" fill="#f8fbff" stroke="#9cc3ff" stroke-width="14" />
+  <path d="M328 84v70a22 22 0 0 0 22 22h56Z" fill="#cfe3ff" />
+  <path d="M183 197h150M183 253h178M183 309h116" stroke="#a8c9f9" stroke-width="20" stroke-linecap="round" />
+  <circle cx="344" cy="350" r="95" fill="#1f6feb" />
+  <path d="M344 283v92M298 334l46 46 46-46M292 414h104" fill="none" stroke="#ffffff" stroke-width="32" stroke-linecap="round" stroke-linejoin="round" />
+</svg>

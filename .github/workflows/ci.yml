@@ -1,0 +1,58 @@
+name: Pack CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify extension
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.12.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare WXT types
+        run: pnpm exec wxt prepare
+
+      - name: Check formatting
+        run: pnpm exec prettier --check .
+
+      - name: Lint
+        run: pnpm exec eslint . --max-warnings 0
+
+      - name: Type-check
+        run: pnpm exec tsc --noEmit
+
+      - name: Unit tests
+        run: pnpm exec vitest run
+
+      - name: Build Chrome MV3 extension
+        run: pnpm exec wxt build
+
+      - name: Verify built package policy
+        run: node scripts/verify-extension-package.mjs .output/chrome-mv3
+
+      - name: Create store zip
+        run: pnpm exec wxt zip

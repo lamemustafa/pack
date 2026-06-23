@@ -1,0 +1,12 @@
+node_modules/
+.output/
+.wxt/
+coverage/
+dist/
+*.tsbuildinfo
+.DS_Store
+.env
+.env.*
+!.env.example
+pnpm-debug.log*
+

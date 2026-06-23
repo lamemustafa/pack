@@ -1,0 +1,64 @@
+name: Bug report
+description: Report a reproducible ComplyEaze Pack bug using synthetic data only.
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include GSTIN, PAN, Aadhaar, taxpayer names, credentials, OTPs,
+        CAPTCHA responses, cookies, downloaded GST files, real filenames,
+        portal HTML, screenshots containing tax data, or raw network captures.
+        Security issues must be reported privately through SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: Extension version
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and version
+      placeholder: "Chrome 126"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "macOS 15, Windows 11, Ubuntu 24.04"
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the problem without sensitive taxpayer data.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Use the synthetic demo where possible.
+      placeholder: |
+        1. Open ...
+        2. Click ...
+        3. See ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Safe diagnostics
+      description: Share only generic error codes/messages shown by Pack.
+    validations:
+      required: false
