@@ -6,10 +6,12 @@ body:
   - type: markdown
     attributes:
       value: |
-        Do not include real taxpayer data, credentials, portal screenshots, raw
-        network responses, or downloaded GST documents. Features that add portal
-        support, permissions, network calls, analytics, cloud upload, or legal
-        wording changes need a design issue before implementation.
+        Do not include GSTIN, PAN, Aadhaar, taxpayer names, credentials, OTPs,
+        CAPTCHA responses, cookies, downloaded GST PDFs/documents, real
+        filenames, portal HTML, portal screenshots, or raw network captures.
+        Features that add portal support, permissions, network calls, analytics,
+        cloud upload, or legal wording changes need a design issue before
+        implementation.
   - type: textarea
     id: problem
     attributes:

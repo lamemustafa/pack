@@ -7,7 +7,7 @@ body:
     attributes:
       value: |
         Do not include GSTIN, PAN, Aadhaar, taxpayer names, credentials, OTPs,
-        CAPTCHA responses, cookies, downloaded GST files, real filenames,
+        CAPTCHA responses, cookies, downloaded GST PDFs/files, real filenames,
         portal HTML, screenshots containing tax data, or raw network captures.
         Security issues must be reported privately through SECURITY.md.
   - type: input
