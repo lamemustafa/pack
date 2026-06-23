@@ -1,6 +1,10 @@
 packages:
   - .
 
+overrides:
+  shell-quote: 1.8.4
+  tmp: 0.2.7
+
 onlyBuiltDependencies:
   - esbuild
   - spawn-sync
