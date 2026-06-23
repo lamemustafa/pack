@@ -38,18 +38,20 @@ GitHub repository and submitting the v0 Chrome Web Store package.
 
 ### Must Complete Before Public GitHub Launch
 
-- [ ] Confirm the GitHub organisation and repository name
-      (`complyeaze/pack` assumed in source metadata).
+- [ ] Create and configure `lamemustafa/complyeaze-pack`, matching the source
+      metadata and manifest homepage URL.
 - [ ] Confirm `contact@complyeaze.com`, `security@complyeaze.com`, and any
       conduct/privacy contacts are monitored.
-- [ ] Replace placeholder CODEOWNERS teams with real GitHub teams before branch
-      protection enforces them.
+- [ ] Confirm CODEOWNERS points to the right GitHub owner. It currently uses
+      `@lamemustafa` for the personal repository; replace with teams if the repo
+      later moves into an organisation.
 - [ ] Run final secret/sensitive artifact scan over the exact repository history
       that will be pushed.
 - [ ] Ensure no `.output`, `.wxt`, `node_modules`, real GST PDFs, GSTIN-bearing
       filenames, portal screenshots, raw network captures, cookies, headers,
       OTPs, CAPTCHA data, or private notes are committed.
-- [ ] Create the initial commit and signed `v0.1.0` tag after verification.
+- [ ] Push the verified local `main` branch and create a signed `v0.1.0` tag
+      after final launch verification.
 - [ ] Publish release checksum and source commit for the release ZIP.
 
 ## Chrome Web Store Checklist

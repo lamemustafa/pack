@@ -1,19 +1,19 @@
 # Security-sensitive extension surfaces.
-/src/entrypoints/background.ts @complyeaze/pack-security
-/src/entrypoints/content.ts @complyeaze/pack-security
-/src/background/ @complyeaze/pack-security
-/src/connectors/ @complyeaze/pack-security
-/src/core/ @complyeaze/pack-security
-/src/extension/ @complyeaze/pack-security
-/scripts/ @complyeaze/pack-security
-/wxt.config.ts @complyeaze/pack-security
+/src/entrypoints/background.ts @lamemustafa
+/src/entrypoints/content.ts @lamemustafa
+/src/background/ @lamemustafa
+/src/connectors/ @lamemustafa
+/src/core/ @lamemustafa
+/src/extension/ @lamemustafa
+/scripts/ @lamemustafa
+/wxt.config.ts @lamemustafa
 
 # Release, policy, and governance.
-/.github/workflows/ @complyeaze/pack-security
-/LICENSE @complyeaze/pack-legal
-/NOTICE @complyeaze/pack-legal
-/SECURITY.md @complyeaze/pack-security
-/TRADEMARKS.md @complyeaze/pack-legal
-/CONTRIBUTING.md @complyeaze/pack-legal
-/CODE_OF_CONDUCT.md @complyeaze/pack-legal
-/README.md @complyeaze/pack-maintainers
+/.github/workflows/ @lamemustafa
+/LICENSE @lamemustafa
+/NOTICE @lamemustafa
+/SECURITY.md @lamemustafa
+/TRADEMARKS.md @lamemustafa
+/CONTRIBUTING.md @lamemustafa
+/CODE_OF_CONDUCT.md @lamemustafa
+/README.md @lamemustafa

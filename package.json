@@ -4,13 +4,13 @@
   "private": true,
   "description": "ComplyEaze Pack: local-first GST GSTR-3B downloader browser extension.",
   "type": "module",
-  "homepage": "https://github.com/complyeaze/pack#readme",
+  "homepage": "https://github.com/lamemustafa/complyeaze-pack#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/complyeaze/pack.git"
+    "url": "https://github.com/lamemustafa/complyeaze-pack.git"
   },
   "bugs": {
-    "url": "https://github.com/complyeaze/pack/issues"
+    "url": "https://github.com/lamemustafa/complyeaze-pack/issues"
   },
   "author": "ComplyEaze <contact@complyeaze.com>",
   "license": "Apache-2.0",
