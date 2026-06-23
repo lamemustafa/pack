@@ -2,7 +2,7 @@
 
 All notable changes to ComplyEaze Pack are documented here.
 
-## 0.1.0 - Planned
+## 0.1.0 - 2026-06-24
 
 - Initial Chrome MV3 V0 release.
 - Local-first GSTR-3B PDF download workflow for supported GST Portal sessions.
