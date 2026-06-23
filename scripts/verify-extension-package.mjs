@@ -17,6 +17,19 @@ const expectedIcons = {
   48: "icons/icon-48.png",
   128: "icons/icon-128.png",
 };
+const expectedPackagedBrandAssets = [
+  "favicon.ico",
+  "icons/icon-256.png",
+  "icons/icon-512.png",
+  "brand/pack-icon.svg",
+  "brand/pack-logo.svg",
+  "brand/pack-logo-hero.svg",
+  "brand/pack-logo-monochrome.svg",
+  "brand/pack-logo-monochrome-outlined.svg",
+  "brand/pack-logo-outlined.svg",
+  "brand/pack-logo-reversed.svg",
+  "brand/pack-logo-reversed-outlined.svg",
+];
 const expectedPermissions = ["downloads", "scripting", "storage"];
 const expectedHostPermissions = [
   "https://www.gst.gov.in/*",
@@ -51,12 +64,19 @@ if (manifest.homepage_url !== expectedHomepageUrl) {
 if (manifest.action?.default_title !== expectedShortName) {
   throw new Error(`Unexpected action title: ${manifest.action?.default_title}`);
 }
+if (JSON.stringify(manifest.action?.default_icon ?? {}) !== JSON.stringify(expectedIcons)) {
+  throw new Error("Pack action default_icon must match extension icons.");
+}
 
 for (const [size, iconPath] of Object.entries(expectedIcons)) {
   if (manifest.icons?.[size] !== iconPath) {
     throw new Error(`Missing required ${size}px icon: ${iconPath}`);
   }
   await readFile(path.join(outputDir, iconPath));
+}
+
+for (const assetPath of expectedPackagedBrandAssets) {
+  await readFile(path.join(outputDir, assetPath));
 }
 
 for (const permission of expectedPermissions) {
@@ -102,6 +122,13 @@ const forbiddenBuiltArtifactPatterns = [
   /importScripts\s*\(/,
 ];
 
+const forbiddenBuiltSvgPatterns = [
+  /<script\b/i,
+  /\son[a-z]+\s*=/i,
+  /\b(?:href|xlink:href)\s*=\s*["'](?:https?:|data:|javascript:)/i,
+  /url\(\s*["']?(?:https?:|data:|javascript:)/i,
+];
+
 const forbiddenPackSourcePatterns = [
   /session_token/i,
   /captcha_response/i,
@@ -113,11 +140,22 @@ const forbiddenPackSourcePatterns = [
 ];
 
 for (const file of await listFiles(outputDir)) {
-  if (!/\.(js|json|html|css)$/.test(file)) continue;
+  if (!/\.(js|json|html|css|svg)$/.test(file)) continue;
   const contents = await readFile(file, "utf8");
-  for (const pattern of forbiddenBuiltArtifactPatterns) {
-    if (pattern.test(contents))
-      throw new Error(`Forbidden pattern ${pattern} in ${path.relative(process.cwd(), file)}`);
+  if (/\.(js|json|html|css)$/.test(file)) {
+    for (const pattern of forbiddenBuiltArtifactPatterns) {
+      if (pattern.test(contents))
+        throw new Error(`Forbidden pattern ${pattern} in ${path.relative(process.cwd(), file)}`);
+    }
+  }
+  if (/\.svg$/.test(file)) {
+    for (const pattern of forbiddenBuiltSvgPatterns) {
+      if (pattern.test(contents)) {
+        throw new Error(
+          `Forbidden SVG pattern ${pattern} in ${path.relative(process.cwd(), file)}`,
+        );
+      }
+    }
   }
 }
 
