@@ -50,7 +50,7 @@ GitHub repository and submitting the v0 Chrome Web Store package.
 - [ ] Ensure no `.output`, `.wxt`, `node_modules`, real GST PDFs, GSTIN-bearing
       filenames, portal screenshots, raw network captures, cookies, headers,
       OTPs, CAPTCHA data, or private notes are committed.
-- [ ] Push the verified local `main` branch and create a signed `v0.1.0` tag
+- [ ] Push the verified local `master` branch and create a signed `v0.1.0` tag
       after final launch verification.
 - [ ] Publish release checksum and source commit for the release ZIP.
 
