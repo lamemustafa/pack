@@ -19,10 +19,19 @@ import {
   type ActiveGstTab,
 } from "../background/filed-returns-flow-runner";
 
-const LAST_CONTEXT_KEY = "pack:last-context";
-const LAST_FILED_RETURNS_OBSERVATION_KEY = "pack:last-filed-returns-observation";
-const LAST_FILED_RETURNS_FLOW_SUMMARY_KEY = "pack:last-filed-returns-flow-summary";
-const LAST_MANIFEST_KEY = "pack:last-manifest";
+export const PACK_LOCAL_STORAGE_KEYS = {
+  install: "pack:install",
+  lastManifest: "pack:last-manifest",
+} as const;
+
+export const PACK_SESSION_STORAGE_KEYS = {
+  lastContext: "pack:last-context",
+  lastFiledReturnsObservation: "pack:last-filed-returns-observation",
+  lastFiledReturnsFlowSummary: "pack:last-filed-returns-flow-summary",
+} as const;
+
+export const PACK_CLEARABLE_LOCAL_STORAGE_KEYS = Object.values(PACK_LOCAL_STORAGE_KEYS);
+
 const CONTENT_SCRIPT_FILE = "/content-scripts/content.js";
 const PRODUCT_VERSION = "0.1.0";
 const OFFICIAL_URL = "https://pack.complyeaze.com";
@@ -31,7 +40,7 @@ const contentInjectionByTab = new Map<number, Promise<void>>();
 export default defineBackground(() => {
   browser.runtime.onInstalled.addListener(() => {
     void browser.storage.local.set({
-      "pack:install": {
+      [PACK_LOCAL_STORAGE_KEYS.install]: {
         version: PRODUCT_VERSION,
         installedAt: new Date().toISOString(),
         localOnly: true,
@@ -61,27 +70,36 @@ async function handleMessage(
   switch (message.type) {
     case "PACK_CONTENT_CONTEXT": {
       if (sender.id !== browser.runtime.id) return { ok: false, error: "Invalid Pack sender." };
-      await browser.storage.session.set({ [LAST_CONTEXT_KEY]: message.payload });
+      await browser.storage.session.set({
+        [PACK_SESSION_STORAGE_KEYS.lastContext]: message.payload,
+      });
       return { ok: true, context: message.payload };
     }
     case "PACK_FILED_RETURNS_OBSERVATION": {
       if (sender.id !== browser.runtime.id) return { ok: false, error: "Invalid Pack sender." };
-      await browser.storage.session.set({ [LAST_FILED_RETURNS_OBSERVATION_KEY]: message.payload });
+      await browser.storage.session.set({
+        [PACK_SESSION_STORAGE_KEYS.lastFiledReturnsObservation]: message.payload,
+      });
       return { ok: true, observation: message.payload };
     }
     case "PACK_GET_CONTEXT":
-      return { ok: true, context: await readSessionValue<PortalContext>(LAST_CONTEXT_KEY) };
+      return {
+        ok: true,
+        context: await readSessionValue<PortalContext>(PACK_SESSION_STORAGE_KEYS.lastContext),
+      };
     case "PACK_GET_FILED_RETURNS_OBSERVATION":
       await refreshActiveFiledReturnsObservation();
       return {
         ok: true,
-        observation: await readSessionValue<PortalObservation>(LAST_FILED_RETURNS_OBSERVATION_KEY),
+        observation: await readSessionValue<PortalObservation>(
+          PACK_SESSION_STORAGE_KEYS.lastFiledReturnsObservation,
+        ),
       };
     case "PACK_GET_FILED_RETURNS_FLOW_SUMMARY":
       return {
         ok: true,
         flowSummary: await readSessionValue<FiledReturnsFlowSummary>(
-          LAST_FILED_RETURNS_FLOW_SUMMARY_KEY,
+          PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary,
         ),
       };
     case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
@@ -89,18 +107,20 @@ async function handleMessage(
         getActiveGstTab,
         sendMessageToTabWithInjection,
         storageKeys: {
-          completion: LAST_FILED_RETURNS_FLOW_SUMMARY_KEY,
-          observation: LAST_FILED_RETURNS_OBSERVATION_KEY,
+          completion: PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary,
+          observation: PACK_SESSION_STORAGE_KEYS.lastFiledReturnsObservation,
         },
       });
     case "PACK_START_SYNTHETIC_DEMO":
       return startSyntheticDemo();
     case "PACK_CLEAR_LOCAL_DATA":
-      await browser.storage.session.clear();
-      await browser.storage.local.remove([LAST_MANIFEST_KEY]);
+      await clearPackLocalData();
       return { ok: true, cleared: true };
     case "PACK_GET_LAST_MANIFEST":
-      return { ok: true, manifest: await readLocalValue<ArchiveManifest>(LAST_MANIFEST_KEY) };
+      return {
+        ok: true,
+        manifest: await readLocalValue<ArchiveManifest>(PACK_LOCAL_STORAGE_KEYS.lastManifest),
+      };
   }
 
   return { ok: false, error: "Unsupported Pack message." };
@@ -118,9 +138,14 @@ async function refreshActiveFiledReturnsObservation(): Promise<void> {
 
   if ("observation" in response && response.observation) {
     await browser.storage.session.set({
-      [LAST_FILED_RETURNS_OBSERVATION_KEY]: response.observation,
+      [PACK_SESSION_STORAGE_KEYS.lastFiledReturnsObservation]: response.observation,
     });
   }
+}
+
+export async function clearPackLocalData(): Promise<void> {
+  await browser.storage.session.clear();
+  await browser.storage.local.remove([...PACK_CLEARABLE_LOCAL_STORAGE_KEYS]);
 }
 
 async function getActiveGstTab(): Promise<ActiveGstTab | null> {
@@ -219,7 +244,7 @@ async function startSyntheticDemo(): Promise<PackMessageResponse> {
     downloaded += 1;
   }
 
-  await browser.storage.local.set({ [LAST_MANIFEST_KEY]: manifest });
+  await browser.storage.local.set({ [PACK_LOCAL_STORAGE_KEYS.lastManifest]: manifest });
   return { ok: true, downloaded, manifest };
 }
 

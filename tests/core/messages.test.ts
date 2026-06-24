@@ -28,6 +28,29 @@ describe("message boundary", () => {
     expect(isPackMessage({ type: "PACK_NAVIGATE_FILED_RETURNS" })).toBe(true);
     expect(
       isPackMessage({
+        type: "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD",
+        payload: {
+          actionId: "action-1",
+          financialYear: "2025-26",
+          period: "March",
+          returnType: "GSTR-3B",
+        },
+      }),
+    ).toBe(true);
+    expect(isPackMessage({ type: "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD" })).toBe(false);
+    expect(
+      isPackMessage({
+        type: "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD",
+        payload: {
+          actionId: "action-1",
+          financialYear: "2025-26",
+          period: "March",
+          returnType: "GSTR-1",
+        },
+      }),
+    ).toBe(false);
+    expect(
+      isPackMessage({
         type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",
         payload: {
           financialYear: "2017-18",

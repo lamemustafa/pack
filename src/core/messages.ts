@@ -2,6 +2,7 @@ import type {
   ArchiveManifest,
   FiledReturnsFlowSummary,
   FiledReturnsDownloadScope,
+  FiledReturnsDownloadTarget,
   PortalDownloadTriggerResult,
   PortalContext,
   PortalFlowStepResult,
@@ -19,7 +20,7 @@ export type PackMessage =
   | { type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" }
   | { type: "PACK_REFRESH_FILED_RETURNS_OBSERVATION" }
   | { type: "PACK_NAVIGATE_FILED_RETURNS" }
-  | { type: "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD" }
+  | { type: "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD"; payload: FiledReturnsDownloadTarget }
   | { type: "PACK_RUN_FILED_RETURNS_DOWNLOAD_STEP"; payload: FiledReturnsDownloadScope }
   | { type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW"; payload: FiledReturnsDownloadScope }
   | { type: "PACK_START_SYNTHETIC_DEMO" }
@@ -64,8 +65,9 @@ export function isPackMessage(input: unknown): input is PackMessage {
     case "PACK_GET_FILED_RETURNS_FLOW_SUMMARY":
     case "PACK_REFRESH_FILED_RETURNS_OBSERVATION":
     case "PACK_NAVIGATE_FILED_RETURNS":
-    case "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD":
       return true;
+    case "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD":
+      return isFiledReturnsDownloadTarget(input.payload);
     case "PACK_RUN_FILED_RETURNS_DOWNLOAD_STEP":
     case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
       return isFiledReturnsDownloadScope(input.payload);
@@ -76,6 +78,20 @@ export function isPackMessage(input: unknown): input is PackMessage {
     default:
       return false;
   }
+}
+
+function isFiledReturnsDownloadTarget(input: unknown): input is FiledReturnsDownloadTarget {
+  if (!isRecord(input)) return false;
+  if (
+    typeof input.actionId !== "string" ||
+    input.actionId.length === 0 ||
+    input.actionId.length > 80
+  ) {
+    return false;
+  }
+  if (!isFiledReturnsDownloadScope(input)) return false;
+  if (input.period === "ALL") return false;
+  return true;
 }
 
 function isFiledReturnsDownloadScope(input: unknown): input is FiledReturnsDownloadScope {

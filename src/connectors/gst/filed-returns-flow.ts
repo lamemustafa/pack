@@ -5,7 +5,10 @@ import {
   matchesAcceptedText,
   normaliseText,
 } from "./filed-returns-dom";
-import { triggerFiledGstr3bFiledPdfDownload } from "./filed-returns-download";
+import {
+  extractFiledReturnsDetailIdentity,
+  extractTaxPeriodFromRow,
+} from "./filed-returns-detail-identity";
 import {
   dismissKnownFiledReturnsSummaryModal,
   navigateToFiledReturnsPage,
@@ -14,21 +17,6 @@ import { selectFiledReturnsFiltersAndSearch } from "./filed-returns-filter-form"
 import { observeFiledReturnsPageText } from "./filed-returns-observer";
 
 const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
-const TAX_PERIODS = [
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-  "January",
-  "February",
-  "March",
-];
-
 export async function runFiledReturnsDownloadStep(
   documentRef: Document,
   scope: FiledReturnsDownloadScope,
@@ -57,18 +45,15 @@ export async function runFiledReturnsDownloadStep(
     if (shouldReturnFromDownloadedDetail(documentRef, scope)) {
       return clickFiledReturnDetailBack(documentRef);
     }
-    const downloadTrigger = await triggerFiledGstr3bFiledPdfDownload(documentRef);
-    const detailPeriod = extractDetailTaxPeriod(documentRef);
-    if (
-      detailPeriod &&
-      !downloadTrigger.safeSignals.includes(`filed-return-detail-period:${detailPeriod}`)
-    ) {
-      return {
-        ...downloadTrigger,
-        safeSignals: [...downloadTrigger.safeSignals, `filed-return-detail-period:${detailPeriod}`],
-      };
-    }
-    return downloadTrigger;
+    const detailIdentity = extractFiledReturnsDetailIdentity(documentRef);
+    return {
+      connectorId: "gst",
+      scopeId: FILED_RETURNS_SCOPE_ID,
+      state: "ready",
+      safeSignals: ["filed-gstr3b-download-ready", ...detailIdentity.safeSignals],
+      safeMessage:
+        "Pack found the filed GSTR-3B detail page and is ready to start the browser download.",
+    };
   }
 
   if (observation.state === "filters-required") {
@@ -120,7 +105,7 @@ function openFiledReturnResultRow(
   scope: FiledReturnsDownloadScope,
 ): PortalFlowStepResult {
   const matchingRows = Array.from(documentRef.querySelectorAll("tr"))
-    .map((row) => ({ row, period: extractTaxPeriod(row) }))
+    .map((row) => ({ row, period: extractTaxPeriodFromRow(row) }))
     .filter(({ row, period }) => {
       const rowText = row.textContent || "";
       return (
@@ -197,7 +182,7 @@ function shouldReturnFromDownloadedDetail(
 ): boolean {
   if (!isEntireFinancialYearScope(scope)) return false;
 
-  const period = extractDetailTaxPeriod(documentRef);
+  const period = extractFiledReturnsDetailIdentity(documentRef).period;
   if (!period) return false;
 
   return new Set((scope.completedPeriods ?? []).map((value) => normaliseText(value))).has(
@@ -230,21 +215,6 @@ function clickFiledReturnDetailBack(documentRef: Document): PortalFlowStepResult
     safeSignals: ["filed-return-detail-back-clicked"],
     safeMessage: "Pack returned from the filed GSTR-3B detail page to continue the year.",
   };
-}
-
-function extractDetailTaxPeriod(documentRef: Document): string | null {
-  const text = getBodyText(documentRef);
-  const normalised = normaliseText(text);
-  const match = /return period\s*-\s*([a-z]+)/i.exec(normalised);
-  if (!match?.[1]) return null;
-  return TAX_PERIODS.find((period) => normaliseText(period) === match[1]) ?? null;
-}
-
-function extractTaxPeriod(row: Element): string | null {
-  const cells = Array.from(row.querySelectorAll("td"));
-  const periodCell = cells[2];
-  const periodText = normaliseText(periodCell?.textContent || "");
-  return TAX_PERIODS.find((period) => normaliseText(period) === periodText) ?? null;
 }
 
 function clickNextResultsPage(documentRef: Document): boolean {

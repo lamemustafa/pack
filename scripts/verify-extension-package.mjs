@@ -122,6 +122,61 @@ const forbiddenBuiltArtifactPatterns = [
   /importScripts\s*\(/,
 ];
 
+const forbiddenTelemetryPatterns = [
+  {
+    label: "posthog-js",
+    pattern: /\bposthog-js\b|@posthog\/(?:browser|core)|api\.posthog\.com/i,
+  },
+  {
+    label: "sentry.io",
+    pattern: /@sentry\/(?:browser|react|core)|\bSentry\.init\b|sentry\.io/i,
+  },
+  {
+    label: "LogRocket",
+    pattern: /\bLogRocket\b|\blogrocket\b|cdn\.logrocket\.io|api\.logrocket\.com/i,
+  },
+  {
+    label: "FullStory",
+    pattern: /\bFullStory\b|\bFS\.identify\b|fullstory\.com|edge\.fullstory\.com/i,
+  },
+  {
+    label: "Segment",
+    pattern: /\banalytics\.load\b|@segment\/analytics|cdn\.segment\.com|api\.segment\.io/i,
+  },
+  {
+    label: "Mixpanel",
+    pattern: /\bmixpanel\b|api\.mixpanel\.com|cdn\.mxpnl\.com/i,
+  },
+  {
+    label: "Amplitude",
+    pattern: /\bamplitude-js\b|@amplitude\/analytics-browser|api\.amplitude\.com/i,
+  },
+  {
+    label: "Google Analytics",
+    pattern: /\bgtag\s*\(|\bdataLayer\b|google-analytics\.com|googletagmanager\.com/i,
+  },
+  {
+    label: "Microsoft Clarity",
+    pattern: /\bclarity\s*\(|clarity\.ms/i,
+  },
+  {
+    label: "Hotjar",
+    pattern: /\bhotjar\b|static\.hotjar\.com|script\.hotjar\.com/i,
+  },
+  {
+    label: "Datadog RUM",
+    pattern: /@datadog\/browser-rum|datadoghq-browser-agent|browser-intake-datadoghq/i,
+  },
+  {
+    label: "New Relic Browser",
+    pattern: /newrelic\.com\/nr-|js-agent\.newrelic\.com|NREUM/i,
+  },
+  {
+    label: "Bugsnag",
+    pattern: /@bugsnag\/browser|notify\.bugsnag\.com/i,
+  },
+];
+
 const forbiddenBuiltSvgPatterns = [
   /<script\b/i,
   /\son[a-z]+\s*=/i,
@@ -147,6 +202,7 @@ for (const file of await listFiles(outputDir)) {
       if (pattern.test(contents))
         throw new Error(`Forbidden pattern ${pattern} in ${path.relative(process.cwd(), file)}`);
     }
+    assertNoForbiddenTelemetry(contents, file);
   }
   if (/\.svg$/.test(file)) {
     for (const pattern of forbiddenBuiltSvgPatterns) {
@@ -168,6 +224,7 @@ for (const file of await listFiles(path.join(process.cwd(), "src"))) {
         `Sensitive Pack source marker ${pattern} in ${path.relative(process.cwd(), file)}`,
       );
   }
+  assertNoForbiddenTelemetry(contents, file);
 }
 
 console.log("Pack WXT extension package verification passed.");
@@ -181,4 +238,14 @@ async function listFiles(dir) {
     }),
   );
   return files.flat();
+}
+
+function assertNoForbiddenTelemetry(contents, file) {
+  for (const { label, pattern } of forbiddenTelemetryPatterns) {
+    if (pattern.test(contents)) {
+      throw new Error(
+        `Forbidden telemetry marker ${label} in ${path.relative(process.cwd(), file)}`,
+      );
+    }
+  }
 }

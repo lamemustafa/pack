@@ -45,10 +45,6 @@ describe("extension permission posture", () => {
     expect(PACK_GST_HOST_PERMISSIONS).not.toContain("<all_urls>");
   });
 
-  it("does not expose a backend bridge", () => {
-    expect("externally_connectable" in {}).toBe(false);
-  });
-
   it("keeps extension pages on a restrictive local CSP", () => {
     expect(PACK_EXTENSION_CSP).toBe("script-src 'self'; object-src 'self'");
     expect(PACK_EXTENSION_CSP).not.toContain("unsafe-eval");

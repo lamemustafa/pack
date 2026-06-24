@@ -31,7 +31,8 @@ still requires the manual gates in
 
 ### Chrome Web Store
 
-Coming soon after Chrome Web Store review and release sign-off.
+No Chrome Web Store listing is published yet. Install from source only until
+Chrome Web Store review, legal review, and release sign-off are complete.
 
 ### From Source
 
@@ -106,6 +107,30 @@ The future UCP reuse surface is the Pack plan/result/archive-manifest contract,
 not shared credential or session handling. In the current alpha, that contract is
 exercised by the synthetic reviewer demo; the live GST path downloads PDFs and
 does not yet persist per-target `DownloadResult` records or a live manifest.
+
+## Extension Storage
+
+Pack uses Chrome extension storage only inside the current browser profile.
+
+`chrome.storage.local`:
+
+- `pack:install`: install/update metadata with product version, install
+  timestamp, and `localOnly: true`;
+- `pack:last-manifest`: the last synthetic reviewer demo archive manifest
+  summary. The live GST download path does not write a live manifest yet.
+
+`chrome.storage.session`:
+
+- `pack:last-context`: the latest safe GST page support context;
+- `pack:last-filed-returns-observation`: the latest safe filed-returns page
+  observation;
+- `pack:last-filed-returns-flow-summary`: the latest temporary filed-return flow
+  status.
+
+The Options page "Clear local Pack data" control removes the local keys above
+and clears Pack session storage. Pack does not store GST Portal credentials,
+OTPs, CAPTCHA values, cookies, GSTIN/PAN, taxpayer names, downloaded PDFs, portal
+HTML, or raw network captures.
 
 ## Privacy Invariants
 

@@ -2,6 +2,7 @@ import { JSDOM } from "jsdom";
 import { describe, expect, it, vi } from "vitest";
 import type { FiledReturnsDownloadScope } from "../../src/core/contracts";
 import { runFiledReturnsDownloadStep } from "../../src/connectors/gst/filed-returns-flow";
+import { triggerFiledGstr3bFiledPdfDownload } from "../../src/connectors/gst/filed-returns-download";
 
 const DEFAULT_SCOPE: FiledReturnsDownloadScope = {
   financialYear: "2025-26",
@@ -434,12 +435,13 @@ describe("filed returns guided flow", () => {
     expect(nextClicked).toBe(1);
   });
 
-  it("triggers the filed PDF download when the detail page is ready", async () => {
+  it("preflights the filed PDF download without clicking from the retryable step", async () => {
     const documentRef = createDocument(`
       <main>
         <nav>Returns / Filed Returns</nav>
         <h1>GSTR-3B - Monthly Return</h1>
         <div>Status - Filed</div>
+        <div>Financial Year - 2025-26</div>
         <div>Return Period - March</div>
         <button>DOWNLOAD FILED GSTR-3B</button>
       </main>
@@ -451,11 +453,102 @@ describe("filed returns guided flow", () => {
 
     const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
 
-    expect(result.state).toBe("clicked");
+    expect(result.state).toBe("ready");
     expect(result.safeSignals).toEqual(
-      expect.arrayContaining(["filed-gstr3b-download-clicked", "filed-return-detail-period:March"]),
+      expect.arrayContaining([
+        "filed-gstr3b-download-ready",
+        "filed-return-detail-period:March",
+        "filed-return-detail-financial-year:2025-26",
+      ]),
     );
-    expect(downloadClicked).toBe(1);
+    expect(downloadClicked).toBe(0);
+  });
+
+  it("refuses an explicit trigger when the detail page identity does not match the target", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <nav>Returns / Filed Returns</nav>
+        <h1>GSTR-3B - Monthly Return</h1>
+        <div>Status - Filed</div>
+        <div>Financial Year - 2025-26</div>
+        <div>Return Period - February</div>
+        <button>DOWNLOAD FILED GSTR-3B</button>
+      </main>
+    `);
+    let downloadClicked = 0;
+    documentRef.querySelector("button")?.addEventListener("click", () => {
+      downloadClicked += 1;
+    });
+
+    const trigger = triggerFiledGstr3bFiledPdfDownload as unknown as (
+      documentRef: Document,
+      target: {
+        actionId: string;
+        financialYear: string;
+        period: string;
+        returnType: "GSTR-3B";
+      },
+    ) => ReturnType<typeof triggerFiledGstr3bFiledPdfDownload>;
+
+    const result = await trigger(documentRef, {
+      actionId: "test-action",
+      financialYear: "2025-26",
+      period: "March",
+      returnType: "GSTR-3B",
+    });
+
+    expect(result.state).toBe("blocked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining([
+        "filed-return-detail-period:February",
+        "filed-return-download-target-mismatch",
+      ]),
+    );
+    expect(downloadClicked).toBe(0);
+  });
+
+  it("refuses an explicit trigger when the detail page has duplicate visible download controls", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <nav>Returns / Filed Returns</nav>
+        <h1>GSTR-3B - Monthly Return</h1>
+        <div>Status - Filed</div>
+        <div>Financial Year - 2025-26</div>
+        <div>Return Period - March</div>
+        <button data-primary>DOWNLOAD FILED GSTR-3B</button>
+        <button data-secondary>DOWNLOAD FILED GSTR-3B</button>
+      </main>
+    `);
+    makeLayoutVisible(documentRef);
+    let clicked = 0;
+    for (const button of Array.from(documentRef.querySelectorAll("button"))) {
+      button.addEventListener("click", () => {
+        clicked += 1;
+      });
+    }
+
+    const trigger = triggerFiledGstr3bFiledPdfDownload as unknown as (
+      documentRef: Document,
+      target: {
+        actionId: string;
+        financialYear: string;
+        period: string;
+        returnType: "GSTR-3B";
+      },
+    ) => ReturnType<typeof triggerFiledGstr3bFiledPdfDownload>;
+
+    const result = await trigger(documentRef, {
+      actionId: "test-action",
+      financialYear: "2025-26",
+      period: "March",
+      returnType: "GSTR-3B",
+    });
+
+    expect(result.state).toBe("candidate-not-found");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining(["filed-gstr3b-download-candidate-ambiguous"]),
+    );
+    expect(clicked).toBe(0);
   });
 
   it("returns from an already downloaded full-year detail page without redownloading", async () => {
