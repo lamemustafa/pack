@@ -30,6 +30,9 @@ For each release candidate:
   session tokens.
 - Confirm the production content script does not sample resource timing entries,
   send request-shape telemetry, or probe authenticated GST endpoints.
+- Confirm live download observation remains bounded to a user-initiated run and
+  does not persist or transmit raw download URLs, referrers, absolute local
+  paths, filenames, portal HTML, or taxpayer identifiers.
 - Confirm the privacy policy, store declarations, and reviewer instructions
   still match actual runtime behavior.
 
