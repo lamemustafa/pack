@@ -17,6 +17,7 @@ pnpm exec vitest run
 pnpm exec wxt build
 node scripts/verify-extension-package.mjs .output/chrome-mv3
 pnpm exec wxt zip
+node scripts/verify-extension-zip.mjs
 ```
 
 The release gate covers:
@@ -28,7 +29,8 @@ The release gate covers:
 - Vitest unit tests;
 - Chrome MV3 production build;
 - built-package permission, CSP, and remote-code checks;
-- store ZIP creation.
+- store ZIP creation;
+- exact-ZIP extraction, package-policy verification, and SHA-256 output.
 
 ## Manual clean-profile QA
 
@@ -49,6 +51,8 @@ review and a current portal-compatibility pass have approved the exact behavior.
 
 ## Release artifact
 
-Use WXT's generated Chrome ZIP from `.output/` as the store artifact. Publish the
+Use WXT's generated Chrome ZIP from `.output/` as the store artifact only after
+`node scripts/verify-extension-zip.mjs` extracts that exact ZIP, reruns the
+package verifier against the extraction, and prints the checksum. Publish the
 source tag, ZIP checksum, and this release runbook together so reviewers can
 reproduce the submitted build.

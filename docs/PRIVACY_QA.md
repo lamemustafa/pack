@@ -33,6 +33,9 @@ For each release candidate:
 - Confirm live download observation remains bounded to a user-initiated run and
   does not persist or transmit raw download URLs, referrers, absolute local
   paths, filenames, portal HTML, or taxpayer identifiers.
+- Confirm `pack:active-filed-returns-run`, when present, contains only the
+  selected financial year, period, return type, run ID, revision, status, and
+  lease timestamp needed to prevent overlapping local runs.
 - Confirm `pack:full-fiscal-year-ledger`, when present, contains only financial
   year, period, return type, target status, attempts, safe signals/messages, and
   timestamps. It must not contain raw URLs/referrers, local paths, filenames,
