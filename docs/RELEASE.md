@@ -24,13 +24,15 @@ The release gate covers:
 
 - WXT type generation;
 - Prettier formatting;
+- high-severity dependency audit;
 - ESLint;
 - TypeScript;
 - Vitest unit tests;
 - Chrome MV3 production build;
 - built-package permission, CSP, and remote-code checks;
 - store ZIP creation;
-- exact-ZIP extraction, package-policy verification, and SHA-256 output.
+- exact-ZIP extraction, package-policy verification, SHA-256 output, checksum
+  file generation, and verified ZIP evidence upload in CI.
 
 ## Manual clean-profile QA
 
@@ -40,7 +42,8 @@ Before submitting a ZIP to a browser store:
 2. Confirm the permission prompt lists only GST Portal host access plus
    downloads/storage.
 3. Open the popup outside GST domains and confirm the extension stays dormant.
-4. Run the synthetic demo and confirm files are downloaded under `Pack-Demo/`.
+4. Open Pack Options, run the synthetic demo, and confirm files are downloaded
+   under `Pack-Demo/`.
 5. Open the generated manifest and exceptions file and confirm all values are
    obviously synthetic.
 6. Use the options page to clear local Pack data.
