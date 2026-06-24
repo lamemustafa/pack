@@ -2,6 +2,7 @@ import { browser } from "wxt/browser";
 import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "../core/contracts";
 import type { PackMessage, PackMessageResponse } from "../core/messages";
 import { isFullFiscalYearScope } from "../core/filed-returns-scope";
+import { acquireFiledReturnsRun, releaseFiledReturnsRun } from "./filed-returns-active-run";
 import { triggerAndObserveFiledReturnDownload } from "./filed-returns-download-trigger";
 import { startFullFiscalYearDownloadFlow } from "./filed-returns-full-fiscal-year";
 import { runDownloadStepWithRetry } from "./filed-returns-flow-messaging";
@@ -26,6 +27,7 @@ export interface FiledReturnsFlowRunnerDeps {
     >,
   ) => Promise<PackMessageResponse>;
   storageKeys: {
+    activeRun?: string;
     completion: string;
     fullFiscalYearLedger: string;
     observation: string;
@@ -41,10 +43,21 @@ export async function startFiledReturnsDownloadFlow(
   scope: FiledReturnsDownloadScope,
   deps: FiledReturnsFlowRunnerDeps,
 ): Promise<PackMessageResponse> {
-  if (isFullFiscalYearScope(scope)) {
-    return startFullFiscalYearDownloadFlow(scope, deps, startSinglePeriodFiledReturnsDownloadFlow);
+  const activeRun = await acquireFiledReturnsRun(scope, deps);
+  if ("response" in activeRun) return activeRun.response;
+
+  try {
+    if (isFullFiscalYearScope(scope)) {
+      return startFullFiscalYearDownloadFlow(
+        scope,
+        deps,
+        startSinglePeriodFiledReturnsDownloadFlow,
+      );
+    }
+    return startSinglePeriodFiledReturnsDownloadFlow(scope, deps);
+  } finally {
+    await releaseFiledReturnsRun(activeRun.run, deps);
   }
-  return startSinglePeriodFiledReturnsDownloadFlow(scope, deps);
 }
 
 async function startSinglePeriodFiledReturnsDownloadFlow(

@@ -22,6 +22,7 @@ import {
 } from "../background/filed-returns-flow-runner";
 
 export const PACK_LOCAL_STORAGE_KEYS = {
+  activeFiledReturnsRun: "pack:active-filed-returns-run",
   fullFiscalYearLedger: "pack:full-fiscal-year-ledger",
   install: "pack:install",
   lastManifest: "pack:last-manifest",
@@ -41,6 +42,8 @@ const OFFICIAL_URL = "https://pack.complyeaze.com";
 const contentInjectionByTab = new Map<number, Promise<void>>();
 
 export default defineBackground(() => {
+  void restrictLocalStorageToTrustedContexts().catch(() => undefined);
+
   browser.runtime.onInstalled.addListener(() => {
     void browser.storage.local.set({
       [PACK_LOCAL_STORAGE_KEYS.install]: {
@@ -63,6 +66,13 @@ export default defineBackground(() => {
     return true;
   });
 });
+
+export async function restrictLocalStorageToTrustedContexts(): Promise<void> {
+  const storageArea = browser.storage.local as typeof browser.storage.local & {
+    setAccessLevel?: (options: { accessLevel: "TRUSTED_CONTEXTS" }) => Promise<void> | void;
+  };
+  await storageArea.setAccessLevel?.({ accessLevel: "TRUSTED_CONTEXTS" });
+}
 
 async function handleMessage(
   message: unknown,
@@ -108,6 +118,7 @@ async function handleMessage(
         getActiveGstTab,
         sendMessageToTabWithInjection,
         storageKeys: {
+          activeRun: PACK_LOCAL_STORAGE_KEYS.activeFiledReturnsRun,
           completion: PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary,
           fullFiscalYearLedger: PACK_LOCAL_STORAGE_KEYS.fullFiscalYearLedger,
           observation: PACK_SESSION_STORAGE_KEYS.lastFiledReturnsObservation,

@@ -222,12 +222,17 @@ export interface FiledReturnsFullFiscalYearTarget {
 
 export interface FiledReturnsFullFiscalYearLedger {
   schemaVersion: "1.0";
+  planVersion?: string;
+  connectorVersion?: string;
+  createdWithExtensionVersion?: string;
   ledgerId: string;
   status: "running" | "complete" | "partial" | "blocked" | "cancelled";
   scope: FiledReturnsDownloadScope;
   currentTargetId?: string;
   createdAt: string;
   updatedAt: string;
+  eligibleThrough?: string;
+  lastReconciledAt?: string;
   targets: FiledReturnsFullFiscalYearTarget[];
 }
 
