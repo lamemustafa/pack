@@ -31,7 +31,7 @@ describe("GST connector", () => {
 
     expect(context.supported).toBe(true);
     expect(context.pageKind).toBe("gst-filed-returns");
-    expect(context.safeTitle).toBe("View Filed Returns");
+    expect(context.safeTitle).toBeUndefined();
   });
 
   it("detects the filed GSTR-3B detail page as part of the private live scope", () => {
