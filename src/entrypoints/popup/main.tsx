@@ -15,7 +15,7 @@ import {
 } from "../../core/filed-returns-scope";
 import "../../styles/global.css";
 import { ReviewerTools, ScopeForm } from "./components";
-import { getFiledReturnsCompletionStatus } from "./flow-summary";
+import { getFiledReturnsCompletionStatus, getFiledReturnsSummaryHeading } from "./flow-summary";
 
 function App() {
   const [status, setStatus] = React.useState("Loading Pack context...");
@@ -127,22 +127,23 @@ function App() {
   }
 
   const completionStatus = getFiledReturnsCompletionStatus(scope, filedReturnsFlowSummary);
+  const summaryHeading = filedReturnsFlowSummary
+    ? getFiledReturnsSummaryHeading(filedReturnsFlowSummary)
+    : null;
 
   return (
     <main className="popup-shell">
       <header className="brand-header">
-        <img className="brand-mark" src="/icons/icon-48.png" alt="" aria-hidden="true" />
-        <div>
-          <p className="eyebrow">ComplyEaze Pack</p>
-          <h1>GST Return Pack</h1>
-        </div>
+        <img className="brand-logo" src="/brand/pack-logo-outlined.svg" alt="ComplyEaze Pack" />
+        <p className="brand-mode">GST Return Pack</p>
+        <h1 className="sr-only">ComplyEaze Pack GST Return Pack</h1>
       </header>
 
       <section className="state" aria-live="polite">
         <p>{completionStatus ?? status}</p>
         <p className="muted">
           {context === null
-            ? "Open GST Portal, or run the synthetic reviewer demo."
+            ? "Open GST Portal and choose a filed GSTR-3B period to begin."
             : context.supported
               ? `Detected ${context.pageKind} on ${context.origin ?? "GST Portal"}.`
               : (context.requiredAction?.message ?? "This page is outside Pack V0 scope.")}
@@ -165,7 +166,7 @@ function App() {
 
       {completionStatus ? (
         <section className="state">
-          <p>Last filed-returns run: complete</p>
+          <p>{summaryHeading}</p>
           <p className="muted">{filedReturnsFlowSummary?.flowStep.safeMessage}</p>
         </section>
       ) : filedReturnsObservation ? (

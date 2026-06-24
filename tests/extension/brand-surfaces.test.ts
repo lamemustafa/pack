@@ -15,7 +15,7 @@ describe("Pack brand surfaces", () => {
       "utf8",
     );
 
-    expect(popupSource).toContain("/icons/icon-48.png");
+    expect(popupSource).toContain("/brand/pack-logo-outlined.svg");
     expect(optionsSource).toContain("/icons/icon-48.png");
   });
 
