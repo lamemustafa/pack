@@ -9,22 +9,27 @@ import type { PackMessageResponse } from "../core/messages";
 import { getFiledReturnsFullFiscalYearPeriods } from "../core/filed-returns-scope";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
 import {
-  activeFullFiscalYearStep,
-  blockedFullFiscalYearStep,
   completeFullFiscalYearLedger,
-  completeFullFiscalYearStep,
   createFullFiscalYearLedger,
   isFullFiscalYearLedger,
   isFullFiscalYearLedgerStale,
   markFullFiscalYearTargetRunning,
   markFullFiscalYearTargetTerminal,
   nextRunnableFullFiscalYearTarget,
+  reconcileFullFiscalYearLedgerTargets,
   resumeFullFiscalYearLedger,
   sameFiledReturnsScope,
+} from "./filed-returns-full-fiscal-year-ledger";
+import {
+  activeFullFiscalYearStep,
+  blockedFullFiscalYearStep,
+  completeFullFiscalYearStep,
+  downloadUnconfirmedFullFiscalYearStep,
+  interruptedFullFiscalYearStep,
   summariseFullFiscalYearLedger,
   targetStatusFromFlowStep,
   toFullFiscalYearSummary,
-} from "./filed-returns-full-fiscal-year-ledger";
+} from "./filed-returns-full-fiscal-year-summary";
 
 export type SinglePeriodRunner = (
   scope: FiledReturnsDownloadScope,
@@ -40,20 +45,22 @@ export async function startFullFiscalYearDownloadFlow(
 ): Promise<PackMessageResponse> {
   const now = deps.now?.() ?? new Date();
   const existingLedger = await readLedger(deps.storageKeys.fullFiscalYearLedger);
-
-  if (existingLedger && sameFiledReturnsScope(existingLedger.scope, scope)) {
-    const duplicateResponse = responseForExistingLedger(existingLedger, now);
-    if (duplicateResponse) return duplicateResponse;
-  }
+  const plannedPeriods = getFiledReturnsFullFiscalYearPeriods(scope.financialYear, now);
 
   let ledger =
     existingLedger && sameFiledReturnsScope(existingLedger.scope, scope)
-      ? resumeFullFiscalYearLedger(existingLedger, now)
-      : createFullFiscalYearLedger(
-          scope,
-          now,
-          getFiledReturnsFullFiscalYearPeriods(scope.financialYear, now),
-        );
+      ? reconcileFullFiscalYearLedgerTargets(existingLedger, now, plannedPeriods)
+      : createFullFiscalYearLedger(scope, now, plannedPeriods);
+
+  if (existingLedger && sameFiledReturnsScope(existingLedger.scope, scope)) {
+    const duplicateResponse = responseForExistingLedger(ledger, now);
+    if (duplicateResponse) return duplicateResponse;
+  }
+
+  ledger =
+    existingLedger && sameFiledReturnsScope(existingLedger.scope, scope)
+      ? resumeFullFiscalYearLedger(ledger, now)
+      : ledger;
 
   if (ledger.targets.length === 0) {
     ledger = { ...ledger, status: "blocked", updatedAt: now.toISOString() };
@@ -118,14 +125,44 @@ function responseForExistingLedger(
   ledger: FiledReturnsFullFiscalYearLedger,
   now: Date,
 ): PackMessageResponse | null {
+  const unconfirmedDownload = ledger.targets.some(
+    (target) => target.status === "download-unconfirmed",
+  );
+  if (unconfirmedDownload) {
+    const step = downloadUnconfirmedFullFiscalYearStep(ledger);
+    return { ok: true, flowStep: step, flowSummary: toFullFiscalYearSummary(ledger, step) };
+  }
+
   if (ledger.status === "complete") {
     const summary = summariseFullFiscalYearLedger(ledger);
     return { ok: true, flowStep: summary.flowStep, flowSummary: summary };
   }
 
-  if (ledger.status === "running" && !isFullFiscalYearLedgerStale(ledger, now)) {
+  if (
+    ledger.status === "running" &&
+    ledger.targets.some((target) => target.status === "running") &&
+    !isFullFiscalYearLedgerStale(ledger, now)
+  ) {
     const summary = toFullFiscalYearSummary(ledger, activeFullFiscalYearStep(ledger));
     return { ok: true, flowStep: summary.flowStep, flowSummary: summary };
+  }
+
+  if (
+    ledger.status === "running" &&
+    ledger.targets.some((target) => target.status === "running") &&
+    isFullFiscalYearLedgerStale(ledger, now)
+  ) {
+    const displayLedger: FiledReturnsFullFiscalYearLedger = {
+      ...ledger,
+      status: "blocked",
+      updatedAt: now.toISOString(),
+    };
+    const step = interruptedFullFiscalYearStep(displayLedger);
+    return {
+      ok: true,
+      flowStep: step,
+      flowSummary: toFullFiscalYearSummary(displayLedger, step),
+    };
   }
 
   return null;

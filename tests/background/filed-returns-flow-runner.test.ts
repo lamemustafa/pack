@@ -281,6 +281,10 @@ describe("filed returns flow runner", () => {
       "full-year-ledger": createFullFiscalYearLedger({
         status: "running",
         currentPeriod: "April",
+        targets: [
+          { period: "April", status: "running" },
+          { period: "May", status: "pending" },
+        ],
       }),
     });
     const sendMessageToTabWithInjection =
@@ -318,7 +322,7 @@ describe("filed returns flow runner", () => {
     expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
   });
 
-  it("resumes a stale running full fiscal year ledger after service-worker restart", async () => {
+  it("does not auto-resume a stale running full fiscal year ledger after service-worker restart", async () => {
     mockLocalStorageGet({
       "full-year-ledger": createFullFiscalYearLedger({
         status: "running",
@@ -327,31 +331,8 @@ describe("filed returns flow runner", () => {
         targets: [{ period: "April", status: "running" }],
       }),
     });
-    const responses: PackMessageResponse[] = [
-      {
-        ok: true,
-        flowStep: {
-          connectorId: "gst",
-          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
-          state: "clicked",
-          safeSignals: ["filed-return-result-view-clicked", "filed-return-result-period:April"],
-          safeMessage: "Opened.",
-        },
-      },
-      {
-        ok: true,
-        downloadTrigger: {
-          connectorId: "gst",
-          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
-          state: "clicked",
-          safeSignals: ["filed-gstr3b-download-clicked"],
-          safeMessage: "Clicked download.",
-        },
-      },
-    ];
-    const sendMessageToTabWithInjection = vi.fn<
-      FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
-    >(async () => responses.shift() ?? { ok: false, error: "Unexpected call." });
+    const sendMessageToTabWithInjection =
+      vi.fn<FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]>();
 
     const response = await startFiledReturnsDownloadFlow(
       {
@@ -378,16 +359,63 @@ describe("filed returns flow runner", () => {
     expect(response).toMatchObject({
       ok: true,
       flowStep: {
-        state: "downloaded",
-        safeSignals: expect.arrayContaining(["full-fiscal-year-complete"]),
+        state: "user-action-required",
+        safeSignals: expect.arrayContaining(["full-fiscal-year-run-interrupted"]),
       },
       flowSummary: {
-        status: "complete",
-        completedPeriods: ["April"],
-        totalPeriods: 1,
+        status: "blocked",
+        currentPeriod: "April",
+        totalPeriods: 2,
       },
     });
-    expect(sendMessageToTabWithInjection).toHaveBeenCalledTimes(2);
+    expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
+  });
+
+  it("blocks a new run while a persisted active run exists", async () => {
+    mockLocalStorageGet({
+      "active-run": {
+        schemaVersion: "1.0",
+        runId: "run-existing",
+        revision: 1,
+        scope: {
+          financialYear: "2026-27",
+          period: "April",
+          returnType: "GSTR-3B",
+        },
+        status: "running",
+        leaseUpdatedAt: "2026-06-24T00:00:00.000Z",
+      },
+    });
+    const sendMessageToTabWithInjection =
+      vi.fn<FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]>();
+
+    const response = await startFiledReturnsDownloadFlow(
+      {
+        financialYear: "2026-27",
+        period: FULL_FISCAL_YEAR_PERIOD,
+        returnType: "GSTR-3B",
+      },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          activeRun: "active-run",
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+        },
+        now: () => new Date("2026-06-24T00:00:05.000Z"),
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "user-action-required",
+        safeSignals: ["filed-returns-run-active"],
+      },
+    });
+    expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
   });
 
   it("stops a full fiscal year run on an unconfirmed download and persists the blocked target", async () => {
@@ -477,6 +505,126 @@ describe("filed returns flow runner", () => {
         ]),
       }),
     });
+  });
+
+  it("does not retry an unconfirmed full-year target through a normal start", async () => {
+    mockLocalStorageGet({
+      "full-year-ledger": createFullFiscalYearLedger({
+        status: "blocked",
+        currentPeriod: "April",
+        targets: [
+          { period: "April", status: "download-unconfirmed" },
+          { period: "May", status: "pending" },
+        ],
+      }),
+    });
+    const sendMessageToTabWithInjection =
+      vi.fn<FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]>();
+
+    const response = await startFiledReturnsDownloadFlow(
+      {
+        financialYear: "2026-27",
+        period: FULL_FISCAL_YEAR_PERIOD,
+        returnType: "GSTR-3B",
+      },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+        },
+        now: () => new Date("2026-06-24T00:00:00+05:30"),
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "user-action-required",
+        safeSignals: expect.arrayContaining(["full-fiscal-year-download-unconfirmed"]),
+      },
+      flowSummary: {
+        status: "blocked",
+        currentPeriod: "April",
+      },
+    });
+    expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
+  });
+
+  it("reconciles a completed current-year ledger with newly eligible periods", async () => {
+    mockLocalStorageGet({
+      "full-year-ledger": createFullFiscalYearLedger({
+        status: "complete",
+        currentPeriod: "May",
+        updatedAt: "2026-06-24T00:00:00.000Z",
+        targets: [
+          { period: "April", status: "downloaded" },
+          { period: "May", status: "downloaded" },
+        ],
+      }),
+    });
+    const responses: PackMessageResponse[] = [
+      {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+          state: "clicked",
+          safeSignals: ["filed-return-result-view-clicked", "filed-return-result-period:June"],
+          safeMessage: "Opened.",
+        },
+      },
+      {
+        ok: true,
+        downloadTrigger: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+          state: "clicked",
+          safeSignals: ["filed-gstr3b-download-clicked"],
+          safeMessage: "Clicked download.",
+        },
+      },
+    ];
+    const sendMessageToTabWithInjection = vi.fn<
+      FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
+    >(async () => responses.shift() ?? { ok: false, error: "Unexpected call." });
+
+    const response = await startFiledReturnsDownloadFlow(
+      {
+        financialYear: "2026-27",
+        period: FULL_FISCAL_YEAR_PERIOD,
+        returnType: "GSTR-3B",
+      },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+        },
+        now: () => new Date("2026-07-02T00:00:00+05:30"),
+        timings: {
+          flowStepSettleMs: 0,
+          resultRowNavigationSettleMs: 0,
+        },
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowSummary: {
+        status: "complete",
+        completedPeriods: ["April", "May", "June"],
+        totalPeriods: 3,
+      },
+    });
+    const sentPeriods = sendMessageToTabWithInjection.mock.calls.map(
+      ([, message]) => message.payload.period,
+    );
+    expect(sentPeriods).toEqual(["June", "June"]);
   });
 
   it("keeps the observer alive after an ambiguous final trigger delivery", async () => {

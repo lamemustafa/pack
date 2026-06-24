@@ -1,15 +1,17 @@
 import type {
   FiledReturnsDownloadScope,
-  FiledReturnsFlowSummary,
   FiledReturnsFullFiscalYearLedger,
   FiledReturnsFullFiscalYearTarget,
   FiledReturnsFullFiscalYearTargetStatus,
   PortalFlowStepResult,
 } from "../core/contracts";
 import { FULL_FISCAL_YEAR_PERIOD, type FiledReturnsMonth } from "../core/filed-returns-scope";
+import { GST_CONNECTOR_DESCRIPTOR } from "../connectors/gst/constants";
+export { isFullFiscalYearLedger } from "./filed-returns-full-fiscal-year-validation";
 
-const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
 const ACTIVE_LEDGER_STALE_MS = 30_000;
+const FULL_FISCAL_YEAR_PLAN_VERSION = "filed-gstr3b-monthly-v1";
+const CREATED_WITH_EXTENSION_VERSION = "0.1.0";
 const POSITIVE_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
   "downloaded",
   "not-filed",
@@ -21,8 +23,12 @@ export function createFullFiscalYearLedger(
   periods: readonly FiledReturnsMonth[],
 ): FiledReturnsFullFiscalYearLedger {
   const timestamp = now.toISOString();
+  const eligibleThrough = periods.at(-1);
   return {
     schemaVersion: "1.0",
+    planVersion: FULL_FISCAL_YEAR_PLAN_VERSION,
+    connectorVersion: GST_CONNECTOR_DESCRIPTOR.version,
+    createdWithExtensionVersion: CREATED_WITH_EXTENSION_VERSION,
     ledgerId: createLedgerId(now),
     status: "running",
     scope: {
@@ -32,6 +38,8 @@ export function createFullFiscalYearLedger(
     },
     createdAt: timestamp,
     updatedAt: timestamp,
+    ...(eligibleThrough ? { eligibleThrough } : {}),
+    lastReconciledAt: timestamp,
     targets: periods.map((period) => ({
       targetId: createTargetId(scope.financialYear, period),
       financialYear: scope.financialYear,
@@ -43,6 +51,44 @@ export function createFullFiscalYearLedger(
       safeMessage: "Not checked yet.",
       updatedAt: timestamp,
     })),
+  };
+}
+
+export function reconcileFullFiscalYearLedgerTargets(
+  ledger: FiledReturnsFullFiscalYearLedger,
+  now: Date,
+  periods: readonly FiledReturnsMonth[],
+): FiledReturnsFullFiscalYearLedger {
+  const timestamp = now.toISOString();
+  const eligibleThrough = periods.at(-1);
+  const existingTargetIds = new Set(ledger.targets.map((target) => target.targetId));
+  const missingTargets = periods
+    .map((period) => ({
+      targetId: createTargetId(ledger.scope.financialYear, period),
+      financialYear: ledger.scope.financialYear,
+      period,
+      returnType: "GSTR-3B" as const,
+      status: "pending" as const,
+      attempts: 0,
+      safeSignals: [],
+      safeMessage: "Not checked yet.",
+      updatedAt: timestamp,
+    }))
+    .filter((target) => !existingTargetIds.has(target.targetId));
+  const targets = [...ledger.targets, ...missingTargets];
+
+  return {
+    ...ledger,
+    planVersion: FULL_FISCAL_YEAR_PLAN_VERSION,
+    connectorVersion: GST_CONNECTOR_DESCRIPTOR.version,
+    createdWithExtensionVersion:
+      ledger.createdWithExtensionVersion ?? CREATED_WITH_EXTENSION_VERSION,
+    status: ledger.status === "complete" && missingTargets.length > 0 ? "running" : ledger.status,
+    updatedAt:
+      missingTargets.length > 0 && ledger.status !== "running" ? timestamp : ledger.updatedAt,
+    ...(eligibleThrough ? { eligibleThrough } : {}),
+    lastReconciledAt: timestamp,
+    targets,
   };
 }
 
@@ -64,6 +110,7 @@ export function resumeFullFiscalYearLedger(
 export function nextRunnableFullFiscalYearTarget(
   ledger: FiledReturnsFullFiscalYearLedger,
 ): FiledReturnsFullFiscalYearTarget | null {
+  if (ledger.targets.some((target) => target.status === "download-unconfirmed")) return null;
   return ledger.targets.find((target) => !POSITIVE_TARGET_STATUSES.has(target.status)) ?? null;
 }
 
@@ -135,106 +182,6 @@ export function completeFullFiscalYearLedger(
   };
 }
 
-export function targetStatusFromFlowStep(
-  step: PortalFlowStepResult,
-): FiledReturnsFullFiscalYearTargetStatus {
-  if (step.state === "downloaded") return "downloaded";
-  if (step.state === "download-unconfirmed") return "download-unconfirmed";
-  if (
-    step.safeSignals.some((signal) =>
-      [
-        "browser-download-size-unknown",
-        "browser-download-not-observed",
-        "filed-gstr3b-download-trigger-ambiguous",
-      ].includes(signal),
-    )
-  ) {
-    return "download-unconfirmed";
-  }
-  if (step.state === "candidate-not-found") return "blocked";
-  if (
-    step.state === "blocked" ||
-    step.state === "login-required" ||
-    step.state === "unsupported-page" ||
-    step.state === "user-action-required"
-  ) {
-    return "blocked";
-  }
-  return "failed";
-}
-
-export function summariseFullFiscalYearLedger(
-  ledger: FiledReturnsFullFiscalYearLedger,
-): FiledReturnsFlowSummary {
-  if (ledger.status === "complete") {
-    return toFullFiscalYearSummary(ledger, completeFullFiscalYearStep(ledger));
-  }
-  if (ledger.status === "running") {
-    return toFullFiscalYearSummary(ledger, activeFullFiscalYearStep(ledger));
-  }
-  return toFullFiscalYearSummary(
-    ledger,
-    blockedFullFiscalYearStep("full-fiscal-year-run-needs-action", ledger),
-  );
-}
-
-export function toFullFiscalYearSummary(
-  ledger: FiledReturnsFullFiscalYearLedger,
-  flowStep: PortalFlowStepResult,
-): FiledReturnsFlowSummary {
-  const completedPeriods = ledger.targets
-    .filter((target) => target.status === "downloaded")
-    .map((target) => target.period);
-  const currentTarget = ledger.targets.find((target) => target.targetId === ledger.currentTargetId);
-  return {
-    scope: ledger.scope,
-    status: ledger.status,
-    completedPeriods,
-    totalPeriods: ledger.targets.length,
-    updatedAt: ledger.updatedAt,
-    ...(ledger.status === "complete" ? { completedAt: ledger.updatedAt } : {}),
-    ...(currentTarget ? { currentPeriod: currentTarget.period } : {}),
-    flowStep,
-  };
-}
-
-export function completeFullFiscalYearStep(
-  ledger: FiledReturnsFullFiscalYearLedger,
-): PortalFlowStepResult {
-  return {
-    connectorId: "gst",
-    scopeId: FILED_RETURNS_SCOPE_ID,
-    state: "downloaded",
-    safeSignals: ["full-fiscal-year-complete"],
-    safeMessage: `Pack completed the local full fiscal year run for FY ${ledger.scope.financialYear}.`,
-  };
-}
-
-export function activeFullFiscalYearStep(
-  ledger: FiledReturnsFullFiscalYearLedger,
-): PortalFlowStepResult {
-  return {
-    connectorId: "gst",
-    scopeId: FILED_RETURNS_SCOPE_ID,
-    state: "user-action-required",
-    safeSignals: ["full-fiscal-year-run-active"],
-    safeMessage: `A full fiscal year run for FY ${ledger.scope.financialYear} is already active.`,
-  };
-}
-
-export function blockedFullFiscalYearStep(
-  signal: string,
-  ledger: FiledReturnsFullFiscalYearLedger,
-): PortalFlowStepResult {
-  return {
-    connectorId: "gst",
-    scopeId: FILED_RETURNS_SCOPE_ID,
-    state: "blocked",
-    safeSignals: [signal],
-    safeMessage: `Pack could not start a full fiscal year run for FY ${ledger.scope.financialYear}.`,
-  };
-}
-
 export function sameFiledReturnsScope(
   left: FiledReturnsDownloadScope,
   right: FiledReturnsDownloadScope,
@@ -252,18 +199,6 @@ export function isFullFiscalYearLedgerStale(
 ): boolean {
   const updatedAt = Date.parse(ledger.updatedAt);
   return Number.isFinite(updatedAt) && now.getTime() - updatedAt > ACTIVE_LEDGER_STALE_MS;
-}
-
-export function isFullFiscalYearLedger(input: unknown): input is FiledReturnsFullFiscalYearLedger {
-  if (!input || typeof input !== "object") return false;
-  const ledger = input as Partial<FiledReturnsFullFiscalYearLedger>;
-  return (
-    ledger.schemaVersion === "1.0" &&
-    typeof ledger.ledgerId === "string" &&
-    typeof ledger.updatedAt === "string" &&
-    Boolean(ledger.scope) &&
-    Array.isArray(ledger.targets)
-  );
 }
 
 function withoutCurrentTarget(

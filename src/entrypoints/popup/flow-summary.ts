@@ -24,6 +24,10 @@ export function getFiledReturnsCompletionStatus(
   return null;
 }
 
+export function getFiledReturnsSummaryHeading(summary: FiledReturnsFlowSummary): string {
+  return `Last filed-returns run: ${summary.status}`;
+}
+
 function isSameScope(left: FiledReturnsDownloadScope, right: FiledReturnsDownloadScope): boolean {
   return (
     left.financialYear === right.financialYear &&

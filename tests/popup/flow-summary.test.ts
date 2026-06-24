@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { getFiledReturnsCompletionStatus } from "../../src/entrypoints/popup/flow-summary";
+import {
+  getFiledReturnsCompletionStatus,
+  getFiledReturnsSummaryHeading,
+} from "../../src/entrypoints/popup/flow-summary";
 import type { FiledReturnsFlowSummary } from "../../src/core/contracts";
 import { FULL_FISCAL_YEAR_PERIOD } from "../../src/core/filed-returns-scope";
 
@@ -79,5 +82,14 @@ describe("popup filed returns flow summary", () => {
         },
       ),
     ).toBe("FY 2025-26 GSTR-3B blocked at June. 2 of 12 periods downloaded.");
+  });
+
+  it("uses the persisted summary status in the popup heading", () => {
+    expect(getFiledReturnsSummaryHeading(COMPLETE_SUMMARY)).toBe(
+      "Last filed-returns run: complete",
+    );
+    expect(getFiledReturnsSummaryHeading({ ...COMPLETE_SUMMARY, status: "blocked" })).toBe(
+      "Last filed-returns run: blocked",
+    );
   });
 });

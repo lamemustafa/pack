@@ -21,6 +21,7 @@ const browserMocks = vi.hoisted(() => ({
     local: {
       get: vi.fn(async () => ({})),
       remove: vi.fn(async () => undefined),
+      setAccessLevel: vi.fn(async () => undefined),
       set: vi.fn(async () => undefined),
     },
     session: {
@@ -61,5 +62,13 @@ describe("Pack local data clearing", () => {
     expect(background.PACK_CLEARABLE_LOCAL_STORAGE_KEYS).toEqual(
       Object.values(background.PACK_LOCAL_STORAGE_KEYS),
     );
+  });
+
+  it("restricts local storage to trusted extension contexts on startup", async () => {
+    await import("../../src/entrypoints/background");
+
+    expect(browserMocks.storage.local.setAccessLevel).toHaveBeenCalledWith({
+      accessLevel: "TRUSTED_CONTEXTS",
+    });
   });
 });

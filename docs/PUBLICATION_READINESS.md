@@ -33,7 +33,7 @@ open-source alpha to a broader public release and v0 Chrome Web Store package.
 - [x] CODEOWNERS draft for sensitive surfaces.
 - [x] Dependabot configuration for npm and GitHub Actions.
 - [x] CI workflow for format, lint, type-check, tests, build, package-policy
-      verification, and ZIP creation.
+      verification, ZIP creation, and exact-ZIP verification.
 - [x] Package metadata for repository, homepage, bugs, author, and Apache-2.0.
 - [x] Manifest metadata, homepage URL, and icon paths.
 - [x] Built-package verifier checks exact permissions, hosts, CSP, metadata, and

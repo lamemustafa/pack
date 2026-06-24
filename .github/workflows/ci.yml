@@ -56,3 +56,6 @@ jobs:
 
       - name: Create store zip
         run: pnpm exec wxt zip
+
+      - name: Verify exact store zip
+        run: node scripts/verify-extension-zip.mjs
