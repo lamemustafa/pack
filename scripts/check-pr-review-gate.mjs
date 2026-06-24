@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 const rawArgs = process.argv.slice(2);
 const args = new Set(rawArgs);
 const strictHeadReview = args.has("--strict-head-review");
+const allowMissingHeadReview = args.has("--allow-missing-head-review");
 const waitHeadReviewMs = readNonNegativeIntegerArg("--wait-head-review-ms", 0);
 const pollIntervalMs = readNonNegativeIntegerArg("--poll-interval-ms", 10_000);
 const fixturePaths = readFixturePaths();
@@ -25,14 +26,20 @@ if (!Number.isInteger(prNumber) || prNumber < 1)
 const { pr, unresolvedThreads, blockingReviews, headReviews } = await fetchEvaluatedPr();
 reportBlockingState({ unresolvedThreads, blockingReviews });
 
-if (strictHeadReview && headReviews.length === 0) {
-  console.error(`No review was found for current head ${pr.headRefOid}.`);
+const missingHeadReview = strictHeadReview && headReviews.length === 0;
+if (missingHeadReview) {
+  const message = `No review was found for current head ${pr.headRefOid}.`;
+  if (allowMissingHeadReview) {
+    console.warn(`${message} Continuing because --allow-missing-head-review was set.`);
+  } else {
+    console.error(message);
+  }
 }
 
 if (
   unresolvedThreads.length > 0 ||
   blockingReviews.length > 0 ||
-  (strictHeadReview && headReviews.length === 0)
+  (missingHeadReview && !allowMissingHeadReview)
 ) {
   process.exit(1);
 }

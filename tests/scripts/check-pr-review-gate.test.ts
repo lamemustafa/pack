@@ -111,6 +111,64 @@ describe("PR review gate", () => {
     expect(output).toContain("PR review gate passed");
   });
 
+  it("fails strict mode when the required current-head review is missing", () => {
+    const fixturePath = writeFixture(
+      "missing-head-review",
+      reviewFixture({
+        headRefOid: "head-sha",
+        reviews: [review({ state: "COMMENTED", commit: "old-sha" })],
+      }),
+    );
+
+    expect(() =>
+      execFileSync(process.execPath, [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture",
+        fixturePath,
+        "--strict-head-review",
+        "--required-review-author",
+        "chatgpt-codex-connector",
+      ]),
+    ).toThrow(/No review was found for current head/);
+  });
+
+  it("can allow a missing head review for finding-only CI gates", () => {
+    const fixturePath = writeFixture(
+      "allowed-missing-head-review",
+      reviewFixture({
+        headRefOid: "head-sha",
+        reviews: [review({ state: "COMMENTED", commit: "old-sha" })],
+      }),
+    );
+
+    const output = execFileSync(
+      process.execPath,
+      [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture",
+        fixturePath,
+        "--strict-head-review",
+        "--required-review-author",
+        "chatgpt-codex-connector",
+        "--allow-missing-head-review",
+      ],
+      {
+        cwd: rootDir,
+        encoding: "utf8",
+      },
+    );
+
+    expect(output).toContain("PR review gate passed");
+  });
+
   it("waits for a current-head review instead of treating the first snapshot as final", () => {
     const firstFixture = writeFixture(
       "no-head-review",

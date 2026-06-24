@@ -81,6 +81,10 @@ its own git repository.
   Codex bot review with
   `pnpm review:gate -- --strict-head-review --required-review-author chatgpt-codex-connector --wait-head-review-ms 180000`.
   Treat network/auth failure as a reported verification gap, not as a pass.
+- The CI `Review gate` workflow may use `--allow-missing-head-review` so a
+  non-responsive external bot does not create a permanent red check. That mode is
+  a findings gate only; it does not replace the hard local/manual
+  `pnpm verify:pr` release-readiness gate.
 
 ## Required Checks
 

@@ -50,6 +50,13 @@ Record the PR URL, head SHA, merge commit, and review-gate result in the release
 notes. If Codex or another bot submits findings after merge, treat them as a
 release blocker until fixed by a follow-up PR or answered with evidence.
 
+The required CI `Review gate` workflow can pass after waiting for Codex when no
+formal bot review is produced, because the external Codex reviewer is not a
+deterministic CI service. Do not treat that as a store-readiness pass by itself.
+For a release candidate, explicitly trigger `@codex review`, wait for the review
+or document the missing-review gap, and keep the PR open for any later findings
+before tagging.
+
 ## Manual clean-profile QA
 
 Before submitting a ZIP to a browser store:

@@ -30,5 +30,6 @@ describe("Pack CI workflow", () => {
     expect(workflow).toContain("--strict-head-review");
     expect(workflow).toContain("--required-review-author chatgpt-codex-connector");
     expect(workflow).toContain("--wait-head-review-ms 180000");
+    expect(workflow).toContain("--allow-missing-head-review");
   });
 });
