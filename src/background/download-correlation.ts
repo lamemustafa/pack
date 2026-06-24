@@ -41,6 +41,7 @@ function hasExpectedFileEvidence(
 ): boolean {
   const mime = item.mime?.toLowerCase();
   if (mime && context.expectedMimeTypes.some((expected) => mime.includes(expected))) return true;
+  if (mime && isKnownNonMatchingMime(mime, context.expectedMimeTypes)) return false;
 
   const filename = item.filename?.toLowerCase();
   if (
@@ -60,6 +61,11 @@ function hasExpectedFileEvidence(
   }
 
   return false;
+}
+
+function isKnownNonMatchingMime(mime: string, expectedMimeTypes: readonly string[]): boolean {
+  if (mime === "application/octet-stream" || mime === "binary/octet-stream") return false;
+  return !expectedMimeTypes.some((expected) => mime.includes(expected));
 }
 
 function isNonNullableString(value: string | null | undefined): value is string {

@@ -189,6 +189,13 @@ export interface FiledReturnsDownloadScope {
   completedPeriods?: string[];
 }
 
+export interface FiledReturnsDownloadTarget {
+  actionId: string;
+  financialYear: string;
+  period: string;
+  returnType: "GSTR-3B";
+}
+
 export interface FiledReturnsFlowSummary {
   scope: FiledReturnsDownloadScope;
   status: "complete";

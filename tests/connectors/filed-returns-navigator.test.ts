@@ -241,6 +241,8 @@ describe("filed returns navigation matcher", () => {
       <main>
         <h1>GSTR-3B - Monthly Return</h1>
         <div>Status - Filed</div>
+        <div>Financial Year - 2025-26</div>
+        <div>Return Period - March</div>
         <button>DOWNLOAD FILED GSTR-3B</button>
         <a title="Click here to download GSTR-3B system generated PDF">SYSTEM GENERATED GSTR-3B</a>
       </main>
@@ -255,7 +257,12 @@ describe("filed returns navigation matcher", () => {
       systemClicked += 1;
     });
 
-    const result = await triggerFiledGstr3bFiledPdfDownload(documentRef);
+    const result = await triggerFiledGstr3bFiledPdfDownload(documentRef, {
+      actionId: "test-action",
+      financialYear: "2025-26",
+      period: "March",
+      returnType: "GSTR-3B",
+    });
 
     expect(result.state).toBe("clicked");
     expect(result.safeSignals).toEqual(
@@ -281,7 +288,12 @@ describe("filed returns navigation matcher", () => {
       dueDateDownloadClicked += 1;
     });
 
-    const result = await triggerFiledGstr3bFiledPdfDownload(documentRef);
+    const result = await triggerFiledGstr3bFiledPdfDownload(documentRef, {
+      actionId: "test-action",
+      financialYear: "2025-26",
+      period: "March",
+      returnType: "GSTR-3B",
+    });
 
     expect(result.state).toBe("candidate-not-found");
     expect(result.safeSignals).toEqual(expect.arrayContaining(["not-filed-gstr3b-detail-page"]));

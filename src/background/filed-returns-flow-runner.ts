@@ -1,5 +1,4 @@
 import { browser } from "wxt/browser";
-import { GST_CONNECTOR_DESCRIPTOR } from "../connectors/gst/constants";
 import { pickSupportedGstPortalTab } from "../connectors/gst/hosts";
 import type {
   FiledReturnsDownloadScope,
@@ -8,11 +7,10 @@ import type {
 } from "../core/contracts";
 import type { PackMessage, PackMessageResponse } from "../core/messages";
 import {
-  mergeFlowStepWithDownloadObservation,
-  observeNextBrowserDownload,
-} from "./download-observer";
-import { unverifiedPeriodAfterDownloadStep } from "./filed-returns-flow-guards";
-import { runDownloadStepWithRetry, runDownloadTriggerOnce } from "./filed-returns-flow-messaging";
+  observeFiledReturnDownload,
+  triggerAndObserveFiledReturnDownload,
+} from "./filed-returns-download-trigger";
+import { runDownloadStepWithRetry } from "./filed-returns-flow-messaging";
 import { persistFiledReturnsCompletionSummary } from "./filed-returns-flow-summary";
 
 const GST_LOGIN_URL = "https://services.gst.gov.in/services/login";
@@ -21,11 +19,6 @@ const RESULT_ROW_NAVIGATION_SETTLE_MS = 4_500;
 const MAX_FLOW_STEPS = 6;
 const MAX_FINANCIAL_YEAR_FLOW_STEPS = 80;
 const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
-const EXPECTED_FILED_RETURN_DOWNLOAD = {
-  expectedFileExtensions: [".pdf"],
-  expectedMimeTypes: ["application/pdf"],
-  expectedOrigins: GST_CONNECTOR_DESCRIPTOR.supportedOrigins,
-};
 
 export type ActiveGstTab = Browser.tabs.Tab & { id: number };
 
@@ -101,81 +94,33 @@ export async function startFiledReturnsDownloadFlow(
       downloadObservation.stop();
       await delay(RESULT_ROW_NAVIGATION_SETTLE_MS);
 
-      const detailDownloadObservation = observeFiledReturnDownload();
-      const triggerResponse = await runDownloadTriggerOnce(deps, activeTab.tab.id);
-      if (!triggerResponse.ok || !("downloadTrigger" in triggerResponse)) {
-        detailDownloadObservation.stop();
-        return triggerResponse;
-      }
-
-      const triggerStep: PortalFlowStepResult = {
-        ...triggerResponse.downloadTrigger,
-        safeSignals: [
-          ...triggerResponse.downloadTrigger.safeSignals,
-          ...(activePeriod ? [`filed-return-detail-period:${activePeriod}`] : []),
-        ],
-      };
-      const triggerFlowResponse = {
-        ...triggerResponse,
-        flowStep: triggerStep,
-      };
-      await persistFlowResponse(triggerFlowResponse, deps);
-      lastStep = triggerStep;
-      const detailCompletionSummary = await persistCompletionSummaryIfComplete(
-        scope,
+      const triggerResult = await triggerAndObserveFiledReturnDownload({
+        activePeriod,
         completedPeriods,
-        lastStep,
         deps,
-      );
-      if (detailCompletionSummary) {
-        return { ...triggerFlowResponse, flowSummary: detailCompletionSummary };
-      }
-
-      if (!lastStep.safeSignals.includes("filed-gstr3b-download-clicked")) {
-        detailDownloadObservation.stop();
-        return triggerFlowResponse;
-      }
-
-      const observedDownload = await detailDownloadObservation.promise;
-      const mergedResponse = {
-        ...triggerFlowResponse,
-        flowStep: mergeFlowStepWithDownloadObservation(lastStep, observedDownload),
-      };
-      if (!isEntireFinancialYearScope(scope)) return mergedResponse;
-      if (mergedResponse.flowStep.state !== "downloaded") return mergedResponse;
-      if (!activePeriod) {
-        return {
-          ...mergedResponse,
-          flowStep: unverifiedPeriodAfterDownloadStep(mergedResponse.flowStep),
-        };
-      }
-
-      completedPeriods.add(activePeriod);
+        scope,
+        tabId: activeTab.tab.id,
+      });
+      if (!triggerResult.continueFlow) return triggerResult.response;
       activePeriod = null;
+      lastStep = triggerResult.response.flowStep;
       await delay(FLOW_STEP_SETTLE_MS);
-      lastStep = mergedResponse.flowStep;
       continue;
     }
 
-    if (lastStep.safeSignals.includes("filed-gstr3b-download-clicked")) {
-      const observedDownload = await downloadObservation.promise;
-      const mergedResponse = {
-        ...response,
-        flowStep: mergeFlowStepWithDownloadObservation(lastStep, observedDownload),
-      };
-      if (!isEntireFinancialYearScope(scope)) return mergedResponse;
-      if (mergedResponse.flowStep.state !== "downloaded") return mergedResponse;
-      if (!activePeriod) {
-        return {
-          ...mergedResponse,
-          flowStep: unverifiedPeriodAfterDownloadStep(mergedResponse.flowStep),
-        };
-      }
-
-      completedPeriods.add(activePeriod);
+    if (lastStep.safeSignals.includes("filed-gstr3b-download-ready")) {
+      downloadObservation.stop();
+      const triggerResult = await triggerAndObserveFiledReturnDownload({
+        activePeriod,
+        completedPeriods,
+        deps,
+        scope,
+        tabId: activeTab.tab.id,
+      });
+      if (!triggerResult.continueFlow) return triggerResult.response;
       activePeriod = null;
+      lastStep = triggerResult.response.flowStep;
       await delay(FLOW_STEP_SETTLE_MS);
-      lastStep = mergedResponse.flowStep;
       continue;
     }
 
@@ -195,13 +140,6 @@ export async function startFiledReturnsDownloadFlow(
         "Pack started the filed-return flow but did not reach the download step yet. Wait for the GST portal to finish loading, then click Start download again.",
     },
   };
-}
-
-function observeFiledReturnDownload() {
-  return observeNextBrowserDownload(browser.downloads, {
-    ...EXPECTED_FILED_RETURN_DOWNLOAD,
-    armedAt: new Date(),
-  });
 }
 
 async function persistCompletionSummaryIfComplete(

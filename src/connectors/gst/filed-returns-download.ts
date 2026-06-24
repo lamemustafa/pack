@@ -1,14 +1,15 @@
-import type { PortalDownloadTriggerResult } from "../../core/contracts";
-import {
-  dismissKnownFiledReturnsSummaryModal,
-  type NavigationCandidateInput,
-} from "./filed-returns-navigator";
+import type { FiledReturnsDownloadTarget, PortalDownloadTriggerResult } from "../../core/contracts";
+import { resolveVisibleFiledGstr3bDownloadCandidates } from "./filed-returns-download-candidates";
+import { verifyFiledReturnsDownloadTarget } from "./filed-returns-download-target";
+import { dismissKnownFiledReturnsSummaryModal } from "./filed-returns-navigator";
+
+export {
+  findFiledGstr3bDownloadCandidateIndex,
+  scoreFiledGstr3bDownloadCandidate,
+} from "./filed-returns-download-candidates";
 
 const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
 const DIALOG_SETTLE_DELAY_MS = 250;
-const CLICKABLE_SELECTOR = ["a", "button", "[role='button']", "[ng-click]", "[data-ng-click]"].join(
-  ",",
-);
 const BLOCKED_PORTAL_PATTERNS = [
   /request rejected/i,
   /access denied/i,
@@ -18,75 +19,9 @@ const BLOCKED_PORTAL_PATTERNS = [
   /invalid session/i,
 ];
 
-interface CandidateScore {
-  score: number;
-  safeSignals: string[];
-}
-
-export function scoreFiledGstr3bDownloadCandidate(
-  candidate: NavigationCandidateInput,
-): CandidateScore {
-  const searchable = normaliseCandidateText([
-    candidate.text,
-    candidate.ariaLabel,
-    candidate.title,
-    candidate.href,
-  ]);
-  const safeSignals: string[] = [];
-  let score = 0;
-  const hasExplicitFiledDownload = /\bdownload\s+filed\s+gstr[\s-]?3b\b/.test(searchable);
-
-  if (hasExplicitFiledDownload) {
-    score += 160;
-    safeSignals.push("text-download-filed-gstr3b");
-  }
-  if (/\bdownload\b/.test(searchable) && /\bfiled\b/.test(searchable)) {
-    score += 50;
-    safeSignals.push("text-download-filed");
-  }
-  if (/\bdownload\b/.test(searchable) && /\bgstr[\s-]?3b\b/.test(searchable)) {
-    score += 40;
-    safeSignals.push("text-download-gstr3b");
-  }
-
-  if (/\bsystem\s+generated\b/.test(searchable)) {
-    score -= 220;
-    safeSignals.push("excluded-system-generated-gstr3b");
-  }
-  if (
-    /\b(save|submit|proceed|continue|file)\b/.test(searchable) ||
-    (!hasExplicitFiledDownload && /\bclick here\b/.test(searchable))
-  ) {
-    score -= 160;
-    safeSignals.push("excluded-filing-or-navigation-action");
-  }
-  if (!/\bdownload\b/.test(searchable)) {
-    score -= 40;
-    safeSignals.push("excluded-missing-download-term");
-  }
-
-  return { score, safeSignals };
-}
-
-export function findFiledGstr3bDownloadCandidateIndex(
-  candidates: readonly NavigationCandidateInput[],
-): number {
-  let bestIndex = -1;
-  let bestScore = 0;
-
-  candidates.forEach((candidate, index) => {
-    const { score } = scoreFiledGstr3bDownloadCandidate(candidate);
-    if (score > bestScore) {
-      bestScore = score;
-      bestIndex = index;
-    }
-  });
-
-  return bestScore >= 120 ? bestIndex : -1;
-}
-
 export async function triggerFiledGstr3bFiledPdfDownload(
   documentRef: Document,
+  target: FiledReturnsDownloadTarget,
 ): Promise<PortalDownloadTriggerResult> {
   const blockedState = detectBlockedPortalState(documentRef);
   if (blockedState) return blockedState;
@@ -108,16 +43,22 @@ export async function triggerFiledGstr3bFiledPdfDownload(
     };
   }
 
-  const elements = getClickableElements(documentRef).filter((element) => !isDisabled(element));
-  const candidates = elements.map(toNavigationCandidateInput);
-  const candidateIndex = findFiledGstr3bDownloadCandidateIndex(candidates);
+  const targetGuard = verifyFiledReturnsDownloadTarget(documentRef, target, safeSignals);
+  if (targetGuard) return targetGuard;
 
-  if (candidateIndex === -1) {
+  const viableCandidates = resolveVisibleFiledGstr3bDownloadCandidates(documentRef);
+
+  if (viableCandidates.length !== 1) {
     return {
       connectorId: "gst",
       scopeId: FILED_RETURNS_SCOPE_ID,
       state: "candidate-not-found",
-      safeSignals: [...safeSignals, "filed-gstr3b-download-candidate-not-found"],
+      safeSignals: [
+        ...safeSignals,
+        viableCandidates.length > 1
+          ? "filed-gstr3b-download-candidate-ambiguous"
+          : "filed-gstr3b-download-candidate-not-found",
+      ],
       safeMessage:
         "Pack could not find the explicit DOWNLOAD FILED GSTR-3B control on this GST page.",
       userAction: {
@@ -129,9 +70,8 @@ export async function triggerFiledGstr3bFiledPdfDownload(
     };
   }
 
-  const candidate = candidates[candidateIndex];
-  const element = elements[candidateIndex];
-  if (!candidate || !element) {
+  const viableCandidate = viableCandidates[0];
+  if (!viableCandidate) {
     return {
       connectorId: "gst",
       scopeId: FILED_RETURNS_SCOPE_ID,
@@ -141,7 +81,8 @@ export async function triggerFiledGstr3bFiledPdfDownload(
     };
   }
 
-  const score = scoreFiledGstr3bDownloadCandidate(candidate);
+  const { element, score } = viableCandidate;
+
   activateElement(element);
   await delay(DIALOG_SETTLE_DELAY_MS);
 
@@ -208,31 +149,6 @@ function detectBlockedPortalState(documentRef: Document): PortalDownloadTriggerR
   };
 }
 
-function getClickableElements(root: ParentNode): HTMLElement[] {
-  return Array.from(root.querySelectorAll(CLICKABLE_SELECTOR)).filter((element) =>
-    isHtmlElement(root, element),
-  );
-}
-
-function toNavigationCandidateInput(element: HTMLElement): NavigationCandidateInput {
-  const input: NavigationCandidateInput = {
-    text: element.innerText || element.textContent || "",
-  };
-  const HTMLAnchorElementConstructor = element.ownerDocument.defaultView?.HTMLAnchorElement;
-  const href =
-    HTMLAnchorElementConstructor && element instanceof HTMLAnchorElementConstructor
-      ? element.href
-      : null;
-  const ariaLabel = element.getAttribute("aria-label");
-  const title = element.getAttribute("title");
-
-  if (href) input.href = href;
-  if (ariaLabel) input.ariaLabel = ariaLabel;
-  if (title) input.title = title;
-
-  return input;
-}
-
 function activateElement(element: HTMLElement) {
   element.scrollIntoView?.({ block: "center", inline: "center" });
   dispatchPointerSequence(element);
@@ -251,25 +167,6 @@ function dispatchPointerSequence(element: HTMLElement) {
       }),
     );
   }
-}
-
-function isDisabled(element: HTMLElement): boolean {
-  return (
-    element.getAttribute("disabled") !== null ||
-    element.getAttribute("aria-disabled") === "true" ||
-    element.classList.contains("disabled")
-  );
-}
-
-function isHtmlElement(root: ParentNode, element: Element): element is HTMLElement {
-  const documentRef = root.nodeType === 9 ? (root as Document) : root.ownerDocument;
-  if (!documentRef) return false;
-  const HTMLElementConstructor = documentRef.defaultView?.HTMLElement;
-  return HTMLElementConstructor ? element instanceof HTMLElementConstructor : false;
-}
-
-function normaliseCandidateText(values: readonly (string | undefined)[]): string {
-  return values.filter(Boolean).join(" ").replace(/\s+/g, " ").trim().toLowerCase();
 }
 
 function delay(ms: number): Promise<void> {

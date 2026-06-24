@@ -130,6 +130,40 @@ describe("download observer", () => {
     });
   });
 
+  it("rejects contradictory MIME evidence even when the filename looks like a PDF", async () => {
+    const downloads = createDownloadsApi([
+      {
+        id: 147,
+        state: "complete",
+        fileSize: 1234,
+        filename: "GSTR3B.pdf",
+        mime: "text/csv",
+        url: "https://return.gst.gov.in/returns/auth/gstr3b/download.pdf",
+      },
+    ]);
+    const observation = observeNextBrowserDownload(downloads, {
+      armedAt: new Date("2026-06-24T10:00:00.000Z"),
+      expectedFileExtensions: [".pdf"],
+      expectedMimeTypes: ["application/pdf"],
+      expectedOrigins: ["https://return.gst.gov.in"],
+    });
+
+    downloads.created.emit({
+      id: 147,
+      filename: "GSTR3B.pdf",
+      mime: "text/csv",
+      startTime: "2026-06-24T10:00:01.000Z",
+      state: "complete",
+      url: "https://return.gst.gov.in/returns/auth/gstr3b/download.pdf",
+    });
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    await expect(observation.promise).resolves.toMatchObject({
+      state: "not-observed",
+      safeSignals: expect.arrayContaining(["browser-download-correlation-rejected"]),
+    });
+  });
+
   it("keeps waiting when a same-origin non-PDF completes before the GST PDF", async () => {
     const downloads = createDownloadsApi([
       {
@@ -379,6 +413,56 @@ describe("download observer", () => {
         "browser-download-interrupted",
         "browser-download-error-file-failed",
       ]),
+    });
+  });
+
+  it("keeps waiting when a same-origin non-PDF is interrupted before the GST PDF", async () => {
+    const downloads = createDownloadsApi([
+      {
+        id: 18,
+        state: "interrupted",
+        fileSize: 512,
+        mime: "text/csv",
+        url: "https://return.gst.gov.in/returns/auth/gstr3b/export",
+      },
+      {
+        id: 19,
+        state: "complete",
+        fileSize: 4096,
+        mime: "application/pdf",
+        url: "https://return.gst.gov.in/returns/auth/gstr3b/download",
+      },
+    ]);
+    const observation = observeNextBrowserDownload(downloads, {
+      armedAt: new Date("2026-06-24T10:00:00.000Z"),
+      expectedFileExtensions: [".pdf"],
+      expectedMimeTypes: ["application/pdf"],
+      expectedOrigins: ["https://return.gst.gov.in"],
+    });
+
+    downloads.created.emit({
+      id: 18,
+      mime: "text/csv",
+      startTime: "2026-06-24T10:00:01.000Z",
+      state: "in_progress",
+      url: "https://return.gst.gov.in/returns/auth/gstr3b/export",
+    });
+    downloads.changed.emit({
+      id: 18,
+      state: { current: "interrupted" },
+      error: { current: "FILE_FAILED" },
+    });
+    downloads.created.emit({
+      id: 19,
+      mime: "application/pdf",
+      startTime: "2026-06-24T10:00:02.000Z",
+      state: "complete",
+      url: "https://return.gst.gov.in/returns/auth/gstr3b/download",
+    });
+
+    await expect(observation.promise).resolves.toMatchObject({
+      state: "completed",
+      safeSignals: expect.arrayContaining(["browser-download-id:19"]),
     });
   });
 

@@ -4,6 +4,7 @@ import type {
   UserActionRequired,
 } from "../core/contracts";
 import {
+  isExpectedDownloadCandidate,
   isPotentialDownloadCandidate,
   type DownloadObservationContext,
 } from "./download-correlation";
@@ -117,7 +118,7 @@ export function observeNextBrowserDownload(
       return;
     }
     if (item.state === "interrupted") {
-      settle(failedObservation(item.error));
+      await handleInterruptedCandidate(item, item.error);
     }
   };
 
@@ -136,7 +137,7 @@ export function observeNextBrowserDownload(
       return;
     }
     if (delta.state?.current === "interrupted") {
-      settle(failedObservation(delta.error?.current));
+      void handleInterruptedCandidate(candidateItems.get(delta.id), delta.error?.current);
     }
   }
 
@@ -156,6 +157,33 @@ export function observeNextBrowserDownload(
 
     lastUnconfirmedObservation = observation;
     if (!context || shouldSettleUnconfirmed(observation)) settle(observation);
+  }
+
+  async function handleInterruptedCandidate(
+    fallbackItem: DownloadCreatedItem | undefined,
+    errorCode?: string,
+  ) {
+    if (!context || !fallbackItem) {
+      settle(failedObservation(errorCode));
+      return;
+    }
+    const [searchItem] = await downloads.search({ id: fallbackItem.id }).catch(() => []);
+    const item = { ...fallbackItem, ...searchItem };
+    if (isExpectedDownloadCandidate(item, context)) {
+      settle(failedObservation(errorCode));
+      return;
+    }
+    lastUnconfirmedObservation = {
+      state: "not-observed",
+      safeSignals: ["browser-download-created", "browser-download-correlation-rejected"],
+      safeMessage:
+        "Pack saw a browser download event, but it did not match the expected filed GSTR-3B PDF.",
+      userAction: {
+        type: "RETRY_PORTAL_GENERATION",
+        message: "Retry the filed GSTR-3B download from the GST Portal detail page.",
+        canResume: true,
+      },
+    };
   }
 }
 

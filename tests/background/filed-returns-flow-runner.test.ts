@@ -183,8 +183,22 @@ describe("filed returns flow runner", () => {
         flowStep: {
           connectorId: "gst",
           scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+          state: "ready",
+          safeSignals: [
+            "filed-gstr3b-download-ready",
+            "filed-return-detail-period:March",
+            "filed-return-detail-financial-year:2025-26",
+          ],
+          safeMessage: "Ready.",
+        },
+      },
+      {
+        ok: true,
+        downloadTrigger: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
           state: "clicked",
-          safeSignals: ["filed-gstr3b-download-clicked", "filed-return-detail-period:March"],
+          safeSignals: ["filed-gstr3b-download-clicked"],
           safeMessage: "Clicked download.",
         },
       },
@@ -235,6 +249,15 @@ describe("filed returns flow runner", () => {
         state: "downloaded",
         safeSignals: ["filed-return-financial-year-complete"],
       },
+    });
+    expect(sendMessageToTabWithInjection).toHaveBeenNthCalledWith(2, 17, {
+      type: "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD",
+      payload: expect.objectContaining({
+        actionId: expect.any(String),
+        financialYear: "2025-26",
+        period: "March",
+        returnType: "GSTR-3B",
+      }),
     });
     expect(sendMessageToTabWithInjection).toHaveBeenLastCalledWith(
       17,
@@ -325,7 +348,7 @@ describe("filed returns flow runner", () => {
     });
   }, 12_000);
 
-  it("does not retry the final download trigger after an ambiguous tab delivery failure", async () => {
+  it("keeps the observer alive after an ambiguous final trigger delivery", async () => {
     const responses: Array<PackMessageResponse | Error> = [
       {
         ok: true,
@@ -350,7 +373,7 @@ describe("filed returns flow runner", () => {
     const response = await startFiledReturnsDownloadFlow(
       {
         financialYear: "2025-26",
-        period: "ALL",
+        period: "March",
         returnType: "GSTR-3B",
       },
       {
@@ -366,16 +389,22 @@ describe("filed returns flow runner", () => {
     expect(response).toMatchObject({
       ok: true,
       flowStep: {
-        state: "user-action-required",
-        safeSignals: expect.arrayContaining(["filed-gstr3b-download-trigger-ambiguous"]),
-        userAction: {
-          type: "RETRY_PORTAL_GENERATION",
-        },
+        state: "downloaded",
+        safeSignals: expect.arrayContaining([
+          "filed-gstr3b-download-trigger-ambiguous",
+          "browser-download-completed",
+        ]),
       },
     });
     expect(sendMessageToTabWithInjection).toHaveBeenCalledTimes(2);
     expect(sendMessageToTabWithInjection).toHaveBeenLastCalledWith(17, {
       type: "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD",
+      payload: expect.objectContaining({
+        actionId: expect.any(String),
+        financialYear: "2025-26",
+        period: "March",
+        returnType: "GSTR-3B",
+      }),
     });
   }, 12_000);
 
@@ -386,9 +415,9 @@ describe("filed returns flow runner", () => {
         flowStep: {
           connectorId: "gst",
           scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
-          state: "clicked",
-          safeSignals: ["filed-gstr3b-download-clicked"],
-          safeMessage: "Clicked download.",
+          state: "ready",
+          safeSignals: ["filed-gstr3b-download-ready"],
+          safeMessage: "Ready.",
         },
       },
     ];
@@ -416,10 +445,7 @@ describe("filed returns flow runner", () => {
       ok: true,
       flowStep: {
         state: "user-action-required",
-        safeSignals: expect.arrayContaining([
-          "browser-download-completed",
-          "filed-return-detail-period-unverified",
-        ]),
+        safeSignals: expect.arrayContaining(["filed-return-detail-period-unverified"]),
         userAction: {
           type: "NAVIGATE_TO_SUPPORTED_PAGE",
         },

@@ -88,7 +88,7 @@ export default defineContentScript({
       }
 
       if (message.type === "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD") {
-        void triggerFiledGstr3bFiledPdfDownload(document)
+        void triggerFiledGstr3bFiledPdfDownload(document, message.payload)
           .then((downloadTrigger) => {
             const observation = sendFiledReturnsObservation();
             sendResponse({

@@ -1,3 +1,4 @@
+import type { FiledReturnsDownloadTarget } from "../core/contracts";
 import type { PackMessage, PackMessageResponse } from "../core/messages";
 import { ambiguousDownloadTriggerResponse } from "./filed-returns-flow-guards";
 
@@ -19,10 +20,12 @@ export interface FiledReturnsFlowMessagingDeps {
 export async function runDownloadTriggerOnce(
   deps: FiledReturnsFlowMessagingDeps,
   tabId: number,
+  target: FiledReturnsDownloadTarget,
 ): Promise<PackMessageResponse> {
   try {
     return await deps.sendMessageToTabWithInjection(tabId, {
       type: "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD",
+      payload: target,
     });
   } catch {
     return ambiguousDownloadTriggerResponse();
