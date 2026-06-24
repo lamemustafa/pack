@@ -19,6 +19,17 @@ describe("full fiscal year ledger", () => {
     expect(nextRunnableFullFiscalYearTarget(ledger)).toBeNull();
   });
 
+  it("selects only pending targets for normal scheduling", () => {
+    expect(nextRunnableFullFiscalYearTarget(createLedger([["April", "pending"]]))).toMatchObject({
+      period: "April",
+      status: "pending",
+    });
+
+    for (const status of ["blocked", "failed", "cancelled"] as const) {
+      expect(nextRunnableFullFiscalYearTarget(createLedger([["April", status]]))).toBeNull();
+    }
+  });
+
   it("rejects malformed or inconsistent persisted ledgers", () => {
     expect(isFullFiscalYearLedger(createLedger([["April", "downloaded"]]))).toBe(true);
 

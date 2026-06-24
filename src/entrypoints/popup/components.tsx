@@ -42,6 +42,7 @@ export function RecoveryActions({
     (signals.has("full-fiscal-year-download-unconfirmed") ||
       signals.has("full-fiscal-year-run-interrupted") ||
       signals.has("full-fiscal-year-run-needs-action"));
+  const canManuallyObserveFullYear = canManuallyObserveFullFiscalYearTarget(summary);
   if (!needsRunReview && !needsTargetReview && !needsFullFiscalYearReview) return null;
 
   return (
@@ -86,14 +87,18 @@ export function RecoveryActions({
           <button type="button" disabled={busy !== null} onClick={onRetryFullFiscalYearTarget}>
             {busy === "retry-full-fiscal-year-target" ? "Retrying..." : "Retry full-year period"}
           </button>
-          <button
-            type="button"
-            className="secondary"
-            disabled={busy !== null}
-            onClick={() => onResolveFullFiscalYearTarget("manually-observed")}
-          >
-            {busy === "resolve-full-fiscal-year-target" ? "Saving..." : "Mark as manually observed"}
-          </button>
+          {canManuallyObserveFullYear ? (
+            <button
+              type="button"
+              className="secondary"
+              disabled={busy !== null}
+              onClick={() => onResolveFullFiscalYearTarget("manually-observed")}
+            >
+              {busy === "resolve-full-fiscal-year-target"
+                ? "Saving..."
+                : "Mark as manually observed"}
+            </button>
+          ) : null}
           <button
             type="button"
             className="secondary"
@@ -108,6 +113,12 @@ export function RecoveryActions({
       ) : null}
     </section>
   );
+}
+
+export function canManuallyObserveFullFiscalYearTarget(
+  summary: FiledReturnsFlowSummary | null,
+): boolean {
+  return summary?.fullFiscalYearRecovery?.targetStatus === "download-unconfirmed";
 }
 
 export function ScopeForm({ busy, scope, onScopeChange, onStart }: ScopeFormProps) {

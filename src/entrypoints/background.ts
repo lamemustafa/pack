@@ -7,11 +7,9 @@ import {
   readActiveFiledReturnsRunSummary,
 } from "../background/filed-returns-active-run";
 import { readCurrentFiledReturnsFlowSummary } from "../background/filed-returns-current-state";
+import { resolveFullFiscalYearTarget } from "../background/filed-returns-full-fiscal-year-recovery";
 import {
-  prepareFullFiscalYearTargetRetry,
-  resolveFullFiscalYearTarget,
-} from "../background/filed-returns-full-fiscal-year-recovery";
-import {
+  retryFullFiscalYearTargetDownloadFlow,
   startFiledReturnsDownloadFlow,
   type ActiveGstTab,
 } from "../background/filed-returns-flow-runner";
@@ -133,14 +131,8 @@ async function handleMessage(
         storageKeys: { targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview },
       });
       return startFiledReturnsDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
-    case "PACK_RETRY_FULL_FISCAL_YEAR_TARGET": {
-      const recovery = await prepareFullFiscalYearTargetRetry(
-        message.payload,
-        filedReturnsFlowRunnerDeps(),
-      );
-      if (!recovery.ok) return recovery.response;
-      return startFiledReturnsDownloadFlow(recovery.ledger.scope, filedReturnsFlowRunnerDeps());
-    }
+    case "PACK_RETRY_FULL_FISCAL_YEAR_TARGET":
+      return retryFullFiscalYearTargetDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
     case "PACK_RESOLVE_UNCONFIRMED_DOWNLOAD":
       return resolveUnconfirmedFiledReturnsDownload(
         message.payload.scope,

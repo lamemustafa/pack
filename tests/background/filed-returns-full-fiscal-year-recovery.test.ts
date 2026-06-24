@@ -138,6 +138,78 @@ describe("full fiscal-year recovery", () => {
       }),
     });
   });
+
+  it("rejects manual observation when the target has no final-click evidence", async () => {
+    mockLocalStorageGet({
+      "full-year-ledger": createRecoveryLedger({
+        revision: 2,
+        targetStatus: "blocked",
+        safeSignals: ["filed-return-result-row-not-found"],
+      }),
+    });
+
+    const response = await resolveFullFiscalYearTarget(
+      {
+        ledgerId: "ledger-existing",
+        targetId: "GSTR-3B:2026-27:April",
+        expectedRevision: 2,
+      },
+      "manually-observed",
+      recoveryDeps(),
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "user-action-required",
+        safeSignals: ["full-fiscal-year-manual-observation-unavailable"],
+      },
+    });
+    expect(browser.storage.local.set).not.toHaveBeenCalled();
+    expect(browser.storage.session.set).not.toHaveBeenCalled();
+  });
+
+  it("serializes concurrent recovery commands so only one matching revision can mutate", async () => {
+    const store: Record<string, unknown> = {
+      "full-year-ledger": createRecoveryLedger({ revision: 2 }),
+    };
+    vi.mocked(browser.storage.local.get).mockImplementation(async (key: unknown) => {
+      if (typeof key === "string") return { [key]: store[key] };
+      return store;
+    });
+    vi.mocked(browser.storage.local.set).mockImplementation(
+      async (value: Record<string, unknown>) => {
+        Object.assign(store, value);
+      },
+    );
+
+    const payload = {
+      ledgerId: "ledger-existing",
+      targetId: "GSTR-3B:2026-27:April",
+      expectedRevision: 2,
+    };
+    const [first, second] = await Promise.all([
+      prepareFullFiscalYearTargetRetry(payload, recoveryDeps()),
+      prepareFullFiscalYearTargetRetry(payload, recoveryDeps()),
+    ]);
+
+    expect(first).toMatchObject({
+      ok: true,
+      ledger: {
+        revision: 3,
+        targets: [expect.objectContaining({ status: "pending" })],
+      },
+    });
+    expect(second).toMatchObject({
+      ok: false,
+      response: {
+        flowStep: {
+          safeSignals: ["full-fiscal-year-recovery-stale"],
+        },
+      },
+    });
+    expect(browser.storage.local.set).toHaveBeenCalledTimes(1);
+  });
 });
 
 function recoveryDeps() {
@@ -160,8 +232,12 @@ function mockLocalStorageGet(values: Record<string, unknown>) {
 
 function createRecoveryLedger({
   revision,
+  targetStatus = "download-unconfirmed",
+  safeSignals = ["browser-download-size-unknown"],
 }: {
   revision: number;
+  targetStatus?: FiledReturnsFullFiscalYearLedger["targets"][number]["status"];
+  safeSignals?: string[];
 }): FiledReturnsFullFiscalYearLedger {
   return {
     schemaVersion: "1.0",
@@ -182,9 +258,9 @@ function createRecoveryLedger({
         financialYear: "2026-27",
         period: "April",
         returnType: "GSTR-3B",
-        status: "download-unconfirmed",
+        status: targetStatus,
         attempts: 1,
-        safeSignals: ["browser-download-size-unknown"],
+        safeSignals,
         safeMessage: "Unconfirmed.",
         updatedAt: "2026-06-24T00:00:00.000Z",
       },

@@ -9,7 +9,9 @@ import type { PackMessageResponse } from "../core/messages";
 import { getFiledReturnsFullFiscalYearPeriods } from "../core/filed-returns-scope";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
 import {
+  canCompleteFullFiscalYearLedger,
   completeFullFiscalYearLedger,
+  hasActionRequiredFullFiscalYearTarget,
   createFullFiscalYearLedger,
   isFullFiscalYearLedger,
   isFullFiscalYearLedgerStale,
@@ -130,7 +132,7 @@ function responseForExistingLedger(
     return { ok: true, flowStep: step, flowSummary: toFullFiscalYearSummary(ledger, step) };
   }
 
-  if (ledger.status === "complete") {
+  if (ledger.status === "complete" && canCompleteFullFiscalYearLedger(ledger)) {
     const summary = summariseFullFiscalYearLedger(ledger);
     return { ok: true, flowStep: summary.flowStep, flowSummary: summary };
   }
@@ -162,13 +164,36 @@ function responseForExistingLedger(
     };
   }
 
+  if (hasActionRequiredFullFiscalYearTarget(ledger)) {
+    const displayLedger = coerceInconsistentCompleteLedger(ledger, now);
+    const step = blockedFullFiscalYearStep("full-fiscal-year-run-needs-action", displayLedger);
+    return {
+      ok: true,
+      flowStep: step,
+      flowSummary: toFullFiscalYearSummary(displayLedger, step),
+    };
+  }
+
   return null;
+}
+
+function coerceInconsistentCompleteLedger(
+  ledger: FiledReturnsFullFiscalYearLedger,
+  now: Date,
+): FiledReturnsFullFiscalYearLedger {
+  if (ledger.status !== "complete") return ledger;
+  return { ...ledger, status: "blocked", updatedAt: now.toISOString() };
 }
 
 async function completeRun(
   deps: FiledReturnsFlowRunnerDeps,
   ledger: FiledReturnsFullFiscalYearLedger,
 ): Promise<PackMessageResponse> {
+  if (!canCompleteFullFiscalYearLedger(ledger)) {
+    const step = blockedFullFiscalYearStep("full-fiscal-year-run-needs-action", ledger);
+    return { ok: true, flowStep: step, flowSummary: toFullFiscalYearSummary(ledger, step) };
+  }
+
   const completedLedger = completeFullFiscalYearLedger(ledger, deps.now?.() ?? new Date());
   const step = completeFullFiscalYearStep(completedLedger);
   await persistLedgerAndSummary(deps, completedLedger, step);

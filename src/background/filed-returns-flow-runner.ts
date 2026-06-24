@@ -1,6 +1,10 @@
 import { browser } from "wxt/browser";
 import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "../core/contracts";
-import type { PackMessage, PackMessageResponse } from "../core/messages";
+import type {
+  FullFiscalYearTargetRecoveryPayload,
+  PackMessage,
+  PackMessageResponse,
+} from "../core/messages";
 import { isFullFiscalYearScope } from "../core/filed-returns-scope";
 import {
   acquireFiledReturnsRun,
@@ -10,6 +14,10 @@ import {
 import { triggerAndObserveFiledReturnDownload } from "./filed-returns-download-trigger";
 import { startFullFiscalYearDownloadFlow } from "./filed-returns-full-fiscal-year";
 import { runDownloadStepWithRetry } from "./filed-returns-flow-messaging";
+import {
+  prepareFullFiscalYearTargetRetry,
+  readFullFiscalYearTargetRecoveryScope,
+} from "./filed-returns-full-fiscal-year-recovery";
 import {
   readFiledReturnsTargetReview,
   responseForFiledReturnsTargetReview,
@@ -71,6 +79,31 @@ export async function startFiledReturnsDownloadFlow(
       );
     }
     return startSinglePeriodFiledReturnsDownloadFlow(scope, deps);
+  } finally {
+    stopLeaseRenewal();
+    await releaseFiledReturnsRun(activeRun.run, deps);
+  }
+}
+
+export async function retryFullFiscalYearTargetDownloadFlow(
+  payload: FullFiscalYearTargetRecoveryPayload,
+  deps: FiledReturnsFlowRunnerDeps,
+): Promise<PackMessageResponse> {
+  const recoveryScope = await readFullFiscalYearTargetRecoveryScope(payload, deps);
+  if ("response" in recoveryScope) return recoveryScope.response;
+
+  const activeRun = await acquireFiledReturnsRun(recoveryScope.scope, deps);
+  if ("response" in activeRun) return activeRun.response;
+
+  const stopLeaseRenewal = startFiledReturnsRunLeaseRenewal(activeRun.run, deps);
+  try {
+    const recovery = await prepareFullFiscalYearTargetRetry(payload, deps);
+    if (!recovery.ok) return recovery.response;
+    return startFullFiscalYearDownloadFlow(
+      recovery.ledger.scope,
+      deps,
+      startSinglePeriodFiledReturnsDownloadFlow,
+    );
   } finally {
     stopLeaseRenewal();
     await releaseFiledReturnsRun(activeRun.run, deps);
