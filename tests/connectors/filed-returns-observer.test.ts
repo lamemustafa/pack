@@ -142,6 +142,21 @@ describe("filed returns private observer", () => {
     expect(JSON.stringify(observation)).not.toMatch(/password|captcha/i);
   });
 
+  it("does not treat authenticated Last Login text as a login requirement", () => {
+    const observation = observeFiledReturnsPageText(`
+      View Filed Returns
+      Last Login: 24/06/2026
+      Financial Year
+      Return Filing Period
+      Return Type
+      GSTR-3B
+      Search
+    `);
+
+    expect(observation.state).toBe("filters-required");
+    expect(observation.safeSignals).not.toContain("login");
+  });
+
   it("redacts sensitive identifiers from safe diagnostic labels", () => {
     const observation = observeFiledReturnsPageText(`
       View Filed Returns

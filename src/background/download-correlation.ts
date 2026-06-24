@@ -64,8 +64,25 @@ function hasExpectedFileEvidence(
 }
 
 function isKnownNonMatchingMime(mime: string, expectedMimeTypes: readonly string[]): boolean {
-  if (mime === "application/octet-stream" || mime === "binary/octet-stream") return false;
-  return !expectedMimeTypes.some((expected) => mime.includes(expected));
+  if (expectedMimeTypes.some((expected) => mime.includes(expected))) return false;
+  if (isGenericAttachmentMime(mime)) return false;
+  if (mime.startsWith("text/") || mime.startsWith("image/")) return true;
+  return [
+    "application/json",
+    "application/xml",
+    "application/javascript",
+    "application/zip",
+  ].includes(mime);
+}
+
+function isGenericAttachmentMime(mime: string): boolean {
+  return [
+    "application/octet-stream",
+    "binary/octet-stream",
+    "application/download",
+    "application/force-download",
+    "application/x-download",
+  ].includes(mime);
 }
 
 function isNonNullableString(value: string | null | undefined): value is string {

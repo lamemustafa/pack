@@ -61,7 +61,10 @@ export async function triggerAndObserveFiledReturnDownload({
   const observedDownload = await detailDownloadObservation.promise;
   const mergedResponse = {
     ...triggerFlowResponse,
-    flowStep: mergeFlowStepWithDownloadObservation(triggerFlowResponse.flowStep, observedDownload),
+    flowStep: normaliseAmbiguousTriggerDownloadResult(
+      triggerFlowResponse.flowStep,
+      mergeFlowStepWithDownloadObservation(triggerFlowResponse.flowStep, observedDownload),
+    ),
   };
   if (!isEntireFinancialYearScope(scope)) return { continueFlow: false, response: mergedResponse };
   if (mergedResponse.flowStep.state !== "downloaded") {
@@ -120,6 +123,26 @@ function shouldAwaitDownloadObservation(step: PortalFlowStepResult): boolean {
     step.safeSignals.includes("filed-gstr3b-download-clicked") ||
     step.safeSignals.includes("filed-gstr3b-download-trigger-ambiguous")
   );
+}
+
+function normaliseAmbiguousTriggerDownloadResult(
+  triggerStep: PortalFlowStepResult,
+  mergedStep: PortalFlowStepResult,
+): PortalFlowStepResult {
+  if (
+    !triggerStep.safeSignals.includes("filed-gstr3b-download-trigger-ambiguous") ||
+    mergedStep.state !== "downloaded"
+  ) {
+    return mergedStep;
+  }
+
+  return {
+    ...mergedStep,
+    state: "download-unconfirmed",
+    safeMessage:
+      "Pack saw a matching GST PDF download, but could not confirm that Pack delivered the download click. It will not mark this target as downloaded without a confirmed click.",
+    ...(triggerStep.userAction ? { userAction: triggerStep.userAction } : {}),
+  };
 }
 
 function unverifiedPeriodResponse(): FlowStepResponse {

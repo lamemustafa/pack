@@ -1,15 +1,11 @@
 import { browser } from "wxt/browser";
-import { pickSupportedGstPortalTab } from "../connectors/gst/hosts";
 import type {
   FiledReturnsDownloadScope,
   FiledReturnsFlowSummary,
   PortalFlowStepResult,
 } from "../core/contracts";
 import type { PackMessage, PackMessageResponse } from "../core/messages";
-import {
-  observeFiledReturnDownload,
-  triggerAndObserveFiledReturnDownload,
-} from "./filed-returns-download-trigger";
+import { triggerAndObserveFiledReturnDownload } from "./filed-returns-download-trigger";
 import { runDownloadStepWithRetry } from "./filed-returns-flow-messaging";
 import { persistFiledReturnsCompletionSummary } from "./filed-returns-flow-summary";
 
@@ -69,13 +65,11 @@ export async function startFiledReturnsDownloadFlow(
     ? MAX_FINANCIAL_YEAR_FLOW_STEPS
     : MAX_FLOW_STEPS;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    const downloadObservation = observeFiledReturnDownload();
     const stepScope = isEntireFinancialYearScope(scope)
       ? { ...scope, completedPeriods: [...completedPeriods] }
       : scope;
     const response = await runScopedDownloadStepWithRetry(deps, activeTab.tab.id, stepScope);
     if (!response.ok || !("flowStep" in response)) {
-      downloadObservation.stop();
       return response;
     }
 
@@ -91,7 +85,6 @@ export async function startFiledReturnsDownloadFlow(
     if (completionSummary) return { ...response, flowSummary: completionSummary };
 
     if (lastStep.safeSignals.includes("filed-return-result-view-clicked")) {
-      downloadObservation.stop();
       await delay(RESULT_ROW_NAVIGATION_SETTLE_MS);
 
       const triggerResult = await triggerAndObserveFiledReturnDownload({
@@ -109,7 +102,6 @@ export async function startFiledReturnsDownloadFlow(
     }
 
     if (lastStep.safeSignals.includes("filed-gstr3b-download-ready")) {
-      downloadObservation.stop();
       const triggerResult = await triggerAndObserveFiledReturnDownload({
         activePeriod,
         completedPeriods,
@@ -124,7 +116,6 @@ export async function startFiledReturnsDownloadFlow(
       continue;
     }
 
-    downloadObservation.stop();
     if (!shouldContinueFlow(lastStep)) return response;
     await delay(getFlowStepSettleMs(lastStep));
   }
@@ -176,12 +167,6 @@ async function getOrOpenGstTab(
   if (activeTab) {
     await focusTab(activeTab);
     return { tab: activeTab, openedForLogin: false };
-  }
-
-  const existingTab = pickSupportedGstPortalTab<Browser.tabs.Tab>(await browser.tabs.query({}));
-  if (existingTab) {
-    await focusTab(existingTab);
-    return { tab: existingTab, openedForLogin: false };
   }
 
   await browser.tabs.create({ active: true, url: GST_LOGIN_URL });

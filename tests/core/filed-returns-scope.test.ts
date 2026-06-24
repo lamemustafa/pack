@@ -37,6 +37,42 @@ describe("filed returns GST scope", () => {
     ]);
   });
 
+  it("exposes only elapsed periods for the current Indian financial year", () => {
+    expect(
+      getFiledReturnsPeriodOptions("2026-27", new Date("2026-06-24T00:00:00+05:30")).map(
+        (option) => option.value,
+      ),
+    ).toEqual(["April", "May"]);
+    expect(
+      getFiledReturnsPeriodOptions("2025-26", new Date("2026-06-24T00:00:00+05:30")).map(
+        (option) => option.value,
+      ),
+    ).toEqual([
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December",
+      "January",
+      "February",
+      "March",
+    ]);
+    expect(
+      isSupportedFiledReturnsScope(
+        {
+          financialYear: "2026-27",
+          period: "July",
+          returnType: "GSTR-3B",
+        },
+        new Date("2026-06-24T00:00:00+05:30"),
+      ),
+    ).toBe(false);
+  });
+
   it("normalises invalid early GST launch months instead of passing them to the portal", () => {
     expect(
       normaliseFiledReturnsScope({

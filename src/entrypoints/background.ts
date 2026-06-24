@@ -149,16 +149,8 @@ export async function clearPackLocalData(): Promise<void> {
 }
 
 async function getActiveGstTab(): Promise<ActiveGstTab | null> {
-  const [currentWindowTabs, lastFocusedWindowTabs, allActiveTabs] = await Promise.all([
-    browser.tabs.query({ active: true, currentWindow: true }),
-    browser.tabs.query({ active: true, lastFocusedWindow: true }),
-    browser.tabs.query({ active: true }),
-  ]);
-  return pickSupportedGstPortalTab<Browser.tabs.Tab>([
-    ...currentWindowTabs,
-    ...lastFocusedWindowTabs,
-    ...allActiveTabs,
-  ]);
+  const currentWindowTabs = await browser.tabs.query({ active: true, currentWindow: true });
+  return pickSupportedGstPortalTab<Browser.tabs.Tab>(currentWindowTabs);
 }
 
 async function sendMessageToTabWithInjection(
