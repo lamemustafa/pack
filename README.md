@@ -22,9 +22,9 @@ endorsed by, or operated by GSTN, CBIC, or the Government of India.
 ## Status
 
 This public repository is an open-source alpha and is not Chrome Web Store ready.
-The extension has a synthetic reviewer demo and a live GSTR-3B PDF download path,
-but live manifest/index/exception-file generation is not wired yet. Public launch
-still requires the manual gates in
+The extension has a local demo and a live GSTR-3B PDF download path. Live
+manifest/index/exception-file generation is outside the current alpha. Public
+launch requires the manual gates in
 [docs/PUBLICATION_READINESS.md](docs/PUBLICATION_READINESS.md).
 
 Full fiscal year download is available in source-build alpha as a local
@@ -37,8 +37,8 @@ resume, and privacy-review gates are complete.
 
 ### Chrome Web Store
 
-No Chrome Web Store listing is published yet. Install from source only until
-Chrome Web Store review, legal review, and release sign-off are complete.
+No Chrome Web Store listing is published. Install from source only while Chrome
+Web Store review, legal review, and release sign-off remain incomplete.
 
 ### From Source
 
@@ -61,6 +61,8 @@ Use a separate Chrome profile for development or manual QA.
 ## Development
 
 ```sh
+pnpm install --frozen-lockfile
+pnpm audit --audit-level high
 pnpm exec wxt prepare
 pnpm exec prettier --check .
 pnpm exec eslint . --max-warnings 0
@@ -73,6 +75,8 @@ node scripts/verify-extension-package.mjs .output/chrome-mv3
 The full release gate is:
 
 ```sh
+pnpm install --frozen-lockfile
+pnpm audit --audit-level high
 pnpm exec wxt prepare
 pnpm exec prettier --check .
 pnpm exec eslint . --max-warnings 0
@@ -81,6 +85,8 @@ pnpm exec vitest run
 pnpm exec wxt build
 node scripts/verify-extension-package.mjs .output/chrome-mv3
 pnpm exec wxt zip
+node scripts/verify-extension-zip.mjs
+git diff --check
 ```
 
 Package scripts are also available:
@@ -104,15 +110,15 @@ ComplyEaze Pack uses WXT, Vite, React, and TypeScript.
 - `src/entrypoints/options`: React options page.
 - `src/core`: portal-neutral contracts, manifest, naming, CSV, and messages.
 - `src/connectors/gst`: GST-specific detection, GSTR-3B filed-return navigation,
-  download triggering, and synthetic demo data.
+  download triggering, and local demo data.
 - `src/extension/manifest-policy.ts`: canonical extension metadata, permissions,
   host allow-list, CSP, homepage, and icons.
 - `scripts/verify-extension-package.mjs`: built-package policy verification.
 
-The future UCP reuse surface is the Pack plan/result/archive-manifest contract,
-not shared credential or session handling. In the current alpha, that contract is
-exercised by the synthetic reviewer demo; the live GST path downloads PDFs and
-does not yet persist per-target `DownloadResult` records or a live manifest.
+The reusable UCP-facing surface is the Pack plan/result/archive-manifest
+contract, not shared credential or session handling. In the current alpha, that
+contract is exercised by the local demo; the live GST path downloads PDFs without
+persisting per-target `DownloadResult` records or a live manifest.
 
 ## Extension Storage
 
@@ -130,8 +136,8 @@ Pack uses Chrome extension storage only inside the current browser profile.
 - `pack:filed-returns-target-review`: local-only single-period unresolved
   download review state with financial year, period, return type, safe
   messages/signals, and timestamps only;
-- `pack:last-manifest`: the last synthetic reviewer demo archive manifest
-  summary. The live GST download path does not write a live manifest yet.
+- `pack:last-manifest`: the last local demo archive manifest summary. The live
+  GST download path does not write a live manifest in this alpha.
 
 `chrome.storage.session`:
 
