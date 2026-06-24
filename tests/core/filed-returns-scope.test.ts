@@ -25,7 +25,6 @@ describe("filed returns GST scope", () => {
 
   it("starts FY 2017-18 at July because GST returns begin from July 2017", () => {
     expect(getFiledReturnsPeriodOptions("2017-18").map((option) => option.value)).toEqual([
-      "ALL",
       "July",
       "August",
       "September",
@@ -83,6 +82,13 @@ describe("filed returns GST scope", () => {
     expect(
       isSupportedFiledReturnsScope({
         financialYear: "2016-17",
+        period: "ALL",
+        returnType: "GSTR-3B",
+      }),
+    ).toBe(false);
+    expect(
+      isSupportedFiledReturnsScope({
+        financialYear: "2025-26",
         period: "ALL",
         returnType: "GSTR-3B",
       }),
