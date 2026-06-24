@@ -5,12 +5,13 @@ privately; do not open a public issue for security findings.
 
 ## Supported Versions
 
-| Version                         | Supported                       |
-| ------------------------------- | ------------------------------- |
-| Latest Chrome Web Store release | Yes                             |
-| Previous release                | Critical fixes only for 30 days |
-| Development/nightly builds      | No production support           |
-| Third-party forks               | Not supported by ComplyEaze     |
+| Version                        | Supported                                 |
+| ------------------------------ | ----------------------------------------- |
+| Current source alpha (`0.1.x`) | Security reports and best-effort fixes    |
+| Chrome Web Store release       | Not applicable; none published yet        |
+| Previous release               | Not applicable until first public release |
+| Development/nightly builds     | No production support                     |
+| Third-party forks              | Not supported by ComplyEaze               |
 
 ## Reporting A Vulnerability
 
@@ -44,6 +45,8 @@ ComplyEaze Pack V0 must not:
 
 - collect GST Portal credentials, OTPs, CAPTCHA responses, cookies, or tokens;
 - upload GST files in the local-download workflow;
+- store GSTIN/PAN, taxpayer names, portal HTML, raw network captures, or
+  downloaded PDFs in extension storage;
 - load remote executable code;
 - access unrelated websites;
 - include hidden analytics, ads, or session replay.
@@ -53,8 +56,9 @@ critical severity.
 
 ## Coordinated Disclosure
 
-Please allow reasonable time for investigation, Chrome Web Store review, and user
-updates. We will credit reporters who request credit unless law, safety, or
+Please allow reasonable time for investigation, release review, and user updates.
+If a Chrome Web Store build exists in the future, Chrome review may also affect
+timing. We will credit reporters who request credit unless law, safety, or
 privacy prevents it.
 
 ## Safe Harbour

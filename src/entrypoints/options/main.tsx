@@ -6,7 +6,7 @@ import "../../styles/global.css";
 
 function OptionsPage() {
   const [status, setStatus] = React.useState(
-    "Pack stores only local preferences and the last local manifest summary.",
+    "Pack stores install metadata, the last synthetic demo manifest summary, and temporary session workflow snapshots in extension storage.",
   );
   const [busy, setBusy] = React.useState(false);
 
@@ -16,7 +16,7 @@ function OptionsPage() {
       const response = (await browser.runtime.sendMessage({
         type: "PACK_CLEAR_LOCAL_DATA",
       })) as PackMessageResponse;
-      setStatus(response.ok ? "Local Pack data cleared." : response.error);
+      setStatus(response.ok ? "Pack local and session storage keys cleared." : response.error);
     } finally {
       setBusy(false);
     }
