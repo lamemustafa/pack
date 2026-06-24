@@ -36,6 +36,27 @@ The release gate covers:
 - exact-ZIP extraction, package-policy verification, SHA-256 output, checksum
   file generation, and checksum log evidence in CI.
 
+## PR Review Closure Before Tagging
+
+Before tagging or producing the final store ZIP, verify that the release PR has
+no unresolved post-merge review threads and that the latest Codex review applies
+to the exact head that was merged:
+
+```sh
+pnpm review:gate -- --repo lamemustafa/pack --pr <number> --strict-head-review --required-review-author chatgpt-codex-connector --wait-head-review-ms 180000
+```
+
+Record the PR URL, head SHA, merge commit, and review-gate result in the release
+notes. If Codex or another bot submits findings after merge, treat them as a
+release blocker until fixed by a follow-up PR or answered with evidence.
+
+The required CI `Review gate` workflow can pass after waiting for Codex when no
+formal bot review is produced, because the external Codex reviewer is not a
+deterministic CI service. Do not treat that as a store-readiness pass by itself.
+For a release candidate, explicitly trigger `@codex review`, wait for the review
+or document the missing-review gap, and keep the PR open for any later findings
+before tagging.
+
 ## Manual clean-profile QA
 
 Before submitting a ZIP to a browser store:

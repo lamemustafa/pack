@@ -77,8 +77,14 @@ its own git repository.
   with evidence, or linked follow-up.
 - When GitHub context is available, run `pnpm review:gate` for normal review
   cleanup and `pnpm review:gate -- --strict-head-review` before claiming a
-  sensitive PR is merge-ready. Treat network/auth failure as a reported
-  verification gap, not as a pass.
+  sensitive PR is merge-ready. For release/runtime PRs, require the current-head
+  Codex bot review with
+  `pnpm review:gate -- --strict-head-review --required-review-author chatgpt-codex-connector --wait-head-review-ms 180000`.
+  Treat network/auth failure as a reported verification gap, not as a pass.
+- The CI `Review gate` workflow may use `--allow-missing-head-review` so a
+  non-responsive external bot does not create a permanent red check. That mode is
+  a findings gate only; it does not replace the hard local/manual
+  `pnpm verify:pr` release-readiness gate.
 
 ## Required Checks
 
@@ -97,7 +103,7 @@ node scripts/verify-extension-package.mjs .output/chrome-mv3
 pnpm exec wxt zip
 node scripts/verify-extension-zip.mjs
 git diff --check
-pnpm review:gate -- --strict-head-review
+pnpm review:gate -- --strict-head-review --required-review-author chatgpt-codex-connector --wait-head-review-ms 180000
 ```
 
 `pnpm verify` and `pnpm verify:release` are provided for normal terminals, but

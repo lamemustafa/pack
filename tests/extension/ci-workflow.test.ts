@@ -15,4 +15,21 @@ describe("Pack CI workflow", () => {
     expect(workflow).toContain(".output/complyeazepack-chrome.zip.sha256");
     expect(workflow).not.toContain("actions/upload-artifact");
   });
+
+  it("runs a strict current-head review gate on PR and review events", async () => {
+    const workflow = await readFile(
+      path.join(rootDir, ".github", "workflows", "review-gate.yml"),
+      "utf8",
+    );
+
+    expect(workflow).toContain("pull_request:");
+    expect(workflow).toContain("pull_request_review:");
+    expect(workflow).toContain("pull_request_review_comment:");
+    expect(workflow).toContain("pull-requests: read");
+    expect(workflow).toContain("GH_TOKEN: ${{ github.token }}");
+    expect(workflow).toContain("--strict-head-review");
+    expect(workflow).toContain("--required-review-author chatgpt-codex-connector");
+    expect(workflow).toContain("--wait-head-review-ms 180000");
+    expect(workflow).toContain("--allow-missing-head-review");
+  });
 });
