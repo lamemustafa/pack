@@ -464,6 +464,41 @@ describe("filed returns guided flow", () => {
     expect(downloadClicked).toBe(0);
   });
 
+  it("parses colon and line-separated detail identity from the download detail component", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <nav>Returns / Filed Returns</nav>
+        <aside>
+          <p>Financial Year - 2024-25</p>
+          <p>Return Period - February</p>
+        </aside>
+        <section>
+          <h1>GSTR-3B - Monthly Return</h1>
+          <div>Status - Filed</div>
+          <dl>
+            <dt>Financial Year:</dt>
+            <dd>2025-26</dd>
+            <dt>Return Period</dt>
+            <dd>March</dd>
+          </dl>
+          <button>DOWNLOAD FILED GSTR-3B</button>
+        </section>
+      </main>
+    `);
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.state).toBe("ready");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining([
+        "filed-return-detail-period:March",
+        "filed-return-detail-financial-year:2025-26",
+      ]),
+    );
+    expect(result.safeSignals).not.toContain("filed-return-detail-period:February");
+    expect(result.safeSignals).not.toContain("filed-return-detail-financial-year:2024-25");
+  });
+
   it("refuses an explicit trigger when the detail page identity does not match the target", async () => {
     const documentRef = createDocument(`
       <main>

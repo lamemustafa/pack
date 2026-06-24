@@ -9,6 +9,9 @@ open-source alpha to a broader public release and v0 Chrome Web Store package.
 - First Chrome listing title: **ComplyEaze Pack: GST GSTR-3B Downloader**.
 - V0 purpose: download filed GSTR-3B PDFs locally from the user's active,
   manually authenticated GST Portal session.
+- Full financial-year download remains a planned Pack feature, but store-facing
+  V0 must not advertise it until the durable per-period job ledger and
+  real-browser restart tests are complete.
 - V0 does not collect GST Portal credentials, OTPs, CAPTCHA responses, cookies,
   session tokens, or GST document contents.
 - ComplyEaze Pack is not affiliated with, endorsed by, or operated by GSTN, CBIC,

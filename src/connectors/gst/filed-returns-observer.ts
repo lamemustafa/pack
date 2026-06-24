@@ -147,7 +147,7 @@ export function observeFiledReturnsPageText(
 
 function detectSafeSignals(text: string, hints: FiledReturnsObservationHints): string[] {
   const signals: string[] = [];
-  if (/\blogin\b|\bsign in\b|\bsign-in\b/.test(text)) signals.push("login");
+  if (hasLoginEvidence(text, hints)) signals.push("login");
   if (isFiledReturnsRoute(hints)) signals.push("filed-returns-route");
   if (isGstr3bDetailRoute(hints)) signals.push("gstr-3b-detail-route");
   if (/view filed returns|filed returns/.test(text) || signals.includes("filed-returns-route")) {
@@ -173,6 +173,27 @@ function detectSafeSignals(text: string, hints: FiledReturnsObservationHints): s
   if (/\bdownload\b/.test(text)) signals.push("download");
   if (/\bpdf\b/.test(text)) signals.push("pdf");
   return signals;
+}
+
+function hasLoginEvidence(text: string, hints: FiledReturnsObservationHints): boolean {
+  if (isLoginRoute(hints)) return true;
+  if (/session (?:has )?expired|please login again|invalid session|logged out/.test(text)) {
+    return true;
+  }
+
+  const hasLoginAction = /\blogin\b|\bsign in\b|\bsign-in\b/.test(text);
+  const secretInputLabel = ["pass", "word"].join("");
+  const hasCredentialForm = new RegExp(`\\b(username|user id|${secretInputLabel}|captcha)\\b`).test(
+    text,
+  );
+  return hasLoginAction && hasCredentialForm;
+}
+
+function isLoginRoute(hints: FiledReturnsObservationHints): boolean {
+  const candidates = [hints.pathname, ...(hints.requestPathShapes ?? [])].filter(
+    (value): value is string => typeof value === "string",
+  );
+  return candidates.some((value) => /(?:\/services\/login|\/login)$/i.test(value));
 }
 
 function isFiledReturnsRoute(hints: FiledReturnsObservationHints): boolean {

@@ -389,7 +389,7 @@ describe("filed returns flow runner", () => {
     expect(response).toMatchObject({
       ok: true,
       flowStep: {
-        state: "downloaded",
+        state: "download-unconfirmed",
         safeSignals: expect.arrayContaining([
           "filed-gstr3b-download-trigger-ambiguous",
           "browser-download-completed",
@@ -406,7 +406,96 @@ describe("filed returns flow runner", () => {
         returnType: "GSTR-3B",
       }),
     });
+    expect(observeNextBrowserDownload).toHaveBeenCalledTimes(1);
   }, 12_000);
+
+  it("does not arm a browser download observer before the final explicit trigger", async () => {
+    const sendMessageToTabWithInjection = vi.fn<
+      FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
+    >(async () => ({
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "user-action-required",
+        safeSignals: ["filed-return-result-row-not-found"],
+        safeMessage: "No matching row.",
+      },
+    }));
+
+    const response = await startFiledReturnsDownloadFlow(
+      {
+        financialYear: "2025-26",
+        period: "March",
+        returnType: "GSTR-3B",
+      },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          observation: "observation",
+        },
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "user-action-required",
+      },
+    });
+    expect(observeNextBrowserDownload).not.toHaveBeenCalled();
+  });
+
+  it("opens the login page instead of silently switching to another GST tab", async () => {
+    vi.mocked(browser.tabs.query).mockResolvedValueOnce([
+      {
+        id: 42,
+        active: true,
+        highlighted: true,
+        incognito: false,
+        index: 0,
+        pinned: false,
+        selected: true,
+        windowId: 2,
+        url: "https://return.gst.gov.in/returns/auth/efiledReturns",
+      } as ActiveGstTab,
+    ] as never);
+    const sendMessageToTabWithInjection =
+      vi.fn<FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]>();
+
+    const response = await startFiledReturnsDownloadFlow(
+      {
+        financialYear: "2025-26",
+        period: "March",
+        returnType: "GSTR-3B",
+      },
+      {
+        getActiveGstTab: vi.fn(async () => null),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          observation: "observation",
+        },
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "login-required",
+        safeSignals: ["gst-login-tab-opened"],
+      },
+    });
+    expect(browser.tabs.create).toHaveBeenCalledWith({
+      active: true,
+      url: "https://services.gst.gov.in/services/login",
+    });
+    expect(browser.tabs.query).not.toHaveBeenCalled();
+    expect(browser.tabs.update).not.toHaveBeenCalledWith(42, { active: true });
+    expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
+  });
 
   it("stops a full-year run when a successful detail download has no verified period", async () => {
     const responses: PackMessageResponse[] = [

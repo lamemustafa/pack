@@ -12,7 +12,7 @@ V0 is intentionally narrow:
 - no ComplyEaze, Axal, or Pack login;
 - no GST Portal credential, OTP, CAPTCHA, cookie, or session-token capture;
 - no GST document upload in the local-download workflow;
-- no extension analytics or hidden telemetry;
+- no extension analytics or telemetry;
 - exact GST host permissions only;
 - live local PDF downloads for selected filed GSTR-3B periods.
 
@@ -26,6 +26,10 @@ The extension has a synthetic reviewer demo and a live GSTR-3B PDF download path
 but live manifest/index/exception-file generation is not wired yet. Public launch
 still requires the manual gates in
 [docs/PUBLICATION_READINESS.md](docs/PUBLICATION_READINESS.md).
+
+Full financial-year download remains a planned first-class feature. It should
+return only as a durable queue of explicit single-period jobs with persisted
+per-period outcomes, not as a long in-memory bulk DOM loop.
 
 ## Install
 
@@ -131,6 +135,13 @@ The Options page "Clear local Pack data" control removes the local keys above
 and clears Pack session storage. Pack does not store GST Portal credentials,
 OTPs, CAPTCHA values, cookies, GSTIN/PAN, taxpayer names, downloaded PDFs, portal
 HTML, or raw network captures.
+
+During a user-initiated live download, Pack temporarily observes browser download
+metadata such as download ID, origin, MIME type, filename, start time, state, and
+byte counts to decide whether the browser reported a non-empty GST Portal PDF.
+This observation is bounded to the active run. Pack does not transmit this
+metadata, and the current live path does not persist raw URLs, referrers,
+absolute local paths, or filenames.
 
 ## Privacy Invariants
 

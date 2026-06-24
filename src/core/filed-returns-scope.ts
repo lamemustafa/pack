@@ -52,27 +52,35 @@ export function getFiledReturnsFinancialYearOptions(asOf = new Date()): string[]
   return years;
 }
 
-export function getFiledReturnsPeriodOptions(financialYear: string): FiledReturnsPeriodOption[] {
-  const months =
-    financialYear === GST_LAUNCH_FINANCIAL_YEAR
-      ? FILED_RETURNS_MONTHS.slice(FILED_RETURNS_MONTHS.indexOf(GST_LAUNCH_MONTH))
-      : FILED_RETURNS_MONTHS;
-
-  return months.map((month) => ({ value: month, label: month }));
+export function getFiledReturnsPeriodOptions(
+  financialYear: string,
+  asOf = new Date(),
+): FiledReturnsPeriodOption[] {
+  return getFiledReturnsPeriods(financialYear, asOf).map((month) => ({
+    value: month,
+    label: month,
+  }));
 }
 
 export function normaliseFiledReturnsScope(
   scope: FiledReturnsDownloadScope,
+  asOf = new Date(),
 ): FiledReturnsDownloadScope {
-  const [firstFinancialYear] = getFiledReturnsFinancialYearOptions();
-  const financialYear = getFiledReturnsFinancialYearOptions().includes(scope.financialYear)
+  const financialYearOptions = getFiledReturnsFinancialYearOptions(asOf);
+  const requestedFinancialYear = financialYearOptions.includes(scope.financialYear)
     ? scope.financialYear
-    : (firstFinancialYear ?? GST_LAUNCH_FINANCIAL_YEAR);
-  const period = getFiledReturnsPeriodOptions(financialYear).some(
+    : financialYearOptions[0];
+  const financialYear =
+    requestedFinancialYear && getFiledReturnsPeriodOptions(requestedFinancialYear, asOf).length > 0
+      ? requestedFinancialYear
+      : (financialYearOptions.find(
+          (candidate) => getFiledReturnsPeriodOptions(candidate, asOf).length > 0,
+        ) ?? GST_LAUNCH_FINANCIAL_YEAR);
+  const period = getFiledReturnsPeriodOptions(financialYear, asOf).some(
     (option) => option.value === scope.period,
   )
     ? scope.period
-    : defaultPeriodForFinancialYear(financialYear);
+    : defaultPeriodForFinancialYear(financialYear, asOf);
 
   return {
     financialYear,
@@ -82,10 +90,13 @@ export function normaliseFiledReturnsScope(
   };
 }
 
-export function isSupportedFiledReturnsScope(input: FiledReturnsDownloadScope): boolean {
+export function isSupportedFiledReturnsScope(
+  input: FiledReturnsDownloadScope,
+  asOf = new Date(),
+): boolean {
   if (input.returnType !== "GSTR-3B") return false;
-  if (!getFiledReturnsFinancialYearOptions().includes(input.financialYear)) return false;
-  return getFiledReturnsPeriodOptions(input.financialYear).some(
+  if (!getFiledReturnsFinancialYearOptions(asOf).includes(input.financialYear)) return false;
+  return getFiledReturnsPeriodOptions(input.financialYear, asOf).some(
     (option) => option.value === input.period,
   );
 }
@@ -114,8 +125,11 @@ function getFinancialYearStartYear(year: number, monthIndex: number): number {
   return monthIndex >= 3 ? year : year - 1;
 }
 
-function defaultPeriodForFinancialYear(financialYear: string): FiledReturnsMonth {
-  const firstMonth = getFiledReturnsPeriodOptions(financialYear)[0];
+function defaultPeriodForFinancialYear(
+  financialYear: string,
+  asOf = new Date(),
+): FiledReturnsMonth {
+  const firstMonth = getFiledReturnsPeriodOptions(financialYear, asOf)[0];
   return firstMonth?.value ?? GST_LAUNCH_MONTH;
 }
 
@@ -132,4 +146,47 @@ function getIndianDateParts(asOf: Date): { year: number; monthIndex: number } {
 
 function formatFinancialYear(startYear: number): string {
   return `${startYear}-${String((startYear + 1) % 100).padStart(2, "0")}`;
+}
+
+function getFiledReturnsPeriods(financialYear: string, asOf: Date): FiledReturnsMonth[] {
+  const financialYearStart = parseFinancialYearStartYear(financialYear);
+  if (financialYearStart === null) return [];
+
+  const launchScopedMonths =
+    financialYear === GST_LAUNCH_FINANCIAL_YEAR
+      ? FILED_RETURNS_MONTHS.slice(FILED_RETURNS_MONTHS.indexOf(GST_LAUNCH_MONTH))
+      : [...FILED_RETURNS_MONTHS];
+
+  if (financialYearStart !== getIndianFinancialYearStartYear(asOf)) return launchScopedMonths;
+
+  const previousMonth = getPreviousCompletedCalendarMonth(asOf);
+  return launchScopedMonths.filter((month) => {
+    const periodCalendar = getFiledReturnsPeriodCalendarMonth(financialYearStart, month);
+    if (periodCalendar.year < previousMonth.year) return true;
+    if (periodCalendar.year > previousMonth.year) return false;
+    return periodCalendar.monthIndex <= previousMonth.monthIndex;
+  });
+}
+
+function parseFinancialYearStartYear(financialYear: string): number | null {
+  const match = /^(20\d{2})-\d{2}$/.exec(financialYear);
+  if (!match?.[1]) return null;
+  return Number(match[1]);
+}
+
+function getPreviousCompletedCalendarMonth(asOf: Date): { year: number; monthIndex: number } {
+  const { year, monthIndex } = getIndianDateParts(asOf);
+  if (monthIndex === 0) return { year: year - 1, monthIndex: 11 };
+  return { year, monthIndex: monthIndex - 1 };
+}
+
+function getFiledReturnsPeriodCalendarMonth(
+  financialYearStart: number,
+  month: FiledReturnsMonth,
+): { year: number; monthIndex: number } {
+  const monthIndex = CALENDAR_MONTHS.indexOf(month);
+  return {
+    year: monthIndex >= 3 ? financialYearStart : financialYearStart + 1,
+    monthIndex,
+  };
 }
