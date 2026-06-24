@@ -64,14 +64,6 @@ jobs:
         run: node scripts/verify-extension-zip.mjs
 
       - name: Write ZIP checksum artifact
-        run: shasum -a 256 .output/*chrome.zip > .output/complyeazepack-chrome.zip.sha256
-
-      - name: Upload verified ZIP evidence
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: pack-chrome-mv3-verified-zip
-          path: |
-            .output/*chrome.zip
-            .output/*chrome.zip.sha256
-          if-no-files-found: error
-          retention-days: 14
+        run: |
+          shasum -a 256 .output/*chrome.zip > .output/complyeazepack-chrome.zip.sha256
+          cat .output/complyeazepack-chrome.zip.sha256

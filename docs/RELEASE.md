@@ -32,7 +32,7 @@ The release gate covers:
 - built-package permission, CSP, and remote-code checks;
 - store ZIP creation;
 - exact-ZIP extraction, package-policy verification, SHA-256 output, checksum
-  file generation, and verified ZIP evidence upload in CI.
+  file generation, and checksum log evidence in CI.
 
 ## Manual clean-profile QA
 

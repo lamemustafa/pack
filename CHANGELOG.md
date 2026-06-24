@@ -20,7 +20,7 @@ All notable changes to ComplyEaze Pack are documented here.
   demo, last synthetic manifest, and broad local-data clearing controls live in
   Pack Options.
 - CI pins third-party actions to commit SHAs, runs high-severity dependency
-  audit, and uploads the verified Chrome ZIP plus checksum as release evidence.
+  audit, and prints the verified Chrome ZIP checksum as release evidence.
 - Filed GSTR-3B final download clicks are now target-bound to the visible period
   and financial year, and the retryable navigation step no longer clicks the
   final portal download control.
