@@ -9,12 +9,14 @@ GST Portal credentials.
 1. Install the unpacked extension from `.output/chrome-mv3`.
 2. Pin Pack and open the popup.
 3. Confirm the popup opens without any Axal, ComplyEaze, or Pack account prompt.
-4. Open `Reviewer and local data tools`.
+4. Open Pack options.
 5. Click `Run local reviewer demo`.
 6. Confirm Chrome downloads a Pack manifest, exception CSV, and synthetic index
    file under `Pack-Demo/`.
-7. Open Pack options and click `Clear local Pack data`.
-8. Reopen the popup and confirm the previous manifest state has been cleared.
+7. Click `Last synthetic demo manifest` to inspect the local synthetic manifest
+   summary.
+8. Click `Clear local Pack data`.
+9. Reopen Pack options and confirm the previous manifest state has been cleared.
 
 ## Expected permissions
 

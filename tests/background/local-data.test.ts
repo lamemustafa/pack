@@ -1,4 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { FULL_FISCAL_YEAR_PERIOD } from "../../src/core/filed-returns-scope";
+import type { FiledReturnsFlowSummary } from "../../src/core/contracts";
+import { readCurrentFiledReturnsFlowSummary } from "../../src/background/filed-returns-current-state";
+
+const filedReturnsCurrentStateStorageKeys = {
+  activeRun: "pack:active-filed-returns-run",
+  completion: "pack:last-filed-returns-flow-summary",
+  fullFiscalYearLedger: "pack:full-fiscal-year-ledger",
+  targetReview: "pack:filed-returns-target-review",
+};
 
 const browserMocks = vi.hoisted(() => ({
   downloads: {
@@ -19,7 +29,10 @@ const browserMocks = vi.hoisted(() => ({
   },
   storage: {
     local: {
-      get: vi.fn(async () => ({})),
+      get: vi.fn(async (_key?: unknown) => {
+        void _key;
+        return {};
+      }),
       remove: vi.fn(async () => undefined),
       setAccessLevel: vi.fn(async () => undefined),
       set: vi.fn(async () => undefined),
@@ -69,6 +82,109 @@ describe("Pack local data clearing", () => {
 
     expect(browserMocks.storage.local.setAccessLevel).toHaveBeenCalledWith({
       accessLevel: "TRUSTED_CONTEXTS",
+    });
+  });
+
+  it("prefers an interrupted active run over an older session summary", async () => {
+    const sessionSummary: FiledReturnsFlowSummary = {
+      scope: {
+        financialYear: "2025-26",
+        period: FULL_FISCAL_YEAR_PERIOD,
+        returnType: "GSTR-3B",
+      },
+      status: "complete",
+      completedPeriods: ["April"],
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "downloaded",
+        safeSignals: ["full-fiscal-year-complete"],
+        safeMessage: "Complete.",
+      },
+    };
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      key === "pack:active-filed-returns-run"
+        ? {
+            [key]: {
+              schemaVersion: "1.0",
+              runId: "run-existing",
+              revision: 1,
+              scope: {
+                financialYear: "2026-27",
+                period: "April",
+                returnType: "GSTR-3B",
+              },
+              status: "running",
+              leaseUpdatedAt: "2026-06-24T00:00:00.000Z",
+            },
+          }
+        : {},
+    );
+    browserMocks.storage.session.get.mockResolvedValue({
+      "pack:last-filed-returns-flow-summary": sessionSummary,
+    });
+    const summary = await readCurrentFiledReturnsFlowSummary({
+      storageKeys: filedReturnsCurrentStateStorageKeys,
+      now: () => new Date("2026-06-24T00:01:00Z"),
+    });
+
+    expect(summary).toMatchObject({
+      status: "blocked",
+      scope: {
+        financialYear: "2026-27",
+        period: "April",
+        returnType: "GSTR-3B",
+      },
+      flowStep: {
+        safeSignals: ["filed-returns-run-needs-review"],
+      },
+    });
+  });
+
+  it("reports a stale running full-year ledger as blocked in current state", async () => {
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      key === "pack:full-fiscal-year-ledger"
+        ? {
+            [key]: {
+              schemaVersion: "1.0",
+              ledgerId: "ledger-existing",
+              status: "running",
+              scope: {
+                financialYear: "2026-27",
+                period: FULL_FISCAL_YEAR_PERIOD,
+                returnType: "GSTR-3B",
+              },
+              currentTargetId: "GSTR-3B:2026-27:April",
+              createdAt: "2026-06-24T00:00:00.000Z",
+              updatedAt: "2026-06-24T00:00:00.000Z",
+              targets: [
+                {
+                  targetId: "GSTR-3B:2026-27:April",
+                  financialYear: "2026-27",
+                  period: "April",
+                  returnType: "GSTR-3B",
+                  status: "running",
+                  attempts: 1,
+                  safeSignals: [],
+                  safeMessage: "Checking April.",
+                  updatedAt: "2026-06-24T00:00:00.000Z",
+                },
+              ],
+            },
+          }
+        : {},
+    );
+    const summary = await readCurrentFiledReturnsFlowSummary({
+      storageKeys: filedReturnsCurrentStateStorageKeys,
+      now: () => new Date("2026-06-24T00:01:00Z"),
+    });
+
+    expect(summary).toMatchObject({
+      status: "blocked",
+      currentPeriod: "April",
+      flowStep: {
+        safeSignals: ["full-fiscal-year-run-interrupted"],
+      },
     });
   });
 });

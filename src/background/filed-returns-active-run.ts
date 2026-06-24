@@ -1,5 +1,9 @@
 import { browser } from "wxt/browser";
-import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "../core/contracts";
+import type {
+  FiledReturnsDownloadScope,
+  FiledReturnsFlowSummary,
+  PortalFlowStepResult,
+} from "../core/contracts";
 import type { PackMessageResponse } from "../core/messages";
 
 const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
@@ -58,6 +62,37 @@ export async function releaseFiledReturnsRun(
   });
 }
 
+export async function readActiveFiledReturnsRunSummary(
+  deps: FiledReturnsActiveRunDeps,
+): Promise<FiledReturnsFlowSummary | null> {
+  const key = deps.storageKeys.activeRun;
+  if (!key) return null;
+
+  const values = await browser.storage.local.get(key);
+  const run = parseActiveRun(values[key]);
+  if (!run) return null;
+
+  return activeRunSummary(run, deps.now?.() ?? new Date());
+}
+
+export async function acknowledgeInterruptedFiledReturnsRun(
+  deps: FiledReturnsActiveRunDeps,
+): Promise<PackMessageResponse> {
+  const key = deps.storageKeys.activeRun;
+  if (!key) return acknowledgedRunResponse();
+
+  return runActiveRunCriticalSection(async () => {
+    const now = deps.now?.() ?? new Date();
+    const values = await browser.storage.local.get(key);
+    const run = parseActiveRun(values[key]);
+    if (!run) return acknowledgedRunResponse();
+    if (!isInterruptedRun(run, now)) return activeRunResponse(run, now);
+
+    await browser.storage.local.remove(key);
+    return acknowledgedRunResponse(run);
+  });
+}
+
 async function runActiveRunCriticalSection<T>(action: () => Promise<T>): Promise<T> {
   const previous = activeRunCriticalSection;
   let release: () => void = () => undefined;
@@ -109,18 +144,61 @@ function parseActiveRun(input: unknown): ActiveFiledReturnsRun | null {
 }
 
 function activeRunResponse(run: ActiveFiledReturnsRun, now: Date): PackMessageResponse {
-  const interrupted = now.getTime() - Date.parse(run.leaseUpdatedAt) > ACTIVE_RUN_REVIEW_MS;
+  const interrupted = isInterruptedRun(run, now);
   const flowStep = activeRunStep(interrupted);
   return {
     ok: true,
     flowStep,
-    flowSummary: {
-      scope: run.scope,
-      status: interrupted ? "blocked" : "running",
-      completedPeriods: [],
-      updatedAt: run.leaseUpdatedAt,
-      flowStep,
+    flowSummary: activeRunSummary(run, now, flowStep),
+  };
+}
+
+function activeRunSummary(
+  run: ActiveFiledReturnsRun,
+  now: Date,
+  flowStep = activeRunStep(isInterruptedRun(run, now)),
+): FiledReturnsFlowSummary {
+  return {
+    scope: run.scope,
+    status: isInterruptedRun(run, now) ? "blocked" : "running",
+    completedPeriods: [],
+    updatedAt: run.leaseUpdatedAt,
+    flowStep,
+  };
+}
+
+function isInterruptedRun(run: ActiveFiledReturnsRun, now: Date): boolean {
+  return now.getTime() - Date.parse(run.leaseUpdatedAt) > ACTIVE_RUN_REVIEW_MS;
+}
+
+function acknowledgedRunResponse(run?: ActiveFiledReturnsRun): PackMessageResponse {
+  const flowStep: PortalFlowStepResult = {
+    connectorId: "gst",
+    scopeId: FILED_RETURNS_SCOPE_ID,
+    state: "user-action-required",
+    safeSignals: ["filed-returns-run-acknowledged"],
+    safeMessage:
+      "Pack cleared the interrupted run marker. Existing full-year ledger history was preserved.",
+    userAction: {
+      type: "RETRY_PORTAL_GENERATION",
+      message: "Start the filed-return download again only after checking browser Downloads.",
+      canResume: true,
     },
+  };
+  return {
+    ok: true,
+    flowStep,
+    ...(run
+      ? {
+          flowSummary: {
+            scope: run.scope,
+            status: "blocked" as const,
+            completedPeriods: [],
+            updatedAt: run.leaseUpdatedAt,
+            flowStep,
+          },
+        }
+      : {}),
   };
 }
 
@@ -136,7 +214,7 @@ function activeRunStep(interrupted: boolean): PortalFlowStepResult {
     userAction: {
       type: "RETRY_PORTAL_GENERATION",
       message: interrupted
-        ? "Check Chrome Downloads first. Clear local Pack data only after confirming the previous run is safe to discard."
+        ? "Check Chrome Downloads first. Acknowledge the interrupted run only after confirming the previous run is safe to discard."
         : "Wait for the active filed-returns run to finish before starting another one.",
       canResume: true,
     },

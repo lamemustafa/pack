@@ -24,6 +24,8 @@ describe("message boundary", () => {
     ).toBe(true);
     expect(isPackMessage({ type: "PACK_GET_FILED_RETURNS_OBSERVATION" })).toBe(true);
     expect(isPackMessage({ type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" })).toBe(true);
+    expect(isPackMessage({ type: "PACK_GET_ACTIVE_FILED_RETURNS_RUN" })).toBe(true);
+    expect(isPackMessage({ type: "PACK_ACKNOWLEDGE_INTERRUPTED_RUN" })).toBe(true);
     expect(isPackMessage({ type: "PACK_PING" })).toBe(true);
     expect(isPackMessage({ type: "PACK_REFRESH_FILED_RETURNS_OBSERVATION" })).toBe(true);
     expect(isPackMessage({ type: "PACK_NAVIGATE_FILED_RETURNS" })).toBe(true);
@@ -77,6 +79,42 @@ describe("message boundary", () => {
           financialYear: "2025-26",
           period: FULL_FISCAL_YEAR_PERIOD,
           returnType: "GSTR-3B",
+        },
+      }),
+    ).toBe(false);
+    expect(
+      isPackMessage({
+        type: "PACK_RETRY_FILED_RETURNS_TARGET",
+        payload: {
+          financialYear: "2025-26",
+          period: "March",
+          returnType: "GSTR-3B",
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isPackMessage({
+        type: "PACK_RESOLVE_UNCONFIRMED_DOWNLOAD",
+        payload: {
+          resolution: "downloaded",
+          scope: {
+            financialYear: "2025-26",
+            period: "March",
+            returnType: "GSTR-3B",
+          },
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isPackMessage({
+        type: "PACK_RESOLVE_UNCONFIRMED_DOWNLOAD",
+        payload: {
+          resolution: "delete-everything",
+          scope: {
+            financialYear: "2025-26",
+            period: "March",
+            returnType: "GSTR-3B",
+          },
         },
       }),
     ).toBe(false);

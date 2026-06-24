@@ -16,7 +16,15 @@ describe("Pack brand surfaces", () => {
     );
 
     expect(popupSource).toContain("/brand/pack-logo-outlined.svg");
+    expect(popupSource).not.toContain("ReviewerTools");
+    expect(popupSource).not.toContain("PACK_CLEAR_LOCAL_DATA");
+    expect(popupSource).toContain("PACK_ACKNOWLEDGE_INTERRUPTED_RUN");
+    expect(popupSource).toContain("PACK_RETRY_FILED_RETURNS_TARGET");
+    expect(popupSource).toContain("PACK_RESOLVE_UNCONFIRMED_DOWNLOAD");
     expect(optionsSource).toContain("/icons/icon-48.png");
+    expect(optionsSource).toContain("PACK_START_SYNTHETIC_DEMO");
+    expect(optionsSource).toContain("Last synthetic demo manifest");
+    expect(optionsSource).toContain("PACK_CLEAR_LOCAL_DATA");
   });
 
   it("declares the Pack favicon on extension pages", async () => {

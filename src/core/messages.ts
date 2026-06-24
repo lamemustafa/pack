@@ -22,6 +22,16 @@ export type PackMessage =
   | { type: "PACK_GET_CONTEXT" }
   | { type: "PACK_GET_FILED_RETURNS_OBSERVATION" }
   | { type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" }
+  | { type: "PACK_GET_ACTIVE_FILED_RETURNS_RUN" }
+  | { type: "PACK_ACKNOWLEDGE_INTERRUPTED_RUN" }
+  | { type: "PACK_RETRY_FILED_RETURNS_TARGET"; payload: FiledReturnsDownloadScope }
+  | {
+      type: "PACK_RESOLVE_UNCONFIRMED_DOWNLOAD";
+      payload: {
+        scope: FiledReturnsDownloadScope;
+        resolution: "downloaded" | "cancelled";
+      };
+    }
   | { type: "PACK_REFRESH_FILED_RETURNS_OBSERVATION" }
   | { type: "PACK_NAVIGATE_FILED_RETURNS" }
   | { type: "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD"; payload: FiledReturnsDownloadTarget }
@@ -67,9 +77,17 @@ export function isPackMessage(input: unknown): input is PackMessage {
     case "PACK_GET_CONTEXT":
     case "PACK_GET_FILED_RETURNS_OBSERVATION":
     case "PACK_GET_FILED_RETURNS_FLOW_SUMMARY":
+    case "PACK_GET_ACTIVE_FILED_RETURNS_RUN":
+    case "PACK_ACKNOWLEDGE_INTERRUPTED_RUN":
     case "PACK_REFRESH_FILED_RETURNS_OBSERVATION":
     case "PACK_NAVIGATE_FILED_RETURNS":
       return true;
+    case "PACK_RETRY_FILED_RETURNS_TARGET":
+      return (
+        isFiledReturnsStartScope(input.payload) && input.payload.period !== FULL_FISCAL_YEAR_PERIOD
+      );
+    case "PACK_RESOLVE_UNCONFIRMED_DOWNLOAD":
+      return isUnconfirmedDownloadResolution(input.payload);
     case "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD":
       return isFiledReturnsDownloadTarget(input.payload);
     case "PACK_RUN_FILED_RETURNS_DOWNLOAD_STEP":
@@ -83,6 +101,15 @@ export function isPackMessage(input: unknown): input is PackMessage {
     default:
       return false;
   }
+}
+
+function isUnconfirmedDownloadResolution(input: unknown): input is {
+  scope: FiledReturnsDownloadScope;
+  resolution: "downloaded" | "cancelled";
+} {
+  if (!isRecord(input)) return false;
+  if (input.resolution !== "downloaded" && input.resolution !== "cancelled") return false;
+  return isFiledReturnsStartScope(input.scope) && input.scope.period !== FULL_FISCAL_YEAR_PERIOD;
 }
 
 function isFiledReturnsDownloadTarget(input: unknown): input is FiledReturnsDownloadTarget {

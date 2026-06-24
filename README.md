@@ -127,6 +127,9 @@ Pack uses Chrome extension storage only inside the current browser profile.
 - `pack:full-fiscal-year-ledger`: local-only full fiscal year run status with
   financial year, period, return type, target status, safe messages/signals,
   attempts, and timestamps only;
+- `pack:filed-returns-target-review`: local-only single-period unresolved
+  download review state with financial year, period, return type, safe
+  messages/signals, and timestamps only;
 - `pack:last-manifest`: the last synthetic reviewer demo archive manifest
   summary. The live GST download path does not write a live manifest yet.
 

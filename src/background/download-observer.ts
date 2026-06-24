@@ -202,7 +202,7 @@ export function mergeFlowStepWithDownloadObservation(
 
   return {
     ...step,
-    state: observation.state === "failed" ? "blocked" : "user-action-required",
+    state: observation.state === "failed" ? "blocked" : "download-unconfirmed",
     safeSignals: [...step.safeSignals, ...observation.safeSignals],
     safeMessage: observation.safeMessage,
     ...(observation.userAction ? { userAction: observation.userAction } : {}),

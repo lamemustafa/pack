@@ -15,6 +15,7 @@ import {
   runDownloadTriggerOnce,
   type FiledReturnsFlowMessagingDeps,
 } from "./filed-returns-flow-messaging";
+import { persistFiledReturnsTargetReview } from "./filed-returns-target-review";
 
 const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
 const EXPECTED_FILED_RETURN_DOWNLOAD = {
@@ -53,12 +54,14 @@ export async function triggerAndObserveFiledReturnDownload({
   }
 
   const observedDownload = await detailDownloadObservation.promise;
+  const flowStep = normaliseAmbiguousTriggerDownloadResult(
+    triggerFlowResponse.flowStep,
+    mergeFlowStepWithDownloadObservation(triggerFlowResponse.flowStep, observedDownload),
+  );
+  await persistFiledReturnsTargetReview(scope, flowStep, deps);
   return {
     ...triggerFlowResponse,
-    flowStep: normaliseAmbiguousTriggerDownloadResult(
-      triggerFlowResponse.flowStep,
-      mergeFlowStepWithDownloadObservation(triggerFlowResponse.flowStep, observedDownload),
-    ),
+    flowStep,
   };
 }
 

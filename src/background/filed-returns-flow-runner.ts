@@ -6,6 +6,10 @@ import { acquireFiledReturnsRun, releaseFiledReturnsRun } from "./filed-returns-
 import { triggerAndObserveFiledReturnDownload } from "./filed-returns-download-trigger";
 import { startFullFiscalYearDownloadFlow } from "./filed-returns-full-fiscal-year";
 import { runDownloadStepWithRetry } from "./filed-returns-flow-messaging";
+import {
+  readFiledReturnsTargetReview,
+  responseForFiledReturnsTargetReview,
+} from "./filed-returns-target-review";
 
 const GST_LOGIN_URL = "https://services.gst.gov.in/services/login";
 const FLOW_STEP_SETTLE_MS = 1_600;
@@ -31,6 +35,7 @@ export interface FiledReturnsFlowRunnerDeps {
     completion: string;
     fullFiscalYearLedger: string;
     observation: string;
+    targetReview?: string;
   };
   now?: () => Date;
   timings?: {
@@ -43,6 +48,11 @@ export async function startFiledReturnsDownloadFlow(
   scope: FiledReturnsDownloadScope,
   deps: FiledReturnsFlowRunnerDeps,
 ): Promise<PackMessageResponse> {
+  if (!isFullFiscalYearScope(scope)) {
+    const targetReview = await readFiledReturnsTargetReview(scope, deps);
+    if (targetReview) return responseForFiledReturnsTargetReview(targetReview);
+  }
+
   const activeRun = await acquireFiledReturnsRun(scope, deps);
   if ("response" in activeRun) return activeRun.response;
 

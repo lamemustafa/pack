@@ -96,10 +96,7 @@ export async function startFullFiscalYearDownloadFlow(
         ledger,
         nextTarget.targetId,
         "failed",
-        fullFiscalYearErrorStep(
-          response.ok ? "Unexpected Pack response." : response.error,
-          nextTarget.period,
-        ),
+        fullFiscalYearErrorStep(nextTarget.period),
         deps.now?.() ?? new Date(),
       );
       await persistLedger(deps, ledger);
@@ -219,12 +216,12 @@ async function persistSummary(
   await browser.storage.session.set({ [deps.storageKeys.completion]: summary });
 }
 
-function fullFiscalYearErrorStep(message: string, period: string): PortalFlowStepResult {
+function fullFiscalYearErrorStep(period: string): PortalFlowStepResult {
   return {
     connectorId: "gst",
     scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
     state: "blocked",
-    safeSignals: ["full-fiscal-year-target-error"],
-    safeMessage: `Pack stopped while checking ${period}: ${message}`,
+    safeSignals: ["full-fiscal-year-target-error", "pack-error:CONTENT_SCRIPT_UNAVAILABLE"],
+    safeMessage: `Pack stopped while checking ${period}. The GST tab could not be reached safely.`,
   };
 }

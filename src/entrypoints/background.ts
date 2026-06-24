@@ -1,31 +1,28 @@
 import { browser } from "wxt/browser";
-import { syntheticDownloadArtifacts } from "../connectors/gst/demo";
 import { pickSupportedGstPortalTab } from "../connectors/gst/hosts";
-import {
-  DEFAULT_GST_RETURN_SCOPE,
-  createGstReturnPlan,
-  createSyntheticGstResults,
-} from "../connectors/gst/planner";
-import type {
-  ArchiveManifest,
-  FiledReturnsFlowSummary,
-  PortalContext,
-  PortalObservation,
-} from "../core/contracts";
-import { createArchiveManifest } from "../core/manifest";
+import type { ArchiveManifest, PortalContext, PortalObservation } from "../core/contracts";
 import { isPackMessage, type PackMessage, type PackMessageResponse } from "../core/messages";
-import { summariseFullFiscalYearLedger } from "../background/filed-returns-full-fiscal-year";
-import { isFullFiscalYearLedger } from "../background/filed-returns-full-fiscal-year-ledger";
+import {
+  acknowledgeInterruptedFiledReturnsRun,
+  readActiveFiledReturnsRunSummary,
+} from "../background/filed-returns-active-run";
+import { readCurrentFiledReturnsFlowSummary } from "../background/filed-returns-current-state";
 import {
   startFiledReturnsDownloadFlow,
   type ActiveGstTab,
 } from "../background/filed-returns-flow-runner";
+import {
+  clearFiledReturnsTargetReview,
+  resolveUnconfirmedFiledReturnsDownload,
+} from "../background/filed-returns-target-review";
+import { startSyntheticDemo } from "../background/synthetic-demo";
 
 export const PACK_LOCAL_STORAGE_KEYS = {
   activeFiledReturnsRun: "pack:active-filed-returns-run",
   fullFiscalYearLedger: "pack:full-fiscal-year-ledger",
   install: "pack:install",
   lastManifest: "pack:last-manifest",
+  targetReview: "pack:filed-returns-target-review",
 } as const;
 
 export const PACK_SESSION_STORAGE_KEYS = {
@@ -111,21 +108,42 @@ async function handleMessage(
     case "PACK_GET_FILED_RETURNS_FLOW_SUMMARY":
       return {
         ok: true,
-        flowSummary: await readFiledReturnsFlowSummary(),
+        flowSummary: await readCurrentFiledReturnsFlowSummary({
+          storageKeys: filedReturnsStorageKeys(),
+        }),
       };
-    case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
-      return startFiledReturnsDownloadFlow(message.payload, {
-        getActiveGstTab,
-        sendMessageToTabWithInjection,
-        storageKeys: {
-          activeRun: PACK_LOCAL_STORAGE_KEYS.activeFiledReturnsRun,
-          completion: PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary,
-          fullFiscalYearLedger: PACK_LOCAL_STORAGE_KEYS.fullFiscalYearLedger,
-          observation: PACK_SESSION_STORAGE_KEYS.lastFiledReturnsObservation,
-        },
+    case "PACK_GET_ACTIVE_FILED_RETURNS_RUN":
+      return {
+        ok: true,
+        flowSummary: await readActiveFiledReturnsRunSummary({
+          storageKeys: { activeRun: PACK_LOCAL_STORAGE_KEYS.activeFiledReturnsRun },
+        }),
+      };
+    case "PACK_ACKNOWLEDGE_INTERRUPTED_RUN":
+      return acknowledgeInterruptedFiledReturnsRun({
+        storageKeys: { activeRun: PACK_LOCAL_STORAGE_KEYS.activeFiledReturnsRun },
       });
+    case "PACK_RETRY_FILED_RETURNS_TARGET":
+      await clearFiledReturnsTargetReview(message.payload, {
+        storageKeys: { targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview },
+      });
+      return startFiledReturnsDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
+    case "PACK_RESOLVE_UNCONFIRMED_DOWNLOAD":
+      return resolveUnconfirmedFiledReturnsDownload(
+        message.payload.scope,
+        message.payload.resolution,
+        {
+          storageKeys: { targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview },
+        },
+      );
+    case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
+      return startFiledReturnsDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
     case "PACK_START_SYNTHETIC_DEMO":
-      return startSyntheticDemo();
+      return startSyntheticDemo({
+        productVersion: PRODUCT_VERSION,
+        officialUrl: OFFICIAL_URL,
+        storageKeys: { lastManifest: PACK_LOCAL_STORAGE_KEYS.lastManifest },
+      });
     case "PACK_CLEAR_LOCAL_DATA":
       await clearPackLocalData();
       return { ok: true, cleared: true };
@@ -137,6 +155,24 @@ async function handleMessage(
   }
 
   return { ok: false, error: "Unsupported Pack message." };
+}
+
+function filedReturnsFlowRunnerDeps() {
+  return {
+    getActiveGstTab,
+    sendMessageToTabWithInjection,
+    storageKeys: filedReturnsStorageKeys(),
+  };
+}
+
+function filedReturnsStorageKeys() {
+  return {
+    activeRun: PACK_LOCAL_STORAGE_KEYS.activeFiledReturnsRun,
+    completion: PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary,
+    fullFiscalYearLedger: PACK_LOCAL_STORAGE_KEYS.fullFiscalYearLedger,
+    observation: PACK_SESSION_STORAGE_KEYS.lastFiledReturnsObservation,
+    targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview,
+  };
 }
 
 async function refreshActiveFiledReturnsObservation(): Promise<void> {
@@ -224,35 +260,6 @@ function isMissingReceivingEndError(error: unknown): boolean {
   return /receiving end does not exist|could not establish connection/i.test(message);
 }
 
-async function startSyntheticDemo(): Promise<PackMessageResponse> {
-  const startedAt = new Date();
-  const plan = createGstReturnPlan(DEFAULT_GST_RETURN_SCOPE, startedAt);
-  const completedAt = new Date(startedAt.getTime() + 250);
-  const results = createSyntheticGstResults(plan, completedAt);
-  const manifest = createArchiveManifest(plan, results, {
-    productVersion: PRODUCT_VERSION,
-    build: browser.runtime.getManifest().version,
-    officialUrl: OFFICIAL_URL,
-    startedAt: startedAt.toISOString(),
-    completedAt: completedAt.toISOString(),
-    browserFamily: "Chrome",
-  });
-
-  let downloaded = 0;
-  for (const artifact of syntheticDownloadArtifacts(plan, results, manifest)) {
-    await browser.downloads.download({
-      conflictAction: "uniquify",
-      filename: `Pack-Demo/${artifact.filename}`,
-      saveAs: false,
-      url: makeDataUrl(artifact.mimeType, artifact.body),
-    });
-    downloaded += 1;
-  }
-
-  await browser.storage.local.set({ [PACK_LOCAL_STORAGE_KEYS.lastManifest]: manifest });
-  return { ok: true, downloaded, manifest };
-}
-
 async function readSessionValue<T>(key: string): Promise<T | null> {
   const values = await browser.storage.session.get(key);
   return (values[key] as T | undefined) ?? null;
@@ -261,26 +268,4 @@ async function readSessionValue<T>(key: string): Promise<T | null> {
 async function readLocalValue<T>(key: string): Promise<T | null> {
   const values = await browser.storage.local.get(key);
   return (values[key] as T | undefined) ?? null;
-}
-
-async function readFiledReturnsFlowSummary(): Promise<FiledReturnsFlowSummary | null> {
-  const sessionSummary = await readSessionValue<FiledReturnsFlowSummary>(
-    PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary,
-  );
-  if (sessionSummary) return sessionSummary;
-
-  const ledger = await readLocalValue<unknown>(PACK_LOCAL_STORAGE_KEYS.fullFiscalYearLedger);
-  if (!isFullFiscalYearLedger(ledger)) return null;
-  return summariseFullFiscalYearLedger(ledger);
-}
-
-function makeDataUrl(mimeType: string, body: string): string {
-  return `data:${mimeType};base64,${base64Encode(body)}`;
-}
-
-function base64Encode(value: string): string {
-  const bytes = new TextEncoder().encode(value);
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
 }
