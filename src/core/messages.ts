@@ -9,7 +9,11 @@ import type {
   PortalNavigationResult,
   PortalObservation,
 } from "./contracts";
-import { isSupportedFiledReturnsScope } from "./filed-returns-scope";
+import {
+  FULL_FISCAL_YEAR_PERIOD,
+  isSupportedFiledReturnsScope,
+  isSupportedFiledReturnsStartScope,
+} from "./filed-returns-scope";
 
 export type PackMessage =
   | { type: "PACK_CONTENT_CONTEXT"; payload: PortalContext }
@@ -69,8 +73,9 @@ export function isPackMessage(input: unknown): input is PackMessage {
     case "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD":
       return isFiledReturnsDownloadTarget(input.payload);
     case "PACK_RUN_FILED_RETURNS_DOWNLOAD_STEP":
-    case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
       return isFiledReturnsDownloadScope(input.payload);
+    case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
+      return isFiledReturnsStartScope(input.payload);
     case "PACK_START_SYNTHETIC_DEMO":
     case "PACK_CLEAR_LOCAL_DATA":
     case "PACK_GET_LAST_MANIFEST":
@@ -90,7 +95,7 @@ function isFiledReturnsDownloadTarget(input: unknown): input is FiledReturnsDown
     return false;
   }
   if (!isFiledReturnsDownloadScope(input)) return false;
-  if (input.period === "ALL") return false;
+  if (input.period === "ALL" || input.period === FULL_FISCAL_YEAR_PERIOD) return false;
   return true;
 }
 
@@ -119,6 +124,50 @@ function isFiledReturnsDownloadScope(input: unknown): input is FiledReturnsDownl
     ...(input.completedPeriods ? { completedPeriods: input.completedPeriods } : {}),
   };
   return isSupportedFiledReturnsScope(scope);
+}
+
+function isFiledReturnsStartScope(input: unknown): input is FiledReturnsDownloadScope {
+  if (!isFiledReturnsScopeShape(input)) return false;
+  return isSupportedFiledReturnsStartScope(toFiledReturnsScope(input));
+}
+
+function isFiledReturnsScopeShape(input: unknown): input is {
+  financialYear: string;
+  period: string;
+  returnType: "GSTR-3B";
+  completedPeriods?: string[];
+} {
+  if (!isRecord(input)) return false;
+  if (typeof input.financialYear !== "string") return false;
+  if (!/^20\d{2}-\d{2}$/.test(input.financialYear)) return false;
+  if (typeof input.period !== "string" || input.period.length === 0 || input.period.length > 24) {
+    return false;
+  }
+  if (input.returnType !== "GSTR-3B") return false;
+  if (
+    input.completedPeriods !== undefined &&
+    (!Array.isArray(input.completedPeriods) ||
+      !input.completedPeriods.every(
+        (period) => typeof period === "string" && period.length > 0 && period.length <= 20,
+      ))
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function toFiledReturnsScope(input: {
+  financialYear: string;
+  period: string;
+  returnType: "GSTR-3B";
+  completedPeriods?: string[];
+}): FiledReturnsDownloadScope {
+  return {
+    financialYear: input.financialYear,
+    period: input.period,
+    returnType: input.returnType,
+    ...(input.completedPeriods ? { completedPeriods: input.completedPeriods } : {}),
+  };
 }
 
 function isRecord(input: unknown): input is Record<string, unknown> {

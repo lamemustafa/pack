@@ -5,12 +5,23 @@ export function getFiledReturnsCompletionStatus(
   summary: FiledReturnsFlowSummary | null,
 ): string | null {
   if (!summary) return null;
-  if (summary.status !== "complete") return null;
   if (!isSameScope(scope, summary.scope)) return null;
-  if (!summary.flowStep.safeSignals.includes("filed-return-financial-year-complete")) return null;
 
   const periodCount = summary.completedPeriods.length;
-  return `FY ${summary.scope.financialYear} ${summary.scope.returnType} download complete. ${periodCount} ${periodCount === 1 ? "period" : "periods"} finished.`;
+  const totalPeriods = summary.totalPeriods ?? periodCount;
+  if (summary.status === "complete") {
+    return `FY ${summary.scope.financialYear} ${summary.scope.returnType} complete. ${periodCount} of ${totalPeriods} ${periodCount === 1 ? "period" : "periods"} downloaded.`;
+  }
+  if (summary.status === "blocked" && summary.currentPeriod) {
+    return `FY ${summary.scope.financialYear} ${summary.scope.returnType} blocked at ${summary.currentPeriod}. ${periodCount} of ${totalPeriods} periods downloaded.`;
+  }
+  if (summary.status === "running" && summary.currentPeriod) {
+    return `FY ${summary.scope.financialYear} ${summary.scope.returnType} running: ${summary.currentPeriod}. ${periodCount} of ${totalPeriods} periods downloaded.`;
+  }
+  if (summary.status === "partial") {
+    return `FY ${summary.scope.financialYear} ${summary.scope.returnType} partial. ${periodCount} of ${totalPeriods} periods downloaded.`;
+  }
+  return null;
 }
 
 function isSameScope(left: FiledReturnsDownloadScope, right: FiledReturnsDownloadScope): boolean {

@@ -1,7 +1,8 @@
 import type { FiledReturnsDownloadScope } from "../../core/contracts";
 import {
   getFiledReturnsFinancialYearOptions,
-  getFiledReturnsPeriodOptions,
+  getFiledReturnsScopePeriodOptions,
+  isFullFiscalYearScope,
   normaliseFiledReturnsScope,
 } from "../../core/filed-returns-scope";
 
@@ -14,7 +15,8 @@ export interface ScopeFormProps {
 
 export function ScopeForm({ busy, scope, onScopeChange, onStart }: ScopeFormProps) {
   const financialYearOptions = getFiledReturnsFinancialYearOptions();
-  const periodOptions = getFiledReturnsPeriodOptions(scope.financialYear);
+  const periodOptions = getFiledReturnsScopePeriodOptions(scope.financialYear);
+  const fullFiscalYear = isFullFiscalYearScope(scope);
 
   return (
     <section className="flow-panel" aria-label="Filed return download scope">
@@ -57,8 +59,18 @@ export function ScopeForm({ busy, scope, onScopeChange, onStart }: ScopeFormProp
           ))}
         </select>
       </label>
+      {fullFiscalYear ? (
+        <p className="muted">
+          Runs eligible filed GSTR-3B periods one by one from your signed-in GST Portal tab. Pack
+          stops on ambiguous downloads and records local status only.
+        </p>
+      ) : null}
       <button type="button" disabled={busy !== null} onClick={onStart}>
-        {busy === "start-filed-returns-flow" ? "Starting..." : "Start download"}
+        {busy === "start-filed-returns-flow"
+          ? "Starting..."
+          : fullFiscalYear
+            ? "Start local full-year run"
+            : "Start download"}
       </button>
     </section>
   );

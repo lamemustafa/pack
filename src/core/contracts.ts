@@ -196,11 +196,49 @@ export interface FiledReturnsDownloadTarget {
   returnType: "GSTR-3B";
 }
 
+export type FiledReturnsFullFiscalYearTargetStatus =
+  | "pending"
+  | "running"
+  | "downloaded"
+  | "not-filed"
+  | "download-unconfirmed"
+  | "blocked"
+  | "failed"
+  | "cancelled";
+
+export interface FiledReturnsFullFiscalYearTarget {
+  targetId: string;
+  financialYear: string;
+  period: string;
+  returnType: "GSTR-3B";
+  status: FiledReturnsFullFiscalYearTargetStatus;
+  attempts: number;
+  safeSignals: string[];
+  safeMessage: string;
+  startedAt?: string;
+  completedAt?: string;
+  updatedAt: string;
+}
+
+export interface FiledReturnsFullFiscalYearLedger {
+  schemaVersion: "1.0";
+  ledgerId: string;
+  status: "running" | "complete" | "partial" | "blocked" | "cancelled";
+  scope: FiledReturnsDownloadScope;
+  currentTargetId?: string;
+  createdAt: string;
+  updatedAt: string;
+  targets: FiledReturnsFullFiscalYearTarget[];
+}
+
 export interface FiledReturnsFlowSummary {
   scope: FiledReturnsDownloadScope;
-  status: "complete";
-  completedAt: string;
+  status: "complete" | "running" | "partial" | "blocked" | "cancelled";
+  completedAt?: string;
+  updatedAt?: string;
   completedPeriods: string[];
+  totalPeriods?: number;
+  currentPeriod?: string;
   flowStep: PortalFlowStepResult;
 }
 

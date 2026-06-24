@@ -1,7 +1,13 @@
 const CLICK_SETTLE_DELAY_MS = 250;
-const CLICKABLE_SELECTOR = ["a", "button", "[role='button']", "[ng-click]", "[data-ng-click]"].join(
-  ",",
-);
+const CLICKABLE_SELECTOR = [
+  "a",
+  "button",
+  "[role='button']",
+  "[ng-click]",
+  "[data-ng-click]",
+  "input[type='button']",
+  "input[type='submit']",
+].join(",");
 
 export function getClickableElements(root: ParentNode): HTMLElement[] {
   return Array.from(root.querySelectorAll(CLICKABLE_SELECTOR)).filter((element) =>

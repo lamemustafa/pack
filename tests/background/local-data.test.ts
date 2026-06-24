@@ -55,10 +55,9 @@ describe("Pack local data clearing", () => {
     await background.clearPackLocalData();
 
     expect(browserMocks.storage.session.clear).toHaveBeenCalledTimes(1);
-    expect(browserMocks.storage.local.remove).toHaveBeenCalledWith([
-      background.PACK_LOCAL_STORAGE_KEYS.install,
-      background.PACK_LOCAL_STORAGE_KEYS.lastManifest,
-    ]);
+    expect(browserMocks.storage.local.remove).toHaveBeenCalledWith(
+      background.PACK_CLEARABLE_LOCAL_STORAGE_KEYS,
+    );
     expect(background.PACK_CLEARABLE_LOCAL_STORAGE_KEYS).toEqual(
       Object.values(background.PACK_LOCAL_STORAGE_KEYS),
     );

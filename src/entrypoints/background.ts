@@ -14,12 +14,15 @@ import type {
 } from "../core/contracts";
 import { createArchiveManifest } from "../core/manifest";
 import { isPackMessage, type PackMessage, type PackMessageResponse } from "../core/messages";
+import { summariseFullFiscalYearLedger } from "../background/filed-returns-full-fiscal-year";
+import { isFullFiscalYearLedger } from "../background/filed-returns-full-fiscal-year-ledger";
 import {
   startFiledReturnsDownloadFlow,
   type ActiveGstTab,
 } from "../background/filed-returns-flow-runner";
 
 export const PACK_LOCAL_STORAGE_KEYS = {
+  fullFiscalYearLedger: "pack:full-fiscal-year-ledger",
   install: "pack:install",
   lastManifest: "pack:last-manifest",
 } as const;
@@ -98,9 +101,7 @@ async function handleMessage(
     case "PACK_GET_FILED_RETURNS_FLOW_SUMMARY":
       return {
         ok: true,
-        flowSummary: await readSessionValue<FiledReturnsFlowSummary>(
-          PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary,
-        ),
+        flowSummary: await readFiledReturnsFlowSummary(),
       };
     case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
       return startFiledReturnsDownloadFlow(message.payload, {
@@ -108,6 +109,7 @@ async function handleMessage(
         sendMessageToTabWithInjection,
         storageKeys: {
           completion: PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary,
+          fullFiscalYearLedger: PACK_LOCAL_STORAGE_KEYS.fullFiscalYearLedger,
           observation: PACK_SESSION_STORAGE_KEYS.lastFiledReturnsObservation,
         },
       });
@@ -248,6 +250,17 @@ async function readSessionValue<T>(key: string): Promise<T | null> {
 async function readLocalValue<T>(key: string): Promise<T | null> {
   const values = await browser.storage.local.get(key);
   return (values[key] as T | undefined) ?? null;
+}
+
+async function readFiledReturnsFlowSummary(): Promise<FiledReturnsFlowSummary | null> {
+  const sessionSummary = await readSessionValue<FiledReturnsFlowSummary>(
+    PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary,
+  );
+  if (sessionSummary) return sessionSummary;
+
+  const ledger = await readLocalValue<unknown>(PACK_LOCAL_STORAGE_KEYS.fullFiscalYearLedger);
+  if (!isFullFiscalYearLedger(ledger)) return null;
+  return summariseFullFiscalYearLedger(ledger);
 }
 
 function makeDataUrl(mimeType: string, body: string): string {
