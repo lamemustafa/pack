@@ -1,5 +1,5 @@
 import { browser } from "wxt/browser";
-import type { FiledReturnsFlowSummary } from "../core/contracts";
+import type { FiledReturnsFlowSummary, FiledReturnsFullFiscalYearLedger } from "../core/contracts";
 import { readActiveFiledReturnsRunSummary } from "./filed-returns-active-run";
 import { summariseFullFiscalYearLedger } from "./filed-returns-full-fiscal-year";
 import { isFullFiscalYearLedger } from "./filed-returns-full-fiscal-year-ledger";
@@ -24,16 +24,27 @@ export async function readCurrentFiledReturnsFlowSummary(
   });
   if (activeRunSummary) return activeRunSummary;
 
+  const ledger = await readLocalValue<unknown>(deps.storageKeys.fullFiscalYearLedger);
+  if (isFullFiscalYearLedger(ledger) && isActionableFullFiscalYearLedger(ledger)) {
+    return summariseFullFiscalYearLedger(ledger, deps.now?.());
+  }
+
   const targetReviewSummary = await readCurrentFiledReturnsTargetReviewSummary({
     storageKeys: { targetReview: deps.storageKeys.targetReview },
     ...(deps.now ? { now: deps.now } : {}),
   });
   if (targetReviewSummary) return targetReviewSummary;
 
-  const ledger = await readLocalValue<unknown>(deps.storageKeys.fullFiscalYearLedger);
   if (isFullFiscalYearLedger(ledger)) return summariseFullFiscalYearLedger(ledger, deps.now?.());
 
   return readSessionValue<FiledReturnsFlowSummary>(deps.storageKeys.completion);
+}
+
+function isActionableFullFiscalYearLedger(ledger: FiledReturnsFullFiscalYearLedger): boolean {
+  if (ledger.status === "complete" || ledger.status === "cancelled") return false;
+  return ledger.targets.some((target) =>
+    ["running", "download-unconfirmed", "blocked", "failed"].includes(target.status),
+  );
 }
 
 async function readSessionValue<T>(key: string): Promise<T | null> {

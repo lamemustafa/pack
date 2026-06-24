@@ -8,6 +8,10 @@ import {
 } from "../background/filed-returns-active-run";
 import { readCurrentFiledReturnsFlowSummary } from "../background/filed-returns-current-state";
 import {
+  prepareFullFiscalYearTargetRetry,
+  resolveFullFiscalYearTarget,
+} from "../background/filed-returns-full-fiscal-year-recovery";
+import {
   startFiledReturnsDownloadFlow,
   type ActiveGstTab,
 } from "../background/filed-returns-flow-runner";
@@ -15,6 +19,7 @@ import {
   clearFiledReturnsTargetReview,
   resolveUnconfirmedFiledReturnsDownload,
 } from "../background/filed-returns-target-review";
+import { clearPackLocalDataWithRecoveryGuard } from "../background/local-data";
 import { startSyntheticDemo } from "../background/synthetic-demo";
 
 export const PACK_LOCAL_STORAGE_KEYS = {
@@ -128,6 +133,14 @@ async function handleMessage(
         storageKeys: { targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview },
       });
       return startFiledReturnsDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
+    case "PACK_RETRY_FULL_FISCAL_YEAR_TARGET": {
+      const recovery = await prepareFullFiscalYearTargetRetry(
+        message.payload,
+        filedReturnsFlowRunnerDeps(),
+      );
+      if (!recovery.ok) return recovery.response;
+      return startFiledReturnsDownloadFlow(recovery.ledger.scope, filedReturnsFlowRunnerDeps());
+    }
     case "PACK_RESOLVE_UNCONFIRMED_DOWNLOAD":
       return resolveUnconfirmedFiledReturnsDownload(
         message.payload.scope,
@@ -135,6 +148,12 @@ async function handleMessage(
         {
           storageKeys: { targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview },
         },
+      );
+    case "PACK_RESOLVE_FULL_FISCAL_YEAR_TARGET":
+      return resolveFullFiscalYearTarget(
+        message.payload,
+        message.payload.resolution,
+        filedReturnsFlowRunnerDeps(),
       );
     case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
       return startFiledReturnsDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
@@ -145,8 +164,7 @@ async function handleMessage(
         storageKeys: { lastManifest: PACK_LOCAL_STORAGE_KEYS.lastManifest },
       });
     case "PACK_CLEAR_LOCAL_DATA":
-      await clearPackLocalData();
-      return { ok: true, cleared: true };
+      return clearPackLocalData();
     case "PACK_GET_LAST_MANIFEST":
       return {
         ok: true,
@@ -192,9 +210,15 @@ async function refreshActiveFiledReturnsObservation(): Promise<void> {
   }
 }
 
-export async function clearPackLocalData(): Promise<void> {
-  await browser.storage.session.clear();
-  await browser.storage.local.remove([...PACK_CLEARABLE_LOCAL_STORAGE_KEYS]);
+export async function clearPackLocalData(): Promise<PackMessageResponse> {
+  return clearPackLocalDataWithRecoveryGuard({
+    clearableLocalStorageKeys: PACK_CLEARABLE_LOCAL_STORAGE_KEYS,
+    storageKeys: {
+      activeRun: PACK_LOCAL_STORAGE_KEYS.activeFiledReturnsRun,
+      fullFiscalYearLedger: PACK_LOCAL_STORAGE_KEYS.fullFiscalYearLedger,
+      targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview,
+    },
+  });
 }
 
 async function getActiveGstTab(): Promise<ActiveGstTab | null> {

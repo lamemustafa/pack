@@ -66,8 +66,9 @@ describe("Pack local data clearing", () => {
   it("removes every Pack local storage key and clears session storage", async () => {
     const background = await import("../../src/entrypoints/background");
 
-    await background.clearPackLocalData();
+    const response = await background.clearPackLocalData();
 
+    expect(response).toEqual({ ok: true, cleared: true });
     expect(browserMocks.storage.session.clear).toHaveBeenCalledTimes(1);
     expect(browserMocks.storage.local.remove).toHaveBeenCalledWith(
       background.PACK_CLEARABLE_LOCAL_STORAGE_KEYS,
@@ -75,6 +76,53 @@ describe("Pack local data clearing", () => {
     expect(background.PACK_CLEARABLE_LOCAL_STORAGE_KEYS).toEqual(
       Object.values(background.PACK_LOCAL_STORAGE_KEYS),
     );
+  });
+
+  it("refuses broad local-data clearing while a full-year recovery target is unresolved", async () => {
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      key === "pack:full-fiscal-year-ledger"
+        ? {
+            [key]: {
+              schemaVersion: "1.0",
+              ledgerId: "ledger-existing",
+              revision: 2,
+              status: "blocked",
+              scope: {
+                financialYear: "2026-27",
+                period: FULL_FISCAL_YEAR_PERIOD,
+                returnType: "GSTR-3B",
+              },
+              currentTargetId: "GSTR-3B:2026-27:April",
+              createdAt: "2026-06-24T00:00:00.000Z",
+              updatedAt: "2026-06-24T00:00:00.000Z",
+              targets: [
+                {
+                  targetId: "GSTR-3B:2026-27:April",
+                  financialYear: "2026-27",
+                  period: "April",
+                  returnType: "GSTR-3B",
+                  status: "download-unconfirmed",
+                  attempts: 1,
+                  safeSignals: ["browser-download-size-unknown"],
+                  safeMessage: "Unconfirmed.",
+                  updatedAt: "2026-06-24T00:00:00.000Z",
+                },
+              ],
+            },
+          }
+        : {},
+    );
+    const background = await import("../../src/entrypoints/background");
+
+    const response = await background.clearPackLocalData();
+
+    expect(response).toEqual({
+      ok: false,
+      error:
+        "Pack has unresolved filed-return recovery state. Cancel or resolve the run before clearing local data.",
+    });
+    expect(browserMocks.storage.session.clear).not.toHaveBeenCalled();
+    expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
   });
 
   it("restricts local storage to trusted extension contexts on startup", async () => {
@@ -148,6 +196,7 @@ describe("Pack local data clearing", () => {
             [key]: {
               schemaVersion: "1.0",
               ledgerId: "ledger-existing",
+              revision: 2,
               status: "running",
               scope: {
                 financialYear: "2026-27",
@@ -182,6 +231,12 @@ describe("Pack local data clearing", () => {
     expect(summary).toMatchObject({
       status: "blocked",
       currentPeriod: "April",
+      fullFiscalYearRecovery: {
+        ledgerId: "ledger-existing",
+        targetId: "GSTR-3B:2026-27:April",
+        expectedRevision: 2,
+        targetStatus: "running",
+      },
       flowStep: {
         safeSignals: ["full-fiscal-year-run-interrupted"],
       },

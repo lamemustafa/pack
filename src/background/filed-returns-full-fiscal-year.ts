@@ -88,7 +88,7 @@ export async function startFullFiscalYearDownloadFlow(
         period: nextTarget.period,
         returnType: nextTarget.returnType,
       },
-      deps,
+      { ...deps, persistTargetReview: false },
     );
 
     if (!response.ok || !("flowStep" in response)) {

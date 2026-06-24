@@ -58,7 +58,9 @@ export async function triggerAndObserveFiledReturnDownload({
     triggerFlowResponse.flowStep,
     mergeFlowStepWithDownloadObservation(triggerFlowResponse.flowStep, observedDownload),
   );
-  await persistFiledReturnsTargetReview(scope, flowStep, deps);
+  if (deps.persistTargetReview !== false) {
+    await persistFiledReturnsTargetReview(scope, flowStep, deps);
+  }
   return {
     ...triggerFlowResponse,
     flowStep,

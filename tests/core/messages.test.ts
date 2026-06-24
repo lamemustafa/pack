@@ -120,6 +120,38 @@ describe("message boundary", () => {
     ).toBe(false);
     expect(
       isPackMessage({
+        type: "PACK_RETRY_FULL_FISCAL_YEAR_TARGET",
+        payload: {
+          ledgerId: "ledger-existing",
+          targetId: "GSTR-3B:2026-27:April",
+          expectedRevision: 2,
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isPackMessage({
+        type: "PACK_RESOLVE_FULL_FISCAL_YEAR_TARGET",
+        payload: {
+          ledgerId: "ledger-existing",
+          targetId: "GSTR-3B:2026-27:April",
+          expectedRevision: 2,
+          resolution: "manually-observed",
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isPackMessage({
+        type: "PACK_RESOLVE_FULL_FISCAL_YEAR_TARGET",
+        payload: {
+          ledgerId: "ledger-existing",
+          targetId: "GSTR-3B:2026-27:April",
+          expectedRevision: 2,
+          resolution: "downloaded",
+        },
+      }),
+    ).toBe(false);
+    expect(
+      isPackMessage({
         type: "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD",
         payload: {
           actionId: "action-1",

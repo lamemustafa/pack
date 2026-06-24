@@ -2,7 +2,11 @@ import { browser } from "wxt/browser";
 import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "../core/contracts";
 import type { PackMessage, PackMessageResponse } from "../core/messages";
 import { isFullFiscalYearScope } from "../core/filed-returns-scope";
-import { acquireFiledReturnsRun, releaseFiledReturnsRun } from "./filed-returns-active-run";
+import {
+  acquireFiledReturnsRun,
+  releaseFiledReturnsRun,
+  startFiledReturnsRunLeaseRenewal,
+} from "./filed-returns-active-run";
 import { triggerAndObserveFiledReturnDownload } from "./filed-returns-download-trigger";
 import { startFullFiscalYearDownloadFlow } from "./filed-returns-full-fiscal-year";
 import { runDownloadStepWithRetry } from "./filed-returns-flow-messaging";
@@ -38,6 +42,7 @@ export interface FiledReturnsFlowRunnerDeps {
     targetReview?: string;
   };
   now?: () => Date;
+  persistTargetReview?: boolean;
   timings?: {
     flowStepSettleMs?: number;
     resultRowNavigationSettleMs?: number;
@@ -56,6 +61,7 @@ export async function startFiledReturnsDownloadFlow(
   const activeRun = await acquireFiledReturnsRun(scope, deps);
   if ("response" in activeRun) return activeRun.response;
 
+  const stopLeaseRenewal = startFiledReturnsRunLeaseRenewal(activeRun.run, deps);
   try {
     if (isFullFiscalYearScope(scope)) {
       return startFullFiscalYearDownloadFlow(
@@ -66,6 +72,7 @@ export async function startFiledReturnsDownloadFlow(
     }
     return startSinglePeriodFiledReturnsDownloadFlow(scope, deps);
   } finally {
+    stopLeaseRenewal();
     await releaseFiledReturnsRun(activeRun.run, deps);
   }
 }

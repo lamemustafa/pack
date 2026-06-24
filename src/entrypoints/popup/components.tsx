@@ -17,7 +17,9 @@ export interface RecoveryActionsProps {
   busy: string | null;
   summary: FiledReturnsFlowSummary | null;
   onAcknowledgeInterruptedRun: () => void;
+  onRetryFullFiscalYearTarget: () => void;
   onRetryTarget: () => void;
+  onResolveFullFiscalYearTarget: (resolution: "manually-observed" | "cancelled") => void;
   onResolveTarget: (resolution: "downloaded" | "cancelled") => void;
 }
 
@@ -25,7 +27,9 @@ export function RecoveryActions({
   busy,
   summary,
   onAcknowledgeInterruptedRun,
+  onRetryFullFiscalYearTarget,
   onRetryTarget,
+  onResolveFullFiscalYearTarget,
   onResolveTarget,
 }: RecoveryActionsProps) {
   if (!summary) return null;
@@ -33,7 +37,12 @@ export function RecoveryActions({
   const signals = new Set(summary.flowStep.safeSignals);
   const needsRunReview = signals.has("filed-returns-run-needs-review");
   const needsTargetReview = signals.has("filed-returns-target-review-required");
-  if (!needsRunReview && !needsTargetReview) return null;
+  const needsFullFiscalYearReview =
+    Boolean(summary.fullFiscalYearRecovery) &&
+    (signals.has("full-fiscal-year-download-unconfirmed") ||
+      signals.has("full-fiscal-year-run-interrupted") ||
+      signals.has("full-fiscal-year-run-needs-action"));
+  if (!needsRunReview && !needsTargetReview && !needsFullFiscalYearReview) return null;
 
   return (
     <section className="actions" aria-label="Filed return recovery actions">
@@ -60,7 +69,7 @@ export function RecoveryActions({
             disabled={busy !== null}
             onClick={() => onResolveTarget("downloaded")}
           >
-            {busy === "resolve-unconfirmed-download" ? "Saving..." : "Mark reviewed as downloaded"}
+            {busy === "resolve-unconfirmed-download" ? "Saving..." : "Mark reviewed manually"}
           </button>
           <button
             type="button"
@@ -69,6 +78,31 @@ export function RecoveryActions({
             onClick={() => onResolveTarget("cancelled")}
           >
             {busy === "cancel-unconfirmed-download" ? "Cancelling..." : "Cancel target"}
+          </button>
+        </>
+      ) : null}
+      {needsFullFiscalYearReview ? (
+        <>
+          <button type="button" disabled={busy !== null} onClick={onRetryFullFiscalYearTarget}>
+            {busy === "retry-full-fiscal-year-target" ? "Retrying..." : "Retry full-year period"}
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            disabled={busy !== null}
+            onClick={() => onResolveFullFiscalYearTarget("manually-observed")}
+          >
+            {busy === "resolve-full-fiscal-year-target" ? "Saving..." : "Mark as manually observed"}
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            disabled={busy !== null}
+            onClick={() => onResolveFullFiscalYearTarget("cancelled")}
+          >
+            {busy === "cancel-full-fiscal-year-target"
+              ? "Cancelling..."
+              : "Cancel full-year target"}
           </button>
         </>
       ) : null}
@@ -125,7 +159,8 @@ export function ScopeForm({ busy, scope, onScopeChange, onStart }: ScopeFormProp
       {fullFiscalYear ? (
         <p className="muted">
           Runs eligible filed GSTR-3B periods one by one from your signed-in GST Portal tab. Pack
-          stops on ambiguous downloads and records local status only.
+          stops on ambiguous downloads and records local status only. V0 supports monthly GSTR-3B
+          filers only.
         </p>
       ) : null}
       <button type="button" disabled={busy !== null} onClick={onStart}>

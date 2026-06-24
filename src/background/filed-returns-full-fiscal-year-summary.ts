@@ -1,18 +1,27 @@
 import type {
   FiledReturnsFlowSummary,
   FiledReturnsFullFiscalYearLedger,
+  FiledReturnsFullFiscalYearTarget,
   FiledReturnsFullFiscalYearTargetStatus,
   PortalFlowStepResult,
 } from "../core/contracts";
 import { isFullFiscalYearLedgerStale } from "./filed-returns-full-fiscal-year-ledger";
 
 const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
+const COMPLETED_SUMMARY_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
+  "downloaded",
+  "manually-observed",
+  "not-filed",
+]);
 
 export function targetStatusFromFlowStep(
   step: PortalFlowStepResult,
 ): FiledReturnsFullFiscalYearTargetStatus {
   if (step.state === "downloaded") return "downloaded";
   if (step.state === "download-unconfirmed") return "download-unconfirmed";
+  if (step.safeSignals.includes("filed-returns-target-manually-observed")) {
+    return "manually-observed";
+  }
   if (
     step.safeSignals.some((signal) =>
       [
@@ -40,6 +49,9 @@ export function summariseFullFiscalYearLedger(
   ledger: FiledReturnsFullFiscalYearLedger,
   now = new Date(),
 ): FiledReturnsFlowSummary {
+  if (ledger.targets.some((target) => target.status === "download-unconfirmed")) {
+    return toFullFiscalYearSummary(ledger, downloadUnconfirmedFullFiscalYearStep(ledger));
+  }
   if (ledger.status === "complete") {
     return toFullFiscalYearSummary(ledger, completeFullFiscalYearStep(ledger));
   }
@@ -68,7 +80,7 @@ export function toFullFiscalYearSummary(
   flowStep: PortalFlowStepResult,
 ): FiledReturnsFlowSummary {
   const completedPeriods = ledger.targets
-    .filter((target) => target.status === "downloaded")
+    .filter((target) => COMPLETED_SUMMARY_TARGET_STATUSES.has(target.status))
     .map((target) => target.period);
   const currentTarget = ledger.targets.find((target) => target.targetId === ledger.currentTargetId);
   return {
@@ -79,6 +91,16 @@ export function toFullFiscalYearSummary(
     updatedAt: ledger.updatedAt,
     ...(ledger.status === "complete" ? { completedAt: ledger.updatedAt } : {}),
     ...(currentTarget ? { currentPeriod: currentTarget.period } : {}),
+    ...(currentTarget && isRecoverableFullFiscalYearTarget(currentTarget)
+      ? {
+          fullFiscalYearRecovery: {
+            ledgerId: ledger.ledgerId,
+            targetId: currentTarget.targetId,
+            expectedRevision: ledger.revision ?? 1,
+            targetStatus: currentTarget.status,
+          },
+        }
+      : {}),
     flowStep,
   };
 }
@@ -93,6 +115,15 @@ export function completeFullFiscalYearStep(
     safeSignals: ["full-fiscal-year-complete"],
     safeMessage: `Pack completed the local full fiscal year run for FY ${ledger.scope.financialYear}.`,
   };
+}
+
+function isRecoverableFullFiscalYearTarget(target: FiledReturnsFullFiscalYearTarget): boolean {
+  return (
+    target.status === "download-unconfirmed" ||
+    target.status === "running" ||
+    target.status === "blocked" ||
+    target.status === "failed"
+  );
 }
 
 export function activeFullFiscalYearStep(

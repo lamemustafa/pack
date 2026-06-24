@@ -21,6 +21,8 @@ describe("Pack brand surfaces", () => {
     expect(popupSource).toContain("PACK_ACKNOWLEDGE_INTERRUPTED_RUN");
     expect(popupSource).toContain("PACK_RETRY_FILED_RETURNS_TARGET");
     expect(popupSource).toContain("PACK_RESOLVE_UNCONFIRMED_DOWNLOAD");
+    expect(popupSource).toContain("PACK_RETRY_FULL_FISCAL_YEAR_TARGET");
+    expect(popupSource).toContain("PACK_RESOLVE_FULL_FISCAL_YEAR_TARGET");
     expect(optionsSource).toContain("/icons/icon-48.png");
     expect(optionsSource).toContain("PACK_START_SYNTHETIC_DEMO");
     expect(optionsSource).toContain("Last synthetic demo manifest");

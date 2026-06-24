@@ -8,6 +8,7 @@ import type { PackMessageResponse } from "../core/messages";
 
 const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
 const ACTIVE_RUN_REVIEW_MS = 30_000;
+const ACTIVE_RUN_LEASE_RENEWAL_MS = 10_000;
 
 export interface ActiveFiledReturnsRun {
   schemaVersion: "1.0";
@@ -59,6 +60,38 @@ export async function releaseFiledReturnsRun(
     if (storedRun?.runId === run.runId) {
       await browser.storage.local.remove(key);
     }
+  });
+}
+
+export function startFiledReturnsRunLeaseRenewal(
+  run: ActiveFiledReturnsRun,
+  deps: FiledReturnsActiveRunDeps,
+): () => void {
+  const intervalId = globalThis.setInterval(() => {
+    void renewFiledReturnsRunLease(run, deps).catch(() => undefined);
+  }, ACTIVE_RUN_LEASE_RENEWAL_MS);
+  return () => globalThis.clearInterval(intervalId);
+}
+
+export async function renewFiledReturnsRunLease(
+  run: ActiveFiledReturnsRun,
+  deps: FiledReturnsActiveRunDeps,
+): Promise<void> {
+  const key = deps.storageKeys.activeRun;
+  if (!key) return;
+
+  await runActiveRunCriticalSection(async () => {
+    const values = await browser.storage.local.get(key);
+    const storedRun = parseActiveRun(values[key]);
+    if (storedRun?.runId !== run.runId) return;
+
+    await browser.storage.local.set({
+      [key]: {
+        ...storedRun,
+        revision: storedRun.revision + 1,
+        leaseUpdatedAt: (deps.now?.() ?? new Date()).toISOString(),
+      } satisfies ActiveFiledReturnsRun,
+    });
   });
 }
 
