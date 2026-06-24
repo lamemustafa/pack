@@ -10,6 +10,10 @@
 
 # Release, policy, and governance.
 /.github/workflows/ @lamemustafa
+/.github/PULL_REQUEST_TEMPLATE.md @lamemustafa
+/.github/ISSUE_TEMPLATE/ @lamemustafa
+/.github/CODEOWNERS @lamemustafa
+/.github/dependabot.yml @lamemustafa
 /LICENSE @lamemustafa
 /NOTICE @lamemustafa
 /SECURITY.md @lamemustafa
@@ -17,3 +21,10 @@
 /CONTRIBUTING.md @lamemustafa
 /CODE_OF_CONDUCT.md @lamemustafa
 /README.md @lamemustafa
+/CHANGELOG.md @lamemustafa
+/package.json @lamemustafa
+/pnpm-lock.yaml @lamemustafa
+/docs/AGENT_REVIEW_RECTIFY.md @lamemustafa
+/docs/PUBLICATION_READINESS.md @lamemustafa
+/docs/PRIVACY_QA.md @lamemustafa
+/docs/RELEASE.md @lamemustafa

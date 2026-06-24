@@ -81,6 +81,8 @@ Use only lenses that can change the result:
 Required checks for runtime or release-affecting changes:
 
 ```sh
+pnpm install --frozen-lockfile
+pnpm audit --audit-level high
 pnpm exec wxt prepare
 pnpm exec prettier --check .
 pnpm exec eslint . --max-warnings 0
@@ -88,17 +90,21 @@ pnpm exec tsc --noEmit
 pnpm exec vitest run
 pnpm exec wxt build
 node scripts/verify-extension-package.mjs .output/chrome-mv3
+pnpm exec wxt zip
+node scripts/verify-extension-zip.mjs
 git diff --check
-```
-
-For open-source release work, also run:
-
-```sh
-pnpm audit --audit-level high
+pnpm review:gate -- --strict-head-review
 ```
 
 If the audit cannot run because the registry is unavailable, report that as a
-verification gap.
+verification gap. If `pnpm review:gate` cannot run because there is no PR,
+network access, or authenticated GitHub CLI session, report that as a PR-readiness
+verification gap instead of treating it as a pass.
+
+For PRs, record the exact local commands or CI run, the retained ZIP artifact,
+and the SHA-256 checksum. Treat late Codex/bot comments as claims against the
+current head SHA; fix valid findings, answer stale findings with evidence, and
+list explicit follow-ups in the PR body.
 
 ## Privacy And Artifact Rules
 

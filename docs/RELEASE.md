@@ -9,6 +9,7 @@ Run the full local release verification before tagging:
 
 ```sh
 pnpm install --frozen-lockfile
+pnpm audit --audit-level high
 pnpm exec wxt prepare
 pnpm exec prettier --check .
 pnpm exec eslint . --max-warnings 0
@@ -18,6 +19,7 @@ pnpm exec wxt build
 node scripts/verify-extension-package.mjs .output/chrome-mv3
 pnpm exec wxt zip
 node scripts/verify-extension-zip.mjs
+git diff --check
 ```
 
 The release gate covers:
@@ -32,7 +34,7 @@ The release gate covers:
 - built-package permission, CSP, and remote-code checks;
 - store ZIP creation;
 - exact-ZIP extraction, package-policy verification, SHA-256 output, checksum
-  file generation, and checksum log evidence in CI.
+  file generation, retained CI artifact, and checksum log evidence in CI.
 
 ## Manual clean-profile QA
 
@@ -57,5 +59,5 @@ review and a current portal-compatibility pass have approved the exact behavior.
 Use WXT's generated Chrome ZIP from `.output/` as the store artifact only after
 `node scripts/verify-extension-zip.mjs` extracts that exact ZIP, reruns the
 package verifier against the extraction, and prints the checksum. Publish the
-source tag, ZIP checksum, and this release runbook together so reviewers can
-reproduce the submitted build.
+source tag, retained ZIP artifact, ZIP checksum, and this release runbook
+together so reviewers can reproduce the submitted build.

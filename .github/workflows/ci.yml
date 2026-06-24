@@ -63,7 +63,20 @@ jobs:
       - name: Verify exact store zip
         run: node scripts/verify-extension-zip.mjs
 
+      - name: Check diff whitespace
+        run: git diff --check
+
       - name: Write ZIP checksum artifact
         run: |
           shasum -a 256 .output/*chrome.zip > .output/complyeazepack-chrome.zip.sha256
           cat .output/complyeazepack-chrome.zip.sha256
+
+      - name: Retain verified ZIP evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: complyeazepack-chrome-${{ github.sha }}
+          path: |
+            .output/*chrome.zip
+            .output/complyeazepack-chrome.zip.sha256
+          if-no-files-found: error
+          retention-days: 14
