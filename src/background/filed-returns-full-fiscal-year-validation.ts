@@ -23,6 +23,7 @@ const VALID_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
   "pending",
   "running",
   "downloaded",
+  "manually-observed",
   "not-filed",
   "download-unconfirmed",
   "blocked",
@@ -35,6 +36,15 @@ export function isFullFiscalYearLedger(input: unknown): input is FiledReturnsFul
   const ledger = input as Partial<FiledReturnsFullFiscalYearLedger>;
   if (ledger.schemaVersion !== "1.0") return false;
   if (!isBoundedString(ledger.ledgerId, 1, 120)) return false;
+  if (
+    ledger.revision !== undefined &&
+    (typeof ledger.revision !== "number" ||
+      !Number.isInteger(ledger.revision) ||
+      ledger.revision < 1 ||
+      ledger.revision > 10_000)
+  ) {
+    return false;
+  }
   if (!ledger.status || !VALID_LEDGER_STATUSES.has(ledger.status)) return false;
   if (!isValidTimestamp(ledger.createdAt) || !isValidTimestamp(ledger.updatedAt)) return false;
   if (ledger.lastReconciledAt !== undefined && !isValidTimestamp(ledger.lastReconciledAt)) {

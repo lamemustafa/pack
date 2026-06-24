@@ -7,7 +7,7 @@ import "../../styles/global.css";
 
 function OptionsPage() {
   const [status, setStatus] = React.useState(
-    "Pack stores install metadata, the last synthetic demo manifest summary, and temporary session workflow snapshots in extension storage.",
+    "Pack stores install metadata, synthetic demo manifest summaries, temporary session observations, active filed-return run markers, single-period review markers, and full fiscal-year ledgers in extension storage.",
   );
   const [busy, setBusy] = React.useState<string | null>(null);
   const [manifestSummary, setManifestSummary] = React.useState("");

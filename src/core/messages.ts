@@ -26,10 +26,20 @@ export type PackMessage =
   | { type: "PACK_ACKNOWLEDGE_INTERRUPTED_RUN" }
   | { type: "PACK_RETRY_FILED_RETURNS_TARGET"; payload: FiledReturnsDownloadScope }
   | {
+      type: "PACK_RETRY_FULL_FISCAL_YEAR_TARGET";
+      payload: FullFiscalYearTargetRecoveryPayload;
+    }
+  | {
       type: "PACK_RESOLVE_UNCONFIRMED_DOWNLOAD";
       payload: {
         scope: FiledReturnsDownloadScope;
         resolution: "downloaded" | "cancelled";
+      };
+    }
+  | {
+      type: "PACK_RESOLVE_FULL_FISCAL_YEAR_TARGET";
+      payload: FullFiscalYearTargetRecoveryPayload & {
+        resolution: "manually-observed" | "cancelled";
       };
     }
   | { type: "PACK_REFRESH_FILED_RETURNS_OBSERVATION" }
@@ -65,6 +75,12 @@ export type PackMessageResponse =
   | { ok: true; cleared: true }
   | { ok: false; error: string };
 
+export interface FullFiscalYearTargetRecoveryPayload {
+  ledgerId: string;
+  targetId: string;
+  expectedRevision: number;
+}
+
 export function isPackMessage(input: unknown): input is PackMessage {
   if (!isRecord(input) || typeof input.type !== "string") return false;
 
@@ -86,8 +102,12 @@ export function isPackMessage(input: unknown): input is PackMessage {
       return (
         isFiledReturnsStartScope(input.payload) && input.payload.period !== FULL_FISCAL_YEAR_PERIOD
       );
+    case "PACK_RETRY_FULL_FISCAL_YEAR_TARGET":
+      return isFullFiscalYearTargetRecoveryPayload(input.payload);
     case "PACK_RESOLVE_UNCONFIRMED_DOWNLOAD":
       return isUnconfirmedDownloadResolution(input.payload);
+    case "PACK_RESOLVE_FULL_FISCAL_YEAR_TARGET":
+      return isFullFiscalYearTargetResolution(input.payload);
     case "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD":
       return isFiledReturnsDownloadTarget(input.payload);
     case "PACK_RUN_FILED_RETURNS_DOWNLOAD_STEP":
@@ -103,6 +123,30 @@ export function isPackMessage(input: unknown): input is PackMessage {
   }
 }
 
+function isFullFiscalYearTargetRecoveryPayload(
+  input: unknown,
+): input is FullFiscalYearTargetRecoveryPayload {
+  if (!isRecord(input)) return false;
+  const expectedRevision = input.expectedRevision;
+  return (
+    isBoundedString(input.ledgerId, 1, 120) &&
+    isBoundedString(input.targetId, 1, 120) &&
+    typeof expectedRevision === "number" &&
+    Number.isInteger(expectedRevision) &&
+    expectedRevision >= 1
+  );
+}
+
+function isFullFiscalYearTargetResolution(
+  input: unknown,
+): input is FullFiscalYearTargetRecoveryPayload & {
+  resolution: "manually-observed" | "cancelled";
+} {
+  if (!isRecord(input)) return false;
+  if (input.resolution !== "manually-observed" && input.resolution !== "cancelled") return false;
+  return isFullFiscalYearTargetRecoveryPayload(input);
+}
+
 function isUnconfirmedDownloadResolution(input: unknown): input is {
   scope: FiledReturnsDownloadScope;
   resolution: "downloaded" | "cancelled";
@@ -110,6 +154,10 @@ function isUnconfirmedDownloadResolution(input: unknown): input is {
   if (!isRecord(input)) return false;
   if (input.resolution !== "downloaded" && input.resolution !== "cancelled") return false;
   return isFiledReturnsStartScope(input.scope) && input.scope.period !== FULL_FISCAL_YEAR_PERIOD;
+}
+
+function isBoundedString(input: unknown, minLength: number, maxLength: number): input is string {
+  return typeof input === "string" && input.length >= minLength && input.length <= maxLength;
 }
 
 function isFiledReturnsDownloadTarget(input: unknown): input is FiledReturnsDownloadTarget {

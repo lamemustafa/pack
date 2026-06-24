@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   acknowledgeInterruptedFiledReturnsRun,
+  type ActiveFiledReturnsRun,
   readActiveFiledReturnsRunSummary,
+  renewFiledReturnsRunLease,
 } from "../../src/background/filed-returns-active-run";
 
 const browserMocks = vi.hoisted(() => ({
@@ -29,7 +31,7 @@ const ACTIVE_RUN = {
   },
   status: "running",
   leaseUpdatedAt: "2026-06-24T00:00:00.000Z",
-};
+} satisfies ActiveFiledReturnsRun;
 
 describe("filed returns active run recovery", () => {
   beforeEach(() => {
@@ -83,5 +85,20 @@ describe("filed returns active run recovery", () => {
       },
     });
     expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
+  });
+
+  it("renews the active run lease without changing the scope", async () => {
+    await renewFiledReturnsRunLease(ACTIVE_RUN, {
+      storageKeys: { activeRun: "active-run" },
+      now: () => new Date("2026-06-24T00:00:20Z"),
+    });
+
+    expect(browserMocks.storage.local.set).toHaveBeenCalledWith({
+      "active-run": {
+        ...ACTIVE_RUN,
+        revision: 2,
+        leaseUpdatedAt: "2026-06-24T00:00:20.000Z",
+      },
+    });
   });
 });

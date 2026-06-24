@@ -7,7 +7,11 @@ import type {
   PortalContext,
   PortalObservation,
 } from "../../core/contracts";
-import type { PackMessage, PackMessageResponse } from "../../core/messages";
+import type {
+  FullFiscalYearTargetRecoveryPayload,
+  PackMessage,
+  PackMessageResponse,
+} from "../../core/messages";
 import {
   DEFAULT_FILED_RETURNS_DOWNLOAD_SCOPE,
   normaliseFiledReturnsScope,
@@ -110,6 +114,40 @@ function App() {
     );
   }
 
+  async function retryFullFiscalYearTarget() {
+    const payload = getFullFiscalYearRecoveryPayload();
+    if (!payload) return;
+
+    await withBusy("retry-full-fiscal-year-target", async () => {
+      const response = await sendPackMessage({
+        type: "PACK_RETRY_FULL_FISCAL_YEAR_TARGET",
+        payload,
+      });
+      applyFlowResponse(response);
+    });
+  }
+
+  async function resolveFullFiscalYearTarget(resolution: "manually-observed" | "cancelled") {
+    const payload = getFullFiscalYearRecoveryPayload();
+    if (!payload) return;
+
+    await withBusy(
+      resolution === "manually-observed"
+        ? "resolve-full-fiscal-year-target"
+        : "cancel-full-fiscal-year-target",
+      async () => {
+        const response = await sendPackMessage({
+          type: "PACK_RESOLVE_FULL_FISCAL_YEAR_TARGET",
+          payload: {
+            ...payload,
+            resolution,
+          },
+        });
+        applyFlowResponse(response);
+      },
+    );
+  }
+
   function applyFlowResponse(response: PackMessageResponse) {
     if (response.ok && "flowStep" in response) {
       setStatus(response.flowStep.safeMessage);
@@ -132,6 +170,16 @@ function App() {
     } finally {
       setBusy(null);
     }
+  }
+
+  function getFullFiscalYearRecoveryPayload(): FullFiscalYearTargetRecoveryPayload | null {
+    const recovery = filedReturnsFlowSummary?.fullFiscalYearRecovery;
+    if (!recovery) return null;
+    return {
+      ledgerId: recovery.ledgerId,
+      targetId: recovery.targetId,
+      expectedRevision: recovery.expectedRevision,
+    };
   }
 
   const completionStatus = getFiledReturnsCompletionStatus(scope, filedReturnsFlowSummary);
@@ -181,7 +229,9 @@ function App() {
         busy={busy}
         summary={filedReturnsFlowSummary}
         onAcknowledgeInterruptedRun={() => void acknowledgeInterruptedRun()}
+        onRetryFullFiscalYearTarget={() => void retryFullFiscalYearTarget()}
         onRetryTarget={() => void retryFiledReturnsTarget()}
+        onResolveFullFiscalYearTarget={(resolution) => void resolveFullFiscalYearTarget(resolution)}
         onResolveTarget={(resolution) => void resolveUnconfirmedDownload(resolution)}
       />
 

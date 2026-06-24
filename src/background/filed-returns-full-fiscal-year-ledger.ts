@@ -14,6 +14,7 @@ const FULL_FISCAL_YEAR_PLAN_VERSION = "filed-gstr3b-monthly-v1";
 const CREATED_WITH_EXTENSION_VERSION = "0.1.0";
 const POSITIVE_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
   "downloaded",
+  "manually-observed",
   "not-filed",
 ]);
 
@@ -30,6 +31,7 @@ export function createFullFiscalYearLedger(
     connectorVersion: GST_CONNECTOR_DESCRIPTOR.version,
     createdWithExtensionVersion: CREATED_WITH_EXTENSION_VERSION,
     ledgerId: createLedgerId(now),
+    revision: 1,
     status: "running",
     scope: {
       financialYear: scope.financialYear,
@@ -79,6 +81,7 @@ export function reconcileFullFiscalYearLedgerTargets(
 
   return {
     ...ledger,
+    revision: missingTargets.length > 0 ? nextRevision(ledger) : (ledger.revision ?? 1),
     planVersion: FULL_FISCAL_YEAR_PLAN_VERSION,
     connectorVersion: GST_CONNECTOR_DESCRIPTOR.version,
     createdWithExtensionVersion:
@@ -99,6 +102,7 @@ export function resumeFullFiscalYearLedger(
   const ledgerWithoutCurrentTarget = withoutCurrentTarget(ledger);
   return {
     ...ledgerWithoutCurrentTarget,
+    revision: nextRevision(ledger),
     status: "running",
     updatedAt: now.toISOString(),
     targets: ledger.targets.map((target) =>
@@ -122,6 +126,7 @@ export function markFullFiscalYearTargetRunning(
   const timestamp = now.toISOString();
   return {
     ...ledger,
+    revision: nextRevision(ledger),
     status: "running",
     currentTargetId: targetId,
     updatedAt: timestamp,
@@ -163,6 +168,7 @@ export function markFullFiscalYearTargetTerminal(
   );
   return {
     ...ledger,
+    revision: nextRevision(ledger),
     status: ledgerStatus(nextTargets, status),
     currentTargetId: targetId,
     updatedAt: timestamp,
@@ -177,6 +183,7 @@ export function completeFullFiscalYearLedger(
   const ledgerWithoutCurrentTarget = withoutCurrentTarget(ledger);
   return {
     ...ledgerWithoutCurrentTarget,
+    revision: nextRevision(ledger),
     status: "complete",
     updatedAt: now.toISOString(),
   };
@@ -207,6 +214,10 @@ function withoutCurrentTarget(
   const copy = { ...ledger };
   delete copy.currentTargetId;
   return copy;
+}
+
+function nextRevision(ledger: Pick<FiledReturnsFullFiscalYearLedger, "revision">): number {
+  return (ledger.revision ?? 1) + 1;
 }
 
 function ledgerStatus(

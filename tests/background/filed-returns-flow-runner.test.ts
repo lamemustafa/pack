@@ -518,6 +518,7 @@ describe("filed returns flow runner", () => {
           completion: "completion",
           fullFiscalYearLedger: "full-year-ledger",
           observation: "observation",
+          targetReview: "target-review",
         },
         now: () => new Date("2026-06-24T00:00:00+05:30"),
         timings: {
@@ -551,6 +552,9 @@ describe("filed returns flow runner", () => {
           expect.objectContaining({ period: "May", status: "pending" }),
         ]),
       }),
+    });
+    expect(browser.storage.local.set).not.toHaveBeenCalledWith({
+      "target-review": expect.anything(),
     });
   });
 
@@ -639,6 +643,12 @@ describe("filed returns flow runner", () => {
       flowSummary: {
         status: "blocked",
         currentPeriod: "April",
+        fullFiscalYearRecovery: {
+          ledgerId: "ledger-existing",
+          targetId: "GSTR-3B:2026-27:April",
+          expectedRevision: 1,
+          targetStatus: "download-unconfirmed",
+        },
       },
     });
     expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();

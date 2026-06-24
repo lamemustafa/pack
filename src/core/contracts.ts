@@ -210,6 +210,7 @@ export type FiledReturnsFullFiscalYearTargetStatus =
   | "pending"
   | "running"
   | "downloaded"
+  | "manually-observed"
   | "not-filed"
   | "download-unconfirmed"
   | "blocked"
@@ -236,6 +237,7 @@ export interface FiledReturnsFullFiscalYearLedger {
   connectorVersion?: string;
   createdWithExtensionVersion?: string;
   ledgerId: string;
+  revision?: number;
   status: "running" | "complete" | "partial" | "blocked" | "cancelled";
   scope: FiledReturnsDownloadScope;
   currentTargetId?: string;
@@ -254,6 +256,12 @@ export interface FiledReturnsFlowSummary {
   completedPeriods: string[];
   totalPeriods?: number;
   currentPeriod?: string;
+  fullFiscalYearRecovery?: {
+    ledgerId: string;
+    targetId: string;
+    expectedRevision: number;
+    targetStatus: FiledReturnsFullFiscalYearTargetStatus;
+  };
   flowStep: PortalFlowStepResult;
 }
 

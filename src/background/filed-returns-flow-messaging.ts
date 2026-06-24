@@ -19,6 +19,7 @@ export interface FiledReturnsFlowMessagingDeps {
     targetReview?: string;
   };
   now?: () => Date;
+  persistTargetReview?: boolean;
 }
 
 export async function runDownloadTriggerOnce(
