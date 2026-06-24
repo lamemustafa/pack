@@ -3,7 +3,7 @@ Title format: type(scope): imperative summary
 Examples:
 - fix(download): block implicit full-year retries
 - docs(release): align alpha store-readiness gates
-- chore(ci): retain verified ZIP artifacts
+- chore(ci): strengthen verified ZIP evidence
 -->
 
 ## Summary

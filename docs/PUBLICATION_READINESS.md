@@ -34,8 +34,7 @@ open-source alpha to a broader public release and v0 Chrome Web Store package.
 - [x] Dependabot configuration for npm and GitHub Actions.
 - [x] CI workflow with pinned GitHub Actions for format, dependency audit, lint,
       type-check, tests, build, package-policy verification, ZIP creation,
-      exact-ZIP verification, checksum generation, retained ZIP artifact, and
-      checksum log evidence.
+      exact-ZIP verification, checksum generation, and checksum log evidence.
 - [x] Package metadata for repository, homepage, bugs, author, and Apache-2.0.
 - [x] Manifest metadata, homepage URL, and icon paths.
 - [x] Built-package verifier checks exact permissions, hosts, CSP, metadata, and
