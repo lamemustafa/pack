@@ -196,6 +196,16 @@ export interface FiledReturnsDownloadTarget {
   returnType: "GSTR-3B";
 }
 
+export interface FiledReturnsTargetReview {
+  schemaVersion: "1.0";
+  targetId: string;
+  status: "download-unconfirmed";
+  scope: FiledReturnsDownloadScope;
+  safeSignals: string[];
+  safeMessage: string;
+  updatedAt: string;
+}
+
 export type FiledReturnsFullFiscalYearTargetStatus =
   | "pending"
   | "running"

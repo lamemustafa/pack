@@ -4,6 +4,7 @@ import type {
   FiledReturnsFullFiscalYearTargetStatus,
   PortalFlowStepResult,
 } from "../core/contracts";
+import { isFullFiscalYearLedgerStale } from "./filed-returns-full-fiscal-year-ledger";
 
 const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
 
@@ -37,11 +38,23 @@ export function targetStatusFromFlowStep(
 
 export function summariseFullFiscalYearLedger(
   ledger: FiledReturnsFullFiscalYearLedger,
+  now = new Date(),
 ): FiledReturnsFlowSummary {
   if (ledger.status === "complete") {
     return toFullFiscalYearSummary(ledger, completeFullFiscalYearStep(ledger));
   }
   if (ledger.status === "running") {
+    if (
+      ledger.targets.some((target) => target.status === "running") &&
+      isFullFiscalYearLedgerStale(ledger, now)
+    ) {
+      const displayLedger: FiledReturnsFullFiscalYearLedger = {
+        ...ledger,
+        status: "blocked",
+        updatedAt: now.toISOString(),
+      };
+      return toFullFiscalYearSummary(displayLedger, interruptedFullFiscalYearStep(displayLedger));
+    }
     return toFullFiscalYearSummary(ledger, activeFullFiscalYearStep(ledger));
   }
   return toFullFiscalYearSummary(

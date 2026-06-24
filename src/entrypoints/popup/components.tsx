@@ -1,4 +1,4 @@
-import type { FiledReturnsDownloadScope } from "../../core/contracts";
+import type { FiledReturnsDownloadScope, FiledReturnsFlowSummary } from "../../core/contracts";
 import {
   getFiledReturnsFinancialYearOptions,
   getFiledReturnsScopePeriodOptions,
@@ -11,6 +11,69 @@ export interface ScopeFormProps {
   scope: FiledReturnsDownloadScope;
   onScopeChange: (scope: FiledReturnsDownloadScope) => void;
   onStart: () => void;
+}
+
+export interface RecoveryActionsProps {
+  busy: string | null;
+  summary: FiledReturnsFlowSummary | null;
+  onAcknowledgeInterruptedRun: () => void;
+  onRetryTarget: () => void;
+  onResolveTarget: (resolution: "downloaded" | "cancelled") => void;
+}
+
+export function RecoveryActions({
+  busy,
+  summary,
+  onAcknowledgeInterruptedRun,
+  onRetryTarget,
+  onResolveTarget,
+}: RecoveryActionsProps) {
+  if (!summary) return null;
+
+  const signals = new Set(summary.flowStep.safeSignals);
+  const needsRunReview = signals.has("filed-returns-run-needs-review");
+  const needsTargetReview = signals.has("filed-returns-target-review-required");
+  if (!needsRunReview && !needsTargetReview) return null;
+
+  return (
+    <section className="actions" aria-label="Filed return recovery actions">
+      {needsRunReview ? (
+        <button
+          type="button"
+          className="secondary"
+          disabled={busy !== null}
+          onClick={onAcknowledgeInterruptedRun}
+        >
+          {busy === "acknowledge-interrupted-run"
+            ? "Acknowledging..."
+            : "Acknowledge interrupted run"}
+        </button>
+      ) : null}
+      {needsTargetReview ? (
+        <>
+          <button type="button" disabled={busy !== null} onClick={onRetryTarget}>
+            {busy === "retry-filed-returns-target" ? "Retrying..." : "Retry this period"}
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            disabled={busy !== null}
+            onClick={() => onResolveTarget("downloaded")}
+          >
+            {busy === "resolve-unconfirmed-download" ? "Saving..." : "Mark reviewed as downloaded"}
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            disabled={busy !== null}
+            onClick={() => onResolveTarget("cancelled")}
+          >
+            {busy === "cancel-unconfirmed-download" ? "Cancelling..." : "Cancel target"}
+          </button>
+        </>
+      ) : null}
+    </section>
+  );
 }
 
 export function ScopeForm({ busy, scope, onScopeChange, onStart }: ScopeFormProps) {
@@ -73,46 +136,5 @@ export function ScopeForm({ busy, scope, onScopeChange, onStart }: ScopeFormProp
             : "Start download"}
       </button>
     </section>
-  );
-}
-
-export interface ReviewerToolsProps {
-  busy: string | null;
-  onRunDemo: () => void;
-  onLoadLastManifest: () => void;
-  onClearLocalData: () => void;
-}
-
-export function ReviewerTools({
-  busy,
-  onRunDemo,
-  onLoadLastManifest,
-  onClearLocalData,
-}: ReviewerToolsProps) {
-  return (
-    <details className="advanced">
-      <summary>Reviewer and local data tools</summary>
-      <section className="actions" aria-label="Pack reviewer and local data tools">
-        <button type="button" className="secondary" disabled={busy !== null} onClick={onRunDemo}>
-          {busy === "demo" ? "Building demo..." : "Run local reviewer demo"}
-        </button>
-        <button
-          type="button"
-          className="secondary"
-          disabled={busy !== null}
-          onClick={onLoadLastManifest}
-        >
-          {busy === "manifest" ? "Loading..." : "Last manifest"}
-        </button>
-        <button
-          type="button"
-          className="secondary"
-          disabled={busy !== null}
-          onClick={onClearLocalData}
-        >
-          {busy === "clear" ? "Clearing..." : "Clear local data"}
-        </button>
-      </section>
-    </details>
   );
 }

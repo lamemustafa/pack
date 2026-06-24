@@ -15,6 +15,10 @@ export interface FiledReturnsFlowMessagingDeps {
       }
     >,
   ) => Promise<PackMessageResponse>;
+  storageKeys: {
+    targetReview?: string;
+  };
+  now?: () => Date;
 }
 
 export async function runDownloadTriggerOnce(
@@ -37,13 +41,10 @@ export async function runDownloadStepWithRetry(
   tabId: number,
   message: Extract<PackMessage, { type: "PACK_RUN_FILED_RETURNS_DOWNLOAD_STEP" }>,
 ): Promise<PackMessageResponse> {
-  let lastError: unknown;
-
   for (let attempt = 0; attempt < MAX_FLOW_STEP_MESSAGE_ATTEMPTS; attempt += 1) {
     try {
       return await deps.sendMessageToTabWithInjection(tabId, message);
-    } catch (error: unknown) {
-      lastError = error;
+    } catch {
       if (attempt < MAX_FLOW_STEP_MESSAGE_ATTEMPTS - 1) {
         await delay(FLOW_STEP_MESSAGE_RETRY_MS);
       }
@@ -52,10 +53,7 @@ export async function runDownloadStepWithRetry(
 
   return {
     ok: false,
-    error:
-      lastError instanceof Error
-        ? lastError.message
-        : "Pack could not reconnect to the GST tab after portal navigation.",
+    error: "CONTENT_SCRIPT_UNAVAILABLE",
   };
 }
 
