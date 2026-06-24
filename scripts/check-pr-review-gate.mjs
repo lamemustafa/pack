@@ -1,11 +1,18 @@
 #!/usr/bin/env node
 
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 
-const args = new Set(process.argv.slice(2));
+const rawArgs = process.argv.slice(2);
+const args = new Set(rawArgs);
 const strictHeadReview = args.has("--strict-head-review");
+const waitHeadReviewMs = readNonNegativeIntegerArg("--wait-head-review-ms", 0);
+const pollIntervalMs = readNonNegativeIntegerArg("--poll-interval-ms", 10_000);
+const fixturePaths = readFixturePaths();
+const requiredReviewAuthor = readArgValue("--required-review-author");
 const explicitRepo = readArgValue("--repo");
 const explicitPr = readArgValue("--pr");
+let fixtureIndex = 0;
 
 const repo =
   explicitRepo ?? runText(["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"]);
@@ -15,44 +22,8 @@ if (!repo || !repo.includes("/")) fail("Could not determine GitHub repo. Pass --
 if (!Number.isInteger(prNumber) || prNumber < 1)
   fail("Could not determine PR number. Pass --pr <number>.");
 
-const [owner, name] = repo.split("/");
-const result = runJson([
-  "api",
-  "graphql",
-  "-F",
-  `owner=${owner}`,
-  "-F",
-  `name=${name}`,
-  "-F",
-  `number=${prNumber}`,
-  "-f",
-  "query=query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){headRefOid reviewThreads(first:100){nodes{id isResolved isOutdated path line comments(first:1){nodes{url author{login} body}}}} reviews(first:100){nodes{state submittedAt url author{login} commit{oid}}}}}}",
-]);
-
-const pr = result.data?.repository?.pullRequest;
-if (!pr) fail(`Could not fetch PR #${prNumber} from ${repo}.`);
-
-const unresolvedThreads = pr.reviewThreads.nodes.filter(
-  (thread) => !thread.isResolved && !thread.isOutdated,
-);
-const blockingReviews = pr.reviews.nodes.filter((review) => review.state === "CHANGES_REQUESTED");
-const headReviews = pr.reviews.nodes.filter((review) => review.commit?.oid === pr.headRefOid);
-
-if (unresolvedThreads.length > 0) {
-  console.error(`Unresolved review threads on ${repo}#${prNumber}:`);
-  for (const thread of unresolvedThreads) {
-    const comment = thread.comments.nodes[0];
-    console.error(`- ${thread.path}:${thread.line ?? "?"} ${comment?.url ?? thread.id}`);
-    console.error(`  author: ${comment?.author?.login ?? "unknown"}`);
-  }
-}
-
-if (blockingReviews.length > 0) {
-  console.error(`Requested-changes reviews on ${repo}#${prNumber}:`);
-  for (const review of blockingReviews) {
-    console.error(`- ${review.author?.login ?? "unknown"} ${review.submittedAt} ${review.url}`);
-  }
-}
+const { pr, unresolvedThreads, blockingReviews, headReviews } = await fetchEvaluatedPr();
+reportBlockingState({ unresolvedThreads, blockingReviews });
 
 if (strictHeadReview && headReviews.length === 0) {
   console.error(`No review was found for current head ${pr.headRefOid}.`);
@@ -75,9 +46,112 @@ if (latestReview && latestReview.commit?.oid !== pr.headRefOid) {
 
 console.log(`PR review gate passed for ${repo}#${prNumber}.`);
 
+async function fetchEvaluatedPr() {
+  const start = Date.now();
+
+  while (true) {
+    const result = fetchReviewGraph();
+    const pr = result.data?.repository?.pullRequest;
+    if (!pr) fail(`Could not fetch PR #${prNumber} from ${repo}.`);
+
+    const evaluated = evaluatePullRequestReviewState(pr);
+    if (
+      !strictHeadReview ||
+      evaluated.headReviews.length > 0 ||
+      waitHeadReviewMs <= 0 ||
+      Date.now() - start >= waitHeadReviewMs
+    ) {
+      return { pr, ...evaluated };
+    }
+
+    await sleep(Math.min(pollIntervalMs, waitHeadReviewMs));
+  }
+}
+
+function evaluatePullRequestReviewState(pr) {
+  const unresolvedThreads = pr.reviewThreads.nodes.filter(
+    (thread) => !thread.isResolved && !thread.isOutdated,
+  );
+  const blockingReviews = pr.reviews.nodes.filter(
+    (review) =>
+      review.state === "CHANGES_REQUESTED" &&
+      (!review.commit?.oid || review.commit.oid === pr.headRefOid),
+  );
+  const headReviews = pr.reviews.nodes.filter(
+    (review) =>
+      review.commit?.oid === pr.headRefOid &&
+      (!requiredReviewAuthor ||
+        normaliseAuthorLogin(review.author?.login) === normaliseAuthorLogin(requiredReviewAuthor)),
+  );
+  return { unresolvedThreads, blockingReviews, headReviews };
+}
+
+function reportBlockingState({ unresolvedThreads, blockingReviews }) {
+  if (unresolvedThreads.length > 0) {
+    console.error(`Unresolved review threads on ${repo}#${prNumber}:`);
+    for (const thread of unresolvedThreads) {
+      const comment = thread.comments.nodes[0];
+      console.error(`- ${thread.path}:${thread.line ?? "?"} ${comment?.url ?? thread.id}`);
+      console.error(`  author: ${comment?.author?.login ?? "unknown"}`);
+    }
+  }
+
+  if (blockingReviews.length > 0) {
+    console.error(`Requested-changes reviews on ${repo}#${prNumber}:`);
+    for (const review of blockingReviews) {
+      console.error(`- ${review.author?.login ?? "unknown"} ${review.submittedAt} ${review.url}`);
+    }
+  }
+}
+
+function fetchReviewGraph() {
+  const fixture = nextFixturePath();
+  if (fixture) return JSON.parse(readFileSync(fixture, "utf8"));
+
+  const [owner, name] = repo.split("/");
+  return runJson([
+    "api",
+    "graphql",
+    "-F",
+    `owner=${owner}`,
+    "-F",
+    `name=${name}`,
+    "-F",
+    `number=${prNumber}`,
+    "-f",
+    "query=query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){headRefOid reviewThreads(first:100){nodes{id isResolved isOutdated path line comments(first:1){nodes{url author{login} body}}}} reviews(first:100){nodes{state submittedAt url author{login} commit{oid}}}}}}",
+  ]);
+}
+
+function nextFixturePath() {
+  if (fixturePaths.length === 0) return null;
+  const index = Math.min(fixtureIndex, fixturePaths.length - 1);
+  fixtureIndex += 1;
+  return fixturePaths[index];
+}
+
+function readFixturePaths() {
+  const singleFixture = readArgValue("--fixture");
+  const fixtureSequence = readArgValue("--fixture-sequence");
+  if (fixtureSequence) return fixtureSequence.split(",").filter(Boolean);
+  return singleFixture ? [singleFixture] : [];
+}
+
 function readArgValue(name) {
-  const index = process.argv.indexOf(name);
-  return index >= 0 ? process.argv[index + 1] : null;
+  const index = rawArgs.indexOf(name);
+  return index >= 0 ? rawArgs[index + 1] : null;
+}
+
+function readNonNegativeIntegerArg(name, defaultValue) {
+  const rawValue = readArgValue(name);
+  if (rawValue === null) return defaultValue;
+  const value = Number(rawValue);
+  if (!Number.isInteger(value) || value < 0) fail(`${name} must be a non-negative integer.`);
+  return value;
+}
+
+function normaliseAuthorLogin(login) {
+  return String(login ?? "").replace(/\[bot\]$/u, "");
 }
 
 function runText(commandArgs) {
@@ -94,4 +168,8 @@ function runJson(commandArgs) {
 function fail(message) {
   console.error(message);
   process.exit(1);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
 }

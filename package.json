@@ -33,8 +33,10 @@
     "verify:package": "node scripts/verify-extension-package.mjs .output/chrome-mv3",
     "verify:zip": "node scripts/verify-extension-zip.mjs",
     "review:gate": "node scripts/check-pr-review-gate.mjs",
-    "verify": "wxt prepare && prettier --check . && eslint . --max-warnings 0 && tsc --noEmit && vitest run && wxt build && node scripts/verify-extension-package.mjs .output/chrome-mv3",
-    "verify:release": "wxt prepare && prettier --check . && eslint . --max-warnings 0 && tsc --noEmit && vitest run && wxt build && node scripts/verify-extension-package.mjs .output/chrome-mv3 && wxt zip && node scripts/verify-extension-zip.mjs"
+    "verify:local": "pnpm install --frozen-lockfile && pnpm audit --audit-level high && wxt prepare && prettier --check . && eslint . --max-warnings 0 && tsc --noEmit && vitest run && wxt build && node scripts/verify-extension-package.mjs .output/chrome-mv3 && git diff --check",
+    "verify": "pnpm verify:local",
+    "verify:release": "pnpm verify:local && wxt zip && node scripts/verify-extension-zip.mjs",
+    "verify:pr": "pnpm review:gate -- --strict-head-review --required-review-author chatgpt-codex-connector --wait-head-review-ms 180000 --poll-interval-ms 10000"
   },
   "dependencies": {
     "@wxt-dev/module-react": "^1.1.3",

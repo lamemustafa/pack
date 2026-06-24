@@ -1,0 +1,198 @@
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { describe, expect, it } from "vitest";
+
+const rootDir = process.cwd();
+const scriptPath = path.join(rootDir, "scripts", "check-pr-review-gate.mjs");
+
+describe("PR review gate", () => {
+  it("fails when unresolved review threads are present", () => {
+    const fixturePath = writeFixture(
+      "unresolved-thread",
+      reviewFixture({
+        headRefOid: "head-sha",
+        reviewThreads: [
+          {
+            id: "thread-1",
+            isResolved: false,
+            isOutdated: false,
+            path: "src/file.ts",
+            line: 10,
+            comments: {
+              nodes: [
+                {
+                  url: "https://github.com/lamemustafa/pack/pull/1#discussion_r1",
+                  author: { login: "chatgpt-codex-connector" },
+                  body: "Fix this.",
+                },
+              ],
+            },
+          },
+        ],
+        reviews: [review({ state: "COMMENTED", commit: "head-sha" })],
+      }),
+    );
+
+    expect(() =>
+      execFileSync(process.execPath, [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture",
+        fixturePath,
+        "--strict-head-review",
+        "--required-review-author",
+        "chatgpt-codex-connector",
+      ]),
+    ).toThrow(/Unresolved review threads/);
+  });
+
+  it("fails when the current head has a requested-changes review", () => {
+    const fixturePath = writeFixture(
+      "current-head-requested-changes",
+      reviewFixture({
+        headRefOid: "head-sha",
+        reviews: [review({ state: "CHANGES_REQUESTED", commit: "head-sha" })],
+      }),
+    );
+
+    expect(() =>
+      execFileSync(process.execPath, [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture",
+        fixturePath,
+        "--strict-head-review",
+        "--required-review-author",
+        "chatgpt-codex-connector",
+      ]),
+    ).toThrow(/Requested-changes reviews/);
+  });
+
+  it("ignores stale requested-changes reviews once the current head has a later review", () => {
+    const fixturePath = writeFixture(
+      "stale-requested-changes",
+      reviewFixture({
+        headRefOid: "head-sha",
+        reviews: [
+          review({ state: "CHANGES_REQUESTED", commit: "old-sha" }),
+          review({ state: "COMMENTED", commit: "head-sha" }),
+        ],
+      }),
+    );
+
+    const output = execFileSync(
+      process.execPath,
+      [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture",
+        fixturePath,
+        "--strict-head-review",
+        "--required-review-author",
+        "chatgpt-codex-connector",
+      ],
+      {
+        cwd: rootDir,
+        encoding: "utf8",
+      },
+    );
+
+    expect(output).toContain("PR review gate passed");
+  });
+
+  it("waits for a current-head review instead of treating the first snapshot as final", () => {
+    const firstFixture = writeFixture(
+      "no-head-review",
+      reviewFixture({
+        headRefOid: "head-sha",
+        reviews: [review({ state: "COMMENTED", commit: "old-sha" })],
+      }),
+    );
+    const secondFixture = writeFixture(
+      "head-review",
+      reviewFixture({
+        headRefOid: "head-sha",
+        reviews: [
+          review({ state: "COMMENTED", commit: "old-sha" }),
+          review({ state: "COMMENTED", commit: "head-sha" }),
+        ],
+      }),
+    );
+
+    const output = execFileSync(
+      process.execPath,
+      [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture-sequence",
+        `${firstFixture},${secondFixture}`,
+        "--strict-head-review",
+        "--wait-head-review-ms",
+        "5",
+        "--poll-interval-ms",
+        "1",
+        "--required-review-author",
+        "chatgpt-codex-connector",
+      ],
+      {
+        cwd: rootDir,
+        encoding: "utf8",
+      },
+    );
+
+    expect(output).toContain("PR review gate passed");
+  });
+});
+
+function writeFixture(name: string, value: unknown): string {
+  const directory = mkdtempSync(path.join(tmpdir(), "pack-review-gate-"));
+  const fixturePath = path.join(directory, `${name}.json`);
+  writeFileSync(fixturePath, JSON.stringify(value), "utf8");
+  return fixturePath;
+}
+
+function reviewFixture({
+  headRefOid,
+  reviewThreads = [],
+  reviews,
+}: {
+  headRefOid: string;
+  reviewThreads?: unknown[];
+  reviews: Array<ReturnType<typeof review>>;
+}) {
+  return {
+    data: {
+      repository: {
+        pullRequest: {
+          headRefOid,
+          reviewThreads: { nodes: reviewThreads },
+          reviews: { nodes: reviews },
+        },
+      },
+    },
+  };
+}
+
+function review({ state, commit }: { state: "COMMENTED" | "CHANGES_REQUESTED"; commit: string }) {
+  return {
+    state,
+    submittedAt: "2026-06-24T17:45:40Z",
+    url: `https://github.com/lamemustafa/pack/pull/14#${commit}-${state}`,
+    author: { login: "chatgpt-codex-connector" },
+    commit: { oid: commit },
+  };
+}

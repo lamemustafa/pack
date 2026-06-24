@@ -59,7 +59,7 @@ Examples:
 - [ ] `pnpm exec wxt zip`
 - [ ] `node scripts/verify-extension-zip.mjs`
 - [ ] `git diff --check`
-- [ ] `pnpm review:gate -- --strict-head-review` before merge/readiness claim, or reason not run:
+- [ ] `pnpm review:gate -- --strict-head-review --required-review-author chatgpt-codex-connector --wait-head-review-ms 180000` before merge/readiness claim, or reason not run:
 
 ## Artifact Evidence
 
