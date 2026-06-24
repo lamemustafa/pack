@@ -13,6 +13,7 @@ import { isSupportedFiledReturnsScope } from "./filed-returns-scope";
 export type PackMessage =
   | { type: "PACK_CONTENT_CONTEXT"; payload: PortalContext }
   | { type: "PACK_FILED_RETURNS_OBSERVATION"; payload: PortalObservation }
+  | { type: "PACK_PING" }
   | { type: "PACK_GET_CONTEXT" }
   | { type: "PACK_GET_FILED_RETURNS_OBSERVATION" }
   | { type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" }
@@ -57,6 +58,7 @@ export function isPackMessage(input: unknown): input is PackMessage {
       return isRecord(input.payload);
     case "PACK_FILED_RETURNS_OBSERVATION":
       return isPortalObservation(input.payload);
+    case "PACK_PING":
     case "PACK_GET_CONTEXT":
     case "PACK_GET_FILED_RETURNS_OBSERVATION":
     case "PACK_GET_FILED_RETURNS_FLOW_SUMMARY":

@@ -9,6 +9,14 @@ import {
 import { observeFiledReturnsPageText } from "../connectors/gst/filed-returns-observer";
 import { isPackMessage, type PackMessageResponse } from "../core/messages";
 
+const PACK_CONTENT_LISTENER_KEY = "__packContentListenerInstalled";
+
+declare global {
+  interface Window {
+    [PACK_CONTENT_LISTENER_KEY]?: boolean;
+  }
+}
+
 export default defineContentScript({
   matches: [
     "https://www.gst.gov.in/*",
@@ -17,6 +25,9 @@ export default defineContentScript({
   ],
   runAt: "document_idle",
   main() {
+    if (window[PACK_CONTENT_LISTENER_KEY]) return;
+    window[PACK_CONTENT_LISTENER_KEY] = true;
+
     const context = detectGstPortalContext(window.location, document.title);
     void browser.runtime
       .sendMessage({
@@ -33,6 +44,11 @@ export default defineContentScript({
 
     browser.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
       if (!isPackMessage(message)) {
+        return false;
+      }
+
+      if (message.type === "PACK_PING") {
+        sendResponse({ ok: true, context: null } satisfies PackMessageResponse);
         return false;
       }
 
