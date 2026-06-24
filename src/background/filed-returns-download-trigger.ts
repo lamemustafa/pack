@@ -6,11 +6,11 @@ import type {
   PortalFlowStepResult,
 } from "../core/contracts";
 import type { PackMessageResponse } from "../core/messages";
+import { FULL_FISCAL_YEAR_PERIOD } from "../core/filed-returns-scope";
 import {
   mergeFlowStepWithDownloadObservation,
   observeNextBrowserDownload,
 } from "./download-observer";
-import { unverifiedPeriodAfterDownloadStep } from "./filed-returns-flow-guards";
 import {
   runDownloadTriggerOnce,
   type FiledReturnsFlowMessagingDeps,
@@ -25,75 +25,49 @@ const EXPECTED_FILED_RETURN_DOWNLOAD = {
 
 type FlowStepResponse = Extract<PackMessageResponse, { ok: true; flowStep: PortalFlowStepResult }>;
 
-export type TriggerAndObserveResult =
-  | { continueFlow: true; response: FlowStepResponse }
-  | { continueFlow: false; response: PackMessageResponse };
-
 export async function triggerAndObserveFiledReturnDownload({
   activePeriod,
-  completedPeriods,
   deps,
   scope,
   tabId,
 }: {
   activePeriod: string | null;
-  completedPeriods: Set<string>;
   deps: FiledReturnsFlowMessagingDeps;
   scope: FiledReturnsDownloadScope;
   tabId: number;
-}): Promise<TriggerAndObserveResult> {
-  const target = createDownloadTarget(scope, activePeriod);
-  if (!target) return { continueFlow: false, response: unverifiedPeriodResponse() };
+}): Promise<PackMessageResponse> {
+  const target = createDownloadTarget(scope);
+  if (!target) return unverifiedPeriodResponse();
 
   const detailDownloadObservation = observeFiledReturnDownload();
   const triggerResponse = await runDownloadTriggerOnce(deps, tabId, target);
   const triggerFlowResponse = toTriggerFlowResponse(triggerResponse, activePeriod);
   if (!triggerFlowResponse.ok || !("flowStep" in triggerFlowResponse)) {
     detailDownloadObservation.stop();
-    return { continueFlow: false, response: triggerFlowResponse };
+    return triggerFlowResponse;
   }
 
   if (!shouldAwaitDownloadObservation(triggerFlowResponse.flowStep)) {
     detailDownloadObservation.stop();
-    return { continueFlow: false, response: triggerFlowResponse };
+    return triggerFlowResponse;
   }
 
   const observedDownload = await detailDownloadObservation.promise;
-  const mergedResponse = {
+  return {
     ...triggerFlowResponse,
     flowStep: normaliseAmbiguousTriggerDownloadResult(
       triggerFlowResponse.flowStep,
       mergeFlowStepWithDownloadObservation(triggerFlowResponse.flowStep, observedDownload),
     ),
   };
-  if (!isEntireFinancialYearScope(scope)) return { continueFlow: false, response: mergedResponse };
-  if (mergedResponse.flowStep.state !== "downloaded") {
-    return { continueFlow: false, response: mergedResponse };
-  }
-  if (!activePeriod) {
-    return {
-      continueFlow: false,
-      response: {
-        ...mergedResponse,
-        flowStep: unverifiedPeriodAfterDownloadStep(mergedResponse.flowStep),
-      },
-    };
-  }
-
-  completedPeriods.add(activePeriod);
-  return { continueFlow: true, response: mergedResponse };
 }
 
-function createDownloadTarget(
-  scope: FiledReturnsDownloadScope,
-  activePeriod: string | null,
-): FiledReturnsDownloadTarget | null {
-  const period = isEntireFinancialYearScope(scope) ? activePeriod : scope.period;
-  if (!period || period === "ALL") return null;
+function createDownloadTarget(scope: FiledReturnsDownloadScope): FiledReturnsDownloadTarget | null {
+  if (scope.period === "ALL" || scope.period === FULL_FISCAL_YEAR_PERIOD) return null;
   return {
     actionId: createActionId(),
     financialYear: scope.financialYear,
-    period,
+    period: scope.period,
     returnType: scope.returnType,
   };
 }
@@ -175,8 +149,4 @@ function createActionId(): string {
   const randomId = globalThis.crypto?.randomUUID?.();
   if (randomId) return randomId;
   return `action-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function isEntireFinancialYearScope(scope: FiledReturnsDownloadScope): boolean {
-  return scope.period === "ALL";
 }

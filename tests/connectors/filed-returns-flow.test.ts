@@ -10,12 +10,6 @@ const DEFAULT_SCOPE: FiledReturnsDownloadScope = {
   returnType: "GSTR-3B",
 };
 
-const FULL_YEAR_SCOPE: FiledReturnsDownloadScope = {
-  financialYear: "2025-26",
-  period: "ALL",
-  returnType: "GSTR-3B",
-};
-
 describe("filed returns guided flow", () => {
   it("selects the requested filing filters and clicks search", async () => {
     const documentRef = createDocument(`
@@ -181,62 +175,6 @@ describe("filed returns guided flow", () => {
     expect(searchClicked).toBe(1);
   });
 
-  it("leaves the month field unselected when searching the entire financial year", async () => {
-    const documentRef = createDocument(`
-      <form name="efiledReturns">
-        <h1>View Filed Returns</h1>
-        <div>
-          <label>Financial year</label>
-          <select id="finYr">
-            <option>Select</option>
-            <option>2025-26</option>
-          </select>
-        </div>
-        <div>
-          <label>Return Filing Period</label>
-          <select id="optValue">
-            <option>Select</option>
-            <option>Monthly</option>
-          </select>
-        </div>
-        <div>
-          <label>Month</label>
-          <select id="month">
-            <option>Select</option>
-            <option>March</option>
-          </select>
-        </div>
-        <div>
-          <label>Return Type</label>
-          <select id="retTyp">
-            <option>Select</option>
-            <option>GSTR3B</option>
-          </select>
-        </div>
-        <button id="lotsearch" type="button">Search</button>
-      </form>
-    `);
-    let searchClicked = 0;
-    documentRef.querySelector("#lotsearch")?.addEventListener("click", () => {
-      searchClicked += 1;
-    });
-
-    const result = await runFiledReturnsDownloadStep(documentRef, FULL_YEAR_SCOPE);
-
-    expect(result.state).toBe("clicked");
-    expect(documentRef.querySelector<HTMLSelectElement>("#month")?.value).toBe("Select");
-    expect(result.safeSignals).toEqual(
-      expect.arrayContaining([
-        "period-selected",
-        "month-left-unselected-for-financial-year",
-        "return-type-selected",
-        "search-clicked",
-      ]),
-    );
-    expect(result.safeSignals).not.toContain("month-selected");
-    expect(searchClicked).toBe(1);
-  });
-
   it("waits for GST Angular controls to repopulate after selecting the financial year", async () => {
     vi.useFakeTimers();
     try {
@@ -358,17 +296,17 @@ describe("filed returns guided flow", () => {
     expect(gstr3bClicked).toBe(1);
   });
 
-  it("opens the next unprocessed result row for an entire financial year search", async () => {
+  it("opens the requested row when GST reorders result columns", async () => {
     const documentRef = createDocument(`
       <main>
         <h1>View Filed Returns</h1>
         <table>
           <thead>
-            <tr><th>Return Type</th><th>Financial Year</th><th>Tax Period</th><th>Acknowledgement Number</th><th>View/Download</th></tr>
+            <tr><th>#</th><th>Acknowledgement Number</th><th>Tax Period</th><th>Financial Year</th><th>Return Type</th><th>View/Download</th></tr>
           </thead>
           <tbody>
-            <tr><td>GSTR3B</td><td>2025-26</td><td>March</td><td>AA1</td><td><a href="#march">View</a></td></tr>
-            <tr><td>GSTR3B</td><td>2025-26</td><td>February</td><td>AA2</td><td><a href="#february">View</a></td></tr>
+            <tr><td>1</td><td>AA1</td><td>February</td><td>2025-26</td><td>GSTR3B</td><td><a href="#february">View</a></td></tr>
+            <tr><td>2</td><td>AA2</td><td>March</td><td>2025-26</td><td>GSTR3B</td><td><a href="#march">View</a></td></tr>
           </tbody>
         </table>
       </main>
@@ -384,23 +322,20 @@ describe("filed returns guided flow", () => {
       februaryClicked += 1;
     });
 
-    const result = await runFiledReturnsDownloadStep(documentRef, {
-      ...FULL_YEAR_SCOPE,
-      completedPeriods: ["March"],
-    });
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
 
     expect(result.state).toBe("clicked");
     expect(result.safeSignals).toEqual(
       expect.arrayContaining([
         "filed-return-result-view-clicked",
-        "filed-return-result-period:February",
+        "filed-return-result-period:March",
       ]),
     );
-    expect(marchClicked).toBe(0);
-    expect(februaryClicked).toBe(1);
+    expect(marchClicked).toBe(1);
+    expect(februaryClicked).toBe(0);
   });
 
-  it("moves to the next results page after visible full-year rows are complete", async () => {
+  it("blocks duplicate matching result rows instead of guessing which period to open", async () => {
     const documentRef = createDocument(`
       <main>
         <h1>View Filed Returns</h1>
@@ -409,30 +344,71 @@ describe("filed returns guided flow", () => {
             <tr><th>Return Type</th><th>Financial Year</th><th>Tax Period</th><th>Acknowledgement Number</th><th>View/Download</th></tr>
           </thead>
           <tbody>
-            <tr><td>GSTR3B</td><td>2025-26</td><td>March</td><td>AA1</td><td><a>View</a></td></tr>
+            <tr><td>GSTR3B</td><td>2025-26</td><td>March</td><td>AA1</td><td><a href="#first">View</a></td></tr>
+            <tr><td>GSTR3B</td><td>2025-26</td><td>March</td><td>AA2</td><td><a href="#second">View</a></td></tr>
           </tbody>
         </table>
-        <ul class="pagination ng-table-pagination">
-          <li class="page-item active"><a class="page-link">1</a></li>
-          <li class="page-item"><a class="page-link" data-next>»</a></li>
-        </ul>
       </main>
     `);
-    let nextClicked = 0;
-    documentRef.querySelector("[data-next]")?.addEventListener("click", () => {
-      nextClicked += 1;
+    let clicked = 0;
+    for (const link of Array.from(documentRef.querySelectorAll("a"))) {
+      link.addEventListener("click", () => {
+        clicked += 1;
+      });
+    }
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.state).toBe("blocked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining(["filed-return-result-row-ambiguous"]),
+    );
+    expect(clicked).toBe(0);
+  });
+
+  it("scopes the final search click to the filed-return filter form", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <button data-unrelated-search type="button">Search</button>
+        <form name="efiledReturns">
+          <h1>View Filed Returns</h1>
+          <div>
+            <label>Financial year</label>
+            <select id="finYr"><option>Select</option><option>2025-26</option></select>
+          </div>
+          <div>
+            <label>Return Filing Period</label>
+            <select id="optValue"><option>Select</option><option>Monthly</option></select>
+          </div>
+          <div>
+            <label>Month</label>
+            <select id="month"><option>Select</option><option>March</option></select>
+          </div>
+          <div>
+            <label>Return Type</label>
+            <select id="retTyp"><option>Select</option><option>GSTR3B</option></select>
+          </div>
+          <input id="lotsearch" type="button" value="Search" />
+        </form>
+      </main>
+    `);
+    let unrelatedClicked = 0;
+    let formSearchClicked = 0;
+    documentRef.querySelector("[data-unrelated-search]")?.addEventListener("click", () => {
+      unrelatedClicked += 1;
+    });
+    documentRef.querySelector("#lotsearch")?.addEventListener("click", () => {
+      formSearchClicked += 1;
     });
 
-    const result = await runFiledReturnsDownloadStep(documentRef, {
-      ...FULL_YEAR_SCOPE,
-      completedPeriods: ["March"],
-    });
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
 
     expect(result.state).toBe("clicked");
     expect(result.safeSignals).toEqual(
-      expect.arrayContaining(["filed-return-results-next-page-clicked"]),
+      expect.arrayContaining(["financial-year-selected", "month-selected", "search-clicked"]),
     );
-    expect(nextClicked).toBe(1);
+    expect(unrelatedClicked).toBe(0);
+    expect(formSearchClicked).toBe(1);
   });
 
   it("preflights the filed PDF download without clicking from the retryable step", async () => {
@@ -586,12 +562,13 @@ describe("filed returns guided flow", () => {
     expect(clicked).toBe(0);
   });
 
-  it("returns from an already downloaded full-year detail page without redownloading", async () => {
+  it("returns from a mismatched detail page before running the requested exact period", async () => {
     const documentRef = createDocument(`
       <main>
         <nav>Returns / Filed Returns</nav>
         <h1>GSTR-3B - Monthly Return</h1>
         <div>Status - Filed</div>
+        <div>Financial Year - 2025-26</div>
         <div>Return Period - March</div>
         <button>BACK</button>
         <button>DOWNLOAD FILED GSTR-3B</button>
@@ -609,8 +586,7 @@ describe("filed returns guided flow", () => {
 
     const result = await runFiledReturnsDownloadStep(documentRef, {
       ...DEFAULT_SCOPE,
-      period: "ALL",
-      completedPeriods: ["March"],
+      period: "February",
     });
 
     expect(result.state).toBe("clicked");
@@ -707,8 +683,8 @@ describe("filed returns guided flow", () => {
       unrelatedClicked += 1;
     });
     period?.addEventListener("click", () => {
-      appendOwnedOption(documentRef, "period-options", "Monthly", () => {
-        period.textContent = "Monthly";
+      appendOwnedOption(documentRef, "period-options", "March", () => {
+        period.textContent = "March";
       });
     });
     returnType?.addEventListener("click", () => {
@@ -720,10 +696,7 @@ describe("filed returns guided flow", () => {
       searchClicked += 1;
     });
 
-    const result = await runFiledReturnsDownloadStep(documentRef, {
-      ...DEFAULT_SCOPE,
-      period: "ALL",
-    });
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
 
     expect(result.state).toBe("clicked");
     expect(result.safeSignals).toEqual(

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { FULL_FISCAL_YEAR_PERIOD } from "../../src/core/filed-returns-scope";
 import { isPackMessage } from "../../src/core/messages";
 
 describe("message boundary", () => {
@@ -59,6 +60,37 @@ describe("message boundary", () => {
         },
       }),
     ).toBe(true);
+    expect(
+      isPackMessage({
+        type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",
+        payload: {
+          financialYear: "2025-26",
+          period: FULL_FISCAL_YEAR_PERIOD,
+          returnType: "GSTR-3B",
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isPackMessage({
+        type: "PACK_RUN_FILED_RETURNS_DOWNLOAD_STEP",
+        payload: {
+          financialYear: "2025-26",
+          period: FULL_FISCAL_YEAR_PERIOD,
+          returnType: "GSTR-3B",
+        },
+      }),
+    ).toBe(false);
+    expect(
+      isPackMessage({
+        type: "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD",
+        payload: {
+          actionId: "action-1",
+          financialYear: "2025-26",
+          period: FULL_FISCAL_YEAR_PERIOD,
+          returnType: "GSTR-3B",
+        },
+      }),
+    ).toBe(false);
     expect(
       isPackMessage({
         type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",

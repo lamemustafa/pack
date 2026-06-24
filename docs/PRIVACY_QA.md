@@ -33,6 +33,13 @@ For each release candidate:
 - Confirm live download observation remains bounded to a user-initiated run and
   does not persist or transmit raw download URLs, referrers, absolute local
   paths, filenames, portal HTML, or taxpayer identifiers.
+- Confirm `pack:full-fiscal-year-ledger`, when present, contains only financial
+  year, period, return type, target status, attempts, safe signals/messages, and
+  timestamps. It must not contain raw URLs/referrers, local paths, filenames,
+  GSTIN/PAN, taxpayer names, ARNs, portal HTML, cookies, credentials, OTP, or
+  CAPTCHA data.
+- Confirm "Clear local Pack data" removes the full fiscal year ledger along with
+  install/demo manifest metadata and session observations.
 - Confirm the privacy policy, store declarations, and reviewer instructions
   still match actual runtime behavior.
 

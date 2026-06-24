@@ -2,6 +2,7 @@ import type { FiledReturnsDownloadScope } from "./contracts";
 
 export const GST_LAUNCH_FINANCIAL_YEAR = "2017-18";
 export const GST_LAUNCH_MONTH = "July";
+export const FULL_FISCAL_YEAR_PERIOD = "FULL_FISCAL_YEAR";
 export const FILED_RETURNS_MONTHS = [
   "April",
   "May",
@@ -32,9 +33,15 @@ const CALENDAR_MONTHS = [
 ] as const;
 
 export type FiledReturnsMonth = (typeof FILED_RETURNS_MONTHS)[number];
+export type FiledReturnsScopePeriod = FiledReturnsMonth | typeof FULL_FISCAL_YEAR_PERIOD;
 
 export interface FiledReturnsPeriodOption {
   value: FiledReturnsMonth;
+  label: string;
+}
+
+export interface FiledReturnsScopePeriodOption {
+  value: FiledReturnsScopePeriod;
   label: string;
 }
 
@@ -62,6 +69,28 @@ export function getFiledReturnsPeriodOptions(
   }));
 }
 
+export function getFiledReturnsScopePeriodOptions(
+  financialYear: string,
+  asOf = new Date(),
+): FiledReturnsScopePeriodOption[] {
+  const periodOptions = getFiledReturnsPeriodOptions(financialYear, asOf);
+  if (periodOptions.length === 0) return [];
+  return [
+    {
+      value: FULL_FISCAL_YEAR_PERIOD,
+      label: "Full fiscal year",
+    },
+    ...periodOptions,
+  ];
+}
+
+export function getFiledReturnsFullFiscalYearPeriods(
+  financialYear: string,
+  asOf = new Date(),
+): FiledReturnsMonth[] {
+  return getFiledReturnsPeriods(financialYear, asOf);
+}
+
 export function normaliseFiledReturnsScope(
   scope: FiledReturnsDownloadScope,
   asOf = new Date(),
@@ -76,11 +105,12 @@ export function normaliseFiledReturnsScope(
       : (financialYearOptions.find(
           (candidate) => getFiledReturnsPeriodOptions(candidate, asOf).length > 0,
         ) ?? GST_LAUNCH_FINANCIAL_YEAR);
-  const period = getFiledReturnsPeriodOptions(financialYear, asOf).some(
-    (option) => option.value === scope.period,
-  )
-    ? scope.period
-    : defaultPeriodForFinancialYear(financialYear, asOf);
+  const periodOptions = getFiledReturnsPeriodOptions(financialYear, asOf);
+  const period = isFullFiscalYearScope(scope)
+    ? FULL_FISCAL_YEAR_PERIOD
+    : periodOptions.some((option) => option.value === scope.period)
+      ? scope.period
+      : defaultPeriodForFinancialYear(financialYear, asOf);
 
   return {
     financialYear,
@@ -88,6 +118,10 @@ export function normaliseFiledReturnsScope(
     returnType: "GSTR-3B",
     ...(scope.completedPeriods ? { completedPeriods: scope.completedPeriods } : {}),
   };
+}
+
+export function isFullFiscalYearScope(input: Pick<FiledReturnsDownloadScope, "period">): boolean {
+  return input.period === FULL_FISCAL_YEAR_PERIOD;
 }
 
 export function isSupportedFiledReturnsScope(
@@ -99,6 +133,18 @@ export function isSupportedFiledReturnsScope(
   return getFiledReturnsPeriodOptions(input.financialYear, asOf).some(
     (option) => option.value === input.period,
   );
+}
+
+export function isSupportedFiledReturnsStartScope(
+  input: FiledReturnsDownloadScope,
+  asOf = new Date(),
+): boolean {
+  if (input.returnType !== "GSTR-3B") return false;
+  if (!getFiledReturnsFinancialYearOptions(asOf).includes(input.financialYear)) return false;
+  if (isFullFiscalYearScope(input)) {
+    return getFiledReturnsFullFiscalYearPeriods(input.financialYear, asOf).length > 0;
+  }
+  return isSupportedFiledReturnsScope(input, asOf);
 }
 
 function getDefaultFiledReturnsPeriodScope(asOf = new Date()): {

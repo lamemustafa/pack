@@ -30,6 +30,13 @@
 - [ ] Service-worker durability impact is understood and documented.
 - [ ] Real taxpayer data, local paths, raw URLs/referrers, and portal HTML are absent from the diff.
 
+## Chrome Web Store Impact
+
+- [ ] This PR does not claim Chrome Web Store readiness, approval, or submission.
+- [ ] Full fiscal year remains source-build alpha unless every gate in `docs/PUBLICATION_READINESS.md` is checked.
+- [ ] Store copy, README status, Privacy QA, and reviewer instructions were reviewed if user-facing behavior changed.
+- [ ] CI ZIP creation is treated as package verification only, not store-submission sign-off.
+
 ## Verification
 
 - [ ] `pnpm exec wxt prepare`

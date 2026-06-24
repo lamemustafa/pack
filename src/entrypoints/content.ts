@@ -2,10 +2,7 @@ import { browser } from "wxt/browser";
 import { detectGstPortalContext } from "../connectors/gst/detect";
 import { runFiledReturnsDownloadStep } from "../connectors/gst/filed-returns-flow";
 import { triggerFiledGstr3bFiledPdfDownload } from "../connectors/gst/filed-returns-download";
-import {
-  dismissKnownFiledReturnsSummaryModal,
-  navigateToFiledReturnsPage,
-} from "../connectors/gst/filed-returns-navigator";
+import { navigateToFiledReturnsPage } from "../connectors/gst/filed-returns-navigator";
 import { observeFiledReturnsPageText } from "../connectors/gst/filed-returns-observer";
 import { isPackMessage, type PackMessageResponse } from "../core/messages";
 
@@ -67,24 +64,12 @@ export default defineContentScript({
       }
 
       if (message.type === "PACK_REFRESH_FILED_RETURNS_OBSERVATION") {
-        void dismissKnownFiledReturnsSummaryModal(document)
-          .then(() => {
-            const observation = sendFiledReturnsObservation();
-            sendResponse({
-              ok: true,
-              observation,
-            } satisfies PackMessageResponse);
-          })
-          .catch((error: unknown) =>
-            sendResponse({
-              ok: false,
-              error:
-                error instanceof Error
-                  ? error.message
-                  : "Filed returns observation refresh failed.",
-            } satisfies PackMessageResponse),
-          );
-        return true;
+        const observation = sendFiledReturnsObservation();
+        sendResponse({
+          ok: true,
+          observation,
+        } satisfies PackMessageResponse);
+        return false;
       }
 
       if (message.type === "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD") {

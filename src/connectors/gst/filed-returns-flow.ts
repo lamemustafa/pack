@@ -42,10 +42,10 @@ export async function runFiledReturnsDownloadStep(
   }
 
   if (observation.state === "ready") {
-    if (shouldReturnFromDownloadedDetail(documentRef, scope)) {
+    const detailIdentity = extractFiledReturnsDetailIdentity(documentRef);
+    if (shouldReturnFromMismatchedDetail(detailIdentity, scope)) {
       return clickFiledReturnDetailBack(documentRef);
     }
-    const detailIdentity = extractFiledReturnsDetailIdentity(documentRef);
     return {
       connectorId: "gst",
       scopeId: FILED_RETURNS_SCOPE_ID,
@@ -105,23 +105,56 @@ function openFiledReturnResultRow(
   scope: FiledReturnsDownloadScope,
 ): PortalFlowStepResult {
   const matchingRows = Array.from(documentRef.querySelectorAll("tr"))
-    .map((row) => ({ row, period: extractTaxPeriodFromRow(row) }))
-    .filter(({ row, period }) => {
+    .map((row) => ({ row, identity: extractResultRowIdentity(row) }))
+    .filter(({ row, identity }) => {
       const rowText = row.textContent || "";
+      const period = identity.period ?? extractTaxPeriodFromRow(row);
+      const financialYear = identity.financialYear ?? rowText;
+      const returnType = identity.returnType ?? rowText;
       return (
-        matchesAcceptedText(rowText, [scope.returnType]) &&
-        matchesAcceptedText(rowText, [scope.financialYear]) &&
+        matchesAcceptedText(returnType, [scope.returnType]) &&
+        matchesAcceptedText(financialYear, [scope.financialYear]) &&
         periodMatchesScope(period, scope)
       );
     });
 
-  for (const { row, period } of matchingRows) {
-    const view = getClickableElements(row).find((element) =>
-      /^view$/i.test(normaliseText(element.innerText || element.textContent || "")),
+  const actionableRows = matchingRows
+    .map(({ row, identity }) => ({
+      row,
+      period: identity.period ?? extractTaxPeriodFromRow(row),
+      view: getClickableElements(row).find((element) =>
+        /^view$/i.test(normaliseText(readElementText(element))),
+      ),
+    }))
+    .filter(
+      (
+        candidate,
+      ): candidate is {
+        row: HTMLTableRowElement;
+        period: string | null;
+        view: HTMLElement;
+      } => Boolean(candidate.view),
     );
-    if (!view) continue;
 
-    activateElement(view);
+  if (actionableRows.length > 1) {
+    return {
+      connectorId: "gst",
+      scopeId: FILED_RETURNS_SCOPE_ID,
+      state: "blocked",
+      safeSignals: ["filed-return-result-row-ambiguous"],
+      safeMessage:
+        "Pack found more than one filed GSTR-3B result row for the requested period. Open the correct row manually, then start Pack again.",
+      userAction: {
+        type: "NAVIGATE_TO_SUPPORTED_PAGE",
+        message: "Open the exact filed GSTR-3B row for the requested period.",
+        canResume: true,
+      },
+    };
+  }
+
+  const actionableRow = actionableRows[0];
+  if (actionableRow) {
+    activateElement(actionableRow.view);
     return {
       connectorId: "gst",
       scopeId: FILED_RETURNS_SCOPE_ID,
@@ -129,32 +162,9 @@ function openFiledReturnResultRow(
       safeSignals: [
         "filed-return-result-view-clicked",
         "result-row-gstr3b",
-        ...(period ? [`filed-return-result-period:${period}`] : []),
+        ...(actionableRow.period ? [`filed-return-result-period:${actionableRow.period}`] : []),
       ],
       safeMessage: "Pack opened the filed GSTR-3B result row.",
-    };
-  }
-
-  if (isEntireFinancialYearScope(scope) && clickNextResultsPage(documentRef)) {
-    return {
-      connectorId: "gst",
-      scopeId: FILED_RETURNS_SCOPE_ID,
-      state: "clicked",
-      safeSignals: ["filed-return-results-next-page-clicked"],
-      safeMessage: "Pack moved to the next page of filed GSTR-3B results.",
-    };
-  }
-
-  if (isEntireFinancialYearScope(scope) && (scope.completedPeriods?.length ?? 0) > 0) {
-    return {
-      connectorId: "gst",
-      scopeId: FILED_RETURNS_SCOPE_ID,
-      state: "downloaded",
-      safeSignals: [
-        "filed-return-financial-year-complete",
-        `filed-return-periods-downloaded:${scope.completedPeriods?.length ?? 0}`,
-      ],
-      safeMessage: "Pack processed the visible filed GSTR-3B results for the financial year.",
     };
   }
 
@@ -170,23 +180,17 @@ function openFiledReturnResultRow(
 
 function periodMatchesScope(period: string | null, scope: FiledReturnsDownloadScope): boolean {
   if (!period) return false;
-  if (!isEntireFinancialYearScope(scope)) return matchesAcceptedText(period, [scope.period]);
-  return !new Set((scope.completedPeriods ?? []).map((value) => normaliseText(value))).has(
-    normaliseText(period),
-  );
+  return matchesAcceptedText(period, [scope.period]);
 }
 
-function shouldReturnFromDownloadedDetail(
-  documentRef: Document,
+function shouldReturnFromMismatchedDetail(
+  detailIdentity: ReturnType<typeof extractFiledReturnsDetailIdentity>,
   scope: FiledReturnsDownloadScope,
 ): boolean {
-  if (!isEntireFinancialYearScope(scope)) return false;
-
-  const period = extractFiledReturnsDetailIdentity(documentRef).period;
-  if (!period) return false;
-
-  return new Set((scope.completedPeriods ?? []).map((value) => normaliseText(value))).has(
-    normaliseText(period),
+  if (!detailIdentity.period || !detailIdentity.financialYear) return false;
+  return (
+    !matchesAcceptedText(detailIdentity.period, [scope.period]) ||
+    !matchesAcceptedText(detailIdentity.financialYear, [scope.financialYear])
   );
 }
 
@@ -217,39 +221,59 @@ function clickFiledReturnDetailBack(documentRef: Document): PortalFlowStepResult
   };
 }
 
-function clickNextResultsPage(documentRef: Document): boolean {
-  const paginationLinks = getClickableElements(documentRef).filter((element) => {
-    const text = normaliseText(element.innerText || element.textContent || "");
-    return text === "»" || text === "next";
-  });
-
-  const nextPage = paginationLinks.find((element) => !hasDisabledAncestor(element));
-  if (!nextPage) return false;
-
-  activateElement(nextPage);
-  return true;
-}
-
-function hasDisabledAncestor(element: HTMLElement): boolean {
-  let current: HTMLElement | null = element;
-  for (let depth = 0; current && depth < 3; depth += 1) {
-    if (
-      current.classList.contains("disabled") ||
-      current.getAttribute("aria-disabled") === "true"
-    ) {
-      return true;
-    }
-    current = current.parentElement;
-  }
-  return false;
-}
-
-function isEntireFinancialYearScope(scope: FiledReturnsDownloadScope): boolean {
-  return scope.period === "ALL";
-}
-
 function getBodyText(documentRef: Document): string {
   return documentRef.body?.innerText || documentRef.body?.textContent || "";
+}
+
+function extractResultRowIdentity(row: Element): {
+  financialYear: string | null;
+  period: string | null;
+  returnType: string | null;
+} {
+  const cells = Array.from(row.querySelectorAll("td"));
+  const headers = getResultTableHeaders(row);
+  if (cells.length === 0 || headers.length === 0) {
+    return { financialYear: null, period: null, returnType: null };
+  }
+
+  return {
+    financialYear: readCellByHeader(cells, headers, /financial\s+year|^fy$/i),
+    period: readCellByHeader(cells, headers, /tax\s+period|period|month/i),
+    returnType: readCellByHeader(cells, headers, /return\s+type|return/i),
+  };
+}
+
+function getResultTableHeaders(row: Element): string[] {
+  const table = row.closest("table");
+  if (!table) return [];
+  const headerCells = Array.from(table.querySelectorAll("thead th"));
+  const fallbackHeaderCells =
+    headerCells.length > 0 ? headerCells : Array.from(table.querySelectorAll("th"));
+  return fallbackHeaderCells.map((header) => normaliseText(readElementText(header)));
+}
+
+function readCellByHeader(cells: readonly Element[], headers: readonly string[], pattern: RegExp) {
+  const index = headers.findIndex((header) => pattern.test(header));
+  if (index < 0) return null;
+  return readElementText(cells[index]).replace(/\s+/g, " ").trim() || null;
+}
+
+function readElementText(element: Element | null | undefined): string {
+  if (!element) return "";
+  const HTMLInputElementConstructor = element.ownerDocument.defaultView?.HTMLInputElement;
+  const inputValue =
+    HTMLInputElementConstructor && element instanceof HTMLInputElementConstructor
+      ? element.value
+      : "";
+  return [
+    "innerText" in element ? (element as HTMLElement).innerText : "",
+    element.textContent ?? "",
+    inputValue,
+    element.getAttribute("aria-label") ?? "",
+    element.getAttribute("title") ?? "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 function withOptionalUserAction(

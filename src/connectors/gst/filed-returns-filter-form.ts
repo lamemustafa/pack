@@ -37,9 +37,8 @@ export async function selectFiledReturnsFiltersAndSearch(
   if (periodSelected) await delay(FIELD_SETTLE_DELAY_MS);
 
   const monthFieldPresent = hasFieldControl(documentRef, /^month\b|^tax\s+period\b/i);
-  const shouldSelectMonth = !isEntireFinancialYearScope(scope);
   const monthSelected =
-    periodSelected && monthFieldPresent && shouldSelectMonth
+    periodSelected && monthFieldPresent
       ? await selectFieldOption(
           documentRef,
           /^month\b|^tax\s+period\b/i,
@@ -54,14 +53,13 @@ export async function selectFiledReturnsFiltersAndSearch(
 
   if (financialYearSelected) selectSignals.push("financial-year-selected");
   if (periodSelected) selectSignals.push("period-selected");
-  if (monthFieldPresent && monthSelected && shouldSelectMonth) selectSignals.push("month-selected");
-  if (monthFieldPresent && monthSelected && !shouldSelectMonth) {
-    selectSignals.push("month-left-unselected-for-financial-year");
-  }
+  if (monthFieldPresent && monthSelected) selectSignals.push("month-selected");
   if (returnTypeSelected) selectSignals.push("return-type-selected");
 
-  const search = getClickableElements(documentRef).find((element) =>
-    /^search$/i.test(normaliseText(element.innerText || element.textContent || "")),
+  const formRoot = findFiledReturnsFilterRoot(documentRef);
+  const searchRoot = formRoot ?? documentRef;
+  const search = getClickableElements(searchRoot).find((element) =>
+    /^search$/i.test(normaliseText(readElementText(element))),
   );
 
   if (
@@ -74,7 +72,7 @@ export async function selectFiledReturnsFiltersAndSearch(
     if (
       financialYearSelected ||
       periodSelected ||
-      (monthFieldPresent && monthSelected && shouldSelectMonth) ||
+      (monthFieldPresent && monthSelected) ||
       returnTypeSelected
     ) {
       return {
@@ -114,7 +112,7 @@ export async function selectFiledReturnsFiltersAndSearch(
 
 function acceptedFilingPeriodOptions(scope: FiledReturnsDownloadScope): string[] {
   if (scope.returnType === "GSTR-3B") {
-    return isEntireFinancialYearScope(scope) ? ["Monthly"] : ["Monthly", scope.period];
+    return ["Monthly", scope.period];
   }
   return [scope.period];
 }
@@ -139,10 +137,6 @@ const MONTH_ABBREVIATIONS: Record<string, string> = {
   march: "Mar",
 };
 
-function isEntireFinancialYearScope(scope: FiledReturnsDownloadScope): boolean {
-  return scope.period === "ALL";
-}
-
 function hasFieldControl(documentRef: Document, labelPattern: RegExp): boolean {
   const formRoot = findFiledReturnsFilterRoot(documentRef);
   const fieldRoot = formRoot ? findFieldRoot(formRoot, labelPattern) : null;
@@ -150,6 +144,23 @@ function hasFieldControl(documentRef: Document, labelPattern: RegExp): boolean {
     fieldRoot?.querySelector("select") ||
     (fieldRoot && getCustomDropdownControls(fieldRoot).length > 0),
   );
+}
+
+function readElementText(element: HTMLElement): string {
+  const HTMLInputElementConstructor = element.ownerDocument.defaultView?.HTMLInputElement;
+  const inputValue =
+    HTMLInputElementConstructor && element instanceof HTMLInputElementConstructor
+      ? element.value
+      : "";
+  return [
+    element.innerText || "",
+    element.textContent || "",
+    inputValue,
+    element.getAttribute("aria-label") ?? "",
+    element.getAttribute("title") ?? "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 async function selectFieldOption(

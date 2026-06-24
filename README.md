@@ -27,9 +27,11 @@ but live manifest/index/exception-file generation is not wired yet. Public launc
 still requires the manual gates in
 [docs/PUBLICATION_READINESS.md](docs/PUBLICATION_READINESS.md).
 
-Full financial-year download remains a planned first-class feature. It should
-return only as a durable queue of explicit single-period jobs with persisted
-per-period outcomes, not as a long in-memory bulk DOM loop.
+Full fiscal year download is available in source-build alpha as a local
+per-period ledger. It expands the selected financial year into eligible
+GSTR-3B periods and runs them one at a time through the single-period path.
+It remains outside Chrome Web Store readiness until real-browser restart,
+resume, and privacy-review gates are complete.
 
 ## Install
 
@@ -120,6 +122,9 @@ Pack uses Chrome extension storage only inside the current browser profile.
 
 - `pack:install`: install/update metadata with product version, install
   timestamp, and `localOnly: true`;
+- `pack:full-fiscal-year-ledger`: local-only full fiscal year run status with
+  financial year, period, return type, target status, safe messages/signals,
+  attempts, and timestamps only;
 - `pack:last-manifest`: the last synthetic reviewer demo archive manifest
   summary. The live GST download path does not write a live manifest yet.
 
@@ -134,7 +139,8 @@ Pack uses Chrome extension storage only inside the current browser profile.
 The Options page "Clear local Pack data" control removes the local keys above
 and clears Pack session storage. Pack does not store GST Portal credentials,
 OTPs, CAPTCHA values, cookies, GSTIN/PAN, taxpayer names, downloaded PDFs, portal
-HTML, or raw network captures.
+HTML, raw URLs/referrers, local download paths, filenames, or raw network
+captures.
 
 During a user-initiated live download, Pack temporarily observes browser download
 metadata such as download ID, origin, MIME type, filename, start time, state, and

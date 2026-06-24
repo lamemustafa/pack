@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_FILED_RETURNS_DOWNLOAD_SCOPE,
+  FULL_FISCAL_YEAR_PERIOD,
   getFiledReturnsFinancialYearOptions,
+  getFiledReturnsFullFiscalYearPeriods,
   getFiledReturnsPeriodOptions,
+  getFiledReturnsScopePeriodOptions,
+  isFullFiscalYearScope,
   isSupportedFiledReturnsScope,
+  isSupportedFiledReturnsStartScope,
   normaliseFiledReturnsScope,
 } from "../../src/core/filed-returns-scope";
 
@@ -73,6 +78,35 @@ describe("filed returns GST scope", () => {
     ).toBe(false);
   });
 
+  it("plans full fiscal year targets from concrete eligible filing periods", () => {
+    expect(
+      getFiledReturnsFullFiscalYearPeriods("2017-18", new Date("2026-06-24T00:00:00+05:30")),
+    ).toEqual([
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December",
+      "January",
+      "February",
+      "March",
+    ]);
+    expect(
+      getFiledReturnsFullFiscalYearPeriods("2026-27", new Date("2026-06-24T00:00:00+05:30")),
+    ).toEqual(["April", "May"]);
+  });
+
+  it("exposes full fiscal year as a start-only user option without changing the default", () => {
+    expect(
+      getFiledReturnsScopePeriodOptions("2025-26", new Date("2026-06-24T00:00:00+05:30"))[0],
+    ).toEqual({
+      value: FULL_FISCAL_YEAR_PERIOD,
+      label: "Full fiscal year",
+    });
+    expect(DEFAULT_FILED_RETURNS_DOWNLOAD_SCOPE.period).not.toBe(FULL_FISCAL_YEAR_PERIOD);
+  });
+
   it("normalises invalid early GST launch months instead of passing them to the portal", () => {
     expect(
       normaliseFiledReturnsScope({
@@ -85,6 +119,28 @@ describe("filed returns GST scope", () => {
       period: "July",
       returnType: "GSTR-3B",
     });
+  });
+
+  it("normalises and validates full fiscal year only at the start boundary", () => {
+    const scope = normaliseFiledReturnsScope(
+      {
+        financialYear: "2025-26",
+        period: FULL_FISCAL_YEAR_PERIOD,
+        returnType: "GSTR-3B",
+      },
+      new Date("2026-06-24T00:00:00+05:30"),
+    );
+
+    expect(scope).toEqual({
+      financialYear: "2025-26",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-3B",
+    });
+    expect(isFullFiscalYearScope(scope)).toBe(true);
+    expect(isSupportedFiledReturnsStartScope(scope, new Date("2026-06-24T00:00:00+05:30"))).toBe(
+      true,
+    );
+    expect(isSupportedFiledReturnsScope(scope, new Date("2026-06-24T00:00:00+05:30"))).toBe(false);
   });
 
   it("defaults to a single completed Indian filing month instead of all periods", () => {
@@ -115,6 +171,13 @@ describe("filed returns GST scope", () => {
         returnType: "GSTR-3B",
       }),
     ).toBe(false);
+    expect(
+      isSupportedFiledReturnsStartScope({
+        financialYear: "2025-26",
+        period: FULL_FISCAL_YEAR_PERIOD,
+        returnType: "GSTR-3B",
+      }),
+    ).toBe(true);
     expect(
       isSupportedFiledReturnsScope({
         financialYear: "2016-17",
