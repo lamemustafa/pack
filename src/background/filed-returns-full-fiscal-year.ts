@@ -44,6 +44,7 @@ export async function startFullFiscalYearDownloadFlow(
   scope: FiledReturnsDownloadScope,
   deps: FiledReturnsFlowRunnerDeps,
   runSinglePeriod: SinglePeriodRunner,
+  options: { allowExistingLedgerResume?: boolean } = {},
 ): Promise<PackMessageResponse> {
   const now = deps.now?.() ?? new Date();
   const existingLedger = await readLedger(deps.storageKeys.fullFiscalYearLedger);
@@ -55,7 +56,10 @@ export async function startFullFiscalYearDownloadFlow(
       : createFullFiscalYearLedger(scope, now, plannedPeriods);
 
   if (existingLedger && sameFiledReturnsScope(existingLedger.scope, scope)) {
-    const duplicateResponse = responseForExistingLedger(ledger, now);
+    if (shouldPersistReconciledLedger(existingLedger, ledger)) {
+      await persistLedger(deps, ledger);
+    }
+    const duplicateResponse = responseForExistingLedger(ledger, now, options);
     if (duplicateResponse) return duplicateResponse;
   }
 
@@ -123,6 +127,7 @@ export async function startFullFiscalYearDownloadFlow(
 function responseForExistingLedger(
   ledger: FiledReturnsFullFiscalYearLedger,
   now: Date,
+  options: { allowExistingLedgerResume?: boolean } = {},
 ): PackMessageResponse | null {
   const unconfirmedDownload = ledger.targets.some(
     (target) => target.status === "download-unconfirmed",
@@ -174,7 +179,31 @@ function responseForExistingLedger(
     };
   }
 
+  if (
+    !options.allowExistingLedgerResume &&
+    ledger.targets.some((target) => target.status === "pending")
+  ) {
+    const step = blockedFullFiscalYearStep("full-fiscal-year-resume-confirmation-required", ledger);
+    return {
+      ok: true,
+      flowStep: step,
+      flowSummary: toFullFiscalYearSummary(ledger, step),
+    };
+  }
+
   return null;
+}
+
+function shouldPersistReconciledLedger(
+  previous: FiledReturnsFullFiscalYearLedger,
+  reconciled: FiledReturnsFullFiscalYearLedger,
+): boolean {
+  return (
+    (previous.revision ?? 1) !== (reconciled.revision ?? 1) ||
+    previous.status !== reconciled.status ||
+    previous.targets.length !== reconciled.targets.length ||
+    previous.eligibleThrough !== reconciled.eligibleThrough
+  );
 }
 
 function coerceInconsistentCompleteLedger(

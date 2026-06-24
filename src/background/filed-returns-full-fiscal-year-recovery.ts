@@ -17,10 +17,12 @@ import { clearFiledReturnsTargetReview } from "./filed-returns-target-review";
 
 const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
 const RECOVERABLE_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
+  "pending",
   "download-unconfirmed",
   "running",
   "blocked",
   "failed",
+  "cancelled",
 ]);
 const FINAL_SIDE_EFFECT_SIGNALS = new Set([
   "filed-gstr3b-download-clicked",
@@ -87,6 +89,10 @@ export async function resolveFullFiscalYearTarget(
       );
     }
 
+    if (resolution === "cancelled" && checked.target.status === "pending") {
+      return discardPendingFullFiscalYearRun(checked.ledger, checked.target, deps);
+    }
+
     const now = deps.now?.() ?? new Date();
     const flowStep =
       resolution === "manually-observed"
@@ -106,6 +112,29 @@ export async function resolveFullFiscalYearTarget(
     await clearLegacyTargetReview(checked.target, deps);
     return { ok: true, flowStep, flowSummary };
   });
+}
+
+async function discardPendingFullFiscalYearRun(
+  ledger: FiledReturnsFullFiscalYearLedger,
+  target: FiledReturnsFullFiscalYearTarget,
+  deps: FullFiscalYearTargetRecoveryDeps,
+): Promise<PackMessageResponse> {
+  const now = deps.now?.() ?? new Date();
+  const flowStep = discardedRunStep(target);
+  const cancelledLedger = markFullFiscalYearTargetTerminal(
+    ledger,
+    target.targetId,
+    "cancelled",
+    flowStep,
+    now,
+  );
+  const flowSummary = toFullFiscalYearSummary(cancelledLedger, flowStep);
+  delete flowSummary.fullFiscalYearRecovery;
+
+  await browser.storage.local.remove(deps.storageKeys.fullFiscalYearLedger);
+  await persistSummary(flowSummary, deps);
+  await clearLegacyTargetReview(target, deps);
+  return { ok: true, flowStep, flowSummary };
 }
 
 async function runRecoveryCriticalSection<T>(action: () => Promise<T>): Promise<T> {
@@ -236,6 +265,16 @@ function cancelledTargetStep(target: FiledReturnsFullFiscalYearTarget): PortalFl
     state: "user-action-required",
     safeSignals: ["full-fiscal-year-target-cancelled"],
     safeMessage: `Pack cancelled ${target.period} in the full fiscal-year run. No portal click was retried.`,
+  };
+}
+
+function discardedRunStep(target: FiledReturnsFullFiscalYearTarget): PortalFlowStepResult {
+  return {
+    connectorId: "gst",
+    scopeId: FILED_RETURNS_SCOPE_ID,
+    state: "user-action-required",
+    safeSignals: ["full-fiscal-year-run-discarded"],
+    safeMessage: `Pack discarded the saved full fiscal-year run before resuming ${target.period}.`,
   };
 }
 

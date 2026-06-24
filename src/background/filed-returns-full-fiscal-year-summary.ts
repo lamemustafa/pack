@@ -83,6 +83,10 @@ export function toFullFiscalYearSummary(
     .filter((target) => COMPLETED_SUMMARY_TARGET_STATUSES.has(target.status))
     .map((target) => target.period);
   const currentTarget = ledger.targets.find((target) => target.targetId === ledger.currentTargetId);
+  const recoveryTarget =
+    currentTarget && isRecoverableFullFiscalYearTarget(currentTarget)
+      ? currentTarget
+      : ledger.targets.find(isRecoverableFullFiscalYearTarget);
   return {
     scope: ledger.scope,
     status: ledger.status,
@@ -90,14 +94,14 @@ export function toFullFiscalYearSummary(
     totalPeriods: ledger.targets.length,
     updatedAt: ledger.updatedAt,
     ...(ledger.status === "complete" ? { completedAt: ledger.updatedAt } : {}),
-    ...(currentTarget ? { currentPeriod: currentTarget.period } : {}),
-    ...(currentTarget && isRecoverableFullFiscalYearTarget(currentTarget)
+    ...(recoveryTarget ? { currentPeriod: recoveryTarget.period } : {}),
+    ...(recoveryTarget
       ? {
           fullFiscalYearRecovery: {
             ledgerId: ledger.ledgerId,
-            targetId: currentTarget.targetId,
+            targetId: recoveryTarget.targetId,
             expectedRevision: ledger.revision ?? 1,
-            targetStatus: currentTarget.status,
+            targetStatus: recoveryTarget.status,
           },
         }
       : {}),
@@ -119,10 +123,12 @@ export function completeFullFiscalYearStep(
 
 function isRecoverableFullFiscalYearTarget(target: FiledReturnsFullFiscalYearTarget): boolean {
   return (
+    target.status === "pending" ||
     target.status === "download-unconfirmed" ||
     target.status === "running" ||
     target.status === "blocked" ||
-    target.status === "failed"
+    target.status === "failed" ||
+    target.status === "cancelled"
   );
 }
 

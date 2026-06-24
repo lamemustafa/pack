@@ -41,9 +41,11 @@ export async function readCurrentFiledReturnsFlowSummary(
 }
 
 function isActionableFullFiscalYearLedger(ledger: FiledReturnsFullFiscalYearLedger): boolean {
-  if (ledger.status === "complete" || ledger.status === "cancelled") return false;
+  if (ledger.status === "complete") return false;
   return ledger.targets.some((target) =>
-    ["running", "download-unconfirmed", "blocked", "failed"].includes(target.status),
+    ["pending", "running", "download-unconfirmed", "blocked", "failed", "cancelled"].includes(
+      target.status,
+    ),
   );
 }
 

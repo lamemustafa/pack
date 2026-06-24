@@ -207,7 +207,7 @@ describe("filed returns flow runner", () => {
     });
   });
 
-  it("resumes a persisted full fiscal year ledger without repeating a downloaded period", async () => {
+  it("explicitly resumes a persisted full fiscal year ledger without repeating a downloaded period", async () => {
     mockLocalStorageGet({
       "full-year-ledger": createFullFiscalYearLedger({
         targets: [
@@ -242,11 +242,11 @@ describe("filed returns flow runner", () => {
       FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
     >(async () => responses.shift() ?? { ok: false, error: "Unexpected call." });
 
-    const response = await startFiledReturnsDownloadFlow(
+    const response = await retryFullFiscalYearTargetDownloadFlow(
       {
-        financialYear: "2026-27",
-        period: FULL_FISCAL_YEAR_PERIOD,
-        returnType: "GSTR-3B",
+        ledgerId: "ledger-existing",
+        targetId: "GSTR-3B:2026-27:May",
+        expectedRevision: 1,
       },
       {
         getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
@@ -255,6 +255,7 @@ describe("filed returns flow runner", () => {
           completion: "completion",
           fullFiscalYearLedger: "full-year-ledger",
           observation: "observation",
+          targetReview: "target-review",
         },
         now: () => new Date("2026-06-24T00:00:00+05:30"),
         timings: {
@@ -655,6 +656,59 @@ describe("filed returns flow runner", () => {
     expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
   });
 
+  it("requires explicit confirmation before resuming an existing pending full-year ledger", async () => {
+    mockLocalStorageGet({
+      "full-year-ledger": createFullFiscalYearLedger({
+        status: "running",
+        currentPeriod: "May",
+        targets: [
+          { period: "April", status: "downloaded" },
+          { period: "May", status: "pending" },
+        ],
+      }),
+    });
+    const sendMessageToTabWithInjection =
+      vi.fn<FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]>();
+
+    const response = await startFiledReturnsDownloadFlow(
+      {
+        financialYear: "2026-27",
+        period: FULL_FISCAL_YEAR_PERIOD,
+        returnType: "GSTR-3B",
+      },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+        },
+        now: () => new Date("2026-06-24T00:00:00+05:30"),
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "blocked",
+        safeSignals: ["full-fiscal-year-resume-confirmation-required"],
+      },
+      flowSummary: {
+        status: "running",
+        completedPeriods: ["April"],
+        currentPeriod: "May",
+        fullFiscalYearRecovery: {
+          ledgerId: "ledger-existing",
+          targetId: "GSTR-3B:2026-27:May",
+          expectedRevision: 1,
+          targetStatus: "pending",
+        },
+      },
+    });
+    expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
+  });
+
   it.each(["blocked", "failed", "cancelled"] as const)(
     "does not retry a %s full-year target through a normal start",
     async (targetStatus) => {
@@ -699,6 +753,12 @@ describe("filed returns flow runner", () => {
           status: targetStatus === "cancelled" ? "cancelled" : "blocked",
           completedPeriods: ["May"],
           totalPeriods: 2,
+          fullFiscalYearRecovery: {
+            ledgerId: "ledger-existing",
+            targetId: "GSTR-3B:2026-27:April",
+            expectedRevision: 1,
+            targetStatus,
+          },
         },
       });
       expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
@@ -707,6 +767,60 @@ describe("filed returns flow runner", () => {
       });
     },
   );
+
+  it("persists current-year reconciliation before returning an action-required full-year summary", async () => {
+    mockLocalStorageGet({
+      "full-year-ledger": createFullFiscalYearLedger({
+        status: "blocked",
+        currentPeriod: "May",
+        updatedAt: "2026-06-24T00:00:00.000Z",
+        targets: [
+          { period: "April", status: "downloaded" },
+          { period: "May", status: "blocked" },
+        ],
+      }),
+    });
+    const sendMessageToTabWithInjection =
+      vi.fn<FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]>();
+
+    const response = await startFiledReturnsDownloadFlow(
+      {
+        financialYear: "2026-27",
+        period: FULL_FISCAL_YEAR_PERIOD,
+        returnType: "GSTR-3B",
+      },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+        },
+        now: () => new Date("2026-07-02T00:00:00+05:30"),
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "blocked",
+        safeSignals: expect.arrayContaining(["full-fiscal-year-run-needs-action"]),
+      },
+      flowSummary: {
+        status: "blocked",
+        totalPeriods: 3,
+      },
+    });
+    expect(browser.storage.local.set).toHaveBeenCalledWith({
+      "full-year-ledger": expect.objectContaining({
+        revision: 2,
+        lastReconciledAt: "2026-07-01T18:30:00.000Z",
+        targets: expect.arrayContaining([expect.objectContaining({ period: "June" })]),
+      }),
+    });
+    expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
+  });
 
   it("does not trust a stale complete ledger when a target is not successful", async () => {
     mockLocalStorageGet({
@@ -813,15 +927,16 @@ describe("filed returns flow runner", () => {
     });
   });
 
-  it("reconciles a completed current-year ledger with newly eligible periods", async () => {
+  it("explicitly resumes a reconciled current-year ledger with newly eligible periods", async () => {
     mockLocalStorageGet({
       "full-year-ledger": createFullFiscalYearLedger({
-        status: "complete",
-        currentPeriod: "May",
-        updatedAt: "2026-06-24T00:00:00.000Z",
+        status: "running",
+        currentPeriod: "June",
+        updatedAt: "2026-07-02T00:00:00.000Z",
         targets: [
           { period: "April", status: "downloaded" },
           { period: "May", status: "downloaded" },
+          { period: "June", status: "pending" },
         ],
       }),
     });
@@ -851,11 +966,11 @@ describe("filed returns flow runner", () => {
       FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
     >(async () => responses.shift() ?? { ok: false, error: "Unexpected call." });
 
-    const response = await startFiledReturnsDownloadFlow(
+    const response = await retryFullFiscalYearTargetDownloadFlow(
       {
-        financialYear: "2026-27",
-        period: FULL_FISCAL_YEAR_PERIOD,
-        returnType: "GSTR-3B",
+        ledgerId: "ledger-existing",
+        targetId: "GSTR-3B:2026-27:June",
+        expectedRevision: 1,
       },
       {
         getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
@@ -864,6 +979,7 @@ describe("filed returns flow runner", () => {
           completion: "completion",
           fullFiscalYearLedger: "full-year-ledger",
           observation: "observation",
+          targetReview: "target-review",
         },
         now: () => new Date("2026-07-02T00:00:00+05:30"),
         timings: {

@@ -100,6 +100,73 @@ describe("full fiscal-year recovery", () => {
     expect(browser.storage.local.remove).toHaveBeenCalledWith("target-review");
   });
 
+  it("allows an explicitly cancelled target to be retried after user review", async () => {
+    mockLocalStorageGet({
+      "full-year-ledger": createRecoveryLedger({
+        revision: 2,
+        targetStatus: "cancelled",
+        safeSignals: ["full-fiscal-year-target-cancelled"],
+      }),
+    });
+
+    const recovery = await prepareFullFiscalYearTargetRetry(
+      {
+        ledgerId: "ledger-existing",
+        targetId: "GSTR-3B:2026-27:April",
+        expectedRevision: 2,
+      },
+      recoveryDeps(),
+    );
+
+    expect(recovery).toMatchObject({
+      ok: true,
+      ledger: {
+        revision: 3,
+        status: "running",
+        targets: [expect.objectContaining({ period: "April", status: "pending" })],
+      },
+    });
+  });
+
+  it("discards a pending full-year resume without leaving a recoverable target", async () => {
+    mockLocalStorageGet({
+      "full-year-ledger": createRecoveryLedger({
+        revision: 2,
+        targetStatus: "pending",
+        safeSignals: ["full-fiscal-year-resume-confirmation-required"],
+      }),
+    });
+
+    const response = await resolveFullFiscalYearTarget(
+      {
+        ledgerId: "ledger-existing",
+        targetId: "GSTR-3B:2026-27:April",
+        expectedRevision: 2,
+      },
+      "cancelled",
+      recoveryDeps(),
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "user-action-required",
+        safeSignals: ["full-fiscal-year-run-discarded"],
+      },
+      flowSummary: {
+        status: "cancelled",
+        currentPeriod: "April",
+      },
+    });
+    expect(JSON.stringify(response)).not.toContain("fullFiscalYearRecovery");
+    expect(browser.storage.local.remove).toHaveBeenCalledWith("full-year-ledger");
+    expect(browser.storage.session.set).toHaveBeenCalledWith({
+      completion: expect.objectContaining({
+        status: "cancelled",
+      }),
+    });
+  });
+
   it("records a manually observed full-year target without marking it browser-confirmed", async () => {
     mockLocalStorageGet({
       "full-year-ledger": createRecoveryLedger({ revision: 2 }),

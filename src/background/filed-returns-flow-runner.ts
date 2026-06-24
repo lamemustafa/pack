@@ -103,6 +103,7 @@ export async function retryFullFiscalYearTargetDownloadFlow(
       recovery.ledger.scope,
       deps,
       startSinglePeriodFiledReturnsDownloadFlow,
+      { allowExistingLedgerResume: true },
     );
   } finally {
     stopLeaseRenewal();
