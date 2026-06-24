@@ -84,6 +84,16 @@ describe("message boundary", () => {
         type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",
         payload: {
           financialYear: "2025-26",
+          period: "ALL",
+          returnType: "GSTR-3B",
+        },
+      }),
+    ).toBe(false);
+    expect(
+      isPackMessage({
+        type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",
+        payload: {
+          financialYear: "2025-26",
           period: "March",
           returnType: "GSTR-1",
         },

@@ -17,6 +17,8 @@ All notable changes to ComplyEaze Pack are documented here.
 - Filed GSTR-3B final download clicks are now target-bound to the visible period
   and financial year, and the retryable navigation step no longer clicks the
   final portal download control.
+- Full-financial-year bulk download selection is temporarily disabled until Pack
+  has a durable per-period job ledger and completion inventory.
 - Exact GST host permissions only.
 - No ComplyEaze login, analytics, credential capture, cookie capture, or GST file
   upload in the local-download workflow.

@@ -34,7 +34,7 @@ const CALENDAR_MONTHS = [
 export type FiledReturnsMonth = (typeof FILED_RETURNS_MONTHS)[number];
 
 export interface FiledReturnsPeriodOption {
-  value: "ALL" | FiledReturnsMonth;
+  value: FiledReturnsMonth;
   label: string;
 }
 
@@ -58,10 +58,7 @@ export function getFiledReturnsPeriodOptions(financialYear: string): FiledReturn
       ? FILED_RETURNS_MONTHS.slice(FILED_RETURNS_MONTHS.indexOf(GST_LAUNCH_MONTH))
       : FILED_RETURNS_MONTHS;
 
-  return [
-    { value: "ALL", label: "All currently available filed returns" },
-    ...months.map((month) => ({ value: month, label: month })),
-  ];
+  return months.map((month) => ({ value: month, label: month }));
 }
 
 export function normaliseFiledReturnsScope(
@@ -118,10 +115,7 @@ function getFinancialYearStartYear(year: number, monthIndex: number): number {
 }
 
 function defaultPeriodForFinancialYear(financialYear: string): FiledReturnsMonth {
-  const firstMonth = getFiledReturnsPeriodOptions(financialYear).find(
-    (option): option is FiledReturnsPeriodOption & { value: FiledReturnsMonth } =>
-      option.value !== "ALL",
-  );
+  const firstMonth = getFiledReturnsPeriodOptions(financialYear)[0];
   return firstMonth?.value ?? GST_LAUNCH_MONTH;
 }
 
