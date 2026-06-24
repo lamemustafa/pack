@@ -11,13 +11,13 @@ import {
   mergeFlowStepWithDownloadObservation,
   observeNextBrowserDownload,
 } from "./download-observer";
+import { unverifiedPeriodAfterDownloadStep } from "./filed-returns-flow-guards";
+import { runDownloadStepWithRetry, runDownloadTriggerOnce } from "./filed-returns-flow-messaging";
 import { persistFiledReturnsCompletionSummary } from "./filed-returns-flow-summary";
 
 const GST_LOGIN_URL = "https://services.gst.gov.in/services/login";
 const FLOW_STEP_SETTLE_MS = 1_600;
 const RESULT_ROW_NAVIGATION_SETTLE_MS = 4_500;
-const FLOW_STEP_MESSAGE_RETRY_MS = 1_250;
-const MAX_FLOW_STEP_MESSAGE_ATTEMPTS = 8;
 const MAX_FLOW_STEPS = 6;
 const MAX_FINANCIAL_YEAR_FLOW_STEPS = 80;
 const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
@@ -80,7 +80,7 @@ export async function startFiledReturnsDownloadFlow(
     const stepScope = isEntireFinancialYearScope(scope)
       ? { ...scope, completedPeriods: [...completedPeriods] }
       : scope;
-    const response = await runDownloadStepWithRetry(deps, activeTab.tab.id, stepScope);
+    const response = await runScopedDownloadStepWithRetry(deps, activeTab.tab.id, stepScope);
     if (!response.ok || !("flowStep" in response)) {
       downloadObservation.stop();
       return response;
@@ -102,7 +102,7 @@ export async function startFiledReturnsDownloadFlow(
       await delay(RESULT_ROW_NAVIGATION_SETTLE_MS);
 
       const detailDownloadObservation = observeFiledReturnDownload();
-      const triggerResponse = await runDownloadTriggerWithRetry(deps, activeTab.tab.id);
+      const triggerResponse = await runDownloadTriggerOnce(deps, activeTab.tab.id);
       if (!triggerResponse.ok || !("downloadTrigger" in triggerResponse)) {
         detailDownloadObservation.stop();
         return triggerResponse;
@@ -143,8 +143,14 @@ export async function startFiledReturnsDownloadFlow(
       };
       if (!isEntireFinancialYearScope(scope)) return mergedResponse;
       if (mergedResponse.flowStep.state !== "downloaded") return mergedResponse;
+      if (!activePeriod) {
+        return {
+          ...mergedResponse,
+          flowStep: unverifiedPeriodAfterDownloadStep(mergedResponse.flowStep),
+        };
+      }
 
-      if (activePeriod) completedPeriods.add(activePeriod);
+      completedPeriods.add(activePeriod);
       activePeriod = null;
       await delay(FLOW_STEP_SETTLE_MS);
       lastStep = mergedResponse.flowStep;
@@ -159,8 +165,14 @@ export async function startFiledReturnsDownloadFlow(
       };
       if (!isEntireFinancialYearScope(scope)) return mergedResponse;
       if (mergedResponse.flowStep.state !== "downloaded") return mergedResponse;
+      if (!activePeriod) {
+        return {
+          ...mergedResponse,
+          flowStep: unverifiedPeriodAfterDownloadStep(mergedResponse.flowStep),
+        };
+      }
 
-      if (activePeriod) completedPeriods.add(activePeriod);
+      completedPeriods.add(activePeriod);
       activePeriod = null;
       await delay(FLOW_STEP_SETTLE_MS);
       lastStep = mergedResponse.flowStep;
@@ -192,15 +204,6 @@ function observeFiledReturnDownload() {
   });
 }
 
-async function runDownloadTriggerWithRetry(
-  deps: FiledReturnsFlowRunnerDeps,
-  tabId: number,
-): Promise<PackMessageResponse> {
-  return runFlowMessageWithRetry(deps, tabId, {
-    type: "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD",
-  });
-}
-
 async function persistCompletionSummaryIfComplete(
   scope: FiledReturnsDownloadScope,
   completedPeriods: ReadonlySet<string>,
@@ -217,47 +220,15 @@ async function persistCompletionSummaryIfComplete(
   );
 }
 
-async function runDownloadStepWithRetry(
+function runScopedDownloadStepWithRetry(
   deps: FiledReturnsFlowRunnerDeps,
   tabId: number,
   scope: FiledReturnsDownloadScope,
 ): Promise<PackMessageResponse> {
-  return runFlowMessageWithRetry(deps, tabId, {
+  return runDownloadStepWithRetry(deps, tabId, {
     type: "PACK_RUN_FILED_RETURNS_DOWNLOAD_STEP",
     payload: scope,
   });
-}
-
-async function runFlowMessageWithRetry(
-  deps: FiledReturnsFlowRunnerDeps,
-  tabId: number,
-  message: Extract<
-    PackMessage,
-    {
-      type: "PACK_RUN_FILED_RETURNS_DOWNLOAD_STEP" | "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD";
-    }
-  >,
-): Promise<PackMessageResponse> {
-  let lastError: unknown;
-
-  for (let attempt = 0; attempt < MAX_FLOW_STEP_MESSAGE_ATTEMPTS; attempt += 1) {
-    try {
-      return await deps.sendMessageToTabWithInjection(tabId, message);
-    } catch (error: unknown) {
-      lastError = error;
-      if (attempt < MAX_FLOW_STEP_MESSAGE_ATTEMPTS - 1) {
-        await delay(FLOW_STEP_MESSAGE_RETRY_MS);
-      }
-    }
-  }
-
-  return {
-    ok: false,
-    error:
-      lastError instanceof Error
-        ? lastError.message
-        : "Pack could not reconnect to the GST tab after portal navigation.",
-  };
 }
 
 async function getOrOpenGstTab(

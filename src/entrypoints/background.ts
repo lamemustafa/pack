@@ -26,6 +26,7 @@ const LAST_MANIFEST_KEY = "pack:last-manifest";
 const CONTENT_SCRIPT_FILE = "/content-scripts/content.js";
 const PRODUCT_VERSION = "0.1.0";
 const OFFICIAL_URL = "https://pack.complyeaze.com";
+const contentInjectionByTab = new Map<number, Promise<void>>();
 
 export default defineBackground(() => {
   browser.runtime.onInstalled.addListener(() => {
@@ -152,11 +153,39 @@ async function sendMessageToTabWithInjection(
     return (await browser.tabs.sendMessage(tabId, message)) as PackMessageResponse;
   } catch (error) {
     if (!isMissingReceivingEndError(error)) throw error;
-    await browser.scripting.executeScript({
-      files: [CONTENT_SCRIPT_FILE],
-      target: { tabId },
-    });
+    await ensureContentScript(tabId);
     return browser.tabs.sendMessage(tabId, message) as Promise<PackMessageResponse>;
+  }
+}
+
+async function ensureContentScript(tabId: number): Promise<void> {
+  if (await pingContentScript(tabId)) return;
+
+  let injection = contentInjectionByTab.get(tabId);
+  if (!injection) {
+    injection = browser.scripting
+      .executeScript({
+        files: [CONTENT_SCRIPT_FILE],
+        target: { tabId },
+      })
+      .then(() => undefined)
+      .finally(() => {
+        contentInjectionByTab.delete(tabId);
+      });
+    contentInjectionByTab.set(tabId, injection);
+  }
+
+  await injection;
+}
+
+async function pingContentScript(tabId: number): Promise<boolean> {
+  try {
+    const response = (await browser.tabs.sendMessage(tabId, {
+      type: "PACK_PING",
+    })) as PackMessageResponse;
+    return response.ok;
+  } catch {
+    return false;
   }
 }
 

@@ -325,7 +325,7 @@ describe("filed returns flow runner", () => {
     });
   }, 12_000);
 
-  it("retries a flow step when GST navigation temporarily disconnects the content script", async () => {
+  it("does not retry the final download trigger after an ambiguous tab delivery failure", async () => {
     const responses: Array<PackMessageResponse | Error> = [
       {
         ok: true,
@@ -338,9 +338,52 @@ describe("filed returns flow runner", () => {
         },
       },
       new Error("Could not establish connection. Receiving end does not exist."),
+    ];
+    const sendMessageToTabWithInjection = vi.fn<
+      FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
+    >(async () => {
+      const response = responses.shift();
+      if (response instanceof Error) throw response;
+      return response ?? { ok: false, error: "Unexpected call." };
+    });
+
+    const response = await startFiledReturnsDownloadFlow(
+      {
+        financialYear: "2025-26",
+        period: "ALL",
+        returnType: "GSTR-3B",
+      },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          observation: "observation",
+        },
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "user-action-required",
+        safeSignals: expect.arrayContaining(["filed-gstr3b-download-trigger-ambiguous"]),
+        userAction: {
+          type: "RETRY_PORTAL_GENERATION",
+        },
+      },
+    });
+    expect(sendMessageToTabWithInjection).toHaveBeenCalledTimes(2);
+    expect(sendMessageToTabWithInjection).toHaveBeenLastCalledWith(17, {
+      type: "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD",
+    });
+  }, 12_000);
+
+  it("stops a full-year run when a successful detail download has no verified period", async () => {
+    const responses: PackMessageResponse[] = [
       {
         ok: true,
-        downloadTrigger: {
+        flowStep: {
           connectorId: "gst",
           scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
           state: "clicked",
@@ -348,6 +391,45 @@ describe("filed returns flow runner", () => {
           safeMessage: "Clicked download.",
         },
       },
+    ];
+    const sendMessageToTabWithInjection = vi.fn<
+      FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
+    >(async () => responses.shift() ?? { ok: false, error: "Unexpected call." });
+
+    const response = await startFiledReturnsDownloadFlow(
+      {
+        financialYear: "2025-26",
+        period: "ALL",
+        returnType: "GSTR-3B",
+      },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          observation: "observation",
+        },
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "user-action-required",
+        safeSignals: expect.arrayContaining([
+          "browser-download-completed",
+          "filed-return-detail-period-unverified",
+        ]),
+        userAction: {
+          type: "NAVIGATE_TO_SUPPORTED_PAGE",
+        },
+      },
+    });
+    expect(sendMessageToTabWithInjection).toHaveBeenCalledTimes(1);
+  }, 12_000);
+
+  it("retries a non-download flow step when GST navigation temporarily disconnects the content script", async () => {
+    const responses: Array<PackMessageResponse | Error> = [
       {
         ok: true,
         flowStep: {
@@ -358,6 +440,7 @@ describe("filed returns flow runner", () => {
           safeMessage: "Returned.",
         },
       },
+      new Error("Could not establish connection. Receiving end does not exist."),
       {
         ok: true,
         flowStep: {
@@ -400,6 +483,6 @@ describe("filed returns flow runner", () => {
         safeSignals: ["filed-return-financial-year-complete"],
       },
     });
-    expect(sendMessageToTabWithInjection).toHaveBeenCalledTimes(5);
+    expect(sendMessageToTabWithInjection).toHaveBeenCalledTimes(3);
   }, 12_000);
 });

@@ -23,7 +23,7 @@ export function isPotentialDownloadCandidate(
 }
 
 function startsAfterArmedTime(item: DownloadCreatedItem, armedAt: Date): boolean {
-  if (!item.startTime) return true;
+  if (!item.startTime) return false;
   const startTime = Date.parse(item.startTime);
   return Number.isFinite(startTime) && startTime >= armedAt.getTime();
 }

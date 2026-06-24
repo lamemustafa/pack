@@ -547,6 +547,64 @@ describe("filed returns guided flow", () => {
     expect(searchClicked).toBe(1);
   });
 
+  it("does not choose a matching custom option from an unrelated page overlay", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <button data-unrelated-option role="option">Monthly</button>
+        <section>
+          <div>
+            <span>Financial Year</span>
+            <button data-field="financial-year">2025-26</button>
+          </div>
+          <div>
+            <span>Return Filing Period</span>
+            <button data-field="period" aria-controls="period-options">Select</button>
+          </div>
+          <div>
+            <span>Return Type</span>
+            <button data-field="return-type" aria-controls="return-type-options">Select</button>
+          </div>
+          <button data-search>Search</button>
+        </section>
+      </main>
+    `);
+    makeLayoutVisible(documentRef);
+    const period = documentRef.querySelector<HTMLElement>("[data-field='period']");
+    const returnType = documentRef.querySelector<HTMLElement>("[data-field='return-type']");
+    let unrelatedClicked = 0;
+    let searchClicked = 0;
+
+    documentRef.querySelector("[data-unrelated-option]")?.addEventListener("click", () => {
+      unrelatedClicked += 1;
+    });
+    period?.addEventListener("click", () => {
+      appendOwnedOption(documentRef, "period-options", "Monthly", () => {
+        period.textContent = "Monthly";
+      });
+    });
+    returnType?.addEventListener("click", () => {
+      appendOwnedOption(documentRef, "return-type-options", "GSTR-3B", () => {
+        returnType.textContent = "GSTR-3B";
+      });
+    });
+    documentRef.querySelector("[data-search]")?.addEventListener("click", () => {
+      searchClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      ...DEFAULT_SCOPE,
+      period: "ALL",
+    });
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining(["period-selected", "return-type-selected", "search-clicked"]),
+    );
+    expect(unrelatedClicked).toBe(0);
+    expect(searchClicked).toBe(1);
+  });
+
   it("does not click unrelated controls when the filter widgets cannot be resolved", async () => {
     const documentRef = createDocument(`
       <main>
@@ -631,6 +689,21 @@ function appendOption(documentRef: Document, text: string, onClick: () => void) 
     option.remove();
   });
   documentRef.body.append(option);
+}
+
+function appendOwnedOption(documentRef: Document, id: string, text: string, onClick: () => void) {
+  const listbox = documentRef.createElement("div");
+  listbox.id = id;
+  listbox.setAttribute("role", "listbox");
+  const option = documentRef.createElement("button");
+  option.setAttribute("role", "option");
+  option.textContent = text;
+  option.addEventListener("click", () => {
+    onClick();
+    listbox.remove();
+  });
+  listbox.append(option);
+  documentRef.body.append(listbox);
 }
 
 function appendNativeOption(documentRef: Document, select: HTMLSelectElement | null, text: string) {

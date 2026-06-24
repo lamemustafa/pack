@@ -1,16 +1,19 @@
 import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "../../core/contracts";
 import {
+  findFieldRoot,
+  findFiledReturnsFilterRoot,
+  getCustomDropdownControls,
+  selectCustomOptionNearLabel,
+} from "./filed-returns-custom-dropdown";
+import {
   activateElement,
   delay,
   dispatchChange,
   getClickableElements,
-  isHtmlElement,
-  isVisible,
   matchesAcceptedText,
   normaliseText,
 } from "./filed-returns-dom";
 
-const CLICK_SETTLE_DELAY_MS = 250;
 const FIELD_SETTLE_DELAY_MS = 500;
 const FIELD_SELECTION_ATTEMPTS = 8;
 type FieldSelectionAttempt = "selected" | "pending" | "missing";
@@ -262,132 +265,4 @@ function selectOption(select: HTMLSelectElement, acceptedTexts: readonly string[
   select.selectedIndex = option.index;
   dispatchChange(select);
   return true;
-}
-
-async function selectCustomOptionNearLabel(
-  documentRef: Document,
-  labelPattern: RegExp,
-  acceptedTexts: readonly string[],
-): Promise<boolean> {
-  const formRoot = findFiledReturnsFilterRoot(documentRef);
-  if (!formRoot) return false;
-
-  const fieldRoot = findFieldRoot(formRoot, labelPattern);
-  if (!fieldRoot) return false;
-
-  const currentText = normaliseText(fieldRoot.textContent || "");
-  if (matchesAcceptedText(currentText, acceptedTexts)) return true;
-
-  const control = getCustomDropdownControls(fieldRoot).find((candidate) => isVisible(candidate));
-  if (!control) return false;
-
-  activateElement(control);
-  await delay(CLICK_SETTLE_DELAY_MS);
-
-  const option = findVisibleOption(documentRef, acceptedTexts, control);
-  if (!option) return false;
-
-  activateElement(option);
-  await delay(CLICK_SETTLE_DELAY_MS);
-  return true;
-}
-
-function findFiledReturnsFilterRoot(documentRef: Document): HTMLElement | null {
-  const searchButton = getClickableElements(documentRef).find((element) =>
-    /^search$/i.test(normaliseText(element.innerText || element.textContent || "")),
-  );
-  if (!searchButton) return null;
-
-  let current: HTMLElement | null = searchButton;
-  for (let depth = 0; current && depth < 8; depth += 1) {
-    const text = normaliseText(current.innerText || current.textContent || "");
-    if (
-      /financial\s+year/i.test(text) &&
-      /return\s+filing\s+period/i.test(text) &&
-      /return\s+type/i.test(text)
-    ) {
-      return current;
-    }
-    current = current.parentElement;
-  }
-
-  return searchButton.parentElement;
-}
-
-function findFieldRoot(root: ParentNode, labelPattern: RegExp): HTMLElement | null {
-  const candidates = Array.from(root.querySelectorAll<HTMLElement>("label, div, span, p")).filter(
-    (element) => {
-      const text = normaliseText(element.textContent || "");
-      return text.length > 0 && text.length <= 80 && labelPattern.test(text);
-    },
-  );
-
-  for (const candidate of candidates) {
-    let current: HTMLElement | null = candidate;
-    for (let depth = 0; current && depth < 4; depth += 1) {
-      const controls = getCustomDropdownControls(current);
-      const selects = current.querySelectorAll("select");
-      const text = normaliseText(current.innerText || current.textContent || "");
-      if (
-        ((controls.length > 0 && controls.length <= 2) || selects.length === 1) &&
-        text.length <= 160
-      ) {
-        return current;
-      }
-      current = current.parentElement;
-    }
-  }
-
-  return null;
-}
-
-function getCustomDropdownControls(root: ParentNode): HTMLElement[] {
-  const selector = [
-    "button",
-    "[role='button']",
-    "[aria-haspopup]",
-    "[ng-click]",
-    "[data-ng-click]",
-    ".select2-choice",
-    ".ui-select-match",
-    ".chosen-single",
-    ".dropdown-toggle",
-  ].join(",");
-
-  return Array.from(root.querySelectorAll(selector)).filter((element) =>
-    isHtmlElement(root, element),
-  );
-}
-
-function findVisibleOption(
-  documentRef: Document,
-  acceptedTexts: readonly string[],
-  openedControl: HTMLElement,
-): HTMLElement | null {
-  const selector = [
-    "[role='option']",
-    ".ui-select-choices-row",
-    ".select2-results li",
-    ".chosen-results li",
-    "li",
-    "a",
-    "button",
-    "span",
-    "[role='listbox'] div",
-    ".dropdown-menu div",
-    ".ui-select-choices div",
-    ".select2-results div",
-  ].join(",");
-
-  for (const element of Array.from(documentRef.body.querySelectorAll(selector))) {
-    if (!isHtmlElement(documentRef, element)) continue;
-    if (element === openedControl || openedControl.contains(element)) continue;
-    if (!isVisible(element)) continue;
-    const text = normaliseText(element.innerText || element.textContent || "");
-    if (text.length > 0 && text.length <= 80 && matchesAcceptedText(text, acceptedTexts)) {
-      return element;
-    }
-  }
-
-  return null;
 }
