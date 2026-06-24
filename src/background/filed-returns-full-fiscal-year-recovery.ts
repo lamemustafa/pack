@@ -22,6 +22,13 @@ const RECOVERABLE_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStat
   "blocked",
   "failed",
 ]);
+const FINAL_SIDE_EFFECT_SIGNALS = new Set([
+  "filed-gstr3b-download-clicked",
+  "filed-gstr3b-download-trigger-ambiguous",
+  "browser-download-created",
+  "browser-download-size-unknown",
+  "browser-download-not-observed",
+]);
 
 export interface FullFiscalYearTargetRecoveryDeps {
   storageKeys: {
@@ -36,18 +43,31 @@ export type FullFiscalYearTargetRetryResult =
   | { ok: true; ledger: FiledReturnsFullFiscalYearLedger }
   | { ok: false; response: PackMessageResponse };
 
+let recoveryCriticalSection = Promise.resolve();
+
+export async function readFullFiscalYearTargetRecoveryScope(
+  payload: FullFiscalYearTargetRecoveryPayload,
+  deps: FullFiscalYearTargetRecoveryDeps,
+): Promise<{ scope: FiledReturnsDownloadScope } | { response: PackMessageResponse }> {
+  const checked = await readRecoverableFullFiscalYearTarget(payload, deps);
+  if ("response" in checked) return { response: checked.response };
+  return { scope: checked.ledger.scope };
+}
+
 export async function prepareFullFiscalYearTargetRetry(
   payload: FullFiscalYearTargetRecoveryPayload,
   deps: FullFiscalYearTargetRecoveryDeps,
 ): Promise<FullFiscalYearTargetRetryResult> {
-  const checked = await readRecoverableFullFiscalYearTarget(payload, deps);
-  if ("response" in checked) return { ok: false, response: checked.response };
+  return runRecoveryCriticalSection(async () => {
+    const checked = await readRecoverableFullFiscalYearTarget(payload, deps);
+    if ("response" in checked) return { ok: false, response: checked.response };
 
-  const now = deps.now?.() ?? new Date();
-  const updatedLedger = resetFullFiscalYearTargetForRetry(checked.ledger, checked.target, now);
-  await persistLedger(updatedLedger, deps);
-  await clearLegacyTargetReview(checked.target, deps);
-  return { ok: true, ledger: updatedLedger };
+    const now = deps.now?.() ?? new Date();
+    const updatedLedger = resetFullFiscalYearTargetForRetry(checked.ledger, checked.target, now);
+    await persistLedger(updatedLedger, deps);
+    await clearLegacyTargetReview(checked.target, deps);
+    return { ok: true, ledger: updatedLedger };
+  });
 }
 
 export async function resolveFullFiscalYearTarget(
@@ -55,27 +75,51 @@ export async function resolveFullFiscalYearTarget(
   resolution: "manually-observed" | "cancelled",
   deps: FullFiscalYearTargetRecoveryDeps,
 ): Promise<PackMessageResponse> {
-  const checked = await readRecoverableFullFiscalYearTarget(payload, deps);
-  if ("response" in checked) return checked.response;
+  return runRecoveryCriticalSection(async () => {
+    const checked = await readRecoverableFullFiscalYearTarget(payload, deps);
+    if ("response" in checked) return checked.response;
 
-  const now = deps.now?.() ?? new Date();
-  const flowStep =
-    resolution === "manually-observed"
-      ? manuallyObservedStep(checked.target)
-      : cancelledTargetStep(checked.target);
-  const updatedLedger = markFullFiscalYearTargetTerminal(
-    checked.ledger,
-    checked.target.targetId,
-    resolution,
-    flowStep,
-    now,
-  );
-  const flowSummary = toFullFiscalYearSummary(updatedLedger, flowStep);
+    if (resolution === "manually-observed" && !canResolveAsManuallyObserved(checked.target)) {
+      return recoveryActionUnavailableResponse(
+        "full-fiscal-year-manual-observation-unavailable",
+        "Pack has no evidence that the final GST download click was attempted for this period. Retry or cancel this target instead.",
+        checked.ledger,
+      );
+    }
 
-  await persistLedger(updatedLedger, deps);
-  await persistSummary(flowSummary, deps);
-  await clearLegacyTargetReview(checked.target, deps);
-  return { ok: true, flowStep, flowSummary };
+    const now = deps.now?.() ?? new Date();
+    const flowStep =
+      resolution === "manually-observed"
+        ? manuallyObservedStep(checked.target)
+        : cancelledTargetStep(checked.target);
+    const updatedLedger = markFullFiscalYearTargetTerminal(
+      checked.ledger,
+      checked.target.targetId,
+      resolution,
+      flowStep,
+      now,
+    );
+    const flowSummary = toFullFiscalYearSummary(updatedLedger, flowStep);
+
+    await persistLedger(updatedLedger, deps);
+    await persistSummary(flowSummary, deps);
+    await clearLegacyTargetReview(checked.target, deps);
+    return { ok: true, flowStep, flowSummary };
+  });
+}
+
+async function runRecoveryCriticalSection<T>(action: () => Promise<T>): Promise<T> {
+  const previous = recoveryCriticalSection;
+  let release: () => void = () => undefined;
+  recoveryCriticalSection = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await previous;
+  try {
+    return await action();
+  } finally {
+    release();
+  }
 }
 
 async function readRecoverableFullFiscalYearTarget(
@@ -176,6 +220,13 @@ function manuallyObservedStep(target: FiledReturnsFullFiscalYearTarget): PortalF
     safeSignals: ["filed-returns-target-manually-observed"],
     safeMessage: `Pack recorded ${target.period} as manually observed after user review of browser Downloads.`,
   };
+}
+
+function canResolveAsManuallyObserved(target: FiledReturnsFullFiscalYearTarget): boolean {
+  return (
+    target.status === "download-unconfirmed" ||
+    target.safeSignals.some((signal) => FINAL_SIDE_EFFECT_SIGNALS.has(signal))
+  );
 }
 
 function cancelledTargetStep(target: FiledReturnsFullFiscalYearTarget): PortalFlowStepResult {

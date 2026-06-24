@@ -115,7 +115,22 @@ export function nextRunnableFullFiscalYearTarget(
   ledger: FiledReturnsFullFiscalYearLedger,
 ): FiledReturnsFullFiscalYearTarget | null {
   if (ledger.targets.some((target) => target.status === "download-unconfirmed")) return null;
-  return ledger.targets.find((target) => !POSITIVE_TARGET_STATUSES.has(target.status)) ?? null;
+  return ledger.targets.find((target) => target.status === "pending") ?? null;
+}
+
+export function canCompleteFullFiscalYearLedger(ledger: FiledReturnsFullFiscalYearLedger): boolean {
+  return (
+    ledger.targets.length > 0 &&
+    ledger.targets.every((target) => POSITIVE_TARGET_STATUSES.has(target.status))
+  );
+}
+
+export function hasActionRequiredFullFiscalYearTarget(
+  ledger: FiledReturnsFullFiscalYearLedger,
+): boolean {
+  return ledger.targets.some(
+    (target) => target.status !== "pending" && !POSITIVE_TARGET_STATUSES.has(target.status),
+  );
 }
 
 export function markFullFiscalYearTargetRunning(

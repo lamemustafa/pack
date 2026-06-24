@@ -74,6 +74,15 @@ open-source alpha to a broader public release and v0 Chrome Web Store package.
 
 ### Must Complete Before Store Submission
 
+#### Live Evidence Gate
+
+- [ ] For each Store-ready claim, record dated evidence: source commit/tag, exact
+      ZIP checksum, clean-profile install result, demo result, authorised live GST
+      run result, network/storage audit summary, privacy declaration snapshot,
+      reviewer instructions, approver, and date.
+- [ ] Public Pack source/status pages are regenerated from this evidence and do
+      not claim newer readiness than the recorded gate.
+
 - [ ] Legal review of live GST Portal terms against exact extension behaviour.
 - [ ] Privacy Policy, Terms, support URL, source URL, and limited-use statement
       are live and accessible without login.
