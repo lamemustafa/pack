@@ -101,8 +101,6 @@ function checkPrTemplate() {
 }
 
 function currentBranch() {
-  if (process.env.GITHUB_HEAD_REF) return process.env.GITHUB_HEAD_REF;
-  if (process.env.GITHUB_REF_NAME) return process.env.GITHUB_REF_NAME;
   return gitText(["branch", "--show-current"]);
 }
 
