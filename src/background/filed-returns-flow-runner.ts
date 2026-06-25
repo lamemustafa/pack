@@ -22,8 +22,10 @@ import {
   readFiledReturnsTargetReview,
   responseForFiledReturnsTargetReview,
 } from "./filed-returns-target-review";
+import { GST_CONNECTOR_DESCRIPTOR } from "../connectors/gst/constants";
 
-const GST_LOGIN_URL = "https://services.gst.gov.in/services/login";
+const GST_SERVICES_ORIGIN = GST_CONNECTOR_DESCRIPTOR.supportedOrigins[1] ?? "";
+const GST_LOGIN_URL = new URL("/services/login", GST_SERVICES_ORIGIN).href;
 const FLOW_STEP_SETTLE_MS = 1_600;
 const RESULT_ROW_NAVIGATION_SETTLE_MS = 4_500;
 const MAX_FLOW_STEPS = 6;

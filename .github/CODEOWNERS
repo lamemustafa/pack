@@ -6,6 +6,7 @@
 /src/core/ @lamemustafa
 /src/extension/ @lamemustafa
 /scripts/ @lamemustafa
+/policies/ @lamemustafa
 /wxt.config.ts @lamemustafa
 
 # Release, policy, and governance.
