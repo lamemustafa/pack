@@ -317,11 +317,6 @@ describe("PR review gate", () => {
         headRefOid: "head-sha",
         reviews: [
           review({ state: "COMMENTED", commit: "head-sha", submittedAt: "2026-06-24T17:40:40Z" }),
-          review({
-            state: "CHANGES_REQUESTED",
-            commit: "head-sha",
-            submittedAt: "2026-06-24T17:45:40Z",
-          }),
           review({ state: "DISMISSED", commit: "head-sha", submittedAt: "2026-06-24T17:55:40Z" }),
         ],
       }),
@@ -350,9 +345,9 @@ describe("PR review gate", () => {
     expect(output).toContain("PR review gate passed");
   });
 
-  it("treats a dismissed requested-changes review as no submitted head review when there is no earlier review", () => {
+  it("keeps requested changes blocking when a later comment is dismissed", () => {
     const fixturePath = writeFixture(
-      "requested-changes-then-dismissed",
+      "requested-changes-comment-dismissed",
       reviewFixture({
         headRefOid: "head-sha",
         reviews: [
@@ -361,7 +356,110 @@ describe("PR review gate", () => {
             commit: "head-sha",
             submittedAt: "2026-06-24T17:45:40Z",
           }),
+          review({ state: "COMMENTED", commit: "head-sha", submittedAt: "2026-06-24T17:50:40Z" }),
           review({ state: "DISMISSED", commit: "head-sha", submittedAt: "2026-06-24T17:55:40Z" }),
+        ],
+      }),
+    );
+
+    expect(() =>
+      execFileSync(process.execPath, [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture",
+        fixturePath,
+        "--strict-head-review",
+        "--required-review-author",
+        "chatgpt-codex-connector",
+      ]),
+    ).toThrow(/Requested-changes reviews/);
+  });
+
+  it("ignores dismissed requested-changes reviews after an approval", () => {
+    const fixturePath = writeFixture(
+      "approval-then-dismissed-requested-changes",
+      reviewFixture({
+        headRefOid: "head-sha",
+        reviews: [
+          review({
+            state: "APPROVED",
+            commit: "head-sha",
+            submittedAt: "2026-06-24T17:45:40Z",
+          }),
+          review({ state: "DISMISSED", commit: "head-sha", submittedAt: "2026-06-24T18:05:40Z" }),
+        ],
+      }),
+    );
+
+    const output = execFileSync(
+      process.execPath,
+      [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture",
+        fixturePath,
+        "--strict-head-review",
+        "--required-review-author",
+        "chatgpt-codex-connector",
+      ],
+      {
+        cwd: rootDir,
+        encoding: "utf8",
+      },
+    );
+
+    expect(output).toContain("PR review gate passed");
+  });
+
+  it("ignores dismissed requested-changes reviews after a comment", () => {
+    const fixturePath = writeFixture(
+      "comment-then-dismissed-requested-changes",
+      reviewFixture({
+        headRefOid: "head-sha",
+        reviews: [
+          review({ state: "COMMENTED", commit: "head-sha", submittedAt: "2026-06-24T17:45:40Z" }),
+          review({ state: "DISMISSED", commit: "head-sha", submittedAt: "2026-06-24T18:05:40Z" }),
+        ],
+      }),
+    );
+
+    const output = execFileSync(
+      process.execPath,
+      [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture",
+        fixturePath,
+        "--strict-head-review",
+        "--required-review-author",
+        "chatgpt-codex-connector",
+      ],
+      {
+        cwd: rootDir,
+        encoding: "utf8",
+      },
+    );
+
+    expect(output).toContain("PR review gate passed");
+  });
+
+  it("treats only dismissed and pending reviews as no submitted head review", () => {
+    const fixturePath = writeFixture(
+      "only-dismissed-pending",
+      reviewFixture({
+        headRefOid: "head-sha",
+        reviews: [
+          review({ state: "DISMISSED", commit: "head-sha", submittedAt: "2026-06-24T17:55:40Z" }),
+          review({ state: "PENDING", commit: "head-sha", submittedAt: "2026-06-24T18:05:40Z" }),
         ],
       }),
     );

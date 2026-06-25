@@ -944,6 +944,116 @@ describe("filed returns guided flow", () => {
     expect(secondResult.safeSignals).not.toContain("filed-return-positively-not-filed");
   });
 
+  it("does not settle a stale no-record search from unrelated post-click page loading", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <select id="finYr"><option selected>2025-26</option></select>
+          <select id="optValue"><option selected>Monthly</option></select>
+          <select id="month"><option selected>March</option></select>
+          <select id="retTyp"><option selected>GSTR3B</option></select>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+        <section aria-label="Search results">
+          <p>No records found</p>
+        </section>
+      </main>
+    `);
+
+    markFiledReturnsSearchPending(documentRef, DEFAULT_SCOPE);
+    const unrelatedLoading = documentRef.createElement("div");
+    unrelatedLoading.setAttribute("aria-busy", "true");
+    unrelatedLoading.textContent = "Loading...";
+    documentRef.body.append(unrelatedLoading);
+
+    expect(hasSettledFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(false);
+    unrelatedLoading.remove();
+    expect(hasSettledFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(false);
+  });
+
+  it("does not settle a plain no-record section from unrelated body mutations", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <select id="finYr"><option selected>2025-26</option></select>
+          <select id="optValue"><option selected>Monthly</option></select>
+          <select id="month"><option selected>March</option></select>
+          <select id="retTyp"><option selected>GSTR3B</option></select>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+        <section>
+          <p>No records found</p>
+        </section>
+      </main>
+    `);
+
+    markFiledReturnsSearchPending(documentRef, DEFAULT_SCOPE);
+    const unrelatedStatus = documentRef.createElement("aside");
+    unrelatedStatus.textContent = "Search finished elsewhere";
+    documentRef.body.append(unrelatedStatus);
+
+    expect(hasSettledFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(false);
+  });
+
+  it("settles when the filed-return result surface enters and exits busy with the same no-record text", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <select id="finYr"><option selected>2025-26</option></select>
+          <select id="optValue"><option selected>Monthly</option></select>
+          <select id="month"><option selected>March</option></select>
+          <select id="retTyp"><option selected>GSTR3B</option></select>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+        <section aria-label="Search results">
+          <p>No records found</p>
+        </section>
+      </main>
+    `);
+    const resultSurface = documentRef.querySelector("section");
+
+    markFiledReturnsSearchPending(documentRef, DEFAULT_SCOPE);
+    resultSurface?.setAttribute("aria-busy", "true");
+    expect(hasSettledFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(false);
+    resultSurface?.removeAttribute("aria-busy");
+
+    expect(hasSettledFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(true);
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining(["filed-return-positively-not-filed"]),
+    );
+  });
+
+  it("settles when the filed-return result container is replaced with identical no-record content", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <select id="finYr"><option selected>2025-26</option></select>
+          <select id="optValue"><option selected>Monthly</option></select>
+          <select id="month"><option selected>March</option></select>
+          <select id="retTyp"><option selected>GSTR3B</option></select>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+        <section aria-label="Search results">
+          <p>No records found</p>
+        </section>
+      </main>
+    `);
+    const oldSurface = documentRef.querySelector("section");
+    const replacement = documentRef.createElement("section");
+    replacement.setAttribute("aria-label", "Search results");
+    replacement.innerHTML = "<p>No records found</p>";
+
+    markFiledReturnsSearchPending(documentRef, DEFAULT_SCOPE);
+    oldSurface?.replaceWith(replacement);
+
+    expect(hasSettledFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(true);
+  });
+
   it("consumes settled not-filed evidence after returning a terminal result", async () => {
     const documentRef = createDocument(`
       <main>
@@ -989,9 +1099,137 @@ describe("filed returns guided flow", () => {
     `);
     markPackSubmittedSearch(documentRef, DEFAULT_SCOPE);
     expect(hasSettledFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(true);
-    const loading = documentRef.createElement("div");
-    loading.textContent = "Loading...";
-    documentRef.body.append(loading);
+    documentRef.querySelector("section")?.setAttribute("aria-busy", "true");
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.safeSignals).not.toContain("filed-return-positively-not-filed");
+  });
+
+  it("rejects no-record evidence when the scoped month differs despite a stale global match", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <label>Month</label>
+        <select data-stale-month><option selected>March</option></select>
+        <form name="efiledReturns">
+          <select id="finYr"><option selected>2025-26</option></select>
+          <select id="optValue"><option selected>Monthly</option></select>
+          <select id="month"><option selected>February</option><option>March</option></select>
+          <select id="retTyp"><option selected>GSTR3B</option></select>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+        <section aria-label="Search results">
+          <p>No records found</p>
+        </section>
+      </main>
+    `);
+    markPackSubmittedSearch(documentRef, DEFAULT_SCOPE);
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.safeSignals).not.toContain("filed-return-positively-not-filed");
+  });
+
+  it("accepts no-record evidence when the scoped month matches despite a stale global mismatch", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <label>Month</label>
+        <select data-stale-month><option selected>February</option></select>
+        <form name="efiledReturns">
+          <select id="finYr"><option selected>2025-26</option></select>
+          <select id="optValue"><option selected>Monthly</option></select>
+          <select id="month"><option selected>March</option></select>
+          <select id="retTyp"><option selected>GSTR3B</option></select>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+        <section aria-label="Search results">
+          <p>No records found</p>
+        </section>
+      </main>
+    `);
+    markPackSubmittedSearch(documentRef, DEFAULT_SCOPE);
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining(["filed-return-positively-not-filed"]),
+    );
+  });
+
+  it("rejects no-record evidence when visible scoped month controls conflict", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <select id="finYr"><option selected>2025-26</option></select>
+          <select id="optValue"><option selected>Monthly</option></select>
+          <label>Month</label>
+          <select data-first-month><option selected>March</option></select>
+          <label>Tax Period</label>
+          <select data-second-month><option selected>February</option></select>
+          <select id="retTyp"><option selected>GSTR3B</option></select>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+        <section aria-label="Search results">
+          <p>No records found</p>
+        </section>
+      </main>
+    `);
+    markPackSubmittedSearch(documentRef, DEFAULT_SCOPE);
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.safeSignals).not.toContain("filed-return-positively-not-filed");
+  });
+
+  it("allows one unambiguous global field when no filed-return form field exists", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <label>Financial Year</label>
+        <select><option selected>2025-26</option></select>
+        <label>Return Filing Period</label>
+        <select><option selected>Monthly</option></select>
+        <label>Month</label>
+        <select><option selected>March</option></select>
+        <label>Return Type</label>
+        <select><option selected>GSTR3B</option></select>
+        <section aria-label="Search results">
+          <p>No records found</p>
+        </section>
+      </main>
+    `);
+    markPackSubmittedSearch(documentRef, DEFAULT_SCOPE);
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining(["filed-return-positively-not-filed"]),
+    );
+  });
+
+  it("rejects no-record evidence when fallback global fields conflict", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <label>Financial Year</label>
+        <select><option selected>2025-26</option></select>
+        <label>Return Filing Period</label>
+        <select><option selected>Monthly</option></select>
+        <label>Month</label>
+        <select id="month"><option selected>March</option></select>
+        <label>Month</label>
+        <select><option selected>February</option></select>
+        <label>Return Type</label>
+        <select><option selected>GSTR3B</option></select>
+        <section aria-label="Search results">
+          <p>No records found</p>
+        </section>
+      </main>
+    `);
+    markPackSubmittedSearch(documentRef, DEFAULT_SCOPE);
 
     const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
 

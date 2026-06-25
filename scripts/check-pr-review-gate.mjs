@@ -100,6 +100,7 @@ function reduceSubmittedCurrentHeadReviewsByAuthor(reviews, headRefOid) {
     .filter(
       (review) =>
         review.state !== "PENDING" &&
+        review.state !== "DISMISSED" &&
         (review.commit?.oid === headRefOid ||
           (review.state === "CHANGES_REQUESTED" && !review.commit?.oid)),
     )
@@ -110,23 +111,12 @@ function reduceSubmittedCurrentHeadReviewsByAuthor(reviews, headRefOid) {
 
     const previous = authorStates.get(author) ?? {
       latestSubmittedReview: null,
-      latestNonBlockingReview: null,
       blockingReview: null,
     };
-
-    if (review.state === "DISMISSED") {
-      authorStates.set(author, {
-        latestSubmittedReview: previous.latestNonBlockingReview,
-        latestNonBlockingReview: previous.latestNonBlockingReview,
-        blockingReview: null,
-      });
-      continue;
-    }
 
     if (review.state === "CHANGES_REQUESTED") {
       authorStates.set(author, {
         latestSubmittedReview: review,
-        latestNonBlockingReview: previous.latestNonBlockingReview,
         blockingReview: review,
       });
       continue;
@@ -135,7 +125,6 @@ function reduceSubmittedCurrentHeadReviewsByAuthor(reviews, headRefOid) {
     if (review.state === "APPROVED") {
       authorStates.set(author, {
         latestSubmittedReview: review,
-        latestNonBlockingReview: review,
         blockingReview: null,
       });
       continue;
@@ -144,7 +133,6 @@ function reduceSubmittedCurrentHeadReviewsByAuthor(reviews, headRefOid) {
     if (review.state === "COMMENTED") {
       authorStates.set(author, {
         latestSubmittedReview: review,
-        latestNonBlockingReview: review,
         blockingReview: previous.blockingReview,
       });
     }
