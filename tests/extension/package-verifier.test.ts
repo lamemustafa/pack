@@ -76,6 +76,106 @@ describe("extension package verifier", () => {
       expect(result.output).toContain(markerCase.expected);
     }
   });
+
+  it("rejects sensitive policy markers from the vendored harness snapshot", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "assets/leak.js",
+      "console.log('27ABCDE1234F1Z5 ABCDE1234F /Users/example/Downloads/gstr3b.pdf');",
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("agent-harness-policy.snapshot.json");
+    expect(result.output).toContain("gstin");
+  });
+
+  it("rejects sensitive policy markers in packaged manifest fields", async () => {
+    const outputDir = await createValidPackage();
+    const manifestPath = path.join(outputDir, "manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<string, unknown>;
+    await writeFile(
+      manifestPath,
+      `${JSON.stringify(
+        {
+          ...manifest,
+          version_name: "/Users/example/Downloads/27ABCDE1234F1Z5",
+        },
+        null,
+        2,
+      )}\n`,
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("agent-harness-policy.snapshot.json");
+    expect(result.output).toContain("gstin");
+  });
+
+  it("fails closed when the harness policy snapshot omits required redactors", async () => {
+    const outputDir = await createValidPackage();
+    const snapshotPath = path.join(outputDir, "bad-policy-snapshot.json");
+    await writeFile(
+      snapshotPath,
+      `${JSON.stringify(
+        {
+          manifest: {
+            policySchemaVersion: 1,
+            policyVersion: "1.0.0",
+            sourceRepository: "complyeaze",
+            sourceCommit: "0123456789abcdef0123456789abcdef01234567",
+            canonicalPolicySha256:
+              "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            generatorVersion: "1.0.0",
+          },
+          policy: {
+            redaction: {
+              patterns: [],
+            },
+          },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+
+    const result = await runVerifier(outputDir, {
+      PACK_HARNESS_POLICY_PATH: snapshotPath,
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("missing redaction pattern gstin");
+  });
+
+  it("allows approved GST portal origins in packaged extension code", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "assets/background.js",
+      "const approvedOrigin = 'https://services.gst.gov.in';",
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(0);
+  });
+
+  it("rejects pathful GST portal URLs in packaged extension code", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "assets/background.js",
+      "const capturedRoute = 'https://services.gst.gov.in/services/auth/efiledreturns';",
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("Pathful GST Portal URL");
+  });
 });
 
 async function createValidPackage(): Promise<string> {
@@ -144,12 +244,15 @@ async function writePackageFile(outputDir: string, relativePath: string, content
   await writeFile(filePath, contents);
 }
 
-async function runVerifier(outputDir: string): Promise<{ output: string; status: number }> {
+async function runVerifier(
+  outputDir: string,
+  env: NodeJS.ProcessEnv = {},
+): Promise<{ output: string; status: number }> {
   return new Promise((resolve) => {
     execFile(
       process.execPath,
       ["scripts/verify-extension-package.mjs", outputDir],
-      { cwd: rootDir },
+      { cwd: rootDir, env: { ...process.env, ...env } },
       (error, stdout, stderr) => {
         resolve({
           output: `${stdout}${stderr}`,

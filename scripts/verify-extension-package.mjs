@@ -5,6 +5,21 @@ const outputDir = process.argv[2];
 if (!outputDir)
   throw new Error("usage: node scripts/verify-extension-package.mjs <extension-output-dir>");
 
+const harnessPolicyPath =
+  process.env.PACK_HARNESS_POLICY_PATH ??
+  path.join(process.cwd(), "policies", "agent-harness-policy.snapshot.json");
+const harnessPolicy = JSON.parse(await readFile(harnessPolicyPath, "utf8"));
+validateHarnessPolicySnapshot(harnessPolicy);
+const harnessRedactionPatterns = (harnessPolicy.policy?.redaction?.patterns ?? []).map((entry) => ({
+  id: entry.id,
+  pattern: new RegExp(entry.pattern, "gi"),
+}));
+const harnessPackageLeakPatterns = harnessRedactionPatterns.filter(({ id }) => {
+  return id !== "gst-url";
+});
+const pathfulGstPortalPattern =
+  /https:\/\/(?:www|services|return)\.gst\.gov\.in\/(?!\*)(?:[^\s"']+)/i;
+
 const manifestPath = path.join(outputDir, "manifest.json");
 const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
 const expectedName = "ComplyEaze Pack: GST GSTR-3B Downloader";
@@ -203,6 +218,8 @@ for (const file of await listFiles(outputDir)) {
         throw new Error(`Forbidden pattern ${pattern} in ${path.relative(process.cwd(), file)}`);
     }
     assertNoForbiddenTelemetry(contents, file);
+    assertNoHarnessPolicyLeaks(contents, file);
+    if (path.basename(file) !== "manifest.json") assertNoPathfulGstPortalUrl(contents, file);
   }
   if (/\.svg$/.test(file)) {
     for (const pattern of forbiddenBuiltSvgPatterns) {
@@ -212,6 +229,8 @@ for (const file of await listFiles(outputDir)) {
         );
       }
     }
+    assertNoHarnessPolicyLeaks(contents, file);
+    assertNoPathfulGstPortalUrl(contents, file);
   }
 }
 
@@ -247,5 +266,67 @@ function assertNoForbiddenTelemetry(contents, file) {
         `Forbidden telemetry marker ${label} in ${path.relative(process.cwd(), file)}`,
       );
     }
+  }
+}
+
+function assertNoHarnessPolicyLeaks(contents, file) {
+  for (const { id, pattern } of harnessPackageLeakPatterns) {
+    if (pattern.test(contents)) {
+      throw new Error(
+        `Sensitive marker ${id} from agent-harness-policy.snapshot.json in ${path.relative(
+          process.cwd(),
+          file,
+        )}`,
+      );
+    }
+  }
+}
+
+function assertNoPathfulGstPortalUrl(contents, file) {
+  if (pathfulGstPortalPattern.test(contents)) {
+    throw new Error(`Pathful GST Portal URL in ${path.relative(process.cwd(), file)}`);
+  }
+}
+
+function validateHarnessPolicySnapshot(snapshot) {
+  const manifest = snapshot.manifest ?? {};
+  const requiredManifestFields = [
+    "policySchemaVersion",
+    "policyVersion",
+    "sourceRepository",
+    "sourceCommit",
+    "canonicalPolicySha256",
+    "generatorVersion",
+  ];
+  for (const field of requiredManifestFields) {
+    if (!manifest[field]) {
+      throw new Error(`Invalid harness policy snapshot: missing manifest.${field}`);
+    }
+  }
+  if (!/^[a-f0-9]{40}$/i.test(manifest.sourceCommit)) {
+    throw new Error("Invalid harness policy snapshot: sourceCommit must be a 40-character git SHA");
+  }
+  if (!/^sha256:[a-f0-9]{64}$/i.test(manifest.canonicalPolicySha256)) {
+    throw new Error(
+      "Invalid harness policy snapshot: canonicalPolicySha256 must be a sha256 digest",
+    );
+  }
+
+  const requiredPatternIds = new Set([
+    "gstin",
+    "pan",
+    "openai-secret",
+    "cookie-header",
+    "home-path",
+    "gst-url",
+  ]);
+  const patterns = snapshot.policy?.redaction?.patterns ?? [];
+  for (const patternId of requiredPatternIds) {
+    if (!patterns.some((entry) => entry.id === patternId)) {
+      throw new Error(`Invalid harness policy snapshot: missing redaction pattern ${patternId}`);
+    }
+  }
+  for (const entry of patterns) {
+    new RegExp(entry.pattern, "gi");
   }
 }
