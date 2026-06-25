@@ -366,6 +366,32 @@ describe("filed returns guided flow", () => {
     expect(clicked).toBe(0);
   });
 
+  it("treats a settled no-records result as positive not-filed evidence", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <select id="finYr"><option selected>2025-26</option></select>
+          <select id="optValue"><option selected>Monthly</option></select>
+          <select id="month"><option selected>March</option></select>
+          <select id="retTyp"><option selected>GSTR3B</option></select>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+        <section aria-label="Search results">
+          <p>No records found</p>
+        </section>
+      </main>
+    `);
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result).toMatchObject({
+      state: "candidate-not-found",
+      safeSignals: expect.arrayContaining(["filed-return-positively-not-filed"]),
+    });
+    expect(result.safeSignals).not.toContain("filed-return-result-row-not-found");
+  });
+
   it("scopes the final search click to the filed-return filter form", async () => {
     const documentRef = createDocument(`
       <main>

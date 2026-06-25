@@ -8,6 +8,10 @@ import {
   isFullFiscalYearLedger,
   nextRunnableFullFiscalYearTarget,
 } from "../../src/background/filed-returns-full-fiscal-year-ledger";
+import {
+  summariseFullFiscalYearLedger,
+  targetStatusFromFlowStep,
+} from "../../src/background/filed-returns-full-fiscal-year";
 
 describe("full fiscal year ledger", () => {
   it("does not select later targets while an unconfirmed download needs acknowledgement", () => {
@@ -28,6 +32,53 @@ describe("full fiscal year ledger", () => {
     for (const status of ["blocked", "failed", "cancelled"] as const) {
       expect(nextRunnableFullFiscalYearTarget(createLedger([["April", status]]))).toBeNull();
     }
+  });
+
+  it("summarises saved pending running ledgers as explicit resume confirmation", () => {
+    const summary = summariseFullFiscalYearLedger({
+      ...createLedger([
+        ["April", "downloaded"],
+        ["May", "pending"],
+      ]),
+      status: "running",
+      currentTargetId: "GSTR-3B:2026-27:May",
+    });
+
+    expect(summary).toMatchObject({
+      status: "running",
+      currentPeriod: "May",
+      fullFiscalYearRecovery: {
+        targetId: "GSTR-3B:2026-27:May",
+        targetStatus: "pending",
+      },
+      flowStep: {
+        state: "blocked",
+        safeSignals: ["full-fiscal-year-resume-confirmation-required"],
+      },
+    });
+    expect(summary.flowStep.safeSignals).not.toContain("full-fiscal-year-run-active");
+  });
+
+  it("maps only positive not-filed evidence to a terminal not-filed target", () => {
+    expect(
+      targetStatusFromFlowStep({
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "candidate-not-found",
+        safeSignals: ["filed-return-positively-not-filed"],
+        safeMessage: "No filed return exists for the selected period.",
+      }),
+    ).toBe("not-filed");
+
+    expect(
+      targetStatusFromFlowStep({
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "candidate-not-found",
+        safeSignals: ["filed-return-result-row-not-found"],
+        safeMessage: "Missing result row.",
+      }),
+    ).toBe("blocked");
   });
 
   it("rejects malformed or inconsistent persisted ledgers", () => {

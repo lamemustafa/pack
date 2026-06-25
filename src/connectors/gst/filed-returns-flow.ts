@@ -14,6 +14,7 @@ import {
   navigateToFiledReturnsPage,
 } from "./filed-returns-navigator";
 import { selectFiledReturnsFiltersAndSearch } from "./filed-returns-filter-form";
+import { detectPositiveNotFiledEvidence } from "./filed-returns-not-filed-evidence";
 import { observeFiledReturnsPageText } from "./filed-returns-observer";
 
 const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
@@ -63,6 +64,13 @@ export async function runFiledReturnsDownloadStep(
   if (observation.state === "filed-return-results-visible") {
     return openFiledReturnResultRow(documentRef, scope);
   }
+
+  const notFiledEvidence = detectPositiveNotFiledEvidence(
+    documentRef,
+    scope,
+    FILED_RETURNS_SCOPE_ID,
+  );
+  if (notFiledEvidence) return notFiledEvidence;
 
   if (observation.state === "page-settling") {
     return {

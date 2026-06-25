@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import type { FiledReturnsFlowSummary } from "../../src/core/contracts";
 import { FULL_FISCAL_YEAR_PERIOD } from "../../src/core/filed-returns-scope";
-import { canManuallyObserveFullFiscalYearTarget } from "../../src/entrypoints/popup/components";
+import {
+  canManuallyObserveFullFiscalYearTarget,
+  RecoveryActions,
+} from "../../src/entrypoints/popup/components";
 
 describe("popup full-year recovery actions", () => {
   it("offers manual observation only for final-click recovery states", () => {
@@ -10,10 +15,28 @@ describe("popup full-year recovery actions", () => {
     expect(canManuallyObserveFullFiscalYearTarget(summaryFor("failed"))).toBe(false);
     expect(canManuallyObserveFullFiscalYearTarget(summaryFor("running"))).toBe(false);
   });
+
+  it("renders resume and discard immediately for a pending saved full-year run", () => {
+    const markup = renderToStaticMarkup(
+      createElement(RecoveryActions, {
+        busy: null,
+        summary: summaryFor("pending", "full-fiscal-year-resume-confirmation-required"),
+        onAcknowledgeInterruptedRun: () => undefined,
+        onRetryFullFiscalYearTarget: () => undefined,
+        onRetryTarget: () => undefined,
+        onResolveFullFiscalYearTarget: () => undefined,
+        onResolveTarget: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain("Resume saved run");
+    expect(markup).toContain("Discard saved run");
+  });
 });
 
 function summaryFor(
   targetStatus: NonNullable<FiledReturnsFlowSummary["fullFiscalYearRecovery"]>["targetStatus"],
+  signal = "full-fiscal-year-run-needs-action",
 ): FiledReturnsFlowSummary {
   return {
     scope: {
@@ -35,7 +58,7 @@ function summaryFor(
       connectorId: "gst",
       scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
       state: "user-action-required",
-      safeSignals: ["full-fiscal-year-run-needs-action"],
+      safeSignals: [signal],
       safeMessage: "Needs action.",
     },
   };

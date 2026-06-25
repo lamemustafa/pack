@@ -136,6 +136,104 @@ describe("PR review gate", () => {
     ).toThrow(/No review was found for current head/);
   });
 
+  it("does not count dismissed current-head reviews as satisfying strict review", () => {
+    const fixturePath = writeFixture(
+      "dismissed-head-review",
+      reviewFixture({
+        headRefOid: "head-sha",
+        reviews: [review({ state: "DISMISSED", commit: "head-sha" })],
+      }),
+    );
+
+    expect(() =>
+      execFileSync(process.execPath, [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture",
+        fixturePath,
+        "--strict-head-review",
+        "--required-review-author",
+        "chatgpt-codex-connector",
+      ]),
+    ).toThrow(/No review was found for current head/);
+  });
+
+  it("uses each reviewer's latest non-dismissed current-head review state", () => {
+    const fixturePath = writeFixture(
+      "requested-changes-then-approval",
+      reviewFixture({
+        headRefOid: "head-sha",
+        reviews: [
+          review({
+            state: "CHANGES_REQUESTED",
+            commit: "head-sha",
+            submittedAt: "2026-06-24T17:45:40Z",
+          }),
+          review({ state: "APPROVED", commit: "head-sha", submittedAt: "2026-06-24T17:55:40Z" }),
+        ],
+      }),
+    );
+
+    const output = execFileSync(
+      process.execPath,
+      [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture",
+        fixturePath,
+        "--strict-head-review",
+        "--required-review-author",
+        "chatgpt-codex-connector",
+      ],
+      {
+        cwd: rootDir,
+        encoding: "utf8",
+      },
+    );
+
+    expect(output).toContain("PR review gate passed");
+  });
+
+  it("evaluates review state from paginated fixture pages", () => {
+    const fixturePath = writeFixture("paginated-review-state", {
+      pages: [
+        reviewFixture({
+          headRefOid: "head-sha",
+          reviewThreads: [],
+          reviews: [review({ state: "COMMENTED", commit: "old-sha" })],
+          reviewsPageInfo: { hasNextPage: true, endCursor: "reviews-page-1" },
+        }),
+        reviewFixture({
+          headRefOid: "head-sha",
+          reviewThreads: [],
+          reviews: [review({ state: "CHANGES_REQUESTED", commit: "head-sha" })],
+          reviewsPageInfo: { hasNextPage: false, endCursor: null },
+        }),
+      ],
+    });
+
+    expect(() =>
+      execFileSync(process.execPath, [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture",
+        fixturePath,
+        "--strict-head-review",
+        "--required-review-author",
+        "chatgpt-codex-connector",
+      ]),
+    ).toThrow(/Requested-changes reviews/);
+  });
+
   it("can allow a missing head review for finding-only CI gates", () => {
     const fixturePath = writeFixture(
       "allowed-missing-head-review",
@@ -226,29 +324,41 @@ function writeFixture(name: string, value: unknown): string {
 function reviewFixture({
   headRefOid,
   reviewThreads = [],
+  reviewThreadsPageInfo = { hasNextPage: false, endCursor: null },
   reviews,
+  reviewsPageInfo = { hasNextPage: false, endCursor: null },
 }: {
   headRefOid: string;
   reviewThreads?: unknown[];
+  reviewThreadsPageInfo?: { hasNextPage: boolean; endCursor: string | null };
   reviews: Array<ReturnType<typeof review>>;
+  reviewsPageInfo?: { hasNextPage: boolean; endCursor: string | null };
 }) {
   return {
     data: {
       repository: {
         pullRequest: {
           headRefOid,
-          reviewThreads: { nodes: reviewThreads },
-          reviews: { nodes: reviews },
+          reviewThreads: { nodes: reviewThreads, pageInfo: reviewThreadsPageInfo },
+          reviews: { nodes: reviews, pageInfo: reviewsPageInfo },
         },
       },
     },
   };
 }
 
-function review({ state, commit }: { state: "COMMENTED" | "CHANGES_REQUESTED"; commit: string }) {
+function review({
+  state,
+  commit,
+  submittedAt = "2026-06-24T17:45:40Z",
+}: {
+  state: "APPROVED" | "COMMENTED" | "CHANGES_REQUESTED" | "DISMISSED";
+  commit: string;
+  submittedAt?: string;
+}) {
   return {
     state,
-    submittedAt: "2026-06-24T17:45:40Z",
+    submittedAt,
     url: `https://github.com/lamemustafa/pack/pull/14#${commit}-${state}`,
     author: { login: "chatgpt-codex-connector" },
     commit: { oid: commit },

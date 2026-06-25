@@ -123,12 +123,18 @@ export function canManuallyObserveFullFiscalYearTarget(
 }
 
 function retryFullYearLabel(summary: FiledReturnsFlowSummary): string {
+  if (summary.flowStep.safeSignals.includes("full-fiscal-year-resume-confirmation-required")) {
+    return "Resume saved run";
+  }
   return summary.fullFiscalYearRecovery?.targetStatus === "pending"
     ? "Resume full-year period"
     : "Retry full-year period";
 }
 
 function cancelFullYearLabel(summary: FiledReturnsFlowSummary): string {
+  if (summary.flowStep.safeSignals.includes("full-fiscal-year-resume-confirmation-required")) {
+    return "Discard saved run";
+  }
   return summary.fullFiscalYearRecovery?.targetStatus === "pending"
     ? "Discard full-year run"
     : "Cancel full-year target";

@@ -38,7 +38,7 @@ export type SinglePeriodRunner = (
   deps: FiledReturnsFlowRunnerDeps,
 ) => Promise<PackMessageResponse>;
 
-export { summariseFullFiscalYearLedger };
+export { summariseFullFiscalYearLedger, targetStatusFromFlowStep };
 
 export async function startFullFiscalYearDownloadFlow(
   scope: FiledReturnsDownloadScope,
@@ -54,8 +54,21 @@ export async function startFullFiscalYearDownloadFlow(
     existingLedger && sameFiledReturnsScope(existingLedger.scope, scope)
       ? reconcileFullFiscalYearLedgerTargets(existingLedger, now, plannedPeriods)
       : createFullFiscalYearLedger(scope, now, plannedPeriods);
+  const replaceCompletedSameScopeLedger =
+    existingLedger &&
+    sameFiledReturnsScope(existingLedger.scope, scope) &&
+    ledger.status === "complete" &&
+    canCompleteFullFiscalYearLedger(ledger) &&
+    !options.allowExistingLedgerResume;
+  if (replaceCompletedSameScopeLedger) {
+    ledger = createFullFiscalYearLedger(scope, now, plannedPeriods);
+  }
 
-  if (existingLedger && sameFiledReturnsScope(existingLedger.scope, scope)) {
+  if (
+    existingLedger &&
+    sameFiledReturnsScope(existingLedger.scope, scope) &&
+    !replaceCompletedSameScopeLedger
+  ) {
     if (shouldPersistReconciledLedger(existingLedger, ledger)) {
       await persistLedger(deps, ledger);
     }
@@ -64,7 +77,9 @@ export async function startFullFiscalYearDownloadFlow(
   }
 
   ledger =
-    existingLedger && sameFiledReturnsScope(existingLedger.scope, scope)
+    existingLedger &&
+    sameFiledReturnsScope(existingLedger.scope, scope) &&
+    !replaceCompletedSameScopeLedger
       ? resumeFullFiscalYearLedger(ledger, now)
       : ledger;
 

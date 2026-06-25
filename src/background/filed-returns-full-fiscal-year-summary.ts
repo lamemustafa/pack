@@ -22,6 +22,9 @@ export function targetStatusFromFlowStep(
   if (step.safeSignals.includes("filed-returns-target-manually-observed")) {
     return "manually-observed";
   }
+  if (step.safeSignals.includes("filed-return-positively-not-filed")) {
+    return "not-filed";
+  }
   if (
     step.safeSignals.some((signal) =>
       [
@@ -56,6 +59,15 @@ export function summariseFullFiscalYearLedger(
     return toFullFiscalYearSummary(ledger, completeFullFiscalYearStep(ledger));
   }
   if (ledger.status === "running") {
+    if (
+      ledger.targets.some((target) => target.status === "pending") &&
+      !ledger.targets.some((target) => target.status === "running")
+    ) {
+      return toFullFiscalYearSummary(
+        ledger,
+        blockedFullFiscalYearStep("full-fiscal-year-resume-confirmation-required", ledger),
+      );
+    }
     if (
       ledger.targets.some((target) => target.status === "running") &&
       isFullFiscalYearLedgerStale(ledger, now)
@@ -148,6 +160,23 @@ export function blockedFullFiscalYearStep(
   signal: string,
   ledger: FiledReturnsFullFiscalYearLedger,
 ): PortalFlowStepResult {
+  if (signal === "full-fiscal-year-resume-confirmation-required") {
+    return {
+      connectorId: "gst",
+      scopeId: FILED_RETURNS_SCOPE_ID,
+      state: "blocked",
+      safeSignals: [signal],
+      safeMessage:
+        "Pack cannot verify which GST account owns this saved full fiscal-year run. Resume only if the same GST account is currently open; otherwise discard the saved run.",
+      userAction: {
+        type: "RETRY_PORTAL_GENERATION",
+        message:
+          "Resume only after confirming the same GST account is open in the current GST Portal tab.",
+        canResume: true,
+      },
+    };
+  }
+
   return {
     connectorId: "gst",
     scopeId: FILED_RETURNS_SCOPE_ID,

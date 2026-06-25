@@ -79,18 +79,37 @@ function evaluatePullRequestReviewState(pr) {
   const unresolvedThreads = pr.reviewThreads.nodes.filter(
     (thread) => !thread.isResolved && !thread.isOutdated,
   );
-  const blockingReviews = pr.reviews.nodes.filter(
-    (review) =>
-      review.state === "CHANGES_REQUESTED" &&
-      (!review.commit?.oid || review.commit.oid === pr.headRefOid),
+  const latestReviews = latestNonDismissedReviewsByAuthor(pr.reviews.nodes, pr.headRefOid);
+  const blockingReviews = Array.from(latestReviews.values()).filter(
+    (review) => review.state === "CHANGES_REQUESTED",
   );
-  const headReviews = pr.reviews.nodes.filter(
+  const headReviews = Array.from(latestReviews.values()).filter(
     (review) =>
-      review.commit?.oid === pr.headRefOid &&
-      (!requiredReviewAuthor ||
-        normaliseAuthorLogin(review.author?.login) === normaliseAuthorLogin(requiredReviewAuthor)),
+      !requiredReviewAuthor ||
+      normaliseAuthorLogin(review.author?.login) === normaliseAuthorLogin(requiredReviewAuthor),
   );
   return { unresolvedThreads, blockingReviews, headReviews };
+}
+
+function latestNonDismissedReviewsByAuthor(reviews, headRefOid) {
+  const latestReviews = new Map();
+  for (const review of reviews) {
+    if (review.state === "DISMISSED") continue;
+    if (review.commit?.oid !== headRefOid) continue;
+    const author = normaliseAuthorLogin(review.author?.login) || "unknown";
+    const previous = latestReviews.get(author);
+    if (!previous || compareReviewSubmittedAt(review, previous) >= 0) {
+      latestReviews.set(author, review);
+    }
+  }
+  return latestReviews;
+}
+
+function compareReviewSubmittedAt(left, right) {
+  const leftTime = Date.parse(left.submittedAt ?? "");
+  const rightTime = Date.parse(right.submittedAt ?? "");
+  if (Number.isFinite(leftTime) && Number.isFinite(rightTime)) return leftTime - rightTime;
+  return 0;
 }
 
 function reportBlockingState({ unresolvedThreads, blockingReviews }) {
@@ -113,10 +132,45 @@ function reportBlockingState({ unresolvedThreads, blockingReviews }) {
 
 function fetchReviewGraph() {
   const fixture = nextFixturePath();
-  if (fixture) return JSON.parse(readFileSync(fixture, "utf8"));
+  if (fixture) return normaliseFixtureReviewGraph(JSON.parse(readFileSync(fixture, "utf8")));
+
+  return fetchPaginatedReviewGraph();
+}
+
+function fetchPaginatedReviewGraph() {
+  let reviewThreadsAfter = null;
+  let reviewsAfter = null;
+  let merged = null;
+
+  while (true) {
+    const page = fetchReviewGraphPage(reviewThreadsAfter, reviewsAfter);
+    const pr = page.data?.repository?.pullRequest;
+    if (!pr) return page;
+
+    if (!merged) {
+      merged = page;
+    } else {
+      const mergedPr = merged.data.repository.pullRequest;
+      mergedPr.reviewThreads.nodes.push(...pr.reviewThreads.nodes);
+      mergedPr.reviews.nodes.push(...pr.reviews.nodes);
+      mergedPr.reviewThreads.pageInfo = pr.reviewThreads.pageInfo;
+      mergedPr.reviews.pageInfo = pr.reviews.pageInfo;
+    }
+
+    reviewThreadsAfter = pr.reviewThreads.pageInfo?.hasNextPage
+      ? pr.reviewThreads.pageInfo.endCursor
+      : null;
+    reviewsAfter = pr.reviews.pageInfo?.hasNextPage ? pr.reviews.pageInfo.endCursor : null;
+    if (!reviewThreadsAfter && !reviewsAfter) return annotateReviewHeadRef(merged);
+  }
+}
+
+function fetchReviewGraphPage(reviewThreadsAfter, reviewsAfter) {
+  const fixture = nextFixturePath();
+  if (fixture) return normaliseFixtureReviewGraph(JSON.parse(readFileSync(fixture, "utf8")));
 
   const [owner, name] = repo.split("/");
-  return runJson([
+  const commandArgs = [
     "api",
     "graphql",
     "-F",
@@ -126,8 +180,12 @@ function fetchReviewGraph() {
     "-F",
     `number=${prNumber}`,
     "-f",
-    "query=query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){headRefOid reviewThreads(first:100){nodes{id isResolved isOutdated path line comments(first:1){nodes{url author{login} body}}}} reviews(first:100){nodes{state submittedAt url author{login} commit{oid}}}}}}",
-  ]);
+    "query=query($owner:String!,$name:String!,$number:Int!,$reviewThreadsAfter:String,$reviewsAfter:String){repository(owner:$owner,name:$name){pullRequest(number:$number){headRefOid reviewThreads(first:100,after:$reviewThreadsAfter){pageInfo{hasNextPage endCursor} nodes{id isResolved isOutdated path line comments(first:1){nodes{url author{login} body}}}} reviews(first:100,after:$reviewsAfter){pageInfo{hasNextPage endCursor} nodes{state submittedAt url author{login} commit{oid}}}}}}",
+  ];
+  if (reviewThreadsAfter)
+    commandArgs.splice(8, 0, "-F", `reviewThreadsAfter=${reviewThreadsAfter}`);
+  if (reviewsAfter) commandArgs.splice(8, 0, "-F", `reviewsAfter=${reviewsAfter}`);
+  return runJson(commandArgs);
 }
 
 function nextFixturePath() {
@@ -135,6 +193,38 @@ function nextFixturePath() {
   const index = Math.min(fixtureIndex, fixturePaths.length - 1);
   fixtureIndex += 1;
   return fixturePaths[index];
+}
+
+function normaliseFixtureReviewGraph(fixture) {
+  if (Array.isArray(fixture.pages)) {
+    return annotateReviewHeadRef(mergeReviewGraphPages(fixture.pages));
+  }
+  return annotateReviewHeadRef(fixture);
+}
+
+function mergeReviewGraphPages(pages) {
+  const [firstPage, ...remainingPages] = pages;
+  if (!firstPage) return {};
+  const merged = JSON.parse(JSON.stringify(firstPage));
+  const mergedPr = merged.data?.repository?.pullRequest;
+  if (!mergedPr) return merged;
+  for (const page of remainingPages) {
+    const pr = page.data?.repository?.pullRequest;
+    if (!pr) continue;
+    mergedPr.reviewThreads.nodes.push(...pr.reviewThreads.nodes);
+    mergedPr.reviews.nodes.push(...pr.reviews.nodes);
+    mergedPr.reviewThreads.pageInfo = pr.reviewThreads.pageInfo;
+    mergedPr.reviews.pageInfo = pr.reviews.pageInfo;
+  }
+  return merged;
+}
+
+function annotateReviewHeadRef(result) {
+  const pr = result?.data?.repository?.pullRequest;
+  if (!pr) return result;
+  pr.reviewThreads.pageInfo ??= { hasNextPage: false, endCursor: null };
+  pr.reviews.pageInfo ??= { hasNextPage: false, endCursor: null };
+  return result;
 }
 
 function readFixturePaths() {
