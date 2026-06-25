@@ -271,7 +271,86 @@ describe("PR review gate", () => {
     expect(output).toContain("PR review gate passed");
   });
 
-  it("treats a dismissed requested-changes review as no submitted head review", () => {
+  it("keeps an earlier approval when a later review is dismissed", () => {
+    const fixturePath = writeFixture(
+      "approval-then-dismissed",
+      reviewFixture({
+        headRefOid: "head-sha",
+        reviews: [
+          review({
+            state: "APPROVED",
+            commit: "head-sha",
+            submittedAt: "2026-06-24T17:45:40Z",
+          }),
+          review({ state: "DISMISSED", commit: "head-sha", submittedAt: "2026-06-24T17:55:40Z" }),
+        ],
+      }),
+    );
+
+    const output = execFileSync(
+      process.execPath,
+      [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture",
+        fixturePath,
+        "--strict-head-review",
+        "--required-review-author",
+        "chatgpt-codex-connector",
+      ],
+      {
+        cwd: rootDir,
+        encoding: "utf8",
+      },
+    );
+
+    expect(output).toContain("PR review gate passed");
+  });
+
+  it("keeps an earlier comment when later requested changes are dismissed", () => {
+    const fixturePath = writeFixture(
+      "comment-requested-changes-dismissed",
+      reviewFixture({
+        headRefOid: "head-sha",
+        reviews: [
+          review({ state: "COMMENTED", commit: "head-sha", submittedAt: "2026-06-24T17:40:40Z" }),
+          review({
+            state: "CHANGES_REQUESTED",
+            commit: "head-sha",
+            submittedAt: "2026-06-24T17:45:40Z",
+          }),
+          review({ state: "DISMISSED", commit: "head-sha", submittedAt: "2026-06-24T17:55:40Z" }),
+        ],
+      }),
+    );
+
+    const output = execFileSync(
+      process.execPath,
+      [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture",
+        fixturePath,
+        "--strict-head-review",
+        "--required-review-author",
+        "chatgpt-codex-connector",
+      ],
+      {
+        cwd: rootDir,
+        encoding: "utf8",
+      },
+    );
+
+    expect(output).toContain("PR review gate passed");
+  });
+
+  it("treats a dismissed requested-changes review as no submitted head review when there is no earlier review", () => {
     const fixturePath = writeFixture(
       "requested-changes-then-dismissed",
       reviewFixture({

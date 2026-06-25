@@ -1,11 +1,8 @@
 import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "../../core/contracts";
-import { matchesAcceptedText, normaliseText } from "./filed-returns-dom";
-import { extractTaxPeriodFromRow } from "./filed-returns-detail-identity";
-import {
-  FILED_RETURNS_SEARCH_SIGNATURE_ATTR,
-  filedReturnsFilterFieldMatches,
-  filedReturnsSearchSignature,
-} from "./filed-returns-filter-fields";
+import { normaliseText } from "./filed-returns-dom";
+import { findMatchingActionableFiledReturnRows } from "./filed-returns-result-rows";
+import { filedReturnsFilterFieldMatches } from "./filed-returns-filter-fields";
+import { hasSettledFiledReturnsSearchForScope } from "./filed-returns-search-state";
 
 export function detectPositiveNotFiledEvidence(
   documentRef: Document,
@@ -32,10 +29,7 @@ function hasSubmittedSearchForScope(
   documentRef: Document,
   scope: FiledReturnsDownloadScope,
 ): boolean {
-  return (
-    documentRef.body?.getAttribute(FILED_RETURNS_SEARCH_SIGNATURE_ATTR) ===
-    filedReturnsSearchSignature(scope)
-  );
+  return hasSettledFiledReturnsSearchForScope(documentRef, scope);
 }
 
 function filterFormMatchesScope(documentRef: Document, scope: FiledReturnsDownloadScope): boolean {
@@ -93,16 +87,7 @@ function hasLoadingEvidence(container: Element): boolean {
 }
 
 function hasMatchingResultRow(root: ParentNode, scope: FiledReturnsDownloadScope): boolean {
-  return Array.from(root.querySelectorAll("tr")).some((row) => {
-    const rowText = visibleText(row);
-    const period = extractTaxPeriodFromRow(row) ?? rowText;
-    return (
-      matchesAcceptedText(rowText, [scope.returnType]) &&
-      matchesAcceptedText(rowText, [scope.financialYear]) &&
-      matchesAcceptedText(period, [scope.period]) &&
-      /\bview\b|download/i.test(rowText)
-    );
-  });
+  return findMatchingActionableFiledReturnRows(root, scope).length > 0;
 }
 
 function visibleText(root: Element): string {

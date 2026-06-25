@@ -5,10 +5,8 @@ import {
   selectCustomOptionNearLabel,
 } from "./filed-returns-custom-dropdown";
 import {
-  FILED_RETURNS_SEARCH_SIGNATURE_ATTR,
   findKnownGstSelect,
   findLabelledSelects,
-  filedReturnsSearchSignature,
   hasFiledReturnsFilterFieldControl,
 } from "./filed-returns-filter-fields";
 import {
@@ -19,6 +17,7 @@ import {
   matchesAcceptedText,
   normaliseText,
 } from "./filed-returns-dom";
+import { markFiledReturnsSearchPending } from "./filed-returns-search-state";
 
 const FIELD_SETTLE_DELAY_MS = 500;
 const FIELD_SELECTION_ATTEMPTS = 8;
@@ -106,10 +105,7 @@ export async function selectFiledReturnsFiltersAndSearch(
     };
   }
 
-  documentRef.body?.setAttribute(
-    FILED_RETURNS_SEARCH_SIGNATURE_ATTR,
-    filedReturnsSearchSignature(scope),
-  );
+  markFiledReturnsSearchPending(documentRef, scope);
   activateElement(search);
   return {
     connectorId: "gst",

@@ -5,10 +5,7 @@ import {
   matchesAcceptedText,
   normaliseText,
 } from "./filed-returns-dom";
-import {
-  extractFiledReturnsDetailIdentity,
-  extractTaxPeriodFromRow,
-} from "./filed-returns-detail-identity";
+import { extractFiledReturnsDetailIdentity } from "./filed-returns-detail-identity";
 import {
   dismissKnownFiledReturnsSummaryModal,
   navigateToFiledReturnsPage,
@@ -16,6 +13,7 @@ import {
 import { selectFiledReturnsFiltersAndSearch } from "./filed-returns-filter-form";
 import { detectPositiveNotFiledEvidence } from "./filed-returns-not-filed-evidence";
 import { observeFiledReturnsPageText } from "./filed-returns-observer";
+import { findMatchingActionableFiledReturnRows } from "./filed-returns-result-rows";
 
 const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
 export async function runFiledReturnsDownloadStep(
@@ -114,37 +112,7 @@ function openFiledReturnResultRow(
   documentRef: Document,
   scope: FiledReturnsDownloadScope,
 ): PortalFlowStepResult {
-  const matchingRows = Array.from(documentRef.querySelectorAll("tr"))
-    .map((row) => ({ row, identity: extractResultRowIdentity(row) }))
-    .filter(({ row, identity }) => {
-      const rowText = row.textContent || "";
-      const period = identity.period ?? extractTaxPeriodFromRow(row);
-      const financialYear = identity.financialYear ?? rowText;
-      const returnType = identity.returnType ?? rowText;
-      return (
-        matchesAcceptedText(returnType, [scope.returnType]) &&
-        matchesAcceptedText(financialYear, [scope.financialYear]) &&
-        periodMatchesScope(period, scope)
-      );
-    });
-
-  const actionableRows = matchingRows
-    .map(({ row, identity }) => ({
-      row,
-      period: identity.period ?? extractTaxPeriodFromRow(row),
-      view: getClickableElements(row).find((element) =>
-        /^view$/i.test(normaliseText(readElementText(element))),
-      ),
-    }))
-    .filter(
-      (
-        candidate,
-      ): candidate is {
-        row: HTMLTableRowElement;
-        period: string | null;
-        view: HTMLElement;
-      } => Boolean(candidate.view),
-    );
+  const actionableRows = findMatchingActionableFiledReturnRows(documentRef, scope);
 
   if (actionableRows.length > 1) {
     return {
@@ -186,11 +154,6 @@ function openFiledReturnResultRow(
     safeMessage:
       "Pack could not find a filed GSTR-3B result row for the selected period. Check the portal results and start Pack again.",
   };
-}
-
-function periodMatchesScope(period: string | null, scope: FiledReturnsDownloadScope): boolean {
-  if (!period) return false;
-  return matchesAcceptedText(period, [scope.period]);
 }
 
 function isFiledReturnsSearchSurface(safeSignals: readonly string[]): boolean {
@@ -243,57 +206,6 @@ function clickFiledReturnDetailBack(documentRef: Document): PortalFlowStepResult
 
 function getBodyText(documentRef: Document): string {
   return documentRef.body?.innerText || documentRef.body?.textContent || "";
-}
-
-function extractResultRowIdentity(row: Element): {
-  financialYear: string | null;
-  period: string | null;
-  returnType: string | null;
-} {
-  const cells = Array.from(row.querySelectorAll("td"));
-  const headers = getResultTableHeaders(row);
-  if (cells.length === 0 || headers.length === 0) {
-    return { financialYear: null, period: null, returnType: null };
-  }
-
-  return {
-    financialYear: readCellByHeader(cells, headers, /financial\s+year|^fy$/i),
-    period: readCellByHeader(cells, headers, /tax\s+period|period|month/i),
-    returnType: readCellByHeader(cells, headers, /return\s+type|return/i),
-  };
-}
-
-function getResultTableHeaders(row: Element): string[] {
-  const table = row.closest("table");
-  if (!table) return [];
-  const headerCells = Array.from(table.querySelectorAll("thead th"));
-  const fallbackHeaderCells =
-    headerCells.length > 0 ? headerCells : Array.from(table.querySelectorAll("th"));
-  return fallbackHeaderCells.map((header) => normaliseText(readElementText(header)));
-}
-
-function readCellByHeader(cells: readonly Element[], headers: readonly string[], pattern: RegExp) {
-  const index = headers.findIndex((header) => pattern.test(header));
-  if (index < 0) return null;
-  return readElementText(cells[index]).replace(/\s+/g, " ").trim() || null;
-}
-
-function readElementText(element: Element | null | undefined): string {
-  if (!element) return "";
-  const HTMLInputElementConstructor = element.ownerDocument.defaultView?.HTMLInputElement;
-  const inputValue =
-    HTMLInputElementConstructor && element instanceof HTMLInputElementConstructor
-      ? element.value
-      : "";
-  return [
-    "innerText" in element ? (element as HTMLElement).innerText : "",
-    element.textContent ?? "",
-    inputValue,
-    element.getAttribute("aria-label") ?? "",
-    element.getAttribute("title") ?? "",
-  ]
-    .filter(Boolean)
-    .join(" ");
 }
 
 function withOptionalUserAction(

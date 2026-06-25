@@ -4,9 +4,6 @@ import {
   getCustomDropdownControls,
 } from "./filed-returns-custom-dropdown";
 import { matchesAcceptedText, normaliseText } from "./filed-returns-dom";
-import type { FiledReturnsDownloadScope } from "../../core/contracts";
-
-export const FILED_RETURNS_SEARCH_SIGNATURE_ATTR = "data-pack-filed-returns-search-signature";
 
 export interface FiledReturnsFilterFieldState {
   present: boolean;
@@ -50,10 +47,6 @@ export function filedReturnsFilterFieldMatches(
     const selectedText = readElementText(select.selectedOptions[0]) || select.value;
     return matchesAcceptedText(selectedText, acceptedTexts);
   });
-}
-
-export function filedReturnsSearchSignature(scope: FiledReturnsDownloadScope): string {
-  return `${scope.financialYear}::${scope.period}::${scope.returnType}`;
 }
 
 export function hasFiledReturnsFilterFieldControl(

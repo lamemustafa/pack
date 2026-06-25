@@ -51,19 +51,18 @@ export async function startFullFiscalYearDownloadFlow(
   const existingLedger = await readLedger(deps.storageKeys.fullFiscalYearLedger);
   const plannedPeriods = getFiledReturnsFullFiscalYearPeriods(scope.financialYear, now);
 
-  let ledger =
-    existingLedger && sameFiledReturnsScope(existingLedger.scope, scope)
-      ? reconcileFullFiscalYearLedgerTargets(existingLedger, now, plannedPeriods)
-      : createFullFiscalYearLedger(scope, now, plannedPeriods);
   const replaceCompletedSameScopeLedger =
     existingLedger &&
     sameFiledReturnsScope(existingLedger.scope, scope) &&
-    ledger.status === "complete" &&
-    canCompleteFullFiscalYearLedger(ledger) &&
+    existingLedger.status === "complete" &&
+    canCompleteFullFiscalYearLedger(existingLedger) &&
     !options.allowExistingLedgerResume;
-  if (replaceCompletedSameScopeLedger) {
-    ledger = createFullFiscalYearLedger(scope, now, plannedPeriods);
-  }
+  let ledger =
+    existingLedger &&
+    sameFiledReturnsScope(existingLedger.scope, scope) &&
+    !replaceCompletedSameScopeLedger
+      ? reconcileFullFiscalYearLedgerTargets(existingLedger, now, plannedPeriods)
+      : createFullFiscalYearLedger(scope, now, plannedPeriods);
 
   if (
     existingLedger &&

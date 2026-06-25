@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { FiledReturnsDownloadScope } from "../../src/core/contracts";
 import { runFiledReturnsDownloadStep } from "../../src/connectors/gst/filed-returns-flow";
 import { triggerFiledGstr3bFiledPdfDownload } from "../../src/connectors/gst/filed-returns-download";
+import { markFiledReturnsSearchPending } from "../../src/connectors/gst/filed-returns-search-state";
 
 const DEFAULT_SCOPE: FiledReturnsDownloadScope = {
   financialYear: "2025-26",
@@ -553,6 +554,46 @@ describe("filed returns guided flow", () => {
     expect(viewClicked).toBe(1);
   });
 
+  it("does not mark not-filed when a matching result row has an accessible icon action", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <select id="finYr"><option selected>2025-26</option></select>
+          <select id="optValue"><option selected>Monthly</option></select>
+          <select id="month"><option selected>March</option></select>
+          <select id="retTyp"><option selected>GSTR3B</option></select>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+        <section aria-label="Prior result status">
+          <p>No records found</p>
+        </section>
+        <section aria-label="Search results">
+          <table>
+            <thead><tr><th>Return Type</th><th>Financial Year</th><th>Tax Period</th><th>View/Download</th></tr></thead>
+            <tbody>
+              <tr><td>GSTR3B</td><td>2025-26</td><td>March</td><td><button aria-label="View"></button></td></tr>
+            </tbody>
+          </table>
+        </section>
+      </main>
+    `);
+    markPackSubmittedSearch(documentRef, DEFAULT_SCOPE);
+    let viewClicked = 0;
+    documentRef.querySelector("button[aria-label='View']")?.addEventListener("click", () => {
+      viewClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining(["filed-return-result-view-clicked"]),
+    );
+    expect(result.safeSignals).not.toContain("filed-return-positively-not-filed");
+    expect(viewClicked).toBe(1);
+  });
+
   it("verifies native month selection before accepting no-record evidence", async () => {
     const documentRef = createDocument(`
       <main>
@@ -666,6 +707,34 @@ describe("filed returns guided flow", () => {
     const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
 
     expect(result.safeSignals).not.toContain("filed-return-positively-not-filed");
+  });
+
+  it("does not mark not-filed from a stale no-record panel before the search result settles", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <label>Financial Year</label>
+          <select id="finYr"><option selected>2025-26</option></select>
+          <label>Return Filing Period</label>
+          <select id="optValue"><option selected>Monthly</option></select>
+          <label>Month</label>
+          <select id="month"><option selected>March</option></select>
+          <label>Return Type</label>
+          <select id="retTyp"><option selected>GSTR3B</option></select>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+        <section aria-label="Search results">
+          <p>No records found</p>
+        </section>
+      </main>
+    `);
+
+    const firstResult = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+    const secondResult = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(firstResult.state).toBe("clicked");
+    expect(secondResult.safeSignals).not.toContain("filed-return-positively-not-filed");
   });
 
   it("does not mark not-filed from non-filed-returns GST pages", async () => {
@@ -1170,8 +1239,25 @@ function appendNativeOption(documentRef: Document, select: HTMLSelectElement | n
 }
 
 function markPackSubmittedSearch(documentRef: Document, scope: FiledReturnsDownloadScope) {
-  documentRef.body.setAttribute(
-    "data-pack-filed-returns-search-signature",
-    `${scope.financialYear}::${scope.period}::${scope.returnType}`,
-  );
+  const settledContainers = detachSettledResults(documentRef);
+  markFiledReturnsSearchPending(documentRef, scope);
+  for (const container of settledContainers) {
+    container.parent.append(container.element);
+  }
+}
+
+function detachSettledResults(documentRef: Document): Array<{ parent: Element; element: Element }> {
+  const selectors = [
+    "[aria-label*='result' i]",
+    "[id*='result' i]",
+    "[class*='result' i]",
+    "table",
+  ].join(",");
+  return Array.from(documentRef.querySelectorAll(selectors))
+    .filter((element) => element.parentElement)
+    .map((element) => {
+      const parent = element.parentElement as Element;
+      element.remove();
+      return { parent, element };
+    });
 }
