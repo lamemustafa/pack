@@ -67,8 +67,11 @@ export function validateLiveRunEvidence(input: unknown): LiveRunEvidenceValidati
   requirePattern(input.completedAt, ISO_TIMESTAMP, "completedAt", errors);
   validateTimeRange(input.startedAt, input.completedAt, errors);
   requireOneOf(input.outcome, ["pass", "blocked", "failed"], "outcome", errors);
-  validateCounts(input.counts, input.outcome, errors);
-  validateChecks(input.checks, input.scenario, errors);
+  if (input.outcome === "pass" && input.profile !== "clean-test-profile") {
+    errors.push("pass evidence must use clean-test-profile");
+  }
+  validateCounts(input.counts, input.outcome, input.scenario, errors);
+  validateChecks(input.checks, input.scenario, input.outcome, errors);
   validateRedaction(input.redaction, errors);
   validateMediaArtifacts(input.mediaArtifacts, errors);
   assertNoSensitiveMarkers(input, errors);
@@ -90,12 +93,18 @@ function validateBrowser(input: unknown, errors: string[]): void {
   requireBoundedString(input.version, "browser.version", errors, 1, 80);
 }
 
-function validateCounts(input: unknown, outcome: unknown, errors: string[]): void {
+function validateCounts(
+  input: unknown,
+  outcome: unknown,
+  scenario: unknown,
+  errors: string[],
+): void {
   if (!isRecord(input)) {
     errors.push("counts must be an object");
     return;
   }
   for (const field of [
+    "eligibleTargets",
     "downloaded",
     "notFiled",
     "manuallyObserved",
@@ -112,10 +121,18 @@ function validateCounts(input: unknown, outcome: unknown, errors: string[]): voi
     if (input.blocked > 0) errors.push("pass evidence cannot include blocked targets");
     if (input.failed > 0) errors.push("pass evidence cannot include failed targets");
     if (input.duplicates > 0) errors.push("pass evidence cannot include duplicate targets");
+    if (scenario === "full-year" && input.eligibleTargets !== reconciled) {
+      errors.push("full-year pass evidence must reconcile every eligible target");
+    }
   }
 }
 
-function validateChecks(input: unknown, scenario: unknown, errors: string[]): void {
+function validateChecks(
+  input: unknown,
+  scenario: unknown,
+  outcome: unknown,
+  errors: string[],
+): void {
   if (!isRecord(input)) {
     errors.push("checks must be an object");
     return;
@@ -136,6 +153,13 @@ function validateChecks(input: unknown, scenario: unknown, errors: string[]): vo
     "checks.unexpectedNetworkDestinations",
     errors,
   );
+  if (
+    outcome === "pass" &&
+    typeof input.unexpectedNetworkDestinations === "number" &&
+    input.unexpectedNetworkDestinations > 0
+  ) {
+    errors.push("pass evidence cannot include unexpected network destinations");
+  }
 }
 
 function validateRedaction(input: unknown, errors: string[]): void {
@@ -268,6 +292,7 @@ function hasOnlyNumberCounts(
 ): input is Record<keyof LiveRunEvidenceCounts, number> {
   return (
     typeof input.downloaded === "number" &&
+    typeof input.eligibleTargets === "number" &&
     typeof input.notFiled === "number" &&
     typeof input.manuallyObserved === "number" &&
     typeof input.blocked === "number" &&

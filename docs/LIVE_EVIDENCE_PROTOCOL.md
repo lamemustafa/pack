@@ -74,8 +74,8 @@ For a one-month or full-year exploratory run, record:
 - browser name/version and clean-profile confirmation;
 - subject alias such as `SUBJECT-A`, never GSTIN/PAN/name;
 - scenario: `single-period` or `full-year`;
-- outcome counts: downloaded, not filed, manually observed, blocked, failed,
-  duplicates;
+- outcome counts: eligible targets, downloaded, not filed, manually observed,
+  blocked, failed, duplicates;
 - human verification checks;
 - service-worker and browser-restart checks for full-year runs;
 - clear-local-data result;

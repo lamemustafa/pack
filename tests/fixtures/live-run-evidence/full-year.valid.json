@@ -16,6 +16,7 @@
   "completedAt": "2026-06-26T08:30:00.000Z",
   "outcome": "pass",
   "counts": {
+    "eligibleTargets": 12,
     "downloaded": 10,
     "notFiled": 2,
     "manuallyObserved": 0,

@@ -20,10 +20,16 @@ describe("live run evidence", () => {
     const cases: Array<[string, Partial<LiveRunEvidence>]> = [
       ["gstin", { notes: "Observed 27ABCDE1234F1Z5 in the portal." }],
       ["pan", { notes: "Observed ABCDE1234F in the portal." }],
+      ["arn", { notes: "Portal displayed ARN AA2901234567890." }],
       ["portal-url", { notes: "https://services.gst.gov.in/services/auth/efiledreturns" }],
       ["local-path", { notes: "/Users/example/Downloads/gstr3b.pdf" }],
-      ["filename", { notes: "Saved GSTR3B_27ABCDE1234F1Z5_April.pdf" }],
+      ["local-path", { notes: "/home/alice/Downloads/download.pdf" }],
+      ["local-path", { notes: "/tmp/pack/evidence.json" }],
+      ["filename", { notes: "Saved download.pdf" }],
+      ["filename", { notes: "Saved returns_april.zip" }],
       ["secret", { notes: "authorization: Bearer secret-value" }],
+      ["secret", { notes: '{"cookie":"SID=secret-value"}' }],
+      ["secret", { notes: '{"x-csrf-token":"abc"}' }],
     ];
 
     for (const [expected, patch] of cases) {
@@ -65,6 +71,7 @@ describe("live run evidence", () => {
     const noTargets = validateLiveRunEvidence({
       ...createValidEvidence(),
       counts: {
+        eligibleTargets: 0,
         downloaded: 0,
         notFiled: 0,
         manuallyObserved: 0,
@@ -87,6 +94,49 @@ describe("live run evidence", () => {
     expect(blockedPass.ok).toBe(false);
     if (!blockedPass.ok)
       expect(blockedPass.errors).toContain("pass evidence cannot include blocked targets");
+  });
+
+  it("requires full-year pass evidence to reconcile every eligible target", () => {
+    const result = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      counts: {
+        ...createValidEvidence().counts,
+        eligibleTargets: 12,
+        downloaded: 10,
+        notFiled: 1,
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors).toContain(
+        "full-year pass evidence must reconcile every eligible target",
+      );
+    }
+  });
+
+  it("requires passing evidence to use a clean profile and zero unexpected network destinations", () => {
+    const dirtyProfile = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      profile: "default",
+    });
+    const unexpectedNetwork = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      checks: {
+        ...createValidEvidence().checks,
+        unexpectedNetworkDestinations: 1,
+      },
+    });
+
+    expect(dirtyProfile.ok).toBe(false);
+    if (!dirtyProfile.ok)
+      expect(dirtyProfile.errors).toContain("pass evidence must use clean-test-profile");
+    expect(unexpectedNetwork.ok).toBe(false);
+    if (!unexpectedNetwork.ok) {
+      expect(unexpectedNetwork.errors).toContain(
+        "pass evidence cannot include unexpected network destinations",
+      );
+    }
   });
 
   it("requires neutral subject aliases and ordered timestamps", () => {
@@ -134,6 +184,7 @@ describe("live run evidence", () => {
     const right = {
       ...left,
       counts: {
+        eligibleTargets: 12,
         duplicates: 0,
         failed: 0,
         blocked: 0,
@@ -166,6 +217,7 @@ function createValidEvidence(): LiveRunEvidence {
     completedAt: "2026-06-26T08:30:00.000Z",
     outcome: "pass",
     counts: {
+      eligibleTargets: 12,
       downloaded: 10,
       notFiled: 2,
       manuallyObserved: 0,

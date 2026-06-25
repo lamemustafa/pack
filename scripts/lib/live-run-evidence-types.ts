@@ -26,6 +26,7 @@ export interface LiveRunEvidence {
 }
 
 export interface LiveRunEvidenceCounts {
+  eligibleTargets: number;
   downloaded: number;
   notFiled: number;
   manuallyObserved: number;
