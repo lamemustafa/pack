@@ -78,6 +78,44 @@ Use only lenses that can change the result:
 7. Repeat until the review is clean enough that remaining items are explicit
    Medium/Low follow-ups, not hidden release blockers.
 
+## Public-Site Claim Intake
+
+For Pack landing-page, public-site, policy, support, source, status,
+release-note, README, or store-copy work, treat the task as `HIGH` unless it is
+purely visual and cannot change claims. Before implementation, build a compact
+claim-evidence table with: claim text, affected page/file, code source, doc
+source, built artifact or verifier source when relevant, live/public source,
+verification date, and blocker status.
+
+Required checks for claim-bearing work:
+
+- Privacy and storage claims must be reconciled against runtime storage keys and
+  writes, README/docs privacy disclosures, public facts, and the live privacy
+  page.
+- Source/version, license, install, and reproducibility claims must point to the
+  reviewed commit or tag when the page presents reviewed-source evidence. Moving
+  branch links are allowed only when clearly labeled as development links.
+- Status/readiness claims must match `docs/PUBLICATION_READINESS.md`, status
+  route source, build or ZIP verifier evidence, and live `/status`. Do not claim
+  Chrome Web Store readiness, release readiness, public reproducibility, or
+  durable full-year support without matching gate evidence.
+- Support claims must be verified against live/public support routes and GitHub
+  issue settings. A broken tester feedback path blocks tester-acquisition copy.
+- Built artifact claims must be checked against `.output/chrome-mv3/manifest.json`
+  after `pnpm exec wxt build` plus Pack verifier output, not source constants
+  alone.
+- Public-facts changes must run
+  `pnpm exec tsx scripts/sync-pack-public-facts.ts --check` in the parent app
+  when the parent app owns the public snapshot. If facts change, explain whether
+  the script reads canonical sources or copies static arrays.
+- Live/public evidence should include browser or `curl -L` checks for the
+  affected public routes and GitHub repo/issues/license/release URLs. Record
+  network/auth failures as verification gaps, not proof.
+
+Resolve mismatches by narrowing the claim, changing the source of truth, adding
+a drift test, or marking the claim blocked. Do not polish around unresolved
+truth mismatches.
+
 Required checks for runtime or release-affecting changes:
 
 ```sh

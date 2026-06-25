@@ -33,6 +33,15 @@ describe("Pack CI workflow", () => {
     expect(workflow).toContain("name: Review findings gate");
     expect(workflow).toContain("pull-requests: read");
     expect(workflow).toContain("GH_TOKEN: ${{ github.token }}");
+    expect(workflow).toContain("fetch-depth: 0");
+    expect(workflow).toContain("pnpm workflow:preflight");
+    expect(workflow).toContain("ready_for_review, edited");
+    expect(workflow).toContain('--branch "${{ github.event.pull_request.head.ref }}"');
+    expect(workflow).toContain('--base-ref "${{ github.event.pull_request.base.ref }}"');
+    expect(workflow).toContain('--repo "${{ github.repository }}"');
+    expect(workflow).toContain(
+      '--head-repo "${{ github.event.pull_request.head.repo.full_name }}"',
+    );
     expect(workflow).toContain("--strict-head-review");
     expect(workflow).toContain("--required-review-author chatgpt-codex-connector");
     expect(workflow).toContain("--wait-head-review-ms 180000");

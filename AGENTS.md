@@ -117,6 +117,17 @@ release/audit gates.
   or the Government of India.
 - Public status pages must not outrun the latest recorded source commit, exact
   ZIP checksum, privacy declaration, and live/manual QA evidence.
+- When a Pack landing-page, public-site, policy, support, source, status,
+  release-note, README, or store-copy review is pasted, treat every item as a
+  claim to verify before implementing. Produce a disposition list grouped as
+  confirmed blocker, confirmed improvement, rejected/stale, and follow-up, then
+  split confirmed work into logical PR lanes.
+- Public-site claim changes require evidence from the live page or route source,
+  Pack code/docs, public-facts snapshot or generator, release/build verifier
+  output when relevant, GitHub repo settings where claimed, and current CI. If a
+  privacy, storage, source-version, support, license, status, install, release,
+  or Store-readiness claim cannot be proved, narrow or block the claim instead
+  of polishing around the mismatch.
 
 ## Generated Artifacts And Release Assets
 
@@ -181,6 +192,13 @@ subagent findings implicit.
 - Never work directly on `master` for launch, runtime, public-copy, release,
   governance, or AGENTS/instruction changes. Create a
   `tapish-codex/<short-scope>` branch from the current protected base.
+- Use a task-owned `git worktree` for non-trivial Pack edits expected to be
+  committed, and for each concurrent Pack PR lane. Keep the main checkout and
+  other agents' worktrees read-only unless the user explicitly asks otherwise;
+  do not mix parent-app and Pack branches.
+- Run `pnpm workflow:preflight` before non-trivial edits or before claiming PR
+  readiness. It checks branch safety, stale Pack AGENTS/review guidance, and PR
+  template checklist wiring.
 - Pack is a nested git repository. Parent ComplyEaze branch state does not make
   Pack safe; run `git -C pack status -sb` and manage Pack branches separately.
 - Inspect `git status -sb` and the diff before staging. Stage only files that
