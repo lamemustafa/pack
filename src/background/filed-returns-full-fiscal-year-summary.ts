@@ -58,16 +58,13 @@ export function summariseFullFiscalYearLedger(
   if (ledger.status === "complete") {
     return toFullFiscalYearSummary(ledger, completeFullFiscalYearStep(ledger));
   }
+  if (needsResumeConfirmation(ledger)) {
+    return toFullFiscalYearSummary(
+      ledger,
+      blockedFullFiscalYearStep("full-fiscal-year-resume-confirmation-required", ledger),
+    );
+  }
   if (ledger.status === "running") {
-    if (
-      ledger.targets.some((target) => target.status === "pending") &&
-      !ledger.targets.some((target) => target.status === "running")
-    ) {
-      return toFullFiscalYearSummary(
-        ledger,
-        blockedFullFiscalYearStep("full-fiscal-year-resume-confirmation-required", ledger),
-      );
-    }
     if (
       ledger.targets.some((target) => target.status === "running") &&
       isFullFiscalYearLedgerStale(ledger, now)
@@ -84,6 +81,14 @@ export function summariseFullFiscalYearLedger(
   return toFullFiscalYearSummary(
     ledger,
     blockedFullFiscalYearStep("full-fiscal-year-run-needs-action", ledger),
+  );
+}
+
+export function needsResumeConfirmation(ledger: FiledReturnsFullFiscalYearLedger): boolean {
+  return (
+    ledger.status !== "complete" &&
+    ledger.targets.some((target) => target.status === "pending") &&
+    !ledger.targets.some((target) => target.status === "running")
   );
 }
 

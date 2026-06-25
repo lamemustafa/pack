@@ -1,18 +1,17 @@
 import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "../../core/contracts";
-import { matchesAcceptedText } from "./filed-returns-dom";
+import { matchesAcceptedText, normaliseText } from "./filed-returns-dom";
+import { extractTaxPeriodFromRow } from "./filed-returns-detail-identity";
+import { filedReturnsFilterFieldMatches } from "./filed-returns-filter-fields";
 
 export function detectPositiveNotFiledEvidence(
   documentRef: Document,
   scope: FiledReturnsDownloadScope,
   scopeId: string,
 ): PortalFlowStepResult | null {
-  const bodyText = documentRef.body?.innerText || documentRef.body?.textContent || "";
-  if (
-    !/\bno\s+records?\s+found\b|\bno\s+data\s+found\b|\bno\s+results?\s+found\b/i.test(bodyText)
-  ) {
-    return null;
-  }
+  const resultsContainer = findSettledNoRecordResultsContainer(documentRef);
+  if (!resultsContainer) return null;
   if (!filterFormMatchesScope(documentRef, scope)) return null;
+  if (hasMatchingResultRow(resultsContainer, scope)) return null;
 
   return {
     connectorId: "gst",
@@ -26,43 +25,93 @@ export function detectPositiveNotFiledEvidence(
 
 function filterFormMatchesScope(documentRef: Document, scope: FiledReturnsDownloadScope): boolean {
   return (
-    selectMatches(documentRef, "#finYr", [scope.financialYear]) &&
-    selectMatches(documentRef, "#optValue", ["Monthly", scope.period]) &&
-    optionalSelectMatches(documentRef, "#month", [scope.period]) &&
-    selectMatches(documentRef, "#retTyp", [scope.returnType])
+    filedReturnsFilterFieldMatches(documentRef, /financial\s+year/i, [scope.financialYear]) &&
+    filedReturnsFilterFieldMatches(documentRef, /^return\s+filing\s+period\b|^period\b/i, [
+      "Monthly",
+      scope.period,
+    ]) &&
+    filedReturnsFilterFieldMatches(documentRef, /^month\b|^tax\s+period\b/i, [scope.period]) &&
+    filedReturnsFilterFieldMatches(documentRef, /^return\s+type\b/i, [scope.returnType])
   );
 }
 
-function optionalSelectMatches(
-  documentRef: Document,
-  selector: string,
-  acceptedTexts: readonly string[],
-): boolean {
-  return documentRef.querySelector(selector)
-    ? selectMatches(documentRef, selector, acceptedTexts)
-    : true;
-}
+function findSettledNoRecordResultsContainer(documentRef: Document): Element | null {
+  const candidates = Array.from(documentRef.body?.querySelectorAll("*") ?? []).filter((element) =>
+    hasNoRecordText(element),
+  );
 
-function selectMatches(
-  documentRef: Document,
-  selector: string,
-  acceptedTexts: readonly string[],
-): boolean {
-  const HTMLSelectElementConstructor = documentRef.defaultView?.HTMLSelectElement;
-  const select = documentRef.querySelector(selector);
-  if (!HTMLSelectElementConstructor || !(select instanceof HTMLSelectElementConstructor)) {
-    return false;
+  for (const candidate of candidates) {
+    if (isHidden(candidate)) continue;
+    const container = findResultsContainer(candidate);
+    if (!container || hasLoadingEvidence(container)) continue;
+    return container;
   }
-  const selectedText = readElementText(select.selectedOptions[0]) || select.value;
-  return matchesAcceptedText(selectedText, acceptedTexts);
+
+  return null;
 }
 
-function readElementText(element: Element | null | undefined): string {
-  if (!element) return "";
-  return [
-    "innerText" in element ? (element as HTMLElement).innerText : "",
-    element.textContent ?? "",
-  ]
+function hasNoRecordText(element: Element): boolean {
+  return /\bno\s+records?\s+found\b|\bno\s+data\s+found\b|\bno\s+results?\s+found\b/i.test(
+    ownVisibleText(element),
+  );
+}
+
+function findResultsContainer(element: Element): Element | null {
+  return element.closest(
+    [
+      "[aria-label*='result' i]",
+      "[id*='result' i]",
+      "[class*='result' i]",
+      "table",
+      "tbody",
+      "section",
+      "article",
+      "main",
+    ].join(","),
+  );
+}
+
+function hasLoadingEvidence(container: Element): boolean {
+  if (container.getAttribute("aria-busy") === "true") return true;
+  const text = visibleText(container);
+  return /\bloading\b|\bplease\s+wait\b|\bsearching\b|\bprocessing\b/.test(normaliseText(text));
+}
+
+function hasMatchingResultRow(root: Element, scope: FiledReturnsDownloadScope): boolean {
+  return Array.from(root.querySelectorAll("tr")).some((row) => {
+    const rowText = visibleText(row);
+    const period = extractTaxPeriodFromRow(row) ?? rowText;
+    return (
+      matchesAcceptedText(rowText, [scope.returnType]) &&
+      matchesAcceptedText(rowText, [scope.financialYear]) &&
+      matchesAcceptedText(period, [scope.period]) &&
+      /\bview\b|download/i.test(rowText)
+    );
+  });
+}
+
+function visibleText(root: Element): string {
+  return Array.from(root.querySelectorAll("*"))
+    .filter((element) => !isHidden(element))
+    .map(ownVisibleText)
+    .concat(ownVisibleText(root))
     .filter(Boolean)
     .join(" ");
+}
+
+function ownVisibleText(element: Element): string {
+  if (isHidden(element)) return "";
+  return Array.from(element.childNodes)
+    .filter((node) => node.nodeType === node.TEXT_NODE)
+    .map((node) => node.textContent ?? "")
+    .join(" ");
+}
+
+function isHidden(element: Element): boolean {
+  const htmlElement = element as HTMLElement;
+  if (element.getAttribute("aria-hidden") === "true") return true;
+  if (htmlElement.hidden) return true;
+  const style = element.ownerDocument.defaultView?.getComputedStyle(element);
+  if (style && (style.display === "none" || style.visibility === "hidden")) return true;
+  return Boolean(element.parentElement && isHidden(element.parentElement));
 }

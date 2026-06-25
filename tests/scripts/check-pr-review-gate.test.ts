@@ -200,6 +200,134 @@ describe("PR review gate", () => {
     expect(output).toContain("PR review gate passed");
   });
 
+  it("keeps requested changes blocking when a later comment is submitted", () => {
+    const fixturePath = writeFixture(
+      "requested-changes-then-comment",
+      reviewFixture({
+        headRefOid: "head-sha",
+        reviews: [
+          review({
+            state: "CHANGES_REQUESTED",
+            commit: "head-sha",
+            submittedAt: "2026-06-24T17:45:40Z",
+          }),
+          review({ state: "COMMENTED", commit: "head-sha", submittedAt: "2026-06-24T17:55:40Z" }),
+        ],
+      }),
+    );
+
+    expect(() =>
+      execFileSync(process.execPath, [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture",
+        fixturePath,
+        "--strict-head-review",
+        "--required-review-author",
+        "chatgpt-codex-connector",
+      ]),
+    ).toThrow(/Requested-changes reviews/);
+  });
+
+  it("treats a later approval as clearing requested changes", () => {
+    const fixturePath = writeFixture(
+      "requested-changes-then-approval-clears",
+      reviewFixture({
+        headRefOid: "head-sha",
+        reviews: [
+          review({
+            state: "CHANGES_REQUESTED",
+            commit: "head-sha",
+            submittedAt: "2026-06-24T17:45:40Z",
+          }),
+          review({ state: "APPROVED", commit: "head-sha", submittedAt: "2026-06-24T17:55:40Z" }),
+        ],
+      }),
+    );
+
+    const output = execFileSync(
+      process.execPath,
+      [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture",
+        fixturePath,
+        "--strict-head-review",
+        "--required-review-author",
+        "chatgpt-codex-connector",
+      ],
+      {
+        cwd: rootDir,
+        encoding: "utf8",
+      },
+    );
+
+    expect(output).toContain("PR review gate passed");
+  });
+
+  it("treats a dismissed requested-changes review as no submitted head review", () => {
+    const fixturePath = writeFixture(
+      "requested-changes-then-dismissed",
+      reviewFixture({
+        headRefOid: "head-sha",
+        reviews: [
+          review({
+            state: "CHANGES_REQUESTED",
+            commit: "head-sha",
+            submittedAt: "2026-06-24T17:45:40Z",
+          }),
+          review({ state: "DISMISSED", commit: "head-sha", submittedAt: "2026-06-24T17:55:40Z" }),
+        ],
+      }),
+    );
+
+    expect(() =>
+      execFileSync(process.execPath, [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture",
+        fixturePath,
+        "--strict-head-review",
+        "--required-review-author",
+        "chatgpt-codex-connector",
+      ]),
+    ).toThrow(/No review was found for current head/);
+  });
+
+  it("does not count pending reviews as submitted head reviews", () => {
+    const fixturePath = writeFixture(
+      "pending-head-review",
+      reviewFixture({
+        headRefOid: "head-sha",
+        reviews: [review({ state: "PENDING", commit: "head-sha" })],
+      }),
+    );
+
+    expect(() =>
+      execFileSync(process.execPath, [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture",
+        fixturePath,
+        "--strict-head-review",
+        "--required-review-author",
+        "chatgpt-codex-connector",
+      ]),
+    ).toThrow(/No review was found for current head/);
+  });
+
   it("evaluates review state from paginated fixture pages", () => {
     const fixturePath = writeFixture("paginated-review-state", {
       pages: [
@@ -352,7 +480,7 @@ function review({
   commit,
   submittedAt = "2026-06-24T17:45:40Z",
 }: {
-  state: "APPROVED" | "COMMENTED" | "CHANGES_REQUESTED" | "DISMISSED";
+  state: "APPROVED" | "COMMENTED" | "CHANGES_REQUESTED" | "DISMISSED" | "PENDING";
   commit: string;
   submittedAt?: string;
 }) {

@@ -167,6 +167,35 @@ describe("full fiscal-year recovery", () => {
     });
   });
 
+  it("discards a blocked full-year run without leaving the saved ledger", async () => {
+    mockLocalStorageGet({
+      "full-year-ledger": createRecoveryLedger({
+        revision: 2,
+        targetStatus: "blocked",
+        safeSignals: ["filed-return-result-row-not-found"],
+      }),
+    });
+
+    const response = await resolveFullFiscalYearTarget(
+      {
+        ledgerId: "ledger-existing",
+        targetId: "GSTR-3B:2026-27:April",
+        expectedRevision: 2,
+      },
+      "cancelled",
+      recoveryDeps(),
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        safeSignals: ["full-fiscal-year-run-discarded"],
+      },
+    });
+    expect(JSON.stringify(response)).not.toContain("fullFiscalYearRecovery");
+    expect(browser.storage.local.remove).toHaveBeenCalledWith("full-year-ledger");
+  });
+
   it("records a manually observed full-year target without marking it browser-confirmed", async () => {
     mockLocalStorageGet({
       "full-year-ledger": createRecoveryLedger({ revision: 2 }),

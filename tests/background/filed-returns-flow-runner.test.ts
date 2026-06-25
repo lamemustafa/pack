@@ -782,7 +782,7 @@ describe("filed returns flow runner", () => {
     },
   );
 
-  it("persists current-year reconciliation before returning an action-required full-year summary", async () => {
+  it("persists current-year reconciliation before returning a resume-confirmation summary", async () => {
     mockLocalStorageGet({
       "full-year-ledger": createFullFiscalYearLedger({
         status: "blocked",
@@ -819,11 +819,15 @@ describe("filed returns flow runner", () => {
       ok: true,
       flowStep: {
         state: "blocked",
-        safeSignals: expect.arrayContaining(["full-fiscal-year-run-needs-action"]),
+        safeSignals: expect.arrayContaining(["full-fiscal-year-resume-confirmation-required"]),
       },
       flowSummary: {
         status: "blocked",
         totalPeriods: 3,
+        fullFiscalYearRecovery: {
+          targetId: "GSTR-3B:2026-27:May",
+          targetStatus: "blocked",
+        },
       },
     });
     expect(browser.storage.local.set).toHaveBeenCalledWith({

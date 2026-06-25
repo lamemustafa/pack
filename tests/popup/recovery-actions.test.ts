@@ -32,6 +32,44 @@ describe("popup full-year recovery actions", () => {
     expect(markup).toContain("Resume saved run");
     expect(markup).toContain("Discard saved run");
   });
+
+  it("shows the same-account warning on every full-year recovery path", () => {
+    for (const targetStatus of ["blocked", "failed", "cancelled"] as const) {
+      const markup = renderToStaticMarkup(
+        createElement(RecoveryActions, {
+          busy: null,
+          summary: summaryFor(targetStatus),
+          onAcknowledgeInterruptedRun: () => undefined,
+          onRetryFullFiscalYearTarget: () => undefined,
+          onRetryTarget: () => undefined,
+          onResolveFullFiscalYearTarget: () => undefined,
+          onResolveTarget: () => undefined,
+        }),
+      );
+
+      expect(markup).toContain(
+        "This saved run is not bound to a GST account. Continue only if the same GST account is currently open.",
+      );
+    }
+  });
+
+  it("offers discard saved full-year run for non-complete recovery targets", () => {
+    for (const targetStatus of ["blocked", "failed", "cancelled"] as const) {
+      const markup = renderToStaticMarkup(
+        createElement(RecoveryActions, {
+          busy: null,
+          summary: summaryFor(targetStatus),
+          onAcknowledgeInterruptedRun: () => undefined,
+          onRetryFullFiscalYearTarget: () => undefined,
+          onRetryTarget: () => undefined,
+          onResolveFullFiscalYearTarget: () => undefined,
+          onResolveTarget: () => undefined,
+        }),
+      );
+
+      expect(markup).toContain("Discard saved full-year run");
+    }
+  });
 });
 
 function summaryFor(

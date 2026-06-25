@@ -89,15 +89,12 @@ export async function resolveFullFiscalYearTarget(
       );
     }
 
-    if (resolution === "cancelled" && checked.target.status === "pending") {
-      return discardPendingFullFiscalYearRun(checked.ledger, checked.target, deps);
+    if (resolution === "cancelled") {
+      return discardFullFiscalYearRun(checked.ledger, checked.target, deps);
     }
 
     const now = deps.now?.() ?? new Date();
-    const flowStep =
-      resolution === "manually-observed"
-        ? manuallyObservedStep(checked.target)
-        : cancelledTargetStep(checked.target);
+    const flowStep = manuallyObservedStep(checked.target);
     const updatedLedger = markFullFiscalYearTargetTerminal(
       checked.ledger,
       checked.target.targetId,
@@ -114,7 +111,7 @@ export async function resolveFullFiscalYearTarget(
   });
 }
 
-async function discardPendingFullFiscalYearRun(
+async function discardFullFiscalYearRun(
   ledger: FiledReturnsFullFiscalYearLedger,
   target: FiledReturnsFullFiscalYearTarget,
   deps: FullFiscalYearTargetRecoveryDeps,
@@ -256,16 +253,6 @@ function canResolveAsManuallyObserved(target: FiledReturnsFullFiscalYearTarget):
     target.status === "download-unconfirmed" ||
     target.safeSignals.some((signal) => FINAL_SIDE_EFFECT_SIGNALS.has(signal))
   );
-}
-
-function cancelledTargetStep(target: FiledReturnsFullFiscalYearTarget): PortalFlowStepResult {
-  return {
-    connectorId: "gst",
-    scopeId: FILED_RETURNS_SCOPE_ID,
-    state: "user-action-required",
-    safeSignals: ["full-fiscal-year-target-cancelled"],
-    safeMessage: `Pack cancelled ${target.period} in the full fiscal-year run. No portal click was retried.`,
-  };
 }
 
 function discardedRunStep(target: FiledReturnsFullFiscalYearTarget): PortalFlowStepResult {

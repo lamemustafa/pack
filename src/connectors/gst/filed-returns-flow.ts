@@ -57,6 +57,13 @@ export async function runFiledReturnsDownloadStep(
     };
   }
 
+  const notFiledEvidence = detectPositiveNotFiledEvidence(
+    documentRef,
+    scope,
+    FILED_RETURNS_SCOPE_ID,
+  );
+  if (notFiledEvidence) return notFiledEvidence;
+
   if (observation.state === "filters-required") {
     return selectFiledReturnsFiltersAndSearch(documentRef, scope, FILED_RETURNS_SCOPE_ID);
   }
@@ -64,13 +71,6 @@ export async function runFiledReturnsDownloadStep(
   if (observation.state === "filed-return-results-visible") {
     return openFiledReturnResultRow(documentRef, scope);
   }
-
-  const notFiledEvidence = detectPositiveNotFiledEvidence(
-    documentRef,
-    scope,
-    FILED_RETURNS_SCOPE_ID,
-  );
-  if (notFiledEvidence) return notFiledEvidence;
 
   if (observation.state === "page-settling") {
     return {

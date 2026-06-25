@@ -10,10 +10,10 @@ Portal credentials.
 2. Pin Pack and open the popup.
 3. Confirm the popup opens without any Axal, ComplyEaze, or Pack account prompt.
 4. Open Pack options.
-5. Click `Run local demo`.
+5. Click `Run local reviewer demo`.
 6. Confirm Chrome downloads a Pack manifest, exception CSV, and demo index
    file under `Pack-Demo/`.
-7. Click `Last demo manifest` to inspect the local demo manifest summary.
+7. Click `Last synthetic demo manifest` to inspect the local demo manifest summary.
 8. Click `Clear local Pack data`.
 9. Reopen Pack options and confirm the previous manifest state has been cleared.
 

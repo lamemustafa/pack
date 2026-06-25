@@ -59,6 +59,48 @@ describe("full fiscal year ledger", () => {
     expect(summary.flowStep.safeSignals).not.toContain("full-fiscal-year-run-active");
   });
 
+  it("summarises partial ledgers with pending work as explicit resume confirmation", () => {
+    const summary = summariseFullFiscalYearLedger({
+      ...createLedger([
+        ["April", "downloaded"],
+        ["May", "pending"],
+      ]),
+      status: "partial",
+      currentTargetId: "GSTR-3B:2026-27:May",
+    });
+
+    expect(summary).toMatchObject({
+      status: "partial",
+      currentPeriod: "May",
+      fullFiscalYearRecovery: {
+        targetId: "GSTR-3B:2026-27:May",
+        targetStatus: "pending",
+      },
+      flowStep: {
+        state: "blocked",
+        safeSignals: ["full-fiscal-year-resume-confirmation-required"],
+      },
+    });
+  });
+
+  it("keeps same-account warning on blocked and cancelled ledgers with pending work", () => {
+    for (const status of ["blocked", "cancelled"] as const) {
+      const summary = summariseFullFiscalYearLedger({
+        ...createLedger([
+          ["April", "downloaded"],
+          ["May", "pending"],
+        ]),
+        status,
+        currentTargetId: "GSTR-3B:2026-27:May",
+      });
+
+      expect(summary.flowStep.safeSignals).toEqual([
+        "full-fiscal-year-resume-confirmation-required",
+      ]);
+      expect(summary.flowStep.safeMessage).toContain("same GST account");
+    }
+  });
+
   it("maps only positive not-filed evidence to a terminal not-filed target", () => {
     expect(
       targetStatusFromFlowStep({

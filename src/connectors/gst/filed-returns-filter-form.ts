@@ -2,9 +2,13 @@ import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "../../core
 import {
   findFieldRoot,
   findFiledReturnsFilterRoot,
-  getCustomDropdownControls,
   selectCustomOptionNearLabel,
 } from "./filed-returns-custom-dropdown";
+import {
+  findKnownGstSelect,
+  findLabelledSelect,
+  hasFiledReturnsFilterFieldControl,
+} from "./filed-returns-filter-fields";
 import {
   activateElement,
   delay,
@@ -138,12 +142,7 @@ const MONTH_ABBREVIATIONS: Record<string, string> = {
 };
 
 function hasFieldControl(documentRef: Document, labelPattern: RegExp): boolean {
-  const formRoot = findFiledReturnsFilterRoot(documentRef);
-  const fieldRoot = formRoot ? findFieldRoot(formRoot, labelPattern) : null;
-  return Boolean(
-    fieldRoot?.querySelector("select") ||
-    (fieldRoot && getCustomDropdownControls(fieldRoot).length > 0),
-  );
+  return hasFiledReturnsFilterFieldControl(documentRef, labelPattern);
 }
 
 function readElementText(element: HTMLElement): string {
@@ -200,14 +199,9 @@ async function selectOptionNearLabel(
     }
   }
 
-  const labels = Array.from(documentRef.querySelectorAll("label")).filter((label) =>
-    labelPattern.test(label.textContent || ""),
-  );
-
-  for (const label of labels) {
-    const select = findNextSelect(label);
-    if (!select) continue;
-    if (selectOption(select, acceptedTexts)) return "selected";
+  const labelledSelect = findLabelledSelect(documentRef, labelPattern);
+  if (labelledSelect) {
+    if (selectOption(labelledSelect, acceptedTexts)) return "selected";
     hasPendingNativeControl = true;
   }
 
@@ -216,50 +210,6 @@ async function selectOptionNearLabel(
   return (await selectCustomOptionNearLabel(documentRef, labelPattern, acceptedTexts))
     ? "selected"
     : "missing";
-}
-
-function findNextSelect(label: Element): HTMLSelectElement | null {
-  const forId = label.getAttribute("for");
-  const documentRef = label.ownerDocument;
-  const HTMLSelectElementConstructor = documentRef.defaultView?.HTMLSelectElement;
-  if (!HTMLSelectElementConstructor) return null;
-
-  if (forId) {
-    const target = documentRef.getElementById(forId);
-    if (target instanceof HTMLSelectElementConstructor) return target;
-  }
-
-  let sibling = label.nextElementSibling;
-  while (sibling) {
-    if (sibling instanceof HTMLSelectElementConstructor) return sibling;
-    const nested = sibling.querySelector("select");
-    if (nested instanceof HTMLSelectElementConstructor) return nested;
-    sibling = sibling.nextElementSibling;
-  }
-  return null;
-}
-
-function findKnownGstSelect(root: ParentNode, labelPattern: RegExp): HTMLSelectElement | null {
-  const ids = knownGstSelectIds(labelPattern);
-  const documentRef = root.nodeType === 9 ? (root as Document) : root.ownerDocument;
-  const HTMLSelectElementConstructor = documentRef?.defaultView?.HTMLSelectElement;
-  if (!HTMLSelectElementConstructor) return null;
-
-  for (const id of ids) {
-    const selector = `#${id}`;
-    const candidate = root.querySelector(selector);
-    if (candidate instanceof HTMLSelectElementConstructor) return candidate;
-  }
-
-  return null;
-}
-
-function knownGstSelectIds(labelPattern: RegExp): string[] {
-  if (labelPattern.test("financial year")) return ["finYr"];
-  if (labelPattern.test("return filing period")) return ["optValue"];
-  if (labelPattern.test("month")) return ["month"];
-  if (labelPattern.test("return type")) return ["retTyp"];
-  return [];
 }
 
 function selectOption(select: HTMLSelectElement, acceptedTexts: readonly string[]): boolean {

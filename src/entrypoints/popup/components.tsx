@@ -85,6 +85,10 @@ export function RecoveryActions({
       ) : null}
       {needsFullFiscalYearReview ? (
         <>
+          <p className="muted">
+            This saved run is not bound to a GST account. Continue only if the same GST account is
+            currently open.
+          </p>
           <button type="button" disabled={busy !== null} onClick={onRetryFullFiscalYearTarget}>
             {busy === "retry-full-fiscal-year-target" ? "Retrying..." : retryFullYearLabel(summary)}
           </button>
@@ -137,7 +141,7 @@ function cancelFullYearLabel(summary: FiledReturnsFlowSummary): string {
   }
   return summary.fullFiscalYearRecovery?.targetStatus === "pending"
     ? "Discard full-year run"
-    : "Cancel full-year target";
+    : "Discard saved full-year run";
 }
 
 export function ScopeForm({ busy, scope, onScopeChange, onStart }: ScopeFormProps) {

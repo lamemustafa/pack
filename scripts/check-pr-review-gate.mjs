@@ -79,30 +79,66 @@ function evaluatePullRequestReviewState(pr) {
   const unresolvedThreads = pr.reviewThreads.nodes.filter(
     (thread) => !thread.isResolved && !thread.isOutdated,
   );
-  const latestReviews = latestNonDismissedReviewsByAuthor(pr.reviews.nodes, pr.headRefOid);
-  const blockingReviews = Array.from(latestReviews.values()).filter(
-    (review) => review.state === "CHANGES_REQUESTED",
-  );
-  const headReviews = Array.from(latestReviews.values()).filter(
-    (review) =>
-      !requiredReviewAuthor ||
-      normaliseAuthorLogin(review.author?.login) === normaliseAuthorLogin(requiredReviewAuthor),
-  );
+  const authorStates = reduceSubmittedCurrentHeadReviewsByAuthor(pr.reviews.nodes, pr.headRefOid);
+  const blockingReviews = Array.from(authorStates.values())
+    .map((state) => state.blockingReview)
+    .filter(Boolean);
+  const headReviews = Array.from(authorStates.values())
+    .map((state) => state.latestSubmittedReview)
+    .filter(Boolean)
+    .filter(
+      (review) =>
+        !requiredReviewAuthor ||
+        normaliseAuthorLogin(review.author?.login) === normaliseAuthorLogin(requiredReviewAuthor),
+    );
   return { unresolvedThreads, blockingReviews, headReviews };
 }
 
-function latestNonDismissedReviewsByAuthor(reviews, headRefOid) {
-  const latestReviews = new Map();
-  for (const review of reviews) {
-    if (review.state === "DISMISSED") continue;
+function reduceSubmittedCurrentHeadReviewsByAuthor(reviews, headRefOid) {
+  const authorStates = new Map();
+  const currentHeadReviews = reviews
+    .filter((review) => review.commit?.oid === headRefOid)
+    .sort(compareReviewSubmittedAt);
+
+  for (const review of currentHeadReviews) {
+    if (review.state === "PENDING") continue;
     if (review.commit?.oid !== headRefOid) continue;
     const author = normaliseAuthorLogin(review.author?.login) || "unknown";
-    const previous = latestReviews.get(author);
-    if (!previous || compareReviewSubmittedAt(review, previous) >= 0) {
-      latestReviews.set(author, review);
+    if (review.state === "DISMISSED") {
+      authorStates.delete(author);
+      continue;
+    }
+
+    const previous = authorStates.get(author) ?? {
+      latestSubmittedReview: null,
+      blockingReview: null,
+    };
+
+    if (review.state === "CHANGES_REQUESTED") {
+      authorStates.set(author, {
+        latestSubmittedReview: review,
+        blockingReview: review,
+      });
+      continue;
+    }
+
+    if (review.state === "APPROVED") {
+      authorStates.set(author, {
+        latestSubmittedReview: review,
+        blockingReview: null,
+      });
+      continue;
+    }
+
+    if (review.state === "COMMENTED") {
+      authorStates.set(author, {
+        latestSubmittedReview: review,
+        blockingReview: previous.blockingReview,
+      });
     }
   }
-  return latestReviews;
+
+  return authorStates;
 }
 
 function compareReviewSubmittedAt(left, right) {
@@ -138,37 +174,34 @@ function fetchReviewGraph() {
 }
 
 function fetchPaginatedReviewGraph() {
-  let reviewThreadsAfter = null;
-  let reviewsAfter = null;
-  let merged = null;
+  const merged = fetchReviewGraphPage();
+  const mergedPr = merged.data?.repository?.pullRequest;
+  if (!mergedPr) return merged;
 
-  while (true) {
-    const page = fetchReviewGraphPage(reviewThreadsAfter, reviewsAfter);
+  let reviewThreadsPageInfo = mergedPr.reviewThreads.pageInfo;
+  while (reviewThreadsPageInfo?.hasNextPage) {
+    const page = fetchReviewThreadsGraphPage(reviewThreadsPageInfo.endCursor);
     const pr = page.data?.repository?.pullRequest;
-    if (!pr) return page;
-
-    if (!merged) {
-      merged = page;
-    } else {
-      const mergedPr = merged.data.repository.pullRequest;
-      mergedPr.reviewThreads.nodes.push(...pr.reviewThreads.nodes);
-      mergedPr.reviews.nodes.push(...pr.reviews.nodes);
-      mergedPr.reviewThreads.pageInfo = pr.reviewThreads.pageInfo;
-      mergedPr.reviews.pageInfo = pr.reviews.pageInfo;
-    }
-
-    reviewThreadsAfter = pr.reviewThreads.pageInfo?.hasNextPage
-      ? pr.reviewThreads.pageInfo.endCursor
-      : null;
-    reviewsAfter = pr.reviews.pageInfo?.hasNextPage ? pr.reviews.pageInfo.endCursor : null;
-    if (!reviewThreadsAfter && !reviewsAfter) return annotateReviewHeadRef(merged);
+    if (!pr) break;
+    mergedPr.reviewThreads.nodes.push(...pr.reviewThreads.nodes);
+    reviewThreadsPageInfo = pr.reviewThreads.pageInfo;
+    mergedPr.reviewThreads.pageInfo = reviewThreadsPageInfo;
   }
+
+  let reviewsPageInfo = mergedPr.reviews.pageInfo;
+  while (reviewsPageInfo?.hasNextPage) {
+    const page = fetchReviewsGraphPage(reviewsPageInfo.endCursor);
+    const pr = page.data?.repository?.pullRequest;
+    if (!pr) break;
+    mergedPr.reviews.nodes.push(...pr.reviews.nodes);
+    reviewsPageInfo = pr.reviews.pageInfo;
+    mergedPr.reviews.pageInfo = reviewsPageInfo;
+  }
+
+  return annotateReviewHeadRef(merged);
 }
 
-function fetchReviewGraphPage(reviewThreadsAfter, reviewsAfter) {
-  const fixture = nextFixturePath();
-  if (fixture) return normaliseFixtureReviewGraph(JSON.parse(readFileSync(fixture, "utf8")));
-
+function fetchReviewGraphPage() {
   const [owner, name] = repo.split("/");
   const commandArgs = [
     "api",
@@ -180,12 +213,45 @@ function fetchReviewGraphPage(reviewThreadsAfter, reviewsAfter) {
     "-F",
     `number=${prNumber}`,
     "-f",
-    "query=query($owner:String!,$name:String!,$number:Int!,$reviewThreadsAfter:String,$reviewsAfter:String){repository(owner:$owner,name:$name){pullRequest(number:$number){headRefOid reviewThreads(first:100,after:$reviewThreadsAfter){pageInfo{hasNextPage endCursor} nodes{id isResolved isOutdated path line comments(first:1){nodes{url author{login} body}}}} reviews(first:100,after:$reviewsAfter){pageInfo{hasNextPage endCursor} nodes{state submittedAt url author{login} commit{oid}}}}}}",
+    "query=query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){headRefOid reviewThreads(first:100){pageInfo{hasNextPage endCursor} nodes{id isResolved isOutdated path line comments(first:1){nodes{url author{login} body}}}} reviews(first:100){pageInfo{hasNextPage endCursor} nodes{state submittedAt url author{login} commit{oid}}}}}}",
   ];
-  if (reviewThreadsAfter)
-    commandArgs.splice(8, 0, "-F", `reviewThreadsAfter=${reviewThreadsAfter}`);
-  if (reviewsAfter) commandArgs.splice(8, 0, "-F", `reviewsAfter=${reviewsAfter}`);
   return runJson(commandArgs);
+}
+
+function fetchReviewThreadsGraphPage(after) {
+  const [owner, name] = repo.split("/");
+  return runJson([
+    "api",
+    "graphql",
+    "-F",
+    `owner=${owner}`,
+    "-F",
+    `name=${name}`,
+    "-F",
+    `number=${prNumber}`,
+    "-F",
+    `after=${after}`,
+    "-f",
+    "query=query($owner:String!,$name:String!,$number:Int!,$after:String!){repository(owner:$owner,name:$name){pullRequest(number:$number){reviewThreads(first:100,after:$after){pageInfo{hasNextPage endCursor} nodes{id isResolved isOutdated path line comments(first:1){nodes{url author{login} body}}}}}}}",
+  ]);
+}
+
+function fetchReviewsGraphPage(after) {
+  const [owner, name] = repo.split("/");
+  return runJson([
+    "api",
+    "graphql",
+    "-F",
+    `owner=${owner}`,
+    "-F",
+    `name=${name}`,
+    "-F",
+    `number=${prNumber}`,
+    "-F",
+    `after=${after}`,
+    "-f",
+    "query=query($owner:String!,$name:String!,$number:Int!,$after:String!){repository(owner:$owner,name:$name){pullRequest(number:$number){reviews(first:100,after:$after){pageInfo{hasNextPage endCursor} nodes{state submittedAt url author{login} commit{oid}}}}}}",
+  ]);
 }
 
 function nextFixturePath() {

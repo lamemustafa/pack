@@ -392,6 +392,211 @@ describe("filed returns guided flow", () => {
     expect(result.safeSignals).not.toContain("filed-return-result-row-not-found");
   });
 
+  it("checks no-record evidence before reselecting an already matching filter form", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <label>Financial Year</label>
+          <select id="finYr"><option selected>2025-26</option></select>
+          <label>Return Filing Period</label>
+          <select id="optValue"><option selected>Monthly</option></select>
+          <label>Month</label>
+          <select id="month"><option selected>March</option></select>
+          <label>Return Type</label>
+          <select id="retTyp"><option selected>GSTR3B</option></select>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+        <section aria-label="Search results">
+          <p>No records found</p>
+        </section>
+      </main>
+    `);
+    let searchClicked = 0;
+    documentRef.querySelector("#lotsearch")?.addEventListener("click", () => {
+      searchClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.state).toBe("candidate-not-found");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining(["filed-return-positively-not-filed"]),
+    );
+    expect(searchClicked).toBe(0);
+  });
+
+  it("does not treat stale hidden no-record text as positive not-filed evidence", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <select id="finYr"><option selected>2025-26</option></select>
+          <select id="optValue"><option selected>Monthly</option></select>
+          <select id="month"><option selected>March</option></select>
+          <select id="retTyp"><option selected>GSTR3B</option></select>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+        <section aria-label="Search results">
+          <p style="display: none">No records found</p>
+        </section>
+      </main>
+    `);
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.safeSignals).not.toContain("filed-return-positively-not-filed");
+  });
+
+  it("does not treat no-record text while loading as positive not-filed evidence", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <select id="finYr"><option selected>2025-26</option></select>
+          <select id="optValue"><option selected>Monthly</option></select>
+          <select id="month"><option selected>March</option></select>
+          <select id="retTyp"><option selected>GSTR3B</option></select>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+        <section aria-label="Search results" aria-busy="true">
+          <p>Loading...</p>
+          <p>No records found</p>
+        </section>
+      </main>
+    `);
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.safeSignals).not.toContain("filed-return-positively-not-filed");
+  });
+
+  it("does not mark not-filed when a matching result row exists with a no-record footer", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <select id="finYr"><option selected>2025-26</option></select>
+          <select id="optValue"><option selected>Monthly</option></select>
+          <select id="month"><option selected>March</option></select>
+          <select id="retTyp"><option selected>GSTR3B</option></select>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+        <section aria-label="Search results">
+          <table>
+            <thead><tr><th>Return Type</th><th>Financial Year</th><th>Tax Period</th><th>View/Download</th></tr></thead>
+            <tbody>
+              <tr><td>GSTR3B</td><td>2025-26</td><td>March</td><td><a href="#view">View</a></td></tr>
+            </tbody>
+          </table>
+          <p>No records found</p>
+        </section>
+      </main>
+    `);
+    let viewClicked = 0;
+    documentRef.querySelector("a")?.addEventListener("click", () => {
+      viewClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining(["filed-return-result-view-clicked"]),
+    );
+    expect(result.safeSignals).not.toContain("filed-return-positively-not-filed");
+    expect(viewClicked).toBe(1);
+  });
+
+  it("verifies native month selection before accepting no-record evidence", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <select id="finYr"><option selected>2025-26</option></select>
+          <select id="optValue"><option selected>Monthly</option></select>
+          <select id="month"><option selected>February</option><option>March</option></select>
+          <select id="retTyp"><option selected>GSTR3B</option></select>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+        <section aria-label="Search results">
+          <p>No records found</p>
+        </section>
+      </main>
+    `);
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.safeSignals).not.toContain("filed-return-positively-not-filed");
+  });
+
+  it("verifies custom month selection before accepting no-record evidence", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <div><label>Financial Year</label><select id="finYr"><option selected>2025-26</option></select></div>
+          <div><label>Return Filing Period</label><select id="optValue"><option selected>Monthly</option></select></div>
+          <div><span>Month</span><button type="button" data-month>March</button></div>
+          <div><label>Return Type</label><select id="retTyp"><option selected>GSTR3B</option></select></div>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+        <section aria-label="Search results">
+          <p>No records found</p>
+        </section>
+      </main>
+    `);
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining(["filed-return-positively-not-filed"]),
+    );
+  });
+
+  it("rejects no-record evidence when the custom month selection differs", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <div><label>Financial Year</label><select id="finYr"><option selected>2025-26</option></select></div>
+          <div><label>Return Filing Period</label><select id="optValue"><option selected>Monthly</option></select></div>
+          <div><span>Month</span><button type="button" data-month>February</button></div>
+          <div><label>Return Type</label><select id="retTyp"><option selected>GSTR3B</option></select></div>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+        <section aria-label="Search results">
+          <p>No records found</p>
+        </section>
+      </main>
+    `);
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.safeSignals).not.toContain("filed-return-positively-not-filed");
+  });
+
+  it("requires a present month control before accepting no-record evidence", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <select id="finYr"><option selected>2025-26</option></select>
+          <select id="optValue"><option selected>Monthly</option></select>
+          <select id="retTyp"><option selected>GSTR3B</option></select>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+        <section aria-label="Search results">
+          <p>No records found</p>
+        </section>
+      </main>
+    `);
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.safeSignals).not.toContain("filed-return-positively-not-filed");
+  });
+
   it("scopes the final search click to the filed-return filter form", async () => {
     const documentRef = createDocument(`
       <main>
