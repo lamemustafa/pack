@@ -24,6 +24,7 @@ if (!Number.isInteger(prNumber) || prNumber < 1)
   fail("Could not determine PR number. Pass --pr <number>.");
 
 const { pr, unresolvedThreads, blockingReviews, headReviews } = await fetchEvaluatedPr();
+const bodyIssues = evaluatePullRequestBody(pr);
 reportBlockingState({ unresolvedThreads, blockingReviews });
 
 const missingHeadReview = strictHeadReview && headReviews.length === 0;
@@ -39,8 +40,13 @@ if (missingHeadReview) {
 if (
   unresolvedThreads.length > 0 ||
   blockingReviews.length > 0 ||
+  bodyIssues.length > 0 ||
   (missingHeadReview && !allowMissingHeadReview)
 ) {
+  if (bodyIssues.length > 0) {
+    console.error(`PR body workflow/template issues on ${repo}#${prNumber}:`);
+    for (const issue of bodyIssues) console.error(`- ${issue}`);
+  }
   process.exit(1);
 }
 
@@ -93,6 +99,42 @@ function evaluatePullRequestReviewState(pr) {
   return { unresolvedThreads, blockingReviews, headReviews };
 }
 
+function evaluatePullRequestBody(pr) {
+  const issues = [];
+  const body = pr.body ?? "";
+
+  if (pr.headRefName === "master" || pr.headRefName === "main") {
+    if (pr.headRepository?.nameWithOwner && pr.headRepository.nameWithOwner !== repo) {
+      console.warn(
+        `warn: fork branch ${pr.headRepository.nameWithOwner}:${pr.headRefName} uses a protected branch name; treating it as external contributor input.`,
+      );
+    } else {
+      issues.push(
+        `PR head branch is ${pr.headRefName}; Pack PRs must not be opened from a protected base branch.`,
+      );
+    }
+  } else if (pr.headRefName && !pr.headRefName.startsWith("tapish-codex/")) {
+    console.warn(
+      `warn: PR head branch ${pr.headRefName} does not use tapish-codex/<short-scope>; acceptable for forks only.`,
+    );
+  }
+
+  for (const required of [
+    "Pack Workflow Preflight",
+    "Privacy And Data-Flow Impact",
+    "Sensitive Surface Review",
+    "Verification",
+    "PR Review Follow-Up",
+    "pnpm workflow:preflight",
+  ]) {
+    if (!body.includes(required)) {
+      issues.push(`missing PR template section or checklist text: ${required}`);
+    }
+  }
+
+  return issues;
+}
+
 function reportBlockingState({ unresolvedThreads, blockingReviews }) {
   if (unresolvedThreads.length > 0) {
     console.error(`Unresolved review threads on ${repo}#${prNumber}:`);
@@ -126,7 +168,7 @@ function fetchReviewGraph() {
     "-F",
     `number=${prNumber}`,
     "-f",
-    "query=query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){headRefOid reviewThreads(first:100){nodes{id isResolved isOutdated path line comments(first:1){nodes{url author{login} body}}}} reviews(first:100){nodes{state submittedAt url author{login} commit{oid}}}}}}",
+    "query=query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){body headRefName baseRefName headRepository{nameWithOwner} headRefOid reviewThreads(first:100){nodes{id isResolved isOutdated path line comments(first:1){nodes{url author{login} body}}}} reviews(first:100){nodes{state submittedAt url author{login} commit{oid}}}}}}",
   ]);
 }
 

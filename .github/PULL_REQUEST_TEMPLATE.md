@@ -21,6 +21,13 @@ Examples:
 - Docs/governance:
 - Explicitly out of scope:
 
+## Pack Workflow Preflight
+
+- [ ] `pnpm workflow:preflight` was run before editing/push, or the skip reason is documented.
+- [ ] This PR was opened from a Pack branch, not master.
+- [ ] I checked latest master Pack AGENTS guidance or recorded the stale-guidance warning.
+- [ ] PR body keeps the required Pack privacy/review/verification checklist visible.
+
 ## Privacy And Data-Flow Impact
 
 - [ ] No new browser permissions.
