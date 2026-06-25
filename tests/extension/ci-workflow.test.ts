@@ -32,7 +32,7 @@ describe("Pack CI workflow", () => {
     expect(workflow).not.toContain("github.event.issue");
     expect(workflow).not.toContain("/review-gate");
     expect(workflow).toContain("name: Review findings gate");
-    expect(workflow).toContain("name: Review findings gate");
+    expect(workflow).toContain("name: Review gate");
     expect(workflow).toContain("pull-requests: read");
     expect(workflow).toContain("GH_TOKEN: ${{ github.token }}");
     expect(workflow).toContain("fetch-depth: 0");

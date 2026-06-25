@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   review-gate:
-    name: Review findings gate
+    name: Review gate
     runs-on: ubuntu-latest
     timeout-minutes: 8
 
