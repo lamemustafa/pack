@@ -1,17 +1,21 @@
 import type { FiledReturnsDownloadScope } from "../../core/contracts";
 import { getClickableElements, matchesAcceptedText, normaliseText } from "./filed-returns-dom";
 import { extractTaxPeriodFromRow } from "./filed-returns-detail-identity";
+import { acceptedFiledReturnsPeriodTexts } from "./filed-returns-months";
 
-export interface MatchingActionableFiledReturnRow {
+export interface MatchingFiledReturnRow {
   row: HTMLTableRowElement;
   period: string | null;
+}
+
+export interface MatchingActionableFiledReturnRow extends MatchingFiledReturnRow {
   view: HTMLElement;
 }
 
-export function findMatchingActionableFiledReturnRows(
+export function findMatchingFiledReturnRows(
   root: ParentNode,
   scope: FiledReturnsDownloadScope,
-): MatchingActionableFiledReturnRow[] {
+): MatchingFiledReturnRow[] {
   return Array.from(root.querySelectorAll("tr"))
     .map((row) => ({ row, identity: extractResultRowIdentity(row) }))
     .filter(({ row, identity }) => {
@@ -28,6 +32,17 @@ export function findMatchingActionableFiledReturnRows(
     .map(({ row, identity }) => ({
       row,
       period: identity.period ?? extractTaxPeriodFromRow(row),
+    }));
+}
+
+export function findMatchingActionableFiledReturnRows(
+  root: ParentNode,
+  scope: FiledReturnsDownloadScope,
+): MatchingActionableFiledReturnRow[] {
+  return findMatchingFiledReturnRows(root, scope)
+    .map(({ row, period }) => ({
+      row,
+      period,
       view: getClickableElements(row).find((element) =>
         /^view$/i.test(normaliseText(readElementText(element))),
       ),
@@ -37,7 +52,7 @@ export function findMatchingActionableFiledReturnRows(
 
 function periodMatchesScope(period: string | null, scope: FiledReturnsDownloadScope): boolean {
   if (!period) return false;
-  return matchesAcceptedText(period, [scope.period]);
+  return matchesAcceptedText(period, acceptedFiledReturnsPeriodTexts(scope));
 }
 
 function extractResultRowIdentity(row: Element): {

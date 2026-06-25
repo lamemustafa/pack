@@ -4,11 +4,14 @@ import { normaliseText } from "./filed-returns-dom";
 interface FiledReturnsSearchAttempt {
   signature: string;
   preSearchFingerprint: string;
-  sawLoading: boolean;
+  preSearchLoadingFingerprint: string | null;
+  sawPostClickLoading: boolean;
   settled: boolean;
+  createdAt: number;
 }
 
 const searchAttempts = new WeakMap<Document, FiledReturnsSearchAttempt>();
+const SEARCH_ATTEMPT_TTL_MS = 2 * 60 * 1000;
 
 function filedReturnsSearchSignature(scope: FiledReturnsDownloadScope): string {
   return `${scope.financialYear}::${scope.period}::${scope.returnType}`;
@@ -21,8 +24,10 @@ export function markFiledReturnsSearchPending(
   searchAttempts.set(documentRef, {
     signature: filedReturnsSearchSignature(scope),
     preSearchFingerprint: resultFingerprint(documentRef),
-    sawLoading: hasLoadingEvidence(documentRef),
+    preSearchLoadingFingerprint: loadingFingerprint(documentRef),
+    sawPostClickLoading: false,
     settled: false,
+    createdAt: Date.now(),
   });
 }
 
@@ -32,20 +37,42 @@ export function hasSettledFiledReturnsSearchForScope(
 ): boolean {
   const attempt = searchAttempts.get(documentRef);
   if (!attempt || attempt.signature !== filedReturnsSearchSignature(scope)) return false;
+  if (Date.now() - attempt.createdAt > SEARCH_ATTEMPT_TTL_MS) {
+    searchAttempts.delete(documentRef);
+    return false;
+  }
   if (attempt.settled) return true;
 
-  if (hasLoadingEvidence(documentRef)) {
-    attempt.sawLoading = true;
+  const currentLoadingFingerprint = loadingFingerprint(documentRef);
+  if (
+    currentLoadingFingerprint &&
+    currentLoadingFingerprint !== attempt.preSearchLoadingFingerprint
+  ) {
+    attempt.sawPostClickLoading = true;
     return false;
   }
 
   const currentFingerprint = resultFingerprint(documentRef);
-  if (attempt.sawLoading || currentFingerprint !== attempt.preSearchFingerprint) {
+  if (attempt.sawPostClickLoading || currentFingerprint !== attempt.preSearchFingerprint) {
     attempt.settled = true;
     return true;
   }
 
   return false;
+}
+
+export function consumeSettledFiledReturnsSearchForScope(
+  documentRef: Document,
+  scope: FiledReturnsDownloadScope,
+): void {
+  const attempt = searchAttempts.get(documentRef);
+  if (attempt?.signature === filedReturnsSearchSignature(scope) && attempt.settled) {
+    searchAttempts.delete(documentRef);
+  }
+}
+
+export function clearFiledReturnsSearchAttempt(documentRef: Document): void {
+  searchAttempts.delete(documentRef);
 }
 
 function resultFingerprint(documentRef: Document): string {
@@ -72,8 +99,6 @@ function fingerprintElement(element: Element): string {
   const text = normaliseText(visibleText(element));
   return JSON.stringify({
     noRecordCount: (text.match(/\bno\s+(records?|data|results?)\s+found\b/g) ?? []).length,
-    loadingCount: (text.match(/\bloading\b|\bplease\s+wait\b|\bsearching\b|\bprocessing\b/g) ?? [])
-      .length,
     tableCount: element.querySelectorAll("table").length,
     rowCount: element.querySelectorAll("tr").length,
     clickableCount: element.querySelectorAll("a,button,[role='button'],input[type='button']")
@@ -83,15 +108,21 @@ function fingerprintElement(element: Element): string {
   });
 }
 
-function hasLoadingEvidence(root: ParentNode): boolean {
+function loadingFingerprint(root: ParentNode): string | null {
   const documentRef = root.nodeType === 9 ? (root as Document) : root.ownerDocument;
-  if (!documentRef) return false;
-  const busyElement = Array.from(documentRef.querySelectorAll("[aria-busy='true']")).find(
+  if (!documentRef) return null;
+  const busyElements = Array.from(documentRef.querySelectorAll("[aria-busy='true']")).filter(
     (element) => !isHidden(element),
   );
-  if (busyElement) return true;
   const text = normaliseText(visibleText(documentRef.body));
-  return /\bloading\b|\bplease\s+wait\b|\bsearching\b|\bprocessing\b/.test(text);
+  const loadingTextCount = (
+    text.match(/\bloading\b|\bplease\s+wait\b|\bsearching\b|\bprocessing\b/g) ?? []
+  ).length;
+  if (busyElements.length === 0 && loadingTextCount === 0) return null;
+  return JSON.stringify({
+    busyCount: busyElements.length,
+    loadingTextCount,
+  });
 }
 
 function visibleText(root: Element | null): string {

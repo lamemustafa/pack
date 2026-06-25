@@ -1,8 +1,12 @@
 import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "../../core/contracts";
 import { normaliseText } from "./filed-returns-dom";
-import { findMatchingActionableFiledReturnRows } from "./filed-returns-result-rows";
+import { acceptedFiledReturnsPeriodTexts } from "./filed-returns-months";
+import { findMatchingFiledReturnRows } from "./filed-returns-result-rows";
 import { filedReturnsFilterFieldMatches } from "./filed-returns-filter-fields";
-import { hasSettledFiledReturnsSearchForScope } from "./filed-returns-search-state";
+import {
+  consumeSettledFiledReturnsSearchForScope,
+  hasSettledFiledReturnsSearchForScope,
+} from "./filed-returns-search-state";
 
 export function detectPositiveNotFiledEvidence(
   documentRef: Document,
@@ -14,6 +18,7 @@ export function detectPositiveNotFiledEvidence(
   if (!hasSubmittedSearchForScope(documentRef, scope)) return null;
   if (!filterFormMatchesScope(documentRef, scope)) return null;
   if (hasMatchingResultRow(documentRef, scope)) return null;
+  consumeSettledFiledReturnsSearchForScope(documentRef, scope);
 
   return {
     connectorId: "gst",
@@ -39,7 +44,11 @@ function filterFormMatchesScope(documentRef: Document, scope: FiledReturnsDownlo
       "Monthly",
       scope.period,
     ]) &&
-    filedReturnsFilterFieldMatches(documentRef, /^month\b|^tax\s+period\b/i, [scope.period]) &&
+    filedReturnsFilterFieldMatches(
+      documentRef,
+      /^month\b|^tax\s+period\b/i,
+      acceptedFiledReturnsPeriodTexts(scope),
+    ) &&
     filedReturnsFilterFieldMatches(documentRef, /^return\s+type\b/i, [scope.returnType])
   );
 }
@@ -87,7 +96,7 @@ function hasLoadingEvidence(container: Element): boolean {
 }
 
 function hasMatchingResultRow(root: ParentNode, scope: FiledReturnsDownloadScope): boolean {
-  return findMatchingActionableFiledReturnRows(root, scope).length > 0;
+  return findMatchingFiledReturnRows(root, scope).length > 0;
 }
 
 function visibleText(root: Element): string {

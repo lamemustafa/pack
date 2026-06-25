@@ -14,6 +14,7 @@ import { selectFiledReturnsFiltersAndSearch } from "./filed-returns-filter-form"
 import { detectPositiveNotFiledEvidence } from "./filed-returns-not-filed-evidence";
 import { observeFiledReturnsPageText } from "./filed-returns-observer";
 import { findMatchingActionableFiledReturnRows } from "./filed-returns-result-rows";
+import { clearFiledReturnsSearchAttempt } from "./filed-returns-search-state";
 
 const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
 export async function runFiledReturnsDownloadStep(
@@ -28,6 +29,7 @@ export async function runFiledReturnsDownloadStep(
   });
 
   if (observation.state === "login-required") {
+    clearFiledReturnsSearchAttempt(documentRef);
     return withOptionalUserAction(
       {
         connectorId: "gst",
@@ -55,13 +57,15 @@ export async function runFiledReturnsDownloadStep(
     };
   }
 
-  const notFiledEvidence = detectPositiveNotFiledEvidence(
-    documentRef,
-    scope,
-    FILED_RETURNS_SCOPE_ID,
-  );
-  if (isFiledReturnsSearchSurface(observation.safeSignals) && notFiledEvidence) {
-    return notFiledEvidence;
+  if (isFiledReturnsSearchSurface(observation.safeSignals)) {
+    const notFiledEvidence = detectPositiveNotFiledEvidence(
+      documentRef,
+      scope,
+      FILED_RETURNS_SCOPE_ID,
+    );
+    if (notFiledEvidence) {
+      return notFiledEvidence;
+    }
   }
 
   if (observation.state === "filters-required") {
@@ -83,6 +87,7 @@ export async function runFiledReturnsDownloadStep(
   }
 
   if (observation.state === "wrong-page") {
+    clearFiledReturnsSearchAttempt(documentRef);
     const navigation = await navigateToFiledReturnsPage(documentRef);
     return withOptionalUserAction(
       {

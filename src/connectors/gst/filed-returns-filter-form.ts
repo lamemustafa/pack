@@ -9,6 +9,7 @@ import {
   findLabelledSelects,
   hasFiledReturnsFilterFieldControl,
 } from "./filed-returns-filter-fields";
+import { acceptedFiledReturnsMonthTexts } from "./filed-returns-months";
 import {
   activateElement,
   delay,
@@ -124,24 +125,8 @@ function acceptedFilingPeriodOptions(scope: FiledReturnsDownloadScope): string[]
 }
 
 function acceptedMonthOptions(scope: FiledReturnsDownloadScope): string[] {
-  const shortMonth = MONTH_ABBREVIATIONS[scope.period.toLowerCase()];
-  return shortMonth ? [scope.period, shortMonth] : [scope.period];
+  return acceptedFiledReturnsMonthTexts(scope.period);
 }
-
-const MONTH_ABBREVIATIONS: Record<string, string> = {
-  april: "Apr",
-  may: "May",
-  june: "Jun",
-  july: "Jul",
-  august: "Aug",
-  september: "Sep",
-  october: "Oct",
-  november: "Nov",
-  december: "Dec",
-  january: "Jan",
-  february: "Feb",
-  march: "Mar",
-};
 
 function hasFieldControl(documentRef: Document, labelPattern: RegExp): boolean {
   return hasFiledReturnsFilterFieldControl(documentRef, labelPattern);

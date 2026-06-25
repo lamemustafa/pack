@@ -594,6 +594,66 @@ describe("filed returns guided flow", () => {
     expect(viewClicked).toBe(1);
   });
 
+  it("does not mark not-filed when a matching result row has no actionable view control", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <select id="finYr"><option selected>2025-26</option></select>
+          <select id="optValue"><option selected>Monthly</option></select>
+          <select id="month"><option selected>March</option></select>
+          <select id="retTyp"><option selected>GSTR3B</option></select>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+        <section aria-label="Prior result status">
+          <p>No records found</p>
+        </section>
+        <section aria-label="Search results">
+          <table>
+            <thead><tr><th>Return Type</th><th>Financial Year</th><th>Tax Period</th><th>View/Download</th></tr></thead>
+            <tbody>
+              <tr><td>GSTR3B</td><td>2025-26</td><td>March</td><td><button disabled>Open</button></td></tr>
+            </tbody>
+          </table>
+        </section>
+      </main>
+    `);
+    markPackSubmittedSearch(documentRef, DEFAULT_SCOPE);
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.safeSignals).not.toContain("filed-return-positively-not-filed");
+  });
+
+  it("opens result rows whose tax period uses a GST month abbreviation", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <table>
+          <thead><tr><th>Return Type</th><th>Financial Year</th><th>Tax Period</th><th>View/Download</th></tr></thead>
+          <tbody>
+            <tr><td>GSTR3B</td><td>2025-26</td><td>Mar</td><td><a href="#view">View</a></td></tr>
+          </tbody>
+        </table>
+      </main>
+    `);
+    let viewClicked = 0;
+    documentRef.querySelector("a")?.addEventListener("click", () => {
+      viewClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining([
+        "filed-return-result-view-clicked",
+        "filed-return-result-period:Mar",
+      ]),
+    );
+    expect(viewClicked).toBe(1);
+  });
+
   it("verifies native month selection before accepting no-record evidence", async () => {
     const documentRef = createDocument(`
       <main>
@@ -617,6 +677,31 @@ describe("filed returns guided flow", () => {
     expect(result.safeSignals).not.toContain("filed-return-positively-not-filed");
   });
 
+  it("accepts native abbreviated month selection before accepting no-record evidence", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <select id="finYr"><option selected>2025-26</option></select>
+          <select id="optValue"><option selected>Monthly</option></select>
+          <select id="month"><option selected>Mar</option></select>
+          <select id="retTyp"><option selected>GSTR3B</option></select>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+        <section aria-label="Search results">
+          <p>No records found</p>
+        </section>
+      </main>
+    `);
+    markPackSubmittedSearch(documentRef, DEFAULT_SCOPE);
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining(["filed-return-positively-not-filed"]),
+    );
+  });
+
   it("verifies custom month selection before accepting no-record evidence", async () => {
     const documentRef = createDocument(`
       <main>
@@ -636,6 +721,37 @@ describe("filed returns guided flow", () => {
     markPackSubmittedSearch(documentRef, DEFAULT_SCOPE);
 
     const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining(["filed-return-positively-not-filed"]),
+    );
+  });
+
+  it("accepts custom September abbreviation before accepting no-record evidence", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <div><label>Financial Year</label><select id="finYr"><option selected>2025-26</option></select></div>
+          <div><label>Return Filing Period</label><select id="optValue"><option selected>Monthly</option></select></div>
+          <div><span>Month</span><button type="button" data-month>Sept</button></div>
+          <div><label>Return Type</label><select id="retTyp"><option selected>GSTR3B</option></select></div>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+        <section aria-label="Search results">
+          <p>No records found</p>
+        </section>
+      </main>
+    `);
+    markPackSubmittedSearch(documentRef, {
+      ...DEFAULT_SCOPE,
+      period: "September",
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      ...DEFAULT_SCOPE,
+      period: "September",
+    });
 
     expect(result.safeSignals).toEqual(
       expect.arrayContaining(["filed-return-positively-not-filed"]),
@@ -734,6 +850,63 @@ describe("filed returns guided flow", () => {
     const secondResult = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
 
     expect(firstResult.state).toBe("clicked");
+    expect(secondResult.safeSignals).not.toContain("filed-return-positively-not-filed");
+  });
+
+  it("does not mark not-filed when unrelated pre-search loading disappears without result changes", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <label>Financial Year</label>
+          <select id="finYr"><option selected>2025-26</option></select>
+          <label>Return Filing Period</label>
+          <select id="optValue"><option selected>Monthly</option></select>
+          <label>Month</label>
+          <select id="month"><option selected>March</option></select>
+          <label>Return Type</label>
+          <select id="retTyp"><option selected>GSTR3B</option></select>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+        <div data-unrelated-loading>Loading...</div>
+        <section aria-label="Search results">
+          <p>No records found</p>
+        </section>
+      </main>
+    `);
+
+    const firstResult = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+    documentRef.querySelector("[data-unrelated-loading]")?.remove();
+    const secondResult = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(firstResult.state).toBe("clicked");
+    expect(secondResult.safeSignals).not.toContain("filed-return-positively-not-filed");
+  });
+
+  it("consumes settled not-filed evidence after returning a terminal result", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <select id="finYr"><option selected>2025-26</option></select>
+          <select id="optValue"><option selected>Monthly</option></select>
+          <select id="month"><option selected>March</option></select>
+          <select id="retTyp"><option selected>GSTR3B</option></select>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+        <section aria-label="Search results">
+          <p>No records found</p>
+        </section>
+      </main>
+    `);
+    markPackSubmittedSearch(documentRef, DEFAULT_SCOPE);
+
+    const firstResult = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+    const secondResult = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(firstResult.safeSignals).toEqual(
+      expect.arrayContaining(["filed-return-positively-not-filed"]),
+    );
     expect(secondResult.safeSignals).not.toContain("filed-return-positively-not-filed");
   });
 
