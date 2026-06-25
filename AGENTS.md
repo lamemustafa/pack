@@ -181,6 +181,9 @@ subagent findings implicit.
 - Never work directly on `master` for launch, runtime, public-copy, release,
   governance, or AGENTS/instruction changes. Create a
   `tapish-codex/<short-scope>` branch from the current protected base.
+- Run `pnpm workflow:preflight` before non-trivial edits or before claiming PR
+  readiness. It checks branch safety, stale Pack AGENTS/review guidance, and PR
+  template checklist wiring.
 - Pack is a nested git repository. Parent ComplyEaze branch state does not make
   Pack safe; run `git -C pack status -sb` and manage Pack branches separately.
 - Inspect `git status -sb` and the diff before staging. Stage only files that

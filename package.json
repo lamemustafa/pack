@@ -20,6 +20,7 @@
   },
   "scripts": {
     "dev": "wxt",
+    "workflow:preflight": "node scripts/check-pack-workflow-preflight.mjs",
     "dev:firefox": "wxt --browser firefox",
     "build": "wxt build",
     "build:firefox": "wxt build --browser firefox",
@@ -36,7 +37,7 @@
     "verify:local": "pnpm install --frozen-lockfile && pnpm audit --audit-level high && wxt prepare && prettier --check . && eslint . --max-warnings 0 && tsc --noEmit && vitest run && wxt build && node scripts/verify-extension-package.mjs .output/chrome-mv3 && git diff --check",
     "verify": "pnpm verify:local",
     "verify:release": "pnpm verify:local && wxt zip && node scripts/verify-extension-zip.mjs",
-    "verify:pr": "pnpm review:gate -- --strict-head-review --required-review-author chatgpt-codex-connector --wait-head-review-ms 180000 --poll-interval-ms 10000"
+    "verify:pr": "pnpm workflow:preflight && pnpm review:gate -- --strict-head-review --required-review-author chatgpt-codex-connector --wait-head-review-ms 180000 --poll-interval-ms 10000"
   },
   "dependencies": {
     "@wxt-dev/module-react": "^1.1.3",

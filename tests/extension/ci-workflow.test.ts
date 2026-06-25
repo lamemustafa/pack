@@ -27,6 +27,9 @@ describe("Pack CI workflow", () => {
     expect(workflow).toContain("pull_request_review_comment:");
     expect(workflow).toContain("pull-requests: read");
     expect(workflow).toContain("GH_TOKEN: ${{ github.token }}");
+    expect(workflow).toContain("pnpm workflow:preflight");
+    expect(workflow).toContain('--branch "${{ github.head_ref }}"');
+    expect(workflow).toContain('--base-ref "${{ github.base_ref }}"');
     expect(workflow).toContain("--strict-head-review");
     expect(workflow).toContain("--required-review-author chatgpt-codex-connector");
     expect(workflow).toContain("--wait-head-review-ms 180000");

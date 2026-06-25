@@ -136,6 +136,33 @@ describe("PR review gate", () => {
     ).toThrow(/No review was found for current head/);
   });
 
+  it("fails when the PR body omits the required Pack workflow checklist", () => {
+    const fixturePath = writeFixture(
+      "missing-template-body",
+      reviewFixture({
+        body: "## Summary\n\nNo Pack workflow checklist.",
+        headRefName: "tapish-codex/missing-body",
+        headRefOid: "head-sha",
+        reviews: [review({ state: "COMMENTED", commit: "head-sha" })],
+      }),
+    );
+
+    expect(() =>
+      execFileSync(process.execPath, [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture",
+        fixturePath,
+        "--strict-head-review",
+        "--required-review-author",
+        "chatgpt-codex-connector",
+      ]),
+    ).toThrow(/PR body workflow\/template issues/);
+  });
+
   it("can allow a missing head review for finding-only CI gates", () => {
     const fixturePath = writeFixture(
       "allowed-missing-head-review",
@@ -225,10 +252,16 @@ function writeFixture(name: string, value: unknown): string {
 
 function reviewFixture({
   headRefOid,
+  headRefName = "tapish-codex/test-pr",
+  baseRefName = "master",
+  body = packPrBody(),
   reviewThreads = [],
   reviews,
 }: {
   headRefOid: string;
+  headRefName?: string;
+  baseRefName?: string;
+  body?: string;
   reviewThreads?: unknown[];
   reviews: Array<ReturnType<typeof review>>;
 }) {
@@ -236,6 +269,9 @@ function reviewFixture({
     data: {
       repository: {
         pullRequest: {
+          body,
+          headRefName,
+          baseRefName,
           headRefOid,
           reviewThreads: { nodes: reviewThreads },
           reviews: { nodes: reviews },
@@ -243,6 +279,17 @@ function reviewFixture({
       },
     },
   };
+}
+
+function packPrBody() {
+  return [
+    "## Summary",
+    "## Pack Workflow Preflight",
+    "- [x] `pnpm workflow:preflight` was run before editing/push, or the skip reason is documented.",
+    "## Privacy And Data-Flow Impact",
+    "## Sensitive Surface Review",
+    "## PR Review Follow-Up",
+  ].join("\n\n");
 }
 
 function review({ state, commit }: { state: "COMMENTED" | "CHANGES_REQUESTED"; commit: string }) {
