@@ -67,10 +67,13 @@ export function validateLiveRunEvidence(input: unknown): LiveRunEvidenceValidati
   requirePattern(input.completedAt, ISO_TIMESTAMP, "completedAt", errors);
   validateTimeRange(input.startedAt, input.completedAt, errors);
   requireOneOf(input.outcome, ["pass", "blocked", "failed"], "outcome", errors);
+  if (Object.prototype.hasOwnProperty.call(input, "notes")) {
+    errors.push("notes is not allowed in shareable evidence");
+  }
   if (input.outcome === "pass" && input.profile !== "clean-test-profile") {
     errors.push("pass evidence must use clean-test-profile");
   }
-  validateCounts(input.counts, input.outcome, input.scenario, errors);
+  validateCounts(input.counts, input.outcome, errors);
   validateChecks(input.checks, input.scenario, input.outcome, errors);
   validateRedaction(input.redaction, errors);
   validateMediaArtifacts(input.mediaArtifacts, errors);
@@ -93,12 +96,7 @@ function validateBrowser(input: unknown, errors: string[]): void {
   requireBoundedString(input.version, "browser.version", errors, 1, 80);
 }
 
-function validateCounts(
-  input: unknown,
-  outcome: unknown,
-  scenario: unknown,
-  errors: string[],
-): void {
+function validateCounts(input: unknown, outcome: unknown, errors: string[]): void {
   if (!isRecord(input)) {
     errors.push("counts must be an object");
     return;
@@ -116,13 +114,18 @@ function validateCounts(
   }
   if (!hasOnlyNumberCounts(input)) return;
   const reconciled = input.downloaded + input.notFiled + input.manuallyObserved;
-  if (reconciled === 0) errors.push("counts must include at least one reconciled target");
+  const observed = reconciled + input.blocked + input.failed;
+  if (outcome === "pass" && reconciled === 0) {
+    errors.push("counts must include at least one reconciled target");
+  } else if (observed === 0) {
+    errors.push("counts must include at least one observed target");
+  }
   if (outcome === "pass") {
     if (input.blocked > 0) errors.push("pass evidence cannot include blocked targets");
     if (input.failed > 0) errors.push("pass evidence cannot include failed targets");
     if (input.duplicates > 0) errors.push("pass evidence cannot include duplicate targets");
-    if (scenario === "full-year" && input.eligibleTargets !== reconciled) {
-      errors.push("full-year pass evidence must reconcile every eligible target");
+    if (input.eligibleTargets !== reconciled) {
+      errors.push("pass evidence must reconcile every eligible target");
     }
   }
 }
@@ -145,8 +148,10 @@ function validateChecks(
             field !== "serviceWorkerRestartResumeChecked" &&
             field !== "browserRestartResumeChecked",
         );
-  for (const field of requiredChecks) {
-    if (input[field] !== true) errors.push(`checks.${field} must be true`);
+  if (outcome === "pass") {
+    for (const field of requiredChecks) {
+      if (input[field] !== true) errors.push(`checks.${field} must be true`);
+    }
   }
   requireNonNegativeInteger(
     input.unexpectedNetworkDestinations,

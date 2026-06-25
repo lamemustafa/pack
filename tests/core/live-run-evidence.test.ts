@@ -18,18 +18,28 @@ describe("live run evidence", () => {
 
   it("rejects taxpayer, portal, path, file, and credential markers anywhere in the evidence", () => {
     const cases: Array<[string, Partial<LiveRunEvidence>]> = [
-      ["gstin", { notes: "Observed 27ABCDE1234F1Z5 in the portal." }],
-      ["pan", { notes: "Observed ABCDE1234F in the portal." }],
-      ["arn", { notes: "Portal displayed ARN AA2901234567890." }],
-      ["portal-url", { notes: "https://services.gst.gov.in/services/auth/efiledreturns" }],
-      ["local-path", { notes: "/Users/example/Downloads/gstr3b.pdf" }],
-      ["local-path", { notes: "/home/alice/Downloads/download.pdf" }],
-      ["local-path", { notes: "/tmp/pack/evidence.json" }],
-      ["filename", { notes: "Saved download.pdf" }],
-      ["filename", { notes: "Saved returns_april.zip" }],
-      ["secret", { notes: "authorization: Bearer secret-value" }],
-      ["secret", { notes: '{"cookie":"SID=secret-value"}' }],
-      ["secret", { notes: '{"x-csrf-token":"abc"}' }],
+      ["gstin", withEvidenceText("Observed 27ABCDE1234F1Z5 in the portal.")],
+      ["pan", withEvidenceText("Observed ABCDE1234F in the portal.")],
+      ["arn", withEvidenceText("Portal displayed ARN AA2901234567890.")],
+      ["portal-url", withEvidenceText("https://services.gst.gov.in/services/auth/efiledreturns")],
+      ["local-path", withEvidenceText("/Users/example/Downloads/gstr3b.pdf")],
+      ["local-path", withEvidenceText("/home/alice/Downloads/download.pdf")],
+      ["local-path", withEvidenceText("/tmp/pack/evidence.json")],
+      ["local-path", withEvidenceText("/workspace/pack/live-evidence.json")],
+      ["local-path", withEvidenceText("/root/pack/live-evidence.json")],
+      ["local-path", withEvidenceText("/opt/pack/live-evidence.json")],
+      ["local-path", withEvidenceText("/var/tmp/pack/live-evidence.json")],
+      ["local-path", withEvidenceText("file:///workspace/pack/live-evidence.json")],
+      ["filename", withEvidenceText("Saved download.pdf")],
+      ["filename", withEvidenceText("Saved returns_april.zip")],
+      ["secret", withEvidenceText("authorization: Bearer secret-value")],
+      ["secret", withEvidenceText('{"cookie":"SID=secret-value"}')],
+      ["secret", withEvidenceText('{"x-csrf-token":"abc"}')],
+      ["secret", withEvidenceText("otp: 123456")],
+      ["secret", withEvidenceText("captcha: AB12C")],
+      ["secret", withEvidenceText("password: secret-value")],
+      ["pdf", withEvidenceText("%PDF-1.7")],
+      ["pdf", withEvidenceText("data:application/pdf;base64,JVBERi0x")],
     ];
 
     for (const [expected, patch] of cases) {
@@ -38,6 +48,16 @@ describe("live run evidence", () => {
       expect(result.ok).toBe(false);
       if (!result.ok) expect(result.errors.join("\n")).toContain(expected);
     }
+  });
+
+  it("rejects free-form notes in shareable evidence", () => {
+    const result = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      notes: "Manual tester saw a client name here.",
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors).toContain("notes is not allowed in shareable evidence");
   });
 
   it("requires all redaction assertions to be false", () => {
@@ -96,8 +116,8 @@ describe("live run evidence", () => {
       expect(blockedPass.errors).toContain("pass evidence cannot include blocked targets");
   });
 
-  it("requires full-year pass evidence to reconcile every eligible target", () => {
-    const result = validateLiveRunEvidence({
+  it("requires passing evidence to reconcile every eligible target", () => {
+    const fullYear = validateLiveRunEvidence({
       ...createValidEvidence(),
       counts: {
         ...createValidEvidence().counts,
@@ -106,13 +126,57 @@ describe("live run evidence", () => {
         notFiled: 1,
       },
     });
+    const singlePeriod = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      scenario: "single-period",
+      checks: {
+        ...createValidEvidence().checks,
+        serviceWorkerRestartResumeChecked: false,
+        browserRestartResumeChecked: false,
+      },
+      counts: {
+        ...createValidEvidence().counts,
+        eligibleTargets: 3,
+        downloaded: 1,
+        notFiled: 0,
+      },
+    });
 
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.errors).toContain(
-        "full-year pass evidence must reconcile every eligible target",
-      );
+    expect(fullYear.ok).toBe(false);
+    if (!fullYear.ok) {
+      expect(fullYear.errors).toContain("pass evidence must reconcile every eligible target");
     }
+    expect(singlePeriod.ok).toBe(false);
+    if (!singlePeriod.ok) {
+      expect(singlePeriod.errors).toContain("pass evidence must reconcile every eligible target");
+    }
+  });
+
+  it("does not require success-only checks for blocked evidence", () => {
+    const result = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      outcome: "blocked",
+      counts: {
+        eligibleTargets: 12,
+        downloaded: 0,
+        notFiled: 0,
+        manuallyObserved: 0,
+        blocked: 1,
+        failed: 0,
+        duplicates: 0,
+      },
+      checks: {
+        humanVerifiedAccount: false,
+        humanVerifiedPeriods: false,
+        allFilesNonEmpty: false,
+        serviceWorkerRestartResumeChecked: false,
+        browserRestartResumeChecked: false,
+        clearLocalDataChecked: false,
+        unexpectedNetworkDestinations: 0,
+      },
+    });
+
+    expect(result.ok).toBe(true);
   });
 
   it("requires passing evidence to use a clean profile and zero unexpected network destinations", () => {
@@ -197,6 +261,10 @@ describe("live run evidence", () => {
     expect(computeLiveRunEvidenceDigest(left)).toBe(computeLiveRunEvidenceDigest(right));
   });
 });
+
+function withEvidenceText(text: string): Partial<LiveRunEvidence> {
+  return { evidenceId: text };
+}
 
 function createValidEvidence(): LiveRunEvidence {
   return {

@@ -5,7 +5,8 @@ export const LIVE_RUN_SENSITIVE_PATTERNS: Array<{ id: string; pattern: RegExp }>
   { id: "portal-url", pattern: /https:\/\/(?:www|services|return)\.gst\.gov\.in\/[^\s"']+/i },
   {
     id: "local-path",
-    pattern: /(?:\/(?:Users|home|tmp|private\/tmp|var\/folders)\/|[A-Z]:\\)[^\s"']+/i,
+    pattern:
+      /(?:file:\/\/\/[^\s"']+|\/(?:Users|home|tmp|private\/tmp|var|workspace|root|opt|mnt|Volumes)\/[^\s"']+|[A-Z]:\\[^\s"']+)/i,
   },
   {
     id: "filename",
@@ -14,8 +15,9 @@ export const LIVE_RUN_SENSITIVE_PATTERNS: Array<{ id: string; pattern: RegExp }>
   {
     id: "secret",
     pattern:
-      /(?:\\?"(?:cookie|authorization|x-csrf-token)\\?"|\b(?:cookie|authorization|x-csrf-token)\b)\s*[:=]\s*\\?"?[^\s;,"'}]+/i,
+      /(?:\\?"(?:cookie|authorization|x-csrf-token|otp|captcha|password)\\?"|\b(?:cookie|authorization|x-csrf-token|otp|captcha|password)\b)\s*[:=]\s*\\?"?[^\s;,"'}]+/i,
   },
   { id: "secret", pattern: /\b(?:Bearer|Basic)\s+[A-Za-z0-9._~+/-]+=*\b/i },
+  { id: "pdf", pattern: /(?:%PDF-\d(?:\.\d)?|application\/pdf|data:application\/pdf)/i },
   { id: "portal-html", pattern: /<(?:html|body|script|table|form|input|select)\b/i },
 ];

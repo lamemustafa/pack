@@ -22,7 +22,6 @@ export interface LiveRunEvidence {
   checks: LiveRunEvidenceChecks;
   redaction: LiveRunEvidenceRedaction;
   mediaArtifacts?: LiveRunEvidenceMediaArtifact[];
-  notes?: string;
 }
 
 export interface LiveRunEvidenceCounts {
