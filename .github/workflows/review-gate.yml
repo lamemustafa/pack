@@ -2,7 +2,7 @@ name: Review gate
 
 on:
   pull_request:
-    types: [opened, reopened, synchronize, ready_for_review]
+    types: [opened, reopened, synchronize, ready_for_review, edited]
   pull_request_review:
     types: [submitted, edited, dismissed]
   pull_request_review_comment:
@@ -37,7 +37,9 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run Pack workflow preflight
-        run: pnpm workflow:preflight -- --branch "${{ github.head_ref }}" --base-ref "${{ github.base_ref }}"
+        run: >-
+          pnpm workflow:preflight -- --branch "${{ github.event.pull_request.head.ref }}"
+          --base-ref "${{ github.event.pull_request.base.ref }}"
 
       - name: Check current-head review state
         run: >-
