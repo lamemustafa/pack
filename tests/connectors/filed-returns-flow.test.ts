@@ -382,6 +382,7 @@ describe("filed returns guided flow", () => {
         </section>
       </main>
     `);
+    markPackSubmittedSearch(documentRef, DEFAULT_SCOPE);
 
     const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
 
@@ -412,6 +413,7 @@ describe("filed returns guided flow", () => {
         </section>
       </main>
     `);
+    markPackSubmittedSearch(documentRef, DEFAULT_SCOPE);
     let searchClicked = 0;
     documentRef.querySelector("#lotsearch")?.addEventListener("click", () => {
       searchClicked += 1;
@@ -442,6 +444,7 @@ describe("filed returns guided flow", () => {
         </section>
       </main>
     `);
+    markPackSubmittedSearch(documentRef, DEFAULT_SCOPE);
 
     const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
 
@@ -465,6 +468,7 @@ describe("filed returns guided flow", () => {
         </section>
       </main>
     `);
+    markPackSubmittedSearch(documentRef, DEFAULT_SCOPE);
 
     const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
 
@@ -493,6 +497,7 @@ describe("filed returns guided flow", () => {
         </section>
       </main>
     `);
+    markPackSubmittedSearch(documentRef, DEFAULT_SCOPE);
     let viewClicked = 0;
     documentRef.querySelector("a")?.addEventListener("click", () => {
       viewClicked += 1;
@@ -532,6 +537,7 @@ describe("filed returns guided flow", () => {
         </section>
       </main>
     `);
+    markPackSubmittedSearch(documentRef, DEFAULT_SCOPE);
     let viewClicked = 0;
     documentRef.querySelector("a")?.addEventListener("click", () => {
       viewClicked += 1;
@@ -563,6 +569,7 @@ describe("filed returns guided flow", () => {
         </section>
       </main>
     `);
+    markPackSubmittedSearch(documentRef, DEFAULT_SCOPE);
 
     const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
 
@@ -585,6 +592,7 @@ describe("filed returns guided flow", () => {
         </section>
       </main>
     `);
+    markPackSubmittedSearch(documentRef, DEFAULT_SCOPE);
 
     const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
 
@@ -609,6 +617,7 @@ describe("filed returns guided flow", () => {
         </section>
       </main>
     `);
+    markPackSubmittedSearch(documentRef, DEFAULT_SCOPE);
 
     const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
 
@@ -630,6 +639,51 @@ describe("filed returns guided flow", () => {
         </section>
       </main>
     `);
+    markPackSubmittedSearch(documentRef, DEFAULT_SCOPE);
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.safeSignals).not.toContain("filed-return-positively-not-filed");
+  });
+
+  it("does not mark not-filed from a stale no-record panel without a submitted-search marker", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <select id="finYr"><option selected>2025-26</option></select>
+          <select id="optValue"><option selected>Monthly</option></select>
+          <select id="month"><option selected>March</option></select>
+          <select id="retTyp"><option selected>GSTR3B</option></select>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+        <section aria-label="Search results">
+          <p>No records found</p>
+        </section>
+      </main>
+    `);
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.safeSignals).not.toContain("filed-return-positively-not-filed");
+  });
+
+  it("does not mark not-filed from non-filed-returns GST pages", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>Other GST Search</h1>
+        <form>
+          <select id="finYr"><option selected>2025-26</option></select>
+          <select id="optValue"><option selected>Monthly</option></select>
+          <select id="month"><option selected>March</option></select>
+          <select id="retTyp"><option selected>GSTR3B</option></select>
+        </form>
+        <section aria-label="Search results">
+          <p>No records found</p>
+        </section>
+      </main>
+    `);
+    markPackSubmittedSearch(documentRef, DEFAULT_SCOPE);
 
     const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
 
@@ -976,6 +1030,37 @@ describe("filed returns guided flow", () => {
     expect(searchClicked).toBe(1);
   });
 
+  it("continues past an earlier labelled select that does not contain the requested option", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <label>Financial Year</label>
+        <select data-stale-fy><option>2024-25</option></select>
+        <form name="efiledReturns">
+          <label>Financial Year</label>
+          <select id="finYr"><option>Select</option><option>2025-26</option></select>
+          <label>Return Filing Period</label>
+          <select id="optValue"><option>Select</option><option>Monthly</option></select>
+          <label>Month</label>
+          <select id="month"><option>Select</option><option>March</option></select>
+          <label>Return Type</label>
+          <select id="retTyp"><option>Select</option><option>GSTR3B</option></select>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+      </main>
+    `);
+    let searchClicked = 0;
+    documentRef.querySelector("#lotsearch")?.addEventListener("click", () => {
+      searchClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.state).toBe("clicked");
+    expect(documentRef.querySelector<HTMLSelectElement>("#finYr")?.value).toBe("2025-26");
+    expect(searchClicked).toBe(1);
+  });
+
   it("does not click unrelated controls when the filter widgets cannot be resolved", async () => {
     const documentRef = createDocument(`
       <main>
@@ -1082,4 +1167,11 @@ function appendNativeOption(documentRef: Document, select: HTMLSelectElement | n
   option.textContent = text;
   option.value = text;
   select?.append(option);
+}
+
+function markPackSubmittedSearch(documentRef: Document, scope: FiledReturnsDownloadScope) {
+  documentRef.body.setAttribute(
+    "data-pack-filed-returns-search-signature",
+    `${scope.financialYear}::${scope.period}::${scope.returnType}`,
+  );
 }

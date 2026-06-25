@@ -62,7 +62,9 @@ export async function runFiledReturnsDownloadStep(
     scope,
     FILED_RETURNS_SCOPE_ID,
   );
-  if (notFiledEvidence) return notFiledEvidence;
+  if (isFiledReturnsSearchSurface(observation.safeSignals) && notFiledEvidence) {
+    return notFiledEvidence;
+  }
 
   if (observation.state === "filters-required") {
     return selectFiledReturnsFiltersAndSearch(documentRef, scope, FILED_RETURNS_SCOPE_ID);
@@ -189,6 +191,16 @@ function openFiledReturnResultRow(
 function periodMatchesScope(period: string | null, scope: FiledReturnsDownloadScope): boolean {
   if (!period) return false;
   return matchesAcceptedText(period, [scope.period]);
+}
+
+function isFiledReturnsSearchSurface(safeSignals: readonly string[]): boolean {
+  return (
+    safeSignals.includes("filed-returns-heading") &&
+    (safeSignals.includes("filter-form") ||
+      safeSignals.includes("view-download-column") ||
+      safeSignals.includes("search-action") ||
+      safeSignals.includes("filed-returns-route"))
+  );
 }
 
 function shouldReturnFromMismatchedDetail(

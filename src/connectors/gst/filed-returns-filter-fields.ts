@@ -4,6 +4,9 @@ import {
   getCustomDropdownControls,
 } from "./filed-returns-custom-dropdown";
 import { matchesAcceptedText, normaliseText } from "./filed-returns-dom";
+import type { FiledReturnsDownloadScope } from "../../core/contracts";
+
+export const FILED_RETURNS_SEARCH_SIGNATURE_ATTR = "data-pack-filed-returns-search-signature";
 
 export interface FiledReturnsFilterFieldState {
   present: boolean;
@@ -41,7 +44,16 @@ export function filedReturnsFilterFieldMatches(
   acceptedTexts: readonly string[],
 ): boolean {
   const state = readFiledReturnsFilterFieldState(documentRef, labelPattern);
-  return Boolean(state.selectedText && matchesAcceptedText(state.selectedText, acceptedTexts));
+  if (state.selectedText && matchesAcceptedText(state.selectedText, acceptedTexts)) return true;
+
+  return findLabelledSelects(documentRef, labelPattern).some((select) => {
+    const selectedText = readElementText(select.selectedOptions[0]) || select.value;
+    return matchesAcceptedText(selectedText, acceptedTexts);
+  });
+}
+
+export function filedReturnsSearchSignature(scope: FiledReturnsDownloadScope): string {
+  return `${scope.financialYear}::${scope.period}::${scope.returnType}`;
 }
 
 export function hasFiledReturnsFilterFieldControl(
@@ -72,29 +84,46 @@ export function findLabelledSelect(
   documentRef: Document,
   labelPattern: RegExp,
 ): HTMLSelectElement | null {
+  return findLabelledSelects(documentRef, labelPattern)[0] ?? null;
+}
+
+export function findLabelledSelects(
+  documentRef: Document,
+  labelPattern: RegExp,
+): HTMLSelectElement[] {
   const labels = Array.from(documentRef.querySelectorAll("label")).filter((label) =>
     labelPattern.test(label.textContent || ""),
   );
   const HTMLSelectElementConstructor = documentRef.defaultView?.HTMLSelectElement;
-  if (!HTMLSelectElementConstructor) return null;
+  if (!HTMLSelectElementConstructor) return [];
 
+  const selects: HTMLSelectElement[] = [];
   for (const label of labels) {
     const forId = label.getAttribute("for");
     if (forId) {
       const target = documentRef.getElementById(forId);
-      if (target instanceof HTMLSelectElementConstructor) return target;
+      if (target instanceof HTMLSelectElementConstructor) {
+        selects.push(target);
+        continue;
+      }
     }
 
     let sibling = label.nextElementSibling;
     while (sibling) {
-      if (sibling instanceof HTMLSelectElementConstructor) return sibling;
+      if (sibling instanceof HTMLSelectElementConstructor) {
+        selects.push(sibling);
+        break;
+      }
       const nested = sibling.querySelector("select");
-      if (nested instanceof HTMLSelectElementConstructor) return nested;
+      if (nested instanceof HTMLSelectElementConstructor) {
+        selects.push(nested);
+        break;
+      }
       sibling = sibling.nextElementSibling;
     }
   }
 
-  return null;
+  return selects;
 }
 
 function knownGstSelectIds(labelPattern: RegExp): string[] {

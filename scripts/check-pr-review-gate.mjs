@@ -97,12 +97,15 @@ function evaluatePullRequestReviewState(pr) {
 function reduceSubmittedCurrentHeadReviewsByAuthor(reviews, headRefOid) {
   const authorStates = new Map();
   const currentHeadReviews = reviews
-    .filter((review) => review.commit?.oid === headRefOid)
+    .filter(
+      (review) =>
+        review.commit?.oid === headRefOid ||
+        (review.state === "CHANGES_REQUESTED" && !review.commit?.oid),
+    )
     .sort(compareReviewSubmittedAt);
 
   for (const review of currentHeadReviews) {
     if (review.state === "PENDING") continue;
-    if (review.commit?.oid !== headRefOid) continue;
     const author = normaliseAuthorLogin(review.author?.login) || "unknown";
     if (review.state === "DISMISSED") {
       authorStates.delete(author);

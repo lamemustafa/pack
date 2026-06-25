@@ -5,8 +5,10 @@ import {
   selectCustomOptionNearLabel,
 } from "./filed-returns-custom-dropdown";
 import {
+  FILED_RETURNS_SEARCH_SIGNATURE_ATTR,
   findKnownGstSelect,
-  findLabelledSelect,
+  findLabelledSelects,
+  filedReturnsSearchSignature,
   hasFiledReturnsFilterFieldControl,
 } from "./filed-returns-filter-fields";
 import {
@@ -104,6 +106,10 @@ export async function selectFiledReturnsFiltersAndSearch(
     };
   }
 
+  documentRef.body?.setAttribute(
+    FILED_RETURNS_SEARCH_SIGNATURE_ATTR,
+    filedReturnsSearchSignature(scope),
+  );
   activateElement(search);
   return {
     connectorId: "gst",
@@ -199,8 +205,7 @@ async function selectOptionNearLabel(
     }
   }
 
-  const labelledSelect = findLabelledSelect(documentRef, labelPattern);
-  if (labelledSelect) {
+  for (const labelledSelect of findLabelledSelects(documentRef, labelPattern)) {
     if (selectOption(labelledSelect, acceptedTexts)) return "selected";
     hasPendingNativeControl = true;
   }

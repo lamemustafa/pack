@@ -328,6 +328,34 @@ describe("PR review gate", () => {
     ).toThrow(/No review was found for current head/);
   });
 
+  it("keeps commitless requested-change reviews blocking", () => {
+    const fixturePath = writeFixture(
+      "commitless-requested-changes",
+      reviewFixture({
+        headRefOid: "head-sha",
+        reviews: [
+          review({ state: "COMMENTED", commit: "head-sha" }),
+          review({ state: "CHANGES_REQUESTED", commit: null }),
+        ],
+      }),
+    );
+
+    expect(() =>
+      execFileSync(process.execPath, [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture",
+        fixturePath,
+        "--strict-head-review",
+        "--required-review-author",
+        "chatgpt-codex-connector",
+      ]),
+    ).toThrow(/Requested-changes reviews/);
+  });
+
   it("evaluates review state from paginated fixture pages", () => {
     const fixturePath = writeFixture("paginated-review-state", {
       pages: [
@@ -481,7 +509,7 @@ function review({
   submittedAt = "2026-06-24T17:45:40Z",
 }: {
   state: "APPROVED" | "COMMENTED" | "CHANGES_REQUESTED" | "DISMISSED" | "PENDING";
-  commit: string;
+  commit: string | null;
   submittedAt?: string;
 }) {
   return {
@@ -489,6 +517,6 @@ function review({
     submittedAt,
     url: `https://github.com/lamemustafa/pack/pull/14#${commit}-${state}`,
     author: { login: "chatgpt-codex-connector" },
-    commit: { oid: commit },
+    commit: commit ? { oid: commit } : null,
   };
 }
