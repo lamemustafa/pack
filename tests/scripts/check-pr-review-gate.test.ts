@@ -163,6 +163,40 @@ describe("PR review gate", () => {
     ).toThrow(/PR body workflow\/template issues/);
   });
 
+  it("allows fork PRs from default branch names while warning on naming", () => {
+    const fixturePath = writeFixture(
+      "fork-main-branch",
+      reviewFixture({
+        headRefName: "main",
+        headRepository: { nameWithOwner: "external/pack-fork" },
+        headRefOid: "head-sha",
+        reviews: [review({ state: "COMMENTED", commit: "head-sha" })],
+      }),
+    );
+
+    const output = execFileSync(
+      process.execPath,
+      [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture",
+        fixturePath,
+        "--strict-head-review",
+        "--required-review-author",
+        "chatgpt-codex-connector",
+      ],
+      {
+        cwd: rootDir,
+        encoding: "utf8",
+      },
+    );
+
+    expect(output).toContain("PR review gate passed");
+  });
+
   it("can allow a missing head review for finding-only CI gates", () => {
     const fixturePath = writeFixture(
       "allowed-missing-head-review",
@@ -254,6 +288,7 @@ function reviewFixture({
   headRefOid,
   headRefName = "tapish-codex/test-pr",
   baseRefName = "master",
+  headRepository = { nameWithOwner: "lamemustafa/pack" },
   body = packPrBody(),
   reviewThreads = [],
   reviews,
@@ -261,6 +296,7 @@ function reviewFixture({
   headRefOid: string;
   headRefName?: string;
   baseRefName?: string;
+  headRepository?: { nameWithOwner: string };
   body?: string;
   reviewThreads?: unknown[];
   reviews: Array<ReturnType<typeof review>>;
@@ -272,6 +308,7 @@ function reviewFixture({
           body,
           headRefName,
           baseRefName,
+          headRepository,
           headRefOid,
           reviewThreads: { nodes: reviewThreads },
           reviews: { nodes: reviews },
@@ -288,6 +325,7 @@ function packPrBody() {
     "- [x] `pnpm workflow:preflight` was run before editing/push, or the skip reason is documented.",
     "## Privacy And Data-Flow Impact",
     "## Sensitive Surface Review",
+    "## Verification",
     "## PR Review Follow-Up",
   ].join("\n\n");
 }

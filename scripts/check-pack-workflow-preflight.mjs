@@ -10,6 +10,8 @@ let repoRoot = process.cwd();
 repoRoot = gitText(["rev-parse", "--show-toplevel"]);
 const branch = readArg("--branch") ?? currentBranch();
 const baseRef = readArg("--base-ref") ?? process.env.GITHUB_BASE_REF ?? "master";
+const repoFullName = readArg("--repo");
+const headRepoFullName = readArg("--head-repo");
 const issues = [];
 const warnings = [];
 
@@ -32,7 +34,13 @@ function checkBranch() {
   }
 
   if (protectedBranches.has(branch)) {
-    issues.push(`current branch is ${branch}; create a Pack branch before non-trivial edits`);
+    if (headRepoFullName && repoFullName && headRepoFullName !== repoFullName) {
+      warnings.push(
+        `fork branch ${headRepoFullName}:${branch} uses a protected branch name; treating it as external contributor input`,
+      );
+    } else {
+      issues.push(`current branch is ${branch}; create a Pack branch before non-trivial edits`);
+    }
   }
 
   if (!branch.startsWith("tapish-codex/") && !protectedBranches.has(branch)) {
