@@ -11,7 +11,7 @@ export function detectPositiveNotFiledEvidence(
   const resultsContainer = findSettledNoRecordResultsContainer(documentRef);
   if (!resultsContainer) return null;
   if (!filterFormMatchesScope(documentRef, scope)) return null;
-  if (hasMatchingResultRow(resultsContainer, scope)) return null;
+  if (hasMatchingResultRow(documentRef, scope)) return null;
 
   return {
     connectorId: "gst",
@@ -77,7 +77,7 @@ function hasLoadingEvidence(container: Element): boolean {
   return /\bloading\b|\bplease\s+wait\b|\bsearching\b|\bprocessing\b/.test(normaliseText(text));
 }
 
-function hasMatchingResultRow(root: Element, scope: FiledReturnsDownloadScope): boolean {
+function hasMatchingResultRow(root: ParentNode, scope: FiledReturnsDownloadScope): boolean {
   return Array.from(root.querySelectorAll("tr")).some((row) => {
     const rowText = visibleText(row);
     const period = extractTaxPeriodFromRow(row) ?? rowText;

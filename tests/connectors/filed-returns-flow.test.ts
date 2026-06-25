@@ -508,6 +508,45 @@ describe("filed returns guided flow", () => {
     expect(viewClicked).toBe(1);
   });
 
+  it("does not mark not-filed when a matching result row exists outside the no-record panel", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <select id="finYr"><option selected>2025-26</option></select>
+          <select id="optValue"><option selected>Monthly</option></select>
+          <select id="month"><option selected>March</option></select>
+          <select id="retTyp"><option selected>GSTR3B</option></select>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+        <section aria-label="Prior result status">
+          <p>No records found</p>
+        </section>
+        <section aria-label="Search results">
+          <table>
+            <thead><tr><th>Return Type</th><th>Financial Year</th><th>Tax Period</th><th>View/Download</th></tr></thead>
+            <tbody>
+              <tr><td>GSTR3B</td><td>2025-26</td><td>March</td><td><a href="#view">View</a></td></tr>
+            </tbody>
+          </table>
+        </section>
+      </main>
+    `);
+    let viewClicked = 0;
+    documentRef.querySelector("a")?.addEventListener("click", () => {
+      viewClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining(["filed-return-result-view-clicked"]),
+    );
+    expect(result.safeSignals).not.toContain("filed-return-positively-not-filed");
+    expect(viewClicked).toBe(1);
+  });
+
   it("verifies native month selection before accepting no-record evidence", async () => {
     const documentRef = createDocument(`
       <main>
