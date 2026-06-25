@@ -35,6 +35,7 @@
     "verify:zip": "node scripts/verify-extension-zip.mjs",
     "verify:clean": "node scripts/assert-clean-worktree.mjs",
     "review:gate": "node scripts/check-pr-review-gate.mjs",
+    "validate:evidence": "PACK_VALIDATE_EVIDENCE_REQUIRED=true vitest run tests/core/live-run-evidence-file.test.ts",
     "verify:local": "pnpm install --frozen-lockfile && pnpm audit --audit-level high && wxt prepare && prettier --check . && eslint . --max-warnings 0 && tsc --noEmit && vitest run && wxt build && node scripts/verify-extension-package.mjs .output/chrome-mv3 && git diff --check",
     "verify": "pnpm verify:local",
     "verify:release": "pnpm verify:local && pnpm verify:clean && wxt zip && node scripts/verify-extension-zip.mjs",

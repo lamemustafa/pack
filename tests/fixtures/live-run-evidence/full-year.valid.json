@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "evidenceId": "pack-live-run-2026-06-26-subject-a-full-year",
+  "sourceCommit": "0123456789abcdef0123456789abcdef01234567",
+  "gitTag": "v0.1.1",
+  "zipSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "extensionVersion": "0.1.1",
+  "browser": {
+    "name": "Brave",
+    "version": "1.80.122"
+  },
+  "profile": "clean-test-profile",
+  "subjectAlias": "SUBJECT-A",
+  "scenario": "full-year",
+  "startedAt": "2026-06-26T08:00:00.000Z",
+  "completedAt": "2026-06-26T08:30:00.000Z",
+  "outcome": "pass",
+  "counts": {
+    "eligibleTargets": 12,
+    "downloaded": 10,
+    "notFiled": 2,
+    "manuallyObserved": 0,
+    "blocked": 0,
+    "failed": 0,
+    "duplicates": 0
+  },
+  "checks": {
+    "humanVerifiedAccount": true,
+    "humanVerifiedPeriods": true,
+    "allFilesNonEmpty": true,
+    "serviceWorkerRestartResumeChecked": true,
+    "browserRestartResumeChecked": true,
+    "clearLocalDataChecked": true,
+    "unexpectedNetworkDestinations": 0
+  },
+  "redaction": {
+    "containsGstin": false,
+    "containsPan": false,
+    "containsTaxpayerName": false,
+    "containsFilename": false,
+    "containsPortalUrl": false,
+    "containsLocalPath": false,
+    "containsPdf": false,
+    "containsCookieOrToken": false,
+    "containsPortalHtml": false,
+    "containsScreenshotOrVideo": false
+  },
+  "mediaArtifacts": [
+    {
+      "kind": "screen-recording",
+      "classification": "private-debug-only",
+      "redactionMethod": "not-published",
+      "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    }
+  ]
+}
