@@ -16,7 +16,7 @@ describe("Pack CI workflow", () => {
     expect(workflow).not.toContain("actions/upload-artifact");
   });
 
-  it("runs a current-head review findings gate on PR, review, and manual recovery events", async () => {
+  it("runs a current-head review findings gate on PR, review, and branch-dispatched manual recovery events", async () => {
     const workflow = await readFile(
       path.join(rootDir, ".github", "workflows", "review-gate.yml"),
       "utf8",
@@ -25,8 +25,10 @@ describe("Pack CI workflow", () => {
     expect(workflow).toContain("pull_request:");
     expect(workflow).toContain("pull_request_review:");
     expect(workflow).toContain("pull_request_review_comment:");
-    expect(workflow).toContain("issue_comment:");
     expect(workflow).toContain("workflow_dispatch:");
+    expect(workflow).not.toContain("issue_comment:");
+    expect(workflow).not.toContain("github.event.issue");
+    expect(workflow).not.toContain("/review-gate");
     expect(workflow).toContain("name: Review findings gate");
     expect(workflow).toContain("name: Review findings gate");
     expect(workflow).toContain("pull-requests: read");

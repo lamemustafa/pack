@@ -3,7 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 import type { FiledReturnsDownloadScope } from "../../src/core/contracts";
 import { runFiledReturnsDownloadStep } from "../../src/connectors/gst/filed-returns-flow";
 import { triggerFiledGstr3bFiledPdfDownload } from "../../src/connectors/gst/filed-returns-download";
-import { markFiledReturnsSearchPending } from "../../src/connectors/gst/filed-returns-search-state";
+import {
+  hasSettledFiledReturnsSearchForScope,
+  markFiledReturnsSearchPending,
+} from "../../src/connectors/gst/filed-returns-search-state";
 
 const DEFAULT_SCOPE: FiledReturnsDownloadScope = {
   financialYear: "2025-26",
@@ -476,6 +479,35 @@ describe("filed returns guided flow", () => {
     expect(result.safeSignals).not.toContain("filed-return-positively-not-filed");
   });
 
+  it("does not treat no-record text inside an outer busy result panel as not-filed", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <select id="finYr"><option selected>2025-26</option></select>
+          <select id="optValue"><option selected>Monthly</option></select>
+          <select id="month"><option selected>March</option></select>
+          <select id="retTyp"><option selected>GSTR3B</option></select>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+        <section aria-label="Search results">
+          <table>
+            <tbody>
+              <tr><td>No records found</td></tr>
+            </tbody>
+          </table>
+        </section>
+      </main>
+    `);
+    markPackSubmittedSearch(documentRef, DEFAULT_SCOPE);
+    expect(hasSettledFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(true);
+    documentRef.querySelector("section")?.setAttribute("aria-busy", "true");
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.safeSignals).not.toContain("filed-return-positively-not-filed");
+  });
+
   it("does not mark not-filed when a matching result row exists with a no-record footer", async () => {
     const documentRef = createDocument(`
       <main>
@@ -648,7 +680,36 @@ describe("filed returns guided flow", () => {
     expect(result.safeSignals).toEqual(
       expect.arrayContaining([
         "filed-return-result-view-clicked",
-        "filed-return-result-period:Mar",
+        "filed-return-result-period:March",
+      ]),
+    );
+    expect(viewClicked).toBe(1);
+  });
+
+  it("opens headerless result rows whose tax period uses a GST month abbreviation", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <table>
+          <caption>View/Download</caption>
+          <tbody>
+            <tr><td>GSTR3B</td><td>2025-26</td><td>Mar</td><td><a href="#view">View</a></td></tr>
+          </tbody>
+        </table>
+      </main>
+    `);
+    let viewClicked = 0;
+    documentRef.querySelector("a")?.addEventListener("click", () => {
+      viewClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining([
+        "filed-return-result-view-clicked",
+        "filed-return-result-period:March",
       ]),
     );
     expect(viewClicked).toBe(1);
@@ -910,6 +971,33 @@ describe("filed returns guided flow", () => {
     expect(secondResult.safeSignals).not.toContain("filed-return-positively-not-filed");
   });
 
+  it("does not reuse settled not-filed evidence after a new refresh starts", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <select id="finYr"><option selected>2025-26</option></select>
+          <select id="optValue"><option selected>Monthly</option></select>
+          <select id="month"><option selected>March</option></select>
+          <select id="retTyp"><option selected>GSTR3B</option></select>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+        <section aria-label="Search results">
+          <p>No records found</p>
+        </section>
+      </main>
+    `);
+    markPackSubmittedSearch(documentRef, DEFAULT_SCOPE);
+    expect(hasSettledFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(true);
+    const loading = documentRef.createElement("div");
+    loading.textContent = "Loading...";
+    documentRef.body.append(loading);
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.safeSignals).not.toContain("filed-return-positively-not-filed");
+  });
+
   it("does not mark not-filed from non-filed-returns GST pages", async () => {
     const documentRef = createDocument(`
       <main>
@@ -1039,6 +1127,84 @@ describe("filed returns guided flow", () => {
     );
     expect(result.safeSignals).not.toContain("filed-return-detail-period:February");
     expect(result.safeSignals).not.toContain("filed-return-detail-financial-year:2024-25");
+  });
+
+  it("canonicalizes abbreviated detail periods before declaring the download ready", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <nav>Returns / Filed Returns</nav>
+        <h1>GSTR-3B - Monthly Return</h1>
+        <div>Status - Filed</div>
+        <div>Financial Year - 2025-26</div>
+        <div>Return Period - Mar</div>
+        <button>DOWNLOAD FILED GSTR-3B</button>
+      </main>
+    `);
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.state).toBe("ready");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining([
+        "filed-return-detail-period:March",
+        "filed-return-detail-financial-year:2025-26",
+      ]),
+    );
+  });
+
+  it("canonicalizes September detail abbreviations before declaring the download ready", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <nav>Returns / Filed Returns</nav>
+        <h1>GSTR-3B - Monthly Return</h1>
+        <div>Status - Filed</div>
+        <div>Financial Year - 2025-26</div>
+        <div>Return Period - Sept</div>
+        <button>DOWNLOAD FILED GSTR-3B</button>
+      </main>
+    `);
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      ...DEFAULT_SCOPE,
+      period: "September",
+    });
+
+    expect(result.state).toBe("ready");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining([
+        "filed-return-detail-period:September",
+        "filed-return-detail-financial-year:2025-26",
+      ]),
+    );
+  });
+
+  it("clicks an explicit filed PDF download when the detail period is abbreviated", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <nav>Returns / Filed Returns</nav>
+        <h1>GSTR-3B - Monthly Return</h1>
+        <div>Status - Filed</div>
+        <div>Financial Year - 2025-26</div>
+        <div>Return Period - Mar</div>
+        <button>DOWNLOAD FILED GSTR-3B</button>
+      </main>
+    `);
+    makeLayoutVisible(documentRef);
+    let downloadClicked = 0;
+    documentRef.querySelector("button")?.addEventListener("click", () => {
+      downloadClicked += 1;
+    });
+
+    const result = await triggerFiledGstr3bFiledPdfDownload(documentRef, {
+      actionId: "test-action",
+      financialYear: "2025-26",
+      period: "March",
+      returnType: "GSTR-3B",
+    });
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(expect.arrayContaining(["filed-gstr3b-download-clicked"]));
+    expect(downloadClicked).toBe(1);
   });
 
   it("refuses an explicit trigger when the detail page identity does not match the target", async () => {

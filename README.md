@@ -84,6 +84,7 @@ pnpm exec tsc --noEmit
 pnpm exec vitest run
 pnpm exec wxt build
 node scripts/verify-extension-package.mjs .output/chrome-mv3
+pnpm verify:clean
 pnpm exec wxt zip
 node scripts/verify-extension-zip.mjs
 git diff --check

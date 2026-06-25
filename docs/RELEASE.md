@@ -17,6 +17,7 @@ pnpm exec tsc --noEmit
 pnpm exec vitest run
 pnpm exec wxt build
 node scripts/verify-extension-package.mjs .output/chrome-mv3
+pnpm verify:clean
 pnpm exec wxt zip
 node scripts/verify-extension-zip.mjs
 git diff --check
@@ -32,6 +33,7 @@ The release gate covers:
 - Vitest unit tests;
 - Chrome MV3 production build;
 - built-package permission, CSP, and remote-code checks;
+- clean worktree enforcement before release ZIP creation;
 - store ZIP creation;
 - exact-ZIP extraction, package-policy verification, SHA-256 output, checksum
   file generation, and checksum log evidence in CI.

@@ -1,7 +1,10 @@
 import type { FiledReturnsDownloadScope } from "../../core/contracts";
 import { getClickableElements, matchesAcceptedText, normaliseText } from "./filed-returns-dom";
 import { extractTaxPeriodFromRow } from "./filed-returns-detail-identity";
-import { acceptedFiledReturnsPeriodTexts } from "./filed-returns-months";
+import {
+  acceptedFiledReturnsPeriodTexts,
+  canonicalFiledReturnsMonth,
+} from "./filed-returns-months";
 
 export interface MatchingFiledReturnRow {
   row: HTMLTableRowElement;
@@ -20,7 +23,7 @@ export function findMatchingFiledReturnRows(
     .map((row) => ({ row, identity: extractResultRowIdentity(row) }))
     .filter(({ row, identity }) => {
       const rowText = readElementText(row);
-      const period = identity.period ?? extractTaxPeriodFromRow(row);
+      const period = canonicalResultRowPeriod(identity.period ?? extractTaxPeriodFromRow(row));
       const financialYear = identity.financialYear ?? rowText;
       const returnType = identity.returnType ?? rowText;
       return (
@@ -31,7 +34,7 @@ export function findMatchingFiledReturnRows(
     })
     .map(({ row, identity }) => ({
       row,
-      period: identity.period ?? extractTaxPeriodFromRow(row),
+      period: canonicalResultRowPeriod(identity.period ?? extractTaxPeriodFromRow(row)),
     }));
 }
 
@@ -53,6 +56,10 @@ export function findMatchingActionableFiledReturnRows(
 function periodMatchesScope(period: string | null, scope: FiledReturnsDownloadScope): boolean {
   if (!period) return false;
   return matchesAcceptedText(period, acceptedFiledReturnsPeriodTexts(scope));
+}
+
+function canonicalResultRowPeriod(period: string | null): string | null {
+  return canonicalFiledReturnsMonth(period) ?? period;
 }
 
 function extractResultRowIdentity(row: Element): {

@@ -61,7 +61,7 @@ function findSettledNoRecordResultsContainer(documentRef: Document): Element | n
   for (const candidate of candidates) {
     if (isHidden(candidate)) continue;
     const container = findResultsContainer(candidate);
-    if (!container || hasLoadingEvidence(container)) continue;
+    if (!container || hasLoadingEvidenceForResultSurface(candidate, container)) continue;
     return container;
   }
 
@@ -87,6 +87,17 @@ function findResultsContainer(element: Element): Element | null {
       "main",
     ].join(","),
   );
+}
+
+function hasLoadingEvidenceForResultSurface(noRecordElement: Element, container: Element): boolean {
+  if (hasLoadingEvidence(noRecordElement)) return true;
+  let current: Element | null = container;
+  while (current) {
+    if (hasLoadingEvidence(current)) return true;
+    if (current === current.ownerDocument.body) break;
+    current = current.parentElement;
+  }
+  return false;
 }
 
 function hasLoadingEvidence(container: Element): boolean {

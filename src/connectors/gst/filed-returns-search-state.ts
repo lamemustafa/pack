@@ -41,7 +41,6 @@ export function hasSettledFiledReturnsSearchForScope(
     searchAttempts.delete(documentRef);
     return false;
   }
-  if (attempt.settled) return true;
 
   const currentLoadingFingerprint = loadingFingerprint(documentRef);
   if (
@@ -49,8 +48,10 @@ export function hasSettledFiledReturnsSearchForScope(
     currentLoadingFingerprint !== attempt.preSearchLoadingFingerprint
   ) {
     attempt.sawPostClickLoading = true;
+    attempt.settled = false;
     return false;
   }
+  if (attempt.settled) return true;
 
   const currentFingerprint = resultFingerprint(documentRef);
   if (attempt.sawPostClickLoading || currentFingerprint !== attempt.preSearchFingerprint) {
