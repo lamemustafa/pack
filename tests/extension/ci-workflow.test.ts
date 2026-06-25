@@ -16,7 +16,7 @@ describe("Pack CI workflow", () => {
     expect(workflow).not.toContain("actions/upload-artifact");
   });
 
-  it("runs a strict current-head review gate on PR and review events", async () => {
+  it("runs a current-head review findings gate on PR, review, and PR-dispatched manual recovery events", async () => {
     const workflow = await readFile(
       path.join(rootDir, ".github", "workflows", "review-gate.yml"),
       "utf8",
@@ -25,17 +25,24 @@ describe("Pack CI workflow", () => {
     expect(workflow).toContain("pull_request:");
     expect(workflow).toContain("pull_request_review:");
     expect(workflow).toContain("pull_request_review_comment:");
+    expect(workflow).toContain("workflow_dispatch:");
+    expect(workflow).toContain("name: Resolve PR metadata");
+    expect(workflow).toContain('gh pr view "${PR_NUMBER}"');
+    expect(workflow).not.toContain("issue_comment:");
+    expect(workflow).not.toContain("github.event.issue");
+    expect(workflow).not.toContain("/review-gate");
+    expect(workflow).toContain("name: Review findings gate");
+    expect(workflow).toContain("name: Review gate");
     expect(workflow).toContain("pull-requests: read");
     expect(workflow).toContain("GH_TOKEN: ${{ github.token }}");
     expect(workflow).toContain("fetch-depth: 0");
+    expect(workflow).toContain("ref: ${{ steps.resolve-pr.outputs.head_sha }}");
     expect(workflow).toContain("pnpm workflow:preflight");
     expect(workflow).toContain("ready_for_review, edited");
-    expect(workflow).toContain('--branch "${{ github.event.pull_request.head.ref }}"');
-    expect(workflow).toContain('--base-ref "${{ github.event.pull_request.base.ref }}"');
+    expect(workflow).toContain('--branch "${{ steps.resolve-pr.outputs.head_ref }}"');
+    expect(workflow).toContain('--base-ref "${{ steps.resolve-pr.outputs.base_ref }}"');
     expect(workflow).toContain('--repo "${{ github.repository }}"');
-    expect(workflow).toContain(
-      '--head-repo "${{ github.event.pull_request.head.repo.full_name }}"',
-    );
+    expect(workflow).toContain('--head-repo "${{ steps.resolve-pr.outputs.head_repo }}"');
     expect(workflow).toContain("--strict-head-review");
     expect(workflow).toContain("--required-review-author chatgpt-codex-connector");
     expect(workflow).toContain("--wait-head-review-ms 180000");

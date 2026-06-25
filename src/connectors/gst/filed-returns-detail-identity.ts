@@ -1,19 +1,5 @@
 import { normaliseText } from "./filed-returns-dom";
-
-const TAX_PERIODS = [
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-  "January",
-  "February",
-  "March",
-];
+import { canonicalFiledReturnsMonth } from "./filed-returns-months";
 
 export interface FiledReturnsDetailIdentity {
   financialYear: string | null;
@@ -41,17 +27,15 @@ export function extractTaxPeriodFromRow(row: Element): string | null {
   const cells = Array.from(row.querySelectorAll("td"));
   const periodCell = cells[2];
   const periodText = normaliseText(periodCell?.textContent || "");
-  return TAX_PERIODS.find((period) => normaliseText(period) === periodText) ?? null;
+  return canonicalFiledReturnsMonth(periodText);
 }
 
 function extractDetailTaxPeriod(text: string): string | null {
-  const periodPattern = TAX_PERIODS.map((period) => period.toLowerCase()).join("|");
-  const match = new RegExp(
-    `\\breturn\\s+period\\b\\s*(?:[-:]\\s*)?(${periodPattern})\\b`,
-    "i",
-  ).exec(normaliseText(text));
+  const match = new RegExp("\\breturn\\s+period\\b\\s*(?:[-:]\\s*)?([a-z]+)\\b", "i").exec(
+    normaliseText(text),
+  );
   if (!match?.[1]) return null;
-  return TAX_PERIODS.find((period) => normaliseText(period) === match[1]) ?? null;
+  return canonicalFiledReturnsMonth(match[1]);
 }
 
 function extractDetailFinancialYear(text: string): string | null {

@@ -10,16 +10,16 @@ export function getFiledReturnsCompletionStatus(
   const periodCount = summary.completedPeriods.length;
   const totalPeriods = summary.totalPeriods ?? periodCount;
   if (summary.status === "complete") {
-    return `FY ${summary.scope.financialYear} ${summary.scope.returnType} complete. ${periodCount} of ${totalPeriods} ${periodCount === 1 ? "period" : "periods"} downloaded.`;
+    return `FY ${summary.scope.financialYear} ${summary.scope.returnType} complete. ${periodCount} of ${totalPeriods} ${periodCount === 1 ? "period" : "periods"} reconciled.`;
   }
   if (summary.status === "blocked" && summary.currentPeriod) {
-    return `FY ${summary.scope.financialYear} ${summary.scope.returnType} blocked at ${summary.currentPeriod}. ${periodCount} of ${totalPeriods} periods downloaded.`;
+    return `FY ${summary.scope.financialYear} ${summary.scope.returnType} blocked at ${summary.currentPeriod}. ${periodCount} of ${totalPeriods} periods reconciled.`;
   }
   if (summary.status === "running" && summary.currentPeriod) {
-    return `FY ${summary.scope.financialYear} ${summary.scope.returnType} running: ${summary.currentPeriod}. ${periodCount} of ${totalPeriods} periods downloaded.`;
+    return `FY ${summary.scope.financialYear} ${summary.scope.returnType} running: ${summary.currentPeriod}. ${periodCount} of ${totalPeriods} periods reconciled.`;
   }
   if (summary.status === "partial") {
-    return `FY ${summary.scope.financialYear} ${summary.scope.returnType} partial. ${periodCount} of ${totalPeriods} periods downloaded.`;
+    return `FY ${summary.scope.financialYear} ${summary.scope.returnType} partial. ${periodCount} of ${totalPeriods} periods reconciled.`;
   }
   return null;
 }

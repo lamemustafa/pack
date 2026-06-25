@@ -85,18 +85,73 @@ function evaluatePullRequestReviewState(pr) {
   const unresolvedThreads = pr.reviewThreads.nodes.filter(
     (thread) => !thread.isResolved && !thread.isOutdated,
   );
-  const blockingReviews = pr.reviews.nodes.filter(
-    (review) =>
-      review.state === "CHANGES_REQUESTED" &&
-      (!review.commit?.oid || review.commit.oid === pr.headRefOid),
-  );
-  const headReviews = pr.reviews.nodes.filter(
-    (review) =>
-      review.commit?.oid === pr.headRefOid &&
-      (!requiredReviewAuthor ||
-        normaliseAuthorLogin(review.author?.login) === normaliseAuthorLogin(requiredReviewAuthor)),
-  );
+  const authorStates = reduceSubmittedCurrentHeadReviewsByAuthor(pr.reviews.nodes, pr.headRefOid);
+  const blockingReviews = Array.from(authorStates.values())
+    .map((state) => state.blockingReview)
+    .filter(Boolean);
+  const headReviews = Array.from(authorStates.values())
+    .map((state) => state.latestSubmittedReview)
+    .filter(Boolean)
+    .filter(
+      (review) =>
+        !requiredReviewAuthor ||
+        normaliseAuthorLogin(review.author?.login) === normaliseAuthorLogin(requiredReviewAuthor),
+    );
   return { unresolvedThreads, blockingReviews, headReviews };
+}
+
+function reduceSubmittedCurrentHeadReviewsByAuthor(reviews, headRefOid) {
+  const authorStates = new Map();
+  const currentHeadReviews = reviews
+    .filter(
+      (review) =>
+        review.state !== "PENDING" &&
+        review.state !== "DISMISSED" &&
+        (review.commit?.oid === headRefOid ||
+          (review.state === "CHANGES_REQUESTED" && !review.commit?.oid)),
+    )
+    .sort(compareReviewSubmittedAt);
+
+  for (const review of currentHeadReviews) {
+    const author = normaliseAuthorLogin(review.author?.login) || "unknown";
+
+    const previous = authorStates.get(author) ?? {
+      latestSubmittedReview: null,
+      blockingReview: null,
+    };
+
+    if (review.state === "CHANGES_REQUESTED") {
+      authorStates.set(author, {
+        latestSubmittedReview: review,
+        blockingReview: review,
+      });
+      continue;
+    }
+
+    if (review.state === "APPROVED") {
+      authorStates.set(author, {
+        latestSubmittedReview: review,
+        blockingReview: null,
+      });
+      continue;
+    }
+
+    if (review.state === "COMMENTED") {
+      authorStates.set(author, {
+        latestSubmittedReview: review,
+        blockingReview: previous.blockingReview,
+      });
+    }
+  }
+
+  return authorStates;
+}
+
+function compareReviewSubmittedAt(left, right) {
+  const leftTime = Date.parse(left.submittedAt ?? "");
+  const rightTime = Date.parse(right.submittedAt ?? "");
+  if (Number.isFinite(leftTime) && Number.isFinite(rightTime)) return leftTime - rightTime;
+  return 0;
 }
 
 function evaluatePullRequestBody(pr) {
@@ -155,8 +210,57 @@ function reportBlockingState({ unresolvedThreads, blockingReviews }) {
 
 function fetchReviewGraph() {
   const fixture = nextFixturePath();
-  if (fixture) return JSON.parse(readFileSync(fixture, "utf8"));
+  if (fixture) return normaliseFixtureReviewGraph(JSON.parse(readFileSync(fixture, "utf8")));
 
+  return fetchPaginatedReviewGraph();
+}
+
+function fetchPaginatedReviewGraph() {
+  const merged = fetchReviewGraphPage();
+  const mergedPr = merged.data?.repository?.pullRequest;
+  if (!mergedPr) return merged;
+
+  let reviewThreadsPageInfo = mergedPr.reviewThreads.pageInfo;
+  while (reviewThreadsPageInfo?.hasNextPage) {
+    const page = fetchReviewThreadsGraphPage(reviewThreadsPageInfo.endCursor);
+    const pr = page.data?.repository?.pullRequest;
+    if (!pr) break;
+    mergedPr.reviewThreads.nodes.push(...pr.reviewThreads.nodes);
+    reviewThreadsPageInfo = pr.reviewThreads.pageInfo;
+    mergedPr.reviewThreads.pageInfo = reviewThreadsPageInfo;
+  }
+
+  let reviewsPageInfo = mergedPr.reviews.pageInfo;
+  while (reviewsPageInfo?.hasNextPage) {
+    const page = fetchReviewsGraphPage(reviewsPageInfo.endCursor);
+    const pr = page.data?.repository?.pullRequest;
+    if (!pr) break;
+    mergedPr.reviews.nodes.push(...pr.reviews.nodes);
+    reviewsPageInfo = pr.reviews.pageInfo;
+    mergedPr.reviews.pageInfo = reviewsPageInfo;
+  }
+
+  return annotateReviewHeadRef(merged);
+}
+
+function fetchReviewGraphPage() {
+  const [owner, name] = repo.split("/");
+  const commandArgs = [
+    "api",
+    "graphql",
+    "-F",
+    `owner=${owner}`,
+    "-F",
+    `name=${name}`,
+    "-F",
+    `number=${prNumber}`,
+    "-f",
+    "query=query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){body headRefName baseRefName headRepository{nameWithOwner} headRefOid reviewThreads(first:100){pageInfo{hasNextPage endCursor} nodes{id isResolved isOutdated path line comments(first:1){nodes{url author{login} body}}}} reviews(first:100){pageInfo{hasNextPage endCursor} nodes{state submittedAt url author{login} commit{oid}}}}}}",
+  ];
+  return runJson(commandArgs);
+}
+
+function fetchReviewThreadsGraphPage(after) {
   const [owner, name] = repo.split("/");
   return runJson([
     "api",
@@ -167,8 +271,28 @@ function fetchReviewGraph() {
     `name=${name}`,
     "-F",
     `number=${prNumber}`,
+    "-F",
+    `after=${after}`,
     "-f",
-    "query=query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){body headRefName baseRefName headRepository{nameWithOwner} headRefOid reviewThreads(first:100){nodes{id isResolved isOutdated path line comments(first:1){nodes{url author{login} body}}}} reviews(first:100){nodes{state submittedAt url author{login} commit{oid}}}}}}",
+    "query=query($owner:String!,$name:String!,$number:Int!,$after:String!){repository(owner:$owner,name:$name){pullRequest(number:$number){reviewThreads(first:100,after:$after){pageInfo{hasNextPage endCursor} nodes{id isResolved isOutdated path line comments(first:1){nodes{url author{login} body}}}}}}}",
+  ]);
+}
+
+function fetchReviewsGraphPage(after) {
+  const [owner, name] = repo.split("/");
+  return runJson([
+    "api",
+    "graphql",
+    "-F",
+    `owner=${owner}`,
+    "-F",
+    `name=${name}`,
+    "-F",
+    `number=${prNumber}`,
+    "-F",
+    `after=${after}`,
+    "-f",
+    "query=query($owner:String!,$name:String!,$number:Int!,$after:String!){repository(owner:$owner,name:$name){pullRequest(number:$number){reviews(first:100,after:$after){pageInfo{hasNextPage endCursor} nodes{state submittedAt url author{login} commit{oid}}}}}}",
   ]);
 }
 
@@ -177,6 +301,38 @@ function nextFixturePath() {
   const index = Math.min(fixtureIndex, fixturePaths.length - 1);
   fixtureIndex += 1;
   return fixturePaths[index];
+}
+
+function normaliseFixtureReviewGraph(fixture) {
+  if (Array.isArray(fixture.pages)) {
+    return annotateReviewHeadRef(mergeReviewGraphPages(fixture.pages));
+  }
+  return annotateReviewHeadRef(fixture);
+}
+
+function mergeReviewGraphPages(pages) {
+  const [firstPage, ...remainingPages] = pages;
+  if (!firstPage) return {};
+  const merged = JSON.parse(JSON.stringify(firstPage));
+  const mergedPr = merged.data?.repository?.pullRequest;
+  if (!mergedPr) return merged;
+  for (const page of remainingPages) {
+    const pr = page.data?.repository?.pullRequest;
+    if (!pr) continue;
+    mergedPr.reviewThreads.nodes.push(...pr.reviewThreads.nodes);
+    mergedPr.reviews.nodes.push(...pr.reviews.nodes);
+    mergedPr.reviewThreads.pageInfo = pr.reviewThreads.pageInfo;
+    mergedPr.reviews.pageInfo = pr.reviews.pageInfo;
+  }
+  return merged;
+}
+
+function annotateReviewHeadRef(result) {
+  const pr = result?.data?.repository?.pullRequest;
+  if (!pr) return result;
+  pr.reviewThreads.pageInfo ??= { hasNextPage: false, endCursor: null };
+  pr.reviews.pageInfo ??= { hasNextPage: false, endCursor: null };
+  return result;
 }
 
 function readFixturePaths() {

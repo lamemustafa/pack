@@ -1,6 +1,11 @@
-name: Review gate
+name: Review findings gate
 
 on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Pull request number to check
+        required: true
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review, edited]
   pull_request_review:
@@ -19,10 +24,62 @@ jobs:
     timeout-minutes: 8
 
     steps:
+      - name: Resolve PR metadata
+        id: resolve-pr
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.inputs.pr }}
+          EVENT_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          EVENT_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          EVENT_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${PR_NUMBER}" ]; then
+            echo "Could not determine pull request number." >&2
+            exit 1
+          fi
+
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
+            mapfile -t pr_metadata < <(
+              gh pr view "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" \
+                --json headRefName,baseRefName,headRepository,headRefOid \
+                --jq '.headRefName, .baseRefName, .headRepository.nameWithOwner, .headRefOid'
+            )
+            head_ref="${pr_metadata[0]:-}"
+            base_ref="${pr_metadata[1]:-}"
+            head_repo="${pr_metadata[2]:-}"
+            head_sha="${pr_metadata[3]:-}"
+          else
+            head_ref="${EVENT_HEAD_REF}"
+            base_ref="${EVENT_BASE_REF}"
+            head_repo="${EVENT_HEAD_REPO}"
+            head_sha="${EVENT_HEAD_SHA}"
+          fi
+
+          if [ -z "${head_ref}" ] || [ -z "${base_ref}" ] || [ -z "${head_repo}" ] || [ -z "${head_sha}" ]; then
+            echo "Could not resolve complete pull request metadata for #${PR_NUMBER}." >&2
+            exit 1
+          fi
+
+          {
+            echo "pr=${PR_NUMBER}"
+            echo "head_ref=${head_ref}"
+            echo "base_ref=${base_ref}"
+            echo "head_repo=${head_repo}"
+            echo "head_sha=${head_sha}"
+          } >> "${GITHUB_OUTPUT}"
+
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
           fetch-depth: 0
+          repository: ${{ steps.resolve-pr.outputs.head_repo }}
+          ref: ${{ steps.resolve-pr.outputs.head_sha }}
+          persist-credentials: false
 
       - name: Set up pnpm
         uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271
@@ -40,14 +97,14 @@ jobs:
 
       - name: Run Pack workflow preflight
         run: >-
-          pnpm workflow:preflight -- --branch "${{ github.event.pull_request.head.ref }}"
-          --base-ref "${{ github.event.pull_request.base.ref }}"
+          pnpm workflow:preflight -- --branch "${{ steps.resolve-pr.outputs.head_ref }}"
+          --base-ref "${{ steps.resolve-pr.outputs.base_ref }}"
           --repo "${{ github.repository }}"
-          --head-repo "${{ github.event.pull_request.head.repo.full_name }}"
+          --head-repo "${{ steps.resolve-pr.outputs.head_repo }}"
 
       - name: Check current-head review state
         run: >-
-          pnpm review:gate -- --repo "${{ github.repository }}" --pr "${{ github.event.pull_request.number }}"
+          pnpm review:gate -- --repo "${{ github.repository }}" --pr "${{ steps.resolve-pr.outputs.pr }}"
           --strict-head-review --required-review-author chatgpt-codex-connector
           --wait-head-review-ms 180000 --poll-interval-ms 10000 --allow-missing-head-review
         env:

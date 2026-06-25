@@ -28,6 +28,7 @@ import {
   completeFullFiscalYearStep,
   downloadUnconfirmedFullFiscalYearStep,
   interruptedFullFiscalYearStep,
+  needsResumeConfirmation,
   summariseFullFiscalYearLedger,
   targetStatusFromFlowStep,
   toFullFiscalYearSummary,
@@ -38,7 +39,7 @@ export type SinglePeriodRunner = (
   deps: FiledReturnsFlowRunnerDeps,
 ) => Promise<PackMessageResponse>;
 
-export { summariseFullFiscalYearLedger };
+export { summariseFullFiscalYearLedger, targetStatusFromFlowStep };
 
 export async function startFullFiscalYearDownloadFlow(
   scope: FiledReturnsDownloadScope,
@@ -50,12 +51,24 @@ export async function startFullFiscalYearDownloadFlow(
   const existingLedger = await readLedger(deps.storageKeys.fullFiscalYearLedger);
   const plannedPeriods = getFiledReturnsFullFiscalYearPeriods(scope.financialYear, now);
 
+  const replaceCompletedSameScopeLedger =
+    existingLedger &&
+    sameFiledReturnsScope(existingLedger.scope, scope) &&
+    existingLedger.status === "complete" &&
+    canCompleteFullFiscalYearLedger(existingLedger) &&
+    !options.allowExistingLedgerResume;
   let ledger =
-    existingLedger && sameFiledReturnsScope(existingLedger.scope, scope)
+    existingLedger &&
+    sameFiledReturnsScope(existingLedger.scope, scope) &&
+    !replaceCompletedSameScopeLedger
       ? reconcileFullFiscalYearLedgerTargets(existingLedger, now, plannedPeriods)
       : createFullFiscalYearLedger(scope, now, plannedPeriods);
 
-  if (existingLedger && sameFiledReturnsScope(existingLedger.scope, scope)) {
+  if (
+    existingLedger &&
+    sameFiledReturnsScope(existingLedger.scope, scope) &&
+    !replaceCompletedSameScopeLedger
+  ) {
     if (shouldPersistReconciledLedger(existingLedger, ledger)) {
       await persistLedger(deps, ledger);
     }
@@ -64,7 +77,9 @@ export async function startFullFiscalYearDownloadFlow(
   }
 
   ledger =
-    existingLedger && sameFiledReturnsScope(existingLedger.scope, scope)
+    existingLedger &&
+    sameFiledReturnsScope(existingLedger.scope, scope) &&
+    !replaceCompletedSameScopeLedger
       ? resumeFullFiscalYearLedger(ledger, now)
       : ledger;
 
@@ -169,6 +184,15 @@ function responseForExistingLedger(
     };
   }
 
+  if (!options.allowExistingLedgerResume && needsResumeConfirmation(ledger)) {
+    const step = blockedFullFiscalYearStep("full-fiscal-year-resume-confirmation-required", ledger);
+    return {
+      ok: true,
+      flowStep: step,
+      flowSummary: toFullFiscalYearSummary(ledger, step),
+    };
+  }
+
   if (hasActionRequiredFullFiscalYearTarget(ledger)) {
     const displayLedger = coerceInconsistentCompleteLedger(ledger, now);
     const step = blockedFullFiscalYearStep("full-fiscal-year-run-needs-action", displayLedger);
@@ -176,18 +200,6 @@ function responseForExistingLedger(
       ok: true,
       flowStep: step,
       flowSummary: toFullFiscalYearSummary(displayLedger, step),
-    };
-  }
-
-  if (
-    !options.allowExistingLedgerResume &&
-    ledger.targets.some((target) => target.status === "pending")
-  ) {
-    const step = blockedFullFiscalYearStep("full-fiscal-year-resume-confirmation-required", ledger);
-    return {
-      ok: true,
-      flowStep: step,
-      flowSummary: toFullFiscalYearSummary(ledger, step),
     };
   }
 

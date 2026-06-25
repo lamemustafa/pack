@@ -49,7 +49,7 @@ describe("popup filed returns flow summary", () => {
         },
         COMPLETE_SUMMARY,
       ),
-    ).toBe("FY 2025-26 GSTR-3B complete. 12 of 12 periods downloaded.");
+    ).toBe("FY 2025-26 GSTR-3B complete. 12 of 12 periods reconciled.");
   });
 
   it("does not show stale completion for a different selected scope", () => {
@@ -81,7 +81,25 @@ describe("popup filed returns flow summary", () => {
           currentPeriod: "June",
         },
       ),
-    ).toBe("FY 2025-26 GSTR-3B blocked at June. 2 of 12 periods downloaded.");
+    ).toBe("FY 2025-26 GSTR-3B blocked at June. 2 of 12 periods reconciled.");
+  });
+
+  it("uses reconciled language when completed periods may include manual or not-filed outcomes", () => {
+    expect(
+      getFiledReturnsCompletionStatus(
+        {
+          financialYear: "2025-26",
+          period: FULL_FISCAL_YEAR_PERIOD,
+          returnType: "GSTR-3B",
+        },
+        {
+          ...COMPLETE_SUMMARY,
+          status: "complete",
+          completedPeriods: ["April", "May"],
+          totalPeriods: 2,
+        },
+      ),
+    ).toBe("FY 2025-26 GSTR-3B complete. 2 of 2 periods reconciled.");
   });
 
   it("uses the persisted summary status in the popup heading", () => {
