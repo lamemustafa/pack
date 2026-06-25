@@ -36,7 +36,9 @@ function checkBranch() {
   }
 
   if (!branch.startsWith("tapish-codex/") && !protectedBranches.has(branch)) {
-    warnings.push(`branch ${branch} does not use tapish-codex/<short-scope>; acceptable for forks only`);
+    warnings.push(
+      `branch ${branch} does not use tapish-codex/<short-scope>; acceptable for forks only`,
+    );
   }
 }
 
@@ -52,14 +54,23 @@ function checkWorktreeClean() {
 function checkGuidanceFreshness() {
   const remoteBase = `origin/${baseRef}`;
   if (!gitRefExists(remoteBase)) {
-    warnings.push(`could not find ${remoteBase}; run git fetch origin before relying on Pack guidance freshness checks`);
+    warnings.push(
+      `could not find ${remoteBase}; run git fetch origin before relying on Pack guidance freshness checks`,
+    );
     return;
   }
 
   try {
     execFileSync(
       "git",
-      ["diff", "--quiet", `HEAD...${remoteBase}`, "--", "AGENTS.md", "docs/AGENT_REVIEW_RECTIFY.md"],
+      [
+        "diff",
+        "--quiet",
+        `HEAD...${remoteBase}`,
+        "--",
+        "AGENTS.md",
+        "docs/AGENT_REVIEW_RECTIFY.md",
+      ],
       { cwd: repoRoot, stdio: "ignore" },
     );
   } catch {

@@ -32,11 +32,7 @@ describe("Pack workflow preflight", () => {
 
   it("fails when the PR template is missing required workflow checklist text", () => {
     const repo = createPackRepo("tapish-codex/missing-template");
-    writeFileSync(
-      path.join(repo, ".github", "PULL_REQUEST_TEMPLATE.md"),
-      "## Summary\n",
-      "utf8",
-    );
+    writeFileSync(path.join(repo, ".github", "PULL_REQUEST_TEMPLATE.md"), "## Summary\n", "utf8");
     git(repo, ["add", ".github/PULL_REQUEST_TEMPLATE.md"]);
     git(repo, ["commit", "-m", "break template"]);
 
