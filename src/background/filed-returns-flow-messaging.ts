@@ -4,7 +4,7 @@ import { ambiguousDownloadTriggerResponse } from "./filed-returns-flow-guards";
 
 const FLOW_STEP_MESSAGE_RETRY_MS = 1_250;
 const MAX_FLOW_STEP_MESSAGE_ATTEMPTS = 8;
-const CONTENT_MESSAGE_TIMEOUT_MS = 20_000;
+const CONTENT_MESSAGE_TIMEOUT_MS = 60_000;
 
 export interface FiledReturnsFlowMessagingDeps {
   sendMessageToTabWithInjection: (

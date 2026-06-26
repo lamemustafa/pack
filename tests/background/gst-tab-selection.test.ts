@@ -106,6 +106,32 @@ describe("Pack GST tab selection", () => {
     });
   });
 
+  it("fails closed when the popup tab has multiple GST tabs in the current window", async () => {
+    browserMocks.tabs.query
+      .mockResolvedValueOnce([
+        {
+          active: true,
+          id: 24,
+          url: "chrome-extension://pack-test-extension/popup.html",
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          active: false,
+          id: 25,
+          url: "https://services.gst.gov.in/services/auth/dashboard",
+        },
+        {
+          active: false,
+          id: 26,
+          url: "https://return.gst.gov.in/returns/auth/efiledReturns",
+        },
+      ]);
+    const { getActiveGstTab } = await import("../../src/entrypoints/background");
+
+    await expect(getActiveGstTab()).resolves.toBeNull();
+  });
+
   it("returns null when no GST tab exists in the current window", async () => {
     browserMocks.tabs.query
       .mockResolvedValueOnce([

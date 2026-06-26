@@ -1,5 +1,5 @@
 import { browser } from "wxt/browser";
-import { pickSupportedGstPortalTab } from "../connectors/gst/hosts";
+import { isSupportedGstPortalUrl, pickSupportedGstPortalTab } from "../connectors/gst/hosts";
 import type { ArchiveManifest, PortalContext, PortalObservation } from "../core/contracts";
 import { isPackMessage, type PackMessage, type PackMessageResponse } from "../core/messages";
 import {
@@ -219,7 +219,12 @@ export async function getActiveGstTab(): Promise<ActiveGstTab | null> {
   if (activeGstTab) return activeGstTab;
 
   const currentWindowTabs = await browser.tabs.query({ currentWindow: true });
-  return pickSupportedGstPortalTab<Browser.tabs.Tab>(currentWindowTabs);
+  const fallbackGstTabs = currentWindowTabs.filter(
+    (tab): tab is Browser.tabs.Tab & { id: number } =>
+      typeof tab.id === "number" && isSupportedGstPortalUrl(tab.url),
+  );
+  if (fallbackGstTabs.length !== 1) return null;
+  return fallbackGstTabs[0] ?? null;
 }
 
 async function sendMessageToTabWithInjection(

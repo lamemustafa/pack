@@ -310,26 +310,26 @@ async function selectOptionNearLabel(
   acceptedTexts: readonly string[],
 ): Promise<FieldSelectionAttempt> {
   let hasPendingNativeControl = false;
-  const knownDocumentSelect = findKnownGstSelect(documentRef, labelPattern);
-  if (knownDocumentSelect) {
-    if (selectOption(knownDocumentSelect, acceptedTexts)) return "selected";
-    hasPendingNativeControl = true;
-  }
-
   const formRoot = findFiledReturnsFilterRoot(documentRef);
   if (formRoot) {
-    const knownSelect = findKnownGstSelect(formRoot, labelPattern);
-    if (knownSelect && knownSelect !== knownDocumentSelect) {
-      if (selectOption(knownSelect, acceptedTexts)) return "selected";
+    const scopedKnownSelect = findKnownGstSelect(formRoot, labelPattern);
+    if (scopedKnownSelect) {
+      if (selectOption(scopedKnownSelect, acceptedTexts)) return "selected";
       hasPendingNativeControl = true;
     }
 
     const fieldRoot = findFieldRoot(formRoot, labelPattern);
     const select = fieldRoot?.querySelector("select");
-    if (select && select !== knownSelect) {
+    if (select && select !== scopedKnownSelect) {
       if (selectOption(select, acceptedTexts)) return "selected";
       hasPendingNativeControl = true;
     }
+  }
+
+  const knownDocumentSelect = findKnownGstSelect(documentRef, labelPattern);
+  if (knownDocumentSelect) {
+    if (selectOption(knownDocumentSelect, acceptedTexts)) return "selected";
+    hasPendingNativeControl = true;
   }
 
   for (const labelledSelect of findLabelledSelects(documentRef, labelPattern)) {

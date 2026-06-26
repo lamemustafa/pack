@@ -31,7 +31,7 @@ export function detectFiledReturnsPortalAvailabilityIssue(
   const path = windowRef?.location.pathname ?? "";
   const bodyText = documentRef.body?.innerText ?? documentRef.body?.textContent ?? "";
 
-  if (matchesAny(bodyText, SCHEDULED_DOWNTIME_PATTERNS)) {
+  if (isScheduledDowntimeOutagePage(documentRef, bodyText)) {
     return {
       connectorId: "gst",
       scopeId: FILED_RETURNS_SCOPE_ID,
@@ -81,4 +81,22 @@ export function asPortalDownloadTriggerResult(
 
 function matchesAny(text: string, patterns: readonly RegExp[]): boolean {
   return patterns.some((pattern) => pattern.test(text));
+}
+
+function isScheduledDowntimeOutagePage(documentRef: Document, bodyText: string): boolean {
+  if (!matchesAny(bodyText, SCHEDULED_DOWNTIME_PATTERNS)) return false;
+
+  const headingText = Array.from(documentRef.querySelectorAll("h1,h2,h3,h4,h5,h6"))
+    .map((heading) => heading.textContent ?? "")
+    .join(" ");
+  const headingSignalsOutage = /scheduled downtime|maintenance|temporarily unavailable/i.test(
+    headingText,
+  );
+  const bodySignalsOutageWindow =
+    /downtime window|kindly come back later|services will not be available/i.test(bodyText);
+  const hasInteractivePortalSurface = Boolean(
+    documentRef.querySelector("form,select,input,button,[role='button'],nav,header,a[href]"),
+  );
+
+  return (headingSignalsOutage || bodySignalsOutageWindow) && !hasInteractivePortalSurface;
 }

@@ -73,6 +73,35 @@ describe("filed returns guided flow", () => {
     expect(result.userAction?.type).toBe("WAIT_FOR_PORTAL_AVAILABILITY");
   });
 
+  it("does not block a usable filed-returns page for a future downtime banner", async () => {
+    const documentRef = createGstDocument(`
+      <main>
+        <aside>Scheduled Downtime: services will not be available during a future downtime window.</aside>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <label>Financial Year</label>
+          <select><option>2024-25</option><option>2025-26</option></select>
+          <label>Return Filing Period</label>
+          <select><option>February</option><option>March</option></select>
+          <label>Return Type</label>
+          <select><option>GSTR-1</option><option>GSTR-3B</option></select>
+          <button type="button">Search</button>
+        </form>
+      </main>
+    `);
+    let searchClicked = 0;
+    documentRef.querySelector("button")?.addEventListener("click", () => {
+      searchClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(expect.arrayContaining(["search-clicked"]));
+    expect(result.safeSignals).not.toContain("portal-scheduled-downtime");
+    expect(searchClicked).toBe(1);
+  });
+
   it("does not try final download trigger during GST scheduled downtime", async () => {
     const documentRef = createGstDocument(
       `
@@ -209,6 +238,38 @@ describe("filed returns guided flow", () => {
     expect(documentRef.querySelector<HTMLSelectElement>("#optValue")?.value).toBe("Select");
     expect(documentRef.querySelector<HTMLSelectElement>("#retTyp")?.value).toBe("Select");
     expect(searchClicked).toBe(0);
+    expect(submittedForms).toEqual([{ action: "/returns/auth/gstr3b", method: "POST" }]);
+  });
+
+  it("uses the filed-return API when the GST route casing changes", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <h1>View Filed Returns</h1>
+          <form name="efiledReturns">
+            <label>Financial year</label>
+            <select id="finYr"><option>Select</option><option>2025-26</option></select>
+            <label>Return Filing Period</label>
+            <select id="optValue"><option>Select</option><option>Monthly</option></select>
+            <label>Month</label>
+            <select id="month"><option>Select</option></select>
+            <label>Return Type</label>
+            <select id="retTyp"><option>Select</option><option>GSTR3B</option></select>
+          </form>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/efiledreturns",
+    );
+    const submittedForms = stubFormSubmit(documentRef);
+    stubFiledReturnsApi(documentRef, {
+      roleStatus: { userPref: "M" },
+      rows: [{ rtntype: "GSTR3B", fy: "2025-26", taxp: "March", arn: "SYNTHETIC", dof: "" }],
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(expect.arrayContaining(["filed-return-api-result-posted"]));
     expect(submittedForms).toEqual([{ action: "/returns/auth/gstr3b", method: "POST" }]);
   });
 
@@ -2627,6 +2688,79 @@ describe("filed returns guided flow", () => {
     expect(documentRef.querySelector<HTMLSelectElement>("#finYr")?.value).toBe("string:2025-26");
     expect(documentRef.querySelector<HTMLSelectElement>("#optValue")?.value).toBe("string:Monthly");
     expect(documentRef.querySelector<HTMLSelectElement>("#retTyp")?.value).toBe("string:GSTR3B");
+    expect(searchClicked).toBe(1);
+  });
+
+  it("prefers filed-return form selects before matching controls elsewhere on the page", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <aside>
+          <select id="finYr" data-outside-financial-year>
+            <option>Select</option>
+            <option>2025-26</option>
+          </select>
+          <select id="optValue" data-outside-period>
+            <option>Select</option>
+            <option>Monthly</option>
+          </select>
+          <select id="retTyp" data-outside-return-type>
+            <option>Select</option>
+            <option>GSTR3B</option>
+          </select>
+        </aside>
+        <form name="efiledReturns">
+          <div>
+            <label>Financial year</label>
+            <select data-form-financial-year>
+              <option>Select</option>
+              <option>2025-26</option>
+            </select>
+          </div>
+          <div>
+            <label>Return Filing Period</label>
+            <select data-form-period>
+              <option>Select</option>
+              <option>Monthly</option>
+            </select>
+          </div>
+          <div>
+            <label>Return Type</label>
+            <select data-form-return-type>
+              <option>Select</option>
+              <option>GSTR3B</option>
+            </select>
+          </div>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+      </main>
+    `);
+    let searchClicked = 0;
+    documentRef.querySelector("#lotsearch")?.addEventListener("click", () => {
+      searchClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.state).toBe("clicked");
+    expect(documentRef.querySelector<HTMLSelectElement>("[data-form-financial-year]")?.value).toBe(
+      "2025-26",
+    );
+    expect(documentRef.querySelector<HTMLSelectElement>("[data-form-period]")?.value).toBe(
+      "Monthly",
+    );
+    expect(documentRef.querySelector<HTMLSelectElement>("[data-form-return-type]")?.value).toBe(
+      "GSTR3B",
+    );
+    expect(
+      documentRef.querySelector<HTMLSelectElement>("[data-outside-financial-year]")?.value,
+    ).toBe("Select");
+    expect(documentRef.querySelector<HTMLSelectElement>("[data-outside-period]")?.value).toBe(
+      "Select",
+    );
+    expect(documentRef.querySelector<HTMLSelectElement>("[data-outside-return-type]")?.value).toBe(
+      "Select",
+    );
     expect(searchClicked).toBe(1);
   });
 

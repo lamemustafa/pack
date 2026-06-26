@@ -104,7 +104,7 @@ function canUseFiledReturnsApi(documentRef: Document): boolean {
   const location = documentRef.defaultView?.location;
   return (
     location?.origin === "https://return.gst.gov.in" &&
-    location.pathname === "/returns/auth/efiledReturns"
+    location.pathname.toLowerCase() === "/returns/auth/efiledreturns"
   );
 }
 
