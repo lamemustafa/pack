@@ -176,6 +176,42 @@ describe("extension package verifier", () => {
     expect(result.status).not.toBe(0);
     expect(result.output).toContain("Pathful GST Portal URL");
   });
+
+  it("keeps exact ZIP verification wired to browser-loaded release checks", async () => {
+    const script = await readFile(
+      path.join(rootDir, "scripts", "verify-extension-zip.mjs"),
+      "utf8",
+    );
+    const packageJson = JSON.parse(await readFile(path.join(rootDir, "package.json"), "utf8")) as {
+      scripts: Record<string, string>;
+      devDependencies: Record<string, string>;
+    };
+
+    expect(script).toContain("scripts/verify-extension-browser.mjs");
+    expect(packageJson.scripts["verify:browser"]).toBe(
+      "node scripts/verify-extension-browser.mjs .output/chrome-mv3",
+    );
+    expect(packageJson.devDependencies["@playwright/test"]).toBe("1.55.1");
+  });
+
+  it("keeps browser release verification fail-closed around popup, scripts, network, and runtime errors", async () => {
+    const script = await readFile(
+      path.join(rootDir, "scripts", "verify-extension-browser.mjs"),
+      "utf8",
+    );
+
+    expect(script).toContain("contentScripts.length !== 1");
+    expect(script).toContain("assertPopupPageLoads");
+    expect(script).toContain("assertNoBrowserRuntimeFailures");
+    expect(script).toContain("unexpectedDeniedRequests.length > 0");
+    expect(script).toContain("isExpectedDeniedNetworkProbe");
+    expect(script).toContain("recordBrowserEvent");
+    expect(script).toContain("pattern.test(entry.raw)");
+    expect(script).toContain("PACK_BROWSER_XVFB");
+    expect(script).toContain("xvfb-run");
+    expect(script).toContain("--disable-background-networking");
+    expect(script).toContain("--disable-component-update");
+  });
 });
 
 async function createValidPackage(): Promise<string> {

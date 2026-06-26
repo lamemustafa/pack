@@ -9,7 +9,9 @@ describe("Pack CI workflow", () => {
     const workflow = await readFile(path.join(rootDir, ".github", "workflows", "ci.yml"), "utf8");
 
     expect(workflow).not.toMatch(/uses:\s+[^@\s]+@[vV]\d+/);
+    expect(workflow).toContain("pnpm exec playwright install --with-deps chromium");
     expect(workflow).toContain("pnpm audit --audit-level high");
+    expect(workflow).toContain("node scripts/verify-extension-zip.mjs");
     expect(workflow).toContain("shasum -a 256 .output/*chrome.zip");
     expect(workflow).toContain("cat .output/complyeazepack-chrome.zip.sha256");
     expect(workflow).toContain(".output/complyeazepack-chrome.zip.sha256");

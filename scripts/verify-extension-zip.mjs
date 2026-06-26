@@ -11,6 +11,7 @@ await rm(extractionDir, { force: true, recursive: true });
 await mkdir(extractionDir, { recursive: true });
 await run("unzip", ["-q", zipPath, "-d", extractionDir]);
 await run("node", ["scripts/verify-extension-package.mjs", extractionDir]);
+await run("node", ["scripts/verify-extension-browser.mjs", extractionDir]);
 await run("shasum", ["-a", "256", zipPath]);
 
 console.log(`Pack exact ZIP verification passed: ${path.relative(process.cwd(), zipPath)}`);
