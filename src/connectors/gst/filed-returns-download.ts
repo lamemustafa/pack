@@ -2,6 +2,10 @@ import type { FiledReturnsDownloadTarget, PortalDownloadTriggerResult } from "..
 import { resolveVisibleFiledGstr3bDownloadCandidates } from "./filed-returns-download-candidates";
 import { verifyFiledReturnsDownloadTarget } from "./filed-returns-download-target";
 import { dismissKnownFiledReturnsSummaryModal } from "./filed-returns-navigator";
+import {
+  asPortalDownloadTriggerResult,
+  detectFiledReturnsPortalAvailabilityIssue,
+} from "./filed-returns-portal-availability";
 
 export {
   findFiledGstr3bDownloadCandidateIndex,
@@ -10,15 +14,6 @@ export {
 
 const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
 const DIALOG_SETTLE_DELAY_MS = 250;
-const BLOCKED_PORTAL_PATTERNS = [
-  /request rejected/i,
-  /access denied/i,
-  /you are not authorized/i,
-  /session (?:has )?expired/i,
-  /please login again/i,
-  /invalid session/i,
-];
-
 export async function triggerFiledGstr3bFiledPdfDownload(
   documentRef: Document,
   target: FiledReturnsDownloadTarget,
@@ -127,26 +122,8 @@ function detectFiledGstr3bDetailPage(documentRef: Document): {
 }
 
 function detectBlockedPortalState(documentRef: Document): PortalDownloadTriggerResult | null {
-  const windowRef = documentRef.defaultView;
-  const path = windowRef?.location.pathname ?? "";
-  const bodyText = documentRef.body?.innerText ?? documentRef.body?.textContent ?? "";
-  const isBlockedPath = /\/services\/error|\/error\//i.test(path);
-  const isBlockedText = BLOCKED_PORTAL_PATTERNS.some((pattern) => pattern.test(bodyText));
-  if (!isBlockedPath && !isBlockedText) return null;
-
-  return {
-    connectorId: "gst",
-    scopeId: FILED_RETURNS_SCOPE_ID,
-    state: /session|login/i.test(bodyText) ? "login-required" : "blocked",
-    safeSignals: ["portal-blocked-or-session-expired"],
-    safeMessage:
-      "The GST portal appears to be on an access-denied or expired-session screen. Please return to an authenticated GST page before using Pack.",
-    userAction: {
-      type: "LOGIN",
-      message: "Sign in to the GST portal, then reopen Pack on the authenticated page.",
-      canResume: true,
-    },
-  };
+  const issue = detectFiledReturnsPortalAvailabilityIssue(documentRef);
+  return issue ? asPortalDownloadTriggerResult(issue) : null;
 }
 
 function activateElement(element: HTMLElement) {

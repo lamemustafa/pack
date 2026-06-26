@@ -2,11 +2,12 @@ import { browser } from "wxt/browser";
 import { detectGstPortalContext } from "../connectors/gst/detect";
 import { runFiledReturnsDownloadStep } from "../connectors/gst/filed-returns-flow";
 import { triggerFiledGstr3bFiledPdfDownload } from "../connectors/gst/filed-returns-download";
+import { resolveFiledGstr3bGeneratedPdfApiRequest } from "../connectors/gst/filed-returns-direct-download";
 import { navigateToFiledReturnsPage } from "../connectors/gst/filed-returns-navigator";
 import { observeFiledReturnsPageText } from "../connectors/gst/filed-returns-observer";
 import { isPackMessage, type PackMessageResponse } from "../core/messages";
 
-const PACK_CONTENT_LISTENER_KEY = "__packContentListenerInstalled";
+const PACK_CONTENT_LISTENER_KEY = "__packContentListenerInstalledV2";
 
 declare global {
   interface Window {
@@ -44,12 +45,12 @@ export default defineContentScript({
         return false;
       }
 
-      if (message.type === "PACK_PING") {
+      if (message.type === "PACK_CONTENT_PING_V2") {
         sendResponse({ ok: true, context: null } satisfies PackMessageResponse);
         return false;
       }
 
-      if (message.type === "PACK_NAVIGATE_FILED_RETURNS") {
+      if (message.type === "PACK_CONTENT_NAVIGATE_FILED_RETURNS_V2") {
         void navigateToFiledReturnsPage(document)
           .then((navigation) =>
             sendResponse({ ok: true, navigation } satisfies PackMessageResponse),
@@ -63,7 +64,7 @@ export default defineContentScript({
         return true;
       }
 
-      if (message.type === "PACK_REFRESH_FILED_RETURNS_OBSERVATION") {
+      if (message.type === "PACK_CONTENT_REFRESH_FILED_RETURNS_OBSERVATION_V2") {
         const observation = sendFiledReturnsObservation();
         sendResponse({
           ok: true,
@@ -72,7 +73,7 @@ export default defineContentScript({
         return false;
       }
 
-      if (message.type === "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD") {
+      if (message.type === "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V2") {
         void triggerFiledGstr3bFiledPdfDownload(document, message.payload)
           .then((downloadTrigger) => {
             const observation = sendFiledReturnsObservation();
@@ -92,7 +93,31 @@ export default defineContentScript({
         return true;
       }
 
-      if (message.type === "PACK_RUN_FILED_RETURNS_DOWNLOAD_STEP") {
+      if (message.type === "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V2") {
+        const resolved = resolveFiledGstr3bGeneratedPdfApiRequest(document, message.payload);
+        const observation = sendFiledReturnsObservation();
+        if (!resolved.ok) {
+          sendResponse({
+            ok: true,
+            downloadTrigger: resolved.result,
+            observation,
+          } satisfies PackMessageResponse);
+          return false;
+        }
+
+        sendResponse({
+          ok: true,
+          directDownloadRequest: {
+            actionId: message.payload.actionId,
+            url: new URL(resolved.pdfPath, window.location.origin).href,
+            safeSignals: resolved.safeSignals,
+          },
+          observation,
+        } satisfies PackMessageResponse);
+        return false;
+      }
+
+      if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V2") {
         void runFiledReturnsDownloadStep(document, message.payload)
           .then((flowStep) => {
             const observation = sendFiledReturnsObservation();

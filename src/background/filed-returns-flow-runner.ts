@@ -40,7 +40,10 @@ export interface FiledReturnsFlowRunnerDeps {
     message: Extract<
       PackMessage,
       {
-        type: "PACK_RUN_FILED_RETURNS_DOWNLOAD_STEP" | "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD";
+        type:
+          | "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V2"
+          | "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V2"
+          | "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V2";
       }
     >,
   ) => Promise<PackMessageResponse>;
@@ -54,6 +57,7 @@ export interface FiledReturnsFlowRunnerDeps {
   now?: () => Date;
   persistTargetReview?: boolean;
   timings?: {
+    contentMessageTimeoutMs?: number;
     flowStepSettleMs?: number;
     resultRowNavigationSettleMs?: number;
   };
@@ -148,6 +152,17 @@ async function startSinglePeriodFiledReturnsDownloadFlow(
     lastStep = response.flowStep;
     activePeriod = extractActivePeriod(lastStep) ?? activePeriod;
 
+    if (lastStep.safeSignals.includes("filed-return-api-result-posted")) {
+      await delay(getResultRowNavigationSettleMs(deps));
+
+      return waitForDetailReadyThenTrigger({
+        activePeriod,
+        deps,
+        scope,
+        tabId: activeTab.tab.id,
+      });
+    }
+
     if (lastStep.safeSignals.includes("filed-return-result-view-clicked")) {
       await delay(getResultRowNavigationSettleMs(deps));
 
@@ -185,13 +200,62 @@ async function startSinglePeriodFiledReturnsDownloadFlow(
   };
 }
 
+async function waitForDetailReadyThenTrigger({
+  activePeriod,
+  deps,
+  scope,
+  tabId,
+}: {
+  activePeriod: string | null;
+  deps: FiledReturnsFlowRunnerDeps;
+  scope: FiledReturnsDownloadScope;
+  tabId: number;
+}): Promise<PackMessageResponse> {
+  let lastStep: PortalFlowStepResult | null = null;
+
+  for (let attempt = 0; attempt < MAX_FLOW_STEPS; attempt += 1) {
+    const response = await runScopedDownloadStepWithRetry(deps, tabId, scope);
+    if (!response.ok || !("flowStep" in response)) {
+      return response;
+    }
+
+    await persistFlowResponse(response, deps);
+    lastStep = response.flowStep;
+    activePeriod = extractActivePeriod(lastStep) ?? activePeriod;
+
+    if (lastStep.safeSignals.includes("filed-gstr3b-download-ready")) {
+      return triggerAndObserveFiledReturnDownload({
+        activePeriod,
+        deps,
+        scope,
+        tabId,
+      });
+    }
+
+    if (!shouldContinueFlow(lastStep)) return response;
+    await delay(getFlowStepSettleMs(lastStep, deps));
+  }
+
+  return {
+    ok: true,
+    flowStep: lastStep ?? {
+      connectorId: "gst",
+      scopeId: FILED_RETURNS_SCOPE_ID,
+      state: "user-action-required",
+      safeSignals: ["detail-ready-step-limit-reached"],
+      safeMessage:
+        "Pack opened the filed GSTR-3B detail page but did not see the final download control yet. Wait for the GST portal to finish loading, then click Start download again.",
+    },
+  };
+}
+
 function runScopedDownloadStepWithRetry(
   deps: FiledReturnsFlowRunnerDeps,
   tabId: number,
   scope: FiledReturnsDownloadScope,
 ): Promise<PackMessageResponse> {
   return runDownloadStepWithRetry(deps, tabId, {
-    type: "PACK_RUN_FILED_RETURNS_DOWNLOAD_STEP",
+    type: "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V2",
     payload: scope,
   });
 }
@@ -228,7 +292,15 @@ async function persistFlowResponse(
 }
 
 function shouldContinueFlow(step: PortalFlowStepResult): boolean {
-  return step.state === "clicked" && !step.safeSignals.includes("filed-gstr3b-download-clicked");
+  if (step.safeSignals.includes("filed-gstr3b-download-clicked")) return false;
+  return step.state === "clicked" || step.safeSignals.includes("detail-summary-modal");
+}
+
+function isFiledReturnDetailNavigationStep(step: PortalFlowStepResult): boolean {
+  return (
+    step.safeSignals.includes("filed-return-result-view-clicked") ||
+    step.safeSignals.includes("filed-return-api-result-posted")
+  );
 }
 
 function getResultRowNavigationSettleMs(deps: FiledReturnsFlowRunnerDeps): number {
@@ -236,7 +308,7 @@ function getResultRowNavigationSettleMs(deps: FiledReturnsFlowRunnerDeps): numbe
 }
 
 function getFlowStepSettleMs(step: PortalFlowStepResult, deps: FiledReturnsFlowRunnerDeps): number {
-  if (step.safeSignals.includes("filed-return-result-view-clicked")) {
+  if (isFiledReturnDetailNavigationStep(step)) {
     return deps.timings?.resultRowNavigationSettleMs ?? RESULT_ROW_NAVIGATION_SETTLE_MS;
   }
   return deps.timings?.flowStepSettleMs ?? FLOW_STEP_SETTLE_MS;

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { FiledReturnsDownloadScope } from "../../src/core/contracts";
 import { runFiledReturnsDownloadStep } from "../../src/connectors/gst/filed-returns-flow";
 import { triggerFiledGstr3bFiledPdfDownload } from "../../src/connectors/gst/filed-returns-download";
+import { navigateToFiledReturnsPage } from "../../src/connectors/gst/filed-returns-navigator";
 import {
   hasSettledFiledReturnsSearchForScope,
   markFiledReturnsSearchPending,
@@ -15,6 +16,345 @@ const DEFAULT_SCOPE: FiledReturnsDownloadScope = {
 };
 
 describe("filed returns guided flow", () => {
+  it("blocks cleanly during GST scheduled downtime", async () => {
+    const documentRef = createGstDocument(
+      `
+        <h4>Scheduled Downtime.</h4>
+        <p>Scheduled Downtime! We are enhancing the services on the site.</p>
+        <p>The services will not be available from Downtime Window: 27th June'26 12:00 AM to 27th June'26 02:30 AM.</p>
+        <p>Kindly come back later!</p>
+      `,
+      "https://services.gst.gov.in/services/",
+    );
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.state).toBe("blocked");
+    expect(result.safeSignals).toEqual(["portal-scheduled-downtime"]);
+    expect(result.safeMessage).toMatch(/scheduled downtime/i);
+    expect(result.userAction).toEqual({
+      type: "WAIT_FOR_PORTAL_AVAILABILITY",
+      message: "Wait until the GST scheduled downtime window is over, then reopen Pack.",
+      canResume: true,
+    });
+  });
+
+  it("does not try portal navigation during GST scheduled downtime", async () => {
+    const documentRef = createGstDocument(
+      `
+        <h4>Scheduled Downtime.</h4>
+        <p>The services will not be available from Downtime Window: 27th June'26 12:00 AM to 27th June'26 02:30 AM.</p>
+        <p>Kindly come back later!</p>
+      `,
+      "https://services.gst.gov.in/services/",
+    );
+
+    const result = await navigateToFiledReturnsPage(documentRef);
+
+    expect(result.state).toBe("blocked");
+    expect(result.safeSignals).toEqual(["portal-scheduled-downtime"]);
+    expect(result.userAction?.type).toBe("WAIT_FOR_PORTAL_AVAILABILITY");
+  });
+
+  it("treats GST maintenance and temporary unavailability as portal downtime", async () => {
+    const documentRef = createGstDocument(
+      `
+        <h4>GST Portal Maintenance</h4>
+        <p>We are enhancing the services on the site.</p>
+        <p>The portal is temporarily unavailable and under maintenance.</p>
+      `,
+      "https://services.gst.gov.in/services/login",
+    );
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.state).toBe("blocked");
+    expect(result.safeSignals).toEqual(["portal-scheduled-downtime"]);
+    expect(result.userAction?.type).toBe("WAIT_FOR_PORTAL_AVAILABILITY");
+  });
+
+  it("does not block a usable filed-returns page for a future downtime banner", async () => {
+    const documentRef = createGstDocument(`
+      <main>
+        <aside>Scheduled Downtime: services will not be available during a future downtime window.</aside>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <label>Financial Year</label>
+          <select><option>2024-25</option><option>2025-26</option></select>
+          <label>Return Filing Period</label>
+          <select><option>February</option><option>March</option></select>
+          <label>Return Type</label>
+          <select><option>GSTR-1</option><option>GSTR-3B</option></select>
+          <button type="button">Search</button>
+        </form>
+      </main>
+    `);
+    let searchClicked = 0;
+    documentRef.querySelector("button")?.addEventListener("click", () => {
+      searchClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(expect.arrayContaining(["search-clicked"]));
+    expect(result.safeSignals).not.toContain("portal-scheduled-downtime");
+    expect(searchClicked).toBe(1);
+  });
+
+  it("does not try final download trigger during GST scheduled downtime", async () => {
+    const documentRef = createGstDocument(
+      `
+        <h4>Scheduled Downtime.</h4>
+        <p>Scheduled Downtime! We are enhancing the services on the site.</p>
+        <p>Kindly come back later!</p>
+      `,
+      "https://return.gst.gov.in/returns/auth/gstr3b",
+    );
+
+    const result = await triggerFiledGstr3bFiledPdfDownload(documentRef, {
+      actionId: "test-action",
+      financialYear: "2025-26",
+      period: "March",
+      returnType: "GSTR-3B",
+    });
+
+    expect(result.state).toBe("blocked");
+    expect(result.safeSignals).toEqual(["portal-scheduled-downtime"]);
+    expect(result.userAction?.type).toBe("WAIT_FOR_PORTAL_AVAILABILITY");
+  });
+
+  it("dismisses the GST bank warning with Cancel and does not click File Amendment", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <section class="modal show" role="dialog">
+          <p>Please furnish the bank account details before continuing.</p>
+          <button data-file-amendment>FILE AMENDMENT</button>
+          <button data-cancel>CANCEL</button>
+        </section>
+        <a data-filed-returns href="/returns/auth/efiledReturns">View Filed Returns</a>
+      </main>
+    `);
+    makeLayoutVisible(documentRef);
+    let fileAmendmentClicked = 0;
+    let cancelClicked = 0;
+    let filedReturnsClicked = 0;
+    documentRef.querySelector("[data-file-amendment]")?.addEventListener("click", () => {
+      fileAmendmentClicked += 1;
+    });
+    documentRef.querySelector("[data-cancel]")?.addEventListener("click", () => {
+      cancelClicked += 1;
+      documentRef.querySelector(".modal")?.remove();
+    });
+    documentRef.querySelector("[data-filed-returns]")?.addEventListener("click", () => {
+      filedReturnsClicked += 1;
+    });
+
+    const result = await navigateToFiledReturnsPage(documentRef);
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining(["safe-dialog-dismissed", "dialog-cancel"]),
+    );
+    expect(fileAmendmentClicked).toBe(0);
+    expect(cancelClicked).toBe(1);
+    expect(filedReturnsClicked).toBe(1);
+  });
+
+  it("dismisses the GST GTA annexure dialog with No and does not click Yes", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <section class="modal show" role="dialog">
+          <p>GTA Annexure V declaration is available for this taxpayer.</p>
+          <button data-yes>YES</button>
+          <button data-no>NO</button>
+        </section>
+        <a data-filed-returns href="/returns/auth/efiledReturns">View Filed Returns</a>
+      </main>
+    `);
+    makeLayoutVisible(documentRef);
+    let yesClicked = 0;
+    let noClicked = 0;
+    let filedReturnsClicked = 0;
+    documentRef.querySelector("[data-yes]")?.addEventListener("click", () => {
+      yesClicked += 1;
+    });
+    documentRef.querySelector("[data-no]")?.addEventListener("click", () => {
+      noClicked += 1;
+      documentRef.querySelector(".modal")?.remove();
+    });
+    documentRef.querySelector("[data-filed-returns]")?.addEventListener("click", () => {
+      filedReturnsClicked += 1;
+    });
+
+    const result = await navigateToFiledReturnsPage(documentRef);
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining(["safe-dialog-dismissed", "dialog-no"]),
+    );
+    expect(yesClicked).toBe(0);
+    expect(noClicked).toBe(1);
+    expect(filedReturnsClicked).toBe(1);
+  });
+
+  it("uses the filed-return API before slow dependent dropdown selection on the GST route", async () => {
+    const documentRef = createGstDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <label>Financial year</label>
+          <select id="finYr"><option>Select</option><option>2026-27</option></select>
+          <label>Return Filing Period</label>
+          <select id="optValue"><option>Select</option><option>Monthly</option></select>
+          <label>Month</label>
+          <select id="month"><option>Select</option></select>
+          <label>Return Type</label>
+          <select id="retTyp"><option>Select</option><option>GSTR3B</option></select>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+      </main>
+    `);
+    const scope: FiledReturnsDownloadScope = {
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-3B",
+    };
+    const submittedForms = stubFormSubmit(documentRef);
+    stubFiledReturnsApi(documentRef, {
+      roleStatus: { userPref: "M" },
+      rows: [{ rtntype: "GSTR3B", fy: "2026-27", taxp: "May", arn: "SYNTHETIC", dof: "" }],
+    });
+    let searchClicked = 0;
+    documentRef.querySelector("#lotsearch")?.addEventListener("click", () => {
+      searchClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, scope);
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(expect.arrayContaining(["filed-return-api-result-posted"]));
+    expect(documentRef.querySelector<HTMLSelectElement>("#finYr")?.value).toBe("Select");
+    expect(documentRef.querySelector<HTMLSelectElement>("#optValue")?.value).toBe("Select");
+    expect(documentRef.querySelector<HTMLSelectElement>("#retTyp")?.value).toBe("Select");
+    expect(searchClicked).toBe(0);
+    expect(submittedForms).toEqual([{ action: "/returns/auth/gstr3b", method: "POST" }]);
+  });
+
+  it("uses the filed-return API when the GST route casing changes", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <h1>View Filed Returns</h1>
+          <form name="efiledReturns">
+            <label>Financial year</label>
+            <select id="finYr"><option>Select</option><option>2025-26</option></select>
+            <label>Return Filing Period</label>
+            <select id="optValue"><option>Select</option><option>Monthly</option></select>
+            <label>Month</label>
+            <select id="month"><option>Select</option></select>
+            <label>Return Type</label>
+            <select id="retTyp"><option>Select</option><option>GSTR3B</option></select>
+          </form>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/efiledreturns",
+    );
+    const submittedForms = stubFormSubmit(documentRef);
+    stubFiledReturnsApi(documentRef, {
+      roleStatus: { userPref: "M" },
+      rows: [{ rtntype: "GSTR3B", fy: "2025-26", taxp: "March", arn: "SYNTHETIC", dof: "" }],
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(expect.arrayContaining(["filed-return-api-result-posted"]));
+    expect(submittedForms).toEqual([{ action: "/returns/auth/gstr3b", method: "POST" }]);
+  });
+
+  it("opens filed-return API rows when GST wraps data and varies field names", async () => {
+    const documentRef = createGstDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <label>Financial year</label>
+          <select id="finYr"><option>Select</option><option>2025-26</option></select>
+          <label>Return Filing Period</label>
+          <select id="optValue"><option>Select</option><option>Monthly</option></select>
+          <label>Month</label>
+          <select id="month"><option>Select</option></select>
+          <label>Return Type</label>
+          <select id="retTyp"><option>Select</option><option>GSTR3B</option></select>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+      </main>
+    `);
+    const submittedForms = stubFormSubmit(documentRef);
+    stubFiledReturnsApi(documentRef, {
+      roleStatus: { data: { userPref: "M" } },
+      rows: {
+        data: [
+          {
+            rtnTyp: "GSTR3B",
+            financialYear: "2025-26",
+            taxPeriod: "March",
+            ackNo: "SYNTHETIC",
+            dateOfFiling: "18/04/2025",
+          },
+        ],
+      },
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(expect.arrayContaining(["filed-return-api-result-posted"]));
+    expect(submittedForms).toEqual([{ action: "/returns/auth/gstr3b", method: "POST" }]);
+    expect(documentRef.defaultView?.localStorage.getItem("rtn_prd")).toBe("032026");
+    const efileData = documentRef.defaultView?.localStorage.getItem("efile_data") ?? "";
+    expect(efileData).toContain("March");
+    expect(efileData).not.toContain("SYNTHETIC");
+    expect(efileData).not.toContain("18/04/2025");
+  });
+
+  it("falls back to visible filter selection when the GST API returns no matching rows", async () => {
+    const documentRef = createGstDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <label>Financial Year</label>
+        <select><option>2024-25</option><option>2025-26</option></select>
+        <label>Return Filing Period</label>
+        <select><option>February</option><option>March</option></select>
+        <label>Return Type</label>
+        <select><option>GSTR-1</option><option>GSTR-3B</option></select>
+        <button>Search</button>
+      </main>
+    `);
+    stubFiledReturnsApi(documentRef, {
+      roleStatus: { userPref: "M" },
+      rows: [],
+    });
+    let searchClicked = 0;
+    documentRef.querySelector("button")?.addEventListener("click", () => {
+      searchClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining([
+        "financial-year-selected",
+        "period-selected",
+        "return-type-selected",
+        "search-clicked",
+      ]),
+    );
+    expect(result.safeSignals).not.toContain("filed-return-api-result-not-found");
+    expect(searchClicked).toBe(1);
+  });
+
   it("selects the requested filing filters and clicks search", async () => {
     const documentRef = createDocument(`
       <main>
@@ -179,6 +519,140 @@ describe("filed returns guided flow", () => {
     expect(searchClicked).toBe(1);
   });
 
+  it("selects a visible GST month select by title when the generated id changes", async () => {
+    const mayScope: FiledReturnsDownloadScope = {
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-3B",
+    };
+    const documentRef = createDocument(`
+      <form name="efiledReturns">
+        <h1>View Filed Returns</h1>
+        <div class="row">
+          <div class="col-sm-3">
+            <div class="col-sm-12"><label>Financial year</label></div>
+            <div class="col-sm-12">
+              <select id="finYr" title="Select Financial Year" data-ng-model="efiledReturns_financialYear_val">
+                <option>Select</option>
+                <option value="string:2026-27">2026-27</option>
+              </select>
+            </div>
+          </div>
+          <div class="col-sm-3">
+            <div class="col-sm-12"><label>Return Filing Period</label></div>
+            <div class="col-sm-12">
+              <select id="optValue" title="Return Filing Period" data-ng-model="efiledReturns_filingPeriod_val">
+                <option>Select</option>
+                <option value="string:Monthly">Monthly</option>
+              </select>
+            </div>
+          </div>
+          <div class="col-sm-3">
+            <div class="col-sm-12">Month</div>
+            <div class="col-sm-12">
+              <select id="taxPeriodValue" title="Month" data-ng-model="efiledReturns_taxPeriod_val">
+                <option>Select</option>
+                <option value="string:April">April</option>
+                <option value="string:May">May</option>
+              </select>
+            </div>
+          </div>
+          <div class="col-sm-3">
+            <div class="col-sm-12"><label>Return Type</label></div>
+            <div class="col-sm-12">
+              <select id="retTyp" title="Return Type" data-ng-model="efiledReturns_gstValue_val">
+                <option>Select</option>
+                <option value="string:GSTR3B">GSTR3B</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <button id="lotsearch" type="button">Search</button>
+      </form>
+    `);
+    let searchClicked = 0;
+    documentRef.querySelector("#lotsearch")?.addEventListener("click", () => {
+      searchClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, mayScope);
+
+    expect(result.state).toBe("clicked");
+    expect(documentRef.querySelector<HTMLSelectElement>("#taxPeriodValue")?.value).toBe(
+      "string:May",
+    );
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining(["month-selected", "search-clicked"]),
+    );
+    expect(searchClicked).toBe(1);
+  });
+
+  it("selects the month select between period and return type when GST omits stable month metadata", async () => {
+    const mayScope: FiledReturnsDownloadScope = {
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-3B",
+    };
+    const documentRef = createDocument(`
+      <form name="efiledReturns">
+        <h1>View Filed Returns</h1>
+        <div class="row">
+          <div class="col-sm-3">
+            <div class="col-sm-12"><label>Financial year</label></div>
+            <div class="col-sm-12">
+              <select id="finYr" data-ng-model="efiledReturns_financialYear_val">
+                <option>Select</option>
+                <option value="string:2026-27">2026-27</option>
+              </select>
+            </div>
+          </div>
+          <div class="col-sm-3">
+            <div class="col-sm-12"><label>Return Filing Period</label></div>
+            <div class="col-sm-12">
+              <select id="optValue" data-ng-model="efiledReturns_filingPeriod_val">
+                <option>Select</option>
+                <option value="string:Monthly">Monthly</option>
+              </select>
+            </div>
+          </div>
+          <div class="col-sm-3">
+            <div class="col-sm-12">Month</div>
+            <div class="col-sm-12">
+              <select id="periodValue">
+                <option>Select</option>
+                <option value="string:April">April</option>
+                <option value="string:May">May</option>
+              </select>
+            </div>
+          </div>
+          <div class="col-sm-3">
+            <div class="col-sm-12"><label>Return Type</label></div>
+            <div class="col-sm-12">
+              <select id="retTyp" data-ng-model="efiledReturns_gstValue_val">
+                <option>Select</option>
+                <option value="string:GSTR3B">GSTR3B</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <button id="lotsearch" type="button">Search</button>
+      </form>
+    `);
+    let searchClicked = 0;
+    documentRef.querySelector("#lotsearch")?.addEventListener("click", () => {
+      searchClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, mayScope);
+
+    expect(result.state).toBe("clicked");
+    expect(documentRef.querySelector<HTMLSelectElement>("#periodValue")?.value).toBe("string:May");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining(["month-selected", "search-clicked"]),
+    );
+    expect(searchClicked).toBe(1);
+  });
+
   it("waits for GST Angular controls to repopulate after selecting the financial year", async () => {
     vi.useFakeTimers();
     try {
@@ -251,6 +725,381 @@ describe("filed returns guided flow", () => {
       expect(period?.value).toBe("Monthly");
       expect(month?.value).toBe("March");
       expect(returnType?.value).toBe("GSTR3B");
+      expect(result.safeSignals).toEqual(
+        expect.arrayContaining([
+          "financial-year-selected",
+          "period-selected",
+          "month-selected",
+          "return-type-selected",
+          "search-clicked",
+        ]),
+      );
+      expect(searchClicked).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("retries month selection after GST populates month options from return type selection", async () => {
+    vi.useFakeTimers();
+    try {
+      const documentRef = createDocument(`
+        <form name="efiledReturns">
+          <h1>View Filed Returns</h1>
+          <div>
+            <label>Financial year</label>
+            <select id="finYr" data-ng-model="efiledReturns_financialYear_val">
+              <option>Select</option>
+              <option value="string:2026-27">2026-27</option>
+            </select>
+          </div>
+          <div>
+            <label>Return Filing Period</label>
+            <select id="optValue" data-ng-model="efiledReturns_filingPeriod_val">
+              <option>Select</option>
+              <option value="string:Monthly">Monthly</option>
+            </select>
+          </div>
+          <div>
+            <div>Month</div>
+            <select id="periodValue">
+              <option>Select</option>
+            </select>
+          </div>
+          <div>
+            <label>Return Type</label>
+            <select id="retTyp" data-ng-model="efiledReturns_gstValue_val">
+              <option>Select</option>
+              <option value="string:GSTR3B">GSTR3B</option>
+            </select>
+          </div>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+      `);
+      const scope: FiledReturnsDownloadScope = {
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-3B",
+      };
+      const returnType = documentRef.querySelector<HTMLSelectElement>("#retTyp");
+      let searchClicked = 0;
+
+      returnType?.addEventListener("change", () => {
+        globalThis.setTimeout(() => {
+          appendNativeOption(
+            documentRef,
+            documentRef.querySelector<HTMLSelectElement>("#periodValue"),
+            "April",
+          );
+          appendNativeOption(
+            documentRef,
+            documentRef.querySelector<HTMLSelectElement>("#periodValue"),
+            "May",
+          );
+        }, 1_300);
+      });
+      documentRef.querySelector("#lotsearch")?.addEventListener("click", () => {
+        searchClicked += 1;
+      });
+
+      const resultPromise = runFiledReturnsDownloadStep(documentRef, scope);
+      await vi.advanceTimersByTimeAsync(12_000);
+      const result = await resultPromise;
+
+      expect(result.state).toBe("clicked");
+      expect(documentRef.querySelector<HTMLSelectElement>("#periodValue")?.value).toBe("May");
+      expect(result.safeSignals).toEqual(
+        expect.arrayContaining([
+          "financial-year-selected",
+          "period-selected",
+          "month-selected",
+          "return-type-selected",
+          "search-clicked",
+        ]),
+      );
+      expect(searchClicked).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reports available month options when GST keeps the month field unselectable", async () => {
+    vi.useFakeTimers();
+    try {
+      const documentRef = createDocument(`
+        <form name="efiledReturns">
+          <h1>View Filed Returns</h1>
+          <div>
+            <label>Financial year</label>
+            <select id="finYr" data-ng-model="efiledReturns_financialYear_val">
+              <option>Select</option>
+              <option value="string:2026-27">2026-27</option>
+            </select>
+          </div>
+          <div>
+            <label>Return Filing Period</label>
+            <select id="optValue" data-ng-model="efiledReturns_filingPeriod_val">
+              <option>Select</option>
+              <option value="string:Monthly">Monthly</option>
+            </select>
+          </div>
+          <div>
+            <div>Month</div>
+            <select id="periodValue">
+              <option>Select</option>
+            </select>
+          </div>
+          <div>
+            <label>Return Type</label>
+            <select id="retTyp" data-ng-model="efiledReturns_gstValue_val">
+              <option>Select</option>
+              <option value="string:GSTR3B">GSTR3B</option>
+            </select>
+          </div>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+      `);
+      let searchClicked = 0;
+      documentRef.querySelector("#lotsearch")?.addEventListener("click", () => {
+        searchClicked += 1;
+      });
+
+      const resultPromise = runFiledReturnsDownloadStep(documentRef, {
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-3B",
+      });
+      await vi.advanceTimersByTimeAsync(45_000);
+      const result = await resultPromise;
+
+      expect(result.state).toBe("clicked");
+      expect(result.safeSignals).toEqual(
+        expect.arrayContaining([
+          "financial-year-selected",
+          "period-selected",
+          "return-type-selected",
+        ]),
+      );
+      expect(result.safeSignals).not.toContain("month-selected");
+      expect(result.safeMessage).toContain("Missing: month (available options: select).");
+      expect(searchClicked).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  }, 12_000);
+
+  it("opens the filed return through the GST API when the month dropdown stays stuck", async () => {
+    vi.useFakeTimers();
+    try {
+      const documentRef = createGstDocument(`
+        <form name="efiledReturns">
+          <h1>View Filed Returns</h1>
+          <div>
+            <label>Financial year</label>
+            <select id="finYr" data-ng-model="efiledReturns_financialYear_val">
+              <option>Select</option>
+              <option value="string:2025-26">2025-26</option>
+            </select>
+          </div>
+          <div>
+            <label>Return Filing Period</label>
+            <select id="optValue" data-ng-model="efiledReturns_filingPeriod_val">
+              <option>Select</option>
+              <option value="string:Monthly">Monthly</option>
+            </select>
+          </div>
+          <div>
+            <div>Month</div>
+            <select id="periodValue" title="Month">
+              <option>Select</option>
+            </select>
+          </div>
+          <div>
+            <label>Return Type</label>
+            <select id="retTyp" data-ng-model="efiledReturns_gstValue_val">
+              <option>Select</option>
+              <option value="string:GSTR3B">GSTR3B</option>
+            </select>
+          </div>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+      `);
+      const submittedForms = stubFormSubmit(documentRef);
+      stubFiledReturnsApi(documentRef, {
+        rows: [
+          {
+            rtntype: "GSTR3B",
+            fy: "2025-26",
+            taxp: "March",
+            arn: "synthetic-arn",
+            dof: "18/04/2025",
+          },
+        ],
+        roleStatus: { userPref: "Q" },
+      });
+      let searchClicked = 0;
+      documentRef.querySelector("#lotsearch")?.addEventListener("click", () => {
+        searchClicked += 1;
+      });
+
+      const resultPromise = runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+      await vi.advanceTimersByTimeAsync(45_000);
+      const result = await resultPromise;
+
+      expect(result.state).toBe("clicked");
+      expect(result.safeSignals).toEqual(
+        expect.arrayContaining([
+          "filed-return-api-searched",
+          "filed-return-api-result-found",
+          "filed-return-api-result-posted",
+          "filed-return-result-period:March",
+        ]),
+      );
+      expect(searchClicked).toBe(0);
+      expect(submittedForms).toEqual([{ action: "/returns/auth/gstr3b", method: "POST" }]);
+      expect(documentRef.defaultView?.localStorage.getItem("rtn_prd")).toBe("032026");
+      expect(documentRef.defaultView?.localStorage.getItem("gstr3bPref")).toBe("Q");
+      expect(documentRef.defaultView?.sessionStorage.getItem("viewFiled")).toBe("true");
+    } finally {
+      vi.useRealTimers();
+    }
+  }, 12_000);
+
+  it("stops with a clear action when the GST API finds a row but role status is unavailable", async () => {
+    vi.useFakeTimers();
+    try {
+      const documentRef = createGstDocument(`
+        <form name="efiledReturns">
+          <h1>View Filed Returns</h1>
+          <div>
+            <label>Financial year</label>
+            <select id="finYr" data-ng-model="efiledReturns_financialYear_val">
+              <option>Select</option>
+              <option value="string:2025-26">2025-26</option>
+            </select>
+          </div>
+          <div>
+            <label>Return Filing Period</label>
+            <select id="optValue" data-ng-model="efiledReturns_filingPeriod_val">
+              <option>Select</option>
+              <option value="string:Monthly">Monthly</option>
+            </select>
+          </div>
+          <div>
+            <div>Month</div>
+            <select id="periodValue" title="Month">
+              <option>Select</option>
+            </select>
+          </div>
+          <div>
+            <label>Return Type</label>
+            <select id="retTyp" data-ng-model="efiledReturns_gstValue_val">
+              <option>Select</option>
+              <option value="string:GSTR3B">GSTR3B</option>
+            </select>
+          </div>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+      `);
+      stubFiledReturnsApi(documentRef, {
+        rows: [
+          {
+            rtntype: "GSTR3B",
+            fy: "2025-26",
+            taxp: "March",
+            arn: "synthetic-arn",
+            dof: "18/04/2025",
+          },
+        ],
+        roleStatus: null,
+      });
+
+      const resultPromise = runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+      await vi.advanceTimersByTimeAsync(47_000);
+      const result = await resultPromise;
+
+      expect(result.state).toBe("user-action-required");
+      expect(result.safeSignals).toEqual(
+        expect.arrayContaining([
+          "filed-return-api-searched",
+          "filed-return-api-result-found",
+          "filed-return-api-result-role-status-unavailable",
+        ]),
+      );
+      expect(result.userAction?.canResume).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  }, 12_000);
+
+  it("waits for GST dependent field resets before searching", async () => {
+    vi.useFakeTimers();
+    try {
+      const documentRef = createDocument(`
+        <form name="efiledReturns">
+          <h1>View Filed Returns</h1>
+          <div>
+            <label>Financial year</label>
+            <select id="finYr" data-ng-model="efiledReturns_financialYear_val">
+              <option>Select</option>
+              <option value="string:2026-27">2026-27</option>
+            </select>
+          </div>
+          <div>
+            <label>Return Filing Period</label>
+            <select id="optValue" data-ng-model="efiledReturns_filingPeriod_val">
+              <option>Select</option>
+              <option value="string:Monthly">Monthly</option>
+            </select>
+          </div>
+          <div>
+            <div>Month</div>
+            <select id="periodValue" title="Month">
+              <option>Select</option>
+              <option value="string:May">May</option>
+            </select>
+          </div>
+          <div>
+            <label>Return Type</label>
+            <select id="retTyp" data-ng-model="efiledReturns_gstValue_val">
+              <option>Select</option>
+              <option value="string:GSTR3B">GSTR3B</option>
+            </select>
+          </div>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+      `);
+      const scope: FiledReturnsDownloadScope = {
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-3B",
+      };
+      const month = documentRef.querySelector<HTMLSelectElement>("#periodValue");
+      const returnType = documentRef.querySelector<HTMLSelectElement>("#retTyp");
+      let resetReturnType = true;
+      let searchClicked = 0;
+
+      month?.addEventListener("change", () => {
+        if (!resetReturnType) return;
+        resetReturnType = false;
+        globalThis.setTimeout(() => {
+          if (!returnType) return;
+          returnType.value = "Select";
+          returnType.selectedIndex = 0;
+          returnType.dispatchEvent(new documentRef.defaultView!.Event("change", { bubbles: true }));
+        }, 700);
+      });
+      documentRef.querySelector("#lotsearch")?.addEventListener("click", () => {
+        searchClicked += 1;
+      });
+
+      const resultPromise = runFiledReturnsDownloadStep(documentRef, scope);
+      await vi.advanceTimersByTimeAsync(15_000);
+      const result = await resultPromise;
+
+      expect(result.state).toBe("clicked");
+      expect(month?.value).toBe("string:May");
+      expect(returnType?.value).toBe("string:GSTR3B");
       expect(result.safeSignals).toEqual(
         expect.arrayContaining([
           "financial-year-selected",
@@ -887,61 +1736,79 @@ describe("filed returns guided flow", () => {
   });
 
   it("does not mark not-filed from a stale no-record panel before the search result settles", async () => {
-    const documentRef = createDocument(`
-      <main>
-        <h1>View Filed Returns</h1>
-        <form name="efiledReturns">
-          <label>Financial Year</label>
-          <select id="finYr"><option selected>2025-26</option></select>
-          <label>Return Filing Period</label>
-          <select id="optValue"><option selected>Monthly</option></select>
-          <label>Month</label>
-          <select id="month"><option selected>March</option></select>
-          <label>Return Type</label>
-          <select id="retTyp"><option selected>GSTR3B</option></select>
-          <button id="lotsearch" type="button">Search</button>
-        </form>
-        <section aria-label="Search results">
-          <p>No records found</p>
-        </section>
-      </main>
-    `);
+    vi.useFakeTimers();
+    try {
+      const documentRef = createDocument(`
+        <main>
+          <h1>View Filed Returns</h1>
+          <form name="efiledReturns">
+            <label>Financial Year</label>
+            <select id="finYr"><option selected>2025-26</option></select>
+            <label>Return Filing Period</label>
+            <select id="optValue"><option selected>Monthly</option></select>
+            <label>Month</label>
+            <select id="month"><option selected>March</option></select>
+            <label>Return Type</label>
+            <select id="retTyp"><option selected>GSTR3B</option></select>
+            <button id="lotsearch" type="button">Search</button>
+          </form>
+          <section aria-label="Search results">
+            <p>No records found</p>
+          </section>
+        </main>
+      `);
 
-    const firstResult = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
-    const secondResult = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+      const firstResultPromise = runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+      await vi.advanceTimersByTimeAsync(10_000);
+      const firstResult = await firstResultPromise;
+      const secondResultPromise = runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+      await vi.advanceTimersByTimeAsync(10_000);
+      const secondResult = await secondResultPromise;
 
-    expect(firstResult.state).toBe("clicked");
-    expect(secondResult.safeSignals).not.toContain("filed-return-positively-not-filed");
+      expect(firstResult.state).toBe("clicked");
+      expect(secondResult.safeSignals).not.toContain("filed-return-positively-not-filed");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("does not mark not-filed when unrelated pre-search loading disappears without result changes", async () => {
-    const documentRef = createDocument(`
-      <main>
-        <h1>View Filed Returns</h1>
-        <form name="efiledReturns">
-          <label>Financial Year</label>
-          <select id="finYr"><option selected>2025-26</option></select>
-          <label>Return Filing Period</label>
-          <select id="optValue"><option selected>Monthly</option></select>
-          <label>Month</label>
-          <select id="month"><option selected>March</option></select>
-          <label>Return Type</label>
-          <select id="retTyp"><option selected>GSTR3B</option></select>
-          <button id="lotsearch" type="button">Search</button>
-        </form>
-        <div data-unrelated-loading>Loading...</div>
-        <section aria-label="Search results">
-          <p>No records found</p>
-        </section>
-      </main>
-    `);
+    vi.useFakeTimers();
+    try {
+      const documentRef = createDocument(`
+        <main>
+          <h1>View Filed Returns</h1>
+          <form name="efiledReturns">
+            <label>Financial Year</label>
+            <select id="finYr"><option selected>2025-26</option></select>
+            <label>Return Filing Period</label>
+            <select id="optValue"><option selected>Monthly</option></select>
+            <label>Month</label>
+            <select id="month"><option selected>March</option></select>
+            <label>Return Type</label>
+            <select id="retTyp"><option selected>GSTR3B</option></select>
+            <button id="lotsearch" type="button">Search</button>
+          </form>
+          <div data-unrelated-loading>Loading...</div>
+          <section aria-label="Search results">
+            <p>No records found</p>
+          </section>
+        </main>
+      `);
 
-    const firstResult = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
-    documentRef.querySelector("[data-unrelated-loading]")?.remove();
-    const secondResult = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+      const firstResultPromise = runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+      await vi.advanceTimersByTimeAsync(10_000);
+      const firstResult = await firstResultPromise;
+      documentRef.querySelector("[data-unrelated-loading]")?.remove();
+      const secondResultPromise = runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+      await vi.advanceTimersByTimeAsync(10_000);
+      const secondResult = await secondResultPromise;
 
-    expect(firstResult.state).toBe("clicked");
-    expect(secondResult.safeSignals).not.toContain("filed-return-positively-not-filed");
+      expect(firstResult.state).toBe("clicked");
+      expect(secondResult.safeSignals).not.toContain("filed-return-positively-not-filed");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("does not settle a stale no-record search from unrelated post-click page loading", async () => {
@@ -1329,6 +2196,45 @@ describe("filed returns guided flow", () => {
         "filed-return-detail-financial-year:2025-26",
       ]),
     );
+    expect(downloadClicked).toBe(0);
+  });
+
+  it("dismisses the GST summary overlay even when it is not marked as a modal", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <nav>Returns / Filed Returns / GSTR-3B</nav>
+        <h1>GSTR-3B - Monthly Return</h1>
+        <div>Status - Filed</div>
+        <div>Financial Year - 2025-26</div>
+        <div>Return Period - March</div>
+        <button data-download>DOWNLOAD FILED GSTR-3B</button>
+        <section data-summary-overlay>
+          <h2>System generated summary for GSTR-3B:</h2>
+          <table><tbody><tr><td>Summary status</td><td>Yes</td></tr></tbody></table>
+          <button data-close>CLOSE</button>
+        </section>
+      </main>
+    `);
+    makeLayoutVisible(documentRef);
+    let downloadClicked = 0;
+    documentRef.querySelector("[data-download]")?.addEventListener("click", () => {
+      downloadClicked += 1;
+    });
+    documentRef.querySelector("[data-close]")?.addEventListener("click", () => {
+      documentRef.querySelector("[data-summary-overlay]")?.remove();
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.state).toBe("ready");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining([
+        "filed-gstr3b-download-ready",
+        "filed-return-detail-period:March",
+        "filed-return-detail-financial-year:2025-26",
+      ]),
+    );
+    expect(documentRef.querySelector("[data-summary-overlay]")).toBeNull();
     expect(downloadClicked).toBe(0);
   });
 
@@ -1733,6 +2639,131 @@ describe("filed returns guided flow", () => {
     expect(logoutClicked).toBe(0);
   });
 
+  it("selects stable GST native selects when labels and selects are split across columns", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <div class="row">
+            <div class="col-sm-3">
+              <div class="col-sm-12"><label>Financial year</label></div>
+              <div class="col-sm-12">
+                <select id="finYr">
+                  <option value="string:Select">Select</option>
+                  <option value="string:2025-26">2025-26</option>
+                </select>
+              </div>
+            </div>
+            <div class="col-sm-3">
+              <div class="col-sm-12"><label>Return Filing Period</label></div>
+              <div class="col-sm-12">
+                <select id="optValue">
+                  <option value="string:Select">Select</option>
+                  <option value="string:Monthly">Monthly</option>
+                </select>
+              </div>
+            </div>
+            <div class="col-sm-3">
+              <div class="col-sm-12"><label>Return Type</label></div>
+              <div class="col-sm-12">
+                <select id="retTyp">
+                  <option value="string:Select">Select</option>
+                  <option value="string:GSTR3B">GSTR3B</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </form>
+        <button id="lotsearch" type="button">Search</button>
+      </main>
+    `);
+    let searchClicked = 0;
+    documentRef.querySelector("#lotsearch")?.addEventListener("click", () => {
+      searchClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.state).toBe("clicked");
+    expect(documentRef.querySelector<HTMLSelectElement>("#finYr")?.value).toBe("string:2025-26");
+    expect(documentRef.querySelector<HTMLSelectElement>("#optValue")?.value).toBe("string:Monthly");
+    expect(documentRef.querySelector<HTMLSelectElement>("#retTyp")?.value).toBe("string:GSTR3B");
+    expect(searchClicked).toBe(1);
+  });
+
+  it("prefers filed-return form selects before matching controls elsewhere on the page", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <aside>
+          <select id="finYr" data-outside-financial-year>
+            <option>Select</option>
+            <option>2025-26</option>
+          </select>
+          <select id="optValue" data-outside-period>
+            <option>Select</option>
+            <option>Monthly</option>
+          </select>
+          <select id="retTyp" data-outside-return-type>
+            <option>Select</option>
+            <option>GSTR3B</option>
+          </select>
+        </aside>
+        <form name="efiledReturns">
+          <div>
+            <label>Financial year</label>
+            <select data-form-financial-year>
+              <option>Select</option>
+              <option>2025-26</option>
+            </select>
+          </div>
+          <div>
+            <label>Return Filing Period</label>
+            <select data-form-period>
+              <option>Select</option>
+              <option>Monthly</option>
+            </select>
+          </div>
+          <div>
+            <label>Return Type</label>
+            <select data-form-return-type>
+              <option>Select</option>
+              <option>GSTR3B</option>
+            </select>
+          </div>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+      </main>
+    `);
+    let searchClicked = 0;
+    documentRef.querySelector("#lotsearch")?.addEventListener("click", () => {
+      searchClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.state).toBe("clicked");
+    expect(documentRef.querySelector<HTMLSelectElement>("[data-form-financial-year]")?.value).toBe(
+      "2025-26",
+    );
+    expect(documentRef.querySelector<HTMLSelectElement>("[data-form-period]")?.value).toBe(
+      "Monthly",
+    );
+    expect(documentRef.querySelector<HTMLSelectElement>("[data-form-return-type]")?.value).toBe(
+      "GSTR3B",
+    );
+    expect(
+      documentRef.querySelector<HTMLSelectElement>("[data-outside-financial-year]")?.value,
+    ).toBe("Select");
+    expect(documentRef.querySelector<HTMLSelectElement>("[data-outside-period]")?.value).toBe(
+      "Select",
+    );
+    expect(documentRef.querySelector<HTMLSelectElement>("[data-outside-return-type]")?.value).toBe(
+      "Select",
+    );
+    expect(searchClicked).toBe(1);
+  });
+
   it("does not change unrelated native selects outside the filed-return form", async () => {
     const documentRef = createDocument(`
       <main>
@@ -1763,6 +2794,17 @@ function createDocument(body: string): Document {
   return new JSDOM(`<!doctype html><html><body>${body}</body></html>`, {
     pretendToBeVisual: true,
   }).window.document;
+}
+
+function createGstDocument(
+  body: string,
+  url = "https://return.gst.gov.in/returns/auth/efiledReturns",
+): Document {
+  const options: Record<string, unknown> = {
+    pretendToBeVisual: true,
+    url,
+  };
+  return new JSDOM(`<!doctype html><html><body>${body}</body></html>`, options).window.document;
 }
 
 function makeLayoutVisible(documentRef: Document) {
@@ -1813,6 +2855,42 @@ function appendNativeOption(documentRef: Document, select: HTMLSelectElement | n
   option.textContent = text;
   option.value = text;
   select?.append(option);
+}
+
+function stubFiledReturnsApi(
+  documentRef: Document,
+  responses: { rows: unknown; roleStatus: unknown | null },
+) {
+  Object.defineProperty(documentRef.defaultView, "fetch", {
+    configurable: true,
+    value: vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/returns/auth/api/rolestatus")) {
+        return {
+          json: async () => responses.roleStatus,
+          ok: Boolean(responses.roleStatus),
+        };
+      }
+      return {
+        json: async () => responses.rows,
+        ok: true,
+      };
+    }),
+  });
+}
+
+function stubFormSubmit(documentRef: Document): Array<{ action: string; method: string }> {
+  const submittedForms: Array<{ action: string; method: string }> = [];
+  Object.defineProperty(documentRef.defaultView?.HTMLFormElement.prototype, "submit", {
+    configurable: true,
+    value(this: HTMLFormElement) {
+      submittedForms.push({
+        action: this.getAttribute("action") ?? "",
+        method: this.getAttribute("method") ?? "",
+      });
+    },
+  });
+  return submittedForms;
 }
 
 function markPackSubmittedSearch(documentRef: Document, scope: FiledReturnsDownloadScope) {

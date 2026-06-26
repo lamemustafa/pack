@@ -108,7 +108,8 @@ export interface UserActionRequired {
     | "COMPLETE_OTP"
     | "NAVIGATE_TO_SUPPORTED_PAGE"
     | "ALLOW_MULTIPLE_DOWNLOADS"
-    | "RETRY_PORTAL_GENERATION";
+    | "RETRY_PORTAL_GENERATION"
+    | "WAIT_FOR_PORTAL_AVAILABILITY";
   message: string;
   canResume: boolean;
 }
@@ -194,6 +195,12 @@ export interface FiledReturnsDownloadTarget {
   financialYear: string;
   period: string;
   returnType: "GSTR-3B";
+}
+
+export interface FiledReturnsDirectDownloadRequest {
+  actionId: string;
+  url: string;
+  safeSignals: string[];
 }
 
 export interface FiledReturnsTargetReview {

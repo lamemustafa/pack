@@ -54,14 +54,21 @@ export function findKnownGstSelect(
   root: ParentNode,
   labelPattern: RegExp,
 ): HTMLSelectElement | null {
-  const ids = knownGstSelectIds(labelPattern);
   const documentRef = root.nodeType === 9 ? (root as Document) : root.ownerDocument;
   const HTMLSelectElementConstructor = documentRef?.defaultView?.HTMLSelectElement;
   if (!HTMLSelectElementConstructor) return null;
 
-  for (const id of ids) {
-    const candidate = root.querySelector(`#${id}`);
-    if (candidate instanceof HTMLSelectElementConstructor && !isHidden(candidate)) return candidate;
+  const visibleSelects = Array.from(root.querySelectorAll("select")).filter(
+    (candidate): candidate is HTMLSelectElement =>
+      candidate instanceof HTMLSelectElementConstructor && !isHidden(candidate),
+  );
+
+  for (const candidate of visibleSelects) {
+    if (matchesKnownGstSelect(candidate, labelPattern)) return candidate;
+  }
+
+  if (labelPattern.test("month") || labelPattern.test("tax period")) {
+    return findMonthSelectBetweenPeriodAndReturnType(visibleSelects);
   }
 
   return null;
@@ -158,12 +165,48 @@ function evaluateFiledReturnsFilterField(
   };
 }
 
-function knownGstSelectIds(labelPattern: RegExp): string[] {
-  if (labelPattern.test("financial year")) return ["finYr"];
-  if (labelPattern.test("return filing period")) return ["optValue"];
-  if (labelPattern.test("month")) return ["month"];
-  if (labelPattern.test("return type")) return ["retTyp"];
-  return [];
+function matchesKnownGstSelect(select: HTMLSelectElement, labelPattern: RegExp): boolean {
+  const identity = normaliseText(
+    [
+      select.id,
+      select.name,
+      select.title,
+      select.getAttribute("aria-label") ?? "",
+      select.getAttribute("data-ng-model") ?? "",
+      select.getAttribute("ng-model") ?? "",
+    ].join(" "),
+  );
+
+  if (labelPattern.test("financial year")) {
+    return /\bfinyr\b|\bfinancial\s+year\b|financialyear/.test(identity);
+  }
+  if (labelPattern.test("return filing period")) {
+    return /\boptvalue\b|\breturn\s+filing\s+period\b|filingperiod/.test(identity);
+  }
+  if (labelPattern.test("month")) {
+    return /\bmonth\b|\bmth\b/.test(identity);
+  }
+  if (labelPattern.test("return type")) {
+    return /\brettyp\b|\breturn\s+type\b|gstvalue|gsttype/.test(identity);
+  }
+  return false;
+}
+
+function findMonthSelectBetweenPeriodAndReturnType(
+  visibleSelects: readonly HTMLSelectElement[],
+): HTMLSelectElement | null {
+  const periodIndex = visibleSelects.findIndex((select) =>
+    matchesKnownGstSelect(select, /^return\s+filing\s+period\b|^period\b/i),
+  );
+  const returnTypeIndex = visibleSelects.findIndex((select) =>
+    matchesKnownGstSelect(select, /^return\s+type\b/i),
+  );
+  if (periodIndex < 0 || returnTypeIndex < 0 || returnTypeIndex <= periodIndex + 1) {
+    return null;
+  }
+
+  const between = visibleSelects.slice(periodIndex + 1, returnTypeIndex);
+  return between.length === 1 ? (between[0] ?? null) : null;
 }
 
 function readNativeSelectState(select: HTMLSelectElement): FiledReturnsFilterFieldState {

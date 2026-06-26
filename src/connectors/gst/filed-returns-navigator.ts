@@ -1,4 +1,5 @@
 import type { PortalNavigationResult } from "../../core/contracts";
+import { detectFiledReturnsPortalAvailabilityIssue } from "./filed-returns-portal-availability";
 
 const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
 const MENU_REVEAL_DELAY_MS = 350;
@@ -27,18 +28,14 @@ const SAFE_NAVIGATION_LABELS = [
   "Help and Taxpayer Facilities",
   "GST Law",
 ];
-const BLOCKED_PORTAL_PATTERNS = [
-  /request rejected/i,
-  /access denied/i,
-  /you are not authorized/i,
-  /session (?:has )?expired/i,
-  /please login again/i,
-  /invalid session/i,
-];
 const SUMMARY_MODAL_PATTERN = /system generated summary for gstr[\s-]?3b/i;
 const SAFE_POST_LOGIN_DIALOG_PATTERNS = [
   /would you like to authenticate aadhaar or upload e-?kyc documents/i,
   /dashboard\s*>\s*my profile\s*>\s*aadhaar authentication status/i,
+  /gst system is collecting metadata/i,
+  /furnish the bank account details/i,
+  /(?:gta\s+)?annexure\s+v/i,
+  /goods transport agency\s+annexure/i,
 ];
 
 export interface NavigationCandidateInput {
@@ -243,6 +240,10 @@ export function scoreDialogDismissalCandidate(
   if (/^no$/.test(searchable)) {
     score += 80;
     safeSignals.push("dialog-no");
+  }
+  if (/\bno[-\s]*remind\b/.test(searchable)) {
+    score += 80;
+    safeSignals.push("dialog-no-remind");
   }
   if (/^close$/.test(searchable) || /\bclose\b/.test(searchable)) {
     score += 50;
@@ -477,6 +478,7 @@ function getVisibleDialogRoots(documentRef: Document): HTMLElement[] {
     (element): element is HTMLElement => isHtmlElement(documentRef, element) && isVisible(element),
   );
   roots.push(...getKnownPostLoginDialogRoots(documentRef));
+  roots.push(...getKnownFiledReturnsSummaryDialogRoots(documentRef));
   return dedupeElements(roots);
 }
 
@@ -499,6 +501,30 @@ function getKnownPostLoginDialogRoots(documentRef: Document): HTMLElement[] {
     for (let depth = 0; current && depth < 8; depth += 1) {
       const text = current.innerText || current.textContent || "";
       if (SAFE_POST_LOGIN_DIALOG_PATTERNS.some((pattern) => pattern.test(text))) {
+        roots.push(current);
+        break;
+      }
+      current = current.parentElement;
+    }
+  }
+
+  return roots.filter((element) => isVisible(element));
+}
+
+function getKnownFiledReturnsSummaryDialogRoots(documentRef: Document): HTMLElement[] {
+  const roots: HTMLElement[] = [];
+  const dismissiveElements = getClickableElements(documentRef).filter((element) => {
+    const score = scoreFiledReturnsSummaryModalDismissalCandidate(
+      toNavigationCandidateInput(element),
+    );
+    return score.score >= 60 && isVisible(element);
+  });
+
+  for (const element of dismissiveElements) {
+    let current: HTMLElement | null = element;
+    for (let depth = 0; current && depth < 8; depth += 1) {
+      const text = current.innerText || current.textContent || "";
+      if (SUMMARY_MODAL_PATTERN.test(text)) {
         roots.push(current);
         break;
       }
@@ -573,25 +599,15 @@ function dispatchEscapeKey(element: HTMLElement) {
 }
 
 function detectBlockedPortalState(documentRef: Document): PortalNavigationResult | null {
-  const windowRef = documentRef.defaultView;
-  const path = windowRef?.location.pathname ?? "";
-  const bodyText = documentRef.body?.innerText ?? documentRef.body?.textContent ?? "";
-  const isBlockedPath = /\/services\/error|\/error\//i.test(path);
-  const isBlockedText = BLOCKED_PORTAL_PATTERNS.some((pattern) => pattern.test(bodyText));
-  if (!isBlockedPath && !isBlockedText) return null;
-
+  const issue = detectFiledReturnsPortalAvailabilityIssue(documentRef);
+  if (!issue) return null;
   return {
-    connectorId: "gst",
-    scopeId: FILED_RETURNS_SCOPE_ID,
-    state: /session|login/i.test(bodyText) ? "login-required" : "blocked",
-    safeSignals: ["portal-blocked-or-session-expired"],
-    safeMessage:
-      "The GST portal appears to be on an access-denied or expired-session screen. Please return to an authenticated GST page before using Pack.",
-    userAction: {
-      type: "LOGIN",
-      message: "Sign in to the GST portal, then reopen Pack on the authenticated page.",
-      canResume: true,
-    },
+    connectorId: issue.connectorId,
+    scopeId: issue.scopeId,
+    state: issue.state === "login-required" ? "login-required" : "blocked",
+    safeSignals: issue.safeSignals,
+    safeMessage: issue.safeMessage,
+    ...(issue.userAction ? { userAction: issue.userAction } : {}),
   };
 }
 

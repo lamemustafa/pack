@@ -92,6 +92,10 @@ not a public launch path.
   the visible field label containers and waits briefly after each selection so
   GST's dependent period/return-type options can populate before clicking
   `Search`.
+- Scheduled downtime handling: Pack treats GST's plain scheduled-downtime page
+  as a blocked portal-availability state with a retry-later action. It must not
+  continue navigation, API search, dropdown selection or final download attempts
+  while that page is visible.
 
 ## Live navigation finding
 
@@ -180,6 +184,71 @@ not reload the portal page if the browser shows a form-resubmission warning.
 Return to a normal authenticated GST page, open Pack and click `Start download`;
 the popup should refresh through the same-tab content-script recovery path.
 
+## 2026-06-26 live filed-returns finding
+
+Private Brave testing confirmed the filed-returns route can render the filter
+form while the Month field remains at `Select` and Return Type population is
+slow. Treat this as the main live stuck point before the detail page: Pack should
+not wait on the dependent dropdown path when a same-origin filed-return search
+API is available from `/returns/auth/efiledReturns`.
+
+The redacted request shape observed for the filed-return search is:
+
+```json
+{
+  "fy": "YYYY-YY",
+  "rfp": "Monthly",
+  "qtr": null,
+  "mth": "MonthName",
+  "rtntp": "GSTR3B"
+}
+```
+
+The response shape has appeared as either a bare array or a `data`-wrapped
+array, and GST field names can vary across related endpoints. Pack therefore
+normalises filed-return API rows through a small alias list before matching the
+requested financial year, period and return type. The handoff still happens
+inside the active portal page with `fetch(..., { credentials: "same-origin" })`
+and portal storage/form navigation; Pack must not copy, store, log or transmit
+GST cookies, session tokens, raw headers or taxpayer-specific response bodies.
+
+Synthetic direct-download replay remains an engineering experiment only. It may
+be tried locally from an authenticated portal page after a legitimate user action
+reveals the final request shape, but it is not a v0 production path unless it can
+preserve the same privacy boundary and avoid durable credential/session capture.
+
+The redacted final filed GSTR-3B detail-page request family observed after the
+portal-rendered download action is:
+
+```text
+GET /returns/auth/api/gstr3b/getgenpdf?rtn_prd=MMYYYY
+GET /returns/auth/api/gstr3b/taxpayble?rtn_prd=MMYYYY
+```
+
+`MMYYYY` is derived from the user-selected return period and financial year.
+Pack must not document, log or store the raw protected URL from a taxpayer
+session. Any direct-download experiment must construct the path from the local
+target, run only on `https://return.gst.gov.in/returns/auth/gstr3b`, verify that
+the visible detail page matches the target financial year and period, and bind
+the request to Pack's local action id before attempting anything networked.
+
+The smallest safe replay boundary is response-blind: browser-managed credentials
+only, no copied cookies or headers, no raw response body reads, no filenames or
+local paths in logs, and success only through Pack's existing correlated
+`chrome.downloads` completed/non-empty evidence. A `fetch` metadata probe may be
+used as a private engineering check, but a production download path should use
+the browser download pipeline rather than reading PDF bytes in Pack code.
+
+Live experiment result: constructing the final PDF endpoint and handing it to
+`chrome.downloads.download` from the extension is not currently a safe default.
+In Brave, the extension-owned download request reached the browser download
+pipeline but produced an access-denied save prompt rather than the filed PDF.
+This suggests the GST endpoint is sensitive to request initiator/context beyond
+the session cookies available to the browser profile. Keep the production path
+as portal-owned navigation plus the portal-rendered `DOWNLOAD FILED GSTR-3B`
+click, with the direct endpoint helpers retained only as private research
+scaffolding.
+
 ## Remaining public-release gaps
 
 - Re-run a clean-profile exact ZIP smoke test after every package rebuild.
@@ -203,3 +272,10 @@ Chrome/Brave extension host where `chrome.downloads` is available.
 
 The next live run should start from a new login and use `Start download` or
 manual portal navigation only. Do not paste or replay direct protected URLs.
+
+## 2026-06-27 scheduled downtime finding
+
+The GST Portal returned a bare scheduled-downtime page during the live retry
+window. Pack now treats that as `portal-scheduled-downtime`: the run stops with a
+retry-later action, and no login, selector, API-search or final-download step is
+attempted until the user returns after services are available.
