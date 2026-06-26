@@ -190,7 +190,7 @@ async function refreshActiveFiledReturnsObservation(): Promise<void> {
   if (!activeTab) return;
 
   const response = await sendMessageToTabWithInjection(activeTab.id, {
-    type: "PACK_REFRESH_FILED_RETURNS_OBSERVATION",
+    type: "PACK_CONTENT_REFRESH_FILED_RETURNS_OBSERVATION_V2",
   });
 
   if (!response.ok) return;
@@ -213,8 +213,12 @@ export async function clearPackLocalData(): Promise<PackMessageResponse> {
   });
 }
 
-async function getActiveGstTab(): Promise<ActiveGstTab | null> {
-  const currentWindowTabs = await browser.tabs.query({ active: true, currentWindow: true });
+export async function getActiveGstTab(): Promise<ActiveGstTab | null> {
+  const activeCurrentWindowTabs = await browser.tabs.query({ active: true, currentWindow: true });
+  const activeGstTab = pickSupportedGstPortalTab<Browser.tabs.Tab>(activeCurrentWindowTabs);
+  if (activeGstTab) return activeGstTab;
+
+  const currentWindowTabs = await browser.tabs.query({ currentWindow: true });
   return pickSupportedGstPortalTab<Browser.tabs.Tab>(currentWindowTabs);
 }
 
@@ -224,10 +228,11 @@ async function sendMessageToTabWithInjection(
     PackMessage,
     {
       type:
-        | "PACK_NAVIGATE_FILED_RETURNS"
-        | "PACK_REFRESH_FILED_RETURNS_OBSERVATION"
-        | "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD"
-        | "PACK_RUN_FILED_RETURNS_DOWNLOAD_STEP";
+        | "PACK_CONTENT_NAVIGATE_FILED_RETURNS_V2"
+        | "PACK_CONTENT_REFRESH_FILED_RETURNS_OBSERVATION_V2"
+        | "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V2"
+        | "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V2"
+        | "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V2";
     }
   >,
 ): Promise<PackMessageResponse> {
@@ -263,7 +268,7 @@ async function ensureContentScript(tabId: number): Promise<void> {
 async function pingContentScript(tabId: number): Promise<boolean> {
   try {
     const response = (await browser.tabs.sendMessage(tabId, {
-      type: "PACK_PING",
+      type: "PACK_CONTENT_PING_V2",
     })) as PackMessageResponse;
     return response.ok;
   } catch {

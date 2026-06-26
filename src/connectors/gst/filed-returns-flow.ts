@@ -10,9 +10,11 @@ import {
   dismissKnownFiledReturnsSummaryModal,
   navigateToFiledReturnsPage,
 } from "./filed-returns-navigator";
+import { openFiledReturnFromApiSearch } from "./filed-returns-api-search";
 import { selectFiledReturnsFiltersAndSearch } from "./filed-returns-filter-form";
 import { detectPositiveNotFiledEvidence } from "./filed-returns-not-filed-evidence";
 import { observeFiledReturnsPageText } from "./filed-returns-observer";
+import { detectFiledReturnsPortalAvailabilityIssue } from "./filed-returns-portal-availability";
 import { findMatchingActionableFiledReturnRows } from "./filed-returns-result-rows";
 import { clearFiledReturnsSearchAttempt } from "./filed-returns-search-state";
 
@@ -21,6 +23,12 @@ export async function runFiledReturnsDownloadStep(
   documentRef: Document,
   scope: FiledReturnsDownloadScope,
 ): Promise<PortalFlowStepResult> {
+  const portalAvailabilityIssue = detectFiledReturnsPortalAvailabilityIssue(documentRef);
+  if (portalAvailabilityIssue) {
+    clearFiledReturnsSearchAttempt(documentRef);
+    return portalAvailabilityIssue;
+  }
+
   await dismissKnownFiledReturnsSummaryModal(documentRef);
   const observation = observeFiledReturnsPageText(getBodyText(documentRef), {
     ...(documentRef.defaultView?.location.pathname
@@ -69,7 +77,27 @@ export async function runFiledReturnsDownloadStep(
   }
 
   if (observation.state === "filters-required") {
-    return selectFiledReturnsFiltersAndSearch(documentRef, scope, FILED_RETURNS_SCOPE_ID);
+    const apiSearchResult = await openFiledReturnFromApiSearch(
+      documentRef,
+      scope,
+      FILED_RETURNS_SCOPE_ID,
+    );
+    if (apiSearchResult) return apiSearchResult;
+
+    const selectionResult = await selectFiledReturnsFiltersAndSearch(
+      documentRef,
+      scope,
+      FILED_RETURNS_SCOPE_ID,
+    );
+    if (shouldTryApiSearchFallback(selectionResult)) {
+      const apiSearchResult = await openFiledReturnFromApiSearch(
+        documentRef,
+        scope,
+        FILED_RETURNS_SCOPE_ID,
+      );
+      if (apiSearchResult) return apiSearchResult;
+    }
+    return selectionResult;
   }
 
   if (observation.state === "filed-return-results-visible") {
@@ -179,6 +207,13 @@ function shouldReturnFromMismatchedDetail(
   return (
     !matchesAcceptedText(detailIdentity.period, [scope.period]) ||
     !matchesAcceptedText(detailIdentity.financialYear, [scope.financialYear])
+  );
+}
+
+function shouldTryApiSearchFallback(step: PortalFlowStepResult): boolean {
+  return (
+    step.safeSignals.includes("filed-return-filter-selection-in-progress") ||
+    step.safeSignals.includes("filed-return-filter-candidate-not-found")
   );
 }
 
