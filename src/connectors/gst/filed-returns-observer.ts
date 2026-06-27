@@ -177,7 +177,7 @@ function detectSafeSignals(text: string, hints: FiledReturnsObservationHints): s
 
 function hasLoginEvidence(text: string, hints: FiledReturnsObservationHints): boolean {
   if (isLoginRoute(hints)) return true;
-  if (/session (?:has )?expired|please login again|invalid session|logged out/.test(text)) {
+  if (/session (?:is |has )?expired|please login again|invalid session|logged out/.test(text)) {
     return true;
   }
 

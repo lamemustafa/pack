@@ -16,6 +16,8 @@ import {
   isSupportedFiledReturnsStartScope,
 } from "./filed-returns-scope";
 
+export const PACK_CONTENT_SCRIPT_PROTOCOL_VERSION = 3;
+
 export type PackMessage =
   | { type: "PACK_CONTENT_CONTEXT"; payload: PortalContext }
   | { type: "PACK_FILED_RETURNS_OBSERVATION"; payload: PortalObservation }
@@ -68,7 +70,7 @@ export type PackMessage =
     };
 
 export type PackMessageResponse =
-  | { ok: true; context: PortalContext | null }
+  | { ok: true; context: PortalContext | null; contentScriptVersion?: number }
   | {
       ok: true;
       observation: PortalObservation | null;

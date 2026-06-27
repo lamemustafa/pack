@@ -73,6 +73,29 @@ describe("filed returns guided flow", () => {
     expect(result.userAction?.type).toBe("WAIT_FOR_PORTAL_AVAILABILITY");
   });
 
+  it("treats the GST access-denied expired-session page as login-required", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <h4>Access Denied!</h4>
+          <p>Your session is expired or you don't have permission to access the requested page.</p>
+          <a href="/services/login">Login</a>
+        </main>
+      `,
+      "https://services.gst.gov.in/services/error/accessdenied",
+    );
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.state).toBe("login-required");
+    expect(result.safeSignals).toEqual(["portal-blocked-or-session-expired"]);
+    expect(result.userAction).toEqual({
+      type: "LOGIN",
+      message: "Sign in to the GST portal, then reopen Pack on the authenticated page.",
+      canResume: true,
+    });
+  });
+
   it("does not block a usable filed-returns page for a future downtime banner", async () => {
     const documentRef = createGstDocument(`
       <main>
@@ -196,6 +219,260 @@ describe("filed returns guided flow", () => {
     expect(yesClicked).toBe(0);
     expect(noClicked).toBe(1);
     expect(filedReturnsClicked).toBe(1);
+  });
+
+  it("dismisses stacked GST fowelcome reminders before entering Return Dashboard", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <section data-aadhaar-reminder>
+            <h2>Would you like to Authenticate Aadhaar or Upload E-KYC Documents of Partner/Promoter and Primary Authorized Signatory?</h2>
+            <a data-profile>YES, NAVIGATE TO MY PROFILE</a>
+            <a data-aadhaar-dismiss>REMIND ME LATER</a>
+            <p>Dashboard>My Profile>Aadhaar Authentication Status</p>
+          </section>
+          <section data-metadata-reminder hidden>
+            <h2>GST System is collecting metadata for the Principal Place of Business. Would you like to provide the details now ?</h2>
+            <a data-metadata-yes>YES-CLICK HERE</a>
+            <a data-metadata-dismiss>NO-REMIND ME LATER</a>
+          </section>
+          <button data-return-dashboard>RETURN DASHBOARD</button>
+        </main>
+      `,
+      "https://services.gst.gov.in/services/auth/fowelcome",
+    );
+    makeLayoutVisible(documentRef);
+    let profileClicked = 0;
+    let metadataYesClicked = 0;
+    let aadhaarDismissed = 0;
+    let metadataDismissed = 0;
+    let returnDashboardClicked = 0;
+
+    documentRef.querySelector("[data-profile]")?.addEventListener("click", () => {
+      profileClicked += 1;
+    });
+    documentRef.querySelector("[data-aadhaar-dismiss]")?.addEventListener("click", () => {
+      aadhaarDismissed += 1;
+      documentRef.querySelector("[data-aadhaar-reminder]")?.remove();
+      documentRef.querySelector("[data-metadata-reminder]")?.removeAttribute("hidden");
+    });
+    documentRef.querySelector("[data-metadata-yes]")?.addEventListener("click", () => {
+      metadataYesClicked += 1;
+    });
+    documentRef.querySelector("[data-metadata-dismiss]")?.addEventListener("click", () => {
+      metadataDismissed += 1;
+      documentRef.querySelector("[data-metadata-reminder]")?.remove();
+    });
+    documentRef.querySelector("[data-return-dashboard]")?.addEventListener("click", () => {
+      returnDashboardClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining([
+        "safe-dialog-dismissed",
+        "dialog-remind-later",
+        "dialog-no-remind-later",
+        "return-dashboard-candidate-clicked",
+      ]),
+    );
+    expect(profileClicked).toBe(0);
+    expect(metadataYesClicked).toBe(0);
+    expect(aadhaarDismissed).toBe(1);
+    expect(metadataDismissed).toBe(1);
+    expect(returnDashboardClicked).toBe(1);
+  });
+
+  it("uses Services > Returns > View Filed Returns before the Return Dashboard fallback", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <nav>
+            <button data-services>Services</button>
+            <div data-services-menu hidden>
+              <button data-returns>Returns</button>
+              <a data-filed-returns hidden href="https://return.gst.gov.in/returns/auth/efiledReturns">View Filed Returns</a>
+            </div>
+          </nav>
+          <button data-return-dashboard>RETURN DASHBOARD</button>
+        </main>
+      `,
+      "https://services.gst.gov.in/services/auth/dashboard",
+    );
+    makeLayoutVisible(documentRef);
+    let filedReturnsClicked = 0;
+    let returnDashboardClicked = 0;
+
+    documentRef.querySelector("[data-services]")?.addEventListener("mouseover", () => {
+      documentRef.querySelector("[data-services-menu]")?.removeAttribute("hidden");
+    });
+    documentRef.querySelector("[data-returns]")?.addEventListener("mouseover", () => {
+      documentRef.querySelector("[data-filed-returns]")?.removeAttribute("hidden");
+    });
+    documentRef.querySelector("[data-filed-returns]")?.addEventListener("click", () => {
+      filedReturnsClicked += 1;
+    });
+    documentRef.querySelector("[data-return-dashboard]")?.addEventListener("click", () => {
+      returnDashboardClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining([
+        "filed-returns-candidate-clicked",
+        "after-returns-menu",
+        "href-efiledreturns",
+      ]),
+    );
+    expect(result.safeSignals).not.toContain("return-dashboard-candidate-clicked");
+    expect(filedReturnsClicked).toBe(1);
+    expect(returnDashboardClicked).toBe(0);
+  });
+
+  it("uses a hidden portal View Filed Returns menu anchor before Return Dashboard fallback", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <nav>
+            <button data-services>Services</button>
+            <div data-services-menu hidden>
+              <button data-returns>Returns</button>
+              <a data-filed-returns hidden href="https://return.gst.gov.in/returns/auth/efiledReturns">View Filed Returns</a>
+            </div>
+          </nav>
+          <button data-return-dashboard>RETURN DASHBOARD</button>
+        </main>
+      `,
+      "https://services.gst.gov.in/services/auth/dashboard",
+    );
+    makeLayoutVisible(documentRef);
+    let filedReturnsClicked = 0;
+    let returnDashboardClicked = 0;
+
+    documentRef.querySelector("[data-filed-returns]")?.addEventListener("click", () => {
+      filedReturnsClicked += 1;
+    });
+    documentRef.querySelector("[data-return-dashboard]")?.addEventListener("click", () => {
+      returnDashboardClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining([
+        "hidden-filed-returns-candidate-clicked",
+        "hidden-services-returns-menu",
+        "href-efiledreturns",
+      ]),
+    );
+    expect(result.safeSignals).not.toContain("return-dashboard-candidate-clicked");
+    expect(filedReturnsClicked).toBe(1);
+    expect(returnDashboardClicked).toBe(0);
+  });
+
+  it("uses the portal menu from the GST return dashboard instead of replaying the protected URL", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <nav>
+            <button data-services>Services</button>
+            <div data-services-menu hidden>
+              <button data-returns>Returns</button>
+              <a data-filed-returns hidden href="https://return.gst.gov.in/returns/auth/efiledReturns">View Filed Returns</a>
+            </div>
+          </nav>
+          <h1>Returns Dashboard</h1>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/dashboard",
+    );
+    makeLayoutVisible(documentRef);
+    let filedReturnsClicked = 0;
+
+    documentRef.querySelector("[data-services]")?.addEventListener("mouseover", () => {
+      documentRef.querySelector("[data-services-menu]")?.removeAttribute("hidden");
+    });
+    documentRef.querySelector("[data-returns]")?.addEventListener("mouseover", () => {
+      documentRef.querySelector("[data-filed-returns]")?.removeAttribute("hidden");
+    });
+    documentRef.querySelector("[data-filed-returns]")?.addEventListener("click", () => {
+      filedReturnsClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining([
+        "filed-returns-candidate-clicked",
+        "after-returns-menu",
+        "href-efiledreturns",
+      ]),
+    );
+    expect(result.safeSignals).not.toContain("return-dashboard-direct-efiledreturns-route");
+    expect(filedReturnsClicked).toBe(1);
+  });
+
+  it("fails closed on the GST return dashboard when the filed-returns menu candidate is not visible", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <nav>
+            <button>Services</button>
+            <button>Returns</button>
+          </nav>
+          <h1>Returns Dashboard</h1>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/dashboard",
+    );
+    const clickedHrefs: string[] = [];
+    const view = documentRef.defaultView;
+    if (!view) throw new Error("Expected JSDOM window.");
+    documentRef.body.addEventListener("click", (event) => {
+      const target = event.target;
+      if (target instanceof view.HTMLAnchorElement) {
+        event.preventDefault();
+        clickedHrefs.push(target.href);
+      }
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.state).toBe("candidate-not-found");
+    expect(result.safeSignals).toEqual(expect.arrayContaining(["no-filed-returns-candidate"]));
+    expect(result.userAction?.type).toBe("NAVIGATE_TO_SUPPORTED_PAGE");
+    expect(clickedHrefs).toEqual([]);
+  });
+
+  it("does not click a dashboard self-link from the GST return dashboard", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <a data-self-dashboard href="https://return.gst.gov.in/returns/auth/dashboard">Return Dashboard</a>
+          <button>Services</button>
+          <h1>File Returns</h1>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/dashboard",
+    );
+    makeLayoutVisible(documentRef);
+    let dashboardClicked = 0;
+    documentRef.querySelector("[data-self-dashboard]")?.addEventListener("click", () => {
+      dashboardClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.state).toBe("candidate-not-found");
+    expect(result.safeSignals).toEqual(expect.arrayContaining(["no-filed-returns-candidate"]));
+    expect(result.safeSignals).not.toContain("return-dashboard-candidate-clicked");
+    expect(dashboardClicked).toBe(0);
   });
 
   it("uses the filed-return API before slow dependent dropdown selection on the GST route", async () => {

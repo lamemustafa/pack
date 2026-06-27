@@ -72,6 +72,20 @@ describe("Pack GST tab selection", () => {
     });
   });
 
+  it("rejects stale content script ping responses without the current protocol version", async () => {
+    const { PACK_CONTENT_SCRIPT_PROTOCOL_VERSION } = await import("../../src/core/messages");
+    const { isCurrentContentScriptPingResponse } = await import("../../src/entrypoints/background");
+
+    expect(isCurrentContentScriptPingResponse({ ok: true, context: null })).toBe(false);
+    expect(
+      isCurrentContentScriptPingResponse({
+        ok: true,
+        context: null,
+        contentScriptVersion: PACK_CONTENT_SCRIPT_PROTOCOL_VERSION,
+      }),
+    ).toBe(true);
+  });
+
   it("falls back to a GST tab in the current window when the popup is open as a tab", async () => {
     browserMocks.tabs.query
       .mockResolvedValueOnce([

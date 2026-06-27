@@ -67,6 +67,67 @@ export interface ActiveDownloadObservation {
   stop(): void;
 }
 
+export async function observeBrowserDownloadById(
+  downloads: DownloadObservationApi,
+  downloadId: number,
+  context: DownloadObservationContext,
+  timeoutMs = DEFAULT_DOWNLOAD_WAIT_MS,
+): Promise<SafeDownloadObservation> {
+  const [initialItem] = await downloads.search({ id: downloadId }).catch(() => []);
+  if (initialItem?.state === "complete") {
+    return completedObservation(downloads, downloadId, context, initialItem);
+  }
+  if (initialItem?.state === "interrupted") {
+    return failedObservation(initialItem.error);
+  }
+
+  return new Promise<SafeDownloadObservation>((resolve) => {
+    let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
+    let settled = false;
+
+    const cleanup = () => {
+      downloads.onChanged.removeListener(onChanged);
+      if (timeoutId) globalThis.clearTimeout(timeoutId);
+      timeoutId = null;
+    };
+
+    const settle = (observation: SafeDownloadObservation) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(observation);
+    };
+
+    function onChanged(delta: DownloadDelta) {
+      if (delta.id !== downloadId) return;
+      if (delta.state?.current === "complete") {
+        void completedObservation(downloads, downloadId, context).then(settle);
+        return;
+      }
+      if (delta.state?.current === "interrupted") {
+        settle(failedObservation(delta.error?.current));
+      }
+    }
+
+    downloads.onChanged.addListener(onChanged);
+    void downloads
+      .search({ id: downloadId })
+      .then(([latestItem]) => {
+        if (latestItem?.state === "complete") {
+          void completedObservation(downloads, downloadId, context, latestItem).then(settle);
+          return;
+        }
+        if (latestItem?.state === "interrupted") {
+          settle(failedObservation(latestItem.error));
+        }
+      })
+      .catch(() => undefined);
+    timeoutId = globalThis.setTimeout(() => {
+      settle(downloadNotObserved());
+    }, timeoutMs);
+  });
+}
+
 export function observeNextBrowserDownload(
   downloads: DownloadObservationApi,
   contextOrTimeoutMs?: DownloadObservationContext | number,

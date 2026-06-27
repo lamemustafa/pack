@@ -24,6 +24,7 @@ export interface FiledReturnsFlowMessagingDeps {
   };
   now?: () => Date;
   persistTargetReview?: boolean;
+  preferDirectDownload?: boolean;
   timings?: {
     contentMessageTimeoutMs?: number;
   };
