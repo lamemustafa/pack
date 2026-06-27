@@ -56,7 +56,7 @@ describe("filed returns direct download request helpers", () => {
     );
   });
 
-  it("resolves a synthetic PDF request on a blank detail route when stored return period matches the target", () => {
+  it("blocks direct PDF requests until the visible detail page exposes the target identity", () => {
     const documentRef = createDetailDocument(
       "https://return.gst.gov.in/returns/auth/gstr3b",
       "<main></main>",
@@ -65,14 +65,14 @@ describe("filed returns direct download request helpers", () => {
 
     const resolved = resolveFiledGstr3bGeneratedPdfApiRequest(documentRef, TARGET);
 
-    expect(resolved.ok).toBe(true);
-    if (!resolved.ok) return;
-    expect(resolved.pdfPath).toBe("/returns/auth/api/gstr3b/getgenpdf?rtn_prd=032026");
-    expect(resolved.safeSignals).toEqual(
+    expect(resolved.ok).toBe(false);
+    if (resolved.ok) return;
+    expect(resolved.result.state).toBe("blocked");
+    expect(resolved.result.safeSignals).toEqual(
       expect.arrayContaining([
         "gstr-3b-detail-route",
-        "filed-gstr3b-direct-download-storage-period-matched",
-        "filed-gstr3b-direct-download-path-built",
+        "filed-gstr3b-direct-download-visible-identity-missing",
+        "filed-return-download-target-mismatch",
       ]),
     );
   });
@@ -98,7 +98,7 @@ describe("filed returns direct download request helpers", () => {
     expect(resolved.result.safeSignals).toContain("filed-return-download-target-mismatch");
   });
 
-  it("blocks blank detail route PDF requests when stored return period does not match the target", () => {
+  it("blocks blank detail route PDF requests even when stored return period does not match the target", () => {
     const documentRef = createDetailDocument(
       "https://return.gst.gov.in/returns/auth/gstr3b",
       "<main></main>",
@@ -111,7 +111,7 @@ describe("filed returns direct download request helpers", () => {
     if (resolved.ok) return;
     expect(resolved.result.state).toBe("blocked");
     expect(resolved.result.safeSignals).toContain(
-      "filed-gstr3b-direct-download-storage-period-mismatch",
+      "filed-gstr3b-direct-download-visible-identity-missing",
     );
   });
 

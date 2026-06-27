@@ -20,7 +20,7 @@ import { persistFiledReturnsTargetReview } from "./filed-returns-target-review";
 const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
 const SAFE_DOWNLOAD_ROOT = "ComplyEaze-Pack/GSTR-3B";
 const EXPECTED_FILED_RETURN_DOWNLOAD = {
-  expectedFileExtensions: [".pdf"],
+  expectedFileExtensions: [],
   expectedMimeTypes: ["application/pdf"],
   expectedOrigins: GST_CONNECTOR_DESCRIPTOR.supportedOrigins,
 };

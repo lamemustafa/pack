@@ -183,7 +183,7 @@ async function handleMessage(
 function filedReturnsFlowRunnerDeps() {
   return {
     getActiveGstTab,
-    preferDirectDownload: true,
+    preferDirectDownload: false,
     sendMessageToTabWithInjection,
     storageKeys: filedReturnsStorageKeys(),
   };

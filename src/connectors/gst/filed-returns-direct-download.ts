@@ -86,7 +86,7 @@ export function resolveFiledGstr3bGeneratedPdfApiRequest(
     };
   }
 
-  const targetGuard = verifyDirectDownloadTarget(documentRef, target, baseSignals, returnPeriod);
+  const targetGuard = verifyDirectDownloadTarget(documentRef, target, baseSignals);
   if (targetGuard) return { ok: false, result: targetGuard };
 
   return {
@@ -200,15 +200,11 @@ function verifyDirectDownloadTarget(
   documentRef: Document,
   target: FiledReturnsDownloadTarget,
   baseSignals: readonly string[],
-  returnPeriod: string,
 ): PortalDownloadTriggerResult | null {
   const identity = extractFiledReturnsDetailIdentity(documentRef);
-  if (identity.period || identity.financialYear) {
+  if (identity.period && identity.financialYear) {
     return verifyFiledReturnsDownloadTarget(documentRef, target, baseSignals);
   }
-
-  const storedReturnPeriod = readStoredReturnPeriod(documentRef);
-  if (storedReturnPeriod === returnPeriod) return null;
 
   return {
     connectorId: "gst",
@@ -216,13 +212,11 @@ function verifyDirectDownloadTarget(
     state: "blocked",
     safeSignals: [
       ...baseSignals,
-      storedReturnPeriod
-        ? "filed-gstr3b-direct-download-storage-period-mismatch"
-        : "filed-gstr3b-direct-download-storage-period-missing",
+      "filed-gstr3b-direct-download-visible-identity-missing",
       "filed-return-download-target-mismatch",
     ],
     safeMessage:
-      "Pack will not build a direct filed GSTR-3B PDF request because the GST detail route does not expose a matching return period.",
+      "Pack will not build a direct filed GSTR-3B PDF request until the visible GST detail page exposes the requested return period and financial year.",
     userAction: {
       type: "NAVIGATE_TO_SUPPORTED_PAGE",
       message:
