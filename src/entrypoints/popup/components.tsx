@@ -8,6 +8,7 @@ import {
 
 export interface ScopeFormProps {
   busy: string | null;
+  flowSummary?: FiledReturnsFlowSummary | null;
   scope: FiledReturnsDownloadScope;
   onScopeChange: (scope: FiledReturnsDownloadScope) => void;
   onStart: () => void;
@@ -37,6 +38,8 @@ export function RecoveryActions({
   const signals = new Set(summary.flowStep.safeSignals);
   const needsRunReview = signals.has("filed-returns-run-needs-review");
   const needsTargetReview = signals.has("filed-returns-target-review-required");
+  const runActive =
+    signals.has("filed-returns-run-active") || signals.has("full-fiscal-year-run-active");
   const needsFullFiscalYearReview =
     Boolean(summary.fullFiscalYearRecovery) &&
     (signals.has("full-fiscal-year-download-unconfirmed") ||
@@ -44,10 +47,22 @@ export function RecoveryActions({
       signals.has("full-fiscal-year-resume-confirmation-required") ||
       signals.has("full-fiscal-year-run-needs-action"));
   const canManuallyObserveFullYear = canManuallyObserveFullFiscalYearTarget(summary);
-  if (!needsRunReview && !needsTargetReview && !needsFullFiscalYearReview) return null;
+  if (!needsRunReview && !needsTargetReview && !needsFullFiscalYearReview && !runActive) {
+    return null;
+  }
 
   return (
     <section className="actions" aria-label="Filed return recovery actions">
+      {runActive ? (
+        <>
+          <button type="button" disabled>
+            Run in progress
+          </button>
+          <p className="muted">
+            Retry controls appear automatically if the run stops making progress.
+          </p>
+        </>
+      ) : null}
       {needsRunReview ? (
         <button
           type="button"
@@ -55,9 +70,7 @@ export function RecoveryActions({
           disabled={busy !== null}
           onClick={onAcknowledgeInterruptedRun}
         >
-          {busy === "acknowledge-interrupted-run"
-            ? "Acknowledging..."
-            : "Acknowledge interrupted run"}
+          {busy === "acknowledge-interrupted-run" ? "Resetting..." : "Reset stuck run"}
         </button>
       ) : null}
       {needsTargetReview ? (
@@ -79,7 +92,7 @@ export function RecoveryActions({
             disabled={busy !== null}
             onClick={() => onResolveTarget("cancelled")}
           >
-            {busy === "cancel-unconfirmed-download" ? "Cancelling..." : "Cancel target"}
+            {busy === "cancel-unconfirmed-download" ? "Cancelling..." : "Cancel and reset"}
           </button>
         </>
       ) : null}
@@ -131,23 +144,22 @@ function retryFullYearLabel(summary: FiledReturnsFlowSummary): string {
     return "Resume saved run";
   }
   return summary.fullFiscalYearRecovery?.targetStatus === "pending"
-    ? "Resume full-year period"
-    : "Retry full-year period";
+    ? "Resume saved period"
+    : "Retry this period";
 }
 
 function cancelFullYearLabel(summary: FiledReturnsFlowSummary): string {
   if (summary.flowStep.safeSignals.includes("full-fiscal-year-resume-confirmation-required")) {
     return "Discard saved run";
   }
-  return summary.fullFiscalYearRecovery?.targetStatus === "pending"
-    ? "Discard full-year run"
-    : "Discard saved full-year run";
+  return "Cancel and reset";
 }
 
-export function ScopeForm({ busy, scope, onScopeChange, onStart }: ScopeFormProps) {
+export function ScopeForm({ busy, flowSummary, scope, onScopeChange, onStart }: ScopeFormProps) {
   const financialYearOptions = getFiledReturnsFinancialYearOptions();
   const periodOptions = getFiledReturnsScopePeriodOptions(scope.financialYear);
   const fullFiscalYear = isFullFiscalYearScope(scope);
+  const startAction = getScopeFormStartAction(scope, flowSummary, busy, fullFiscalYear);
 
   return (
     <section className="flow-panel" aria-label="Filed return download scope">
@@ -197,13 +209,52 @@ export function ScopeForm({ busy, scope, onScopeChange, onStart }: ScopeFormProp
           filers only.
         </p>
       ) : null}
-      <button type="button" disabled={busy !== null} onClick={onStart}>
-        {busy === "start-filed-returns-flow"
-          ? "Starting..."
-          : fullFiscalYear
-            ? "Start local full-year run"
-            : "Start download"}
+      <button type="button" disabled={startAction.disabled} onClick={onStart}>
+        {startAction.label}
       </button>
     </section>
+  );
+}
+
+function getScopeFormStartAction(
+  scope: FiledReturnsDownloadScope,
+  summary: FiledReturnsFlowSummary | null | undefined,
+  busy: string | null,
+  fullFiscalYear: boolean,
+): { disabled: boolean; label: string } {
+  if (busy === "start-filed-returns-flow") return { disabled: true, label: "Starting..." };
+  if (busy !== null) return { disabled: true, label: defaultStartLabel(fullFiscalYear) };
+  if (summary && isSameScope(scope, summary.scope)) {
+    const signals = new Set(summary.flowStep.safeSignals);
+    if (signals.has("filed-returns-run-active") || signals.has("full-fiscal-year-run-active")) {
+      return { disabled: true, label: "Run in progress" };
+    }
+    if (signals.has("filed-returns-run-needs-review")) {
+      return { disabled: true, label: "Reset stuck run first" };
+    }
+    if (
+      signals.has("filed-returns-target-review-required") ||
+      signals.has("full-fiscal-year-download-unconfirmed") ||
+      signals.has("full-fiscal-year-run-interrupted") ||
+      signals.has("full-fiscal-year-run-needs-action")
+    ) {
+      return { disabled: true, label: "Resolve current period first" };
+    }
+    if (signals.has("full-fiscal-year-resume-confirmation-required")) {
+      return { disabled: true, label: "Resume or discard saved run" };
+    }
+  }
+  return { disabled: false, label: defaultStartLabel(fullFiscalYear) };
+}
+
+function defaultStartLabel(fullFiscalYear: boolean): string {
+  return fullFiscalYear ? "Start local full-year run" : "Start download";
+}
+
+function isSameScope(left: FiledReturnsDownloadScope, right: FiledReturnsDownloadScope): boolean {
+  return (
+    left.financialYear === right.financialYear &&
+    left.period === right.period &&
+    left.returnType === right.returnType
   );
 }

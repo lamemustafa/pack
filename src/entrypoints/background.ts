@@ -1,7 +1,12 @@
 import { browser } from "wxt/browser";
 import { isSupportedGstPortalUrl, pickSupportedGstPortalTab } from "../connectors/gst/hosts";
 import type { ArchiveManifest, PortalContext, PortalObservation } from "../core/contracts";
-import { isPackMessage, type PackMessage, type PackMessageResponse } from "../core/messages";
+import {
+  PACK_CONTENT_SCRIPT_PROTOCOL_VERSION,
+  isPackMessage,
+  type PackMessage,
+  type PackMessageResponse,
+} from "../core/messages";
 import {
   acknowledgeInterruptedFiledReturnsRun,
   readActiveFiledReturnsRunSummary,
@@ -72,6 +77,14 @@ export async function restrictLocalStorageToTrustedContexts(): Promise<void> {
     setAccessLevel?: (options: { accessLevel: "TRUSTED_CONTEXTS" }) => Promise<void> | void;
   };
   await storageArea.setAccessLevel?.({ accessLevel: "TRUSTED_CONTEXTS" });
+}
+
+export function isCurrentContentScriptPingResponse(response: PackMessageResponse): boolean {
+  return (
+    response.ok &&
+    "contentScriptVersion" in response &&
+    response.contentScriptVersion === PACK_CONTENT_SCRIPT_PROTOCOL_VERSION
+  );
 }
 
 async function handleMessage(
@@ -170,6 +183,7 @@ async function handleMessage(
 function filedReturnsFlowRunnerDeps() {
   return {
     getActiveGstTab,
+    preferDirectDownload: true,
     sendMessageToTabWithInjection,
     storageKeys: filedReturnsStorageKeys(),
   };
@@ -275,7 +289,7 @@ async function pingContentScript(tabId: number): Promise<boolean> {
     const response = (await browser.tabs.sendMessage(tabId, {
       type: "PACK_CONTENT_PING_V2",
     })) as PackMessageResponse;
-    return response.ok;
+    return isCurrentContentScriptPingResponse(response);
   } catch {
     return false;
   }

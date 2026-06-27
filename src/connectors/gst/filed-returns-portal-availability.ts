@@ -5,7 +5,7 @@ const BLOCKED_PORTAL_PATTERNS = [
   /request rejected/i,
   /access denied/i,
   /you are not authorized/i,
-  /session (?:has )?expired/i,
+  /session (?:is |has )?expired/i,
   /please login again/i,
   /invalid session/i,
 ];

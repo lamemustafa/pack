@@ -71,9 +71,6 @@ export function resolveFiledGstr3bGeneratedPdfApiRequest(
     };
   }
 
-  const targetGuard = verifyFiledReturnsDownloadTarget(documentRef, target, baseSignals);
-  if (targetGuard) return { ok: false, result: targetGuard };
-
   const returnPeriod = toPortalReturnPeriod(target.period, target.financialYear);
   if (!returnPeriod) {
     return {
@@ -89,12 +86,19 @@ export function resolveFiledGstr3bGeneratedPdfApiRequest(
     };
   }
 
+  const targetGuard = verifyDirectDownloadTarget(documentRef, target, baseSignals, returnPeriod);
+  if (targetGuard) return { ok: false, result: targetGuard };
+
   return {
     ok: true,
     pdfPath: buildFiledGstr3bGeneratedPdfApiPath(returnPeriod),
     preflightPath: buildFiledGstr3bTaxPayableApiPath(returnPeriod),
     returnPeriod,
-    safeSignals: [...baseSignals, "filed-gstr3b-direct-download-path-built"],
+    safeSignals: [
+      ...baseSignals,
+      ...buildStoredReturnPeriodMatchSignals(documentRef, returnPeriod),
+      "filed-gstr3b-direct-download-path-built",
+    ],
   };
 }
 
@@ -190,4 +194,57 @@ function detectFiledGstr3bDetailApiContext(documentRef: Document): {
     ok: safeSignals.includes("gst-returns-origin") && safeSignals.includes("gstr-3b-detail-route"),
     safeSignals,
   };
+}
+
+function verifyDirectDownloadTarget(
+  documentRef: Document,
+  target: FiledReturnsDownloadTarget,
+  baseSignals: readonly string[],
+  returnPeriod: string,
+): PortalDownloadTriggerResult | null {
+  const identity = extractFiledReturnsDetailIdentity(documentRef);
+  if (identity.period || identity.financialYear) {
+    return verifyFiledReturnsDownloadTarget(documentRef, target, baseSignals);
+  }
+
+  const storedReturnPeriod = readStoredReturnPeriod(documentRef);
+  if (storedReturnPeriod === returnPeriod) return null;
+
+  return {
+    connectorId: "gst",
+    scopeId: FILED_RETURNS_SCOPE_ID,
+    state: "blocked",
+    safeSignals: [
+      ...baseSignals,
+      storedReturnPeriod
+        ? "filed-gstr3b-direct-download-storage-period-mismatch"
+        : "filed-gstr3b-direct-download-storage-period-missing",
+      "filed-return-download-target-mismatch",
+    ],
+    safeMessage:
+      "Pack will not build a direct filed GSTR-3B PDF request because the GST detail route does not expose a matching return period.",
+    userAction: {
+      type: "NAVIGATE_TO_SUPPORTED_PAGE",
+      message:
+        "Open the filed GSTR-3B detail page for the requested period and financial year, then start Pack again.",
+      canResume: true,
+    },
+  };
+}
+
+function buildStoredReturnPeriodMatchSignals(
+  documentRef: Document,
+  returnPeriod: string,
+): string[] {
+  return readStoredReturnPeriod(documentRef) === returnPeriod
+    ? ["filed-gstr3b-direct-download-storage-period-matched"]
+    : [];
+}
+
+function readStoredReturnPeriod(documentRef: Document): string | null {
+  try {
+    return documentRef.defaultView?.localStorage.getItem("rtn_prd") || null;
+  } catch {
+    return null;
+  }
 }

@@ -5,9 +5,13 @@ import { triggerFiledGstr3bFiledPdfDownload } from "../connectors/gst/filed-retu
 import { resolveFiledGstr3bGeneratedPdfApiRequest } from "../connectors/gst/filed-returns-direct-download";
 import { navigateToFiledReturnsPage } from "../connectors/gst/filed-returns-navigator";
 import { observeFiledReturnsPageText } from "../connectors/gst/filed-returns-observer";
-import { isPackMessage, type PackMessageResponse } from "../core/messages";
+import {
+  PACK_CONTENT_SCRIPT_PROTOCOL_VERSION,
+  isPackMessage,
+  type PackMessageResponse,
+} from "../core/messages";
 
-const PACK_CONTENT_LISTENER_KEY = "__packContentListenerInstalledV2";
+const PACK_CONTENT_LISTENER_KEY = `__packContentListenerInstalledV${PACK_CONTENT_SCRIPT_PROTOCOL_VERSION}`;
 
 declare global {
   interface Window {
@@ -46,7 +50,11 @@ export default defineContentScript({
       }
 
       if (message.type === "PACK_CONTENT_PING_V2") {
-        sendResponse({ ok: true, context: null } satisfies PackMessageResponse);
+        sendResponse({
+          ok: true,
+          context: null,
+          contentScriptVersion: PACK_CONTENT_SCRIPT_PROTOCOL_VERSION,
+        } satisfies PackMessageResponse);
         return false;
       }
 

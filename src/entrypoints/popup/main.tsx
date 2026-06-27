@@ -208,6 +208,7 @@ function App() {
 
       <ScopeForm
         busy={busy}
+        flowSummary={filedReturnsFlowSummary}
         scope={scope}
         onScopeChange={setScope}
         onStart={() => void startFiledReturnsFlow()}

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   mergeDownloadTriggerWithDownloadObservation,
   mergeFlowStepWithDownloadObservation,
+  observeBrowserDownloadById,
   observeNextBrowserDownload,
   type DownloadCreatedItem,
   type DownloadDelta,
@@ -92,6 +93,91 @@ describe("download observer", () => {
     await expect(observation.promise).resolves.toMatchObject({
       state: "completed",
       safeSignals: expect.arrayContaining(["browser-download-id:13"]),
+    });
+  });
+
+  it("observes only the browser download id returned by the direct download API", async () => {
+    const downloads = createDownloadsApi([
+      {
+        filename: "unrelated.pdf",
+        id: 80,
+        mime: "application/pdf",
+        state: "complete",
+        fileSize: 1234,
+        startTime: "2026-06-24T10:00:01.000Z",
+        url: "https://return.gst.gov.in/returns/auth/gstr3b/getgenpdf",
+      },
+      {
+        filename: "May-GSTR-3B.pdf",
+        id: 81,
+        mime: "application/pdf",
+        state: "complete",
+        fileSize: 2048,
+        startTime: "2026-06-24T10:00:02.000Z",
+        url: "https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=052026",
+      },
+    ]);
+
+    await expect(
+      observeBrowserDownloadById(downloads, 81, {
+        armedAt: new Date("2026-06-24T10:00:00.000Z"),
+        expectedFileExtensions: [".pdf"],
+        expectedMimeTypes: ["application/pdf"],
+        expectedOrigins: ["https://return.gst.gov.in"],
+      }),
+    ).resolves.toMatchObject({
+      state: "completed",
+      safeSignals: expect.arrayContaining(["browser-download-id:81"]),
+    });
+  });
+
+  it("rechecks the direct download id after subscribing to avoid missing a fast completion", async () => {
+    const created = createEvent<DownloadCreatedItem>();
+    const changed = createEvent<DownloadDelta>();
+    const search = vi
+      .fn()
+      .mockResolvedValueOnce([{ id: 82, state: "in_progress" }])
+      .mockResolvedValueOnce([
+        {
+          filename: "May-GSTR-3B.pdf",
+          id: 82,
+          mime: "application/pdf",
+          state: "complete",
+          fileSize: 2048,
+          startTime: "2026-06-24T10:00:02.000Z",
+          url: "https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=052026",
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          filename: "May-GSTR-3B.pdf",
+          id: 82,
+          mime: "application/pdf",
+          state: "complete",
+          fileSize: 2048,
+          startTime: "2026-06-24T10:00:02.000Z",
+          url: "https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=052026",
+        },
+      ]);
+
+    await expect(
+      observeBrowserDownloadById(
+        {
+          onCreated: created.api,
+          onChanged: changed.api,
+          search,
+        },
+        82,
+        {
+          armedAt: new Date("2026-06-24T10:00:00.000Z"),
+          expectedFileExtensions: [".pdf"],
+          expectedMimeTypes: ["application/pdf"],
+          expectedOrigins: ["https://return.gst.gov.in"],
+        },
+      ),
+    ).resolves.toMatchObject({
+      state: "completed",
+      safeSignals: expect.arrayContaining(["browser-download-id:82"]),
     });
   });
 

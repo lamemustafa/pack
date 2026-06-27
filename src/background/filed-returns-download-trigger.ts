@@ -11,6 +11,7 @@ import {
   mergeFlowStepWithDownloadObservation,
   observeNextBrowserDownload,
 } from "./download-observer";
+import { triggerDirectFiledReturnDownload } from "./filed-returns-direct-download-trigger";
 import {
   runDownloadTriggerOnce,
   type FiledReturnsFlowMessagingDeps,
@@ -39,6 +40,17 @@ export async function triggerAndObserveFiledReturnDownload({
 }): Promise<PackMessageResponse> {
   const target = createDownloadTarget(scope);
   if (!target) return unverifiedPeriodResponse();
+
+  if (deps.preferDirectDownload) {
+    const directDownloadResponse = await triggerDirectFiledReturnDownload({
+      activePeriod,
+      deps,
+      scope,
+      tabId,
+      target,
+    });
+    if (directDownloadResponse) return directDownloadResponse;
+  }
 
   const detailDownloadObservation = observeFiledReturnDownload();
   const triggerResponse = await runDownloadTriggerOnce(deps, tabId, target);

@@ -56,6 +56,7 @@ export interface FiledReturnsFlowRunnerDeps {
   };
   now?: () => Date;
   persistTargetReview?: boolean;
+  preferDirectDownload?: boolean;
   timings?: {
     contentMessageTimeoutMs?: number;
     flowStepSettleMs?: number;
@@ -232,6 +233,15 @@ async function waitForDetailReadyThenTrigger({
       });
     }
 
+    if (shouldAttemptDirectDownloadFromDetailRoute(lastStep, deps)) {
+      return triggerAndObserveFiledReturnDownload({
+        activePeriod,
+        deps,
+        scope,
+        tabId,
+      });
+    }
+
     if (!shouldContinueFlow(lastStep)) return response;
     await delay(getFlowStepSettleMs(lastStep, deps));
   }
@@ -294,6 +304,17 @@ async function persistFlowResponse(
 function shouldContinueFlow(step: PortalFlowStepResult): boolean {
   if (step.safeSignals.includes("filed-gstr3b-download-clicked")) return false;
   return step.state === "clicked" || step.safeSignals.includes("detail-summary-modal");
+}
+
+function shouldAttemptDirectDownloadFromDetailRoute(
+  step: PortalFlowStepResult,
+  deps: FiledReturnsFlowRunnerDeps,
+): boolean {
+  return Boolean(
+    deps.preferDirectDownload &&
+    step.safeSignals.includes("gstr-3b-detail-route") &&
+    !step.safeSignals.includes("detail-summary-modal"),
+  );
 }
 
 function isFiledReturnDetailNavigationStep(step: PortalFlowStepResult): boolean {

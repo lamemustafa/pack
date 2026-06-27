@@ -63,9 +63,6 @@ export async function navigateToFiledReturnsPage(
   const firstPass = clickBestFiledReturnsCandidate(documentRef, "initial-scan", safeSignals);
   if (firstPass) return firstPass;
 
-  const dashboardPass = clickBestReturnDashboardCandidate(documentRef, "initial-scan", safeSignals);
-  if (dashboardPass) return dashboardPass;
-
   revealMenuCandidate(documentRef, isServicesMenuCandidate);
   await delay(MENU_REVEAL_DELAY_MS);
   safeSignals.push(...(await dismissSafePostLoginDialogs(documentRef)));
@@ -87,6 +84,22 @@ export async function navigateToFiledReturnsPage(
     safeSignals,
   );
   if (afterReturns) return afterReturns;
+
+  const hiddenMenuPass = clickBestHiddenFiledReturnsMenuCandidate(
+    documentRef,
+    "hidden-services-returns-menu",
+    safeSignals,
+  );
+  if (hiddenMenuPass) return hiddenMenuPass;
+
+  if (!isReturnDashboardRoute(documentRef)) {
+    const dashboardPass = clickBestReturnDashboardCandidate(
+      documentRef,
+      "after-filed-returns-menu",
+      safeSignals,
+    );
+    if (dashboardPass) return dashboardPass;
+  }
 
   const diagnostics = collectSafeNavigationDiagnostics(
     getClickableElements(documentRef).map(toNavigationCandidateInput),
@@ -417,6 +430,58 @@ function clickBestReturnDashboardCandidate(
   };
 }
 
+function clickBestHiddenFiledReturnsMenuCandidate(
+  documentRef: Document,
+  scanStage: string,
+  prefixSignals: readonly string[],
+): PortalNavigationResult | null {
+  const candidates = getClickableElements(documentRef, { includeHidden: true })
+    .filter((element) => !isVisible(element))
+    .map((element) => ({
+      element,
+      candidate: toNavigationCandidateInput(element),
+    }))
+    .map(({ element, candidate }) => ({
+      element,
+      candidate,
+      score: scoreFiledReturnsNavigationCandidate(candidate),
+    }))
+    .filter(({ score }) => {
+      const isExplicitFiledReturnsTarget =
+        score.safeSignals.includes("text-view-filed-returns") ||
+        score.safeSignals.includes("href-efiledreturns");
+      return (
+        score.score >= 90 &&
+        isExplicitFiledReturnsTarget &&
+        !score.safeSignals.includes("excluded-account-navigation")
+      );
+    })
+    .sort((left, right) => right.score.score - left.score.score);
+
+  const best = candidates[0];
+  if (!best) return null;
+
+  activateElement(best.element);
+
+  return {
+    connectorId: "gst",
+    scopeId: FILED_RETURNS_SCOPE_ID,
+    state: "clicked",
+    safeSignals: [
+      ...prefixSignals,
+      "hidden-filed-returns-candidate-clicked",
+      scanStage,
+      ...best.score.safeSignals,
+    ],
+    safeMessage: "Pack clicked the portal's hidden View Filed Returns menu candidate.",
+  };
+}
+
+function isReturnDashboardRoute(documentRef: Document): boolean {
+  const location = documentRef.defaultView?.location;
+  return Boolean(location && /\/returns\/auth\/dashboard$/i.test(location.pathname));
+}
+
 export async function dismissSafePostLoginDialogs(documentRef: Document): Promise<string[]> {
   const signals: string[] = [];
   const dismissedElements = new Set<HTMLElement>();
@@ -467,10 +532,14 @@ function isReturnsMenuCandidate(candidate: NavigationCandidateInput): boolean {
   return /^returns\s*$/i.test(normaliseCandidateText([candidate.text, candidate.ariaLabel]));
 }
 
-function getClickableElements(root: ParentNode): HTMLElement[] {
-  return Array.from(root.querySelectorAll(CLICKABLE_SELECTOR)).filter((element) =>
-    isHtmlElement(root, element),
+function getClickableElements(
+  root: ParentNode,
+  options: { includeHidden?: boolean } = {},
+): HTMLElement[] {
+  const elements = Array.from(root.querySelectorAll(CLICKABLE_SELECTOR)).filter(
+    (element): element is HTMLElement => isHtmlElement(root, element),
   );
+  return options.includeHidden ? elements : elements.filter(isVisible);
 }
 
 function getVisibleDialogRoots(documentRef: Document): HTMLElement[] {

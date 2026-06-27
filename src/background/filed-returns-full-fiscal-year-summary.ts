@@ -205,7 +205,7 @@ export function downloadUnconfirmedFullFiscalYearStep(
       : "Pack could not confirm one browser download. Check Downloads before retrying.",
     userAction: {
       type: "RETRY_PORTAL_GENERATION",
-      message: "Check Chrome Downloads first. Retry only if no filed GSTR-3B PDF appeared.",
+      message: "Check browser Downloads first. Retry only if no filed GSTR-3B PDF appeared.",
       canResume: true,
     },
   };
@@ -226,7 +226,7 @@ export function interruptedFullFiscalYearStep(
     userAction: {
       type: "RETRY_PORTAL_GENERATION",
       message:
-        "Check Chrome Downloads first. Retry only after confirming that no duplicate filed GSTR-3B PDF was saved.",
+        "Check browser Downloads first. Retry only after confirming that no duplicate filed GSTR-3B PDF was saved.",
       canResume: true,
     },
   };
