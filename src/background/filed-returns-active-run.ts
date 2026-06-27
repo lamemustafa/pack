@@ -247,7 +247,7 @@ function activeRunStep(interrupted: boolean): PortalFlowStepResult {
     userAction: {
       type: "RETRY_PORTAL_GENERATION",
       message: interrupted
-        ? "Check Chrome Downloads first. Acknowledge the interrupted run only after confirming the previous run is safe to discard."
+        ? "Check browser Downloads first. Acknowledge the interrupted run only after confirming the previous run is safe to discard."
         : "Wait for the active filed-returns run to finish before starting another one.",
       canResume: true,
     },
