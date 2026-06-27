@@ -41,7 +41,11 @@
           "label": "<SECRET>",
           "pattern": "\\b(cookie|authorization)\\s*[:=]\\s*[^\\s;]+"
         },
-        { "id": "home-path", "label": "<HOME>", "pattern": "/Users/[^\\s\"']+" },
+        {
+          "id": "home-path",
+          "label": "<HOME>",
+          "pattern": "(?:/(?:Users|home|root)/[^\\s\"']+|[A-Z]:\\\\Users\\\\[^\\s\"']+)"
+        },
         {
           "id": "gst-url",
           "label": "<GST_PORTAL_URL>",

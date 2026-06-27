@@ -23,7 +23,46 @@ export type {
 const HEX_40 = /^[a-f0-9]{40}$/;
 const HEX_64 = /^[a-f0-9]{64}$/;
 const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
-const SUBJECT_ALIAS = /^SUBJECT-[A-Z0-9_-]+$/;
+const SUBJECT_ALIAS = /^SUBJECT-[A-Z0-9]{1,12}$/;
+const LIVE_RUN_EVIDENCE_KEYS = [
+  "schemaVersion",
+  "evidenceId",
+  "sourceCommit",
+  "gitTag",
+  "zipSha256",
+  "extensionVersion",
+  "browser",
+  "profile",
+  "subjectAlias",
+  "scenario",
+  "startedAt",
+  "completedAt",
+  "outcome",
+  "counts",
+  "checks",
+  "redaction",
+  "mediaArtifacts",
+];
+const BROWSER_KEYS = ["name", "version"];
+const COUNT_KEYS = [
+  "eligibleTargets",
+  "downloaded",
+  "notFiled",
+  "manuallyObserved",
+  "blocked",
+  "failed",
+  "duplicates",
+];
+const CHECK_KEYS = [
+  "humanVerifiedAccount",
+  "humanVerifiedPeriods",
+  "allFilesNonEmpty",
+  "serviceWorkerRestartResumeChecked",
+  "browserRestartResumeChecked",
+  "clearLocalDataChecked",
+  "unexpectedNetworkDestinations",
+];
+const MEDIA_ARTIFACT_KEYS = ["kind", "classification", "redactionMethod", "sha256"];
 
 const REQUIRED_TRUE_CHECKS: Array<keyof LiveRunEvidenceChecks> = [
   "humanVerifiedAccount",
@@ -51,6 +90,7 @@ export function validateLiveRunEvidence(input: unknown): LiveRunEvidenceValidati
   const errors: string[] = [];
   if (!isRecord(input)) return { ok: false, errors: ["evidence must be an object"] };
 
+  requireOnlyKeys(input, LIVE_RUN_EVIDENCE_KEYS, "evidence", errors);
   requireExact(input.schemaVersion, 1, "schemaVersion", errors);
   requireBoundedString(input.evidenceId, "evidenceId", errors, 8, 120);
   requirePattern(input.sourceCommit, HEX_40, "sourceCommit", errors);
@@ -63,8 +103,8 @@ export function validateLiveRunEvidence(input: unknown): LiveRunEvidenceValidati
     message: "subjectAlias must be a neutral SUBJECT-* alias",
   });
   requireOneOf(input.scenario, ["single-period", "full-year"], "scenario", errors);
-  requirePattern(input.startedAt, ISO_TIMESTAMP, "startedAt", errors);
-  requirePattern(input.completedAt, ISO_TIMESTAMP, "completedAt", errors);
+  requireIsoTimestamp(input.startedAt, "startedAt", errors);
+  requireIsoTimestamp(input.completedAt, "completedAt", errors);
   validateTimeRange(input.startedAt, input.completedAt, errors);
   requireOneOf(input.outcome, ["pass", "blocked", "failed"], "outcome", errors);
   if (Object.prototype.hasOwnProperty.call(input, "notes")) {
@@ -83,6 +123,18 @@ export function validateLiveRunEvidence(input: unknown): LiveRunEvidenceValidati
   return { ok: true, evidence: input as unknown as LiveRunEvidence };
 }
 
+export function validateLiveRunEvidenceJson(source: string): LiveRunEvidenceValidationResult {
+  const errors: string[] = [];
+  assertNoSensitiveMarkers(source, errors);
+  if (errors.length > 0) return { ok: false, errors };
+
+  try {
+    return validateLiveRunEvidence(JSON.parse(source) as unknown);
+  } catch {
+    return { ok: false, errors: ["evidence JSON is invalid"] };
+  }
+}
+
 export function computeLiveRunEvidenceDigest(evidence: LiveRunEvidence): string {
   return createHash("sha256").update(stableJson(evidence)).digest("hex");
 }
@@ -92,6 +144,7 @@ function validateBrowser(input: unknown, errors: string[]): void {
     errors.push("browser must be an object");
     return;
   }
+  requireOnlyKeys(input, BROWSER_KEYS, "browser", errors);
   requireBoundedString(input.name, "browser.name", errors, 1, 40);
   requireBoundedString(input.version, "browser.version", errors, 1, 80);
 }
@@ -101,15 +154,8 @@ function validateCounts(input: unknown, outcome: unknown, errors: string[]): voi
     errors.push("counts must be an object");
     return;
   }
-  for (const field of [
-    "eligibleTargets",
-    "downloaded",
-    "notFiled",
-    "manuallyObserved",
-    "blocked",
-    "failed",
-    "duplicates",
-  ]) {
+  requireOnlyKeys(input, COUNT_KEYS, "counts", errors);
+  for (const field of COUNT_KEYS) {
     requireNonNegativeInteger(input[field], `counts.${field}`, errors);
   }
   if (!hasOnlyNumberCounts(input)) return;
@@ -119,6 +165,9 @@ function validateCounts(input: unknown, outcome: unknown, errors: string[]): voi
     errors.push("counts must include at least one reconciled target");
   } else if (observed === 0) {
     errors.push("counts must include at least one observed target");
+  }
+  if (input.eligibleTargets !== observed) {
+    errors.push("counts must reconcile eligible targets");
   }
   if (outcome === "pass") {
     if (input.blocked > 0) errors.push("pass evidence cannot include blocked targets");
@@ -140,6 +189,7 @@ function validateChecks(
     errors.push("checks must be an object");
     return;
   }
+  requireOnlyKeys(input, CHECK_KEYS, "checks", errors);
   const requiredChecks =
     scenario === "full-year"
       ? REQUIRED_TRUE_CHECKS
@@ -172,6 +222,7 @@ function validateRedaction(input: unknown, errors: string[]): void {
     errors.push("redaction must be an object");
     return;
   }
+  requireOnlyKeys(input, REDACTION_ASSERTIONS, "redaction", errors);
   for (const field of REDACTION_ASSERTIONS) {
     if (input[field] !== false) errors.push(`redaction.${field} must be false`);
   }
@@ -196,6 +247,7 @@ function validateMediaArtifacts(input: unknown, errors: string[]): void {
       errors.push(`mediaArtifacts[${index}] must be an object`);
       return;
     }
+    requireOnlyKeys(artifact, MEDIA_ARTIFACT_KEYS, `mediaArtifacts[${index}]`, errors);
     requireOneOf(
       artifact.kind,
       ["screenshot", "screen-recording", "other"],
@@ -225,8 +277,9 @@ function validateMediaArtifacts(input: unknown, errors: string[]): void {
 }
 
 function assertNoSensitiveMarkers(input: unknown, errors: string[]): void {
-  const evidenceText = JSON.stringify(input);
+  const evidenceText = typeof input === "string" ? input : JSON.stringify(input);
   for (const { id, pattern } of LIVE_RUN_SENSITIVE_PATTERNS) {
+    pattern.lastIndex = 0;
     if (pattern.test(evidenceText)) errors.push(`sensitive marker ${id} found in evidence`);
   }
 }
@@ -264,6 +317,24 @@ function requirePattern(
   }
 }
 
+function requireIsoTimestamp(value: unknown, field: string, errors: string[]): void {
+  if (typeof value !== "string" || !ISO_TIMESTAMP.test(value)) {
+    errors.push(`${field} is invalid`);
+    return;
+  }
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) {
+    errors.push(`${field} is invalid`);
+    return;
+  }
+  const canonical = new Date(parsed).toISOString();
+  if (value.includes(".")) {
+    if (value !== canonical) errors.push(`${field} is invalid`);
+    return;
+  }
+  if (value !== canonical.replace(".000Z", "Z")) errors.push(`${field} is invalid`);
+}
+
 function requireOneOf(
   value: unknown,
   allowed: readonly string[],
@@ -278,6 +349,18 @@ function requireOneOf(
 function requireNonNegativeInteger(value: unknown, field: string, errors: string[]): void {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
     errors.push(`${field} must be a non-negative integer`);
+  }
+}
+
+function requireOnlyKeys(
+  input: Record<string, unknown>,
+  allowedKeys: readonly string[],
+  field: string,
+  errors: string[],
+): void {
+  const allowed = new Set(allowedKeys);
+  for (const key of Object.keys(input)) {
+    if (!allowed.has(key)) errors.push(`${field}.${key} is not allowed`);
   }
 }
 

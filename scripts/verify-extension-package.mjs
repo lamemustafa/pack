@@ -210,6 +210,7 @@ const forbiddenPackSourcePatterns = [
 ];
 
 for (const file of await listFiles(outputDir)) {
+  assertNoHarnessPolicyLeaks(path.relative(outputDir, file), file);
   if (!/\.(js|json|html|css|svg)$/.test(file)) continue;
   const contents = await readFile(file, "utf8");
   if (/\.(js|json|html|css)$/.test(file)) {
@@ -219,7 +220,7 @@ for (const file of await listFiles(outputDir)) {
     }
     assertNoForbiddenTelemetry(contents, file);
     assertNoHarnessPolicyLeaks(contents, file);
-    if (path.basename(file) !== "manifest.json") assertNoPathfulGstPortalUrl(contents, file);
+    assertNoPathfulGstPortalUrl(contents, file);
   }
   if (/\.svg$/.test(file)) {
     for (const pattern of forbiddenBuiltSvgPatterns) {
@@ -235,6 +236,7 @@ for (const file of await listFiles(outputDir)) {
 }
 
 for (const file of await listFiles(path.join(process.cwd(), "src"))) {
+  assertNoHarnessPolicyLeaks(path.relative(process.cwd(), file), file);
   if (!/\.(ts|tsx|js|jsx)$/.test(file)) continue;
   const contents = await readFile(file, "utf8");
   for (const pattern of forbiddenPackSourcePatterns) {
@@ -271,6 +273,7 @@ function assertNoForbiddenTelemetry(contents, file) {
 
 function assertNoHarnessPolicyLeaks(contents, file) {
   for (const { id, pattern } of harnessPackageLeakPatterns) {
+    pattern.lastIndex = 0;
     if (pattern.test(contents)) {
       throw new Error(
         `Sensitive marker ${id} from agent-harness-policy.snapshot.json in ${path.relative(
@@ -328,5 +331,36 @@ function validateHarnessPolicySnapshot(snapshot) {
   }
   for (const entry of patterns) {
     new RegExp(entry.pattern, "gi");
+  }
+  validatePolicyPatternSamples(patterns);
+}
+
+function validatePolicyPatternSamples(patterns) {
+  const samples = new Map([
+    ["gstin", ["27ABCDE1234F1Z5"]],
+    ["pan", ["ABCDE1234F"]],
+    ["openai-secret", ["sk-proj-example_secret"]],
+    ["cookie-header", ["cookie: SID=secret-value", "authorization: Bearer value"]],
+    [
+      "home-path",
+      [
+        "/Users/example/Downloads/return.pdf",
+        "/home/example/Downloads/return.pdf",
+        "C:\\Users\\example\\Downloads\\return.pdf",
+      ],
+    ],
+    ["gst-url", ["https://services.gst.gov.in/services/auth/efiledreturns"]],
+  ]);
+
+  for (const [patternId, values] of samples) {
+    const entry = patterns.find((candidate) => candidate.id === patternId);
+    const pattern = new RegExp(entry.pattern, "i");
+    for (const value of values) {
+      if (!pattern.test(value)) {
+        throw new Error(
+          `Invalid harness policy snapshot: redaction pattern ${patternId} missed ${value}`,
+        );
+      }
+    }
   }
 }

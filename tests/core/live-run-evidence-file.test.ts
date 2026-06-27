@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import {
   computeLiveRunEvidenceDigest,
-  validateLiveRunEvidence,
+  validateLiveRunEvidenceJson,
 } from "../../scripts/lib/live-run-evidence";
 
 const evidencePath = process.env.PACK_LIVE_EVIDENCE_PATH;
@@ -16,8 +16,7 @@ describe("live run evidence file", () => {
     }
 
     const source = await readFile(evidencePath!, "utf8");
-    const parsed = JSON.parse(source) as unknown;
-    const result = validateLiveRunEvidence(parsed);
+    const result = validateLiveRunEvidenceJson(source);
 
     expect(result).toMatchObject({ ok: true });
     if (result.ok) {
