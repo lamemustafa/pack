@@ -56,6 +56,31 @@ describe("filed returns direct download request helpers", () => {
     );
   });
 
+  it("accepts compact portal detail labels and non-hyphenated financial years", () => {
+    const documentRef = createDetailDocument(
+      "https://return.gst.gov.in/returns/auth/gstr3b",
+      `
+        <main>
+          <h1>GSTR-3B - Monthly Return</h1>
+          <p>FinancialYear: 202526</p>
+          <p>ReturnPeriod: March</p>
+          <button>Download Filed GSTR-3B</button>
+        </main>
+      `,
+    );
+
+    const resolved = resolveFiledGstr3bGeneratedPdfApiRequest(documentRef, TARGET);
+
+    expect(resolved.ok).toBe(true);
+    if (!resolved.ok) return;
+    expect(resolved.safeSignals).toEqual(
+      expect.arrayContaining([
+        "filed-return-detail-period:March",
+        "filed-return-detail-financial-year:2025-26",
+      ]),
+    );
+  });
+
   it("blocks direct PDF requests until the visible detail page exposes the target identity", () => {
     const documentRef = createDetailDocument(
       "https://return.gst.gov.in/returns/auth/gstr3b",

@@ -1309,6 +1309,43 @@ describe("filed returns guided flow", () => {
     }
   }, 12_000);
 
+  it("blocks API detail handoff when role status omits user preference", async () => {
+    vi.useFakeTimers();
+    try {
+      const documentRef = createGstDocument(`
+        <form name="efiledReturns">
+          <h1>View Filed Returns</h1>
+          <label>Financial year</label>
+          <select id="finYr"><option>Select</option><option value="string:2025-26">2025-26</option></select>
+          <label>Return Filing Period</label>
+          <select id="optValue"><option>Select</option><option value="string:Monthly">Monthly</option></select>
+          <select id="periodValue" title="Month"><option>Select</option></select>
+          <label>Return Type</label>
+          <select id="retTyp"><option>Select</option><option value="string:GSTR3B">GSTR3B</option></select>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+      `);
+      stubFiledReturnsApi(documentRef, {
+        rows: [{ rtntype: "GSTR3B", fy: "2025-26", taxp: "March" }],
+        roleStatus: {},
+      });
+
+      const resultPromise = runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+      await vi.advanceTimersByTimeAsync(47_000);
+      const result = await resultPromise;
+
+      expect(result.state).toBe("user-action-required");
+      expect(result.safeSignals).toEqual(
+        expect.arrayContaining([
+          "filed-return-api-result-found",
+          "filed-return-api-result-role-status-unavailable",
+        ]),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  }, 12_000);
+
   it("waits for GST dependent field resets before searching", async () => {
     vi.useFakeTimers();
     try {
