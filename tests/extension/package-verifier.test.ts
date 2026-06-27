@@ -115,6 +115,17 @@ describe("extension package verifier", () => {
     expect(result.output).toContain("gstin");
   });
 
+  it("rejects sensitive policy markers in packaged filenames", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(outputDir, "assets/27ABCDE1234F1Z5.js", "const packLocalOnly = true;");
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("agent-harness-policy.snapshot.json");
+    expect(result.output).toContain("gstin");
+  });
+
   it("fails closed when the harness policy snapshot omits required redactors", async () => {
     const outputDir = await createValidPackage();
     const snapshotPath = path.join(outputDir, "bad-policy-snapshot.json");
@@ -150,6 +161,51 @@ describe("extension package verifier", () => {
     expect(result.output).toContain("missing redaction pattern gstin");
   });
 
+  it("fails closed when the harness policy snapshot misses Linux or Windows home paths", async () => {
+    const outputDir = await createValidPackage();
+    const snapshotPath = path.join(outputDir, "bad-policy-snapshot.json");
+    await writeFile(
+      snapshotPath,
+      `${JSON.stringify(
+        {
+          manifest: {
+            policySchemaVersion: 1,
+            policyVersion: "1.0.0",
+            sourceRepository: "complyeaze",
+            sourceCommit: "0123456789abcdef0123456789abcdef01234567",
+            canonicalPolicySha256:
+              "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            generatorVersion: "1.0.0",
+          },
+          policy: {
+            redaction: {
+              patterns: [
+                { id: "gstin", pattern: "\\b\\d{2}[A-Z]{5}\\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]\\b" },
+                { id: "pan", pattern: "\\b[A-Z]{5}\\d{4}[A-Z]\\b" },
+                { id: "openai-secret", pattern: "\\bsk-(?:proj-)?[A-Za-z0-9_-]+\\b" },
+                { id: "cookie-header", pattern: "\\b(cookie|authorization)\\s*[:=]\\s*[^\\s;]+" },
+                { id: "home-path", pattern: "/Users/[^\\s\"']+" },
+                {
+                  id: "gst-url",
+                  pattern: "https://(?:www|services|return)\\.gst\\.gov\\.in/[^\\s\"']*",
+                },
+              ],
+            },
+          },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+
+    const result = await runVerifier(outputDir, {
+      PACK_HARNESS_POLICY_PATH: snapshotPath,
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("redaction pattern home-path missed /home/example");
+  });
+
   it("allows approved GST portal origins in packaged extension code", async () => {
     const outputDir = await createValidPackage();
     await writePackageFile(
@@ -169,6 +225,28 @@ describe("extension package verifier", () => {
       outputDir,
       "assets/background.js",
       "const capturedRoute = 'https://services.gst.gov.in/services/auth/efiledreturns';",
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("Pathful GST Portal URL");
+  });
+
+  it("rejects pathful GST portal URLs in packaged manifest fields", async () => {
+    const outputDir = await createValidPackage();
+    const manifestPath = path.join(outputDir, "manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<string, unknown>;
+    await writeFile(
+      manifestPath,
+      `${JSON.stringify(
+        {
+          ...manifest,
+          version_name: "https://services.gst.gov.in/services/auth/efiledreturns",
+        },
+        null,
+        2,
+      )}\n`,
     );
 
     const result = await runVerifier(outputDir);
@@ -203,6 +281,10 @@ describe("extension package verifier", () => {
     expect(script).toContain("contentScripts.length !== 1");
     expect(script).toContain("assertPopupPageLoads");
     expect(script).toContain("assertNoBrowserRuntimeFailures");
+    expect(script).toContain("Pack host permissions must stay on the approved GST allow-list");
+    expect(script).toContain("buildApprovedOrigins(manifest)");
+    expect(script).toContain("LIVE_RUN_SENSITIVE_PATTERN_DEFINITIONS");
+    expect(script).toContain("sanitize(message)");
     expect(script).toContain("unexpectedDeniedRequests.length > 0");
     expect(script).toContain("isExpectedDeniedNetworkProbe");
     expect(script).toContain("recordBrowserEvent");
@@ -211,6 +293,7 @@ describe("extension package verifier", () => {
     expect(script).toContain("xvfb-run");
     expect(script).toContain("--disable-background-networking");
     expect(script).toContain("--disable-component-update");
+    expect(script).toContain("--host-resolver-rules=MAP * 127.0.0.1");
   });
 });
 

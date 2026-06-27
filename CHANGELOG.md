@@ -2,7 +2,7 @@
 
 All notable changes to ComplyEaze Pack are documented here.
 
-## 0.1.0 - 2026-06-24
+## 0.1.0 - 2026-06-23
 
 - Initial Chrome MV3 V0 source alpha. No Chrome Web Store listing or approval is
   published yet.

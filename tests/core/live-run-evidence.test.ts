@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   computeLiveRunEvidenceDigest,
   validateLiveRunEvidence,
+  validateLiveRunEvidenceJson,
   type LiveRunEvidence,
 } from "../../scripts/lib/live-run-evidence";
 
@@ -60,6 +61,37 @@ describe("live run evidence", () => {
     if (!result.ok) expect(result.errors).toContain("notes is not allowed in shareable evidence");
   });
 
+  it("rejects fields outside the evidence schema", () => {
+    const topLevel = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      reviewerComment: "looks clean",
+    });
+    const nested = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      counts: {
+        ...createValidEvidence().counts,
+        ignoredTargets: 1,
+      },
+    });
+
+    expect(topLevel.ok).toBe(false);
+    if (!topLevel.ok) expect(topLevel.errors).toContain("evidence.reviewerComment is not allowed");
+    expect(nested.ok).toBe(false);
+    if (!nested.ok) expect(nested.errors).toContain("counts.ignoredTargets is not allowed");
+  });
+
+  it("scans raw evidence JSON before parsing", () => {
+    const source = JSON.stringify({
+      ...createValidEvidence(),
+      evidenceId: "\\u002fhome\\u002falice\\u002fDownloads\\u002freturn.pdf",
+    });
+
+    const result = validateLiveRunEvidenceJson(source);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors).toContain("sensitive marker filename found in evidence");
+  });
+
   it("requires all redaction assertions to be false", () => {
     const result = validateLiveRunEvidence({
       ...createValidEvidence(),
@@ -116,7 +148,7 @@ describe("live run evidence", () => {
       expect(blockedPass.errors).toContain("pass evidence cannot include blocked targets");
   });
 
-  it("requires passing evidence to reconcile every eligible target", () => {
+  it("requires evidence to reconcile every eligible target", () => {
     const fullYear = validateLiveRunEvidence({
       ...createValidEvidence(),
       counts: {
@@ -141,15 +173,41 @@ describe("live run evidence", () => {
         notFiled: 0,
       },
     });
+    const blocked = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      outcome: "blocked",
+      counts: {
+        eligibleTargets: 12,
+        downloaded: 0,
+        notFiled: 0,
+        manuallyObserved: 0,
+        blocked: 1,
+        failed: 0,
+        duplicates: 0,
+      },
+      checks: {
+        humanVerifiedAccount: false,
+        humanVerifiedPeriods: false,
+        allFilesNonEmpty: false,
+        serviceWorkerRestartResumeChecked: false,
+        browserRestartResumeChecked: false,
+        clearLocalDataChecked: false,
+        unexpectedNetworkDestinations: 0,
+      },
+    });
 
     expect(fullYear.ok).toBe(false);
     if (!fullYear.ok) {
       expect(fullYear.errors).toContain("pass evidence must reconcile every eligible target");
+      expect(fullYear.errors).toContain("counts must reconcile eligible targets");
     }
     expect(singlePeriod.ok).toBe(false);
     if (!singlePeriod.ok) {
       expect(singlePeriod.errors).toContain("pass evidence must reconcile every eligible target");
+      expect(singlePeriod.errors).toContain("counts must reconcile eligible targets");
     }
+    expect(blocked.ok).toBe(false);
+    if (!blocked.ok) expect(blocked.errors).toContain("counts must reconcile eligible targets");
   });
 
   it("does not require success-only checks for blocked evidence", () => {
@@ -157,7 +215,7 @@ describe("live run evidence", () => {
       ...createValidEvidence(),
       outcome: "blocked",
       counts: {
-        eligibleTargets: 12,
+        eligibleTargets: 1,
         downloaded: 0,
         notFiled: 0,
         manuallyObserved: 0,
@@ -213,6 +271,14 @@ describe("live run evidence", () => {
       startedAt: "2026-06-26T08:30:00.000Z",
       completedAt: "2026-06-26T08:00:00.000Z",
     });
+    const encodedAlias = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      subjectAlias: "SUBJECT-ACME-TRADERS",
+    });
+    const invalidCalendarDate = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      startedAt: "2026-02-30T08:00:00.000Z",
+    });
 
     expect(namedAlias.ok).toBe(false);
     if (!namedAlias.ok)
@@ -220,6 +286,12 @@ describe("live run evidence", () => {
     expect(reversedDates.ok).toBe(false);
     if (!reversedDates.ok)
       expect(reversedDates.errors).toContain("completedAt must be after startedAt");
+    expect(encodedAlias.ok).toBe(false);
+    if (!encodedAlias.ok)
+      expect(encodedAlias.errors).toContain("subjectAlias must be a neutral SUBJECT-* alias");
+    expect(invalidCalendarDate.ok).toBe(false);
+    if (!invalidCalendarDate.ok)
+      expect(invalidCalendarDate.errors).toContain("startedAt is invalid");
   });
 
   it("rejects live portal screenshots or videos as public evidence artifacts", () => {

@@ -8,6 +8,7 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { URL } from "node:url";
 import { chromium } from "@playwright/test";
+import { LIVE_RUN_SENSITIVE_PATTERN_DEFINITIONS } from "./lib/live-run-evidence-redaction-patterns.mjs";
 
 ensureHeadedChromiumDisplay();
 
@@ -19,9 +20,12 @@ const chromiumExecutablePath = process.env.PACK_CHROMIUM_EXECUTABLE
   : null;
 const manifest = JSON.parse(await readFile(path.join(extensionDir, "manifest.json"), "utf8"));
 const profileDir = await mkdtemp(path.join(os.tmpdir(), "pack-browser-release-"));
-const approvedOrigins = new Set(
-  (manifest.host_permissions ?? []).map((pattern) => new URL(pattern.replace(/\*$/, "")).origin),
-);
+let approvedOrigins = new Set();
+const expectedHostPermissions = [
+  "https://return.gst.gov.in/*",
+  "https://services.gst.gov.in/*",
+  "https://www.gst.gov.in/*",
+];
 const expectedContentScriptMatches = [
   "https://return.gst.gov.in/*",
   "https://services.gst.gov.in/*",
@@ -29,12 +33,10 @@ const expectedContentScriptMatches = [
 ];
 const hostileOrigin = "https://hostile-pack.invalid";
 const expectedDeniedNetworkProbe = "https://unexpected-pack-network.invalid/tracker.png";
-const sensitivePatterns = [
-  { id: "gstin", pattern: /\b\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]\b/g },
-  { id: "pan", pattern: /\b[A-Z]{5}\d{4}[A-Z]\b/g },
-  { id: "cookie", pattern: /\b(?:cookie|session|token|otp|captcha)\b/gi },
-  { id: "local-path", pattern: /\/Users\/[^/\s]+\/[^\s"']*/g },
-];
+const sensitivePatterns = LIVE_RUN_SENSITIVE_PATTERN_DEFINITIONS.map(({ id, pattern, flags }) => ({
+  id,
+  pattern: new RegExp(pattern, flags.includes("g") ? flags : `${flags}g`),
+}));
 
 const browserLogs = [];
 const deniedRequests = [];
@@ -44,6 +46,7 @@ let context;
 
 try {
   assertStaticReleaseBrowserPolicy(manifest);
+  approvedOrigins = buildApprovedOrigins(manifest);
   context = await launchExtensionContext();
   context.on("page", attachPageLogging);
   await context.route("**/*", async (route) => {
@@ -107,7 +110,7 @@ try {
   const message = error instanceof Error ? error.message : String(error);
   if (/Executable doesn't exist/i.test(message)) {
     throw new Error(
-      `${message}\nInstall pinned Chromium with: pnpm exec playwright install chromium`,
+      `${sanitize(message)}\nInstall pinned Chromium with: pnpm exec playwright install chromium`,
     );
   }
   throw error;
@@ -129,6 +132,11 @@ function assertStaticReleaseBrowserPolicy(input) {
   if ((input.web_accessible_resources ?? []).length > 0) {
     throw new Error("Pack release must not expose web_accessible_resources.");
   }
+  const actualHostPermissions = [...(input.host_permissions ?? [])].sort();
+  const expectedHosts = [...expectedHostPermissions].sort();
+  if (JSON.stringify(actualHostPermissions) !== JSON.stringify(expectedHosts)) {
+    throw new Error("Pack host permissions must stay on the approved GST allow-list.");
+  }
   const contentScripts = input.content_scripts ?? [];
   if (contentScripts.length !== 1) {
     throw new Error("Pack release must include exactly one content script.");
@@ -148,6 +156,12 @@ function assertStaticReleaseBrowserPolicy(input) {
   }
 }
 
+function buildApprovedOrigins(input) {
+  return new Set(
+    input.host_permissions.map((pattern) => new URL(pattern.replace(/\*$/, "")).origin),
+  );
+}
+
 async function launchExtensionContext() {
   return chromium.launchPersistentContext(profileDir, {
     ...(chromiumExecutablePath
@@ -162,6 +176,7 @@ async function launchExtensionContext() {
       "--disable-sync",
       "--metrics-recording-only",
       "--no-first-run",
+      "--host-resolver-rules=MAP * 127.0.0.1, EXCLUDE localhost, EXCLUDE 127.0.0.1",
       `--disable-extensions-except=${extensionDir}`,
       `--load-extension=${extensionDir}`,
     ],

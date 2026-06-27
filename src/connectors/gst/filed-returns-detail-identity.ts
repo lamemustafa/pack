@@ -31,7 +31,7 @@ export function extractTaxPeriodFromRow(row: Element): string | null {
 }
 
 function extractDetailTaxPeriod(text: string): string | null {
-  const match = new RegExp("\\breturn\\s+period\\b\\s*(?:[-:]\\s*)?([a-z]+)\\b", "i").exec(
+  const match = new RegExp("\\breturn\\s*period\\b\\s*(?:[-:]\\s*)?([a-z]+)\\b", "i").exec(
     normaliseText(text),
   );
   if (!match?.[1]) return null;
@@ -40,9 +40,18 @@ function extractDetailTaxPeriod(text: string): string | null {
 
 function extractDetailFinancialYear(text: string): string | null {
   const normalised = normaliseText(text);
-  return (
-    /\b(?:financial\s+year|fy)\b\s*(?:[-:]\s*)?(20\d{2}-\d{2})\b/i.exec(normalised)?.[1] ?? null
-  );
+  const match =
+    /\b(?:financial\s*year|fy)\b\s*(?:[-:]\s*)?(20\d{2})(?:\s*[-/]\s*(\d{2}|\d{4})|\s+(\d{2})|(\d{2}))\b/i.exec(
+      normalised,
+    );
+  if (!match?.[1]) return null;
+
+  const startYear = Number(match[1]);
+  const endYearText = match[2] ?? match[3] ?? match[4];
+  if (!endYearText) return null;
+  const endYear = endYearText.length === 4 ? Number(endYearText.slice(2)) : Number(endYearText);
+  if (endYear !== (startYear + 1) % 100) return null;
+  return `${match[1]}-${String(endYear).padStart(2, "0")}`;
 }
 
 function getDetailIdentityText(documentRef: Document): string {

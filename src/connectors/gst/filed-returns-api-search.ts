@@ -215,6 +215,7 @@ async function queryRoleStatus(
 
     const payload: unknown = await response.json();
     const userPref = readUserPreference(payload);
+    if (!userPref) return { ok: false };
     return { ok: true, userPref };
   } catch {
     return { ok: false };
@@ -277,17 +278,21 @@ function isGstr3bQuarterlyEnabled(rtnPrd: string): boolean {
   return new Date(returnYear, returnMonth) >= new Date(thresholdYear, thresholdMonth);
 }
 
-function readUserPreference(payload: unknown): string {
+function readUserPreference(payload: unknown): string | null {
   if (payload && typeof payload === "object") {
     const direct = (payload as { userPref?: unknown }).userPref;
-    if (typeof direct === "string" && direct) return direct;
+    if (isAcceptedUserPreference(direct)) return direct;
     const data = (payload as { data?: unknown }).data;
     if (data && typeof data === "object") {
       const nested = (data as { userPref?: unknown }).userPref;
-      if (typeof nested === "string" && nested) return nested;
+      if (isAcceptedUserPreference(nested)) return nested;
     }
   }
-  return "M";
+  return null;
+}
+
+function isAcceptedUserPreference(value: unknown): value is string {
+  return value === "M" || value === "Q";
 }
 
 function normaliseReturnTypeForApi(returnType: FiledReturnsDownloadScope["returnType"]): string {
