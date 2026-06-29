@@ -11,7 +11,9 @@ import {
   mergeFlowStepWithDownloadObservation,
   observeNextBrowserDownload,
 } from "./download-observer";
+import { suggestNextBrowserDownloadFilename } from "./download-filename-suggester";
 import { triggerDirectFiledReturnDownload } from "./filed-returns-direct-download-trigger";
+import { safeFiledReturnDownloadFilename } from "./filed-returns-download-filename";
 import {
   runDownloadTriggerOnce,
   type FiledReturnsFlowMessagingDeps,
@@ -52,20 +54,30 @@ export async function triggerAndObserveFiledReturnDownload({
     if (directDownloadResponse) return directDownloadResponse;
   }
 
-  const detailDownloadObservation = observeFiledReturnDownload();
+  const armedAt = new Date();
+  const detailDownloadFilenameSuggestion = suggestNextBrowserDownloadFilename(
+    browser.downloads,
+    { ...EXPECTED_FILED_RETURN_DOWNLOAD, armedAt },
+    safeFiledReturnDownloadFilename(scope),
+  );
+  const detailDownloadObservation = observeFiledReturnDownload(armedAt);
   const triggerResponse = await runDownloadTriggerOnce(deps, tabId, target);
   const triggerFlowResponse = toTriggerFlowResponse(triggerResponse, activePeriod);
   if (!triggerFlowResponse.ok || !("flowStep" in triggerFlowResponse)) {
     detailDownloadObservation.stop();
+    detailDownloadFilenameSuggestion.stop();
     return triggerFlowResponse;
   }
 
   if (!shouldAwaitDownloadObservation(triggerFlowResponse.flowStep)) {
     detailDownloadObservation.stop();
+    detailDownloadFilenameSuggestion.stop();
     return triggerFlowResponse;
   }
 
-  const observedDownload = await detailDownloadObservation.promise;
+  const observedDownload = await detailDownloadObservation.promise.finally(() => {
+    detailDownloadFilenameSuggestion.stop();
+  });
   const flowStep = normaliseAmbiguousTriggerDownloadResult(
     triggerFlowResponse.flowStep,
     mergeFlowStepWithDownloadObservation(triggerFlowResponse.flowStep, observedDownload),
@@ -155,10 +167,10 @@ function unverifiedPeriodResponse(): FlowStepResponse {
   };
 }
 
-export function observeFiledReturnDownload() {
+export function observeFiledReturnDownload(armedAt = new Date()) {
   return observeNextBrowserDownload(browser.downloads, {
     ...EXPECTED_FILED_RETURN_DOWNLOAD,
-    armedAt: new Date(),
+    armedAt,
   });
 }
 

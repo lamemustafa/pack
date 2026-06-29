@@ -15,6 +15,7 @@ import {
   observeBrowserDownloadById,
   observeNextBrowserDownload,
 } from "../../src/background/download-observer";
+import { suggestNextBrowserDownloadFilename } from "../../src/background/download-filename-suggester";
 import { browser } from "wxt/browser";
 
 vi.mock("wxt/browser", () => ({
@@ -76,6 +77,10 @@ vi.mock("../../src/background/download-observer", () => ({
           ...(observation.userAction ? { userAction: observation.userAction } : {}),
         },
   ),
+}));
+
+vi.mock("../../src/background/download-filename-suggester", () => ({
+  suggestNextBrowserDownloadFilename: vi.fn(() => ({ stop: vi.fn() })),
 }));
 
 const ACTIVE_GST_TAB = {
@@ -163,6 +168,22 @@ describe("filed returns flow runner", () => {
       "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V2",
       "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V2",
     ]);
+    expect(suggestNextBrowserDownloadFilename).toHaveBeenCalledWith(
+      browser.downloads,
+      expect.objectContaining({
+        expectedMimeTypes: ["application/pdf"],
+        expectedOrigins: expect.arrayContaining(["https://return.gst.gov.in"]),
+      }),
+      "complyeaze-pack/gst/2026-27/gstr-3b/april.pdf",
+    );
+    expect(suggestNextBrowserDownloadFilename).toHaveBeenCalledWith(
+      browser.downloads,
+      expect.objectContaining({
+        expectedMimeTypes: ["application/pdf"],
+        expectedOrigins: expect.arrayContaining(["https://return.gst.gov.in"]),
+      }),
+      "complyeaze-pack/gst/2026-27/gstr-3b/may.pdf",
+    );
     expect(browser.storage.session.set).toHaveBeenCalledWith({
       completion: expect.objectContaining({
         completedAt: expect.any(String),
@@ -249,7 +270,7 @@ describe("filed returns flow runner", () => {
     });
     expect(browser.downloads.download).toHaveBeenCalledWith({
       conflictAction: "uniquify",
-      filename: "ComplyEaze-Pack/GSTR-3B/2026-27/May-GSTR-3B.pdf",
+      filename: "complyeaze-pack/gst/2026-27/gstr-3b/may.pdf",
       saveAs: false,
       url: "https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=052026",
     });
@@ -257,6 +278,56 @@ describe("filed returns flow runner", () => {
       "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V2",
       "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V2",
     ]);
+  });
+
+  it("persists a single-period download result for popup status", async () => {
+    const responses: PackMessageResponse[] = [
+      filedReturnDownloadReady("May"),
+      filedReturnDownloadClicked(),
+    ];
+    const sendMessageToTabWithInjection = vi.fn<
+      FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
+    >(async () => responses.shift() ?? { ok: false, error: "Unexpected call." });
+
+    await startFiledReturnsDownloadFlow(
+      {
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-3B",
+      },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+        },
+        now: () => new Date("2026-06-24T00:00:00.000Z"),
+        timings: {
+          flowStepSettleMs: 0,
+          resultRowNavigationSettleMs: 0,
+        },
+      },
+    );
+
+    expect(browser.storage.session.set).toHaveBeenCalledWith({
+      completion: expect.objectContaining({
+        completedAt: "2026-06-24T00:00:00.000Z",
+        completedPeriods: ["May"],
+        currentPeriod: "May",
+        status: "complete",
+        scope: {
+          financialYear: "2026-27",
+          period: "May",
+          returnType: "GSTR-3B",
+        },
+        flowStep: expect.objectContaining({
+          state: "downloaded",
+          safeSignals: expect.arrayContaining(["filed-gstr3b-download-clicked"]),
+        }),
+      }),
+    });
   });
 
   it("explains when a direct download is waiting on the browser native Save prompt", async () => {
@@ -1725,7 +1796,7 @@ describe("filed returns flow runner", () => {
     });
     expect(browser.downloads.download).toHaveBeenCalledWith({
       conflictAction: "uniquify",
-      filename: "ComplyEaze-Pack/GSTR-3B/2025-26/March-GSTR-3B.pdf",
+      filename: "complyeaze-pack/gst/2025-26/gstr-3b/march.pdf",
       saveAs: false,
       url: "https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=032026",
     });

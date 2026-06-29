@@ -1,5 +1,9 @@
 import { browser } from "wxt/browser";
-import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "../core/contracts";
+import type {
+  FiledReturnsDownloadScope,
+  FiledReturnsFlowSummary,
+  PortalFlowStepResult,
+} from "../core/contracts";
 import type {
   FullFiscalYearTargetRecoveryPayload,
   PackMessage,
@@ -121,6 +125,7 @@ export async function retryFullFiscalYearTargetDownloadFlow(
 async function startSinglePeriodFiledReturnsDownloadFlow(
   scope: FiledReturnsDownloadScope,
   deps: FiledReturnsFlowRunnerDeps,
+  options: { persistSinglePeriodSummary?: boolean } = {},
 ): Promise<PackMessageResponse> {
   const activeTab = await getOrOpenGstTab(deps.getActiveGstTab);
   if (activeTab.openedForLogin) {
@@ -159,6 +164,7 @@ async function startSinglePeriodFiledReturnsDownloadFlow(
       return waitForDetailReadyThenTrigger({
         activePeriod,
         deps,
+        shouldPersistSinglePeriodSummary: options.persistSinglePeriodSummary !== false,
         scope,
         tabId: activeTab.tab.id,
       });
@@ -167,18 +173,20 @@ async function startSinglePeriodFiledReturnsDownloadFlow(
     if (lastStep.safeSignals.includes("filed-return-result-view-clicked")) {
       await delay(getResultRowNavigationSettleMs(deps));
 
-      return triggerAndObserveFiledReturnDownload({
+      return triggerSinglePeriodDownloadAndPersistSummary({
         activePeriod,
         deps,
+        shouldPersistSinglePeriodSummary: options.persistSinglePeriodSummary !== false,
         scope,
         tabId: activeTab.tab.id,
       });
     }
 
     if (lastStep.safeSignals.includes("filed-gstr3b-download-ready")) {
-      return triggerAndObserveFiledReturnDownload({
+      return triggerSinglePeriodDownloadAndPersistSummary({
         activePeriod,
         deps,
+        shouldPersistSinglePeriodSummary: options.persistSinglePeriodSummary !== false,
         scope,
         tabId: activeTab.tab.id,
       });
@@ -204,11 +212,13 @@ async function startSinglePeriodFiledReturnsDownloadFlow(
 async function waitForDetailReadyThenTrigger({
   activePeriod,
   deps,
+  shouldPersistSinglePeriodSummary,
   scope,
   tabId,
 }: {
   activePeriod: string | null;
   deps: FiledReturnsFlowRunnerDeps;
+  shouldPersistSinglePeriodSummary: boolean;
   scope: FiledReturnsDownloadScope;
   tabId: number;
 }): Promise<PackMessageResponse> {
@@ -225,18 +235,20 @@ async function waitForDetailReadyThenTrigger({
     activePeriod = extractActivePeriod(lastStep) ?? activePeriod;
 
     if (lastStep.safeSignals.includes("filed-gstr3b-download-ready")) {
-      return triggerAndObserveFiledReturnDownload({
+      return triggerSinglePeriodDownloadAndPersistSummary({
         activePeriod,
         deps,
+        shouldPersistSinglePeriodSummary,
         scope,
         tabId,
       });
     }
 
     if (shouldAttemptDirectDownloadFromDetailRoute(lastStep, deps)) {
-      return triggerAndObserveFiledReturnDownload({
+      return triggerSinglePeriodDownloadAndPersistSummary({
         activePeriod,
         deps,
+        shouldPersistSinglePeriodSummary,
         scope,
         tabId,
       });
@@ -270,6 +282,31 @@ function runScopedDownloadStepWithRetry(
   });
 }
 
+async function triggerSinglePeriodDownloadAndPersistSummary({
+  activePeriod,
+  deps,
+  shouldPersistSinglePeriodSummary,
+  scope,
+  tabId,
+}: {
+  activePeriod: string | null;
+  deps: FiledReturnsFlowRunnerDeps;
+  shouldPersistSinglePeriodSummary: boolean;
+  scope: FiledReturnsDownloadScope;
+  tabId: number;
+}): Promise<PackMessageResponse> {
+  const response = await triggerAndObserveFiledReturnDownload({
+    activePeriod,
+    deps,
+    scope,
+    tabId,
+  });
+  if (shouldPersistSinglePeriodSummary && response.ok && "flowStep" in response) {
+    await persistSinglePeriodSummary(scope, response.flowStep, deps);
+  }
+  return response;
+}
+
 async function getOrOpenGstTab(
   getActiveGstTab: () => Promise<ActiveGstTab | null>,
 ): Promise<{ tab: ActiveGstTab; openedForLogin: false } | { openedForLogin: true }> {
@@ -299,6 +336,31 @@ async function persistFlowResponse(
       [deps.storageKeys.observation]: response.observation,
     });
   }
+}
+
+async function persistSinglePeriodSummary(
+  scope: FiledReturnsDownloadScope,
+  flowStep: PortalFlowStepResult,
+  deps: FiledReturnsFlowRunnerDeps,
+): Promise<void> {
+  const summary = toSinglePeriodSummary(scope, flowStep, deps.now?.() ?? new Date());
+  await browser.storage.session.set({ [deps.storageKeys.completion]: summary });
+}
+
+function toSinglePeriodSummary(
+  scope: FiledReturnsDownloadScope,
+  flowStep: PortalFlowStepResult,
+  now: Date,
+): FiledReturnsFlowSummary {
+  const isDownloaded = flowStep.state === "downloaded";
+  return {
+    scope,
+    status: isDownloaded ? "complete" : "blocked",
+    ...(isDownloaded ? { completedAt: now.toISOString() } : { updatedAt: now.toISOString() }),
+    completedPeriods: isDownloaded ? [scope.period] : [],
+    currentPeriod: scope.period,
+    flowStep,
+  };
 }
 
 function shouldContinueFlow(step: PortalFlowStepResult): boolean {

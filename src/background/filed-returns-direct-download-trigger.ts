@@ -15,10 +15,10 @@ import {
   type FiledReturnsFlowMessagingDeps,
   resolveDirectDownloadRequestOnce,
 } from "./filed-returns-flow-messaging";
+import { safeFiledReturnDownloadFilename } from "./filed-returns-download-filename";
 import { persistFiledReturnsTargetReview } from "./filed-returns-target-review";
 
 const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
-const SAFE_DOWNLOAD_ROOT = "ComplyEaze-Pack/GSTR-3B";
 const EXPECTED_FILED_RETURN_DOWNLOAD = {
   expectedFileExtensions: [],
   expectedMimeTypes: ["application/pdf"],
@@ -224,19 +224,4 @@ function isExpectedFiledReturnDirectDownloadUrl(
   } catch {
     return false;
   }
-}
-
-function safeFiledReturnDownloadFilename(scope: FiledReturnsDownloadScope): string {
-  return [
-    SAFE_DOWNLOAD_ROOT,
-    safeFilenameSegment(scope.financialYear),
-    `${safeFilenameSegment(scope.period)}-${safeFilenameSegment(scope.returnType)}.pdf`,
-  ].join("/");
-}
-
-function safeFilenameSegment(value: string): string {
-  return value
-    .replace(/[^A-Za-z0-9._-]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80);
 }
