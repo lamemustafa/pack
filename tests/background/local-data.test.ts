@@ -189,6 +189,68 @@ describe("Pack local data clearing", () => {
     });
   });
 
+  it("prefers a same-scope terminal single-period summary over an active run marker", async () => {
+    const sessionSummary: FiledReturnsFlowSummary = {
+      scope: {
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-3B",
+      },
+      status: "complete",
+      completedAt: "2026-06-24T00:00:01.000Z",
+      completedPeriods: ["May"],
+      currentPeriod: "May",
+      totalPeriods: 1,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "downloaded",
+        safeSignals: ["filed-gstr3b-download-clicked", "browser-download-completed"],
+        safeMessage: "Complete.",
+      },
+    };
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      key === "pack:active-filed-returns-run"
+        ? {
+            [key]: {
+              schemaVersion: "1.0",
+              runId: "run-existing",
+              revision: 1,
+              scope: {
+                financialYear: "2026-27",
+                period: "May",
+                returnType: "GSTR-3B",
+              },
+              status: "running",
+              leaseUpdatedAt: "2026-06-24T00:00:00.000Z",
+            },
+          }
+        : {},
+    );
+    browserMocks.storage.session.get.mockResolvedValue({
+      "pack:last-filed-returns-flow-summary": sessionSummary,
+    });
+    const summary = await readCurrentFiledReturnsFlowSummary({
+      storageKeys: filedReturnsCurrentStateStorageKeys,
+      now: () => new Date("2026-06-24T00:00:05Z"),
+    });
+
+    expect(summary).toMatchObject({
+      status: "complete",
+      currentPeriod: "May",
+      completedPeriods: ["May"],
+      totalPeriods: 1,
+      scope: {
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-3B",
+      },
+      flowStep: {
+        safeSignals: expect.arrayContaining(["browser-download-completed"]),
+      },
+    });
+  });
+
   it("reports a stale running full-year ledger as blocked in current state", async () => {
     browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
       key === "pack:full-fiscal-year-ledger"

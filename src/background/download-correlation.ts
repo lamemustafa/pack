@@ -44,11 +44,11 @@ function hasExpectedFileEvidence(
   if (mime && context.expectedMimeTypes.some((expected) => mime.includes(expected))) return true;
   if (mime && isKnownNonMatchingMime(mime, context.expectedMimeTypes)) return false;
 
-  const filename = item.filename?.toLowerCase();
+  const filename = item.filename;
   if (
     filename &&
-    !context.ignoredFilenames?.some((ignored) => ignored.toLowerCase() === filename) &&
-    context.expectedFileExtensions.some((extension) => filename.endsWith(extension))
+    !isIgnoredFilename(filename, context.ignoredFilenames) &&
+    context.expectedFileExtensions.some((extension) => filename.toLowerCase().endsWith(extension))
   ) {
     return true;
   }
@@ -85,6 +85,27 @@ function isGenericAttachmentMime(mime: string): boolean {
     "application/force-download",
     "application/x-download",
   ].includes(mime);
+}
+
+function isIgnoredFilename(
+  filename: string,
+  ignoredFilenames: readonly string[] | undefined,
+): boolean {
+  if (!ignoredFilenames?.length) return false;
+  const candidates = filenameCandidates(filename);
+  return ignoredFilenames.some((ignored) =>
+    Array.from(filenameCandidates(ignored)).some((candidate) => candidates.has(candidate)),
+  );
+}
+
+function filenameCandidates(filename: string): Set<string> {
+  const normalised = filename.replace(/\\/g, "/").toLowerCase();
+  const basename = normalised.split("/").pop() ?? normalised;
+  return new Set([normalised, basename, stripUniquifier(normalised), stripUniquifier(basename)]);
+}
+
+function stripUniquifier(filename: string): string {
+  return filename.replace(/\s+\(\d+\)(?=\.[^/.]+$)/, "");
 }
 
 function isNonNullableString(value: string | null | undefined): value is string {

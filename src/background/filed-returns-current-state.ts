@@ -1,5 +1,6 @@
 import { browser } from "wxt/browser";
 import type { FiledReturnsFlowSummary, FiledReturnsFullFiscalYearLedger } from "../core/contracts";
+import { isFullFiscalYearScope } from "../core/filed-returns-scope";
 import { readActiveFiledReturnsRunSummary } from "./filed-returns-active-run";
 import { summariseFullFiscalYearLedger } from "./filed-returns-full-fiscal-year";
 import { isFullFiscalYearLedger } from "./filed-returns-full-fiscal-year-ledger";
@@ -18,11 +19,19 @@ export interface FiledReturnsCurrentStateDeps {
 export async function readCurrentFiledReturnsFlowSummary(
   deps: FiledReturnsCurrentStateDeps,
 ): Promise<FiledReturnsFlowSummary | null> {
+  const completionSummary = await readSessionValue<FiledReturnsFlowSummary>(
+    deps.storageKeys.completion,
+  );
   const activeRunSummary = await readActiveFiledReturnsRunSummary({
     storageKeys: { activeRun: deps.storageKeys.activeRun },
     ...(deps.now ? { now: deps.now } : {}),
   });
-  if (activeRunSummary) return activeRunSummary;
+  if (activeRunSummary) {
+    if (isCurrentTerminalSinglePeriodCompletion(completionSummary, activeRunSummary)) {
+      return completionSummary;
+    }
+    return activeRunSummary;
+  }
 
   const ledger = await readLocalValue<unknown>(deps.storageKeys.fullFiscalYearLedger);
   if (isFullFiscalYearLedger(ledger) && isActionableFullFiscalYearLedger(ledger)) {
@@ -37,7 +46,7 @@ export async function readCurrentFiledReturnsFlowSummary(
 
   if (isFullFiscalYearLedger(ledger)) return summariseFullFiscalYearLedger(ledger, deps.now?.());
 
-  return readSessionValue<FiledReturnsFlowSummary>(deps.storageKeys.completion);
+  return completionSummary;
 }
 
 function isActionableFullFiscalYearLedger(ledger: FiledReturnsFullFiscalYearLedger): boolean {
@@ -47,6 +56,37 @@ function isActionableFullFiscalYearLedger(ledger: FiledReturnsFullFiscalYearLedg
       target.status,
     ),
   );
+}
+
+function isCurrentTerminalSinglePeriodCompletion(
+  completionSummary: FiledReturnsFlowSummary | null,
+  activeRunSummary: FiledReturnsFlowSummary,
+): completionSummary is FiledReturnsFlowSummary {
+  if (!completionSummary) return false;
+  if (completionSummary.status === "running") return false;
+  if (isFullFiscalYearScope(completionSummary.scope)) return false;
+  if (!sameFiledReturnsScope(completionSummary.scope, activeRunSummary.scope)) return false;
+
+  const completionTime = flowSummaryTimestampMs(completionSummary);
+  const activeRunTime = flowSummaryTimestampMs(activeRunSummary);
+  return Number.isFinite(completionTime) && completionTime >= activeRunTime;
+}
+
+function sameFiledReturnsScope(
+  left: FiledReturnsFlowSummary["scope"],
+  right: FiledReturnsFlowSummary["scope"],
+): boolean {
+  return (
+    left.financialYear === right.financialYear &&
+    left.period === right.period &&
+    left.returnType === right.returnType
+  );
+}
+
+function flowSummaryTimestampMs(summary: FiledReturnsFlowSummary): number {
+  const timestamp = summary.completedAt ?? summary.updatedAt;
+  if (!timestamp) return Number.NaN;
+  return Date.parse(timestamp);
 }
 
 async function readSessionValue<T>(key: string): Promise<T | null> {
