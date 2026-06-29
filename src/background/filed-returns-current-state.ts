@@ -63,7 +63,9 @@ function isCurrentTerminalSinglePeriodCompletion(
   activeRunSummary: FiledReturnsFlowSummary,
 ): completionSummary is FiledReturnsFlowSummary {
   if (!completionSummary) return false;
-  if (completionSummary.status === "running") return false;
+  if (completionSummary.status !== "complete" && completionSummary.status !== "cancelled") {
+    return false;
+  }
   if (isFullFiscalYearScope(completionSummary.scope)) return false;
   if (!sameFiledReturnsScope(completionSummary.scope, activeRunSummary.scope)) return false;
 

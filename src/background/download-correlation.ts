@@ -6,6 +6,7 @@ export interface DownloadObservationContext {
   expectedFileExtensions: readonly string[];
   expectedMimeTypes: readonly string[];
   ignoredFilenames?: readonly string[];
+  trustedDownloadIds?: Set<number>;
 }
 
 export function isExpectedDownloadCandidate(
@@ -43,6 +44,7 @@ function hasExpectedFileEvidence(
   const mime = item.mime?.toLowerCase();
   if (mime && context.expectedMimeTypes.some((expected) => mime.includes(expected))) return true;
   if (mime && isKnownNonMatchingMime(mime, context.expectedMimeTypes)) return false;
+  if (context.trustedDownloadIds?.has(item.id)) return true;
 
   const filename = item.filename;
   if (

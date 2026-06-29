@@ -151,7 +151,10 @@ async function handleMessage(
         message.payload.scope,
         message.payload.resolution,
         {
-          storageKeys: { targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview },
+          storageKeys: {
+            completion: PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary,
+            targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview,
+          },
         },
       );
     case "PACK_RESOLVE_FULL_FISCAL_YEAR_TARGET":

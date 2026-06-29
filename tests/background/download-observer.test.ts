@@ -390,6 +390,42 @@ describe("download observer", () => {
     });
   });
 
+  it("accepts original filename evidence captured before suggesting the Pack path", async () => {
+    const suggestedFilename = "complyeaze-pack/gst/2026-27/gstr-3b/may.pdf";
+    const downloads = createDownloadsApi([
+      {
+        filename: suggestedFilename,
+        id: 152,
+        mime: "application/download",
+        state: "complete",
+        fileSize: 1234,
+        url: "https://return.gst.gov.in/returns/auth/gstr3b/download",
+      },
+    ]);
+    const observation = observeNextBrowserDownload(downloads, {
+      armedAt: new Date("2026-06-24T10:00:00.000Z"),
+      expectedFileExtensions: [".pdf"],
+      expectedMimeTypes: ["application/pdf"],
+      expectedOrigins: ["https://return.gst.gov.in"],
+      ignoredFilenames: [suggestedFilename],
+      trustedDownloadIds: new Set([152]),
+    });
+
+    downloads.created.emit({
+      filename: suggestedFilename,
+      id: 152,
+      mime: "application/download",
+      startTime: "2026-06-24T10:00:01.000Z",
+      state: "complete",
+      url: "https://return.gst.gov.in/returns/auth/gstr3b/download",
+    });
+
+    await expect(observation.promise).resolves.toMatchObject({
+      state: "completed",
+      safeSignals: expect.arrayContaining(["browser-download-id:152"]),
+    });
+  });
+
   it("keeps waiting when a same-origin non-PDF completes before the GST PDF", async () => {
     const downloads = createDownloadsApi([
       {

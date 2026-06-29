@@ -56,14 +56,16 @@ export async function triggerAndObserveFiledReturnDownload({
 
   const armedAt = new Date();
   const filename = safeFiledReturnDownloadFilename(scope);
+  const trustedDownloadIds = new Set<number>();
   const observationContext = {
     ...EXPECTED_FILED_RETURN_DOWNLOAD,
     armedAt,
     ignoredFilenames: [filename],
+    trustedDownloadIds,
   };
   const detailDownloadFilenameSuggestion = suggestNextBrowserDownloadFilename(
     browser.downloads,
-    { ...EXPECTED_FILED_RETURN_DOWNLOAD, armedAt },
+    observationContext,
     filename,
   );
   const detailDownloadObservation = observeFiledReturnDownload(observationContext);

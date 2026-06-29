@@ -251,6 +251,65 @@ describe("Pack local data clearing", () => {
     });
   });
 
+  it("does not let a blocked single-period summary hide interrupted active-run recovery", async () => {
+    const sessionSummary: FiledReturnsFlowSummary = {
+      scope: {
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-3B",
+      },
+      status: "blocked",
+      updatedAt: "2026-06-24T00:00:01.000Z",
+      completedPeriods: [],
+      currentPeriod: "May",
+      totalPeriods: 1,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "download-unconfirmed",
+        safeSignals: ["browser-download-not-observed"],
+        safeMessage: "No browser completion.",
+      },
+    };
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      key === "pack:active-filed-returns-run"
+        ? {
+            [key]: {
+              schemaVersion: "1.0",
+              runId: "run-existing",
+              revision: 1,
+              scope: {
+                financialYear: "2026-27",
+                period: "May",
+                returnType: "GSTR-3B",
+              },
+              status: "running",
+              leaseUpdatedAt: "2026-06-24T00:00:00.000Z",
+            },
+          }
+        : {},
+    );
+    browserMocks.storage.session.get.mockResolvedValue({
+      "pack:last-filed-returns-flow-summary": sessionSummary,
+    });
+    const summary = await readCurrentFiledReturnsFlowSummary({
+      storageKeys: filedReturnsCurrentStateStorageKeys,
+      now: () => new Date("2026-06-24T00:01:00Z"),
+    });
+
+    expect(summary).toMatchObject({
+      status: "blocked",
+      scope: {
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-3B",
+      },
+      flowStep: {
+        safeSignals: ["filed-returns-run-needs-review"],
+      },
+    });
+  });
+
   it("reports a stale running full-year ledger as blocked in current state", async () => {
     browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
       key === "pack:full-fiscal-year-ledger"

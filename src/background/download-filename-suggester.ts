@@ -1,5 +1,5 @@
 import {
-  isPotentialDownloadCandidate,
+  isExpectedDownloadCandidate,
   type DownloadObservationContext,
 } from "./download-correlation";
 import type { DownloadCreatedItem } from "./download-observer";
@@ -42,42 +42,16 @@ export function suggestNextBrowserDownloadFilename(
       suggest();
       return;
     }
-    if (!isPotentialDownloadCandidate(item, context) || hasKnownNonMatchingMime(item, context)) {
+    if (!isExpectedDownloadCandidate(item, context)) {
       suggest();
       return;
     }
 
+    context.trustedDownloadIds?.add(item.id);
     suggest({ filename, conflictAction: "uniquify" });
     stop();
   }
 
   event.addListener(onDeterminingFilename);
   return { stop };
-}
-
-function hasKnownNonMatchingMime(
-  item: DownloadCreatedItem,
-  context: DownloadObservationContext,
-): boolean {
-  const mime = item.mime?.toLowerCase();
-  if (!mime) return false;
-  if (context.expectedMimeTypes.some((expected) => mime.includes(expected))) return false;
-  if (isGenericAttachmentMime(mime)) return false;
-  if (mime.startsWith("text/") || mime.startsWith("image/")) return true;
-  return [
-    "application/json",
-    "application/xml",
-    "application/javascript",
-    "application/zip",
-  ].includes(mime);
-}
-
-function isGenericAttachmentMime(mime: string): boolean {
-  return [
-    "application/octet-stream",
-    "binary/octet-stream",
-    "application/download",
-    "application/force-download",
-    "application/x-download",
-  ].includes(mime);
 }
