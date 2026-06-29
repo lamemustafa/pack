@@ -55,12 +55,21 @@ export async function triggerAndObserveFiledReturnDownload({
   }
 
   const armedAt = new Date();
+  const filename = safeFiledReturnDownloadFilename(scope);
+  const observationContext = {
+    ...EXPECTED_FILED_RETURN_DOWNLOAD,
+    armedAt,
+    ignoredFilenames: [filename],
+  };
   const detailDownloadFilenameSuggestion = suggestNextBrowserDownloadFilename(
     browser.downloads,
     { ...EXPECTED_FILED_RETURN_DOWNLOAD, armedAt },
-    safeFiledReturnDownloadFilename(scope),
+    filename,
   );
-  const detailDownloadObservation = observeFiledReturnDownload(armedAt);
+  const detailDownloadObservation = observeFiledReturnDownload(observationContext);
+  const observedDownloadPromise = detailDownloadObservation.promise.finally(() => {
+    detailDownloadFilenameSuggestion.stop();
+  });
   const triggerResponse = await runDownloadTriggerOnce(deps, tabId, target);
   const triggerFlowResponse = toTriggerFlowResponse(triggerResponse, activePeriod);
   if (!triggerFlowResponse.ok || !("flowStep" in triggerFlowResponse)) {
@@ -75,9 +84,7 @@ export async function triggerAndObserveFiledReturnDownload({
     return triggerFlowResponse;
   }
 
-  const observedDownload = await detailDownloadObservation.promise.finally(() => {
-    detailDownloadFilenameSuggestion.stop();
-  });
+  const observedDownload = await observedDownloadPromise;
   const flowStep = normaliseAmbiguousTriggerDownloadResult(
     triggerFlowResponse.flowStep,
     mergeFlowStepWithDownloadObservation(triggerFlowResponse.flowStep, observedDownload),
@@ -167,11 +174,10 @@ function unverifiedPeriodResponse(): FlowStepResponse {
   };
 }
 
-export function observeFiledReturnDownload(armedAt = new Date()) {
-  return observeNextBrowserDownload(browser.downloads, {
-    ...EXPECTED_FILED_RETURN_DOWNLOAD,
-    armedAt,
-  });
+export function observeFiledReturnDownload(
+  context = { ...EXPECTED_FILED_RETURN_DOWNLOAD, armedAt: new Date() },
+) {
+  return observeNextBrowserDownload(browser.downloads, context);
 }
 
 function createActionId(): string {

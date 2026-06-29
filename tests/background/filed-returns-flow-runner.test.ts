@@ -184,6 +184,18 @@ describe("filed returns flow runner", () => {
       }),
       "complyeaze-pack/gst/2026-27/gstr-3b/may.pdf",
     );
+    expect(observeNextBrowserDownload).toHaveBeenCalledWith(
+      browser.downloads,
+      expect.objectContaining({
+        ignoredFilenames: ["complyeaze-pack/gst/2026-27/gstr-3b/april.pdf"],
+      }),
+    );
+    expect(observeNextBrowserDownload).toHaveBeenCalledWith(
+      browser.downloads,
+      expect.objectContaining({
+        ignoredFilenames: ["complyeaze-pack/gst/2026-27/gstr-3b/may.pdf"],
+      }),
+    );
     expect(browser.storage.session.set).toHaveBeenCalledWith({
       completion: expect.objectContaining({
         completedAt: expect.any(String),
@@ -289,7 +301,7 @@ describe("filed returns flow runner", () => {
       FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
     >(async () => responses.shift() ?? { ok: false, error: "Unexpected call." });
 
-    await startFiledReturnsDownloadFlow(
+    const response = await startFiledReturnsDownloadFlow(
       {
         financialYear: "2026-27",
         period: "May",
@@ -326,7 +338,71 @@ describe("filed returns flow runner", () => {
           state: "downloaded",
           safeSignals: expect.arrayContaining(["filed-gstr3b-download-clicked"]),
         }),
+        totalPeriods: 1,
       }),
+    });
+    expect(response).toMatchObject({
+      ok: true,
+      flowSummary: expect.objectContaining({
+        completedPeriods: ["May"],
+        currentPeriod: "May",
+        status: "complete",
+        totalPeriods: 1,
+      }),
+    });
+  });
+
+  it("returns a blocked single-period summary for immediate popup updates", async () => {
+    vi.mocked(observeNextBrowserDownload).mockReturnValueOnce({
+      promise: Promise.resolve({
+        state: "not-observed",
+        safeSignals: ["browser-download-not-observed"],
+        safeMessage: "No browser completion.",
+      }),
+      stop: vi.fn(),
+    });
+    const responses: PackMessageResponse[] = [
+      filedReturnDownloadReady("May"),
+      filedReturnDownloadClicked(),
+    ];
+    const sendMessageToTabWithInjection = vi.fn<
+      FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
+    >(async () => responses.shift() ?? { ok: false, error: "Unexpected call." });
+
+    const response = await startFiledReturnsDownloadFlow(
+      {
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-3B",
+      },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+        },
+        now: () => new Date("2026-06-24T00:00:00.000Z"),
+        timings: {
+          flowStepSettleMs: 0,
+          resultRowNavigationSettleMs: 0,
+        },
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "download-unconfirmed",
+      },
+      flowSummary: {
+        completedPeriods: [],
+        currentPeriod: "May",
+        status: "blocked",
+        totalPeriods: 1,
+        updatedAt: "2026-06-24T00:00:00.000Z",
+      },
     });
   });
 

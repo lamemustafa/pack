@@ -5,6 +5,7 @@ export interface DownloadObservationContext {
   expectedOrigins: readonly string[];
   expectedFileExtensions: readonly string[];
   expectedMimeTypes: readonly string[];
+  ignoredFilenames?: readonly string[];
 }
 
 export function isExpectedDownloadCandidate(
@@ -46,6 +47,7 @@ function hasExpectedFileEvidence(
   const filename = item.filename?.toLowerCase();
   if (
     filename &&
+    !context.ignoredFilenames?.some((ignored) => ignored.toLowerCase() === filename) &&
     context.expectedFileExtensions.some((extension) => filename.endsWith(extension))
   ) {
     return true;

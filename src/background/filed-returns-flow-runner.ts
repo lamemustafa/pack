@@ -302,7 +302,8 @@ async function triggerSinglePeriodDownloadAndPersistSummary({
     tabId,
   });
   if (shouldPersistSinglePeriodSummary && response.ok && "flowStep" in response) {
-    await persistSinglePeriodSummary(scope, response.flowStep, deps);
+    const flowSummary = await persistSinglePeriodSummary(scope, response.flowStep, deps);
+    return { ...response, flowSummary };
   }
   return response;
 }
@@ -342,9 +343,10 @@ async function persistSinglePeriodSummary(
   scope: FiledReturnsDownloadScope,
   flowStep: PortalFlowStepResult,
   deps: FiledReturnsFlowRunnerDeps,
-): Promise<void> {
+): Promise<FiledReturnsFlowSummary> {
   const summary = toSinglePeriodSummary(scope, flowStep, deps.now?.() ?? new Date());
   await browser.storage.session.set({ [deps.storageKeys.completion]: summary });
+  return summary;
 }
 
 function toSinglePeriodSummary(
@@ -360,6 +362,7 @@ function toSinglePeriodSummary(
     completedPeriods: isDownloaded ? [scope.period] : [],
     currentPeriod: scope.period,
     flowStep,
+    totalPeriods: 1,
   };
 }
 
