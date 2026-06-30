@@ -477,6 +477,7 @@ describe("filed returns flow runner", () => {
           completion: "completion",
           fullFiscalYearLedger: "full-year-ledger",
           observation: "observation",
+          targetReview: "target-review",
         },
         timings: {
           flowStepSettleMs: 0,
@@ -499,7 +500,32 @@ describe("filed returns flow runner", () => {
           message: expect.stringContaining("asks where to save"),
         },
       },
+      flowSummary: {
+        status: "blocked",
+        completedPeriods: [],
+        currentPeriod: "May",
+        flowStep: {
+          state: "user-action-required",
+          safeSignals: ["filed-returns-target-review-required"],
+        },
+      },
     });
+    expect(browser.storage.session.set).toHaveBeenCalledWith({
+      completion: expect.objectContaining({
+        currentPeriod: "May",
+        status: "blocked",
+        flowStep: expect.objectContaining({
+          safeSignals: ["filed-returns-target-review-required"],
+        }),
+      }),
+    });
+    expect(observeBrowserDownloadById).toHaveBeenCalledWith(
+      browser.downloads,
+      81,
+      expect.objectContaining({
+        expectedUrlSubstrings: ["rtn_prd=052026"],
+      }),
+    );
   });
 
   it("falls back to the portal click when the direct GST PDF endpoint is unavailable", async () => {

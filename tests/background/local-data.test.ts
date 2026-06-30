@@ -189,7 +189,7 @@ describe("Pack local data clearing", () => {
     });
   });
 
-  it("prefers a same-scope terminal single-period summary over an active run marker", async () => {
+  it("keeps same-scope active-run recovery visible over a terminal summary", async () => {
     const sessionSummary: FiledReturnsFlowSummary = {
       scope: {
         financialYear: "2026-27",
@@ -232,21 +232,18 @@ describe("Pack local data clearing", () => {
     });
     const summary = await readCurrentFiledReturnsFlowSummary({
       storageKeys: filedReturnsCurrentStateStorageKeys,
-      now: () => new Date("2026-06-24T00:00:05Z"),
+      now: () => new Date("2026-06-24T00:01:00Z"),
     });
 
     expect(summary).toMatchObject({
-      status: "complete",
-      currentPeriod: "May",
-      completedPeriods: ["May"],
-      totalPeriods: 1,
+      status: "blocked",
       scope: {
         financialYear: "2026-27",
         period: "May",
         returnType: "GSTR-3B",
       },
       flowStep: {
-        safeSignals: expect.arrayContaining(["browser-download-completed"]),
+        safeSignals: ["filed-returns-run-needs-review"],
       },
     });
   });

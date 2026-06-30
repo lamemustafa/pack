@@ -4,6 +4,7 @@ import { toPortalReturnPeriod } from "../connectors/gst/filed-returns-return-per
 import type {
   FiledReturnsDownloadScope,
   FiledReturnsDownloadTarget,
+  FiledReturnsFlowSummary,
   PortalFlowStepResult,
 } from "../core/contracts";
 import type { PackMessageResponse } from "../core/messages";
@@ -76,16 +77,19 @@ export async function triggerDirectFiledReturnDownload({
   const observedDownload = await observeBrowserDownloadById(browser.downloads, startedDownload.id, {
     ...EXPECTED_FILED_RETURN_DOWNLOAD,
     armedAt,
+    expectedUrlSubstrings: targetUrlSubstrings(scope),
   });
   const flowStep = explainDirectDownloadPromptIfNeeded(
     mergeFlowStepWithDownloadObservation(directTriggerStep, observedDownload),
   );
+  let flowSummary: FiledReturnsFlowSummary | null = null;
   if (deps.persistTargetReview !== false) {
-    await persistFiledReturnsTargetReview(scope, flowStep, deps);
+    flowSummary = await persistFiledReturnsTargetReview(scope, flowStep, deps);
   }
   return {
     ok: true,
     flowStep,
+    ...(flowSummary ? { flowSummary } : {}),
     ...(response.observation ? { observation: response.observation } : {}),
   };
 }
@@ -224,4 +228,9 @@ function isExpectedFiledReturnDirectDownloadUrl(
   } catch {
     return false;
   }
+}
+
+function targetUrlSubstrings(scope: FiledReturnsDownloadScope): string[] {
+  const returnPeriod = toPortalReturnPeriod(scope.period, scope.financialYear);
+  return returnPeriod ? [`rtn_prd=${returnPeriod}`] : [];
 }

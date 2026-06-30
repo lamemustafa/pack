@@ -14,7 +14,11 @@ export function isExpectedDownloadCandidate(
   item: DownloadCreatedItem,
   context: DownloadObservationContext,
 ): boolean {
-  return isPotentialDownloadCandidate(item, context) && hasExpectedFileEvidence(item, context);
+  return (
+    isPotentialDownloadCandidate(item, context) &&
+    hasExpectedUrlEvidence(item, context) &&
+    hasExpectedFileEvidence(item, context)
+  );
 }
 
 export function isPotentialDownloadCandidate(
@@ -48,6 +52,16 @@ function hasExpectedOrigin(item: DownloadCreatedItem, expectedOrigins: readonly 
     .map((value) => (value ? parseOrigin(value) : null))
     .filter(isNonNullableString);
   return origins.some((origin) => expectedOrigins.includes(origin));
+}
+
+function hasExpectedUrlEvidence(
+  item: DownloadCreatedItem,
+  context: DownloadObservationContext,
+): boolean {
+  return (
+    context.trustedDownloadIds?.has(item.id) === true ||
+    matchesExpectedUrlSubstrings(item, context.expectedUrlSubstrings)
+  );
 }
 
 function hasExpectedFileEvidence(
