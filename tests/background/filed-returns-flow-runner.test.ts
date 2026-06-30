@@ -2058,6 +2058,20 @@ describe("filed returns flow runner", () => {
       flowStep: {
         state: "user-action-required",
       },
+      flowSummary: {
+        currentPeriod: "March",
+        status: "blocked",
+        totalPeriods: 1,
+      },
+    });
+    expect(browser.storage.session.set).toHaveBeenCalledWith({
+      completion: expect.objectContaining({
+        currentPeriod: "March",
+        status: "blocked",
+        flowStep: expect.objectContaining({
+          safeSignals: ["filed-return-result-row-not-found"],
+        }),
+      }),
     });
     expect(observeNextBrowserDownload).not.toHaveBeenCalled();
   });
@@ -2102,6 +2116,20 @@ describe("filed returns flow runner", () => {
         state: "login-required",
         safeSignals: ["gst-login-tab-opened"],
       },
+      flowSummary: {
+        currentPeriod: "March",
+        status: "blocked",
+        totalPeriods: 1,
+      },
+    });
+    expect(browser.storage.session.set).toHaveBeenCalledWith({
+      completion: expect.objectContaining({
+        currentPeriod: "March",
+        status: "blocked",
+        flowStep: expect.objectContaining({
+          safeSignals: ["gst-login-tab-opened"],
+        }),
+      }),
     });
     expect(browser.tabs.create).toHaveBeenCalledWith({
       active: true,

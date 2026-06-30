@@ -127,23 +127,29 @@ async function startSinglePeriodFiledReturnsDownloadFlow(
   deps: FiledReturnsFlowRunnerDeps,
   options: { persistSinglePeriodSummary?: boolean } = {},
 ): Promise<PackMessageResponse> {
+  const shouldPersistSinglePeriodSummary = options.persistSinglePeriodSummary !== false;
   const activeTab = await getOrOpenGstTab(deps.getActiveGstTab);
   if (activeTab.openedForLogin) {
-    return {
-      ok: true,
-      flowStep: {
-        connectorId: "gst",
-        scopeId: FILED_RETURNS_SCOPE_ID,
-        state: "login-required",
-        safeSignals: ["gst-login-tab-opened"],
-        safeMessage: "Pack opened the GST Portal login page. Sign in, then click Start download.",
-        userAction: {
-          type: "LOGIN",
-          message: "Sign in to the GST Portal. Pack will resume after you click Start download.",
-          canResume: true,
+    return withPersistedSinglePeriodSummary(
+      scope,
+      {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: FILED_RETURNS_SCOPE_ID,
+          state: "login-required",
+          safeSignals: ["gst-login-tab-opened"],
+          safeMessage: "Pack opened the GST Portal login page. Sign in, then click Start download.",
+          userAction: {
+            type: "LOGIN",
+            message: "Sign in to the GST Portal. Pack will resume after you click Start download.",
+            canResume: true,
+          },
         },
       },
-    };
+      deps,
+      shouldPersistSinglePeriodSummary,
+    );
   }
 
   let lastStep: PortalFlowStepResult | null = null;
@@ -164,7 +170,7 @@ async function startSinglePeriodFiledReturnsDownloadFlow(
       return waitForDetailReadyThenTrigger({
         activePeriod,
         deps,
-        shouldPersistSinglePeriodSummary: options.persistSinglePeriodSummary !== false,
+        shouldPersistSinglePeriodSummary,
         scope,
         tabId: activeTab.tab.id,
       });
@@ -176,7 +182,7 @@ async function startSinglePeriodFiledReturnsDownloadFlow(
       return triggerSinglePeriodDownloadAndPersistSummary({
         activePeriod,
         deps,
-        shouldPersistSinglePeriodSummary: options.persistSinglePeriodSummary !== false,
+        shouldPersistSinglePeriodSummary,
         scope,
         tabId: activeTab.tab.id,
       });
@@ -186,27 +192,39 @@ async function startSinglePeriodFiledReturnsDownloadFlow(
       return triggerSinglePeriodDownloadAndPersistSummary({
         activePeriod,
         deps,
-        shouldPersistSinglePeriodSummary: options.persistSinglePeriodSummary !== false,
+        shouldPersistSinglePeriodSummary,
         scope,
         tabId: activeTab.tab.id,
       });
     }
 
-    if (!shouldContinueFlow(lastStep)) return response;
+    if (!shouldContinueFlow(lastStep)) {
+      return withPersistedSinglePeriodSummary(
+        scope,
+        response,
+        deps,
+        shouldPersistSinglePeriodSummary,
+      );
+    }
     await delay(getFlowStepSettleMs(lastStep, deps));
   }
 
-  return {
-    ok: true,
-    flowStep: lastStep ?? {
-      connectorId: "gst",
-      scopeId: FILED_RETURNS_SCOPE_ID,
-      state: "user-action-required",
-      safeSignals: ["flow-step-limit-reached"],
-      safeMessage:
-        "Pack started the filed-return flow but did not reach the download step yet. Wait for the GST portal to finish loading, then click Start download again.",
+  return withPersistedSinglePeriodSummary(
+    scope,
+    {
+      ok: true,
+      flowStep: lastStep ?? {
+        connectorId: "gst",
+        scopeId: FILED_RETURNS_SCOPE_ID,
+        state: "user-action-required",
+        safeSignals: ["flow-step-limit-reached"],
+        safeMessage:
+          "Pack started the filed-return flow but did not reach the download step yet. Wait for the GST portal to finish loading, then click Start download again.",
+      },
     },
-  };
+    deps,
+    shouldPersistSinglePeriodSummary,
+  );
 }
 
 async function waitForDetailReadyThenTrigger({
@@ -302,10 +320,25 @@ async function triggerSinglePeriodDownloadAndPersistSummary({
     tabId,
   });
   if (shouldPersistSinglePeriodSummary && response.ok && "flowStep" in response) {
-    const flowSummary = await persistSinglePeriodSummary(scope, response.flowStep, deps);
-    return { ...response, flowSummary };
+    return withPersistedSinglePeriodSummary(
+      scope,
+      response,
+      deps,
+      shouldPersistSinglePeriodSummary,
+    );
   }
   return response;
+}
+
+async function withPersistedSinglePeriodSummary(
+  scope: FiledReturnsDownloadScope,
+  response: Extract<PackMessageResponse, { ok: true; flowStep: PortalFlowStepResult }>,
+  deps: FiledReturnsFlowRunnerDeps,
+  shouldPersistSinglePeriodSummary: boolean,
+): Promise<PackMessageResponse> {
+  if (!shouldPersistSinglePeriodSummary) return response;
+  const flowSummary = await persistSinglePeriodSummary(scope, response.flowStep, deps);
+  return { ...response, flowSummary };
 }
 
 async function getOrOpenGstTab(
