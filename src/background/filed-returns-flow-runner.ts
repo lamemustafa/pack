@@ -410,12 +410,14 @@ function toSinglePeriodSummary(
   flowStep: PortalFlowStepResult,
   now: Date,
 ): FiledReturnsFlowSummary {
-  const isDownloaded = flowStep.state === "downloaded";
+  const isReconciled =
+    flowStep.state === "downloaded" ||
+    flowStep.safeSignals.includes("filed-return-positively-not-filed");
   return {
     scope,
-    status: isDownloaded ? "complete" : "blocked",
-    ...(isDownloaded ? { completedAt: now.toISOString() } : { updatedAt: now.toISOString() }),
-    completedPeriods: isDownloaded ? [scope.period] : [],
+    status: isReconciled ? "complete" : "blocked",
+    ...(isReconciled ? { completedAt: now.toISOString() } : { updatedAt: now.toISOString() }),
+    completedPeriods: isReconciled ? [scope.period] : [],
     currentPeriod: scope.period,
     flowStep,
     totalPeriods: 1,

@@ -523,7 +523,7 @@ describe("filed returns flow runner", () => {
       browser.downloads,
       81,
       expect.objectContaining({
-        expectedUrlSubstrings: ["rtn_prd=052026"],
+        expectedUrlSubstrings: ["/returns/auth/api/gstr3b/getgenpdf", "rtn_prd=052026"],
       }),
     );
   });
@@ -2258,6 +2258,65 @@ describe("filed returns flow runner", () => {
       },
     });
     expect(sendMessageToTabWithInjection).toHaveBeenCalledTimes(3);
+  });
+
+  it("treats positive not-filed evidence as a reconciled single-period result", async () => {
+    const responses: PackMessageResponse[] = [
+      {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+          state: "candidate-not-found",
+          safeSignals: ["filed-return-positively-not-filed"],
+          safeMessage: "The GST portal shows no filed GSTR-3B for this period.",
+        },
+      },
+    ];
+    const sendMessageToTabWithInjection = vi.fn<
+      FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
+    >(async () => responses.shift() ?? { ok: false, error: "Unexpected call." });
+
+    const response = await startFiledReturnsDownloadFlow(
+      {
+        financialYear: "2025-26",
+        period: "March",
+        returnType: "GSTR-3B",
+      },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+        },
+        now: () => new Date("2026-06-24T00:00:00.000Z"),
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowSummary: {
+        completedAt: "2026-06-24T00:00:00.000Z",
+        completedPeriods: ["March"],
+        currentPeriod: "March",
+        status: "complete",
+        totalPeriods: 1,
+        flowStep: {
+          safeSignals: ["filed-return-positively-not-filed"],
+        },
+      },
+    });
+    expect(browser.storage.session.set).toHaveBeenCalledWith({
+      completion: expect.objectContaining({
+        completedPeriods: ["March"],
+        status: "complete",
+        flowStep: expect.objectContaining({
+          safeSignals: ["filed-return-positively-not-filed"],
+        }),
+      }),
+    });
   });
 
   it("stops after API detail handoff if the portal reports scheduled downtime", async () => {

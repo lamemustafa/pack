@@ -38,7 +38,7 @@ export function matchesExpectedUrlSubstrings(
   const urls = [item.url, item.finalUrl, item.referrer]
     .filter(isNonNullableString)
     .map((value) => value.toLowerCase());
-  return urls.some((url) => expectedMarkers.some((marker) => url.includes(marker)));
+  return urls.some((url) => expectedMarkers.every((marker) => url.includes(marker)));
 }
 
 function startsAfterArmedTime(item: DownloadCreatedItem, armedAt: Date): boolean {

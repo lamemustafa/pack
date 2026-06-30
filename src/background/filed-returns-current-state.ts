@@ -1,5 +1,6 @@
 import { browser } from "wxt/browser";
 import type { FiledReturnsFlowSummary, FiledReturnsFullFiscalYearLedger } from "../core/contracts";
+import { isFullFiscalYearScope } from "../core/filed-returns-scope";
 import { readActiveFiledReturnsRunSummary } from "./filed-returns-active-run";
 import { summariseFullFiscalYearLedger } from "./filed-returns-full-fiscal-year";
 import { isFullFiscalYearLedger } from "./filed-returns-full-fiscal-year-ledger";
@@ -38,6 +39,10 @@ export async function readCurrentFiledReturnsFlowSummary(
   });
   if (targetReviewSummary) return targetReviewSummary;
 
+  if (isFullFiscalYearLedger(ledger) && isNewerSinglePeriodSummary(completionSummary, ledger)) {
+    return completionSummary;
+  }
+
   if (isFullFiscalYearLedger(ledger)) return summariseFullFiscalYearLedger(ledger, deps.now?.());
 
   return completionSummary;
@@ -50,6 +55,26 @@ function isActionableFullFiscalYearLedger(ledger: FiledReturnsFullFiscalYearLedg
       target.status,
     ),
   );
+}
+
+function isNewerSinglePeriodSummary(
+  completionSummary: FiledReturnsFlowSummary | null,
+  ledger: FiledReturnsFullFiscalYearLedger,
+): completionSummary is FiledReturnsFlowSummary {
+  if (!completionSummary) return false;
+  if (isFullFiscalYearScope(completionSummary.scope)) return false;
+
+  const completionTime = flowSummaryTimestampMs(completionSummary);
+  const ledgerTime = Date.parse(ledger.updatedAt);
+  return (
+    Number.isFinite(completionTime) && Number.isFinite(ledgerTime) && completionTime >= ledgerTime
+  );
+}
+
+function flowSummaryTimestampMs(summary: FiledReturnsFlowSummary): number {
+  const timestamp = summary.completedAt ?? summary.updatedAt;
+  if (!timestamp) return Number.NaN;
+  return Date.parse(timestamp);
 }
 
 async function readSessionValue<T>(key: string): Promise<T | null> {

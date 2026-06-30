@@ -232,5 +232,5 @@ function isExpectedFiledReturnDirectDownloadUrl(
 
 function targetUrlSubstrings(scope: FiledReturnsDownloadScope): string[] {
   const returnPeriod = toPortalReturnPeriod(scope.period, scope.financialYear);
-  return returnPeriod ? [`rtn_prd=${returnPeriod}`] : [];
+  return returnPeriod ? ["/returns/auth/api/gstr3b/getgenpdf", `rtn_prd=${returnPeriod}`] : [];
 }
