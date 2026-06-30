@@ -1,5 +1,6 @@
 import {
   isExpectedDownloadCandidate,
+  matchesExpectedUrlSubstrings,
   type DownloadObservationContext,
 } from "./download-correlation";
 import type { DownloadCreatedItem } from "./download-observer";
@@ -42,7 +43,10 @@ export function suggestNextBrowserDownloadFilename(
       suggest();
       return;
     }
-    if (!isExpectedDownloadCandidate(item, context)) {
+    if (
+      !isExpectedDownloadCandidate(item, context) ||
+      !matchesExpectedUrlSubstrings(item, context.expectedUrlSubstrings)
+    ) {
       suggest();
       return;
     }

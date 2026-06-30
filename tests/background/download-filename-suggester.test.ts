@@ -123,6 +123,55 @@ describe("download filename suggester", () => {
     expect(trustedDownloadIds.has(95)).toBe(true);
     expect(downloads.determiningFilename.listenerCount()).toBe(0);
   });
+
+  it("binds suggestions to the requested return-period URL marker", () => {
+    const downloads = createDownloadsApi();
+    const trustedDownloadIds = new Set<number>();
+    suggestNextBrowserDownloadFilename(
+      downloads,
+      {
+        armedAt: new Date("2026-06-24T10:00:00.000Z"),
+        expectedFileExtensions: [".pdf"],
+        expectedMimeTypes: ["application/pdf"],
+        expectedOrigins: ["https://return.gst.gov.in"],
+        expectedUrlSubstrings: ["rtn_prd=052026"],
+        trustedDownloadIds,
+      },
+      "complyeaze-pack/gst/2026-27/gstr-3b/may.pdf",
+    );
+    const otherPeriodSuggest = vi.fn();
+    const targetPeriodSuggest = vi.fn();
+
+    downloads.determiningFilename.emit(
+      {
+        filename: "GSTR3B.pdf",
+        id: 96,
+        mime: "application/download",
+        startTime: "2026-06-24T10:00:01.000Z",
+        url: "https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=042026",
+      },
+      otherPeriodSuggest,
+    );
+    downloads.determiningFilename.emit(
+      {
+        filename: "GSTR3B.pdf",
+        id: 97,
+        mime: "application/download",
+        startTime: "2026-06-24T10:00:02.000Z",
+        url: "https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=052026",
+      },
+      targetPeriodSuggest,
+    );
+
+    expect(otherPeriodSuggest).toHaveBeenCalledWith();
+    expect(targetPeriodSuggest).toHaveBeenCalledWith({
+      conflictAction: "uniquify",
+      filename: "complyeaze-pack/gst/2026-27/gstr-3b/may.pdf",
+    });
+    expect(trustedDownloadIds.has(96)).toBe(false);
+    expect(trustedDownloadIds.has(97)).toBe(true);
+    expect(downloads.determiningFilename.listenerCount()).toBe(0);
+  });
 });
 
 function createDownloadsApi() {

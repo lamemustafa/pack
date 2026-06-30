@@ -272,21 +272,33 @@ async function waitForDetailReadyThenTrigger({
       });
     }
 
-    if (!shouldContinueFlow(lastStep)) return response;
+    if (!shouldContinueFlow(lastStep)) {
+      return withPersistedSinglePeriodSummary(
+        scope,
+        response,
+        deps,
+        shouldPersistSinglePeriodSummary,
+      );
+    }
     await delay(getFlowStepSettleMs(lastStep, deps));
   }
 
-  return {
-    ok: true,
-    flowStep: lastStep ?? {
-      connectorId: "gst",
-      scopeId: FILED_RETURNS_SCOPE_ID,
-      state: "user-action-required",
-      safeSignals: ["detail-ready-step-limit-reached"],
-      safeMessage:
-        "Pack opened the filed GSTR-3B detail page but did not see the final download control yet. Wait for the GST portal to finish loading, then click Start download again.",
+  return withPersistedSinglePeriodSummary(
+    scope,
+    {
+      ok: true,
+      flowStep: lastStep ?? {
+        connectorId: "gst",
+        scopeId: FILED_RETURNS_SCOPE_ID,
+        state: "user-action-required",
+        safeSignals: ["detail-ready-step-limit-reached"],
+        safeMessage:
+          "Pack opened the filed GSTR-3B detail page but did not see the final download control yet. Wait for the GST portal to finish loading, then click Start download again.",
+      },
     },
-  };
+    deps,
+    shouldPersistSinglePeriodSummary,
+  );
 }
 
 function runScopedDownloadStepWithRetry(
@@ -337,6 +349,10 @@ async function withPersistedSinglePeriodSummary(
   shouldPersistSinglePeriodSummary: boolean,
 ): Promise<PackMessageResponse> {
   if (!shouldPersistSinglePeriodSummary) return response;
+  if (response.flowSummary) {
+    await persistProvidedSinglePeriodSummary(response.flowSummary, deps);
+    return response;
+  }
   const flowSummary = await persistSinglePeriodSummary(scope, response.flowStep, deps);
   return { ...response, flowSummary };
 }
@@ -380,6 +396,13 @@ async function persistSinglePeriodSummary(
   const summary = toSinglePeriodSummary(scope, flowStep, deps.now?.() ?? new Date());
   await browser.storage.session.set({ [deps.storageKeys.completion]: summary });
   return summary;
+}
+
+async function persistProvidedSinglePeriodSummary(
+  flowSummary: FiledReturnsFlowSummary,
+  deps: FiledReturnsFlowRunnerDeps,
+): Promise<void> {
+  await browser.storage.session.set({ [deps.storageKeys.completion]: flowSummary });
 }
 
 function toSinglePeriodSummary(

@@ -5,6 +5,7 @@ export interface DownloadObservationContext {
   expectedOrigins: readonly string[];
   expectedFileExtensions: readonly string[];
   expectedMimeTypes: readonly string[];
+  expectedUrlSubstrings?: readonly string[];
   ignoredFilenames?: readonly string[];
   trustedDownloadIds?: Set<number>;
 }
@@ -22,6 +23,18 @@ export function isPotentialDownloadCandidate(
 ): boolean {
   if (!startsAfterArmedTime(item, context.armedAt)) return false;
   return hasExpectedOrigin(item, context.expectedOrigins);
+}
+
+export function matchesExpectedUrlSubstrings(
+  item: DownloadCreatedItem,
+  expectedUrlSubstrings: readonly string[] | undefined,
+): boolean {
+  if (!expectedUrlSubstrings?.length) return true;
+  const expectedMarkers = expectedUrlSubstrings.map((marker) => marker.toLowerCase());
+  const urls = [item.url, item.finalUrl, item.referrer]
+    .filter(isNonNullableString)
+    .map((value) => value.toLowerCase());
+  return urls.some((url) => expectedMarkers.some((marker) => url.includes(marker)));
 }
 
 function startsAfterArmedTime(item: DownloadCreatedItem, armedAt: Date): boolean {
@@ -94,16 +107,15 @@ function isIgnoredFilename(
   ignoredFilenames: readonly string[] | undefined,
 ): boolean {
   if (!ignoredFilenames?.length) return false;
-  const candidates = filenameCandidates(filename);
-  return ignoredFilenames.some((ignored) =>
-    Array.from(filenameCandidates(ignored)).some((candidate) => candidates.has(candidate)),
-  );
+  const candidate = normaliseDownloadPath(filename);
+  return ignoredFilenames.some((ignored) => {
+    const ignoredPath = normaliseDownloadPath(ignored);
+    return candidate === ignoredPath || candidate.endsWith(`/${ignoredPath}`);
+  });
 }
 
-function filenameCandidates(filename: string): Set<string> {
-  const normalised = filename.replace(/\\/g, "/").toLowerCase();
-  const basename = normalised.split("/").pop() ?? normalised;
-  return new Set([normalised, basename, stripUniquifier(normalised), stripUniquifier(basename)]);
+function normaliseDownloadPath(filename: string): string {
+  return stripUniquifier(filename.replace(/\\/g, "/").toLowerCase());
 }
 
 function stripUniquifier(filename: string): string {

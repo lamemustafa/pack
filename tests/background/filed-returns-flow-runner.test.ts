@@ -382,6 +382,7 @@ describe("filed returns flow runner", () => {
           completion: "completion",
           fullFiscalYearLedger: "full-year-ledger",
           observation: "observation",
+          targetReview: "target-review",
         },
         now: () => new Date("2026-06-24T00:00:00.000Z"),
         timings: {
@@ -399,10 +400,31 @@ describe("filed returns flow runner", () => {
       flowSummary: {
         completedPeriods: [],
         currentPeriod: "May",
+        flowStep: {
+          state: "user-action-required",
+          safeSignals: ["filed-returns-target-review-required"],
+          userAction: {
+            type: "RETRY_PORTAL_GENERATION",
+          },
+        },
         status: "blocked",
         totalPeriods: 1,
         updatedAt: "2026-06-24T00:00:00.000Z",
       },
+    });
+    expect(browser.storage.session.set).toHaveBeenCalledWith({
+      completion: expect.objectContaining({
+        currentPeriod: "May",
+        status: "blocked",
+        flowStep: expect.objectContaining({
+          safeSignals: ["filed-returns-target-review-required"],
+          userAction: {
+            type: "RETRY_PORTAL_GENERATION",
+            message: expect.any(String),
+            canResume: true,
+          },
+        }),
+      }),
     });
   });
 
@@ -2008,6 +2030,15 @@ describe("filed returns flow runner", () => {
       flowStep: {
         state: "download-unconfirmed",
       },
+      flowSummary: {
+        status: "blocked",
+        completedPeriods: [],
+        currentPeriod: "March",
+        flowStep: {
+          state: "user-action-required",
+          safeSignals: ["filed-returns-target-review-required"],
+        },
+      },
     });
     expect(browser.storage.local.set).toHaveBeenCalledWith({
       "target-review": expect.objectContaining({
@@ -2253,6 +2284,24 @@ describe("filed returns flow runner", () => {
         state: "blocked",
         safeSignals: ["portal-scheduled-downtime"],
       },
+      flowSummary: {
+        currentPeriod: "March",
+        status: "blocked",
+        totalPeriods: 1,
+        flowStep: {
+          state: "blocked",
+          safeSignals: ["portal-scheduled-downtime"],
+        },
+      },
+    });
+    expect(browser.storage.session.set).toHaveBeenCalledWith({
+      completion: expect.objectContaining({
+        currentPeriod: "March",
+        status: "blocked",
+        flowStep: expect.objectContaining({
+          safeSignals: ["portal-scheduled-downtime"],
+        }),
+      }),
     });
     expect(sendMessageToTabWithInjection).toHaveBeenCalledTimes(2);
     expect(sendMessageToTabWithInjection.mock.calls.map(([, message]) => message.type)).toEqual([

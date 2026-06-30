@@ -1,8 +1,10 @@
 import { browser } from "wxt/browser";
 import { GST_CONNECTOR_DESCRIPTOR } from "../connectors/gst/constants";
+import { toPortalReturnPeriod } from "../connectors/gst/filed-returns-return-period";
 import type {
   FiledReturnsDownloadScope,
   FiledReturnsDownloadTarget,
+  FiledReturnsFlowSummary,
   PortalFlowStepResult,
 } from "../core/contracts";
 import type { PackMessageResponse } from "../core/messages";
@@ -60,6 +62,7 @@ export async function triggerAndObserveFiledReturnDownload({
   const observationContext = {
     ...EXPECTED_FILED_RETURN_DOWNLOAD,
     armedAt,
+    expectedUrlSubstrings: targetUrlSubstrings(scope),
     ignoredFilenames: [filename],
     trustedDownloadIds,
   };
@@ -91,12 +94,14 @@ export async function triggerAndObserveFiledReturnDownload({
     triggerFlowResponse.flowStep,
     mergeFlowStepWithDownloadObservation(triggerFlowResponse.flowStep, observedDownload),
   );
+  let flowSummary: FiledReturnsFlowSummary | null = null;
   if (deps.persistTargetReview !== false) {
-    await persistFiledReturnsTargetReview(scope, flowStep, deps);
+    flowSummary = await persistFiledReturnsTargetReview(scope, flowStep, deps);
   }
   return {
     ...triggerFlowResponse,
     flowStep,
+    ...(flowSummary ? { flowSummary } : {}),
   };
 }
 
@@ -108,6 +113,11 @@ function createDownloadTarget(scope: FiledReturnsDownloadScope): FiledReturnsDow
     period: scope.period,
     returnType: scope.returnType,
   };
+}
+
+function targetUrlSubstrings(scope: FiledReturnsDownloadScope): string[] {
+  const returnPeriod = toPortalReturnPeriod(scope.period, scope.financialYear);
+  return returnPeriod ? [`rtn_prd=${returnPeriod}`] : [];
 }
 
 function toTriggerFlowResponse(

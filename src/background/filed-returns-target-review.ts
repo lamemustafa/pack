@@ -56,22 +56,24 @@ export async function persistFiledReturnsTargetReview(
   scope: FiledReturnsDownloadScope,
   flowStep: PortalFlowStepResult,
   deps: FiledReturnsTargetReviewDeps,
-): Promise<void> {
+): Promise<FiledReturnsFlowSummary | null> {
   const key = deps.storageKeys.targetReview;
-  if (!key || !requiresTargetReview(flowStep)) return;
+  if (!key || !requiresTargetReview(flowStep)) return null;
 
   const timestamp = (deps.now?.() ?? new Date()).toISOString();
+  const review = {
+    schemaVersion: "1.0",
+    targetId: createTargetId(scope),
+    status: "download-unconfirmed",
+    scope,
+    safeSignals: flowStep.safeSignals,
+    safeMessage: flowStep.safeMessage,
+    updatedAt: timestamp,
+  } satisfies FiledReturnsTargetReview;
   await browser.storage.local.set({
-    [key]: {
-      schemaVersion: "1.0",
-      targetId: createTargetId(scope),
-      status: "download-unconfirmed",
-      scope,
-      safeSignals: flowStep.safeSignals,
-      safeMessage: flowStep.safeMessage,
-      updatedAt: timestamp,
-    } satisfies FiledReturnsTargetReview,
+    [key]: review,
   });
+  return toTargetReviewSummary(review);
 }
 
 export async function clearFiledReturnsTargetReview(
