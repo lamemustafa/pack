@@ -11,6 +11,7 @@ const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
 
 export interface FiledReturnsTargetReviewDeps {
   storageKeys: {
+    completion?: string;
     targetReview?: string;
   };
   now?: () => Date;
@@ -55,22 +56,24 @@ export async function persistFiledReturnsTargetReview(
   scope: FiledReturnsDownloadScope,
   flowStep: PortalFlowStepResult,
   deps: FiledReturnsTargetReviewDeps,
-): Promise<void> {
+): Promise<FiledReturnsFlowSummary | null> {
   const key = deps.storageKeys.targetReview;
-  if (!key || !requiresTargetReview(flowStep)) return;
+  if (!key || !requiresTargetReview(flowStep)) return null;
 
   const timestamp = (deps.now?.() ?? new Date()).toISOString();
+  const review = {
+    schemaVersion: "1.0",
+    targetId: createTargetId(scope),
+    status: "download-unconfirmed",
+    scope,
+    safeSignals: flowStep.safeSignals,
+    safeMessage: flowStep.safeMessage,
+    updatedAt: timestamp,
+  } satisfies FiledReturnsTargetReview;
   await browser.storage.local.set({
-    [key]: {
-      schemaVersion: "1.0",
-      targetId: createTargetId(scope),
-      status: "download-unconfirmed",
-      scope,
-      safeSignals: flowStep.safeSignals,
-      safeMessage: flowStep.safeMessage,
-      updatedAt: timestamp,
-    } satisfies FiledReturnsTargetReview,
+    [key]: review,
   });
+  return toTargetReviewSummary(review);
 }
 
 export async function clearFiledReturnsTargetReview(
@@ -107,18 +110,29 @@ export async function resolveUnconfirmedFiledReturnsDownload(
         ? "Pack marked the unresolved filed-return download as manually reviewed."
         : "Pack cancelled the unresolved filed-return target. No portal click was retried.",
   };
+  const flowSummary: FiledReturnsFlowSummary = {
+    scope,
+    status: resolution === "downloaded" ? "complete" : "cancelled",
+    completedPeriods: resolution === "downloaded" ? [scope.period] : [],
+    totalPeriods: 1,
+    updatedAt: (deps.now?.() ?? new Date()).toISOString(),
+    flowStep,
+  };
+  await persistResolvedTargetReviewSummary(flowSummary, deps);
   return {
     ok: true,
     flowStep,
-    flowSummary: {
-      scope,
-      status: resolution === "downloaded" ? "complete" : "cancelled",
-      completedPeriods: resolution === "downloaded" ? [scope.period] : [],
-      totalPeriods: 1,
-      updatedAt: (deps.now?.() ?? new Date()).toISOString(),
-      flowStep,
-    },
+    flowSummary,
   };
+}
+
+async function persistResolvedTargetReviewSummary(
+  flowSummary: FiledReturnsFlowSummary,
+  deps: FiledReturnsTargetReviewDeps,
+): Promise<void> {
+  const key = deps.storageKeys.completion;
+  if (!key) return;
+  await browser.storage.session.set({ [key]: flowSummary });
 }
 
 function parseFiledReturnsTargetReview(input: unknown): FiledReturnsTargetReview | null {

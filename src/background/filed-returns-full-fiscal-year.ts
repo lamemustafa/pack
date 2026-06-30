@@ -37,6 +37,7 @@ import {
 export type SinglePeriodRunner = (
   scope: FiledReturnsDownloadScope,
   deps: FiledReturnsFlowRunnerDeps,
+  options?: { persistSinglePeriodSummary?: boolean },
 ) => Promise<PackMessageResponse>;
 
 export { summariseFullFiscalYearLedger, targetStatusFromFlowStep };
@@ -110,6 +111,7 @@ export async function startFullFiscalYearDownloadFlow(
         returnType: nextTarget.returnType,
       },
       { ...deps, persistTargetReview: false },
+      { persistSinglePeriodSummary: false },
     );
 
     if (!response.ok || !("flowStep" in response)) {

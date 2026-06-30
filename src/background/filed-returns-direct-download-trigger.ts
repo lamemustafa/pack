@@ -4,6 +4,7 @@ import { toPortalReturnPeriod } from "../connectors/gst/filed-returns-return-per
 import type {
   FiledReturnsDownloadScope,
   FiledReturnsDownloadTarget,
+  FiledReturnsFlowSummary,
   PortalFlowStepResult,
 } from "../core/contracts";
 import type { PackMessageResponse } from "../core/messages";
@@ -15,10 +16,10 @@ import {
   type FiledReturnsFlowMessagingDeps,
   resolveDirectDownloadRequestOnce,
 } from "./filed-returns-flow-messaging";
+import { safeFiledReturnDownloadFilename } from "./filed-returns-download-filename";
 import { persistFiledReturnsTargetReview } from "./filed-returns-target-review";
 
 const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
-const SAFE_DOWNLOAD_ROOT = "ComplyEaze-Pack/GSTR-3B";
 const EXPECTED_FILED_RETURN_DOWNLOAD = {
   expectedFileExtensions: [],
   expectedMimeTypes: ["application/pdf"],
@@ -76,16 +77,19 @@ export async function triggerDirectFiledReturnDownload({
   const observedDownload = await observeBrowserDownloadById(browser.downloads, startedDownload.id, {
     ...EXPECTED_FILED_RETURN_DOWNLOAD,
     armedAt,
+    expectedUrlSubstrings: targetUrlSubstrings(scope),
   });
   const flowStep = explainDirectDownloadPromptIfNeeded(
     mergeFlowStepWithDownloadObservation(directTriggerStep, observedDownload),
   );
+  let flowSummary: FiledReturnsFlowSummary | null = null;
   if (deps.persistTargetReview !== false) {
-    await persistFiledReturnsTargetReview(scope, flowStep, deps);
+    flowSummary = await persistFiledReturnsTargetReview(scope, flowStep, deps);
   }
   return {
     ok: true,
     flowStep,
+    ...(flowSummary ? { flowSummary } : {}),
     ...(response.observation ? { observation: response.observation } : {}),
   };
 }
@@ -226,17 +230,7 @@ function isExpectedFiledReturnDirectDownloadUrl(
   }
 }
 
-function safeFiledReturnDownloadFilename(scope: FiledReturnsDownloadScope): string {
-  return [
-    SAFE_DOWNLOAD_ROOT,
-    safeFilenameSegment(scope.financialYear),
-    `${safeFilenameSegment(scope.period)}-${safeFilenameSegment(scope.returnType)}.pdf`,
-  ].join("/");
-}
-
-function safeFilenameSegment(value: string): string {
-  return value
-    .replace(/[^A-Za-z0-9._-]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80);
+function targetUrlSubstrings(scope: FiledReturnsDownloadScope): string[] {
+  const returnPeriod = toPortalReturnPeriod(scope.period, scope.financialYear);
+  return returnPeriod ? ["/returns/auth/api/gstr3b/getgenpdf", `rtn_prd=${returnPeriod}`] : [];
 }

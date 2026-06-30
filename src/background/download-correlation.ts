@@ -5,13 +5,20 @@ export interface DownloadObservationContext {
   expectedOrigins: readonly string[];
   expectedFileExtensions: readonly string[];
   expectedMimeTypes: readonly string[];
+  expectedUrlSubstrings?: readonly string[];
+  ignoredFilenames?: readonly string[];
+  trustedDownloadIds?: Set<number>;
 }
 
 export function isExpectedDownloadCandidate(
   item: DownloadCreatedItem,
   context: DownloadObservationContext,
 ): boolean {
-  return isPotentialDownloadCandidate(item, context) && hasExpectedFileEvidence(item, context);
+  return (
+    isPotentialDownloadCandidate(item, context) &&
+    hasExpectedUrlEvidence(item, context) &&
+    hasExpectedFileEvidence(item, context)
+  );
 }
 
 export function isPotentialDownloadCandidate(
@@ -20,6 +27,18 @@ export function isPotentialDownloadCandidate(
 ): boolean {
   if (!startsAfterArmedTime(item, context.armedAt)) return false;
   return hasExpectedOrigin(item, context.expectedOrigins);
+}
+
+export function matchesExpectedUrlSubstrings(
+  item: DownloadCreatedItem,
+  expectedUrlSubstrings: readonly string[] | undefined,
+): boolean {
+  if (!expectedUrlSubstrings?.length) return true;
+  const expectedMarkers = expectedUrlSubstrings.map((marker) => marker.toLowerCase());
+  const urls = [item.url, item.finalUrl, item.referrer]
+    .filter(isNonNullableString)
+    .map((value) => value.toLowerCase());
+  return urls.some((url) => expectedMarkers.every((marker) => url.includes(marker)));
 }
 
 function startsAfterArmedTime(item: DownloadCreatedItem, armedAt: Date): boolean {
@@ -35,6 +54,16 @@ function hasExpectedOrigin(item: DownloadCreatedItem, expectedOrigins: readonly 
   return origins.some((origin) => expectedOrigins.includes(origin));
 }
 
+function hasExpectedUrlEvidence(
+  item: DownloadCreatedItem,
+  context: DownloadObservationContext,
+): boolean {
+  return (
+    context.trustedDownloadIds?.has(item.id) === true ||
+    matchesExpectedUrlSubstrings(item, context.expectedUrlSubstrings)
+  );
+}
+
 function hasExpectedFileEvidence(
   item: DownloadCreatedItem,
   context: DownloadObservationContext,
@@ -42,11 +71,13 @@ function hasExpectedFileEvidence(
   const mime = item.mime?.toLowerCase();
   if (mime && context.expectedMimeTypes.some((expected) => mime.includes(expected))) return true;
   if (mime && isKnownNonMatchingMime(mime, context.expectedMimeTypes)) return false;
+  if (context.trustedDownloadIds?.has(item.id)) return true;
 
-  const filename = item.filename?.toLowerCase();
+  const filename = item.filename;
   if (
     filename &&
-    context.expectedFileExtensions.some((extension) => filename.endsWith(extension))
+    !isIgnoredFilename(filename, context.ignoredFilenames) &&
+    context.expectedFileExtensions.some((extension) => filename.toLowerCase().endsWith(extension))
   ) {
     return true;
   }
@@ -83,6 +114,26 @@ function isGenericAttachmentMime(mime: string): boolean {
     "application/force-download",
     "application/x-download",
   ].includes(mime);
+}
+
+function isIgnoredFilename(
+  filename: string,
+  ignoredFilenames: readonly string[] | undefined,
+): boolean {
+  if (!ignoredFilenames?.length) return false;
+  const candidate = normaliseDownloadPath(filename);
+  return ignoredFilenames.some((ignored) => {
+    const ignoredPath = normaliseDownloadPath(ignored);
+    return candidate === ignoredPath || candidate.endsWith(`/${ignoredPath}`);
+  });
+}
+
+function normaliseDownloadPath(filename: string): string {
+  return stripUniquifier(filename.replace(/\\/g, "/").toLowerCase());
+}
+
+function stripUniquifier(filename: string): string {
+  return filename.replace(/\s+\(\d+\)(?=\.[^/.]+$)/, "");
 }
 
 function isNonNullableString(value: string | null | undefined): value is string {

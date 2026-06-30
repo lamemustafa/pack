@@ -1,8 +1,10 @@
 import { browser } from "wxt/browser";
 import { GST_CONNECTOR_DESCRIPTOR } from "../connectors/gst/constants";
+import { toPortalReturnPeriod } from "../connectors/gst/filed-returns-return-period";
 import type {
   FiledReturnsDownloadScope,
   FiledReturnsDownloadTarget,
+  FiledReturnsFlowSummary,
   PortalFlowStepResult,
 } from "../core/contracts";
 import type { PackMessageResponse } from "../core/messages";
@@ -11,7 +13,9 @@ import {
   mergeFlowStepWithDownloadObservation,
   observeNextBrowserDownload,
 } from "./download-observer";
+import { suggestNextBrowserDownloadFilename } from "./download-filename-suggester";
 import { triggerDirectFiledReturnDownload } from "./filed-returns-direct-download-trigger";
+import { safeFiledReturnDownloadFilename } from "./filed-returns-download-filename";
 import {
   runDownloadTriggerOnce,
   type FiledReturnsFlowMessagingDeps,
@@ -52,30 +56,52 @@ export async function triggerAndObserveFiledReturnDownload({
     if (directDownloadResponse) return directDownloadResponse;
   }
 
-  const detailDownloadObservation = observeFiledReturnDownload();
+  const armedAt = new Date();
+  const filename = safeFiledReturnDownloadFilename(scope);
+  const trustedDownloadIds = new Set<number>();
+  const observationContext = {
+    ...EXPECTED_FILED_RETURN_DOWNLOAD,
+    armedAt,
+    expectedUrlSubstrings: targetUrlSubstrings(scope),
+    ignoredFilenames: [filename],
+    trustedDownloadIds,
+  };
+  const detailDownloadFilenameSuggestion = suggestNextBrowserDownloadFilename(
+    browser.downloads,
+    observationContext,
+    filename,
+  );
+  const detailDownloadObservation = observeFiledReturnDownload(observationContext);
+  const observedDownloadPromise = detailDownloadObservation.promise.finally(() => {
+    detailDownloadFilenameSuggestion.stop();
+  });
   const triggerResponse = await runDownloadTriggerOnce(deps, tabId, target);
   const triggerFlowResponse = toTriggerFlowResponse(triggerResponse, activePeriod);
   if (!triggerFlowResponse.ok || !("flowStep" in triggerFlowResponse)) {
     detailDownloadObservation.stop();
+    detailDownloadFilenameSuggestion.stop();
     return triggerFlowResponse;
   }
 
   if (!shouldAwaitDownloadObservation(triggerFlowResponse.flowStep)) {
     detailDownloadObservation.stop();
+    detailDownloadFilenameSuggestion.stop();
     return triggerFlowResponse;
   }
 
-  const observedDownload = await detailDownloadObservation.promise;
+  const observedDownload = await observedDownloadPromise;
   const flowStep = normaliseAmbiguousTriggerDownloadResult(
     triggerFlowResponse.flowStep,
     mergeFlowStepWithDownloadObservation(triggerFlowResponse.flowStep, observedDownload),
   );
+  let flowSummary: FiledReturnsFlowSummary | null = null;
   if (deps.persistTargetReview !== false) {
-    await persistFiledReturnsTargetReview(scope, flowStep, deps);
+    flowSummary = await persistFiledReturnsTargetReview(scope, flowStep, deps);
   }
   return {
     ...triggerFlowResponse,
     flowStep,
+    ...(flowSummary ? { flowSummary } : {}),
   };
 }
 
@@ -87,6 +113,11 @@ function createDownloadTarget(scope: FiledReturnsDownloadScope): FiledReturnsDow
     period: scope.period,
     returnType: scope.returnType,
   };
+}
+
+function targetUrlSubstrings(scope: FiledReturnsDownloadScope): string[] {
+  const returnPeriod = toPortalReturnPeriod(scope.period, scope.financialYear);
+  return returnPeriod ? ["/returns/auth/api/gstr3b/getgenpdf", `rtn_prd=${returnPeriod}`] : [];
 }
 
 function toTriggerFlowResponse(
@@ -155,11 +186,10 @@ function unverifiedPeriodResponse(): FlowStepResponse {
   };
 }
 
-export function observeFiledReturnDownload() {
-  return observeNextBrowserDownload(browser.downloads, {
-    ...EXPECTED_FILED_RETURN_DOWNLOAD,
-    armedAt: new Date(),
-  });
+export function observeFiledReturnDownload(
+  context = { ...EXPECTED_FILED_RETURN_DOWNLOAD, armedAt: new Date() },
+) {
+  return observeNextBrowserDownload(browser.downloads, context);
 }
 
 function createActionId(): string {
