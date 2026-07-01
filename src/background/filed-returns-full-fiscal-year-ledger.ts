@@ -7,11 +7,11 @@ import type {
 } from "../core/contracts";
 import { FULL_FISCAL_YEAR_PERIOD, type FiledReturnsMonth } from "../core/filed-returns-scope";
 import { GST_CONNECTOR_DESCRIPTOR } from "../connectors/gst/constants";
+import { PACK_PRODUCT_VERSION } from "../extension/version";
 export { isFullFiscalYearLedger } from "./filed-returns-full-fiscal-year-validation";
 
 const ACTIVE_LEDGER_STALE_MS = 30_000;
 const FULL_FISCAL_YEAR_PLAN_VERSION = "filed-gstr3b-monthly-v1";
-const CREATED_WITH_EXTENSION_VERSION = "0.1.0";
 const POSITIVE_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
   "downloaded",
   "manually-observed",
@@ -29,7 +29,7 @@ export function createFullFiscalYearLedger(
     schemaVersion: "1.0",
     planVersion: FULL_FISCAL_YEAR_PLAN_VERSION,
     connectorVersion: GST_CONNECTOR_DESCRIPTOR.version,
-    createdWithExtensionVersion: CREATED_WITH_EXTENSION_VERSION,
+    createdWithExtensionVersion: PACK_PRODUCT_VERSION,
     ledgerId: createLedgerId(now),
     revision: 1,
     status: "running",
@@ -84,8 +84,7 @@ export function reconcileFullFiscalYearLedgerTargets(
     revision: missingTargets.length > 0 ? nextRevision(ledger) : (ledger.revision ?? 1),
     planVersion: FULL_FISCAL_YEAR_PLAN_VERSION,
     connectorVersion: GST_CONNECTOR_DESCRIPTOR.version,
-    createdWithExtensionVersion:
-      ledger.createdWithExtensionVersion ?? CREATED_WITH_EXTENSION_VERSION,
+    createdWithExtensionVersion: ledger.createdWithExtensionVersion ?? PACK_PRODUCT_VERSION,
     status: ledger.status === "complete" && missingTargets.length > 0 ? "running" : ledger.status,
     updatedAt:
       missingTargets.length > 0 && ledger.status !== "running" ? timestamp : ledger.updatedAt,

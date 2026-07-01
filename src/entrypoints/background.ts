@@ -1,6 +1,7 @@
 import { browser } from "wxt/browser";
 import { isSupportedGstPortalUrl, pickSupportedGstPortalTab } from "../connectors/gst/hosts";
 import type { ArchiveManifest, PortalContext, PortalObservation } from "../core/contracts";
+import { PACK_PRODUCT_VERSION } from "../extension/version";
 import {
   PACK_CONTENT_SCRIPT_PROTOCOL_VERSION,
   isPackMessage,
@@ -42,7 +43,6 @@ export const PACK_SESSION_STORAGE_KEYS = {
 export const PACK_CLEARABLE_LOCAL_STORAGE_KEYS = Object.values(PACK_LOCAL_STORAGE_KEYS);
 
 const CONTENT_SCRIPT_FILE = "/content-scripts/content.js";
-const PRODUCT_VERSION = "0.1.0";
 const OFFICIAL_URL = "https://pack.complyeaze.com";
 const contentInjectionByTab = new Map<number, Promise<void>>();
 
@@ -52,7 +52,7 @@ export default defineBackground(() => {
   browser.runtime.onInstalled.addListener(() => {
     void browser.storage.local.set({
       [PACK_LOCAL_STORAGE_KEYS.install]: {
-        version: PRODUCT_VERSION,
+        version: packRuntimeVersion(),
         installedAt: new Date().toISOString(),
         localOnly: true,
       },
@@ -167,7 +167,7 @@ async function handleMessage(
       return startFiledReturnsDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
     case "PACK_START_SYNTHETIC_DEMO":
       return startSyntheticDemo({
-        productVersion: PRODUCT_VERSION,
+        productVersion: packRuntimeVersion(),
         officialUrl: OFFICIAL_URL,
         storageKeys: { lastManifest: PACK_LOCAL_STORAGE_KEYS.lastManifest },
       });
@@ -181,6 +181,10 @@ async function handleMessage(
   }
 
   return { ok: false, error: "Unsupported Pack message." };
+}
+
+function packRuntimeVersion() {
+  return browser.runtime.getManifest().version ?? PACK_PRODUCT_VERSION;
 }
 
 function filedReturnsFlowRunnerDeps() {

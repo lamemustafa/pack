@@ -306,7 +306,7 @@ async function createValidPackage(): Promise<string> {
     name: "ComplyEaze Pack: GST GSTR-3B Downloader",
     short_name: "ComplyEaze Pack",
     description: "Download filed GSTR-3B PDFs locally from your GST Portal session.",
-    homepage_url: "https://github.com/lamemustafa/pack",
+    homepage_url: "https://pack.complyeaze.com/gst",
     permissions: ["downloads", "scripting", "storage"],
     host_permissions: [
       "https://www.gst.gov.in/*",
