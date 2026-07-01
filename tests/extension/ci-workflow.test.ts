@@ -1,8 +1,16 @@
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 const rootDir = process.cwd();
+const workflowsDir = path.join(rootDir, ".github", "workflows");
+const pinnedActionRefPattern = /@[\da-f]{40}$/i;
+const allowedActionPatterns = [
+  /^actions\/checkout@[\da-f]{40}$/i,
+  /^actions\/setup-node@[\da-f]{40}$/i,
+  /^pnpm\/action-setup@[\da-f]{40}$/i,
+  /^github\/codeql-action\/[^@\s]+@[\da-f]{40}$/i,
+];
 
 describe("Pack CI workflow", () => {
   it("uses allowed pinned actions, audits dependencies, and prints verified ZIP checksum evidence", async () => {
@@ -49,5 +57,30 @@ describe("Pack CI workflow", () => {
     expect(workflow).toContain("--required-review-author chatgpt-codex-connector");
     expect(workflow).toContain("--wait-head-review-ms 180000");
     expect(workflow).toContain("--allow-missing-head-review");
+  });
+
+  it("keeps every workflow action reference within the repository selected-actions policy", async () => {
+    const workflowFiles = (await readdir(workflowsDir)).filter((file) => file.endsWith(".yml"));
+    const disallowedReferences: string[] = [];
+
+    for (const file of workflowFiles) {
+      const workflow = await readFile(path.join(workflowsDir, file), "utf8");
+      const actionReferences = [
+        ...workflow.matchAll(/^\s*uses:\s+["']?([^"'\s#]+)["']?/gm),
+      ].flatMap((match) => (match[1] ? [match[1]] : []));
+
+      for (const reference of actionReferences) {
+        if (reference.startsWith("./") || reference.startsWith("docker://")) {
+          continue;
+        }
+
+        const isAllowed = allowedActionPatterns.some((pattern) => pattern.test(reference));
+        if (!isAllowed || !pinnedActionRefPattern.test(reference)) {
+          disallowedReferences.push(`${file}: ${reference}`);
+        }
+      }
+    }
+
+    expect(disallowedReferences).toEqual([]);
   });
 });
