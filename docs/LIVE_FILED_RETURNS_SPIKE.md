@@ -232,12 +232,16 @@ target, run only on `https://return.gst.gov.in/returns/auth/gstr3b`, verify that
 the visible detail page matches the target financial year and period, and bind
 the request to Pack's local action id before attempting anything networked.
 
-The smallest safe replay boundary is response-blind: browser-managed credentials
-only, no copied cookies or headers, no raw response body reads, no filenames or
-local paths in logs, and success only through Pack's existing correlated
-`chrome.downloads` completed/non-empty evidence. A `fetch` metadata probe may be
-used as a private engineering check, but a production download path should use
-the browser download pipeline rather than reading PDF bytes in Pack code.
+The safe replay boundary is header-level and URL-only: browser-managed
+credentials only, no copied cookies or headers, no raw response body reads, no
+filenames or local paths in logs, and success only through Pack's existing
+correlated `chrome.downloads` completed/non-empty evidence. Live Brave testing
+showed that the reviewed protected URL can expose an HTML response instead of
+the filed PDF. The current direct path therefore probes the response metadata
+inside the authenticated GST page context and only hands the reviewed GST URL to
+the browser download manager when the endpoint does not contradict a PDF
+download. Pack must not store, log, upload, or document PDF bytes, copied
+cookies, headers, raw protected URLs, local filenames, or local paths.
 
 Live experiment result: constructing the final PDF endpoint and handing it to
 `chrome.downloads.download` from the extension is not currently a safe default.
@@ -248,6 +252,30 @@ the session cookies available to the browser profile. Keep the production path
 as portal-owned navigation plus the portal-rendered `DOWNLOAD FILED GSTR-3B`
 click, with the direct endpoint helpers retained only as private research
 scaffolding.
+
+2026-06-30 update: Pack now tries the reviewed direct browser-download path
+before the portal-owned click because the portal click path can block single
+period and full-fiscal-year runs behind a native Save dialog. This does not
+promote direct-download compatibility to a release claim. Keep the Chrome/Brave
+live QA gate open until an authorised clean-profile run proves that the
+target-bound direct path completes the same filed GSTR-3B PDF without
+persisting cookies, headers, PDF bytes, raw URLs, local filenames, or paths. If
+that live gate fails, treat it as a runtime blocker and keep the portal-click
+fallback constrained to the existing target-bound observer/review path.
+
+2026-07-01 live Brave result: after reloading the unpacked extension into an
+already-authenticated Brave profile, Pack completed the selected single-month
+GSTR-3B download without a native Save dialog. The same profile then completed
+the local full-year flow for the two periods selected by Pack in that run
+without the native Save dialog. Sanitized filesystem evidence showed recent
+non-empty PDF downloads, and the Pack popup reported the full-year run as
+complete with two of two periods reconciled. This is valid evidence for the
+save-dialog runtime blocker in the authorised profile. It is not a store-ready
+clean-profile gate: run the exact ZIP in clean Chrome and Brave profiles with
+"Ask where to save each file" both enabled and disabled before making a broader
+release claim. The live artifact location also did not prove Pack-managed
+folder placement, so manifest/folder reconciliation remains a release-hardening
+follow-up rather than part of the save-dialog fix.
 
 ## Remaining public-release gaps
 
