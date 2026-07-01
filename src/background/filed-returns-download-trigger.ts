@@ -1,6 +1,5 @@
 import { browser } from "wxt/browser";
 import { GST_CONNECTOR_DESCRIPTOR } from "../connectors/gst/constants";
-import { toPortalReturnPeriod } from "../connectors/gst/filed-returns-return-period";
 import type {
   FiledReturnsDownloadScope,
   FiledReturnsDownloadTarget,
@@ -53,7 +52,9 @@ export async function triggerAndObserveFiledReturnDownload({
       tabId,
       target,
     });
-    if (directDownloadResponse) return directDownloadResponse;
+    if (directDownloadResponse && !shouldFallBackToPortalClick(directDownloadResponse)) {
+      return directDownloadResponse;
+    }
   }
 
   const armedAt = new Date();
@@ -62,7 +63,7 @@ export async function triggerAndObserveFiledReturnDownload({
   const observationContext = {
     ...EXPECTED_FILED_RETURN_DOWNLOAD,
     armedAt,
-    expectedUrlSubstrings: targetUrlSubstrings(scope),
+    expectedUrlSubstrings: [],
     ignoredFilenames: [filename],
     trustedDownloadIds,
   };
@@ -115,11 +116,6 @@ function createDownloadTarget(scope: FiledReturnsDownloadScope): FiledReturnsDow
   };
 }
 
-function targetUrlSubstrings(scope: FiledReturnsDownloadScope): string[] {
-  const returnPeriod = toPortalReturnPeriod(scope.period, scope.financialYear);
-  return returnPeriod ? ["/returns/auth/api/gstr3b/getgenpdf", `rtn_prd=${returnPeriod}`] : [];
-}
-
 function toTriggerFlowResponse(
   response: PackMessageResponse,
   activePeriod: string | null,
@@ -144,6 +140,19 @@ function shouldAwaitDownloadObservation(step: PortalFlowStepResult): boolean {
   return (
     step.safeSignals.includes("filed-gstr3b-download-clicked") ||
     step.safeSignals.includes("filed-gstr3b-download-trigger-ambiguous")
+  );
+}
+
+function shouldFallBackToPortalClick(response: PackMessageResponse): boolean {
+  if (!response.ok || !("flowStep" in response)) return false;
+  const signals = new Set(response.flowStep.safeSignals);
+  return (
+    signals.has("filed-gstr3b-download-trigger-ambiguous") ||
+    signals.has("filed-gstr3b-direct-download-fetch-unavailable") ||
+    signals.has("filed-gstr3b-direct-download-status-rejected") ||
+    signals.has("filed-gstr3b-direct-download-non-pdf-response") ||
+    signals.has("filed-gstr3b-direct-download-fetch-failed") ||
+    signals.has("filed-gstr3b-direct-download-start-rejected")
   );
 }
 

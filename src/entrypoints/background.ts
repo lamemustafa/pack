@@ -190,7 +190,7 @@ function packRuntimeVersion() {
 function filedReturnsFlowRunnerDeps() {
   return {
     getActiveGstTab,
-    preferDirectDownload: false,
+    preferDirectDownload: true,
     sendMessageToTabWithInjection,
     storageKeys: filedReturnsStorageKeys(),
   };

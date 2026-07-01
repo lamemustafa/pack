@@ -184,7 +184,7 @@ function App() {
 
   const completionStatus = getFiledReturnsCompletionStatus(scope, filedReturnsFlowSummary);
   const summaryHeading = filedReturnsFlowSummary
-    ? getFiledReturnsSummaryHeading(filedReturnsFlowSummary)
+    ? getFiledReturnsSummaryHeading(scope, filedReturnsFlowSummary)
     : null;
 
   return (
@@ -214,7 +214,7 @@ function App() {
         onStart={() => void startFiledReturnsFlow()}
       />
 
-      {filedReturnsFlowSummary ? (
+      {filedReturnsFlowSummary && summaryHeading ? (
         <section className="state">
           <p>{summaryHeading}</p>
           <p className="muted">{filedReturnsFlowSummary.flowStep.safeMessage}</p>

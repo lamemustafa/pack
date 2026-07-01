@@ -102,12 +102,39 @@ describe("popup filed returns flow summary", () => {
     ).toBe("FY 2025-26 GSTR-3B complete. 2 of 2 periods reconciled.");
   });
 
-  it("uses the persisted summary status in the popup heading", () => {
-    expect(getFiledReturnsSummaryHeading(COMPLETE_SUMMARY)).toBe(
-      "Last filed-returns run: complete",
-    );
-    expect(getFiledReturnsSummaryHeading({ ...COMPLETE_SUMMARY, status: "blocked" })).toBe(
-      "Last filed-returns run: blocked",
-    );
+  it("uses the persisted summary status in the popup heading for the selected scope", () => {
+    expect(
+      getFiledReturnsSummaryHeading(
+        {
+          financialYear: "2025-26",
+          period: FULL_FISCAL_YEAR_PERIOD,
+          returnType: "GSTR-3B",
+        },
+        COMPLETE_SUMMARY,
+      ),
+    ).toBe("Last filed-returns run: complete");
+    expect(
+      getFiledReturnsSummaryHeading(
+        {
+          financialYear: "2025-26",
+          period: FULL_FISCAL_YEAR_PERIOD,
+          returnType: "GSTR-3B",
+        },
+        { ...COMPLETE_SUMMARY, status: "blocked" },
+      ),
+    ).toBe("Last filed-returns run: blocked");
+  });
+
+  it("does not show stale summary details for a different selected scope", () => {
+    expect(
+      getFiledReturnsSummaryHeading(
+        {
+          financialYear: "2025-26",
+          period: "May",
+          returnType: "GSTR-3B",
+        },
+        COMPLETE_SUMMARY,
+      ),
+    ).toBeNull();
   });
 });

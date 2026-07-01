@@ -16,7 +16,10 @@ stable-release claims.
   store-facing V0 must not advertise it until durable resume, real-browser
   restart, and privacy-review tests are complete.
 - V0 does not collect GST Portal credentials, OTPs, CAPTCHA responses, cookies,
-  session tokens, or GST document contents.
+  or session tokens, and does not store, log, or upload GST document contents.
+  The direct-download compatibility path is URL-only: it reviews GST endpoint
+  metadata in the authenticated page context and hands only the reviewed GST URL
+  to the browser download manager, without reading or retaining PDF bytes.
 - ComplyEaze Pack is not affiliated with, endorsed by, or operated by GSTN, CBIC,
   or the Government of India.
 
@@ -106,6 +109,14 @@ stable-release claims.
       cookies, credentials, OTP, or CAPTCHA data.
 - [ ] Authorised live full fiscal year run reconciles every eligible target as
       downloaded, positively not filed, blocked, or failed in the local ledger.
+- [ ] Direct browser-download default is tested in clean Chrome and Brave
+      profiles with "Ask where to save each file" on and off, and the
+      portal-click fallback is verified to stop on unconfirmed or ambiguous
+      evidence without repeating completed full-year targets.
+      Active-profile Brave testing on 2026-07-01 cleared the immediate native
+      Save dialog blocker for one single-month run and a two-period local flow
+      run, but this item remains open until exact-ZIP clean-profile evidence is
+      recorded.
 - [ ] Network/storage audit confirms no unexpected destinations or sensitive
       persistence.
 - [ ] SBOM, dependency vulnerability review, license scan, and secret scan are
