@@ -115,4 +115,20 @@ describe("Pack CI workflow", () => {
       expect(packConfig?.["pull-request-footer"]).toContain(required);
     }
   });
+
+  it("requires an explicit repository variable before automatic Chrome Web Store submission", async () => {
+    const releaseWorkflow = await readFile(
+      path.join(rootDir, ".github", "workflows", "release.yml"),
+      "utf8",
+    );
+    const releaseRunbook = await readFile(path.join(rootDir, "docs", "RELEASE.md"), "utf8");
+
+    expect(releaseWorkflow).toContain("vars.CWS_SUBMIT_ENABLED == 'true'");
+    expect(releaseWorkflow).toContain("environment: chrome-web-store");
+    expect(releaseWorkflow).toContain(
+      "node scripts/publish-chrome-web-store.mjs --zip .release/*chrome.zip",
+    );
+    expect(releaseRunbook).toContain("CWS_SUBMIT_ENABLED");
+    expect(releaseRunbook).toContain("CWS_SUBMIT_ENABLED=true");
+  });
 });
