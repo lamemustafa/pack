@@ -5,6 +5,14 @@ import { describe, expect, it } from "vitest";
 const rootDir = process.cwd();
 const workflowsDir = path.join(rootDir, ".github", "workflows");
 const pinnedActionRefPattern = /@[\da-f]{40}$/i;
+const requiredReviewGateBodyText = [
+  "Pack Workflow Preflight",
+  "Privacy And Data-Flow Impact",
+  "Sensitive Surface Review",
+  "Verification",
+  "PR Review Follow-Up",
+  "pnpm workflow:preflight",
+];
 const allowedActionPatterns = [
   /^actions\/checkout@[\da-f]{40}$/i,
   /^actions\/setup-node@[\da-f]{40}$/i,
@@ -82,5 +90,29 @@ describe("Pack CI workflow", () => {
     }
 
     expect(disallowedReferences).toEqual([]);
+  });
+
+  it("keeps generated Release Please PRs compatible with Pack gates", async () => {
+    const prettierIgnore = await readFile(path.join(rootDir, ".prettierignore"), "utf8");
+    const releaseConfig = JSON.parse(
+      await readFile(path.join(rootDir, "release-please-config.json"), "utf8"),
+    ) as {
+      packages?: {
+        "."?: {
+          "pull-request-footer"?: string;
+          "extra-files"?: Array<{ type?: string; path?: string }>;
+        };
+      };
+    };
+    const packConfig = releaseConfig.packages?.["."];
+
+    expect(prettierIgnore).toContain("CHANGELOG.md");
+    expect(packConfig?.["extra-files"]).toContainEqual({
+      type: "generic",
+      path: "src/extension/version.ts",
+    });
+    for (const required of requiredReviewGateBodyText) {
+      expect(packConfig?.["pull-request-footer"]).toContain(required);
+    }
   });
 });

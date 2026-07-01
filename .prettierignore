@@ -3,4 +3,4 @@ node_modules/
 .wxt/
 coverage/
 pnpm-lock.yaml
-
+CHANGELOG.md
