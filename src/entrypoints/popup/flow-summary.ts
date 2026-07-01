@@ -24,7 +24,11 @@ export function getFiledReturnsCompletionStatus(
   return null;
 }
 
-export function getFiledReturnsSummaryHeading(summary: FiledReturnsFlowSummary): string {
+export function getFiledReturnsSummaryHeading(
+  scope: FiledReturnsDownloadScope,
+  summary: FiledReturnsFlowSummary,
+): string | null {
+  if (!isSameScope(scope, summary.scope)) return null;
   return `Last filed-returns run: ${summary.status}`;
 }
 
