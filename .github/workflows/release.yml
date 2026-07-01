@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
   pull-requests: write
 
 concurrency:
@@ -86,10 +87,13 @@ jobs:
 
       - name: Run Release Please
         id: release
-        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7
-        with:
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
+        run: node scripts/run-release-please.mjs
+        env:
+          RELEASE_PLEASE_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_API_URL: ${{ github.api_url }}
+          GITHUB_GRAPHQL_URL: ${{ github.graphql_url }}
 
       - name: Mark v0 GitHub release as prerelease
         if: ${{ steps.release.outputs.release_created == 'true' }}
