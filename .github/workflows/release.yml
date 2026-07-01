@@ -127,7 +127,7 @@ jobs:
   chrome-web-store:
     name: Submit Chrome Web Store package
     needs: release
-    if: ${{ needs.release.outputs.release_created == 'true' }}
+    if: ${{ needs.release.outputs.release_created == 'true' && vars.CWS_SUBMIT_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 12
     environment: chrome-web-store

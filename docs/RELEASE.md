@@ -121,13 +121,16 @@ The official V0 listing is:
 
 https://chromewebstore.google.com/detail/complyeaze-pack-gst-gstr/nfnbhekccajjfgkppolomflaeledoccb
 
-The release workflow has a protected `chrome-web-store` environment job. Keep
-that environment restricted to maintainers and require approval while Pack is
-pre-1.0. The job downloads the exact GitHub release ZIP instead of rebuilding it,
-then runs `scripts/publish-chrome-web-store.mjs`.
+The release workflow has a protected `chrome-web-store` environment job. The
+automatic submission job runs only when the repository or organization variable
+`CWS_SUBMIT_ENABLED` is exactly `true`. Keep the environment restricted to
+maintainers and require approval while Pack is pre-1.0. The job downloads the
+exact GitHub release ZIP instead of rebuilding it, then runs
+`scripts/publish-chrome-web-store.mjs`.
 
 Required GitHub Environment configuration:
 
+- Repository or organization variable: `CWS_SUBMIT_ENABLED=true`.
 - Variable: `CWS_PUBLISHER_ID`.
 - Secret option A: `CWS_SERVICE_ACCOUNT_JSON`.
 - Secret option B: `CWS_CLIENT_ID`, `CWS_CLIENT_SECRET`, and
