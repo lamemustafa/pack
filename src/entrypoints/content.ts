@@ -2,7 +2,7 @@ import { browser } from "wxt/browser";
 import { detectGstPortalContext } from "../connectors/gst/detect";
 import { runFiledReturnsDownloadStep } from "../connectors/gst/filed-returns-flow";
 import { triggerFiledGstr3bFiledPdfDownload } from "../connectors/gst/filed-returns-download";
-import { resolveFiledGstr3bGeneratedPdfApiRequest } from "../connectors/gst/filed-returns-direct-download";
+import { resolveFiledGstr3bVerifiedPdfDownloadRequest } from "../connectors/gst/filed-returns-direct-download-probe";
 import { navigateToFiledReturnsPage } from "../connectors/gst/filed-returns-navigator";
 import { observeFiledReturnsPageText } from "../connectors/gst/filed-returns-observer";
 import {
@@ -102,27 +102,38 @@ export default defineContentScript({
       }
 
       if (message.type === "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V2") {
-        const resolved = resolveFiledGstr3bGeneratedPdfApiRequest(document, message.payload);
-        const observation = sendFiledReturnsObservation();
-        if (!resolved.ok) {
-          sendResponse({
-            ok: true,
-            downloadTrigger: resolved.result,
-            observation,
-          } satisfies PackMessageResponse);
-          return false;
-        }
+        void resolveFiledGstr3bVerifiedPdfDownloadRequest(document, message.payload)
+          .then((resolved) => {
+            const observation = sendFiledReturnsObservation();
+            if (!resolved.ok) {
+              sendResponse({
+                ok: true,
+                downloadTrigger: resolved.result,
+                observation,
+              } satisfies PackMessageResponse);
+              return;
+            }
 
-        sendResponse({
-          ok: true,
-          directDownloadRequest: {
-            actionId: message.payload.actionId,
-            url: new URL(resolved.pdfPath, window.location.origin).href,
-            safeSignals: resolved.safeSignals,
-          },
-          observation,
-        } satisfies PackMessageResponse);
-        return false;
+            sendResponse({
+              ok: true,
+              directDownloadRequest: {
+                actionId: message.payload.actionId,
+                url: new URL(resolved.pdfPath, window.location.origin).href,
+                safeSignals: resolved.safeSignals,
+              },
+              observation,
+            } satisfies PackMessageResponse);
+          })
+          .catch((error: unknown) =>
+            sendResponse({
+              ok: false,
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Filed GSTR-3B direct download resolution failed.",
+            } satisfies PackMessageResponse),
+          );
+        return true;
       }
 
       if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V2") {

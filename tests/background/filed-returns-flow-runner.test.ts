@@ -224,14 +224,18 @@ describe("filed returns flow runner", () => {
   });
 
   it("uses the direct GST PDF endpoint before clicking the portal download control", async () => {
+    const directUrl = "https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=052026";
     const responses: PackMessageResponse[] = [
       filedReturnDownloadReady("May"),
       {
         ok: true,
         directDownloadRequest: {
           actionId: "action-direct",
-          url: "https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=052026",
-          safeSignals: ["filed-gstr3b-direct-download-path-built"],
+          safeSignals: [
+            "filed-gstr3b-direct-download-path-built",
+            "filed-gstr3b-direct-download-probe-accepted",
+          ],
+          url: directUrl,
         },
       },
     ];
@@ -284,8 +288,14 @@ describe("filed returns flow runner", () => {
       conflictAction: "uniquify",
       filename: "complyeaze-pack/gst/2026-27/gstr-3b/may.pdf",
       saveAs: false,
-      url: "https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=052026",
+      url: directUrl,
     });
+    const directObservationContext = vi.mocked(observeBrowserDownloadById).mock.calls.at(-1)?.[2];
+    expect(directObservationContext?.trustedDownloadIds?.has(81)).toBe(true);
+    expect(directObservationContext?.expectedUrlSubstrings).toEqual([
+      "/returns/auth/api/gstr3b/getgenpdf",
+      "rtn_prd=052026",
+    ]);
     expect(sendMessageToTabWithInjection.mock.calls.map(([, message]) => message.type)).toEqual([
       "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V2",
       "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V2",
@@ -429,6 +439,7 @@ describe("filed returns flow runner", () => {
   });
 
   it("explains when a direct download is waiting on the browser native Save prompt", async () => {
+    const directUrl = "https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=052026";
     vi.mocked(observeBrowserDownloadById).mockResolvedValueOnce({
       state: "not-observed",
       safeSignals: ["browser-download-not-observed"],
@@ -445,8 +456,8 @@ describe("filed returns flow runner", () => {
         ok: true,
         directDownloadRequest: {
           actionId: "action-direct",
-          url: "https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=052026",
-          safeSignals: ["filed-gstr3b-direct-download-path-built"],
+          safeSignals: ["filed-gstr3b-direct-download-probe-accepted"],
+          url: directUrl,
         },
       },
     ];
@@ -583,7 +594,118 @@ describe("filed returns flow runner", () => {
     ]);
   });
 
-  it("blocks instead of falling back to the portal click when Chrome rejects the direct download start", async () => {
+  it("falls back to the portal click when the direct PDF response is not verified", async () => {
+    const responses: PackMessageResponse[] = [
+      filedReturnDownloadReady("May"),
+      {
+        ok: true,
+        downloadTrigger: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+          state: "blocked",
+          safeSignals: [
+            "filed-gstr3b-direct-download-fetched",
+            "filed-gstr3b-direct-download-non-pdf-response",
+          ],
+          safeMessage: "The GST endpoint did not return a verified PDF.",
+        },
+      },
+      filedReturnDownloadClicked(),
+    ];
+    const sendMessageToTabWithInjection = vi.fn<
+      FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
+    >(async () => responses.shift() ?? { ok: false, error: "Unexpected call." });
+
+    const response = await startFiledReturnsDownloadFlow(
+      {
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-3B",
+      },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        preferDirectDownload: true,
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+        },
+        timings: {
+          flowStepSettleMs: 0,
+          resultRowNavigationSettleMs: 0,
+        },
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "downloaded",
+      },
+    });
+    expect(browser.downloads.download).not.toHaveBeenCalled();
+    expect(sendMessageToTabWithInjection.mock.calls.map(([, message]) => message.type)).toEqual([
+      "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V2",
+      "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V2",
+      "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V2",
+    ]);
+  });
+
+  it("falls back to the portal click when the direct resolver message fails before any download side effect", async () => {
+    const sendMessageToTabWithInjection = vi.fn<
+      FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
+    >(async (_tabId, message) => {
+      if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V2") {
+        return filedReturnDownloadReady("May");
+      }
+      if (message.type === "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V2") {
+        throw new Error("direct resolver timed out");
+      }
+      if (message.type === "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V2") {
+        return filedReturnDownloadClicked();
+      }
+      return { ok: false, error: "Unexpected call." };
+    });
+
+    const response = await startFiledReturnsDownloadFlow(
+      {
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-3B",
+      },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        preferDirectDownload: true,
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+        },
+        timings: {
+          flowStepSettleMs: 0,
+          resultRowNavigationSettleMs: 0,
+        },
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "downloaded",
+      },
+    });
+    expect(browser.downloads.download).not.toHaveBeenCalled();
+    expect(sendMessageToTabWithInjection.mock.calls.map(([, message]) => message.type)).toEqual([
+      "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V2",
+      "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V2",
+      "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V2",
+    ]);
+  });
+
+  it("falls back to the portal click when Chrome rejects the direct download start", async () => {
+    const directUrl = "https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=052026";
     vi.mocked(browser.downloads.download).mockImplementationOnce(async () => {
       throw new Error("downloads api rejected");
     });
@@ -593,10 +715,11 @@ describe("filed returns flow runner", () => {
         ok: true,
         directDownloadRequest: {
           actionId: "action-direct",
-          url: "https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=052026",
-          safeSignals: ["filed-gstr3b-direct-download-path-built"],
+          safeSignals: ["filed-gstr3b-direct-download-probe-accepted"],
+          url: directUrl,
         },
       },
+      filedReturnDownloadClicked(),
     ];
     const sendMessageToTabWithInjection = vi.fn<
       FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
@@ -636,13 +759,14 @@ describe("filed returns flow runner", () => {
     expect(response).toMatchObject({
       ok: true,
       flowStep: {
-        state: "blocked",
-        safeSignals: expect.arrayContaining(["filed-gstr3b-direct-download-start-rejected"]),
+        state: "downloaded",
       },
     });
+    expect(browser.downloads.download).toHaveBeenCalledTimes(1);
     expect(sendMessageToTabWithInjection.mock.calls.map(([, message]) => message.type)).toEqual([
       "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V2",
       "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V2",
+      "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V2",
     ]);
   });
 
@@ -1855,34 +1979,29 @@ describe("filed returns flow runner", () => {
     });
   });
 
-  it("starts a direct download after API detail handoff lands on a blank GSTR-3B route", async () => {
+  it("blocks direct download after API detail handoff lands on a blank GSTR-3B route", async () => {
     const responses: PackMessageResponse[] = [
       filedReturnApiResultPosted("March"),
       blankGstr3bDetailRoute(),
       {
         ok: true,
-        directDownloadRequest: {
-          actionId: "action-direct",
-          url: "https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=032026",
+        downloadTrigger: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+          state: "blocked",
           safeSignals: [
             "gstr-3b-detail-route",
-            "filed-gstr3b-direct-download-storage-period-matched",
-            "filed-gstr3b-direct-download-path-built",
+            "filed-gstr3b-direct-download-visible-identity-missing",
+            "filed-return-download-target-mismatch",
           ],
+          safeMessage: "Visible target identity is missing.",
         },
       },
     ];
     const sendMessageToTabWithInjection = vi.fn<
       FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
-    >(async (_tabId, message) => {
-      const response = responses.shift() ?? { ok: false, error: "Unexpected call." };
-      if (
-        "directDownloadRequest" in response &&
-        message.type === "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V2"
-      ) {
-        response.directDownloadRequest.actionId = message.payload.actionId;
-      }
-      return response;
+    >(async () => {
+      return responses.shift() ?? { ok: false, error: "Unexpected call." };
     });
 
     const response = await startFiledReturnsDownloadFlow(
@@ -1910,20 +2029,14 @@ describe("filed returns flow runner", () => {
     expect(response).toMatchObject({
       ok: true,
       flowStep: {
-        state: "downloaded",
+        state: "blocked",
         safeSignals: expect.arrayContaining([
-          "filed-gstr3b-direct-download-started",
-          "browser-download-completed",
-          "browser-download-non-empty",
+          "filed-gstr3b-direct-download-visible-identity-missing",
+          "filed-return-download-target-mismatch",
         ]),
       },
     });
-    expect(browser.downloads.download).toHaveBeenCalledWith({
-      conflictAction: "uniquify",
-      filename: "complyeaze-pack/gst/2025-26/gstr-3b/march.pdf",
-      saveAs: false,
-      url: "https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=032026",
-    });
+    expect(browser.downloads.download).not.toHaveBeenCalled();
     expect(sendMessageToTabWithInjection.mock.calls.map(([, message]) => message.type)).toEqual([
       "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V2",
       "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V2",
