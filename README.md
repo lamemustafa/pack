@@ -21,24 +21,33 @@ endorsed by, or operated by GSTN, CBIC, or the Government of India.
 
 ## Status
 
-This public repository is an open-source alpha and is not Chrome Web Store ready.
-The extension has a local demo and a live GSTR-3B PDF download path. Live
-manifest/index/exception-file generation is outside the current alpha. Public
-launch requires the manual gates in
-[docs/PUBLICATION_READINESS.md](docs/PUBLICATION_READINESS.md).
+This public repository and the Chrome Web Store V0 listing are open-source
+alpha surfaces. The extension has a local demo and a live GSTR-3B PDF download
+path. Live manifest/index/exception-file generation is outside the current
+alpha. Future store updates require the release gates in
+[docs/PUBLICATION_READINESS.md](docs/PUBLICATION_READINESS.md) and
+[docs/RELEASE.md](docs/RELEASE.md).
+Release PR titles use Conventional Commits so Release Please can decide the
+next Pack version from each merge.
 
 Full fiscal year download is available in source-build alpha as a local
 per-period ledger. It expands the selected financial year into eligible
 GSTR-3B periods and runs them one at a time through the single-period path.
-It remains outside Chrome Web Store readiness until real-browser restart,
-resume, and privacy-review gates are complete.
+It remains outside store-facing claims until real-browser restart, resume, and
+privacy-review gates are complete.
 
 ## Install
 
 ### Chrome Web Store
 
-No Chrome Web Store listing is published. Install from source only while Chrome
-Web Store review, legal review, and release sign-off remain incomplete.
+The V0 listing is available on the Chrome Web Store:
+
+https://chromewebstore.google.com/detail/complyeaze-pack-gst-gstr/nfnbhekccajjfgkppolomflaeledoccb
+
+Review the source, release notes, permissions, and privacy boundaries before
+using Pack for GST records. The public Pack site is:
+
+https://pack.complyeaze.com/gst
 
 ### From Source
 

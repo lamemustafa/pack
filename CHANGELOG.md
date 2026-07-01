@@ -2,6 +2,17 @@
 
 All notable changes to ComplyEaze Pack are documented here.
 
+## Unreleased
+
+- Added Release Please-based version and changelog automation for reviewed
+  release PRs.
+- Added GitHub release asset publication for the verified Chrome ZIP, checksum,
+  and release provenance JSON.
+- Added protected Chrome Web Store submission workflows for future release
+  updates.
+- Updated public source metadata so the extension homepage points to
+  `https://pack.complyeaze.com/gst`.
+
 ## 0.1.0 - 2026-06-23
 
 - Initial Chrome MV3 V0 source alpha. No Chrome Web Store listing or approval is

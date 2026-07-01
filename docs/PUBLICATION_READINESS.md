@@ -1,12 +1,15 @@
 # Publication Readiness
 
-This checklist tracks what remains before moving ComplyEaze Pack from
-open-source alpha to a broader public release and v0 Chrome Web Store package.
+This checklist tracks what remains while ComplyEaze Pack is a public V0 Chrome
+Web Store alpha and before it can make broader public, durable full-year, or
+stable-release claims.
 
 ## Current Decision
 
 - Canonical product name: **ComplyEaze Pack**.
 - First Chrome listing title: **ComplyEaze Pack: GST GSTR-3B Downloader**.
+- V0 Chrome Web Store listing:
+  `https://chromewebstore.google.com/detail/complyeaze-pack-gst-gstr/nfnbhekccajjfgkppolomflaeledoccb`.
 - V0 purpose: download filed GSTR-3B PDFs locally from the user's active,
   manually authenticated GST Portal session.
 - Full fiscal year download exists as a source-build alpha local ledger, but
@@ -39,6 +42,8 @@ open-source alpha to a broader public release and v0 Chrome Web Store package.
 - [x] Manifest metadata, homepage URL, and icon paths.
 - [x] Built-package verifier checks exact permissions, hosts, CSP, metadata, and
       icons.
+- [x] Release workflow publishes verified ZIP, checksum, and provenance assets
+      to GitHub releases after the exact-ZIP verifier passes.
 
 ### Must Complete Before Broad Public GitHub Launch
 
@@ -71,8 +76,10 @@ open-source alpha to a broader public release and v0 Chrome Web Store package.
 - [x] Synthetic reviewer demo exists.
 - [x] Reviewer instructions exist in `docs/CHROME_REVIEWER_TEST.md`.
 - [x] Manifest icons are present in source and verified in the built package.
+- [x] Manifest homepage URL points to `https://pack.complyeaze.com/gst`.
+- [x] Protected Chrome Web Store workflow exists for future release updates.
 
-### Must Complete Before Store Submission
+### Must Complete Before Future Store Updates Or Broader Store Claims
 
 #### Live Evidence Gate
 
@@ -109,6 +116,9 @@ open-source alpha to a broader public release and v0 Chrome Web Store package.
 - [ ] Publisher account MFA, recovery, and team access are verified.
 - [ ] Product, engineering, security, privacy/legal, open-source, and release
       manager sign-offs are recorded.
+- [x] Initial Chrome Web Store V0 listing published.
+- [ ] Automated Chrome Web Store release update submitted from the protected
+      release workflow.
 
 ## Suggested Store Copy
 
@@ -139,9 +149,10 @@ ComplyEaze Pack is not affiliated with, endorsed by, or operated by GSTN, CBIC,
 or the Government of India.
 ```
 
-## Not Yet Launch-Ready Until
+## Not Yet Stable Or Broad-Claim Ready Until
 
-The codebase can be open-sourced after final scan, contact confirmation, and
-repository hygiene review. Chrome Web Store submission should wait for legal
-review, live public policy URLs, exact-ZIP manual QA, privacy declarations, live
-per-target result/manifest wiring, and store assets/sign-offs.
+The V0 listing exists, but Pack must not claim stable Chrome Web Store maturity,
+durable full-year support, legal approval, live manifest/index/exception output,
+or broad GST coverage until legal review, live public policy URL confirmation,
+exact-ZIP manual QA, privacy declarations, live per-target result/manifest
+wiring, and store assets/sign-offs are recorded for the exact release.

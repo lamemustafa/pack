@@ -1,0 +1,69 @@
+name: Chrome Web Store Submit
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: GitHub release tag to submit, for example v0.1.1
+        required: true
+      dry_run:
+        description: Validate the release package and print the submission plan without uploading
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+permissions:
+  contents: read
+
+jobs:
+  submit:
+    name: Submit release package
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment: chrome-web-store
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: 22.13.0
+
+      - name: Download verified release package
+        run: >-
+          gh release download "${{ inputs.tag }}"
+          --pattern "*chrome.zip"
+          --pattern "*.sha256"
+          --pattern "pack-release-provenance.v1.json"
+          --dir .release
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Verify downloaded release package
+        run: >-
+          node scripts/verify-github-release-assets.mjs
+          --tag "${{ inputs.tag }}"
+          --zip .release/*chrome.zip
+          --checksum .release/*.sha256
+          --provenance .release/pack-release-provenance.v1.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+
+      - name: Submit to Chrome Web Store
+        run: >-
+          node scripts/publish-chrome-web-store.mjs
+          --zip .release/*chrome.zip
+          --dry-run "${{ inputs.dry_run }}"
+        env:
+          CWS_EXTENSION_ID: nfnbhekccajjfgkppolomflaeledoccb
+          CWS_PUBLISHER_ID: ${{ vars.CWS_PUBLISHER_ID }}
+          CWS_SERVICE_ACCOUNT_JSON: ${{ secrets.CWS_SERVICE_ACCOUNT_JSON }}
+          CWS_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          CWS_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
