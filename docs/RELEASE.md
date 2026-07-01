@@ -3,9 +3,20 @@
 Pack releases are produced from the standalone extension repository, not from the
 parent ComplyEaze app repository.
 
+## Release cadence
+
+Release Please opens a reviewed release PR whenever merged conventional commits
+require a new Pack version. Patch releases use `fix`, minor releases use `feat`,
+and breaking changes must be called out explicitly while Pack remains pre-1.0.
+Merging the release PR updates `package.json`, `CHANGELOG.md`, and
+`src/extension/version.ts`.
+
+The `Conventional PR Title` workflow enforces the same commit vocabulary on PR
+titles so squash merges continue to produce Release Please-visible history.
+
 ## Release gate
 
-Run the full local release verification before tagging:
+Run the full local release verification before tagging or store submission:
 
 ```sh
 pnpm install --frozen-lockfile
@@ -20,6 +31,7 @@ node scripts/verify-extension-package.mjs .output/chrome-mv3
 pnpm verify:clean
 pnpm exec wxt zip
 node scripts/verify-extension-zip.mjs
+node scripts/write-release-provenance.mjs
 git diff --check
 ```
 
@@ -36,7 +48,25 @@ The release gate covers:
 - clean worktree enforcement before release ZIP creation;
 - store ZIP creation;
 - exact-ZIP extraction, package-policy verification, SHA-256 output, checksum
-  file generation, and checksum log evidence in CI.
+  file generation, and checksum log evidence in CI;
+- release provenance JSON with source commit, version, manifest permissions,
+  homepage URL, ZIP asset name, and ZIP SHA-256.
+
+## Automated GitHub release flow
+
+The `Pack Release` workflow runs on pushes to `master` and through manual
+dispatch. It performs the release gate first, then runs Release Please.
+
+- When ordinary feature/fix commits are present, Release Please opens or updates
+  a release PR. No GitHub release or store submission is created from a feature
+  merge alone.
+- When the release PR is merged, Release Please creates the `vX.Y.Z` GitHub
+  release. The workflow marks Pack v0 releases as prereleases, uploads the
+  verified Chrome ZIP, checksum, and `pack-release-provenance.v1.json`, then
+  checks the uploaded asset digest and local/downloaded ZIP checksum against the
+  recorded SHA-256.
+- Generated `.output` files stay out of source control. The GitHub release
+  assets are the public binary distribution and changelog artifact.
 
 ## PR Review Closure Before Tagging
 
@@ -84,3 +114,28 @@ Use WXT's generated Chrome ZIP from `.output/` as the store artifact only after
 package verifier against the extraction, and prints the checksum. Publish the
 source tag, release ZIP artifact, ZIP checksum, and this release runbook together
 so reviewers can reproduce the submitted build.
+
+## Chrome Web Store submission
+
+The official V0 listing is:
+
+https://chromewebstore.google.com/detail/complyeaze-pack-gst-gstr/nfnbhekccajjfgkppolomflaeledoccb
+
+The release workflow has a protected `chrome-web-store` environment job. Keep
+that environment restricted to maintainers and require approval while Pack is
+pre-1.0. The job downloads the exact GitHub release ZIP instead of rebuilding it,
+then runs `scripts/publish-chrome-web-store.mjs`.
+
+Required GitHub Environment configuration:
+
+- Variable: `CWS_PUBLISHER_ID`.
+- Secret option A: `CWS_SERVICE_ACCOUNT_JSON`.
+- Secret option B: `CWS_CLIENT_ID`, `CWS_CLIENT_SECRET`, and
+  `CWS_REFRESH_TOKEN`.
+
+Use `Chrome Web Store Submit` with `dry_run=true` to validate an existing
+release package without uploading. The workflow verifies the downloaded release
+ZIP, checksum, provenance file, and GitHub asset digest before the publish
+script runs. Do not move listing/support/homepage URLs in the Chrome dashboard
+without updating `src/extension/manifest-policy.ts`, this runbook, and the
+public Pack site.
