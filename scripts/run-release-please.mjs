@@ -27,10 +27,9 @@ export async function runReleasePlease(env = process.env) {
     token,
     apiUrl: env.GITHUB_API_URL || DEFAULT_GITHUB_API_URL,
     graphqlUrl: normalizeGraphqlUrl(env.GITHUB_GRAPHQL_URL || DEFAULT_GITHUB_GRAPHQL_URL),
-    defaultBranch: env.RELEASE_PLEASE_TARGET_BRANCH || env.GITHUB_REF_NAME,
+    defaultBranch: env.RELEASE_PLEASE_TARGET_BRANCH,
   });
-  const targetBranch =
-    env.RELEASE_PLEASE_TARGET_BRANCH || env.GITHUB_REF_NAME || github.repository.defaultBranch;
+  const targetBranch = resolveReleaseTargetBranch(env, github.repository.defaultBranch);
   const configFile = env.RELEASE_PLEASE_CONFIG_FILE || DEFAULT_CONFIG_FILE;
   const manifestFile = env.RELEASE_PLEASE_MANIFEST_FILE || DEFAULT_MANIFEST_FILE;
 
@@ -96,6 +95,10 @@ export function serializeGitHubOutput(outputs) {
       .map(([key, value]) => serializeGitHubOutputEntry(key, value))
       .join("\n") + "\n"
   );
+}
+
+export function resolveReleaseTargetBranch(env, repositoryDefaultBranch) {
+  return env.RELEASE_PLEASE_TARGET_BRANCH || repositoryDefaultBranch;
 }
 
 function normalizeGraphqlUrl(url) {

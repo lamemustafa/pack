@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { buildReleaseOutputs, serializeGitHubOutput } from "../../scripts/run-release-please.mjs";
+import {
+  buildReleaseOutputs,
+  resolveReleaseTargetBranch,
+  serializeGitHubOutput,
+} from "../../scripts/run-release-please.mjs";
 
 describe("Release Please workflow wrapper", () => {
   it("emits root release outputs compatible with release-please-action", () => {
@@ -47,5 +51,17 @@ describe("Release Please workflow wrapper", () => {
     expect(serializeGitHubOutput({ body: "line one\nline two", tag_name: "v0.1.1" })).toContain(
       "body<<",
     );
+  });
+
+  it("uses the repository default branch unless a release target branch is explicit", () => {
+    expect(resolveReleaseTargetBranch({ GITHUB_REF_NAME: "feature/recovery" }, "master")).toBe(
+      "master",
+    );
+    expect(
+      resolveReleaseTargetBranch(
+        { GITHUB_REF_NAME: "feature/recovery", RELEASE_PLEASE_TARGET_BRANCH: "1.x" },
+        "master",
+      ),
+    ).toBe("1.x");
   });
 });
