@@ -68,7 +68,7 @@
     "jsdom": "^29.0.0",
     "prettier": "^3.5.3",
     "release-please": "17.10.1",
-    "typescript": "^5.8.3",
+    "typescript": "^6.0.3",
     "typescript-eslint": "^8.35.0",
     "vitest": "^4.1.9",
     "wxt": "^0.20.26"
