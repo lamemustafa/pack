@@ -13,6 +13,16 @@ All notable changes to ComplyEaze Pack are documented here.
 - Updated public source metadata so the extension homepage points to
   `https://pack.complyeaze.com/gst`.
 
+## [0.2.1](https://github.com/lamemustafa/pack/compare/v0.2.0...v0.2.1) (2026-07-01)
+
+
+### Maintenance
+
+* **deps-dev:** bump eslint-plugin-react-hooks to 7.1.1 ([ad7c797](https://github.com/lamemustafa/pack/commit/ad7c79709fdbc20d79e1e102ba9749e926972a1b))
+* **deps-dev:** bump globals to 17.7.0 ([9a6e179](https://github.com/lamemustafa/pack/commit/9a6e1795050a101ba2d968853220e70b88ba8bff))
+* **deps-dev:** bump typescript from 5.9.3 to 6.0.3 ([13585df](https://github.com/lamemustafa/pack/commit/13585dfc3c0363887a41203c91fceecfcd5c59bc))
+* **deps-dev:** bump wxt from 0.20.26 to 0.20.27 ([e8e02c5](https://github.com/lamemustafa/pack/commit/e8e02c591546bfa9494637b59413522a169265a8))
+
 ## [0.2.0](https://github.com/lamemustafa/pack/compare/v0.1.0...v0.2.0) (2026-07-01)
 
 
