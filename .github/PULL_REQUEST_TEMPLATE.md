@@ -48,7 +48,7 @@ Examples:
 ## Chrome Web Store Impact
 
 - [ ] This PR does not expand beyond the existing Chrome Web Store V0 listing unless every gate in `docs/PUBLICATION_READINESS.md` is checked.
-- [ ] Full fiscal year store/public claims match recorded release evidence and do not imply restart-safe durability unless that gate is checked.
+- [ ] Full fiscal year remains source-build alpha and is not part of the Chrome Web Store V0 listing.
 - [ ] Store copy, README status, Privacy QA, and reviewer instructions were reviewed if user-facing behavior changed.
 - [ ] CI ZIP creation, provenance, and protected publishing are treated as release evidence, not manual store-submission sign-off.
 - [ ] PR title uses Conventional Commits so Release Please can bump Pack after merge.

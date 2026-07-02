@@ -12,10 +12,11 @@ stable-release claims.
   `https://chromewebstore.google.com/detail/complyeaze-pack-gst-gstr/nfnbhekccajjfgkppolomflaeledoccb`.
 - V0 purpose: download filed GSTR-3B PDFs locally from the user's active,
   manually authenticated GST Portal session.
-- Full fiscal year download exists in V0 as a local per-period ledger that runs
-  eligible GSTR-3B periods through the single-period path after user initiation.
-  Broad durable claims still require exact-ZIP clean-profile, real-browser
-  restart/resume, reconciliation, and privacy-review evidence for the release.
+- Full fiscal year download exists as a source-build alpha local per-period
+  ledger that runs eligible GSTR-3B periods through the single-period path after
+  user initiation. Store-facing V0 must not advertise it until exact-ZIP
+  clean-profile, real-browser restart/resume, reconciliation, and privacy-review
+  evidence are recorded for the release.
 - V0 does not collect GST Portal credentials, OTPs, CAPTCHA responses, cookies,
   or session tokens, and does not store, log, or upload GST document contents.
   The direct-download compatibility path is URL-only: it reviews GST endpoint
@@ -167,9 +168,10 @@ or the Government of India.
 
 ## Not Yet Stable Or Broad-Claim Ready Until
 
-The V0 listing exists, and the current full-year workflow can run automatic
-local downloads after user initiation. Pack must not claim stable Chrome Web
-Store maturity, durable restart-safe full-year support, legal approval, live
+The V0 listing exists, and the source-build alpha full-year workflow has
+maintainer evidence for automatic local downloads after user initiation. Pack
+must not claim stable Chrome Web Store maturity, store-facing full-year
+availability, durable restart-safe full-year support, legal approval, live
 manifest/index/exception output, or broad GST coverage until legal review, live
 public policy URL confirmation, exact-ZIP manual QA, privacy declarations, live
 per-target result/manifest wiring, and store assets/sign-offs are recorded for

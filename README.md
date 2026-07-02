@@ -30,10 +30,10 @@ alpha. Future store updates require the release gates in
 Release PR titles use Conventional Commits so Release Please can decide the
 next Pack version from each merge.
 
-Full fiscal year download is available in the V0 extension as a local
+Full fiscal year download is available in source-build alpha as a local
 per-period ledger. It expands the selected financial year into eligible
 GSTR-3B periods and runs them one at a time through the single-period path.
-Broad durable claims remain gated until exact-ZIP clean-profile evidence,
+It remains outside store-facing claims until exact-ZIP clean-profile evidence,
 restart/resume evidence, and privacy-review evidence are recorded for the
 release.
 
