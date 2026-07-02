@@ -28,6 +28,7 @@ export async function publishChromeWebStorePackage({
   const zipPath = args.zip ? path.resolve(cwd, args.zip) : await findSingleChromeZip(cwd);
   const extensionId = args.extensionId ?? env.CWS_EXTENSION_ID ?? DEFAULT_EXTENSION_ID;
   const publisherId = args.publisherId ?? env.CWS_PUBLISHER_ID;
+  const releasePackage = await readReleasePackage({ args, cwd, env, zipPath });
   const dryRun = parseOptionalBoolean(args.dryRun ?? env.CWS_DRY_RUN, "dryRun") ?? false;
   const blockOnWarnings =
     parseOptionalBoolean(args.blockOnWarnings ?? env.CWS_BLOCK_ON_WARNINGS, "blockOnWarnings") ??
@@ -46,8 +47,8 @@ export async function publishChromeWebStorePackage({
 
   if (!publisherId) throw new Error("Missing CWS_PUBLISHER_ID or --publisher-id.");
 
-  const packageJson = JSON.parse(await readFile(path.join(cwd, "package.json"), "utf8"));
   const zipSha256 = await sha256File(zipPath);
+  assertReleasePackageMatchesZip(releasePackage, zipPath, zipSha256);
   const name = `publishers/${publisherId}/items/${extensionId}`;
   const publishBody = buildPublishRequest({ blockOnWarnings, deployPercentage });
 
@@ -56,7 +57,8 @@ export async function publishChromeWebStorePackage({
       dryRun: true,
       extensionId,
       publisherId,
-      version: packageJson.version,
+      version: releasePackage.version,
+      sourceTag: releasePackage.sourceTag,
       zip: path.relative(cwd, zipPath),
       zipSha256,
       publishRequest: publishBody,
@@ -72,7 +74,9 @@ export async function publishChromeWebStorePackage({
     accessToken,
     fetchImpl,
   );
-  write(`Uploaded Chrome Web Store package for ${extensionId} at version ${packageJson.version}.`);
+  write(
+    `Uploaded Chrome Web Store package for ${extensionId} at version ${releasePackage.version}.`,
+  );
   if (uploadResult.uploadState) write(`Upload state: ${uploadResult.uploadState}`);
 
   const uploadStatus = await waitForUploadCompletion({
@@ -85,7 +89,7 @@ export async function publishChromeWebStorePackage({
     uploadResult,
     write,
   });
-  assertUploadedVersion(uploadStatus, packageJson.version);
+  assertUploadedVersion(uploadStatus, releasePackage.version);
   const publishResult = await postJson(
     `https://chromewebstore.googleapis.com/v2/${name}:publish`,
     publishBody,
@@ -94,7 +98,7 @@ export async function publishChromeWebStorePackage({
   );
   const result = {
     extensionId,
-    version: packageJson.version,
+    version: releasePackage.version,
     zipSha256,
     uploadState: uploadStatus.uploadState,
     publishState:
@@ -107,6 +111,68 @@ export async function publishChromeWebStorePackage({
   };
   writeJson(write, result);
   return result;
+}
+
+async function readReleasePackage({ args, cwd, env, zipPath }) {
+  const provenanceFile = args.provenance ?? env.CWS_RELEASE_PROVENANCE;
+
+  if (!provenanceFile) {
+    const packageJson = JSON.parse(await readFile(path.join(cwd, "package.json"), "utf8"));
+    return {
+      sourceTag: `v${packageJson.version}`,
+      version: packageJson.version,
+      zipAssetName: path.basename(zipPath),
+      zipSha256: null,
+    };
+  }
+
+  const provenancePath = path.resolve(cwd, provenanceFile);
+  const provenance = parseRequiredJsonResponse(
+    await readFile(provenancePath, "utf8"),
+    `Release provenance ${path.relative(cwd, provenancePath)}`,
+  );
+  const version = provenance.product?.version;
+  const zipAssetName = provenance.package?.zipAssetName;
+  const zipSha256 = provenance.package?.zipSha256;
+
+  if (!version) {
+    throw new Error(
+      `Release provenance ${path.relative(cwd, provenancePath)} is missing product.version.`,
+    );
+  }
+  if (!zipAssetName) {
+    throw new Error(
+      `Release provenance ${path.relative(cwd, provenancePath)} is missing package.zipAssetName.`,
+    );
+  }
+  if (!zipSha256) {
+    throw new Error(
+      `Release provenance ${path.relative(cwd, provenancePath)} is missing package.zipSha256.`,
+    );
+  }
+
+  return {
+    sourceTag: provenance.source?.tag ?? null,
+    version,
+    zipAssetName,
+    zipSha256,
+  };
+}
+
+function assertReleasePackageMatchesZip(releasePackage, zipPath, zipSha256) {
+  if (releasePackage.zipAssetName && path.basename(zipPath) !== releasePackage.zipAssetName) {
+    throw new Error(
+      `Release provenance ZIP asset ${releasePackage.zipAssetName} does not match selected ZIP ${path.basename(
+        zipPath,
+      )}.`,
+    );
+  }
+
+  if (releasePackage.zipSha256 && zipSha256 !== releasePackage.zipSha256) {
+    throw new Error(
+      `Release provenance ZIP SHA-256 ${releasePackage.zipSha256} does not match selected ZIP ${zipSha256}.`,
+    );
+  }
 }
 
 export function buildPublishRequest({ blockOnWarnings = true, deployPercentage } = {}) {
@@ -290,10 +356,19 @@ async function responseJsonOrThrow(response, label) {
   const text = await response.text();
   if (!response.ok) {
     const data = parseOptionalJsonResponse(text);
-    const message = data.error_description ?? data.error?.message ?? text;
+    const message = formatApiError(data, text);
     throw new Error(`${label}: ${response.status} ${message}`);
   }
   return parseRequiredJsonResponse(text, label);
+}
+
+function formatApiError(data, text) {
+  if (typeof data.error === "string" && data.error_description) {
+    return `${data.error}: ${data.error_description}`;
+  }
+  if (typeof data.error === "string") return data.error;
+  if (data.error?.message) return data.error.message;
+  return text;
 }
 
 function parseArgs(values) {

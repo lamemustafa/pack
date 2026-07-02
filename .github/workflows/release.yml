@@ -165,7 +165,10 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
 
       - name: Submit to Chrome Web Store
-        run: node scripts/publish-chrome-web-store.mjs --zip .release/*chrome.zip
+        run: >-
+          node scripts/publish-chrome-web-store.mjs
+          --zip .release/*chrome.zip
+          --provenance .release/pack-release-provenance.v1.json
         env:
           CWS_EXTENSION_ID: nfnbhekccajjfgkppolomflaeledoccb
           CWS_PUBLISHER_ID: ${{ vars.CWS_PUBLISHER_ID }}

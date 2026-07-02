@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -49,6 +50,77 @@ describe("Chrome Web Store publisher", () => {
         deployInfos: [{ deployPercentage: 10 }],
       },
     });
+  });
+
+  it("uses release provenance version during dry-run instead of checkout package.json", async () => {
+    const { cwd, provenancePath, zipPath } = await writePackageFixture({
+      packageVersion: "0.2.1",
+      provenanceVersion: "0.2.0",
+    });
+    const output: string[] = [];
+    const fetchImpl = vi.fn();
+
+    const plan = await publishChromeWebStorePackage({
+      argv: ["--zip", zipPath, "--provenance", provenancePath, "--dry-run", "true"],
+      cwd,
+      env: {
+        CWS_PUBLISHER_ID: "publisher-1",
+      },
+      fetchImpl,
+      write: (line) => output.push(line),
+    });
+
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(plan).toMatchObject({
+      sourceTag: "v0.2.0",
+      version: "0.2.0",
+    });
+    expect(JSON.parse(output[0] ?? "{}")).toMatchObject({
+      sourceTag: "v0.2.0",
+      version: "0.2.0",
+    });
+  });
+
+  it("rejects release provenance that points at a different ZIP asset", async () => {
+    const { cwd, provenancePath, zipPath } = await writePackageFixture({
+      provenanceVersion: "0.2.0",
+      provenanceZipName: "other-chrome.zip",
+    });
+
+    await expect(
+      publishChromeWebStorePackage({
+        argv: ["--zip", zipPath, "--provenance", provenancePath, "--dry-run", "true"],
+        cwd,
+        env: {
+          CWS_PUBLISHER_ID: "publisher-1",
+        },
+        fetchImpl: vi.fn(),
+        write: vi.fn(),
+      }),
+    ).rejects.toThrow(
+      "Release provenance ZIP asset other-chrome.zip does not match selected ZIP complyeazepack-chrome.zip.",
+    );
+  });
+
+  it("rejects release provenance when the selected ZIP checksum differs", async () => {
+    const { cwd, provenancePath, zipPath } = await writePackageFixture({
+      provenanceSha256: "a".repeat(64),
+      provenanceVersion: "0.2.0",
+    });
+
+    await expect(
+      publishChromeWebStorePackage({
+        argv: ["--zip", zipPath, "--provenance", provenancePath, "--dry-run", "true"],
+        cwd,
+        env: {
+          CWS_PUBLISHER_ID: "publisher-1",
+        },
+        fetchImpl: vi.fn(),
+        write: vi.fn(),
+      }),
+    ).rejects.toThrow(
+      "Release provenance ZIP SHA-256 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa does not match selected ZIP",
+    );
   });
 
   it("polls async uploads before publishing and preserves warning output", async () => {
@@ -206,16 +278,81 @@ describe("Chrome Web Store publisher", () => {
       }),
     ).rejects.toThrow("Chrome Web Store upload failed: 500 store unavailable");
   });
+
+  it("includes OAuth error codes in token request failures", async () => {
+    const { cwd, zipPath } = await writePackageFixture();
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url === "https://oauth2.googleapis.com/token") {
+        return {
+          ok: false,
+          status: 400,
+          text: async () =>
+            JSON.stringify({
+              error: "invalid_grant",
+              error_description: "Token has been expired or revoked.",
+            }),
+        } as Response;
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+
+    await expect(
+      publishChromeWebStorePackage({
+        argv: ["--zip", zipPath],
+        cwd,
+        env: {
+          CWS_CLIENT_ID: "client-1",
+          CWS_CLIENT_SECRET: "secret-1",
+          CWS_PUBLISHER_ID: "publisher-1",
+          CWS_REFRESH_TOKEN: "refresh-1",
+        },
+        fetchImpl,
+        write: vi.fn(),
+      }),
+    ).rejects.toThrow(
+      "OAuth token request failed: 400 invalid_grant: Token has been expired or revoked.",
+    );
+  });
 });
 
-async function writePackageFixture() {
+type PackageFixtureOptions = {
+  packageVersion?: string;
+  provenanceSha256?: string;
+  provenanceVersion?: string;
+  provenanceZipName?: string;
+};
+
+async function writePackageFixture({
+  packageVersion = "0.2.0",
+  provenanceSha256,
+  provenanceVersion,
+  provenanceZipName,
+}: PackageFixtureOptions = {}) {
   const cwd = await mkdtemp(path.join(tmpdir(), "pack-cws-test-"));
   const zipPath = path.join(cwd, "complyeazepack-chrome.zip");
+  const zipBody = "synthetic zip";
+  const zipSha256 = createHash("sha256").update(zipBody).digest("hex");
+  const provenancePath = path.join(cwd, "pack-release-provenance.v1.json");
 
-  await writeFile(path.join(cwd, "package.json"), JSON.stringify({ version: "0.2.0" }));
-  await writeFile(zipPath, "synthetic zip");
+  await writeFile(path.join(cwd, "package.json"), JSON.stringify({ version: packageVersion }));
+  await writeFile(zipPath, zipBody);
 
-  return { cwd, zipPath };
+  if (provenanceVersion) {
+    await writeFile(
+      provenancePath,
+      JSON.stringify({
+        product: { version: provenanceVersion },
+        source: { tag: `v${provenanceVersion}` },
+        package: {
+          zipAssetName: provenanceZipName ?? path.basename(zipPath),
+          zipSha256: provenanceSha256 ?? zipSha256,
+        },
+      }),
+    );
+  }
+
+  return { cwd, provenancePath, zipPath };
 }
 
 function jsonResponse(body: unknown) {

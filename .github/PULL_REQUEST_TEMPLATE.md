@@ -48,7 +48,7 @@ Examples:
 ## Chrome Web Store Impact
 
 - [ ] This PR does not expand beyond the existing Chrome Web Store V0 listing unless every gate in `docs/PUBLICATION_READINESS.md` is checked.
-- [ ] Full fiscal year remains source-build alpha and is not part of the Chrome Web Store V0 listing.
+- [ ] Full fiscal year store/public claims match recorded release evidence and do not imply restart-safe durability unless that gate is checked.
 - [ ] Store copy, README status, Privacy QA, and reviewer instructions were reviewed if user-facing behavior changed.
 - [ ] CI ZIP creation, provenance, and protected publishing are treated as release evidence, not manual store-submission sign-off.
 - [ ] PR title uses Conventional Commits so Release Please can bump Pack after merge.
@@ -68,7 +68,7 @@ Examples:
 - [ ] `node scripts/verify-extension-zip.mjs`
 - [ ] `node scripts/write-release-provenance.mjs`
 - [ ] `node scripts/verify-github-release-assets.mjs --tag <tag> --zip <zip> --checksum <sha256> --provenance <json>` when release assets exist
-- [ ] `node scripts/publish-chrome-web-store.mjs --zip .output/<zip> --publisher-id <id> --dry-run true`
+- [ ] `node scripts/publish-chrome-web-store.mjs --zip .output/<zip> --provenance .output/pack-release-provenance.v1.json --publisher-id <id> --dry-run true`
 - [ ] `git diff --check`
 - [ ] `pnpm review:gate -- --strict-head-review --required-review-author chatgpt-codex-connector --wait-head-review-ms 180000` before merge/readiness claim, or reason not run:
 
