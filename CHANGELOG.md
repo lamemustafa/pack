@@ -13,6 +13,14 @@ All notable changes to ComplyEaze Pack are documented here.
 - Updated public source metadata so the extension homepage points to
   `https://pack.complyeaze.com/gst`.
 
+## [0.2.2](https://github.com/lamemustafa/pack/compare/v0.2.1...v0.2.2) (2026-07-02)
+
+
+### Fixes
+
+* **release:** harden Chrome Web Store submission ([#39](https://github.com/lamemustafa/pack/issues/39)) ([85ee506](https://github.com/lamemustafa/pack/commit/85ee506b5b939738ec3bafe0348d78b3165ef57e))
+* **release:** require bound CWS provenance ([#41](https://github.com/lamemustafa/pack/issues/41)) ([ec8f0f1](https://github.com/lamemustafa/pack/commit/ec8f0f1d809edacde6152f598125587c01753fda))
+
 ## [0.2.1](https://github.com/lamemustafa/pack/compare/v0.2.0...v0.2.1) (2026-07-01)
 
 
