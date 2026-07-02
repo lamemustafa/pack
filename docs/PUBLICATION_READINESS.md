@@ -117,10 +117,8 @@ stable-release claims.
       evidence without repeating completed full-year targets.
       Active-profile Brave testing on 2026-07-01 cleared the immediate native
       Save dialog blocker for one single-month run and a two-period local flow
-      run. Maintainer full-year automatic download testing on 2026-07-02
-      confirmed the current workflow no longer needs manual save-dialog
-      handling, but this item remains open until exact-ZIP clean-profile
-      Chrome/Brave evidence is recorded.
+      run. No exact-ZIP clean-profile Chrome/Brave full-year evidence is
+      recorded yet, so full-year and browser-profile acceptance remains open.
 - [ ] Network/storage audit confirms no unexpected destinations or sensitive
       persistence.
 - [ ] SBOM, dependency vulnerability review, license scan, and secret scan are

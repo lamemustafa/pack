@@ -133,6 +133,8 @@ async function readReleasePackage({ args, cwd, env, zipPath }) {
     `Release provenance ${path.relative(cwd, provenancePath)}`,
   );
   const version = provenance.product?.version;
+  const sourceTag = provenance.source?.tag;
+  const extensionId = provenance.chromeWebStore?.extensionId;
   const zipAssetName = provenance.package?.zipAssetName;
   const zipSha256 = provenance.package?.zipSha256;
 
@@ -141,9 +143,32 @@ async function readReleasePackage({ args, cwd, env, zipPath }) {
       `Release provenance ${path.relative(cwd, provenancePath)} is missing product.version.`,
     );
   }
+  if (!sourceTag) {
+    throw new Error(
+      `Release provenance ${path.relative(cwd, provenancePath)} is missing source.tag.`,
+    );
+  }
+  if (sourceTag !== `v${version}`) {
+    throw new Error(
+      `Release provenance source tag ${sourceTag} does not match product.version ${version}.`,
+    );
+  }
+  if (!extensionId) {
+    throw new Error(
+      `Release provenance ${path.relative(
+        cwd,
+        provenancePath,
+      )} is missing chromeWebStore.extensionId.`,
+    );
+  }
   if (!zipAssetName) {
     throw new Error(
       `Release provenance ${path.relative(cwd, provenancePath)} is missing package.zipAssetName.`,
+    );
+  }
+  if (!zipAssetName.includes(`-${version}-`)) {
+    throw new Error(
+      `Release provenance ZIP asset ${zipAssetName} does not include product.version ${version}.`,
     );
   }
   if (!zipSha256) {
@@ -153,8 +178,8 @@ async function readReleasePackage({ args, cwd, env, zipPath }) {
   }
 
   return {
-    extensionId: provenance.chromeWebStore?.extensionId ?? null,
-    sourceTag: provenance.source?.tag ?? null,
+    extensionId,
+    sourceTag,
     version,
     zipAssetName,
     zipSha256,
