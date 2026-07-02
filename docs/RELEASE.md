@@ -139,6 +139,43 @@ Required GitHub Environment configuration:
 Use `Chrome Web Store Submit` with `dry_run=true` to validate an existing
 release package without uploading. The workflow verifies the downloaded release
 ZIP, checksum, provenance file, and GitHub asset digest before the publish
-script runs. Do not move listing/support/homepage URLs in the Chrome dashboard
-without updating `src/extension/manifest-policy.ts`, this runbook, and the
-public Pack site.
+script runs. The publish script must receive the matching
+`pack-release-provenance.v1.json` file so dry-runs and uploads validate the
+downloaded release version instead of the workflow checkout's `package.json`
+version.
+
+For local dry-runs against a generated release package:
+
+```sh
+node scripts/publish-chrome-web-store.mjs \
+  --zip .output/complyeazepack-<version>-chrome.zip \
+  --provenance .output/pack-release-provenance.v1.json \
+  --publisher-id <publisher-id> \
+  --dry-run true
+```
+
+Do not move listing/support/homepage URLs in the Chrome dashboard without
+updating `src/extension/manifest-policy.ts`, this runbook, and the public Pack
+site.
+
+## Google OAuth credential maintenance
+
+The Chrome Web Store API OAuth app must stay production-ready if it is used for
+repeatable release automation. Configure Google Auth Platform branding with full
+URLs, not bare domains. This OAuth app is separate from the public Chrome Web
+Store item homepage:
+
+- Application home page: `https://pack.complyeaze.com/release-automation`
+- Application privacy policy link: `https://pack.complyeaze.com/privacy`
+- Application Terms of Service link: `https://pack.complyeaze.com/terms`
+- Authorized domain: `complyeaze.com`
+
+Keep `extensions@complyeaze.com` or another monitored release account as the
+OAuth user support and developer contact. Submit and publish branding before
+requesting data-access verification for the Chrome Web Store API scope.
+
+If OAuth is left in external testing mode, refresh tokens for non-basic scopes
+expire after roughly seven days. Move the app to production and complete the
+required branding/data-access verification before relying on the token for
+future releases, or replace the GitHub environment `CWS_REFRESH_TOKEN` before
+the next submission.

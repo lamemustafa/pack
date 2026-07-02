@@ -33,8 +33,9 @@ next Pack version from each merge.
 Full fiscal year download is available in source-build alpha as a local
 per-period ledger. It expands the selected financial year into eligible
 GSTR-3B periods and runs them one at a time through the single-period path.
-It remains outside store-facing claims until real-browser restart, resume, and
-privacy-review gates are complete.
+It remains outside store-facing claims until exact-ZIP clean-profile evidence,
+restart/resume evidence, and privacy-review evidence are recorded for the
+release.
 
 ## Install
 

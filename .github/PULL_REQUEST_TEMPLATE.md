@@ -68,7 +68,7 @@ Examples:
 - [ ] `node scripts/verify-extension-zip.mjs`
 - [ ] `node scripts/write-release-provenance.mjs`
 - [ ] `node scripts/verify-github-release-assets.mjs --tag <tag> --zip <zip> --checksum <sha256> --provenance <json>` when release assets exist
-- [ ] `node scripts/publish-chrome-web-store.mjs --zip .output/<zip> --publisher-id <id> --dry-run true`
+- [ ] `node scripts/publish-chrome-web-store.mjs --zip .output/<zip> --provenance .output/pack-release-provenance.v1.json --publisher-id <id> --dry-run true`
 - [ ] `git diff --check`
 - [ ] `pnpm review:gate -- --strict-head-review --required-review-author chatgpt-codex-connector --wait-head-review-ms 180000` before merge/readiness claim, or reason not run:
 

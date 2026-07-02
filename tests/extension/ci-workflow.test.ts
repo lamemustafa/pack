@@ -125,9 +125,9 @@ describe("Pack CI workflow", () => {
 
     expect(releaseWorkflow).toContain("vars.CWS_SUBMIT_ENABLED == 'true'");
     expect(releaseWorkflow).toContain("environment: chrome-web-store");
-    expect(releaseWorkflow).toContain(
-      "node scripts/publish-chrome-web-store.mjs --zip .release/*chrome.zip",
-    );
+    expect(releaseWorkflow).toContain("node scripts/publish-chrome-web-store.mjs");
+    expect(releaseWorkflow).toContain("--zip .release/*chrome.zip");
+    expect(releaseWorkflow).toContain("--provenance .release/pack-release-provenance.v1.json");
     expect(releaseRunbook).toContain("CWS_SUBMIT_ENABLED");
     expect(releaseRunbook).toContain("CWS_SUBMIT_ENABLED=true");
   });

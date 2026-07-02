@@ -59,6 +59,7 @@ jobs:
         run: >-
           node scripts/publish-chrome-web-store.mjs
           --zip .release/*chrome.zip
+          --provenance .release/pack-release-provenance.v1.json
           --dry-run "${{ inputs.dry_run }}"
         env:
           CWS_EXTENSION_ID: nfnbhekccajjfgkppolomflaeledoccb
