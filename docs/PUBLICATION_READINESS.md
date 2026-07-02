@@ -12,9 +12,10 @@ stable-release claims.
   `https://chromewebstore.google.com/detail/complyeaze-pack-gst-gstr/nfnbhekccajjfgkppolomflaeledoccb`.
 - V0 purpose: download filed GSTR-3B PDFs locally from the user's active,
   manually authenticated GST Portal session.
-- Full fiscal year download exists as a source-build alpha local ledger, but
-  store-facing V0 must not advertise it until durable resume, real-browser
-  restart, and privacy-review tests are complete.
+- Full fiscal year download exists in V0 as a local per-period ledger that runs
+  eligible GSTR-3B periods through the single-period path after user initiation.
+  Broad durable claims still require exact-ZIP clean-profile, real-browser
+  restart/resume, reconciliation, and privacy-review evidence for the release.
 - V0 does not collect GST Portal credentials, OTPs, CAPTCHA responses, cookies,
   or session tokens, and does not store, log, or upload GST document contents.
   The direct-download compatibility path is URL-only: it reviews GST endpoint
@@ -115,8 +116,10 @@ stable-release claims.
       evidence without repeating completed full-year targets.
       Active-profile Brave testing on 2026-07-01 cleared the immediate native
       Save dialog blocker for one single-month run and a two-period local flow
-      run, but this item remains open until exact-ZIP clean-profile evidence is
-      recorded.
+      run. Maintainer full-year automatic download testing on 2026-07-02
+      confirmed the current workflow no longer needs manual save-dialog
+      handling, but this item remains open until exact-ZIP clean-profile
+      Chrome/Brave evidence is recorded.
 - [ ] Network/storage audit confirms no unexpected destinations or sensitive
       persistence.
 - [ ] SBOM, dependency vulnerability review, license scan, and secret scan are
@@ -128,8 +131,10 @@ stable-release claims.
 - [ ] Product, engineering, security, privacy/legal, open-source, and release
       manager sign-offs are recorded.
 - [x] Initial Chrome Web Store V0 listing published.
-- [ ] Automated Chrome Web Store release update submitted from the protected
-      release workflow.
+- [x] Protected Chrome Web Store release update submitted through workflow
+      dispatch. The `v0.2.1` package was uploaded through GitHub Actions run
+      `28542410006` with Chrome Web Store upload state `SUCCEEDED`, publish
+      state `PENDING_REVIEW`, and no warnings.
 
 ## Suggested Store Copy
 
@@ -162,8 +167,10 @@ or the Government of India.
 
 ## Not Yet Stable Or Broad-Claim Ready Until
 
-The V0 listing exists, but Pack must not claim stable Chrome Web Store maturity,
-durable full-year support, legal approval, live manifest/index/exception output,
-or broad GST coverage until legal review, live public policy URL confirmation,
-exact-ZIP manual QA, privacy declarations, live per-target result/manifest
-wiring, and store assets/sign-offs are recorded for the exact release.
+The V0 listing exists, and the current full-year workflow can run automatic
+local downloads after user initiation. Pack must not claim stable Chrome Web
+Store maturity, durable restart-safe full-year support, legal approval, live
+manifest/index/exception output, or broad GST coverage until legal review, live
+public policy URL confirmation, exact-ZIP manual QA, privacy declarations, live
+per-target result/manifest wiring, and store assets/sign-offs are recorded for
+the exact release.
