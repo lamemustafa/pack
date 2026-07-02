@@ -48,6 +48,7 @@ export async function publishChromeWebStorePackage({
   if (!publisherId) throw new Error("Missing CWS_PUBLISHER_ID or --publisher-id.");
 
   const zipSha256 = await sha256File(zipPath);
+  assertReleasePackageMatchesTarget(releasePackage, extensionId);
   assertReleasePackageMatchesZip(releasePackage, zipPath, zipSha256);
   const name = `publishers/${publisherId}/items/${extensionId}`;
   const publishBody = buildPublishRequest({ blockOnWarnings, deployPercentage });
@@ -152,11 +153,20 @@ async function readReleasePackage({ args, cwd, env, zipPath }) {
   }
 
   return {
+    extensionId: provenance.chromeWebStore?.extensionId ?? null,
     sourceTag: provenance.source?.tag ?? null,
     version,
     zipAssetName,
     zipSha256,
   };
+}
+
+function assertReleasePackageMatchesTarget(releasePackage, extensionId) {
+  if (releasePackage.extensionId && extensionId !== releasePackage.extensionId) {
+    throw new Error(
+      `Release provenance Chrome Web Store extension ID ${releasePackage.extensionId} does not match selected extension ID ${extensionId}.`,
+    );
+  }
 }
 
 function assertReleasePackageMatchesZip(releasePackage, zipPath, zipSha256) {

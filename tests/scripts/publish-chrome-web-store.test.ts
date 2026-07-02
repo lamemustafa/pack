@@ -9,6 +9,8 @@ import {
   publishChromeWebStorePackage,
 } from "../../scripts/publish-chrome-web-store.mjs";
 
+const DEFAULT_EXTENSION_ID = "nfnbhekccajjfgkppolomflaeledoccb";
+
 describe("Chrome Web Store publisher", () => {
   it("sends rollout percentages through publish deployInfos", () => {
     expect(buildPublishRequest({ blockOnWarnings: true, deployPercentage: "25" })).toEqual({
@@ -120,6 +122,35 @@ describe("Chrome Web Store publisher", () => {
       }),
     ).rejects.toThrow(
       "Release provenance ZIP SHA-256 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa does not match selected ZIP",
+    );
+  });
+
+  it("rejects release provenance that points at a different extension item", async () => {
+    const { cwd, provenancePath, zipPath } = await writePackageFixture({
+      provenanceVersion: "0.2.0",
+    });
+
+    await expect(
+      publishChromeWebStorePackage({
+        argv: [
+          "--zip",
+          zipPath,
+          "--provenance",
+          provenancePath,
+          "--extension-id",
+          "other-extension-id",
+          "--dry-run",
+          "true",
+        ],
+        cwd,
+        env: {
+          CWS_PUBLISHER_ID: "publisher-1",
+        },
+        fetchImpl: vi.fn(),
+        write: vi.fn(),
+      }),
+    ).rejects.toThrow(
+      `Release provenance Chrome Web Store extension ID ${DEFAULT_EXTENSION_ID} does not match selected extension ID other-extension-id.`,
     );
   });
 
@@ -318,6 +349,7 @@ describe("Chrome Web Store publisher", () => {
 
 type PackageFixtureOptions = {
   packageVersion?: string;
+  provenanceExtensionId?: string;
   provenanceSha256?: string;
   provenanceVersion?: string;
   provenanceZipName?: string;
@@ -325,6 +357,7 @@ type PackageFixtureOptions = {
 
 async function writePackageFixture({
   packageVersion = "0.2.0",
+  provenanceExtensionId = DEFAULT_EXTENSION_ID,
   provenanceSha256,
   provenanceVersion,
   provenanceZipName,
@@ -344,6 +377,9 @@ async function writePackageFixture({
       JSON.stringify({
         product: { version: provenanceVersion },
         source: { tag: `v${provenanceVersion}` },
+        chromeWebStore: {
+          extensionId: provenanceExtensionId,
+        },
         package: {
           zipAssetName: provenanceZipName ?? path.basename(zipPath),
           zipSha256: provenanceSha256 ?? zipSha256,
