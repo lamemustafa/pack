@@ -187,6 +187,23 @@ closure: fixed with evidence, stale with evidence, accepted follow-up with a
 named blocker, or rejected with file/runtime evidence. Do not leave bot or
 subagent findings implicit.
 
+## Sanchika Consumption
+
+Pack is the third Sanchika consumer after ComplyEaze and Axal. Keep Pack
+local-first and browser-extension-scoped when applying Sanchika guidance:
+
+- Consume Sanchika through published packages, a reviewed local package link, or
+  copied design guidance. Do not import `../sanchika` source files by path.
+- Before Pack consumes `@sanchika/*` packages or copied Sanchika guidance, read
+  `sanchika/docs/adoption-pack.md` from the coordinated parent worktree and
+  record ComplyEaze and Axal completion evidence in the Pack PR.
+- Keep Sanchika and Pack branches, commits, generated artifacts, and PRs
+  separate unless the user explicitly asks for a coordinated cross-repo handoff.
+- Do not use Sanchika adoption work to add telemetry, upload behavior, backend
+  dependencies, or account assumptions to Pack.
+- Treat Tools at `tools.complyeaze.com` as the fourth Sanchika consumer after
+  Pack, not as part of the Pack extension repo.
+
 ## Branch, PR, And Review Workflow
 
 - Never work directly on `master` for launch, runtime, public-copy, release,
@@ -195,7 +212,7 @@ subagent findings implicit.
 - Use a task-owned `git worktree` for non-trivial Pack edits expected to be
   committed, and for each concurrent Pack PR lane. Keep the main checkout and
   other agents' worktrees read-only unless the user explicitly asks otherwise;
-  do not mix parent-app and Pack branches.
+  do not mix parent-app, Sanchika, Tools, and Pack branches or PRs.
 - Run `pnpm workflow:preflight` before non-trivial edits or before claiming PR
   readiness. It checks branch safety, stale Pack AGENTS/review guidance, and PR
   template checklist wiring.

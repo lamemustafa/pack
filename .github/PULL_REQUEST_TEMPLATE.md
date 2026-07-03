@@ -28,6 +28,15 @@ Examples:
 - [ ] I checked latest master Pack AGENTS guidance or recorded the stale-guidance warning.
 - [ ] PR body keeps the required Pack privacy/review/verification checklist visible.
 
+## Sanchika Adoption Gate
+
+- [ ] If this PR consumes `@sanchika/*` packages or copied Sanchika guidance, I
+      read `sanchika/docs/adoption-pack.md` in the coordinated parent worktree.
+- [ ] If this PR consumes Sanchika, it links ComplyEaze and Axal completion evidence
+      and records the Sanchika commit or copied guidance used.
+- [ ] This PR does not import `../sanchika`, `sanchika/packages/*/src`, or parent
+      source paths.
+
 ## Privacy And Data-Flow Impact
 
 - [ ] No new browser permissions.

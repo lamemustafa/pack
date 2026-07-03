@@ -101,6 +101,9 @@ function checkPrTemplate() {
     "opened from a Pack branch, not master",
     "latest master Pack AGENTS guidance",
     "required Pack privacy/review/verification checklist visible",
+    "Sanchika Adoption Gate",
+    "docs/adoption-pack.md",
+    "ComplyEaze and Axal completion evidence",
   ]) {
     if (!template.includes(required)) {
       issues.push(`PR template is missing required Pack workflow checklist text: ${required}`);
