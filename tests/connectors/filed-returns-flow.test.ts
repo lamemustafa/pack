@@ -2,7 +2,10 @@ import { JSDOM } from "jsdom";
 import { describe, expect, it, vi } from "vitest";
 import type { FiledReturnsDownloadScope } from "../../src/core/contracts";
 import { runFiledReturnsDownloadStep } from "../../src/connectors/gst/filed-returns-flow";
-import { triggerFiledGstr3bFiledPdfDownload } from "../../src/connectors/gst/filed-returns-download";
+import {
+  triggerFiledGstr3bFiledPdfDownload,
+  triggerFiledReturnFiledPdfDownload,
+} from "../../src/connectors/gst/filed-returns-download";
 import { navigateToFiledReturnsPage } from "../../src/connectors/gst/filed-returns-navigator";
 import {
   hasSettledFiledReturnsSearchForScope,
@@ -665,6 +668,50 @@ describe("filed returns guided flow", () => {
     expect(searchClicked).toBe(1);
   });
 
+  it("selects filed GSTR-1 filters without using the GSTR-3B API handoff", async () => {
+    const scope: FiledReturnsDownloadScope = {
+      financialYear: "2025-26",
+      period: "March",
+      returnType: "GSTR-1",
+    };
+    const documentRef = createGstDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <label>Financial Year</label>
+        <select><option>2024-25</option><option>2025-26</option></select>
+        <label>Return Filing Period</label>
+        <select><option>February</option><option>March</option></select>
+        <label>Return Type</label>
+        <select><option>GSTR-1</option><option>GSTR-3B</option></select>
+        <button>Search</button>
+      </main>
+    `);
+    stubFiledReturnsApi(documentRef, {
+      roleStatus: { userPref: "M" },
+      rows: [{ rtntype: "GSTR1", fy: "2025-26", taxp: "March" }],
+    });
+    let searchClicked = 0;
+    documentRef.querySelector("button")?.addEventListener("click", () => {
+      searchClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, scope);
+
+    expect(result.state).toBe("clicked");
+    expect(result.scopeId).toBe("gst-filed-returns-gstr1-pdf-private-v0");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining([
+        "filed-return-filters-selected",
+        "financial-year-selected",
+        "period-selected",
+        "return-type-selected",
+        "search-clicked",
+      ]),
+    );
+    expect(searchClicked).toBe(1);
+    expect(documentRef.defaultView?.localStorage.getItem("rtn_prd")).toBeNull();
+  });
+
   it("selects native GST form controls by field label and waits for dependent return types", async () => {
     const documentRef = createDocument(`
       <main>
@@ -789,6 +836,74 @@ describe("filed returns guided flow", () => {
       expect.arrayContaining([
         "financial-year-selected",
         "period-selected",
+        "return-type-selected",
+        "search-clicked",
+      ]),
+    );
+    expect(searchClicked).toBe(1);
+  });
+
+  it("selects monthly frequency and month before searching for a GSTR-1 row", async () => {
+    const mayGstr1Scope: FiledReturnsDownloadScope = {
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-1",
+    };
+    const documentRef = createDocument(`
+      <form name="efiledReturns">
+        <h1>View Filed Returns</h1>
+        <div>
+          <label>Financial year</label>
+          <select id="finYr" title="Select Financial Year">
+            <option>Select</option>
+            <option value="string:2025-26">2025-26</option>
+          </select>
+        </div>
+        <div>
+          <label>Return Filing Period</label>
+          <select id="optValue" title="Return Filing Period">
+            <option>Select</option>
+            <option value="string:Annual">Annual</option>
+            <option value="string:Quarterly">Quarterly</option>
+            <option value="string:Monthly">Monthly</option>
+          </select>
+        </div>
+        <div>
+          <label>Month</label>
+          <select id="taxPeriodValue" title="Month">
+            <option>Select</option>
+            <option value="string:April">April</option>
+            <option value="string:May">May</option>
+          </select>
+        </div>
+        <div>
+          <label>Return Type</label>
+          <select id="retTyp" title="Return Type">
+            <option>Select</option>
+            <option value="string:GSTR1">GSTR1</option>
+            <option value="string:GSTR3B">GSTR3B</option>
+          </select>
+        </div>
+        <button id="lotsearch" type="button">Search</button>
+      </form>
+    `);
+    let searchClicked = 0;
+    documentRef.querySelector("#lotsearch")?.addEventListener("click", () => {
+      searchClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, mayGstr1Scope);
+
+    expect(result.state).toBe("clicked");
+    expect(documentRef.querySelector<HTMLSelectElement>("#optValue")?.value).toBe("string:Monthly");
+    expect(documentRef.querySelector<HTMLSelectElement>("#taxPeriodValue")?.value).toBe(
+      "string:May",
+    );
+    expect(documentRef.querySelector<HTMLSelectElement>("#retTyp")?.value).toBe("string:GSTR1");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining([
+        "period-selected",
+        "month-selected",
         "return-type-selected",
         "search-clicked",
       ]),
@@ -1461,6 +1576,48 @@ describe("filed returns guided flow", () => {
     );
     expect(gstr1Clicked).toBe(0);
     expect(gstr3bClicked).toBe(1);
+  });
+
+  it("opens the filed GSTR-1 result row for the requested period", async () => {
+    const scope: FiledReturnsDownloadScope = {
+      financialYear: "2025-26",
+      period: "March",
+      returnType: "GSTR-1",
+    };
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <table>
+          <thead><tr><th>Return Type</th><th>Financial Year</th><th>Period</th><th>View/Download</th></tr></thead>
+          <tbody>
+            <tr><td>GSTR-3B</td><td>2025-26</td><td>March</td><td><button data-gstr3b>View</button></td></tr>
+            <tr><td>GSTR1</td><td>2025-26</td><td>March</td><td><button data-gstr1>View</button></td></tr>
+          </tbody>
+        </table>
+      </main>
+    `);
+    let gstr3bClicked = 0;
+    let gstr1Clicked = 0;
+    documentRef.querySelector("[data-gstr3b]")?.addEventListener("click", () => {
+      gstr3bClicked += 1;
+    });
+    Object.defineProperty(documentRef.querySelector("[data-gstr1]"), "innerText", {
+      configurable: true,
+      value: "View",
+    });
+    documentRef.querySelector("[data-gstr1]")?.addEventListener("click", () => {
+      gstr1Clicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, scope);
+
+    expect(result.state).toBe("clicked");
+    expect(result.scopeId).toBe("gst-filed-returns-gstr1-pdf-private-v0");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining(["filed-return-result-view-clicked", "result-row-gstr1"]),
+    );
+    expect(gstr3bClicked).toBe(0);
+    expect(gstr1Clicked).toBe(1);
   });
 
   it("opens the requested row when GST reorders result columns", async () => {
@@ -2665,6 +2822,335 @@ describe("filed returns guided flow", () => {
     expect(downloadClicked).toBe(1);
   });
 
+  it("clicks an explicit filed GSTR-1 PDF download when target identity matches", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <nav>Returns / Filed Returns</nav>
+        <h1>GSTR-1</h1>
+        <div>Status - Filed</div>
+        <div>Financial Year - 2025-26</div>
+        <div>Return Period - March</div>
+        <button>DOWNLOAD FILED GSTR-1</button>
+      </main>
+    `);
+    makeLayoutVisible(documentRef);
+    let downloadClicked = 0;
+    documentRef.querySelector("button")?.addEventListener("click", () => {
+      downloadClicked += 1;
+    });
+
+    const result = await triggerFiledReturnFiledPdfDownload(documentRef, {
+      actionId: "test-action",
+      financialYear: "2025-26",
+      period: "March",
+      returnType: "GSTR-1",
+    });
+
+    expect(result.state).toBe("clicked");
+    expect(result.scopeId).toBe("gst-filed-returns-gstr1-pdf-private-v0");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining(["filed-return-download-clicked", "filed-gstr1-download-clicked"]),
+    );
+    expect(downloadClicked).toBe(1);
+  });
+
+  it("treats the filed GSTR-1 View Summary page as PDF-download ready", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <nav>Returns / Filed Returns</nav>
+          <h1>GSTR-1 Summary</h1>
+          <div>Status - Filed</div>
+          <div>Financial Year - 2025-26</div>
+          <div>Tax Period - May</div>
+          <button>DOWNLOAD SUMMARY (PDF)</button>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/gstr1/gstr1sum",
+    );
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-1",
+    });
+
+    expect(result.state).toBe("ready");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining([
+        "filed-gstr1-download-ready",
+        "filed-return-detail-period:May",
+        "filed-return-detail-financial-year:2025-26",
+        "filed-return-detail-type:GSTR-1",
+      ]),
+    );
+  });
+
+  it("clicks the filed GSTR-1 View Summary PDF download when target identity matches", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <nav>Returns / Filed Returns</nav>
+          <h1>GSTR-1 Summary</h1>
+          <div>Status - Filed</div>
+          <div>Financial Year - 2025-26</div>
+          <div>Tax Period - May</div>
+          <button>
+            DOWNLOAD (PDF)
+            DOWNLOAD SUMMARY (PDF)
+            Click here to download GSTR-1 summary for all tax periods in PDF format.
+          </button>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/gstr1/gstr1sum",
+    );
+    makeLayoutVisible(documentRef);
+    let downloadClicked = 0;
+    documentRef.querySelector("button")?.addEventListener("click", () => {
+      downloadClicked += 1;
+    });
+
+    const result = await triggerFiledReturnFiledPdfDownload(documentRef, {
+      actionId: "test-action",
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-1",
+    });
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining([
+        "gstr1-detail-route",
+        "download-pdf-gstr1-visible",
+        "filed-return-download-clicked",
+        "text-download-pdf-gstr1",
+      ]),
+    );
+    expect(downloadClicked).toBe(1);
+  });
+
+  it("returns from the filed GSTR-1 View Summary page before an Excel-only trigger", async () => {
+    const gstr1Scope: FiledReturnsDownloadScope = {
+      artifactType: "EXCEL",
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-1",
+    };
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <nav>Returns / Filed Returns</nav>
+          <h1>GSTR-1 Summary</h1>
+          <div>Status - Filed</div>
+          <div>Financial Year - 2025-26</div>
+          <div>Tax Period - May</div>
+          <button>DOWNLOAD SUMMARY (PDF)</button>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/gstr1/gstr1sum",
+    );
+    const view = documentRef.defaultView;
+    if (!view) throw new Error("Expected JSDOM window.");
+    const back = vi.spyOn(view.history, "back").mockImplementation(() => undefined);
+
+    const result = await runFiledReturnsDownloadStep(documentRef, gstr1Scope);
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining(["filed-gstr1-summary-back-clicked"]),
+    );
+    expect(back).toHaveBeenCalledTimes(1);
+  });
+
+  it("clicks an explicit filed GSTR-1 e-invoice details Excel download when target identity matches", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <nav>Returns / Filed Returns</nav>
+        <h1>GSTR-1</h1>
+        <div>Status - Filed</div>
+        <div>Financial Year - 2025-26</div>
+        <div>Return Period - May</div>
+        <button data-pdf>DOWNLOAD FILED GSTR-1</button>
+        <button data-excel>Download Details from E-Invoices (Excel)</button>
+      </main>
+    `);
+    makeLayoutVisible(documentRef);
+    let pdfClicked = 0;
+    let excelClicked = 0;
+    documentRef.querySelector("[data-pdf]")?.addEventListener("click", () => {
+      pdfClicked += 1;
+    });
+    documentRef.querySelector("[data-excel]")?.addEventListener("click", () => {
+      excelClicked += 1;
+    });
+
+    const result = await triggerFiledReturnFiledPdfDownload(documentRef, {
+      actionId: "test-action",
+      artifactType: "EXCEL",
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-1",
+    });
+
+    expect(result.state).toBe("clicked");
+    expect(result.scopeId).toBe("gst-filed-returns-gstr1-pdf-private-v0");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining([
+        "filed-return-download-clicked",
+        "filed-gstr1-download-clicked",
+        "text-download-excel-gstr1",
+      ]),
+    );
+    expect(pdfClicked).toBe(0);
+    expect(excelClicked).toBe(1);
+  });
+
+  it("classifies the GSTR-1 e-invoice no-details modal after an Excel click", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <nav>Returns / Filed Returns</nav>
+        <h1>GSTR-1</h1>
+        <div>Status - Filed</div>
+        <div>Financial Year - 2025-26</div>
+        <div>Return Period - May</div>
+        <button data-excel>Download Details from E-Invoices (Excel)</button>
+      </main>
+    `);
+    makeLayoutVisible(documentRef);
+    let excelClicked = 0;
+    documentRef.querySelector("[data-excel]")?.addEventListener("click", () => {
+      excelClicked += 1;
+      globalThis.setTimeout(() => {
+        const modal = documentRef.createElement("section");
+        modal.setAttribute("role", "dialog");
+        modal.innerHTML = `
+          <h2>Information</h2>
+          <p>No details available for download (This is relevant only if you have reported e-invoices).</p>
+          <button>OK</button>
+        `;
+        documentRef.body.append(modal);
+      }, 400);
+    });
+
+    const result = await triggerFiledReturnFiledPdfDownload(documentRef, {
+      actionId: "test-action",
+      artifactType: "EXCEL",
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-1",
+    });
+
+    expect(result.state).toBe("blocked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining([
+        "filed-return-download-clicked",
+        "filed-gstr1-download-clicked",
+        "filed-gstr1-excel-no-details-available",
+      ]),
+    );
+    expect(result.safeMessage).toMatch(/no e-invoice details/i);
+    expect(excelClicked).toBe(1);
+  });
+
+  it("refuses to click GSTR-1 e-invoice Excel controls until filed status is visible", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <nav>Returns / Filed Returns</nav>
+        <h1>GSTR-1</h1>
+        <div>Financial Year - 2025-26</div>
+        <div>Return Period - May</div>
+        <button>Download Details from E-Invoices (Excel)</button>
+      </main>
+    `);
+    makeLayoutVisible(documentRef);
+    let excelClicked = 0;
+    documentRef.querySelector("button")?.addEventListener("click", () => {
+      excelClicked += 1;
+    });
+
+    const result = await triggerFiledReturnFiledPdfDownload(documentRef, {
+      actionId: "test-action",
+      artifactType: "EXCEL",
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-1",
+    });
+
+    expect(result.state).toBe("candidate-not-found");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining(["filed-gstr1-download-status-not-filed"]),
+    );
+    expect(excelClicked).toBe(0);
+  });
+
+  it("reports a filed GSTR-1 detail page when no download files are available yet", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <nav>Returns / Filed Returns</nav>
+          <h1>GSTR-1</h1>
+          <div>Status - Filed</div>
+          <div>Financial Year - 2025-26</div>
+          <div>Tax Period - May</div>
+          <section>
+            <h2>E-Invoice Download History</h2>
+            <p>No files available for download</p>
+          </section>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/gstr1",
+    );
+
+    const result = await triggerFiledReturnFiledPdfDownload(documentRef, {
+      actionId: "test-action",
+      artifactType: "EXCEL",
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-1",
+    });
+
+    expect(result.state).toBe("candidate-not-found");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining([
+        "gstr1-detail-route",
+        "status-filed",
+        "no-files-available-for-download",
+        "filed-gstr1-download-candidate-not-found",
+      ]),
+    );
+    expect(result.safeSignals).not.toContain("not-filed-gstr1-detail-page");
+  });
+
+  it("refuses to click a GSTR-3B detail page for a GSTR-1 target", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <nav>Returns / Filed Returns</nav>
+        <h1>GSTR-3B - Monthly Return</h1>
+        <div>Status - Filed</div>
+        <div>Financial Year - 2025-26</div>
+        <div>Return Period - March</div>
+        <button>DOWNLOAD FILED GSTR-3B</button>
+      </main>
+    `);
+    makeLayoutVisible(documentRef);
+    let downloadClicked = 0;
+    documentRef.querySelector("button")?.addEventListener("click", () => {
+      downloadClicked += 1;
+    });
+
+    const result = await triggerFiledReturnFiledPdfDownload(documentRef, {
+      actionId: "test-action",
+      financialYear: "2025-26",
+      period: "March",
+      returnType: "GSTR-1",
+    });
+
+    expect(result.state).toBe("candidate-not-found");
+    expect(result.scopeId).toBe("gst-filed-returns-gstr1-pdf-private-v0");
+    expect(result.safeSignals).toEqual(expect.arrayContaining(["not-filed-gstr1-detail-page"]));
+    expect(downloadClicked).toBe(0);
+  });
+
   it("refuses an explicit trigger when the detail page identity does not match the target", async () => {
     const documentRef = createDocument(`
       <main>
@@ -3003,6 +3489,246 @@ describe("filed returns guided flow", () => {
     expect(documentRef.querySelector<HTMLSelectElement>("#optValue")?.value).toBe("string:Monthly");
     expect(documentRef.querySelector<HTMLSelectElement>("#retTyp")?.value).toBe("string:GSTR3B");
     expect(searchClicked).toBe(1);
+  });
+
+  it("clicks search when the live GSTR-1 filter form is already populated", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <div class="row">
+            <div class="col-sm-3">
+              <div class="col-sm-12"><label>Financial year</label></div>
+              <div class="col-sm-12">
+                <select id="finYr">
+                  <option value="string:Select">Select</option>
+                  <option selected value="string:2025-26">2025-26</option>
+                </select>
+              </div>
+            </div>
+            <div class="col-sm-3">
+              <div class="col-sm-12"><label>Return Filing Period</label></div>
+              <div class="col-sm-12">
+                <select id="optValue">
+                  <option value="string:Select">Select</option>
+                  <option selected value="string:Monthly">Monthly</option>
+                </select>
+              </div>
+            </div>
+            <div class="col-sm-3">
+              <div class="col-sm-12"><label>Month</label></div>
+              <div class="col-sm-12">
+                <select id="month">
+                  <option value="string:Select">Select</option>
+                  <option selected value="string:May">May</option>
+                </select>
+              </div>
+            </div>
+            <div class="col-sm-3">
+              <div class="col-sm-12"><label>Return Type</label></div>
+              <div class="col-sm-12">
+                <select id="retTyp">
+                  <option value="string:Select">Select</option>
+                  <option selected value="string:GSTR1">GSTR-1/IFF/GSTR-1A</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </form>
+        <button id="lotsearch" type="button">Search</button>
+      </main>
+    `);
+    Object.defineProperty(documentRef.querySelector("#lotsearch"), "innerText", {
+      configurable: true,
+      value: "Search",
+    });
+    const gstr1Scope: FiledReturnsDownloadScope = {
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-1",
+    };
+    let searchClicked = 0;
+    documentRef.querySelector("#lotsearch")?.addEventListener("click", () => {
+      searchClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, gstr1Scope);
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining([
+        "financial-year-selected",
+        "period-selected",
+        "month-selected",
+        "return-type-selected",
+        "search-clicked",
+      ]),
+    );
+    expect(searchClicked).toBe(1);
+  });
+
+  it("opens the filed GSTR-1 View Summary page before the PDF download", async () => {
+    const gstr1Scope: FiledReturnsDownloadScope = {
+      artifactType: "PDF",
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-1",
+    };
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <h1>View Filed Returns</h1>
+          <h2>GSTR-1</h2>
+          <section>
+            <p>Return Type - GSTR-1</p>
+            <p>Financial Year - 2025-26</p>
+            <p>Tax Period - May</p>
+            <p>Status - Filed</p>
+            <button data-summary type="button">VIEW SUMMARY PROCEED TO FILE/SUMMARY</button>
+            <button data-excel type="button">Download details of E-invoices in Excel</button>
+          </section>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/gstr1",
+    );
+    let summaryClicked = 0;
+    let excelClicked = 0;
+    documentRef.querySelector("[data-summary]")?.addEventListener("click", () => {
+      summaryClicked += 1;
+    });
+    documentRef.querySelector("[data-excel]")?.addEventListener("click", () => {
+      excelClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, gstr1Scope);
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining(["filed-gstr1-summary-view-clicked"]),
+    );
+    expect(summaryClicked).toBe(1);
+    expect(excelClicked).toBe(0);
+  });
+
+  it("opens the filed GSTR-1 View Summary page before a combined PDF and Excel run", async () => {
+    const gstr1Scope: FiledReturnsDownloadScope = {
+      artifactType: "PDF_AND_EXCEL",
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-1",
+    };
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <h1>View Filed Returns</h1>
+          <h2>GSTR-1</h2>
+          <section>
+            <p>Return Type - GSTR-1</p>
+            <p>Financial Year - 2025-26</p>
+            <p>Tax Period - May</p>
+            <p>Status - Filed</p>
+            <button data-summary type="button">VIEW SUMMARY PROCEED TO FILE/SUMMARY</button>
+            <button data-excel type="button">Download details of E-invoices in Excel</button>
+          </section>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/gstr1",
+    );
+    let summaryClicked = 0;
+    let excelClicked = 0;
+    documentRef.querySelector("[data-summary]")?.addEventListener("click", () => {
+      summaryClicked += 1;
+    });
+    documentRef.querySelector("[data-excel]")?.addEventListener("click", () => {
+      excelClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, gstr1Scope);
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining(["filed-gstr1-summary-view-clicked"]),
+    );
+    expect(summaryClicked).toBe(1);
+    expect(excelClicked).toBe(0);
+  });
+
+  it("uses the filed GSTR-1 route as return-type evidence before View Summary navigation", async () => {
+    const gstr1Scope: FiledReturnsDownloadScope = {
+      artifactType: "PDF",
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-1",
+    };
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <h1>Filed return detail</h1>
+          <section>
+            <p>Financial Year - 2025-26</p>
+            <p>Tax Period - May</p>
+            <p>Status - Filed</p>
+            <button data-summary type="button">VIEW SUMMARY PROCEED TO FILE/SUMMARY</button>
+            <button data-excel type="button">Download details of E-invoices in Excel</button>
+            <button data-back type="button">Back</button>
+          </section>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/gstr1",
+    );
+    let summaryClicked = 0;
+    let backClicked = 0;
+    documentRef.querySelector("[data-summary]")?.addEventListener("click", () => {
+      summaryClicked += 1;
+    });
+    documentRef.querySelector("[data-back]")?.addEventListener("click", () => {
+      backClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, gstr1Scope);
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining(["filed-gstr1-summary-view-clicked"]),
+    );
+    expect(summaryClicked).toBe(1);
+    expect(backClicked).toBe(0);
+  });
+
+  it("does not leave the filed GSTR-1 detail page before an Excel-only run", async () => {
+    const gstr1Scope: FiledReturnsDownloadScope = {
+      artifactType: "EXCEL",
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-1",
+    };
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <h1>View Filed Returns</h1>
+          <h2>GSTR-1</h2>
+          <section>
+            <p>Return Type - GSTR-1</p>
+            <p>Financial Year - 2025-26</p>
+            <p>Tax Period - May</p>
+            <p>Status - Filed</p>
+            <button data-summary type="button">View Summary</button>
+            <button data-excel type="button">Download details of E-invoices in Excel</button>
+          </section>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/gstr1",
+    );
+    let summaryClicked = 0;
+    documentRef.querySelector("[data-summary]")?.addEventListener("click", () => {
+      summaryClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, gstr1Scope);
+
+    expect(result.state).toBe("ready");
+    expect(result.safeSignals).not.toContain("filed-gstr1-summary-view-clicked");
+    expect(summaryClicked).toBe(0);
   });
 
   it("prefers filed-return form selects before matching controls elsewhere on the page", async () => {

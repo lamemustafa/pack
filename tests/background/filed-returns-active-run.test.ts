@@ -55,6 +55,29 @@ describe("filed returns active run recovery", () => {
     });
   });
 
+  it("uses the active run return type when reporting interrupted GSTR-1 state", async () => {
+    const gstr1Run: ActiveFiledReturnsRun = {
+      ...ACTIVE_RUN,
+      scope: {
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2026-27",
+        period: "April",
+        returnType: "GSTR-1",
+      },
+    };
+    browserMocks.storage.local.get.mockResolvedValue({ "active-run": gstr1Run });
+
+    const summary = await readActiveFiledReturnsRunSummary({
+      storageKeys: { activeRun: "active-run" },
+      now: () => new Date("2026-06-24T00:01:00Z"),
+    });
+
+    expect(summary?.flowStep).toMatchObject({
+      scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
+      safeSignals: ["filed-returns-run-needs-review"],
+    });
+  });
+
   it("acknowledges an interrupted run by removing only the active run key", async () => {
     const response = await acknowledgeInterruptedFiledReturnsRun({
       storageKeys: { activeRun: "active-run" },

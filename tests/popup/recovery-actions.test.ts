@@ -158,6 +158,33 @@ describe("popup full-year recovery actions", () => {
     expect(markup).not.toContain("Start download");
   });
 
+  it("shows GSTR-1 as a filing option with artifact and full-year controls", () => {
+    const markup = renderToStaticMarkup(
+      createElement(ScopeForm, {
+        busy: null,
+        scope: {
+          artifactType: "PDF_AND_EXCEL",
+          financialYear: "2025-26",
+          period: "March",
+          returnType: "GSTR-1",
+        },
+        flowSummary: null,
+        onScopeChange: () => undefined,
+        onStart: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain('value="GSTR-1" selected="">GSTR-1');
+    expect(markup).toContain('value="GSTR-3B">GSTR-3B');
+    expect(markup).toContain('value="PDF">Summary PDF');
+    expect(markup).toContain('value="EXCEL">E-invoice details Excel');
+    expect(markup).toContain(
+      'value="PDF_AND_EXCEL" selected="">Summary PDF + e-invoice details Excel',
+    );
+    expect(markup).toContain("Full fiscal year");
+    expect(markup).not.toContain("monthly GSTR-3B filers only");
+  });
+
   it("presents interrupted runs as resettable stuck work", () => {
     const markup = renderToStaticMarkup(
       createElement(RecoveryActions, {

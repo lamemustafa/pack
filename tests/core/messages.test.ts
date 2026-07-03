@@ -65,7 +65,7 @@ describe("message boundary", () => {
           returnType: "GSTR-1",
         },
       }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       isPackMessage({
         type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",
@@ -224,7 +224,63 @@ describe("message boundary", () => {
           returnType: "GSTR-1",
         },
       }),
+    ).toBe(true);
+    expect(
+      isPackMessage({
+        type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",
+        payload: {
+          artifactType: "PDF_AND_EXCEL",
+          financialYear: "2025-26",
+          period: "May",
+          returnType: "GSTR-1",
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isPackMessage({
+        type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",
+        payload: {
+          artifactType: "EXCEL",
+          financialYear: "2025-26",
+          period: "May",
+          returnType: "GSTR-3B",
+        },
+      }),
     ).toBe(false);
+    expect(
+      isPackMessage({
+        type: "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V2",
+        payload: {
+          actionId: "action-1",
+          artifactType: "EXCEL",
+          financialYear: "2025-26",
+          period: "May",
+          returnType: "GSTR-1",
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isPackMessage({
+        type: "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V2",
+        payload: {
+          actionId: "action-1",
+          artifactType: "PDF_AND_EXCEL",
+          financialYear: "2025-26",
+          period: "May",
+          returnType: "GSTR-1",
+        },
+      }),
+    ).toBe(false);
+    expect(
+      isPackMessage({
+        type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",
+        payload: {
+          financialYear: "2025-26",
+          period: FULL_FISCAL_YEAR_PERIOD,
+          returnType: "GSTR-1",
+        },
+      }),
+    ).toBe(true);
     expect(
       isPackMessage({
         type: "PACK_FILED_RETURNS_REQUEST_SHAPES",

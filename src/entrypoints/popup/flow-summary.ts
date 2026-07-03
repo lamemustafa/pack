@@ -1,4 +1,5 @@
 import type { FiledReturnsDownloadScope, FiledReturnsFlowSummary } from "../../core/contracts";
+import { normaliseFiledReturnsArtifactType } from "../../core/filed-returns-artifacts";
 
 export function getFiledReturnsCompletionStatus(
   scope: FiledReturnsDownloadScope,
@@ -36,6 +37,8 @@ function isSameScope(left: FiledReturnsDownloadScope, right: FiledReturnsDownloa
   return (
     left.financialYear === right.financialYear &&
     left.period === right.period &&
-    left.returnType === right.returnType
+    left.returnType === right.returnType &&
+    normaliseFiledReturnsArtifactType(left.returnType, left.artifactType) ===
+      normaliseFiledReturnsArtifactType(right.returnType, right.artifactType)
   );
 }

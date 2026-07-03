@@ -1,13 +1,24 @@
 import type { FiledReturnsDownloadScope } from "../core/contracts";
+import {
+  concreteFiledReturnsArtifactTypes,
+  filedReturnsArtifactExtension,
+  normaliseFiledReturnsArtifactType,
+  type FiledReturnsConcreteArtifactType,
+} from "../core/filed-returns-artifacts";
 
 const SAFE_DOWNLOAD_ROOT = "complyeaze-pack/gst";
 
-export function safeFiledReturnDownloadFilename(scope: FiledReturnsDownloadScope): string {
+export function safeFiledReturnDownloadFilename(
+  scope: FiledReturnsDownloadScope,
+  artifactType: FiledReturnsConcreteArtifactType = concreteFiledReturnsArtifactTypes(
+    normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType),
+  )[0] ?? "PDF",
+): string {
   return [
     SAFE_DOWNLOAD_ROOT,
     safeFilenameSegment(scope.financialYear),
     safeFilenameSegment(scope.returnType),
-    `${safeFilenameSegment(scope.period)}.pdf`,
+    `${safeFilenameSegment(scope.period)}${filedReturnsArtifactExtension(artifactType)}`,
   ].join("/");
 }
 

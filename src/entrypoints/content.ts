@@ -1,7 +1,7 @@
 import { browser } from "wxt/browser";
 import { detectGstPortalContext } from "../connectors/gst/detect";
 import { runFiledReturnsDownloadStep } from "../connectors/gst/filed-returns-flow";
-import { triggerFiledGstr3bFiledPdfDownload } from "../connectors/gst/filed-returns-download";
+import { triggerFiledReturnFiledPdfDownload } from "../connectors/gst/filed-returns-download";
 import { resolveFiledGstr3bVerifiedPdfDownloadRequest } from "../connectors/gst/filed-returns-direct-download-probe";
 import { navigateToFiledReturnsPage } from "../connectors/gst/filed-returns-navigator";
 import { observeFiledReturnsPageText } from "../connectors/gst/filed-returns-observer";
@@ -82,7 +82,7 @@ export default defineContentScript({
       }
 
       if (message.type === "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V2") {
-        void triggerFiledGstr3bFiledPdfDownload(document, message.payload)
+        void triggerFiledReturnFiledPdfDownload(document, message.payload)
           .then((downloadTrigger) => {
             const observation = sendFiledReturnsObservation();
             sendResponse({
@@ -95,7 +95,7 @@ export default defineContentScript({
             sendResponse({
               ok: false,
               error:
-                error instanceof Error ? error.message : "Filed GSTR-3B download trigger failed.",
+                error instanceof Error ? error.message : "Filed return download trigger failed.",
             } satisfies PackMessageResponse),
           );
         return true;

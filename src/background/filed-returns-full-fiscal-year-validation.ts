@@ -5,6 +5,16 @@ import type {
   FiledReturnsFullFiscalYearTargetStatus,
 } from "../core/contracts";
 import {
+  isFiledReturnsArtifactType,
+  normaliseFiledReturnsArtifactType,
+  supportsFiledReturnsArtifactType,
+} from "../core/filed-returns-artifacts";
+import {
+  isFiledReturnsReturnType,
+  type FiledReturnsReturnType,
+  supportsFullFiscalYearFiledReturnsRun,
+} from "../core/filed-returns-return-types";
+import {
   FILED_RETURNS_MONTHS,
   FULL_FISCAL_YEAR_PERIOD,
   type FiledReturnsMonth,
@@ -58,7 +68,7 @@ export function isFullFiscalYearLedger(input: unknown): input is FiledReturnsFul
 
   const targetIds = new Set<string>();
   for (const target of ledger.targets) {
-    if (!isFullFiscalYearTarget(target, ledger.scope.financialYear)) return false;
+    if (!isFullFiscalYearTarget(target, ledger.scope)) return false;
     if (targetIds.has(target.targetId)) return false;
     targetIds.add(target.targetId);
   }
@@ -70,24 +80,40 @@ export function isFullFiscalYearLedger(input: unknown): input is FiledReturnsFul
 function isFullFiscalYearScope(
   scope: Partial<FiledReturnsDownloadScope> | undefined,
 ): scope is FiledReturnsDownloadScope {
+  if (!scope) return false;
+  const artifactType = scope.artifactType ?? "PDF";
   return (
-    Boolean(scope) &&
-    typeof scope?.financialYear === "string" &&
+    typeof scope.financialYear === "string" &&
     /^20\d{2}-\d{2}$/.test(scope.financialYear) &&
     scope.period === FULL_FISCAL_YEAR_PERIOD &&
-    scope.returnType === "GSTR-3B"
+    isFiledReturnsReturnType(scope.returnType) &&
+    supportsFullFiscalYearFiledReturnsRun(scope.returnType) &&
+    isFiledReturnsArtifactType(artifactType) &&
+    supportsFiledReturnsArtifactType(scope.returnType, artifactType)
   );
 }
 
 function isFullFiscalYearTarget(
   target: Partial<FiledReturnsFullFiscalYearTarget>,
-  financialYear: string,
+  scope: FiledReturnsDownloadScope,
 ): target is FiledReturnsFullFiscalYearTarget {
   if (!isBoundedString(target.targetId, 1, 120)) return false;
-  if (target.financialYear !== financialYear) return false;
+  if (target.financialYear !== scope.financialYear) return false;
   if (!isFiledReturnsMonth(target.period)) return false;
-  if (target.targetId !== createTargetId(financialYear, target.period)) return false;
-  if (target.returnType !== "GSTR-3B") return false;
+  if (target.returnType !== scope.returnType) return false;
+  const artifactType = normaliseFiledReturnsArtifactType(target.returnType, target.artifactType);
+  const ledgerArtifactType = normaliseFiledReturnsArtifactType(
+    scope.returnType,
+    scope.artifactType,
+  );
+  if (artifactType !== ledgerArtifactType) return false;
+  if (target.artifactType !== undefined && target.artifactType !== artifactType) return false;
+  if (
+    target.targetId !==
+    createTargetId(scope.financialYear, target.period, target.returnType, artifactType)
+  ) {
+    return false;
+  }
   if (!target.status || !VALID_TARGET_STATUSES.has(target.status)) return false;
   const attempts = target.attempts;
   if (
@@ -123,6 +149,12 @@ function isValidTimestamp(input: unknown): input is string {
   return typeof input === "string" && input.length <= 40 && Number.isFinite(Date.parse(input));
 }
 
-function createTargetId(financialYear: string, period: string): string {
-  return `GSTR-3B:${financialYear}:${period}`;
+function createTargetId(
+  financialYear: string,
+  period: string,
+  returnType: FiledReturnsReturnType,
+  artifactType: string,
+): string {
+  const base = `${returnType}:${financialYear}:${period}`;
+  return artifactType === "PDF" ? base : `${base}:${artifactType}`;
 }

@@ -14,8 +14,9 @@ import {
 } from "./filed-returns-full-fiscal-year-ledger";
 import { toFullFiscalYearSummary } from "./filed-returns-full-fiscal-year-summary";
 import { clearFiledReturnsTargetReview } from "./filed-returns-target-review";
+import { normaliseFiledReturnsArtifactType } from "../core/filed-returns-artifacts";
+import { filedReturnsScopeId } from "../core/filed-returns-return-types";
 
-const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
 const RECOVERABLE_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
   "pending",
   "download-unconfirmed",
@@ -25,8 +26,12 @@ const RECOVERABLE_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStat
   "cancelled",
 ]);
 const FINAL_SIDE_EFFECT_SIGNALS = new Set([
+  "filed-return-download-clicked",
+  "filed-return-download-trigger-ambiguous",
   "filed-gstr3b-download-clicked",
   "filed-gstr3b-download-trigger-ambiguous",
+  "filed-gstr1-download-clicked",
+  "filed-gstr1-download-trigger-ambiguous",
   "browser-download-created",
   "browser-download-size-unknown",
   "browser-download-not-observed",
@@ -241,7 +246,7 @@ function resetFullFiscalYearTargetForRetry(
 function manuallyObservedStep(target: FiledReturnsFullFiscalYearTarget): PortalFlowStepResult {
   return {
     connectorId: "gst",
-    scopeId: FILED_RETURNS_SCOPE_ID,
+    scopeId: filedReturnsScopeId(target.returnType),
     state: "user-action-required",
     safeSignals: ["filed-returns-target-manually-observed"],
     safeMessage: `Pack recorded ${target.period} as manually observed after user review of browser Downloads.`,
@@ -258,7 +263,7 @@ function canResolveAsManuallyObserved(target: FiledReturnsFullFiscalYearTarget):
 function discardedRunStep(target: FiledReturnsFullFiscalYearTarget): PortalFlowStepResult {
   return {
     connectorId: "gst",
-    scopeId: FILED_RETURNS_SCOPE_ID,
+    scopeId: filedReturnsScopeId(target.returnType),
     state: "user-action-required",
     safeSignals: ["full-fiscal-year-run-discarded"],
     safeMessage: `Pack discarded the saved full fiscal-year run before resuming ${target.period}.`,
@@ -272,7 +277,7 @@ function recoveryActionUnavailableResponse(
 ): PackMessageResponse {
   const flowStep: PortalFlowStepResult = {
     connectorId: "gst",
-    scopeId: FILED_RETURNS_SCOPE_ID,
+    scopeId: ledger ? filedReturnsScopeId(ledger.scope.returnType) : filedReturnsScopeId("GSTR-3B"),
     state: "user-action-required",
     safeSignals: [signal],
     safeMessage,
@@ -314,6 +319,7 @@ async function clearLegacyTargetReview(
     financialYear: target.financialYear,
     period: target.period,
     returnType: target.returnType,
+    artifactType: normaliseFiledReturnsArtifactType(target.returnType, target.artifactType),
   };
   await clearFiledReturnsTargetReview(scope, deps);
 }

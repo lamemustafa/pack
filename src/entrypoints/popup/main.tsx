@@ -199,7 +199,7 @@ function App() {
         <p>{completionStatus ?? status}</p>
         <p className="muted">
           {context === null
-            ? "Open GST Portal and choose a filed GSTR-3B period to begin."
+            ? "Open GST Portal and choose a filed GST return period to begin."
             : context.supported
               ? `Detected ${context.pageKind} on ${context.origin ?? "GST Portal"}.`
               : (context.requiredAction?.message ?? "This page is outside Pack V0 scope.")}

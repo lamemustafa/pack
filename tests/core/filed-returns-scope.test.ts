@@ -107,6 +107,115 @@ describe("filed returns GST scope", () => {
     expect(DEFAULT_FILED_RETURNS_DOWNLOAD_SCOPE.period).not.toBe(FULL_FISCAL_YEAR_PERIOD);
   });
 
+  it("supports GSTR-1 full fiscal year starts with artifact selection", () => {
+    expect(
+      getFiledReturnsScopePeriodOptions(
+        "2025-26",
+        new Date("2026-06-24T00:00:00+05:30"),
+        "GSTR-1",
+      ).map((option) => option.value),
+    ).toEqual([
+      FULL_FISCAL_YEAR_PERIOD,
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December",
+      "January",
+      "February",
+      "March",
+    ]);
+    expect(
+      isSupportedFiledReturnsScope({
+        financialYear: "2025-26",
+        period: "March",
+        returnType: "GSTR-1",
+      }),
+    ).toBe(true);
+    expect(
+      isSupportedFiledReturnsStartScope({
+        financialYear: "2025-26",
+        period: FULL_FISCAL_YEAR_PERIOD,
+        returnType: "GSTR-1",
+        artifactType: "PDF_AND_EXCEL",
+      }),
+    ).toBe(true);
+    expect(
+      normaliseFiledReturnsScope(
+        {
+          artifactType: "PDF_AND_EXCEL",
+          financialYear: "2025-26",
+          period: FULL_FISCAL_YEAR_PERIOD,
+          returnType: "GSTR-1",
+        },
+        new Date("2026-06-24T00:00:00+05:30"),
+      ),
+    ).toEqual({
+      artifactType: "PDF_AND_EXCEL",
+      financialYear: "2025-26",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-1",
+    });
+  });
+
+  it("supports summary PDF plus e-invoice details Excel for GSTR-1 single-period downloads", () => {
+    expect(
+      isSupportedFiledReturnsStartScope({
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2025-26",
+        period: "May",
+        returnType: "GSTR-1",
+      }),
+    ).toBe(true);
+    expect(
+      normaliseFiledReturnsScope(
+        {
+          artifactType: "PDF_AND_EXCEL",
+          financialYear: "2025-26",
+          period: "May",
+          returnType: "GSTR-1",
+        },
+        new Date("2026-06-24T00:00:00+05:30"),
+      ),
+    ).toEqual({
+      artifactType: "PDF_AND_EXCEL",
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-1",
+    });
+  });
+
+  it("normalises unsupported GSTR-3B Excel requests back to PDF", () => {
+    expect(
+      isSupportedFiledReturnsStartScope({
+        artifactType: "EXCEL",
+        financialYear: "2025-26",
+        period: "May",
+        returnType: "GSTR-3B",
+      }),
+    ).toBe(false);
+    expect(
+      normaliseFiledReturnsScope(
+        {
+          artifactType: "EXCEL",
+          financialYear: "2025-26",
+          period: "May",
+          returnType: "GSTR-3B",
+        },
+        new Date("2026-06-24T00:00:00+05:30"),
+      ),
+    ).toEqual({
+      artifactType: "PDF",
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-3B",
+    });
+  });
+
   it("normalises invalid early GST launch months instead of passing them to the portal", () => {
     expect(
       normaliseFiledReturnsScope({
@@ -115,6 +224,7 @@ describe("filed returns GST scope", () => {
         returnType: "GSTR-3B",
       }),
     ).toEqual({
+      artifactType: "PDF",
       financialYear: "2017-18",
       period: "July",
       returnType: "GSTR-3B",
@@ -132,6 +242,7 @@ describe("filed returns GST scope", () => {
     );
 
     expect(scope).toEqual({
+      artifactType: "PDF",
       financialYear: "2025-26",
       period: FULL_FISCAL_YEAR_PERIOD,
       returnType: "GSTR-3B",

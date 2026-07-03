@@ -1,4 +1,6 @@
 import type { PortalObservation } from "../../core/contracts";
+import type { FiledReturnsReturnType } from "../../core/filed-returns-return-types";
+import { filedReturnScopedSignal } from "./filed-returns-return-descriptors";
 
 export type FiledReturnsObservationState =
   | "ready"
@@ -12,7 +14,7 @@ export type FiledReturnsObservationState =
   | "download-not-visible";
 
 export type FiledReturnsObservation = PortalObservation & {
-  scopeId: "gst-filed-returns-gstr3b-pdf-private-v0";
+  scopeId: "gst-filed-returns-gstr3b-pdf-private-v0" | "gst-filed-returns-gstr1-pdf-private-v0";
   state: FiledReturnsObservationState;
   pageKind: "gst-filed-returns";
 };
@@ -84,6 +86,21 @@ export function observeFiledReturnsPageText(
     };
   }
 
+  if (
+    safeSignals.includes("download-filed-gstr-1") ||
+    safeSignals.includes("download-pdf-gstr-1") ||
+    safeSignals.includes("download-excel-gstr-1")
+  ) {
+    return {
+      connectorId: "gst",
+      pageKind: "gst-filed-returns",
+      scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
+      state: "ready",
+      safeSignals,
+      safeMessage: "Filed GSTR-1 download controls appear ready.",
+    };
+  }
+
   if (safeSignals.includes("view-download-column") && safeSignals.includes("view-action")) {
     return {
       connectorId: "gst",
@@ -92,7 +109,7 @@ export function observeFiledReturnsPageText(
       state: "filed-return-results-visible",
       safeSignals,
       safeMessage:
-        "Filed GSTR-3B results are visible. Open a row with View to expose the portal's final PDF/download controls.",
+        "Filed return results are visible. Open a row with View to expose the portal's final PDF/download controls.",
     };
   }
 
@@ -104,7 +121,7 @@ export function observeFiledReturnsPageText(
       state: "filters-required",
       safeSignals,
       safeMessage:
-        "The filed returns filter form is visible. Select Financial Year, Return Filing Period and GSTR-3B, then click Search.",
+        "The filed returns filter form is visible. Select Financial Year, Return Filing Period, Return Type, then click Search.",
     };
   }
 
@@ -112,6 +129,8 @@ export function observeFiledReturnsPageText(
     safeSignals.includes("filed-returns-route") &&
     !safeSignals.includes("view-download-column") &&
     !safeSignals.includes("download-filed-gstr-3b") &&
+    !safeSignals.includes("download-filed-gstr-1") &&
+    !safeSignals.includes("download-excel-gstr-1") &&
     !safeSignals.includes("search-action")
   ) {
     return {
@@ -124,16 +143,19 @@ export function observeFiledReturnsPageText(
     };
   }
 
-  if (!safeSignals.includes("gstr-3b")) {
+  if (!safeSignals.includes("gstr-3b") && !safeSignals.includes("gstr-1")) {
     return {
       connectorId: "gst",
       pageKind: "gst-filed-returns",
       scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
       state: "gstr-3b-not-visible",
       safeSignals,
-      safeMessage: "The filed returns page is visible, but GSTR-3B is not visible yet.",
+      safeMessage:
+        "The filed returns page is visible, but the requested return type is not visible yet.",
     };
   }
+
+  const visibleReturnLabel = detectVisibleReturnLabel(safeSignals);
 
   return {
     connectorId: "gst",
@@ -141,7 +163,7 @@ export function observeFiledReturnsPageText(
     scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
     state: "download-not-visible",
     safeSignals,
-    safeMessage: "GSTR-3B is visible, but a filed-return PDF download control is not visible.",
+    safeMessage: `${visibleReturnLabel} is visible, but a filed-return download control is not visible.`,
   };
 }
 
@@ -150,12 +172,48 @@ function detectSafeSignals(text: string, hints: FiledReturnsObservationHints): s
   if (hasLoginEvidence(text, hints)) signals.push("login");
   if (isFiledReturnsRoute(hints)) signals.push("filed-returns-route");
   if (isGstr3bDetailRoute(hints)) signals.push("gstr-3b-detail-route");
+  if (isGstr1DetailRoute(hints)) signals.push("gstr-1-detail-route");
+  if (isGstr1SummaryRoute(hints)) signals.push("gstr-1-summary-route");
   if (/view filed returns|filed returns/.test(text) || signals.includes("filed-returns-route")) {
     signals.push("filed-returns-heading");
   }
   if (signals.includes("gstr-3b-detail-route")) signals.push("filed-returns-heading");
+  if (signals.includes("gstr-1-detail-route")) signals.push("filed-returns-heading", "gstr-1");
+  if (signals.includes("gstr-1-summary-route")) signals.push("filed-returns-heading", "gstr-1");
   if (/gstr[\s-]?3b/.test(text)) signals.push("gstr-3b");
+  if (/\bgstr[\s-]?1\b/.test(text)) signals.push("gstr-1");
   if (/download filed gstr[\s-]?3b/.test(text)) signals.push("download-filed-gstr-3b");
+  if (/download filed gstr[\s-]?1\b/.test(text)) signals.push("download-filed-gstr-1");
+  if (
+    signals.includes("gstr-1-summary-route") &&
+    (/\bdownload\s*\(?\s*pdf\s*\)?\b/.test(text) || /\bdownload\b.*\bsummary\b.*\bpdf\b/.test(text))
+  ) {
+    signals.push("download-pdf-gstr-1");
+  }
+  if (
+    /download\b.*\bexcel\b/.test(text) ||
+    /download\b.*\bdetails?\b.*\be-?invoices?\b/.test(text)
+  ) {
+    signals.push("download-excel-gstr-1");
+  }
+  for (const returnType of ["GSTR-3B", "GSTR-1"] as const) {
+    const slug = returnType === "GSTR-3B" ? "gstr-3b" : "gstr-1";
+    if (
+      signals.includes(`download-filed-${slug}`) ||
+      (returnType === "GSTR-1" && signals.includes("download-excel-gstr-1"))
+    ) {
+      signals.push(
+        "filed-return-download-ready",
+        filedReturnScopedSignal(returnType, "download-ready"),
+      );
+    }
+  }
+  if (signals.includes("download-pdf-gstr-1")) {
+    signals.push(
+      "filed-return-download-ready",
+      filedReturnScopedSignal("GSTR-1", "download-ready"),
+    );
+  }
   if (/system generated summary for gstr[\s-]?3b/.test(text)) {
     signals.push("detail-summary-modal");
   }
@@ -207,4 +265,17 @@ function isFiledReturnsRoute(hints: FiledReturnsObservationHints): boolean {
 
 function isGstr3bDetailRoute(hints: FiledReturnsObservationHints): boolean {
   return hints.pathname ? /\/returns\/auth\/gstr3b$/i.test(hints.pathname) : false;
+}
+
+function isGstr1DetailRoute(hints: FiledReturnsObservationHints): boolean {
+  return hints.pathname ? /\/returns\/auth\/gstr1$/i.test(hints.pathname) : false;
+}
+
+function isGstr1SummaryRoute(hints: FiledReturnsObservationHints): boolean {
+  return hints.pathname ? /\/returns\/auth\/gstr1\/gstr1sum$/i.test(hints.pathname) : false;
+}
+
+function detectVisibleReturnLabel(signals: readonly string[]): FiledReturnsReturnType {
+  if (signals.includes("gstr-1")) return "GSTR-1";
+  return "GSTR-3B";
 }

@@ -5,9 +5,13 @@ import type {
   FiledReturnsTargetReview,
   PortalFlowStepResult,
 } from "../core/contracts";
+import {
+  concreteFiledReturnsArtifactTypes,
+  normaliseFiledReturnsArtifactType,
+} from "../core/filed-returns-artifacts";
+import { isFiledReturnsReturnType } from "../core/filed-returns-return-types";
 import type { PackMessageResponse } from "../core/messages";
-
-const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
+import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 
 export interface FiledReturnsTargetReviewDeps {
   storageKeys: {
@@ -98,7 +102,7 @@ export async function resolveUnconfirmedFiledReturnsDownload(
   await clearFiledReturnsTargetReview(scope, deps);
   const flowStep: PortalFlowStepResult = {
     connectorId: "gst",
-    scopeId: FILED_RETURNS_SCOPE_ID,
+    scopeId: filedReturnScopeId(scope.returnType),
     state: resolution === "downloaded" ? "downloaded" : "user-action-required",
     safeSignals: [
       resolution === "downloaded"
@@ -146,7 +150,9 @@ function parseFiledReturnsTargetReview(input: unknown): FiledReturnsTargetReview
   if (
     typeof review.scope.financialYear !== "string" ||
     typeof review.scope.period !== "string" ||
-    review.scope.returnType !== "GSTR-3B"
+    !isFiledReturnsReturnType(review.scope.returnType) ||
+    normaliseFiledReturnsArtifactType(review.scope.returnType, review.scope.artifactType) !==
+      (review.scope.artifactType ?? "PDF")
   ) {
     return null;
   }
@@ -181,7 +187,7 @@ function toTargetReviewSummary(
 function targetReviewStep(review: FiledReturnsTargetReview): PortalFlowStepResult {
   return {
     connectorId: "gst",
-    scopeId: FILED_RETURNS_SCOPE_ID,
+    scopeId: filedReturnScopeId(review.scope.returnType),
     state: "user-action-required",
     safeSignals: ["filed-returns-target-review-required"],
     safeMessage: review.safeMessage,
@@ -196,7 +202,7 @@ function targetReviewStep(review: FiledReturnsTargetReview): PortalFlowStepResul
 function noTargetReviewResponse(scope: FiledReturnsDownloadScope): PackMessageResponse {
   const flowStep: PortalFlowStepResult = {
     connectorId: "gst",
-    scopeId: FILED_RETURNS_SCOPE_ID,
+    scopeId: filedReturnScopeId(scope.returnType),
     state: "user-action-required",
     safeSignals: ["filed-returns-target-review-not-found"],
     safeMessage: "Pack did not find an unresolved filed-return target for this period.",
@@ -222,6 +228,7 @@ function requiresTargetReview(step: PortalFlowStepResult): boolean {
       [
         "browser-download-size-unknown",
         "browser-download-not-observed",
+        "filed-return-download-trigger-ambiguous",
         "filed-gstr3b-download-trigger-ambiguous",
       ].includes(signal),
     )
@@ -235,12 +242,28 @@ function sameFiledReturnsScope(
   return (
     left.financialYear === right.financialYear &&
     left.period === right.period &&
-    left.returnType === right.returnType
+    left.returnType === right.returnType &&
+    artifactSelectionsOverlap(left, right)
   );
 }
 
+function artifactSelectionsOverlap(
+  left: FiledReturnsDownloadScope,
+  right: FiledReturnsDownloadScope,
+): boolean {
+  const leftArtifacts = concreteFiledReturnsArtifactTypes(
+    normaliseFiledReturnsArtifactType(left.returnType, left.artifactType),
+  );
+  const rightArtifacts = concreteFiledReturnsArtifactTypes(
+    normaliseFiledReturnsArtifactType(right.returnType, right.artifactType),
+  );
+  return leftArtifacts.some((artifactType) => rightArtifacts.includes(artifactType));
+}
+
 function createTargetId(scope: FiledReturnsDownloadScope): string {
-  return `GSTR-3B:${scope.financialYear}:${scope.period}`;
+  const artifactType = normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType);
+  const baseTargetId = `${scope.returnType}:${scope.financialYear}:${scope.period}`;
+  return artifactType === "PDF" ? baseTargetId : `${baseTargetId}:${artifactType}`;
 }
 
 function isBoundedString(input: unknown, minLength: number, maxLength: number): input is string {

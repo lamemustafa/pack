@@ -1,3 +1,9 @@
+import type { FiledReturnsReturnType } from "./filed-returns-return-types";
+import type {
+  FiledReturnsArtifactType,
+  FiledReturnsConcreteArtifactType,
+} from "./filed-returns-artifacts";
+
 export type ConnectorId = "gst" | string;
 export type ExecutionMode = "local-browser" | "ucp-managed";
 
@@ -186,7 +192,8 @@ export interface PortalDownloadTriggerResult {
 export interface FiledReturnsDownloadScope {
   financialYear: string;
   period: string;
-  returnType: "GSTR-3B";
+  returnType: FiledReturnsReturnType;
+  artifactType?: FiledReturnsArtifactType;
   completedPeriods?: string[];
 }
 
@@ -194,7 +201,8 @@ export interface FiledReturnsDownloadTarget {
   actionId: string;
   financialYear: string;
   period: string;
-  returnType: "GSTR-3B";
+  returnType: FiledReturnsReturnType;
+  artifactType?: FiledReturnsConcreteArtifactType;
 }
 
 export interface FiledReturnsDirectDownloadRequest {
@@ -228,7 +236,8 @@ export interface FiledReturnsFullFiscalYearTarget {
   targetId: string;
   financialYear: string;
   period: string;
-  returnType: "GSTR-3B";
+  returnType: FiledReturnsReturnType;
+  artifactType?: FiledReturnsArtifactType;
   status: FiledReturnsFullFiscalYearTargetStatus;
   attempts: number;
   safeSignals: string[];

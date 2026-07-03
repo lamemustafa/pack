@@ -48,6 +48,20 @@ export async function triggerDirectFiledReturnDownload({
   tabId: number;
   target: FiledReturnsDownloadTarget;
 }): Promise<PackMessageResponse | null> {
+  if (target.artifactType && target.artifactType !== "PDF") {
+    return {
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: FILED_RETURNS_SCOPE_ID,
+        state: "blocked",
+        safeSignals: ["filed-gstr3b-direct-download-artifact-rejected"],
+        safeMessage:
+          "Pack will not use the reviewed filed GSTR-3B direct PDF endpoint for a non-PDF artifact.",
+      },
+    };
+  }
+
   const response = await resolveDirectDownloadRequestOnce(deps, tabId, target);
   if (!response.ok) return response;
   if ("flowStep" in response) return response;
@@ -66,7 +80,7 @@ export async function triggerDirectFiledReturnDownload({
   const armedAt = new Date();
   const startedDownload = await startDirectBrowserDownload(
     response.directDownloadRequest.url,
-    safeFiledReturnDownloadFilename(scope),
+    safeFiledReturnDownloadFilename(scope, "PDF"),
   );
   if (!startedDownload.ok) {
     return directDownloadStartRejectedResponse(activePeriod);

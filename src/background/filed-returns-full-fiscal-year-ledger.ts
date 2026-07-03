@@ -5,13 +5,18 @@ import type {
   FiledReturnsFullFiscalYearTargetStatus,
   PortalFlowStepResult,
 } from "../core/contracts";
+import {
+  normaliseFiledReturnsArtifactType,
+  type FiledReturnsArtifactType,
+} from "../core/filed-returns-artifacts";
 import { FULL_FISCAL_YEAR_PERIOD, type FiledReturnsMonth } from "../core/filed-returns-scope";
+import type { FiledReturnsReturnType } from "../core/filed-returns-return-types";
 import { GST_CONNECTOR_DESCRIPTOR } from "../connectors/gst/constants";
 import { PACK_PRODUCT_VERSION } from "../extension/version";
 export { isFullFiscalYearLedger } from "./filed-returns-full-fiscal-year-validation";
 
 const ACTIVE_LEDGER_STALE_MS = 30_000;
-const FULL_FISCAL_YEAR_PLAN_VERSION = "filed-gstr3b-monthly-v1";
+const FULL_FISCAL_YEAR_PLAN_VERSION = "filed-returns-monthly-v2";
 const POSITIVE_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
   "downloaded",
   "manually-observed",
@@ -25,6 +30,7 @@ export function createFullFiscalYearLedger(
 ): FiledReturnsFullFiscalYearLedger {
   const timestamp = now.toISOString();
   const eligibleThrough = periods.at(-1);
+  const artifactType = normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType);
   return {
     schemaVersion: "1.0",
     planVersion: FULL_FISCAL_YEAR_PLAN_VERSION,
@@ -36,17 +42,19 @@ export function createFullFiscalYearLedger(
     scope: {
       financialYear: scope.financialYear,
       period: FULL_FISCAL_YEAR_PERIOD,
-      returnType: "GSTR-3B",
+      returnType: scope.returnType,
+      artifactType,
     },
     createdAt: timestamp,
     updatedAt: timestamp,
     ...(eligibleThrough ? { eligibleThrough } : {}),
     lastReconciledAt: timestamp,
     targets: periods.map((period) => ({
-      targetId: createTargetId(scope.financialYear, period),
+      targetId: createTargetId(scope.financialYear, period, scope.returnType, artifactType),
       financialYear: scope.financialYear,
       period,
-      returnType: "GSTR-3B",
+      returnType: scope.returnType,
+      artifactType,
       status: "pending",
       attempts: 0,
       safeSignals: [],
@@ -63,13 +71,23 @@ export function reconcileFullFiscalYearLedgerTargets(
 ): FiledReturnsFullFiscalYearLedger {
   const timestamp = now.toISOString();
   const eligibleThrough = periods.at(-1);
+  const artifactType = normaliseFiledReturnsArtifactType(
+    ledger.scope.returnType,
+    ledger.scope.artifactType,
+  );
   const existingTargetIds = new Set(ledger.targets.map((target) => target.targetId));
   const missingTargets = periods
     .map((period) => ({
-      targetId: createTargetId(ledger.scope.financialYear, period),
+      targetId: createTargetId(
+        ledger.scope.financialYear,
+        period,
+        ledger.scope.returnType,
+        artifactType,
+      ),
       financialYear: ledger.scope.financialYear,
       period,
-      returnType: "GSTR-3B" as const,
+      returnType: ledger.scope.returnType,
+      artifactType,
       status: "pending" as const,
       attempts: 0,
       safeSignals: [],
@@ -210,7 +228,9 @@ export function sameFiledReturnsScope(
   return (
     left.financialYear === right.financialYear &&
     left.period === right.period &&
-    left.returnType === right.returnType
+    left.returnType === right.returnType &&
+    normaliseFiledReturnsArtifactType(left.returnType, left.artifactType) ===
+      normaliseFiledReturnsArtifactType(right.returnType, right.artifactType)
   );
 }
 
@@ -250,6 +270,22 @@ function createLedgerId(now: Date): string {
   return `full-fiscal-year-${now.getTime().toString(36)}`;
 }
 
-function createTargetId(financialYear: string, period: string): string {
-  return `GSTR-3B:${financialYear}:${period}`;
+export function createFullFiscalYearTargetId(
+  financialYear: string,
+  period: string,
+  returnType: FiledReturnsReturnType,
+  artifactType?: FiledReturnsArtifactType,
+): string {
+  const normalisedArtifactType = normaliseFiledReturnsArtifactType(returnType, artifactType);
+  const base = `${returnType}:${financialYear}:${period}`;
+  return normalisedArtifactType === "PDF" ? base : `${base}:${normalisedArtifactType}`;
+}
+
+function createTargetId(
+  financialYear: string,
+  period: string,
+  returnType: FiledReturnsReturnType,
+  artifactType?: FiledReturnsArtifactType,
+): string {
+  return createFullFiscalYearTargetId(financialYear, period, returnType, artifactType);
 }
