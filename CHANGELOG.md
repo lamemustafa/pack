@@ -13,6 +13,13 @@ All notable changes to ComplyEaze Pack are documented here.
 - Updated public source metadata so the extension homepage points to
   `https://pack.complyeaze.com/gst`.
 
+## [0.3.0](https://github.com/lamemustafa/pack/compare/v0.2.2...v0.3.0) (2026-07-03)
+
+
+### Features
+
+* **gst:** support GSTR-1 filed-return downloads ([94a1ec9](https://github.com/lamemustafa/pack/commit/94a1ec9a65ef4dc47bf3e5f0737fc7d908c4cdba))
+
 ## [0.2.2](https://github.com/lamemustafa/pack/compare/v0.2.1...v0.2.2) (2026-07-02)
 
 
