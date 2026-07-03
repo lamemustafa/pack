@@ -7,16 +7,18 @@ stable-release claims.
 ## Current Decision
 
 - Canonical product name: **ComplyEaze Pack**.
-- First Chrome listing title: **ComplyEaze Pack: GST GSTR-3B Downloader**.
+- First Chrome listing title: **ComplyEaze Pack: GSTR-3B/GSTR-1 Downloader**.
 - V0 Chrome Web Store listing:
   `https://chromewebstore.google.com/detail/complyeaze-pack-gst-gstr/nfnbhekccajjfgkppolomflaeledoccb`.
-- V0 purpose: download filed GSTR-3B PDFs locally from the user's active,
-  manually authenticated GST Portal session.
+- V0 purpose: download filed GSTR-3B PDFs, GSTR-1 summary PDFs, and optional
+  GSTR-1 e-invoice details Excel files locally from the user's active,
+  manually authenticated GST Portal session when the GST Portal exposes those
+  artifacts.
 - Full fiscal year download exists as a source-build alpha local per-period
-  ledger that runs eligible GSTR-3B periods through the single-period path after
-  user initiation. Store-facing V0 must not advertise it until exact-ZIP
-  clean-profile, real-browser restart/resume, reconciliation, and privacy-review
-  evidence are recorded for the release.
+  ledger that runs eligible GSTR-3B or GSTR-1 periods through the
+  single-period path after user initiation. Store-facing V0 must not advertise
+  it until exact-ZIP clean-profile, real-browser restart/resume,
+  reconciliation, and privacy-review evidence are recorded for the release.
 - V0 does not collect GST Portal credentials, OTPs, CAPTCHA responses, cookies,
   or session tokens, and does not store, log, or upload GST document contents.
   The direct-download compatibility path is URL-only: it reviews GST endpoint
@@ -103,7 +105,8 @@ stable-release claims.
       local access or processing.
 - [ ] Store screenshots and promotional images use only synthetic data.
 - [ ] Exact ZIP tested in a clean Chrome profile.
-- [ ] Exact ZIP tested against the live GSTR-3B flow by an authorised user.
+- [ ] Exact ZIP tested against the live GSTR-3B and GSTR-1 flows by an
+      authorised user.
 - [ ] Full fiscal year ledger resumes after service-worker restart without
       repeating a downloaded target.
 - [ ] Full fiscal year ledger resumes after browser restart without retaining
@@ -116,13 +119,38 @@ stable-release claims.
       portal-click fallback is verified to stop on unconfirmed or ambiguous
       evidence without repeating completed full-year targets.
       Active-profile Brave testing on 2026-07-01 cleared the immediate native
-      Save dialog blocker for one single-month run and a two-period local flow
-      run. No exact-ZIP clean-profile Chrome/Brave full-year evidence is
-      recorded yet, so full-year and browser-profile acceptance remains open.
+      Save dialog blocker for one GSTR-3B single-month run and a two-period
+      local flow run. Active-profile Brave testing on 2026-07-03 completed
+      one GSTR-1 PDF+Excel single-month run and one FY 2025-26 GSTR-1
+      PDF+Excel full-year run in the unpacked source build. No exact-ZIP
+      clean-profile Chrome/Brave full-year evidence is recorded yet, so
+      browser-profile and release-package acceptance remains open.
+      Local packaging follow-up on 2026-07-03 rebuilt the Chrome MV3 package,
+      produced `.output/complyeazepack-0.2.2-chrome.zip`, and updated the
+      exact-ZIP verifier to emit package-policy and SHA-256 evidence before the
+      browser-host step. The unpacked package, extracted ZIP package policy, and
+      ZIP checksum were verified locally. The recorded SHA-256 is
+      `58395617e5a5557f2b4c2091396937e82a5f7a857d94127702dff5881babe3e4`.
+      The exact-ZIP verifier still stops at the browser-host step because
+      Codex's macOS sandbox denies Chromium Crashpad application-support access
+      before Pack loads. The verifier now reports that as a sanitized
+      environmental blocker; no browser assertions ran in that attempt.
+      Focused unit coverage confirms explicit full-year resume does not repeat
+      a downloaded period and stale running ledgers do not auto-resume after a
+      service-worker restart, but real Chrome/Brave service-worker and
+      browser-restart evidence is still required before durable full-year
+      claims.
 - [ ] Network/storage audit confirms no unexpected destinations or sensitive
       persistence.
 - [ ] SBOM, dependency vulnerability review, license scan, and secret scan are
       complete.
+      `pnpm audit --audit-level high` hung without output in the sandbox on
+      2026-07-03, and the network-capable rerun was rejected by the current
+      Codex approval policy. Pack now uses `node scripts/run-dependency-audit.mjs`,
+      a timeout wrapper around the same audit command, so local release
+      verification fails clearly instead of hanging indefinitely. Treat
+      dependency-audit evidence as missing until the audit is run from an
+      approved network-capable shell or CI.
 - [ ] Multiple-download prompt, session expiration, cancellation, failed
       download, zero-byte/corrupt-file, and service-worker restart paths are
       manually checked.
@@ -140,20 +168,21 @@ stable-release claims.
 Title:
 
 ```text
-ComplyEaze Pack: GST GSTR-3B Downloader
+ComplyEaze Pack: GSTR-3B/GSTR-1 Downloader
 ```
 
 Short description:
 
 ```text
-Download filed GSTR-3B PDFs locally from your GST Portal session.
+Download filed GSTR-3B PDFs and GSTR-1 summary PDFs locally from your GST Portal session.
 ```
 
 Opening description:
 
 ```text
-ComplyEaze Pack helps you download your own filed GSTR-3B PDFs from the GST
-Portal using your active browser session. It does not ask for or store GST Portal
+ComplyEaze Pack helps you download your own filed GSTR-3B PDFs, GSTR-1 summary
+PDFs, and optional GSTR-1 e-invoice details Excel files from the GST Portal
+using your active browser session. It does not ask for or store GST Portal
 credentials, OTPs, CAPTCHA responses, cookies, or session tokens.
 ```
 

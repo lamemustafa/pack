@@ -73,20 +73,50 @@ For a one-month or full-year exploratory run, record:
 - exact source commit and ZIP SHA-256;
 - browser name/version and clean-profile confirmation;
 - subject alias such as `SUBJECT-A`, never GSTIN/PAN/name;
+- return type, artifact type, financial year, and period scope;
 - scenario: `single-period` or `full-year`;
 - outcome counts: eligible targets, downloaded, not filed, manually observed,
   blocked, failed, duplicates;
 - human verification checks;
 - service-worker and browser-restart checks for full-year runs;
 - clear-local-data result;
-- unexpected network destination count.
+- unexpected network destination count;
+- controlled limitation codes when the summary is blocked or incomplete.
 
 Run the focused validator test and then validate the local evidence file before
 treating the summary as shareable:
 
 ```sh
 pnpm exec vitest run tests/core/live-run-evidence.test.ts
-PACK_LIVE_EVIDENCE_PATH=/path/to/redacted-live-run.json pnpm run validate:evidence
+node scripts/validate-live-run-evidence.mjs /path/to/redacted-live-run.json
 ```
 
 If any redaction assertion is true, the summary is not publishable.
+
+Use the template generator before a manual clean-profile run so the return
+scope, artifact type, ZIP checksum, and restart checks are recorded consistently.
+For example:
+
+```sh
+pnpm run evidence:template -- \
+  --return-type GSTR-1 \
+  --artifact-type PDF_AND_EXCEL \
+  --financial-year 2025-26 \
+  --period FULL_FISCAL_YEAR \
+  --subject-alias SUBJECT-A \
+  --browser Brave \
+  --browser-version <version> \
+  --browser-summary-captured \
+  --output .output/redacted-live-run.json
+```
+
+For blocked or partial evidence, use only controlled limitation codes such as
+`browser-state-not-captured`, `clean-profile-not-verified`,
+`file-non-empty-check-not-verified`, `service-worker-restart-not-verified`, or
+`browser-restart-not-verified`. Free-form notes are not allowed in shareable
+evidence.
+
+For passing full-year evidence, the generator requires explicit
+`--clean-test-profile`, `--service-worker-restart-resume-checked`, and
+`--browser-restart-resume-checked` assertions. Do not add those flags until the
+browser-host run actually proves them.

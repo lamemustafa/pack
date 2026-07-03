@@ -120,7 +120,7 @@ Required checks for runtime or release-affecting changes:
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm audit --audit-level high
+node scripts/run-dependency-audit.mjs
 pnpm exec wxt prepare
 pnpm exec prettier --check .
 pnpm exec eslint . --max-warnings 0
@@ -134,8 +134,10 @@ git diff --check
 pnpm review:gate -- --strict-head-review --required-review-author chatgpt-codex-connector --wait-head-review-ms 180000
 ```
 
-If the audit cannot run because the registry is unavailable, report that as a
-verification gap. If `pnpm review:gate` cannot run because there is no PR,
+`node scripts/run-dependency-audit.mjs` runs `pnpm audit --audit-level high`
+with a timeout. If the audit cannot run because the registry is unavailable,
+report that as a verification gap. If `pnpm review:gate` cannot run because
+there is no PR,
 network access, or authenticated GitHub CLI session, report that as a PR-readiness
 verification gap instead of treating it as a pass.
 

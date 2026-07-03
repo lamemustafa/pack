@@ -6,8 +6,9 @@ not a public launch path.
 ## Scope
 
 - Portal area: `Services > Returns > View Filed Returns`.
-- Document: filed `GSTR-3B`.
-- Format: final PDF where available.
+- Documents: filed `GSTR-3B` and `GSTR-1`.
+- Formats: filed GSTR-3B PDF, filed GSTR-1 summary PDF, and optional filed
+  GSTR-1 e-invoice details Excel where the GST Portal provides the file.
 - Mode: user-authenticated local browser session.
 
 ## Non-negotiables
@@ -25,7 +26,9 @@ not a public launch path.
 - Filed-return page detection: `gst-filed-returns`.
 - Post-login GST shell detection: `services/auth/fowelcome` is treated as
   `gst-auth-landing`, not as an unsupported page.
-- Private spike plan: filed `GSTR-3B` PDF only.
+- Private spike plan: filed `GSTR-3B` PDF plus filed `GSTR-1` PDF/Excel
+  source-build support. Store-facing claims remain gated by the release
+  checklist.
 - Safe observation harness: content script classifies readiness from the active
   page and sends only allow-listed labels to the background worker.
 - Initial filed-returns form handling: Pack reports `filters-required` when the
@@ -99,11 +102,14 @@ not a public launch path.
 
 ## Live navigation finding
 
-A direct browser route jump to `https://return.gst.gov.in/returns/auth/efiledreturns`
-was rejected by the GST Portal even after an authenticated returns-domain page
-had been opened. Treat direct protected route jumps as unsupported for Pack V0.
+A direct browser route jump to the authenticated returns-domain filed-returns
+route was rejected by the GST Portal even after an authenticated returns-domain
+page had been opened. Treat direct protected route jumps as unsupported for Pack
+V0. This was reconfirmed on 2026-07-02 by navigating from the returns dashboard
+path to the filed-returns path, which landed on the GST access-denied page
+instead of the filed-returns UI.
 
-Live test update: starting from `https://services.gst.gov.in/services/auth/fowelcome`,
+Live test update: starting from the authenticated services-domain welcome page,
 Pack successfully clicked through to the portal-rendered `View Filed Returns`
 page. The first page state after navigation is the FY/period/return-type filter
 form; Pack now reports that as `filters-required` instead of mistaking the
@@ -228,9 +234,10 @@ GET /returns/auth/api/gstr3b/taxpayble?rtn_prd=MMYYYY
 `MMYYYY` is derived from the user-selected return period and financial year.
 Pack must not document, log or store the raw protected URL from a taxpayer
 session. Any direct-download experiment must construct the path from the local
-target, run only on `https://return.gst.gov.in/returns/auth/gstr3b`, verify that
-the visible detail page matches the target financial year and period, and bind
-the request to Pack's local action id before attempting anything networked.
+target, run only on the authenticated returns-domain GSTR-3B detail route,
+verify that the visible detail page matches the target financial year and
+period, and bind the request to Pack's local action id before attempting
+anything networked.
 
 The safe replay boundary is header-level and URL-only: browser-managed
 credentials only, no copied cookies or headers, no raw response body reads, no
@@ -277,9 +284,217 @@ release claim. The live artifact location also did not prove Pack-managed
 folder placement, so manifest/folder reconciliation remains a release-hardening
 follow-up rather than part of the save-dialog fix.
 
+## 2026-07-02 private GSTR-3B observation
+
+Private Brave testing against `SUBJECT-A` recorded two GSTR-3B outcomes for
+FY `2025-26` using an existing user Brave profile and an existing unpacked Pack
+build:
+
+- Full-year scope completed with `12` of `12` targets reconciled. The run used
+  Pack's built-in retry/recovery at the final saved period, then reported
+  completion.
+- Single-period May scope completed with `1` of `1` target reconciled and no
+  manual recovery.
+
+The local redacted JSON summary is stored under the ignored generated evidence
+area and is intentionally classified as private local observation evidence, not
+release-grade or publishable evidence. The result is useful engineering proof
+for the GSTR-3B flow, but it does not close the live evidence gate because it
+did not use a clean profile, did not load the isolated current worktree build,
+did not cryptographically bind the loaded extension to the source under review,
+and did not check service-worker or browser-restart resume behavior. No live
+portal screenshots, recordings, downloaded files, filenames, local paths,
+GSTIN/PAN, taxpayer names, raw portal HTML, cookies, headers, tokens, OTPs, or
+CAPTCHA data were retained.
+
+## 2026-07-02 private GSTR-1 observation
+
+Private Brave testing continued with the rebuilt local unpacked Pack build for
+GSTR-1. Brave's extension page showed the expected Pack `0.2.2` title that
+mentions GSTR-1 before the live retry.
+
+For FY `2025-26` and May, Pack reached the GST filed-returns filter form and
+selected the visible GSTR-1 search filters:
+
+- financial year `2025-26`;
+- return filing period `Monthly`;
+- month `May`;
+- return type `GSTR-1/IFF/GSTR-1A`.
+
+The first GSTR-1 live run stopped before clicking the portal `Search` action and
+reported a safe blocked state while waiting for the GST portal filter form to
+settle. The implementation was tightened so GSTR-1 explicitly selects
+`Monthly`, then the target month, and falls back to the document-level `Search`
+button when the live portal keeps that control outside the detected form root.
+Focused regression coverage now proves both the fresh-selection and
+already-populated GSTR-1 filter forms click `Search`.
+
+After rebuilding and reloading the local unpacked extension in a fresh
+authenticated Brave session, Pack progressed beyond the filter form. The live
+safe-result inspection found one GSTR-1/IFF result row for May and no
+`No records found` state. Pack then opened the row and reached
+`/returns/auth/gstr1`, with safe signals for the GSTR-1 detail route, GSTR-1
+heading and filed status.
+
+The live PDF path is different from GSTR-3B: the filed GSTR-1 detail page does
+not expose the final summary PDF download directly. It exposes a portal
+`View Summary` action whose live merged label appeared as
+`VIEW SUMMARY PROCEED TO FILE/SUMMARY VIEW SUMMARY`; that action opens a
+separate summary page with the PDF download control near the bottom.
+
+Implementation changes from this evidence:
+
+- GSTR-1 PDF and combined PDF+Excel runs click `View Summary` from the filed
+  GSTR-1 detail page before attempting the PDF artifact.
+- GSTR-1 Excel-only runs stay on the filed GSTR-1 detail page; if a previous
+  PDF step leaves the browser on the summary page, Pack uses browser history to
+  return to the detail page before triggering Excel.
+- Combined PDF+Excel runs sequence PDF first, then return to the detail page
+  and trigger the Excel artifact.
+- After opening a GSTR-1 result row, the runner waits for the page to settle and
+  for the content step to report the correct PDF/Excel page readiness instead
+  of immediately trying the final download trigger.
+
+Excel-only initially reached the e-invoice download path and clicked an
+Excel-related control, but the browser did not report a completed download. The
+run was therefore recorded as `download-unconfirmed`, not downloaded. A safe
+control scan also observed an e-invoice download-history area with no files
+available for download during this session.
+
+Second-account follow-up: after the user switched to another authorised GST
+account in the same Brave profile, running Excel-only for the same FY `2025-26`
+May target completed: the browser reported a completed non-empty download for
+the e-invoice details Excel artifact. This is valid private engineering evidence
+for the Excel-only path in the active Brave profile, but it does not prove
+GSTR-1 summary PDF or combined PDF+Excel completion.
+
+After the View Summary implementation change, another live retry on the same
+second account found only one GST tab, opened the May GSTR-1 result row, and
+reported the safe signals `filed-return-result-view-clicked`,
+`result-row-gstr1`, and `filed-return-result-period:May`. A subsequent retry
+from the GST authenticated welcome route returned Pack's portal availability
+guard instead: `blocked` with `portal-scheduled-downtime`. Treat this as a
+portal-side blocker for the current session, not as PDF completion evidence.
+
+2026-07-03 follow-up: after the user logged back into the same Brave profile,
+the first rebuilt run reached `/returns/auth/gstr1` but exposed two live gaps:
+Pack did not classify the GSTR-1 detail route as a filed-return detail context,
+and target identity review could treat the correct GSTR-1 detail page as a
+mismatch when the scoped download panel exposed FY/period but not an explicit
+return-type label. The implementation now treats `/returns/auth/gstr1` as a
+GSTR-1 detail route and uses the authenticated detail route as return-type
+evidence while still enforcing FY/period checks.
+
+After rebuilding and reloading the unpacked extension with those fixes, the
+GSTR-1 PDF-only run for FY `2025-26` May completed in Brave. The redacted helper
+reported `downloaded` with safe signals including `gstr1-detail-route`,
+`gstr1-detail-heading`, `status-filed`, and `download-pdf-gstr1-visible`. This
+is private engineering evidence for the GSTR-1 summary PDF path in the active
+Brave profile. It is not clean-profile release evidence and did not retain
+portal screenshots, downloaded files, filenames, local paths, GSTIN/PAN,
+taxpayer names, raw portal HTML, cookies, headers, tokens, OTPs or CAPTCHA data.
+
+The same live session then ran combined PDF+Excel. Pack reached the GSTR-1
+detail context and clicked a filed-return download control, but the browser did
+not report a completed download for the Excel leg, so the combined run ended as
+`download-unconfirmed`. A following Excel-only retry was blocked by Pack's local
+target-review guard with `filed-returns-target-review-required`. Treat this as
+PDF passed, Excel previously passed in this account, and combined PDF+Excel
+still not live-proven.
+
+After the user cleared the GST page state and Pack extension state and returned
+to the GST dashboard, another combined PDF+Excel retry again navigated from the
+dashboard and ended as `download-unconfirmed` on the Excel leg. A follow-up
+Excel-only retry hit the expected Excel-specific target-review guard. This
+confirms the remaining combined-flow gap is not stale extension state; it is the
+Excel browser-download observation path after the portal click. Pack now marks
+that condition with `filed-return-artifact-unconfirmed:EXCEL` and an
+Excel-specific message that distinguishes browser multiple-download blocking
+from the portal having no generated e-invoice file available yet.
+
+The implementation was tightened again from this evidence: Chromium duplicate
+`innerText`/`textContent` surfaces are de-duplicated for the live `Search` and
+row `View` controls, GSTR-1 detail identity accepts GST's `Tax Period` label,
+GSTR-1 detail routes are recognised as detail contexts, route evidence can
+confirm the return type when a scoped panel omits the label, and filed GSTR-1
+detail pages that show no download files are classified as the correct page
+with a missing/unconfirmed download artifact rather than as a wrong-page
+condition. Excel unconfirmed states are now artifact-specific instead of a
+generic filed-return warning. This is both an Excel-only live pass and a GSTR-1
+summary PDF live pass in the active Brave profile, but it is not a combined
+PDF+Excel pass. Combined PDF+Excel completion still requires a run where both
+the PDF and Excel legs report completed browser downloads in one Pack flow. No live portal
+screenshots, recordings, downloaded files, filenames, local paths, GSTIN/PAN,
+taxpayer names, raw portal HTML, cookies, headers, tokens, OTPs or CAPTCHA data
+were retained.
+
+Final 2026-07-03 live retry: after rebuilding, reloading the unpacked extension
+and refreshing the authenticated GST return tab, the Excel-only helper for
+FY `2025-26` May returned `blocked` with
+`filed-gstr1-excel-no-details-available`. The live portal displayed an
+information dialog saying no e-invoice details were available for download for
+that filed GSTR-1 period. Pack now preserves that portal evidence instead of
+waiting for the browser-download observer and rewriting the result as
+`download-unconfirmed`. This is the expected outcome for a filed GSTR-1 period
+where the PDF path is available but the optional e-invoice Excel artifact is not
+generated for the account/period. The UI can still offer PDF, Excel, or
+PDF+Excel, but Excel completion is only provable when the portal actually
+provides the e-invoice details file. No portal screenshots, recordings,
+downloaded files, filenames, local paths, GSTIN/PAN, taxpayer names, raw portal
+HTML, cookies, headers, tokens, OTPs or CAPTCHA data were retained.
+
+Different-account 2026-07-03 live validation: after the user logged into a
+different authorised GST account in the same Brave profile, Pack was rebuilt,
+the unpacked extension was reloaded, and the GST tab was refreshed before live
+testing. FY `2026-27` April GSTR-1 PDF completed with browser download evidence.
+FY `2026-27` May GSTR-1 PDF+Excel completed in one combined Pack flow with the
+safe `downloaded` selected-artifacts result. FY `2026-27` June GSTR-1 PDF was
+used as the negative-control period; Pack did not enter filing/submission
+actions and returned a terminal `blocked` summary. The first June run exposed a
+message-quality gap because the terminal summary reused the intermediate
+`clicked Search` safe message. The runner now rewrites step-limit exits to
+`user-action-required` with `flow-step-limit-reached`, preserving the prior safe
+signals while explaining that the portal did not show a filed GSTR-1 row or
+download control before Pack's retry limit. A rebuilt/reloaded Brave retest
+confirmed the improved blocked state. No portal screenshots, recordings,
+downloaded files, filenames, local paths, GSTIN/PAN, taxpayer names, raw portal
+HTML, cookies, headers, tokens, OTPs or CAPTCHA data were retained.
+
+Final 2026-07-03 full-year live validation: after the user logged into an
+authorised GST account in the same Brave profile, Pack was rebuilt, the
+unpacked extension was reloaded from `.output/chrome-mv3`, Pack local state was
+cleared, and the active GST session was reused. A single-period FY `2025-26`
+May GSTR-1 `PDF_AND_EXCEL` run completed with the selected-artifacts success
+message. A subsequent FY `2025-26` GSTR-1 `PDF_AND_EXCEL` full fiscal year run
+completed in the same unpacked source build. The redacted Pack helper summary
+reported scope `{ returnType: "GSTR-1", period: "FULL_FISCAL_YEAR",
+financialYear: "2025-26", artifactType: "PDF_AND_EXCEL" }`, status
+`complete`, total periods `12`, and completed periods April through March, with
+the safe signal `full-fiscal-year-complete`. This is active-profile Brave
+source-build evidence that the GSTR-1 full-year PDF+Excel ledger can run
+smoothly after user initiation. It is not exact-ZIP clean-profile evidence, and
+it does not prove service-worker restart, browser-restart, release-package, or
+legal/store-review acceptance. No portal screenshots, recordings, downloaded
+files, filenames, local paths, GSTIN/PAN, taxpayer names, raw portal HTML,
+cookies, headers, tokens, OTPs or CAPTCHA data were retained.
+
 ## Remaining public-release gaps
 
-- Re-run a clean-profile exact ZIP smoke test after every package rebuild.
+- Re-run a clean-profile exact ZIP smoke test after every package rebuild. The
+  2026-07-03 local ZIP had SHA-256
+  `38b7759d2f205febba18f1428db714bf0b4f6527a29b345b1599fa29e3c8dcd8` and
+  passed package-policy verification after extraction. The exact-ZIP verifier
+  now emits package-policy and checksum evidence before the browser-host step,
+  but the browser-host verifier remains blocked before Pack loads by the local
+  macOS Chromium Crashpad sandbox permission boundary.
+- Run `node scripts/run-dependency-audit.mjs` from CI or an approved
+  network-capable shell; the local sandboxed audit hung without output and the
+  escalated network rerun was rejected by policy. The wrapper now fails with a
+  timeout instead of hanging indefinitely.
+- Capture real Chrome/Brave service-worker restart and browser-restart evidence
+  for full-year runs. Unit tests cover explicit resume without repeating a
+  downloaded period and stale running-ledger restart handling, but release
+  claims still need browser-host proof.
 - Reconcile live downloaded PDFs into the local Pack manifest and exception
   report before broad public launch.
 - Complete counsel review of the live GST Portal terms, product copy and store
