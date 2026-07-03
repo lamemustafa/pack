@@ -222,16 +222,18 @@ function validateCounts(input: unknown, outcome: unknown, errors: string[]): voi
   } else if (observed === 0) {
     errors.push("counts must include at least one observed target");
   }
-  if (input.eligibleTargets !== observed) {
-    errors.push("counts must reconcile eligible targets");
-  }
   if (outcome === "pass") {
+    if (input.eligibleTargets !== observed) {
+      errors.push("counts must reconcile eligible targets");
+    }
     if (input.blocked > 0) errors.push("pass evidence cannot include blocked targets");
     if (input.failed > 0) errors.push("pass evidence cannot include failed targets");
     if (input.duplicates > 0) errors.push("pass evidence cannot include duplicate targets");
     if (input.eligibleTargets !== reconciled) {
       errors.push("pass evidence must reconcile every eligible target");
     }
+  } else if (observed > input.eligibleTargets) {
+    errors.push("counts cannot exceed eligible targets");
   }
 }
 

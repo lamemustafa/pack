@@ -206,6 +206,32 @@ describe("extension package verifier", () => {
     expect(result.output).toContain("redaction pattern home-path missed /home/example");
   });
 
+  it("fails closed when the harness policy snapshot digest is stale", async () => {
+    const outputDir = await createValidPackage();
+    const snapshotDir = await mkdtemp(path.join(tmpdir(), "pack-policy-"));
+    createdDirs.push(snapshotDir);
+    const snapshotPath = path.join(snapshotDir, "stale-policy-snapshot.json");
+    const snapshot = JSON.parse(
+      await readFile(path.join(rootDir, "policies", "agent-harness-policy.snapshot.json"), "utf8"),
+    ) as {
+      manifest: Record<string, unknown>;
+      policy: { redaction: { patterns: Array<Record<string, unknown>> } };
+    };
+    snapshot.policy.redaction.patterns.push({
+      id: "extra-test-pattern",
+      label: "<EXTRA>",
+      pattern: "extra-test-pattern",
+    });
+    await writeFile(snapshotPath, `${JSON.stringify(snapshot, null, 2)}\n`);
+
+    const result = await runVerifier(outputDir, {
+      PACK_HARNESS_POLICY_PATH: snapshotPath,
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("canonicalPolicySha256 does not match snapshot.policy");
+  });
+
   it("allows approved GST portal origins in packaged extension code", async () => {
     const outputDir = await createValidPackage();
     await writePackageFile(
