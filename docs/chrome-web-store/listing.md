@@ -8,7 +8,8 @@ be reviewed in the Chrome Web Store Developer Dashboard.
 ## Current Public Listing
 
 - Status: V0 listing available for the existing published package.
-- Required update: v0.3.1 listing copy and package review for GSTR-1 support.
+- Required update: next Release Please patch listing copy and package review for
+  GSTR-1 support.
 - External boundary: no official, GSTN-approved, filing, reconciliation, all GST
   returns, backend sync, or professional-review claim.
 
