@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm exec vitest run*)",
+      "Bash(pnpm exec eslint .*)",
+      "Bash(pnpm exec tsc --noEmit*)",
+      "Bash(pnpm exec prettier --check .*)",
+      "Bash(git status*)",
+      "Bash(git diff*)"
+    ]
+  }
+}
