@@ -1,5 +1,16 @@
 export type LiveRunScenario = "single-period" | "full-year";
 export type LiveRunOutcome = "pass" | "blocked" | "failed";
+export type LiveRunReturnType = "GSTR-3B" | "GSTR-1";
+export type LiveRunArtifactType = "PDF" | "EXCEL" | "PDF_AND_EXCEL";
+export type LiveRunEvidenceLimitation =
+  | "clean-profile-not-verified"
+  | "human-account-match-not-verified"
+  | "human-period-match-not-verified"
+  | "file-non-empty-check-not-verified"
+  | "service-worker-restart-not-verified"
+  | "browser-restart-not-verified"
+  | "clear-local-data-not-verified"
+  | "browser-state-not-captured";
 
 export interface LiveRunEvidence {
   schemaVersion: 1;
@@ -14,12 +25,17 @@ export interface LiveRunEvidence {
   };
   profile: "clean-test-profile" | string;
   subjectAlias: string;
+  returnType: LiveRunReturnType;
+  artifactType: LiveRunArtifactType;
+  financialYear: string;
+  period: string;
   scenario: LiveRunScenario;
   startedAt: string;
   completedAt: string;
   outcome: LiveRunOutcome;
   counts: LiveRunEvidenceCounts;
   checks: LiveRunEvidenceChecks;
+  limitations?: LiveRunEvidenceLimitation[];
   redaction: LiveRunEvidenceRedaction;
   mediaArtifacts?: LiveRunEvidenceMediaArtifact[];
 }
@@ -41,6 +57,7 @@ export interface LiveRunEvidenceChecks {
   serviceWorkerRestartResumeChecked: boolean;
   browserRestartResumeChecked: boolean;
   clearLocalDataChecked: boolean;
+  browserSummaryCaptured: boolean;
   unexpectedNetworkDestinations: number;
 }
 

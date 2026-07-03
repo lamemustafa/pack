@@ -80,6 +80,39 @@ describe("live run evidence", () => {
     if (!nested.ok) expect(nested.errors).toContain("counts.ignoredTargets is not allowed");
   });
 
+  it("requires return scope fields that identify the tested artifact", () => {
+    const evidenceWithoutReturnType = { ...createValidEvidence() } as Record<string, unknown>;
+    delete evidenceWithoutReturnType.returnType;
+    const missingReturnType = validateLiveRunEvidence(evidenceWithoutReturnType);
+    const invalidGstr3bArtifact = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      artifactType: "PDF_AND_EXCEL",
+    });
+    const invalidFullYearPeriod = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      period: "May",
+    });
+    const validGstr1Combined = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      returnType: "GSTR-1",
+      artifactType: "PDF_AND_EXCEL",
+      financialYear: "2025-26",
+    });
+
+    expect(missingReturnType.ok).toBe(false);
+    if (!missingReturnType.ok)
+      expect(missingReturnType.errors).toContain("returnType must be one of GSTR-3B, GSTR-1");
+    expect(invalidGstr3bArtifact.ok).toBe(false);
+    if (!invalidGstr3bArtifact.ok)
+      expect(invalidGstr3bArtifact.errors).toContain("GSTR-3B evidence must use artifactType PDF");
+    expect(invalidFullYearPeriod.ok).toBe(false);
+    if (!invalidFullYearPeriod.ok)
+      expect(invalidFullYearPeriod.errors).toContain(
+        "full-year evidence must use period FULL_FISCAL_YEAR",
+      );
+    expect(validGstr1Combined).toMatchObject({ ok: true });
+  });
+
   it("scans raw evidence JSON before parsing", () => {
     const source = JSON.stringify({
       ...createValidEvidence(),
@@ -192,6 +225,7 @@ describe("live run evidence", () => {
         serviceWorkerRestartResumeChecked: false,
         browserRestartResumeChecked: false,
         clearLocalDataChecked: false,
+        browserSummaryCaptured: false,
         unexpectedNetworkDestinations: 0,
       },
     });
@@ -230,11 +264,70 @@ describe("live run evidence", () => {
         serviceWorkerRestartResumeChecked: false,
         browserRestartResumeChecked: false,
         clearLocalDataChecked: false,
+        browserSummaryCaptured: false,
         unexpectedNetworkDestinations: 0,
       },
     });
 
     expect(result.ok).toBe(true);
+  });
+
+  it("allows only controlled limitation codes for blocked evidence", () => {
+    const blockedEvidence = {
+      ...createValidEvidence(),
+      outcome: "blocked",
+      counts: {
+        eligibleTargets: 1,
+        downloaded: 0,
+        notFiled: 0,
+        manuallyObserved: 0,
+        blocked: 1,
+        failed: 0,
+        duplicates: 0,
+      },
+      checks: {
+        humanVerifiedAccount: false,
+        humanVerifiedPeriods: false,
+        allFilesNonEmpty: false,
+        serviceWorkerRestartResumeChecked: false,
+        browserRestartResumeChecked: false,
+        clearLocalDataChecked: false,
+        browserSummaryCaptured: false,
+        unexpectedNetworkDestinations: 0,
+      },
+    };
+    const accepted = validateLiveRunEvidence({
+      ...blockedEvidence,
+      limitations: ["browser-state-not-captured", "service-worker-restart-not-verified"],
+    });
+    const rejected = validateLiveRunEvidence({
+      ...blockedEvidence,
+      limitations: ["manual tester saw client name"],
+    });
+    const duplicate = validateLiveRunEvidence({
+      ...blockedEvidence,
+      limitations: ["browser-state-not-captured", "browser-state-not-captured"],
+    });
+
+    expect(accepted.ok).toBe(true);
+    expect(rejected.ok).toBe(false);
+    if (!rejected.ok)
+      expect(rejected.errors).toContain(
+        "limitations[0] must be one of clean-profile-not-verified, human-account-match-not-verified, human-period-match-not-verified, file-non-empty-check-not-verified, service-worker-restart-not-verified, browser-restart-not-verified, clear-local-data-not-verified, browser-state-not-captured",
+      );
+    expect(duplicate.ok).toBe(false);
+    if (!duplicate.ok)
+      expect(duplicate.errors).toContain("limitations[1] duplicates browser-state-not-captured");
+  });
+
+  it("rejects limitation codes on pass evidence", () => {
+    const result = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      limitations: ["browser-state-not-captured"],
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors).toContain("pass evidence cannot include limitations");
   });
 
   it("requires passing evidence to use a clean profile and zero unexpected network destinations", () => {
@@ -352,6 +445,10 @@ function createValidEvidence(): LiveRunEvidence {
     },
     profile: "clean-test-profile",
     subjectAlias: "SUBJECT-A",
+    returnType: "GSTR-3B",
+    artifactType: "PDF",
+    financialYear: "2026-27",
+    period: "FULL_FISCAL_YEAR",
     scenario: "full-year",
     startedAt: "2026-06-26T08:00:00.000Z",
     completedAt: "2026-06-26T08:30:00.000Z",
@@ -372,6 +469,7 @@ function createValidEvidence(): LiveRunEvidence {
       serviceWorkerRestartResumeChecked: true,
       browserRestartResumeChecked: true,
       clearLocalDataChecked: true,
+      browserSummaryCaptured: true,
       unexpectedNetworkDestinations: 0,
     },
     redaction: {

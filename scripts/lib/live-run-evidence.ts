@@ -5,25 +5,45 @@ import type {
   LiveRunEvidence,
   LiveRunEvidenceChecks,
   LiveRunEvidenceCounts,
+  LiveRunEvidenceLimitation,
   LiveRunEvidenceRedaction,
   LiveRunEvidenceValidationResult,
 } from "./live-run-evidence-types";
 
 export type {
+  LiveRunArtifactType,
   LiveRunEvidence,
   LiveRunEvidenceChecks,
   LiveRunEvidenceCounts,
+  LiveRunEvidenceLimitation,
   LiveRunEvidenceMediaArtifact,
   LiveRunEvidenceRedaction,
   LiveRunEvidenceValidationResult,
   LiveRunOutcome,
+  LiveRunReturnType,
   LiveRunScenario,
 } from "./live-run-evidence-types";
 
 const HEX_40 = /^[a-f0-9]{40}$/;
 const HEX_64 = /^[a-f0-9]{64}$/;
+const FINANCIAL_YEAR = /^20\d{2}-\d{2}$/;
 const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 const SUBJECT_ALIAS = /^SUBJECT-[A-Z0-9]{1,12}$/;
+const PERIODS = [
+  "FULL_FISCAL_YEAR",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+  "January",
+  "February",
+  "March",
+];
 const LIVE_RUN_EVIDENCE_KEYS = [
   "schemaVersion",
   "evidenceId",
@@ -34,12 +54,17 @@ const LIVE_RUN_EVIDENCE_KEYS = [
   "browser",
   "profile",
   "subjectAlias",
+  "returnType",
+  "artifactType",
+  "financialYear",
+  "period",
   "scenario",
   "startedAt",
   "completedAt",
   "outcome",
   "counts",
   "checks",
+  "limitations",
   "redaction",
   "mediaArtifacts",
 ];
@@ -60,9 +85,21 @@ const CHECK_KEYS = [
   "serviceWorkerRestartResumeChecked",
   "browserRestartResumeChecked",
   "clearLocalDataChecked",
+  "browserSummaryCaptured",
   "unexpectedNetworkDestinations",
 ];
 const MEDIA_ARTIFACT_KEYS = ["kind", "classification", "redactionMethod", "sha256"];
+const LIMITATIONS: LiveRunEvidenceLimitation[] = [
+  "clean-profile-not-verified",
+  "human-account-match-not-verified",
+  "human-period-match-not-verified",
+  "file-non-empty-check-not-verified",
+  "service-worker-restart-not-verified",
+  "browser-restart-not-verified",
+  "clear-local-data-not-verified",
+  "browser-state-not-captured",
+];
+const LIMITATION_SET = new Set<string>(LIMITATIONS);
 
 const REQUIRED_TRUE_CHECKS: Array<keyof LiveRunEvidenceChecks> = [
   "humanVerifiedAccount",
@@ -71,6 +108,7 @@ const REQUIRED_TRUE_CHECKS: Array<keyof LiveRunEvidenceChecks> = [
   "serviceWorkerRestartResumeChecked",
   "browserRestartResumeChecked",
   "clearLocalDataChecked",
+  "browserSummaryCaptured",
 ];
 
 const REDACTION_ASSERTIONS: Array<keyof LiveRunEvidenceRedaction> = [
@@ -102,7 +140,12 @@ export function validateLiveRunEvidence(input: unknown): LiveRunEvidenceValidati
   requirePattern(input.subjectAlias, SUBJECT_ALIAS, "subjectAlias", errors, {
     message: "subjectAlias must be a neutral SUBJECT-* alias",
   });
+  requireOneOf(input.returnType, ["GSTR-3B", "GSTR-1"], "returnType", errors);
+  requireOneOf(input.artifactType, ["PDF", "EXCEL", "PDF_AND_EXCEL"], "artifactType", errors);
+  requirePattern(input.financialYear, FINANCIAL_YEAR, "financialYear", errors);
+  requireOneOf(input.period, PERIODS, "period", errors);
   requireOneOf(input.scenario, ["single-period", "full-year"], "scenario", errors);
+  validateScopeConsistency(input, errors);
   requireIsoTimestamp(input.startedAt, "startedAt", errors);
   requireIsoTimestamp(input.completedAt, "completedAt", errors);
   validateTimeRange(input.startedAt, input.completedAt, errors);
@@ -115,6 +158,7 @@ export function validateLiveRunEvidence(input: unknown): LiveRunEvidenceValidati
   }
   validateCounts(input.counts, input.outcome, errors);
   validateChecks(input.checks, input.scenario, input.outcome, errors);
+  validateLimitations(input.limitations, input.outcome, errors);
   validateRedaction(input.redaction, errors);
   validateMediaArtifacts(input.mediaArtifacts, errors);
   assertNoSensitiveMarkers(input, errors);
@@ -147,6 +191,18 @@ function validateBrowser(input: unknown, errors: string[]): void {
   requireOnlyKeys(input, BROWSER_KEYS, "browser", errors);
   requireBoundedString(input.name, "browser.name", errors, 1, 40);
   requireBoundedString(input.version, "browser.version", errors, 1, 80);
+}
+
+function validateScopeConsistency(input: Record<string, unknown>, errors: string[]): void {
+  if (input.returnType === "GSTR-3B" && input.artifactType !== "PDF") {
+    errors.push("GSTR-3B evidence must use artifactType PDF");
+  }
+  if (input.scenario === "full-year" && input.period !== "FULL_FISCAL_YEAR") {
+    errors.push("full-year evidence must use period FULL_FISCAL_YEAR");
+  }
+  if (input.scenario === "single-period" && input.period === "FULL_FISCAL_YEAR") {
+    errors.push("single-period evidence must use a month period");
+  }
 }
 
 function validateCounts(input: unknown, outcome: unknown, errors: string[]): void {
@@ -234,6 +290,29 @@ function validateTimeRange(startedAt: unknown, completedAt: unknown, errors: str
   const completedAtMs = Date.parse(completedAt);
   if (!Number.isFinite(startedAtMs) || !Number.isFinite(completedAtMs)) return;
   if (completedAtMs <= startedAtMs) errors.push("completedAt must be after startedAt");
+}
+
+function validateLimitations(input: unknown, outcome: unknown, errors: string[]): void {
+  if (input === undefined) return;
+  if (!Array.isArray(input)) {
+    errors.push("limitations must be an array");
+    return;
+  }
+  if (outcome === "pass" && input.length > 0) {
+    errors.push("pass evidence cannot include limitations");
+  }
+  const seen = new Set<string>();
+  input.forEach((limitation, index) => {
+    if (typeof limitation !== "string" || !LIMITATION_SET.has(limitation)) {
+      errors.push(`limitations[${index}] must be one of ${LIMITATIONS.join(", ")}`);
+      return;
+    }
+    if (seen.has(limitation)) {
+      errors.push(`limitations[${index}] duplicates ${limitation}`);
+      return;
+    }
+    seen.add(limitation);
+  });
 }
 
 function validateMediaArtifacts(input: unknown, errors: string[]): void {
