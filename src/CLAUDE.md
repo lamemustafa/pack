@@ -20,7 +20,7 @@ src/
 
 `src/core` must stay portal-neutral: contracts (`contracts.ts`), manifest
 building (`manifest.ts`), redaction (`redaction.ts`), naming, CSV, filed-returns
-*shape* types (`filed-returns-artifacts.ts`, `filed-returns-return-types.ts`,
+_shape_ types (`filed-returns-artifacts.ts`, `filed-returns-return-types.ts`,
 `filed-returns-scope.ts`). Nothing in `core` may import from
 `connectors/gst` or know about GST DOM structure, GST hosts, or GST-specific
 copy. This is what lets a second connector be added later without touching

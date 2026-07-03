@@ -30,14 +30,17 @@ Run these in order. Stop and surface the failure if any step fails — do not
 skip ahead or "fix forward" past a failing gate without the user's input.
 
 1. **Install (frozen lockfile)**
+
    ```sh
    pnpm install --frozen-lockfile
    ```
 
 2. **Verify — the full local release gate**
+
    ```sh
    pnpm verify:release
    ```
+
    This expands to `verify:local` (dependency audit, `wxt prepare`, Prettier,
    ESLint, `tsc --noEmit`, Vitest, `wxt build`, package-policy verification,
    `git diff --check`) plus `verify:clean`, `wxt zip`, and
@@ -46,43 +49,53 @@ skip ahead or "fix forward" past a failing gate without the user's input.
    section for the exact command sequence.
 
 3. **Clean worktree assertion**
+
    ```sh
    pnpm verify:clean
    ```
+
    This is also invoked inside `verify:release`, but re-run it standalone if
    you made any changes between steps (e.g. a fix for a failed gate). A
    release ZIP must never be built from a dirty worktree.
 
 4. **Zip**
+
    ```sh
    pnpm exec wxt zip
    ```
+
    Produces the Chrome MV3 store ZIP under `.output/`. Do not commit this file
    — `.output/` is generated and gitignored.
 
 5. **Verify the exact ZIP**
+
    ```sh
    pnpm verify:zip
    ```
+
    Extracts the just-built ZIP, reruns the package-policy verifier against
    the extraction (permissions, CSP, no remote code), and prints the SHA-256.
    Record this checksum — it must match what later appears on the GitHub
    release asset.
 
 6. **Write release provenance**
+
    ```sh
    pnpm release:provenance
    ```
+
    Generates `pack-release-provenance.v1.json` recording source commit,
    version, manifest permissions, homepage URL, ZIP asset name, and ZIP
    SHA-256. This file is what later dry-run/publish steps validate against —
    not the checked-out `package.json` version — so do not skip it.
 
 7. **PR review closure check (before tagging)**
+
    ```sh
    pnpm review:gate -- --repo lamemustafa/pack --pr <number> --strict-head-review \
      --required-review-author chatgpt-codex-connector --wait-head-review-ms 180000
    ```
+
    Confirms the release PR has no unresolved post-merge review threads and
    that the latest automated review applies to the exact merged head. Treat
    any post-merge findings as a release blocker until fixed or explicitly

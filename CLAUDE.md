@@ -17,7 +17,7 @@ Code specifically, not a replacement or a competing source of truth.
   nothing declared ready until checks pass) still applies in full.
 - Run `pnpm workflow:preflight` before non-trivial edits.
 - Keep PRs small. Use Conventional Commits PR titles (`type(scope): imperative
-  summary`) — CI-enforced by `pr-title.yml`.
+summary`) — CI-enforced by `pr-title.yml`.
 - Prefer draft PRs unless explicitly ready for review. Never declare a PR
   ready or mergeable until GitHub Actions checks pass and any automated
   review bot's findings are addressed or explicitly dispositioned.

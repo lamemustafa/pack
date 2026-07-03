@@ -26,10 +26,11 @@ trusting a description of it.
 ## What to review
 
 Treat every one of these as in scope, not just GST connector code:
+
 - Diffs under `src/connectors/gst/**` and anything they import from `src/core`.
 - `src/entrypoints/**` (background, options, popup) wherever it touches
   downloads, storage, or portal interaction.
-- README.md, docs/**, CHANGELOG.md, Chrome Web Store listing copy, PR titles
+- README.md, docs/\*\*, CHANGELOG.md, Chrome Web Store listing copy, PR titles
   and descriptions, release notes, and any pack.complyeaze.com copy changes.
 - Test fixtures, synthetic data files, screenshots, and log/debug output added
   anywhere in the repo.
@@ -110,6 +111,7 @@ chat message you review — not only source code:
 ## How to report
 
 For each finding, give:
+
 - Severity: Critical (credential/session/taxpayer leak, manifest/permission
   expansion, or public overclaim) / High / Medium / Low.
 - File and line (or PR/issue location) and the exact offending text or code.

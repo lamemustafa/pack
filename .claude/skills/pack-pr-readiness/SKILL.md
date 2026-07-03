@@ -96,8 +96,8 @@ Confirm the PR body's disposition table (matching
 `.github/PULL_REQUEST_TEMPLATE.md`'s "PR Review Follow-Up" section) is
 filled in with one row per thread/comment, for example:
 
-| Thread/comment | Disposition | Commit or evidence |
-| --- | --- | --- |
+| Thread/comment           | Disposition                                                                                                | Commit or evidence                    |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------- | ------------------------------------- |
 | <thread link or summary> | fixed-with-evidence / stale-with-evidence / accepted-follow-up-with-named-blocker / rejected-with-evidence | <commit SHA, test name, or file:line> |
 
 If the PR template uses its shorter literal column values (`accepted / fixed
