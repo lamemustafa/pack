@@ -234,7 +234,9 @@ function resetFullFiscalYearTargetForRetry(
         ? {
             ...candidate,
             status: "pending",
-            safeSignals: ["full-fiscal-year-target-retry-approved"],
+            safeSignals: Array.from(
+              new Set([...candidate.safeSignals, "full-fiscal-year-target-retry-approved"]),
+            ),
             safeMessage: `Pack will retry ${candidate.period} in the full fiscal-year run.`,
             updatedAt: timestamp,
           }

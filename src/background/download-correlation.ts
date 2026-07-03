@@ -58,10 +58,7 @@ function hasExpectedUrlEvidence(
   item: DownloadCreatedItem,
   context: DownloadObservationContext,
 ): boolean {
-  return (
-    context.trustedDownloadIds?.has(item.id) === true ||
-    matchesExpectedUrlSubstrings(item, context.expectedUrlSubstrings)
-  );
+  return matchesExpectedUrlSubstrings(item, context.expectedUrlSubstrings);
 }
 
 function hasExpectedFileEvidence(
@@ -71,7 +68,6 @@ function hasExpectedFileEvidence(
   const mime = item.mime?.toLowerCase();
   if (mime && context.expectedMimeTypes.some((expected) => mime.includes(expected))) return true;
   if (mime && isKnownNonMatchingMime(mime, context.expectedMimeTypes)) return false;
-  if (context.trustedDownloadIds?.has(item.id)) return true;
 
   const filename = item.filename;
   if (

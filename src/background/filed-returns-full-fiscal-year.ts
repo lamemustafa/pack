@@ -34,6 +34,10 @@ import {
   targetStatusFromFlowStep,
   toFullFiscalYearSummary,
 } from "./filed-returns-full-fiscal-year-summary";
+import {
+  mergeRetriedArtifactSignals,
+  scopeForFullFiscalYearTarget,
+} from "./filed-returns-full-fiscal-year-artifacts";
 
 export type SinglePeriodRunner = (
   scope: FiledReturnsDownloadScope,
@@ -97,6 +101,8 @@ export async function startFullFiscalYearDownloadFlow(
   while (true) {
     const nextTarget = nextRunnableFullFiscalYearTarget(ledger);
     if (!nextTarget) return completeRun(deps, ledger);
+    const retryScope = scopeForFullFiscalYearTarget(nextTarget);
+    const previousTargetSafeSignals = nextTarget.safeSignals;
 
     ledger = markFullFiscalYearTargetRunning(
       ledger,
@@ -106,12 +112,7 @@ export async function startFullFiscalYearDownloadFlow(
     await persistLedger(deps, ledger);
 
     const response = await runSinglePeriod(
-      {
-        financialYear: nextTarget.financialYear,
-        period: nextTarget.period,
-        returnType: nextTarget.returnType,
-        ...(nextTarget.artifactType ? { artifactType: nextTarget.artifactType } : {}),
-      },
+      retryScope,
       { ...deps, persistTargetReview: false },
       { persistSinglePeriodSummary: false },
     );
@@ -128,18 +129,19 @@ export async function startFullFiscalYearDownloadFlow(
       return response;
     }
 
-    const targetStatus = targetStatusFromFlowStep(response.flowStep);
+    const flowStep = mergeRetriedArtifactSignals(previousTargetSafeSignals, response.flowStep);
+    const targetStatus = targetStatusFromFlowStep(flowStep);
     ledger = markFullFiscalYearTargetTerminal(
       ledger,
       nextTarget.targetId,
       targetStatus,
-      response.flowStep,
+      flowStep,
       deps.now?.() ?? new Date(),
     );
-    await persistLedgerAndMaybeSummary(deps, ledger, response.flowStep);
+    await persistLedgerAndMaybeSummary(deps, ledger, flowStep);
 
     if (targetStatus === "downloaded" || targetStatus === "not-filed") continue;
-    return { ...response, flowSummary: toFullFiscalYearSummary(ledger, response.flowStep) };
+    return { ...response, flowStep, flowSummary: toFullFiscalYearSummary(ledger, flowStep) };
   }
 }
 

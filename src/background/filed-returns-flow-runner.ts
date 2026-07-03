@@ -376,7 +376,6 @@ async function triggerSelectedArtifacts({
       ? await readPersistedArtifactProgress(scope, artifactTypes, deps)
       : null;
   const completedArtifactTypes = new Set(persistedProgress?.completedArtifactTypes ?? []);
-  const newlyCompletedArtifactTypes = new Set<FiledReturnsConcreteArtifactType>();
   let combinedFlowStep: PortalFlowStepResult | null = persistedProgress?.flowStep ?? null;
   let lastResponse: Extract<
     PackMessageResponse,
@@ -391,7 +390,6 @@ async function triggerSelectedArtifacts({
       artifactType,
       completedArtifactTypes,
       deps,
-      newlyCompletedArtifactTypes,
       scope,
       tabId,
     });
@@ -437,7 +435,6 @@ async function triggerSelectedArtifacts({
 
     lastResponse = response;
     completedArtifactTypes.add(artifactType);
-    newlyCompletedArtifactTypes.add(artifactType);
     combinedFlowStep = combineDownloadedArtifactFlowSteps(combinedFlowStep, response.flowStep);
     if (artifactTypes.length > 1 && completedArtifactTypes.size < artifactTypes.length) {
       await persistPartialArtifactSummary(scope, combinedFlowStep, deps);
@@ -520,7 +517,6 @@ async function preparePageForSelectedArtifact({
   artifactType,
   completedArtifactTypes,
   deps,
-  newlyCompletedArtifactTypes,
   scope,
   tabId,
 }: {
@@ -528,7 +524,6 @@ async function preparePageForSelectedArtifact({
   artifactType: FiledReturnsConcreteArtifactType;
   completedArtifactTypes: ReadonlySet<FiledReturnsConcreteArtifactType>;
   deps: FiledReturnsFlowRunnerDeps;
-  newlyCompletedArtifactTypes: ReadonlySet<FiledReturnsConcreteArtifactType>;
   scope: FiledReturnsDownloadScope;
   tabId: number;
 }): Promise<
@@ -538,8 +533,7 @@ async function preparePageForSelectedArtifact({
     scope.returnType !== "GSTR-1" ||
     scope.artifactType !== "PDF_AND_EXCEL" ||
     artifactType !== "EXCEL" ||
-    !completedArtifactTypes.has("PDF") ||
-    !newlyCompletedArtifactTypes.has("PDF")
+    !completedArtifactTypes.has("PDF")
   ) {
     return { ok: true, activePeriod };
   }
@@ -830,6 +824,12 @@ function toSinglePeriodSummary(
 function shouldContinueFlow(step: PortalFlowStepResult): boolean {
   if (step.safeSignals.includes("filed-return-download-clicked")) return false;
   if (step.safeSignals.includes("filed-gstr3b-download-clicked")) return false;
+  if (
+    step.safeSignals.includes("gstr-3b-detail-route") &&
+    step.safeSignals.includes("filed-returns-heading")
+  ) {
+    return true;
+  }
   return step.state === "clicked" || step.safeSignals.includes("detail-summary-modal");
 }
 
@@ -852,7 +852,19 @@ function shouldAttemptDirectDownloadFromDetailRoute(
     deps.preferDirectDownload &&
     filedReturnDescriptor(scope.returnType).supportsDirectDownload &&
     step.safeSignals.includes("gstr-3b-detail-route") &&
-    !step.safeSignals.includes("detail-summary-modal"),
+    !step.safeSignals.includes("detail-summary-modal") &&
+    hasDirectDownloadReadySignal(step, scope),
+  );
+}
+
+function hasDirectDownloadReadySignal(
+  step: PortalFlowStepResult,
+  scope: FiledReturnsDownloadScope,
+): boolean {
+  return (
+    isFiledReturnDownloadReady(step, scope) ||
+    (step.safeSignals.includes(`filed-return-detail-period:${scope.period}`) &&
+      step.safeSignals.includes(`filed-return-detail-financial-year:${scope.financialYear}`))
   );
 }
 

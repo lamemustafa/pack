@@ -10,6 +10,7 @@ import {
   normaliseFiledReturnsArtifactType,
 } from "../core/filed-returns-artifacts";
 import { filedReturnsScopeId } from "../core/filed-returns-return-types";
+import { isUnconfirmedBrowserDownloadSignal } from "./download-evidence-signals";
 import { isFullFiscalYearLedgerStale } from "./filed-returns-full-fiscal-year-ledger";
 
 const COMPLETED_SUMMARY_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
@@ -29,16 +30,7 @@ export function targetStatusFromFlowStep(
   if (step.safeSignals.includes("filed-return-positively-not-filed")) {
     return "not-filed";
   }
-  if (
-    step.safeSignals.some((signal) =>
-      [
-        "browser-download-size-unknown",
-        "browser-download-not-observed",
-        "filed-return-download-trigger-ambiguous",
-        "filed-gstr3b-download-trigger-ambiguous",
-      ].includes(signal),
-    )
-  ) {
+  if (step.safeSignals.some(isUnconfirmedBrowserDownloadSignal)) {
     return "download-unconfirmed";
   }
   if (step.state === "candidate-not-found") return "blocked";

@@ -124,6 +124,28 @@ describe("full fiscal year ledger", () => {
     ).toBe("blocked");
   });
 
+  it.each([
+    "browser-download-not-observed",
+    "browser-download-size-unknown",
+    "browser-download-interrupted",
+    "browser-download-correlation-rejected",
+    "browser-download-search-unavailable",
+    "browser-download-search-missing",
+    "browser-download-zero-bytes",
+    "filed-return-download-trigger-ambiguous",
+    "filed-gstr3b-download-trigger-ambiguous",
+  ])("maps unresolved browser evidence %s to an unconfirmed target", (signal) => {
+    expect(
+      targetStatusFromFlowStep({
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "blocked",
+        safeSignals: [signal],
+        safeMessage: "Pack could not prove the download completed.",
+      }),
+    ).toBe("download-unconfirmed");
+  });
+
   it("rejects malformed or inconsistent persisted ledgers", () => {
     expect(isFullFiscalYearLedger(createLedger([["April", "downloaded"]]))).toBe(true);
 

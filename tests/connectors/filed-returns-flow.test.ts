@@ -521,6 +521,44 @@ describe("filed returns guided flow", () => {
     expect(submittedForms).toEqual([{ action: "/returns/auth/gstr3b", method: "POST" }]);
   });
 
+  it("uses monthly preference for pre-quarterly GSTR-3B API handoff when role status omits userPref", async () => {
+    const documentRef = createGstDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <label>Financial year</label>
+          <select id="finYr"><option>Select</option><option>2020-21</option></select>
+          <label>Return Filing Period</label>
+          <select id="optValue"><option>Select</option><option>Monthly</option></select>
+          <label>Month</label>
+          <select id="month"><option>Select</option></select>
+          <label>Return Type</label>
+          <select id="retTyp"><option>Select</option><option>GSTR3B</option></select>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+      </main>
+    `);
+    const scope: FiledReturnsDownloadScope = {
+      financialYear: "2020-21",
+      period: "December",
+      returnType: "GSTR-3B",
+    };
+    const submittedForms = stubFormSubmit(documentRef);
+    stubFiledReturnsApi(documentRef, {
+      roleStatus: {},
+      rows: [{ rtntype: "GSTR3B", fy: "2020-21", taxp: "December" }],
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, scope);
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(expect.arrayContaining(["filed-return-api-result-posted"]));
+    expect(documentRef.defaultView?.localStorage.getItem("rtn_prd")).toBe("122020");
+    expect(documentRef.defaultView?.localStorage.getItem("uPref")).toBe("M");
+    expect(documentRef.defaultView?.localStorage.getItem("gstr3bPref")).toBe("M");
+    expect(submittedForms).toEqual([{ action: "/returns/auth/gstr3b", method: "POST" }]);
+  });
+
   it("uses the filed-return API when the GST route casing changes", async () => {
     const documentRef = createGstDocument(
       `

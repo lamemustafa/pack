@@ -5,22 +5,22 @@ export function getFiledReturnsCompletionStatus(
   scope: FiledReturnsDownloadScope,
   summary: FiledReturnsFlowSummary | null,
 ): string | null {
-  if (!summary) return null;
-  if (!isSameScope(scope, summary.scope)) return null;
+  const matchedSummary = getScopeMatchedFiledReturnsSummary(scope, summary);
+  if (!matchedSummary) return null;
 
-  const periodCount = summary.completedPeriods.length;
-  const totalPeriods = summary.totalPeriods ?? periodCount;
-  if (summary.status === "complete") {
-    return `FY ${summary.scope.financialYear} ${summary.scope.returnType} complete. ${periodCount} of ${totalPeriods} ${periodCount === 1 ? "period" : "periods"} reconciled.`;
+  const periodCount = matchedSummary.completedPeriods.length;
+  const totalPeriods = matchedSummary.totalPeriods ?? periodCount;
+  if (matchedSummary.status === "complete") {
+    return `FY ${matchedSummary.scope.financialYear} ${matchedSummary.scope.returnType} complete. ${periodCount} of ${totalPeriods} ${periodCount === 1 ? "period" : "periods"} reconciled.`;
   }
-  if (summary.status === "blocked" && summary.currentPeriod) {
-    return `FY ${summary.scope.financialYear} ${summary.scope.returnType} blocked at ${summary.currentPeriod}. ${periodCount} of ${totalPeriods} periods reconciled.`;
+  if (matchedSummary.status === "blocked" && matchedSummary.currentPeriod) {
+    return `FY ${matchedSummary.scope.financialYear} ${matchedSummary.scope.returnType} blocked at ${matchedSummary.currentPeriod}. ${periodCount} of ${totalPeriods} periods reconciled.`;
   }
-  if (summary.status === "running" && summary.currentPeriod) {
-    return `FY ${summary.scope.financialYear} ${summary.scope.returnType} running: ${summary.currentPeriod}. ${periodCount} of ${totalPeriods} periods reconciled.`;
+  if (matchedSummary.status === "running" && matchedSummary.currentPeriod) {
+    return `FY ${matchedSummary.scope.financialYear} ${matchedSummary.scope.returnType} running: ${matchedSummary.currentPeriod}. ${periodCount} of ${totalPeriods} periods reconciled.`;
   }
-  if (summary.status === "partial") {
-    return `FY ${summary.scope.financialYear} ${summary.scope.returnType} partial. ${periodCount} of ${totalPeriods} periods reconciled.`;
+  if (matchedSummary.status === "partial") {
+    return `FY ${matchedSummary.scope.financialYear} ${matchedSummary.scope.returnType} partial. ${periodCount} of ${totalPeriods} periods reconciled.`;
   }
   return null;
 }
@@ -31,6 +31,14 @@ export function getFiledReturnsSummaryHeading(
 ): string | null {
   if (!isSameScope(scope, summary.scope)) return null;
   return `Last filed-returns run: ${summary.status}`;
+}
+
+export function getScopeMatchedFiledReturnsSummary(
+  scope: FiledReturnsDownloadScope,
+  summary: FiledReturnsFlowSummary | null,
+): FiledReturnsFlowSummary | null {
+  if (!summary) return null;
+  return isSameScope(scope, summary.scope) ? summary : null;
 }
 
 function isSameScope(left: FiledReturnsDownloadScope, right: FiledReturnsDownloadScope): boolean {
