@@ -13,6 +13,18 @@ All notable changes to ComplyEaze Pack are documented here.
 - Updated public source metadata so the extension homepage points to
   `https://pack.complyeaze.com/gst`.
 
+## [0.3.1](https://github.com/lamemustafa/pack/compare/v0.3.0...v0.3.1) (2026-07-03)
+
+
+### Fixes
+
+* align Pack store listing metadata ([#46](https://github.com/lamemustafa/pack/issues/46)) ([5107ab2](https://github.com/lamemustafa/pack/commit/5107ab28731dcfb26a04f2bfc9a52223d04e9907))
+
+
+### Documentation
+
+* native Claude Code config (CLAUDE.md, subagents, skills) ([#44](https://github.com/lamemustafa/pack/issues/44)) ([0161b8f](https://github.com/lamemustafa/pack/commit/0161b8fcfea919470f396329c5eff8e7daf7ff63))
+
 ## [0.3.0](https://github.com/lamemustafa/pack/compare/v0.2.2...v0.3.0) (2026-07-03)
 
 
