@@ -22,7 +22,7 @@ const pathfulGstPortalPattern =
 
 const manifestPath = path.join(outputDir, "manifest.json");
 const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-const expectedName = "ComplyEaze Pack: GST Return Downloader";
+const expectedName = "ComplyEaze Pack: GSTR-1/GSTR-3B Downloader";
 const expectedShortName = "ComplyEaze Pack";
 const expectedDescription =
   "Alpha: locally download filed GSTR-1 and GSTR-3B documents from your active GST Portal session.";

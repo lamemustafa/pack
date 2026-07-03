@@ -13,7 +13,7 @@ import {
 
 describe("extension permission posture", () => {
   it("uses launch-ready public metadata", () => {
-    expect(PACK_EXTENSION_NAME).toBe("ComplyEaze Pack: GST Return Downloader");
+    expect(PACK_EXTENSION_NAME).toBe("ComplyEaze Pack: GSTR-1/GSTR-3B Downloader");
     expect(PACK_EXTENSION_SHORT_NAME).toBe("ComplyEaze Pack");
     expect(PACK_EXTENSION_DESCRIPTION).toBe(
       "Alpha: locally download filed GSTR-1 and GSTR-3B documents from your active GST Portal session.",
