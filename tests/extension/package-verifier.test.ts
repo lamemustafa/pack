@@ -303,10 +303,10 @@ async function createValidPackage(): Promise<string> {
 
   const manifest = {
     manifest_version: 3,
-    name: "ComplyEaze Pack: GSTR-3B/GSTR-1 Downloader",
+    name: "ComplyEaze Pack: GSTR-1/GSTR-3B Downloader",
     short_name: "ComplyEaze Pack",
     description:
-      "Download filed GSTR-3B PDFs and GSTR-1 summary PDFs locally from your GST Portal session.",
+      "Alpha: locally download filed GSTR-1 and GSTR-3B documents from your active GST Portal session.",
     homepage_url: "https://pack.complyeaze.com/gst",
     permissions: ["downloads", "scripting", "storage"],
     host_permissions: [

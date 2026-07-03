@@ -7,7 +7,7 @@ stable-release claims.
 ## Current Decision
 
 - Canonical product name: **ComplyEaze Pack**.
-- First Chrome listing title: **ComplyEaze Pack: GSTR-3B/GSTR-1 Downloader**.
+- First Chrome listing title: **ComplyEaze Pack: GSTR-1/GSTR-3B Downloader**.
 - V0 Chrome Web Store listing:
   `https://chromewebstore.google.com/detail/complyeaze-pack-gst-gstr/nfnbhekccajjfgkppolomflaeledoccb`.
 - V0 purpose: download filed GSTR-3B PDFs, GSTR-1 summary PDFs, and optional
@@ -165,16 +165,19 @@ stable-release claims.
 
 ## Suggested Store Copy
 
+Canonical dashboard copy and current asset inventory are maintained in
+[`docs/chrome-web-store/listing.md`](chrome-web-store/listing.md).
+
 Title:
 
 ```text
-ComplyEaze Pack: GSTR-3B/GSTR-1 Downloader
+ComplyEaze Pack: GSTR-1/GSTR-3B Downloader
 ```
 
 Short description:
 
 ```text
-Download filed GSTR-3B PDFs and GSTR-1 summary PDFs locally from your GST Portal session.
+Alpha: locally download filed GSTR-1 and GSTR-3B documents from your active GST Portal session.
 ```
 
 Opening description:

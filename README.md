@@ -25,8 +25,11 @@ endorsed by, or operated by GSTN, CBIC, or the Government of India.
 ## Status
 
 This public repository and the Chrome Web Store V0 listing are open-source
-alpha surfaces. The extension has a local demo, a live GSTR-3B PDF download
-path, and private source-build evidence for GSTR-1 PDF/Excel downloads. Live
+alpha surfaces. The reviewed source has live local download support for filed
+GSTR-3B PDFs, filed GSTR-1 summary PDFs, and optional GSTR-1 e-invoice details
+Excel files where the GST Portal provides them. The Chrome Web Store
+listing/package may lag these source changes until the next Release Please patch
+package, dashboard listing update, and store review are complete. Live
 manifest/index/exception-file generation is outside the current alpha. Future
 store updates require the release gates in
 [docs/PUBLICATION_READINESS.md](docs/PUBLICATION_READINESS.md) and

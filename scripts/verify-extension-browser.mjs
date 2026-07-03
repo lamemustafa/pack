@@ -219,7 +219,7 @@ async function assertServiceWorkerStarted(serviceWorker) {
       storageWritable: Boolean(values["pack:browser-release-probe"]?.localOnly),
     };
   });
-  if (serviceWorkerState.manifestName !== "ComplyEaze Pack: GSTR-3B/GSTR-1 Downloader") {
+  if (serviceWorkerState.manifestName !== "ComplyEaze Pack: GSTR-1/GSTR-3B Downloader") {
     throw new Error("Unexpected extension manifest loaded in browser.");
   }
   if (!serviceWorkerState.storageWritable) {
