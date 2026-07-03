@@ -1,4 +1,5 @@
 import type { FiledReturnsDownloadScope } from "../../core/contracts";
+import { normaliseFiledReturnsArtifactType } from "../../core/filed-returns-artifacts";
 import { normaliseText } from "./filed-returns-dom";
 
 interface FiledReturnsSearchAttempt {
@@ -16,7 +17,8 @@ const resultRootIds = new WeakMap<Element, number>();
 let nextResultRootId = 1;
 
 function filedReturnsSearchSignature(scope: FiledReturnsDownloadScope): string {
-  return `${scope.financialYear}::${scope.period}::${scope.returnType}`;
+  const artifactType = normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType);
+  return `${scope.financialYear}::${scope.period}::${scope.returnType}::${artifactType}`;
 }
 
 export function markFiledReturnsSearchPending(

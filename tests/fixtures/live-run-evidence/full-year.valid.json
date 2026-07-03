@@ -11,6 +11,10 @@
   },
   "profile": "clean-test-profile",
   "subjectAlias": "SUBJECT-A",
+  "returnType": "GSTR-3B",
+  "artifactType": "PDF",
+  "financialYear": "2026-27",
+  "period": "FULL_FISCAL_YEAR",
   "scenario": "full-year",
   "startedAt": "2026-06-26T08:00:00.000Z",
   "completedAt": "2026-06-26T08:30:00.000Z",
@@ -31,6 +35,7 @@
     "serviceWorkerRestartResumeChecked": true,
     "browserRestartResumeChecked": true,
     "clearLocalDataChecked": true,
+    "browserSummaryCaptured": true,
     "unexpectedNetworkDestinations": 0
   },
   "redaction": {

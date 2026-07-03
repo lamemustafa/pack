@@ -1,4 +1,14 @@
 import type { FiledReturnsDownloadScope } from "./contracts";
+import {
+  isFiledReturnsArtifactType,
+  normaliseFiledReturnsArtifactType,
+  supportsFiledReturnsArtifactType,
+} from "./filed-returns-artifacts";
+import {
+  isFiledReturnsReturnType,
+  supportsFullFiscalYearFiledReturnsRun,
+  type FiledReturnsReturnType,
+} from "./filed-returns-return-types";
 
 export const GST_LAUNCH_FINANCIAL_YEAR = "2017-18";
 export const GST_LAUNCH_MONTH = "July";
@@ -48,6 +58,7 @@ export interface FiledReturnsScopePeriodOption {
 export const DEFAULT_FILED_RETURNS_DOWNLOAD_SCOPE: FiledReturnsDownloadScope = {
   ...getDefaultFiledReturnsPeriodScope(),
   returnType: "GSTR-3B",
+  artifactType: "PDF",
 };
 
 export function getFiledReturnsFinancialYearOptions(asOf = new Date()): string[] {
@@ -72,9 +83,11 @@ export function getFiledReturnsPeriodOptions(
 export function getFiledReturnsScopePeriodOptions(
   financialYear: string,
   asOf = new Date(),
+  returnType: FiledReturnsReturnType = "GSTR-3B",
 ): FiledReturnsScopePeriodOption[] {
   const periodOptions = getFiledReturnsPeriodOptions(financialYear, asOf);
   if (periodOptions.length === 0) return [];
+  if (!supportsFullFiscalYearFiledReturnsRun(returnType)) return periodOptions;
   return [
     {
       value: FULL_FISCAL_YEAR_PERIOD,
@@ -95,6 +108,7 @@ export function normaliseFiledReturnsScope(
   scope: FiledReturnsDownloadScope,
   asOf = new Date(),
 ): FiledReturnsDownloadScope {
+  const returnType = isFiledReturnsReturnType(scope.returnType) ? scope.returnType : "GSTR-3B";
   const financialYearOptions = getFiledReturnsFinancialYearOptions(asOf);
   const requestedFinancialYear = financialYearOptions.includes(scope.financialYear)
     ? scope.financialYear
@@ -106,16 +120,18 @@ export function normaliseFiledReturnsScope(
           (candidate) => getFiledReturnsPeriodOptions(candidate, asOf).length > 0,
         ) ?? GST_LAUNCH_FINANCIAL_YEAR);
   const periodOptions = getFiledReturnsPeriodOptions(financialYear, asOf);
-  const period = isFullFiscalYearScope(scope)
-    ? FULL_FISCAL_YEAR_PERIOD
-    : periodOptions.some((option) => option.value === scope.period)
-      ? scope.period
-      : defaultPeriodForFinancialYear(financialYear, asOf);
+  const period =
+    isFullFiscalYearScope(scope) && supportsFullFiscalYearFiledReturnsRun(returnType)
+      ? FULL_FISCAL_YEAR_PERIOD
+      : periodOptions.some((option) => option.value === scope.period)
+        ? scope.period
+        : defaultPeriodForFinancialYear(financialYear, asOf);
 
   return {
     financialYear,
     period,
-    returnType: "GSTR-3B",
+    returnType,
+    artifactType: normaliseFiledReturnsArtifactType(returnType, scope.artifactType),
     ...(scope.completedPeriods ? { completedPeriods: scope.completedPeriods } : {}),
   };
 }
@@ -128,7 +144,8 @@ export function isSupportedFiledReturnsScope(
   input: FiledReturnsDownloadScope,
   asOf = new Date(),
 ): boolean {
-  if (input.returnType !== "GSTR-3B") return false;
+  if (!isFiledReturnsReturnType(input.returnType)) return false;
+  if (!isSupportedArtifactSelection(input)) return false;
   if (!getFiledReturnsFinancialYearOptions(asOf).includes(input.financialYear)) return false;
   return getFiledReturnsPeriodOptions(input.financialYear, asOf).some(
     (option) => option.value === input.period,
@@ -139,12 +156,24 @@ export function isSupportedFiledReturnsStartScope(
   input: FiledReturnsDownloadScope,
   asOf = new Date(),
 ): boolean {
-  if (input.returnType !== "GSTR-3B") return false;
+  if (!isFiledReturnsReturnType(input.returnType)) return false;
+  if (!isSupportedArtifactSelection(input)) return false;
   if (!getFiledReturnsFinancialYearOptions(asOf).includes(input.financialYear)) return false;
   if (isFullFiscalYearScope(input)) {
-    return getFiledReturnsFullFiscalYearPeriods(input.financialYear, asOf).length > 0;
+    return (
+      supportsFullFiscalYearFiledReturnsRun(input.returnType) &&
+      getFiledReturnsFullFiscalYearPeriods(input.financialYear, asOf).length > 0
+    );
   }
   return isSupportedFiledReturnsScope(input, asOf);
+}
+
+function isSupportedArtifactSelection(input: FiledReturnsDownloadScope): boolean {
+  const artifactType = input.artifactType ?? "PDF";
+  return (
+    isFiledReturnsArtifactType(artifactType) &&
+    supportsFiledReturnsArtifactType(input.returnType, artifactType)
+  );
 }
 
 function getDefaultFiledReturnsPeriodScope(asOf = new Date()): {

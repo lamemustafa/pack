@@ -34,16 +34,17 @@ For each release candidate:
   does not persist or transmit raw download URLs, referrers, absolute local
   paths, filenames, portal HTML, or taxpayer identifiers.
 - Confirm `pack:active-filed-returns-run`, when present, contains only the
-  selected financial year, period, return type, run ID, revision, status, and
-  lease timestamp needed to prevent overlapping local runs.
+  selected financial year, period, return type, artifact type, run ID,
+  revision, status, and lease timestamp needed to prevent overlapping local
+  runs.
 - Confirm `pack:filed-returns-target-review`, when present, contains only the
   selected financial year, period, return type, unresolved target status, safe
   signals/messages, and timestamps needed to block implicit retry.
 - Confirm `pack:full-fiscal-year-ledger`, when present, contains only financial
-  year, period, return type, target status, attempts, safe signals/messages, and
-  timestamps. It must not contain raw URLs/referrers, local paths, filenames,
-  GSTIN/PAN, taxpayer names, ARNs, portal HTML, cookies, credentials, OTP, or
-  CAPTCHA data.
+  year, period, return type, artifact type, target status, attempts, safe
+  signals/messages, and timestamps. It must not contain raw URLs/referrers,
+  local paths, filenames, GSTIN/PAN, taxpayer names, ARNs, portal HTML, cookies,
+  credentials, OTP, or CAPTCHA data.
 - Confirm "Clear local Pack data" is only exposed from Pack Options and removes
   the active run marker, target-review marker, full fiscal year ledger,
   install/demo manifest metadata, and session observations.

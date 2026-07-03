@@ -1,10 +1,17 @@
 import type { FiledReturnsDownloadScope, FiledReturnsFlowSummary } from "../../core/contracts";
 import {
+  FILED_RETURNS_ARTIFACT_TYPES,
+  filedReturnsArtifactLabel,
+  normaliseFiledReturnsArtifactType,
+  supportsFiledReturnsArtifactType,
+} from "../../core/filed-returns-artifacts";
+import {
   getFiledReturnsFinancialYearOptions,
   getFiledReturnsScopePeriodOptions,
   isFullFiscalYearScope,
   normaliseFiledReturnsScope,
 } from "../../core/filed-returns-scope";
+import { FILED_RETURNS_RETURN_TYPES } from "../../core/filed-returns-return-types";
 
 export interface ScopeFormProps {
   busy: string | null;
@@ -157,7 +164,18 @@ function cancelFullYearLabel(summary: FiledReturnsFlowSummary): string {
 
 export function ScopeForm({ busy, flowSummary, scope, onScopeChange, onStart }: ScopeFormProps) {
   const financialYearOptions = getFiledReturnsFinancialYearOptions();
-  const periodOptions = getFiledReturnsScopePeriodOptions(scope.financialYear);
+  const periodOptions = getFiledReturnsScopePeriodOptions(
+    scope.financialYear,
+    new Date(),
+    scope.returnType,
+  );
+  const artifactOptions = FILED_RETURNS_ARTIFACT_TYPES.filter((artifactType) =>
+    supportsFiledReturnsArtifactType(scope.returnType, artifactType),
+  );
+  const selectedArtifactType = normaliseFiledReturnsArtifactType(
+    scope.returnType,
+    scope.artifactType,
+  );
   const fullFiscalYear = isFullFiscalYearScope(scope);
   const startAction = getScopeFormStartAction(scope, flowSummary, busy, fullFiscalYear);
 
@@ -165,8 +183,44 @@ export function ScopeForm({ busy, flowSummary, scope, onScopeChange, onStart }: 
     <section className="flow-panel" aria-label="Filed return download scope">
       <label>
         Filing
-        <select value={scope.returnType} disabled>
-          <option value="GSTR-3B">GSTR-3B</option>
+        <select
+          value={scope.returnType}
+          onChange={(event) =>
+            onScopeChange(
+              normaliseFiledReturnsScope({
+                ...scope,
+                returnType: event.target.value as FiledReturnsDownloadScope["returnType"],
+              }),
+            )
+          }
+        >
+          {FILED_RETURNS_RETURN_TYPES.map((returnType) => (
+            <option key={returnType} value={returnType}>
+              {returnType}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Download
+        <select
+          value={selectedArtifactType}
+          onChange={(event) =>
+            onScopeChange(
+              normaliseFiledReturnsScope({
+                ...scope,
+                artifactType: event.target.value as NonNullable<
+                  FiledReturnsDownloadScope["artifactType"]
+                >,
+              }),
+            )
+          }
+        >
+          {artifactOptions.map((artifactType) => (
+            <option key={artifactType} value={artifactType}>
+              {filedReturnsArtifactLabel(artifactType, scope.returnType)}
+            </option>
+          ))}
         </select>
       </label>
       <label>
@@ -204,9 +258,9 @@ export function ScopeForm({ busy, flowSummary, scope, onScopeChange, onStart }: 
       </label>
       {fullFiscalYear ? (
         <p className="muted">
-          Runs eligible filed GSTR-3B periods one by one from your signed-in GST Portal tab. Pack
-          stops on ambiguous downloads and records local status only. V0 supports monthly GSTR-3B
-          filers only.
+          Runs eligible filed {scope.returnType} periods one by one from your signed-in GST Portal
+          tab. Pack stops on ambiguous downloads and records local status only. Excel is available
+          only when the GST Portal provides the selected GSTR-1 e-invoice details file.
         </p>
       ) : null}
       <button type="button" disabled={startAction.disabled} onClick={onStart}>
@@ -255,6 +309,8 @@ function isSameScope(left: FiledReturnsDownloadScope, right: FiledReturnsDownloa
   return (
     left.financialYear === right.financialYear &&
     left.period === right.period &&
-    left.returnType === right.returnType
+    left.returnType === right.returnType &&
+    normaliseFiledReturnsArtifactType(left.returnType, left.artifactType) ===
+      normaliseFiledReturnsArtifactType(right.returnType, right.artifactType)
   );
 }

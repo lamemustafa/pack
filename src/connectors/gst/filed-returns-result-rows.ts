@@ -102,6 +102,7 @@ export function readElementText(element: Element | null | undefined): string {
     HTMLInputElementConstructor && element instanceof HTMLInputElementConstructor
       ? element.value
       : "";
+  const seenTexts = new Set<string>();
   return [
     "innerText" in element ? (element as HTMLElement).innerText : "",
     element.textContent ?? "",
@@ -109,6 +110,11 @@ export function readElementText(element: Element | null | undefined): string {
     element.getAttribute("aria-label") ?? "",
     element.getAttribute("title") ?? "",
   ]
-    .filter(Boolean)
+    .filter((text) => {
+      const comparable = normaliseText(text);
+      if (!comparable || seenTexts.has(comparable)) return false;
+      seenTexts.add(comparable);
+      return true;
+    })
     .join(" ");
 }

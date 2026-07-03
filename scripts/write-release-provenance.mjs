@@ -60,7 +60,7 @@ const provenance = {
   verification: {
     requiredCommands: [
       "pnpm install --frozen-lockfile",
-      "pnpm audit --audit-level high",
+      "node scripts/run-dependency-audit.mjs",
       "pnpm exec wxt prepare",
       "pnpm exec prettier --check .",
       "pnpm exec eslint . --max-warnings 0",

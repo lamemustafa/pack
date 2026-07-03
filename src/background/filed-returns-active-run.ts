@@ -4,7 +4,9 @@ import type {
   FiledReturnsFlowSummary,
   PortalFlowStepResult,
 } from "../core/contracts";
+import { isFiledReturnsReturnType } from "../core/filed-returns-return-types";
 import type { PackMessageResponse } from "../core/messages";
+import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 
 const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
 const ACTIVE_RUN_REVIEW_MS = 30_000;
@@ -169,7 +171,7 @@ function parseActiveRun(input: unknown): ActiveFiledReturnsRun | null {
   if (
     typeof scope.financialYear !== "string" ||
     typeof scope.period !== "string" ||
-    scope.returnType !== "GSTR-3B"
+    !isFiledReturnsReturnType(scope.returnType)
   ) {
     return null;
   }
@@ -178,7 +180,7 @@ function parseActiveRun(input: unknown): ActiveFiledReturnsRun | null {
 
 function activeRunResponse(run: ActiveFiledReturnsRun, now: Date): PackMessageResponse {
   const interrupted = isInterruptedRun(run, now);
-  const flowStep = activeRunStep(interrupted);
+  const flowStep = activeRunStep(interrupted, run.scope.returnType);
   return {
     ok: true,
     flowStep,
@@ -189,7 +191,7 @@ function activeRunResponse(run: ActiveFiledReturnsRun, now: Date): PackMessageRe
 function activeRunSummary(
   run: ActiveFiledReturnsRun,
   now: Date,
-  flowStep = activeRunStep(isInterruptedRun(run, now)),
+  flowStep = activeRunStep(isInterruptedRun(run, now), run.scope.returnType),
 ): FiledReturnsFlowSummary {
   return {
     scope: run.scope,
@@ -207,7 +209,7 @@ function isInterruptedRun(run: ActiveFiledReturnsRun, now: Date): boolean {
 function acknowledgedRunResponse(run?: ActiveFiledReturnsRun): PackMessageResponse {
   const flowStep: PortalFlowStepResult = {
     connectorId: "gst",
-    scopeId: FILED_RETURNS_SCOPE_ID,
+    scopeId: run ? filedReturnScopeId(run.scope.returnType) : FILED_RETURNS_SCOPE_ID,
     state: "user-action-required",
     safeSignals: ["filed-returns-run-acknowledged"],
     safeMessage:
@@ -235,10 +237,13 @@ function acknowledgedRunResponse(run?: ActiveFiledReturnsRun): PackMessageRespon
   };
 }
 
-function activeRunStep(interrupted: boolean): PortalFlowStepResult {
+function activeRunStep(
+  interrupted: boolean,
+  returnType: FiledReturnsDownloadScope["returnType"] = "GSTR-3B",
+): PortalFlowStepResult {
   return {
     connectorId: "gst",
-    scopeId: FILED_RETURNS_SCOPE_ID,
+    scopeId: filedReturnScopeId(returnType),
     state: "user-action-required",
     safeSignals: [interrupted ? "filed-returns-run-needs-review" : "filed-returns-run-active"],
     safeMessage: interrupted

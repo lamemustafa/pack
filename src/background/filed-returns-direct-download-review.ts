@@ -84,6 +84,7 @@ export function isExpectedFiledReturnDirectDownloadUrl(
   url: string,
   scope: FiledReturnsDownloadScope,
 ): boolean {
+  if (scope.returnType !== "GSTR-3B") return false;
   const returnPeriod = toPortalReturnPeriod(scope.period, scope.financialYear);
   if (!returnPeriod) return false;
 
@@ -99,6 +100,7 @@ export function isExpectedFiledReturnDirectDownloadUrl(
 }
 
 export function targetUrlSubstrings(scope: FiledReturnsDownloadScope): string[] {
+  if (scope.returnType !== "GSTR-3B") return [];
   const returnPeriod = toPortalReturnPeriod(scope.period, scope.financialYear);
   return returnPeriod ? ["/returns/auth/api/gstr3b/getgenpdf", `rtn_prd=${returnPeriod}`] : [];
 }

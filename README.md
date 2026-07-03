@@ -5,7 +5,8 @@
 
 ComplyEaze Pack is a local-first Chrome MV3 browser extension for collecting
 compliance portal documents from an authorised browser session. V0 starts with
-filed GSTR-3B PDFs from the GST Portal.
+filed GSTR-3B PDFs, filed GSTR-1 summary PDFs, and optional GSTR-1 e-invoice
+details Excel downloads from the GST Portal where the portal provides them.
 
 V0 is intentionally narrow:
 
@@ -14,7 +15,9 @@ V0 is intentionally narrow:
 - no GST document upload in the local-download workflow;
 - no extension analytics or telemetry;
 - exact GST host permissions only;
-- live local PDF downloads for selected filed GSTR-3B periods.
+- live local downloads for selected filed GSTR-3B and GSTR-1 periods, with
+  GSTR-1 Excel available only when the GST Portal provides the selected
+  e-invoice details file.
 
 ComplyEaze Pack is an independent third-party tool. It is not affiliated with,
 endorsed by, or operated by GSTN, CBIC, or the Government of India.
@@ -22,9 +25,10 @@ endorsed by, or operated by GSTN, CBIC, or the Government of India.
 ## Status
 
 This public repository and the Chrome Web Store V0 listing are open-source
-alpha surfaces. The extension has a local demo and a live GSTR-3B PDF download
-path. Live manifest/index/exception-file generation is outside the current
-alpha. Future store updates require the release gates in
+alpha surfaces. The extension has a local demo, a live GSTR-3B PDF download
+path, and private source-build evidence for GSTR-1 PDF/Excel downloads. Live
+manifest/index/exception-file generation is outside the current alpha. Future
+store updates require the release gates in
 [docs/PUBLICATION_READINESS.md](docs/PUBLICATION_READINESS.md) and
 [docs/RELEASE.md](docs/RELEASE.md).
 Release PR titles use Conventional Commits so Release Please can decide the
@@ -32,10 +36,10 @@ next Pack version from each merge.
 
 Full fiscal year download is available in source-build alpha as a local
 per-period ledger. It expands the selected financial year into eligible
-GSTR-3B periods and runs them one at a time through the single-period path.
-It remains outside store-facing claims until exact-ZIP clean-profile evidence,
-restart/resume evidence, and privacy-review evidence are recorded for the
-release.
+GSTR-3B or GSTR-1 periods and runs them one at a time through the
+single-period path. It remains outside store-facing claims until exact-ZIP
+clean-profile evidence, restart/resume evidence, and privacy-review evidence
+are recorded for the release.
 
 ## Install
 
@@ -72,7 +76,7 @@ Use a separate Chrome profile for development or manual QA.
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm audit --audit-level high
+node scripts/run-dependency-audit.mjs
 pnpm exec wxt prepare
 pnpm exec prettier --check .
 pnpm exec eslint . --max-warnings 0
@@ -86,7 +90,7 @@ The full release gate is:
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm audit --audit-level high
+node scripts/run-dependency-audit.mjs
 pnpm exec wxt prepare
 pnpm exec prettier --check .
 pnpm exec eslint . --max-warnings 0
@@ -109,18 +113,21 @@ pnpm verify:release
 
 Direct commands are preferred in constrained agent terminals if chained package
 scripts hang or hide failure details.
+`node scripts/run-dependency-audit.mjs` runs `pnpm audit --audit-level high`
+with a timeout so local release verification fails clearly instead of hanging
+indefinitely when the registry is unavailable.
 
 ## Architecture
 
 ComplyEaze Pack uses WXT, Vite, React, and TypeScript.
 
 - `src/entrypoints/background.ts`: service worker, local demo downloads, and
-  bounded filed-return PDF flow orchestration.
+  bounded filed-return download flow orchestration.
 - `src/entrypoints/content.ts`: passive GST context detection.
 - `src/entrypoints/popup`: React popup.
 - `src/entrypoints/options`: React options page.
 - `src/core`: portal-neutral contracts, manifest, naming, CSV, and messages.
-- `src/connectors/gst`: GST-specific detection, GSTR-3B filed-return navigation,
+- `src/connectors/gst`: GST-specific detection, filed-return navigation,
   download triggering, and local demo data.
 - `src/extension/manifest-policy.ts`: canonical extension metadata, permissions,
   host allow-list, CSP, homepage, and icons.
@@ -166,10 +173,10 @@ captures.
 
 During a user-initiated live download, Pack temporarily observes browser download
 metadata such as download ID, origin, MIME type, filename, start time, state, and
-byte counts to decide whether the browser reported a non-empty GST Portal PDF.
-This observation is bounded to the active run. Pack does not transmit this
-metadata, and the current live path does not persist raw URLs, referrers,
-absolute local paths, or filenames.
+byte counts to decide whether the browser reported a non-empty GST Portal file
+for the selected artifact. This observation is bounded to the active run. Pack
+does not transmit this metadata, and the current live path does not persist raw
+URLs, referrers, absolute local paths, or filenames.
 
 ## Privacy Invariants
 

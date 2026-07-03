@@ -238,10 +238,10 @@ export function observeNextBrowserDownload(
       state: "not-observed",
       safeSignals: ["browser-download-created", "browser-download-correlation-rejected"],
       safeMessage:
-        "Pack saw a browser download event, but it did not match the expected filed GSTR-3B PDF.",
+        "Pack saw a browser download event, but it did not match the expected filed-return PDF.",
       userAction: {
         type: "RETRY_PORTAL_GENERATION",
-        message: "Retry the filed GSTR-3B download from the GST Portal detail page.",
+        message: "Retry the filed-return download from the GST Portal detail page.",
         canResume: true,
       },
     };

@@ -35,6 +35,36 @@ describe("filed returns private observer", () => {
     expect(observation.userAction).toBeUndefined();
   });
 
+  it("marks the page ready when the explicit filed GSTR-1 download control is visible", () => {
+    const observation = observeFiledReturnsPageText(`
+      View Filed Returns
+      GSTR-1
+      Status - Filed
+      DOWNLOAD FILED GSTR-1
+    `);
+
+    expect(observation.state).toBe("ready");
+    expect(observation.scopeId).toBe("gst-filed-returns-gstr1-pdf-private-v0");
+    expect(observation.safeSignals).toEqual(
+      expect.arrayContaining(["filed-returns-heading", "gstr-1", "download-filed-gstr-1"]),
+    );
+  });
+
+  it("does not mark generic GSTR-1 PDF controls as filed-return readiness", () => {
+    const observation = observeFiledReturnsPageText(`
+      View Filed Returns
+      GSTR-1
+      Filed
+      Download
+      PDF
+    `);
+
+    expect(observation.state).toBe("download-not-visible");
+    expect(observation.safeSignals).toEqual(
+      expect.arrayContaining(["filed-returns-heading", "gstr-1", "filed", "download", "pdf"]),
+    );
+  });
+
   it("does not classify the GST home due-date PDF as filed-return readiness", () => {
     const observation = observeFiledReturnsPageText(`
       Goods and Services Tax
@@ -125,6 +155,45 @@ describe("filed returns private observer", () => {
     expect(observation.state).toBe("ready");
     expect(observation.safeSignals).toEqual(
       expect.arrayContaining(["gstr-3b-detail-route", "download-filed-gstr-3b"]),
+    );
+  });
+
+  it("recognises the filed GSTR-1 detail route as a filed-return detail context", () => {
+    const observation = observeFiledReturnsPageText(
+      `
+      GSTR-1
+      Status - Filed
+      VIEW SUMMARY PROCEED TO FILE/SUMMARY VIEW SUMMARY
+    `,
+      { pathname: "/returns/auth/gstr1" },
+    );
+
+    expect(observation.state).toBe("download-not-visible");
+    expect(observation.userAction).toBeUndefined();
+    expect(observation.safeSignals).toEqual(
+      expect.arrayContaining(["gstr-1-detail-route", "filed-returns-heading", "gstr-1"]),
+    );
+  });
+
+  it("marks the filed GSTR-1 detail route as ready when Excel controls are visible", () => {
+    const observation = observeFiledReturnsPageText(
+      `
+      GSTR-1
+      Status - Filed
+      Download Details from E-Invoices (Excel)
+    `,
+      { pathname: "/returns/auth/gstr1" },
+    );
+
+    expect(observation.state).toBe("ready");
+    expect(observation.scopeId).toBe("gst-filed-returns-gstr1-pdf-private-v0");
+    expect(observation.safeSignals).toEqual(
+      expect.arrayContaining([
+        "gstr-1-detail-route",
+        "download-excel-gstr-1",
+        "filed-return-download-ready",
+        "filed-gstr1-download-ready",
+      ]),
     );
   });
 

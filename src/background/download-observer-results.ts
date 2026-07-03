@@ -32,7 +32,7 @@ export async function completedObservation(
       state: "failed",
       safeSignals: ["browser-download-completed", "browser-download-zero-bytes"],
       safeMessage:
-        "The browser reported a filed GSTR-3B download, but the file appears to be empty. Retry from the GST Portal detail page.",
+        "The browser reported a filed-return PDF download, but the file appears to be empty. Retry from the GST Portal detail page.",
       userAction: retryPortalGenerationAction(),
     };
   }
@@ -46,7 +46,7 @@ export async function completedObservation(
       ...(knownSize > 0 ? ["browser-download-non-empty"] : []),
     ],
     safeMessage:
-      "The browser reported that the filed GSTR-3B download completed. Check the local downloads folder for the GST Portal PDF.",
+      "The browser reported that the filed-return PDF download completed. Check the local downloads folder for the GST Portal PDF.",
   };
 }
 
@@ -55,7 +55,7 @@ export function unconfirmedObservation(signal: string): SafeDownloadObservation 
     state: "not-observed",
     safeSignals: ["browser-download-created", signal],
     safeMessage:
-      "Pack saw a browser download event, but could not prove it was a non-empty filed GSTR-3B PDF from the GST Portal. Retry from the GST Portal detail page.",
+      "Pack saw a browser download event, but could not prove it was a non-empty filed-return PDF from the GST Portal. Retry from the GST Portal detail page.",
     userAction: retryPortalGenerationAction(),
   };
 }
@@ -65,7 +65,7 @@ export function downloadNotObserved(): SafeDownloadObservation {
     state: "not-observed",
     safeSignals: ["browser-download-not-observed"],
     safeMessage:
-      "Pack clicked the filed GSTR-3B download control, but the browser did not report a download. Allow downloads for the GST Portal, then retry.",
+      "Pack clicked the filed-return download control, but the browser did not report a download. Allow downloads for the GST Portal, then retry.",
     userAction: {
       type: "ALLOW_MULTIPLE_DOWNLOADS",
       message: "Allow browser downloads for the GST Portal, then start the Pack download again.",
@@ -83,7 +83,7 @@ export function failedObservation(errorCode?: string): SafeDownloadObservation {
       ...(errorCode ? [`browser-download-error-${normaliseSignal(errorCode)}`] : []),
     ],
     safeMessage:
-      "The browser started the filed GSTR-3B download but reported that it was interrupted. Check browser download permissions and retry.",
+      "The browser started the filed-return PDF download but reported that it was interrupted. Check browser download permissions and retry.",
     userAction: {
       type: "ALLOW_MULTIPLE_DOWNLOADS",
       message: "Allow browser downloads for the GST Portal, then start the Pack download again.",
@@ -137,7 +137,7 @@ function mergeDownloadEvidence(
 function retryPortalGenerationAction(): UserActionRequired {
   return {
     type: "RETRY_PORTAL_GENERATION",
-    message: "Retry the filed GSTR-3B download from the GST Portal detail page.",
+    message: "Retry the filed-return download from the GST Portal detail page.",
     canResume: true,
   };
 }

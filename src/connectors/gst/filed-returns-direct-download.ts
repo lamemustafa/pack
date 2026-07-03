@@ -35,6 +35,34 @@ export function resolveFiledGstr3bGeneratedPdfApiRequest(
   documentRef: Document,
   target: FiledReturnsDownloadTarget,
 ): FiledGstr3bDirectDownloadRequestResolution {
+  if (target.artifactType && target.artifactType !== "PDF") {
+    return {
+      ok: false,
+      result: {
+        connectorId: "gst",
+        scopeId: FILED_RETURNS_SCOPE_ID,
+        state: "blocked",
+        safeSignals: ["filed-gstr3b-direct-download-artifact-rejected"],
+        safeMessage:
+          "Pack will not build a direct filed GSTR-3B PDF request for a non-PDF artifact.",
+      },
+    };
+  }
+
+  if (target.returnType !== "GSTR-3B") {
+    return {
+      ok: false,
+      result: {
+        connectorId: "gst",
+        scopeId: FILED_RETURNS_SCOPE_ID,
+        state: "blocked",
+        safeSignals: ["filed-gstr3b-direct-download-return-type-rejected"],
+        safeMessage:
+          "Pack will not build a direct filed-return PDF request for this return type until its GST Portal endpoint is reviewed.",
+      },
+    };
+  }
+
   const pageGuard = detectFiledGstr3bDetailApiContext(documentRef);
   if (!pageGuard.ok) {
     return {

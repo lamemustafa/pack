@@ -20,6 +20,7 @@ import {
   normaliseText,
 } from "./filed-returns-dom";
 import { markFiledReturnsSearchPending } from "./filed-returns-search-state";
+import { filedReturnDescriptor } from "./filed-returns-return-descriptors";
 
 const FIELD_SETTLE_DELAY_MS = 500;
 const FIELD_STABILITY_DELAY_MS = 1_000;
@@ -44,6 +45,7 @@ export async function selectFiledReturnsFiltersAndSearch(
   scope: FiledReturnsDownloadScope,
   scopeId: string,
 ): Promise<PortalFlowStepResult> {
+  const descriptor = filedReturnDescriptor(scope.returnType);
   const selectSignals: string[] = [];
   let financialYearSelected = await selectFieldOption(documentRef, FINANCIAL_YEAR_LABEL, [
     scope.financialYear,
@@ -89,9 +91,7 @@ export async function selectFiledReturnsFiltersAndSearch(
 
   const formRoot = findFiledReturnsFilterRoot(documentRef);
   const searchRoot = formRoot ?? documentRef;
-  const search = getClickableElements(searchRoot).find((element) =>
-    /^search$/i.test(normaliseText(readElementText(element))),
-  );
+  const search = findSearchButton(searchRoot) ?? findSearchButton(documentRef);
 
   if (
     !financialYearSelected ||
@@ -131,7 +131,7 @@ export async function selectFiledReturnsFiltersAndSearch(
         "Pack could not safely select the requested filed-return filters. Use the portal filters manually, then start Pack again.",
       userAction: {
         type: "NAVIGATE_TO_SUPPORTED_PAGE",
-        message: "Select the filed GSTR-3B filters in the GST portal, then start Pack again.",
+        message: `Select the filed ${descriptor.label} filters in the GST portal, then start Pack again.`,
         canResume: true,
       },
     };
@@ -149,10 +149,7 @@ export async function selectFiledReturnsFiltersAndSearch(
 }
 
 function acceptedFilingPeriodOptions(scope: FiledReturnsDownloadScope): string[] {
-  if (scope.returnType === "GSTR-3B") {
-    return ["Monthly", scope.period];
-  }
-  return [scope.period];
+  return ["Monthly", scope.period];
 }
 
 function acceptedMonthOptions(scope: FiledReturnsDownloadScope): string[] {
@@ -247,8 +244,25 @@ function describeMissingFilterContext(documentRef: Document, state: FilterSelect
     missing.push(`month (${summariseNativeSelectOptions(documentRef, MONTH_LABEL)})`);
   }
   if (!state.returnTypeSelected) missing.push("return type");
+  if (
+    state.financialYearSelected &&
+    state.periodSelected &&
+    state.monthSelected &&
+    state.returnTypeSelected &&
+    !findSearchButton(documentRef)
+  ) {
+    missing.push("search button");
+  }
 
   return missing.length > 0 ? ` Missing: ${missing.join(", ")}.` : "";
+}
+
+function findSearchButton(root: ParentNode): HTMLElement | null {
+  return (
+    getClickableElements(root).find((element) =>
+      /^search$/i.test(normaliseText(readElementText(element))),
+    ) ?? null
+  );
 }
 
 function summariseNativeSelectOptions(documentRef: Document, labelPattern: RegExp): string {
@@ -278,6 +292,7 @@ function readElementText(element: HTMLElement): string {
     HTMLInputElementConstructor && element instanceof HTMLInputElementConstructor
       ? element.value
       : "";
+  const seenTexts = new Set<string>();
   return [
     element.innerText || "",
     element.textContent || "",
@@ -285,7 +300,12 @@ function readElementText(element: HTMLElement): string {
     element.getAttribute("aria-label") ?? "",
     element.getAttribute("title") ?? "",
   ]
-    .filter(Boolean)
+    .filter((text) => {
+      const comparable = normaliseText(text);
+      if (!comparable || seenTexts.has(comparable)) return false;
+      seenTexts.add(comparable);
+      return true;
+    })
     .join(" ");
 }
 

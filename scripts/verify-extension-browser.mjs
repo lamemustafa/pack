@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* global chrome, document */
 import { spawnSync } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -113,6 +113,11 @@ try {
       `${sanitize(message)}\nInstall pinned Chromium with: pnpm exec playwright install chromium`,
     );
   }
+  if (isChromiumCrashpadPermissionFailure(message)) {
+    throw new Error(
+      "Chromium exited before Pack loaded because macOS denied Chromium Crashpad application-support access. Run the Pack browser verifier from a normal local shell, or explicitly approve the unsandboxed verifier run in Codex, then retry. No Pack browser assertions ran in this attempt.",
+    );
+  }
   throw error;
 } finally {
   await context?.close();
@@ -163,17 +168,29 @@ function buildApprovedOrigins(input) {
 }
 
 async function launchExtensionContext() {
+  const isolatedBrowserHome = path.join(profileDir, "home");
+  await mkdir(isolatedBrowserHome, { recursive: true });
   return chromium.launchPersistentContext(profileDir, {
     ...(chromiumExecutablePath
       ? { executablePath: chromiumExecutablePath }
       : { channel: "chromium" }),
+    env: {
+      ...process.env,
+      HOME: isolatedBrowserHome,
+      XDG_CACHE_HOME: path.join(profileDir, "xdg-cache"),
+      XDG_CONFIG_HOME: path.join(profileDir, "xdg-config"),
+    },
     headless: false,
     args: [
       "--disable-background-networking",
       "--disable-component-update",
+      "--disable-breakpad",
+      "--disable-crash-reporter",
+      "--disable-crashpad",
       "--disable-default-apps",
       "--disable-features=AutofillServerCommunication,OptimizationHints,Translate",
       "--disable-sync",
+      `--crash-dumps-dir=${path.join(profileDir, "Crashpad")}`,
       "--metrics-recording-only",
       "--no-first-run",
       "--host-resolver-rules=MAP * 127.0.0.1, EXCLUDE localhost, EXCLUDE 127.0.0.1",
@@ -202,7 +219,7 @@ async function assertServiceWorkerStarted(serviceWorker) {
       storageWritable: Boolean(values["pack:browser-release-probe"]?.localOnly),
     };
   });
-  if (serviceWorkerState.manifestName !== "ComplyEaze Pack: GST GSTR-3B Downloader") {
+  if (serviceWorkerState.manifestName !== "ComplyEaze Pack: GSTR-3B/GSTR-1 Downloader") {
     throw new Error("Unexpected extension manifest loaded in browser.");
   }
   if (!serviceWorkerState.storageWritable) {
@@ -419,6 +436,13 @@ function ensureHeadedChromiumDisplay() {
     );
   }
   process.exit(result.status ?? 1);
+}
+
+function isChromiumCrashpadPermissionFailure(message) {
+  return (
+    /Crashpad\/settings\.dat/i.test(message) &&
+    /Operation not permitted|Permission denied/i.test(message)
+  );
 }
 
 function redactExtensionId(value) {

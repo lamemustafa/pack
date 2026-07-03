@@ -1,6 +1,7 @@
 import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "../../core/contracts";
 import { matchesAcceptedText } from "./filed-returns-dom";
 import { acceptedFiledReturnsPeriodTexts } from "./filed-returns-months";
+import { filedReturnDescriptor } from "./filed-returns-return-descriptors";
 import { toPortalReturnPeriod } from "./filed-returns-return-period";
 
 const EFILED_RETURNS_API_PATH = "/returns/auth/api/efiledReturns";
@@ -35,11 +36,13 @@ export async function openFiledReturnFromApiSearch(
   scope: FiledReturnsDownloadScope,
   scopeId: string,
 ): Promise<PortalFlowStepResult | null> {
+  if (scope.returnType !== "GSTR-3B") return null;
   if (!canUseFiledReturnsApi(documentRef)) return null;
 
   const rows = await queryFiledReturnsApi(documentRef, scope);
   if (!rows) return null;
 
+  const descriptor = filedReturnDescriptor(scope.returnType);
   const matchingRows = rows.filter((row) => rowMatchesScope(row, scope));
   if (matchingRows.length === 0) {
     return null;
@@ -51,11 +54,10 @@ export async function openFiledReturnFromApiSearch(
       scopeId,
       state: "blocked",
       safeSignals: ["filed-return-api-searched", "filed-return-api-result-ambiguous"],
-      safeMessage:
-        "Pack found more than one GST filed-return API result for the requested period. Open the correct row manually, then start Pack again.",
+      safeMessage: `Pack found more than one GST filed-return API result for the requested ${descriptor.label} period. Open the correct row manually, then start Pack again.`,
       userAction: {
         type: "NAVIGATE_TO_SUPPORTED_PAGE",
-        message: "Open the exact filed GSTR-3B row for the requested period.",
+        message: `Open the exact filed ${descriptor.label} row for the requested period.`,
         canResume: true,
       },
     };
@@ -76,8 +78,7 @@ export async function openFiledReturnFromApiSearch(
         "filed-return-api-result-posted",
         `filed-return-result-period:${scope.period}`,
       ],
-      safeMessage:
-        "Pack found the filed GSTR-3B through the GST search API and opened the portal detail page.",
+      safeMessage: `Pack found the filed ${descriptor.label} through the GST search API and opened the portal detail page.`,
     };
   }
 
@@ -90,11 +91,10 @@ export async function openFiledReturnFromApiSearch(
       "filed-return-api-result-found",
       `filed-return-api-result-${openResponse.reason}`,
     ],
-    safeMessage:
-      "Pack found the filed GSTR-3B through the GST search API, but the portal detail-page handoff could not be completed safely. Open the row manually, then start Pack again.",
+    safeMessage: `Pack found the filed ${descriptor.label} through the GST search API, but the portal detail-page handoff could not be completed safely. Open the row manually, then start Pack again.`,
     userAction: {
       type: "NAVIGATE_TO_SUPPORTED_PAGE",
-      message: "Open the exact filed GSTR-3B row for the requested period.",
+      message: `Open the exact filed ${descriptor.label} row for the requested period.`,
       canResume: true,
     },
   };

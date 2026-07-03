@@ -8,6 +8,7 @@ import type {
 import type { PackMessageResponse } from "../core/messages";
 import { getFiledReturnsFullFiscalYearPeriods } from "../core/filed-returns-scope";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
+import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import {
   canCompleteFullFiscalYearLedger,
   completeFullFiscalYearLedger,
@@ -109,6 +110,7 @@ export async function startFullFiscalYearDownloadFlow(
         financialYear: nextTarget.financialYear,
         period: nextTarget.period,
         returnType: nextTarget.returnType,
+        ...(nextTarget.artifactType ? { artifactType: nextTarget.artifactType } : {}),
       },
       { ...deps, persistTargetReview: false },
       { persistSinglePeriodSummary: false },
@@ -119,7 +121,7 @@ export async function startFullFiscalYearDownloadFlow(
         ledger,
         nextTarget.targetId,
         "failed",
-        fullFiscalYearErrorStep(nextTarget.period),
+        fullFiscalYearErrorStep(nextTarget),
         deps.now?.() ?? new Date(),
       );
       await persistLedger(deps, ledger);
@@ -284,12 +286,14 @@ async function persistSummary(
   await browser.storage.session.set({ [deps.storageKeys.completion]: summary });
 }
 
-function fullFiscalYearErrorStep(period: string): PortalFlowStepResult {
+function fullFiscalYearErrorStep(
+  target: FiledReturnsFullFiscalYearLedger["targets"][number],
+): PortalFlowStepResult {
   return {
     connectorId: "gst",
-    scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+    scopeId: filedReturnScopeId(target.returnType),
     state: "blocked",
     safeSignals: ["full-fiscal-year-target-error", "pack-error:CONTENT_SCRIPT_UNAVAILABLE"],
-    safeMessage: `Pack stopped while checking ${period}. The GST tab could not be reached safely.`,
+    safeMessage: `Pack stopped while checking ${target.period}. The GST tab could not be reached safely.`,
   };
 }

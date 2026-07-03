@@ -1,65 +1,104 @@
 import type { FiledReturnsDownloadTarget, PortalDownloadTriggerResult } from "../../core/contracts";
-import { resolveVisibleFiledGstr3bDownloadCandidates } from "./filed-returns-download-candidates";
+import {
+  filedReturnsConcreteArtifactLabel,
+  supportsFiledReturnsArtifactType,
+  type FiledReturnsConcreteArtifactType,
+} from "../../core/filed-returns-artifacts";
+import { resolveVisibleFiledReturnDownloadCandidates } from "./filed-returns-download-candidates";
 import { verifyFiledReturnsDownloadTarget } from "./filed-returns-download-target";
 import { dismissKnownFiledReturnsSummaryModal } from "./filed-returns-navigator";
 import {
   asPortalDownloadTriggerResult,
   detectFiledReturnsPortalAvailabilityIssue,
 } from "./filed-returns-portal-availability";
+import {
+  filedReturnDescriptor,
+  filedReturnScopedSignal,
+  filedReturnScopeId,
+} from "./filed-returns-return-descriptors";
 
 export {
   findFiledGstr3bDownloadCandidateIndex,
   scoreFiledGstr3bDownloadCandidate,
 } from "./filed-returns-download-candidates";
 
-const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
 const DIALOG_SETTLE_DELAY_MS = 250;
+const GSTR1_EXCEL_POST_CLICK_BLOCKED_WAIT_MS = 2_500;
+const GSTR1_EXCEL_POST_CLICK_BLOCKED_POLL_MS = 100;
 export async function triggerFiledGstr3bFiledPdfDownload(
+  documentRef: Document,
+  target: FiledReturnsDownloadTarget,
+): Promise<PortalDownloadTriggerResult> {
+  return triggerFiledReturnFiledPdfDownload(documentRef, target);
+}
+
+export async function triggerFiledReturnFiledPdfDownload(
   documentRef: Document,
   target: FiledReturnsDownloadTarget,
 ): Promise<PortalDownloadTriggerResult> {
   const blockedState = detectBlockedPortalState(documentRef);
   if (blockedState) return blockedState;
 
+  const descriptor = filedReturnDescriptor(target.returnType);
+  const scopeId = filedReturnScopeId(target.returnType);
+  const artifactType = target.artifactType ?? "PDF";
+  const artifactLabel = filedReturnsConcreteArtifactLabel(artifactType);
+  if (!supportsFiledReturnsArtifactType(target.returnType, artifactType)) {
+    return {
+      connectorId: "gst",
+      scopeId,
+      state: "blocked",
+      safeSignals: [filedReturnScopedSignal(target.returnType, "artifact-unsupported")],
+      safeMessage: `Pack does not support ${artifactLabel} downloads for filed ${descriptor.label}.`,
+    };
+  }
+
   const safeSignals = await dismissKnownFiledReturnsSummaryModal(documentRef);
-  const pageGuard = detectFiledGstr3bDetailPage(documentRef);
+  const pageGuard = detectFiledReturnDetailPage(documentRef, target.returnType, artifactType);
   if (!pageGuard.isDetailPage) {
     return {
       connectorId: "gst",
-      scopeId: FILED_RETURNS_SCOPE_ID,
+      scopeId,
       state: "candidate-not-found",
-      safeSignals: [...safeSignals, ...pageGuard.safeSignals, "not-filed-gstr3b-detail-page"],
-      safeMessage: "Pack will only click DOWNLOAD FILED GSTR-3B on the filed GSTR-3B detail page.",
+      safeSignals: [
+        ...safeSignals,
+        ...pageGuard.safeSignals,
+        `not-filed-${descriptor.signalSlug}-detail-page`,
+      ],
+      safeMessage: `Pack will only click the filed ${descriptor.label} ${artifactLabel} download on the filed ${descriptor.label} detail page.`,
       userAction: {
         type: "NAVIGATE_TO_SUPPORTED_PAGE",
-        message: "Open a filed GSTR-3B result row so the filed GSTR-3B detail page is visible.",
+        message: `Open a filed ${descriptor.label} result row so the filed ${descriptor.label} detail page is visible.`,
         canResume: true,
       },
     };
   }
+  const detailSignals = [...safeSignals, ...pageGuard.safeSignals];
 
-  const targetGuard = verifyFiledReturnsDownloadTarget(documentRef, target, safeSignals);
+  const targetGuard = verifyFiledReturnsDownloadTarget(documentRef, target, detailSignals);
   if (targetGuard) return targetGuard;
 
-  const viableCandidates = resolveVisibleFiledGstr3bDownloadCandidates(documentRef);
+  const viableCandidates = resolveVisibleFiledReturnDownloadCandidates(
+    documentRef,
+    target.returnType,
+    artifactType,
+  );
 
   if (viableCandidates.length !== 1) {
     return {
       connectorId: "gst",
-      scopeId: FILED_RETURNS_SCOPE_ID,
+      scopeId,
       state: "candidate-not-found",
       safeSignals: [
-        ...safeSignals,
+        ...detailSignals,
         viableCandidates.length > 1
-          ? "filed-gstr3b-download-candidate-ambiguous"
-          : "filed-gstr3b-download-candidate-not-found",
+          ? filedReturnScopedSignal(target.returnType, "download-candidate-ambiguous")
+          : filedReturnScopedSignal(target.returnType, "download-candidate-not-found"),
       ],
-      safeMessage:
-        "Pack could not find the explicit DOWNLOAD FILED GSTR-3B control on this GST page.",
+      safeMessage: `Pack could not find exactly one explicit filed ${descriptor.label} ${artifactLabel} download control on this GST page.`,
       userAction: {
         type: "NAVIGATE_TO_SUPPORTED_PAGE",
-        message:
-          "Open the filed GSTR-3B detail page where the DOWNLOAD FILED GSTR-3B button is visible.",
+        message: `Open the filed ${descriptor.label} detail page where the filed ${descriptor.label} ${artifactLabel} download button is visible.`,
         canResume: true,
       },
     };
@@ -69,9 +108,12 @@ export async function triggerFiledGstr3bFiledPdfDownload(
   if (!viableCandidate) {
     return {
       connectorId: "gst",
-      scopeId: FILED_RETURNS_SCOPE_ID,
+      scopeId,
       state: "candidate-not-found",
-      safeSignals: [...safeSignals, "filed-gstr3b-download-candidate-missing"],
+      safeSignals: [
+        ...detailSignals,
+        filedReturnScopedSignal(target.returnType, "download-candidate-missing"),
+      ],
       safeMessage: "Pack found an unstable filed-return download candidate. Run the check again.",
     };
   }
@@ -80,43 +122,143 @@ export async function triggerFiledGstr3bFiledPdfDownload(
 
   activateElement(element);
   await delay(DIALOG_SETTLE_DELAY_MS);
+  const clickedSignals = [
+    ...detailSignals,
+    "filed-return-download-clicked",
+    filedReturnScopedSignal(target.returnType, "download-clicked"),
+    ...score.safeSignals,
+  ];
+
+  const postClickBlockedState = await waitForPostClickBlockedState(
+    documentRef,
+    target,
+    clickedSignals,
+  );
+  if (postClickBlockedState) return postClickBlockedState;
 
   return {
     connectorId: "gst",
-    scopeId: FILED_RETURNS_SCOPE_ID,
+    scopeId,
     state: "clicked",
-    safeSignals: [...safeSignals, "filed-gstr3b-download-clicked", ...score.safeSignals],
-    safeMessage:
-      "Pack clicked the GST portal's DOWNLOAD FILED GSTR-3B control. Check the browser downloads shelf/folder for the PDF.",
+    safeSignals: clickedSignals,
+    safeMessage: `Pack clicked the GST portal's filed ${descriptor.label} ${artifactLabel} download control. Check the browser downloads shelf/folder for the file.`,
   };
 }
 
-function detectFiledGstr3bDetailPage(documentRef: Document): {
-  isDetailPage: boolean;
-  safeSignals: string[];
-} {
-  const path = documentRef.defaultView?.location.pathname ?? "";
-  const text = documentRef.body?.innerText ?? documentRef.body?.textContent ?? "";
-  const normalised = text.replace(/\s+/g, " ").trim().toLowerCase();
-  const safeSignals: string[] = [];
+async function waitForPostClickBlockedState(
+  documentRef: Document,
+  target: FiledReturnsDownloadTarget,
+  safeSignals: string[],
+): Promise<PortalDownloadTriggerResult | null> {
+  if (target.returnType !== "GSTR-1" || target.artifactType !== "EXCEL") return null;
 
-  if (/\/returns\/auth\/gstr3b$/i.test(path)) safeSignals.push("gstr-3b-detail-route");
-  if (/gstr[\s-]?3b\s*-\s*monthly\s+return/.test(normalised)) {
-    safeSignals.push("gstr-3b-monthly-return-heading");
-  }
-  if (/\bstatus\s*-\s*filed\b|\bstatus\s+filed\b/.test(normalised)) {
-    safeSignals.push("status-filed");
-  }
-  if (/\bdownload\s+filed\s+gstr[\s-]?3b\b/.test(normalised)) {
-    safeSignals.push("download-filed-gstr3b-visible");
+  const startedAt = Date.now();
+  do {
+    const blockedState = detectPostClickBlockedState(documentRef, target, safeSignals);
+    if (blockedState) return blockedState;
+    await delay(GSTR1_EXCEL_POST_CLICK_BLOCKED_POLL_MS);
+  } while (Date.now() - startedAt < GSTR1_EXCEL_POST_CLICK_BLOCKED_WAIT_MS);
+
+  return null;
+}
+
+function detectPostClickBlockedState(
+  documentRef: Document,
+  target: FiledReturnsDownloadTarget,
+  safeSignals: string[],
+): PortalDownloadTriggerResult | null {
+  if (target.returnType !== "GSTR-1" || target.artifactType !== "EXCEL") return null;
+
+  const text = documentRef.body?.innerText ?? documentRef.body?.textContent ?? "";
+  const normalised = text.replace(/\s+/g, " ").trim();
+  if (
+    !/\bno\s+details\s+available\s+for\s+download\b/i.test(normalised) ||
+    !/\be-?invoices?\b/i.test(normalised)
+  ) {
+    return null;
   }
 
   return {
+    connectorId: "gst",
+    scopeId: filedReturnScopeId(target.returnType),
+    state: "blocked",
+    safeSignals: [
+      ...safeSignals,
+      ...(safeSignals.includes("filed-gstr1-excel-no-details-available")
+        ? []
+        : ["filed-gstr1-excel-no-details-available"]),
+    ],
+    safeMessage:
+      "The GST Portal reported that no e-invoice details are available for this filed GSTR-1 period, so Pack did not record an Excel download. Retry after e-invoice details are available, or run PDF-only for this period.",
+    userAction: {
+      type: "RETRY_PORTAL_GENERATION",
+      message:
+        "Close the GST Portal information dialog, then retry the GSTR-1 Excel download after e-invoice details are available.",
+      canResume: true,
+    },
+  };
+}
+
+function detectFiledReturnDetailPage(
+  documentRef: Document,
+  returnType: FiledReturnsDownloadTarget["returnType"],
+  artifactType: FiledReturnsConcreteArtifactType,
+): {
+  isDetailPage: boolean;
+  safeSignals: string[];
+} {
+  const descriptor = filedReturnDescriptor(returnType);
+  const path = documentRef.defaultView?.location.pathname ?? "";
+  const text = documentRef.body?.innerText ?? documentRef.body?.textContent ?? "";
+  const normalised = text.replace(/\s+/g, " ").trim();
+  const safeSignals: string[] = [];
+
+  if (descriptor.detailRoutePattern.test(path)) {
+    safeSignals.push(`${descriptor.signalSlug}-detail-route`);
+  }
+  if (descriptor.detailHeadingPattern.test(normalised)) {
+    safeSignals.push(`${descriptor.signalSlug}-detail-heading`);
+  }
+  if (/\bstatus\s*-\s*filed\b|\bstatus\s+filed\b/i.test(normalised)) {
+    safeSignals.push("status-filed");
+  }
+  if (descriptor.explicitDownloadPattern.test(normalised)) {
+    safeSignals.push(`download-filed-${descriptor.signalSlug}-visible`);
+  }
+  if (descriptor.excelDownloadPattern?.test(normalised)) {
+    safeSignals.push(`download-excel-${descriptor.signalSlug}-visible`);
+  }
+  if (descriptor.secondaryDownloadPattern?.test(normalised)) {
+    safeSignals.push(`download-pdf-${descriptor.signalSlug}-visible`);
+  }
+  if (/\bno\s+files?\s+available\s+for\s+download\b/i.test(normalised)) {
+    safeSignals.push("no-files-available-for-download");
+  }
+  if (
+    artifactType === "EXCEL" &&
+    returnType === "GSTR-1" &&
+    !safeSignals.includes("status-filed")
+  ) {
+    safeSignals.push("filed-gstr1-download-status-not-filed");
+  }
+
+  const hasRequestedDownload =
+    artifactType === "EXCEL"
+      ? safeSignals.includes(`download-excel-${descriptor.signalSlug}-visible`)
+      : safeSignals.includes(`download-filed-${descriptor.signalSlug}-visible`) ||
+        safeSignals.includes(`download-pdf-${descriptor.signalSlug}-visible`);
+  const hasRequiredFilingStatus =
+    artifactType !== "EXCEL" || returnType !== "GSTR-1" || safeSignals.includes("status-filed");
+
+  return {
     isDetailPage:
-      safeSignals.includes("download-filed-gstr3b-visible") &&
-      (safeSignals.includes("gstr-3b-detail-route") ||
-        (safeSignals.includes("gstr-3b-monthly-return-heading") &&
-          safeSignals.includes("status-filed"))),
+      hasRequiredFilingStatus &&
+      (safeSignals.includes(`${descriptor.signalSlug}-detail-route`) ||
+        (safeSignals.includes(`${descriptor.signalSlug}-detail-heading`) &&
+          safeSignals.includes("status-filed"))) &&
+      (hasRequestedDownload ||
+        safeSignals.includes("status-filed") ||
+        safeSignals.includes("no-files-available-for-download")),
     safeSignals,
   };
 }

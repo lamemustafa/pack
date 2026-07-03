@@ -5,6 +5,7 @@ import {
 } from "../../src/core/filed-returns-scope";
 import type { FiledReturnsFullFiscalYearLedger } from "../../src/core/contracts";
 import {
+  createFullFiscalYearTargetId,
   isFullFiscalYearLedger,
   nextRunnableFullFiscalYearTarget,
 } from "../../src/background/filed-returns-full-fiscal-year-ledger";
@@ -154,14 +155,48 @@ describe("full fiscal year ledger", () => {
       }),
     ).toBe(false);
   });
+
+  it("validates GSTR-1 full fiscal year ledgers with artifact-specific targets", () => {
+    const ledger = createLedger([["May", "downloaded"]], {
+      artifactType: "PDF_AND_EXCEL",
+      returnType: "GSTR-1",
+    });
+
+    expect(ledger.scope).toMatchObject({
+      artifactType: "PDF_AND_EXCEL",
+      returnType: "GSTR-1",
+    });
+    expect(ledger.targets[0]).toMatchObject({
+      artifactType: "PDF_AND_EXCEL",
+      targetId: "GSTR-1:2026-27:May:PDF_AND_EXCEL",
+      returnType: "GSTR-1",
+    });
+    expect(isFullFiscalYearLedger(ledger)).toBe(true);
+    expect(createFullFiscalYearTargetId("2026-27", "May", "GSTR-1", "PDF_AND_EXCEL")).toBe(
+      "GSTR-1:2026-27:May:PDF_AND_EXCEL",
+    );
+
+    expect(
+      isFullFiscalYearLedger({
+        ...ledger,
+        targets: [{ ...ledger.targets[0], artifactType: "PDF" }],
+      }),
+    ).toBe(false);
+  });
 });
 
 function createLedger(
   targets: Array<
     [FiledReturnsMonth, FiledReturnsFullFiscalYearLedger["targets"][number]["status"]]
   >,
+  options: {
+    artifactType?: FiledReturnsFullFiscalYearLedger["scope"]["artifactType"];
+    returnType?: FiledReturnsFullFiscalYearLedger["scope"]["returnType"];
+  } = {},
 ): FiledReturnsFullFiscalYearLedger {
   const now = "2026-06-24T00:00:00.000Z";
+  const returnType = options.returnType ?? "GSTR-3B";
+  const artifactType = options.artifactType ?? "PDF";
   return {
     schemaVersion: "1.0",
     ledgerId: "ledger-test",
@@ -169,25 +204,44 @@ function createLedger(
     scope: {
       financialYear: "2026-27",
       period: FULL_FISCAL_YEAR_PERIOD,
-      returnType: "GSTR-3B",
+      returnType,
+      artifactType,
     },
-    ...(targets[0] ? { currentTargetId: `GSTR-3B:2026-27:${targets[0][0]}` } : {}),
+    ...(targets[0]
+      ? {
+          currentTargetId: createFullFiscalYearTargetId(
+            "2026-27",
+            targets[0][0],
+            returnType,
+            artifactType,
+          ),
+        }
+      : {}),
     createdAt: now,
     updatedAt: now,
-    targets: targets.map(([period, status]) => createTarget(period, status)),
+    targets: targets.map(([period, status]) =>
+      createTarget(period, status, { artifactType, returnType }),
+    ),
   };
 }
 
 function createTarget(
   period: FiledReturnsMonth,
   status: FiledReturnsFullFiscalYearLedger["targets"][number]["status"],
+  options: {
+    artifactType?: FiledReturnsFullFiscalYearLedger["targets"][number]["artifactType"];
+    returnType?: FiledReturnsFullFiscalYearLedger["targets"][number]["returnType"];
+  } = {},
 ): FiledReturnsFullFiscalYearLedger["targets"][number] {
   const now = "2026-06-24T00:00:00.000Z";
+  const returnType = options.returnType ?? "GSTR-3B";
+  const artifactType = options.artifactType ?? "PDF";
   return {
-    targetId: `GSTR-3B:2026-27:${period}`,
+    targetId: createFullFiscalYearTargetId("2026-27", period, returnType, artifactType),
     financialYear: "2026-27",
     period,
-    returnType: "GSTR-3B",
+    returnType,
+    artifactType,
     status,
     attempts: status === "pending" ? 0 : 1,
     safeSignals: [],

@@ -9,13 +9,16 @@ export function ambiguousDownloadTriggerResponse(): PackMessageResponse {
       connectorId: "gst",
       scopeId: FILED_RETURNS_SCOPE_ID,
       state: "user-action-required",
-      safeSignals: ["filed-gstr3b-download-trigger-ambiguous"],
+      safeSignals: [
+        "filed-return-download-trigger-ambiguous",
+        "filed-gstr3b-download-trigger-ambiguous",
+      ],
       safeMessage:
         "Pack could not confirm whether the GST Portal received the download click, so it did not retry the side-effectful action. Check the browser downloads shelf, then retry only if no PDF appeared.",
       userAction: {
         type: "RETRY_PORTAL_GENERATION",
         message:
-          "Check whether the filed GSTR-3B PDF already downloaded. Retry from the GST Portal detail page only if no PDF appeared.",
+          "Check whether the filed-return PDF already downloaded. Retry from the GST Portal detail page only if no PDF appeared.",
         canResume: true,
       },
     },

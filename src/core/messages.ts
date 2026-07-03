@@ -15,8 +15,18 @@ import {
   isSupportedFiledReturnsScope,
   isSupportedFiledReturnsStartScope,
 } from "./filed-returns-scope";
+import {
+  isFiledReturnsArtifactType,
+  isFiledReturnsConcreteArtifactType,
+  supportsFiledReturnsArtifactType,
+  type FiledReturnsArtifactType,
+} from "./filed-returns-artifacts";
+import {
+  isFiledReturnsReturnType,
+  type FiledReturnsReturnType,
+} from "./filed-returns-return-types";
 
-export const PACK_CONTENT_SCRIPT_PROTOCOL_VERSION = 3;
+export const PACK_CONTENT_SCRIPT_PROTOCOL_VERSION = 9;
 
 export type PackMessage =
   | { type: "PACK_CONTENT_CONTEXT"; payload: PortalContext }
@@ -200,6 +210,9 @@ function isFiledReturnsDownloadTarget(input: unknown): input is FiledReturnsDown
   }
   if (!isFiledReturnsDownloadScope(input)) return false;
   if (input.period === "ALL" || input.period === FULL_FISCAL_YEAR_PERIOD) return false;
+  if (input.artifactType !== undefined && !isFiledReturnsConcreteArtifactType(input.artifactType)) {
+    return false;
+  }
   return true;
 }
 
@@ -210,7 +223,15 @@ function isFiledReturnsDownloadScope(input: unknown): input is FiledReturnsDownl
   if (typeof input.period !== "string" || input.period.length === 0 || input.period.length > 20) {
     return false;
   }
-  if (input.returnType !== "GSTR-3B") return false;
+  if (!isFiledReturnsReturnType(input.returnType)) return false;
+  if (
+    !isSupportedArtifactSelection({
+      artifactType: input.artifactType,
+      returnType: input.returnType,
+    })
+  ) {
+    return false;
+  }
   if (
     input.completedPeriods !== undefined &&
     (!Array.isArray(input.completedPeriods) ||
@@ -221,10 +242,14 @@ function isFiledReturnsDownloadScope(input: unknown): input is FiledReturnsDownl
     return false;
   }
 
+  const artifactType = isFiledReturnsArtifactType(input.artifactType)
+    ? input.artifactType
+    : undefined;
   const scope: FiledReturnsDownloadScope = {
     financialYear: input.financialYear,
     period: input.period,
     returnType: input.returnType,
+    ...(artifactType ? { artifactType } : {}),
     ...(input.completedPeriods ? { completedPeriods: input.completedPeriods } : {}),
   };
   return isSupportedFiledReturnsScope(scope);
@@ -238,7 +263,8 @@ function isFiledReturnsStartScope(input: unknown): input is FiledReturnsDownload
 function isFiledReturnsScopeShape(input: unknown): input is {
   financialYear: string;
   period: string;
-  returnType: "GSTR-3B";
+  returnType: FiledReturnsReturnType;
+  artifactType?: FiledReturnsArtifactType;
   completedPeriods?: string[];
 } {
   if (!isRecord(input)) return false;
@@ -247,7 +273,15 @@ function isFiledReturnsScopeShape(input: unknown): input is {
   if (typeof input.period !== "string" || input.period.length === 0 || input.period.length > 24) {
     return false;
   }
-  if (input.returnType !== "GSTR-3B") return false;
+  if (!isFiledReturnsReturnType(input.returnType)) return false;
+  if (
+    !isSupportedArtifactSelection({
+      artifactType: input.artifactType,
+      returnType: input.returnType,
+    })
+  ) {
+    return false;
+  }
   if (
     input.completedPeriods !== undefined &&
     (!Array.isArray(input.completedPeriods) ||
@@ -263,15 +297,28 @@ function isFiledReturnsScopeShape(input: unknown): input is {
 function toFiledReturnsScope(input: {
   financialYear: string;
   period: string;
-  returnType: "GSTR-3B";
+  returnType: FiledReturnsReturnType;
+  artifactType?: FiledReturnsArtifactType;
   completedPeriods?: string[];
 }): FiledReturnsDownloadScope {
   return {
     financialYear: input.financialYear,
     period: input.period,
     returnType: input.returnType,
+    ...(input.artifactType ? { artifactType: input.artifactType } : {}),
     ...(input.completedPeriods ? { completedPeriods: input.completedPeriods } : {}),
   };
+}
+
+function isSupportedArtifactSelection(input: {
+  returnType: FiledReturnsReturnType;
+  artifactType?: unknown;
+}): boolean {
+  const artifactType = input.artifactType ?? "PDF";
+  return (
+    isFiledReturnsArtifactType(artifactType) &&
+    supportsFiledReturnsArtifactType(input.returnType, artifactType)
+  );
 }
 
 function isRecord(input: unknown): input is Record<string, unknown> {

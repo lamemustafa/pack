@@ -16,13 +16,19 @@ import { detectPositiveNotFiledEvidence } from "./filed-returns-not-filed-eviden
 import { observeFiledReturnsPageText } from "./filed-returns-observer";
 import { detectFiledReturnsPortalAvailabilityIssue } from "./filed-returns-portal-availability";
 import { findMatchingActionableFiledReturnRows } from "./filed-returns-result-rows";
+import {
+  filedReturnDescriptor,
+  filedReturnScopedSignal,
+  filedReturnScopeId,
+} from "./filed-returns-return-descriptors";
 import { clearFiledReturnsSearchAttempt } from "./filed-returns-search-state";
 
-const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
 export async function runFiledReturnsDownloadStep(
   documentRef: Document,
   scope: FiledReturnsDownloadScope,
 ): Promise<PortalFlowStepResult> {
+  const descriptor = filedReturnDescriptor(scope.returnType);
+  const scopeId = filedReturnScopeId(scope.returnType);
   const portalAvailabilityIssue = detectFiledReturnsPortalAvailabilityIssue(documentRef);
   if (portalAvailabilityIssue) {
     clearFiledReturnsSearchAttempt(documentRef);
@@ -41,7 +47,7 @@ export async function runFiledReturnsDownloadStep(
     return withOptionalUserAction(
       {
         connectorId: "gst",
-        scopeId: FILED_RETURNS_SCOPE_ID,
+        scopeId,
         state: "login-required",
         safeSignals: observation.safeSignals,
         safeMessage: observation.safeMessage,
@@ -51,50 +57,49 @@ export async function runFiledReturnsDownloadStep(
   }
 
   if (observation.state === "ready") {
-    const detailIdentity = extractFiledReturnsDetailIdentity(documentRef);
+    const detailIdentity = extractFiledReturnsDetailIdentity(documentRef, scope.returnType);
     if (shouldReturnFromMismatchedDetail(detailIdentity, scope)) {
-      return clickFiledReturnDetailBack(documentRef);
+      return clickFiledReturnDetailBack(documentRef, scope);
     }
+    const gstr1DetailNavigation = returnFromFiledGstr1SummaryForExcel(
+      documentRef,
+      scope,
+      observation.safeSignals,
+    );
+    if (gstr1DetailNavigation) return gstr1DetailNavigation;
+    const gstr1SummaryNavigation = clickFiledGstr1SummaryForPdf(
+      documentRef,
+      scope,
+      observation.safeSignals,
+    );
+    if (gstr1SummaryNavigation) return gstr1SummaryNavigation;
     return {
       connectorId: "gst",
-      scopeId: FILED_RETURNS_SCOPE_ID,
+      scopeId,
       state: "ready",
-      safeSignals: ["filed-gstr3b-download-ready", ...detailIdentity.safeSignals],
-      safeMessage:
-        "Pack found the filed GSTR-3B detail page and is ready to start the browser download.",
+      safeSignals: [
+        "filed-return-download-ready",
+        filedReturnScopedSignal(scope.returnType, "download-ready"),
+        ...detailIdentity.safeSignals,
+      ],
+      safeMessage: `Pack found the filed ${descriptor.label} detail page and is ready to start the browser download.`,
     };
   }
 
   if (isFiledReturnsSearchSurface(observation.safeSignals)) {
-    const notFiledEvidence = detectPositiveNotFiledEvidence(
-      documentRef,
-      scope,
-      FILED_RETURNS_SCOPE_ID,
-    );
+    const notFiledEvidence = detectPositiveNotFiledEvidence(documentRef, scope, scopeId);
     if (notFiledEvidence) {
       return notFiledEvidence;
     }
   }
 
   if (observation.state === "filters-required") {
-    const apiSearchResult = await openFiledReturnFromApiSearch(
-      documentRef,
-      scope,
-      FILED_RETURNS_SCOPE_ID,
-    );
+    const apiSearchResult = await openFiledReturnFromApiSearch(documentRef, scope, scopeId);
     if (apiSearchResult) return apiSearchResult;
 
-    const selectionResult = await selectFiledReturnsFiltersAndSearch(
-      documentRef,
-      scope,
-      FILED_RETURNS_SCOPE_ID,
-    );
+    const selectionResult = await selectFiledReturnsFiltersAndSearch(documentRef, scope, scopeId);
     if (shouldTryApiSearchFallback(selectionResult)) {
-      const apiSearchResult = await openFiledReturnFromApiSearch(
-        documentRef,
-        scope,
-        FILED_RETURNS_SCOPE_ID,
-      );
+      const apiSearchResult = await openFiledReturnFromApiSearch(documentRef, scope, scopeId);
       if (apiSearchResult) return apiSearchResult;
     }
     return selectionResult;
@@ -107,7 +112,7 @@ export async function runFiledReturnsDownloadStep(
   if (observation.state === "page-settling") {
     return {
       connectorId: "gst",
-      scopeId: FILED_RETURNS_SCOPE_ID,
+      scopeId,
       state: "clicked",
       safeSignals: [...observation.safeSignals, "filed-returns-page-settling"],
       safeMessage: observation.safeMessage,
@@ -120,7 +125,7 @@ export async function runFiledReturnsDownloadStep(
     return withOptionalUserAction(
       {
         connectorId: "gst",
-        scopeId: FILED_RETURNS_SCOPE_ID,
+        scopeId,
         state: navigation.state,
         safeSignals: navigation.safeSignals,
         safeMessage: navigation.safeMessage,
@@ -132,7 +137,7 @@ export async function runFiledReturnsDownloadStep(
   return withOptionalUserAction(
     {
       connectorId: "gst",
-      scopeId: FILED_RETURNS_SCOPE_ID,
+      scopeId,
       state: "user-action-required",
       safeSignals: observation.safeSignals,
       safeMessage: observation.safeMessage,
@@ -145,19 +150,20 @@ function openFiledReturnResultRow(
   documentRef: Document,
   scope: FiledReturnsDownloadScope,
 ): PortalFlowStepResult {
+  const descriptor = filedReturnDescriptor(scope.returnType);
+  const scopeId = filedReturnScopeId(scope.returnType);
   const actionableRows = findMatchingActionableFiledReturnRows(documentRef, scope);
 
   if (actionableRows.length > 1) {
     return {
       connectorId: "gst",
-      scopeId: FILED_RETURNS_SCOPE_ID,
+      scopeId,
       state: "blocked",
       safeSignals: ["filed-return-result-row-ambiguous"],
-      safeMessage:
-        "Pack found more than one filed GSTR-3B result row for the requested period. Open the correct row manually, then start Pack again.",
+      safeMessage: `Pack found more than one filed ${descriptor.label} result row for the requested period. Open the correct row manually, then start Pack again.`,
       userAction: {
         type: "NAVIGATE_TO_SUPPORTED_PAGE",
-        message: "Open the exact filed GSTR-3B row for the requested period.",
+        message: `Open the exact filed ${descriptor.label} row for the requested period.`,
         canResume: true,
       },
     };
@@ -168,24 +174,23 @@ function openFiledReturnResultRow(
     activateElement(actionableRow.view);
     return {
       connectorId: "gst",
-      scopeId: FILED_RETURNS_SCOPE_ID,
+      scopeId,
       state: "clicked",
       safeSignals: [
         "filed-return-result-view-clicked",
-        "result-row-gstr3b",
+        `result-row-${descriptor.signalSlug}`,
         ...(actionableRow.period ? [`filed-return-result-period:${actionableRow.period}`] : []),
       ],
-      safeMessage: "Pack opened the filed GSTR-3B result row.",
+      safeMessage: `Pack opened the filed ${descriptor.label} result row.`,
     };
   }
 
   return {
     connectorId: "gst",
-    scopeId: FILED_RETURNS_SCOPE_ID,
+    scopeId,
     state: "candidate-not-found",
     safeSignals: ["filed-return-result-row-not-found"],
-    safeMessage:
-      "Pack could not find a filed GSTR-3B result row for the selected period. Check the portal results and start Pack again.",
+    safeMessage: `Pack could not find a filed ${descriptor.label} result row for the selected period. Check the portal results and start Pack again.`,
   };
 }
 
@@ -205,6 +210,7 @@ function shouldReturnFromMismatchedDetail(
 ): boolean {
   if (!detailIdentity.period || !detailIdentity.financialYear) return false;
   return (
+    detailIdentity.returnType !== scope.returnType ||
     !matchesAcceptedText(detailIdentity.period, [scope.period]) ||
     !matchesAcceptedText(detailIdentity.financialYear, [scope.financialYear])
   );
@@ -217,7 +223,12 @@ function shouldTryApiSearchFallback(step: PortalFlowStepResult): boolean {
   );
 }
 
-function clickFiledReturnDetailBack(documentRef: Document): PortalFlowStepResult {
+function clickFiledReturnDetailBack(
+  documentRef: Document,
+  scope: FiledReturnsDownloadScope,
+): PortalFlowStepResult {
+  const descriptor = filedReturnDescriptor(scope.returnType);
+  const scopeId = filedReturnScopeId(scope.returnType);
   const backButton = getClickableElements(documentRef).find((element) => {
     const text = normaliseText(element.innerText || element.textContent || "");
     return text === "back";
@@ -226,22 +237,134 @@ function clickFiledReturnDetailBack(documentRef: Document): PortalFlowStepResult
   if (!backButton) {
     return {
       connectorId: "gst",
-      scopeId: FILED_RETURNS_SCOPE_ID,
+      scopeId,
       state: "user-action-required",
       safeSignals: ["filed-return-detail-back-not-found"],
-      safeMessage:
-        "Pack downloaded this filed GSTR-3B, but could not find the portal Back button to continue the financial year.",
+      safeMessage: `Pack downloaded this filed ${descriptor.label}, but could not find the portal Back button to continue the run.`,
     };
   }
 
   activateElement(backButton);
   return {
     connectorId: "gst",
-    scopeId: FILED_RETURNS_SCOPE_ID,
+    scopeId,
     state: "clicked",
     safeSignals: ["filed-return-detail-back-clicked"],
-    safeMessage: "Pack returned from the filed GSTR-3B detail page to continue the year.",
+    safeMessage: `Pack returned from the filed ${descriptor.label} detail page to continue.`,
   };
+}
+
+function returnFromFiledGstr1SummaryForExcel(
+  documentRef: Document,
+  scope: FiledReturnsDownloadScope,
+  safeSignals: readonly string[],
+): PortalFlowStepResult | null {
+  if (scope.returnType !== "GSTR-1") return null;
+  if (scope.artifactType !== "EXCEL") return null;
+  if (safeSignals.includes("download-excel-gstr-1")) return null;
+  if (
+    !safeSignals.includes("gstr-1-summary-route") &&
+    !safeSignals.includes("download-pdf-gstr-1")
+  ) {
+    return null;
+  }
+
+  const view = documentRef.defaultView;
+  if (!view) {
+    return {
+      connectorId: "gst",
+      scopeId: filedReturnScopeId("GSTR-1"),
+      state: "user-action-required",
+      safeSignals: ["filed-gstr1-summary-back-unavailable"],
+      safeMessage:
+        "Pack downloaded the filed GSTR-1 summary PDF, but could not return to the detail page for the e-invoice details Excel download.",
+    };
+  }
+
+  view.history.back();
+  return {
+    connectorId: "gst",
+    scopeId: filedReturnScopeId("GSTR-1"),
+    state: "clicked",
+    safeSignals: ["filed-gstr1-summary-back-clicked"],
+    safeMessage:
+      "Pack returned from the filed GSTR-1 View Summary page before downloading the e-invoice details Excel file.",
+  };
+}
+
+function clickFiledGstr1SummaryForPdf(
+  documentRef: Document,
+  scope: FiledReturnsDownloadScope,
+  safeSignals: readonly string[],
+): PortalFlowStepResult | null {
+  if (scope.returnType !== "GSTR-1") return null;
+  if (!scopeIncludesPdfArtifact(scope)) return null;
+  if (safeSignals.includes("download-pdf-gstr-1")) return null;
+  if (isGstr1SummaryRoute(documentRef)) return null;
+
+  const summaryControl = findGstr1ViewSummaryControl(documentRef);
+  if (!summaryControl) return null;
+
+  activateElement(summaryControl);
+  return {
+    connectorId: "gst",
+    scopeId: filedReturnScopeId("GSTR-1"),
+    state: "clicked",
+    safeSignals: ["filed-gstr1-summary-view-clicked"],
+    safeMessage:
+      "Pack opened the filed GSTR-1 View Summary page before downloading the summary PDF.",
+  };
+}
+
+function scopeIncludesPdfArtifact(scope: FiledReturnsDownloadScope): boolean {
+  return scope.artifactType !== "EXCEL";
+}
+
+function isGstr1SummaryRoute(documentRef: Document): boolean {
+  return /\/returns\/auth\/gstr1\/gstr1sum$/i.test(
+    documentRef.defaultView?.location.pathname ?? "",
+  );
+}
+
+function findGstr1ViewSummaryControl(documentRef: Document): HTMLElement | null {
+  return (
+    getClickableElements(documentRef).find((element) => {
+      if (isSemanticallyHidden(element)) return false;
+      const text = normaliseText(readClickableText(element));
+      if (!/\bview\s+summary\b/.test(text)) return false;
+      if (/\b(?:download|excel|pdf|save|submit|search|back|logout)\b/.test(text)) return false;
+      return !/\b(?:file|proceed|continue)\b/.test(text) || /^view\s+summary\b/.test(text);
+    }) ?? null
+  );
+}
+
+function readClickableText(element: HTMLElement): string {
+  const HTMLInputElementConstructor = element.ownerDocument.defaultView?.HTMLInputElement;
+  const inputValue =
+    HTMLInputElementConstructor && element instanceof HTMLInputElementConstructor
+      ? element.value
+      : "";
+  const seenTexts = new Set<string>();
+  return [
+    "innerText" in element ? element.innerText : "",
+    element.textContent ?? "",
+    inputValue,
+    element.getAttribute("aria-label") ?? "",
+    element.getAttribute("title") ?? "",
+  ]
+    .filter((text) => {
+      const comparable = normaliseText(text);
+      if (!comparable || seenTexts.has(comparable)) return false;
+      seenTexts.add(comparable);
+      return true;
+    })
+    .join(" ");
+}
+
+function isSemanticallyHidden(element: HTMLElement): boolean {
+  if (element.hidden || element.getAttribute("aria-hidden") === "true") return true;
+  const style = element.ownerDocument.defaultView?.getComputedStyle(element);
+  return Boolean(style && (style.display === "none" || style.visibility === "hidden"));
 }
 
 function getBodyText(documentRef: Document): string {

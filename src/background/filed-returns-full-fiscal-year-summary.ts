@@ -5,9 +5,13 @@ import type {
   FiledReturnsFullFiscalYearTargetStatus,
   PortalFlowStepResult,
 } from "../core/contracts";
+import {
+  filedReturnsArtifactLabel,
+  normaliseFiledReturnsArtifactType,
+} from "../core/filed-returns-artifacts";
+import { filedReturnsScopeId } from "../core/filed-returns-return-types";
 import { isFullFiscalYearLedgerStale } from "./filed-returns-full-fiscal-year-ledger";
 
-const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
 const COMPLETED_SUMMARY_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
   "downloaded",
   "manually-observed",
@@ -30,6 +34,7 @@ export function targetStatusFromFlowStep(
       [
         "browser-download-size-unknown",
         "browser-download-not-observed",
+        "filed-return-download-trigger-ambiguous",
         "filed-gstr3b-download-trigger-ambiguous",
       ].includes(signal),
     )
@@ -131,7 +136,7 @@ export function completeFullFiscalYearStep(
 ): PortalFlowStepResult {
   return {
     connectorId: "gst",
-    scopeId: FILED_RETURNS_SCOPE_ID,
+    scopeId: filedReturnsScopeId(ledger.scope.returnType),
     state: "downloaded",
     safeSignals: ["full-fiscal-year-complete"],
     safeMessage: `Pack completed the local full fiscal year run for FY ${ledger.scope.financialYear}.`,
@@ -154,7 +159,7 @@ export function activeFullFiscalYearStep(
 ): PortalFlowStepResult {
   return {
     connectorId: "gst",
-    scopeId: FILED_RETURNS_SCOPE_ID,
+    scopeId: filedReturnsScopeId(ledger.scope.returnType),
     state: "user-action-required",
     safeSignals: ["full-fiscal-year-run-active"],
     safeMessage: `A full fiscal year run for FY ${ledger.scope.financialYear} is already active.`,
@@ -168,7 +173,7 @@ export function blockedFullFiscalYearStep(
   if (signal === "full-fiscal-year-resume-confirmation-required") {
     return {
       connectorId: "gst",
-      scopeId: FILED_RETURNS_SCOPE_ID,
+      scopeId: filedReturnsScopeId(ledger.scope.returnType),
       state: "blocked",
       safeSignals: [signal],
       safeMessage:
@@ -184,7 +189,7 @@ export function blockedFullFiscalYearStep(
 
   return {
     connectorId: "gst",
-    scopeId: FILED_RETURNS_SCOPE_ID,
+    scopeId: filedReturnsScopeId(ledger.scope.returnType),
     state: "blocked",
     safeSignals: [signal],
     safeMessage: `Pack could not start a full fiscal year run for FY ${ledger.scope.financialYear}.`,
@@ -197,7 +202,7 @@ export function downloadUnconfirmedFullFiscalYearStep(
   const target = ledger.targets.find((candidate) => candidate.status === "download-unconfirmed");
   return {
     connectorId: "gst",
-    scopeId: FILED_RETURNS_SCOPE_ID,
+    scopeId: filedReturnsScopeId(ledger.scope.returnType),
     state: "user-action-required",
     safeSignals: ["full-fiscal-year-download-unconfirmed"],
     safeMessage: target
@@ -205,7 +210,7 @@ export function downloadUnconfirmedFullFiscalYearStep(
       : "Pack could not confirm one browser download. Check Downloads before retrying.",
     userAction: {
       type: "RETRY_PORTAL_GENERATION",
-      message: "Check browser Downloads first. Retry only if no filed GSTR-3B PDF appeared.",
+      message: `Check browser Downloads first. Retry only if no filed ${ledger.scope.returnType} ${artifactLabel(ledger)} appeared.`,
       canResume: true,
     },
   };
@@ -217,7 +222,7 @@ export function interruptedFullFiscalYearStep(
   const target = ledger.targets.find((candidate) => candidate.status === "running");
   return {
     connectorId: "gst",
-    scopeId: FILED_RETURNS_SCOPE_ID,
+    scopeId: filedReturnsScopeId(ledger.scope.returnType),
     state: "user-action-required",
     safeSignals: ["full-fiscal-year-run-interrupted"],
     safeMessage: target
@@ -225,9 +230,15 @@ export function interruptedFullFiscalYearStep(
       : `Pack stopped before it could confirm the FY ${ledger.scope.financialYear} run. Check Downloads before starting again.`,
     userAction: {
       type: "RETRY_PORTAL_GENERATION",
-      message:
-        "Check browser Downloads first. Retry only after confirming that no duplicate filed GSTR-3B PDF was saved.",
+      message: `Check browser Downloads first. Retry only after confirming that no duplicate filed ${ledger.scope.returnType} ${artifactLabel(ledger)} was saved.`,
       canResume: true,
     },
   };
+}
+
+function artifactLabel(ledger: FiledReturnsFullFiscalYearLedger): string {
+  return filedReturnsArtifactLabel(
+    normaliseFiledReturnsArtifactType(ledger.scope.returnType, ledger.scope.artifactType),
+    ledger.scope.returnType,
+  );
 }

@@ -1,4 +1,7 @@
+import type { FiledReturnsConcreteArtifactType } from "../../core/filed-returns-artifacts";
+import type { FiledReturnsReturnType } from "../../core/filed-returns-return-types";
 import type { NavigationCandidateInput } from "./filed-returns-navigator";
+import { filedReturnDescriptor } from "./filed-returns-return-descriptors";
 
 const CLICKABLE_SELECTOR = ["a", "button", "[role='button']", "[ng-click]", "[data-ng-click]"].join(
   ",",
@@ -15,7 +18,113 @@ export interface FiledGstr3bDownloadCandidate {
   score: CandidateScore;
 }
 
+export type FiledReturnDownloadCandidate = FiledGstr3bDownloadCandidate;
+
 export function scoreFiledGstr3bDownloadCandidate(
+  candidate: NavigationCandidateInput,
+): CandidateScore {
+  return scoreFiledReturnDownloadCandidate(candidate, "GSTR-3B");
+}
+
+export function scoreFiledReturnDownloadCandidate(
+  candidate: NavigationCandidateInput,
+  returnType: FiledReturnsReturnType,
+  artifactType: FiledReturnsConcreteArtifactType = "PDF",
+): CandidateScore {
+  if (returnType === "GSTR-3B") return scoreFiledGstr3bDownloadCandidateInternal(candidate);
+  if (artifactType === "EXCEL")
+    return scoreFiledReturnExcelDownloadCandidate(candidate, returnType);
+
+  const descriptor = filedReturnDescriptor(returnType);
+  const searchable = normaliseCandidateText([
+    candidate.text,
+    candidate.ariaLabel,
+    candidate.title,
+    candidate.href,
+  ]);
+  const safeSignals: string[] = [];
+  let score = 0;
+  const hasExplicitFiledDownload = descriptor.explicitDownloadPattern.test(searchable);
+  const hasSecondaryPdfDownload = descriptor.secondaryDownloadPattern?.test(searchable) ?? false;
+
+  if (hasExplicitFiledDownload) {
+    score += 160;
+    safeSignals.push(`text-download-filed-${descriptor.signalSlug}`);
+  }
+  if (hasSecondaryPdfDownload) {
+    score += 120;
+    safeSignals.push(`text-download-pdf-${descriptor.signalSlug}`);
+  }
+  if (/\bdownload\b/.test(searchable) && /\bfiled\b/.test(searchable)) {
+    score += 50;
+    safeSignals.push("text-download-filed");
+  }
+  if (/\bdownload\b/.test(searchable) && descriptor.detailHeadingPattern.test(searchable)) {
+    score += 40;
+    safeSignals.push(`text-download-${descriptor.signalSlug}`);
+  }
+
+  if (/\b(excel|json|offline|e-?invoice|history)\b/.test(searchable)) {
+    score -= 220;
+    safeSignals.push("excluded-structured-data-download");
+  }
+  if (/\b(save|submit|proceed|continue|file)\b/.test(searchable)) {
+    score -= 160;
+    safeSignals.push("excluded-filing-or-navigation-action");
+  }
+  if (!/\bdownload\b/.test(searchable)) {
+    score -= 40;
+    safeSignals.push("excluded-missing-download-term");
+  }
+
+  return { score, safeSignals };
+}
+
+function scoreFiledReturnExcelDownloadCandidate(
+  candidate: NavigationCandidateInput,
+  returnType: FiledReturnsReturnType,
+): CandidateScore {
+  const descriptor = filedReturnDescriptor(returnType);
+  const searchable = normaliseCandidateText([
+    candidate.text,
+    candidate.ariaLabel,
+    candidate.title,
+    candidate.href,
+  ]);
+  const safeSignals: string[] = [];
+  let score = 0;
+  const hasExplicitExcelDownload = descriptor.excelDownloadPattern?.test(searchable) ?? false;
+
+  if (hasExplicitExcelDownload) {
+    score += 180;
+    safeSignals.push(`text-download-excel-${descriptor.signalSlug}`);
+  }
+  if (/\bdownload\b/.test(searchable) && /\bexcel\b/.test(searchable)) {
+    score += 120;
+    safeSignals.push(`text-download-excel-${descriptor.signalSlug}`);
+  }
+  if (/\bdownload\b/.test(searchable) && /\be-?invoices?\b/.test(searchable)) {
+    score += 80;
+    safeSignals.push(`text-download-einvoice-${descriptor.signalSlug}`);
+  }
+
+  if (descriptor.explicitDownloadPattern.test(searchable) || /\bpdf\b/.test(searchable)) {
+    score -= 180;
+    safeSignals.push("excluded-pdf-download");
+  }
+  if (/\b(save|submit|proceed|continue|file)\b/.test(searchable)) {
+    score -= 160;
+    safeSignals.push("excluded-filing-or-navigation-action");
+  }
+  if (!/\bdownload\b/.test(searchable)) {
+    score -= 40;
+    safeSignals.push("excluded-missing-download-term");
+  }
+
+  return { score, safeSignals: Array.from(new Set(safeSignals)) };
+}
+
+function scoreFiledGstr3bDownloadCandidateInternal(
   candidate: NavigationCandidateInput,
 ): CandidateScore {
   const searchable = normaliseCandidateText([
@@ -63,11 +172,19 @@ export function scoreFiledGstr3bDownloadCandidate(
 export function findFiledGstr3bDownloadCandidateIndex(
   candidates: readonly NavigationCandidateInput[],
 ): number {
+  return findFiledReturnDownloadCandidateIndex(candidates, "GSTR-3B");
+}
+
+export function findFiledReturnDownloadCandidateIndex(
+  candidates: readonly NavigationCandidateInput[],
+  returnType: FiledReturnsReturnType,
+  artifactType: FiledReturnsConcreteArtifactType = "PDF",
+): number {
   let bestIndex = -1;
   let bestScore = 0;
 
   candidates.forEach((candidate, index) => {
-    const { score } = scoreFiledGstr3bDownloadCandidate(candidate);
+    const { score } = scoreFiledReturnDownloadCandidate(candidate, returnType, artifactType);
     if (score > bestScore) {
       bestScore = score;
       bestIndex = index;
@@ -80,6 +197,14 @@ export function findFiledGstr3bDownloadCandidateIndex(
 export function resolveVisibleFiledGstr3bDownloadCandidates(
   documentRef: Document,
 ): FiledGstr3bDownloadCandidate[] {
+  return resolveVisibleFiledReturnDownloadCandidates(documentRef, "GSTR-3B");
+}
+
+export function resolveVisibleFiledReturnDownloadCandidates(
+  documentRef: Document,
+  returnType: FiledReturnsReturnType,
+  artifactType: FiledReturnsConcreteArtifactType = "PDF",
+): FiledReturnDownloadCandidate[] {
   return getClickableElements(documentRef)
     .filter((element) => !isDisabled(element) && isVisible(element))
     .map((element) => ({
@@ -89,7 +214,7 @@ export function resolveVisibleFiledGstr3bDownloadCandidates(
     .map(({ candidate, element }) => ({
       candidate,
       element,
-      score: scoreFiledGstr3bDownloadCandidate(candidate),
+      score: scoreFiledReturnDownloadCandidate(candidate, returnType, artifactType),
     }))
     .filter((candidate) => candidate.score.score >= 120);
 }
