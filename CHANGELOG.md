@@ -12,6 +12,15 @@ All notable changes to ComplyEaze Pack are documented here.
   updates.
 - Updated public source metadata so the extension homepage points to
   `https://pack.complyeaze.com/gst`.
+- Hardened filed-return detail identity scoping, direct-download readiness,
+  browser-download correlation, stale popup recovery, and combined GSTR-1
+  PDF/Excel retry behavior.
+- Bound release provenance and Pack harness-policy snapshots to their canonical
+  SHA-256 values.
+- Allowed partial blocked live-run evidence without inflating eligible target
+  counts while keeping pass evidence fully reconciled.
+- Aligned Node typings with Pack's Node 22 runtime floor.
+- Documented the closed-PR review-thread cleanup workflow.
 
 ## [0.3.1](https://github.com/lamemustafa/pack/compare/v0.3.0...v0.3.1) (2026-07-03)
 
@@ -55,7 +64,7 @@ All notable changes to ComplyEaze Pack are documented here.
 
 ### Features
 
-* add full fiscal year filed-return ledger ([16c9789](https://github.com/lamemustafa/pack/commit/16c97894fb293bfaf8a97d5db08070ea23c0de1c))
+* add source-build alpha full fiscal year filed-return ledger ([16c9789](https://github.com/lamemustafa/pack/commit/16c97894fb293bfaf8a97d5db08070ea23c0de1c))
 * **release:** automate Pack GitHub and Chrome Web Store releases ([#32](https://github.com/lamemustafa/pack/issues/32)) ([d551d14](https://github.com/lamemustafa/pack/commit/d551d141ec0f3174055e1ecc32d94f40ea00bbd1))
 
 

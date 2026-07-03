@@ -21,6 +21,9 @@ summary`) — CI-enforced by `pr-title.yml`.
 - Prefer draft PRs unless explicitly ready for review. Never declare a PR
   ready or mergeable until GitHub Actions checks pass and any automated
   review bot's findings are addressed or explicitly dispositioned.
+- When cleaning up merged or closed PRs, inspect GraphQL review threads, comment
+  with current evidence or a tracking issue link, and resolve each conversation
+  only after that disposition is recorded.
 - Run `pnpm review:gate` before claiming PR readiness; add
   `--strict-head-review` for anything touching runtime, download, manifest,
   permission, or privacy surfaces.
