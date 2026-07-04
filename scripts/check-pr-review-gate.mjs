@@ -90,7 +90,7 @@ function evaluatePullRequestReviewState(pr) {
     .map((state) => state.blockingReview)
     .filter(Boolean);
   const headReviews = Array.from(authorStates.values())
-    .map((state) => state.latestSubmittedReview)
+    .map((state) => state.latestCurrentHeadReview)
     .filter(Boolean)
     .filter(
       (review) =>
@@ -102,27 +102,25 @@ function evaluatePullRequestReviewState(pr) {
 
 function reduceSubmittedCurrentHeadReviewsByAuthor(reviews, headRefOid) {
   const authorStates = new Map();
-  const currentHeadReviews = reviews
-    .filter(
-      (review) =>
-        review.state !== "PENDING" &&
-        review.state !== "DISMISSED" &&
-        (review.commit?.oid === headRefOid ||
-          (review.state === "CHANGES_REQUESTED" && !review.commit?.oid)),
-    )
+  const submittedReviews = reviews
+    .filter((review) => review.state !== "PENDING" && review.state !== "DISMISSED")
     .sort(compareReviewSubmittedAt);
 
-  for (const review of currentHeadReviews) {
+  for (const review of submittedReviews) {
     const author = normaliseAuthorLogin(review.author?.login) || "unknown";
 
     const previous = authorStates.get(author) ?? {
       latestSubmittedReview: null,
+      latestCurrentHeadReview: null,
       blockingReview: null,
     };
+    const latestCurrentHeadReview =
+      review.commit?.oid === headRefOid ? review : previous.latestCurrentHeadReview;
 
     if (review.state === "CHANGES_REQUESTED") {
       authorStates.set(author, {
         latestSubmittedReview: review,
+        latestCurrentHeadReview,
         blockingReview: review,
       });
       continue;
@@ -131,6 +129,7 @@ function reduceSubmittedCurrentHeadReviewsByAuthor(reviews, headRefOid) {
     if (review.state === "APPROVED") {
       authorStates.set(author, {
         latestSubmittedReview: review,
+        latestCurrentHeadReview,
         blockingReview: null,
       });
       continue;
@@ -139,6 +138,7 @@ function reduceSubmittedCurrentHeadReviewsByAuthor(reviews, headRefOid) {
     if (review.state === "COMMENTED") {
       authorStates.set(author, {
         latestSubmittedReview: review,
+        latestCurrentHeadReview,
         blockingReview: previous.blockingReview,
       });
     }
