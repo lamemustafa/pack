@@ -51,6 +51,7 @@ describe("Chrome Web Store status monitor", () => {
       pendingReview: false,
       published: true,
       publishedVersion: "0.3.2",
+      takenDown: false,
     });
   });
 
@@ -85,6 +86,64 @@ describe("Chrome Web Store status monitor", () => {
         write: vi.fn(),
       }),
     ).rejects.toThrow("failed/rejected state: REJECTED");
+  });
+
+  it("fails on cancelled submissions for the expected version", async () => {
+    const cwd = await writePackageFixture("0.3.2");
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.endsWith(":fetchStatus")) {
+        return jsonResponse({
+          submittedItemRevisionStatus: {
+            state: "CANCELLED",
+            distributionChannels: [{ crxVersion: "0.3.2" }],
+          },
+        });
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+
+    await expect(
+      checkChromeWebStoreStatus({
+        cwd,
+        env: {
+          CWS_ACCESS_TOKEN: "token-1",
+          CWS_PUBLISHER_ID: "pub-1",
+        },
+        fetchImpl,
+        write: vi.fn(),
+      }),
+    ).rejects.toThrow("failed/rejected state: CANCELLED");
+  });
+
+  it("fails when fetchStatus reports the item has been taken down", async () => {
+    const cwd = await writePackageFixture("0.3.2");
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.endsWith(":fetchStatus")) {
+        return jsonResponse({
+          takenDown: true,
+          publishedItemRevisionStatus: {
+            state: "PUBLISHED",
+            distributionChannels: [{ crxVersion: "0.3.2" }],
+          },
+        });
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+
+    await expect(
+      checkChromeWebStoreStatus({
+        argv: ["--require-published", "true"],
+        cwd,
+        env: {
+          CWS_ACCESS_TOKEN: "token-1",
+          CWS_PUBLISHER_ID: "pub-1",
+        },
+        fetchImpl,
+        write: vi.fn(),
+      }),
+    ).rejects.toThrow("has been taken down for a policy violation");
   });
 
   it("uses fetchStatus and package.json version by default", async () => {

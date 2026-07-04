@@ -6,7 +6,13 @@ import { pathToFileURL } from "node:url";
 import { fetchChromeWebStoreStatus } from "./publish-chrome-web-store.mjs";
 
 const DEFAULT_EXTENSION_ID = "nfnbhekccajjfgkppolomflaeledoccb";
-const FAILURE_STATES = new Set(["FAILED", "FAILURE", "REJECTED", "REJECTED_FOR_POLICY"]);
+const FAILURE_STATES = new Set([
+  "CANCELLED",
+  "FAILED",
+  "FAILURE",
+  "REJECTED",
+  "REJECTED_FOR_POLICY",
+]);
 const PENDING_STATES = new Set([
   "IN_REVIEW",
   "PENDING",
@@ -77,7 +83,8 @@ export function summarizeChromeWebStoreStatus(
     status.publishedItemRevisionStatus?.reviewState,
   ]);
   const normalizedStates = states.map((state) => state.toUpperCase());
-  const hasFailureState = normalizedStates.some((state) => FAILURE_STATES.has(state));
+  const hasFailureState =
+    normalizedStates.some((state) => FAILURE_STATES.has(state)) || status.takenDown === true;
   const hasPendingState = normalizedStates.some((state) => PENDING_STATES.has(state));
   const hasPublishedState = normalizedStates.some((state) => PUBLISHED_STATES.has(state));
   const expectedSubmitted = expectedVersion ? submittedVersion === expectedVersion : null;
@@ -91,16 +98,24 @@ export function summarizeChromeWebStoreStatus(
     publishedVersion: publishedVersion ?? null,
     latestObservedVersion: submittedVersion ?? publishedVersion ?? anyVersion ?? null,
     states,
+    takenDown: status.takenDown === true,
     expectedSubmitted,
     expectedPublished,
     pendingReview: hasPendingState && !hasFailureState && !expectedPublished,
-    published: Boolean(expectedPublished || (!expectedVersion && hasPublishedState)),
+    published:
+      !hasFailureState && Boolean(expectedPublished || (!expectedVersion && hasPublishedState)),
     failed: hasFailureState,
   };
 }
 
 function assertChromeWebStoreStatus(summary, { requirePublished }) {
   if (summary.failed) {
+    if (summary.takenDown) {
+      throw new Error(
+        `Chrome Web Store item ${summary.extensionId} has been taken down for a policy violation.`,
+      );
+    }
+
     throw new Error(
       `Chrome Web Store item ${summary.extensionId} has a failed/rejected state: ${summary.states.join(", ")}`,
     );

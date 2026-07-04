@@ -186,6 +186,10 @@ stable-release claims.
 - [x] Submit the `v0.3.2` package through the protected Chrome Web Store
       workflow. Run `28704776806` uploaded the package with Chrome Web Store
       upload state `SUCCEEDED`, publish state `PENDING_REVIEW`, and no warnings.
+- [x] Add a read-only Chrome Web Store status monitor for submitted packages.
+      Scheduled runs use the dedicated `chrome-web-store-status` environment so
+      publication/rejection monitoring is not blocked by the protected publishing
+      approval gate.
 - [ ] Upload/review the `v0.3.2` GSTR-1 listing copy, screenshots, promotional
       images, privacy-practices declarations, and reviewer instructions in the
       Chrome Web Store dashboard, then record review/publication evidence for

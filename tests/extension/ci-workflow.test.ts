@@ -140,7 +140,7 @@ describe("Pack CI workflow", () => {
 
     expect(statusWorkflow).toContain("schedule:");
     expect(statusWorkflow).toContain("workflow_dispatch:");
-    expect(statusWorkflow).toContain("environment: chrome-web-store");
+    expect(statusWorkflow).toContain("environment: chrome-web-store-status");
     expect(statusWorkflow).toContain("node scripts/check-chrome-web-store-status.mjs");
     expect(statusWorkflow).toContain("CWS_REQUIRE_PUBLISHED");
     expect(statusWorkflow).not.toContain("scripts/publish-chrome-web-store.mjs");
