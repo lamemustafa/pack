@@ -1,3 +1,4 @@
+import { generateKeyPairSync } from "node:crypto";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -52,6 +53,47 @@ describe("Chrome Web Store status monitor", () => {
       published: true,
       publishedVersion: "0.3.2",
       takenDown: false,
+      warned: false,
+    });
+  });
+
+  it("matches the expected version across every distribution channel", () => {
+    const summary = summarizeChromeWebStoreStatus(
+      {
+        submittedItemRevisionStatus: {
+          state: "PENDING_REVIEW",
+          distributionChannels: [{ crxVersion: "0.3.1" }, { crxVersion: "0.3.2" }],
+        },
+      },
+      { expectedVersion: "0.3.2", extensionId: "ext-1", publisherId: "pub-1" },
+    );
+
+    expect(summary).toMatchObject({
+      expectedSubmitted: true,
+      failed: false,
+      pendingReview: true,
+      published: false,
+      submittedVersion: "0.3.1",
+    });
+  });
+
+  it("does not treat tester-only availability as public publication", () => {
+    const summary = summarizeChromeWebStoreStatus(
+      {
+        publishedItemRevisionStatus: {
+          state: "PUBLISHED_TO_TESTERS",
+          distributionChannels: [{ crxVersion: "0.3.2" }],
+        },
+      },
+      { expectedVersion: "0.3.2", extensionId: "ext-1", publisherId: "pub-1" },
+    );
+
+    expect(summary).toMatchObject({
+      expectedPublished: true,
+      failed: false,
+      pendingReview: false,
+      published: false,
+      publishedVersion: "0.3.2",
     });
   });
 
@@ -146,6 +188,36 @@ describe("Chrome Web Store status monitor", () => {
     ).rejects.toThrow("has been taken down for a policy violation");
   });
 
+  it("fails when fetchStatus reports a policy warning", async () => {
+    const cwd = await writePackageFixture("0.3.2");
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.endsWith(":fetchStatus")) {
+        return jsonResponse({
+          warned: true,
+          publishedItemRevisionStatus: {
+            state: "PUBLISHED",
+            distributionChannels: [{ crxVersion: "0.3.2" }],
+          },
+        });
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+
+    await expect(
+      checkChromeWebStoreStatus({
+        argv: ["--require-published", "true"],
+        cwd,
+        env: {
+          CWS_ACCESS_TOKEN: "token-1",
+          CWS_PUBLISHER_ID: "pub-1",
+        },
+        fetchImpl,
+        write: vi.fn(),
+      }),
+    ).rejects.toThrow("has a policy warning that must be resolved");
+  });
+
   it("uses fetchStatus and package.json version by default", async () => {
     const cwd = await writePackageFixture("0.3.2");
     const calls: Array<{ method: string | undefined; url: string }> = [];
@@ -197,6 +269,47 @@ describe("Chrome Web Store status monitor", () => {
     });
   });
 
+  it("requests read-only service-account tokens for fetchStatus", async () => {
+    const cwd = await writePackageFixture("0.3.2");
+    const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const jwtPayloads: Array<{ scope?: string }> = [];
+    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "https://oauth2.googleapis.com/token") {
+        const body = init?.body as URLSearchParams;
+        const assertion = body.get("assertion") ?? "";
+        jwtPayloads.push(decodeJwtPayload(assertion));
+        return jsonResponse({ access_token: "token-1" });
+      }
+      if (url.endsWith(":fetchStatus")) {
+        return jsonResponse({
+          submittedItemRevisionStatus: {
+            state: "PENDING_REVIEW",
+            distributionChannels: [{ crxVersion: "0.3.2" }],
+          },
+        });
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+
+    await checkChromeWebStoreStatus({
+      cwd,
+      env: {
+        CWS_EXPECTED_VERSION: "0.3.2",
+        CWS_PUBLISHER_ID: "pub-1",
+        CWS_SERVICE_ACCOUNT_JSON: JSON.stringify({
+          client_email: "pack-status@example.iam.gserviceaccount.com",
+          private_key: privateKey.export({ format: "pem", type: "pkcs8" }),
+          token_uri: "https://oauth2.googleapis.com/token",
+        }),
+      },
+      fetchImpl,
+      write: vi.fn(),
+    });
+
+    expect(jwtPayloads[0]?.scope).toBe("https://www.googleapis.com/auth/chromewebstore.readonly");
+  });
+
   it("can require the expected version to be published", async () => {
     const cwd = await writePackageFixture("0.3.2");
     const fetchImpl = vi.fn(async (url: string) => {
@@ -239,4 +352,9 @@ function jsonResponse(body: unknown) {
     status: 200,
     text: async () => JSON.stringify(body),
   } as Response;
+}
+
+function decodeJwtPayload(assertion: string) {
+  const payload = assertion.split(".")[1] ?? "";
+  return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { scope?: string };
 }

@@ -60,35 +60,41 @@ export function summarizeChromeWebStoreStatus(
   status,
   { extensionId = DEFAULT_EXTENSION_ID, expectedVersion, publisherId = null } = {},
 ) {
-  const submittedVersion = firstString([
+  const submittedVersions = uniqueStrings([
     ...distributionVersions(status.submittedItemRevisionStatus),
     ...distributionVersions(status.itemRevisionStatus),
   ]);
-  const publishedVersion = firstString([
+  const publishedVersions = uniqueStrings([
     ...distributionVersions(status.publishedItemRevisionStatus),
     ...distributionVersions(status.publicItemRevisionStatus),
   ]);
+  const submittedVersion = firstString(submittedVersions);
+  const publishedVersion = firstString(publishedVersions);
   const anyVersion = firstString([...collectValuesByKey(status, "crxVersion")]);
+  const topLevelStates = [status.itemState, status.state, status.reviewState, status.publishState];
+  const submittedRevisionStates = revisionStates(status.submittedItemRevisionStatus);
+  const publishedRevisionStates = revisionStates(status.publishedItemRevisionStatus);
   const states = uniqueStrings([
     status.lastAsyncUploadState,
-    status.itemState,
-    status.state,
-    status.reviewState,
-    status.publishState,
-    status.submittedItemRevisionStatus?.itemState,
-    status.submittedItemRevisionStatus?.state,
-    status.submittedItemRevisionStatus?.reviewState,
-    status.publishedItemRevisionStatus?.itemState,
-    status.publishedItemRevisionStatus?.state,
-    status.publishedItemRevisionStatus?.reviewState,
+    ...topLevelStates,
+    ...submittedRevisionStates,
+    ...publishedRevisionStates,
   ]);
   const normalizedStates = states.map((state) => state.toUpperCase());
+  const normalizedPublishedStates = uniqueStrings([
+    ...topLevelStates,
+    ...publishedRevisionStates,
+  ]).map((state) => state.toUpperCase());
   const hasFailureState =
-    normalizedStates.some((state) => FAILURE_STATES.has(state)) || status.takenDown === true;
+    normalizedStates.some((state) => FAILURE_STATES.has(state)) ||
+    status.takenDown === true ||
+    status.warned === true;
   const hasPendingState = normalizedStates.some((state) => PENDING_STATES.has(state));
-  const hasPublishedState = normalizedStates.some((state) => PUBLISHED_STATES.has(state));
-  const expectedSubmitted = expectedVersion ? submittedVersion === expectedVersion : null;
-  const expectedPublished = expectedVersion ? publishedVersion === expectedVersion : null;
+  const hasPublishedState = normalizedPublishedStates.some((state) => PUBLISHED_STATES.has(state));
+  const expectedSubmitted = expectedVersion ? submittedVersions.includes(expectedVersion) : null;
+  const expectedPublished = expectedVersion ? publishedVersions.includes(expectedVersion) : null;
+  const published =
+    !hasFailureState && hasPublishedState && Boolean(expectedVersion ? expectedPublished : true);
 
   return {
     extensionId,
@@ -99,11 +105,11 @@ export function summarizeChromeWebStoreStatus(
     latestObservedVersion: submittedVersion ?? publishedVersion ?? anyVersion ?? null,
     states,
     takenDown: status.takenDown === true,
+    warned: status.warned === true,
     expectedSubmitted,
     expectedPublished,
-    pendingReview: hasPendingState && !hasFailureState && !expectedPublished,
-    published:
-      !hasFailureState && Boolean(expectedPublished || (!expectedVersion && hasPublishedState)),
+    pendingReview: hasPendingState && !hasFailureState && !published,
+    published,
     failed: hasFailureState,
   };
 }
@@ -113,6 +119,12 @@ function assertChromeWebStoreStatus(summary, { requirePublished }) {
     if (summary.takenDown) {
       throw new Error(
         `Chrome Web Store item ${summary.extensionId} has been taken down for a policy violation.`,
+      );
+    }
+
+    if (summary.warned) {
+      throw new Error(
+        `Chrome Web Store item ${summary.extensionId} has a policy warning that must be resolved.`,
       );
     }
 
@@ -146,6 +158,11 @@ function distributionVersions(revisionStatus) {
     revisionStatus.crxVersion,
     ...(revisionStatus.distributionChannels ?? []).map((channel) => channel?.crxVersion),
   ].filter(Boolean);
+}
+
+function revisionStates(revisionStatus) {
+  if (!revisionStatus) return [];
+  return [revisionStatus.itemState, revisionStatus.state, revisionStatus.reviewState];
 }
 
 function collectValuesByKey(value, key, seen = new Set()) {

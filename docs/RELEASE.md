@@ -146,10 +146,10 @@ version.
 
 Use `Chrome Web Store Status` after a submit run. It calls the Chrome Web Store
 API `fetchStatus` endpoint, prints a bounded status summary, and fails on
-rejected, cancelled, failed, or taken-down states. By default it succeeds while
-the expected version is submitted but still pending review; dispatch it with
-`require_published=true` when final publication, not just submission, is the
-release gate.
+rejected, cancelled, failed, warned, or taken-down states. By default it
+succeeds while the expected version is submitted but still pending review;
+dispatch it with `require_published=true` when final publication, not just
+submission, is the release gate.
 
 Configure the status workflow with a dedicated `chrome-web-store-status`
 environment that has no required reviewer protection. Give it only read-only
