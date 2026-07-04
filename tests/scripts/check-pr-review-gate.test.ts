@@ -264,6 +264,49 @@ describe("PR review gate", () => {
     expect(output).toContain("PR review gate passed");
   });
 
+  it("keeps current-head requested changes blocking after a stale approval", () => {
+    const fixturePath = writeFixture(
+      "requested-changes-then-stale-approval",
+      reviewFixture({
+        headRefOid: "head-sha",
+        reviews: [
+          review({
+            state: "CHANGES_REQUESTED",
+            commit: "head-sha",
+            submittedAt: "2026-06-24T17:45:40Z",
+          }),
+          review({
+            state: "APPROVED",
+            commit: "old-sha",
+            submittedAt: "2026-06-24T17:55:40Z",
+          }),
+        ],
+      }),
+    );
+
+    expect(() =>
+      execFileSync(
+        process.execPath,
+        [
+          scriptPath,
+          "--repo",
+          "lamemustafa/pack",
+          "--pr",
+          "14",
+          "--fixture",
+          fixturePath,
+          "--strict-head-review",
+          "--required-review-author",
+          "chatgpt-codex-connector",
+        ],
+        {
+          cwd: rootDir,
+          encoding: "utf8",
+        },
+      ),
+    ).toThrow(/Requested-changes reviews/);
+  });
+
   it("keeps an earlier approval when a later review is dismissed", () => {
     const fixturePath = writeFixture(
       "approval-then-dismissed",

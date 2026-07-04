@@ -116,8 +116,8 @@ function reduceSubmittedCurrentHeadReviewsByAuthor(reviews, headRefOid) {
       latestCurrentHeadReview: null,
       blockingReview: null,
     };
-    const latestCurrentHeadReview =
-      review.commit?.oid === headRefOid ? review : previous.latestCurrentHeadReview;
+    const isCurrentHeadReview = review.commit?.oid === headRefOid;
+    const latestCurrentHeadReview = isCurrentHeadReview ? review : previous.latestCurrentHeadReview;
 
     if (review.state === "CHANGES_REQUESTED") {
       authorStates.set(author, {
@@ -132,7 +132,7 @@ function reduceSubmittedCurrentHeadReviewsByAuthor(reviews, headRefOid) {
       authorStates.set(author, {
         latestSubmittedReview: review,
         latestCurrentHeadReview,
-        blockingReview: null,
+        blockingReview: isCurrentHeadReview ? null : previous.blockingReview,
       });
       continue;
     }
