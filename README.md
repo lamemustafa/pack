@@ -208,6 +208,7 @@ network captures, or downloaded GST files.
 
 - [Publication readiness](docs/PUBLICATION_READINESS.md)
 - [Release runbook](docs/RELEASE.md)
+- [Chrome Web Store listing and assets](docs/chrome-web-store/listing.md)
 - [Privacy QA](docs/PRIVACY_QA.md)
 - [Chrome reviewer test instructions](docs/CHROME_REVIEWER_TEST.md)
 - [Live filed returns spike notes](docs/LIVE_FILED_RETURNS_SPIKE.md)

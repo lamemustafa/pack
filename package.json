@@ -38,6 +38,7 @@
     "release:provenance": "node scripts/write-release-provenance.mjs",
     "release:verify-assets": "node scripts/verify-github-release-assets.mjs",
     "release:chrome-web-store": "node scripts/publish-chrome-web-store.mjs",
+    "store:assets": "node scripts/export-chrome-web-store-assets.mjs",
     "release:check-pr-title": "node scripts/check-conventional-pr-title.mjs",
     "verify:clean": "node scripts/assert-clean-worktree.mjs",
     "review:gate": "node scripts/check-pr-review-gate.mjs",

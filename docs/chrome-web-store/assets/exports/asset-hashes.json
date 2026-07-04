@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "assets": [
+    {
+      "file": "small-promo-440x280.png",
+      "height": 280,
+      "sha256": "dd2be16f7f660fc5d6222dfd22cc64443cfc86df95c3ecdaed8ccee39d3461dd",
+      "source": "small-promo-440x280.svg",
+      "width": 440
+    },
+    {
+      "file": "marquee-promo-1400x560.png",
+      "height": 560,
+      "sha256": "a9e387d317e2ff66ab6357a0b142852f2980a8fa31642e3e9a4b32620fd8ac98",
+      "source": "marquee-promo-1400x560.svg",
+      "width": 1400
+    },
+    {
+      "file": "screenshot-local-downloads-1280x800.png",
+      "height": 800,
+      "sha256": "76b5917b8c3e2d516f4a9d293078989b035e529306527c11058003c505339e8e",
+      "source": "screenshot-local-downloads-1280x800.svg",
+      "width": 1280
+    }
+  ]
+}
