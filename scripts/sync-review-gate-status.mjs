@@ -182,7 +182,15 @@ function runReviewGate(prNumber) {
 }
 
 function setReviewGateStatus(target, state, description) {
-  const latestStatus = readLatestReviewGateStatus(target);
+  let latestStatus = null;
+  try {
+    latestStatus = readLatestReviewGateStatus(target);
+  } catch (error) {
+    console.warn(
+      `warn: could not read existing Review gate status for #${target.number}; writing ${state} status anyway.`,
+    );
+    process.stderr.write(String(error.stderr ?? ""));
+  }
   if (latestStatus?.state === state && latestStatus?.description === description) {
     console.log(
       `Review gate status already ${state} for #${target.number}; skipping duplicate write.`,
