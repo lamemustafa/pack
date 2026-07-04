@@ -1,6 +1,6 @@
 # Chrome Web Store Asset Sources
 
-These source assets are safe drafts for the `v0.3.1` Chrome Web Store dashboard
+These source assets are safe drafts for the `v0.3.2` Chrome Web Store dashboard
 update. They are not proof that the Store update is live.
 
 The asset dimensions follow Chrome's official "Supplying Images" guidance:
@@ -31,7 +31,7 @@ exported file hash and dashboard review state in
 | `marquee-promo-1400x560.svg`              | 1400x560 optional marquee PNG     |
 | `screenshot-local-downloads-1280x800.svg` | 1280x800 synthetic screenshot PNG |
 
-The Chrome Web Store package/listing update for `v0.3.1` remains pending until
+The Chrome Web Store package/listing update for `v0.3.2` remains pending until
 the exported assets, package upload, privacy declarations, reviewer
 instructions, review result, and publication state are recorded for the exact
 release.
