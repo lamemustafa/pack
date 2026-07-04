@@ -158,6 +158,22 @@ Do not move listing/support/homepage URLs in the Chrome dashboard without
 updating `src/extension/manifest-policy.ts`, this runbook, and the public Pack
 site.
 
+## Chrome Web Store listing assets
+
+Source-controlled dashboard image exports are generated from synthetic SVG
+sources under `docs/chrome-web-store/assets/`. Run:
+
+```sh
+pnpm store:assets
+```
+
+This writes the PNG dashboard uploads and `asset-hashes.json` under
+`docs/chrome-web-store/assets/exports/`. Re-run it whenever the SVG source
+assets change, then visually inspect the generated PNGs before uploading them to
+the Chrome Web Store dashboard. The exports must not contain real GST Portal
+screenshots, taxpayer names, GSTIN/PAN values, portal HTML, downloaded GST
+files, local paths, cookies, headers, OTPs, or CAPTCHA content.
+
 ## Google OAuth credential maintenance
 
 The Chrome Web Store API OAuth app must stay production-ready if it is used for

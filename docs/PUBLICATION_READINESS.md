@@ -115,7 +115,12 @@ stable-release claims.
 - [ ] Chrome privacy declarations match the exact final build. Do not answer
       "no data" merely because data stays local if the dashboard asks about
       local access or processing.
-- [ ] Store screenshots and promotional images use only synthetic data.
+- [x] Source-controlled Store screenshots and promotional images use only
+      synthetic/redacted data. The `v0.3.2` PNG exports were generated with
+      `pnpm store:assets`, visually checked, and recorded in
+      `docs/chrome-web-store/assets/exports/asset-hashes.json`.
+- [ ] Upload the generated `v0.3.2` Store screenshot/promotional PNGs to the
+      Chrome Web Store dashboard, then record dashboard image review state.
 - [ ] Exact ZIP tested in a clean Chrome profile.
 - [ ] Exact ZIP tested against the live GSTR-3B and GSTR-1 flows by an
       authorised user.
