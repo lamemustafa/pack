@@ -8,6 +8,10 @@ on:
         required: false
   pull_request_target:
     types: [opened, reopened, synchronize, ready_for_review, edited]
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+  pull_request_review_comment:
+    types: [created, edited, deleted]
   schedule:
     - cron: "*/5 * * * *"
 
@@ -31,7 +35,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
           repository: ${{ github.repository }}
-          ref: ${{ github.event_name == 'workflow_dispatch' && github.ref || github.event.repository.default_branch }}
+          ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
 
       - name: Sync current-head review status
@@ -52,7 +56,7 @@ jobs:
           )
 
           if [ "${EVENT_NAME}" = "schedule" ]; then
-            args+=(--all-open --wait-head-review-ms 0 --skip-pending-status)
+            args+=(--all-open --wait-head-review-ms 0 --allow-missing-head-review --skip-pending-status)
           else
             if [ -z "${PR_NUMBER}" ]; then
               echo "Could not determine pull request number." >&2

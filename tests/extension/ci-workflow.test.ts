@@ -41,11 +41,11 @@ describe("Pack CI workflow", () => {
     );
 
     expect(workflow).toContain("pull_request_target:");
+    expect(workflow).toContain("pull_request_review:");
+    expect(workflow).toContain("pull_request_review_comment:");
     expect(workflow).toContain("schedule:");
     expect(workflow).toContain('cron: "*/5 * * * *"');
     expect(workflow).toContain("workflow_dispatch:");
-    expect(workflow).not.toContain("pull_request_review:");
-    expect(workflow).not.toContain("pull_request_review_comment:");
     expect(workflow).not.toContain("issue_comment:");
     expect(workflow).not.toContain("github.event.issue");
     expect(workflow).not.toContain("/review-gate");
@@ -55,16 +55,16 @@ describe("Pack CI workflow", () => {
     expect(workflow).toContain("statuses: write");
     expect(workflow).toContain("GH_TOKEN: ${{ github.token }}");
     expect(workflow).toContain("repository: ${{ github.repository }}");
-    expect(workflow).toContain(
-      "ref: ${{ github.event_name == 'workflow_dispatch' && github.ref || github.event.repository.default_branch }}",
-    );
+    expect(workflow).toContain("ref: ${{ github.event.repository.default_branch }}");
     expect(workflow).toContain("node scripts/sync-review-gate-status.mjs");
     expect(workflow).toContain("ready_for_review, edited");
     expect(workflow).toContain("--strict-head-review");
     expect(workflow).toContain("--required-review-author chatgpt-codex-connector");
     expect(workflow).toContain("--wait-head-review-ms 180000");
     expect(workflow).toContain("--allow-missing-head-review");
-    expect(workflow).toContain("--skip-pending-status");
+    expect(workflow).toContain(
+      "--all-open --wait-head-review-ms 0 --allow-missing-head-review --skip-pending-status",
+    );
     expect(workflow).not.toContain("pnpm install --frozen-lockfile");
     expect(workflow).not.toContain("steps.resolve-pr.outputs.head_sha");
   });

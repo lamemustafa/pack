@@ -3,6 +3,16 @@
 import { execFileSync } from "node:child_process";
 import { fileURLToPath, URL } from "node:url";
 
+const REQUIRED_TEMPLATE_TEXT = [
+  "Pack Workflow Preflight",
+  "opened from a Pack branch, not master",
+  "latest master Pack AGENTS guidance",
+  "required Pack privacy/review/verification checklist visible",
+  "Sanchika Adoption Gate",
+  "docs/adoption-pack.md",
+  "ComplyEaze and Axal completion evidence",
+];
+
 const rawArgs = process.argv.slice(2);
 const args = new Set(rawArgs);
 const repo = readArgValue("--repo") ?? process.env.GITHUB_REPOSITORY;
@@ -28,21 +38,30 @@ for (const target of targets) {
   if (!skipPendingStatus) {
     setReviewGateStatus(target, "pending", "Review gate is evaluating review state.");
   }
+  const preflightResult = runPackPreflight(target);
   const result = runReviewGate(target.number);
 
-  if (result.ok) {
+  if (preflightResult.ok && result.ok) {
     setReviewGateStatus(target, "success", "No current-head review blockers found.");
     continue;
   }
 
-  setReviewGateStatus(target, "failure", "Unresolved review thread or requested changes found.");
+  setReviewGateStatus(target, "failure", "Workflow preflight or review blocker found.");
   targetedFailure = true;
 }
 
 if (!allOpen && targetedFailure) process.exit(1);
 
 function readPullRequest(number) {
-  return runJson(["pr", "view", String(number), "--repo", repo, "--json", "number,headRefOid"]);
+  return runJson([
+    "pr",
+    "view",
+    String(number),
+    "--repo",
+    repo,
+    "--json",
+    "number,headRefOid,headRefName,baseRefName,headRepository",
+  ]);
 }
 
 function listOpenPullRequests() {
@@ -61,8 +80,8 @@ function listOpenPullRequests() {
       ...(after ? ["-F", `after=${after}`] : []),
       "-f",
       after
-        ? "query=query($owner:String!,$name:String!,$after:String!){repository(owner:$owner,name:$name){pullRequests(states:OPEN,first:100,after:$after){pageInfo{hasNextPage endCursor} nodes{number headRefOid}}}}"
-        : "query=query($owner:String!,$name:String!){repository(owner:$owner,name:$name){pullRequests(states:OPEN,first:100){pageInfo{hasNextPage endCursor} nodes{number headRefOid}}}}",
+        ? "query=query($owner:String!,$name:String!,$after:String!){repository(owner:$owner,name:$name){pullRequests(states:OPEN,first:100,after:$after){pageInfo{hasNextPage endCursor} nodes{number headRefOid headRefName baseRefName headRepository{nameWithOwner}}}}}"
+        : "query=query($owner:String!,$name:String!){repository(owner:$owner,name:$name){pullRequests(states:OPEN,first:100){pageInfo{hasNextPage endCursor} nodes{number headRefOid headRefName baseRefName headRepository{nameWithOwner}}}}}",
     ]);
     const pageData = page.data?.repository?.pullRequests;
     if (!pageData) fail(`Could not list open pull requests for ${repo}.`);
@@ -70,6 +89,61 @@ function listOpenPullRequests() {
     pullRequests.push(...pageData.nodes);
     if (!pageData.pageInfo?.hasNextPage) return pullRequests;
     after = pageData.pageInfo.endCursor;
+  }
+}
+
+function runPackPreflight(target) {
+  const issues = [];
+  const headRepository = target.headRepository?.nameWithOwner;
+  const headRefName = target.headRefName;
+  const baseRefName = target.baseRefName ?? "master";
+
+  if (!headRefName) issues.push(`could not resolve PR #${target.number} head branch`);
+  if (!headRepository) issues.push(`could not resolve PR #${target.number} head repository`);
+
+  if (headRefName === "master" || headRefName === "main") {
+    if (headRepository === repo) {
+      issues.push(`PR #${target.number} uses protected branch ${headRefName}`);
+    }
+  } else if (headRefName && !headRefName.startsWith("tapish-codex/")) {
+    console.warn(
+      `warn: PR #${target.number} branch ${headRefName} does not use tapish-codex/<short-scope>; acceptable for forks only`,
+    );
+  }
+
+  const template = headRepository
+    ? readPullRequestFile(headRepository, target.headRefOid, ".github/PULL_REQUEST_TEMPLATE.md")
+    : null;
+  if (!template) {
+    issues.push(`PR #${target.number} is missing .github/PULL_REQUEST_TEMPLATE.md`);
+  } else {
+    for (const required of REQUIRED_TEMPLATE_TEXT) {
+      if (!template.includes(required)) {
+        issues.push(
+          `PR #${target.number} template is missing required Pack workflow checklist text: ${required}`,
+        );
+      }
+    }
+  }
+
+  if (baseRefName !== "master") {
+    console.warn(
+      `warn: PR #${target.number} targets ${baseRefName}; Pack release gates expect master.`,
+    );
+  }
+
+  for (const issue of issues) console.error(`error: ${issue}`);
+  return { ok: issues.length === 0 };
+}
+
+function readPullRequestFile(repository, ref, filePath) {
+  try {
+    const file = runJson(["api", `repos/${repository}/contents/${filePath}?ref=${ref}`]);
+    if (file.type !== "file" || typeof file.content !== "string") return null;
+    return Buffer.from(file.content.replaceAll("\n", ""), "base64").toString("utf8");
+  } catch (error) {
+    process.stderr.write(String(error.stderr ?? ""));
+    return null;
   }
 }
 
