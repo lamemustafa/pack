@@ -58,6 +58,9 @@ function createPackRepo(branch: string) {
       "- [ ] This PR was opened from a Pack branch, not master.",
       "- [ ] I checked latest master Pack AGENTS guidance or recorded the stale-guidance warning.",
       "- [ ] PR body keeps the required Pack privacy/review/verification checklist visible.",
+      "## Sanchika Adoption Gate",
+      "- [ ] I read `sanchika/docs/adoption-pack.md` in the coordinated parent worktree.",
+      "- [ ] This PR links ComplyEaze and Axal completion evidence.",
     ].join("\n"),
     "utf8",
   );
