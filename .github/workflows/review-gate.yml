@@ -8,8 +8,6 @@ on:
         required: false
   pull_request_target:
     types: [opened, reopened, synchronize, ready_for_review, edited]
-  pull_request_review:
-    types: [submitted, edited, dismissed]
   schedule:
     - cron: "*/5 * * * *"
 
@@ -24,7 +22,7 @@ concurrency:
 
 jobs:
   review-gate:
-    name: Review gate status sync
+    name: Review gate
     runs-on: ubuntu-latest
     timeout-minutes: 8
 
