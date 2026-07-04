@@ -22,7 +22,6 @@ import {
 import { isUnconfirmedBrowserDownloadSignal } from "./download-evidence-signals";
 import { suggestNextBrowserDownloadFilename } from "./download-filename-suggester";
 import { triggerDirectFiledReturnDownload } from "./filed-returns-direct-download-trigger";
-import { targetUrlSubstrings } from "./filed-returns-direct-download-review";
 import { safeFiledReturnDownloadFilename } from "./filed-returns-download-filename";
 import {
   runDownloadTriggerOnce,
@@ -83,7 +82,7 @@ export async function triggerAndObserveFiledReturnDownload({
   const observationContext = {
     ...expectedFiledReturnDownload(artifactType),
     armedAt,
-    expectedUrlSubstrings: artifactType === "PDF" ? targetUrlSubstrings(scope) : [],
+    expectedUrlSubstrings: [],
     ignoredFilenames: [filename],
     trustedDownloadIds,
   };

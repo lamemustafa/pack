@@ -1893,6 +1893,12 @@ describe("filed returns flow runner", () => {
       "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V2",
       "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V2",
     ]);
+    expect(observeNextBrowserDownload).toHaveBeenCalledWith(
+      browser.downloads,
+      expect.objectContaining({
+        expectedUrlSubstrings: [],
+      }),
+    );
   });
 
   it("falls back to the portal click when the direct PDF response is not verified", async () => {
