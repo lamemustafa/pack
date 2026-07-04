@@ -4,6 +4,20 @@ All notable changes to ComplyEaze Pack are documented here.
 
 ## Unreleased
 
+## [0.3.2](https://github.com/lamemustafa/pack/compare/v0.3.1...v0.3.2) (2026-07-04)
+
+
+### Fixes
+
+* **gst:** harden Pack closed-review follow-ups ([#48](https://github.com/lamemustafa/pack/issues/48)) ([5502678](https://github.com/lamemustafa/pack/commit/5502678681df76f24caa08c99984dc6e191c7533))
+
+
+### Documentation
+
+* document Sanchika coordination ([595deb0](https://github.com/lamemustafa/pack/commit/595deb04b66981088d1013223497ca63e3d1adec))
+* **release:** clear stale unreleased changelog ([#52](https://github.com/lamemustafa/pack/issues/52)) ([3767be5](https://github.com/lamemustafa/pack/commit/3767be5a6928f1b10f875e0ed4e57fe78395c233))
+* **store:** update v0.3.1 listing assets ([#49](https://github.com/lamemustafa/pack/issues/49)) ([ea5b47c](https://github.com/lamemustafa/pack/commit/ea5b47cafaf25a46a559f0246e6e6a727fca640b))
+
 ## [0.3.1](https://github.com/lamemustafa/pack/compare/v0.3.0...v0.3.1) (2026-07-03)
 
 
