@@ -143,6 +143,9 @@ describe("Pack CI workflow", () => {
     expect(statusWorkflow).toContain("environment: chrome-web-store-status");
     expect(statusWorkflow).toContain("node scripts/check-chrome-web-store-status.mjs");
     expect(statusWorkflow).toContain("CWS_REQUIRE_PUBLISHED");
+    expect(statusWorkflow).toContain("CWS_SERVICE_ACCOUNT_JSON");
+    expect(statusWorkflow).not.toContain("CWS_REFRESH_TOKEN");
+    expect(statusWorkflow).not.toContain("CWS_CLIENT_SECRET");
     expect(statusWorkflow).not.toContain("scripts/publish-chrome-web-store.mjs");
     expect(statusWorkflow).not.toContain(":publish");
     expect(statusWorkflow).not.toContain(":upload");

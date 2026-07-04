@@ -152,9 +152,11 @@ dispatch it with `require_published=true` when final publication, not just
 submission, is the release gate.
 
 Configure the status workflow with a dedicated `chrome-web-store-status`
-environment that has no required reviewer protection. Give it only read-only
-Chrome Web Store API credentials where possible, plus `CWS_PUBLISHER_ID`. Keep
-the publishing workflow on the protected `chrome-web-store` environment.
+environment that has no required reviewer protection. Give it a read-only
+service-account `CWS_SERVICE_ACCOUNT_JSON` secret plus `CWS_PUBLISHER_ID`; do
+not copy the publish workflow's OAuth client secret or refresh token into this
+environment. Keep the publishing workflow on the protected `chrome-web-store`
+environment.
 
 For local dry-runs against a generated release package:
 
