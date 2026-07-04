@@ -25,6 +25,7 @@ const strictHeadReview = args.has("--strict-head-review");
 const allowMissingHeadReview = args.has("--allow-missing-head-review");
 const skipPendingStatus = args.has("--skip-pending-status");
 const requiredReviewAuthor = readArgValue("--required-review-author");
+const ALLOWED_MISSING_HEAD_REVIEW_MARKER = "review-gate:allowed-missing-head-review";
 
 if (!repo || !repo.includes("/")) fail("Pass --repo owner/name.");
 if (!allOpen && (!explicitPr || !Number.isInteger(Number(explicitPr)))) {
@@ -47,6 +48,13 @@ for (const target of targets) {
   const result = runReviewGate(target.number);
 
   if (preflightResult.ok && result.ok) {
+    if (result.allowedMissingHeadReview) {
+      console.log(
+        `Skipping Review gate success for #${target.number} because the current-head review is still missing.`,
+      );
+      continue;
+    }
+
     setReviewGateStatus(target, "success", "No current-head review blockers found.");
     continue;
   }
@@ -181,12 +189,15 @@ function runReviewGate(prNumber) {
       stdio: ["ignore", "pipe", "pipe"],
     });
     process.stdout.write(output);
-    return { ok: true };
+    return {
+      ok: true,
+      allowedMissingHeadReview: output.includes(ALLOWED_MISSING_HEAD_REVIEW_MARKER),
+    };
   } catch (error) {
     const failure = error;
     process.stdout.write(String(failure.stdout ?? ""));
     process.stderr.write(String(failure.stderr ?? ""));
-    return { ok: false };
+    return { ok: false, allowedMissingHeadReview: false };
   }
 }
 

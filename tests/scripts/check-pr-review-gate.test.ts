@@ -652,6 +652,7 @@ describe("PR review gate", () => {
     );
 
     expect(output).toContain("PR review gate passed");
+    expect(output).toContain("review-gate:allowed-missing-head-review");
   });
 
   it("waits for a current-head review instead of treating the first snapshot as final", () => {

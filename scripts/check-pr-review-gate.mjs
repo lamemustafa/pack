@@ -14,6 +14,7 @@ const requiredReviewAuthor = readArgValue("--required-review-author");
 const explicitRepo = readArgValue("--repo");
 const explicitPr = readArgValue("--pr");
 let fixtureIndex = 0;
+const ALLOWED_MISSING_HEAD_REVIEW_MARKER = "review-gate:allowed-missing-head-review";
 
 const repo =
   explicitRepo ?? runText(["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"]);
@@ -31,6 +32,7 @@ const missingHeadReview = strictHeadReview && headReviews.length === 0;
 if (missingHeadReview) {
   const message = `No review was found for current head ${pr.headRefOid}.`;
   if (allowMissingHeadReview) {
+    console.log(ALLOWED_MISSING_HEAD_REVIEW_MARKER);
     console.warn(`${message} Continuing because --allow-missing-head-review was set.`);
   } else {
     console.error(message);

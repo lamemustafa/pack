@@ -264,9 +264,11 @@ local-first and browser-extension-scoped when applying Sanchika guidance:
   review is missing after its wait window. Scheduled all-open sweeps may use
   `--allow-missing-head-review` so a non-responsive external bot does not create
   permanent red checks while the sweep still catches unresolved threads and
-  requested-changes reviews. The workflow runs from trusted default-branch code
-  and writes a `Review gate` commit status for PR heads; its scheduled all-open
-  sweep is the backstop after review threads are resolved without a new push.
+  requested-changes reviews, but they must skip writing a green status when the
+  only passing condition is an allowed missing current-head review. The workflow
+  runs from trusted default-branch code and writes a `Review gate` commit status
+  for PR heads; its scheduled all-open sweep is the backstop after review threads
+  are resolved without a new push.
 
 ## Required Checks
 

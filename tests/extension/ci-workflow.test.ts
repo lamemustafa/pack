@@ -44,13 +44,14 @@ describe("Pack CI workflow", () => {
     expect(workflow).toContain("schedule:");
     expect(workflow).toContain('cron: "*/5 * * * *"');
     expect(workflow).toContain("workflow_dispatch:");
-    expect(workflow).not.toContain("pull_request_review:");
+    expect(workflow).toContain("pull_request_review:");
+    expect(workflow).toContain("types: [submitted, edited, dismissed]");
     expect(workflow).not.toContain("pull_request_review_comment:");
     expect(workflow).not.toContain("issue_comment:");
     expect(workflow).not.toContain("github.event.issue");
     expect(workflow).not.toContain("/review-gate");
     expect(workflow).toContain("name: Review findings gate");
-    expect(workflow).toContain("name: Review gate");
+    expect(workflow).toContain("name: Review gate status sync");
     expect(workflow).toContain("pull-requests: read");
     expect(workflow).toContain("statuses: write");
     expect(workflow).toContain("GH_TOKEN: ${{ github.token }}");
