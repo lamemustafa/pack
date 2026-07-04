@@ -18,10 +18,12 @@ stable-release claims.
   `https://github.com/lamemustafa/pack/releases/download/v0.3.2/complyeazepack-0.3.2-chrome.zip`
   with SHA-256
   `6bd41a364a2466f0f255bef1b44e93694cc8d95431e7661fea5be3d52c9cdddb`.
-- Chrome Web Store package/listing update for `v0.3.2` is pending dashboard
-  submission, Chrome Web Store review, and publication. The release workflow
-  published the GitHub release assets, but the `Submit Chrome Web Store package`
-  job for run `28702352034` was skipped.
+- Chrome Web Store package update for `v0.3.2` was submitted through protected
+  workflow dispatch on 2026-07-04. Run `28704776806` verified the GitHub release
+  assets, uploaded `complyeazepack-0.3.2-chrome.zip`, reported upload state
+  `SUCCEEDED`, reported publish state `PENDING_REVIEW`, and returned no
+  warnings. Dashboard listing assets/privacy declarations, Chrome Web Store
+  review result, and final publication confirmation are still pending.
 - V0 purpose: download filed GSTR-3B PDFs, GSTR-1 summary PDFs, and optional
   GSTR-1 e-invoice details Excel files locally from the user's active,
   manually authenticated GST Portal session when the GST Portal exposes those
@@ -179,9 +181,13 @@ stable-release claims.
       dispatch. The `v0.2.1` package was uploaded through GitHub Actions run
       `28542410006` with Chrome Web Store upload state `SUCCEEDED`, publish
       state `PENDING_REVIEW`, and no warnings.
-- [ ] Submit the `v0.3.2` package and GSTR-1 listing/assets through the Chrome
-      Web Store dashboard or protected workflow, then record review and
-      publication evidence for that exact package.
+- [x] Submit the `v0.3.2` package through the protected Chrome Web Store
+      workflow. Run `28704776806` uploaded the package with Chrome Web Store
+      upload state `SUCCEEDED`, publish state `PENDING_REVIEW`, and no warnings.
+- [ ] Upload/review the `v0.3.2` GSTR-1 listing copy, screenshots, promotional
+      images, privacy-practices declarations, and reviewer instructions in the
+      Chrome Web Store dashboard, then record review/publication evidence for
+      that exact package.
 
 ## Suggested Store Copy
 
@@ -225,5 +231,6 @@ availability, durable restart-safe full-year support, legal approval, live
 manifest/index/exception output, or broad GST coverage until legal review, live
 public policy URL confirmation, exact-ZIP manual QA, privacy declarations, live
 per-target result/manifest wiring, and store assets/sign-offs are recorded for
-the exact release. For `v0.3.2`, GitHub release assets are verified, but Chrome
-Web Store submission, review, and publication are not yet recorded.
+the exact release. For `v0.3.2`, GitHub release assets and package submission
+are recorded, but Chrome Web Store review/publication and dashboard-held
+listing/assets evidence are not yet recorded.
