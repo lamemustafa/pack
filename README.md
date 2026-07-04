@@ -29,9 +29,9 @@ alpha surfaces. The reviewed source has live local download support for filed
 GSTR-3B PDFs, filed GSTR-1 summary PDFs, and optional GSTR-1 e-invoice details
 Excel files where the GST Portal provides them. The verified GitHub pre-release
 for this source state is
-[`v0.3.1`](https://github.com/lamemustafa/pack/releases/tag/v0.3.1), with
+[`v0.3.2`](https://github.com/lamemustafa/pack/releases/tag/v0.3.2), with
 Chrome ZIP SHA-256
-`e3afec97c0821cd99fb951d7d811e4c22810a36dacfcfdf3c0439163da33edcd`.
+`6bd41a364a2466f0f255bef1b44e93694cc8d95431e7661fea5be3d52c9cdddb`.
 
 The Chrome Web Store package/listing update for this GSTR-1 source release is
 still pending dashboard submission, Chrome Web Store review, and publication.
@@ -57,7 +57,7 @@ The existing V0 listing is available on the Chrome Web Store:
 
 https://chromewebstore.google.com/detail/complyeaze-pack-gst-gstr/nfnbhekccajjfgkppolomflaeledoccb
 
-The `v0.3.1` GitHub release has the verified GSTR-1 source package, but the
+The `v0.3.2` GitHub release has the verified GSTR-1 source package, but the
 Chrome Web Store dashboard package/listing update has not yet been submitted,
 reviewed, or published for that release.
 
