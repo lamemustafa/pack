@@ -110,7 +110,9 @@ function runReviewGate(prNumber) {
 function setReviewGateStatus(target, state, description) {
   const latestStatus = readLatestReviewGateStatus(target);
   if (latestStatus?.state === state && latestStatus?.description === description) {
-    console.log(`Review gate status already ${state} for #${target.number}; skipping duplicate write.`);
+    console.log(
+      `Review gate status already ${state} for #${target.number}; skipping duplicate write.`,
+    );
     return;
   }
 
