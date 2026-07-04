@@ -16,6 +16,25 @@ const UPLOAD_SUCCESS_STATES = new Set([
 ]);
 const UPLOAD_FAILURE_STATES = new Set(["FAILED", "NOT_FOUND", "UPLOAD_FAILED"]);
 
+export async function fetchChromeWebStoreStatus({
+  extensionId = DEFAULT_EXTENSION_ID,
+  publisherId,
+  env = process.env,
+  fetchImpl = fetch,
+} = {}) {
+  const selectedPublisherId = publisherId ?? env.CWS_PUBLISHER_ID;
+  if (!selectedPublisherId) throw new Error("Missing CWS_PUBLISHER_ID or --publisher-id.");
+
+  const accessToken = await getAccessToken(env, fetchImpl);
+  const name = `publishers/${selectedPublisherId}/items/${extensionId}`;
+  return getJson(
+    `https://chromewebstore.googleapis.com/v2/${name}:fetchStatus`,
+    accessToken,
+    fetchImpl,
+    "Chrome Web Store fetchStatus failed",
+  );
+}
+
 export async function publishChromeWebStorePackage({
   argv = process.argv.slice(2),
   cwd = process.cwd(),

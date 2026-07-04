@@ -131,4 +131,20 @@ describe("Pack CI workflow", () => {
     expect(releaseRunbook).toContain("CWS_SUBMIT_ENABLED");
     expect(releaseRunbook).toContain("CWS_SUBMIT_ENABLED=true");
   });
+
+  it("monitors Chrome Web Store review status without publishing side effects", async () => {
+    const statusWorkflow = await readFile(
+      path.join(rootDir, ".github", "workflows", "chrome-web-store-status.yml"),
+      "utf8",
+    );
+
+    expect(statusWorkflow).toContain("schedule:");
+    expect(statusWorkflow).toContain("workflow_dispatch:");
+    expect(statusWorkflow).toContain("environment: chrome-web-store");
+    expect(statusWorkflow).toContain("node scripts/check-chrome-web-store-status.mjs");
+    expect(statusWorkflow).toContain("CWS_REQUIRE_PUBLISHED");
+    expect(statusWorkflow).not.toContain("scripts/publish-chrome-web-store.mjs");
+    expect(statusWorkflow).not.toContain(":publish");
+    expect(statusWorkflow).not.toContain(":upload");
+  });
 });

@@ -99,6 +99,8 @@ stable-release claims.
 - [x] Manifest icons are present in source and verified in the built package.
 - [x] Manifest homepage URL points to `https://pack.complyeaze.com/gst`.
 - [x] Protected Chrome Web Store workflow exists for future release updates.
+- [x] Protected Chrome Web Store status monitor exists for post-submit
+      review/publication checks without upload or publish side effects.
 
 ### Must Complete Before Future Store Updates Or Broader Store Claims
 
