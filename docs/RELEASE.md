@@ -144,6 +144,20 @@ script runs. The publish script must receive the matching
 downloaded release version instead of the workflow checkout's `package.json`
 version.
 
+Use `Chrome Web Store Status` after a submit run. It calls the Chrome Web Store
+API `fetchStatus` endpoint, prints a bounded status summary, and fails on
+rejected, cancelled, failed, warned, or taken-down states. By default it
+succeeds while the expected version is submitted but still pending review;
+dispatch it with `require_published=true` when final publication, not just
+submission, is the release gate.
+
+Configure the status workflow with a dedicated `chrome-web-store-status`
+environment that has no required reviewer protection. Give it a read-only
+service-account `CWS_SERVICE_ACCOUNT_JSON` secret plus `CWS_PUBLISHER_ID`; do
+not copy the publish workflow's OAuth client secret or refresh token into this
+environment. Keep the publishing workflow on the protected `chrome-web-store`
+environment.
+
 For local dry-runs against a generated release package:
 
 ```sh
@@ -152,6 +166,14 @@ node scripts/publish-chrome-web-store.mjs \
   --provenance .output/pack-release-provenance.v1.json \
   --publisher-id <publisher-id> \
   --dry-run true
+```
+
+For a local status check:
+
+```sh
+node scripts/check-chrome-web-store-status.mjs \
+  --publisher-id <publisher-id> \
+  --expected-version <version>
 ```
 
 Do not move listing/support/homepage URLs in the Chrome dashboard without

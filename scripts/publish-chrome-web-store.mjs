@@ -7,6 +7,8 @@ import { URLSearchParams, pathToFileURL } from "node:url";
 const DEFAULT_EXTENSION_ID = "nfnbhekccajjfgkppolomflaeledoccb";
 const DEFAULT_UPLOAD_POLL_ATTEMPTS = 30;
 const DEFAULT_UPLOAD_POLL_INTERVAL_MS = 10_000;
+const CWS_WRITE_SCOPE = "https://www.googleapis.com/auth/chromewebstore";
+const CWS_READONLY_SCOPE = "https://www.googleapis.com/auth/chromewebstore.readonly";
 const UPLOAD_IN_PROGRESS_STATES = new Set(["IN_PROGRESS", "UPLOAD_IN_PROGRESS"]);
 const UPLOAD_SUCCESS_STATES = new Set([
   "SUCCEEDED",
@@ -15,6 +17,25 @@ const UPLOAD_SUCCESS_STATES = new Set([
   "UPLOAD_SUCCEEDED",
 ]);
 const UPLOAD_FAILURE_STATES = new Set(["FAILED", "NOT_FOUND", "UPLOAD_FAILED"]);
+
+export async function fetchChromeWebStoreStatus({
+  extensionId = DEFAULT_EXTENSION_ID,
+  publisherId,
+  env = process.env,
+  fetchImpl = fetch,
+} = {}) {
+  const selectedPublisherId = publisherId ?? env.CWS_PUBLISHER_ID;
+  if (!selectedPublisherId) throw new Error("Missing CWS_PUBLISHER_ID or --publisher-id.");
+
+  const accessToken = await getAccessToken(env, fetchImpl, { scope: CWS_READONLY_SCOPE });
+  const name = `publishers/${selectedPublisherId}/items/${extensionId}`;
+  return getJson(
+    `https://chromewebstore.googleapis.com/v2/${name}:fetchStatus`,
+    accessToken,
+    fetchImpl,
+    "Chrome Web Store fetchStatus failed",
+  );
+}
 
 export async function publishChromeWebStorePackage({
   argv = process.argv.slice(2),
@@ -285,10 +306,10 @@ export async function waitForUploadCompletion({
   );
 }
 
-async function getAccessToken(env, fetchImpl) {
+async function getAccessToken(env, fetchImpl, { scope = CWS_WRITE_SCOPE } = {}) {
   if (env.CWS_ACCESS_TOKEN) return env.CWS_ACCESS_TOKEN;
   if (env.CWS_SERVICE_ACCOUNT_JSON) {
-    return serviceAccountAccessToken(JSON.parse(env.CWS_SERVICE_ACCOUNT_JSON), fetchImpl);
+    return serviceAccountAccessToken(JSON.parse(env.CWS_SERVICE_ACCOUNT_JSON), fetchImpl, scope);
   }
   if (env.CWS_CLIENT_ID && env.CWS_CLIENT_SECRET && env.CWS_REFRESH_TOKEN) {
     return refreshTokenAccessToken({
@@ -303,14 +324,14 @@ async function getAccessToken(env, fetchImpl) {
   );
 }
 
-async function serviceAccountAccessToken(serviceAccount, fetchImpl) {
+async function serviceAccountAccessToken(serviceAccount, fetchImpl, scope) {
   const tokenUri = serviceAccount.token_uri ?? "https://oauth2.googleapis.com/token";
   const iat = Math.floor(Date.now() / 1000);
   const assertion = [
     base64UrlJson({ alg: "RS256", typ: "JWT" }),
     base64UrlJson({
       iss: serviceAccount.client_email,
-      scope: "https://www.googleapis.com/auth/chromewebstore",
+      scope,
       aud: tokenUri,
       exp: iat + 3600,
       iat,

@@ -20,3 +20,10 @@ export function buildPublishRequest(options?: {
   blockOnWarnings?: boolean;
   deployPercentage?: string | number | null;
 }): PublishRequest;
+
+export function fetchChromeWebStoreStatus(options?: {
+  extensionId?: string;
+  publisherId?: string;
+  env?: Record<string, string | undefined>;
+  fetchImpl?: (url: string, init?: RequestInit) => Promise<Response>;
+}): Promise<Record<string, unknown>>;

@@ -1,0 +1,47 @@
+name: Chrome Web Store Status
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_version:
+        description: Expected extension version. Defaults to package.json.
+        required: false
+        default: ""
+      require_published:
+        description: Fail unless the expected version is published.
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+  schedule:
+    - cron: "17 */6 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  status:
+    name: Check Chrome Web Store status
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: chrome-web-store-status
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: 22.13.0
+
+      - name: Check Chrome Web Store status
+        run: node scripts/check-chrome-web-store-status.mjs
+        env:
+          CWS_EXTENSION_ID: nfnbhekccajjfgkppolomflaeledoccb
+          CWS_EXPECTED_VERSION: ${{ inputs.expected_version }}
+          CWS_REQUIRE_PUBLISHED: ${{ inputs.require_published || 'false' }}
+          CWS_PUBLISHER_ID: ${{ vars.CWS_PUBLISHER_ID }}
+          CWS_SERVICE_ACCOUNT_JSON: ${{ secrets.CWS_SERVICE_ACCOUNT_JSON }}
