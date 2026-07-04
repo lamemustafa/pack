@@ -44,6 +44,11 @@ jobs:
         run: |
           set -euo pipefail
 
+          if [ ! -f scripts/sync-review-gate-status.mjs ]; then
+            echo "Review gate scripts are not present on the trusted default branch yet; skipping bootstrap event."
+            exit 0
+          fi
+
           args=(
             --repo "${GITHUB_REPOSITORY}"
             --run-url "${RUN_URL}"

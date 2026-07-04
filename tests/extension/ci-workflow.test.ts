@@ -57,6 +57,9 @@ describe("Pack CI workflow", () => {
     expect(workflow).toContain("repository: ${{ github.repository }}");
     expect(workflow).toContain("ref: ${{ github.event.repository.default_branch }}");
     expect(workflow).toContain("node scripts/sync-review-gate-status.mjs");
+    expect(workflow).toContain(
+      "Review gate scripts are not present on the trusted default branch yet",
+    );
     expect(workflow).toContain("ready_for_review, edited");
     expect(workflow).toContain("--strict-head-review");
     expect(workflow).toContain("--required-review-author chatgpt-codex-connector");
