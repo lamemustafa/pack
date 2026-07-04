@@ -260,13 +260,13 @@ local-first and browser-extension-scoped when applying Sanchika guidance:
   Codex bot review with
   `pnpm review:gate -- --strict-head-review --required-review-author chatgpt-codex-connector --wait-head-review-ms 180000`.
   Treat network/auth failure as a reported verification gap, not as a pass.
-- The CI `Review gate` workflow may use `--allow-missing-head-review` so a
-  non-responsive external bot does not create a permanent red check. That mode is
-  a findings gate only; it does not replace the hard local/manual
-  `pnpm verify:pr` release-readiness gate. The workflow runs from trusted
-  default-branch code and writes a `Review gate` commit status for PR heads; its
-  scheduled all-open sweep is the backstop after review threads are resolved
-  without a new push.
+- The PR/manual CI `Review gate` workflow must fail when the current-head Codex
+  review is missing after its wait window. Scheduled all-open sweeps may use
+  `--allow-missing-head-review` so a non-responsive external bot does not create
+  permanent red checks while the sweep still catches unresolved threads and
+  requested-changes reviews. The workflow runs from trusted default-branch code
+  and writes a `Review gate` commit status for PR heads; its scheduled all-open
+  sweep is the backstop after review threads are resolved without a new push.
 
 ## Required Checks
 

@@ -46,7 +46,11 @@ for (const target of targets) {
     continue;
   }
 
-  setReviewGateStatus(target, "failure", "Workflow preflight or review blocker found.");
+  setReviewGateStatus(
+    target,
+    "failure",
+    "Workflow preflight, unresolved thread, requested changes, or missing current-head review found.",
+  );
   targetedFailure = true;
 }
 

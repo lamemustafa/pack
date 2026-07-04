@@ -61,7 +61,10 @@ describe("Pack CI workflow", () => {
     expect(workflow).toContain("--strict-head-review");
     expect(workflow).toContain("--required-review-author chatgpt-codex-connector");
     expect(workflow).toContain("--wait-head-review-ms 180000");
-    expect(workflow).toContain("--allow-missing-head-review");
+    expect(workflow).toContain('args+=(--pr "${PR_NUMBER}" --wait-head-review-ms 180000)');
+    expect(workflow).not.toContain(
+      'args+=(--pr "${PR_NUMBER}" --wait-head-review-ms 180000 --allow-missing-head-review)',
+    );
     expect(workflow).toContain(
       "--all-open --wait-head-review-ms 0 --allow-missing-head-review --skip-pending-status",
     );
