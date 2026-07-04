@@ -263,7 +263,10 @@ local-first and browser-extension-scoped when applying Sanchika guidance:
 - The CI `Review gate` workflow may use `--allow-missing-head-review` so a
   non-responsive external bot does not create a permanent red check. That mode is
   a findings gate only; it does not replace the hard local/manual
-  `pnpm verify:pr` release-readiness gate.
+  `pnpm verify:pr` release-readiness gate. The workflow runs from trusted
+  default-branch code and writes a `Review gate` commit status for PR heads; its
+  scheduled all-open sweep is the backstop after review threads are resolved
+  without a new push.
 
 ## Required Checks
 

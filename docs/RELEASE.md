@@ -88,6 +88,9 @@ deterministic CI service. Do not treat that as a store-readiness pass by itself.
 For a release candidate, explicitly trigger `@codex review`, wait for the review
 or document the missing-review gap, and keep the PR open for any later findings
 before tagging.
+The workflow is a trusted default-branch status writer with scheduled all-open
+sweeps. After resolving review threads without pushing a new commit, manually
+dispatch `Review gate` or wait for the scheduled sweep before tagging.
 
 ## Manual clean-profile QA
 

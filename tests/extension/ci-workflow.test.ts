@@ -34,37 +34,39 @@ describe("Pack CI workflow", () => {
     expect(workflow).not.toContain("actions/upload-artifact");
   });
 
-  it("runs a current-head review findings gate on PR, review, and PR-dispatched manual recovery events", async () => {
+  it("runs a trusted current-head review findings gate with scheduled status refresh", async () => {
     const workflow = await readFile(
       path.join(rootDir, ".github", "workflows", "review-gate.yml"),
       "utf8",
     );
 
-    expect(workflow).toContain("pull_request:");
-    expect(workflow).toContain("pull_request_review:");
-    expect(workflow).toContain("pull_request_review_comment:");
+    expect(workflow).toContain("pull_request_target:");
+    expect(workflow).toContain("schedule:");
+    expect(workflow).toContain('cron: "*/5 * * * *"');
     expect(workflow).toContain("workflow_dispatch:");
-    expect(workflow).toContain("name: Resolve PR metadata");
-    expect(workflow).toContain('gh pr view "${PR_NUMBER}"');
+    expect(workflow).not.toContain("pull_request_review:");
+    expect(workflow).not.toContain("pull_request_review_comment:");
     expect(workflow).not.toContain("issue_comment:");
     expect(workflow).not.toContain("github.event.issue");
     expect(workflow).not.toContain("/review-gate");
     expect(workflow).toContain("name: Review findings gate");
     expect(workflow).toContain("name: Review gate");
     expect(workflow).toContain("pull-requests: read");
+    expect(workflow).toContain("statuses: write");
     expect(workflow).toContain("GH_TOKEN: ${{ github.token }}");
-    expect(workflow).toContain("fetch-depth: 0");
-    expect(workflow).toContain("ref: ${{ steps.resolve-pr.outputs.head_sha }}");
-    expect(workflow).toContain("pnpm workflow:preflight");
+    expect(workflow).toContain("repository: ${{ github.repository }}");
+    expect(workflow).toContain(
+      "ref: ${{ github.event_name == 'workflow_dispatch' && github.ref || github.event.repository.default_branch }}",
+    );
+    expect(workflow).toContain("node scripts/sync-review-gate-status.mjs");
     expect(workflow).toContain("ready_for_review, edited");
-    expect(workflow).toContain('--branch "${{ steps.resolve-pr.outputs.head_ref }}"');
-    expect(workflow).toContain('--base-ref "${{ steps.resolve-pr.outputs.base_ref }}"');
-    expect(workflow).toContain('--repo "${{ github.repository }}"');
-    expect(workflow).toContain('--head-repo "${{ steps.resolve-pr.outputs.head_repo }}"');
     expect(workflow).toContain("--strict-head-review");
     expect(workflow).toContain("--required-review-author chatgpt-codex-connector");
     expect(workflow).toContain("--wait-head-review-ms 180000");
     expect(workflow).toContain("--allow-missing-head-review");
+    expect(workflow).toContain("--skip-pending-status");
+    expect(workflow).not.toContain("pnpm install --frozen-lockfile");
+    expect(workflow).not.toContain("steps.resolve-pr.outputs.head_sha");
   });
 
   it("keeps every workflow action reference within the repository selected-actions policy", async () => {

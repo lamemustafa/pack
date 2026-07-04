@@ -147,6 +147,10 @@ acknowledge `@codex review` without producing a formal review in a deterministic
 time window. Treat that CI mode as a findings gate only: unresolved review
 threads and current-head requested-changes reviews still fail, but a missing bot
 review must be recorded as a manual PR-readiness gap before merge/release claims.
+The workflow runs from trusted default-branch code and writes the `Review gate`
+commit status for PR heads. Its scheduled all-open sweep is the backstop after
+review threads are resolved without a new push; manually dispatch `Review gate`
+when a specific PR needs an immediate refresh.
 
 For PRs, record the exact local commands or CI run, release ZIP/checksum
 evidence when a ZIP is produced, and the SHA-256 checksum. Treat late Codex/bot
