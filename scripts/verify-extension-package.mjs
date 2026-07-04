@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
@@ -334,6 +335,30 @@ function validateHarnessPolicySnapshot(snapshot) {
     new RegExp(entry.pattern, "gi");
   }
   validatePolicyPatternSamples(patterns);
+  validateCanonicalPolicyDigest(snapshot);
+}
+
+function validateCanonicalPolicyDigest(snapshot) {
+  const expected = snapshot.manifest?.canonicalPolicySha256;
+  const actual = `sha256:${createHash("sha256")
+    .update(stableJson(snapshot.policy ?? {}))
+    .digest("hex")}`;
+  if (expected !== actual) {
+    throw new Error(
+      `Invalid harness policy snapshot: canonicalPolicySha256 does not match snapshot.policy; expected ${actual}.`,
+    );
+  }
+}
+
+function stableJson(value) {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
 }
 
 function validatePolicyPatternSamples(patterns) {

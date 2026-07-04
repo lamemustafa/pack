@@ -19,6 +19,7 @@ import {
   mergeFlowStepWithDownloadObservation,
   observeNextBrowserDownload,
 } from "./download-observer";
+import { isUnconfirmedBrowserDownloadSignal } from "./download-evidence-signals";
 import { suggestNextBrowserDownloadFilename } from "./download-filename-suggester";
 import { triggerDirectFiledReturnDownload } from "./filed-returns-direct-download-trigger";
 import { safeFiledReturnDownloadFilename } from "./filed-returns-download-filename";
@@ -250,15 +251,7 @@ function withUnconfirmedArtifactSignal(
   artifactType: FiledReturnsConcreteArtifactType,
 ): PortalFlowStepResult {
   if (flowStep.state !== "download-unconfirmed" && flowStep.state !== "blocked") return flowStep;
-  if (
-    !flowStep.safeSignals.some((signal) =>
-      [
-        "browser-download-not-observed",
-        "browser-download-size-unknown",
-        "browser-download-interrupted",
-      ].includes(signal),
-    )
-  ) {
+  if (!flowStep.safeSignals.some(isUnconfirmedBrowserDownloadSignal)) {
     return flowStep;
   }
 

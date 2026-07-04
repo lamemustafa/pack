@@ -240,8 +240,65 @@ describe("live run evidence", () => {
       expect(singlePeriod.errors).toContain("pass evidence must reconcile every eligible target");
       expect(singlePeriod.errors).toContain("counts must reconcile eligible targets");
     }
-    expect(blocked.ok).toBe(false);
-    if (!blocked.ok) expect(blocked.errors).toContain("counts must reconcile eligible targets");
+    expect(blocked.ok).toBe(true);
+  });
+
+  it("accepts partial observed counts for blocked full-year live evidence without inflating target totals", () => {
+    const result = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      outcome: "blocked",
+      counts: {
+        eligibleTargets: 12,
+        downloaded: 2,
+        notFiled: 0,
+        manuallyObserved: 0,
+        blocked: 1,
+        failed: 0,
+        duplicates: 0,
+      },
+      checks: {
+        humanVerifiedAccount: false,
+        humanVerifiedPeriods: false,
+        allFilesNonEmpty: false,
+        serviceWorkerRestartResumeChecked: false,
+        browserRestartResumeChecked: false,
+        clearLocalDataChecked: false,
+        browserSummaryCaptured: false,
+        unexpectedNetworkDestinations: 0,
+      },
+      limitations: ["browser-state-not-captured"],
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects blocked or failed live evidence counts that observe more targets than were eligible", () => {
+    const result = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      outcome: "blocked",
+      counts: {
+        eligibleTargets: 2,
+        downloaded: 2,
+        notFiled: 0,
+        manuallyObserved: 0,
+        blocked: 1,
+        failed: 0,
+        duplicates: 0,
+      },
+      checks: {
+        humanVerifiedAccount: false,
+        humanVerifiedPeriods: false,
+        allFilesNonEmpty: false,
+        serviceWorkerRestartResumeChecked: false,
+        browserRestartResumeChecked: false,
+        clearLocalDataChecked: false,
+        browserSummaryCaptured: false,
+        unexpectedNetworkDestinations: 0,
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors).toContain("counts cannot exceed eligible targets");
   });
 
   it("does not require success-only checks for blocked evidence", () => {

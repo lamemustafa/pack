@@ -2,9 +2,9 @@
   "manifest": {
     "policySchemaVersion": 1,
     "policyVersion": "1.0.0",
-    "sourceRepository": "complyeaze",
-    "sourceCommit": "6ee84e7b0e687ab0524087c703a71c2258f11eff",
-    "canonicalPolicySha256": "sha256:92fc501fcbbbee9e9745ee3447cfed763953c76048a1b6dc0e7b27d3172c93a2",
+    "sourceRepository": "lamemustafa/pack",
+    "sourceCommit": "0161b8fcfea919470f396329c5eff8e7daf7ff63",
+    "canonicalPolicySha256": "sha256:8262e32dea442647a04d5840315dabb05390fe435ddf56459a78865e6550b0d2",
     "generatorVersion": "1.0.0"
   },
   "policy": {

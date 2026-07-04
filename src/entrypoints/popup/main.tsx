@@ -18,7 +18,11 @@ import {
 } from "../../core/filed-returns-scope";
 import "../../styles/global.css";
 import { RecoveryActions, ScopeForm } from "./components";
-import { getFiledReturnsCompletionStatus, getFiledReturnsSummaryHeading } from "./flow-summary";
+import {
+  getFiledReturnsCompletionStatus,
+  getFiledReturnsSummaryHeading,
+  getScopeMatchedFiledReturnsSummary,
+} from "./flow-summary";
 
 function App() {
   const [status, setStatus] = React.useState("Loading Pack context...");
@@ -183,8 +187,9 @@ function App() {
   }
 
   const completionStatus = getFiledReturnsCompletionStatus(scope, filedReturnsFlowSummary);
-  const summaryHeading = filedReturnsFlowSummary
-    ? getFiledReturnsSummaryHeading(scope, filedReturnsFlowSummary)
+  const scopedFlowSummary = getScopeMatchedFiledReturnsSummary(scope, filedReturnsFlowSummary);
+  const summaryHeading = scopedFlowSummary
+    ? getFiledReturnsSummaryHeading(scope, scopedFlowSummary)
     : null;
 
   return (
@@ -214,10 +219,10 @@ function App() {
         onStart={() => void startFiledReturnsFlow()}
       />
 
-      {filedReturnsFlowSummary && summaryHeading ? (
+      {scopedFlowSummary && summaryHeading ? (
         <section className="state">
           <p>{summaryHeading}</p>
-          <p className="muted">{filedReturnsFlowSummary.flowStep.safeMessage}</p>
+          <p className="muted">{scopedFlowSummary.flowStep.safeMessage}</p>
         </section>
       ) : filedReturnsObservation ? (
         <section className="state">
@@ -228,7 +233,7 @@ function App() {
 
       <RecoveryActions
         busy={busy}
-        summary={filedReturnsFlowSummary}
+        summary={scopedFlowSummary}
         onAcknowledgeInterruptedRun={() => void acknowledgeInterruptedRun()}
         onRetryFullFiscalYearTarget={() => void retryFullFiscalYearTarget()}
         onRetryTarget={() => void retryFiledReturnsTarget()}

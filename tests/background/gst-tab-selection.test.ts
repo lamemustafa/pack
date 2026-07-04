@@ -86,6 +86,57 @@ describe("Pack GST tab selection", () => {
     ).toBe(true);
   });
 
+  it("checks the content script protocol before sending side-effectful tab messages", async () => {
+    const { PACK_CONTENT_SCRIPT_PROTOCOL_VERSION } = await import("../../src/core/messages");
+    const sendMessage = browserMocks.tabs.sendMessage as unknown as {
+      mockImplementation: (
+        implementation: (tabId: number, message: { type: string }) => Promise<unknown>,
+      ) => void;
+    };
+    sendMessage.mockImplementation(async (_tabId, message) => {
+      if (message.type === "PACK_CONTENT_PING_V2") {
+        return { ok: true, context: null };
+      }
+      return {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+          state: "clicked",
+          safeSignals: ["filed-return-result-view-clicked"],
+          safeMessage: "Opened.",
+          contentScriptVersion: PACK_CONTENT_SCRIPT_PROTOCOL_VERSION,
+        },
+      };
+    });
+    const { sendMessageToTabWithInjection } = await import("../../src/entrypoints/background");
+
+    await sendMessageToTabWithInjection(33, {
+      type: "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V2",
+      payload: {
+        financialYear: "2025-26",
+        period: "March",
+        returnType: "GSTR-3B",
+      },
+    });
+
+    expect(browserMocks.tabs.sendMessage).toHaveBeenNthCalledWith(1, 33, {
+      type: "PACK_CONTENT_PING_V2",
+    });
+    expect(browserMocks.scripting.executeScript).toHaveBeenCalledWith({
+      files: ["/content-scripts/content.js"],
+      target: { tabId: 33 },
+    });
+    expect(browserMocks.tabs.sendMessage).toHaveBeenLastCalledWith(33, {
+      type: "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V2",
+      payload: {
+        financialYear: "2025-26",
+        period: "March",
+        returnType: "GSTR-3B",
+      },
+    });
+  });
+
   it("falls back to a GST tab in the current window when the popup is open as a tab", async () => {
     browserMocks.tabs.query
       .mockResolvedValueOnce([

@@ -84,6 +84,38 @@ describe("filed returns direct download request helpers", () => {
     );
   });
 
+  it("scopes compact portal detail labels to the download control before reading stale page text", () => {
+    const documentRef = createDetailDocument(
+      "https://return.gst.gov.in/returns/auth/gstr3b",
+      `
+        <main>
+          <aside>
+            <p>Financial Year: 2025-26</p>
+            <p>Return Period: February</p>
+          </aside>
+          <section aria-label="Filed return detail">
+            <h1>GSTR-3B - Monthly Return</h1>
+            <p>FinancialYear: 202526</p>
+            <p>ReturnPeriod: March</p>
+            <button>Download Filed GSTR-3B</button>
+          </section>
+        </main>
+      `,
+    );
+
+    const resolved = resolveFiledGstr3bGeneratedPdfApiRequest(documentRef, TARGET);
+
+    expect(resolved.ok).toBe(true);
+    if (!resolved.ok) return;
+    expect(resolved.pdfPath).toBe("/returns/auth/api/gstr3b/getgenpdf?rtn_prd=032026");
+    expect(resolved.safeSignals).toEqual(
+      expect.arrayContaining([
+        "filed-return-detail-period:March",
+        "filed-return-detail-financial-year:2025-26",
+      ]),
+    );
+  });
+
   it("blocks direct PDF requests until the visible detail page exposes the target identity", () => {
     const documentRef = createDetailDocument(
       "https://return.gst.gov.in/returns/auth/gstr3b",

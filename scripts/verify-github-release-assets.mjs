@@ -14,6 +14,13 @@ if (!/^[a-f0-9]{64}$/.test(checksum ?? "")) {
   throw new Error(`Invalid SHA-256 checksum in ${checksumFile}`);
 }
 const provenance = JSON.parse(await readFile(provenanceFile, "utf8"));
+if (provenance.package?.zipSha256 !== checksum) {
+  throw new Error(
+    `Release provenance ZIP SHA-256 ${
+      provenance.package?.zipSha256 ?? "missing"
+    } does not match checksum ${checksum}.`,
+  );
+}
 if (zipFile) {
   const zipSha256 = await sha256File(zipFile);
   if (zipSha256 !== checksum) {

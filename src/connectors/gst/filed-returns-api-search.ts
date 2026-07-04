@@ -215,7 +215,10 @@ async function queryRoleStatus(
 
     const payload: unknown = await response.json();
     const userPref = readUserPreference(payload);
-    if (!userPref) return { ok: false };
+    if (!userPref) {
+      if (!isGstr3bQuarterlyEnabled(rtnPrd)) return { ok: true, userPref: "M" };
+      return { ok: false };
+    }
     return { ok: true, userPref };
   } catch {
     return { ok: false };

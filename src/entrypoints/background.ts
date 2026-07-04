@@ -248,7 +248,7 @@ export async function getActiveGstTab(): Promise<ActiveGstTab | null> {
   return fallbackGstTabs[0] ?? null;
 }
 
-async function sendMessageToTabWithInjection(
+export async function sendMessageToTabWithInjection(
   tabId: number,
   message: Extract<
     PackMessage,
@@ -262,6 +262,7 @@ async function sendMessageToTabWithInjection(
     }
   >,
 ): Promise<PackMessageResponse> {
+  await ensureContentScript(tabId);
   try {
     return (await browser.tabs.sendMessage(tabId, message)) as PackMessageResponse;
   } catch (error) {

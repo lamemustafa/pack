@@ -171,7 +171,7 @@ describe("background filed returns download defaults", () => {
       saveAs: false,
       url: directMayUrl,
     });
-    expect(browserMocks.tabs.sendMessage.mock.calls.map(([, message]) => message.type)).toEqual([
+    expect(sentActionMessageTypes()).toEqual([
       "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V2",
       "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V2",
     ]);
@@ -252,7 +252,7 @@ describe("background filed returns download defaults", () => {
         url: directUrlByMonth.get(period),
       });
     });
-    expect(browserMocks.tabs.sendMessage.mock.calls.map(([, message]) => message.type)).toEqual([
+    expect(sentActionMessageTypes()).toEqual([
       ...periods.flatMap(() => [
         "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V2",
         "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V2",
@@ -272,4 +272,10 @@ async function sendBackgroundMessage(message: PackMessage): Promise<PackMessageR
       resolve,
     );
   });
+}
+
+function sentActionMessageTypes(): string[] {
+  return browserMocks.tabs.sendMessage.mock.calls
+    .map(([, message]) => message.type)
+    .filter((type) => type !== "PACK_CONTENT_PING_V2");
 }

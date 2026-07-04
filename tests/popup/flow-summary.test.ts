@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getFiledReturnsCompletionStatus,
+  getScopeMatchedFiledReturnsSummary,
   getFiledReturnsSummaryHeading,
 } from "../../src/entrypoints/popup/flow-summary";
 import type { FiledReturnsFlowSummary } from "../../src/core/contracts";
@@ -136,5 +137,28 @@ describe("popup filed returns flow summary", () => {
         COMPLETE_SUMMARY,
       ),
     ).toBeNull();
+  });
+
+  it("filters stale summaries before rendering recovery actions", () => {
+    expect(
+      getScopeMatchedFiledReturnsSummary(
+        {
+          financialYear: "2025-26",
+          period: "May",
+          returnType: "GSTR-3B",
+        },
+        COMPLETE_SUMMARY,
+      ),
+    ).toBeNull();
+    expect(
+      getScopeMatchedFiledReturnsSummary(
+        {
+          financialYear: "2025-26",
+          period: FULL_FISCAL_YEAR_PERIOD,
+          returnType: "GSTR-3B",
+        },
+        COMPLETE_SUMMARY,
+      ),
+    ).toBe(COMPLETE_SUMMARY);
   });
 });
