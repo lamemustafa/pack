@@ -8,8 +8,18 @@ be reviewed in the Chrome Web Store Developer Dashboard.
 ## Current Public Listing
 
 - Status: V0 listing available for the existing published package.
-- Required update: next Release Please patch listing copy and package review for
-  GSTR-1 support.
+- Verified source release: GitHub
+  [`v0.3.1`](https://github.com/lamemustafa/pack/releases/tag/v0.3.1)
+  includes GSTR-1 support. The Chrome ZIP asset is
+  `https://github.com/lamemustafa/pack/releases/download/v0.3.1/complyeazepack-0.3.1-chrome.zip`
+  with SHA-256
+  `e3afec97c0821cd99fb951d7d811e4c22810a36dacfcfdf3c0439163da33edcd`.
+- Required update: submit the `v0.3.1` package, listing copy, screenshots,
+  promotional image, privacy-practices declarations, and reviewer instructions
+  for Chrome Web Store review.
+- Publication state: the `v0.3.1` Chrome Web Store package/listing update is not
+  live. It is pending dashboard submission, Chrome Web Store review, and
+  publication.
 - External boundary: no official, GSTN-approved, filing, reconciliation, all GST
   returns, backend sync, or professional-review claim.
 
@@ -43,6 +53,17 @@ ComplyEaze Pack is an independent third-party tool. It is not affiliated with,
 endorsed by, or operated by GSTN, CBIC, or the Government of India.
 ```
 
+## Release Evidence For Dashboard Update
+
+| Item                  | Evidence                                                                                                                              |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Source tag            | [`v0.3.1`](https://github.com/lamemustafa/pack/releases/tag/v0.3.1)                                                                   |
+| Source commit         | `ed7ec9842eb483d6ef76af7d3a5995259cb34a17`                                                                                            |
+| Chrome ZIP asset      | `complyeazepack-0.3.1-chrome.zip`                                                                                                     |
+| Chrome ZIP SHA-256    | `e3afec97c0821cd99fb951d7d811e4c22810a36dacfcfdf3c0439163da33edcd`                                                                    |
+| Release workflow      | GitHub Actions run `28694333443`; package, exact-ZIP verification, provenance, and GitHub release asset upload passed.                |
+| Store publication gap | The same release run skipped `Submit Chrome Web Store package`; no `v0.3.1` standalone Chrome Web Store workflow run is recorded yet. |
+
 ## Asset Inventory
 
 Committed brand and icon assets:
@@ -56,8 +77,21 @@ Committed brand and icon assets:
 | `public/icons/icon-256.png`           | `aec654f6dda6525fdbb03448c99e917a8143332c3e2d1b1bb4ccded83cc5c2c6` |
 | `public/icons/icon-512.png`           | `6380a02494c5da2c1cd4297dcfb5bc53448d95cd117d804c5a5d38f1f390def3` |
 
-Dashboard-held assets that still need review before GSTR-1 store-facing claims:
+Synthetic source-controlled Store asset drafts:
 
-- Store screenshots using synthetic or redacted data only.
-- Promotional tiles if the dashboard requires them.
+| Asset                                                                  | Intended dashboard slot        | Notes                                                |
+| ---------------------------------------------------------------------- | ------------------------------ | ---------------------------------------------------- |
+| `docs/chrome-web-store/assets/small-promo-440x280.svg`                 | Small promotional image source | Synthetic, no portal/account data.                   |
+| `docs/chrome-web-store/assets/marquee-promo-1400x560.svg`              | Optional marquee image source  | Synthetic, no portal/account data.                   |
+| `docs/chrome-web-store/assets/screenshot-local-downloads-1280x800.svg` | Screenshot source              | Synthetic extension UI mock, visibly demo-only data. |
+
+Chrome's current image guidance is recorded in
+[`docs/chrome-web-store/assets/README.md`](assets/README.md). Export dashboard
+uploads from the source assets only after visual QA confirms the generated PNGs
+remain legible and contain no real GST Portal/account data.
+
+Dashboard-held items that still need review before GSTR-1 store-facing claims:
+
+- Store screenshot PNG exports using synthetic or redacted data only.
+- Promotional image PNG exports if the dashboard requires them.
 - Privacy-practices declarations aligned with `docs/PRIVACY_QA.md`.

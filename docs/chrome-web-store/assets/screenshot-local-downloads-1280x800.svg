@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800" role="img" aria-labelledby="title desc">
+  <title id="title">Synthetic Pack local downloads screenshot source</title>
+  <desc id="desc">Synthetic 1280 by 800 screenshot source for Chrome Web Store listing. All GST details are demo-only or redacted.</desc>
+  <defs>
+    <linearGradient id="chrome" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f8fafc" />
+      <stop offset="1" stop-color="#e2e8f0" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#0f172a" flood-opacity="0.18" />
+    </filter>
+  </defs>
+  <rect width="1280" height="800" fill="#eef2f7" />
+  <rect x="56" y="52" width="1168" height="696" rx="24" fill="url(#chrome)" filter="url(#shadow)" />
+  <rect x="56" y="52" width="1168" height="74" rx="24" fill="#f8fafc" />
+  <circle cx="98" cy="90" r="10" fill="#ef4444" />
+  <circle cx="132" cy="90" r="10" fill="#f59e0b" />
+  <circle cx="166" cy="90" r="10" fill="#22c55e" />
+  <rect x="220" y="74" width="640" height="32" rx="16" fill="#e2e8f0" />
+  <text x="244" y="96" fill="#64748b" font-family="Inter, Arial, sans-serif" font-size="15">GST Portal filed returns page</text>
+  <rect x="86" y="150" width="706" height="552" rx="20" fill="#ffffff" />
+  <text x="128" y="210" fill="#0f172a" font-family="Inter, Arial, sans-serif" font-size="36" font-weight="750">GST Filed Returns</text>
+  <text x="128" y="250" fill="#64748b" font-family="Inter, Arial, sans-serif" font-size="18">Synthetic demo account. No real portal data.</text>
+  <rect x="128" y="298" width="190" height="54" rx="12" fill="#f1f5f9" />
+  <text x="150" y="331" fill="#334155" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="700">FY 2025-26</text>
+  <rect x="338" y="298" width="148" height="54" rx="12" fill="#f1f5f9" />
+  <text x="369" y="331" fill="#334155" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="700">May</text>
+  <rect x="506" y="298" width="172" height="54" rx="12" fill="#0f766e" />
+  <text x="548" y="331" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="750">GSTR-1</text>
+  <rect x="128" y="388" width="612" height="78" rx="16" fill="#f8fafc" stroke="#e2e8f0" />
+  <text x="154" y="421" fill="#0f172a" font-family="Inter, Arial, sans-serif" font-size="20" font-weight="750">Summary PDF</text>
+  <text x="154" y="449" fill="#64748b" font-family="Inter, Arial, sans-serif" font-size="15">Available after opening the filed return summary.</text>
+  <rect x="584" y="410" width="122" height="34" rx="17" fill="#0f766e" />
+  <text x="611" y="432" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="750">Download</text>
+  <rect x="128" y="490" width="612" height="78" rx="16" fill="#f8fafc" stroke="#e2e8f0" />
+  <text x="154" y="523" fill="#0f172a" font-family="Inter, Arial, sans-serif" font-size="20" font-weight="750">E-invoice details Excel</text>
+  <text x="154" y="551" fill="#64748b" font-family="Inter, Arial, sans-serif" font-size="15">Optional. Downloaded only when the portal provides it.</text>
+  <rect x="584" y="512" width="122" height="34" rx="17" fill="#243b53" />
+  <text x="611" y="534" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="750">Optional</text>
+  <rect x="128" y="610" width="402" height="42" rx="21" fill="#fef3c7" />
+  <text x="154" y="637" fill="#92400e" font-family="Inter, Arial, sans-serif" font-size="15" font-weight="700">GSTIN and taxpayer fields redacted in public assets</text>
+  <rect x="840" y="150" width="334" height="552" rx="28" fill="#ffffff" filter="url(#shadow)" />
+  <rect x="840" y="150" width="334" height="86" rx="28" fill="#0f6b73" />
+  <text x="884" y="204" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="26" font-weight="800">ComplyEaze Pack</text>
+  <text x="884" y="273" fill="#0f172a" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="750">Local filed-return run</text>
+  <text x="884" y="306" fill="#64748b" font-family="Inter, Arial, sans-serif" font-size="15">Active GST Portal session detected</text>
+  <rect x="884" y="338" width="246" height="50" rx="14" fill="#f1f5f9" />
+  <text x="908" y="369" fill="#334155" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="700">Return type: GSTR-1</text>
+  <rect x="884" y="408" width="246" height="50" rx="14" fill="#f1f5f9" />
+  <text x="908" y="439" fill="#334155" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="700">Period: May 2025</text>
+  <rect x="884" y="482" width="246" height="62" rx="18" fill="#0f766e" />
+  <text x="934" y="520" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="800">Download locally</text>
+  <rect x="884" y="574" width="246" height="56" rx="16" fill="#ecfeff" stroke="#99f6e4" />
+  <text x="908" y="598" fill="#0f766e" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="750">Synthetic screenshot</text>
+  <text x="908" y="619" fill="#0f766e" font-family="Inter, Arial, sans-serif" font-size="14">No real GST data shown</text>
+</svg>
