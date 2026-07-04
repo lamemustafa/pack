@@ -14,12 +14,14 @@ be reviewed in the Chrome Web Store Developer Dashboard.
   `https://github.com/lamemustafa/pack/releases/download/v0.3.2/complyeazepack-0.3.2-chrome.zip`
   with SHA-256
   `6bd41a364a2466f0f255bef1b44e93694cc8d95431e7661fea5be3d52c9cdddb`.
-- Required update: submit the `v0.3.2` package, listing copy, screenshots,
+- Package update: the `v0.3.2` package was submitted through protected workflow
+  dispatch on 2026-07-04. Run `28704776806` uploaded the verified package with
+  upload state `SUCCEEDED`, publish state `PENDING_REVIEW`, and no warnings.
+- Required dashboard update: upload/review listing copy, screenshots,
   promotional image, privacy-practices declarations, and reviewer instructions
-  for Chrome Web Store review.
-- Publication state: the `v0.3.2` Chrome Web Store package/listing update is not
-  live. It is pending dashboard submission, Chrome Web Store review, and
-  publication.
+  in the Chrome Web Store Developer Dashboard.
+- Publication state: the `v0.3.2` package update is pending Chrome Web Store
+  review/publication. Dashboard listing/assets review state is not recorded yet.
 - External boundary: no official, GSTN-approved, filing, reconciliation, all GST
   returns, backend sync, or professional-review claim.
 
@@ -55,14 +57,16 @@ endorsed by, or operated by GSTN, CBIC, or the Government of India.
 
 ## Release Evidence For Dashboard Update
 
-| Item                  | Evidence                                                                                                                              |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| Source tag            | [`v0.3.2`](https://github.com/lamemustafa/pack/releases/tag/v0.3.2)                                                                   |
-| Source commit         | `7bc2c2604f045c1d5547f6ab63a84dbb91de161e`                                                                                            |
-| Chrome ZIP asset      | `complyeazepack-0.3.2-chrome.zip`                                                                                                     |
-| Chrome ZIP SHA-256    | `6bd41a364a2466f0f255bef1b44e93694cc8d95431e7661fea5be3d52c9cdddb`                                                                    |
-| Release workflow      | GitHub Actions run `28702352034`; package, exact-ZIP verification, provenance, and GitHub release asset upload passed.                |
-| Store publication gap | The same release run skipped `Submit Chrome Web Store package`; no `v0.3.2` standalone Chrome Web Store workflow run is recorded yet. |
+| Item                  | Evidence                                                                                                                  |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Source tag            | [`v0.3.2`](https://github.com/lamemustafa/pack/releases/tag/v0.3.2)                                                       |
+| Source commit         | `7bc2c2604f045c1d5547f6ab63a84dbb91de161e`                                                                                |
+| Chrome ZIP asset      | `complyeazepack-0.3.2-chrome.zip`                                                                                         |
+| Chrome ZIP SHA-256    | `6bd41a364a2466f0f255bef1b44e93694cc8d95431e7661fea5be3d52c9cdddb`                                                        |
+| Release workflow      | GitHub Actions run `28702352034`; package, exact-ZIP verification, provenance, and GitHub release asset upload passed.    |
+| Store dry-run         | GitHub Actions run `28704697827`; downloaded and verified `v0.3.2` release assets and produced a dry-run publish request. |
+| Store package submit  | GitHub Actions run `28704776806`; upload state `SUCCEEDED`, publish state `PENDING_REVIEW`, warnings `[]`.                |
+| Store publication gap | Chrome Web Store review/publication and dashboard listing/assets review state are not recorded yet.                       |
 
 ## Asset Inventory
 
