@@ -20,7 +20,7 @@ describe("Chrome Web Store asset exporter", () => {
     const result = await runExporter(exportDir);
 
     expect(result.status).toBe(0);
-    expect(result.output).toContain("Exported 3 Chrome Web Store assets");
+    expect(result.output).toContain("Exported 7 Chrome Web Store assets");
 
     const manifest = JSON.parse(
       await readFile(path.join(exportDir, "asset-hashes.json"), "utf8"),
@@ -42,6 +42,30 @@ describe("Chrome Web Store asset exporter", () => {
       }),
       expect.objectContaining({
         file: "screenshot-local-downloads-1280x800.png",
+        height: 800,
+        sha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+        width: 1280,
+      }),
+      expect.objectContaining({
+        file: "screenshot-gstr3b-summary-pdf-1280x800.png",
+        height: 800,
+        sha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+        width: 1280,
+      }),
+      expect.objectContaining({
+        file: "screenshot-local-review-state-1280x800.png",
+        height: 800,
+        sha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+        width: 1280,
+      }),
+      expect.objectContaining({
+        file: "screenshot-options-clear-data-1280x800.png",
+        height: 800,
+        sha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+        width: 1280,
+      }),
+      expect.objectContaining({
+        file: "screenshot-reviewer-demo-1280x800.png",
         height: 800,
         sha256: expect.stringMatching(/^[a-f0-9]{64}$/),
         width: 1280,

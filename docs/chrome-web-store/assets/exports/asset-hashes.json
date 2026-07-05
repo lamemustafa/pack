@@ -21,6 +21,34 @@
       "sha256": "76b5917b8c3e2d516f4a9d293078989b035e529306527c11058003c505339e8e",
       "source": "screenshot-local-downloads-1280x800.svg",
       "width": 1280
+    },
+    {
+      "file": "screenshot-gstr3b-summary-pdf-1280x800.png",
+      "height": 800,
+      "sha256": "16b47ddaf6426614947ae855529182f7980373d03c3517cf964d79c89fde599e",
+      "source": "screenshot-gstr3b-summary-pdf-1280x800.svg",
+      "width": 1280
+    },
+    {
+      "file": "screenshot-local-review-state-1280x800.png",
+      "height": 800,
+      "sha256": "39a74caa403ec96c2d6fe2850163145ee6a99fcfa692eeac0927bfb2e1db364a",
+      "source": "screenshot-local-review-state-1280x800.svg",
+      "width": 1280
+    },
+    {
+      "file": "screenshot-options-clear-data-1280x800.png",
+      "height": 800,
+      "sha256": "b10bca84078df36b62f864827e157dda0b063b845812bfe0c8c93359db003d15",
+      "source": "screenshot-options-clear-data-1280x800.svg",
+      "width": 1280
+    },
+    {
+      "file": "screenshot-reviewer-demo-1280x800.png",
+      "height": 800,
+      "sha256": "02a599565c113e83d7b47283946143f190a43f214f846188de4547853482338b",
+      "source": "screenshot-reviewer-demo-1280x800.svg",
+      "width": 1280
     }
   ]
 }

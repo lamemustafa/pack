@@ -83,20 +83,28 @@ Committed brand and icon assets:
 
 Synthetic source-controlled Store asset drafts:
 
-| Asset                                                                  | Intended dashboard slot        | Notes                                                |
-| ---------------------------------------------------------------------- | ------------------------------ | ---------------------------------------------------- |
-| `docs/chrome-web-store/assets/small-promo-440x280.svg`                 | Small promotional image source | Synthetic, no portal/account data.                   |
-| `docs/chrome-web-store/assets/marquee-promo-1400x560.svg`              | Optional marquee image source  | Synthetic, no portal/account data.                   |
-| `docs/chrome-web-store/assets/screenshot-local-downloads-1280x800.svg` | Screenshot source              | Synthetic extension UI mock, visibly demo-only data. |
+| Asset                                                                     | Intended dashboard slot        | Notes                                     |
+| ------------------------------------------------------------------------- | ------------------------------ | ----------------------------------------- |
+| `docs/chrome-web-store/assets/small-promo-440x280.svg`                    | Small promotional image source | Synthetic, no portal/account data.        |
+| `docs/chrome-web-store/assets/marquee-promo-1400x560.svg`                 | Optional marquee image source  | Synthetic, no portal/account data.        |
+| `docs/chrome-web-store/assets/screenshot-local-downloads-1280x800.svg`    | Screenshot source              | Synthetic GSTR-1 PDF/Excel view.          |
+| `docs/chrome-web-store/assets/screenshot-gstr3b-summary-pdf-1280x800.svg` | Screenshot source              | Synthetic GSTR-3B PDF view.               |
+| `docs/chrome-web-store/assets/screenshot-local-review-state-1280x800.svg` | Screenshot source              | Synthetic local target-review state.      |
+| `docs/chrome-web-store/assets/screenshot-options-clear-data-1280x800.svg` | Screenshot source              | Synthetic local storage/privacy controls. |
+| `docs/chrome-web-store/assets/screenshot-reviewer-demo-1280x800.svg`      | Screenshot source              | Synthetic reviewer demo output.           |
 
 Generated Store dashboard PNG exports:
 
-| Asset                                                                          | Intended dashboard slot | SHA-256                                                            |
-| ------------------------------------------------------------------------------ | ----------------------- | ------------------------------------------------------------------ |
-| `docs/chrome-web-store/assets/exports/small-promo-440x280.png`                 | Small promotional image | `dd2be16f7f660fc5d6222dfd22cc64443cfc86df95c3ecdaed8ccee39d3461dd` |
-| `docs/chrome-web-store/assets/exports/marquee-promo-1400x560.png`              | Optional marquee image  | `a9e387d317e2ff66ab6357a0b142852f2980a8fa31642e3e9a4b32620fd8ac98` |
-| `docs/chrome-web-store/assets/exports/screenshot-local-downloads-1280x800.png` | Screenshot              | `76b5917b8c3e2d516f4a9d293078989b035e529306527c11058003c505339e8e` |
-| `docs/chrome-web-store/assets/exports/asset-hashes.json`                       | Export manifest         | Tracks file names, dimensions, sources, and SHA-256 hashes.        |
+| Asset                                                                             | Intended dashboard slot | SHA-256                                                            |
+| --------------------------------------------------------------------------------- | ----------------------- | ------------------------------------------------------------------ |
+| `docs/chrome-web-store/assets/exports/small-promo-440x280.png`                    | Small promotional image | `dd2be16f7f660fc5d6222dfd22cc64443cfc86df95c3ecdaed8ccee39d3461dd` |
+| `docs/chrome-web-store/assets/exports/marquee-promo-1400x560.png`                 | Optional marquee image  | `a9e387d317e2ff66ab6357a0b142852f2980a8fa31642e3e9a4b32620fd8ac98` |
+| `docs/chrome-web-store/assets/exports/screenshot-local-downloads-1280x800.png`    | Screenshot              | `76b5917b8c3e2d516f4a9d293078989b035e529306527c11058003c505339e8e` |
+| `docs/chrome-web-store/assets/exports/screenshot-gstr3b-summary-pdf-1280x800.png` | Screenshot              | `16b47ddaf6426614947ae855529182f7980373d03c3517cf964d79c89fde599e` |
+| `docs/chrome-web-store/assets/exports/screenshot-local-review-state-1280x800.png` | Screenshot              | `39a74caa403ec96c2d6fe2850163145ee6a99fcfa692eeac0927bfb2e1db364a` |
+| `docs/chrome-web-store/assets/exports/screenshot-options-clear-data-1280x800.png` | Screenshot              | `b10bca84078df36b62f864827e157dda0b063b845812bfe0c8c93359db003d15` |
+| `docs/chrome-web-store/assets/exports/screenshot-reviewer-demo-1280x800.png`      | Screenshot              | `02a599565c113e83d7b47283946143f190a43f214f846188de4547853482338b` |
+| `docs/chrome-web-store/assets/exports/asset-hashes.json`                          | Export manifest         | Tracks file names, dimensions, sources, and SHA-256 hashes.        |
 
 Chrome's current image guidance is recorded in
 [`docs/chrome-web-store/assets/README.md`](assets/README.md). Export dashboard

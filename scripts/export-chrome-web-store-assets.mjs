@@ -26,6 +26,30 @@ const ASSETS = [
     source: "screenshot-local-downloads-1280x800.svg",
     width: 1280,
   },
+  {
+    file: "screenshot-gstr3b-summary-pdf-1280x800.png",
+    height: 800,
+    source: "screenshot-gstr3b-summary-pdf-1280x800.svg",
+    width: 1280,
+  },
+  {
+    file: "screenshot-local-review-state-1280x800.png",
+    height: 800,
+    source: "screenshot-local-review-state-1280x800.svg",
+    width: 1280,
+  },
+  {
+    file: "screenshot-options-clear-data-1280x800.png",
+    height: 800,
+    source: "screenshot-options-clear-data-1280x800.svg",
+    width: 1280,
+  },
+  {
+    file: "screenshot-reviewer-demo-1280x800.png",
+    height: 800,
+    source: "screenshot-reviewer-demo-1280x800.svg",
+    width: 1280,
+  },
 ];
 
 export async function exportChromeWebStoreAssets({
