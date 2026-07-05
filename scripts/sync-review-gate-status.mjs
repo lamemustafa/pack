@@ -163,9 +163,28 @@ function runPackPreflight(target) {
       `warn: PR #${target.number} targets ${baseRefName}; Pack release gates expect master.`,
     );
   }
+  checkGuidanceFreshness(target, issues, baseRefName);
 
   for (const issue of issues) console.error(`error: ${issue}`);
   return { ok: issues.length === 0 };
+}
+
+function checkGuidanceFreshness(target, issues, baseRefName) {
+  const comparison = runJson([
+    "api",
+    `repos/${repo}/compare/${target.headRefOid}...${baseRefName}`,
+  ]);
+  const staleGuidanceFiles = (comparison.files ?? [])
+    .map((file) => file.filename)
+    .filter((filename) => ["AGENTS.md", "docs/AGENT_REVIEW_RECTIFY.md"].includes(filename));
+
+  if (staleGuidanceFiles.length > 0) {
+    issues.push(
+      `${baseRefName} has Pack guidance changes not present in PR #${target.number}: ${staleGuidanceFiles.join(
+        ", ",
+      )}`,
+    );
+  }
 }
 
 function readPullRequestFile(repository, ref, filePath) {
@@ -262,8 +281,56 @@ function setReviewGateStatus(target, state, description, options = {}) {
 }
 
 function readLatestReviewGateStatus(target) {
-  const statuses = runJson(["api", `repos/${repo}/commits/${target.headRefOid}/statuses`]);
-  return statuses.find((status) => status.context === "Review gate") ?? null;
+  const candidates = [];
+  let readError = null;
+
+  try {
+    const statuses = runJson(["api", `repos/${repo}/commits/${target.headRefOid}/statuses`]);
+    candidates.push(
+      ...statuses
+        .filter((status) => status.context === "Review gate")
+        .map((status) => ({
+          state: status.state,
+          description: status.description,
+          updatedAt: status.updated_at,
+        })),
+    );
+  } catch (error) {
+    readError = error;
+  }
+
+  try {
+    const checkRuns = runJson([
+      "api",
+      `repos/${repo}/commits/${target.headRefOid}/check-runs?check_name=Review%20gate`,
+    ]);
+    candidates.push(
+      ...(checkRuns.check_runs ?? []).map((checkRun) => ({
+        state: normaliseCheckRunState(checkRun),
+        description: checkRun.output?.title ?? checkRun.conclusion ?? checkRun.status,
+        updatedAt: checkRun.completed_at ?? checkRun.started_at ?? checkRun.created_at,
+      })),
+    );
+  } catch (error) {
+    readError ??= error;
+  }
+
+  if (candidates.length === 0) {
+    if (readError) throw readError;
+    return null;
+  }
+
+  return candidates.sort(compareStatusUpdatedAt).at(0) ?? null;
+}
+
+function normaliseCheckRunState(checkRun) {
+  if (checkRun.status !== "completed") return "pending";
+  if (["success", "neutral", "skipped"].includes(checkRun.conclusion)) return "success";
+  return "failure";
+}
+
+function compareStatusUpdatedAt(left, right) {
+  return Date.parse(right.updatedAt ?? "") - Date.parse(left.updatedAt ?? "");
 }
 
 function readArgValue(name) {

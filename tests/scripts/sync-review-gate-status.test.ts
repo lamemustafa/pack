@@ -193,6 +193,91 @@ describe("sync review gate status", () => {
     expect(output).toContain("Clearing stale Review gate success");
     expect(states.map((status) => status.state)).toEqual(["failure"]);
   });
+
+  it("clears a stale check-run success when the required head review disappears", () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), "pack-sync-review-gate-"));
+    const statusLog = path.join(tempDir, "statuses.jsonl");
+    const fakeGh = path.join(tempDir, "gh");
+    writeFileSync(fakeGh, fakeGhScript(), "utf8");
+    chmodSync(fakeGh, 0o755);
+
+    const output = execFileSync(
+      process.execPath,
+      [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--all-open",
+        "--run-url",
+        "https://github.com/lamemustafa/pack/actions/runs/1",
+        "--strict-head-review",
+        "--required-review-author",
+        "chatgpt-codex-connector",
+        "--wait-head-review-ms",
+        "0",
+        "--allow-missing-head-review",
+        "--skip-pending-status",
+      ],
+      {
+        cwd: rootDir,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          PATH: `${tempDir}${path.delimiter}${process.env.PATH ?? ""}`,
+          STATUS_LOG: statusLog,
+          PACK_SYNC_MISSING_HEAD_REVIEW: "1",
+          PACK_SYNC_EXISTING_REVIEW_GATE_CHECK_RUN: "success",
+        },
+      },
+    );
+
+    const states = readFileSync(statusLog, "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { state: string });
+
+    expect(output).toContain("review-gate:allowed-missing-head-review");
+    expect(output).toContain("Clearing stale Review gate success");
+    expect(states.map((status) => status.state)).toEqual(["failure"]);
+  });
+
+  it("fails when base AGENTS guidance is newer than the PR head", () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), "pack-sync-review-gate-"));
+    const statusLog = path.join(tempDir, "statuses.jsonl");
+    const fakeGh = path.join(tempDir, "gh");
+    writeFileSync(fakeGh, fakeGhScript(), "utf8");
+    chmodSync(fakeGh, 0o755);
+
+    expect(() =>
+      execFileSync(
+        process.execPath,
+        [
+          scriptPath,
+          "--repo",
+          "lamemustafa/pack",
+          "--pr",
+          "58",
+          "--run-url",
+          "https://github.com/lamemustafa/pack/pull/58",
+          "--strict-head-review",
+          "--required-review-author",
+          "chatgpt-codex-connector",
+          "--wait-head-review-ms",
+          "0",
+        ],
+        {
+          cwd: rootDir,
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            PATH: `${tempDir}${path.delimiter}${process.env.PATH ?? ""}`,
+            STATUS_LOG: statusLog,
+            PACK_SYNC_STALE_GUIDANCE: "1",
+          },
+        },
+      ),
+    ).toThrow(/Pack guidance changes not present/);
+  });
 });
 
 function fakeGhScript() {
@@ -235,8 +320,33 @@ if (args[0] === "api" && args[1] === "repos/lamemustafa/pack/commits/head-sha/st
     ]));
     process.exit(0);
   }
+  if (process.env.PACK_SYNC_EXISTING_REVIEW_GATE_CHECK_RUN) {
+    console.log(JSON.stringify([]));
+    process.exit(0);
+  }
   console.error("simulated status read timeout");
   process.exit(1);
+}
+
+if (args[0] === "api" && args[1] === "repos/lamemustafa/pack/commits/head-sha/check-runs?check_name=Review%20gate") {
+  const conclusion = process.env.PACK_SYNC_EXISTING_REVIEW_GATE_CHECK_RUN;
+  console.log(JSON.stringify({
+    check_runs: conclusion ? [{
+      name: "Review gate",
+      status: "completed",
+      conclusion,
+      completed_at: "2026-07-05T05:30:00Z",
+      output: { title: "No current-head review blockers found." }
+    }] : []
+  }));
+  process.exit(0);
+}
+
+if (args[0] === "api" && args[1] === "repos/lamemustafa/pack/compare/head-sha...master") {
+  console.log(JSON.stringify({
+    files: process.env.PACK_SYNC_STALE_GUIDANCE === "1" ? [{ filename: "AGENTS.md" }] : []
+  }));
+  process.exit(0);
 }
 
 if (args[0] === "api" && args[1] === "repos/lamemustafa/pack/contents/.github/PULL_REQUEST_TEMPLATE.md?ref=head-sha") {
