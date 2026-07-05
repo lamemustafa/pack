@@ -11,6 +11,7 @@ const waitHeadReviewMs = readNonNegativeIntegerArg("--wait-head-review-ms", 0);
 const pollIntervalMs = readNonNegativeIntegerArg("--poll-interval-ms", 10_000);
 const fixturePaths = readFixturePaths();
 const requiredReviewAuthor = readArgValue("--required-review-author");
+const expectedHeadOid = readArgValue("--expected-head-oid");
 const explicitRepo = readArgValue("--repo");
 const explicitPr = readArgValue("--pr");
 let fixtureIndex = 0;
@@ -68,6 +69,11 @@ async function fetchEvaluatedPr() {
     const result = fetchReviewGraph();
     const pr = result.data?.repository?.pullRequest;
     if (!pr) fail(`Could not fetch PR #${prNumber} from ${repo}.`);
+    if (expectedHeadOid && pr.headRefOid !== expectedHeadOid) {
+      fail(
+        `PR head changed while evaluating ${repo}#${prNumber}: expected ${expectedHeadOid}, found ${pr.headRefOid}.`,
+      );
+    }
 
     const evaluated = evaluatePullRequestReviewState(pr);
     if (

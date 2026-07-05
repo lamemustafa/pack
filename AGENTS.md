@@ -255,20 +255,15 @@ local-first and browser-extension-scoped when applying Sanchika guidance:
   comments: accepted, fixed with commit/test, outdated with evidence, rejected
   with evidence, or linked follow-up.
 - When GitHub context is available, run `pnpm review:gate` for normal review
-  cleanup and `pnpm review:gate -- --strict-head-review` before claiming a
-  sensitive PR is merge-ready. For release/runtime PRs, require the current-head
-  Codex bot review with
-  `pnpm review:gate -- --strict-head-review --required-review-author chatgpt-codex-connector --wait-head-review-ms 180000`.
-  Treat network/auth failure as a reported verification gap, not as a pass.
-- The PR/manual CI `Review gate` workflow must fail when the current-head Codex
-  review is missing after its wait window. Scheduled all-open sweeps may use
-  `--allow-missing-head-review` so a non-responsive external bot does not create
-  permanent red checks while the sweep still catches unresolved threads and
-  requested-changes reviews, but they must skip writing a green status when the
-  only passing condition is an allowed missing current-head review. The workflow
-  runs from trusted default-branch code and writes a `Review gate` commit status
-  for PR heads; its scheduled all-open sweep is the backstop after review threads
-  are resolved without a new push.
+  cleanup and `pnpm review:gate -- --strict-head-review --allow-missing-head-review`
+  before claiming a sensitive PR is merge-ready. Unresolved threads and
+  requested-changes reviews block. Missing current-head Codex review objects are
+  audit gaps unless a guaranteed current-head reviewer app is configured. Treat
+  network/auth failure as a reported verification gap, not as a pass.
+- The CI `Review gate` workflow may use `--allow-missing-head-review` so a
+  non-responsive external bot does not create a permanent red check. That mode is
+  still a findings gate: unresolved review threads and requested-changes reviews
+  remain hard blockers.
 
 ## Required Checks
 

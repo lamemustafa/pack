@@ -139,6 +139,30 @@ describe("PR review gate", () => {
     ).toThrow(/Requested-changes reviews/);
   });
 
+  it("fails when the evaluated PR head does not match the expected SHA", () => {
+    const fixturePath = writeFixture(
+      "head-mismatch",
+      reviewFixture({
+        headRefOid: "changed-sha",
+        reviews: [review({ state: "COMMENTED", commit: "changed-sha" })],
+      }),
+    );
+
+    expect(() =>
+      execFileSync(process.execPath, [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture",
+        fixturePath,
+        "--expected-head-oid",
+        "older-sha",
+      ]),
+    ).toThrow(/PR head changed while evaluating/);
+  });
+
   it("fails strict mode when the required current-head review is missing", () => {
     const fixturePath = writeFixture(
       "missing-head-review",
