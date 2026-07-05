@@ -24,6 +24,7 @@ describe("Pack CI workflow", () => {
   it("uses allowed pinned actions, audits dependencies, and prints verified ZIP checksum evidence", async () => {
     const workflow = await readFile(path.join(rootDir, ".github", "workflows", "ci.yml"), "utf8");
 
+    expect(workflow).toContain("workflow_dispatch:");
     expect(workflow).not.toMatch(/uses:\s+[^@\s]+@[vV]\d+/);
     expect(workflow).toContain("pnpm exec playwright install --with-deps chromium");
     expect(workflow).toContain("pnpm audit --audit-level high");
