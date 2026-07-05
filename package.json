@@ -48,7 +48,7 @@
     "verify:local": "pnpm install --frozen-lockfile && node scripts/run-dependency-audit.mjs && wxt prepare && prettier --check . && eslint . --max-warnings 0 && tsc --noEmit && vitest run && wxt build && node scripts/verify-extension-package.mjs .output/chrome-mv3 && git diff --check",
     "verify": "pnpm verify:local",
     "verify:release": "pnpm verify:local && pnpm verify:clean && wxt zip && node scripts/verify-extension-zip.mjs",
-    "verify:pr": "pnpm workflow:preflight && pnpm review:gate -- --strict-head-review --required-review-author chatgpt-codex-connector --wait-head-review-ms 180000 --poll-interval-ms 10000"
+    "verify:pr": "pnpm workflow:preflight && pnpm review:gate -- --strict-head-review --required-review-author chatgpt-codex-connector --wait-head-review-ms 180000 --poll-interval-ms 10000 --allow-missing-head-review"
   },
   "dependencies": {
     "@wxt-dev/module-react": "^1.1.3",

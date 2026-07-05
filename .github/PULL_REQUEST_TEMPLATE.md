@@ -79,7 +79,7 @@ Examples:
 - [ ] `node scripts/verify-github-release-assets.mjs --tag <tag> --zip <zip> --checksum <sha256> --provenance <json>` when release assets exist
 - [ ] `node scripts/publish-chrome-web-store.mjs --zip .output/<zip> --provenance .output/pack-release-provenance.v1.json --publisher-id <id> --dry-run true`
 - [ ] `git diff --check`
-- [ ] `pnpm review:gate -- --strict-head-review --required-review-author chatgpt-codex-connector --wait-head-review-ms 180000` before merge/readiness claim, or reason not run:
+- [ ] `pnpm review:gate -- --strict-head-review --required-review-author chatgpt-codex-connector --wait-head-review-ms 180000 --allow-missing-head-review` before merge/readiness claim, with missing Codex review recorded as an audit gap if reported:
 
 ## Artifact Evidence
 

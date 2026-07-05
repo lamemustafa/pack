@@ -107,5 +107,6 @@ jobs:
           pnpm review:gate -- --repo "${{ github.repository }}" --pr "${{ steps.resolve-pr.outputs.pr }}"
           --strict-head-review --required-review-author chatgpt-codex-connector
           --wait-head-review-ms 180000 --poll-interval-ms 10000 --allow-missing-head-review
+          --expected-head-oid "${{ steps.resolve-pr.outputs.head_sha }}"
         env:
           GH_TOKEN: ${{ github.token }}

@@ -11,9 +11,11 @@ const waitHeadReviewMs = readNonNegativeIntegerArg("--wait-head-review-ms", 0);
 const pollIntervalMs = readNonNegativeIntegerArg("--poll-interval-ms", 10_000);
 const fixturePaths = readFixturePaths();
 const requiredReviewAuthor = readArgValue("--required-review-author");
+const expectedHeadOid = readArgValue("--expected-head-oid");
 const explicitRepo = readArgValue("--repo");
 const explicitPr = readArgValue("--pr");
 let fixtureIndex = 0;
+const ALLOWED_MISSING_HEAD_REVIEW_MARKER = "review-gate:allowed-missing-head-review";
 
 const repo =
   explicitRepo ?? runText(["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"]);
@@ -31,6 +33,7 @@ const missingHeadReview = strictHeadReview && headReviews.length === 0;
 if (missingHeadReview) {
   const message = `No review was found for current head ${pr.headRefOid}.`;
   if (allowMissingHeadReview) {
+    console.log(ALLOWED_MISSING_HEAD_REVIEW_MARKER);
     console.warn(`${message} Continuing because --allow-missing-head-review was set.`);
   } else {
     console.error(message);
@@ -66,6 +69,11 @@ async function fetchEvaluatedPr() {
     const result = fetchReviewGraph();
     const pr = result.data?.repository?.pullRequest;
     if (!pr) fail(`Could not fetch PR #${prNumber} from ${repo}.`);
+    if (expectedHeadOid && pr.headRefOid !== expectedHeadOid) {
+      fail(
+        `PR head changed while evaluating ${repo}#${prNumber}: expected ${expectedHeadOid}, found ${pr.headRefOid}.`,
+      );
+    }
 
     const evaluated = evaluatePullRequestReviewState(pr);
     if (
@@ -90,7 +98,7 @@ function evaluatePullRequestReviewState(pr) {
     .map((state) => state.blockingReview)
     .filter(Boolean);
   const headReviews = Array.from(authorStates.values())
-    .map((state) => state.latestSubmittedReview)
+    .map((state) => state.latestCurrentHeadReview)
     .filter(Boolean)
     .filter(
       (review) =>
@@ -102,27 +110,25 @@ function evaluatePullRequestReviewState(pr) {
 
 function reduceSubmittedCurrentHeadReviewsByAuthor(reviews, headRefOid) {
   const authorStates = new Map();
-  const currentHeadReviews = reviews
-    .filter(
-      (review) =>
-        review.state !== "PENDING" &&
-        review.state !== "DISMISSED" &&
-        (review.commit?.oid === headRefOid ||
-          (review.state === "CHANGES_REQUESTED" && !review.commit?.oid)),
-    )
+  const submittedReviews = reviews
+    .filter((review) => review.state !== "PENDING" && review.state !== "DISMISSED")
     .sort(compareReviewSubmittedAt);
 
-  for (const review of currentHeadReviews) {
+  for (const review of submittedReviews) {
     const author = normaliseAuthorLogin(review.author?.login) || "unknown";
 
     const previous = authorStates.get(author) ?? {
       latestSubmittedReview: null,
+      latestCurrentHeadReview: null,
       blockingReview: null,
     };
+    const isCurrentHeadReview = review.commit?.oid === headRefOid;
+    const latestCurrentHeadReview = isCurrentHeadReview ? review : previous.latestCurrentHeadReview;
 
     if (review.state === "CHANGES_REQUESTED") {
       authorStates.set(author, {
         latestSubmittedReview: review,
+        latestCurrentHeadReview,
         blockingReview: review,
       });
       continue;
@@ -131,7 +137,11 @@ function reduceSubmittedCurrentHeadReviewsByAuthor(reviews, headRefOid) {
     if (review.state === "APPROVED") {
       authorStates.set(author, {
         latestSubmittedReview: review,
-        blockingReview: null,
+        latestCurrentHeadReview,
+        blockingReview:
+          previous.blockingReview?.commit?.oid === headRefOid && !isCurrentHeadReview
+            ? previous.blockingReview
+            : null,
       });
       continue;
     }
@@ -139,7 +149,13 @@ function reduceSubmittedCurrentHeadReviewsByAuthor(reviews, headRefOid) {
     if (review.state === "COMMENTED") {
       authorStates.set(author, {
         latestSubmittedReview: review,
-        blockingReview: previous.blockingReview,
+        latestCurrentHeadReview,
+        blockingReview:
+          isCurrentHeadReview &&
+          previous.blockingReview?.commit?.oid &&
+          previous.blockingReview.commit.oid !== headRefOid
+            ? null
+            : previous.blockingReview,
       });
     }
   }
