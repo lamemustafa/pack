@@ -5,6 +5,10 @@ dashboard. Package upload and publish are automated separately; dashboard
 listing text, screenshots, promo assets, and privacy-practices fields must still
 be reviewed in the Chrome Web Store Developer Dashboard.
 
+Use [`dashboard-closeout.md`](dashboard-closeout.md) for the manual dashboard
+upload, privacy-practices, reviewer-instructions, and read-only status-monitor
+steps that remain after the protected package submit workflow succeeds.
+
 ## Current Public Listing
 
 - Status: V0 listing available for the existing published package.
