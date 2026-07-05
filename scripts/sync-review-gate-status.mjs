@@ -50,8 +50,10 @@ for (const target of targets) {
   if (preflightResult.ok && result.ok) {
     if (result.allowedMissingHeadReview) {
       console.log(
-        `Skipping Review gate success for #${target.number} because the current-head review is still missing.`,
+        `Writing Review gate failure for #${target.number} because the current-head review is still missing.`,
       );
+      setReviewGateStatus(target, "failure", "Required current-head review is missing.");
+      targetedFailure = true;
       continue;
     }
 

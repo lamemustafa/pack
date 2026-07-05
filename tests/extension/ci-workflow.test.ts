@@ -43,8 +43,7 @@ describe("Pack CI workflow", () => {
     expect(workflow).toContain("pull_request_target:");
     expect(workflow).toContain("schedule:");
     expect(workflow).toContain('cron: "*/5 * * * *"');
-    expect(workflow).toContain("workflow_dispatch:");
-    expect(workflow).toContain("required: true");
+    expect(workflow).not.toContain("workflow_dispatch:");
     expect(workflow).not.toContain("pull_request_review:");
     expect(workflow).not.toContain("pull_request_review_comment:");
     expect(workflow).not.toContain("issue_comment:");

@@ -1,11 +1,6 @@
 name: Review findings gate
 
 on:
-  workflow_dispatch:
-    inputs:
-      pr:
-        description: Pull request number to check
-        required: true
   pull_request_target:
     types: [opened, reopened, synchronize, ready_for_review, edited]
   schedule:
@@ -39,7 +34,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           EVENT_NAME: ${{ github.event_name }}
-          PR_NUMBER: ${{ github.event.pull_request.number || github.event.inputs.pr }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
