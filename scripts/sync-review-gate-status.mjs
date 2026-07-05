@@ -49,10 +49,23 @@ for (const target of targets) {
 
   if (preflightResult.ok && result.ok) {
     if (result.allowedMissingHeadReview) {
+      const statusOptions = allOpen
+        ? {
+            onlyIfLatestState: "success",
+            skipIfStatusUnreadable: true,
+          }
+        : {};
       console.log(
-        `Writing Review gate failure for #${target.number} because the current-head review is still missing.`,
+        allOpen
+          ? `Clearing stale Review gate success for #${target.number} if the current-head review is still missing.`
+          : `Writing Review gate failure for #${target.number} because the current-head review is still missing.`,
       );
-      setReviewGateStatus(target, "failure", "Required current-head review is missing.");
+      setReviewGateStatus(
+        target,
+        "failure",
+        "Required current-head review is missing.",
+        statusOptions,
+      );
       targetedFailure = true;
       continue;
     }
@@ -203,15 +216,28 @@ function runReviewGate(prNumber) {
   }
 }
 
-function setReviewGateStatus(target, state, description) {
+function setReviewGateStatus(target, state, description, options = {}) {
   let latestStatus = null;
   try {
     latestStatus = readLatestReviewGateStatus(target);
   } catch (error) {
+    if (options.skipIfStatusUnreadable) {
+      console.warn(
+        `warn: could not read existing Review gate status for #${target.number}; skipping ${state} status write.`,
+      );
+      process.stderr.write(String(error.stderr ?? ""));
+      return;
+    }
     console.warn(
       `warn: could not read existing Review gate status for #${target.number}; writing ${state} status anyway.`,
     );
     process.stderr.write(String(error.stderr ?? ""));
+  }
+  if (options.onlyIfLatestState && latestStatus?.state !== options.onlyIfLatestState) {
+    console.log(
+      `Review gate status is not ${options.onlyIfLatestState} for #${target.number}; skipping ${state} status write.`,
+    );
+    return;
   }
   if (latestStatus?.state === state && latestStatus?.description === description) {
     console.log(

@@ -87,8 +87,8 @@ current-head Codex review is produced after its wait window. For a release
 candidate, explicitly trigger `@codex review`, wait for the review, and keep the
 PR open for any later findings before tagging.
 The workflow is a trusted default-branch status writer with scheduled all-open
-sweeps. After resolving review threads without pushing a new commit, manually
-dispatch `Review gate` or wait for the scheduled sweep before tagging.
+sweeps. After resolving review threads without pushing a new commit, wait for the
+scheduled sweep or push a no-op commit before tagging.
 
 ## Manual clean-profile QA
 

@@ -147,10 +147,13 @@ all-open sweeps may pass `--allow-missing-head-review` so they continue catching
 unresolved review threads and requested-changes reviews without flipping every
 open PR red before the external bot responds, but they must skip writing a green
 status when the only passing condition is an allowed missing current-head review.
+For that missing-review-only case, scheduled sweeps may only clear an existing
+stale green status; they must not create a fresh red status on an otherwise
+unreviewed PR.
 The workflow runs from trusted default-branch code and writes the `Review gate`
 commit status for PR heads. Its scheduled all-open sweep is the backstop after
-review threads are resolved without a new push; manually dispatch `Review gate`
-when a specific PR needs an immediate refresh.
+review threads are resolved without a new push; push a no-op commit or wait for
+the scheduled sweep when a specific PR needs a refresh.
 
 For PRs, record the exact local commands or CI run, release ZIP/checksum
 evidence when a ZIP is produced, and the SHA-256 checksum. Treat late Codex/bot

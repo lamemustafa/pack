@@ -1,4 +1,4 @@
-import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
@@ -106,6 +106,47 @@ describe("sync review gate status", () => {
     expect(states.map((status) => status.state)).toEqual(["pending", "failure"]);
   });
 
+  it("does not create a fresh scheduled failure when only the head review is missing", () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), "pack-sync-review-gate-"));
+    const statusLog = path.join(tempDir, "statuses.jsonl");
+    const fakeGh = path.join(tempDir, "gh");
+    writeFileSync(fakeGh, fakeGhScript(), "utf8");
+    chmodSync(fakeGh, 0o755);
+
+    const output = execFileSync(
+      process.execPath,
+      [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--all-open",
+        "--run-url",
+        "https://github.com/lamemustafa/pack/actions/runs/1",
+        "--strict-head-review",
+        "--required-review-author",
+        "chatgpt-codex-connector",
+        "--wait-head-review-ms",
+        "0",
+        "--allow-missing-head-review",
+        "--skip-pending-status",
+      ],
+      {
+        cwd: rootDir,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          PATH: `${tempDir}${path.delimiter}${process.env.PATH ?? ""}`,
+          STATUS_LOG: statusLog,
+          PACK_SYNC_MISSING_HEAD_REVIEW: "1",
+        },
+      },
+    );
+
+    expect(output).toContain("review-gate:allowed-missing-head-review");
+    expect(output).toContain("Clearing stale Review gate success");
+    expect(existsSync(statusLog)).toBe(false);
+  });
+
   it("clears a stale success status when the required head review disappears", () => {
     const tempDir = mkdtempSync(path.join(tmpdir(), "pack-sync-review-gate-"));
     const statusLog = path.join(tempDir, "statuses.jsonl");
@@ -113,43 +154,35 @@ describe("sync review gate status", () => {
     writeFileSync(fakeGh, fakeGhScript(), "utf8");
     chmodSync(fakeGh, 0o755);
 
-    let output = "";
-    expect(() => {
-      try {
-        execFileSync(
-          process.execPath,
-          [
-            scriptPath,
-            "--repo",
-            "lamemustafa/pack",
-            "--pr",
-            "58",
-            "--run-url",
-            "https://github.com/lamemustafa/pack/pull/58",
-            "--strict-head-review",
-            "--required-review-author",
-            "chatgpt-codex-connector",
-            "--wait-head-review-ms",
-            "0",
-            "--allow-missing-head-review",
-          ],
-          {
-            cwd: rootDir,
-            encoding: "utf8",
-            env: {
-              ...process.env,
-              PATH: `${tempDir}${path.delimiter}${process.env.PATH ?? ""}`,
-              STATUS_LOG: statusLog,
-              PACK_SYNC_MISSING_HEAD_REVIEW: "1",
-              PACK_SYNC_EXISTING_REVIEW_GATE_STATUS: "success",
-            },
-          },
-        );
-      } catch (error) {
-        output = String((error as { stdout?: string }).stdout ?? "");
-        throw error;
-      }
-    }).toThrow();
+    const output = execFileSync(
+      process.execPath,
+      [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--all-open",
+        "--run-url",
+        "https://github.com/lamemustafa/pack/actions/runs/1",
+        "--strict-head-review",
+        "--required-review-author",
+        "chatgpt-codex-connector",
+        "--wait-head-review-ms",
+        "0",
+        "--allow-missing-head-review",
+        "--skip-pending-status",
+      ],
+      {
+        cwd: rootDir,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          PATH: `${tempDir}${path.delimiter}${process.env.PATH ?? ""}`,
+          STATUS_LOG: statusLog,
+          PACK_SYNC_MISSING_HEAD_REVIEW: "1",
+          PACK_SYNC_EXISTING_REVIEW_GATE_STATUS: "success",
+        },
+      },
+    );
 
     const states = readFileSync(statusLog, "utf8")
       .trim()
@@ -157,8 +190,8 @@ describe("sync review gate status", () => {
       .map((line) => JSON.parse(line) as { state: string });
 
     expect(output).toContain("review-gate:allowed-missing-head-review");
-    expect(output).toContain("Writing Review gate failure");
-    expect(states.map((status) => status.state)).toEqual(["pending", "failure"]);
+    expect(output).toContain("Clearing stale Review gate success");
+    expect(states.map((status) => status.state)).toEqual(["failure"]);
   });
 });
 
@@ -218,8 +251,29 @@ if (args[0] === "api" && args[1] === "-X" && args[2] === "POST" && args[3] === "
   process.exit(0);
 }
 
-if (args[0] === "api" && args[1] === "graphql") {
-  const reviews = process.env.PACK_SYNC_MISSING_HEAD_REVIEW === "1" ? [] : [
+	if (args[0] === "api" && args[1] === "graphql") {
+	  const queryArg = args.find((arg) => arg.startsWith("query=")) ?? "";
+	  if (queryArg.includes("pullRequests(states:OPEN")) {
+	    console.log(JSON.stringify({
+	      data: {
+	        repository: {
+	          pullRequests: {
+	            pageInfo: { hasNextPage: false, endCursor: null },
+	            nodes: [{
+	              number: 58,
+	              headRefOid: "head-sha",
+	              headRefName: "tapish-codex/review-gate-consistency",
+	              baseRefName: "master",
+	              headRepository: { nameWithOwner: "lamemustafa/pack" }
+	            }]
+	          }
+	        }
+	      }
+	    }));
+	    process.exit(0);
+	  }
+
+	  const reviews = process.env.PACK_SYNC_MISSING_HEAD_REVIEW === "1" ? [] : [
     {
       state: "COMMENTED",
       submittedAt: "2026-07-04T19:55:00Z",
