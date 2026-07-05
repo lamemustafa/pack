@@ -4,6 +4,18 @@ All notable changes to ComplyEaze Pack are documented here.
 
 ## Unreleased
 
+## [0.3.3](https://github.com/lamemustafa/pack/compare/v0.3.2...v0.3.3) (2026-07-05)
+
+
+### Documentation
+
+* **cws:** add dashboard closeout runbook ([412515f](https://github.com/lamemustafa/pack/commit/412515f6bccec426d77d9fdd48b93892adaf3b41))
+* **cws:** add dashboard closeout runbook ([412515f](https://github.com/lamemustafa/pack/commit/412515f6bccec426d77d9fdd48b93892adaf3b41))
+* **cws:** expand Pack store asset set ([ed6d209](https://github.com/lamemustafa/pack/commit/ed6d209225c4e5a4d522cf8dae0cca73a6796199))
+* **release:** record v0.3.2 publication evidence ([#53](https://github.com/lamemustafa/pack/issues/53)) ([b85d10d](https://github.com/lamemustafa/pack/commit/b85d10db7f3be03ad5c7093a90f62987a9dc611e))
+* **store:** add verified CWS asset exports ([#55](https://github.com/lamemustafa/pack/issues/55)) ([1379961](https://github.com/lamemustafa/pack/commit/13799611e30cbb4e73f2634902cc3f729b910093))
+* **store:** record v0.3.2 CWS submission ([ff0b2c8](https://github.com/lamemustafa/pack/commit/ff0b2c8629c2a80462d98c483c37a668b0f124f5))
+
 ## [0.3.2](https://github.com/lamemustafa/pack/compare/v0.3.1...v0.3.2) (2026-07-04)
 
 
