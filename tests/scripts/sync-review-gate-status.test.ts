@@ -52,41 +52,49 @@ describe("sync review gate status", () => {
     expect(states.map((status) => status.state)).toEqual(["pending", "success"]);
   });
 
-  it("does not write a success status when only missing-head-review was allowed", () => {
+  it("writes a failure status when only missing-head-review was allowed", () => {
     const tempDir = mkdtempSync(path.join(tmpdir(), "pack-sync-review-gate-"));
     const statusLog = path.join(tempDir, "statuses.jsonl");
     const fakeGh = path.join(tempDir, "gh");
     writeFileSync(fakeGh, fakeGhScript(), "utf8");
     chmodSync(fakeGh, 0o755);
 
-    const output = execFileSync(
-      process.execPath,
-      [
-        scriptPath,
-        "--repo",
-        "lamemustafa/pack",
-        "--pr",
-        "58",
-        "--run-url",
-        "https://github.com/lamemustafa/pack/pull/58",
-        "--strict-head-review",
-        "--required-review-author",
-        "chatgpt-codex-connector",
-        "--wait-head-review-ms",
-        "0",
-        "--allow-missing-head-review",
-      ],
-      {
-        cwd: rootDir,
-        encoding: "utf8",
-        env: {
-          ...process.env,
-          PATH: `${tempDir}${path.delimiter}${process.env.PATH ?? ""}`,
-          STATUS_LOG: statusLog,
-          PACK_SYNC_MISSING_HEAD_REVIEW: "1",
-        },
-      },
-    );
+    let output = "";
+    expect(() => {
+      try {
+        execFileSync(
+          process.execPath,
+          [
+            scriptPath,
+            "--repo",
+            "lamemustafa/pack",
+            "--pr",
+            "58",
+            "--run-url",
+            "https://github.com/lamemustafa/pack/pull/58",
+            "--strict-head-review",
+            "--required-review-author",
+            "chatgpt-codex-connector",
+            "--wait-head-review-ms",
+            "0",
+            "--allow-missing-head-review",
+          ],
+          {
+            cwd: rootDir,
+            encoding: "utf8",
+            env: {
+              ...process.env,
+              PATH: `${tempDir}${path.delimiter}${process.env.PATH ?? ""}`,
+              STATUS_LOG: statusLog,
+              PACK_SYNC_MISSING_HEAD_REVIEW: "1",
+            },
+          },
+        );
+      } catch (error) {
+        output = String((error as { stdout?: string }).stdout ?? "");
+        throw error;
+      }
+    }).toThrow();
 
     const states = readFileSync(statusLog, "utf8")
       .trim()
@@ -94,8 +102,8 @@ describe("sync review gate status", () => {
       .map((line) => JSON.parse(line) as { state: string });
 
     expect(output).toContain("review-gate:allowed-missing-head-review");
-    expect(output).toContain("Skipping Review gate success");
-    expect(states.map((status) => status.state)).toEqual(["pending"]);
+    expect(output).toContain("Writing Review gate failure");
+    expect(states.map((status) => status.state)).toEqual(["pending", "failure"]);
   });
 
   it("clears a stale success status when the required head review disappears", () => {
@@ -105,35 +113,43 @@ describe("sync review gate status", () => {
     writeFileSync(fakeGh, fakeGhScript(), "utf8");
     chmodSync(fakeGh, 0o755);
 
-    const output = execFileSync(
-      process.execPath,
-      [
-        scriptPath,
-        "--repo",
-        "lamemustafa/pack",
-        "--pr",
-        "58",
-        "--run-url",
-        "https://github.com/lamemustafa/pack/pull/58",
-        "--strict-head-review",
-        "--required-review-author",
-        "chatgpt-codex-connector",
-        "--wait-head-review-ms",
-        "0",
-        "--allow-missing-head-review",
-      ],
-      {
-        cwd: rootDir,
-        encoding: "utf8",
-        env: {
-          ...process.env,
-          PATH: `${tempDir}${path.delimiter}${process.env.PATH ?? ""}`,
-          STATUS_LOG: statusLog,
-          PACK_SYNC_MISSING_HEAD_REVIEW: "1",
-          PACK_SYNC_EXISTING_REVIEW_GATE_STATUS: "success",
-        },
-      },
-    );
+    let output = "";
+    expect(() => {
+      try {
+        execFileSync(
+          process.execPath,
+          [
+            scriptPath,
+            "--repo",
+            "lamemustafa/pack",
+            "--pr",
+            "58",
+            "--run-url",
+            "https://github.com/lamemustafa/pack/pull/58",
+            "--strict-head-review",
+            "--required-review-author",
+            "chatgpt-codex-connector",
+            "--wait-head-review-ms",
+            "0",
+            "--allow-missing-head-review",
+          ],
+          {
+            cwd: rootDir,
+            encoding: "utf8",
+            env: {
+              ...process.env,
+              PATH: `${tempDir}${path.delimiter}${process.env.PATH ?? ""}`,
+              STATUS_LOG: statusLog,
+              PACK_SYNC_MISSING_HEAD_REVIEW: "1",
+              PACK_SYNC_EXISTING_REVIEW_GATE_STATUS: "success",
+            },
+          },
+        );
+      } catch (error) {
+        output = String((error as { stdout?: string }).stdout ?? "");
+        throw error;
+      }
+    }).toThrow();
 
     const states = readFileSync(statusLog, "utf8")
       .trim()
@@ -141,6 +157,7 @@ describe("sync review gate status", () => {
       .map((line) => JSON.parse(line) as { state: string });
 
     expect(output).toContain("review-gate:allowed-missing-head-review");
+    expect(output).toContain("Writing Review gate failure");
     expect(states.map((status) => status.state)).toEqual(["pending", "failure"]);
   });
 });
