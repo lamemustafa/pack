@@ -120,8 +120,8 @@ stable-release claims.
       "no data" merely because data stays local if the dashboard asks about
       local access or processing.
 - [x] Source-controlled Store screenshots and promotional images use only
-      synthetic/redacted data. The `v0.3.2` PNG exports were generated with
-      `pnpm store:assets`, visually checked, and recorded in
+      synthetic/redacted data. The seven `v0.3.2` PNG exports were generated
+      with `pnpm store:assets`, visually checked, and recorded in
       `docs/chrome-web-store/assets/exports/asset-hashes.json`.
 - [ ] Upload the generated `v0.3.2` Store screenshot/promotional PNGs to the
       Chrome Web Store dashboard, then record dashboard image review state.
