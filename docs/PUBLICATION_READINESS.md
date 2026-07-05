@@ -193,7 +193,9 @@ stable-release claims.
 - [ ] Upload/review the `v0.3.2` GSTR-1 listing copy, screenshots, promotional
       images, privacy-practices declarations, and reviewer instructions in the
       Chrome Web Store dashboard, then record review/publication evidence for
-      that exact package.
+      that exact package. Use
+      [`docs/chrome-web-store/dashboard-closeout.md`](chrome-web-store/dashboard-closeout.md)
+      for the dashboard and read-only status-monitor closeout checklist.
 
 ## Suggested Store Copy
 

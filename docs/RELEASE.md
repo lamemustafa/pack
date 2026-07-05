@@ -197,6 +197,12 @@ the Chrome Web Store dashboard. The exports must not contain real GST Portal
 screenshots, taxpayer names, GSTIN/PAN values, portal HTML, downloaded GST
 files, local paths, cookies, headers, OTPs, or CAPTCHA content.
 
+After a package submit succeeds, use
+[`chrome-web-store/dashboard-closeout.md`](chrome-web-store/dashboard-closeout.md)
+to complete the Developer Dashboard listing copy, screenshot/promotional image
+upload, privacy-practices declarations, reviewer instructions, and read-only
+status-monitor evidence.
+
 ## Google OAuth credential maintenance
 
 The Chrome Web Store API OAuth app must stay production-ready if it is used for
