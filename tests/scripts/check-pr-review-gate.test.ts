@@ -76,7 +76,7 @@ describe("PR review gate", () => {
     ).toThrow(/Requested-changes reviews/);
   });
 
-  it("keeps stale requested-changes reviews blocking when the current head has a later comment", () => {
+  it("clears stale requested-changes reviews when the current head has a later comment", () => {
     const fixturePath = writeFixture(
       "stale-requested-changes",
       reviewFixture({
@@ -88,8 +88,9 @@ describe("PR review gate", () => {
       }),
     );
 
-    expect(() =>
-      execFileSync(process.execPath, [
+    const output = execFileSync(
+      process.execPath,
+      [
         scriptPath,
         "--repo",
         "lamemustafa/pack",
@@ -100,8 +101,14 @@ describe("PR review gate", () => {
         "--strict-head-review",
         "--required-review-author",
         "chatgpt-codex-connector",
-      ]),
-    ).toThrow(/Requested-changes reviews/);
+      ],
+      {
+        cwd: rootDir,
+        encoding: "utf8",
+      },
+    );
+
+    expect(output).toContain("PR review gate passed");
   });
 
   it("fails strict mode when the required current-head review is missing", () => {
