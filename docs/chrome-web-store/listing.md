@@ -2,8 +2,8 @@
 
 This file is the source-controlled listing brief for the Chrome Web Store
 dashboard. Package upload and publish are automated separately; dashboard
-listing text, screenshots, promo assets, and privacy-practices fields must still
-be reviewed in the Chrome Web Store Developer Dashboard.
+listing text, screenshots, promo assets, and privacy-practices fields are
+dashboard-held evidence and should be rechecked for each Store release.
 
 Use [`dashboard-closeout.md`](dashboard-closeout.md) for the manual dashboard
 upload, privacy-practices, reviewer-instructions, and read-only status-monitor
@@ -21,11 +21,14 @@ steps that remain after the protected package submit workflow succeeds.
 - Package update: the `v0.3.2` package was submitted through protected workflow
   dispatch on 2026-07-04. Run `28704776806` uploaded the verified package with
   upload state `SUCCEEDED`, publish state `PENDING_REVIEW`, and no warnings.
-- Required dashboard update: upload/review listing copy, screenshots,
-  promotional image, privacy-practices declarations, and reviewer instructions
-  in the Chrome Web Store Developer Dashboard.
-- Publication state: the `v0.3.2` package update is pending Chrome Web Store
-  review/publication. Dashboard listing/assets review state is not recorded yet.
+- Publication state: a maintainer-provided Chrome Web Store publication email
+  on 2026-07-06 records item ID `nfnbhekccajjfgkppolomflaeledoccb`, item name
+  `ComplyEaze Pack: GSTR-1/GSTR-3B Downloader`, version `0.3.2`, and visibility
+  `Public`.
+- Evidence-hardening gap: the read-only Chrome Web Store Status workflow still
+  needs a `require_published=true` run after status-environment credentials are
+  available. Dashboard-held field snapshots can be added if maintainers want
+  evidence beyond the publication email.
 - External boundary: no official, GSTN-approved, filing, reconciliation, all GST
   returns, backend sync, or professional-review claim.
 
@@ -61,16 +64,20 @@ endorsed by, or operated by GSTN, CBIC, or the Government of India.
 
 ## Release Evidence For Dashboard Update
 
-| Item                  | Evidence                                                                                                                  |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Source tag            | [`v0.3.2`](https://github.com/lamemustafa/pack/releases/tag/v0.3.2)                                                       |
-| Source commit         | `7bc2c2604f045c1d5547f6ab63a84dbb91de161e`                                                                                |
-| Chrome ZIP asset      | `complyeazepack-0.3.2-chrome.zip`                                                                                         |
-| Chrome ZIP SHA-256    | `6bd41a364a2466f0f255bef1b44e93694cc8d95431e7661fea5be3d52c9cdddb`                                                        |
-| Release workflow      | GitHub Actions run `28702352034`; package, exact-ZIP verification, provenance, and GitHub release asset upload passed.    |
-| Store dry-run         | GitHub Actions run `28704697827`; downloaded and verified `v0.3.2` release assets and produced a dry-run publish request. |
-| Store package submit  | GitHub Actions run `28704776806`; upload state `SUCCEEDED`, publish state `PENDING_REVIEW`, warnings `[]`.                |
-| Store publication gap | Chrome Web Store review/publication and dashboard listing/assets review state are not recorded yet.                       |
+| Item                 | Evidence                                                                                                                  |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Source tag           | [`v0.3.2`](https://github.com/lamemustafa/pack/releases/tag/v0.3.2)                                                       |
+| Source commit        | `7bc2c2604f045c1d5547f6ab63a84dbb91de161e`                                                                                |
+| Chrome ZIP asset     | `complyeazepack-0.3.2-chrome.zip`                                                                                         |
+| Chrome ZIP SHA-256   | `6bd41a364a2466f0f255bef1b44e93694cc8d95431e7661fea5be3d52c9cdddb`                                                        |
+| Release workflow     | GitHub Actions run `28702352034`; package, exact-ZIP verification, provenance, and GitHub release asset upload passed.    |
+| Store dry-run        | GitHub Actions run `28704697827`; downloaded and verified `v0.3.2` release assets and produced a dry-run publish request. |
+| Store package submit | GitHub Actions run `28704776806`; upload state `SUCCEEDED`, publish state `PENDING_REVIEW`, warnings `[]`.                |
+| Store publication    | Maintainer-provided Chrome Web Store publication email dated 2026-07-06.                                                  |
+
+The publication email records item ID `nfnbhekccajjfgkppolomflaeledoccb`, item
+name `ComplyEaze Pack: GSTR-1/GSTR-3B Downloader`, version `0.3.2`, and
+visibility `Public`.
 
 ## Asset Inventory
 
@@ -115,10 +122,12 @@ Chrome's current image guidance is recorded in
 uploads from the source assets only after visual QA confirms the generated PNGs
 remain legible and contain no real GST Portal/account data. The current PNG
 exports were generated with `pnpm store:assets` and visually checked as
-synthetic/redacted source-controlled assets; the Chrome Web Store dashboard still
-needs the actual upload and review-state evidence.
+synthetic/redacted source-controlled assets. The Store-published `v0.3.2`
+evidence is the maintainer-provided Chrome Web Store publication email; retain
+dashboard-held field snapshots separately if stricter asset-by-asset evidence is
+needed.
 
-Dashboard-held items that still need review before GSTR-1 store-facing claims:
+Dashboard-held items to recheck before future Store releases:
 
 - Upload the generated screenshot and promotional PNG exports to the dashboard.
 - Record Chrome Web Store image/listing review state for the uploaded exports.

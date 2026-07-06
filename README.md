@@ -25,10 +25,10 @@ endorsed by, or operated by GSTN, CBIC, or the Government of India.
 ## Status
 
 This public repository and the Chrome Web Store V0 listing are open-source
-alpha surfaces. The reviewed source has live local download support for filed
-GSTR-3B PDFs, filed GSTR-1 summary PDFs, and optional GSTR-1 e-invoice details
-Excel files where the GST Portal provides them. The verified GitHub pre-release
-for this source state is
+alpha surfaces. The Store-published `v0.3.2` source has live local download
+support for filed GSTR-3B PDFs, filed GSTR-1 summary PDFs, and optional GSTR-1
+e-invoice details Excel files where the GST Portal provides them. The verified
+GitHub pre-release for the Store-published package is
 [`v0.3.2`](https://github.com/lamemustafa/pack/releases/tag/v0.3.2), with
 Chrome ZIP SHA-256
 `6bd41a364a2466f0f255bef1b44e93694cc8d95431e7661fea5be3d52c9cdddb`.
@@ -36,8 +36,13 @@ Chrome ZIP SHA-256
 The Chrome Web Store package update for this GSTR-1 source release was
 submitted through the protected workflow on 2026-07-04. Run `28704776806`
 uploaded `v0.3.2` with upload state `SUCCEEDED`, publish state
-`PENDING_REVIEW`, and no warnings. Dashboard listing assets/privacy declarations
-and final Chrome Web Store publication confirmation are still pending.
+`PENDING_REVIEW`, and no warnings. A maintainer-provided Chrome Web Store
+publication email on 2026-07-06 records item ID
+`nfnbhekccajjfgkppolomflaeledoccb`, item name
+`ComplyEaze Pack: GSTR-1/GSTR-3B Downloader`, version `0.3.2`, and visibility
+`Public`. The repository source has since advanced to `v0.3.3`; do not treat
+that newer source release as Store-published until its own Store evidence is
+recorded.
 Live manifest/index/exception-file generation is outside the current alpha.
 Future store updates require the release gates in
 [docs/PUBLICATION_READINESS.md](docs/PUBLICATION_READINESS.md) and
@@ -62,8 +67,8 @@ https://chromewebstore.google.com/detail/complyeaze-pack-gst-gstr/nfnbhekccajjfg
 
 The `v0.3.2` GitHub release has the verified GSTR-1 source package. The package
 update was submitted to Chrome Web Store review through workflow run
-`28704776806`; dashboard listing assets/privacy declarations and final
-publication confirmation are still pending.
+`28704776806` and published publicly as version `0.3.2` on 2026-07-06 based on
+the maintainer-provided Chrome Web Store publication email.
 
 Review the source, release notes, permissions, and privacy boundaries before
 using Pack for GST records. The public Pack site is:
