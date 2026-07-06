@@ -30,6 +30,31 @@ describe("filed returns direct download request helpers", () => {
     );
   });
 
+  it("rejects GSTR-2B direct requests until a reviewed server file endpoint exists", () => {
+    const documentRef = createDetailDocument(
+      "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
+      `
+        <main>
+          <h1>GSTR-2B</h1>
+          <p>March 2026 Auto-drafted ITC Statement</p>
+          <button>DOWNLOAD GSTR-2B SUMMARY (PDF)</button>
+        </main>
+      `,
+    );
+
+    const resolved = resolveFiledGstr3bGeneratedPdfApiRequest(documentRef, {
+      ...TARGET,
+      returnType: "GSTR-2B",
+    });
+
+    expect(resolved.ok).toBe(false);
+    if (resolved.ok) return;
+    expect(resolved.result.state).toBe("blocked");
+    expect(resolved.result.safeSignals).toContain(
+      "filed-gstr3b-direct-download-return-type-rejected",
+    );
+  });
+
   it("resolves a synthetic PDF request only on the matching GST GSTR-3B detail page", () => {
     const documentRef = createDetailDocument(
       "https://return.gst.gov.in/returns/auth/gstr3b",

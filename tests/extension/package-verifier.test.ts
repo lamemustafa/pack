@@ -187,7 +187,7 @@ describe("extension package verifier", () => {
                 { id: "home-path", pattern: "/Users/[^\\s\"']+" },
                 {
                   id: "gst-url",
-                  pattern: "https://(?:www|services|return)\\.gst\\.gov\\.in/[^\\s\"']*",
+                  pattern: "https://(?:www|services|return|gstr2b)\\.gst\\.gov\\.in/[^\\s\"']*",
                 },
               ],
             },
@@ -238,6 +238,19 @@ describe("extension package verifier", () => {
       outputDir,
       "assets/background.js",
       "const approvedOrigin = 'https://services.gst.gov.in';",
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(0);
+  });
+
+  it("allows the approved GSTR-2B summary app route in packaged extension code", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "assets/background.js",
+      "const gstr2bSummary = 'https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary';",
     );
 
     const result = await runVerifier(outputDir);
@@ -304,7 +317,9 @@ describe("extension package verifier", () => {
       "utf8",
     );
 
-    expect(script).toContain("contentScripts.length !== 1");
+    expect(script).toContain("expectedContentScripts.length");
+    expect(script).toContain("content-scripts/gstr2b-capture-main.js");
+    expect(script).toContain("Pack release must include only the approved content scripts.");
     expect(script).toContain("assertPopupPageLoads");
     expect(script).toContain("assertNoBrowserRuntimeFailures");
     expect(script).toContain("Pack host permissions must stay on the approved GST allow-list");
@@ -329,16 +344,17 @@ async function createValidPackage(): Promise<string> {
 
   const manifest = {
     manifest_version: 3,
-    name: "ComplyEaze Pack: GSTR-1/GSTR-3B Downloader",
+    name: "ComplyEaze Pack: GST Return Downloader",
     short_name: "ComplyEaze Pack",
     description:
-      "Alpha: locally download filed GSTR-1 and GSTR-3B documents from your active GST Portal session.",
+      "Alpha: locally download GSTR-1/GSTR-3B files; private GSTR-2B source support is pending live proof.",
     homepage_url: "https://pack.complyeaze.com/gst",
     permissions: ["downloads", "scripting", "storage"],
     host_permissions: [
       "https://www.gst.gov.in/*",
       "https://services.gst.gov.in/*",
       "https://return.gst.gov.in/*",
+      "https://gstr2b.gst.gov.in/*",
     ],
     icons: {
       16: "icons/icon-16.png",

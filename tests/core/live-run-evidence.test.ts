@@ -101,7 +101,9 @@ describe("live run evidence", () => {
 
     expect(missingReturnType.ok).toBe(false);
     if (!missingReturnType.ok)
-      expect(missingReturnType.errors).toContain("returnType must be one of GSTR-3B, GSTR-1");
+      expect(missingReturnType.errors).toContain(
+        "returnType must be one of GSTR-3B, GSTR-1, GSTR-2B",
+      );
     expect(invalidGstr3bArtifact.ok).toBe(false);
     if (!invalidGstr3bArtifact.ok)
       expect(invalidGstr3bArtifact.errors).toContain("GSTR-3B evidence must use artifactType PDF");
@@ -111,6 +113,16 @@ describe("live run evidence", () => {
         "full-year evidence must use period FULL_FISCAL_YEAR",
       );
     expect(validGstr1Combined).toMatchObject({ ok: true });
+  });
+
+  it("accepts redacted GSTR-2B PDF and Excel evidence metadata", () => {
+    expect(
+      validateLiveRunEvidence({
+        ...createValidEvidence(),
+        returnType: "GSTR-2B",
+        artifactType: "PDF_AND_EXCEL",
+      }),
+    ).toMatchObject({ ok: true });
   });
 
   it("scans raw evidence JSON before parsing", () => {

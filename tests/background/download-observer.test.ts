@@ -527,7 +527,7 @@ describe("download observer", () => {
     });
   });
 
-  it("rejects a trusted download id without GST origin evidence", async () => {
+  it("accepts a trusted extension-owned data URL download with expected file evidence", async () => {
     const downloads = createDownloadsApi([
       {
         id: 156,
@@ -549,8 +549,8 @@ describe("download observer", () => {
         trustedDownloadIds: new Set([156]),
       }),
     ).resolves.toMatchObject({
-      state: "not-observed",
-      safeSignals: expect.arrayContaining(["browser-download-correlation-rejected"]),
+      state: "completed",
+      safeSignals: expect.arrayContaining(["browser-download-completed"]),
     });
   });
 

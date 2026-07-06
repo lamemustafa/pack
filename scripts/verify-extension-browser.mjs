@@ -22,14 +22,28 @@ const manifest = JSON.parse(await readFile(path.join(extensionDir, "manifest.jso
 const profileDir = await mkdtemp(path.join(os.tmpdir(), "pack-browser-release-"));
 let approvedOrigins = new Set();
 const expectedHostPermissions = [
+  "https://gstr2b.gst.gov.in/*",
   "https://return.gst.gov.in/*",
   "https://services.gst.gov.in/*",
   "https://www.gst.gov.in/*",
 ];
-const expectedContentScriptMatches = [
-  "https://return.gst.gov.in/*",
-  "https://services.gst.gov.in/*",
-  "https://www.gst.gov.in/*",
+const expectedContentScripts = [
+  {
+    js: ["content-scripts/content.js"],
+    matches: [
+      "https://gstr2b.gst.gov.in/*",
+      "https://return.gst.gov.in/*",
+      "https://services.gst.gov.in/*",
+      "https://www.gst.gov.in/*",
+    ],
+    runAt: "document_idle",
+  },
+  {
+    js: ["content-scripts/gstr2b-capture-main.js"],
+    matches: ["https://gstr2b.gst.gov.in/*"],
+    runAt: "document_start",
+    world: "MAIN",
+  },
 ];
 const hostileOrigin = "https://hostile-pack.invalid";
 const expectedDeniedNetworkProbe = "https://unexpected-pack-network.invalid/tracker.png";
@@ -143,20 +157,33 @@ function assertStaticReleaseBrowserPolicy(input) {
     throw new Error("Pack host permissions must stay on the approved GST allow-list.");
   }
   const contentScripts = input.content_scripts ?? [];
-  if (contentScripts.length !== 1) {
-    throw new Error("Pack release must include exactly one content script.");
+  if (contentScripts.length !== expectedContentScripts.length) {
+    throw new Error("Pack release must include only the approved content scripts.");
   }
-  const expectedMatches = [...expectedContentScriptMatches].sort();
-  for (const contentScript of contentScripts) {
+  for (const expectedContentScript of expectedContentScripts) {
+    const contentScript = contentScripts.find(
+      (candidate) =>
+        JSON.stringify(candidate.js ?? []) === JSON.stringify(expectedContentScript.js),
+    );
+    if (!contentScript) {
+      throw new Error(`Pack content script bundle missing: ${expectedContentScript.js.join(", ")}`);
+    }
     const actualMatches = [...(contentScript.matches ?? [])].sort();
+    const expectedMatches = [...expectedContentScript.matches].sort();
     if (JSON.stringify(actualMatches) !== JSON.stringify(expectedMatches)) {
-      throw new Error("Pack content script matches must stay on the approved GST hosts.");
+      throw new Error(
+        `Pack content script matches changed unexpectedly: ${expectedContentScript.js.join(", ")}`,
+      );
     }
-    if (contentScript.run_at !== "document_idle") {
-      throw new Error("Pack content script must run at document_idle.");
+    if (contentScript.run_at !== expectedContentScript.runAt) {
+      throw new Error(
+        `Pack content script run_at changed unexpectedly: ${expectedContentScript.js.join(", ")}`,
+      );
     }
-    if (JSON.stringify(contentScript.js ?? []) !== JSON.stringify(["content-scripts/content.js"])) {
-      throw new Error("Pack content script bundle path changed unexpectedly.");
+    if ((contentScript.world ?? undefined) !== (expectedContentScript.world ?? undefined)) {
+      throw new Error(
+        `Pack content script world changed unexpectedly: ${expectedContentScript.js.join(", ")}`,
+      );
     }
   }
 }
@@ -219,7 +246,7 @@ async function assertServiceWorkerStarted(serviceWorker) {
       storageWritable: Boolean(values["pack:browser-release-probe"]?.localOnly),
     };
   });
-  if (serviceWorkerState.manifestName !== "ComplyEaze Pack: GSTR-1/GSTR-3B Downloader") {
+  if (serviceWorkerState.manifestName !== "ComplyEaze Pack: GST Return Downloader") {
     throw new Error("Unexpected extension manifest loaded in browser.");
   }
   if (!serviceWorkerState.storageWritable) {

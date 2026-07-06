@@ -19,14 +19,15 @@ const harnessPackageLeakPatterns = harnessRedactionPatterns.filter(({ id }) => {
   return id !== "gst-url";
 });
 const pathfulGstPortalPattern =
-  /https:\/\/(?:www|services|return)\.gst\.gov\.in\/(?!\*)(?:[^\s"']+)/i;
+  /https:\/\/(?:www|services|return|gstr2b)\.gst\.gov\.in\/(?!\*)(?:[^\s"']+)/i;
+const allowedPathfulGstPortalUrls = ["https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary"];
 
 const manifestPath = path.join(outputDir, "manifest.json");
 const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-const expectedName = "ComplyEaze Pack: GSTR-1/GSTR-3B Downloader";
+const expectedName = "ComplyEaze Pack: GST Return Downloader";
 const expectedShortName = "ComplyEaze Pack";
 const expectedDescription =
-  "Alpha: locally download filed GSTR-1 and GSTR-3B documents from your active GST Portal session.";
+  "Alpha: locally download GSTR-1/GSTR-3B files; private GSTR-2B support may still show the browser save dialog.";
 const expectedHomepageUrl = "https://pack.complyeaze.com/gst";
 const expectedIcons = {
   16: "icons/icon-16.png",
@@ -52,6 +53,7 @@ const expectedHostPermissions = [
   "https://www.gst.gov.in/*",
   "https://services.gst.gov.in/*",
   "https://return.gst.gov.in/*",
+  "https://gstr2b.gst.gov.in/*",
 ];
 
 const forbiddenPermissions = new Set([
@@ -288,7 +290,11 @@ function assertNoHarnessPolicyLeaks(contents, file) {
 }
 
 function assertNoPathfulGstPortalUrl(contents, file) {
-  if (pathfulGstPortalPattern.test(contents)) {
+  let inspectedContents = contents;
+  for (const allowedUrl of allowedPathfulGstPortalUrls) {
+    inspectedContents = inspectedContents.split(allowedUrl).join("");
+  }
+  if (pathfulGstPortalPattern.test(inspectedContents)) {
     throw new Error(`Pathful GST Portal URL in ${path.relative(process.cwd(), file)}`);
   }
 }
@@ -375,7 +381,13 @@ function validatePolicyPatternSamples(patterns) {
         "C:\\Users\\example\\Downloads\\return.pdf",
       ],
     ],
-    ["gst-url", ["https://services.gst.gov.in/services/auth/efiledreturns"]],
+    [
+      "gst-url",
+      [
+        "https://services.gst.gov.in/services/auth/efiledreturns",
+        "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
+      ],
+    ],
   ]);
 
   for (const [patternId, values] of samples) {

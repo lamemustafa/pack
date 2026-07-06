@@ -140,7 +140,7 @@ export function validateLiveRunEvidence(input: unknown): LiveRunEvidenceValidati
   requirePattern(input.subjectAlias, SUBJECT_ALIAS, "subjectAlias", errors, {
     message: "subjectAlias must be a neutral SUBJECT-* alias",
   });
-  requireOneOf(input.returnType, ["GSTR-3B", "GSTR-1"], "returnType", errors);
+  requireOneOf(input.returnType, ["GSTR-3B", "GSTR-1", "GSTR-2B"], "returnType", errors);
   requireOneOf(input.artifactType, ["PDF", "EXCEL", "PDF_AND_EXCEL"], "artifactType", errors);
   requirePattern(input.financialYear, FINANCIAL_YEAR, "financialYear", errors);
   requireOneOf(input.period, PERIODS, "period", errors);
