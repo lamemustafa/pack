@@ -55,12 +55,11 @@ export function findKnownGstSelect(
   labelPattern: RegExp,
 ): HTMLSelectElement | null {
   const documentRef = root.nodeType === 9 ? (root as Document) : root.ownerDocument;
-  const HTMLSelectElementConstructor = documentRef?.defaultView?.HTMLSelectElement;
-  if (!HTMLSelectElementConstructor) return null;
+  if (!documentRef) return null;
 
   const visibleSelects = Array.from(root.querySelectorAll("select")).filter(
     (candidate): candidate is HTMLSelectElement =>
-      candidate instanceof HTMLSelectElementConstructor && !isHidden(candidate),
+      isSelectElement(candidate) && !isHidden(candidate),
   );
 
   for (const candidate of visibleSelects) {
@@ -83,8 +82,7 @@ export function findLabelledSelect(
 
 export function findLabelledSelects(root: ParentNode, labelPattern: RegExp): HTMLSelectElement[] {
   const documentRef = root.nodeType === 9 ? (root as Document) : root.ownerDocument;
-  const HTMLSelectElementConstructor = documentRef?.defaultView?.HTMLSelectElement;
-  if (!documentRef || !HTMLSelectElementConstructor) return [];
+  if (!documentRef) return [];
 
   const labels = Array.from(root.querySelectorAll("label")).filter((label) =>
     labelPattern.test(label.textContent || ""),
@@ -95,7 +93,7 @@ export function findLabelledSelects(root: ParentNode, labelPattern: RegExp): HTM
     const forId = label.getAttribute("for");
     if (forId) {
       const target = documentRef.getElementById(forId);
-      if (target instanceof HTMLSelectElementConstructor && !isHidden(target)) {
+      if (target && isSelectElement(target) && !isHidden(target)) {
         selects.push(target);
         continue;
       }
@@ -103,12 +101,12 @@ export function findLabelledSelects(root: ParentNode, labelPattern: RegExp): HTM
 
     let sibling = label.nextElementSibling;
     while (sibling) {
-      if (sibling instanceof HTMLSelectElementConstructor && !isHidden(sibling)) {
+      if (isSelectElement(sibling) && !isHidden(sibling)) {
         selects.push(sibling);
         break;
       }
       const nested = sibling.querySelector("select");
-      if (nested instanceof HTMLSelectElementConstructor && !isHidden(nested)) {
+      if (nested && isSelectElement(nested) && !isHidden(nested)) {
         selects.push(nested);
         break;
       }
@@ -117,6 +115,10 @@ export function findLabelledSelects(root: ParentNode, labelPattern: RegExp): HTM
   }
 
   return Array.from(new Set(selects));
+}
+
+function isSelectElement(element: Element): element is HTMLSelectElement {
+  return element.tagName.toLowerCase() === "select";
 }
 
 type FieldEvaluationStatus = "matched" | "mismatched" | "unresolved";

@@ -12,6 +12,7 @@ import {
   normaliseFiledReturnsScope,
 } from "../../core/filed-returns-scope";
 import { FILED_RETURNS_RETURN_TYPES } from "../../core/filed-returns-return-types";
+import { ScopeButtonGroup } from "./scope-button-group";
 
 export interface ScopeFormProps {
   busy: string | null;
@@ -181,81 +182,60 @@ export function ScopeForm({ busy, flowSummary, scope, onScopeChange, onStart }: 
 
   return (
     <section className="flow-panel" aria-label="Filed return download scope">
-      <label>
-        Filing
-        <select
-          value={scope.returnType}
-          onChange={(event) =>
-            onScopeChange(
-              normaliseFiledReturnsScope({
-                ...scope,
-                returnType: event.target.value as FiledReturnsDownloadScope["returnType"],
-              }),
-            )
-          }
-        >
-          {FILED_RETURNS_RETURN_TYPES.map((returnType) => (
-            <option key={returnType} value={returnType}>
-              {returnType}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        Download
-        <select
-          value={selectedArtifactType}
-          onChange={(event) =>
-            onScopeChange(
-              normaliseFiledReturnsScope({
-                ...scope,
-                artifactType: event.target.value as NonNullable<
-                  FiledReturnsDownloadScope["artifactType"]
-                >,
-              }),
-            )
-          }
-        >
-          {artifactOptions.map((artifactType) => (
-            <option key={artifactType} value={artifactType}>
-              {filedReturnsArtifactLabel(artifactType, scope.returnType)}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        Financial year
-        <select
-          value={scope.financialYear}
-          onChange={(event) =>
-            onScopeChange(
-              normaliseFiledReturnsScope({
-                ...scope,
-                financialYear: event.target.value,
-              }),
-            )
-          }
-        >
-          {financialYearOptions.map((financialYear) => (
-            <option key={financialYear} value={financialYear}>
-              {financialYear}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        Period
-        <select
-          value={scope.period}
-          onChange={(event) => onScopeChange({ ...scope, period: event.target.value })}
-        >
-          {periodOptions.map((period) => (
-            <option key={period.value} value={period.value}>
-              {period.label}
-            </option>
-          ))}
-        </select>
-      </label>
+      <ScopeButtonGroup
+        label="Filing"
+        value={scope.returnType}
+        options={FILED_RETURNS_RETURN_TYPES.map((returnType) => ({
+          value: returnType,
+          label: returnType,
+        }))}
+        onChange={(returnType) =>
+          onScopeChange(
+            normaliseFiledReturnsScope({
+              ...scope,
+              returnType: returnType as FiledReturnsDownloadScope["returnType"],
+            }),
+          )
+        }
+      />
+      <ScopeButtonGroup
+        label="Download"
+        value={selectedArtifactType}
+        options={artifactOptions.map((artifactType) => ({
+          value: artifactType,
+          label: filedReturnsArtifactLabel(artifactType, scope.returnType),
+        }))}
+        onChange={(artifactType) =>
+          onScopeChange(
+            normaliseFiledReturnsScope({
+              ...scope,
+              artifactType: artifactType as NonNullable<FiledReturnsDownloadScope["artifactType"]>,
+            }),
+          )
+        }
+      />
+      <ScopeButtonGroup
+        label="Financial year"
+        value={scope.financialYear}
+        options={financialYearOptions.map((financialYear) => ({
+          value: financialYear,
+          label: financialYear,
+        }))}
+        onChange={(financialYear) =>
+          onScopeChange(
+            normaliseFiledReturnsScope({
+              ...scope,
+              financialYear,
+            }),
+          )
+        }
+      />
+      <ScopeButtonGroup
+        label="Period"
+        value={scope.period}
+        options={periodOptions}
+        onChange={(period) => onScopeChange({ ...scope, period })}
+      />
       {fullFiscalYear ? (
         <p className="muted">
           Runs eligible filed {scope.returnType} periods one by one from your signed-in GST Portal

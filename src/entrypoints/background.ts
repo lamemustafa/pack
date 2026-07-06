@@ -1,5 +1,9 @@
 import { browser } from "wxt/browser";
-import { isSupportedGstPortalUrl, pickSupportedGstPortalTab } from "../connectors/gst/hosts";
+import {
+  isSupportedGstPortalUrl,
+  pickSupportedGstPortalTab,
+  pickUniquePreferredGstPortalTab,
+} from "../connectors/gst/hosts";
 import type { ArchiveManifest, PortalContext, PortalObservation } from "../core/contracts";
 import { PACK_PRODUCT_VERSION } from "../extension/version";
 import {
@@ -38,6 +42,7 @@ export const PACK_SESSION_STORAGE_KEYS = {
   lastContext: "pack:last-context",
   lastFiledReturnsObservation: "pack:last-filed-returns-observation",
   lastFiledReturnsFlowSummary: "pack:last-filed-returns-flow-summary",
+  lastGstTabId: "pack:last-gst-tab-id",
 } as const;
 
 export const PACK_CLEARABLE_LOCAL_STORAGE_KEYS = Object.values(PACK_LOCAL_STORAGE_KEYS);
@@ -48,6 +53,14 @@ const contentInjectionByTab = new Map<number, Promise<void>>();
 
 export default defineBackground(() => {
   void restrictLocalStorageToTrustedContexts().catch(() => undefined);
+
+  browser.tabs.onActivated.addListener(({ tabId }) => {
+    void rememberActiveGstTabById(tabId).catch(() => undefined);
+  });
+
+  browser.tabs.onUpdated.addListener((_tabId, _changeInfo, tab) => {
+    void rememberGstTabIfSupported(tab).catch(() => undefined);
+  });
 
   browser.runtime.onInstalled.addListener(() => {
     void browser.storage.local.set({
@@ -96,8 +109,14 @@ async function handleMessage(
   switch (message.type) {
     case "PACK_CONTENT_CONTEXT": {
       if (sender.id !== browser.runtime.id) return { ok: false, error: "Invalid Pack sender." };
-      await browser.storage.session.set({
+      const nextSessionValues: Record<string, unknown> = {
         [PACK_SESSION_STORAGE_KEYS.lastContext]: message.payload,
+      };
+      if (isSupportedGstBrowserTab(sender.tab)) {
+        nextSessionValues[PACK_SESSION_STORAGE_KEYS.lastGstTabId] = sender.tab.id;
+      }
+      await browser.storage.session.set({
+        ...nextSessionValues,
       });
       return { ok: true, context: message.payload };
     }
@@ -211,7 +230,7 @@ async function refreshActiveFiledReturnsObservation(): Promise<void> {
   if (!activeTab) return;
 
   const response = await sendMessageToTabWithInjection(activeTab.id, {
-    type: "PACK_CONTENT_REFRESH_FILED_RETURNS_OBSERVATION_V2",
+    type: "PACK_CONTENT_REFRESH_FILED_RETURNS_OBSERVATION_V3",
   });
 
   if (!response.ok) return;
@@ -239,13 +258,50 @@ export async function getActiveGstTab(): Promise<ActiveGstTab | null> {
   const activeGstTab = pickSupportedGstPortalTab<Browser.tabs.Tab>(activeCurrentWindowTabs);
   if (activeGstTab) return activeGstTab;
 
+  const rememberedGstTab = await readRememberedGstTab();
+  if (rememberedGstTab) return rememberedGstTab;
+
   const currentWindowTabs = await browser.tabs.query({ currentWindow: true });
   const fallbackGstTabs = currentWindowTabs.filter(
     (tab): tab is Browser.tabs.Tab & { id: number } =>
       typeof tab.id === "number" && isSupportedGstPortalUrl(tab.url),
   );
-  if (fallbackGstTabs.length !== 1) return null;
-  return fallbackGstTabs[0] ?? null;
+  if (fallbackGstTabs.length === 1) return fallbackGstTabs[0] ?? null;
+  return pickUniquePreferredGstPortalTab(fallbackGstTabs);
+}
+
+export async function rememberActiveGstTabById(tabId: number): Promise<void> {
+  try {
+    await rememberGstTabIfSupported(await browser.tabs.get(tabId));
+  } catch {
+    // Tabs can disappear while Brave is switching focus; that should not interrupt Pack.
+  }
+}
+
+export async function rememberGstTabIfSupported(tab: Browser.tabs.Tab | undefined): Promise<void> {
+  if (!isSupportedGstBrowserTab(tab)) return;
+  await browser.storage.session.set({
+    [PACK_SESSION_STORAGE_KEYS.lastGstTabId]: tab.id,
+  });
+}
+
+async function readRememberedGstTab(): Promise<ActiveGstTab | null> {
+  const tabId = await readSessionValue<number>(PACK_SESSION_STORAGE_KEYS.lastGstTabId);
+  if (typeof tabId !== "number") return null;
+
+  try {
+    const tab = await browser.tabs.get(tabId);
+    if (typeof tab.id !== "number" || !isSupportedGstPortalUrl(tab.url)) return null;
+    return tab as ActiveGstTab;
+  } catch {
+    return null;
+  }
+}
+
+function isSupportedGstBrowserTab(
+  tab: Browser.tabs.Tab | undefined,
+): tab is Browser.tabs.Tab & { id: number } {
+  return typeof tab?.id === "number" && isSupportedGstPortalUrl(tab.url);
 }
 
 export async function sendMessageToTabWithInjection(
@@ -254,11 +310,11 @@ export async function sendMessageToTabWithInjection(
     PackMessage,
     {
       type:
-        | "PACK_CONTENT_NAVIGATE_FILED_RETURNS_V2"
-        | "PACK_CONTENT_REFRESH_FILED_RETURNS_OBSERVATION_V2"
-        | "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V2"
-        | "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V2"
-        | "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V2";
+        | "PACK_CONTENT_NAVIGATE_FILED_RETURNS_V3"
+        | "PACK_CONTENT_REFRESH_FILED_RETURNS_OBSERVATION_V3"
+        | "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3"
+        | "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V3"
+        | "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3";
     }
   >,
 ): Promise<PackMessageResponse> {

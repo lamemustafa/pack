@@ -14,6 +14,9 @@ export function isExpectedDownloadCandidate(
   item: DownloadCreatedItem,
   context: DownloadObservationContext,
 ): boolean {
+  if (isTrustedDownload(item, context)) {
+    return startsAfterArmedTime(item, context.armedAt) && hasExpectedFileEvidence(item, context);
+  }
   return (
     isPotentialDownloadCandidate(item, context) &&
     hasExpectedUrlEvidence(item, context) &&
@@ -25,6 +28,7 @@ export function isPotentialDownloadCandidate(
   item: DownloadCreatedItem,
   context: DownloadObservationContext,
 ): boolean {
+  if (isTrustedDownload(item, context)) return startsAfterArmedTime(item, context.armedAt);
   if (!startsAfterArmedTime(item, context.armedAt)) return false;
   return hasExpectedOrigin(item, context.expectedOrigins);
 }
@@ -52,6 +56,13 @@ function hasExpectedOrigin(item: DownloadCreatedItem, expectedOrigins: readonly 
     .map((value) => (value ? parseOrigin(value) : null))
     .filter(isNonNullableString);
   return origins.some((origin) => expectedOrigins.includes(origin));
+}
+
+function isTrustedDownload(
+  item: DownloadCreatedItem,
+  context: DownloadObservationContext,
+): boolean {
+  return context.trustedDownloadIds?.has(item.id) ?? false;
 }
 
 function hasExpectedUrlEvidence(

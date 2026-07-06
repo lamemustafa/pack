@@ -9,6 +9,7 @@ export const GST_CONNECTOR_DESCRIPTOR: PortalConnectorDescriptor = {
     "https://www.gst.gov.in",
     "https://services.gst.gov.in",
     "https://return.gst.gov.in",
+    "https://gstr2b.gst.gov.in",
   ],
   supportedDocumentTypes: ["GSTR-1", "GSTR-3B", "GSTR-2B"],
   compatibilityVersion: "gst-return-pack-v0",

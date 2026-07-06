@@ -1,5 +1,4 @@
 import { browser } from "wxt/browser";
-import { GST_CONNECTOR_DESCRIPTOR } from "../connectors/gst/constants";
 import type {
   FiledReturnsDownloadScope,
   FiledReturnsDownloadTarget,
@@ -8,38 +7,28 @@ import type {
 } from "../core/contracts";
 import type { PackMessageResponse } from "../core/messages";
 import { FULL_FISCAL_YEAR_PERIOD } from "../core/filed-returns-scope";
-import {
-  filedReturnsConcreteArtifactLabel,
-  filedReturnsArtifactMimeTypes,
-  type FiledReturnsConcreteArtifactType,
-} from "../core/filed-returns-artifacts";
+import { type FiledReturnsConcreteArtifactType } from "../core/filed-returns-artifacts";
 import { filedReturnDescriptor } from "../connectors/gst/filed-returns-return-descriptors";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import {
   mergeFlowStepWithDownloadObservation,
   observeNextBrowserDownload,
 } from "./download-observer";
-import { isUnconfirmedBrowserDownloadSignal } from "./download-evidence-signals";
 import { suggestNextBrowserDownloadFilename } from "./download-filename-suggester";
+import { startCapturedFiledReturnDownload } from "./filed-returns-captured-download";
 import { triggerDirectFiledReturnDownload } from "./filed-returns-direct-download-trigger";
+import { expectedDownloadForScope } from "./filed-returns-download-expectations";
 import { safeFiledReturnDownloadFilename } from "./filed-returns-download-filename";
+import {
+  targetReviewScope,
+  withArtifactDownloadMessage,
+  withDownloadedArtifactSignal,
+} from "./filed-returns-download-result";
 import {
   runDownloadTriggerOnce,
   type FiledReturnsFlowMessagingDeps,
 } from "./filed-returns-flow-messaging";
 import { persistFiledReturnsTargetReview } from "./filed-returns-target-review";
-
-const EXPECTED_FILED_RETURN_PDF_DOWNLOAD = {
-  expectedFileExtensions: [".pdf"],
-  expectedMimeTypes: ["application/pdf"],
-  expectedOrigins: GST_CONNECTOR_DESCRIPTOR.supportedOrigins,
-};
-
-const EXPECTED_FILED_RETURN_EXCEL_DOWNLOAD = {
-  expectedFileExtensions: [".xlsx", ".xls"],
-  expectedMimeTypes: filedReturnsArtifactMimeTypes("EXCEL"),
-  expectedOrigins: GST_CONNECTOR_DESCRIPTOR.supportedOrigins,
-};
 
 type FlowStepResponse = Extract<PackMessageResponse, { ok: true; flowStep: PortalFlowStepResult }>;
 
@@ -80,7 +69,7 @@ export async function triggerAndObserveFiledReturnDownload({
   const filename = safeFiledReturnDownloadFilename(scope, artifactType);
   const trustedDownloadIds = new Set<number>();
   const observationContext = {
-    ...expectedFiledReturnDownload(artifactType),
+    ...expectedDownloadForScope(scope, artifactType),
     armedAt,
     expectedUrlSubstrings: [],
     ignoredFilenames: [filename],
@@ -96,6 +85,21 @@ export async function triggerAndObserveFiledReturnDownload({
     detailDownloadFilenameSuggestion.stop();
   });
   const triggerResponse = await runDownloadTriggerOnce(deps, tabId, target);
+  if (triggerResponse.ok && "capturedDownloadRequest" in triggerResponse) {
+    detailDownloadObservation.stop();
+    detailDownloadFilenameSuggestion.stop();
+    return startCapturedFiledReturnDownload({
+      activePeriod,
+      armedAt,
+      artifactType,
+      capturedDownloadRequest: triggerResponse.capturedDownloadRequest,
+      deps,
+      scope,
+      target,
+      triggerStep: triggerResponse.downloadTrigger,
+    });
+  }
+
   const triggerFlowResponse = toTriggerFlowResponse(triggerResponse, activePeriod);
   if (!triggerFlowResponse.ok || !("flowStep" in triggerFlowResponse)) {
     detailDownloadObservation.stop();
@@ -118,6 +122,7 @@ export async function triggerAndObserveFiledReturnDownload({
       ),
       artifactType,
     ),
+    scope,
     artifactType,
   );
   let flowSummary: FiledReturnsFlowSummary | null = null;
@@ -149,12 +154,6 @@ function createDownloadTarget(
   };
 }
 
-function expectedFiledReturnDownload(artifactType: FiledReturnsConcreteArtifactType) {
-  return artifactType === "EXCEL"
-    ? EXPECTED_FILED_RETURN_EXCEL_DOWNLOAD
-    : EXPECTED_FILED_RETURN_PDF_DOWNLOAD;
-}
-
 function toTriggerFlowResponse(
   response: PackMessageResponse,
   activePeriod: string | null,
@@ -180,6 +179,7 @@ function shouldAwaitDownloadObservation(step: PortalFlowStepResult): boolean {
   if (step.state !== "clicked") return false;
   return (
     step.safeSignals.includes("filed-return-download-clicked") ||
+    step.safeSignals.includes("gstr2b-download-clicked") ||
     step.safeSignals.includes("filed-gstr3b-download-clicked") ||
     step.safeSignals.includes("filed-gstr3b-download-trigger-ambiguous")
   );
@@ -218,71 +218,6 @@ function normaliseAmbiguousTriggerDownloadResult(
   };
 }
 
-function withDownloadedArtifactSignal(
-  flowStep: PortalFlowStepResult,
-  artifactType: FiledReturnsConcreteArtifactType,
-): PortalFlowStepResult {
-  if (flowStep.state !== "downloaded") return flowStep;
-  return {
-    ...flowStep,
-    safeSignals: [
-      ...flowStep.safeSignals,
-      ...(flowStep.safeSignals.includes(`filed-return-artifact-downloaded:${artifactType}`)
-        ? []
-        : [`filed-return-artifact-downloaded:${artifactType}`]),
-    ],
-  };
-}
-
-function withArtifactDownloadMessage(
-  flowStep: PortalFlowStepResult,
-  artifactType: FiledReturnsConcreteArtifactType,
-): PortalFlowStepResult {
-  if (flowStep.state !== "downloaded") return withUnconfirmedArtifactSignal(flowStep, artifactType);
-  const artifactLabel = filedReturnsConcreteArtifactLabel(artifactType);
-  return {
-    ...flowStep,
-    safeMessage: `The browser reported that the filed-return ${artifactLabel} download completed. Check the local downloads folder for the GST Portal file.`,
-  };
-}
-
-function withUnconfirmedArtifactSignal(
-  flowStep: PortalFlowStepResult,
-  artifactType: FiledReturnsConcreteArtifactType,
-): PortalFlowStepResult {
-  if (flowStep.state !== "download-unconfirmed" && flowStep.state !== "blocked") return flowStep;
-  if (!flowStep.safeSignals.some(isUnconfirmedBrowserDownloadSignal)) {
-    return flowStep;
-  }
-
-  const artifactLabel = filedReturnsConcreteArtifactLabel(artifactType);
-  return {
-    ...flowStep,
-    safeSignals: [
-      ...flowStep.safeSignals,
-      ...(flowStep.safeSignals.includes(`filed-return-artifact-unconfirmed:${artifactType}`)
-        ? []
-        : [`filed-return-artifact-unconfirmed:${artifactType}`]),
-    ],
-    safeMessage:
-      artifactType === "EXCEL"
-        ? "Pack clicked the filed GSTR-1 e-invoice details Excel download control, but the browser did not report an Excel download. If Brave blocked multiple downloads, allow downloads for the GST Portal; if the portal shows no e-invoice file, retry after the file is available."
-        : `Pack clicked the filed-return ${artifactLabel} download control, but the browser did not report a completed download. Allow downloads for the GST Portal, then retry.`,
-  };
-}
-
-function targetReviewScope(
-  scope: FiledReturnsDownloadScope,
-  artifactType: FiledReturnsConcreteArtifactType,
-): FiledReturnsDownloadScope {
-  if (artifactType === "PDF") {
-    const pdfScope = { ...scope };
-    delete pdfScope.artifactType;
-    return pdfScope;
-  }
-  return { ...scope, artifactType };
-}
-
 function unverifiedPeriodResponse(scope: FiledReturnsDownloadScope): FlowStepResponse {
   const descriptor = filedReturnDescriptor(scope.returnType);
   return {
@@ -303,7 +238,7 @@ function unverifiedPeriodResponse(scope: FiledReturnsDownloadScope): FlowStepRes
 }
 
 export function observeFiledReturnDownload(
-  context = { ...EXPECTED_FILED_RETURN_PDF_DOWNLOAD, armedAt: new Date() },
+  context = { ...expectedDownloadForScope({ returnType: "GSTR-3B" }, "PDF"), armedAt: new Date() },
 ) {
   return observeNextBrowserDownload(browser.downloads, context);
 }

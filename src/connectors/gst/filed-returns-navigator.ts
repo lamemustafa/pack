@@ -398,10 +398,11 @@ function clickBestFiledReturnsCandidate(
   };
 }
 
-function clickBestReturnDashboardCandidate(
+export function clickBestReturnDashboardCandidate(
   documentRef: Document,
   scanStage: string,
   prefixSignals: readonly string[],
+  scopeId = FILED_RETURNS_SCOPE_ID,
 ): PortalNavigationResult | null {
   const elements = getClickableElements(documentRef);
   const candidates = elements.map(toNavigationCandidateInput);
@@ -417,7 +418,7 @@ function clickBestReturnDashboardCandidate(
 
   return {
     connectorId: "gst",
-    scopeId: FILED_RETURNS_SCOPE_ID,
+    scopeId,
     state: "clicked",
     safeSignals: [
       ...prefixSignals,
@@ -479,7 +480,7 @@ function clickBestHiddenFiledReturnsMenuCandidate(
 
 function isReturnDashboardRoute(documentRef: Document): boolean {
   const location = documentRef.defaultView?.location;
-  return Boolean(location && /\/returns\/auth\/dashboard$/i.test(location.pathname));
+  return Boolean(location && /\/returns\/auth\/dashboard\/?$/i.test(location.pathname));
 }
 
 export async function dismissSafePostLoginDialogs(documentRef: Document): Promise<string[]> {

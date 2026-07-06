@@ -14,7 +14,10 @@ export type FiledReturnsObservationState =
   | "download-not-visible";
 
 export type FiledReturnsObservation = PortalObservation & {
-  scopeId: "gst-filed-returns-gstr3b-pdf-private-v0" | "gst-filed-returns-gstr1-pdf-private-v0";
+  scopeId:
+    | "gst-filed-returns-gstr3b-pdf-private-v0"
+    | "gst-filed-returns-gstr1-pdf-private-v0"
+    | "gst-gstr2b-private-v0";
   state: FiledReturnsObservationState;
   pageKind: "gst-filed-returns";
 };
@@ -83,6 +86,20 @@ export function observeFiledReturnsPageText(
       state: "ready",
       safeSignals,
       safeMessage: "Filed GSTR-3B PDF controls appear ready for the private spike.",
+    };
+  }
+
+  if (
+    safeSignals.includes("download-gstr2b-summary-pdf") ||
+    safeSignals.includes("download-gstr2b-details-excel")
+  ) {
+    return {
+      connectorId: "gst",
+      pageKind: "gst-filed-returns",
+      scopeId: "gst-gstr2b-private-v0",
+      state: "ready",
+      safeSignals,
+      safeMessage: "GSTR-2B download controls appear ready.",
     };
   }
 
@@ -174,6 +191,7 @@ function detectSafeSignals(text: string, hints: FiledReturnsObservationHints): s
   if (isGstr3bDetailRoute(hints)) signals.push("gstr-3b-detail-route");
   if (isGstr1DetailRoute(hints)) signals.push("gstr-1-detail-route");
   if (isGstr1SummaryRoute(hints)) signals.push("gstr-1-summary-route");
+  if (isGstr2bSummaryRoute(hints)) signals.push("gstr2b-summary-route", "gstr-2b");
   if (/view filed returns|filed returns/.test(text) || signals.includes("filed-returns-route")) {
     signals.push("filed-returns-heading");
   }
@@ -182,6 +200,7 @@ function detectSafeSignals(text: string, hints: FiledReturnsObservationHints): s
   if (signals.includes("gstr-1-summary-route")) signals.push("filed-returns-heading", "gstr-1");
   if (/gstr[\s-]?3b/.test(text)) signals.push("gstr-3b");
   if (/\bgstr[\s-]?1\b/.test(text)) signals.push("gstr-1");
+  if (/\bgstr[\s-]?2b\b/.test(text)) signals.push("gstr-2b");
   if (/download filed gstr[\s-]?3b/.test(text)) signals.push("download-filed-gstr-3b");
   if (/download filed gstr[\s-]?1\b/.test(text)) signals.push("download-filed-gstr-1");
   if (
@@ -195,6 +214,12 @@ function detectSafeSignals(text: string, hints: FiledReturnsObservationHints): s
     /download\b.*\bdetails?\b.*\be-?invoices?\b/.test(text)
   ) {
     signals.push("download-excel-gstr-1");
+  }
+  if (/\bdownload\s+gstr[\s-]?2b\s+summary\s*\(?\s*pdf\s*\)?\b/.test(text)) {
+    signals.push("download-gstr2b-summary-pdf");
+  }
+  if (/\bdownload\s+gstr[\s-]?2b\s+details\s*\(?\s*excel\s*\)?\b/.test(text)) {
+    signals.push("download-gstr2b-details-excel");
   }
   for (const returnType of ["GSTR-3B", "GSTR-1"] as const) {
     const slug = returnType === "GSTR-3B" ? "gstr-3b" : "gstr-1";
@@ -273,6 +298,10 @@ function isGstr1DetailRoute(hints: FiledReturnsObservationHints): boolean {
 
 function isGstr1SummaryRoute(hints: FiledReturnsObservationHints): boolean {
   return hints.pathname ? /\/returns\/auth\/gstr1\/gstr1sum$/i.test(hints.pathname) : false;
+}
+
+function isGstr2bSummaryRoute(hints: FiledReturnsObservationHints): boolean {
+  return hints.pathname ? /\/gstr2b\/auth\/gstr2b\/summary\/?$/i.test(hints.pathname) : false;
 }
 
 function detectVisibleReturnLabel(signals: readonly string[]): FiledReturnsReturnType {

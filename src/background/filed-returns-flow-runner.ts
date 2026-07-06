@@ -54,9 +54,9 @@ export interface FiledReturnsFlowRunnerDeps {
       PackMessage,
       {
         type:
-          | "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V2"
-          | "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V2"
-          | "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V2";
+          | "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3"
+          | "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3"
+          | "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V3";
       }
     >,
   ) => Promise<PackMessageResponse>;
@@ -322,7 +322,7 @@ function runScopedDownloadStepWithRetry(
   scope: FiledReturnsDownloadScope,
 ): Promise<PackMessageResponse> {
   return runDownloadStepWithRetry(deps, tabId, {
-    type: "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V2",
+    type: "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
     payload: scope,
   });
 }

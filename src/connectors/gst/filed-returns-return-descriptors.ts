@@ -43,6 +43,17 @@ export const FILED_RETURN_DESCRIPTORS: Record<FiledReturnsReturnType, FiledRetur
     secondaryDownloadPattern: /\bdownload\s*\(?\s*pdf\s*\)?\b/i,
     supportsDirectDownload: false,
   },
+  "GSTR-2B": {
+    returnType: "GSTR-2B",
+    label: "GSTR-2B",
+    scopeId: filedReturnsScopeId("GSTR-2B"),
+    signalSlug: filedReturnsSafeSlug("GSTR-2B"),
+    detailRoutePattern: /\/gstr2b\/auth\/gstr2b\/summary\/?$/i,
+    detailHeadingPattern: /\bgstr[\s-]?2b\b/i,
+    explicitDownloadPattern: /\bdownload\s+gstr[\s-]?2b\s+summary\s*\(?\s*pdf\s*\)?\b/i,
+    excelDownloadPattern: /\bdownload\s+gstr[\s-]?2b\s+details\s*\(?\s*excel\s*\)?\b/i,
+    supportsDirectDownload: false,
+  },
 };
 
 export function filedReturnDescriptor(returnType: FiledReturnsReturnType): FiledReturnDescriptor {

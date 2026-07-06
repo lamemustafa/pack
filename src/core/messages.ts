@@ -1,5 +1,6 @@
 import type {
   ArchiveManifest,
+  FiledReturnsCapturedDownloadRequest,
   FiledReturnsFlowSummary,
   FiledReturnsDirectDownloadRequest,
   FiledReturnsDownloadScope,
@@ -26,7 +27,7 @@ import {
   type FiledReturnsReturnType,
 } from "./filed-returns-return-types";
 
-export const PACK_CONTENT_SCRIPT_PROTOCOL_VERSION = 9;
+export const PACK_CONTENT_SCRIPT_PROTOCOL_VERSION = 11;
 
 export type PackMessage =
   | { type: "PACK_CONTENT_CONTEXT"; payload: PortalContext }
@@ -64,18 +65,18 @@ export type PackMessage =
   | { type: "PACK_START_SYNTHETIC_DEMO" }
   | { type: "PACK_CLEAR_LOCAL_DATA" }
   | { type: "PACK_GET_LAST_MANIFEST" }
-  | { type: "PACK_CONTENT_REFRESH_FILED_RETURNS_OBSERVATION_V2" }
-  | { type: "PACK_CONTENT_NAVIGATE_FILED_RETURNS_V2" }
+  | { type: "PACK_CONTENT_REFRESH_FILED_RETURNS_OBSERVATION_V3" }
+  | { type: "PACK_CONTENT_NAVIGATE_FILED_RETURNS_V3" }
   | {
-      type: "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V2";
+      type: "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3";
       payload: FiledReturnsDownloadTarget;
     }
   | {
-      type: "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V2";
+      type: "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V3";
       payload: FiledReturnsDownloadTarget;
     }
   | {
-      type: "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V2";
+      type: "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3";
       payload: FiledReturnsDownloadScope;
     };
 
@@ -94,6 +95,12 @@ export type PackMessageResponse =
   | {
       ok: true;
       directDownloadRequest: FiledReturnsDirectDownloadRequest;
+      observation?: PortalObservation | null;
+    }
+  | {
+      ok: true;
+      capturedDownloadRequest: FiledReturnsCapturedDownloadRequest;
+      downloadTrigger: PortalDownloadTriggerResult;
       observation?: PortalObservation | null;
     }
   | {
@@ -131,8 +138,8 @@ export function isPackMessage(input: unknown): input is PackMessage {
     case "PACK_ACKNOWLEDGE_INTERRUPTED_RUN":
     case "PACK_REFRESH_FILED_RETURNS_OBSERVATION":
     case "PACK_NAVIGATE_FILED_RETURNS":
-    case "PACK_CONTENT_REFRESH_FILED_RETURNS_OBSERVATION_V2":
-    case "PACK_CONTENT_NAVIGATE_FILED_RETURNS_V2":
+    case "PACK_CONTENT_REFRESH_FILED_RETURNS_OBSERVATION_V3":
+    case "PACK_CONTENT_NAVIGATE_FILED_RETURNS_V3":
       return true;
     case "PACK_RETRY_FILED_RETURNS_TARGET":
       return (
@@ -145,11 +152,11 @@ export function isPackMessage(input: unknown): input is PackMessage {
     case "PACK_RESOLVE_FULL_FISCAL_YEAR_TARGET":
       return isFullFiscalYearTargetResolution(input.payload);
     case "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD":
-    case "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V2":
-    case "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V2":
+    case "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3":
+    case "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V3":
       return isFiledReturnsDownloadTarget(input.payload);
     case "PACK_RUN_FILED_RETURNS_DOWNLOAD_STEP":
-    case "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V2":
+    case "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3":
       return isFiledReturnsDownloadScope(input.payload);
     case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
       return isFiledReturnsStartScope(input.payload);
