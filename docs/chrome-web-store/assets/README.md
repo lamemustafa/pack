@@ -1,8 +1,9 @@
 # Chrome Web Store Asset Sources And Exports
 
-These source assets and generated exports are safe drafts for the `v0.3.2`
-Chrome Web Store dashboard update. They are not proof that the Store update is
-live.
+These source assets and generated exports are the safe synthetic asset set for
+the `v0.3.2` Chrome Web Store dashboard update. Store publication is recorded in
+[`../listing.md`](../listing.md); these files remain source-controlled asset
+inputs rather than dashboard-held proof.
 
 The asset dimensions follow Chrome's official "Supplying Images" guidance:
 
@@ -55,7 +56,7 @@ dashboard review state in [`../listing.md`](../listing.md).
 | `exports/screenshot-reviewer-demo-1280x800.png`      | 1280x800   | `02a599565c113e83d7b47283946143f190a43f214f846188de4547853482338b` |
 | `exports/asset-hashes.json`                          | manifest   | recorded in source with the export set                             |
 
-The Chrome Web Store package/listing update for `v0.3.2` remains pending until
-the exported assets, package upload, privacy declarations, reviewer
-instructions, review result, and publication state are recorded for the exact
-release.
+The Chrome Web Store package/listing update for `v0.3.2` is recorded as
+published in [`../listing.md`](../listing.md). For future releases, keep the
+exported assets, package upload, privacy declarations, reviewer instructions,
+review result, and publication state tied to the exact release version.

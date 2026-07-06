@@ -1,9 +1,14 @@
 # Chrome Web Store Dashboard Closeout
 
-This runbook closes the dashboard-held parts of the `v0.3.2` GSTR-1 release.
-It does not replace the protected package submit workflow. It records the manual
-Chrome Web Store Developer Dashboard steps that cannot be proved from source
-control alone.
+This runbook closes dashboard-held parts of Chrome Web Store releases. It does
+not replace the protected package submit workflow. It records the manual Chrome
+Web Store Developer Dashboard steps that cannot be proved from source control
+alone.
+
+For `v0.3.2`, a maintainer-provided Chrome Web Store publication email on
+2026-07-06 records item ID `nfnbhekccajjfgkppolomflaeledoccb`, item name
+`ComplyEaze Pack: GSTR-1/GSTR-3B Downloader`, version `0.3.2`, and visibility
+`Public`.
 
 ## Source Inputs
 
@@ -28,7 +33,8 @@ Official Chrome references to re-check before editing the dashboard:
 
 1. Open the Chrome Web Store Developer Dashboard for the existing Pack item:
    `nfnbhekccajjfgkppolomflaeledoccb`.
-2. Confirm the package under review is the `v0.3.2` upload submitted by GitHub
+2. Confirm the dashboard package under review or published package matches the
+   exact release upload. For `v0.3.2`, this is the upload submitted by GitHub
    Actions run `28704776806`.
 3. Copy the title, short description, opening description, and government
    non-affiliation disclaimer from [`listing.md`](listing.md).
@@ -82,7 +88,9 @@ require_published=true
 ```
 
 Record the run IDs and final state in
-[`../PUBLICATION_READINESS.md`](../PUBLICATION_READINESS.md).
+[`../PUBLICATION_READINESS.md`](../PUBLICATION_READINESS.md). For `v0.3.2`, the
+publication email is already recorded; the `require_published=true` status run
+is evidence hardening after read-only status credentials are available.
 
 ## Evidence To Record
 
@@ -92,7 +100,8 @@ Before considering the GSTR-1 Store closeout done, record:
 - dashboard screenshot and promotional image review state;
 - privacy-practices declaration snapshot or reviewer/approver note;
 - reviewer-instructions snapshot or reviewer/approver note;
-- read-only status workflow run ID for `require_published=false`;
+- read-only status workflow run ID for `require_published=false`, when
+  available;
 - final Chrome Web Store state, rejection reason, or published-version evidence;
 - issue links for any remaining dashboard or credential blockers.
 

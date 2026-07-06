@@ -10,7 +10,7 @@ stable-release claims.
 - First Chrome listing title: **ComplyEaze Pack: GSTR-1/GSTR-3B Downloader**.
 - V0 Chrome Web Store listing:
   `https://chromewebstore.google.com/detail/complyeaze-pack-gst-gstr/nfnbhekccajjfgkppolomflaeledoccb`.
-- Latest verified GitHub release for GSTR-1 support:
+- Store-published GitHub release for GSTR-1 support:
   [`v0.3.2`](https://github.com/lamemustafa/pack/releases/tag/v0.3.2),
   published as a pre-release from commit
   `7bc2c2604f045c1d5547f6ab63a84dbb91de161e`.
@@ -22,8 +22,12 @@ stable-release claims.
   workflow dispatch on 2026-07-04. Run `28704776806` verified the GitHub release
   assets, uploaded `complyeazepack-0.3.2-chrome.zip`, reported upload state
   `SUCCEEDED`, reported publish state `PENDING_REVIEW`, and returned no
-  warnings. Dashboard listing assets/privacy declarations, Chrome Web Store
-  review result, and final publication confirmation are still pending.
+  warnings. A maintainer-provided Chrome Web Store publication email on
+  2026-07-06 records item ID `nfnbhekccajjfgkppolomflaeledoccb`, item name
+  `ComplyEaze Pack: GSTR-1/GSTR-3B Downloader`, version `0.3.2`, and visibility
+  `Public`.
+- Repository source has since advanced to `v0.3.3`; the current Store-published
+  package evidence is for `v0.3.2` only.
 - V0 purpose: download filed GSTR-3B PDFs, GSTR-1 summary PDFs, and optional
   GSTR-1 e-invoice details Excel files locally from the user's active,
   manually authenticated GST Portal session when the GST Portal exposes those
@@ -186,14 +190,19 @@ stable-release claims.
 - [x] Submit the `v0.3.2` package through the protected Chrome Web Store
       workflow. Run `28704776806` uploaded the package with Chrome Web Store
       upload state `SUCCEEDED`, publish state `PENDING_REVIEW`, and no warnings.
+- [x] Record Chrome Web Store publication evidence for `v0.3.2`. A
+      maintainer-provided publication email on 2026-07-06 records item ID
+      `nfnbhekccajjfgkppolomflaeledoccb`, item name
+      `ComplyEaze Pack: GSTR-1/GSTR-3B Downloader`, item type `extension`,
+      version `0.3.2`, and visibility `Public`.
 - [x] Add a read-only Chrome Web Store status monitor for submitted packages.
       Scheduled runs use the dedicated `chrome-web-store-status` environment so
       publication/rejection monitoring is not blocked by the protected publishing
       approval gate.
-- [ ] Upload/review the `v0.3.2` GSTR-1 listing copy, screenshots, promotional
-      images, privacy-practices declarations, and reviewer instructions in the
-      Chrome Web Store dashboard, then record review/publication evidence for
-      that exact package. Use
+- [ ] Optional evidence hardening: record a read-only Chrome Web Store Status
+      run with `expected_version=0.3.2` and `require_published=true`, plus any
+      dashboard-held listing/assets/privacy-practices field snapshots the
+      maintainer wants retained outside the Chrome Web Store email. Use
       [`docs/chrome-web-store/dashboard-closeout.md`](chrome-web-store/dashboard-closeout.md)
       for the dashboard and read-only status-monitor closeout checklist.
 
@@ -232,13 +241,14 @@ or the Government of India.
 
 ## Not Yet Stable Or Broad-Claim Ready Until
 
-The V0 listing exists, and the source-build alpha full-year workflow has
-maintainer evidence for automatic local downloads after user initiation. Pack
-must not claim stable Chrome Web Store maturity, store-facing full-year
-availability, durable restart-safe full-year support, legal approval, live
-manifest/index/exception output, or broad GST coverage until legal review, live
-public policy URL confirmation, exact-ZIP manual QA, privacy declarations, live
-per-target result/manifest wiring, and store assets/sign-offs are recorded for
-the exact release. For `v0.3.2`, GitHub release assets and package submission
-are recorded, but Chrome Web Store review/publication and dashboard-held
-listing/assets evidence are not yet recorded.
+The V0 listing exists for Store-published `v0.3.2`, and the source-build alpha
+full-year workflow has maintainer evidence for automatic local downloads after
+user initiation. Pack must not claim stable Chrome Web Store maturity,
+store-facing full-year availability, durable restart-safe full-year support,
+legal approval, live manifest/index/exception output, or broad GST coverage
+until legal review, live public policy URL confirmation, exact-ZIP manual QA,
+privacy declarations, live per-target result/manifest wiring, and store
+assets/sign-offs are recorded for the exact release. For `v0.3.2`, GitHub
+release assets, package submission, and Chrome Web Store publication email
+evidence are recorded; read-only status API evidence and dashboard-held field
+snapshots remain optional evidence-hardening items.
