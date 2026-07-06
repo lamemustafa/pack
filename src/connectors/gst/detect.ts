@@ -7,11 +7,12 @@ const FILED_RETURNS_PATH_HINTS = [
   /\/pages\/returns\/efiledreturns\.html$/i,
   /\/returns\/auth\/efiledreturns$/i,
   /\/returns\/auth\/gstr3b$/i,
+  /\/gstr2b\/auth\/gstr2b\/summary\/?$/i,
   /view[-_/]?filed[-_/]?returns/i,
   /filed[-_/]?returns/i,
   /returns\/auth\/filed/i,
 ];
-const FILED_RETURNS_TITLE_HINTS = [/view filed returns/i, /filed returns/i];
+const FILED_RETURNS_TITLE_HINTS = [/view filed returns/i, /filed returns/i, /\bgstr2b\b/i];
 
 export function detectGstPortalContext(locationLike: Location, title: string): PortalContext {
   const origin = locationLike.origin;

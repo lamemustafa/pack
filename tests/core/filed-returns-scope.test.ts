@@ -189,6 +189,41 @@ describe("filed returns GST scope", () => {
     });
   });
 
+  it("supports GSTR-2B summary PDF and details Excel for single-period and full-year starts", () => {
+    expect(
+      isSupportedFiledReturnsStartScope({
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2025-26",
+        period: "May",
+        returnType: "GSTR-2B",
+      }),
+    ).toBe(true);
+    expect(
+      isSupportedFiledReturnsStartScope({
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2025-26",
+        period: FULL_FISCAL_YEAR_PERIOD,
+        returnType: "GSTR-2B",
+      }),
+    ).toBe(true);
+    expect(
+      normaliseFiledReturnsScope(
+        {
+          artifactType: "PDF_AND_EXCEL",
+          financialYear: "2025-26",
+          period: "May",
+          returnType: "GSTR-2B",
+        },
+        new Date("2026-06-24T00:00:00+05:30"),
+      ),
+    ).toEqual({
+      artifactType: "PDF_AND_EXCEL",
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-2B",
+    });
+  });
+
   it("normalises unsupported GSTR-3B Excel requests back to PDF", () => {
     expect(
       isSupportedFiledReturnsStartScope({

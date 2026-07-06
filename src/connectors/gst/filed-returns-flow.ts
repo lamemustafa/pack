@@ -1,4 +1,5 @@
 import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "../../core/contracts";
+import { runGstr2bDownloadStep } from "./gstr2b-flow";
 import {
   activateElement,
   getClickableElements,
@@ -27,6 +28,8 @@ export async function runFiledReturnsDownloadStep(
   documentRef: Document,
   scope: FiledReturnsDownloadScope,
 ): Promise<PortalFlowStepResult> {
+  if (scope.returnType === "GSTR-2B") return runGstr2bDownloadStep(documentRef, scope);
+
   const descriptor = filedReturnDescriptor(scope.returnType);
   const scopeId = filedReturnScopeId(scope.returnType);
   const portalAvailabilityIssue = detectFiledReturnsPortalAvailabilityIssue(documentRef);

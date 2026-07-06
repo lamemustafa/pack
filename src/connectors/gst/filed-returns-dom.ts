@@ -55,8 +55,14 @@ export function dispatchChange(element: HTMLElement) {
 export function isHtmlElement(root: ParentNode, element: Element): element is HTMLElement {
   const documentRef = root.nodeType === 9 ? (root as Document) : root.ownerDocument;
   if (!documentRef) return false;
-  const HTMLElementConstructor = documentRef.defaultView?.HTMLElement;
-  return HTMLElementConstructor ? element instanceof HTMLElementConstructor : false;
+  if (element.namespaceURI && element.namespaceURI !== "http://www.w3.org/1999/xhtml") {
+    return false;
+  }
+  const view = documentRef.defaultView;
+  const HTMLElementConstructor = view?.HTMLElement;
+  return HTMLElementConstructor && element instanceof HTMLElementConstructor
+    ? true
+    : typeof (element as Partial<HTMLElement>).click === "function";
 }
 
 export function normaliseText(value: string): string {

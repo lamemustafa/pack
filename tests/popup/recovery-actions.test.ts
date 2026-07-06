@@ -158,7 +158,7 @@ describe("popup full-year recovery actions", () => {
     expect(markup).not.toContain("Start download");
   });
 
-  it("shows GSTR-1 as a filing option with artifact and full-year controls", () => {
+  it("shows GSTR-1 as a radio filing option with artifact and full-year controls", () => {
     const markup = renderToStaticMarkup(
       createElement(ScopeForm, {
         busy: null,
@@ -174,15 +174,43 @@ describe("popup full-year recovery actions", () => {
       }),
     );
 
-    expect(markup).toContain('value="GSTR-1" selected="">GSTR-1');
-    expect(markup).toContain('value="GSTR-3B">GSTR-3B');
-    expect(markup).toContain('value="PDF">Summary PDF');
-    expect(markup).toContain('value="EXCEL">E-invoice details Excel');
-    expect(markup).toContain(
-      'value="PDF_AND_EXCEL" selected="">Summary PDF + e-invoice details Excel',
-    );
+    expect(markup).toContain('type="radio"');
+    expect(markup).toContain('class="scope-option scope-option-selected"');
+    expect(markup).toContain('checked="" value="GSTR-1"');
+    expect(markup).toContain('value="GSTR-3B"');
+    expect(markup).toContain('value="PDF"');
+    expect(markup).toContain("Summary PDF");
+    expect(markup).toContain('value="EXCEL"');
+    expect(markup).toContain("E-invoice details Excel");
+    expect(markup).toContain('checked="" value="PDF_AND_EXCEL"');
+    expect(markup).toContain("Summary PDF + e-invoice details Excel");
     expect(markup).toContain("Full fiscal year");
     expect(markup).not.toContain("monthly GSTR-3B filers only");
+  });
+
+  it("shows GSTR-2B May as exclusive radio selections with GSTR-2B artifacts", () => {
+    const markup = renderToStaticMarkup(
+      createElement(ScopeForm, {
+        busy: null,
+        scope: {
+          artifactType: "PDF_AND_EXCEL",
+          financialYear: "2026-27",
+          period: "May",
+          returnType: "GSTR-2B",
+        },
+        flowSummary: null,
+        onScopeChange: () => undefined,
+        onStart: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain('checked="" value="GSTR-2B"');
+    expect(markup).toContain('value="GSTR-3B"');
+    expect(markup).toContain('checked="" value="May"');
+    expect(markup).toContain('value="June"');
+    expect(markup).toContain('checked="" value="PDF_AND_EXCEL"');
+    expect(markup).toContain("Summary PDF + details Excel");
+    expect(markup).not.toContain("E-invoice details Excel");
   });
 
   it("presents interrupted runs as resettable stuck work", () => {

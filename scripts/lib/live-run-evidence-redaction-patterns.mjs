@@ -4,7 +4,7 @@ export const LIVE_RUN_SENSITIVE_PATTERN_DEFINITIONS = [
   { id: "arn", pattern: "\\b[A-Z]{2}\\d{13}\\b", flags: "i" },
   {
     id: "portal-url",
-    pattern: "https://(?:www|services|return)\\.gst\\.gov\\.in/[^\\s\"']+",
+    pattern: "https://(?:www|services|return|gstr2b)\\.gst\\.gov\\.in/[^\\s\"']+",
     flags: "i",
   },
   {

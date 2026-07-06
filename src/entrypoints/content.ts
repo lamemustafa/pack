@@ -2,6 +2,7 @@ import { browser } from "wxt/browser";
 import { detectGstPortalContext } from "../connectors/gst/detect";
 import { runFiledReturnsDownloadStep } from "../connectors/gst/filed-returns-flow";
 import { triggerFiledReturnFiledPdfDownload } from "../connectors/gst/filed-returns-download";
+import { triggerGstr2bDownload } from "../connectors/gst/gstr2b-download";
 import { resolveFiledGstr3bVerifiedPdfDownloadRequest } from "../connectors/gst/filed-returns-direct-download-probe";
 import { navigateToFiledReturnsPage } from "../connectors/gst/filed-returns-navigator";
 import { observeFiledReturnsPageText } from "../connectors/gst/filed-returns-observer";
@@ -24,6 +25,7 @@ export default defineContentScript({
     "https://www.gst.gov.in/*",
     "https://services.gst.gov.in/*",
     "https://return.gst.gov.in/*",
+    "https://gstr2b.gst.gov.in/*",
   ],
   runAt: "document_idle",
   main() {
@@ -58,7 +60,7 @@ export default defineContentScript({
         return false;
       }
 
-      if (message.type === "PACK_CONTENT_NAVIGATE_FILED_RETURNS_V2") {
+      if (message.type === "PACK_CONTENT_NAVIGATE_FILED_RETURNS_V3") {
         void navigateToFiledReturnsPage(document)
           .then((navigation) =>
             sendResponse({ ok: true, navigation } satisfies PackMessageResponse),
@@ -72,7 +74,7 @@ export default defineContentScript({
         return true;
       }
 
-      if (message.type === "PACK_CONTENT_REFRESH_FILED_RETURNS_OBSERVATION_V2") {
+      if (message.type === "PACK_CONTENT_REFRESH_FILED_RETURNS_OBSERVATION_V3") {
         const observation = sendFiledReturnsObservation();
         sendResponse({
           ok: true,
@@ -81,7 +83,36 @@ export default defineContentScript({
         return false;
       }
 
-      if (message.type === "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V2") {
+      if (message.type === "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3") {
+        if (message.payload.returnType === "GSTR-2B") {
+          void triggerGstr2bDownload(document, message.payload)
+            .then(({ capturedDownloadRequest, downloadTrigger }) => {
+              const observation = sendFiledReturnsObservation();
+              if (capturedDownloadRequest) {
+                sendResponse({
+                  ok: true,
+                  capturedDownloadRequest,
+                  downloadTrigger,
+                  observation,
+                } satisfies PackMessageResponse);
+                return;
+              }
+              sendResponse({
+                ok: true,
+                downloadTrigger,
+                observation,
+              } satisfies PackMessageResponse);
+            })
+            .catch((error: unknown) =>
+              sendResponse({
+                ok: false,
+                error:
+                  error instanceof Error ? error.message : "Filed return download trigger failed.",
+              } satisfies PackMessageResponse),
+            );
+          return true;
+        }
+
         void triggerFiledReturnFiledPdfDownload(document, message.payload)
           .then((downloadTrigger) => {
             const observation = sendFiledReturnsObservation();
@@ -101,7 +132,7 @@ export default defineContentScript({
         return true;
       }
 
-      if (message.type === "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V2") {
+      if (message.type === "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V3") {
         void resolveFiledGstr3bVerifiedPdfDownloadRequest(document, message.payload)
           .then((resolved) => {
             const observation = sendFiledReturnsObservation();
@@ -136,7 +167,7 @@ export default defineContentScript({
         return true;
       }
 
-      if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V2") {
+      if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3") {
         void runFiledReturnsDownloadStep(document, message.payload)
           .then((flowStep) => {
             const observation = sendFiledReturnsObservation();

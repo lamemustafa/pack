@@ -25,7 +25,7 @@ describe("filed returns flow messaging", () => {
     };
 
     const responsePromise = runDownloadStepWithRetry(deps, 10, {
-      type: "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V2",
+      type: "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
       payload: {
         financialYear: "2026-27",
         period: "May",
@@ -68,7 +68,7 @@ describe("filed returns flow messaging", () => {
     };
 
     const responsePromise = runDownloadStepWithRetry(deps, 10, {
-      type: "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V2",
+      type: "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
       payload: {
         financialYear: "2026-27",
         period: "May",

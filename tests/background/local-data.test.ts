@@ -44,6 +44,12 @@ const browserMocks = vi.hoisted(() => ({
     },
   },
   tabs: {
+    onActivated: {
+      addListener: vi.fn(),
+    },
+    onUpdated: {
+      addListener: vi.fn(),
+    },
     query: vi.fn(async () => []),
     sendMessage: vi.fn(async () => ({ ok: true })),
   },

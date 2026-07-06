@@ -4,7 +4,7 @@
     "policyVersion": "1.0.0",
     "sourceRepository": "lamemustafa/pack",
     "sourceCommit": "0161b8fcfea919470f396329c5eff8e7daf7ff63",
-    "canonicalPolicySha256": "sha256:8262e32dea442647a04d5840315dabb05390fe435ddf56459a78865e6550b0d2",
+    "canonicalPolicySha256": "sha256:56eb71a4537b849022f219914a45fcfdb056cf42805f64f1fecceefafe309bda",
     "generatorVersion": "1.0.0"
   },
   "policy": {
@@ -49,7 +49,7 @@
         {
           "id": "gst-url",
           "label": "<GST_PORTAL_URL>",
-          "pattern": "https://(?:www|services|return)\\.gst\\.gov\\.in/[^\\s\"']*"
+          "pattern": "https://(?:www|services|return|gstr2b)\\.gst\\.gov\\.in/[^\\s\"']*"
         }
       ]
     }

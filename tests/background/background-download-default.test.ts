@@ -44,6 +44,12 @@ const browserMocks = vi.hoisted(() => {
       },
     },
     tabs: {
+      onActivated: {
+        addListener: vi.fn(),
+      },
+      onUpdated: {
+        addListener: vi.fn(),
+      },
       create: vi.fn(async () => undefined),
       query: vi.fn(async () => [
         {
@@ -117,7 +123,7 @@ describe("background filed returns download defaults", () => {
 
   it("prefers the direct GST PDF request before the portal download click", async () => {
     browserMocks.tabs.sendMessage.mockImplementation(async (_tabId, message: PackMessage) => {
-      if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V2") {
+      if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3") {
         return {
           ok: true,
           flowStep: {
@@ -130,7 +136,7 @@ describe("background filed returns download defaults", () => {
         } satisfies PackMessageResponse;
       }
 
-      if (message.type === "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V2") {
+      if (message.type === "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V3") {
         return {
           ok: true,
           directDownloadRequest: {
@@ -172,8 +178,8 @@ describe("background filed returns download defaults", () => {
       url: directMayUrl,
     });
     expect(sentActionMessageTypes()).toEqual([
-      "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V2",
-      "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V2",
+      "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
+      "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V3",
     ]);
   });
 
@@ -187,7 +193,7 @@ describe("background filed returns download defaults", () => {
       ]),
     );
     browserMocks.tabs.sendMessage.mockImplementation(async (_tabId, message: PackMessage) => {
-      if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V2") {
+      if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3") {
         return {
           ok: true,
           flowStep: {
@@ -204,7 +210,7 @@ describe("background filed returns download defaults", () => {
         } satisfies PackMessageResponse;
       }
 
-      if (message.type === "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V2") {
+      if (message.type === "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V3") {
         const period = periods.find((candidate) => candidate === message.payload.period);
         const periodDirectUrl = period ? directUrlByMonth.get(period) : null;
         return {
@@ -254,9 +260,73 @@ describe("background filed returns download defaults", () => {
     });
     expect(sentActionMessageTypes()).toEqual([
       ...periods.flatMap(() => [
-        "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V2",
-        "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V2",
+        "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
+        "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V3",
       ]),
+    ]);
+  });
+
+  it("does not use the GSTR-3B direct-download resolver for GSTR-2B", async () => {
+    browserMocks.tabs.sendMessage.mockImplementation(async (_tabId, message: PackMessage) => {
+      if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3") {
+        return {
+          ok: true,
+          flowStep: {
+            connectorId: "gst",
+            scopeId: "gst-gstr2b-private-v0",
+            state: "ready",
+            safeSignals: [
+              "gstr2b-summary-route",
+              "gstr2b-download-ready",
+              "filed-return-download-ready",
+            ],
+            safeMessage: "Ready.",
+          },
+        } satisfies PackMessageResponse;
+      }
+
+      if (message.type === "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3") {
+        return {
+          ok: true,
+          downloadTrigger: {
+            connectorId: "gst",
+            scopeId: "gst-gstr2b-private-v0",
+            state: "clicked",
+            safeSignals: ["gstr2b-download-clicked", "gstr2b-portal-blob-download-clicked"],
+            safeMessage: "Clicked.",
+          },
+        } satisfies PackMessageResponse;
+      }
+
+      return { ok: false, error: "Unexpected message." } satisfies PackMessageResponse;
+    });
+
+    await import("../../src/entrypoints/background");
+
+    const response = await sendBackgroundMessage({
+      type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",
+      payload: {
+        artifactType: "EXCEL",
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-2B",
+      },
+    });
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "downloaded",
+        safeSignals: expect.arrayContaining([
+          "gstr2b-portal-blob-download-clicked",
+          "browser-download-completed",
+        ]),
+      },
+    });
+    expect(browserMocks.downloads.download).not.toHaveBeenCalled();
+    expect(sentActionMessageTypes()).toEqual([
+      "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
+      "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
     ]);
   });
 });

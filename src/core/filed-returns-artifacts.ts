@@ -53,11 +53,13 @@ export function filedReturnsArtifactLabel(
 ): string {
   switch (artifactType) {
     case "EXCEL":
+      if (returnType === "GSTR-2B") return "Details Excel";
       return "E-invoice details Excel";
     case "PDF_AND_EXCEL":
+      if (returnType === "GSTR-2B") return "Summary PDF + details Excel";
       return "Summary PDF + e-invoice details Excel";
     case "PDF":
-      if (returnType === "GSTR-1") return "Summary PDF";
+      if (returnType === "GSTR-1" || returnType === "GSTR-2B") return "Summary PDF";
       return "PDF";
   }
 }

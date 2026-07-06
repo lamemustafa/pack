@@ -6,9 +6,11 @@ not a public launch path.
 ## Scope
 
 - Portal area: `Services > Returns > View Filed Returns`.
-- Documents: filed `GSTR-3B` and `GSTR-1`.
+- Documents: filed `GSTR-3B`, filed `GSTR-1`, and private `GSTR-2B`.
 - Formats: filed GSTR-3B PDF, filed GSTR-1 summary PDF, and optional filed
   GSTR-1 e-invoice details Excel where the GST Portal provides the file.
+  GSTR-2B support covers summary PDF and details Excel from the GST Portal's
+  GSTR-2B summary page.
 - Mode: user-authenticated local browser session.
 
 ## Non-negotiables
@@ -26,9 +28,9 @@ not a public launch path.
 - Filed-return page detection: `gst-filed-returns`.
 - Post-login GST shell detection: `services/auth/fowelcome` is treated as
   `gst-auth-landing`, not as an unsupported page.
-- Private spike plan: filed `GSTR-3B` PDF plus filed `GSTR-1` PDF/Excel
-  source-build support. Store-facing claims remain gated by the release
-  checklist.
+- Private spike plan: filed `GSTR-3B` PDF, filed `GSTR-1` PDF/Excel and
+  `GSTR-2B` PDF/Excel source-build support. Store-facing claims remain gated by
+  the release checklist.
 - Safe observation harness: content script classifies readiness from the active
   page and sends only allow-listed labels to the background worker.
 - Initial filed-returns form handling: Pack reports `filters-required` when the
@@ -63,6 +65,15 @@ not a public launch path.
   before the final filed-GSTR-3B click. A run is considered completed only when
   the browser reports a completed non-empty download; a mere portal-button click
   is reported as unconfirmed and asks the user to allow downloads/retry.
+- GSTR-2B handling: Pack routes `GSTR-2B` to the GST Portal's separate
+  `gstr2b.gst.gov.in` summary page and targets only the explicit
+  `DOWNLOAD GSTR-2B SUMMARY (PDF)` and `DOWNLOAD GSTR-2B DETAILS (EXCEL)`
+  controls. Unlike the reviewed GSTR-3B direct PDF endpoint, the public GSTR-2B
+  bundle generates PDF/Excel as page-side blob downloads from authenticated API
+  data. Pack therefore does not synthesize a direct URL for GSTR-2B. If the
+  browser does not report a completed download after the blob download click,
+  Pack records the artifact as unconfirmed and warns that Brave/Chrome's
+  ask-where-to-save dialog may still be open.
 - Extension-reload recovery: if Brave/Chrome reloads the extension while a GST
   tab is already open, the popup can inject Pack's packaged content script back
   into that active GST tab and refresh the safe observation without reloading the
@@ -478,8 +489,58 @@ legal/store-review acceptance. No portal screenshots, recordings, downloaded
 files, filenames, local paths, GSTIN/PAN, taxpayer names, raw portal HTML,
 cookies, headers, tokens, OTPs or CAPTCHA data were retained.
 
+## 2026-07-05 private GSTR-2B source-build status
+
+Pack now has source-build GSTR-2B PDF and Excel support for the separate
+`gstr2b.gst.gov.in` summary page. The implementation keeps the GSTR-2B path
+behind explicit portal-rendered controls, captures only the page-generated
+Blob download for the active Pack action, validates the generated file type in
+the background worker, and saves through the browser downloads API rather than
+through a synthetic GST endpoint URL.
+
+Local verification passed for the focused GSTR-2B connector/background tests,
+the full Vitest suite, TypeScript, ESLint, Prettier, WXT build, package policy
+verification, and exact ZIP verification. Do not treat GSTR-2B as
+store-facing or public-release-ready until an authorised user session proves
+single-period PDF and Excel behavior, the ask-where-to-save browser setting
+behavior, and the relevant full-fiscal-year ledger behavior without retaining
+portal screenshots, downloaded files, filenames, local paths, GSTIN/PAN,
+taxpayer names, raw portal HTML, cookies, headers, tokens, OTPs, or CAPTCHA
+data.
+
+Follow-up live retry: after the user restored an authenticated Brave session,
+Pack started a FY `2026-27` May GSTR-2B summary PDF run from the services-domain
+welcome/dashboard context. The run attempted the protected GSTR-2B summary app
+URL directly and the GST Portal returned an access-denied or expired-session
+page. Treat that as live evidence that GSTR-2B must be opened through a
+portal-rendered navigation path first. The implementation now routes wrong-page
+GSTR-2B starts through the portal Return Dashboard entry and then the
+dashboard's explicit GSTR-2B `View` control when present, instead of
+synthesizing the protected summary URL from the services page. No live portal
+screenshots, recordings, downloaded files, filenames, local paths, GSTIN/PAN,
+taxpayer names, raw portal HTML, cookies, headers, tokens, OTPs, or CAPTCHA data
+were retained.
+
+Second follow-up live retry: after the rebuilt extension was reloaded and the
+user restored an authenticated Brave session again, Pack drove the flow from the
+extension popup: GSTR-2B, FY `2026-27`, May, Summary PDF. Pack navigated from
+the authenticated GST welcome page to Return Dashboard, selected the requested
+dashboard filters, clicked Search, opened the portal-rendered GSTR-2B `View`
+control, reached the GSTR-2B summary page for May, and triggered the summary PDF
+download. Brave then opened the native save panel because the browser-level
+ask-where-to-save setting was enabled. Treat this as live proof for the
+extension-driven GSTR-2B navigation and period-selection workflow, not as proof
+that Pack can bypass Brave's native save dialog. No live portal screenshots,
+recordings, downloaded files, filenames, local paths, GSTIN/PAN, taxpayer names,
+raw portal HTML, cookies, headers, tokens, OTPs, or CAPTCHA data were retained.
+
 ## Remaining public-release gaps
 
+- Capture follow-up live Brave GSTR-2B evidence for Details Excel and
+  full-fiscal-year recovery using an authorised GST session and the rebuilt
+  unpacked source build. User login and any OTP/CAPTCHA handling must remain
+  manual. Save-dialog automation remains a separate design lane because the
+  browser-level ask-where-to-save setting can still open the native save panel.
 - Re-run a clean-profile exact ZIP smoke test after every package rebuild. The
   2026-07-03 local ZIP had SHA-256
   `38b7759d2f205febba18f1428db714bf0b4f6527a29b345b1599fa29e3c8dcd8` and

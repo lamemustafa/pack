@@ -13,10 +13,10 @@ import {
 
 describe("extension permission posture", () => {
   it("uses launch-ready public metadata", () => {
-    expect(PACK_EXTENSION_NAME).toBe("ComplyEaze Pack: GSTR-1/GSTR-3B Downloader");
+    expect(PACK_EXTENSION_NAME).toBe("ComplyEaze Pack: GST Return Downloader");
     expect(PACK_EXTENSION_SHORT_NAME).toBe("ComplyEaze Pack");
     expect(PACK_EXTENSION_DESCRIPTION).toBe(
-      "Alpha: locally download filed GSTR-1 and GSTR-3B documents from your active GST Portal session.",
+      "Alpha: locally download GSTR-1/GSTR-3B files; private GSTR-2B support may still show the browser save dialog.",
     );
     expect(PACK_EXTENSION_HOMEPAGE_URL).toBe("https://pack.complyeaze.com/gst");
     expect(PACK_EXTENSION_ICONS).toEqual({
@@ -41,6 +41,7 @@ describe("extension permission posture", () => {
       "https://www.gst.gov.in/*",
       "https://services.gst.gov.in/*",
       "https://return.gst.gov.in/*",
+      "https://gstr2b.gst.gov.in/*",
     ]);
     expect(PACK_GST_HOST_PERMISSIONS).not.toContain("<all_urls>");
   });

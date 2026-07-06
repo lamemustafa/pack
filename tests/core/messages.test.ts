@@ -30,8 +30,8 @@ describe("message boundary", () => {
     expect(isPackMessage({ type: "PACK_CONTENT_PING_V2" })).toBe(true);
     expect(isPackMessage({ type: "PACK_REFRESH_FILED_RETURNS_OBSERVATION" })).toBe(true);
     expect(isPackMessage({ type: "PACK_NAVIGATE_FILED_RETURNS" })).toBe(true);
-    expect(isPackMessage({ type: "PACK_CONTENT_REFRESH_FILED_RETURNS_OBSERVATION_V2" })).toBe(true);
-    expect(isPackMessage({ type: "PACK_CONTENT_NAVIGATE_FILED_RETURNS_V2" })).toBe(true);
+    expect(isPackMessage({ type: "PACK_CONTENT_REFRESH_FILED_RETURNS_OBSERVATION_V3" })).toBe(true);
+    expect(isPackMessage({ type: "PACK_CONTENT_NAVIGATE_FILED_RETURNS_V3" })).toBe(true);
     expect(
       isPackMessage({
         type: "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD",
@@ -45,7 +45,7 @@ describe("message boundary", () => {
     ).toBe(true);
     expect(
       isPackMessage({
-        type: "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V2",
+        type: "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
         payload: {
           actionId: "action-1",
           financialYear: "2025-26",
@@ -98,7 +98,7 @@ describe("message boundary", () => {
     ).toBe(false);
     expect(
       isPackMessage({
-        type: "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V2",
+        type: "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
         payload: {
           financialYear: "2025-26",
           period: "March",
@@ -240,6 +240,29 @@ describe("message boundary", () => {
       isPackMessage({
         type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",
         payload: {
+          artifactType: "PDF_AND_EXCEL",
+          financialYear: "2025-26",
+          period: "May",
+          returnType: "GSTR-2B",
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isPackMessage({
+        type: "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
+        payload: {
+          actionId: "action-1",
+          artifactType: "EXCEL",
+          financialYear: "2025-26",
+          period: "May",
+          returnType: "GSTR-2B",
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isPackMessage({
+        type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",
+        payload: {
           artifactType: "EXCEL",
           financialYear: "2025-26",
           period: "May",
@@ -249,7 +272,7 @@ describe("message boundary", () => {
     ).toBe(false);
     expect(
       isPackMessage({
-        type: "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V2",
+        type: "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
         payload: {
           actionId: "action-1",
           artifactType: "EXCEL",
@@ -261,7 +284,7 @@ describe("message boundary", () => {
     ).toBe(true);
     expect(
       isPackMessage({
-        type: "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V2",
+        type: "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
         payload: {
           actionId: "action-1",
           artifactType: "PDF_AND_EXCEL",

@@ -211,6 +211,12 @@ export interface FiledReturnsDirectDownloadRequest {
   safeSignals: string[];
 }
 
+export interface FiledReturnsCapturedDownloadRequest {
+  actionId: string;
+  dataUrl: string;
+  safeSignals: string[];
+}
+
 export interface FiledReturnsTargetReview {
   schemaVersion: "1.0";
   targetId: string;
