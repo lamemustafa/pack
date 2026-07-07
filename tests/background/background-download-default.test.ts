@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { toPortalReturnPeriod } from "../../src/connectors/gst/filed-returns-return-period";
 import { getFiledReturnsFullFiscalYearPeriods } from "../../src/core/filed-returns-scope";
 import type { PackMessage, PackMessageResponse } from "../../src/core/messages";
 
@@ -17,7 +16,14 @@ const browserMocks = vi.hoisted(() => {
     downloads: {
       download: vi.fn(async () => 481),
     },
+    offscreen: {
+      closeDocument: vi.fn(async () => undefined),
+      createDocument: vi.fn(async () => undefined),
+    },
     runtime: {
+      getContexts: vi.fn(async () => []),
+      getURL: vi.fn((path: string) => `chrome-extension://pack/${path}`),
+      getManifest: vi.fn(() => ({ version: "0.3.3" })),
       id: "pack-test-extension",
       onInstalled: {
         addListener: vi.fn(),
@@ -27,9 +33,86 @@ const browserMocks = vi.hoisted(() => {
           messageListener = listener;
         }),
       },
+      sendMessage: vi.fn(async (message: unknown) => {
+        if (
+          typeof message === "object" &&
+          message !== null &&
+          "type" in message &&
+          message.type === "PACK_OFFSCREEN_CREATE_BLOB_URL" &&
+          "payload" in message &&
+          typeof message.payload === "object" &&
+          message.payload !== null &&
+          "requestId" in message.payload
+        ) {
+          return {
+            ok: true,
+            requestId: message.payload.requestId,
+            blobUrl: "blob:chrome-extension://pack/download-prompt-probe",
+          };
+        }
+        if (
+          typeof message === "object" &&
+          message !== null &&
+          "type" in message &&
+          message.type === "PACK_OFFSCREEN_STAGE_FILED_RETURN" &&
+          "payload" in message &&
+          typeof message.payload === "object" &&
+          message.payload !== null &&
+          "requestId" in message.payload
+        ) {
+          return {
+            ok: true,
+            requestId: message.payload.requestId,
+            staged: true,
+            byteCountClass: "non-empty",
+          };
+        }
+        if (
+          typeof message === "object" &&
+          message !== null &&
+          "type" in message &&
+          message.type === "PACK_OFFSCREEN_CLEAR_FILED_RETURN_LEDGER" &&
+          "payload" in message &&
+          typeof message.payload === "object" &&
+          message.payload !== null &&
+          "requestId" in message.payload
+        ) {
+          return {
+            ok: true,
+            requestId: message.payload.requestId,
+            cleared: true,
+          };
+        }
+        if (
+          typeof message === "object" &&
+          message !== null &&
+          "type" in message &&
+          message.type === "PACK_OFFSCREEN_CREATE_FILED_RETURN_ZIP" &&
+          "payload" in message &&
+          typeof message.payload === "object" &&
+          message.payload !== null &&
+          "requestId" in message.payload
+        ) {
+          return {
+            ok: true,
+            requestId: message.payload.requestId,
+            blobUrl: "blob:chrome-extension://pack/full-year.zip",
+            zipEntryCount: 3,
+          };
+        }
+        return { ok: false, errorCategory: "invalid-message" };
+      }),
     },
     scripting: {
-      executeScript: vi.fn(async () => []),
+      executeScript: vi.fn(async (details: { args?: [{ actionId?: string }] }) => [
+        {
+          result: {
+            actionId: details.args?.[0]?.actionId ?? "action-captured",
+            dataUrl: `data:application/pdf;base64,${globalThis.btoa("%PDF-1.7 synthetic")}`,
+            safeSignals: ["portal-blob-captured", "native-blob-click-suppressed"],
+          },
+        },
+      ]),
     },
     storage: {
       local: {
@@ -183,15 +266,9 @@ describe("background filed returns download defaults", () => {
     ]);
   });
 
-  it("uses direct downloads for each full-fiscal-year monthly target", async () => {
+  it("stages full-fiscal-year monthly targets and exports one zip", async () => {
     const financialYear = "2026-27";
     const periods = getFiledReturnsFullFiscalYearPeriods(financialYear);
-    const directUrlByMonth = new Map(
-      periods.map((period) => [
-        period,
-        `https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=${toPortalReturnPeriod(period, financialYear)}`,
-      ]),
-    );
     browserMocks.tabs.sendMessage.mockImplementation(async (_tabId, message: PackMessage) => {
       if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3") {
         return {
@@ -210,15 +287,26 @@ describe("background filed returns download defaults", () => {
         } satisfies PackMessageResponse;
       }
 
-      if (message.type === "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V3") {
-        const period = periods.find((candidate) => candidate === message.payload.period);
-        const periodDirectUrl = period ? directUrlByMonth.get(period) : null;
+      if (message.type === "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3") {
         return {
           ok: true,
-          directDownloadRequest: {
+          mainWorldCaptureRequest: {
             actionId: message.payload.actionId,
-            safeSignals: ["filed-gstr3b-direct-download-probe-accepted"],
-            url: periodDirectUrl ?? directMayUrl,
+            controlAttribute: "data-pack-download-action-id",
+            controlId: message.payload.actionId,
+            maxBytes: 10_000_000,
+            signalPrefix: "filed-gstr3b",
+          },
+          downloadTrigger: {
+            connectorId: "gst",
+            scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+            state: "clicked",
+            safeSignals: [
+              "filed-return-download-clicked",
+              "filed-gstr3b-download-clicked",
+              "filed-gstr3b-portal-blob-download-captured",
+            ],
+            safeMessage: "Captured.",
           },
         } satisfies PackMessageResponse;
       }
@@ -241,7 +329,11 @@ describe("background filed returns download defaults", () => {
       ok: true,
       flowStep: {
         state: "downloaded",
-        safeSignals: expect.arrayContaining(["full-fiscal-year-complete"]),
+        safeSignals: expect.arrayContaining([
+          "full-fiscal-year-complete",
+          "full-fiscal-year-opfs-cleared",
+          "full-fiscal-year-zip-downloaded",
+        ]),
       },
       flowSummary: {
         completedPeriods: periods,
@@ -249,19 +341,35 @@ describe("background filed returns download defaults", () => {
         totalPeriods: periods.length,
       },
     });
-    expect(browserMocks.downloads.download).toHaveBeenCalledTimes(periods.length);
-    periods.forEach((period, index) => {
-      expect(browserMocks.downloads.download).toHaveBeenNthCalledWith(index + 1, {
-        conflictAction: "uniquify",
-        filename: `complyeaze-pack/gst/${financialYear}/gstr-3b/${period.toLowerCase()}.pdf`,
-        saveAs: false,
-        url: directUrlByMonth.get(period),
-      });
+    expect(browserMocks.downloads.download).toHaveBeenCalledTimes(1);
+    expect(browserMocks.downloads.download).toHaveBeenCalledWith({
+      conflictAction: "uniquify",
+      filename: `complyeaze-pack/gst/${financialYear}/gstr-3b-full-year.zip`,
+      saveAs: false,
+      url: "blob:chrome-extension://pack/full-year.zip",
+    });
+    expect(browserMocks.runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "PACK_OFFSCREEN_CLEAR_FILED_RETURN_LEDGER",
+        payload: expect.objectContaining({
+          ledgerId: expect.any(String),
+        }),
+      }),
+    );
+    periods.forEach((period) => {
+      expect(browserMocks.runtime.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "PACK_OFFSCREEN_STAGE_FILED_RETURN",
+          payload: expect.objectContaining({
+            zipPath: `complyeaze-pack/gst/${financialYear}/gstr-3b/${period.toLowerCase()}.pdf`,
+          }),
+        }),
+      );
     });
     expect(sentActionMessageTypes()).toEqual([
       ...periods.flatMap(() => [
         "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
-        "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V3",
+        "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
       ]),
     ]);
   });
@@ -328,6 +436,151 @@ describe("background filed returns download defaults", () => {
       "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
       "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
     ]);
+  });
+
+  it("builds the options-page synthetic demo manifest without starting downloads by default", async () => {
+    await import("../../src/entrypoints/background");
+
+    const response = await sendBackgroundMessage({
+      type: "PACK_START_SYNTHETIC_DEMO",
+      payload: { downloadArtifacts: false },
+    });
+    if (!response.ok) throw new Error(response.error);
+
+    expect(response).toMatchObject({
+      ok: true,
+      downloaded: 0,
+      manifest: {
+        privacy: {
+          local_only: true,
+          uploaded_to_complyeaze: false,
+        },
+      },
+    });
+    expect(browserMocks.downloads.download).not.toHaveBeenCalled();
+    expect(browserMocks.storage.local.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        "pack:last-manifest": expect.objectContaining({
+          privacy: expect.objectContaining({
+            local_only: true,
+            uploaded_to_complyeaze: false,
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("runs the one-file download prompt probe with saveAs false", async () => {
+    await import("../../src/entrypoints/background");
+
+    const response = await sendBackgroundMessage({
+      type: "PACK_RUN_DOWNLOAD_PROMPT_PROBE",
+    });
+
+    expect(response).toMatchObject({
+      ok: true,
+      downloadPromptProbe: {
+        status: "started",
+        downloadId: 481,
+        filenameClass: "synthetic-download-prompt-probe",
+        saveAsFalse: true,
+        sourceClass: "data-url",
+        safeSignals: expect.arrayContaining([
+          "download-prompt-probe-started",
+          "download-prompt-probe-save-as-false",
+          "download-prompt-probe-source:data-url",
+        ]),
+      },
+    });
+    expect(browserMocks.downloads.download).toHaveBeenCalledWith({
+      conflictAction: "uniquify",
+      filename: "Pack-Diagnostics/download-prompt-probe.txt",
+      saveAs: false,
+      url: expect.stringMatching(/^data:text\/plain;charset=utf-8;base64,/),
+    });
+  });
+
+  it("runs the offscreen Blob URL prompt probe with saveAs false", async () => {
+    await import("../../src/entrypoints/background");
+
+    const response = await sendBackgroundMessage({
+      type: "PACK_RUN_DOWNLOAD_PROMPT_PROBE",
+      payload: { sourceClass: "offscreen-blob-url" },
+    });
+
+    expect(response).toMatchObject({
+      ok: true,
+      downloadPromptProbe: {
+        status: "started",
+        downloadId: 481,
+        filenameClass: "synthetic-download-prompt-probe",
+        saveAsFalse: true,
+        sourceClass: "offscreen-blob-url",
+        safeSignals: expect.arrayContaining([
+          "download-prompt-probe-started",
+          "download-prompt-probe-save-as-false",
+          "download-prompt-probe-source:offscreen-blob-url",
+        ]),
+      },
+    });
+    expect(browserMocks.runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "PACK_OFFSCREEN_CREATE_BLOB_URL",
+      }),
+    );
+    expect(browserMocks.downloads.download).toHaveBeenCalledWith({
+      conflictAction: "uniquify",
+      filename: "Pack-Diagnostics/download-prompt-probe.txt",
+      saveAs: false,
+      url: "blob:chrome-extension://pack/download-prompt-probe",
+    });
+  });
+
+  it("reports prompt probe start rejection without raw error details", async () => {
+    browserMocks.downloads.download.mockRejectedValueOnce(new Error("native failure detail"));
+    await import("../../src/entrypoints/background");
+
+    const response = await sendBackgroundMessage({
+      type: "PACK_RUN_DOWNLOAD_PROMPT_PROBE",
+    });
+
+    expect(response).toMatchObject({
+      ok: true,
+      downloadPromptProbe: {
+        status: "start-rejected",
+        filenameClass: "synthetic-download-prompt-probe",
+        saveAsFalse: true,
+        sourceClass: "data-url",
+        safeSignals: expect.arrayContaining([
+          "download-prompt-probe-start-rejected",
+          "download-prompt-probe-save-as-false",
+        ]),
+      },
+    });
+    expect(JSON.stringify(response)).not.toContain("native failure detail");
+  });
+
+  it("keeps explicit synthetic artifact downloads available for controlled review", async () => {
+    await import("../../src/entrypoints/background");
+
+    const response = await sendBackgroundMessage({
+      type: "PACK_START_SYNTHETIC_DEMO",
+      payload: { downloadArtifacts: true },
+    });
+    if (!response.ok) throw new Error(response.error);
+
+    expect(response).toMatchObject({
+      ok: true,
+      downloaded: 10,
+    });
+    expect(browserMocks.downloads.download).toHaveBeenCalledTimes(10);
+    expect(browserMocks.downloads.download).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conflictAction: "uniquify",
+        filename: expect.stringMatching(/^Pack-Demo\/FY-2023-24-/),
+        saveAs: false,
+      }),
+    );
   });
 });
 

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   findFiledGstr3bDownloadCandidateIndex,
   scoreFiledGstr3bDownloadCandidate,
+  triggerFiledReturnDownload,
   triggerFiledGstr3bFiledPdfDownload,
 } from "../../src/connectors/gst/filed-returns-download";
 import {
@@ -184,6 +185,33 @@ describe("filed returns navigation matcher", () => {
     expect(downloadClicked).toBe(0);
   });
 
+  it("dismisses known summary modals with icon-only close buttons", async () => {
+    const documentRef = createDocument(`
+      <div class="modal show" style="display:block">
+        <div>System generated summary for GSTR-3B</div>
+        <button class="close" type="button"><span aria-hidden="true">×</span></button>
+        <button>DOWNLOAD FILED GSTR-3B</button>
+      </div>
+    `);
+    const [closeButton, downloadButton] = Array.from(documentRef.querySelectorAll("button"));
+    let closeClicked = 0;
+    let downloadClicked = 0;
+    closeButton?.addEventListener("click", () => {
+      closeClicked += 1;
+    });
+    downloadButton?.addEventListener("click", () => {
+      downloadClicked += 1;
+    });
+
+    const signals = await dismissKnownFiledReturnsSummaryModal(documentRef);
+
+    expect(signals).toEqual(
+      expect.arrayContaining(["detail-summary-modal-dismissed", "summary-dialog-close-class"]),
+    );
+    expect(closeClicked).toBe(1);
+    expect(downloadClicked).toBe(0);
+  });
+
   it("does not dismiss unrelated modals", async () => {
     const documentRef = createDocument(`
       <div class="modal show" style="display:block">
@@ -213,6 +241,9 @@ describe("filed returns navigation matcher", () => {
     expect(
       scoreFiledReturnsSummaryModalDismissalCandidate({ text: "x", ariaLabel: "Close" }).score,
     ).toBeGreaterThanOrEqual(80);
+    expect(
+      scoreFiledReturnsSummaryModalDismissalCandidate({ text: "", className: "close" }).score,
+    ).toBeGreaterThanOrEqual(80);
   });
 
   it("targets only the explicit filed GSTR-3B PDF download control", () => {
@@ -236,7 +267,7 @@ describe("filed returns navigation matcher", () => {
     expect(scoreFiledGstr3bDownloadCandidate({ text: "SUBMIT" }).score).toBeLessThan(0);
   });
 
-  it("triggers only the selected filed GSTR-3B PDF download control", async () => {
+  it("arms only the selected filed GSTR-3B PDF download control for capture", async () => {
     const documentRef = createDocument(`
       <main>
         <h1>GSTR-3B - Monthly Return</h1>
@@ -257,18 +288,25 @@ describe("filed returns navigation matcher", () => {
       systemClicked += 1;
     });
 
-    const result = await triggerFiledGstr3bFiledPdfDownload(documentRef, {
+    const result = await triggerFiledReturnDownload(documentRef, {
       actionId: "test-action",
       financialYear: "2025-26",
       period: "March",
       returnType: "GSTR-3B",
     });
 
-    expect(result.state).toBe("clicked");
-    expect(result.safeSignals).toEqual(
-      expect.arrayContaining(["filed-gstr3b-download-clicked", "text-download-filed-gstr3b"]),
+    expect(result.downloadTrigger.state).toBe("clicked");
+    expect(result.downloadTrigger.safeSignals).toEqual(
+      expect.arrayContaining([
+        "filed-gstr3b-download-clicked",
+        "text-download-filed-gstr3b",
+        "filed-gstr3b-portal-blob-download-captured",
+      ]),
     );
-    expect(filedClicked).toBe(1);
+    expect("mainWorldCaptureRequest" in result).toBe(true);
+    expect(filedButton?.hasAttribute("data-pack-gstr2b-capture-action")).toBe(true);
+    expect(systemLink?.hasAttribute("data-pack-gstr2b-capture-action")).toBe(false);
+    expect(filedClicked).toBe(0);
     expect(systemClicked).toBe(0);
   });
 

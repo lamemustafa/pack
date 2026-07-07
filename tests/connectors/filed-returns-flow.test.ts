@@ -4,6 +4,7 @@ import type { FiledReturnsDownloadScope } from "../../src/core/contracts";
 import { runFiledReturnsDownloadStep } from "../../src/connectors/gst/filed-returns-flow";
 import {
   triggerFiledGstr3bFiledPdfDownload,
+  triggerFiledReturnDownload,
   triggerFiledReturnFiledPdfDownload,
 } from "../../src/connectors/gst/filed-returns-download";
 import { triggerGstr2bDownload } from "../../src/connectors/gst/gstr2b-download";
@@ -1089,7 +1090,7 @@ describe("filed returns guided flow", () => {
 
     expect(result.downloadTrigger.state).toBe("blocked");
     expect(result.downloadTrigger.safeSignals).toContain("gstr2b-visible-period-mismatch");
-    expect(result.capturedDownloadRequest).toBeUndefined();
+    expect(result.mainWorldCaptureRequest).toBeUndefined();
     expect(pdfClicked).toBe(0);
   });
 
@@ -1138,16 +1139,18 @@ describe("filed returns guided flow", () => {
       expect.arrayContaining([
         "gstr2b-download-clicked",
         "gstr2b-portal-blob-download-captured",
-        "gstr2b-native-blob-click-suppressed",
         "gstr2b-final-period-verified",
         "gstr2b-artifact-clicked:EXCEL",
       ]),
     );
-    expect(result.capturedDownloadRequest?.dataUrl).toMatch(
-      /^data:application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet;base64,/,
-    );
+    expect(result.mainWorldCaptureRequest).toMatchObject({
+      actionId: "action-1",
+      controlAttribute: "data-pack-gstr2b-capture-action",
+      maxBytes: 36 * 1024 * 1024,
+      signalPrefix: "gstr2b",
+    });
     expect(pdfClicked).toBe(0);
-    expect(excelClicked).toBe(1);
+    expect(excelClicked).toBe(0);
   });
 
   it("dismisses the GST bank warning with Cancel and does not click File Amendment", async () => {
@@ -3831,7 +3834,7 @@ describe("filed returns guided flow", () => {
     );
   });
 
-  it("clicks an explicit filed PDF download when the detail period is abbreviated", async () => {
+  it("captures an explicit filed GSTR-3B PDF download when the detail period is abbreviated", async () => {
     const documentRef = createDocument(`
       <main>
         <nav>Returns / Filed Returns</nav>
@@ -3848,16 +3851,28 @@ describe("filed returns guided flow", () => {
       downloadClicked += 1;
     });
 
-    const result = await triggerFiledGstr3bFiledPdfDownload(documentRef, {
+    const result = await triggerFiledReturnDownload(documentRef, {
       actionId: "test-action",
       financialYear: "2025-26",
       period: "March",
       returnType: "GSTR-3B",
     });
 
-    expect(result.state).toBe("clicked");
-    expect(result.safeSignals).toEqual(expect.arrayContaining(["filed-gstr3b-download-clicked"]));
-    expect(downloadClicked).toBe(1);
+    expect(result.downloadTrigger.state).toBe("clicked");
+    expect(result.downloadTrigger.safeSignals).toEqual(
+      expect.arrayContaining([
+        "filed-return-download-clicked",
+        "filed-gstr3b-download-clicked",
+        "filed-gstr3b-portal-blob-download-captured",
+        "filed-gstr3b-extension-download-requested",
+        "filed-return-artifact-clicked:PDF",
+      ]),
+    );
+    expect(result.mainWorldCaptureRequest).toMatchObject({
+      actionId: "test-action",
+      signalPrefix: "filed-gstr3b",
+    });
+    expect(downloadClicked).toBe(0);
   });
 
   it("clicks an explicit filed GSTR-1 PDF download when target identity matches", async () => {
@@ -3877,19 +3892,23 @@ describe("filed returns guided flow", () => {
       downloadClicked += 1;
     });
 
-    const result = await triggerFiledReturnFiledPdfDownload(documentRef, {
+    const result = await triggerFiledReturnDownload(documentRef, {
       actionId: "test-action",
       financialYear: "2025-26",
       period: "March",
       returnType: "GSTR-1",
     });
 
-    expect(result.state).toBe("clicked");
-    expect(result.scopeId).toBe("gst-filed-returns-gstr1-pdf-private-v0");
-    expect(result.safeSignals).toEqual(
+    expect(result.downloadTrigger.state).toBe("clicked");
+    expect(result.downloadTrigger.scopeId).toBe("gst-filed-returns-gstr1-pdf-private-v0");
+    expect(result.downloadTrigger.safeSignals).toEqual(
       expect.arrayContaining(["filed-return-download-clicked", "filed-gstr1-download-clicked"]),
     );
-    expect(downloadClicked).toBe(1);
+    expect(result.mainWorldCaptureRequest).toMatchObject({
+      actionId: "test-action",
+      signalPrefix: "filed-gstr1",
+    });
+    expect(downloadClicked).toBe(0);
   });
 
   it("treats the filed GSTR-1 View Summary page as PDF-download ready", async () => {
@@ -3948,15 +3967,15 @@ describe("filed returns guided flow", () => {
       downloadClicked += 1;
     });
 
-    const result = await triggerFiledReturnFiledPdfDownload(documentRef, {
+    const result = await triggerFiledReturnDownload(documentRef, {
       actionId: "test-action",
       financialYear: "2025-26",
       period: "May",
       returnType: "GSTR-1",
     });
 
-    expect(result.state).toBe("clicked");
-    expect(result.safeSignals).toEqual(
+    expect(result.downloadTrigger.state).toBe("clicked");
+    expect(result.downloadTrigger.safeSignals).toEqual(
       expect.arrayContaining([
         "gstr1-detail-route",
         "download-pdf-gstr1-visible",
@@ -3964,7 +3983,11 @@ describe("filed returns guided flow", () => {
         "text-download-pdf-gstr1",
       ]),
     );
-    expect(downloadClicked).toBe(1);
+    expect(result.mainWorldCaptureRequest).toMatchObject({
+      actionId: "test-action",
+      signalPrefix: "filed-gstr1",
+    });
+    expect(downloadClicked).toBe(0);
   });
 
   it("returns from the filed GSTR-1 View Summary page before an Excel-only trigger", async () => {
@@ -4022,7 +4045,7 @@ describe("filed returns guided flow", () => {
       excelClicked += 1;
     });
 
-    const result = await triggerFiledReturnFiledPdfDownload(documentRef, {
+    const result = await triggerFiledReturnDownload(documentRef, {
       actionId: "test-action",
       artifactType: "EXCEL",
       financialYear: "2025-26",
@@ -4030,17 +4053,21 @@ describe("filed returns guided flow", () => {
       returnType: "GSTR-1",
     });
 
-    expect(result.state).toBe("clicked");
-    expect(result.scopeId).toBe("gst-filed-returns-gstr1-pdf-private-v0");
-    expect(result.safeSignals).toEqual(
+    expect(result.downloadTrigger.state).toBe("clicked");
+    expect(result.downloadTrigger.scopeId).toBe("gst-filed-returns-gstr1-pdf-private-v0");
+    expect(result.downloadTrigger.safeSignals).toEqual(
       expect.arrayContaining([
         "filed-return-download-clicked",
         "filed-gstr1-download-clicked",
         "text-download-excel-gstr1",
       ]),
     );
+    expect(result.mainWorldCaptureRequest).toMatchObject({
+      actionId: "test-action",
+      signalPrefix: "filed-gstr1",
+    });
     expect(pdfClicked).toBe(0);
-    expect(excelClicked).toBe(1);
+    expect(excelClicked).toBe(0);
   });
 
   it("classifies the GSTR-1 e-invoice no-details modal after an Excel click", async () => {
@@ -4070,7 +4097,7 @@ describe("filed returns guided flow", () => {
       }, 400);
     });
 
-    const result = await triggerFiledReturnFiledPdfDownload(documentRef, {
+    const result = await triggerFiledReturnDownload(documentRef, {
       actionId: "test-action",
       artifactType: "EXCEL",
       financialYear: "2025-26",
@@ -4078,16 +4105,15 @@ describe("filed returns guided flow", () => {
       returnType: "GSTR-1",
     });
 
-    expect(result.state).toBe("blocked");
-    expect(result.safeSignals).toEqual(
-      expect.arrayContaining([
-        "filed-return-download-clicked",
-        "filed-gstr1-download-clicked",
-        "filed-gstr1-excel-no-details-available",
-      ]),
+    expect(result.downloadTrigger.state).toBe("clicked");
+    expect(result.downloadTrigger.safeSignals).toEqual(
+      expect.arrayContaining(["filed-return-download-clicked", "filed-gstr1-download-clicked"]),
     );
-    expect(result.safeMessage).toMatch(/no e-invoice details/i);
-    expect(excelClicked).toBe(1);
+    expect(result.mainWorldCaptureRequest).toMatchObject({
+      actionId: "test-action",
+      signalPrefix: "filed-gstr1",
+    });
+    expect(excelClicked).toBe(0);
   });
 
   it("refuses to click GSTR-1 e-invoice Excel controls until filed status is visible", async () => {

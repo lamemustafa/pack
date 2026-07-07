@@ -38,12 +38,6 @@ const expectedContentScripts = [
     ],
     runAt: "document_idle",
   },
-  {
-    js: ["content-scripts/gstr2b-capture-main.js"],
-    matches: ["https://gstr2b.gst.gov.in/*"],
-    runAt: "document_start",
-    world: "MAIN",
-  },
 ];
 const hostileOrigin = "https://hostile-pack.invalid";
 const expectedDeniedNetworkProbe = "https://unexpected-pack-network.invalid/tracker.png";

@@ -6,6 +6,31 @@ describe("message boundary", () => {
   it("accepts only known Pack messages", () => {
     expect(isPackMessage({ type: "PACK_GET_CONTEXT" })).toBe(true);
     expect(isPackMessage({ type: "PACK_START_SYNTHETIC_DEMO" })).toBe(true);
+    expect(isPackMessage({ type: "PACK_RUN_DOWNLOAD_PROMPT_PROBE" })).toBe(true);
+    expect(
+      isPackMessage({
+        type: "PACK_RUN_DOWNLOAD_PROMPT_PROBE",
+        payload: { sourceClass: "offscreen-blob-url" },
+      }),
+    ).toBe(true);
+    expect(
+      isPackMessage({
+        type: "PACK_RUN_DOWNLOAD_PROMPT_PROBE",
+        payload: { sourceClass: "portal-url" },
+      }),
+    ).toBe(false);
+    expect(
+      isPackMessage({
+        type: "PACK_START_SYNTHETIC_DEMO",
+        payload: { downloadArtifacts: false },
+      }),
+    ).toBe(true);
+    expect(
+      isPackMessage({
+        type: "PACK_START_SYNTHETIC_DEMO",
+        payload: { downloadArtifacts: "false" },
+      }),
+    ).toBe(false);
     expect(isPackMessage({ type: "PACK_CONTENT_CONTEXT", payload: { supported: false } })).toBe(
       true,
     );

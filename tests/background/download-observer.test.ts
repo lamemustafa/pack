@@ -93,6 +93,48 @@ describe("download observer", () => {
     await expect(observation.promise).resolves.toMatchObject({
       state: "completed",
       safeSignals: expect.arrayContaining(["browser-download-id:13"]),
+      safeEvidence: {
+        byteCountClass: "non-empty",
+        downloadId: 13,
+        mimeClass: "pdf",
+        urlClass: "https",
+      },
+    });
+  });
+
+  it("redacts blob download metadata to safe evidence classes", async () => {
+    const downloads = createDownloadsApi([
+      {
+        id: 21,
+        state: "complete",
+        fileSize: 1024,
+        mime: "application/pdf",
+        url: "blob:https://return.gst.gov.in/generated-pdf",
+      },
+    ]);
+    const observation = observeNextBrowserDownload(downloads, {
+      armedAt: new Date("2026-06-24T10:00:00.000Z"),
+      expectedFileExtensions: [".pdf"],
+      expectedMimeTypes: ["application/pdf"],
+      expectedOrigins: ["https://return.gst.gov.in"],
+    });
+
+    downloads.created.emit({
+      id: 21,
+      mime: "application/pdf",
+      startTime: "2026-06-24T10:00:02.000Z",
+      state: "complete",
+      url: "blob:https://return.gst.gov.in/generated-pdf",
+    });
+
+    await expect(observation.promise).resolves.toMatchObject({
+      state: "completed",
+      safeEvidence: {
+        byteCountClass: "non-empty",
+        downloadId: 21,
+        mimeClass: "pdf",
+        urlClass: "blob",
+      },
     });
   });
 

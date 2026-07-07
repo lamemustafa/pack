@@ -97,6 +97,16 @@ describe("live run evidence", () => {
       returnType: "GSTR-1",
       artifactType: "PDF_AND_EXCEL",
       financialYear: "2025-26",
+      downloadEvidence: [
+        {
+          ...createValidEvidence().downloadEvidence[0],
+          actionId: "action-gstr1-pdf",
+          returnType: "GSTR-1",
+          financialYear: "2025-26",
+          endpointClass: "gstr1-pdf-portal-blob-captured-download",
+          downloadPathClass: "captured-portal-request-data",
+        },
+      ],
     });
 
     expect(missingReturnType.ok).toBe(false);
@@ -121,6 +131,15 @@ describe("live run evidence", () => {
         ...createValidEvidence(),
         returnType: "GSTR-2B",
         artifactType: "PDF_AND_EXCEL",
+        downloadEvidence: [
+          {
+            ...createValidEvidence().downloadEvidence[0],
+            actionId: "action-gstr2b-pdf",
+            returnType: "GSTR-2B",
+            endpointClass: "gstr2b-portal-blob-captured-download",
+            downloadPathClass: "captured-portal-request-data",
+          },
+        ],
       }),
     ).toMatchObject({ ok: true });
   });
@@ -162,6 +181,32 @@ describe("live run evidence", () => {
     expect(result.ok).toBe(false);
     if (!result.ok)
       expect(result.errors).toContain("checks.browserRestartResumeChecked must be true");
+  });
+
+  it("requires pass evidence to include sanitized download path evidence", () => {
+    const missing = { ...createValidEvidence() } as Record<string, unknown>;
+    delete missing.downloadEvidence;
+    const invalidPath = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      downloadEvidence: [
+        {
+          ...createValidEvidence().downloadEvidence[0],
+          downloadPathClass: "raw-url",
+        },
+      ],
+    });
+
+    const missingResult = validateLiveRunEvidence(missing);
+
+    expect(missingResult.ok).toBe(false);
+    if (!missingResult.ok)
+      expect(missingResult.errors).toContain("downloadEvidence must be an array");
+    expect(invalidPath.ok).toBe(false);
+    if (!invalidPath.ok) {
+      expect(invalidPath.errors).toContain(
+        "downloadEvidence[0].downloadPathClass must be one of extension-direct-https, extension-direct-blob, extension-direct-data, extension-direct-unknown, portal-click-https, portal-click-blob, portal-click-data, portal-click-unknown, portal-click-after-direct-fallback-https, portal-click-after-direct-fallback-blob, portal-click-after-direct-fallback-data, portal-click-after-direct-fallback-unknown, captured-portal-request-https, captured-portal-request-blob, captured-portal-request-data, captured-portal-request-unknown",
+      );
+    }
   });
 
   it("requires pass evidence to have reconciled targets and no blocking counts", () => {
@@ -541,6 +586,22 @@ function createValidEvidence(): LiveRunEvidence {
       browserSummaryCaptured: true,
       unexpectedNetworkDestinations: 0,
     },
+    downloadEvidence: [
+      {
+        actionId: "action-april",
+        returnType: "GSTR-3B",
+        artifactType: "PDF",
+        financialYear: "2026-27",
+        period: "April",
+        endpointClass: "gstr3b-getgenpdf",
+        downloadPathClass: "extension-direct-https",
+        status: "downloaded",
+        askWhereToSave: "off",
+        filenameCollision: "absent",
+        multipleDownloadPrompt: "not-shown",
+        exactZipBuild: "b".repeat(64),
+      },
+    ],
     redaction: {
       containsGstin: false,
       containsPan: false,

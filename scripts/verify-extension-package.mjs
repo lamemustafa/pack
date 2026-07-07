@@ -27,7 +27,7 @@ const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
 const expectedName = "ComplyEaze Pack: GST Return Downloader";
 const expectedShortName = "ComplyEaze Pack";
 const expectedDescription =
-  "Alpha: locally download GSTR-1/GSTR-3B files; private GSTR-2B support may still show the browser save dialog.";
+  "Alpha: locally download GSTR-1/GSTR-3B files; private GSTR-2B downloads are source-build experimental.";
 const expectedHomepageUrl = "https://pack.complyeaze.com/gst";
 const expectedIcons = {
   16: "icons/icon-16.png",
@@ -48,7 +48,7 @@ const expectedPackagedBrandAssets = [
   "brand/pack-logo-reversed.svg",
   "brand/pack-logo-reversed-outlined.svg",
 ];
-const expectedPermissions = ["downloads", "scripting", "storage"];
+const expectedPermissions = ["downloads", "offscreen", "scripting", "storage"];
 const expectedHostPermissions = [
   "https://www.gst.gov.in/*",
   "https://services.gst.gov.in/*",
@@ -58,6 +58,7 @@ const expectedHostPermissions = [
 
 const forbiddenPermissions = new Set([
   "cookies",
+  "debugger",
   "history",
   "webRequest",
   "webRequestBlocking",
@@ -97,6 +98,7 @@ for (const [size, iconPath] of Object.entries(expectedIcons)) {
 for (const assetPath of expectedPackagedBrandAssets) {
   await readFile(path.join(outputDir, assetPath));
 }
+await readFile(path.join(outputDir, "offscreen.html"));
 
 for (const permission of expectedPermissions) {
   if (!manifest.permissions?.includes(permission))
@@ -211,6 +213,18 @@ const forbiddenPackSourcePatterns = [
   /\bcookie_jar\b/i,
   /\bcredential_store\b/i,
   /\bapi_secret\b/i,
+  /\bindexedDB\b/i,
+  /\bcaches\.open\s*\(/i,
+];
+const forbiddenRawArtifactHandoffPatterns = [
+  {
+    label: "raw artifact dataUrl postMessage",
+    pattern: /postMessage\s*\([\s\S]{0,800}\bdataUrl\b/i,
+  },
+  {
+    label: "raw artifact dataUrl runtime sendMessage",
+    pattern: /runtime\.sendMessage\s*\([\s\S]{0,800}\bdataUrl\b/i,
+  },
 ];
 
 for (const file of await listFiles(outputDir)) {
@@ -248,6 +262,13 @@ for (const file of await listFiles(path.join(process.cwd(), "src"))) {
       throw new Error(
         `Sensitive Pack source marker ${pattern} in ${path.relative(process.cwd(), file)}`,
       );
+  }
+  for (const { label, pattern } of forbiddenRawArtifactHandoffPatterns) {
+    const relativeSourcePath = path.relative(process.cwd(), file);
+    if (relativeSourcePath === "src/background/offscreen-blob-url.ts") continue;
+    if (pattern.test(contents)) {
+      throw new Error(`${label} in ${path.relative(process.cwd(), file)}`);
+    }
   }
   assertNoForbiddenTelemetry(contents, file);
 }

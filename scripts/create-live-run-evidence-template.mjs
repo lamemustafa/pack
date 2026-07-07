@@ -4,7 +4,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { readdirSync } from "node:fs";
 import path from "node:path";
 
-const RETURN_TYPES = ["GSTR-3B", "GSTR-1"];
+const RETURN_TYPES = ["GSTR-3B", "GSTR-1", "GSTR-2B"];
 const ARTIFACT_TYPES = ["PDF", "EXCEL", "PDF_AND_EXCEL"];
 const MONTHS = [
   "April",
@@ -121,6 +121,7 @@ try {
   const startedAt = options["started-at"] ?? new Date().toISOString();
   const completedAt =
     options["completed-at"] ?? new Date(Date.parse(startedAt) + 1_000).toISOString();
+  const zipSha256 = options["zip-sha256"] ?? readChromeZipSha256(packageJson.version);
 
   const evidence = {
     schemaVersion: 1,
@@ -131,7 +132,7 @@ try {
       ).toLowerCase()}-${scenario}`,
     sourceCommit: options["source-commit"] ?? git(["rev-parse", "HEAD"]),
     gitTag: options["git-tag"] ?? `v${packageJson.version}-local`,
-    zipSha256: options["zip-sha256"] ?? readChromeZipSha256(packageJson.version),
+    zipSha256,
     extensionVersion: options["extension-version"] ?? packageJson.version,
     browser: {
       name: options.browser ?? "Brave",
@@ -153,6 +154,22 @@ try {
       ...counts,
     },
     checks,
+    downloadEvidence: [
+      {
+        actionId: "manual-entry-required",
+        returnType,
+        artifactType: artifactType === "PDF_AND_EXCEL" ? "PDF" : artifactType,
+        financialYear,
+        period: period === "FULL_FISCAL_YEAR" ? "April" : period,
+        endpointClass: defaultEndpointClass(returnType, artifactType),
+        downloadPathClass: "captured-portal-request-unknown",
+        status: outcome === "pass" ? "downloaded" : "user-action-required",
+        askWhereToSave: options["ask-where-to-save"] ?? "unknown",
+        filenameCollision: options["filename-collision"] ?? "unknown",
+        multipleDownloadPrompt: options["multiple-download-prompt"] ?? "unknown",
+        exactZipBuild: zipSha256,
+      },
+    ],
     ...(limitations.length > 0 ? { limitations } : {}),
     redaction: {
       containsGstin: false,
@@ -295,6 +312,16 @@ function collectLimitations(input, { checks, outcome, profile, scenario }) {
     throw new Error("Pass evidence cannot include --limitation.");
   }
   return [...limitations].sort();
+}
+
+function defaultEndpointClass(returnType, artifactType) {
+  if (returnType === "GSTR-3B") return "gstr3b-getgenpdf";
+  if (returnType === "GSTR-1" && artifactType === "EXCEL") {
+    return "gstr1-excel-portal-blob-captured-download";
+  }
+  if (returnType === "GSTR-1") return "gstr1-pdf-portal-blob-captured-download";
+  if (returnType === "GSTR-2B") return "gstr2b-portal-blob-captured-download";
+  return "unknown";
 }
 
 function toCamelCountKey(key) {

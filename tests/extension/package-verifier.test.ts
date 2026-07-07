@@ -47,6 +47,30 @@ describe("extension package verifier", () => {
     expect(result.output).toContain("externally_connectable");
   });
 
+  it("rejects debugger/CDP permission in the packaged manifest", async () => {
+    const outputDir = await createValidPackage();
+    const manifestPath = path.join(outputDir, "manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+      permissions: string[];
+    };
+    await writeFile(
+      manifestPath,
+      `${JSON.stringify(
+        {
+          ...manifest,
+          permissions: [...manifest.permissions, "debugger"],
+        },
+        null,
+        2,
+      )}\n`,
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("debugger");
+  });
+
   it("rejects analytics, crash-reporting, and replay markers in packaged artifacts", async () => {
     const cases = [
       {
@@ -318,7 +342,8 @@ describe("extension package verifier", () => {
     );
 
     expect(script).toContain("expectedContentScripts.length");
-    expect(script).toContain("content-scripts/gstr2b-capture-main.js");
+    expect(script).toContain("content-scripts/content.js");
+    expect(script).not.toContain("content-scripts/gstr2b-capture-main.js");
     expect(script).toContain("Pack release must include only the approved content scripts.");
     expect(script).toContain("assertPopupPageLoads");
     expect(script).toContain("assertNoBrowserRuntimeFailures");
@@ -347,9 +372,9 @@ async function createValidPackage(): Promise<string> {
     name: "ComplyEaze Pack: GST Return Downloader",
     short_name: "ComplyEaze Pack",
     description:
-      "Alpha: locally download GSTR-1/GSTR-3B files; private GSTR-2B support may still show the browser save dialog.",
+      "Alpha: locally download GSTR-1/GSTR-3B files; private GSTR-2B downloads are source-build experimental.",
     homepage_url: "https://pack.complyeaze.com/gst",
-    permissions: ["downloads", "scripting", "storage"],
+    permissions: ["downloads", "offscreen", "scripting", "storage"],
     host_permissions: [
       "https://www.gst.gov.in/*",
       "https://services.gst.gov.in/*",
@@ -377,6 +402,11 @@ async function createValidPackage(): Promise<string> {
   };
 
   await writePackageFile(outputDir, "manifest.json", `${JSON.stringify(manifest, null, 2)}\n`);
+  await writePackageFile(
+    outputDir,
+    "offscreen.html",
+    '<!doctype html><html><body><script type="module" src="/chunks/offscreen.js"></script></body></html>',
+  );
   for (const iconSize of [16, 32, 48, 128]) {
     await writePackageFile(outputDir, `icons/icon-${iconSize}.png`, "synthetic-png");
   }
