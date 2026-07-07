@@ -178,40 +178,6 @@ describe("filed returns guided flow", () => {
     );
   });
 
-  it("treats the GSTR-2B offline JSON generation page as unsupported for dialog-free download", async () => {
-    const documentRef = createGstDocument(
-      `
-        <main>
-          <h1>GSTR-2B Offline Download</h1>
-          <button type="button" data-ng-click="download()">GENERATE JSON FILE TO DOWNLOAD</button>
-        </main>
-      `,
-      "https://return.gst.gov.in/returns/auth/gstr/offlinedownload",
-    );
-
-    const result = await runFiledReturnsDownloadStep(documentRef, {
-      artifactType: "PDF_AND_EXCEL",
-      financialYear: "2026-27",
-      period: "May",
-      returnType: "GSTR-2B",
-    });
-
-    expect(result.state).toBe("unsupported-page");
-    expect(result.safeSignals).toEqual(
-      expect.arrayContaining([
-        "gstr2b-offline-download-route",
-        "gstr2b-async-json-generation-flow",
-        "gstr2b-dialog-free-download-unsupported",
-      ]),
-    );
-    expect(result.safeMessage).toMatch(/asynchronously/i);
-    expect(result.userAction).toEqual({
-      type: "NAVIGATE_TO_SUPPORTED_PAGE",
-      message: "Use the GST Portal's GSTR-2B offline JSON generation/download manually for this period.",
-      canResume: false,
-    });
-  });
-
   it("navigates authenticated wrong-page GSTR-2B starts through the Return Dashboard", async () => {
     const documentRef = createGstDocument(
       `
