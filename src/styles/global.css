@@ -19,13 +19,15 @@
 
 body {
   margin: 0;
+  min-width: 0;
 }
 
 .popup-shell {
   display: grid;
-  width: 360px;
-  gap: 14px;
-  padding: 16px;
+  width: 440px;
+  max-width: 100vw;
+  gap: 16px;
+  padding: 18px;
 }
 
 .options-shell {
@@ -38,11 +40,13 @@ body {
 
 .brand-header {
   display: grid;
-  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 14px;
+  align-items: end;
 }
 
 .brand-logo {
-  width: 178px;
+  width: 192px;
   max-width: 100%;
   height: auto;
 }
@@ -52,6 +56,7 @@ body {
   color: #5f6f82;
   font-size: 12px;
   font-weight: 700;
+  text-align: right;
 }
 
 .eyebrow {
@@ -82,10 +87,10 @@ h1 {
 }
 
 .state {
-  border: 1px solid #dbe3ee;
+  border: 1px solid #d7deea;
   border-radius: 8px;
-  background: #ffffff;
-  padding: 12px;
+  background: #fbfcff;
+  padding: 13px 14px;
 }
 
 .state p {
@@ -100,17 +105,28 @@ h1 {
 
 .actions {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+}
+
+.actions .muted {
+  grid-column: 1 / -1;
+  margin: 0;
 }
 
 .flow-panel {
   display: grid;
-  gap: 10px;
-  border: 1px solid #dbe3ee;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  border: 1px solid #d7deea;
   border-radius: 8px;
   background: #ffffff;
-  padding: 12px;
+  padding: 14px;
+}
+
+.flow-panel > .muted,
+.flow-panel > button {
+  grid-column: 1 / -1;
 }
 
 label {
@@ -151,15 +167,14 @@ select:disabled {
 }
 
 .scope-options {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
   gap: 6px;
 }
 
 .scope-option {
   display: inline-flex;
   min-height: 32px;
-  flex: 1 1 86px;
   cursor: pointer;
   align-items: center;
   justify-content: center;
@@ -170,6 +185,10 @@ select:disabled {
   font-size: 12px;
   font-weight: 700;
   text-align: center;
+}
+
+.scope-option:hover {
+  border-color: #173a63;
 }
 
 .scope-option input {
@@ -213,6 +232,12 @@ button {
   font-weight: 700;
 }
 
+button:focus-visible,
+.scope-option:has(input:focus-visible) {
+  outline: 2px solid #245b91;
+  outline-offset: 2px;
+}
+
 button.secondary {
   border-color: #c4c7bd;
   background: #ffffff;
@@ -239,4 +264,21 @@ button:disabled {
 
 .fineprint {
   margin: 0;
+}
+
+@media (max-width: 390px) {
+  .popup-shell {
+    width: 100vw;
+    padding: 14px;
+  }
+
+  .brand-header,
+  .flow-panel,
+  .actions {
+    grid-template-columns: 1fr;
+  }
+
+  .brand-mode {
+    text-align: left;
+  }
 }
