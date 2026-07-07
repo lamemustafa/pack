@@ -20,6 +20,7 @@ import {
   releaseFiledReturnsRun,
   startFiledReturnsRunLeaseRenewal,
 } from "./filed-returns-active-run";
+import { getOrOpenGstTab, type ActiveGstTab } from "./filed-returns-active-tab";
 import { triggerAndObserveFiledReturnDownload } from "./filed-returns-download-trigger";
 import { startFullFiscalYearDownloadFlow } from "./filed-returns-full-fiscal-year";
 import {
@@ -41,22 +42,19 @@ import {
   searchStepLimitReachedMessage,
   toStepLimitReachedFlowStep,
 } from "./filed-returns-step-limit";
-import { GST_CONNECTOR_DESCRIPTOR } from "../connectors/gst/constants";
 import {
   filedReturnDescriptor,
   filedReturnScopedSignal,
   filedReturnScopeId,
 } from "../connectors/gst/filed-returns-return-descriptors";
 
-const GST_SERVICES_ORIGIN = GST_CONNECTOR_DESCRIPTOR.supportedOrigins[1] ?? "";
-const GST_LOGIN_URL = new URL("/services/login", GST_SERVICES_ORIGIN).href;
+export type { ActiveGstTab } from "./filed-returns-active-tab";
+
 const FLOW_STEP_SETTLE_MS = 1_600;
 const RESULT_ROW_NAVIGATION_SETTLE_MS = 1_500;
 const MAX_FLOW_STEPS = 6;
 const MAX_GSTR1_FLOW_STEPS = 12;
 const MAX_GSTR2B_FLOW_STEPS = 12;
-
-export type ActiveGstTab = Browser.tabs.Tab & { id: number };
 
 export interface FiledReturnsFlowRunnerDeps {
   getActiveGstTab: () => Promise<ActiveGstTab | null>;
@@ -777,26 +775,6 @@ function sameFiledReturnsScope(
     normaliseFiledReturnsArtifactType(left.returnType, left.artifactType) ===
       normaliseFiledReturnsArtifactType(right.returnType, right.artifactType)
   );
-}
-
-async function getOrOpenGstTab(
-  getActiveGstTab: () => Promise<ActiveGstTab | null>,
-): Promise<{ tab: ActiveGstTab; openedForLogin: false } | { openedForLogin: true }> {
-  const activeTab = await getActiveGstTab();
-  if (activeTab) {
-    await focusTab(activeTab);
-    return { tab: activeTab, openedForLogin: false };
-  }
-
-  await browser.tabs.create({ active: true, url: GST_LOGIN_URL });
-  return { openedForLogin: true };
-}
-
-async function focusTab(tab: ActiveGstTab): Promise<void> {
-  await browser.tabs.update(tab.id, { active: true });
-  if (typeof tab.windowId === "number") {
-    await browser.windows.update(tab.windowId, { focused: true });
-  }
 }
 
 async function persistFlowResponse(
