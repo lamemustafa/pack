@@ -35,6 +35,12 @@ import {
   readFiledReturnsTargetReview,
   responseForFiledReturnsTargetReview,
 } from "./filed-returns-target-review";
+import { withPersistedSinglePeriodSummary } from "./filed-returns-single-period-summary";
+import {
+  detailStepLimitReachedMessage,
+  searchStepLimitReachedMessage,
+  toStepLimitReachedFlowStep,
+} from "./filed-returns-step-limit";
 import { GST_CONNECTOR_DESCRIPTOR } from "../connectors/gst/constants";
 import {
   filedReturnDescriptor,
@@ -664,39 +670,6 @@ async function waitForGstr1ExcelDetailReady({
   };
 }
 
-function toStepLimitReachedFlowStep(
-  scope: FiledReturnsDownloadScope,
-  lastStep: PortalFlowStepResult | null,
-  options: {
-    safeSignal: string;
-    safeMessage: string;
-    userActionMessage: string;
-  },
-): PortalFlowStepResult {
-  return {
-    connectorId: lastStep?.connectorId ?? "gst",
-    scopeId: lastStep?.scopeId ?? filedReturnScopeId(scope.returnType),
-    state: "user-action-required",
-    safeSignals: Array.from(new Set([...(lastStep?.safeSignals ?? []), options.safeSignal])),
-    safeMessage: options.safeMessage,
-    userAction: {
-      type: "WAIT_FOR_PORTAL_AVAILABILITY",
-      message: options.userActionMessage,
-      canResume: true,
-    },
-  };
-}
-
-function searchStepLimitReachedMessage(scope: FiledReturnsDownloadScope): string {
-  const descriptor = filedReturnDescriptor(scope.returnType);
-  return `Pack selected the filed-return filters, but the GST Portal did not show a filed ${descriptor.label} row or download control before Pack's retry limit. If this period is not filed, no filed-return download is available. Otherwise wait for the portal results to finish loading, then start Pack again.`;
-}
-
-function detailStepLimitReachedMessage(scope: FiledReturnsDownloadScope): string {
-  const descriptor = filedReturnDescriptor(scope.returnType);
-  return `Pack opened the filed ${descriptor.label} detail path, but the GST Portal did not show the requested download control before Pack's retry limit. Wait for the detail page to finish loading, then start Pack again.`;
-}
-
 async function readPersistedArtifactProgress(
   scope: FiledReturnsDownloadScope,
   artifactTypes: readonly FiledReturnsConcreteArtifactType[],
@@ -806,21 +779,6 @@ function sameFiledReturnsScope(
   );
 }
 
-async function withPersistedSinglePeriodSummary(
-  scope: FiledReturnsDownloadScope,
-  response: Extract<PackMessageResponse, { ok: true; flowStep: PortalFlowStepResult }>,
-  deps: FiledReturnsFlowRunnerDeps,
-  shouldPersistSinglePeriodSummary: boolean,
-): Promise<PackMessageResponse> {
-  if (!shouldPersistSinglePeriodSummary) return response;
-  if (response.flowSummary) {
-    await persistProvidedSinglePeriodSummary(response.flowSummary, deps);
-    return response;
-  }
-  const flowSummary = await persistSinglePeriodSummary(scope, response.flowStep, deps);
-  return { ...response, flowSummary };
-}
-
 async function getOrOpenGstTab(
   getActiveGstTab: () => Promise<ActiveGstTab | null>,
 ): Promise<{ tab: ActiveGstTab; openedForLogin: false } | { openedForLogin: true }> {
@@ -850,42 +808,6 @@ async function persistFlowResponse(
       [deps.storageKeys.observation]: response.observation,
     });
   }
-}
-
-async function persistSinglePeriodSummary(
-  scope: FiledReturnsDownloadScope,
-  flowStep: PortalFlowStepResult,
-  deps: FiledReturnsFlowRunnerDeps,
-): Promise<FiledReturnsFlowSummary> {
-  const summary = toSinglePeriodSummary(scope, flowStep, deps.now?.() ?? new Date());
-  await browser.storage.session.set({ [deps.storageKeys.completion]: summary });
-  return summary;
-}
-
-async function persistProvidedSinglePeriodSummary(
-  flowSummary: FiledReturnsFlowSummary,
-  deps: FiledReturnsFlowRunnerDeps,
-): Promise<void> {
-  await browser.storage.session.set({ [deps.storageKeys.completion]: flowSummary });
-}
-
-function toSinglePeriodSummary(
-  scope: FiledReturnsDownloadScope,
-  flowStep: PortalFlowStepResult,
-  now: Date,
-): FiledReturnsFlowSummary {
-  const isReconciled =
-    flowStep.state === "downloaded" ||
-    flowStep.safeSignals.includes("filed-return-positively-not-filed");
-  return {
-    scope,
-    status: isReconciled ? "complete" : "blocked",
-    ...(isReconciled ? { completedAt: now.toISOString() } : { updatedAt: now.toISOString() }),
-    completedPeriods: isReconciled ? [scope.period] : [],
-    currentPeriod: scope.period,
-    flowStep,
-    totalPeriods: 1,
-  };
 }
 
 function shouldContinueFlow(step: PortalFlowStepResult): boolean {
