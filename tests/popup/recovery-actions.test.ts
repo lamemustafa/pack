@@ -228,6 +228,28 @@ describe("popup full-year recovery actions", () => {
     expect(markup).not.toContain("E-invoice details Excel");
   });
 
+  it("explains GSTR-2B full-year Excel as portal-generated capture", () => {
+    const markup = renderToStaticMarkup(
+      createElement(ScopeForm, {
+        busy: null,
+        scope: {
+          artifactType: "PDF_AND_EXCEL",
+          financialYear: "2025-26",
+          period: FULL_FISCAL_YEAR_PERIOD,
+          returnType: "GSTR-2B",
+        },
+        flowSummary: null,
+        onScopeChange: () => undefined,
+        onStart: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain(
+      "PDF and Excel are captured only from the portal-generated download controls.",
+    );
+    expect(markup).not.toContain("selected GSTR-1 e-invoice details file");
+  });
+
   it("presents interrupted runs as resettable stuck work", () => {
     const markup = renderToStaticMarkup(
       createElement(RecoveryActions, {

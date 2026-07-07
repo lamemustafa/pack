@@ -101,9 +101,7 @@ export function ScopeForm({ busy, flowSummary, scope, onScopeChange, onStart }: 
       />
       {fullFiscalYear ? (
         <p className="scope-note">
-          Runs eligible filed {scope.returnType} periods one by one from your signed-in GST Portal
-          tab. Pack stops on ambiguous downloads and records local status only. Excel is available
-          only when the GST Portal provides the selected GSTR-1 e-invoice details file.
+          {getFullFiscalYearNote(scope)}
         </p>
       ) : null}
       <button className="primary-action" type="button" disabled={startAction.disabled} onClick={onStart}>
@@ -111,6 +109,20 @@ export function ScopeForm({ busy, flowSummary, scope, onScopeChange, onStart }: 
       </button>
     </section>
   );
+}
+
+function getFullFiscalYearNote(scope: FiledReturnsDownloadScope): string {
+  const artifactType = normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType);
+  const base =
+    `Runs eligible filed ${scope.returnType} periods one by one from your signed-in GST ` +
+    "Portal tab. Pack stops on ambiguous downloads and records local status only.";
+  if (scope.returnType === "GSTR-2B" && artifactType === "PDF_AND_EXCEL") {
+    return `${base} PDF and Excel are captured only from the portal-generated download controls.`;
+  }
+  if (scope.returnType === "GSTR-1" && artifactType !== "PDF") {
+    return `${base} Excel is included only when the GST Portal provides the selected e-invoice details file.`;
+  }
+  return base;
 }
 
 function getScopeFormStartAction(
