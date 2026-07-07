@@ -1,8 +1,4 @@
-import type {
-  FiledReturnsDownloadScope,
-  PortalDownloadTriggerResult,
-  PortalFlowStepResult,
-} from "../../core/contracts";
+import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "../../core/contracts";
 import {
   activateElement,
   delay,
@@ -23,9 +19,16 @@ import { detectFiledReturnsPortalAvailabilityIssue } from "./filed-returns-porta
 import { findMatchingActionableFiledReturnRows } from "./filed-returns-result-rows";
 import { filedReturnScopeId } from "./filed-returns-return-descriptors";
 import { selectFiledReturnsFiltersAndSearch } from "./filed-returns-filter-form";
+import {
+  hasGstr2bLoginEvidence,
+  isGstr2bAuthRoute,
+  isGstr2bSummaryPage,
+  readDocumentText,
+  returnFromMismatchedGstr2bSummary,
+  verifyVisibleGstr2bPeriod,
+} from "./gstr2b-summary";
+import { findGstr2bDashboardControl } from "./gstr2b-dashboard-view";
 
-const GSTR2B_SUMMARY_ROUTE = /\/gstr2b\/auth\/gstr2b\/summary\/?$/i;
-const GSTR2B_AUTH_ROUTE = /\/gstr2b\/auth(?:\/|$)/i;
 const FILED_RETURNS_ROUTE = /\/returns\/auth\/efiledReturns\/?$/i;
 const DASHBOARD_FIELD_SETTLE_DELAY_MS = 500;
 const DASHBOARD_DEPENDENT_FIELD_ATTEMPTS = 6;
@@ -52,7 +55,7 @@ export async function runGstr2bDownloadStep(
   const text = readDocumentText(documentRef);
   const normalised = normaliseText(text);
 
-  if (hasLoginEvidence(documentRef, normalised)) {
+  if (hasGstr2bLoginEvidence(documentRef, normalised)) {
     return {
       connectorId: "gst",
       scopeId,
@@ -231,111 +234,6 @@ function filedReturnsPageOffersGstr2b(documentRef: Document): boolean {
   return Array.from(documentRef.querySelectorAll("option")).some((option) =>
     matchesAcceptedText(option.textContent || option.value, ["GSTR-2B"]),
   );
-}
-
-export function verifyVisibleGstr2bSummaryScope(
-  documentRef: Document,
-  scope: FiledReturnsDownloadScope,
-): PortalDownloadTriggerResult | null {
-  const normalised = normaliseText(readDocumentText(documentRef));
-  if (!isGstr2bSummaryPage(documentRef, normalised)) return null;
-  return verifyVisibleGstr2bPeriod(normalised, scope);
-}
-
-function verifyVisibleGstr2bPeriod(
-  normalisedText: string,
-  scope: FiledReturnsDownloadScope,
-): PortalDownloadTriggerResult | null {
-  const visiblePeriod = extractGstr2bLabelValue(normalisedText, "return period");
-  const visibleFinancialYear = extractGstr2bLabelValue(normalisedText, "financial year");
-  const monthMatches = visiblePeriod
-    ? matchesAcceptedText(visiblePeriod, acceptedFiledReturnsMonthTexts(scope.period))
-    : acceptedFiledReturnsMonthTexts(scope.period).some((period) =>
-        matchesAcceptedText(normalisedText, [period]),
-      );
-  const yearMatches = visibleFinancialYear
-    ? matchesAcceptedText(visibleFinancialYear, [scope.financialYear])
-    : expectedCalendarYears(scope).some((year) => normalisedText.includes(year));
-  if (monthMatches && yearMatches) return null;
-
-  return {
-    connectorId: "gst",
-    scopeId: filedReturnScopeId("GSTR-2B"),
-    state: "blocked",
-    safeSignals: ["gstr2b-visible-period-mismatch"],
-    safeMessage:
-      "Pack found a GSTR-2B summary page, but could not verify that its visible period matches the requested scope.",
-    userAction: {
-      type: "NAVIGATE_TO_SUPPORTED_PAGE",
-      message: "Open the GSTR-2B summary page for the requested month and financial year.",
-      canResume: true,
-    },
-  };
-}
-
-function extractGstr2bLabelValue(
-  normalisedText: string,
-  label: "financial year" | "return period",
-): string | null {
-  const pattern =
-    label === "financial year"
-      ? /\bfinancial\s+year\s*[-:]\s*([0-9]{4}\s*-\s*[0-9]{2})\b/
-      : /\breturn\s+period\s*[-:]\s*([a-z]+)\b/;
-  const match = normalisedText.match(pattern);
-  return match?.[1]?.trim() ?? null;
-}
-
-function returnFromMismatchedGstr2bSummary(
-  documentRef: Document,
-  scopeId: string,
-  safeSignals: readonly string[],
-): PortalFlowStepResult | null {
-  const dashboardBackControl = findGstr2bSummaryDashboardBackControl(documentRef);
-  if (dashboardBackControl) {
-    activateElement(dashboardBackControl);
-    return {
-      connectorId: "gst",
-      scopeId,
-      state: "clicked",
-      safeSignals: Array.from(
-        new Set([
-          ...safeSignals,
-          "gstr2b-summary-period-mismatch",
-          "gstr2b-summary-dashboard-back-clicked",
-        ]),
-      ),
-      safeMessage:
-        "Pack found a GSTR-2B summary for a different period and clicked Back to Dashboard so it can select the requested period.",
-    };
-  }
-
-  const history = documentRef.defaultView?.history;
-  if (history && typeof history.back === "function") {
-    history.back();
-    return {
-      connectorId: "gst",
-      scopeId,
-      state: "clicked",
-      safeSignals: Array.from(
-        new Set([...safeSignals, "gstr2b-summary-period-mismatch", "gstr2b-summary-back-clicked"]),
-      ),
-      safeMessage:
-        "Pack found a GSTR-2B summary for a different period and returned to the GST Return Dashboard so it can select the requested period.",
-    };
-  }
-
-  const dashboardNavigation = clickBestReturnDashboardCandidate(
-    documentRef,
-    "gstr2b-summary-period-mismatch",
-    safeSignals,
-    scopeId,
-  );
-  if (!dashboardNavigation) return null;
-  return {
-    ...dashboardNavigation,
-    safeMessage:
-      "Pack found a GSTR-2B summary for a different period and opened the GST Return Dashboard so it can select the requested period.",
-  };
 }
 
 async function selectGstr2bReturnDashboardFiltersAndSearch(
@@ -558,15 +456,6 @@ function sanitizeDiagnosticSignalValue(value: string): string {
     .slice(0, 40);
 }
 
-function expectedCalendarYears(scope: FiledReturnsDownloadScope): string[] {
-  const match = /^(20\d{2})-\d{2}$/.exec(scope.financialYear);
-  if (!match?.[1]) return [];
-  const startYear = Number(match[1]);
-  return scope.period === "January" || scope.period === "February" || scope.period === "March"
-    ? [String(startYear + 1)]
-    : [String(startYear)];
-}
-
 function acceptedQuarterOptions(period: string): string[] {
   const normalisedPeriod = normaliseText(period);
   if (["april", "may", "june"].includes(normalisedPeriod)) {
@@ -579,21 +468,6 @@ function acceptedQuarterOptions(period: string): string[] {
     return ["Quarter 3", "Q3", "Oct-Dec", "Oct - Dec", "October-December", "October - December"];
   }
   return ["Quarter 4", "Q4", "Jan-Mar", "Jan - Mar", "January-March", "January - March"];
-}
-
-function isGstr2bSummaryPage(documentRef: Document, normalisedText: string): boolean {
-  const pathname = documentRef.defaultView?.location.pathname ?? "";
-  return (
-    GSTR2B_SUMMARY_ROUTE.test(pathname) ||
-    (normalisedText.includes("gstr-2b") &&
-      normalisedText.includes("download gstr-2b summary") &&
-      normalisedText.includes("download gstr-2b details"))
-  );
-}
-
-function isGstr2bAuthRoute(documentRef: Document): boolean {
-  const pathname = documentRef.defaultView?.location.pathname ?? "";
-  return GSTR2B_AUTH_ROUTE.test(pathname);
 }
 
 function dashboardFiltersMatch(
@@ -655,15 +529,6 @@ function findReturnDashboardFilterRoot(documentRef: Document): HTMLElement | nul
   }
 
   return null;
-}
-
-function findGstr2bSummaryDashboardBackControl(documentRef: Document): HTMLElement | null {
-  return (
-    getClickableElements(documentRef).find((element) => {
-      const text = normaliseText(readElementText(element));
-      return /^back\s+to\s+dashboard$/.test(text) || /^back$/.test(text);
-    }) ?? null
-  );
 }
 
 function findNativeReturnDashboardRoot(documentRef: Document): HTMLElement | null {
@@ -880,101 +745,6 @@ function findAcceptedOption(
   );
 }
 
-function findGstr2bDashboardControl(documentRef: Document, intent: "view"): HTMLElement | null {
-  const containers = Array.from(
-    documentRef.querySelectorAll(
-      [
-        "tr",
-        ".row",
-        ".card",
-        ".panel",
-        "[class*='card']",
-        "[class*='col-']",
-        "[class*='tile']",
-        "[data-ng-repeat]",
-        "[ng-repeat]",
-      ].join(","),
-    ),
-  ).sort((left, right) => (left.textContent?.length ?? 0) - (right.textContent?.length ?? 0));
-  for (const container of containers) {
-    const text = normaliseText(container.textContent ?? "");
-    if (!text.includes("gstr-2b") && !text.includes("gstr2b")) continue;
-    const control = findMatchingGstr2bControl(container, intent);
-    if (control) return control;
-  }
-
-  const gstr2bControls = getClickableElements(documentRef).filter((element) => {
-    const text = normaliseText(readElementText(element));
-    return text.includes("gstr-2b") || text.includes("gstr2b");
-  });
-  for (const gstr2bControl of gstr2bControls) {
-    const control = findNearestGstr2bControl(gstr2bControl, intent);
-    if (control) return control;
-  }
-  const nearbyIntentControl = findNearbyGstr2bIntentControl(documentRef, intent);
-  if (nearbyIntentControl) return nearbyIntentControl;
-  return null;
-}
-
-function findNearestGstr2bControl(element: HTMLElement, intent: "view"): HTMLElement | null {
-  let current: HTMLElement | null = element.parentElement;
-  for (let depth = 0; current && depth < 6; depth += 1, current = current.parentElement) {
-    if (!normaliseText(current.textContent ?? "").match(/gstr-?2b/)) continue;
-    const control = findMatchingGstr2bControl(current, intent);
-    if (control) return control;
-  }
-  return null;
-}
-
-function findMatchingGstr2bControl(container: Element, intent: "view"): HTMLElement | null {
-  const candidates = getClickableElements(container).filter((element) =>
-    matchesGstr2bIntentControl(element, intent),
-  );
-  return candidates.find(hasLocallyScopedGstr2bText) ?? null;
-}
-
-function findNearbyGstr2bIntentControl(documentRef: Document, intent: "view"): HTMLElement | null {
-  return (
-    getClickableElements(documentRef).find((element) => {
-      if (!matchesGstr2bIntentControl(element, intent)) return false;
-      return hasLocallyScopedGstr2bText(element);
-    }) ?? null
-  );
-}
-
-function matchesGstr2bIntentControl(element: HTMLElement, intent: "view"): boolean {
-  const label = normaliseText(readElementText(element));
-  if (intent === "view" && /^view$/.test(label)) return true;
-
-  const action = normaliseText(
-    [element.getAttribute("data-ng-click") ?? "", element.getAttribute("ng-click") ?? ""].join(" "),
-  );
-  return intent === "view" && action.includes("page_rtp") && !label.includes("download");
-}
-
-function hasLocallyScopedGstr2bText(element: HTMLElement): boolean {
-  let current: HTMLElement | null = element;
-  for (let depth = 0; current && depth < 5; depth += 1, current = current.parentElement) {
-    const currentText = current.textContent ?? "";
-    if (containsReturnTypeText(currentText)) return isSpecificGstr2bText(currentText);
-    const previous = current.previousElementSibling;
-    const next = current.nextElementSibling;
-    if (previous && isSpecificGstr2bText(previous.textContent ?? "")) return true;
-    if (next && isSpecificGstr2bText(next.textContent ?? "")) return true;
-  }
-  return false;
-}
-
-function containsReturnTypeText(text: string): boolean {
-  return /gstr-?(?:1a?|2a|2b|3b)\b/.test(normaliseText(text));
-}
-
-function isSpecificGstr2bText(text: string): boolean {
-  const normalised = normaliseText(text);
-  if (!/gstr-?2b/.test(normalised)) return false;
-  return !/gstr-?1a?\b|gstr-?2a\b|gstr-?3b\b/.test(normalised);
-}
-
 function isReturnDashboardRoute(documentRef: Document): boolean {
   const pathname = documentRef.defaultView?.location.pathname ?? "";
   return /\/returns\/auth\/dashboard\/?$/i.test(pathname);
@@ -988,26 +758,6 @@ function isFiledReturnsRoute(documentRef: Document): boolean {
 function isReturnDashboardStillRendering(documentRef: Document, documentText: string): boolean {
   if (normaliseText(documentText).length > 40) return false;
   return getClickableElements(documentRef).length === 0;
-}
-
-function hasLoginEvidence(documentRef: Document, normalisedText: string): boolean {
-  const pathname = documentRef.defaultView?.location.pathname ?? "";
-  if (/(?:\/services\/login|\/login)$/i.test(pathname)) return true;
-  if (
-    /session (?:is |has )?expired|please login again|invalid session|logged out/.test(
-      normalisedText,
-    )
-  ) {
-    return true;
-  }
-  return (
-    /\blogin\b|\bsign in\b/.test(normalisedText) &&
-    /\b(username|user id|captcha)\b/.test(normalisedText)
-  );
-}
-
-function readDocumentText(documentRef: Document): string {
-  return documentRef.body?.innerText || documentRef.body?.textContent || "";
 }
 
 function readElementText(element: HTMLElement): string {

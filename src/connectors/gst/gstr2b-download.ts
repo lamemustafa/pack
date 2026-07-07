@@ -12,7 +12,7 @@ import {
 } from "./filed-returns-portal-availability";
 import { filedReturnScopeId } from "./filed-returns-return-descriptors";
 import { prepareGstr2bPortalBlobDownloadCapture } from "./gstr2b-blob-capture";
-import { verifyVisibleGstr2bSummaryScope } from "./gstr2b-flow";
+import { verifyVisibleGstr2bSummaryScope } from "./gstr2b-summary";
 
 export interface Gstr2bDownloadTriggerResult {
   downloadTrigger: PortalDownloadTriggerResult;
