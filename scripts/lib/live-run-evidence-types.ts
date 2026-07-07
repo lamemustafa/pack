@@ -82,5 +82,4 @@ export interface LiveRunEvidenceMediaArtifact {
 }
 
 export type LiveRunEvidenceValidationResult =
-  | { ok: true; evidence: LiveRunEvidence }
-  | { ok: false; errors: string[] };
+  { ok: true; evidence: LiveRunEvidence } | { ok: false; errors: string[] };
