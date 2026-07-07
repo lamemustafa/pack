@@ -213,13 +213,13 @@ describe("filed returns guided flow", () => {
     expect(clickedHrefs).toEqual(["https://return.gst.gov.in/returns/auth/dashboard"]);
   });
 
-  it("selects May GSTR-2B return dashboard filters and clicks search before opening the card", async () => {
+  it("stages the GSTR-2B return dashboard quarter change before selecting the dependent period", async () => {
     const documentRef = createGstDocument(
       `
         <main>
-          <form>
+          <form name="dashboard">
             <label for="fy">Financial Year</label>
-            <select id="fy" name="finyr">
+            <select id="fy" name="fin">
               <option>2025-26</option>
               <option selected>2026-27</option>
             </select>
@@ -229,18 +229,11 @@ describe("filed returns guided flow", () => {
               <option selected>Quarter 2 (Jul - Sep)</option>
             </select>
             <label for="period">Period</label>
-            <select id="period" name="period">
-              <option>April</option>
-              <option>May</option>
-              <option>June</option>
+            <select id="period" name="mon">
               <option selected>July</option>
             </select>
             <button type="button" data-search>Search</button>
           </form>
-          <section>
-            <p>GSTR-2B</p>
-            <button data-gstr2b-view>VIEW</button>
-          </section>
         </main>
       `,
       "https://return.gst.gov.in/returns/auth/dashboard",
@@ -265,16 +258,115 @@ describe("filed returns guided flow", () => {
     expect(result.state).toBe("clicked");
     expect(result.safeSignals).toEqual(
       expect.arrayContaining([
-        "gstr2b-return-dashboard-filters-selected",
+        "gstr2b-return-dashboard-filter-selection-in-progress",
         "quarter-selected",
+      ]),
+    );
+    expect(searchClicked).toBe(0);
+    expect(viewClicked).toBe(0);
+    expect(documentRef.querySelector<HTMLSelectElement>("#quarter")?.value).toContain("Quarter 1");
+    expect(documentRef.querySelector<HTMLSelectElement>("#period")?.value).toBe("July");
+  });
+
+  it("stages the GSTR-2B return dashboard period change after Angular refreshes Q1 months", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <form name="dashboard">
+            <label for="fy">Financial Year</label>
+            <select id="fy" name="fin">
+              <option>2025-26</option>
+              <option selected>2026-27</option>
+            </select>
+            <label for="quarter">Quarter</label>
+            <select id="quarter" name="quarter">
+              <option selected>Quarter 1 (Apr - Jun)</option>
+              <option>Quarter 2 (Jul - Sep)</option>
+            </select>
+            <label for="period">Period</label>
+            <select id="period" name="mon">
+              <option>April</option>
+              <option>May</option>
+              <option selected>June</option>
+            </select>
+            <button type="button" data-search>Search</button>
+          </form>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/dashboard",
+    );
+    makeLayoutVisible(documentRef);
+    let searchClicked = 0;
+    documentRef.querySelector("[data-search]")?.addEventListener("click", () => {
+      searchClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-2B",
+    });
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining([
+        "gstr2b-return-dashboard-filter-selection-in-progress",
         "period-selected",
+      ]),
+    );
+    expect(searchClicked).toBe(0);
+    expect(documentRef.querySelector<HTMLSelectElement>("#period")?.value).toBe("May");
+  });
+
+  it("clicks GSTR-2B dashboard search only after requested filters are already settled", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <form name="dashboard">
+            <label for="fy">Financial Year</label>
+            <select id="fy" name="fin">
+              <option>2025-26</option>
+              <option selected>2026-27</option>
+            </select>
+            <label for="quarter">Quarter</label>
+            <select id="quarter" name="quarter">
+              <option selected>Quarter 1 (Apr - Jun)</option>
+              <option>Quarter 2 (Jul - Sep)</option>
+            </select>
+            <label for="period">Period</label>
+            <select id="period" name="mon">
+              <option>April</option>
+              <option selected>May</option>
+              <option>June</option>
+            </select>
+            <button type="button" data-search>Search</button>
+          </form>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/dashboard",
+    );
+    makeLayoutVisible(documentRef);
+    let searchClicked = 0;
+    documentRef.querySelector("[data-search]")?.addEventListener("click", () => {
+      searchClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-2B",
+    });
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining([
+        "gstr2b-return-dashboard-filters-selected",
         "search-clicked",
       ]),
     );
     expect(searchClicked).toBe(1);
-    expect(viewClicked).toBe(0);
-    expect(documentRef.querySelector<HTMLSelectElement>("#quarter")?.value).toContain("Quarter 1");
-    expect(documentRef.querySelector<HTMLSelectElement>("#period")?.value).toBe("May");
   });
 
   it("waits for the GSTR-2B return dashboard controls when the portal shell is still blank", async () => {
@@ -376,11 +468,14 @@ describe("filed returns guided flow", () => {
 
     expect(result.state).toBe("clicked");
     expect(result.safeSignals).toEqual(
-      expect.arrayContaining(["gstr2b-return-dashboard-filters-selected", "search-clicked"]),
+      expect.arrayContaining([
+        "gstr2b-return-dashboard-filter-selection-in-progress",
+        "quarter-selected",
+      ]),
     );
-    expect(searchClicked).toBe(1);
+    expect(searchClicked).toBe(0);
     expect(documentRef.querySelector<HTMLSelectElement>("#quarter")?.value).toContain("Quarter 1");
-    expect(documentRef.querySelector<HTMLSelectElement>("#period")?.value).toBe("May");
+    expect(documentRef.querySelector<HTMLSelectElement>("#period")?.value).toBe("July");
   });
 
   it("selects GSTR-2B dashboard filters from the live portal ordered select layout", async () => {
@@ -423,13 +518,16 @@ describe("filed returns guided flow", () => {
 
     expect(result.state).toBe("clicked");
     expect(result.safeSignals).toEqual(
-      expect.arrayContaining(["gstr2b-return-dashboard-filters-selected", "search-clicked"]),
+      expect.arrayContaining([
+        "gstr2b-return-dashboard-filter-selection-in-progress",
+        "quarter-selected",
+      ]),
     );
-    expect(searchClicked).toBe(1);
+    expect(searchClicked).toBe(0);
     expect(documentRef.querySelectorAll<HTMLSelectElement>("select")[1]?.value).toContain(
       "Quarter 1",
     );
-    expect(documentRef.querySelectorAll<HTMLSelectElement>("select")[2]?.value).toBe("May");
+    expect(documentRef.querySelectorAll<HTMLSelectElement>("select")[2]?.value).toBe("July");
   });
 
   it("clicks search when GSTR-2B dashboard filters already match but the card is absent", async () => {
@@ -538,17 +636,15 @@ describe("filed returns guided flow", () => {
     expect(result.state).toBe("clicked");
     expect(result.safeSignals).toEqual(
       expect.arrayContaining([
-        "gstr2b-return-dashboard-filters-selected",
+        "gstr2b-return-dashboard-filter-selection-in-progress",
         "quarter-selected",
-        "period-selected",
-        "search-clicked",
       ]),
     );
-    expect(searchClicked).toBe(1);
+    expect(searchClicked).toBe(0);
     expect(documentRef.querySelector<HTMLSelectElement>("[name='quarter']")?.value).toBe(
       "object:198",
     );
-    expect(documentRef.querySelector<HTMLSelectElement>("[name='mon']")?.value).toBe("object:201");
+    expect(documentRef.querySelector<HTMLSelectElement>("[name='mon']")?.value).toBe("object:200");
   });
 
   it("waits for the live GST dashboard period select when quarter changes rebuild it asynchronously", async () => {
@@ -609,17 +705,15 @@ describe("filed returns guided flow", () => {
     expect(result.state).toBe("clicked");
     expect(result.safeSignals).toEqual(
       expect.arrayContaining([
-        "gstr2b-return-dashboard-filters-selected",
+        "gstr2b-return-dashboard-filter-selection-in-progress",
         "quarter-selected",
-        "period-selected",
-        "search-clicked",
       ]),
     );
-    expect(searchClicked).toBe(1);
+    expect(searchClicked).toBe(0);
     expect(documentRef.querySelector<HTMLSelectElement>("[name='quarter']")?.value).toBe(
       "object:198",
     );
-    expect(documentRef.querySelector<HTMLSelectElement>("[name='mon']")?.value).toBe("object:201");
+    expect(documentRef.querySelector<HTMLSelectElement>("[name='mon']")?.value).toBe("object:200");
   });
 
   it("resolves live GST dashboard controls from the dashboard form when page chrome has extra selects", async () => {
@@ -666,20 +760,18 @@ describe("filed returns guided flow", () => {
       expect.arrayContaining([
         "gstr2b-dashboard-root-found",
         "gstr2b-dashboard-quarter-select-found",
-        "gstr2b-return-dashboard-filters-selected",
+        "gstr2b-return-dashboard-filter-selection-in-progress",
         "quarter-selected",
-        "period-selected",
-        "search-clicked",
       ]),
     );
-    expect(searchClicked).toBe(1);
+    expect(searchClicked).toBe(0);
     expect(
       documentRef.querySelector<HTMLSelectElement>("form[name='dashboard'] [name='quarter']")
         ?.value,
     ).toBe("object:198");
     expect(
       documentRef.querySelector<HTMLSelectElement>("form[name='dashboard'] [name='mon']")?.value,
-    ).toBe("object:201");
+    ).toBe("object:200");
   });
 
   it("selects GSTR-2B dashboard filters from ordered selects when labels are not in the root", async () => {
@@ -717,13 +809,16 @@ describe("filed returns guided flow", () => {
 
     expect(result.state).toBe("clicked");
     expect(result.safeSignals).toEqual(
-      expect.arrayContaining(["gstr2b-return-dashboard-filters-selected", "search-clicked"]),
+      expect.arrayContaining([
+        "gstr2b-return-dashboard-filter-selection-in-progress",
+        "quarter-selected",
+      ]),
     );
-    expect(searchClicked).toBe(1);
+    expect(searchClicked).toBe(0);
     expect(documentRef.querySelectorAll<HTMLSelectElement>("select")[1]?.value).toContain(
       "Quarter 1",
     );
-    expect(documentRef.querySelectorAll<HTMLSelectElement>("select")[2]?.value).toBe("May");
+    expect(documentRef.querySelectorAll<HTMLSelectElement>("select")[2]?.value).toBe("July");
   });
 
   it("selects hidden native GSTR-2B return dashboard filters behind custom portal controls", async () => {
@@ -766,13 +861,16 @@ describe("filed returns guided flow", () => {
 
     expect(result.state).toBe("clicked");
     expect(result.safeSignals).toEqual(
-      expect.arrayContaining(["gstr2b-return-dashboard-filters-selected", "search-clicked"]),
+      expect.arrayContaining([
+        "gstr2b-return-dashboard-filter-selection-in-progress",
+        "quarter-selected",
+      ]),
     );
-    expect(searchClicked).toBe(1);
+    expect(searchClicked).toBe(0);
     expect(documentRef.querySelector<HTMLSelectElement>("[name='quarter']")?.value).toContain(
       "Quarter 1",
     );
-    expect(documentRef.querySelector<HTMLSelectElement>("[name='period']")?.value).toBe("May");
+    expect(documentRef.querySelector<HTMLSelectElement>("[name='period']")?.value).toBe("July");
   });
 
   it("opens GSTR-2B from the searched return dashboard card", async () => {

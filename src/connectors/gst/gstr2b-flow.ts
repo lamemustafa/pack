@@ -258,45 +258,45 @@ async function selectGstr2bReturnDashboardFiltersAndSearch(
     if (dashboardYearAndPeriodMatch(scope, controls.year, controls.period)) return null;
   }
 
-  const selectionSignals: string[] = [];
-  const yearSelected = selectOption(controls.year, [scope.financialYear]);
-  if (yearSelected) {
-    selectionSignals.push("financial-year-selected");
-    await delay(DASHBOARD_FIELD_SETTLE_DELAY_MS);
-    controls = findReturnDashboardControls(documentRef) ?? controls;
+  if (!selectMatches(controls.year, [scope.financialYear])) {
+    const yearSelected = selectOption(controls.year, [scope.financialYear]);
+    if (yearSelected) {
+      await delay(DASHBOARD_FIELD_SETTLE_DELAY_MS);
+      controls = findReturnDashboardControls(documentRef) ?? controls;
+      return gstr2bDashboardSelectionInProgress(scopeId, safeSignals, diagnosticSignals, [
+        "financial-year-selected",
+        ...selectedDashboardFilterSignals(controls),
+      ]);
+    }
   }
 
-  const quarterSelected = selectOption(controls.quarter, acceptedQuarterOptions(scope.period));
-  if (quarterSelected) {
-    selectionSignals.push("quarter-selected");
-    controls = await waitForReturnDashboardPeriodOptions(documentRef, scope, controls);
+  if (!selectMatches(controls.quarter, acceptedQuarterOptions(scope.period))) {
+    const quarterSelected = selectOption(controls.quarter, acceptedQuarterOptions(scope.period));
+    if (quarterSelected) {
+      controls = await waitForReturnDashboardPeriodOptions(documentRef, scope, controls);
+      return gstr2bDashboardSelectionInProgress(scopeId, safeSignals, diagnosticSignals, [
+        "quarter-selected",
+        ...selectedDashboardFilterSignals(controls),
+      ]);
+    }
   }
 
-  const periodSelected = selectOption(
-    controls.period,
-    acceptedFiledReturnsMonthTexts(scope.period),
-  );
-  if (periodSelected) {
-    selectionSignals.push("period-selected");
-    await delay(DASHBOARD_FIELD_SETTLE_DELAY_MS);
-    controls = findReturnDashboardControls(documentRef) ?? controls;
+  if (!selectMatches(controls.period, acceptedFiledReturnsMonthTexts(scope.period))) {
+    const periodSelected = selectOption(controls.period, acceptedFiledReturnsMonthTexts(scope.period));
+    if (periodSelected) {
+      await delay(DASHBOARD_FIELD_SETTLE_DELAY_MS);
+      controls = findReturnDashboardControls(documentRef) ?? controls;
+      return gstr2bDashboardSelectionInProgress(scopeId, safeSignals, diagnosticSignals, [
+        "period-selected",
+        ...selectedDashboardFilterSignals(controls),
+      ]);
+    }
   }
 
   if (!dashboardFiltersMatch(scope, controls.year, controls.quarter, controls.period)) {
-    return {
-      connectorId: "gst",
-      scopeId,
-      state: "clicked",
-      safeSignals: [
-        ...safeSignals,
-        ...diagnosticSignals,
-        "gstr2b-return-dashboard-filter-selection-in-progress",
-        ...selectionSignals,
-        ...selectedDashboardFilterSignals(controls),
-      ],
-      safeMessage:
-        "Pack selected part of the GSTR-2B return dashboard filters and is waiting for the GST portal to finish updating them.",
-    };
+    return gstr2bDashboardSelectionInProgress(scopeId, safeSignals, diagnosticSignals, [
+      ...selectedDashboardFilterSignals(controls),
+    ]);
   }
 
   activateElement(controls.search);
@@ -308,11 +308,31 @@ async function selectGstr2bReturnDashboardFiltersAndSearch(
       ...safeSignals,
       ...diagnosticSignals,
       "gstr2b-return-dashboard-filters-selected",
-      ...selectionSignals,
       ...selectedDashboardFilterSignals(controls),
       "search-clicked",
     ],
     safeMessage: "Pack selected the GSTR-2B return dashboard filters and clicked Search.",
+  };
+}
+
+function gstr2bDashboardSelectionInProgress(
+  scopeId: string,
+  safeSignals: readonly string[],
+  diagnosticSignals: readonly string[],
+  selectionSignals: readonly string[],
+): PortalFlowStepResult {
+  return {
+    connectorId: "gst",
+    scopeId,
+    state: "clicked",
+    safeSignals: [
+      ...safeSignals,
+      ...diagnosticSignals,
+      "gstr2b-return-dashboard-filter-selection-in-progress",
+      ...selectionSignals,
+    ],
+    safeMessage:
+      "Pack selected part of the GSTR-2B return dashboard filters and is waiting for the GST portal to finish updating them.",
   };
 }
 
