@@ -63,7 +63,7 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@typescript-eslint/eslint-plugin": "^8.35.0",
-    "@typescript-eslint/parser": "^8.35.0",
+    "@typescript-eslint/parser": "^8.63.0",
     "eslint": "^9.29.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-react": "^7.37.4",
