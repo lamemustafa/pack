@@ -1,5 +1,6 @@
 import type {
   ArchiveManifest,
+  FiledReturnsCapturedDownloadRequest,
   FiledReturnsMainWorldCaptureRequest,
   FiledReturnsFlowSummary,
   FiledReturnsDirectDownloadRequest,
@@ -27,7 +28,12 @@ import {
   type FiledReturnsReturnType,
 } from "./filed-returns-return-types";
 
-export const PACK_CONTENT_SCRIPT_PROTOCOL_VERSION = 15;
+export const PACK_CONTENT_SCRIPT_PROTOCOL_VERSION = 17;
+
+export interface MainWorldCaptureTransferPayload {
+  actionId: string;
+  transferId: string;
+}
 
 export interface DownloadPromptProbeResult {
   status: "started" | "start-rejected";
@@ -93,6 +99,18 @@ export type PackMessage =
   | {
       type: "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3";
       payload: FiledReturnsDownloadScope;
+    }
+  | {
+      type: "PACK_CONTENT_PREPARE_MAIN_WORLD_CAPTURE_V3";
+      payload: MainWorldCaptureTransferPayload;
+    }
+  | {
+      type: "PACK_CONTENT_TAKE_MAIN_WORLD_CAPTURE_CHUNK_V3";
+      payload: MainWorldCaptureTransferPayload & { index: number };
+    }
+  | {
+      type: "PACK_CONTENT_CLEAR_MAIN_WORLD_CAPTURE_V3";
+      payload: MainWorldCaptureTransferPayload;
     };
 
 export type PackMessageResponse =
@@ -120,6 +138,12 @@ export type PackMessageResponse =
     }
   | {
       ok: true;
+      capturedDownloadRequest: FiledReturnsCapturedDownloadRequest;
+      downloadTrigger: PortalDownloadTriggerResult;
+      observation?: PortalObservation | null;
+    }
+  | {
+      ok: true;
       flowStep: PortalFlowStepResult;
       flowSummary?: FiledReturnsFlowSummary;
       observation?: PortalObservation | null;
@@ -128,6 +152,9 @@ export type PackMessageResponse =
   | { ok: true; manifest: ArchiveManifest | null }
   | { ok: true; downloaded: number; manifest: ArchiveManifest }
   | { ok: true; downloadPromptProbe: DownloadPromptProbeResult }
+  | { ok: true; mainWorldCapturePrepared: true }
+  | { ok: true; mainWorldCaptureChunk: string }
+  | { ok: true; mainWorldCaptureCleared: true }
   | { ok: true; cleared: true }
   | { ok: false; error: string };
 
@@ -183,6 +210,16 @@ export function isPackMessage(input: unknown): input is PackMessage {
     case "PACK_RUN_FILED_RETURNS_DOWNLOAD_STEP":
     case "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3":
       return isFiledReturnsDownloadScope(input.payload);
+    case "PACK_CONTENT_PREPARE_MAIN_WORLD_CAPTURE_V3":
+    case "PACK_CONTENT_CLEAR_MAIN_WORLD_CAPTURE_V3":
+      return isMainWorldCaptureTransferPayload(input.payload);
+    case "PACK_CONTENT_TAKE_MAIN_WORLD_CAPTURE_CHUNK_V3":
+      if (!isMainWorldCaptureChunkPayload(input.payload)) return false;
+      return (
+        Number.isInteger(input.payload.index) &&
+        input.payload.index >= 0 &&
+        input.payload.index <= 200
+      );
     case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
       return isFiledReturnsStartScope(input.payload);
     case "PACK_START_SYNTHETIC_DEMO":
@@ -198,6 +235,19 @@ export function isPackMessage(input: unknown): input is PackMessage {
     default:
       return false;
   }
+}
+
+function isMainWorldCaptureTransferPayload(
+  input: unknown,
+): input is MainWorldCaptureTransferPayload {
+  if (!isRecord(input)) return false;
+  return isBoundedString(input.actionId, 8, 120) && isBoundedString(input.transferId, 8, 120);
+}
+
+function isMainWorldCaptureChunkPayload(
+  input: unknown,
+): input is MainWorldCaptureTransferPayload & { index: number } {
+  return isRecord(input) && isMainWorldCaptureTransferPayload(input) && typeof input.index === "number";
 }
 
 function isFullFiscalYearTargetRecoveryPayload(

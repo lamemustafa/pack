@@ -9,6 +9,12 @@ const BLOCKED_PORTAL_PATTERNS = [
   /please login again/i,
   /invalid session/i,
 ];
+const PORTAL_SYSTEM_ERROR_PATTERNS = [
+  /system error/i,
+  /technical error/i,
+  /something went wrong/i,
+  /unable to process/i,
+];
 const SCHEDULED_DOWNTIME_PATTERNS = [
   /scheduled downtime/i,
   /downtime window/i,
@@ -48,6 +54,24 @@ export function detectFiledReturnsPortalAvailabilityIssue(
   }
 
   const isBlockedPath = /\/services\/error|\/error\//i.test(path);
+  const isSystemErrorPath = /\/services\/error\/system\/?$/i.test(path);
+  const isSystemErrorText = matchesAny(bodyText, PORTAL_SYSTEM_ERROR_PATTERNS);
+  if (isSystemErrorPath || isSystemErrorText) {
+    return {
+      connectorId: "gst",
+      scopeId: FILED_RETURNS_SCOPE_ID,
+      state: "blocked",
+      safeSignals: ["portal-system-error"],
+      safeMessage:
+        "The GST portal returned a system-error page. Return to an authenticated GST page and retry this period.",
+      userAction: {
+        type: "WAIT_FOR_PORTAL_AVAILABILITY",
+        message: "Return to an authenticated GST page after the portal system error clears.",
+        canResume: true,
+      },
+    };
+  }
+
   const isBlockedText = matchesAny(bodyText, BLOCKED_PORTAL_PATTERNS);
   if (!isBlockedPath && !isBlockedText) return null;
 

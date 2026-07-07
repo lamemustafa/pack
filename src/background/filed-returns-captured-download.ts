@@ -20,7 +20,10 @@ import {
 } from "./filed-returns-captured-portal-guard";
 import { capturedDownloadRejected } from "./filed-returns-captured-rejected";
 import { capturedDownloadSignalPrefix } from "./filed-returns-captured-signals";
-import { stageCapturedFiledReturnDownload } from "./filed-returns-captured-staging";
+import {
+  stageCapturedFiledReturnDownload,
+  stageChunkedCapturedFiledReturnDownload,
+} from "./filed-returns-captured-staging";
 import { withFiledReturnsDownloadDiagnostic } from "./filed-returns-download-diagnostics";
 import { expectedDownloadForScope } from "./filed-returns-download-expectations";
 import { safeFiledReturnDownloadFilename } from "./filed-returns-download-filename";
@@ -31,7 +34,10 @@ import {
 } from "./filed-returns-download-result";
 import type { FiledReturnsFlowMessagingDeps } from "./filed-returns-flow-messaging";
 import { persistFiledReturnsTargetReview } from "./filed-returns-target-review";
-import { capturePortalBlobDownloadInMainWorld } from "./main-world-blob-capture";
+import {
+  capturePortalBlobDownloadInMainWorld,
+  type MainWorldChunkedCaptureRequest,
+} from "./main-world-blob-capture";
 import {
   closeOffscreenBlobDocument,
   createOffscreenBlobUrl,
@@ -70,15 +76,38 @@ export async function startMainWorldCapturedFiledReturnDownload({
 
   const nativeSuppression = suppressNativePortalDownloadsDuringCapture(scope, artifactType);
   let capturedDownloadRequest: FiledReturnsCapturedDownloadRequest | null = null;
+  let chunkedCaptureRequest: MainWorldChunkedCaptureRequest | undefined;
+  let safeFailureSignals: string[] = [];
   try {
-    capturedDownloadRequest = await capturePortalBlobDownloadInMainWorld(
+    const captureOutcome = await capturePortalBlobDownloadInMainWorld(
       tabId,
       mainWorldCaptureRequest,
     );
+    capturedDownloadRequest = captureOutcome.capturedDownloadRequest;
+    chunkedCaptureRequest = captureOutcome.chunkedCaptureRequest;
+    safeFailureSignals = captureOutcome.safeFailureSignals;
   } finally {
     nativeSuppression.stop();
   }
   const nativeSuppressionSignals = nativeSuppression.safeSignals();
+  if (!capturedDownloadRequest && chunkedCaptureRequest && deps.stageCapturedDownloads) {
+    if (nativeSuppressionSignals.length > 0) {
+      chunkedCaptureRequest = {
+        ...chunkedCaptureRequest,
+        safeSignals: [...chunkedCaptureRequest.safeSignals, ...nativeSuppressionSignals],
+      };
+    }
+    return stageChunkedCapturedFiledReturnDownload({
+      activePeriod,
+      artifactType,
+      chunkedCaptureRequest,
+      deps,
+      scope,
+      tabId,
+      target,
+      triggerStep,
+    });
+  }
   if (!capturedDownloadRequest) {
     const unsupportedStep = gstr2bDialogFreeUnsupportedStep({
       activePeriod,
@@ -99,6 +128,7 @@ export async function startMainWorldCapturedFiledReturnDownload({
           safeSignals: [
             ...triggerStep.safeSignals,
             `${mainWorldCaptureRequest.signalPrefix}-blob-capture-failed`,
+            ...safeFailureSignals,
             ...nativeSuppressionSignals,
             ...(activePeriod ? [`filed-return-detail-period:${activePeriod}`] : []),
           ],

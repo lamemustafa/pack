@@ -223,6 +223,8 @@ export interface FiledReturnsMainWorldCaptureRequest {
   controlId: string;
   maxBytes: number;
   signalPrefix: string;
+  transferId?: string;
+  transferChunkSize?: number;
 }
 
 export interface FiledReturnsTargetReview {

@@ -7,6 +7,7 @@ import {
   normaliseText,
 } from "./filed-returns-dom";
 import { extractFiledReturnsDetailIdentity } from "./filed-returns-detail-identity";
+import { resolveVisibleFiledReturnDownloadCandidates } from "./filed-returns-download-candidates";
 import {
   dismissKnownFiledReturnsSummaryModal,
   navigateToFiledReturnsPage,
@@ -38,6 +39,24 @@ export async function runFiledReturnsDownloadStep(
     return portalAvailabilityIssue;
   }
 
+  if (isGstr2bSummaryRoute(documentRef)) {
+    clearFiledReturnsSearchAttempt(documentRef);
+    const navigation = await navigateToFiledReturnsPage(documentRef);
+    return withOptionalUserAction(
+      {
+        connectorId: "gst",
+        scopeId,
+        state: navigation.state,
+        safeSignals: ["gstr2b-summary-route-mismatched-return", ...navigation.safeSignals],
+        safeMessage:
+          navigation.state === "clicked"
+            ? `Pack left the GSTR-2B summary page to find the filed ${descriptor.label} return.`
+            : navigation.safeMessage,
+      },
+      navigation.userAction,
+    );
+  }
+
   await dismissKnownFiledReturnsSummaryModal(documentRef);
   const observation = observeFiledReturnsPageText(getBodyText(documentRef), {
     ...(documentRef.defaultView?.location.pathname
@@ -59,6 +78,15 @@ export async function runFiledReturnsDownloadStep(
     );
   }
 
+  if (observation.state !== "ready") {
+    const deadEndBackNavigation = returnFromFiledReturnDeadEndBack(
+      documentRef,
+      scope,
+      observation.safeSignals,
+    );
+    if (deadEndBackNavigation) return deadEndBackNavigation;
+  }
+
   if (observation.state === "ready") {
     const detailIdentity = extractFiledReturnsDetailIdentity(documentRef, scope.returnType);
     if (shouldReturnFromMismatchedDetail(detailIdentity, scope)) {
@@ -76,6 +104,12 @@ export async function runFiledReturnsDownloadStep(
       observation.safeSignals,
     );
     if (gstr1SummaryNavigation) return gstr1SummaryNavigation;
+    const deadEndBackNavigation = returnFromFiledReturnDeadEndBack(
+      documentRef,
+      scope,
+      observation.safeSignals,
+    );
+    if (deadEndBackNavigation) return deadEndBackNavigation;
     return {
       connectorId: "gst",
       scopeId,
@@ -147,6 +181,39 @@ export async function runFiledReturnsDownloadStep(
     },
     observation.userAction,
   );
+}
+
+function returnFromFiledReturnDeadEndBack(
+  documentRef: Document,
+  scope: FiledReturnsDownloadScope,
+  safeSignals: readonly string[],
+): PortalFlowStepResult | null {
+  const pathname = documentRef.defaultView?.location.pathname ?? "";
+  if (!filedReturnDescriptor(scope.returnType).detailRoutePattern.test(pathname)) return null;
+
+  const hasDownloadControl =
+    resolveVisibleFiledReturnDownloadCandidates(documentRef, scope.returnType, "PDF").length > 0 ||
+    resolveVisibleFiledReturnDownloadCandidates(documentRef, scope.returnType, "EXCEL").length > 0;
+  if (hasDownloadControl) return null;
+
+  const backControl = getClickableElements(documentRef).find((element) => {
+    const text = normaliseText(element.innerText || element.textContent || "");
+    return text === "back" || text === "[go back]" || text === "go back";
+  });
+  if (!backControl) return null;
+
+  activateElement(backControl);
+  const descriptor = filedReturnDescriptor(scope.returnType);
+  return {
+    connectorId: "gst",
+    scopeId: filedReturnScopeId(scope.returnType),
+    state: "clicked",
+    safeSignals: [
+      ...safeSignals,
+      filedReturnScopedSignal(scope.returnType, "detail-dead-end-back-clicked"),
+    ],
+    safeMessage: `Pack found a filed ${descriptor.label} page without download controls and clicked Back so it can reopen the requested period from the dashboard.`,
+  };
 }
 
 function openFiledReturnResultRow(
@@ -325,6 +392,12 @@ function scopeIncludesPdfArtifact(scope: FiledReturnsDownloadScope): boolean {
 
 function isGstr1SummaryRoute(documentRef: Document): boolean {
   return /\/returns\/auth\/gstr1\/gstr1sum$/i.test(
+    documentRef.defaultView?.location.pathname ?? "",
+  );
+}
+
+function isGstr2bSummaryRoute(documentRef: Document): boolean {
+  return /\/gstr2b\/auth\/gstr2b\/summary\/?$/i.test(
     documentRef.defaultView?.location.pathname ?? "",
   );
 }

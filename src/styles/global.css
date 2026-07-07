@@ -1,4 +1,7 @@
 :root {
+  --pack-popup-width: 500px;
+  --pack-popup-min-height: 560px;
+  --pack-popup-max-height: 600px;
   color: #061943;
   background: #f7f8fb;
   color-scheme: light;
@@ -22,10 +25,28 @@ body {
   min-width: 0;
 }
 
+html[data-pack-surface="popup"],
+html[data-pack-surface="popup"] body,
+html[data-pack-surface="popup"] #root {
+  width: var(--pack-popup-width);
+  min-width: var(--pack-popup-width);
+}
+
+html[data-pack-surface="popup"] body,
+html[data-pack-surface="popup"] #root {
+  min-height: var(--pack-popup-min-height);
+}
+
+html[data-pack-surface="popup"] body {
+  overflow: hidden;
+}
+
 .popup-shell {
   display: grid;
-  width: 440px;
-  max-width: 100vw;
+  width: var(--pack-popup-width);
+  min-height: var(--pack-popup-min-height);
+  max-height: var(--pack-popup-max-height);
+  overflow-y: auto;
   gap: 16px;
   padding: 18px;
 }
@@ -267,7 +288,7 @@ button:disabled {
 }
 
 @media (max-width: 390px) {
-  .popup-shell {
+  html:not([data-pack-surface="popup"]) .popup-shell {
     width: 100vw;
     padding: 14px;
   }

@@ -15,7 +15,10 @@ import {
   observeNextBrowserDownload,
 } from "./download-observer";
 import { suggestNextBrowserDownloadFilename } from "./download-filename-suggester";
-import { startMainWorldCapturedFiledReturnDownload } from "./filed-returns-captured-download";
+import {
+  startCapturedFiledReturnDownload,
+  startMainWorldCapturedFiledReturnDownload,
+} from "./filed-returns-captured-download";
 import { triggerDirectFiledReturnDownload } from "./filed-returns-direct-download-trigger";
 import { expectedDownloadForScope } from "./filed-returns-download-expectations";
 import { withFiledReturnsDownloadDiagnostic } from "./filed-returns-download-diagnostics";
@@ -86,6 +89,20 @@ export async function triggerAndObserveFiledReturnDownload({
     detailDownloadFilenameSuggestion.stop();
   });
   const triggerResponse = await runDownloadTriggerOnce(deps, tabId, target);
+  if (triggerResponse.ok && "capturedDownloadRequest" in triggerResponse) {
+    detailDownloadObservation.stop();
+    detailDownloadFilenameSuggestion.stop();
+    return startCapturedFiledReturnDownload({
+      activePeriod,
+      armedAt,
+      artifactType,
+      capturedDownloadRequest: triggerResponse.capturedDownloadRequest,
+      deps,
+      scope,
+      target,
+      triggerStep: triggerResponse.downloadTrigger,
+    });
+  }
   if (triggerResponse.ok && "mainWorldCaptureRequest" in triggerResponse) {
     detailDownloadObservation.stop();
     detailDownloadFilenameSuggestion.stop();

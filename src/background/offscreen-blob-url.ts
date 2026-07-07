@@ -48,6 +48,39 @@ export async function stageOffscreenFiledReturn({
   return isStagedResponse(response, requestId) ? "staged" : "failed";
 }
 
+export async function stageOffscreenFiledReturnChunk({
+  chunk,
+  index,
+  ledgerId,
+  totalChunks,
+  transferId,
+  zipPath,
+}: {
+  chunk: string;
+  index: number;
+  ledgerId: string;
+  totalChunks: number;
+  transferId: string;
+  zipPath: string;
+}): Promise<"staged" | "failed"> {
+  const requestId = createRequestId();
+  await ensureOffscreenDocument();
+  const response = await browser.runtime.sendMessage({
+    type: "PACK_OFFSCREEN_STAGE_FILED_RETURN_CHUNK",
+    target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+    payload: {
+      requestId,
+      chunk,
+      index,
+      ledgerId,
+      totalChunks,
+      transferId,
+      zipPath,
+    },
+  });
+  return isStagedResponse(response, requestId) ? "staged" : "failed";
+}
+
 export async function createOffscreenFiledReturnZipUrl(
   ledgerId: string,
 ): Promise<{ blobUrl: string; zipEntryCount: number } | null> {

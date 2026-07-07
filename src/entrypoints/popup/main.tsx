@@ -191,6 +191,7 @@ function App() {
   const summaryHeading = scopedFlowSummary
     ? getFiledReturnsSummaryHeading(scope, scopedFlowSummary)
     : null;
+  const effectiveBusy = scopedFlowSummary?.status === "complete" ? null : busy;
 
   return (
     <main className="popup-shell">
@@ -212,7 +213,7 @@ function App() {
       </section>
 
       <ScopeForm
-        busy={busy}
+        busy={effectiveBusy}
         flowSummary={filedReturnsFlowSummary}
         scope={scope}
         onScopeChange={setScope}
@@ -233,7 +234,7 @@ function App() {
       ) : null}
 
       <RecoveryActions
-        busy={busy}
+        busy={effectiveBusy}
         summary={scopedFlowSummary}
         onAcknowledgeInterruptedRun={() => void acknowledgeInterruptedRun()}
         onRetryFullFiscalYearTarget={() => void retryFullFiscalYearTarget()}
@@ -253,7 +254,7 @@ function DiagnosticSignals({ summary }: { summary: FiledReturnsFlowSummary }) {
   const signals = summary.flowStep.safeSignals.filter(isDownloadDiagnosticSignal);
   if (signals.length === 0) return null;
 
-  return <p className="muted">Download path signals: {signals.slice(0, 4).join(", ")}</p>;
+  return <p className="muted">Download path signals: {signals.slice(0, 8).join(", ")}</p>;
 }
 
 function isDownloadDiagnosticSignal(signal: string): boolean {
@@ -262,6 +263,11 @@ function isDownloadDiagnosticSignal(signal: string): boolean {
     signal.includes("portal-blob") ||
     signal.includes("extension-download") ||
     signal.includes("native-blob-click") ||
+    signal.includes("main-world-capture") ||
+    signal.includes("chunk") ||
+    signal.includes("opfs") ||
+    signal.includes("file-reader") ||
+    signal.includes("create-object-url") ||
     signal.startsWith("filed-gstr3b-direct-download-started") ||
     signal.startsWith("filed-gstr3b-direct-download-start-rejected")
   );

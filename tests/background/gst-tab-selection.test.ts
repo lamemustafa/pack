@@ -375,7 +375,7 @@ describe("Pack GST tab selection", () => {
     });
   });
 
-  it("uses the last reported GST tab when the popup is open and multiple GST tabs exist", async () => {
+  it("uses the last reported GST tab when the popup is open and no unique GST tab is visible", async () => {
     browserMocks.storage.session.get.mockResolvedValueOnce({
       "pack:last-gst-tab-id": 26,
     });
@@ -395,9 +395,36 @@ describe("Pack GST tab selection", () => {
 
     await expect(getActiveGstTab()).resolves.toMatchObject({ id: 26 });
 
-    expect(browserMocks.tabs.query).toHaveBeenCalledTimes(1);
+    expect(browserMocks.tabs.query).toHaveBeenCalledTimes(2);
     expect(browserMocks.storage.session.get).toHaveBeenCalledWith("pack:last-gst-tab-id");
     expect(browserMocks.tabs.get).toHaveBeenCalledWith(26);
+  });
+
+  it("prefers a visible GSTR-2B summary tab over a stale remembered dashboard tab", async () => {
+    browserMocks.tabs.query
+      .mockResolvedValueOnce([
+        {
+          active: true,
+          id: 24,
+          url: "chrome-extension://pack-test-extension/popup.html",
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          active: false,
+          id: 25,
+          url: "https://return.gst.gov.in/returns/auth/dashboard",
+        },
+        {
+          active: false,
+          id: 26,
+          url: "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
+        },
+      ]);
+    const { getActiveGstTab } = await import("../../src/entrypoints/background");
+
+    await expect(getActiveGstTab()).resolves.toMatchObject({ id: 26 });
+    expect(browserMocks.tabs.get).not.toHaveBeenCalledWith(25);
   });
 
   it("remembers a supported GST tab when Brave activates it", async () => {

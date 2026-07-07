@@ -1,5 +1,6 @@
 import type {
   FiledReturnsMainWorldCaptureRequest,
+  FiledReturnsCapturedDownloadRequest,
   FiledReturnsDownloadTarget,
   PortalDownloadTriggerResult,
 } from "../../core/contracts";
@@ -12,9 +13,11 @@ import {
 import { filedReturnScopeId } from "./filed-returns-return-descriptors";
 import { prepareGstr2bPortalBlobDownloadCapture } from "./gstr2b-blob-capture";
 import { verifyVisibleGstr2bSummaryScope } from "./gstr2b-flow";
+import { buildGstr2bLocalArtifactRequest } from "./gstr2b-local-artifact";
 
 export interface Gstr2bDownloadTriggerResult {
   downloadTrigger: PortalDownloadTriggerResult;
+  capturedDownloadRequest?: FiledReturnsCapturedDownloadRequest;
   mainWorldCaptureRequest?: FiledReturnsMainWorldCaptureRequest;
 }
 
@@ -54,6 +57,25 @@ export async function triggerGstr2bDownload(
     control,
     target.actionId,
   );
+  const capturedDownloadRequest = buildGstr2bLocalArtifactRequest(target);
+  if (capturedDownloadRequest) {
+    return {
+      capturedDownloadRequest,
+      downloadTrigger: {
+        connectorId: "gst",
+        scopeId,
+        state: "clicked",
+        safeSignals: [
+          "gstr2b-local-json-artifact-requested",
+          "gstr2b-extension-download-requested",
+          "gstr2b-final-period-verified",
+          `gstr2b-artifact-clicked:${artifactType}`,
+        ],
+        safeMessage:
+          "Pack generated the GSTR-2B file locally from the visible GST Portal source data and will stage it for the local zip.",
+      },
+    };
+  }
   if (!mainWorldCaptureRequest) {
     return {
       downloadTrigger: {
@@ -99,13 +121,32 @@ function findGstr2bDownloadControl(
   documentRef: Document,
   artifactType: FiledReturnsDownloadTarget["artifactType"],
 ): HTMLElement | null {
-  const candidates = getClickableElements(documentRef).filter((element) => {
-    const text = normaliseText(readElementText(element));
-    if (!text.includes("download") || !text.includes("gstr-2b")) return false;
-    if (artifactType === "EXCEL") return text.includes("details") && text.includes("excel");
-    return text.includes("summary") && text.includes("pdf");
-  });
+  const candidates = getClickableElements(documentRef)
+    .filter((element) => isUsableDownloadControl(element))
+    .filter((element) => {
+      const text = normaliseText(readElementText(element));
+      if (!text.includes("download") || !text.includes("gstr-2b")) return false;
+      if (artifactType === "EXCEL") return text.includes("details") && text.includes("excel");
+      return text.includes("summary") && text.includes("pdf");
+    });
   return candidates.length === 1 ? (candidates[0] ?? null) : null;
+}
+
+function isUsableDownloadControl(element: HTMLElement): boolean {
+  if (
+    element.hidden ||
+    element.getAttribute("disabled") !== null ||
+    element.getAttribute("aria-disabled") === "true" ||
+    element.classList.contains("disabled")
+  ) {
+    return false;
+  }
+
+  const style = element.ownerDocument.defaultView?.getComputedStyle(element);
+  if (style?.display === "none" || style?.visibility === "hidden") return false;
+
+  const rect = element.getBoundingClientRect?.();
+  return !rect || rect.width > 0 || rect.height > 0;
 }
 
 function readElementText(element: HTMLElement): string {

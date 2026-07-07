@@ -126,6 +126,72 @@ export async function navigateToFiledReturnsPage(
   };
 }
 
+export async function navigateToReturnDashboardPage(
+  documentRef: Document,
+  scopeId = FILED_RETURNS_SCOPE_ID,
+): Promise<PortalNavigationResult> {
+  const blockedState = detectBlockedPortalState(documentRef);
+  if (blockedState) return { ...blockedState, scopeId };
+
+  const safeSignals: string[] = [];
+  const dismissedDialogs = await dismissSafePostLoginDialogs(documentRef);
+  safeSignals.push(...dismissedDialogs);
+
+  const firstPass = clickBestReturnDashboardCandidate(
+    documentRef,
+    "return-dashboard-initial-scan",
+    safeSignals,
+    scopeId,
+  );
+  if (firstPass) return firstPass;
+
+  revealMenuCandidate(documentRef, isServicesMenuCandidate);
+  await delay(MENU_REVEAL_DELAY_MS);
+  safeSignals.push(...(await dismissSafePostLoginDialogs(documentRef)));
+
+  const afterServices = clickBestReturnDashboardCandidate(
+    documentRef,
+    "return-dashboard-after-services-menu",
+    safeSignals,
+    scopeId,
+  );
+  if (afterServices) return afterServices;
+
+  revealMenuCandidate(documentRef, isReturnsMenuCandidate);
+  await delay(MENU_REVEAL_DELAY_MS);
+  safeSignals.push(...(await dismissSafePostLoginDialogs(documentRef)));
+
+  const afterReturns = clickBestReturnDashboardCandidate(
+    documentRef,
+    "return-dashboard-after-returns-menu",
+    safeSignals,
+    scopeId,
+  );
+  if (afterReturns) return afterReturns;
+
+  const diagnostics = collectSafeNavigationDiagnostics(
+    getClickableElements(documentRef).map(toNavigationCandidateInput),
+  );
+
+  return {
+    connectorId: "gst",
+    scopeId,
+    state: "candidate-not-found",
+    safeSignals: [
+      ...safeSignals,
+      "no-return-dashboard-candidate",
+      ...diagnostics.map((label) => `visible-nav:${label.toLowerCase().replace(/\s+/g, "-")}`),
+    ],
+    safeMessage:
+      "Pack could not find the portal's Return Dashboard entry yet. Use GST Portal navigation only: Services > Returns > Returns Dashboard, then run Pack again.",
+    userAction: {
+      type: "NAVIGATE_TO_SUPPORTED_PAGE",
+      message: "Open Services > Returns > Returns Dashboard in the GST portal.",
+      canResume: true,
+    },
+  };
+}
+
 export function scoreFiledReturnsNavigationCandidate(
   candidate: NavigationCandidateInput,
 ): NavigationCandidateScore {
@@ -420,15 +486,13 @@ export function clickBestReturnDashboardCandidate(
   scopeId = FILED_RETURNS_SCOPE_ID,
 ): PortalNavigationResult | null {
   const elements = getClickableElements(documentRef);
-  const candidates = elements.map(toNavigationCandidateInput);
-  const candidateIndex = findReturnDashboardCandidateIndex(candidates);
+  const candidateIndex = findReturnDashboardCandidateIndex(elements.map(toNavigationCandidateInput));
   if (candidateIndex === -1) return null;
 
-  const candidate = candidates[candidateIndex];
   const element = elements[candidateIndex];
-  if (!candidate || !element) return null;
+  if (!element) return null;
 
-  const score = scoreReturnDashboardNavigationCandidate(candidate);
+  const score = scoreReturnDashboardNavigationCandidate(toNavigationCandidateInput(element));
   activateElement(element);
 
   return {

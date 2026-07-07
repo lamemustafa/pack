@@ -106,10 +106,12 @@ export function RecoveryActions({
       ) : null}
       {needsFullFiscalYearReview ? (
         <>
-          <p className="muted">
-            This saved run is not bound to a GST account. Continue only if the same GST account is
-            currently open.
-          </p>
+          {signals.has("full-fiscal-year-resume-confirmation-required") ? (
+            <p className="muted">
+              This saved run is not bound to a GST account. Continue only if the same GST account is
+              currently open.
+            </p>
+          ) : null}
           <button type="button" disabled={busy !== null} onClick={onRetryFullFiscalYearTarget}>
             {busy === "retry-full-fiscal-year-target" ? "Retrying..." : retryFullYearLabel(summary)}
           </button>

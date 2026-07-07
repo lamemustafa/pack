@@ -13,6 +13,8 @@ import {
   safeSinglePeriodZipFilename,
 } from "./filed-returns-download-filename";
 
+const USER_MEDIATED_ZIP_DOWNLOAD_WAIT_MS = 5 * 60 * 1000;
+
 export async function exportFullFiscalYearZip(
   ledger: FiledReturnsFullFiscalYearLedger,
   completeStep: PortalFlowStepResult,
@@ -104,6 +106,7 @@ async function exportStagedFiledReturnsZip({
   }
 
   let downloadId: number | null = null;
+  const armedAt = new Date();
   try {
     downloadId = await browser.downloads.download({
       conflictAction: "uniquify",
@@ -133,13 +136,13 @@ async function exportStagedFiledReturnsZip({
   }
 
   const observed = await observeBrowserDownloadById(browser.downloads, downloadId, {
-    armedAt: new Date(),
+    armedAt,
     expectedFileExtensions: [".zip"],
     expectedMimeTypes: ["application/zip", "application/octet-stream"],
     expectedOrigins: [],
     expectedUrlSubstrings: [],
     trustedDownloadIds: new Set([downloadId]),
-  });
+  }, USER_MEDIATED_ZIP_DOWNLOAD_WAIT_MS);
   await revokeOffscreenBlobUrl(zip.blobUrl);
   const clearSignal = await clearStagedLedgerSignal(ledgerId, clearSignalPrefix);
   await closeOffscreenBlobDocument();

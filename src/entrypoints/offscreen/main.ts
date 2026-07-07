@@ -6,6 +6,15 @@ import {
 } from "../../core/offscreen-blob-url";
 
 const blobUrlsByRequest = new Map<string, string>();
+const chunkedFiledReturnsByTransfer = new Map<
+  string,
+  {
+    chunks: string[];
+    ledgerId: string;
+    totalChunks: number;
+    zipPath: string;
+  }
+>();
 
 browser.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
   if (!isPackOffscreenBlobUrlMessage(message)) return false;
@@ -26,6 +35,71 @@ async function handleMessage(
 ): Promise<PackOffscreenBlobUrlResponse> {
   if (message.type === "PACK_OFFSCREEN_STAGE_FILED_RETURN") {
     const blob = dataUrlToBlob(message.payload.dataUrl);
+    if (!blob || blob.size === 0) {
+      return {
+        ok: false,
+        requestId: message.payload.requestId,
+        errorCategory: "invalid-data-url",
+      };
+    }
+    try {
+      const directory = await getLedgerDirectory(message.payload.ledgerId, true);
+      const fileHandle = await getNestedFileHandle(directory, message.payload.zipPath, true);
+      const writable = await fileHandle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return {
+        ok: true,
+        requestId: message.payload.requestId,
+        staged: true,
+        byteCountClass: "non-empty",
+      };
+    } catch {
+      return {
+        ok: false,
+        requestId: message.payload.requestId,
+        errorCategory: hasStorageDirectoryApi() ? "stage-failed" : "opfs-unavailable",
+      };
+    }
+  }
+
+  if (message.type === "PACK_OFFSCREEN_STAGE_FILED_RETURN_CHUNK") {
+    const key = message.payload.transferId;
+    const existing = chunkedFiledReturnsByTransfer.get(key);
+    const transfer =
+      existing ??
+      {
+        chunks: [],
+        ledgerId: message.payload.ledgerId,
+        totalChunks: message.payload.totalChunks,
+        zipPath: message.payload.zipPath,
+      };
+    if (
+      transfer.ledgerId !== message.payload.ledgerId ||
+      transfer.zipPath !== message.payload.zipPath ||
+      transfer.totalChunks !== message.payload.totalChunks
+    ) {
+      chunkedFiledReturnsByTransfer.delete(key);
+      return {
+        ok: false,
+        requestId: message.payload.requestId,
+        errorCategory: "stage-chunk-failed",
+      };
+    }
+    transfer.chunks[message.payload.index] = message.payload.chunk;
+    chunkedFiledReturnsByTransfer.set(key, transfer);
+
+    if (transfer.chunks.filter((chunk) => typeof chunk === "string").length < transfer.totalChunks) {
+      return {
+        ok: true,
+        requestId: message.payload.requestId,
+        staged: true,
+        byteCountClass: "non-empty",
+      };
+    }
+
+    const blob = dataUrlToBlob(transfer.chunks.join(""));
+    chunkedFiledReturnsByTransfer.delete(key);
     if (!blob || blob.size === 0) {
       return {
         ok: false,

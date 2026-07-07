@@ -318,15 +318,15 @@ export async function getActiveGstTab(): Promise<ActiveGstTab | null> {
   const activeGstTab = pickSupportedGstPortalTab<Browser.tabs.Tab>(activeCurrentWindowTabs);
   if (activeGstTab) return activeGstTab;
 
-  const rememberedGstTab = await readRememberedGstTab();
-  if (rememberedGstTab) return rememberedGstTab;
-
   const urlMatchedCurrentWindowTabs = await browser.tabs.query({
     currentWindow: true,
     url: [...GST_PORTAL_TAB_URL_PATTERNS],
   });
   const urlMatchedGstTab = pickUniquePreferredGstPortalTab(urlMatchedCurrentWindowTabs);
   if (urlMatchedGstTab) return urlMatchedGstTab;
+
+  const rememberedGstTab = await readRememberedGstTab();
+  if (rememberedGstTab) return rememberedGstTab;
 
   const currentWindowTabs = await browser.tabs.query({ currentWindow: true });
   const fallbackGstTabs = currentWindowTabs.filter(

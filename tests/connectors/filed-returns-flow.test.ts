@@ -101,6 +101,57 @@ describe("filed returns guided flow", () => {
     });
   });
 
+  it("treats the GST system-error page as a retryable portal block", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <h4>System Error</h4>
+          <p>The portal is unable to process the request right now.</p>
+        </main>
+      `,
+      "https://services.gst.gov.in/services/error/system",
+    );
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.state).toBe("blocked");
+    expect(result.safeSignals).toEqual(["portal-system-error"]);
+    expect(result.userAction).toEqual({
+      type: "WAIT_FOR_PORTAL_AVAILABILITY",
+      message: "Return to an authenticated GST page after the portal system error clears.",
+      canResume: true,
+    });
+  });
+
+  it("clicks back from a filed GSTR-1 dead-end page without download controls", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <h1>GSTR-1</h1>
+          <a href="#">[Go Back]</a>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/gstr1",
+    );
+    let backClicked = 0;
+    documentRef.querySelector("a")?.addEventListener("click", (event) => {
+      event.preventDefault();
+      backClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-1",
+    });
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining(["filed-gstr1-detail-dead-end-back-clicked"]),
+    );
+    expect(backClicked).toBe(1);
+  });
+
   it("does not block a usable filed-returns page for a future downtime banner", async () => {
     const documentRef = createGstDocument(`
       <main>
@@ -153,29 +204,383 @@ describe("filed returns guided flow", () => {
   });
 
   it("recognises the matching GSTR-2B summary page as download-ready", async () => {
-    const documentRef = createGstDocument(
-      `
-        <main>
-          <h1>GSTR-2B</h1>
-          <p>May 2026 Auto-drafted ITC Statement</p>
-          <button>DOWNLOAD GSTR-2B SUMMARY (PDF)</button>
-          <button>DOWNLOAD GSTR-2B DETAILS (EXCEL)</button>
-        </main>
-      `,
-      "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
-    );
+    const documentRef = createGstr2bSummaryDocument();
+    vi.stubGlobal("localStorage", documentRef.defaultView?.localStorage);
+    localStorage.setItem("rtn_prd", "052026");
+    localStorage.setItem("sum052026", JSON.stringify({ summary: { available: true } }));
+
+    try {
+      const result = await runFiledReturnsDownloadStep(documentRef, {
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-2B",
+      });
+
+      expect(result.state).toBe("ready");
+      expect(result.safeSignals).toEqual(
+        expect.arrayContaining(["gstr2b-summary-route", "gstr2b-download-ready"]),
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("selects GSTR-2B filters from the filed-returns page", async () => {
+    const documentRef = createGstDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <label>Financial Year</label>
+          <select data-year>
+            <option>Select</option>
+            <option>2026-27</option>
+            <option>2025-26</option>
+          </select>
+          <label>Return Filing Period</label>
+          <select data-period>
+            <option>Select</option>
+            <option>Annual</option>
+            <option>Quarterly</option>
+            <option>Monthly</option>
+          </select>
+          <label>Return Type</label>
+          <select data-return-type>
+            <option>Select</option>
+            <option>GSTR1</option>
+            <option>GSTR2B</option>
+            <option>GSTR3B</option>
+          </select>
+          <button type="button">SEARCH</button>
+        </form>
+      </main>
+    `);
+    let searchClicked = 0;
+    documentRef.querySelector("button")?.addEventListener("click", () => {
+      searchClicked += 1;
+    });
 
     const result = await runFiledReturnsDownloadStep(documentRef, {
       artifactType: "PDF_AND_EXCEL",
-      financialYear: "2026-27",
-      period: "May",
+      financialYear: "2025-26",
+      period: "April",
       returnType: "GSTR-2B",
     });
 
-    expect(result.state).toBe("ready");
-    expect(result.safeSignals).toEqual(
-      expect.arrayContaining(["gstr2b-summary-route", "gstr2b-download-ready"]),
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(expect.arrayContaining(["search-clicked"]));
+    expect(documentRef.querySelector<HTMLSelectElement>("[data-year]")?.value).toBe("2025-26");
+    expect(documentRef.querySelector<HTMLSelectElement>("[data-period]")?.value).toBe("Monthly");
+    expect(documentRef.querySelector<HTMLSelectElement>("[data-return-type]")?.value).toBe(
+      "GSTR2B",
     );
+    expect(searchClicked).toBe(1);
+  });
+
+  it("leaves View Filed Returns for Return Dashboard when GSTR-2B is not an offered return type", async () => {
+    const documentRef = createGstDocument(`
+      <main>
+        <nav><a data-dashboard href="/returns/auth/dashboard">Return Dashboard</a></nav>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <label>Financial Year</label>
+          <select>
+            <option>Select</option>
+            <option>2025-26</option>
+          </select>
+          <label>Return Filing Period</label>
+          <select>
+            <option>Select</option>
+            <option>Monthly</option>
+          </select>
+          <label>Month</label>
+          <select>
+            <option>Select</option>
+            <option>April</option>
+          </select>
+          <label>Return Type</label>
+          <select>
+            <option>Select</option>
+            <option>GSTR-1/IFF/GSTR-1A</option>
+            <option>GSTR3B</option>
+          </select>
+          <button type="button">SEARCH</button>
+        </form>
+      </main>
+    `);
+    makeLayoutVisible(documentRef);
+    let dashboardClicked = 0;
+    documentRef.querySelector("[data-dashboard]")?.addEventListener("click", (event) => {
+      event.preventDefault();
+      dashboardClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      artifactType: "PDF_AND_EXCEL",
+      financialYear: "2025-26",
+      period: "April",
+      returnType: "GSTR-2B",
+    });
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining([
+        "gstr2b-filed-returns-no-gstr2b-option",
+        "return-dashboard-candidate-clicked",
+      ]),
+    );
+    expect(dashboardClicked).toBe(1);
+  });
+
+  it("opens the matching GSTR-2B result row from the filed-returns page", async () => {
+    const documentRef = createGstDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <table>
+          <thead>
+            <tr>
+              <th>Financial Year</th>
+              <th>Tax Period</th>
+              <th>Return Type</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>2025-26</td>
+              <td>April</td>
+              <td>GSTR2B</td>
+              <td><button type="button">View</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </main>
+    `);
+    let viewClicked = 0;
+    documentRef.querySelector("button")?.addEventListener("click", () => {
+      viewClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      artifactType: "PDF_AND_EXCEL",
+      financialYear: "2025-26",
+      period: "April",
+      returnType: "GSTR-2B",
+    });
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining(["gstr2b-filed-return-result-view-clicked"]),
+    );
+    expect(viewClicked).toBe(1);
+  });
+
+  it("allows portal GSTR-2B capture when summary source JSON is unavailable", async () => {
+    const documentRef = createGstr2bSummaryDocument();
+    vi.stubGlobal("localStorage", documentRef.defaultView?.localStorage);
+    localStorage.setItem("rtn_prd", "042026");
+    localStorage.setItem("sum042026", JSON.stringify({ summary: { available: true } }));
+
+    try {
+      const result = await runFiledReturnsDownloadStep(documentRef, {
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-2B",
+      });
+
+      expect(result.state).toBe("ready");
+      expect(result.safeSignals).toEqual(
+        expect.arrayContaining([
+          "gstr2b-summary-route",
+          "gstr2b-visible-period-verified",
+          "gstr2b-local-json-unavailable",
+          "gstr2b-download-ready",
+          "filed-return-download-ready",
+        ]),
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it.each(["GSTR-1", "GSTR-3B"] as const)(
+    "leaves the GSTR-2B summary page before starting a %s filed-return run",
+    async (returnType) => {
+      const documentRef = createGstr2bSummaryDocument(`
+        <nav>
+          <a data-return-dashboard href="/returns/auth/dashboard">Return Dashboard</a>
+        </nav>
+      `);
+      let dashboardClicked = 0;
+      documentRef.querySelector("[data-return-dashboard]")?.addEventListener("click", (event) => {
+        event.preventDefault();
+        dashboardClicked += 1;
+      });
+
+      const result = await runFiledReturnsDownloadStep(documentRef, {
+        artifactType: "PDF",
+        financialYear: "2026-27",
+        period: "May",
+        returnType,
+      });
+
+      expect(result.state).toBe("clicked");
+      expect(result.safeSignals).toEqual(
+        expect.arrayContaining([
+          "gstr2b-summary-route-mismatched-return",
+          "return-dashboard-candidate-clicked",
+        ]),
+      );
+      expect(result.safeMessage).toMatch(new RegExp(`filed ${returnType}`));
+      expect(dashboardClicked).toBe(1);
+    },
+  );
+
+  it("generates a local GSTR-2B PDF artifact from the verified period JSON", async () => {
+    const documentRef = createGstr2bSummaryDocument();
+    vi.stubGlobal("localStorage", documentRef.defaultView?.localStorage);
+    try {
+      localStorage.setItem("rtn_prd", "052026");
+      localStorage.setItem("sum052026", JSON.stringify({ summary: { available: true } }));
+
+      const result = await triggerGstr2bDownload(documentRef, {
+        actionId: "action-gstr2b-pdf",
+        artifactType: "PDF",
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-2B",
+      });
+
+      expect(result.capturedDownloadRequest).toMatchObject({
+        actionId: "action-gstr2b-pdf",
+        safeSignals: expect.arrayContaining([
+          "gstr2b-local-json-source-read",
+          "gstr2b-local-json-pdf-generated",
+        ]),
+      });
+      expect(result.capturedDownloadRequest?.dataUrl).toMatch(/^data:application\/pdf;base64,/);
+      expect(
+        atob(result.capturedDownloadRequest?.dataUrl.split(",")[1] ?? "").startsWith("%PDF-"),
+      ).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("ignores hidden duplicate GSTR-2B download controls on the summary page", async () => {
+    const documentRef = createGstr2bSummaryDocument(`
+      <button hidden>DOWNLOAD GSTR-2B SUMMARY (PDF)</button>
+      <button aria-disabled="true">DOWNLOAD GSTR-2B DETAILS (EXCEL)</button>
+    `);
+    vi.stubGlobal("localStorage", documentRef.defaultView?.localStorage);
+    try {
+      localStorage.setItem("rtn_prd", "052026");
+      localStorage.setItem("sum052026", JSON.stringify({ summary: { available: true } }));
+
+      const result = await triggerGstr2bDownload(documentRef, {
+        actionId: "action-gstr2b-visible-control",
+        artifactType: "PDF",
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-2B",
+      });
+
+      expect(result.downloadTrigger.state).toBe("clicked");
+      expect(result.downloadTrigger.safeSignals).toEqual(
+        expect.arrayContaining(["gstr2b-local-json-artifact-requested"]),
+      );
+      expect(result.capturedDownloadRequest?.safeSignals).toEqual(
+        expect.arrayContaining(["gstr2b-local-json-pdf-generated"]),
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("generates a local GSTR-2B artifact from the portal alternate period source key", async () => {
+    const documentRef = createGstr2bSummaryDocument();
+    vi.stubGlobal("localStorage", documentRef.defaultView?.localStorage);
+    try {
+      localStorage.setItem("rtn_prd", "052026");
+      localStorage.setItem("sum052026masked-source", JSON.stringify({ summary: { available: true } }));
+
+      const result = await triggerGstr2bDownload(documentRef, {
+        actionId: "action-gstr2b-alternate",
+        artifactType: "PDF",
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-2B",
+      });
+
+      expect(result.capturedDownloadRequest).toMatchObject({
+        actionId: "action-gstr2b-alternate",
+        safeSignals: expect.arrayContaining([
+          "gstr2b-local-json-source-read",
+          "gstr2b-local-json-source-key-alternate",
+          "gstr2b-local-json-pdf-generated",
+        ]),
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("generates a local GSTR-2B Excel artifact from the verified period JSON", async () => {
+    const documentRef = createGstr2bSummaryDocument();
+    vi.stubGlobal("localStorage", documentRef.defaultView?.localStorage);
+    try {
+      localStorage.setItem("rtn_prd", "052026");
+      localStorage.setItem(
+        "sum052026",
+        JSON.stringify({ supplier: [{ ctin: "synthetic", txval: 100 }] }),
+      );
+
+      const result = await triggerGstr2bDownload(documentRef, {
+        actionId: "action-gstr2b-excel",
+        artifactType: "EXCEL",
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-2B",
+      });
+
+      expect(result.capturedDownloadRequest).toMatchObject({
+        actionId: "action-gstr2b-excel",
+        safeSignals: expect.arrayContaining([
+          "gstr2b-local-json-source-read",
+          "gstr2b-local-json-excel-generated",
+        ]),
+      });
+      const payload = atob(result.capturedDownloadRequest?.dataUrl.split(",")[1] ?? "");
+      expect(result.capturedDownloadRequest?.dataUrl).toMatch(
+        /^data:application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet;base64,/,
+      );
+      expect(payload.startsWith("PK\u0003\u0004")).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("rejects stale GSTR-2B local JSON when the stored return period does not match", async () => {
+    const documentRef = createGstr2bSummaryDocument();
+    vi.stubGlobal("localStorage", documentRef.defaultView?.localStorage);
+    try {
+      localStorage.setItem("rtn_prd", "042026");
+      localStorage.setItem("sum052026", JSON.stringify({ summary: { available: true } }));
+
+      const result = await triggerGstr2bDownload(documentRef, {
+        actionId: "action-gstr2b-stale",
+        artifactType: "PDF",
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-2B",
+      });
+
+      expect(result.capturedDownloadRequest).toBeUndefined();
+      expect(result.mainWorldCaptureRequest).toBeDefined();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("navigates authenticated wrong-page GSTR-2B starts through the Return Dashboard", async () => {
@@ -266,6 +671,54 @@ describe("filed returns guided flow", () => {
     expect(viewClicked).toBe(0);
     expect(documentRef.querySelector<HTMLSelectElement>("#quarter")?.value).toContain("Quarter 1");
     expect(documentRef.querySelector<HTMLSelectElement>("#period")?.value).toBe("July");
+  });
+
+  it("resolves GSTR-2B dashboard controls from the full page when the search root is narrow", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <section>
+            <label for="fy">Financial Year</label>
+            <select id="fy" name="fin">
+              <option>2025-26</option>
+              <option selected>2026-27</option>
+            </select>
+            <label for="quarter">Quarter</label>
+            <select id="quarter" name="quarter">
+              <option>Quarter 1 (Apr - Jun)</option>
+              <option selected>Quarter 2 (Jul - Sep)</option>
+            </select>
+            <label for="period">Period</label>
+            <select id="period" name="mon">
+              <option selected>July</option>
+            </select>
+            <div><button type="button" data-search>Search</button></div>
+          </section>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/dashboard",
+    );
+    makeLayoutVisible(documentRef);
+    const narrowSearchRoot = documentRef.createElement("div");
+    narrowSearchRoot.append(documentRef.querySelector("[data-search]") as HTMLElement);
+    documentRef.body.append(narrowSearchRoot);
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-2B",
+    });
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining([
+        "gstr2b-return-dashboard-filter-selection-in-progress",
+        "gstr2b-dashboard-quarter-select-found",
+        "quarter-selected",
+      ]),
+    );
+    expect(documentRef.querySelector<HTMLSelectElement>("#quarter")?.value).toContain("Quarter 1");
   });
 
   it("stages the GSTR-2B return dashboard period change after Angular refreshes Q1 months", async () => {
@@ -361,10 +814,7 @@ describe("filed returns guided flow", () => {
 
     expect(result.state).toBe("clicked");
     expect(result.safeSignals).toEqual(
-      expect.arrayContaining([
-        "gstr2b-return-dashboard-filters-selected",
-        "search-clicked",
-      ]),
+      expect.arrayContaining(["gstr2b-return-dashboard-filters-selected", "search-clicked"]),
     );
     expect(searchClicked).toBe(1);
   });
@@ -452,7 +902,7 @@ describe("filed returns guided flow", () => {
     expect(result.userAction).toBeUndefined();
   });
 
-  it("reports redacted GSTR-2B dashboard diagnostics when controls are incomplete", async () => {
+  it("waits with redacted GSTR-2B dashboard diagnostics when controls are incomplete", async () => {
     const documentRef = createGstDocument(
       `
         <main>
@@ -480,7 +930,8 @@ describe("filed returns guided flow", () => {
       returnType: "GSTR-2B",
     });
 
-    expect(result.state).toBe("user-action-required");
+    expect(result.state).toBe("clicked");
+    expect(result.userAction).toBeUndefined();
     expect(result.safeSignals).toEqual(
       expect.arrayContaining([
         "gstr2b-return-dashboard-route",
@@ -491,6 +942,7 @@ describe("filed returns guided flow", () => {
         "gstr2b-dashboard-selected-year:2026-27",
       ]),
     );
+    expect(result.safeMessage).toContain("waiting for the remaining dashboard controls");
     expect(result.safeMessage).toContain("Diagnostic signals:");
   });
 
@@ -1235,6 +1687,83 @@ describe("filed returns guided flow", () => {
       ]),
     );
     expect(back).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the GSTR-2B Back to Dashboard control before browser history for stale summaries", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <h1>GSTR-2B</h1>
+          <p>May 2026 Auto-drafted ITC Statement</p>
+          <button data-back>BACK TO DASHBOARD</button>
+          <button>DOWNLOAD GSTR-2B SUMMARY (PDF)</button>
+          <button>DOWNLOAD GSTR-2B DETAILS (EXCEL)</button>
+        </main>
+      `,
+      "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
+    );
+    makeLayoutVisible(documentRef);
+    const back = vi.spyOn(documentRef.defaultView!.history, "back").mockImplementation(() => {});
+    let dashboardBackClicked = 0;
+    documentRef.querySelector("[data-back]")?.addEventListener("click", () => {
+      dashboardBackClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "June",
+      returnType: "GSTR-2B",
+    });
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining([
+        "gstr2b-visible-period-mismatch",
+        "gstr2b-summary-period-mismatch",
+        "gstr2b-summary-dashboard-back-clicked",
+      ]),
+    );
+    expect(dashboardBackClicked).toBe(1);
+    expect(back).not.toHaveBeenCalled();
+  });
+
+  it("trusts explicit GSTR-2B period labels over incidental page month text", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <h1>GSTR-2B</h1>
+          <p>Financial Year - 2025-26</p>
+          <p>Return Period - April</p>
+          <aside>Quarter 1: April May June</aside>
+          <button data-back>BACK TO DASHBOARD</button>
+          <button>DOWNLOAD GSTR-2B SUMMARY (PDF)</button>
+          <button>DOWNLOAD GSTR-2B DETAILS (EXCEL)</button>
+        </main>
+      `,
+      "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
+    );
+    makeLayoutVisible(documentRef);
+    let dashboardBackClicked = 0;
+    documentRef.querySelector("[data-back]")?.addEventListener("click", () => {
+      dashboardBackClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      artifactType: "PDF_AND_EXCEL",
+      financialYear: "2025-26",
+      period: "June",
+      returnType: "GSTR-2B",
+    });
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining([
+        "gstr2b-visible-period-mismatch",
+        "gstr2b-summary-dashboard-back-clicked",
+      ]),
+    );
+    expect(dashboardBackClicked).toBe(1);
   });
 
   it("rechecks the visible GSTR-2B period before capturing a portal blob", async () => {
@@ -5122,6 +5651,24 @@ function createGstDocument(
     url,
   };
   return new JSDOM(`<!doctype html><html><body>${body}</body></html>`, options).window.document;
+}
+
+function createGstr2bSummaryDocument(extraBody = ""): Document {
+  const documentRef = createGstDocument(
+    `
+      <main>
+        <h1>GSTR-2B</h1>
+        <p>Financial Year - 2026-27</p>
+        <p>Return Period - May</p>
+        <button>DOWNLOAD GSTR-2B SUMMARY (PDF)</button>
+        <button>DOWNLOAD GSTR-2B DETAILS (EXCEL)</button>
+        ${extraBody}
+      </main>
+    `,
+    "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
+  );
+  makeLayoutVisible(documentRef);
+  return documentRef;
 }
 
 function makeLayoutVisible(documentRef: Document) {

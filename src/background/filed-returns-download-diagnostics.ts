@@ -121,6 +121,11 @@ function isCapturedDownloadFailureSignal(signal: string): boolean {
     signal === "filed-return-offscreen-blob-url-rejected" ||
     signal.endsWith("-blob-capture-failed") ||
     signal.endsWith("-captured-download-data-url-rejected") ||
-    signal.endsWith("-extension-download-start-rejected")
+    signal.endsWith("-extension-download-start-rejected") ||
+    signal.endsWith("-main-world-capture-exception") ||
+    signal.endsWith("-main-world-capture-timeout") ||
+    signal.endsWith("-main-world-capture-result-rejected") ||
+    signal.endsWith("-chunk-count-rejected") ||
+    signal.endsWith("-opfs-chunk-stage-failed")
   );
 }

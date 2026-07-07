@@ -47,6 +47,8 @@ const GST_LOGIN_URL = new URL("/services/login", GST_SERVICES_ORIGIN).href;
 const FLOW_STEP_SETTLE_MS = 1_600;
 const RESULT_ROW_NAVIGATION_SETTLE_MS = 4_500;
 const MAX_FLOW_STEPS = 6;
+const MAX_GSTR1_FLOW_STEPS = 12;
+const MAX_GSTR2B_FLOW_STEPS = 12;
 
 export type ActiveGstTab = Browser.tabs.Tab & { id: number };
 
@@ -171,7 +173,7 @@ async function startSinglePeriodFiledReturnsDownloadFlow(
 
   let lastStep: PortalFlowStepResult | null = null;
   let activePeriod: string | null = null;
-  for (let attempt = 0; attempt < MAX_FLOW_STEPS; attempt += 1) {
+  for (let attempt = 0; attempt < maxFlowStepsFor(scope); attempt += 1) {
     const response = await runScopedDownloadStepWithRetry(deps, activeTab.tab.id, scope);
     if (!response.ok || !("flowStep" in response)) {
       return response;
@@ -267,7 +269,7 @@ async function waitForDetailReadyThenTrigger({
 }): Promise<PackMessageResponse> {
   let lastStep: PortalFlowStepResult | null = null;
 
-  for (let attempt = 0; attempt < MAX_FLOW_STEPS; attempt += 1) {
+  for (let attempt = 0; attempt < maxFlowStepsFor(scope); attempt += 1) {
     const response = await runScopedDownloadStepWithRetry(deps, tabId, scope);
     if (!response.ok || !("flowStep" in response)) {
       return response;
@@ -896,6 +898,11 @@ function shouldContinueFlow(step: PortalFlowStepResult): boolean {
     return true;
   }
   return step.state === "clicked" || step.safeSignals.includes("detail-summary-modal");
+}
+
+function maxFlowStepsFor(scope: FiledReturnsDownloadScope): number {
+  if (scope.returnType === "GSTR-1") return MAX_GSTR1_FLOW_STEPS;
+  return scope.returnType === "GSTR-2B" ? MAX_GSTR2B_FLOW_STEPS : MAX_FLOW_STEPS;
 }
 
 function isFiledReturnDownloadReady(

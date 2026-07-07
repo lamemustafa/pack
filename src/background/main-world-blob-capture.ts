@@ -5,22 +5,94 @@ import type {
 } from "../core/contracts";
 
 const CAPTURE_SUPPRESSION_SETTLE_MS = 1_000;
+const MAIN_WORLD_CAPTURE_TIMEOUT_MS = 75_000;
+const MAIN_WORLD_CAPTURE_CHUNK_SIZE = 512 * 1024;
+const PACK_MAIN_WORLD_CAPTURE_MESSAGE_SOURCE = "pack-main-world-capture-v1";
+
+export interface MainWorldCaptureOutcome {
+  capturedDownloadRequest: FiledReturnsCapturedDownloadRequest | null;
+  chunkedCaptureRequest?: MainWorldChunkedCaptureRequest;
+  safeFailureSignals: string[];
+}
+
+export interface MainWorldChunkedCaptureRequest {
+  actionId: string;
+  chunkCount: number;
+  safeSignals: string[];
+  transferId: string;
+}
 
 export async function capturePortalBlobDownloadInMainWorld(
   tabId: number,
   request: FiledReturnsMainWorldCaptureRequest,
-): Promise<FiledReturnsCapturedDownloadRequest | null> {
+): Promise<MainWorldCaptureOutcome> {
+  const transferId = createTransferId();
+  const captureRequest: FiledReturnsMainWorldCaptureRequest & { transferId: string } = {
+    ...request,
+    transferChunkSize: MAIN_WORLD_CAPTURE_CHUNK_SIZE,
+    transferId,
+  };
+  await prepareContentCaptureTransfer(tabId, captureRequest).catch(() => undefined);
   try {
-    const [injectionResult] = await browser.scripting.executeScript({
-      args: [request],
-      func: capturePortalBlobDownload,
-      target: { tabId },
-      world: "MAIN",
-    });
-    return isCapturedDownloadRequest(injectionResult?.result) ? injectionResult.result : null;
+    const [injectionResult] = await withTimeout(
+      browser.scripting.executeScript({
+        args: [captureRequest],
+        func: capturePortalBlobDownloadWithDiagnostics,
+        target: { tabId },
+        world: "MAIN",
+      }),
+      MAIN_WORLD_CAPTURE_TIMEOUT_MS,
+    );
+    if (isMainWorldCaptureOutcome(injectionResult?.result)) return injectionResult.result;
+    if (isCapturedDownloadRequest(injectionResult?.result)) {
+      return { capturedDownloadRequest: injectionResult.result, safeFailureSignals: [] };
+    }
+    return {
+      capturedDownloadRequest: null,
+      safeFailureSignals: [`${captureRequest.signalPrefix}-main-world-capture-result-rejected`],
+    };
   } catch {
-    return null;
+    return {
+      capturedDownloadRequest: null,
+      safeFailureSignals: [`${captureRequest.signalPrefix}-main-world-capture-exception`],
+    };
   }
+}
+
+async function prepareContentCaptureTransfer(
+  tabId: number,
+  request: FiledReturnsMainWorldCaptureRequest & { transferId: string },
+): Promise<void> {
+  const response = await browser.tabs.sendMessage(tabId, {
+    type: "PACK_CONTENT_PREPARE_MAIN_WORLD_CAPTURE_V3",
+    payload: {
+      actionId: request.actionId,
+      transferId: request.transferId,
+    },
+  });
+  if (
+    typeof response !== "object" ||
+    response === null ||
+    (response as Record<string, unknown>).ok !== true
+  ) {
+    throw new Error("main-world-capture-transfer-not-prepared");
+  }
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error("main-world-capture-timeout")), timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timeout);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timeout);
+        reject(error);
+      },
+    );
+  });
 }
 
 function isCapturedDownloadRequest(value: unknown): value is FiledReturnsCapturedDownloadRequest {
@@ -34,29 +106,93 @@ function isCapturedDownloadRequest(value: unknown): value is FiledReturnsCapture
   );
 }
 
+function isMainWorldCaptureOutcome(value: unknown): value is MainWorldCaptureOutcome {
+  if (typeof value !== "object" || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    (isCapturedDownloadRequest(record.capturedDownloadRequest) ||
+      record.capturedDownloadRequest === null) &&
+    (record.chunkedCaptureRequest === undefined ||
+      isMainWorldChunkedCaptureRequest(record.chunkedCaptureRequest)) &&
+    Array.isArray(record.safeFailureSignals) &&
+    record.safeFailureSignals.every((signal) => typeof signal === "string")
+  );
+}
+
+function isMainWorldChunkedCaptureRequest(value: unknown): value is MainWorldChunkedCaptureRequest {
+  if (typeof value !== "object" || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.actionId === "string" &&
+    typeof record.transferId === "string" &&
+    typeof record.chunkCount === "number" &&
+    Number.isInteger(record.chunkCount) &&
+    record.chunkCount > 0 &&
+    record.chunkCount <= 200 &&
+    Array.isArray(record.safeSignals) &&
+    record.safeSignals.every((signal) => typeof signal === "string")
+  );
+}
+
+function createTransferId(): string {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return `transfer-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}`;
+}
+
 export async function capturePortalBlobDownload(
   config: FiledReturnsMainWorldCaptureRequest,
 ): Promise<FiledReturnsCapturedDownloadRequest | null> {
+  const outcome = await capturePortalBlobDownloadWithDiagnostics(config);
+  return outcome.capturedDownloadRequest;
+}
+
+export async function capturePortalBlobDownloadWithDiagnostics(
+  config: FiledReturnsMainWorldCaptureRequest,
+): Promise<MainWorldCaptureOutcome> {
   return new Promise((resolve) => {
+    const safeFailureSignals = new Set<string>([`${config.signalPrefix}-main-world-capture-armed`]);
+    const addSafeSignal = (signal: string) => safeFailureSignals.add(signal);
     const escapeCss = (value: string) => {
       if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
         return CSS.escape(value);
       }
       return value.replace(/["\\]/g, "\\$&");
     };
-    const originalCreateObjectUrl = URL.createObjectURL;
+    const urlApi = window.URL ?? URL;
+    const webkitUrlApi = (window as Window & { webkitURL?: typeof URL }).webkitURL;
+    const originalCreateObjectUrl = urlApi.createObjectURL;
+    const originalWebkitCreateObjectUrl = webkitUrlApi?.createObjectURL;
+    const originalFetch = window.fetch;
+    const pdfMake = (window as Window & { pdfMake?: { createPdf?: unknown } }).pdfMake;
+    const originalPdfMakeCreatePdf = pdfMake?.createPdf;
+    const originalSaveAs = (window as Window & { saveAs?: unknown }).saveAs;
+    const originalWindowOpen = window.open;
     const originalClick = HTMLAnchorElement.prototype.click;
     const originalDispatchEvent = HTMLAnchorElement.prototype.dispatchEvent;
+    const originalXhrOpen = XMLHttpRequest.prototype.open;
+    const originalXhrSend = XMLHttpRequest.prototype.send;
     const capturedBlobUrls = new Set<string>();
+    let suppressedWindowOpen = false;
     let restored = false;
     let settled = false;
 
     const restore = () => {
       if (restored) return;
       restored = true;
-      URL.createObjectURL = originalCreateObjectUrl;
+      urlApi.createObjectURL = originalCreateObjectUrl;
+      if (webkitUrlApi && originalWebkitCreateObjectUrl) {
+        webkitUrlApi.createObjectURL = originalWebkitCreateObjectUrl;
+      }
+      window.fetch = originalFetch;
+      if (pdfMake && originalPdfMakeCreatePdf) {
+        pdfMake.createPdf = originalPdfMakeCreatePdf;
+      }
+      (window as Window & { saveAs?: unknown }).saveAs = originalSaveAs;
+      window.open = originalWindowOpen;
       HTMLAnchorElement.prototype.click = originalClick;
       HTMLAnchorElement.prototype.dispatchEvent = originalDispatchEvent;
+      XMLHttpRequest.prototype.open = originalXhrOpen;
+      XMLHttpRequest.prototype.send = originalXhrSend;
       document
         .querySelector<HTMLElement>(`[${config.controlAttribute}="${escapeCss(config.controlId)}"]`)
         ?.removeAttribute(config.controlAttribute);
@@ -65,64 +201,205 @@ export async function capturePortalBlobDownload(
     const settle = (request: FiledReturnsCapturedDownloadRequest | null) => {
       if (settled) return;
       settled = true;
+      const outcome: MainWorldCaptureOutcome = {
+        capturedDownloadRequest: request,
+        safeFailureSignals: request ? [] : Array.from(safeFailureSignals),
+      };
       if (!request) {
         restore();
-        resolve(request);
+        resolve(outcome);
         return;
       }
       window.setTimeout(() => {
         restore();
-        resolve(request);
+        resolve(outcome);
       }, CAPTURE_SUPPRESSION_SETTLE_MS);
+    };
+
+    const settleChunked = (dataUrl: string, safeSignals: string[]) => {
+      if (settled || !config.transferId) return false;
+      const chunkSize = config.transferChunkSize ?? MAIN_WORLD_CAPTURE_CHUNK_SIZE;
+      const chunks: string[] = [];
+      for (let offset = 0; offset < dataUrl.length; offset += chunkSize) {
+        chunks.push(dataUrl.slice(offset, offset + chunkSize));
+      }
+      if (chunks.length === 0 || chunks.length > 200) {
+        addSafeSignal(`${config.signalPrefix}-chunk-count-rejected`);
+        return false;
+      }
+      chunks.forEach((chunk, index) => {
+        window.postMessage(
+          {
+            actionId: config.actionId,
+            chunk,
+            index,
+            source: PACK_MAIN_WORLD_CAPTURE_MESSAGE_SOURCE,
+            totalChunks: chunks.length,
+            transferId: config.transferId,
+          },
+          window.location.origin,
+        );
+      });
+      settled = true;
+      const outcome: MainWorldCaptureOutcome = {
+        capturedDownloadRequest: null,
+        chunkedCaptureRequest: {
+          actionId: config.actionId,
+          chunkCount: chunks.length,
+          safeSignals: [
+            ...safeSignals,
+            `${config.signalPrefix}-main-world-chunked-capture`,
+          ],
+          transferId: config.transferId,
+        },
+        safeFailureSignals: [],
+      };
+      window.setTimeout(() => {
+        restore();
+        resolve(outcome);
+      }, CAPTURE_SUPPRESSION_SETTLE_MS);
+      return true;
+    };
+
+    const isReadableBlob = (value: unknown): value is Blob => {
+      if (!value || typeof value !== "object") return false;
+      const candidate = value as Partial<Blob>;
+      return (
+        typeof candidate.size === "number" &&
+        typeof candidate.type === "string" &&
+        typeof candidate.arrayBuffer === "function"
+      );
     };
 
     const readBlob = (blob: Blob, filename?: string | null) => {
       if (settled) return;
-      if (!blob.size || blob.size > config.maxBytes) return;
+      if (!blob.size) {
+        addSafeSignal(`${config.signalPrefix}-blob-zero-byte-rejected`);
+        return;
+      }
+      if (blob.size > config.maxBytes) {
+        addSafeSignal(`${config.signalPrefix}-blob-oversized-rejected`);
+        return;
+      }
+      addSafeSignal(`${config.signalPrefix}-blob-bytes-accepted`);
       const reader = new FileReader();
       reader.addEventListener("load", () => {
         if (typeof reader.result !== "string") {
+          addSafeSignal(`${config.signalPrefix}-file-reader-result-rejected`);
           settle(null);
           return;
         }
+        const safeSignals = [
+          `${config.signalPrefix}-portal-blob-captured`,
+          `${config.signalPrefix}-native-blob-click-suppressed`,
+          `${config.signalPrefix}-main-world-capture`,
+          ...(suppressedWindowOpen
+            ? [`${config.signalPrefix}-native-window-open-suppressed`]
+            : []),
+          ...(filename ? [`${config.signalPrefix}-portal-filename-observed`] : []),
+        ];
+        if (settleChunked(reader.result, safeSignals)) return;
         settle({
           actionId: config.actionId,
           dataUrl: reader.result,
-          safeSignals: [
-            `${config.signalPrefix}-portal-blob-captured`,
-            `${config.signalPrefix}-native-blob-click-suppressed`,
-            `${config.signalPrefix}-main-world-capture`,
-            ...(filename ? [`${config.signalPrefix}-portal-filename-observed`] : []),
-          ],
+          safeSignals,
         });
       });
-      reader.addEventListener("error", () => settle(null));
+      reader.addEventListener("error", () => {
+        addSafeSignal(`${config.signalPrefix}-file-reader-error`);
+        settle(null);
+      });
       reader.readAsDataURL(blob);
+    };
+
+    const readArrayBuffer = (buffer: ArrayBuffer, contentType?: string | null) => {
+      if (settled) return;
+      if (!buffer.byteLength) {
+        addSafeSignal(`${config.signalPrefix}-array-buffer-zero-byte-rejected`);
+        return;
+      }
+      if (buffer.byteLength > config.maxBytes) {
+        addSafeSignal(`${config.signalPrefix}-array-buffer-oversized-rejected`);
+        return;
+      }
+      const blob = new Blob([buffer], contentType ? { type: contentType } : undefined);
+      readBlob(blob);
+    };
+
+    const readResponseBody = (response: unknown, contentType?: string | null) => {
+      if (settled || !response) return;
+      if (isReadableBlob(response)) {
+        readBlob(response);
+        return;
+      }
+      if (response instanceof ArrayBuffer) {
+        readArrayBuffer(response, contentType);
+        return;
+      }
+      if (ArrayBuffer.isView(response)) {
+        const view = response as ArrayBufferView;
+        const copy = new Uint8Array(view.byteLength);
+        copy.set(new Uint8Array(view.buffer, view.byteOffset, view.byteLength));
+        readArrayBuffer(copy.buffer, contentType);
+      }
     };
 
     const captureDataUrl = (dataUrl: string, filename?: string | null) => {
       if (settled) return;
-      if (!dataUrl.startsWith("data:") || dataUrl.length > config.maxBytes * 2) return;
+      addSafeSignal(`${config.signalPrefix}-data-url-observed`);
+      if (!dataUrl.startsWith("data:") || dataUrl.length > config.maxBytes * 2) {
+        addSafeSignal(`${config.signalPrefix}-data-url-rejected`);
+        return;
+      }
+      const safeSignals = [
+        `${config.signalPrefix}-portal-data-url-captured`,
+        `${config.signalPrefix}-native-data-click-suppressed`,
+        `${config.signalPrefix}-main-world-capture`,
+        ...(suppressedWindowOpen
+          ? [`${config.signalPrefix}-native-window-open-suppressed`]
+          : []),
+        ...(filename ? [`${config.signalPrefix}-portal-filename-observed`] : []),
+      ];
+      if (settleChunked(dataUrl, safeSignals)) return;
       settle({
         actionId: config.actionId,
         dataUrl,
-        safeSignals: [
-          `${config.signalPrefix}-portal-data-url-captured`,
-          `${config.signalPrefix}-native-data-click-suppressed`,
-          `${config.signalPrefix}-main-world-capture`,
-          ...(filename ? [`${config.signalPrefix}-portal-filename-observed`] : []),
-        ],
+        safeSignals,
       });
     };
 
     const captureBlobUrl = (blobUrl: string, filename?: string | null) => {
       if (settled) return;
+      addSafeSignal(`${config.signalPrefix}-blob-url-observed`);
       void fetch(blobUrl)
         .then((response) => (response.ok ? response.blob() : null))
         .then((blob) => {
           if (blob) readBlob(blob, filename);
+          else addSafeSignal(`${config.signalPrefix}-blob-url-fetch-rejected`);
         })
-        .catch(() => undefined);
+        .catch(() => addSafeSignal(`${config.signalPrefix}-blob-url-fetch-failed`));
+    };
+
+    const captureUrl = (value: string | URL, filename?: string | null) => {
+      const nextUrl = String(value);
+      if (nextUrl.startsWith("data:")) captureDataUrl(nextUrl, filename);
+      if (nextUrl.startsWith("blob:")) captureBlobUrl(nextUrl, filename);
+    };
+
+    const isPossibleArtifactContentType = (contentType: string) => {
+      const normalised = contentType.toLowerCase();
+      return [
+        "application/pdf",
+        "application/octet-stream",
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument",
+      ].some((expected) => normalised.includes(expected));
+    };
+
+    const captureEmbeddedUrls = (text: string) => {
+      for (const [url] of text.matchAll(/\b(?:blob|data):[^"'<>\\\s)]+/g)) {
+        captureUrl(url);
+      }
     };
 
     const captureAnchorDownload = (anchor: HTMLAnchorElement) => {
@@ -140,19 +417,184 @@ export async function capturePortalBlobDownload(
       return false;
     };
 
+    window.open = function open(url?: string | URL) {
+      addSafeSignal(`${config.signalPrefix}-window-open-observed`);
+      suppressedWindowOpen = true;
+      if (url) captureUrl(url);
+      const captureWindowLocation = (value: string | URL) => captureUrl(value);
+      const fakeDocument = {
+        close: () => undefined,
+        open: () => fakeDocument,
+        write: (...chunks: string[]) => {
+          chunks.forEach((chunk) => captureEmbeddedUrls(String(chunk)));
+        },
+        writeln: (...chunks: string[]) => {
+          chunks.forEach((chunk) => captureEmbeddedUrls(String(chunk)));
+        },
+      } as unknown as Document;
+      const fakeLocation = {} as Location;
+      Object.defineProperty(fakeLocation, "href", {
+        configurable: true,
+        get() {
+          return "";
+        },
+        set: captureWindowLocation,
+      });
+      const fakeWindow = {
+        close: () => undefined,
+        document: fakeDocument,
+        focus: () => undefined,
+      } as Window & { location: Location };
+      Object.defineProperty(fakeWindow, "location", {
+        configurable: true,
+        get() {
+          return fakeLocation;
+        },
+        set: captureWindowLocation,
+      });
+      return fakeWindow;
+    };
+
     const shouldSuppressAnchor = (anchor: HTMLAnchorElement) => {
       if (capturedBlobUrls.has(anchor.href)) return true;
       return captureAnchorDownload(anchor);
     };
 
-    URL.createObjectURL = function createObjectURL(value: Blob | MediaSource) {
-      const blobUrl = originalCreateObjectUrl.call(URL, value);
-      if (value instanceof Blob && value.size > 0 && value.size <= config.maxBytes) {
+    if (pdfMake && typeof originalPdfMakeCreatePdf === "function") {
+      pdfMake.createPdf = function createPdf(...args: unknown[]) {
+        const pdf = originalPdfMakeCreatePdf.apply(this, args) as
+          | {
+              download?: (filename?: string | null) => unknown;
+              getBlob?: (callback: (blob: Blob) => void) => unknown;
+              open?: (...openArgs: unknown[]) => unknown;
+              print?: (...printArgs: unknown[]) => unknown;
+            }
+          | null
+          | undefined;
+        if (!pdf || typeof pdf !== "object") return pdf;
+
+        const readPdfBlob = (filename?: string | null) => {
+          if (typeof pdf.getBlob !== "function") return;
+          try {
+            pdf.getBlob((blob) => readBlob(blob, filename));
+          } catch {
+            // Ignore portal/pdfMake generation failures; the capture timeout will settle.
+          }
+        };
+        const originalDownload = pdf.download;
+        if (typeof originalDownload === "function") {
+          pdf.download = function download(filename?: string | null) {
+            readPdfBlob(filename);
+            return undefined;
+          };
+        }
+
+        const originalOpen = pdf.open;
+        if (typeof originalOpen === "function") {
+          pdf.open = function open() {
+            readPdfBlob();
+            return undefined;
+          };
+        }
+
+        const originalPrint = pdf.print;
+        if (typeof originalPrint === "function") {
+          pdf.print = function print() {
+            readPdfBlob();
+            return undefined;
+          };
+        }
+
+        return pdf;
+      };
+    }
+
+    (window as Window & { saveAs?: unknown }).saveAs = function saveAs(
+      value: unknown,
+      filename?: string | null,
+    ) {
+      if (isReadableBlob(value)) {
+        readBlob(value, filename);
+        return undefined;
+      }
+      if (typeof value === "string") {
+        captureUrl(value, filename);
+        return undefined;
+      }
+      return undefined;
+    };
+
+    window.fetch = function fetch(input: RequestInfo | URL, init?: RequestInit) {
+      return originalFetch.call(window, input, init).then((response) => {
+        const contentType = response.headers.get("content-type");
+        if (contentType && isPossibleArtifactContentType(contentType)) {
+          void response
+            .clone()
+            .blob()
+            .then((blob) => readBlob(blob))
+            .catch(() => undefined);
+        }
+        return response;
+      });
+    };
+
+    const patchedXhrOpen: XMLHttpRequest["open"] = function open(
+      this: XMLHttpRequest,
+      method: string,
+      url: string | URL,
+      async?: boolean,
+      user?: string | null,
+      pass?: string | null,
+    ) {
+      this.addEventListener("load", () => {
+        if (settled) return;
+        const contentType = this.getResponseHeader("content-type");
+        if (contentType && !isPossibleArtifactContentType(contentType)) return;
+        readResponseBody(this.response, contentType);
+      });
+      if (arguments.length <= 2) {
+        const openWithoutAsync = originalXhrOpen as (
+          this: XMLHttpRequest,
+          method: string,
+          url: string | URL,
+        ) => void;
+        return openWithoutAsync.call(this, method, url);
+      }
+      const openWithAsync = originalXhrOpen as (
+        this: XMLHttpRequest,
+        method: string,
+        url: string | URL,
+        async: boolean,
+        user?: string | null,
+        pass?: string | null,
+      ) => void;
+      return openWithAsync.call(this, method, url, async ?? true, user, pass);
+    };
+    XMLHttpRequest.prototype.open = patchedXhrOpen;
+
+    XMLHttpRequest.prototype.send = function send(body?: Document | XMLHttpRequestBodyInit | null) {
+      return originalXhrSend.call(this, body);
+    };
+
+    const captureCreateObjectUrl = function createObjectURL(value: Blob | MediaSource) {
+      const blobUrl = originalCreateObjectUrl.call(urlApi, value);
+      if (isReadableBlob(value) && value.size > 0 && value.size <= config.maxBytes) {
+        addSafeSignal(`${config.signalPrefix}-create-object-url-observed`);
         capturedBlobUrls.add(blobUrl);
         readBlob(value);
+      } else if (isReadableBlob(value)) {
+        addSafeSignal(
+          value.size > config.maxBytes
+            ? `${config.signalPrefix}-create-object-url-oversized-rejected`
+            : `${config.signalPrefix}-create-object-url-zero-byte-rejected`,
+        );
       }
       return blobUrl;
     };
+    urlApi.createObjectURL = captureCreateObjectUrl;
+    if (webkitUrlApi) {
+      webkitUrlApi.createObjectURL = captureCreateObjectUrl;
+    }
 
     HTMLAnchorElement.prototype.click = function click() {
       if (shouldSuppressAnchor(this)) return undefined;
@@ -164,9 +606,18 @@ export async function capturePortalBlobDownload(
       return originalDispatchEvent.call(this, event);
     };
 
-    document
-      .querySelector<HTMLElement>(`[${config.controlAttribute}="${escapeCss(config.controlId)}"]`)
-      ?.click();
-    window.setTimeout(() => settle(null), 15_000);
+    const control = document.querySelector<HTMLElement>(
+      `[${config.controlAttribute}="${escapeCss(config.controlId)}"]`,
+    );
+    if (!control) {
+      addSafeSignal(`${config.signalPrefix}-capture-control-not-found`);
+      settle(null);
+      return;
+    }
+    control.click();
+    window.setTimeout(() => {
+      addSafeSignal(`${config.signalPrefix}-main-world-capture-timeout`);
+      settle(null);
+    }, 60_000);
   });
 }

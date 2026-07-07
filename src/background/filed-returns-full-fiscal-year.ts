@@ -147,7 +147,11 @@ export async function startFullFiscalYearDownloadFlow(
     await persistLedgerAndMaybeSummary(deps, ledger, flowStep);
 
     if (targetStatus === "downloaded" || targetStatus === "not-filed") continue;
-    return { ...response, flowStep, flowSummary: toFullFiscalYearSummary(ledger, flowStep) };
+    const flowSummary = toFullFiscalYearSummary(ledger, flowStep);
+    if (targetStatus !== "download-unconfirmed") {
+      await persistSummary(deps, flowSummary);
+    }
+    return { ...response, flowStep, flowSummary };
   }
 }
 

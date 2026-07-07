@@ -189,6 +189,58 @@ describe("offscreen Blob URL entrypoint", () => {
     ).toBe(false);
   });
 
+  it("assembles chunked filed-return bytes before staging", async () => {
+    await loadOffscreenEntrypoint();
+    const dataUrl = `data:application/pdf;base64,${btoa("%PDF-1.7 chunked staged")}`;
+    const chunks = [dataUrl.slice(0, 20), dataUrl.slice(20)];
+
+    const first = await sendOffscreenMessage({
+      type: "PACK_OFFSCREEN_STAGE_FILED_RETURN_CHUNK",
+      target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+      payload: {
+        requestId: "chunk-request-1",
+        transferId: "transfer-1",
+        ledgerId: "ledger-1",
+        zipPath: "complyeaze-pack/gst/2025-26/gstr-1/may.pdf",
+        index: 0,
+        totalChunks: 2,
+        chunk: chunks[0],
+      },
+    });
+    expect(first).toEqual({
+      ok: true,
+      requestId: "chunk-request-1",
+      staged: true,
+      byteCountClass: "non-empty",
+    });
+    expect(
+      opfsFiles.has("filed-return-packs/ledger-1/complyeaze-pack/gst/2025-26/gstr-1/may.pdf"),
+    ).toBe(false);
+
+    const second = await sendOffscreenMessage({
+      type: "PACK_OFFSCREEN_STAGE_FILED_RETURN_CHUNK",
+      target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+      payload: {
+        requestId: "chunk-request-2",
+        transferId: "transfer-1",
+        ledgerId: "ledger-1",
+        zipPath: "complyeaze-pack/gst/2025-26/gstr-1/may.pdf",
+        index: 1,
+        totalChunks: 2,
+        chunk: chunks[1],
+      },
+    });
+    expect(second).toEqual({
+      ok: true,
+      requestId: "chunk-request-2",
+      staged: true,
+      byteCountClass: "non-empty",
+    });
+    expect(
+      opfsFiles.has("filed-return-packs/ledger-1/complyeaze-pack/gst/2025-26/gstr-1/may.pdf"),
+    ).toBe(true);
+  });
+
   async function loadOffscreenEntrypoint() {
     vi.doMock("wxt/browser", () => ({
       browser: {

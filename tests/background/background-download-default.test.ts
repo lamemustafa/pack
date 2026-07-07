@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getFiledReturnsFullFiscalYearPeriods } from "../../src/core/filed-returns-scope";
 import type { PackMessage, PackMessageResponse } from "../../src/core/messages";
+import { observeBrowserDownloadById } from "../../src/background/download-observer";
 
 const browserMocks = vi.hoisted(() => {
   let messageListener:
@@ -348,6 +349,15 @@ describe("background filed returns download defaults", () => {
       saveAs: false,
       url: "blob:chrome-extension://pack/full-year.zip",
     });
+    expect(observeBrowserDownloadById).toHaveBeenCalledWith(
+      browserMocks.downloads,
+      481,
+      expect.objectContaining({
+        expectedFileExtensions: [".zip"],
+        trustedDownloadIds: new Set([481]),
+      }),
+      5 * 60 * 1000,
+    );
     expect(browserMocks.runtime.sendMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         type: "PACK_OFFSCREEN_CLEAR_FILED_RETURN_LEDGER",
@@ -370,6 +380,7 @@ describe("background filed returns download defaults", () => {
       ...periods.flatMap(() => [
         "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
         "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
+        "PACK_CONTENT_PREPARE_MAIN_WORLD_CAPTURE_V3",
       ]),
     ]);
   });

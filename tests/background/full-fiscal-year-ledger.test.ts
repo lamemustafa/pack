@@ -103,11 +103,21 @@ describe("full fiscal year ledger", () => {
   });
 
   it("surfaces a blocked target before generic resume confirmation", () => {
+    const ledger = createLedger([
+      ["April", "blocked"],
+      ["May", "pending"],
+    ]);
     const summary = summariseFullFiscalYearLedger({
-      ...createLedger([
-        ["April", "blocked"],
-        ["May", "pending"],
-      ]),
+      ...ledger,
+      targets: ledger.targets.map((target) =>
+        target.period === "April"
+          ? {
+              ...target,
+              safeSignals: ["portal-system-error"],
+              safeMessage: "The GST portal returned a system-error page.",
+            }
+          : target,
+      ),
       status: "blocked",
       currentTargetId: "GSTR-3B:2026-27:April",
     });
@@ -121,7 +131,11 @@ describe("full fiscal year ledger", () => {
       },
       flowStep: {
         state: "blocked",
-        safeSignals: ["full-fiscal-year-run-needs-action"],
+        safeSignals: expect.arrayContaining([
+          "full-fiscal-year-run-needs-action",
+          "portal-system-error",
+        ]),
+        safeMessage: "The GST portal returned a system-error page.",
       },
     });
   });

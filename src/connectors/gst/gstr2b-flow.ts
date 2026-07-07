@@ -17,12 +17,17 @@ import { acceptedFiledReturnsMonthTexts } from "./filed-returns-months";
 import {
   clickBestReturnDashboardCandidate,
   dismissSafePostLoginDialogs,
+  navigateToReturnDashboardPage,
 } from "./filed-returns-navigator";
 import { detectFiledReturnsPortalAvailabilityIssue } from "./filed-returns-portal-availability";
+import { findMatchingActionableFiledReturnRows } from "./filed-returns-result-rows";
 import { filedReturnScopeId } from "./filed-returns-return-descriptors";
+import { selectFiledReturnsFiltersAndSearch } from "./filed-returns-filter-form";
+import { hasMatchingGstr2bSourceJson } from "./gstr2b-local-artifact";
 
 const GSTR2B_SUMMARY_ROUTE = /\/gstr2b\/auth\/gstr2b\/summary\/?$/i;
 const GSTR2B_AUTH_ROUTE = /\/gstr2b\/auth(?:\/|$)/i;
+const FILED_RETURNS_ROUTE = /\/returns\/auth\/efiledReturns\/?$/i;
 const DASHBOARD_FIELD_SETTLE_DELAY_MS = 500;
 const DASHBOARD_DEPENDENT_FIELD_ATTEMPTS = 6;
 const FINANCIAL_YEAR_LABEL = /financial\s+year/i;
@@ -73,6 +78,23 @@ export async function runGstr2bDownloadStep(
       if (recovery) return recovery;
       return periodGuard;
     }
+    if (!hasMatchingGstr2bSourceJson(scope)) {
+      return {
+        connectorId: "gst",
+        scopeId,
+        state: "ready",
+        safeSignals: [
+          ...safeSignals,
+          "gstr2b-summary-route",
+          "gstr2b-visible-period-verified",
+          "gstr2b-local-json-unavailable",
+          "gstr2b-download-ready",
+          "filed-return-download-ready",
+        ],
+        safeMessage:
+          "Pack found the selected GSTR-2B summary page and will try the portal download controls because matching local source data is unavailable.",
+      };
+    }
     return {
       connectorId: "gst",
       scopeId,
@@ -113,6 +135,15 @@ export async function runGstr2bDownloadStep(
       safeSignals,
     );
     if (dashboardSelection) return dashboardSelection;
+  }
+
+  if (isFiledReturnsRoute(documentRef)) {
+    const filedReturnsSelection = await selectGstr2bFiledReturnsFiltersOrResult(
+      documentRef,
+      scope,
+      scopeId,
+    );
+    if (filedReturnsSelection) return filedReturnsSelection;
   }
 
   const viewControl = findGstr2bDashboardControl(documentRef, "view");
@@ -156,6 +187,64 @@ export async function runGstr2bDownloadStep(
   };
 }
 
+async function selectGstr2bFiledReturnsFiltersOrResult(
+  documentRef: Document,
+  scope: FiledReturnsDownloadScope,
+  scopeId: string,
+): Promise<PortalFlowStepResult | null> {
+  const actionableRows = findMatchingActionableFiledReturnRows(documentRef, scope);
+  if (actionableRows.length > 1) {
+    return {
+      connectorId: "gst",
+      scopeId,
+      state: "blocked",
+      safeSignals: ["gstr2b-filed-return-result-row-ambiguous"],
+      safeMessage:
+        "Pack found more than one filed GSTR-2B result row for the requested period. Open the correct row manually, then start Pack again.",
+      userAction: {
+        type: "NAVIGATE_TO_SUPPORTED_PAGE",
+        message: "Open the exact filed GSTR-2B row for the requested period.",
+        canResume: true,
+      },
+    };
+  }
+
+  const actionableRow = actionableRows[0];
+  if (actionableRow) {
+    activateElement(actionableRow.view);
+    return {
+      connectorId: "gst",
+      scopeId,
+      state: "clicked",
+      safeSignals: [
+        "gstr2b-filed-return-result-view-clicked",
+        ...(actionableRow.period ? [`filed-return-result-period:${actionableRow.period}`] : []),
+      ],
+      safeMessage: "Pack opened the filed GSTR-2B result row.",
+    };
+  }
+
+  if (!filedReturnsPageOffersGstr2b(documentRef)) {
+    const navigation = await navigateToReturnDashboardPage(documentRef, scopeId);
+    return {
+      ...navigation,
+      safeSignals: ["gstr2b-filed-returns-no-gstr2b-option", ...navigation.safeSignals],
+      safeMessage:
+        navigation.state === "clicked"
+          ? "Pack left View Filed Returns for the GST Return Dashboard because this portal page does not offer GSTR-2B in its return-type list."
+          : navigation.safeMessage,
+    };
+  }
+
+  return selectFiledReturnsFiltersAndSearch(documentRef, scope, scopeId);
+}
+
+function filedReturnsPageOffersGstr2b(documentRef: Document): boolean {
+  return Array.from(documentRef.querySelectorAll("option")).some((option) =>
+    matchesAcceptedText(option.textContent || option.value, ["GSTR-2B"]),
+  );
+}
+
 export function verifyVisibleGstr2bSummaryScope(
   documentRef: Document,
   scope: FiledReturnsDownloadScope,
@@ -169,10 +258,16 @@ function verifyVisibleGstr2bPeriod(
   normalisedText: string,
   scope: FiledReturnsDownloadScope,
 ): PortalDownloadTriggerResult | null {
-  const monthMatches = acceptedFiledReturnsMonthTexts(scope.period).some((period) =>
-    matchesAcceptedText(normalisedText, [period]),
-  );
-  const yearMatches = expectedCalendarYears(scope).some((year) => normalisedText.includes(year));
+  const visiblePeriod = extractGstr2bLabelValue(normalisedText, "return period");
+  const visibleFinancialYear = extractGstr2bLabelValue(normalisedText, "financial year");
+  const monthMatches = visiblePeriod
+    ? matchesAcceptedText(visiblePeriod, acceptedFiledReturnsMonthTexts(scope.period))
+    : acceptedFiledReturnsMonthTexts(scope.period).some((period) =>
+        matchesAcceptedText(normalisedText, [period]),
+      );
+  const yearMatches = visibleFinancialYear
+    ? matchesAcceptedText(visibleFinancialYear, [scope.financialYear])
+    : expectedCalendarYears(scope).some((year) => normalisedText.includes(year));
   if (monthMatches && yearMatches) return null;
 
   return {
@@ -190,11 +285,42 @@ function verifyVisibleGstr2bPeriod(
   };
 }
 
+function extractGstr2bLabelValue(
+  normalisedText: string,
+  label: "financial year" | "return period",
+): string | null {
+  const pattern =
+    label === "financial year"
+      ? /\bfinancial\s+year\s*[-:]\s*([0-9]{4}\s*-\s*[0-9]{2})\b/
+      : /\breturn\s+period\s*[-:]\s*([a-z]+)\b/;
+  const match = normalisedText.match(pattern);
+  return match?.[1]?.trim() ?? null;
+}
+
 function returnFromMismatchedGstr2bSummary(
   documentRef: Document,
   scopeId: string,
   safeSignals: readonly string[],
 ): PortalFlowStepResult | null {
+  const dashboardBackControl = findGstr2bSummaryDashboardBackControl(documentRef);
+  if (dashboardBackControl) {
+    activateElement(dashboardBackControl);
+    return {
+      connectorId: "gst",
+      scopeId,
+      state: "clicked",
+      safeSignals: Array.from(
+        new Set([
+          ...safeSignals,
+          "gstr2b-summary-period-mismatch",
+          "gstr2b-summary-dashboard-back-clicked",
+        ]),
+      ),
+      safeMessage:
+        "Pack found a GSTR-2B summary for a different period and clicked Back to Dashboard so it can select the requested period.",
+    };
+  }
+
   const history = documentRef.defaultView?.history;
   if (history && typeof history.back === "function") {
     history.back();
@@ -238,17 +364,11 @@ async function selectGstr2bReturnDashboardFiltersAndSearch(
     return {
       connectorId: "gst",
       scopeId,
-      state: "user-action-required",
+      state: "clicked",
       safeSignals: [...safeSignals, ...diagnosticSignals],
       safeMessage:
-        "Pack recognized the GST Return Dashboard, but could not resolve all dashboard controls. Diagnostic signals: " +
+        "Pack recognized the GST Return Dashboard and is waiting for the remaining dashboard controls to render. Diagnostic signals: " +
         diagnosticSignals.join(", "),
-      userAction: {
-        type: "NAVIGATE_TO_SUPPORTED_PAGE",
-        message:
-          "Wait for the GST Return Dashboard controls to finish rendering, then click Start download again.",
-        canResume: true,
-      },
     };
   }
 
@@ -282,7 +402,10 @@ async function selectGstr2bReturnDashboardFiltersAndSearch(
   }
 
   if (!selectMatches(controls.period, acceptedFiledReturnsMonthTexts(scope.period))) {
-    const periodSelected = selectOption(controls.period, acceptedFiledReturnsMonthTexts(scope.period));
+    const periodSelected = selectOption(
+      controls.period,
+      acceptedFiledReturnsMonthTexts(scope.period),
+    );
     if (periodSelected) {
       await delay(DASHBOARD_FIELD_SETTLE_DELAY_MS);
       controls = findReturnDashboardControls(documentRef) ?? controls;
@@ -358,23 +481,33 @@ function findReturnDashboardControls(documentRef: Document): ReturnDashboardCont
     findReturnDashboardFilterRoot(documentRef) ?? findNativeReturnDashboardRoot(documentRef);
   if (!root) return null;
 
-  const nativeDashboardSelects = findNativeDashboardSelects(root);
-  const orderedFallbackSelects = findOrderedDashboardSelects(root);
+  const body = documentRef.body ?? root;
   const year =
-    nativeDashboardSelects.year ??
-    findDashboardSelect(root, FINANCIAL_YEAR_LABEL, "financial-year") ??
-    orderedFallbackSelects.year;
+    findDashboardControlSelect(root, FINANCIAL_YEAR_LABEL, "financial-year") ??
+    findDashboardControlSelect(body, FINANCIAL_YEAR_LABEL, "financial-year");
   const quarter =
-    nativeDashboardSelects.quarter ??
-    findDashboardSelect(root, QUARTER_LABEL, "quarter") ??
-    orderedFallbackSelects.quarter;
+    findDashboardControlSelect(root, QUARTER_LABEL, "quarter") ??
+    findDashboardControlSelect(body, QUARTER_LABEL, "quarter");
   const period =
-    nativeDashboardSelects.period ??
-    findDashboardSelect(root, PERIOD_LABEL, "period") ??
-    orderedFallbackSelects.period;
-  const search = findSearchButton(root);
+    findDashboardControlSelect(root, PERIOD_LABEL, "period") ??
+    findDashboardControlSelect(body, PERIOD_LABEL, "period");
+  const search = findSearchButton(root) ?? findSearchButton(body);
   if (!year || !quarter || !period || !search) return null;
   return { year, quarter, period, search };
+}
+
+function findDashboardControlSelect(
+  root: HTMLElement,
+  labelPattern: RegExp,
+  role: "financial-year" | "quarter" | "period",
+): HTMLSelectElement | null {
+  const nativeDashboardSelects = findNativeDashboardSelects(root);
+  const orderedFallbackSelects = findOrderedDashboardSelects(root);
+  return (
+    nativeDashboardSelects[role === "financial-year" ? "year" : role] ??
+    findDashboardSelect(root, labelPattern, role) ??
+    orderedFallbackSelects[role === "financial-year" ? "year" : role]
+  );
 }
 
 function diagnoseReturnDashboardControls(documentRef: Document): string[] {
@@ -534,6 +667,15 @@ function findReturnDashboardFilterRoot(documentRef: Document): HTMLElement | nul
   }
 
   return null;
+}
+
+function findGstr2bSummaryDashboardBackControl(documentRef: Document): HTMLElement | null {
+  return (
+    getClickableElements(documentRef).find((element) => {
+      const text = normaliseText(readElementText(element));
+      return /^back\s+to\s+dashboard$/.test(text) || /^back$/.test(text);
+    }) ?? null
+  );
 }
 
 function findNativeReturnDashboardRoot(documentRef: Document): HTMLElement | null {
@@ -848,6 +990,11 @@ function isSpecificGstr2bText(text: string): boolean {
 function isReturnDashboardRoute(documentRef: Document): boolean {
   const pathname = documentRef.defaultView?.location.pathname ?? "";
   return /\/returns\/auth\/dashboard\/?$/i.test(pathname);
+}
+
+function isFiledReturnsRoute(documentRef: Document): boolean {
+  const pathname = documentRef.defaultView?.location.pathname ?? "";
+  return FILED_RETURNS_ROUTE.test(pathname);
 }
 
 function isReturnDashboardStillRendering(documentRef: Document, documentText: string): boolean {

@@ -56,10 +56,7 @@ export function summariseFullFiscalYearLedger(
     return toFullFiscalYearSummary(ledger, completeFullFiscalYearStep(ledger));
   }
   if (hasRecoverableActionRequiredTarget(ledger)) {
-    return toFullFiscalYearSummary(
-      ledger,
-      blockedFullFiscalYearStep("full-fiscal-year-run-needs-action", ledger),
-    );
+    return toFullFiscalYearSummary(ledger, recoverableActionRequiredFullFiscalYearStep(ledger));
   }
   if (needsResumeConfirmation(ledger)) {
     return toFullFiscalYearSummary(
@@ -83,7 +80,7 @@ export function summariseFullFiscalYearLedger(
   }
   return toFullFiscalYearSummary(
     ledger,
-    blockedFullFiscalYearStep("full-fiscal-year-run-needs-action", ledger),
+    recoverableActionRequiredFullFiscalYearStep(ledger),
   );
 }
 
@@ -197,6 +194,33 @@ export function blockedFullFiscalYearStep(
     state: "blocked",
     safeSignals: [signal],
     safeMessage: `Pack could not start a full fiscal year run for FY ${ledger.scope.financialYear}.`,
+  };
+}
+
+function recoverableActionRequiredFullFiscalYearStep(
+  ledger: FiledReturnsFullFiscalYearLedger,
+): PortalFlowStepResult {
+  const target =
+    (ledger.currentTargetId
+      ? ledger.targets.find((candidate) => candidate.targetId === ledger.currentTargetId)
+      : null) ?? ledger.targets.find((candidate) => candidate.status !== "pending");
+  if (!target) return blockedFullFiscalYearStep("full-fiscal-year-run-needs-action", ledger);
+
+  return {
+    connectorId: "gst",
+    scopeId: filedReturnsScopeId(ledger.scope.returnType),
+    state: "blocked",
+    safeSignals: Array.from(
+      new Set(["full-fiscal-year-run-needs-action", ...target.safeSignals]),
+    ),
+    safeMessage:
+      target.safeMessage ||
+      `Pack needs action before it can continue the FY ${ledger.scope.financialYear} run.`,
+    userAction: {
+      type: "RETRY_PORTAL_GENERATION",
+      message: `Resolve ${target.period}, then retry this period.`,
+      canResume: true,
+    },
   };
 }
 
