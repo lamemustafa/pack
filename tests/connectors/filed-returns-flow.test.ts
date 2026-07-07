@@ -203,27 +203,25 @@ describe("filed returns guided flow", () => {
     expect(result.userAction?.type).toBe("WAIT_FOR_PORTAL_AVAILABILITY");
   });
 
-  it("recognises the matching GSTR-2B summary page as download-ready", async () => {
+  it("recognises the matching GSTR-2B summary page as portal-capture ready", async () => {
     const documentRef = createGstr2bSummaryDocument();
-    vi.stubGlobal("localStorage", documentRef.defaultView?.localStorage);
-    localStorage.setItem("rtn_prd", "052026");
-    localStorage.setItem("sum052026", JSON.stringify({ summary: { available: true } }));
 
-    try {
-      const result = await runFiledReturnsDownloadStep(documentRef, {
-        artifactType: "PDF_AND_EXCEL",
-        financialYear: "2026-27",
-        period: "May",
-        returnType: "GSTR-2B",
-      });
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      artifactType: "PDF_AND_EXCEL",
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-2B",
+    });
 
-      expect(result.state).toBe("ready");
-      expect(result.safeSignals).toEqual(
-        expect.arrayContaining(["gstr2b-summary-route", "gstr2b-download-ready"]),
-      );
-    } finally {
-      vi.unstubAllGlobals();
-    }
+    expect(result.state).toBe("ready");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining([
+        "gstr2b-summary-route",
+        "gstr2b-visible-period-verified",
+        "gstr2b-download-ready",
+        "filed-return-download-ready",
+      ]),
+    );
   });
 
   it("selects GSTR-2B filters from the filed-returns page", async () => {
@@ -375,7 +373,7 @@ describe("filed returns guided flow", () => {
     expect(viewClicked).toBe(1);
   });
 
-  it("allows portal GSTR-2B capture when summary source JSON is unavailable", async () => {
+  it("ignores unrelated GSTR-2B localStorage when deciding portal-capture readiness", async () => {
     const documentRef = createGstr2bSummaryDocument();
     vi.stubGlobal("localStorage", documentRef.defaultView?.localStorage);
     localStorage.setItem("rtn_prd", "042026");
@@ -394,7 +392,6 @@ describe("filed returns guided flow", () => {
         expect.arrayContaining([
           "gstr2b-summary-route",
           "gstr2b-visible-period-verified",
-          "gstr2b-local-json-unavailable",
           "gstr2b-download-ready",
           "filed-return-download-ready",
         ]),
@@ -437,35 +434,29 @@ describe("filed returns guided flow", () => {
     },
   );
 
-  it("generates a local GSTR-2B PDF artifact from the verified period JSON", async () => {
+  it("captures the portal-generated GSTR-2B PDF instead of generating a local artifact", async () => {
     const documentRef = createGstr2bSummaryDocument();
-    vi.stubGlobal("localStorage", documentRef.defaultView?.localStorage);
-    try {
-      localStorage.setItem("rtn_prd", "052026");
-      localStorage.setItem("sum052026", JSON.stringify({ summary: { available: true } }));
 
-      const result = await triggerGstr2bDownload(documentRef, {
-        actionId: "action-gstr2b-pdf",
-        artifactType: "PDF",
-        financialYear: "2026-27",
-        period: "May",
-        returnType: "GSTR-2B",
-      });
+    const result = await triggerGstr2bDownload(documentRef, {
+      actionId: "action-gstr2b-pdf",
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-2B",
+    });
 
-      expect(result.capturedDownloadRequest).toMatchObject({
-        actionId: "action-gstr2b-pdf",
-        safeSignals: expect.arrayContaining([
-          "gstr2b-local-json-source-read",
-          "gstr2b-local-json-pdf-generated",
-        ]),
-      });
-      expect(result.capturedDownloadRequest?.dataUrl).toMatch(/^data:application\/pdf;base64,/);
-      expect(
-        atob(result.capturedDownloadRequest?.dataUrl.split(",")[1] ?? "").startsWith("%PDF-"),
-      ).toBe(true);
-    } finally {
-      vi.unstubAllGlobals();
-    }
+    expect(result.capturedDownloadRequest).toBeUndefined();
+    expect(result.mainWorldCaptureRequest).toMatchObject({
+      actionId: "action-gstr2b-pdf",
+      signalPrefix: "gstr2b",
+    });
+    expect(result.downloadTrigger.safeSignals).toEqual(
+      expect.arrayContaining([
+        "gstr2b-download-clicked",
+        "gstr2b-portal-blob-download-captured",
+        "gstr2b-extension-download-requested",
+      ]),
+    );
   });
 
   it("ignores hidden duplicate GSTR-2B download controls on the summary page", async () => {
@@ -473,32 +464,24 @@ describe("filed returns guided flow", () => {
       <button hidden>DOWNLOAD GSTR-2B SUMMARY (PDF)</button>
       <button aria-disabled="true">DOWNLOAD GSTR-2B DETAILS (EXCEL)</button>
     `);
-    vi.stubGlobal("localStorage", documentRef.defaultView?.localStorage);
-    try {
-      localStorage.setItem("rtn_prd", "052026");
-      localStorage.setItem("sum052026", JSON.stringify({ summary: { available: true } }));
 
-      const result = await triggerGstr2bDownload(documentRef, {
-        actionId: "action-gstr2b-visible-control",
-        artifactType: "PDF",
-        financialYear: "2026-27",
-        period: "May",
-        returnType: "GSTR-2B",
-      });
+    const result = await triggerGstr2bDownload(documentRef, {
+      actionId: "action-gstr2b-visible-control",
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-2B",
+    });
 
-      expect(result.downloadTrigger.state).toBe("clicked");
-      expect(result.downloadTrigger.safeSignals).toEqual(
-        expect.arrayContaining(["gstr2b-local-json-artifact-requested"]),
-      );
-      expect(result.capturedDownloadRequest?.safeSignals).toEqual(
-        expect.arrayContaining(["gstr2b-local-json-pdf-generated"]),
-      );
-    } finally {
-      vi.unstubAllGlobals();
-    }
+    expect(result.downloadTrigger.state).toBe("clicked");
+    expect(result.capturedDownloadRequest).toBeUndefined();
+    expect(result.mainWorldCaptureRequest).toMatchObject({
+      actionId: "action-gstr2b-visible-control",
+      signalPrefix: "gstr2b",
+    });
   });
 
-  it("generates a local GSTR-2B artifact from the portal alternate period source key", async () => {
+  it("captures the portal-generated GSTR-2B file even when localStorage contains period JSON", async () => {
     const documentRef = createGstr2bSummaryDocument();
     vi.stubGlobal("localStorage", documentRef.defaultView?.localStorage);
     try {
@@ -513,55 +496,35 @@ describe("filed returns guided flow", () => {
         returnType: "GSTR-2B",
       });
 
-      expect(result.capturedDownloadRequest).toMatchObject({
+      expect(result.capturedDownloadRequest).toBeUndefined();
+      expect(result.mainWorldCaptureRequest).toMatchObject({
         actionId: "action-gstr2b-alternate",
-        safeSignals: expect.arrayContaining([
-          "gstr2b-local-json-source-read",
-          "gstr2b-local-json-source-key-alternate",
-          "gstr2b-local-json-pdf-generated",
-        ]),
+        signalPrefix: "gstr2b",
       });
     } finally {
       vi.unstubAllGlobals();
     }
   });
 
-  it("generates a local GSTR-2B Excel artifact from the verified period JSON", async () => {
+  it("captures the portal-generated GSTR-2B Excel instead of generating a local workbook", async () => {
     const documentRef = createGstr2bSummaryDocument();
-    vi.stubGlobal("localStorage", documentRef.defaultView?.localStorage);
-    try {
-      localStorage.setItem("rtn_prd", "052026");
-      localStorage.setItem(
-        "sum052026",
-        JSON.stringify({ supplier: [{ ctin: "synthetic", txval: 100 }] }),
-      );
 
-      const result = await triggerGstr2bDownload(documentRef, {
-        actionId: "action-gstr2b-excel",
-        artifactType: "EXCEL",
-        financialYear: "2026-27",
-        period: "May",
-        returnType: "GSTR-2B",
-      });
+    const result = await triggerGstr2bDownload(documentRef, {
+      actionId: "action-gstr2b-excel",
+      artifactType: "EXCEL",
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-2B",
+    });
 
-      expect(result.capturedDownloadRequest).toMatchObject({
+    expect(result.capturedDownloadRequest).toBeUndefined();
+    expect(result.mainWorldCaptureRequest).toMatchObject({
         actionId: "action-gstr2b-excel",
-        safeSignals: expect.arrayContaining([
-          "gstr2b-local-json-source-read",
-          "gstr2b-local-json-excel-generated",
-        ]),
-      });
-      const payload = atob(result.capturedDownloadRequest?.dataUrl.split(",")[1] ?? "");
-      expect(result.capturedDownloadRequest?.dataUrl).toMatch(
-        /^data:application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet;base64,/,
-      );
-      expect(payload.startsWith("PK\u0003\u0004")).toBe(true);
-    } finally {
-      vi.unstubAllGlobals();
-    }
+      signalPrefix: "gstr2b",
+    });
   });
 
-  it("rejects stale GSTR-2B local JSON when the stored return period does not match", async () => {
+  it("does not use stale GSTR-2B local JSON as a download source", async () => {
     const documentRef = createGstr2bSummaryDocument();
     vi.stubGlobal("localStorage", documentRef.defaultView?.localStorage);
     try {

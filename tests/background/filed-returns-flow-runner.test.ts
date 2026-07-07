@@ -18,11 +18,6 @@ import {
 import { suggestNextBrowserDownloadFilename } from "../../src/background/download-filename-suggester";
 import { browser } from "wxt/browser";
 
-const PDF_DATA_URL = `data:application/pdf;base64,${globalThis.btoa("%PDF-1.7 synthetic")}`;
-const XLSX_DATA_URL = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${globalThis.btoa(
-  "PK\u0003\u0004synthetic",
-)}`;
-
 type RuntimeMock = typeof browser.runtime & {
   getContexts: ReturnType<typeof vi.fn<() => Promise<unknown[]>>>;
 };
@@ -776,126 +771,6 @@ describe("filed returns flow runner", () => {
         ],
       }),
     });
-  });
-
-  it("runs a GSTR-2B full fiscal year through local generated PDF and Excel artifacts", async () => {
-    const sendMessageToTabWithInjection = vi.fn<
-      FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
-    >(async (_tabId, message) => {
-      if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3") {
-        return {
-          ok: true,
-          flowStep: {
-            connectorId: "gst",
-            scopeId: "gst-gstr2b-private-v0",
-            state: "ready",
-            safeSignals: [
-              "gstr2b-summary-route",
-              "gstr2b-download-ready",
-              "filed-return-download-ready",
-            ],
-            safeMessage: "Ready.",
-          },
-        } as PackMessageResponse;
-      }
-
-      if (message.type === "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3") {
-        const artifactType = message.payload.artifactType ?? "PDF";
-        return {
-          ok: true,
-          capturedDownloadRequest: {
-            actionId: message.payload.actionId,
-            dataUrl: artifactType === "EXCEL" ? XLSX_DATA_URL : PDF_DATA_URL,
-            safeSignals: [
-              "gstr2b-local-json-source-read",
-              "gstr2b-local-json-source-key-alternate",
-              `gstr2b-local-json-${artifactType.toLowerCase()}-generated`,
-              "gstr2b-local-artifact-generated",
-            ],
-          },
-          downloadTrigger: {
-            connectorId: "gst",
-            scopeId: "gst-gstr2b-private-v0",
-            state: "clicked",
-            safeSignals: [
-              "gstr2b-local-json-artifact-requested",
-              "gstr2b-extension-download-requested",
-              "gstr2b-final-period-verified",
-              `gstr2b-artifact-clicked:${artifactType}`,
-            ],
-            safeMessage: "Generated locally.",
-          },
-        } as PackMessageResponse;
-      }
-
-      return { ok: false, error: "Unexpected call." };
-    });
-
-    const response = await startFiledReturnsDownloadFlow(
-      {
-        artifactType: "PDF_AND_EXCEL",
-        financialYear: "2026-27",
-        period: FULL_FISCAL_YEAR_PERIOD,
-        returnType: "GSTR-2B",
-      },
-      {
-        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
-        sendMessageToTabWithInjection,
-        storageKeys: {
-          completion: "completion",
-          fullFiscalYearLedger: "full-year-ledger",
-          observation: "observation",
-        },
-        now: () => new Date("2026-06-24T00:00:00+05:30"),
-        timings: {
-          flowStepSettleMs: 0,
-          resultRowNavigationSettleMs: 0,
-        },
-      },
-    );
-
-    expect(response).toMatchObject({
-      ok: true,
-      flowStep: {
-        state: "downloaded",
-        safeSignals: expect.arrayContaining([
-          "full-fiscal-year-complete",
-          "full-fiscal-year-zip-downloaded",
-          "full-fiscal-year-opfs-cleared",
-        ]),
-      },
-      flowSummary: {
-        status: "complete",
-        completedPeriods: ["April", "May"],
-        totalPeriods: 2,
-      },
-    });
-    expect(browser.runtime.sendMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: "PACK_OFFSCREEN_STAGE_FILED_RETURN",
-        payload: expect.objectContaining({ zipPath: "april.pdf" }),
-      }),
-    );
-    expect(browser.runtime.sendMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: "PACK_OFFSCREEN_STAGE_FILED_RETURN",
-        payload: expect.objectContaining({ zipPath: "may.xlsx" }),
-      }),
-    );
-    expect(browser.downloads.download).toHaveBeenCalledWith(
-      expect.objectContaining({
-        filename: "gstr-2b-2026-27-full-year.zip",
-      }),
-    );
-    expect(observeBrowserDownloadById).toHaveBeenCalledWith(
-      browser.downloads,
-      81,
-      expect.objectContaining({
-        expectedFileExtensions: [".zip"],
-        trustedDownloadIds: new Set([81]),
-      }),
-      5 * 60 * 1000,
-    );
   });
 
   it("exports a single-period GSTR-2B PDF and Excel selection as one zip", async () => {

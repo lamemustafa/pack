@@ -23,7 +23,6 @@ import { detectFiledReturnsPortalAvailabilityIssue } from "./filed-returns-porta
 import { findMatchingActionableFiledReturnRows } from "./filed-returns-result-rows";
 import { filedReturnScopeId } from "./filed-returns-return-descriptors";
 import { selectFiledReturnsFiltersAndSearch } from "./filed-returns-filter-form";
-import { hasMatchingGstr2bSourceJson } from "./gstr2b-local-artifact";
 
 const GSTR2B_SUMMARY_ROUTE = /\/gstr2b\/auth\/gstr2b\/summary\/?$/i;
 const GSTR2B_AUTH_ROUTE = /\/gstr2b\/auth(?:\/|$)/i;
@@ -78,30 +77,19 @@ export async function runGstr2bDownloadStep(
       if (recovery) return recovery;
       return periodGuard;
     }
-    if (!hasMatchingGstr2bSourceJson(scope)) {
-      return {
-        connectorId: "gst",
-        scopeId,
-        state: "ready",
-        safeSignals: [
-          ...safeSignals,
-          "gstr2b-summary-route",
-          "gstr2b-visible-period-verified",
-          "gstr2b-local-json-unavailable",
-          "gstr2b-download-ready",
-          "filed-return-download-ready",
-        ],
-        safeMessage:
-          "Pack found the selected GSTR-2B summary page and will try the portal download controls because matching local source data is unavailable.",
-      };
-    }
     return {
       connectorId: "gst",
       scopeId,
       state: "ready",
-      safeSignals: ["gstr2b-summary-route", "gstr2b-download-ready", "filed-return-download-ready"],
+      safeSignals: [
+        ...safeSignals,
+        "gstr2b-summary-route",
+        "gstr2b-visible-period-verified",
+        "gstr2b-download-ready",
+        "filed-return-download-ready",
+      ],
       safeMessage:
-        "Pack found the GSTR-2B summary page and is ready to start the selected download.",
+        "Pack found the GSTR-2B summary page and is ready to capture the GST Portal's generated file.",
     };
   }
 

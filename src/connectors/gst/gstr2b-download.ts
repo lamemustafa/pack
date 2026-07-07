@@ -1,6 +1,6 @@
 import type {
-  FiledReturnsMainWorldCaptureRequest,
   FiledReturnsCapturedDownloadRequest,
+  FiledReturnsMainWorldCaptureRequest,
   FiledReturnsDownloadTarget,
   PortalDownloadTriggerResult,
 } from "../../core/contracts";
@@ -13,7 +13,6 @@ import {
 import { filedReturnScopeId } from "./filed-returns-return-descriptors";
 import { prepareGstr2bPortalBlobDownloadCapture } from "./gstr2b-blob-capture";
 import { verifyVisibleGstr2bSummaryScope } from "./gstr2b-flow";
-import { buildGstr2bLocalArtifactRequest } from "./gstr2b-local-artifact";
 
 export interface Gstr2bDownloadTriggerResult {
   downloadTrigger: PortalDownloadTriggerResult;
@@ -57,25 +56,6 @@ export async function triggerGstr2bDownload(
     control,
     target.actionId,
   );
-  const capturedDownloadRequest = buildGstr2bLocalArtifactRequest(target);
-  if (capturedDownloadRequest) {
-    return {
-      capturedDownloadRequest,
-      downloadTrigger: {
-        connectorId: "gst",
-        scopeId,
-        state: "clicked",
-        safeSignals: [
-          "gstr2b-local-json-artifact-requested",
-          "gstr2b-extension-download-requested",
-          "gstr2b-final-period-verified",
-          `gstr2b-artifact-clicked:${artifactType}`,
-        ],
-        safeMessage:
-          "Pack generated the GSTR-2B file locally from the visible GST Portal source data and will stage it for the local zip.",
-      },
-    };
-  }
   if (!mainWorldCaptureRequest) {
     return {
       downloadTrigger: {
