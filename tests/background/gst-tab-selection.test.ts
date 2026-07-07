@@ -427,6 +427,73 @@ describe("Pack GST tab selection", () => {
     expect(browserMocks.tabs.get).not.toHaveBeenCalledWith(25);
   });
 
+  it("ignores GST access-denied pages when selecting a working portal tab", async () => {
+    browserMocks.tabs.query
+      .mockResolvedValueOnce([
+        {
+          active: true,
+          id: 24,
+          url: "https://services.gst.gov.in/services/error/accessdenied",
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          active: true,
+          id: 24,
+          url: "https://services.gst.gov.in/services/error/accessdenied",
+        },
+        {
+          active: false,
+          id: 25,
+          url: "https://return.gst.gov.in/returns/auth/dashboard",
+        },
+      ]);
+    const { getActiveGstTab } = await import("../../src/entrypoints/background");
+
+    await expect(getActiveGstTab()).resolves.toMatchObject({ id: 25 });
+  });
+
+  it("opens login instead of reusing a stale remembered access-denied tab", async () => {
+    browserMocks.storage.session.get.mockResolvedValueOnce({
+      "pack:last-gst-tab-id": 25,
+    });
+    browserMocks.tabs.get.mockResolvedValueOnce({
+      active: false,
+      id: 25,
+      url: "https://services.gst.gov.in/services/error/accessdenied",
+    });
+    browserMocks.tabs.query
+      .mockResolvedValueOnce([
+        {
+          active: true,
+          id: 24,
+          url: "chrome-extension://pack-test-extension/popup.html",
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          active: false,
+          id: 25,
+          url: "https://services.gst.gov.in/services/error/accessdenied",
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          active: true,
+          id: 24,
+          url: "chrome-extension://pack-test-extension/popup.html",
+        },
+        {
+          active: false,
+          id: 25,
+          url: "https://services.gst.gov.in/services/error/accessdenied",
+        },
+      ]);
+    const { getActiveGstTab } = await import("../../src/entrypoints/background");
+
+    await expect(getActiveGstTab()).resolves.toBeNull();
+  });
+
   it("remembers a supported GST tab when Brave activates it", async () => {
     browserMocks.tabs.get.mockResolvedValueOnce({
       active: true,

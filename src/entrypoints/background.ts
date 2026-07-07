@@ -1,7 +1,7 @@
 import { browser } from "wxt/browser";
 import {
   GST_PORTAL_TAB_URL_PATTERNS,
-  isSupportedGstPortalUrl,
+  isActionableGstPortalTabUrl,
   pickSupportedGstPortalTab,
   pickUniquePreferredGstPortalTab,
 } from "../connectors/gst/hosts";
@@ -331,7 +331,7 @@ export async function getActiveGstTab(): Promise<ActiveGstTab | null> {
   const currentWindowTabs = await browser.tabs.query({ currentWindow: true });
   const fallbackGstTabs = currentWindowTabs.filter(
     (tab): tab is Browser.tabs.Tab & { id: number } =>
-      typeof tab.id === "number" && isSupportedGstPortalUrl(tab.url),
+      typeof tab.id === "number" && isActionableGstPortalTabUrl(tab.url),
   );
   if (fallbackGstTabs.length === 1) return fallbackGstTabs[0] ?? null;
   return pickUniquePreferredGstPortalTab(fallbackGstTabs);
@@ -358,7 +358,7 @@ async function readRememberedGstTab(): Promise<ActiveGstTab | null> {
 
   try {
     const tab = await browser.tabs.get(tabId);
-    if (typeof tab.id !== "number" || !isSupportedGstPortalUrl(tab.url)) return null;
+    if (typeof tab.id !== "number" || !isActionableGstPortalTabUrl(tab.url)) return null;
     return tab as ActiveGstTab;
   } catch {
     return null;
@@ -368,7 +368,7 @@ async function readRememberedGstTab(): Promise<ActiveGstTab | null> {
 function isSupportedGstBrowserTab(
   tab: Browser.tabs.Tab | undefined,
 ): tab is Browser.tabs.Tab & { id: number } {
-  return typeof tab?.id === "number" && isSupportedGstPortalUrl(tab.url);
+  return typeof tab?.id === "number" && isActionableGstPortalTabUrl(tab.url);
 }
 
 export async function sendMessageToTabWithInjection(
