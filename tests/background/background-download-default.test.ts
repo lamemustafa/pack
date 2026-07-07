@@ -344,7 +344,7 @@ describe("background filed returns download defaults", () => {
     expect(browserMocks.downloads.download).toHaveBeenCalledTimes(1);
     expect(browserMocks.downloads.download).toHaveBeenCalledWith({
       conflictAction: "uniquify",
-      filename: `complyeaze-pack/gst/${financialYear}/gstr-3b-full-year.zip`,
+      filename: `gstr-3b-${financialYear.toLowerCase()}-full-year.zip`,
       saveAs: false,
       url: "blob:chrome-extension://pack/full-year.zip",
     });
@@ -361,7 +361,7 @@ describe("background filed returns download defaults", () => {
         expect.objectContaining({
           type: "PACK_OFFSCREEN_STAGE_FILED_RETURN",
           payload: expect.objectContaining({
-            zipPath: `complyeaze-pack/gst/${financialYear}/gstr-3b/${period.toLowerCase()}.pdf`,
+            zipPath: `${period.toLowerCase()}.pdf`,
           }),
         }),
       );

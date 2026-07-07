@@ -1039,7 +1039,7 @@ describe("filed returns guided flow", () => {
       expect.arrayContaining(["gstr2b-auth-route", "gstr2b-summary-loading"]),
     );
   });
-  it("blocks GSTR-2B summary downloads when the visible period does not match", async () => {
+  it("returns from a stale GSTR-2B summary page when the visible period does not match", async () => {
     const documentRef = createGstDocument(
       `
         <main>
@@ -1051,6 +1051,7 @@ describe("filed returns guided flow", () => {
       `,
       "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
     );
+    const back = vi.spyOn(documentRef.defaultView!.history, "back").mockImplementation(() => {});
 
     const result = await runFiledReturnsDownloadStep(documentRef, {
       artifactType: "PDF",
@@ -1059,8 +1060,15 @@ describe("filed returns guided flow", () => {
       returnType: "GSTR-2B",
     });
 
-    expect(result.state).toBe("blocked");
-    expect(result.safeSignals).toContain("gstr2b-visible-period-mismatch");
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining([
+        "gstr2b-visible-period-mismatch",
+        "gstr2b-summary-period-mismatch",
+        "gstr2b-summary-back-clicked",
+      ]),
+    );
+    expect(back).toHaveBeenCalledTimes(1);
   });
 
   it("rechecks the visible GSTR-2B period before capturing a portal blob", async () => {

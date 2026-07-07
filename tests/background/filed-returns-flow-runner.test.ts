@@ -716,7 +716,7 @@ describe("filed returns flow runner", () => {
     expect(browser.downloads.download).toHaveBeenCalledWith(
       expect.objectContaining({
         conflictAction: "uniquify",
-        filename: "complyeaze-pack/gst/2026-27/gstr-2b-full-year.zip",
+        filename: "gstr-2b-2026-27-full-year.zip",
         saveAs: false,
         url: "blob:chrome-extension://pack/full-year.zip",
       }),
@@ -725,7 +725,7 @@ describe("filed returns flow runner", () => {
       expect.objectContaining({
         type: "PACK_OFFSCREEN_STAGE_FILED_RETURN",
         payload: expect.objectContaining({
-          zipPath: "complyeaze-pack/gst/2026-27/gstr-2b/april.pdf",
+          zipPath: "april.pdf",
         }),
       }),
     );
@@ -733,7 +733,7 @@ describe("filed returns flow runner", () => {
       expect.objectContaining({
         type: "PACK_OFFSCREEN_STAGE_FILED_RETURN",
         payload: expect.objectContaining({
-          zipPath: "complyeaze-pack/gst/2026-27/gstr-2b/april.xlsx",
+          zipPath: "april.xlsx",
         }),
       }),
     );
@@ -765,6 +765,124 @@ describe("filed returns flow runner", () => {
         ],
       }),
     });
+  });
+
+  it("exports a single-period GSTR-2B PDF and Excel selection as one zip", async () => {
+    const sendMessageToTabWithInjection = vi.fn<
+      FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
+    >(async (_tabId, message) => {
+      if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3") {
+        return {
+          ok: true,
+          flowStep: {
+            connectorId: "gst",
+            scopeId: "gst-gstr2b-private-v0",
+            state: "ready",
+            safeSignals: [
+              "gstr2b-summary-route",
+              "gstr2b-download-ready",
+              "filed-return-download-ready",
+            ],
+            safeMessage: "Ready.",
+          },
+        } as PackMessageResponse;
+      }
+
+      if (message.type === "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3") {
+        const artifactType = message.payload.artifactType ?? "PDF";
+        return {
+          ok: true,
+          mainWorldCaptureRequest: {
+            actionId: message.payload.actionId,
+            controlAttribute: "data-pack-gstr2b-capture-action",
+            controlId: `control-${artifactType.toLowerCase()}`,
+            maxBytes: 36 * 1024 * 1024,
+            signalPrefix: "gstr2b",
+          },
+          downloadTrigger: {
+            connectorId: "gst",
+            scopeId: "gst-gstr2b-private-v0",
+            state: "clicked",
+            safeSignals: [
+              "gstr2b-download-clicked",
+              "gstr2b-portal-blob-download-captured",
+              "gstr2b-extension-download-requested",
+              `gstr2b-artifact-clicked:${artifactType}`,
+            ],
+            safeMessage: "Captured.",
+          },
+        } as PackMessageResponse;
+      }
+
+      return { ok: false, error: "Unexpected call." };
+    });
+
+    const response = await startFiledReturnsDownloadFlow(
+      {
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-2B",
+      },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+        },
+        now: () => new Date("2026-06-24T00:00:00+05:30"),
+        timings: {
+          flowStepSettleMs: 0,
+          resultRowNavigationSettleMs: 0,
+        },
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "downloaded",
+        safeSignals: expect.arrayContaining([
+          "filed-return-artifact-downloaded:PDF",
+          "filed-return-artifact-downloaded:EXCEL",
+          "single-period-opfs-cleared",
+          "single-period-zip-downloaded",
+        ]),
+      },
+      flowSummary: {
+        completedPeriods: ["May"],
+        status: "complete",
+        totalPeriods: 1,
+      },
+    });
+    expect(browser.downloads.download).toHaveBeenCalledTimes(1);
+    expect(browser.downloads.download).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conflictAction: "uniquify",
+        filename: "gstr-2b-2026-27-may.zip",
+        saveAs: false,
+        url: "blob:chrome-extension://pack/full-year.zip",
+      }),
+    );
+    expect(browser.runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "PACK_OFFSCREEN_STAGE_FILED_RETURN",
+        payload: expect.objectContaining({
+          zipPath: "may.pdf",
+        }),
+      }),
+    );
+    expect(browser.runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "PACK_OFFSCREEN_STAGE_FILED_RETURN",
+        payload: expect.objectContaining({
+          zipPath: "may.xlsx",
+        }),
+      }),
+    );
+    expect(observeBrowserDownloadById).toHaveBeenCalledTimes(1);
   });
 
   it("continues a GSTR-1 full fiscal year when a PDF is downloaded but Excel is unavailable", async () => {
@@ -2448,8 +2566,12 @@ describe("filed returns flow runner", () => {
       ok: true,
       flowStep: {
         state: "download-unconfirmed",
-        safeMessage: expect.stringContaining("e-invoice details Excel"),
-        safeSignals: expect.arrayContaining(["browser-download-not-observed"]),
+        safeMessage: expect.stringContaining("did not export a partial zip"),
+        safeSignals: expect.arrayContaining([
+          "browser-download-not-observed",
+          "single-period-zip-incomplete",
+          "single-period-opfs-cleared",
+        ]),
       },
     });
     expect("flowStep" in response).toBe(true);
@@ -2457,20 +2579,6 @@ describe("filed returns flow runner", () => {
     expect(response.flowStep.safeSignals).toEqual(
       expect.arrayContaining(["filed-return-artifact-unconfirmed:EXCEL"]),
     );
-    expect(browser.storage.session.set).toHaveBeenCalledWith({
-      completion: expect.objectContaining({
-        status: "partial",
-        scope: {
-          artifactType: "PDF_AND_EXCEL",
-          financialYear: "2025-26",
-          period: "May",
-          returnType: "GSTR-1",
-        },
-        flowStep: expect.objectContaining({
-          safeSignals: expect.arrayContaining(["filed-return-artifact-downloaded:PDF"]),
-        }),
-      }),
-    });
     expect(browser.storage.local.set).toHaveBeenCalledWith({
       "target-review": expect.objectContaining({
         targetId: "GSTR-1:2025-26:May:EXCEL",
@@ -2544,16 +2652,18 @@ describe("filed returns flow runner", () => {
       ok: true,
       flowStep: {
         state: "download-unconfirmed",
-        safeMessage: expect.stringContaining("e-invoice details Excel"),
+        safeMessage: expect.stringContaining("did not export a partial zip"),
         safeSignals: expect.arrayContaining([
           "browser-download-correlation-rejected",
           "filed-return-artifact-unconfirmed:EXCEL",
+          "single-period-zip-incomplete",
+          "single-period-opfs-cleared",
         ]),
       },
     });
   });
 
-  it("resumes a partial combined GSTR-1 run without re-clicking the completed PDF", async () => {
+  it("reruns a pre-bundle partial combined GSTR-1 run so the final zip is complete", async () => {
     mockSessionStorageGet({
       completion: {
         scope: {
@@ -2576,54 +2686,58 @@ describe("filed returns flow runner", () => {
         },
       },
     });
-    const responses: PackMessageResponse[] = [
-      {
-        ok: true,
-        flowStep: {
-          connectorId: "gst",
-          scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
-          state: "ready",
-          safeSignals: [
-            "filed-return-download-ready",
-            "filed-gstr1-download-ready",
-            "filed-return-detail-period:May",
-          ],
-          safeMessage: "Ready.",
-        },
-      },
-      {
-        ok: true,
-        flowStep: {
-          connectorId: "gst",
-          scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
-          state: "ready",
-          safeSignals: [
-            "filed-return-download-ready",
-            "filed-gstr1-download-ready",
-            "download-excel-gstr-1",
-            "filed-return-detail-period:May",
-          ],
-          safeMessage: "Excel ready.",
-        },
-      },
-      {
-        ok: true,
-        downloadTrigger: {
-          connectorId: "gst",
-          scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
-          state: "clicked",
-          safeSignals: [
-            "filed-return-download-clicked",
-            "filed-gstr1-download-clicked",
-            "text-download-excel-gstr1",
-          ],
-          safeMessage: "Clicked Excel download.",
-        },
-      },
-    ];
+    let downloadStepCount = 0;
     const sendMessageToTabWithInjection = vi.fn<
       FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
-    >(async () => responses.shift() ?? { ok: false, error: "Unexpected call." });
+    >(async (_tabId, message) => {
+      if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3") {
+        downloadStepCount += 1;
+        return {
+          ok: true,
+          flowStep: {
+            connectorId: "gst",
+            scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
+            state: "ready",
+            safeSignals: [
+              "filed-return-download-ready",
+              "filed-gstr1-download-ready",
+              ...(downloadStepCount > 1 ? ["download-excel-gstr-1"] : []),
+              "filed-return-detail-period:May",
+            ],
+            safeMessage: downloadStepCount > 1 ? "Excel ready." : "Ready.",
+          },
+        } as PackMessageResponse;
+      }
+
+      if (message.type === "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3") {
+        const artifactType = message.payload.artifactType ?? "PDF";
+        return {
+          ok: true,
+          mainWorldCaptureRequest: {
+            actionId: message.payload.actionId,
+            controlAttribute: "data-pack-gstr1-capture-action",
+            controlId: `control-gstr1-${artifactType.toLowerCase()}`,
+            maxBytes: 36 * 1024 * 1024,
+            signalPrefix: "filed-gstr1",
+          },
+          downloadTrigger: {
+            connectorId: "gst",
+            scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
+            state: "clicked",
+            safeSignals: [
+              "filed-return-download-clicked",
+              "filed-gstr1-download-clicked",
+              "filed-gstr1-portal-blob-download-captured",
+              "filed-gstr1-extension-download-requested",
+              `filed-return-artifact-clicked:${artifactType}`,
+            ],
+            safeMessage: "Captured.",
+          },
+        } as PackMessageResponse;
+      }
+
+      return { ok: false, error: "Unexpected call." };
+    });
 
     const response = await startFiledReturnsDownloadFlow(
       {
@@ -2654,6 +2768,7 @@ describe("filed returns flow runner", () => {
         safeSignals: expect.arrayContaining([
           "filed-return-artifact-downloaded:PDF",
           "filed-return-artifact-downloaded:EXCEL",
+          "single-period-zip-downloaded",
         ]),
       },
     });
@@ -2661,7 +2776,12 @@ describe("filed returns flow runner", () => {
       sendMessageToTabWithInjection.mock.calls
         .filter(([, message]) => message.type === "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3")
         .map(([, message]) => message.payload.artifactType),
-    ).toEqual(["EXCEL"]);
+    ).toEqual(["PDF", "EXCEL"]);
+    expect(browser.downloads.download).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filename: "gstr-1-2025-26-may.zip",
+      }),
+    );
   });
 
   it("blocks a combined GSTR-1 start when a child e-invoice details Excel review is unresolved", async () => {
