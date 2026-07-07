@@ -44,7 +44,7 @@ async function handleMessage(
     }
     try {
       const directory = await getLedgerDirectory(message.payload.ledgerId, true);
-      const fileHandle = await getNestedFileHandle(directory, message.payload.zipPath, true);
+      const fileHandle = await getLedgerFileHandle(directory, message.payload.zipPath, true);
       const writable = await fileHandle.createWritable();
       await writable.write(blob);
       await writable.close();
@@ -72,11 +72,11 @@ async function handleMessage(
         chunks: [],
         ledgerId: message.payload.ledgerId,
         totalChunks: message.payload.totalChunks,
-        zipPath: message.payload.zipPath,
+        zipPath: safeZipEntryFilename(message.payload.zipPath),
       };
     if (
       transfer.ledgerId !== message.payload.ledgerId ||
-      transfer.zipPath !== message.payload.zipPath ||
+      transfer.zipPath !== safeZipEntryFilename(message.payload.zipPath) ||
       transfer.totalChunks !== message.payload.totalChunks
     ) {
       chunkedFiledReturnsByTransfer.delete(key);
@@ -109,7 +109,7 @@ async function handleMessage(
     }
     try {
       const directory = await getLedgerDirectory(message.payload.ledgerId, true);
-      const fileHandle = await getNestedFileHandle(directory, message.payload.zipPath, true);
+      const fileHandle = await getLedgerFileHandle(directory, message.payload.zipPath, true);
       const writable = await fileHandle.createWritable();
       await writable.write(blob);
       await writable.close();
@@ -231,19 +231,18 @@ async function clearLedgerDirectory(ledgerId: string): Promise<void> {
   await packs.removeEntry(safeDirectorySegment(ledgerId), { recursive: true });
 }
 
-async function getNestedFileHandle(
+async function getLedgerFileHandle(
   directory: FileSystemDirectoryHandle,
   zipPath: string,
   create: boolean,
 ): Promise<FileSystemFileHandle> {
-  const segments = zipPath.split("/");
-  let currentDirectory = directory;
-  for (const segment of segments.slice(0, -1)) {
-    currentDirectory = await currentDirectory.getDirectoryHandle(segment, { create });
-  }
-  const fileName = segments.at(-1);
+  return directory.getFileHandle(safeZipEntryFilename(zipPath), { create });
+}
+
+function safeZipEntryFilename(zipPath: string): string {
+  const fileName = zipPath.split("/").at(-1);
   if (!fileName) throw new Error("Missing filename.");
-  return currentDirectory.getFileHandle(fileName, { create });
+  return fileName;
 }
 
 async function readZipEntries(

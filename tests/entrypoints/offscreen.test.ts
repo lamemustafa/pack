@@ -147,9 +147,7 @@ describe("offscreen Blob URL entrypoint", () => {
       staged: true,
       byteCountClass: "non-empty",
     });
-    expect(
-      opfsFiles.has("filed-return-packs/ledger-1/complyeaze-pack/gst/2025-26/gstr-3b/may.pdf"),
-    ).toBe(true);
+    expect(opfsFiles.has("filed-return-packs/ledger-1/may.pdf")).toBe(true);
 
     const zip = await sendOffscreenMessage({
       type: "PACK_OFFSCREEN_CREATE_FILED_RETURN_ZIP",
@@ -184,9 +182,7 @@ describe("offscreen Blob URL entrypoint", () => {
       requestId: "clear-request",
       cleared: true,
     });
-    expect(
-      opfsFiles.has("filed-return-packs/ledger-1/complyeaze-pack/gst/2025-26/gstr-3b/may.pdf"),
-    ).toBe(false);
+    expect(opfsFiles.has("filed-return-packs/ledger-1/may.pdf")).toBe(false);
   });
 
   it("assembles chunked filed-return bytes before staging", async () => {
@@ -213,9 +209,7 @@ describe("offscreen Blob URL entrypoint", () => {
       staged: true,
       byteCountClass: "non-empty",
     });
-    expect(
-      opfsFiles.has("filed-return-packs/ledger-1/complyeaze-pack/gst/2025-26/gstr-1/may.pdf"),
-    ).toBe(false);
+    expect(opfsFiles.has("filed-return-packs/ledger-1/may.pdf")).toBe(false);
 
     const second = await sendOffscreenMessage({
       type: "PACK_OFFSCREEN_STAGE_FILED_RETURN_CHUNK",
@@ -236,9 +230,7 @@ describe("offscreen Blob URL entrypoint", () => {
       staged: true,
       byteCountClass: "non-empty",
     });
-    expect(
-      opfsFiles.has("filed-return-packs/ledger-1/complyeaze-pack/gst/2025-26/gstr-1/may.pdf"),
-    ).toBe(true);
+    expect(opfsFiles.has("filed-return-packs/ledger-1/may.pdf")).toBe(true);
   });
 
   async function loadOffscreenEntrypoint() {
