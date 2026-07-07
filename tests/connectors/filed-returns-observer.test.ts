@@ -169,6 +169,7 @@ describe("filed returns private observer", () => {
     );
 
     expect(observation.state).toBe("download-not-visible");
+    expect(observation.scopeId).toBe("gst-filed-returns-gstr1-pdf-private-v0");
     expect(observation.userAction).toBeUndefined();
     expect(observation.safeSignals).toEqual(
       expect.arrayContaining(["gstr-1-detail-route", "filed-returns-heading", "gstr-1"]),
@@ -194,6 +195,53 @@ describe("filed returns private observer", () => {
         "filed-return-download-ready",
         "filed-gstr1-download-ready",
       ]),
+    );
+  });
+
+  it("recognises the GSTR-2B summary route as a filed-return restart context", () => {
+    const observation = observeFiledReturnsPageText(
+      `
+      Auto-drafted ITC Statement for the month
+      GSTR-2B
+      May 2026
+      Download GSTR-2B Summary (PDF)
+      Download GSTR-2B Details (Excel)
+    `,
+      { pathname: "/gstr2b/auth/gstr2b/summary" },
+    );
+
+    expect(observation.state).toBe("ready");
+    expect(observation.scopeId).toBe("gst-gstr2b-private-v0");
+    expect(observation.userAction).toBeUndefined();
+    expect(observation.safeSignals).toEqual(
+      expect.arrayContaining([
+        "gstr2b-summary-route",
+        "filed-returns-heading",
+        "gstr-2b",
+        "download-gstr2b-summary-pdf",
+        "download-gstr2b-details-excel",
+        "filed-return-download-ready",
+        "filed-gstr2b-download-ready",
+      ]),
+    );
+  });
+
+  it("keeps sparse GSTR-2B summary routes in scope while controls render", () => {
+    const observation = observeFiledReturnsPageText(
+      `
+      Auto-drafted ITC Statement for the month
+      GSTR-2B
+      May 2026
+    `,
+      { pathname: "/gstr2b/auth/gstr2b/summary" },
+    );
+
+    expect(observation.state).toBe("download-not-visible");
+    expect(observation.scopeId).toBe("gst-gstr2b-private-v0");
+    expect(observation.userAction).toBeUndefined();
+    expect(observation.safeMessage).toContain("GSTR-2B");
+    expect(observation.safeSignals).toEqual(
+      expect.arrayContaining(["gstr2b-summary-route", "filed-returns-heading", "gstr-2b"]),
     );
   });
 

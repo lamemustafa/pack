@@ -60,6 +60,24 @@ export default defineContentScript({
         return false;
       }
 
+      if (message.type === "PACK_CONTENT_REFRESH_CONTEXT_V3") {
+        const refreshedContext = detectGstPortalContext(window.location, document.title);
+        void browser.runtime
+          .sendMessage({
+            type: "PACK_CONTENT_CONTEXT",
+            payload: refreshedContext,
+          })
+          .catch(() => {
+            // Service workers can be unavailable during extension reload.
+          });
+        sendResponse({
+          ok: true,
+          context: refreshedContext,
+          contentScriptVersion: PACK_CONTENT_SCRIPT_PROTOCOL_VERSION,
+        } satisfies PackMessageResponse);
+        return false;
+      }
+
       if (message.type === "PACK_CONTENT_NAVIGATE_FILED_RETURNS_V3") {
         void navigateToFiledReturnsPage(document)
           .then((navigation) =>

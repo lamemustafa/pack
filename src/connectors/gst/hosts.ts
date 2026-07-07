@@ -5,6 +5,13 @@ const GST_PORTAL_ORIGINS = new Set([
   "https://gstr2b.gst.gov.in",
 ]);
 
+export const GST_PORTAL_TAB_URL_PATTERNS = [
+  "https://www.gst.gov.in/*",
+  "https://services.gst.gov.in/*",
+  "https://return.gst.gov.in/*",
+  "https://gstr2b.gst.gov.in/*",
+] as const;
+
 export interface GstPortalTabCandidate {
   id?: number | undefined;
   url?: string | undefined;

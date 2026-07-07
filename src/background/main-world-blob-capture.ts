@@ -4,6 +4,8 @@ import type {
   FiledReturnsMainWorldCaptureRequest,
 } from "../core/contracts";
 
+const CAPTURE_SUPPRESSION_SETTLE_MS = 1_000;
+
 export async function capturePortalBlobDownloadInMainWorld(
   tabId: number,
   request: FiledReturnsMainWorldCaptureRequest,
@@ -32,7 +34,7 @@ function isCapturedDownloadRequest(value: unknown): value is FiledReturnsCapture
   );
 }
 
-async function capturePortalBlobDownload(
+export async function capturePortalBlobDownload(
   config: FiledReturnsMainWorldCaptureRequest,
 ): Promise<FiledReturnsCapturedDownloadRequest | null> {
   return new Promise((resolve) => {
@@ -63,8 +65,15 @@ async function capturePortalBlobDownload(
     const settle = (request: FiledReturnsCapturedDownloadRequest | null) => {
       if (settled) return;
       settled = true;
-      restore();
-      resolve(request);
+      if (!request) {
+        restore();
+        resolve(request);
+        return;
+      }
+      window.setTimeout(() => {
+        restore();
+        resolve(request);
+      }, CAPTURE_SUPPRESSION_SETTLE_MS);
     };
 
     const readBlob = (blob: Blob, filename?: string | null) => {
@@ -91,9 +100,49 @@ async function capturePortalBlobDownload(
       reader.readAsDataURL(blob);
     };
 
+    const captureDataUrl = (dataUrl: string, filename?: string | null) => {
+      if (settled) return;
+      if (!dataUrl.startsWith("data:") || dataUrl.length > config.maxBytes * 2) return;
+      settle({
+        actionId: config.actionId,
+        dataUrl,
+        safeSignals: [
+          `${config.signalPrefix}-portal-data-url-captured`,
+          `${config.signalPrefix}-native-data-click-suppressed`,
+          `${config.signalPrefix}-main-world-capture`,
+          ...(filename ? [`${config.signalPrefix}-portal-filename-observed`] : []),
+        ],
+      });
+    };
+
+    const captureBlobUrl = (blobUrl: string, filename?: string | null) => {
+      if (settled) return;
+      void fetch(blobUrl)
+        .then((response) => (response.ok ? response.blob() : null))
+        .then((blob) => {
+          if (blob) readBlob(blob, filename);
+        })
+        .catch(() => undefined);
+    };
+
+    const captureAnchorDownload = (anchor: HTMLAnchorElement) => {
+      if (!anchor.hasAttribute("download")) return false;
+      if (anchor.href.startsWith("data:")) {
+        captureDataUrl(anchor.href, anchor.getAttribute("download"));
+        return true;
+      }
+      if (anchor.href.startsWith("blob:")) {
+        if (!capturedBlobUrls.has(anchor.href)) {
+          captureBlobUrl(anchor.href, anchor.getAttribute("download"));
+        }
+        return true;
+      }
+      return false;
+    };
+
     const shouldSuppressAnchor = (anchor: HTMLAnchorElement) => {
       if (capturedBlobUrls.has(anchor.href)) return true;
-      return anchor.hasAttribute("download") && anchor.href.startsWith("blob:");
+      return captureAnchorDownload(anchor);
     };
 
     URL.createObjectURL = function createObjectURL(value: Blob | MediaSource) {

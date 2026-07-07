@@ -14,6 +14,10 @@ import {
   mergeFlowStepWithDownloadObservation,
   observeBrowserDownloadById,
 } from "./download-observer";
+import {
+  gstr2bDialogFreeUnsupportedStep,
+  suppressNativePortalDownloadsDuringCapture,
+} from "./filed-returns-captured-portal-guard";
 import { capturedDownloadRejected } from "./filed-returns-captured-rejected";
 import { capturedDownloadSignalPrefix } from "./filed-returns-captured-signals";
 import { stageCapturedFiledReturnDownload } from "./filed-returns-captured-staging";
@@ -64,11 +68,27 @@ export async function startMainWorldCapturedFiledReturnDownload({
     );
   }
 
-  const capturedDownloadRequest = await capturePortalBlobDownloadInMainWorld(
-    tabId,
-    mainWorldCaptureRequest,
-  );
+  const nativeSuppression = suppressNativePortalDownloadsDuringCapture(scope, artifactType);
+  let capturedDownloadRequest: FiledReturnsCapturedDownloadRequest | null = null;
+  try {
+    capturedDownloadRequest = await capturePortalBlobDownloadInMainWorld(
+      tabId,
+      mainWorldCaptureRequest,
+    );
+  } finally {
+    nativeSuppression.stop();
+  }
+  const nativeSuppressionSignals = nativeSuppression.safeSignals();
   if (!capturedDownloadRequest) {
+    const unsupportedStep = gstr2bDialogFreeUnsupportedStep({
+      activePeriod,
+      nativeSuppressionSignals,
+      scope,
+      target,
+      triggerStep,
+    });
+    if (unsupportedStep) return unsupportedStep;
+
     return {
       ok: true,
       flowStep: withFiledReturnsDownloadDiagnostic({
@@ -79,6 +99,7 @@ export async function startMainWorldCapturedFiledReturnDownload({
           safeSignals: [
             ...triggerStep.safeSignals,
             `${mainWorldCaptureRequest.signalPrefix}-blob-capture-failed`,
+            ...nativeSuppressionSignals,
             ...(activePeriod ? [`filed-return-detail-period:${activePeriod}`] : []),
           ],
           safeMessage:
@@ -92,6 +113,12 @@ export async function startMainWorldCapturedFiledReturnDownload({
         },
         target,
       }),
+    };
+  }
+  if (nativeSuppressionSignals.length > 0) {
+    capturedDownloadRequest = {
+      ...capturedDownloadRequest,
+      safeSignals: [...capturedDownloadRequest.safeSignals, ...nativeSuppressionSignals],
     };
   }
 
@@ -167,6 +194,7 @@ export async function startCapturedFiledReturnDownload({
           state: "blocked",
           safeSignals: [
             ...triggerStep.safeSignals,
+            ...capturedDownloadRequest.safeSignals,
             "filed-return-offscreen-blob-url-rejected",
             ...(activePeriod ? [`filed-return-detail-period:${activePeriod}`] : []),
           ],
@@ -204,6 +232,7 @@ export async function startCapturedFiledReturnDownload({
           state: "blocked",
           safeSignals: [
             ...triggerStep.safeSignals,
+            ...capturedDownloadRequest.safeSignals,
             "gstr2b-extension-download-start-rejected",
             ...(activePeriod ? [`filed-return-detail-period:${activePeriod}`] : []),
           ],
@@ -237,6 +266,7 @@ export async function startCapturedFiledReturnDownload({
             ...triggerStep,
             safeSignals: [
               ...triggerStep.safeSignals,
+              ...capturedDownloadRequest.safeSignals,
               `${capturedDownloadSignalPrefix(target)}-extension-download-started`,
               ...(activePeriod ? [`filed-return-detail-period:${activePeriod}`] : []),
             ],

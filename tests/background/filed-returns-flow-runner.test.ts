@@ -1939,6 +1939,102 @@ describe("filed returns flow runner", () => {
     expect(observeBrowserDownloadById).not.toHaveBeenCalled();
   });
 
+  it("stops GSTR-2B when portal blob capture cannot stay dialog-free", async () => {
+    vi.mocked(browser.scripting.executeScript).mockImplementationOnce(async () => [
+      { result: null },
+    ]);
+    const responses: PackMessageResponse[] = [
+      {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-gstr2b-private-v0",
+          state: "ready",
+          safeSignals: [
+            "gstr2b-summary-route",
+            "gstr2b-download-ready",
+            "filed-return-download-ready",
+          ],
+          safeMessage: "Ready.",
+        },
+      },
+    ];
+    const sendMessageToTabWithInjection = vi.fn<
+      FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
+    >(async (_tabId, message) => {
+      if (message.type === "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3") {
+        return {
+          ok: true,
+          mainWorldCaptureRequest: {
+            actionId: message.payload.actionId,
+            controlAttribute: "data-pack-gstr2b-capture-action",
+            controlId: "control-pdf",
+            maxBytes: 36 * 1024 * 1024,
+            signalPrefix: "gstr2b",
+          },
+          downloadTrigger: {
+            connectorId: "gst",
+            scopeId: "gst-gstr2b-private-v0",
+            state: "clicked",
+            safeSignals: [
+              "gstr2b-download-clicked",
+              "gstr2b-portal-blob-download-captured",
+              "gstr2b-extension-download-requested",
+            ],
+            safeMessage: "Captured.",
+          },
+        } as PackMessageResponse;
+      }
+      return responses.shift() ?? { ok: false, error: "Unexpected call." };
+    });
+
+    const response = await startFiledReturnsDownloadFlow(
+      {
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-2B",
+      },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+        },
+        timings: {
+          flowStepSettleMs: 0,
+          resultRowNavigationSettleMs: 0,
+        },
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "unsupported-page",
+        safeSignals: expect.arrayContaining([
+          "gstr2b-dialog-free-capture-unsupported",
+          "gstr2b-blob-capture-failed",
+        ]),
+        downloadDiagnostic: {
+          returnType: "GSTR-2B",
+          period: "May",
+          artifactType: "PDF",
+          downloadPathClass: "captured-portal-request-unknown",
+          status: "unsupported-page",
+          errorCategory: "gstr2b-blob-capture-failed",
+        },
+        userAction: {
+          type: "NAVIGATE_TO_SUPPORTED_PAGE",
+          canResume: false,
+        },
+      },
+    });
+    expect(browser.downloads.download).not.toHaveBeenCalled();
+    expect(observeBrowserDownloadById).not.toHaveBeenCalled();
+  });
+
   it("explains that Brave's save dialog can block GSTR-2B portal blob downloads", async () => {
     vi.mocked(observeNextBrowserDownload).mockReturnValueOnce({
       promise: Promise.resolve({

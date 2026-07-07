@@ -54,6 +54,7 @@ export async function stageCapturedFiledReturnDownload({
           state: "blocked",
           safeSignals: [
             ...triggerStep.safeSignals,
+            ...capturedDownloadRequest.safeSignals,
             `${signalPrefix}-opfs-stage-failed`,
             ...(activePeriod ? [`filed-return-detail-period:${activePeriod}`] : []),
           ],
@@ -79,6 +80,7 @@ export async function stageCapturedFiledReturnDownload({
           state: "downloaded",
           safeSignals: [
             ...triggerStep.safeSignals,
+            ...capturedDownloadRequest.safeSignals,
             `${capturedDownloadSignalPrefix(target)}-${signalPrefix}-zip-staged`,
             `${signalPrefix}-opfs-staged`,
             ...(activePeriod ? [`filed-return-detail-period:${activePeriod}`] : []),

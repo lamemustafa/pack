@@ -27,7 +27,7 @@ import {
   type FiledReturnsReturnType,
 } from "./filed-returns-return-types";
 
-export const PACK_CONTENT_SCRIPT_PROTOCOL_VERSION = 12;
+export const PACK_CONTENT_SCRIPT_PROTOCOL_VERSION = 15;
 
 export interface DownloadPromptProbeResult {
   status: "started" | "start-rejected";
@@ -44,6 +44,7 @@ export type PackMessage =
   | { type: "PACK_FILED_RETURNS_OBSERVATION"; payload: PortalObservation }
   | { type: "PACK_PING" }
   | { type: "PACK_CONTENT_PING_V2" }
+  | { type: "PACK_CONTENT_REFRESH_CONTEXT_V3" }
   | { type: "PACK_GET_CONTEXT" }
   | { type: "PACK_GET_FILED_RETURNS_OBSERVATION" }
   | { type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" }
@@ -161,6 +162,7 @@ export function isPackMessage(input: unknown): input is PackMessage {
     case "PACK_ACKNOWLEDGE_INTERRUPTED_RUN":
     case "PACK_REFRESH_FILED_RETURNS_OBSERVATION":
     case "PACK_NAVIGATE_FILED_RETURNS":
+    case "PACK_CONTENT_REFRESH_CONTEXT_V3":
     case "PACK_CONTENT_REFRESH_FILED_RETURNS_OBSERVATION_V3":
     case "PACK_CONTENT_NAVIGATE_FILED_RETURNS_V3":
       return true;

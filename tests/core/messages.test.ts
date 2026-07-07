@@ -53,6 +53,7 @@ describe("message boundary", () => {
     expect(isPackMessage({ type: "PACK_ACKNOWLEDGE_INTERRUPTED_RUN" })).toBe(true);
     expect(isPackMessage({ type: "PACK_PING" })).toBe(true);
     expect(isPackMessage({ type: "PACK_CONTENT_PING_V2" })).toBe(true);
+    expect(isPackMessage({ type: "PACK_CONTENT_REFRESH_CONTEXT_V3" })).toBe(true);
     expect(isPackMessage({ type: "PACK_REFRESH_FILED_RETURNS_OBSERVATION" })).toBe(true);
     expect(isPackMessage({ type: "PACK_NAVIGATE_FILED_RETURNS" })).toBe(true);
     expect(isPackMessage({ type: "PACK_CONTENT_REFRESH_FILED_RETURNS_OBSERVATION_V3" })).toBe(true);

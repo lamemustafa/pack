@@ -160,7 +160,11 @@ export function observeFiledReturnsPageText(
     };
   }
 
-  if (!safeSignals.includes("gstr-3b") && !safeSignals.includes("gstr-1")) {
+  if (
+    !safeSignals.includes("gstr-3b") &&
+    !safeSignals.includes("gstr-1") &&
+    !safeSignals.includes("gstr-2b")
+  ) {
     return {
       connectorId: "gst",
       pageKind: "gst-filed-returns",
@@ -177,7 +181,7 @@ export function observeFiledReturnsPageText(
   return {
     connectorId: "gst",
     pageKind: "gst-filed-returns",
-    scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+    scopeId: scopeIdForVisibleReturnLabel(visibleReturnLabel),
     state: "download-not-visible",
     safeSignals,
     safeMessage: `${visibleReturnLabel} is visible, but a filed-return download control is not visible.`,
@@ -198,6 +202,7 @@ function detectSafeSignals(text: string, hints: FiledReturnsObservationHints): s
   if (signals.includes("gstr-3b-detail-route")) signals.push("filed-returns-heading");
   if (signals.includes("gstr-1-detail-route")) signals.push("filed-returns-heading", "gstr-1");
   if (signals.includes("gstr-1-summary-route")) signals.push("filed-returns-heading", "gstr-1");
+  if (signals.includes("gstr2b-summary-route")) signals.push("filed-returns-heading", "gstr-2b");
   if (/gstr[\s-]?3b/.test(text)) signals.push("gstr-3b");
   if (/\bgstr[\s-]?1\b/.test(text)) signals.push("gstr-1");
   if (/\bgstr[\s-]?2b\b/.test(text)) signals.push("gstr-2b");
@@ -237,6 +242,15 @@ function detectSafeSignals(text: string, hints: FiledReturnsObservationHints): s
     signals.push(
       "filed-return-download-ready",
       filedReturnScopedSignal("GSTR-1", "download-ready"),
+    );
+  }
+  if (
+    signals.includes("download-gstr2b-summary-pdf") ||
+    signals.includes("download-gstr2b-details-excel")
+  ) {
+    signals.push(
+      "filed-return-download-ready",
+      filedReturnScopedSignal("GSTR-2B", "download-ready"),
     );
   }
   if (/system generated summary for gstr[\s-]?3b/.test(text)) {
@@ -305,6 +319,15 @@ function isGstr2bSummaryRoute(hints: FiledReturnsObservationHints): boolean {
 }
 
 function detectVisibleReturnLabel(signals: readonly string[]): FiledReturnsReturnType {
+  if (signals.includes("gstr-2b")) return "GSTR-2B";
   if (signals.includes("gstr-1")) return "GSTR-1";
   return "GSTR-3B";
+}
+
+function scopeIdForVisibleReturnLabel(
+  returnType: FiledReturnsReturnType,
+): FiledReturnsObservation["scopeId"] {
+  if (returnType === "GSTR-2B") return "gst-gstr2b-private-v0";
+  if (returnType === "GSTR-1") return "gst-filed-returns-gstr1-pdf-private-v0";
+  return "gst-filed-returns-gstr3b-pdf-private-v0";
 }

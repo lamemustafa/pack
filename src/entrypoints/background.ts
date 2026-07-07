@@ -1,5 +1,6 @@
 import { browser } from "wxt/browser";
 import {
+  GST_PORTAL_TAB_URL_PATTERNS,
   isSupportedGstPortalUrl,
   pickSupportedGstPortalTab,
   pickUniquePreferredGstPortalTab,
@@ -23,6 +24,7 @@ import {
   startFiledReturnsDownloadFlow,
   type ActiveGstTab,
 } from "../background/filed-returns-flow-runner";
+import { observeFiledReturnsPageText } from "../connectors/gst/filed-returns-observer";
 import {
   clearFiledReturnsTargetReview,
   resolveUnconfirmedFiledReturnsDownload,
@@ -131,16 +133,22 @@ async function handleMessage(
     case "PACK_GET_CONTEXT":
       return {
         ok: true,
-        context: await readSessionValue<PortalContext>(PACK_SESSION_STORAGE_KEYS.lastContext),
+        context:
+          (await refreshActiveGstContext()) ??
+          (await readSessionValue<PortalContext>(PACK_SESSION_STORAGE_KEYS.lastContext)),
       };
-    case "PACK_GET_FILED_RETURNS_OBSERVATION":
-      await refreshActiveFiledReturnsObservation();
+    case "PACK_GET_FILED_RETURNS_OBSERVATION": {
+      const refreshedObservation = await refreshActiveFiledReturnsObservation();
       return {
         ok: true,
-        observation: await readSessionValue<PortalObservation>(
-          PACK_SESSION_STORAGE_KEYS.lastFiledReturnsObservation,
-        ),
+        observation:
+          refreshedObservation ??
+          (await inferActiveFiledReturnsObservation()) ??
+          (await readSessionValue<PortalObservation>(
+            PACK_SESSION_STORAGE_KEYS.lastFiledReturnsObservation,
+          )),
       };
+    }
     case "PACK_GET_FILED_RETURNS_FLOW_SUMMARY":
       return {
         ok: true,
@@ -232,21 +240,66 @@ function filedReturnsStorageKeys() {
   };
 }
 
-async function refreshActiveFiledReturnsObservation(): Promise<void> {
+async function refreshActiveFiledReturnsObservation(): Promise<PortalObservation | null> {
   const activeTab = await getActiveGstTab();
-  if (!activeTab) return;
+  if (!activeTab) return null;
 
   const response = await sendMessageToTabWithInjection(activeTab.id, {
     type: "PACK_CONTENT_REFRESH_FILED_RETURNS_OBSERVATION_V3",
   });
 
-  if (!response.ok) return;
+  if (!response.ok) return null;
 
   if ("observation" in response && response.observation) {
     await browser.storage.session.set({
       [PACK_SESSION_STORAGE_KEYS.lastFiledReturnsObservation]: response.observation,
     });
+    return response.observation;
   }
+  return null;
+}
+
+async function inferActiveFiledReturnsObservation(): Promise<PortalObservation | null> {
+  const activeTab = await getActiveGstTab();
+  if (!activeTab?.url) return null;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(activeTab.url);
+  } catch {
+    return null;
+  }
+
+  if (
+    parsed.origin === "https://gstr2b.gst.gov.in" &&
+    /\/gstr2b\/auth\/gstr2b\/summary\/?$/i.test(parsed.pathname)
+  ) {
+    const observation = observeFiledReturnsPageText("GSTR-2B", {
+      pathname: parsed.pathname,
+    });
+    await browser.storage.session.set({
+      [PACK_SESSION_STORAGE_KEYS.lastFiledReturnsObservation]: observation,
+    });
+    return observation;
+  }
+
+  return null;
+}
+
+async function refreshActiveGstContext(): Promise<PortalContext | null> {
+  const activeTab = await getActiveGstTab();
+  if (!activeTab) return null;
+
+  const response = await sendMessageToTabWithInjection(activeTab.id, {
+    type: "PACK_CONTENT_REFRESH_CONTEXT_V3",
+  });
+
+  if (!response.ok || !("context" in response)) return null;
+
+  await browser.storage.session.set({
+    [PACK_SESSION_STORAGE_KEYS.lastContext]: response.context,
+  });
+  return response.context;
 }
 
 export async function clearPackLocalData(): Promise<PackMessageResponse> {
@@ -267,6 +320,13 @@ export async function getActiveGstTab(): Promise<ActiveGstTab | null> {
 
   const rememberedGstTab = await readRememberedGstTab();
   if (rememberedGstTab) return rememberedGstTab;
+
+  const urlMatchedCurrentWindowTabs = await browser.tabs.query({
+    currentWindow: true,
+    url: [...GST_PORTAL_TAB_URL_PATTERNS],
+  });
+  const urlMatchedGstTab = pickUniquePreferredGstPortalTab(urlMatchedCurrentWindowTabs);
+  if (urlMatchedGstTab) return urlMatchedGstTab;
 
   const currentWindowTabs = await browser.tabs.query({ currentWindow: true });
   const fallbackGstTabs = currentWindowTabs.filter(
@@ -318,6 +378,7 @@ export async function sendMessageToTabWithInjection(
     {
       type:
         | "PACK_CONTENT_NAVIGATE_FILED_RETURNS_V3"
+        | "PACK_CONTENT_REFRESH_CONTEXT_V3"
         | "PACK_CONTENT_REFRESH_FILED_RETURNS_OBSERVATION_V3"
         | "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3"
         | "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V3"
