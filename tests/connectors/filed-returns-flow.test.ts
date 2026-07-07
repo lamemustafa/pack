@@ -1401,6 +1401,45 @@ describe("filed returns guided flow", () => {
     expect(filedReturnsClicked).toBe(1);
   });
 
+  it("extends an expiring GST session with Continue before navigating", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <section class="modal show" role="dialog">
+          <h2>Warning</h2>
+          <p>Your logged in session will expire in next 02:54 Minutes. Click Continue to extend your session, or click Logout to logout of the application.</p>
+          <a data-logout href="/services/logout">Logout</a>
+          <button data-continue>Continue</button>
+        </section>
+        <button data-return-dashboard>Return Dashboard</button>
+      </main>
+    `);
+    makeLayoutVisible(documentRef);
+    let continueClicked = 0;
+    let logoutClicked = 0;
+    let dashboardClicked = 0;
+    documentRef.querySelector("[data-continue]")?.addEventListener("click", () => {
+      continueClicked += 1;
+      documentRef.querySelector(".modal")?.remove();
+    });
+    documentRef.querySelector("[data-logout]")?.addEventListener("click", (event) => {
+      event.preventDefault();
+      logoutClicked += 1;
+    });
+    documentRef.querySelector("[data-return-dashboard]")?.addEventListener("click", () => {
+      dashboardClicked += 1;
+    });
+
+    const result = await navigateToFiledReturnsPage(documentRef);
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining(["safe-dialog-dismissed", "dialog-continue"]),
+    );
+    expect(continueClicked).toBe(1);
+    expect(logoutClicked).toBe(0);
+    expect(dashboardClicked).toBe(1);
+  });
+
   it("dismisses stacked GST fowelcome reminders before entering Return Dashboard", async () => {
     const documentRef = createGstDocument(
       `

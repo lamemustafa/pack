@@ -102,6 +102,30 @@ describe("full fiscal year ledger", () => {
     }
   });
 
+  it("surfaces a blocked target before generic resume confirmation", () => {
+    const summary = summariseFullFiscalYearLedger({
+      ...createLedger([
+        ["April", "blocked"],
+        ["May", "pending"],
+      ]),
+      status: "blocked",
+      currentTargetId: "GSTR-3B:2026-27:April",
+    });
+
+    expect(summary).toMatchObject({
+      status: "blocked",
+      currentPeriod: "April",
+      fullFiscalYearRecovery: {
+        targetId: "GSTR-3B:2026-27:April",
+        targetStatus: "blocked",
+      },
+      flowStep: {
+        state: "blocked",
+        safeSignals: ["full-fiscal-year-run-needs-action"],
+      },
+    });
+  });
+
   it("maps only positive not-filed evidence to a terminal not-filed target", () => {
     expect(
       targetStatusFromFlowStep({

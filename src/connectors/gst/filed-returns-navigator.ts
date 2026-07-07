@@ -36,6 +36,7 @@ const SAFE_POST_LOGIN_DIALOG_PATTERNS = [
   /furnish the bank account details/i,
   /(?:gta\s+)?annexure\s+v/i,
   /goods transport agency\s+annexure/i,
+  /logged in session will expire[\s\S]*click continue to extend your session/i,
 ];
 
 export interface NavigationCandidateInput {
@@ -263,8 +264,12 @@ export function scoreDialogDismissalCandidate(
     score += 50;
     safeSignals.push("dialog-close");
   }
+  if (/^continue$/.test(searchable)) {
+    score += 100;
+    safeSignals.push("dialog-continue");
+  }
 
-  const isAffirmative = /\b(yes|file|submit|navigate|proceed|click here|continue)\b/.test(
+  const isAffirmative = /\b(yes|file|submit|navigate|proceed|click here)\b/.test(
     searchable,
   );
   const isDismissive = /\b(no|cancel|remind|close)\b/.test(searchable);

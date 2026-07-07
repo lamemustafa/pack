@@ -196,15 +196,6 @@ function responseForExistingLedger(
     };
   }
 
-  if (!options.allowExistingLedgerResume && needsResumeConfirmation(ledger)) {
-    const step = blockedFullFiscalYearStep("full-fiscal-year-resume-confirmation-required", ledger);
-    return {
-      ok: true,
-      flowStep: step,
-      flowSummary: toFullFiscalYearSummary(ledger, step),
-    };
-  }
-
   if (hasActionRequiredFullFiscalYearTarget(ledger)) {
     const displayLedger = coerceInconsistentCompleteLedger(ledger, now);
     const step = blockedFullFiscalYearStep("full-fiscal-year-run-needs-action", displayLedger);
@@ -212,6 +203,15 @@ function responseForExistingLedger(
       ok: true,
       flowStep: step,
       flowSummary: toFullFiscalYearSummary(displayLedger, step),
+    };
+  }
+
+  if (!options.allowExistingLedgerResume && needsResumeConfirmation(ledger)) {
+    const step = blockedFullFiscalYearStep("full-fiscal-year-resume-confirmation-required", ledger);
+    return {
+      ok: true,
+      flowStep: step,
+      flowSummary: toFullFiscalYearSummary(ledger, step),
     };
   }
 

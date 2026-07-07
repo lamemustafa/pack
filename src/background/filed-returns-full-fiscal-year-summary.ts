@@ -55,6 +55,12 @@ export function summariseFullFiscalYearLedger(
   if (ledger.status === "complete") {
     return toFullFiscalYearSummary(ledger, completeFullFiscalYearStep(ledger));
   }
+  if (hasRecoverableActionRequiredTarget(ledger)) {
+    return toFullFiscalYearSummary(
+      ledger,
+      blockedFullFiscalYearStep("full-fiscal-year-run-needs-action", ledger),
+    );
+  }
   if (needsResumeConfirmation(ledger)) {
     return toFullFiscalYearSummary(
       ledger,
@@ -143,6 +149,12 @@ function isRecoverableFullFiscalYearTarget(target: FiledReturnsFullFiscalYearTar
     target.status === "blocked" ||
     target.status === "failed" ||
     target.status === "cancelled"
+  );
+}
+
+function hasRecoverableActionRequiredTarget(ledger: FiledReturnsFullFiscalYearLedger): boolean {
+  return ledger.targets.some((target) =>
+    ["blocked", "failed", "cancelled", "download-unconfirmed"].includes(target.status),
   );
 }
 
