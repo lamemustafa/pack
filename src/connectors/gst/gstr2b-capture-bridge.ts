@@ -30,6 +30,4 @@ export interface Gstr2bCaptureCapturedMessage {
 }
 
 export type Gstr2bCaptureMessage =
-  | Gstr2bCaptureRequestMessage
-  | Gstr2bCaptureAckMessage
-  | Gstr2bCaptureCapturedMessage;
+  Gstr2bCaptureRequestMessage | Gstr2bCaptureAckMessage | Gstr2bCaptureCapturedMessage;
