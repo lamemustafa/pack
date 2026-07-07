@@ -3,11 +3,11 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { FiledReturnsFlowSummary } from "../../src/core/contracts";
 import { FULL_FISCAL_YEAR_PERIOD } from "../../src/core/filed-returns-scope";
+import { ScopeForm } from "../../src/entrypoints/popup/components";
 import {
   canManuallyObserveFullFiscalYearTarget,
   RecoveryActions,
-  ScopeForm,
-} from "../../src/entrypoints/popup/components";
+} from "../../src/entrypoints/popup/recovery-actions";
 
 describe("popup full-year recovery actions", () => {
   it("offers manual observation only for final-click recovery states", () => {
@@ -34,7 +34,22 @@ describe("popup full-year recovery actions", () => {
     expect(markup).toContain("Discard saved run");
   });
 
-  it("shows the same-account warning on every full-year recovery path", () => {
+  it("shows the same-account warning only for resume confirmation", () => {
+    const resumeMarkup = renderToStaticMarkup(
+      createElement(RecoveryActions, {
+        busy: null,
+        summary: summaryFor("pending", "full-fiscal-year-resume-confirmation-required"),
+        onAcknowledgeInterruptedRun: () => undefined,
+        onRetryFullFiscalYearTarget: () => undefined,
+        onRetryTarget: () => undefined,
+        onResolveFullFiscalYearTarget: () => undefined,
+        onResolveTarget: () => undefined,
+      }),
+    );
+    expect(resumeMarkup).toContain(
+      "This saved run is not bound to a GST account. Continue only if the same GST account is currently open.",
+    );
+
     for (const targetStatus of ["blocked", "failed", "cancelled"] as const) {
       const markup = renderToStaticMarkup(
         createElement(RecoveryActions, {
@@ -48,7 +63,7 @@ describe("popup full-year recovery actions", () => {
         }),
       );
 
-      expect(markup).toContain(
+      expect(markup).not.toContain(
         "This saved run is not bound to a GST account. Continue only if the same GST account is currently open.",
       );
     }

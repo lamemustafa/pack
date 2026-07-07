@@ -17,12 +17,14 @@ import {
   normaliseFiledReturnsScope,
 } from "../../core/filed-returns-scope";
 import "../../styles/global.css";
-import { RecoveryActions, ScopeForm } from "./components";
+import { ScopeForm } from "./components";
 import {
   getFiledReturnsCompletionStatus,
   getFiledReturnsSummaryHeading,
   getScopeMatchedFiledReturnsSummary,
 } from "./flow-summary";
+import { RecoveryActions } from "./recovery-actions";
+import { DiagnosticSignals, RunProgress } from "./run-summary";
 
 function App() {
   const [status, setStatus] = React.useState("Loading Pack context...");
@@ -196,14 +198,16 @@ function App() {
   return (
     <main className="popup-shell">
       <header className="brand-header">
-        <img className="brand-logo" src="/brand/pack-logo-outlined.svg" alt="ComplyEaze Pack" />
-        <p className="brand-mode">GST Return Pack</p>
-        <h1 className="sr-only">ComplyEaze Pack GST Return Pack</h1>
+        <div>
+          <img className="brand-logo" src="/brand/pack-logo-outlined.svg" alt="ComplyEaze Pack" />
+          <h1>GST return downloads</h1>
+        </div>
+        <p className="brand-mode">{context?.supported ? "Portal ready" : "Local only"}</p>
       </header>
 
-      <section className="state" aria-live="polite">
-        <p>{completionStatus ?? status}</p>
-        <p className="muted">
+      <section className="status-card" aria-live="polite">
+        <p className="status-title">{completionStatus ?? status}</p>
+        <p className="status-detail">
           {context === null
             ? "Open GST Portal and choose a filed GST return period to begin."
             : context.supported
@@ -221,15 +225,20 @@ function App() {
       />
 
       {scopedFlowSummary && summaryHeading ? (
-        <section className="state">
-          <p>{summaryHeading}</p>
-          <p className="muted">{scopedFlowSummary.flowStep.safeMessage}</p>
+        <section className="summary-card">
+          <div>
+            <p className="section-label">Current run</p>
+            <p className="summary-title">{summaryHeading}</p>
+          </div>
+          <RunProgress summary={scopedFlowSummary} />
+          <p className="status-detail">{scopedFlowSummary.flowStep.safeMessage}</p>
           <DiagnosticSignals summary={scopedFlowSummary} />
         </section>
       ) : filedReturnsObservation ? (
-        <section className="state">
-          <p>Filed returns status: {filedReturnsObservation.state}</p>
-          <p className="muted">{filedReturnsObservation.safeMessage}</p>
+        <section className="summary-card">
+          <p className="section-label">Portal observation</p>
+          <p className="summary-title">Filed returns status: {filedReturnsObservation.state}</p>
+          <p className="status-detail">{filedReturnsObservation.safeMessage}</p>
         </section>
       ) : null}
 
@@ -247,29 +256,6 @@ function App() {
         No credentials, cookies, OTP, CAPTCHA, or GST documents are sent to ComplyEaze.
       </p>
     </main>
-  );
-}
-
-function DiagnosticSignals({ summary }: { summary: FiledReturnsFlowSummary }) {
-  const signals = summary.flowStep.safeSignals.filter(isDownloadDiagnosticSignal);
-  if (signals.length === 0) return null;
-
-  return <p className="muted">Download path signals: {signals.slice(0, 8).join(", ")}</p>;
-}
-
-function isDownloadDiagnosticSignal(signal: string): boolean {
-  return (
-    signal.includes("blob-capture") ||
-    signal.includes("portal-blob") ||
-    signal.includes("extension-download") ||
-    signal.includes("native-blob-click") ||
-    signal.includes("main-world-capture") ||
-    signal.includes("chunk") ||
-    signal.includes("opfs") ||
-    signal.includes("file-reader") ||
-    signal.includes("create-object-url") ||
-    signal.startsWith("filed-gstr3b-direct-download-started") ||
-    signal.startsWith("filed-gstr3b-direct-download-start-rejected")
   );
 }
 
