@@ -22,6 +22,25 @@ export function safeFiledReturnDownloadFilename(
   ].join("/");
 }
 
+export function safeFiledReturnZipEntryPath(
+  scope: FiledReturnsDownloadScope,
+  artifactType: FiledReturnsConcreteArtifactType,
+): string {
+  return `${safeFilenameSegment(scope.period)}${filedReturnsArtifactExtension(artifactType)}`;
+}
+
+export function safeFullFiscalYearZipFilename(scope: FiledReturnsDownloadScope): string {
+  return `${safeFilenameSegment(scope.returnType)}-${safeFilenameSegment(
+    scope.financialYear,
+  )}-full-year.zip`;
+}
+
+export function safeSinglePeriodZipFilename(scope: FiledReturnsDownloadScope): string {
+  return `${safeFilenameSegment(scope.returnType)}-${safeFilenameSegment(
+    scope.financialYear,
+  )}-${safeFilenameSegment(scope.period)}.zip`;
+}
+
 function safeFilenameSegment(value: string): string {
   return value
     .toLowerCase()

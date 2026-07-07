@@ -118,7 +118,7 @@ export async function startFullFiscalYearDownloadFlow(
         ...deps,
         persistTargetReview: false,
         preferDirectDownload: false,
-        stageCapturedDownloads: { ledgerId: ledger.ledgerId },
+        stageCapturedDownloads: { bundleKind: "full-fiscal-year", ledgerId: ledger.ledgerId },
       },
       { persistSinglePeriodSummary: false },
     );

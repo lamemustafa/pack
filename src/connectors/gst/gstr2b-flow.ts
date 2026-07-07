@@ -65,7 +65,14 @@ export async function runGstr2bDownloadStep(
 
   if (isGstr2bSummaryPage(documentRef, normalised)) {
     const periodGuard = verifyVisibleGstr2bPeriod(normalised, scope);
-    if (periodGuard) return periodGuard;
+    if (periodGuard) {
+      const recovery = returnFromMismatchedGstr2bSummary(documentRef, scopeId, [
+        ...safeSignals,
+        ...periodGuard.safeSignals,
+      ]);
+      if (recovery) return recovery;
+      return periodGuard;
+    }
     return {
       connectorId: "gst",
       scopeId,
@@ -180,6 +187,40 @@ function verifyVisibleGstr2bPeriod(
       message: "Open the GSTR-2B summary page for the requested month and financial year.",
       canResume: true,
     },
+  };
+}
+
+function returnFromMismatchedGstr2bSummary(
+  documentRef: Document,
+  scopeId: string,
+  safeSignals: readonly string[],
+): PortalFlowStepResult | null {
+  const history = documentRef.defaultView?.history;
+  if (history && typeof history.back === "function") {
+    history.back();
+    return {
+      connectorId: "gst",
+      scopeId,
+      state: "clicked",
+      safeSignals: Array.from(
+        new Set([...safeSignals, "gstr2b-summary-period-mismatch", "gstr2b-summary-back-clicked"]),
+      ),
+      safeMessage:
+        "Pack found a GSTR-2B summary for a different period and returned to the GST Return Dashboard so it can select the requested period.",
+    };
+  }
+
+  const dashboardNavigation = clickBestReturnDashboardCandidate(
+    documentRef,
+    "gstr2b-summary-period-mismatch",
+    safeSignals,
+    scopeId,
+  );
+  if (!dashboardNavigation) return null;
+  return {
+    ...dashboardNavigation,
+    safeMessage:
+      "Pack found a GSTR-2B summary for a different period and opened the GST Return Dashboard so it can select the requested period.",
   };
 }
 

@@ -1,5 +1,6 @@
 import { browser } from "wxt/browser";
 import type { FiledReturnsFullFiscalYearLedger, PortalFlowStepResult } from "../core/contracts";
+import type { FiledReturnsDownloadScope } from "../core/contracts";
 import {
   clearOffscreenFiledReturnLedger,
   closeOffscreenBlobDocument,
@@ -7,6 +8,10 @@ import {
   revokeOffscreenBlobUrl,
 } from "./offscreen-blob-url";
 import { observeBrowserDownloadById } from "./download-observer";
+import {
+  safeFullFiscalYearZipFilename,
+  safeSinglePeriodZipFilename,
+} from "./filed-returns-download-filename";
 
 export async function exportFullFiscalYearZip(
   ledger: FiledReturnsFullFiscalYearLedger,
@@ -18,15 +23,83 @@ export async function exportFullFiscalYearZip(
     return completeStep;
   }
 
-  const zip = await createOffscreenFiledReturnZipUrl(ledger.ledgerId);
+  return exportStagedFiledReturnsZip({
+    clearSignalPrefix: "full-fiscal-year",
+    completeStep,
+    ledgerId: ledger.ledgerId,
+    safeMessage: "Pack exported the fiscal-year return files as one local zip.",
+    startRejectedMessage:
+      "Pack prepared the fiscal-year zip, but the browser rejected the final save.",
+    unconfirmedMessage:
+      "Pack prepared the fiscal-year zip, but the final browser download did not complete.",
+    zipFailedMessage:
+      "Pack staged the fiscal-year files, but could not prepare the final zip export.",
+    zipFilename: safeFullFiscalYearZipFilename(ledger.scope),
+  });
+}
+
+export async function exportSinglePeriodFiledReturnsZip({
+  completeStep,
+  ledgerId,
+  scope,
+}: {
+  completeStep: PortalFlowStepResult;
+  ledgerId: string;
+  scope: FiledReturnsDownloadScope;
+}): Promise<PortalFlowStepResult> {
+  return exportStagedFiledReturnsZip({
+    clearSignalPrefix: "single-period",
+    completeStep,
+    ledgerId,
+    safeMessage: "Pack exported the selected filed-return files as one local zip.",
+    startRejectedMessage:
+      "Pack prepared the selected filed-return zip, but the browser rejected the final save.",
+    unconfirmedMessage:
+      "Pack prepared the selected filed-return zip, but the final browser download did not complete.",
+    zipFailedMessage:
+      "Pack staged the selected filed-return files, but could not prepare the final zip export.",
+    zipFilename: safeSinglePeriodZipFilename(scope),
+  });
+}
+
+export async function discardSinglePeriodFiledReturnsZip(ledgerId: string): Promise<string> {
+  const clearSignal = await clearStagedLedgerSignal(ledgerId, "single-period");
+  await closeOffscreenBlobDocument();
+  return clearSignal;
+}
+
+async function exportStagedFiledReturnsZip({
+  clearSignalPrefix,
+  completeStep,
+  ledgerId,
+  safeMessage,
+  startRejectedMessage,
+  unconfirmedMessage,
+  zipFailedMessage,
+  zipFilename,
+}: {
+  clearSignalPrefix: "full-fiscal-year" | "single-period";
+  completeStep: PortalFlowStepResult;
+  ledgerId: string;
+  safeMessage: string;
+  startRejectedMessage: string;
+  unconfirmedMessage: string;
+  zipFailedMessage: string;
+  zipFilename: string;
+}): Promise<PortalFlowStepResult> {
+  const zip = await createOffscreenFiledReturnZipUrl(ledgerId);
   if (!zip) {
-    const clearSignal = await clearStagedLedgerSignal(ledger.ledgerId);
+    const clearSignal = await clearStagedLedgerSignal(ledgerId, clearSignalPrefix);
     await closeOffscreenBlobDocument();
     return {
       ...completeStep,
       state: "blocked",
-      safeSignals: [...completeStep.safeSignals, "full-fiscal-year-zip-export-failed", clearSignal],
-      safeMessage: "Pack staged the fiscal-year files, but could not prepare the final zip export.",
+      safeSignals: [
+        ...completeStep.safeSignals,
+        `${clearSignalPrefix}-zip-export-failed`,
+        clearSignal,
+      ],
+      safeMessage: zipFailedMessage,
     };
   }
 
@@ -34,26 +107,26 @@ export async function exportFullFiscalYearZip(
   try {
     downloadId = await browser.downloads.download({
       conflictAction: "uniquify",
-      filename: fullFiscalYearZipFilename(ledger),
+      filename: zipFilename,
       saveAs: false,
       url: zip.blobUrl,
     });
   } catch {
     await revokeOffscreenBlobUrl(zip.blobUrl);
-    const clearSignal = await clearStagedLedgerSignal(ledger.ledgerId);
+    const clearSignal = await clearStagedLedgerSignal(ledgerId, clearSignalPrefix);
     await closeOffscreenBlobDocument();
     return {
       ...completeStep,
       state: "blocked",
       safeSignals: [
         ...completeStep.safeSignals,
-        "full-fiscal-year-zip-download-start-rejected",
+        `${clearSignalPrefix}-zip-download-start-rejected`,
         clearSignal,
       ],
-      safeMessage: "Pack prepared the fiscal-year zip, but the browser rejected the final save.",
+      safeMessage: startRejectedMessage,
       userAction: {
         type: "ALLOW_MULTIPLE_DOWNLOADS",
-        message: "Allow downloads for Pack, then retry the fiscal-year export.",
+        message: "Allow downloads for Pack, then retry the zip export.",
         canResume: true,
       },
     };
@@ -68,7 +141,7 @@ export async function exportFullFiscalYearZip(
     trustedDownloadIds: new Set([downloadId]),
   });
   await revokeOffscreenBlobUrl(zip.blobUrl);
-  const clearSignal = await clearStagedLedgerSignal(ledger.ledgerId);
+  const clearSignal = await clearStagedLedgerSignal(ledgerId, clearSignalPrefix);
   await closeOffscreenBlobDocument();
 
   if (observed.state !== "completed") {
@@ -77,13 +150,12 @@ export async function exportFullFiscalYearZip(
       state: observed.state === "failed" ? "blocked" : "download-unconfirmed",
       safeSignals: [
         ...completeStep.safeSignals,
-        "full-fiscal-year-zip-download-started",
-        "full-fiscal-year-zip-download-unconfirmed",
+        `${clearSignalPrefix}-zip-download-started`,
+        `${clearSignalPrefix}-zip-download-unconfirmed`,
         clearSignal,
         ...observed.safeSignals,
       ],
-      safeMessage:
-        "Pack prepared the fiscal-year zip, but the final browser download did not complete.",
+      safeMessage: unconfirmedMessage,
       ...(observed.userAction ? { userAction: observed.userAction } : {}),
     };
   }
@@ -92,23 +164,21 @@ export async function exportFullFiscalYearZip(
     ...completeStep,
     safeSignals: [
       ...completeStep.safeSignals,
-      "full-fiscal-year-zip-download-started",
-      "full-fiscal-year-zip-downloaded",
-      `full-fiscal-year-zip-entry-count:${zip.zipEntryCount}`,
+      `${clearSignalPrefix}-zip-download-started`,
+      `${clearSignalPrefix}-zip-downloaded`,
+      `${clearSignalPrefix}-zip-entry-count:${zip.zipEntryCount}`,
       clearSignal,
       ...observed.safeSignals,
     ],
-    safeMessage: "Pack exported the fiscal-year return files as one local zip.",
+    safeMessage,
   };
 }
 
-async function clearStagedLedgerSignal(ledgerId: string): Promise<string> {
+async function clearStagedLedgerSignal(
+  ledgerId: string,
+  prefix: "full-fiscal-year" | "single-period",
+): Promise<string> {
   return (await clearOffscreenFiledReturnLedger(ledgerId)) === "cleared"
-    ? "full-fiscal-year-opfs-cleared"
-    : "full-fiscal-year-opfs-clear-failed";
-}
-
-function fullFiscalYearZipFilename(ledger: FiledReturnsFullFiscalYearLedger): string {
-  const returnType = ledger.scope.returnType.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-  return `complyeaze-pack/gst/${ledger.scope.financialYear}/${returnType}-full-year.zip`;
+    ? `${prefix}-opfs-cleared`
+    : `${prefix}-opfs-clear-failed`;
 }

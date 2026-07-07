@@ -8,7 +8,7 @@ import type {
 import type { FiledReturnsConcreteArtifactType } from "../core/filed-returns-artifacts";
 import type { PackMessageResponse } from "../core/messages";
 import { withFiledReturnsDownloadDiagnostic } from "./filed-returns-download-diagnostics";
-import { safeFiledReturnDownloadFilename } from "./filed-returns-download-filename";
+import { safeFiledReturnZipEntryPath } from "./filed-returns-download-filename";
 import {
   targetReviewScope,
   withArtifactDownloadMessage,
@@ -36,10 +36,12 @@ export async function stageCapturedFiledReturnDownload({
   target: FiledReturnsDownloadTarget;
   triggerStep: PortalFlowStepResult;
 }): Promise<PackMessageResponse> {
+  const bundleKind = deps.stageCapturedDownloads?.bundleKind ?? "full-fiscal-year";
+  const signalPrefix = bundleKind === "single-period" ? "single-period" : "full-fiscal-year";
   const staged = await stageOffscreenFiledReturn({
     dataUrl: capturedDownloadRequest.dataUrl,
     ledgerId: deps.stageCapturedDownloads?.ledgerId ?? "unknown-ledger",
-    zipPath: safeFiledReturnDownloadFilename(scope, artifactType),
+    zipPath: safeFiledReturnZipEntryPath(scope, artifactType),
   });
 
   if (staged !== "staged") {
@@ -52,7 +54,7 @@ export async function stageCapturedFiledReturnDownload({
           state: "blocked",
           safeSignals: [
             ...triggerStep.safeSignals,
-            "full-fiscal-year-opfs-stage-failed",
+            `${signalPrefix}-opfs-stage-failed`,
             ...(activePeriod ? [`filed-return-detail-period:${activePeriod}`] : []),
           ],
           safeMessage:
@@ -77,11 +79,14 @@ export async function stageCapturedFiledReturnDownload({
           state: "downloaded",
           safeSignals: [
             ...triggerStep.safeSignals,
-            `${capturedDownloadSignalPrefix(target)}-full-fiscal-year-zip-staged`,
-            "full-fiscal-year-opfs-staged",
+            `${capturedDownloadSignalPrefix(target)}-${signalPrefix}-zip-staged`,
+            `${signalPrefix}-opfs-staged`,
             ...(activePeriod ? [`filed-return-detail-period:${activePeriod}`] : []),
           ],
-          safeMessage: "Pack staged the captured filed-return file for a single fiscal-year zip.",
+          safeMessage:
+            bundleKind === "single-period"
+              ? "Pack staged the captured filed-return file for a single local zip."
+              : "Pack staged the captured filed-return file for a single fiscal-year zip.",
         },
         artifactType,
       ),

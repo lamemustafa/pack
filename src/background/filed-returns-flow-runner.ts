@@ -22,6 +22,10 @@ import {
 } from "./filed-returns-active-run";
 import { triggerAndObserveFiledReturnDownload } from "./filed-returns-download-trigger";
 import { startFullFiscalYearDownloadFlow } from "./filed-returns-full-fiscal-year";
+import {
+  discardSinglePeriodFiledReturnsZip,
+  exportSinglePeriodFiledReturnsZip,
+} from "./filed-returns-full-fiscal-year-zip";
 import { runDownloadStepWithRetry } from "./filed-returns-flow-messaging";
 import {
   prepareFullFiscalYearTargetRetry,
@@ -71,6 +75,7 @@ export interface FiledReturnsFlowRunnerDeps {
   persistTargetReview?: boolean;
   preferDirectDownload?: boolean;
   stageCapturedDownloads?: {
+    bundleKind?: "full-fiscal-year" | "single-period";
     ledgerId: string;
   };
   timings?: {
@@ -374,9 +379,22 @@ async function triggerSelectedArtifacts({
   const artifactTypes = concreteFiledReturnsArtifactTypes(
     normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType),
   );
+  const singlePeriodBundleLedgerId =
+    artifactTypes.length > 1 && !deps.stageCapturedDownloads
+      ? createSinglePeriodBundleLedgerId(scope)
+      : null;
+  const artifactDeps: FiledReturnsFlowRunnerDeps = singlePeriodBundleLedgerId
+    ? {
+        ...deps,
+        stageCapturedDownloads: {
+          bundleKind: "single-period",
+          ledgerId: singlePeriodBundleLedgerId,
+        },
+      }
+    : deps;
   const persistedProgress =
-    artifactTypes.length > 1
-      ? await readPersistedArtifactProgress(scope, artifactTypes, deps)
+    artifactTypes.length > 1 && !singlePeriodBundleLedgerId
+      ? await readPersistedArtifactProgress(scope, artifactTypes, artifactDeps)
       : null;
   const completedArtifactTypes = new Set(persistedProgress?.completedArtifactTypes ?? []);
   let combinedFlowStep: PortalFlowStepResult | null = persistedProgress?.flowStep ?? null;
@@ -392,7 +410,7 @@ async function triggerSelectedArtifacts({
       activePeriod,
       artifactType,
       completedArtifactTypes,
-      deps,
+      deps: artifactDeps,
       scope,
       tabId,
     });
@@ -402,7 +420,7 @@ async function triggerSelectedArtifacts({
     const response = await triggerAndObserveFiledReturnDownload({
       activePeriod,
       artifactType,
-      deps,
+      deps: artifactDeps,
       scope,
       tabId,
     });
@@ -424,6 +442,25 @@ async function triggerSelectedArtifacts({
 
       if (!combinedFlowStep || artifactTypes.length === 1) return response;
 
+      if (singlePeriodBundleLedgerId) {
+        const clearSignal = await discardSinglePeriodFiledReturnsZip(singlePeriodBundleLedgerId);
+        return {
+          ...response,
+          flowStep: {
+            ...response.flowStep,
+            safeSignals: Array.from(
+              new Set([
+                ...response.flowStep.safeSignals,
+                "single-period-zip-incomplete",
+                clearSignal,
+              ]),
+            ),
+            safeMessage:
+              "Pack could not complete every selected filed-return artifact, so it did not export a partial zip.",
+          },
+        };
+      }
+
       const flowStep = markArtifactProgressNeedsReview(
         combineDownloadedArtifactFlowSteps(combinedFlowStep, response.flowStep),
         response,
@@ -439,8 +476,12 @@ async function triggerSelectedArtifacts({
     lastResponse = response;
     completedArtifactTypes.add(artifactType);
     combinedFlowStep = combineDownloadedArtifactFlowSteps(combinedFlowStep, response.flowStep);
-    if (artifactTypes.length > 1 && completedArtifactTypes.size < artifactTypes.length) {
-      await persistPartialArtifactSummary(scope, combinedFlowStep, deps);
+    if (
+      artifactTypes.length > 1 &&
+      completedArtifactTypes.size < artifactTypes.length &&
+      !singlePeriodBundleLedgerId
+    ) {
+      await persistPartialArtifactSummary(scope, combinedFlowStep, artifactDeps);
     }
   }
 
@@ -461,7 +502,7 @@ async function triggerSelectedArtifacts({
     };
   }
 
-  return {
+  const response: PackMessageResponse = {
     ...lastResponse,
     flowStep:
       artifactTypes.length === 1
@@ -471,6 +512,27 @@ async function triggerSelectedArtifacts({
             safeMessage: selectedArtifactsSafeMessage(combinedFlowStep),
           },
   };
+  if (!singlePeriodBundleLedgerId || artifactTypes.length === 1 || !response.ok) return response;
+  if (!("flowStep" in response) || response.flowStep.state !== "downloaded") return response;
+  if (!response.flowStep.safeSignals.includes("single-period-opfs-staged")) return response;
+
+  return {
+    ...response,
+    flowStep: await exportSinglePeriodFiledReturnsZip({
+      completeStep: response.flowStep,
+      ledgerId: singlePeriodBundleLedgerId,
+      scope,
+    }),
+  };
+}
+
+function createSinglePeriodBundleLedgerId(scope: FiledReturnsDownloadScope): string {
+  const suffix =
+    globalThis.crypto?.randomUUID?.() ??
+    `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+  return ["single-period", scope.returnType, scope.financialYear, scope.period, suffix]
+    .join(":")
+    .replace(/[^a-zA-Z0-9:._-]/g, "_");
 }
 
 function toOptionalArtifactUnavailableFlowStep({

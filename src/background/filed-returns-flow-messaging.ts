@@ -26,6 +26,7 @@ export interface FiledReturnsFlowMessagingDeps {
   persistTargetReview?: boolean;
   preferDirectDownload?: boolean;
   stageCapturedDownloads?: {
+    bundleKind?: "full-fiscal-year" | "single-period";
     ledgerId: string;
   };
   timings?: {

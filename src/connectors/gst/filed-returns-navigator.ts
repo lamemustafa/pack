@@ -3,7 +3,7 @@ import { detectFiledReturnsPortalAvailabilityIssue } from "./filed-returns-porta
 
 const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
 const MENU_REVEAL_DELAY_MS = 350;
-const DIALOG_SETTLE_DELAY_MS = 250;
+const DIALOG_SETTLE_DELAY_MS = 100;
 const MAX_DIALOG_DISMISSALS = 4;
 const CLICKABLE_SELECTOR = [
   "a",
