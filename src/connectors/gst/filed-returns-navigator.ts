@@ -42,6 +42,7 @@ export interface NavigationCandidateInput {
   text: string;
   href?: string;
   ariaLabel?: string;
+  className?: string;
   title?: string;
 }
 
@@ -295,7 +296,12 @@ export function findDialogDismissalCandidateIndex(
 export function scoreFiledReturnsSummaryModalDismissalCandidate(
   candidate: NavigationCandidateInput,
 ): NavigationCandidateScore {
-  const searchable = normaliseCandidateText([candidate.text, candidate.ariaLabel, candidate.title]);
+  const searchable = normaliseCandidateText([
+    candidate.text,
+    candidate.ariaLabel,
+    candidate.className,
+    candidate.title,
+  ]);
   const safeSignals: string[] = [];
   let score = 0;
 
@@ -306,6 +312,10 @@ export function scoreFiledReturnsSummaryModalDismissalCandidate(
   if (/^(x|×)$/.test(searchable)) {
     score += 80;
     safeSignals.push("summary-dialog-x");
+  }
+  if (/\bclose\b/.test(candidate.className ?? "")) {
+    score += 90;
+    safeSignals.push("summary-dialog-close-class");
   }
 
   const isPotentialPortalAction = /\b(download|file|submit|proceed|continue|yes|click here)\b/.test(
@@ -623,10 +633,12 @@ function toNavigationCandidateInput(element: HTMLElement): NavigationCandidateIn
       ? element.href
       : null;
   const ariaLabel = element.getAttribute("aria-label");
+  const className = element.className;
   const title = element.getAttribute("title");
 
   if (href) input.href = href;
   if (ariaLabel) input.ariaLabel = ariaLabel;
+  if (typeof className === "string" && className.trim()) input.className = className;
   if (title) input.title = title;
 
   return input;

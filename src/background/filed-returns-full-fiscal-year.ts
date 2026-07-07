@@ -38,6 +38,7 @@ import {
   mergeRetriedArtifactSignals,
   scopeForFullFiscalYearTarget,
 } from "./filed-returns-full-fiscal-year-artifacts";
+import { exportFullFiscalYearZip } from "./filed-returns-full-fiscal-year-zip";
 
 export type SinglePeriodRunner = (
   scope: FiledReturnsDownloadScope,
@@ -113,7 +114,12 @@ export async function startFullFiscalYearDownloadFlow(
 
     const response = await runSinglePeriod(
       retryScope,
-      { ...deps, persistTargetReview: false },
+      {
+        ...deps,
+        persistTargetReview: false,
+        preferDirectDownload: false,
+        stageCapturedDownloads: { ledgerId: ledger.ledgerId },
+      },
       { persistSinglePeriodSummary: false },
     );
 
@@ -244,7 +250,9 @@ async function completeRun(
   const completedLedger = completeFullFiscalYearLedger(ledger, deps.now?.() ?? new Date());
   const step = completeFullFiscalYearStep(completedLedger);
   await persistLedgerAndSummary(deps, completedLedger, step);
-  const summary = toFullFiscalYearSummary(completedLedger, step);
+  const zipStep = await exportFullFiscalYearZip(completedLedger, step);
+  const summary = toFullFiscalYearSummary(completedLedger, zipStep);
+  await persistSummary(deps, summary);
   return { ok: true, flowStep: summary.flowStep, flowSummary: summary };
 }
 

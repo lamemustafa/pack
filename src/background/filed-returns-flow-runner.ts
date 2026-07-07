@@ -70,6 +70,9 @@ export interface FiledReturnsFlowRunnerDeps {
   now?: () => Date;
   persistTargetReview?: boolean;
   preferDirectDownload?: boolean;
+  stageCapturedDownloads?: {
+    ledgerId: string;
+  };
   timings?: {
     contentMessageTimeoutMs?: number;
     flowStepSettleMs?: number;

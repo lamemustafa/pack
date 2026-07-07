@@ -14,6 +14,7 @@ export interface SyntheticDemoDeps {
   storageKeys: {
     lastManifest: string;
   };
+  downloadArtifacts?: boolean;
   now?: () => Date;
 }
 
@@ -32,14 +33,16 @@ export async function startSyntheticDemo(deps: SyntheticDemoDeps): Promise<PackM
   });
 
   let downloaded = 0;
-  for (const artifact of syntheticDownloadArtifacts(plan, results, manifest)) {
-    await browser.downloads.download({
-      conflictAction: "uniquify",
-      filename: `Pack-Demo/${artifact.filename}`,
-      saveAs: false,
-      url: makeDataUrl(artifact.mimeType, artifact.body),
-    });
-    downloaded += 1;
+  if (deps.downloadArtifacts === true) {
+    for (const artifact of syntheticDownloadArtifacts(plan, results, manifest)) {
+      await browser.downloads.download({
+        conflictAction: "uniquify",
+        filename: `Pack-Demo/${artifact.filename}`,
+        saveAs: false,
+        url: makeDataUrl(artifact.mimeType, artifact.body),
+      });
+      downloaded += 1;
+    }
   }
 
   await browser.storage.local.set({ [deps.storageKeys.lastManifest]: manifest });

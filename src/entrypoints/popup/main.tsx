@@ -223,6 +223,7 @@ function App() {
         <section className="state">
           <p>{summaryHeading}</p>
           <p className="muted">{scopedFlowSummary.flowStep.safeMessage}</p>
+          <DiagnosticSignals summary={scopedFlowSummary} />
         </section>
       ) : filedReturnsObservation ? (
         <section className="state">
@@ -245,6 +246,24 @@ function App() {
         No credentials, cookies, OTP, CAPTCHA, or GST documents are sent to ComplyEaze.
       </p>
     </main>
+  );
+}
+
+function DiagnosticSignals({ summary }: { summary: FiledReturnsFlowSummary }) {
+  const signals = summary.flowStep.safeSignals.filter(isDownloadDiagnosticSignal);
+  if (signals.length === 0) return null;
+
+  return <p className="muted">Download path signals: {signals.slice(0, 4).join(", ")}</p>;
+}
+
+function isDownloadDiagnosticSignal(signal: string): boolean {
+  return (
+    signal.includes("blob-capture") ||
+    signal.includes("portal-blob") ||
+    signal.includes("extension-download") ||
+    signal.includes("native-blob-click") ||
+    signal.startsWith("filed-gstr3b-direct-download-started") ||
+    signal.startsWith("filed-gstr3b-direct-download-start-rejected")
   );
 }
 

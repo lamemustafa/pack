@@ -29,6 +29,7 @@ import {
 } from "../background/filed-returns-target-review";
 import { clearPackLocalDataWithRecoveryGuard } from "../background/local-data";
 import { startSyntheticDemo } from "../background/synthetic-demo";
+import { runDownloadPromptProbe } from "../background/download-prompt-probe";
 
 export const PACK_LOCAL_STORAGE_KEYS = {
   activeFiledReturnsRun: "pack:active-filed-returns-run",
@@ -189,7 +190,13 @@ async function handleMessage(
         productVersion: packRuntimeVersion(),
         officialUrl: OFFICIAL_URL,
         storageKeys: { lastManifest: PACK_LOCAL_STORAGE_KEYS.lastManifest },
+        downloadArtifacts: message.payload?.downloadArtifacts === true,
       });
+    case "PACK_RUN_DOWNLOAD_PROMPT_PROBE":
+      return {
+        ok: true,
+        downloadPromptProbe: await runDownloadPromptProbe(message.payload?.sourceClass),
+      };
     case "PACK_CLEAR_LOCAL_DATA":
       return clearPackLocalData();
     case "PACK_GET_LAST_MANIFEST":

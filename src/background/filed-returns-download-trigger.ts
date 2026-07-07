@@ -15,9 +15,10 @@ import {
   observeNextBrowserDownload,
 } from "./download-observer";
 import { suggestNextBrowserDownloadFilename } from "./download-filename-suggester";
-import { startCapturedFiledReturnDownload } from "./filed-returns-captured-download";
+import { startMainWorldCapturedFiledReturnDownload } from "./filed-returns-captured-download";
 import { triggerDirectFiledReturnDownload } from "./filed-returns-direct-download-trigger";
 import { expectedDownloadForScope } from "./filed-returns-download-expectations";
+import { withFiledReturnsDownloadDiagnostic } from "./filed-returns-download-diagnostics";
 import { safeFiledReturnDownloadFilename } from "./filed-returns-download-filename";
 import {
   targetReviewScope,
@@ -47,12 +48,12 @@ export async function triggerAndObserveFiledReturnDownload({
 }): Promise<PackMessageResponse> {
   const target = createDownloadTarget(scope, artifactType);
   if (!target) return unverifiedPeriodResponse(scope);
-
-  if (
+  const shouldAttemptDirectDownload =
     artifactType === "PDF" &&
     deps.preferDirectDownload &&
-    filedReturnDescriptor(scope.returnType).supportsDirectDownload
-  ) {
+    filedReturnDescriptor(scope.returnType).supportsDirectDownload;
+
+  if (shouldAttemptDirectDownload) {
     const directDownloadResponse = await triggerDirectFiledReturnDownload({
       activePeriod,
       deps,
@@ -85,16 +86,17 @@ export async function triggerAndObserveFiledReturnDownload({
     detailDownloadFilenameSuggestion.stop();
   });
   const triggerResponse = await runDownloadTriggerOnce(deps, tabId, target);
-  if (triggerResponse.ok && "capturedDownloadRequest" in triggerResponse) {
+  if (triggerResponse.ok && "mainWorldCaptureRequest" in triggerResponse) {
     detailDownloadObservation.stop();
     detailDownloadFilenameSuggestion.stop();
-    return startCapturedFiledReturnDownload({
+    return startMainWorldCapturedFiledReturnDownload({
       activePeriod,
       armedAt,
       artifactType,
-      capturedDownloadRequest: triggerResponse.capturedDownloadRequest,
       deps,
+      mainWorldCaptureRequest: triggerResponse.mainWorldCaptureRequest,
       scope,
+      tabId,
       target,
       triggerStep: triggerResponse.downloadTrigger,
     });
@@ -110,21 +112,37 @@ export async function triggerAndObserveFiledReturnDownload({
   if (!shouldAwaitDownloadObservation(triggerFlowResponse.flowStep)) {
     detailDownloadObservation.stop();
     detailDownloadFilenameSuggestion.stop();
-    return triggerFlowResponse;
+    return {
+      ...triggerFlowResponse,
+      flowStep: withFiledReturnsDownloadDiagnostic({
+        attemptClass: shouldAttemptDirectDownload
+          ? "portal-click-after-direct-fallback"
+          : "portal-click",
+        flowStep: triggerFlowResponse.flowStep,
+        target,
+      }),
+    };
   }
 
   const observedDownload = await observedDownloadPromise;
-  const flowStep = withArtifactDownloadMessage(
-    withDownloadedArtifactSignal(
-      normaliseAmbiguousTriggerDownloadResult(
-        triggerFlowResponse.flowStep,
-        mergeFlowStepWithDownloadObservation(triggerFlowResponse.flowStep, observedDownload),
+  const flowStep = withFiledReturnsDownloadDiagnostic({
+    attemptClass: shouldAttemptDirectDownload
+      ? "portal-click-after-direct-fallback"
+      : "portal-click",
+    flowStep: withArtifactDownloadMessage(
+      withDownloadedArtifactSignal(
+        normaliseAmbiguousTriggerDownloadResult(
+          triggerFlowResponse.flowStep,
+          mergeFlowStepWithDownloadObservation(triggerFlowResponse.flowStep, observedDownload),
+        ),
+        artifactType,
       ),
+      scope,
       artifactType,
     ),
-    scope,
-    artifactType,
-  );
+    safeEvidence: observedDownload.safeEvidence,
+    target,
+  });
   let flowSummary: FiledReturnsFlowSummary | null = null;
   if (deps.persistTargetReview !== false) {
     flowSummary = await persistFiledReturnsTargetReview(

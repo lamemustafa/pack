@@ -1,6 +1,6 @@
 import type {
   ArchiveManifest,
-  FiledReturnsCapturedDownloadRequest,
+  FiledReturnsMainWorldCaptureRequest,
   FiledReturnsFlowSummary,
   FiledReturnsDirectDownloadRequest,
   FiledReturnsDownloadScope,
@@ -27,7 +27,17 @@ import {
   type FiledReturnsReturnType,
 } from "./filed-returns-return-types";
 
-export const PACK_CONTENT_SCRIPT_PROTOCOL_VERSION = 11;
+export const PACK_CONTENT_SCRIPT_PROTOCOL_VERSION = 12;
+
+export interface DownloadPromptProbeResult {
+  status: "started" | "start-rejected";
+  safeSignals: string[];
+  safeMessage: string;
+  filenameClass: "synthetic-download-prompt-probe";
+  saveAsFalse: true;
+  sourceClass: "data-url" | "offscreen-blob-url";
+  downloadId?: number;
+}
 
 export type PackMessage =
   | { type: "PACK_CONTENT_CONTEXT"; payload: PortalContext }
@@ -62,7 +72,11 @@ export type PackMessage =
   | { type: "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD"; payload: FiledReturnsDownloadTarget }
   | { type: "PACK_RUN_FILED_RETURNS_DOWNLOAD_STEP"; payload: FiledReturnsDownloadScope }
   | { type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW"; payload: FiledReturnsDownloadScope }
-  | { type: "PACK_START_SYNTHETIC_DEMO" }
+  | { type: "PACK_START_SYNTHETIC_DEMO"; payload?: { downloadArtifacts?: boolean } }
+  | {
+      type: "PACK_RUN_DOWNLOAD_PROMPT_PROBE";
+      payload?: { sourceClass?: "data-url" | "offscreen-blob-url" };
+    }
   | { type: "PACK_CLEAR_LOCAL_DATA" }
   | { type: "PACK_GET_LAST_MANIFEST" }
   | { type: "PACK_CONTENT_REFRESH_FILED_RETURNS_OBSERVATION_V3" }
@@ -99,7 +113,7 @@ export type PackMessageResponse =
     }
   | {
       ok: true;
-      capturedDownloadRequest: FiledReturnsCapturedDownloadRequest;
+      mainWorldCaptureRequest: FiledReturnsMainWorldCaptureRequest;
       downloadTrigger: PortalDownloadTriggerResult;
       observation?: PortalObservation | null;
     }
@@ -112,6 +126,7 @@ export type PackMessageResponse =
   | { ok: true; flowSummary: FiledReturnsFlowSummary | null }
   | { ok: true; manifest: ArchiveManifest | null }
   | { ok: true; downloaded: number; manifest: ArchiveManifest }
+  | { ok: true; downloadPromptProbe: DownloadPromptProbeResult }
   | { ok: true; cleared: true }
   | { ok: false; error: string };
 
@@ -132,6 +147,14 @@ export function isPackMessage(input: unknown): input is PackMessage {
     case "PACK_PING":
     case "PACK_CONTENT_PING_V2":
     case "PACK_GET_CONTEXT":
+    case "PACK_RUN_DOWNLOAD_PROMPT_PROBE":
+      return (
+        input.payload === undefined ||
+        (isRecord(input.payload) &&
+          (input.payload.sourceClass === undefined ||
+            input.payload.sourceClass === "data-url" ||
+            input.payload.sourceClass === "offscreen-blob-url"))
+      );
     case "PACK_GET_FILED_RETURNS_OBSERVATION":
     case "PACK_GET_FILED_RETURNS_FLOW_SUMMARY":
     case "PACK_GET_ACTIVE_FILED_RETURNS_RUN":
@@ -161,6 +184,12 @@ export function isPackMessage(input: unknown): input is PackMessage {
     case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
       return isFiledReturnsStartScope(input.payload);
     case "PACK_START_SYNTHETIC_DEMO":
+      return (
+        input.payload === undefined ||
+        (isRecord(input.payload) &&
+          (input.payload.downloadArtifacts === undefined ||
+            typeof input.payload.downloadArtifacts === "boolean"))
+      );
     case "PACK_CLEAR_LOCAL_DATA":
     case "PACK_GET_LAST_MANIFEST":
       return true;

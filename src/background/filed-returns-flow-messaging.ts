@@ -25,6 +25,9 @@ export interface FiledReturnsFlowMessagingDeps {
   now?: () => Date;
   persistTargetReview?: boolean;
   preferDirectDownload?: boolean;
+  stageCapturedDownloads?: {
+    ledgerId: string;
+  };
   timings?: {
     contentMessageTimeoutMs?: number;
   };

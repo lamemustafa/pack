@@ -1,4 +1,5 @@
 import type {
+  BrowserDownloadSafeEvidence,
   PortalDownloadTriggerResult,
   PortalFlowStepResult,
   UserActionRequired,
@@ -24,6 +25,7 @@ export interface SafeDownloadObservation {
   safeSignals: string[];
   safeMessage: string;
   userAction?: UserActionRequired;
+  safeEvidence?: BrowserDownloadSafeEvidence;
 }
 
 export interface DownloadCreatedItem {

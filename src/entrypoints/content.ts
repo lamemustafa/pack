@@ -1,7 +1,7 @@
 import { browser } from "wxt/browser";
 import { detectGstPortalContext } from "../connectors/gst/detect";
 import { runFiledReturnsDownloadStep } from "../connectors/gst/filed-returns-flow";
-import { triggerFiledReturnFiledPdfDownload } from "../connectors/gst/filed-returns-download";
+import { triggerFiledReturnDownload } from "../connectors/gst/filed-returns-download";
 import { triggerGstr2bDownload } from "../connectors/gst/gstr2b-download";
 import { resolveFiledGstr3bVerifiedPdfDownloadRequest } from "../connectors/gst/filed-returns-direct-download-probe";
 import { navigateToFiledReturnsPage } from "../connectors/gst/filed-returns-navigator";
@@ -86,12 +86,12 @@ export default defineContentScript({
       if (message.type === "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3") {
         if (message.payload.returnType === "GSTR-2B") {
           void triggerGstr2bDownload(document, message.payload)
-            .then(({ capturedDownloadRequest, downloadTrigger }) => {
+            .then(({ mainWorldCaptureRequest, downloadTrigger }) => {
               const observation = sendFiledReturnsObservation();
-              if (capturedDownloadRequest) {
+              if (mainWorldCaptureRequest) {
                 sendResponse({
                   ok: true,
-                  capturedDownloadRequest,
+                  mainWorldCaptureRequest,
                   downloadTrigger,
                   observation,
                 } satisfies PackMessageResponse);
@@ -113,9 +113,18 @@ export default defineContentScript({
           return true;
         }
 
-        void triggerFiledReturnFiledPdfDownload(document, message.payload)
-          .then((downloadTrigger) => {
+        void triggerFiledReturnDownload(document, message.payload)
+          .then(({ mainWorldCaptureRequest, downloadTrigger }) => {
             const observation = sendFiledReturnsObservation();
+            if (mainWorldCaptureRequest) {
+              sendResponse({
+                ok: true,
+                mainWorldCaptureRequest,
+                downloadTrigger,
+                observation,
+              } satisfies PackMessageResponse);
+              return;
+            }
             sendResponse({
               ok: true,
               downloadTrigger,

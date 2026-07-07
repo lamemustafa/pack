@@ -193,6 +193,9 @@ export function markFullFiscalYearTargetTerminal(
           status,
           safeSignals: flowStep.safeSignals,
           safeMessage: flowStep.safeMessage,
+          ...(flowStep.downloadDiagnostic
+            ? { downloadDiagnostic: flowStep.downloadDiagnostic }
+            : {}),
           ...(POSITIVE_TARGET_STATUSES.has(status) ? { completedAt: timestamp } : {}),
           updatedAt: timestamp,
         }

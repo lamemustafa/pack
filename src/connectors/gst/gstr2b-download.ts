@@ -1,5 +1,5 @@
 import type {
-  FiledReturnsCapturedDownloadRequest,
+  FiledReturnsMainWorldCaptureRequest,
   FiledReturnsDownloadTarget,
   PortalDownloadTriggerResult,
 } from "../../core/contracts";
@@ -10,12 +10,12 @@ import {
   detectFiledReturnsPortalAvailabilityIssue,
 } from "./filed-returns-portal-availability";
 import { filedReturnScopeId } from "./filed-returns-return-descriptors";
-import { captureGstr2bPortalBlobDownload } from "./gstr2b-blob-capture";
+import { prepareGstr2bPortalBlobDownloadCapture } from "./gstr2b-blob-capture";
 import { verifyVisibleGstr2bSummaryScope } from "./gstr2b-flow";
 
 export interface Gstr2bDownloadTriggerResult {
   downloadTrigger: PortalDownloadTriggerResult;
-  capturedDownloadRequest?: FiledReturnsCapturedDownloadRequest;
+  mainWorldCaptureRequest?: FiledReturnsMainWorldCaptureRequest;
 }
 
 export async function triggerGstr2bDownload(
@@ -49,12 +49,12 @@ export async function triggerGstr2bDownload(
     };
   }
 
-  const capturedDownloadRequest = await captureGstr2bPortalBlobDownload(
+  const mainWorldCaptureRequest = prepareGstr2bPortalBlobDownloadCapture(
     documentRef,
     control,
     target.actionId,
   );
-  if (!capturedDownloadRequest) {
+  if (!mainWorldCaptureRequest) {
     return {
       downloadTrigger: {
         connectorId: "gst",
@@ -77,7 +77,7 @@ export async function triggerGstr2bDownload(
   }
 
   return {
-    capturedDownloadRequest,
+    mainWorldCaptureRequest,
     downloadTrigger: {
       connectorId: "gst",
       scopeId,
@@ -88,7 +88,6 @@ export async function triggerGstr2bDownload(
         "gstr2b-extension-download-requested",
         "gstr2b-final-period-verified",
         `gstr2b-artifact-clicked:${artifactType}`,
-        ...capturedDownloadRequest.safeSignals,
       ],
       safeMessage:
         "Pack captured the GST Portal's generated GSTR-2B file and will save it through the browser downloads API.",
