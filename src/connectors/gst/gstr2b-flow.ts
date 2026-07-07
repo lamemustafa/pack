@@ -825,13 +825,18 @@ function matchesGstr2bIntentControl(element: HTMLElement, intent: "view"): boole
 function hasLocallyScopedGstr2bText(element: HTMLElement): boolean {
   let current: HTMLElement | null = element;
   for (let depth = 0; current && depth < 5; depth += 1, current = current.parentElement) {
-    if (isSpecificGstr2bText(current.textContent ?? "")) return true;
+    const currentText = current.textContent ?? "";
+    if (containsReturnTypeText(currentText)) return isSpecificGstr2bText(currentText);
     const previous = current.previousElementSibling;
     const next = current.nextElementSibling;
     if (previous && isSpecificGstr2bText(previous.textContent ?? "")) return true;
     if (next && isSpecificGstr2bText(next.textContent ?? "")) return true;
   }
   return false;
+}
+
+function containsReturnTypeText(text: string): boolean {
+  return /gstr-?(?:1a?|2a|2b|3b)\b/.test(normaliseText(text));
 }
 
 function isSpecificGstr2bText(text: string): boolean {

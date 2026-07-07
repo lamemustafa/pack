@@ -369,6 +369,74 @@ describe("filed returns guided flow", () => {
     expect(searchClicked).toBe(1);
   });
 
+  it("clicks the GSTR-2B View control instead of adjacent GSTR-1 dashboard controls", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <form name="dashboard">
+            <label for="fy">Financial Year</label>
+            <select id="fy" name="fin">
+              <option selected>2026-27</option>
+            </select>
+            <label for="quarter">Quarter</label>
+            <select id="quarter" name="quarter">
+              <option selected>Quarter 1 (Apr - Jun)</option>
+            </select>
+            <label for="period">Period</label>
+            <select id="period" name="mon">
+              <option selected>May</option>
+            </select>
+            <button type="button" data-search>Search</button>
+          </form>
+          <section class="return-grid">
+            <article>
+              <h3>Details of outward supplies of goods or services GSTR-1</h3>
+              <button type="button" data-gstr1-view>VIEW</button>
+              <button type="button">DOWNLOAD</button>
+            </article>
+            <article>
+              <h3>Auto - drafted ITC Statement for the month GSTR-2B</h3>
+              <button type="button" data-gstr2b-view>VIEW</button>
+              <button type="button">DOWNLOAD</button>
+            </article>
+            <article>
+              <h3>Monthly Return GSTR-3B</h3>
+              <button type="button">VIEW GSTR3B</button>
+              <button type="button">DOWNLOAD</button>
+            </article>
+          </section>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/dashboard",
+    );
+    makeLayoutVisible(documentRef);
+    let gstr1ViewClicked = 0;
+    let gstr2bViewClicked = 0;
+    let searchClicked = 0;
+    documentRef.querySelector("[data-gstr1-view]")?.addEventListener("click", () => {
+      gstr1ViewClicked += 1;
+    });
+    documentRef.querySelector("[data-gstr2b-view]")?.addEventListener("click", () => {
+      gstr2bViewClicked += 1;
+    });
+    documentRef.querySelector("[data-search]")?.addEventListener("click", () => {
+      searchClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-2B",
+    });
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toContain("gstr2b-dashboard-view-clicked");
+    expect(gstr1ViewClicked).toBe(0);
+    expect(gstr2bViewClicked).toBe(1);
+    expect(searchClicked).toBe(0);
+  });
+
   it("waits for the GSTR-2B return dashboard controls when the portal shell is still blank", async () => {
     const documentRef = createGstDocument("", "https://return.gst.gov.in/returns/auth/dashboard");
 
