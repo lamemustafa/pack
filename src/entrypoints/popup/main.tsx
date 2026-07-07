@@ -17,6 +17,7 @@ import {
   normaliseFiledReturnsScope,
 } from "../../core/filed-returns-scope";
 import "../../styles/global.css";
+import "../../styles/popup.css";
 import { ScopeForm } from "./components";
 import {
   getFiledReturnsCompletionStatus,
