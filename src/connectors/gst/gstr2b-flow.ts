@@ -23,6 +23,7 @@ import { filedReturnScopeId } from "./filed-returns-return-descriptors";
 
 const GSTR2B_SUMMARY_ROUTE = /\/gstr2b\/auth\/gstr2b\/summary\/?$/i;
 const GSTR2B_AUTH_ROUTE = /\/gstr2b\/auth(?:\/|$)/i;
+const GSTR2B_OFFLINE_DOWNLOAD_ROUTE = /\/returns\/auth\/gstr\/offlinedownload\/?$/i;
 const DASHBOARD_FIELD_SETTLE_DELAY_MS = 500;
 const DASHBOARD_DEPENDENT_FIELD_ATTEMPTS = 6;
 const FINANCIAL_YEAR_LABEL = /financial\s+year/i;
@@ -80,6 +81,28 @@ export async function runGstr2bDownloadStep(
       safeSignals: ["gstr2b-summary-route", "gstr2b-download-ready", "filed-return-download-ready"],
       safeMessage:
         "Pack found the GSTR-2B summary page and is ready to start the selected download.",
+    };
+  }
+
+  if (isGstr2bOfflineDownloadPage(documentRef, normalised)) {
+    return {
+      connectorId: "gst",
+      scopeId,
+      state: "unsupported-page",
+      safeSignals: [
+        ...safeSignals,
+        "gstr2b-offline-download-route",
+        "gstr2b-async-json-generation-flow",
+        "gstr2b-dialog-free-download-unsupported",
+      ],
+      safeMessage:
+        "The GST Portal opened GSTR-2B's offline JSON generation page. This flow generates a file asynchronously on the portal and is not a reviewed dialog-free PDF/Excel download path in Pack yet.",
+      userAction: {
+        type: "NAVIGATE_TO_SUPPORTED_PAGE",
+        message:
+          "Use the GST Portal's GSTR-2B offline JSON generation/download manually for this period.",
+        canResume: false,
+      },
     };
   }
 
@@ -473,6 +496,14 @@ function isGstr2bSummaryPage(documentRef: Document, normalisedText: string): boo
 function isGstr2bAuthRoute(documentRef: Document): boolean {
   const pathname = documentRef.defaultView?.location.pathname ?? "";
   return GSTR2B_AUTH_ROUTE.test(pathname);
+}
+
+function isGstr2bOfflineDownloadPage(documentRef: Document, normalisedText: string): boolean {
+  const pathname = documentRef.defaultView?.location.pathname ?? "";
+  return (
+    GSTR2B_OFFLINE_DOWNLOAD_ROUTE.test(pathname) &&
+    normalisedText.includes("generate json file to download")
+  );
 }
 
 function dashboardFiltersMatch(
