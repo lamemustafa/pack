@@ -33,6 +33,11 @@ For each release candidate:
 - Confirm live download observation remains bounded to a user-initiated run and
   does not persist or transmit raw download URLs, referrers, absolute local
   paths, filenames, portal HTML, or taxpayer identifiers.
+- Confirm transient artifact-byte handling is used only during an explicit
+  user-started, target-bound local download or full-year ZIP export. Captured
+  PDF/XLS bytes may exist transiently in memory or OPFS for that active export
+  only, and must not be written to extension storage, IndexedDB, Cache Storage,
+  diagnostics, logs, telemetry, support bundles, or ComplyEaze systems.
 - Confirm `pack:active-filed-returns-run`, when present, contains only the
   selected financial year, period, return type, artifact type, run ID,
   revision, status, and lease timestamp needed to prevent overlapping local
