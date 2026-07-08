@@ -77,8 +77,6 @@ async function runSinglePeriodSteps(
     activePeriod = extractActivePeriod(lastStep) ?? activePeriod;
 
     if (lastStep.safeSignals.includes("filed-return-api-result-posted")) {
-      await delay(getResultRowNavigationSettleMs(deps));
-
       return waitForDetailReadyThenTrigger({
         activePeriod,
         deps,
@@ -92,8 +90,6 @@ async function runSinglePeriodSteps(
       lastStep.safeSignals.includes("filed-return-result-view-clicked") ||
       lastStep.safeSignals.includes("gstr2b-dashboard-view-clicked")
     ) {
-      await delay(getResultRowNavigationSettleMs(deps));
-
       if (shouldWaitForDetailReadyAfterResultNavigation(scope)) {
         return waitForDetailReadyThenTrigger({
           activePeriod,
@@ -103,6 +99,8 @@ async function runSinglePeriodSteps(
           tabId,
         });
       }
+
+      await delay(getResultRowNavigationSettleMs(deps));
 
       return triggerSinglePeriodDownloadAndPersistSummary({
         activePeriod,

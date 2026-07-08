@@ -3405,6 +3405,49 @@ describe("filed returns flow runner", () => {
     expect(sendMessageToTabWithInjection).toHaveBeenCalledTimes(4);
   });
 
+  it("polls GSTR-2B detail readiness immediately after dashboard navigation", async () => {
+    const responses: PackMessageResponse[] = [
+      gstr2bDashboardViewClicked("May"),
+      gstr2bDownloadReady("May"),
+      gstr2bDownloadClicked(),
+    ];
+    const sendMessageToTabWithInjection = vi.fn<
+      FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
+    >(async () => responses.shift() ?? { ok: false, error: "Unexpected call." });
+
+    const response = await startFiledReturnsDownloadFlow(
+      {
+        artifactType: "PDF",
+        financialYear: "2025-26",
+        period: "May",
+        returnType: "GSTR-2B",
+      },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+        },
+        now: () => new Date("2026-07-03T00:00:00.000Z"),
+        timings: {
+          flowStepSettleMs: 0,
+          resultRowNavigationSettleMs: 60_000,
+        },
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "downloaded",
+        safeSignals: expect.arrayContaining(["filed-gstr2b-download-clicked"]),
+      },
+    });
+    expect(sendMessageToTabWithInjection).toHaveBeenCalledTimes(3);
+  });
+
   it("starts a fresh detail wait after opening GSTR-2B from the return dashboard", async () => {
     const responses: PackMessageResponse[] = [
       gstr2bDashboardViewClicked("April"),
