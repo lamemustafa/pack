@@ -1,5 +1,6 @@
 import type { PortalNavigationResult } from "../../core/contracts";
 import { dismissSafePostLoginDialogs } from "./filed-returns-dialogs";
+import { clickBestHiddenFiledReturnsMenuCandidate } from "./filed-returns-hidden-navigation";
 import {
   collectSafeNavigationDiagnostics,
   findFiledReturnsNavigationCandidateIndex,
@@ -12,7 +13,6 @@ import {
   getClickableElements,
   isReturnsMenuCandidate,
   isServicesMenuCandidate,
-  isVisible,
   revealMenuCandidate,
   toNavigationCandidateInput,
 } from "./filed-returns-navigation-dom";
@@ -74,6 +74,7 @@ export async function navigateToFiledReturnsPage(
 
   const hiddenMenuPass = clickBestHiddenFiledReturnsMenuCandidate(
     documentRef,
+    FILED_RETURNS_SCOPE_ID,
     "hidden-services-returns-menu",
     safeSignals,
   );
@@ -256,53 +257,6 @@ export function clickBestReturnDashboardCandidate(
     ],
     safeMessage:
       "Pack clicked the GST Return Dashboard entry. After the portal loads, click Start download again if Pack is not already on View Filed Returns.",
-  };
-}
-
-function clickBestHiddenFiledReturnsMenuCandidate(
-  documentRef: Document,
-  scanStage: string,
-  prefixSignals: readonly string[],
-): PortalNavigationResult | null {
-  const candidates = getClickableElements(documentRef, { includeHidden: true })
-    .filter((element) => !isVisible(element))
-    .map((element) => ({
-      element,
-      candidate: toNavigationCandidateInput(element),
-    }))
-    .map(({ element, candidate }) => ({
-      element,
-      candidate,
-      score: scoreFiledReturnsNavigationCandidate(candidate),
-    }))
-    .filter(({ score }) => {
-      const isExplicitFiledReturnsTarget =
-        score.safeSignals.includes("text-view-filed-returns") ||
-        score.safeSignals.includes("href-efiledreturns");
-      return (
-        score.score >= 90 &&
-        isExplicitFiledReturnsTarget &&
-        !score.safeSignals.includes("excluded-account-navigation")
-      );
-    })
-    .sort((left, right) => right.score.score - left.score.score);
-
-  const best = candidates[0];
-  if (!best) return null;
-
-  activateElement(best.element);
-
-  return {
-    connectorId: "gst",
-    scopeId: FILED_RETURNS_SCOPE_ID,
-    state: "clicked",
-    safeSignals: [
-      ...prefixSignals,
-      "hidden-filed-returns-candidate-clicked",
-      scanStage,
-      ...best.score.safeSignals,
-    ],
-    safeMessage: "Pack clicked the portal's hidden View Filed Returns menu candidate.",
   };
 }
 

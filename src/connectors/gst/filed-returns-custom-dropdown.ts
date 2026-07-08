@@ -6,9 +6,9 @@ import {
   matchesAcceptedText,
   normaliseText,
 } from "./filed-returns-dom";
+import { waitForVisibleCustomDropdownOption } from "./filed-returns-custom-dropdown-options";
 
 const DROPDOWN_POLL_MS = 50;
-const DROPDOWN_OPEN_TIMEOUT_MS = 400;
 const DROPDOWN_SELECTION_TIMEOUT_MS = 400;
 
 export async function selectCustomOptionNearLabel(
@@ -33,7 +33,7 @@ export async function selectCustomOptionNearLabel(
   const beforeOpenElements = new Set(Array.from(documentRef.body.querySelectorAll("*")));
   activateElement(control);
 
-  const option = await waitForVisibleOption(
+  const option = await waitForVisibleCustomDropdownOption(
     documentRef,
     acceptedTexts,
     control,
@@ -128,134 +128,6 @@ function getClickableSearchButtons(documentRef: Document): HTMLElement[] {
     .filter((element) => /^search$/i.test(normaliseText(readElementText(element))));
 }
 
-function findVisibleOption(
-  documentRef: Document,
-  acceptedTexts: readonly string[],
-  openedControl: HTMLElement,
-  beforeOpenElements: ReadonlySet<Element>,
-): HTMLElement | null {
-  const optionRoots = candidateOptionRoots(documentRef, openedControl, beforeOpenElements);
-  const selector = [
-    "[role='option']",
-    ".ui-select-choices-row",
-    ".select2-results li",
-    ".chosen-results li",
-    "li",
-    "a",
-    "button",
-    "span",
-    "[role='listbox'] div",
-    ".dropdown-menu div",
-    ".ui-select-choices div",
-    ".select2-results div",
-  ].join(",");
-
-  for (const root of optionRoots) {
-    const candidates = root.matches(selector)
-      ? [root, ...Array.from(root.querySelectorAll(selector))]
-      : Array.from(root.querySelectorAll(selector));
-    for (const element of candidates) {
-      if (!isHtmlElement(documentRef, element)) continue;
-      if (element === openedControl || openedControl.contains(element)) continue;
-      if (!isVisible(element)) continue;
-      const text = normaliseText(readElementText(element));
-      if (text.length > 0 && text.length <= 80 && matchesAcceptedText(text, acceptedTexts)) {
-        return element;
-      }
-    }
-  }
-
-  return null;
-}
-
-function candidateOptionRoots(
-  documentRef: Document,
-  openedControl: HTMLElement,
-  beforeOpenElements: ReadonlySet<Element>,
-): HTMLElement[] {
-  const roots: HTMLElement[] = [];
-  const controlledRoot = findAriaControlledRoot(documentRef, openedControl);
-  if (controlledRoot) roots.push(controlledRoot);
-
-  const fieldOverlay = closestOptionContainer(openedControl);
-  if (fieldOverlay) roots.push(fieldOverlay);
-
-  roots.push(...newOverlayRoots(documentRef, beforeOpenElements));
-  roots.push(...newOptionRoots(documentRef, beforeOpenElements));
-
-  return Array.from(new Set(roots));
-}
-
-function findAriaControlledRoot(
-  documentRef: Document,
-  openedControl: HTMLElement,
-): HTMLElement | null {
-  const controls = openedControl.getAttribute("aria-controls");
-  if (!controls) return null;
-
-  for (const id of controls.split(/\s+/)) {
-    if (!id) continue;
-    const candidate = documentRef.getElementById(id);
-    if (candidate && isHtmlElement(documentRef, candidate) && isVisible(candidate)) {
-      return candidate;
-    }
-  }
-
-  return null;
-}
-
-function closestOptionContainer(openedControl: HTMLElement): HTMLElement | null {
-  const overlaySelector = [
-    "[role='listbox']",
-    ".ui-select-choices",
-    ".select2-drop",
-    ".select2-results",
-    ".chosen-drop",
-    ".dropdown-menu",
-  ].join(",");
-  const fieldRoot = openedControl.closest("div, section, form");
-  const candidate = fieldRoot?.querySelector(overlaySelector);
-  return candidate && isHtmlElement(openedControl.ownerDocument, candidate) && isVisible(candidate)
-    ? candidate
-    : null;
-}
-
-function newOverlayRoots(
-  documentRef: Document,
-  beforeOpenElements: ReadonlySet<Element>,
-): HTMLElement[] {
-  const overlaySelector = [
-    "[role='listbox']",
-    ".ui-select-choices",
-    ".select2-drop",
-    ".select2-results",
-    ".chosen-drop",
-    ".dropdown-menu",
-  ].join(",");
-
-  return Array.from(documentRef.body.querySelectorAll(overlaySelector)).filter(
-    (element): element is HTMLElement =>
-      isHtmlElement(documentRef, element) && !beforeOpenElements.has(element) && isVisible(element),
-  );
-}
-
-function newOptionRoots(
-  documentRef: Document,
-  beforeOpenElements: ReadonlySet<Element>,
-): HTMLElement[] {
-  const optionSelector = [
-    "[role='option']",
-    ".ui-select-choices-row",
-    ".select2-results li",
-    ".chosen-results li",
-  ].join(",");
-
-  return Array.from(documentRef.body.querySelectorAll(optionSelector)).filter(
-    (element): element is HTMLElement =>
-      isHtmlElement(documentRef, element) && !beforeOpenElements.has(element) && isVisible(element),
-  );
-}
-
 function readElementText(element: Element): string {
   const HTMLInputElementConstructor = element.ownerDocument.defaultView?.HTMLInputElement;
   const inputValue =
@@ -271,21 +143,6 @@ function readElementText(element: Element): string {
   ]
     .filter(Boolean)
     .join(" ");
-}
-
-async function waitForVisibleOption(
-  documentRef: Document,
-  acceptedTexts: readonly string[],
-  openedControl: HTMLElement,
-  beforeOpenElements: ReadonlySet<Element>,
-): Promise<HTMLElement | null> {
-  const startedAt = Date.now();
-  do {
-    const option = findVisibleOption(documentRef, acceptedTexts, openedControl, beforeOpenElements);
-    if (option) return option;
-    await delay(DROPDOWN_POLL_MS);
-  } while (Date.now() - startedAt < DROPDOWN_OPEN_TIMEOUT_MS);
-  return null;
 }
 
 async function waitForFieldTextMatch(
