@@ -16,6 +16,7 @@ import {
   observeNextBrowserDownload,
 } from "../../src/background/download-observer";
 import { suggestNextBrowserDownloadFilename } from "../../src/background/download-filename-suggester";
+import { createZip } from "../../src/entrypoints/offscreen/zip";
 import { browser } from "wxt/browser";
 
 type RuntimeMock = typeof browser.runtime & {
@@ -6010,19 +6011,26 @@ function dataUrl(mimeType: string, body: string): string {
   return `data:${mimeType};base64,${globalThis.btoa(body)}`;
 }
 
+function dataUrlBytes(mimeType: string, bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return `data:${mimeType};base64,${globalThis.btoa(binary)}`;
+}
+
 function portalSizedPdfBody(marker: string): string {
   return `%PDF-1.7 synthetic${marker} ${"x".repeat(21 * 1024)}`;
 }
 
-function saneXlsxBody(marker: string): string {
-  return (
-    "PK\u0003\u0004" +
-    "\u0014\u0000" +
-    "\u0000\u0000" +
-    "\b\u0000" +
-    "\u0000".repeat(18) +
-    `[Content_Types].xml xl/workbook.xml synthetic xlsx${marker}`
-  );
+function saneXlsxBytes(marker: string): Uint8Array {
+  return createZip([
+    { path: "[Content_Types].xml", bytes: textBytes("<Types />") },
+    { path: "xl/workbook.xml", bytes: textBytes(`<workbook>${marker}</workbook>`) },
+    { path: "xl/worksheets/sheet10.xml", bytes: textBytes("<worksheet />") },
+  ]);
+}
+
+function textBytes(value: string): Uint8Array {
+  return new TextEncoder().encode(value);
 }
 
 function actionIdFromScriptingDetails(details: unknown): string {
@@ -6049,9 +6057,9 @@ function dataUrlForScriptingDetails(details: unknown): string {
       : "";
   const marker = signalPrefix === "gstr2b" ? " GSTR-2B" : "";
   if (controlId.includes("excel")) {
-    return dataUrl(
+    return dataUrlBytes(
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      saneXlsxBody(marker),
+      saneXlsxBytes(marker),
     );
   }
   return dataUrl("application/pdf", portalSizedPdfBody(marker));

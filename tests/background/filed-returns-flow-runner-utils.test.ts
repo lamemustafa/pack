@@ -65,6 +65,18 @@ describe("filed returns flow runner wait policy", () => {
     expect(getFlowStepSettleMs(BASE_STEP, BASE_DEPS)).toBe(FLOW_STEP_SETTLE_MS);
   });
 
+  it("keeps GSTR-2B dashboard result polling on the generic cadence", () => {
+    expect(
+      getFlowStepSettleMs(
+        {
+          ...BASE_STEP,
+          safeSignals: ["gstr2b-return-dashboard-search-results-pending"],
+        },
+        BASE_DEPS,
+      ),
+    ).toBe(FLOW_STEP_SETTLE_MS);
+  });
+
   it("keeps test/runtime timing overrides explicit", () => {
     const deps = {
       ...BASE_DEPS,
