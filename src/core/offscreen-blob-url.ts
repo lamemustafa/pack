@@ -1,3 +1,8 @@
+import { isFiledReturnsConcreteArtifactType } from "./filed-returns-artifacts";
+import { isFiledReturnsReturnType } from "./filed-returns-return-types";
+import type { FiledReturnsConcreteArtifactType } from "./filed-returns-artifacts";
+import type { FiledReturnsReturnType } from "./filed-returns-return-types";
+
 export const PACK_OFFSCREEN_BLOB_URL_TARGET = "pack-offscreen-blob-url";
 export const PACK_OFFSCREEN_DATA_URL_MAX_LENGTH = 50 * 1024 * 1024;
 export const PACK_OFFSCREEN_DATA_URL_CHUNK_MAX_LENGTH = 1024 * 1024;
@@ -40,6 +45,8 @@ export interface PackOffscreenStageFiledReturnChunkMessage {
     transferId: string;
     ledgerId: string;
     zipPath: string;
+    returnType: FiledReturnsReturnType;
+    artifactType: FiledReturnsConcreteArtifactType;
     index: number;
     totalChunks: number;
     chunk: string;
@@ -137,6 +144,8 @@ export function isPackOffscreenBlobUrlMessage(
       isBoundedString(input.payload.transferId, 8, 120) &&
       isBoundedString(input.payload.ledgerId, 1, 120) &&
       isSafeZipPath(input.payload.zipPath) &&
+      isFiledReturnsReturnType(input.payload.returnType) &&
+      isFiledReturnsConcreteArtifactType(input.payload.artifactType) &&
       typeof input.payload.index === "number" &&
       Number.isInteger(input.payload.index) &&
       input.payload.index >= 0 &&

@@ -173,6 +173,8 @@ export async function stageChunkedCapturedFiledReturnDownload({
       chunk: chunkResponse.mainWorldCaptureChunk,
       index,
       ledgerId,
+      returnType: target.returnType,
+      artifactType,
       totalChunks: chunkedCaptureRequest.chunkCount,
       transferId: chunkedCaptureRequest.transferId,
       zipPath,

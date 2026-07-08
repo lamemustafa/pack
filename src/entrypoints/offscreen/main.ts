@@ -4,6 +4,9 @@ import {
   type PackOffscreenBlobUrlMessage,
   type PackOffscreenBlobUrlResponse,
 } from "../../core/offscreen-blob-url";
+import type { FiledReturnsConcreteArtifactType } from "../../core/filed-returns-artifacts";
+import type { FiledReturnsReturnType } from "../../core/filed-returns-return-types";
+import { isExpectedCapturedDataUrlForReturnType } from "../../background/captured-download-data-url";
 import { createZip, type ZipEntry } from "./zip";
 
 const blobUrlsByRequest = new Map<string, string>();
@@ -11,7 +14,9 @@ const chunkedFiledReturnsByTransfer = new Map<
   string,
   {
     chunks: string[];
+    artifactType: FiledReturnsConcreteArtifactType;
     ledgerId: string;
+    returnType: FiledReturnsReturnType;
     totalChunks: number;
     zipPath: string;
   }
@@ -71,12 +76,16 @@ async function handleMessage(
       existing ??
       {
         chunks: [],
+        artifactType: message.payload.artifactType,
         ledgerId: message.payload.ledgerId,
+        returnType: message.payload.returnType,
         totalChunks: message.payload.totalChunks,
         zipPath: safeZipEntryFilename(message.payload.zipPath),
       };
     if (
+      transfer.artifactType !== message.payload.artifactType ||
       transfer.ledgerId !== message.payload.ledgerId ||
+      transfer.returnType !== message.payload.returnType ||
       transfer.zipPath !== safeZipEntryFilename(message.payload.zipPath) ||
       transfer.totalChunks !== message.payload.totalChunks
     ) {
@@ -99,9 +108,18 @@ async function handleMessage(
       };
     }
 
-    const blob = dataUrlToBlob(transfer.chunks.join(""));
     chunkedFiledReturnsByTransfer.delete(key);
-    if (!blob || blob.size === 0) {
+    const dataUrl = transfer.chunks.join("");
+    const blob = dataUrlToBlob(dataUrl);
+    if (
+      !blob ||
+      blob.size === 0 ||
+      !isExpectedCapturedDataUrlForReturnType(
+        dataUrl,
+        transfer.artifactType,
+        transfer.returnType,
+      )
+    ) {
       return {
         ok: false,
         requestId: message.payload.requestId,

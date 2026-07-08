@@ -3,6 +3,8 @@ import {
   PACK_OFFSCREEN_BLOB_URL_TARGET,
   type PackOffscreenBlobUrlResponse,
 } from "../core/offscreen-blob-url";
+import type { FiledReturnsConcreteArtifactType } from "../core/filed-returns-artifacts";
+import type { FiledReturnsReturnType } from "../core/filed-returns-return-types";
 
 const OFFSCREEN_DOCUMENT_PATH = "offscreen.html";
 const OFFSCREEN_JUSTIFICATION =
@@ -52,6 +54,8 @@ export async function stageOffscreenFiledReturnChunk({
   chunk,
   index,
   ledgerId,
+  returnType,
+  artifactType,
   totalChunks,
   transferId,
   zipPath,
@@ -59,6 +63,8 @@ export async function stageOffscreenFiledReturnChunk({
   chunk: string;
   index: number;
   ledgerId: string;
+  returnType: FiledReturnsReturnType;
+  artifactType: FiledReturnsConcreteArtifactType;
   totalChunks: number;
   transferId: string;
   zipPath: string;
@@ -76,6 +82,8 @@ export async function stageOffscreenFiledReturnChunk({
       totalChunks,
       transferId,
       zipPath,
+      returnType,
+      artifactType,
     },
   });
   return isStagedResponse(response, requestId) ? "staged" : "failed";

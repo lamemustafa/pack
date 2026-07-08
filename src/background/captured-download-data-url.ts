@@ -4,6 +4,7 @@ import {
   type FiledReturnsConcreteArtifactType,
 } from "../core/filed-returns-artifacts";
 import type { FiledReturnsDownloadTarget } from "../core/contracts";
+import type { FiledReturnsReturnType } from "../core/filed-returns-return-types";
 import { PACK_OFFSCREEN_DATA_URL_MAX_LENGTH } from "../core/offscreen-blob-url";
 
 const GSTR2B_MIN_PORTAL_PDF_BYTES = 20 * 1024;
@@ -37,8 +38,16 @@ export function isExpectedCapturedDataUrlForTarget(
   artifactType: FiledReturnsConcreteArtifactType,
   target: FiledReturnsDownloadTarget,
 ): boolean {
+  return isExpectedCapturedDataUrlForReturnType(dataUrl, artifactType, target.returnType);
+}
+
+export function isExpectedCapturedDataUrlForReturnType(
+  dataUrl: string,
+  artifactType: FiledReturnsConcreteArtifactType,
+  returnType: FiledReturnsReturnType,
+): boolean {
   if (!isExpectedCapturedDataUrl(dataUrl, artifactType)) return false;
-  if (target.returnType !== "GSTR-2B") return true;
+  if (returnType !== "GSTR-2B") return true;
   if (artifactType === "PDF") {
     if (!(dataUrlContainsAscii(dataUrl, "GSTR-2B") || dataUrlContainsAscii(dataUrl, "GSTR2B"))) {
       return false;

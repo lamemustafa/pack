@@ -198,6 +198,8 @@ describe("offscreen Blob URL entrypoint", () => {
         transferId: "transfer-1",
         ledgerId: "ledger-1",
         zipPath: "complyeaze-pack/gst/2025-26/gstr-1/may.pdf",
+        returnType: "GSTR-1",
+        artifactType: "PDF",
         index: 0,
         totalChunks: 2,
         chunk: chunks[0],
@@ -219,6 +221,8 @@ describe("offscreen Blob URL entrypoint", () => {
         transferId: "transfer-1",
         ledgerId: "ledger-1",
         zipPath: "complyeaze-pack/gst/2025-26/gstr-1/may.pdf",
+        returnType: "GSTR-1",
+        artifactType: "PDF",
         index: 1,
         totalChunks: 2,
         chunk: chunks[1],
@@ -231,6 +235,51 @@ describe("offscreen Blob URL entrypoint", () => {
       byteCountClass: "non-empty",
     });
     expect(opfsFiles.has("filed-return-packs/ledger-1/may.pdf")).toBe(true);
+  });
+
+  it("rejects chunked GSTR-2B bytes that do not match the requested artifact", async () => {
+    await loadOffscreenEntrypoint();
+    const dataUrl = `data:application/pdf;base64,${btoa("%PDF-1.7 not a portal GSTR-2B PDF")}`;
+    const chunks = [dataUrl.slice(0, 20), dataUrl.slice(20)];
+
+    await sendOffscreenMessage({
+      type: "PACK_OFFSCREEN_STAGE_FILED_RETURN_CHUNK",
+      target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+      payload: {
+        requestId: "bad-chunk-request-1",
+        transferId: "transfer-2",
+        ledgerId: "ledger-1",
+        zipPath: "complyeaze-pack/gst/2025-26/gstr-2b/may.pdf",
+        returnType: "GSTR-2B",
+        artifactType: "PDF",
+        index: 0,
+        totalChunks: 2,
+        chunk: chunks[0],
+      },
+    });
+
+    const rejected = await sendOffscreenMessage({
+      type: "PACK_OFFSCREEN_STAGE_FILED_RETURN_CHUNK",
+      target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+      payload: {
+        requestId: "bad-chunk-request-2",
+        transferId: "transfer-2",
+        ledgerId: "ledger-1",
+        zipPath: "complyeaze-pack/gst/2025-26/gstr-2b/may.pdf",
+        returnType: "GSTR-2B",
+        artifactType: "PDF",
+        index: 1,
+        totalChunks: 2,
+        chunk: chunks[1],
+      },
+    });
+
+    expect(rejected).toEqual({
+      ok: false,
+      requestId: "bad-chunk-request-2",
+      errorCategory: "invalid-data-url",
+    });
+    expect(opfsFiles.has("filed-return-packs/ledger-1/may.pdf")).toBe(false);
   });
 
   async function loadOffscreenEntrypoint() {
