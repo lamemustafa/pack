@@ -3,14 +3,16 @@ html[data-pack-surface="popup"] body,
 html[data-pack-surface="popup"] #root,
 body:has(.popup-shell),
 body:has(.popup-shell) #root {
-  width: 100vw;
-  min-width: min(var(--pack-popup-min-width), 100vw);
+  width: var(--pack-action-popup-width);
+  min-width: var(--pack-popup-min-width);
+  max-width: var(--pack-action-popup-width);
 }
 
 html[data-pack-surface="popup"],
 html[data-pack-surface="popup"] body,
 html[data-pack-surface="popup"] #root {
-  height: var(--pack-popup-max-height);
+  height: auto;
+  max-height: var(--pack-action-popup-max-height);
 }
 
 html[data-pack-surface="popup"] body,
@@ -33,17 +35,17 @@ html[data-pack-surface="popup"] #root {
 
 .popup-shell {
   display: grid;
-  width: min(var(--pack-popup-width), 100vw);
-  max-width: var(--pack-popup-width);
-  min-height: var(--pack-popup-min-height);
-  height: min(var(--pack-popup-max-height), 100vh);
-  max-height: var(--pack-popup-max-height);
+  width: var(--pack-action-popup-width);
+  max-width: var(--pack-action-popup-width);
+  min-height: 0;
+  height: auto;
+  max-height: var(--pack-action-popup-max-height);
   overflow-y: auto;
   overscroll-behavior: contain;
   align-content: start;
-  gap: 12px;
-  margin: 0 auto;
-  padding: 16px;
+  gap: 10px;
+  margin: 0;
+  padding: 12px;
   background: var(--pack-soft);
 }
 
@@ -58,11 +60,10 @@ html[data-pack-surface="popup"] #root {
 }
 
 .brand-header {
-  display: flex;
+  display: grid;
   min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
+  align-items: start;
+  gap: 10px;
   border-color: transparent;
   background: transparent;
   padding: 2px 2px 0;
@@ -90,7 +91,7 @@ html[data-pack-surface="popup"] #root {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  justify-content: end;
+  justify-content: start;
 }
 
 .brand-badges p,
@@ -125,8 +126,8 @@ html[data-pack-surface="popup"] #root {
 
 .command-workbench {
   display: grid;
-  grid-template-columns: minmax(0, 1.65fr) minmax(340px, 0.72fr);
-  gap: 14px;
+  grid-template-columns: 1fr;
+  gap: 10px;
   align-items: start;
 }
 
@@ -138,8 +139,7 @@ html[data-pack-surface="popup"] #root {
 }
 
 .run-column {
-  position: sticky;
-  top: 8px;
+  position: static;
 }
 
 .section-label {
@@ -252,48 +252,74 @@ html[data-pack-surface="popup"] #root {
   content: "";
 }
 
-@media (max-width: 720px) {
+@media (min-width: 860px) {
+  html[data-pack-surface="popup"],
+  html[data-pack-surface="popup"] body,
+  html[data-pack-surface="popup"] #root,
+  body:has(.popup-shell),
+  body:has(.popup-shell) #root {
+    width: 100vw;
+    min-width: min(var(--pack-popup-min-width), 100vw);
+    max-width: none;
+  }
+
   html[data-pack-surface="popup"],
   html[data-pack-surface="popup"] body,
   html[data-pack-surface="popup"] #root {
-    height: auto;
-    min-height: min(var(--pack-popup-min-height), 100vh);
+    height: var(--pack-popup-max-height);
+    max-height: var(--pack-popup-max-height);
   }
 
   html[data-pack-surface="popup"] body,
   body:has(.popup-shell) {
-    overflow: auto;
+    overflow: hidden;
   }
 
   .popup-shell {
-    width: 100vw;
-    min-height: min(var(--pack-popup-min-height), 100vh);
-    height: auto;
-    max-height: none;
-    padding: 10px;
+    width: min(var(--pack-popup-width), 100vw);
+    max-width: var(--pack-popup-width);
+    min-height: var(--pack-popup-min-height);
+    height: min(var(--pack-popup-max-height), 100vh);
+    max-height: var(--pack-popup-max-height);
+    gap: 12px;
+    margin: 0 auto;
+    padding: 16px;
   }
 
   .command-workbench {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1.65fr) minmax(340px, 0.72fr);
+    gap: 14px;
   }
 
   .run-column {
-    position: static;
+    position: sticky;
+    top: 8px;
   }
 
   .brand-header {
-    display: grid;
-  }
-
-  .brand-title-block {
-    align-items: flex-start;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
   }
 
   .brand-badges {
-    justify-content: start;
+    justify-content: end;
   }
 
   .evidence-heading {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 430px) {
+  html[data-pack-surface="popup"],
+  html[data-pack-surface="popup"] body,
+  html[data-pack-surface="popup"] #root,
+  body:has(.popup-shell),
+  body:has(.popup-shell) #root,
+  .popup-shell {
+    width: 100vw;
+    max-width: 100vw;
   }
 }
