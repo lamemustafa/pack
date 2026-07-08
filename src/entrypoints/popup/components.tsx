@@ -6,8 +6,11 @@ import {
   supportsFiledReturnsArtifactType,
 } from "../../core/filed-returns-artifacts";
 import {
+  FILED_RETURNS_MONTHS,
   getFiledReturnsFinancialYearOptions,
+  getFiledReturnsPeriodOptions,
   getFiledReturnsScopePeriodOptions,
+  FULL_FISCAL_YEAR_PERIOD,
   isFullFiscalYearScope,
   normaliseFiledReturnsScope,
 } from "../../core/filed-returns-scope";
@@ -24,10 +27,14 @@ export interface ScopeFormProps {
 
 export function ScopeForm({ busy, flowSummary, scope, onScopeChange, onStart }: ScopeFormProps) {
   const financialYearOptions = getFiledReturnsFinancialYearOptions();
-  const periodOptions = getFiledReturnsScopePeriodOptions(
+  const singlePeriodOptions = getFiledReturnsPeriodOptions(scope.financialYear, new Date());
+  const scopePeriodOptions = getFiledReturnsScopePeriodOptions(
     scope.financialYear,
     new Date(),
     scope.returnType,
+  );
+  const supportsFullFiscalYear = scopePeriodOptions.some(
+    (option) => option.value === FULL_FISCAL_YEAR_PERIOD,
   );
   const artifactOptions = FILED_RETURNS_ARTIFACT_TYPES.filter((artifactType) =>
     supportsFiledReturnsArtifactType(scope.returnType, artifactType),
@@ -47,6 +54,7 @@ export function ScopeForm({ busy, flowSummary, scope, onScopeChange, onStart }: 
       </div>
       <div className="scope-section scope-section-primary">
         <ScopeButtonGroup
+          className="scope-group-return"
           label="Return"
           value={scope.returnType}
           options={FILED_RETURNS_RETURN_TYPES.map((returnType) => ({
@@ -62,7 +70,30 @@ export function ScopeForm({ busy, flowSummary, scope, onScopeChange, onStart }: 
             )
           }
         />
+        {supportsFullFiscalYear ? (
+          <ScopeButtonGroup
+            className="scope-group-run-mode"
+            label="Run mode"
+            value={fullFiscalYear ? "FULL_YEAR" : "SINGLE_PERIOD"}
+            options={[
+              { value: "SINGLE_PERIOD", label: "Single period" },
+              { value: "FULL_YEAR", label: "Full fiscal year" },
+            ]}
+            onChange={(mode) =>
+              onScopeChange(
+                normaliseFiledReturnsScope({
+                  ...scope,
+                  period:
+                    mode === "FULL_YEAR"
+                      ? FULL_FISCAL_YEAR_PERIOD
+                      : getSinglePeriodFallback(scope.period, singlePeriodOptions),
+                }),
+              )
+            }
+          />
+        ) : null}
         <ScopeButtonGroup
+          className="scope-group-file"
           label="File"
           value={selectedArtifactType}
           options={artifactOptions.map((artifactType) => ({
@@ -98,12 +129,14 @@ export function ScopeForm({ busy, flowSummary, scope, onScopeChange, onStart }: 
             )
           }
         />
-        <ScopeSelect
-          label="Period"
-          value={scope.period}
-          options={periodOptions}
-          onChange={(period) => onScopeChange({ ...scope, period })}
-        />
+        {fullFiscalYear ? null : (
+          <ScopeSelect
+            label="Period"
+            value={scope.period}
+            options={singlePeriodOptions}
+            onChange={(period) => onScopeChange({ ...scope, period })}
+          />
+        )}
       </div>
       {fullFiscalYear ? <p className="scope-note">{getFullFiscalYearNote(scope)}</p> : null}
       <button
@@ -116,6 +149,14 @@ export function ScopeForm({ busy, flowSummary, scope, onScopeChange, onStart }: 
       </button>
     </section>
   );
+}
+
+function getSinglePeriodFallback(
+  period: FiledReturnsDownloadScope["period"],
+  options: Array<{ value: string; label: string }>,
+): string {
+  if (period !== FULL_FISCAL_YEAR_PERIOD) return period;
+  return options[0]?.value ?? FILED_RETURNS_MONTHS[0];
 }
 
 function ScopeSelect({

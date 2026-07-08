@@ -1,12 +1,14 @@
 :root {
-  --pack-popup-width: 1060px;
-  --pack-popup-min-height: 680px;
-  --pack-popup-max-height: 820px;
+  --pack-popup-width: 1120px;
+  --pack-popup-min-height: 720px;
+  --pack-popup-max-height: 840px;
   --pack-ink: #101923;
   --pack-muted: #4c5c6d;
   --pack-border: #ccd6e2;
+  --pack-border-strong: #aebdcb;
   --pack-surface: #ffffff;
   --pack-soft: #f4f6f8;
+  --pack-soft-strong: #e9eef4;
   --pack-accent: #173a63;
   --pack-accent-strong: #0f2a49;
   --pack-accent-soft: #e9f1f8;

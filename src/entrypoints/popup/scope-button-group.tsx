@@ -1,9 +1,11 @@
 export function ScopeButtonGroup({
+  className,
   label,
   value,
   options,
   onChange,
 }: {
+  className?: string;
   label: string;
   value: string;
   options: Array<{ value: string; label: string }>;
@@ -12,7 +14,7 @@ export function ScopeButtonGroup({
   const groupName = `scope-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
 
   return (
-    <fieldset className="scope-group">
+    <fieldset className={className ? `scope-group ${className}` : "scope-group"}>
       <legend>{label}</legend>
       <div className="scope-options">
         {options.map((option) => {
