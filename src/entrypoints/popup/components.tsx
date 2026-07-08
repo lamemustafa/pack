@@ -35,13 +35,7 @@ export function ScopeForm({
   onStart,
 }: ScopeFormProps) {
   const formModel = createScopeFormModel(scope);
-  const startAction = getScopeFormStartAction(
-    scope,
-    flowSummary,
-    busy,
-    formModel.fullFiscalYear,
-    context,
-  );
+  const startAction = getScopeFormStartAction(scope, flowSummary, busy, formModel.fullFiscalYear);
   const actionCopy = getScopeActionCopy(scope, formModel.fullFiscalYear);
 
   return (

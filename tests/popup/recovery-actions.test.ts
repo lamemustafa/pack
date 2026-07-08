@@ -378,7 +378,7 @@ describe("popup full-year recovery actions", () => {
     expect(markup).toContain("Cancel and reset");
   });
 
-  it("disables start when no actionable GST Portal tab is available", () => {
+  it("keeps start available while warning when popup context is inactive", () => {
     const markup = renderToStaticMarkup(
       createElement(ScopeForm, {
         busy: null,
@@ -395,11 +395,11 @@ describe("popup full-year recovery actions", () => {
       }),
     );
 
-    expect(markup).toContain("Open GST Portal tab");
+    expect(markup).toContain("Start ZIP");
     expect(markup).toContain(
       "Open a signed-in GST return dashboard or return page before starting.",
     );
-    expect(markup).not.toContain(">Start local full-year run<");
+    expect(markup).not.toContain("Open GST Portal tab");
   });
 
   it("normalizes older login-opened evidence copy in the run panel", () => {
