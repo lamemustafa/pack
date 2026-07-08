@@ -221,7 +221,7 @@ describe("popup full-year recovery actions", () => {
 
     expect(markup).toContain('checked="" value="GSTR-2B"');
     expect(markup).toContain('value="GSTR-3B"');
-    expect(markup).toContain('checked="" value="May"');
+    expect(markup).toContain('value="May" selected=""');
     expect(markup).toContain('value="June"');
     expect(markup).toContain('checked="" value="PDF_AND_EXCEL"');
     expect(markup).toContain("Summary PDF + details Excel");

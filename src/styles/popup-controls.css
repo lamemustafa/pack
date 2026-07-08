@@ -1,7 +1,7 @@
 .flow-panel {
   display: grid;
-  gap: 14px;
-  padding: 14px;
+  gap: 16px;
+  padding: 16px;
 }
 
 .panel-heading {
@@ -13,10 +13,11 @@
   margin: 0;
   border: 1px solid #dbe3ec;
   border-radius: 8px;
-  background: #f7f9fb;
-  color: #435264;
+  background: #f8fafc;
+  color: #37475a;
   font-size: 12px;
-  padding: 10px 11px;
+  line-height: 1.45;
+  padding: 11px 12px;
 }
 
 .scope-section {
@@ -26,7 +27,7 @@
 }
 
 .scope-section-primary {
-  grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr);
+  grid-template-columns: minmax(230px, 0.58fr) minmax(0, 1.42fr);
 }
 
 .scope-section-period {
@@ -50,7 +51,7 @@
 
 .scope-options {
   display: grid;
-  gap: 6px;
+  gap: 8px;
 }
 
 .scope-section-primary .scope-options {
@@ -67,7 +68,7 @@
 
 .scope-option {
   display: inline-flex;
-  min-height: 34px;
+  min-height: 38px;
   cursor: pointer;
   align-items: center;
   justify-content: center;
@@ -75,7 +76,7 @@
   border-radius: 7px;
   background: #ffffff;
   color: #1d2634;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 750;
   line-height: 1.15;
   text-align: center;
@@ -117,12 +118,13 @@
 
 .scope-select select {
   border-color: #c9d2dc;
+  min-height: 40px;
 }
 
 .primary-action {
-  min-height: 44px;
+  min-height: 46px;
   margin-top: 2px;
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .recovery-panel {

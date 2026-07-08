@@ -19,23 +19,11 @@ export function RecoveryActions({
   onResolveFullFiscalYearTarget,
   onResolveTarget,
 }: RecoveryActionsProps) {
-  if (!summary) return null;
-
-  const signals = new Set(summary.flowStep.safeSignals);
-  const needsRunReview = signals.has("filed-returns-run-needs-review");
-  const needsTargetReview = signals.has("filed-returns-target-review-required");
-  const runActive =
-    signals.has("filed-returns-run-active") || signals.has("full-fiscal-year-run-active");
-  const needsFullFiscalYearReview =
-    Boolean(summary.fullFiscalYearRecovery) &&
-    (signals.has("full-fiscal-year-download-unconfirmed") ||
-      signals.has("full-fiscal-year-run-interrupted") ||
-      signals.has("full-fiscal-year-resume-confirmation-required") ||
-      signals.has("full-fiscal-year-run-needs-action"));
+  const recoveryState = getRecoveryActionState(summary);
+  if (!summary || !recoveryState.visible) return null;
+  const { needsFullFiscalYearReview, needsRunReview, needsTargetReview, runActive, signals } =
+    recoveryState;
   const canManuallyObserveFullYear = canManuallyObserveFullFiscalYearTarget(summary);
-  if (!needsRunReview && !needsTargetReview && !needsFullFiscalYearReview && !runActive) {
-    return null;
-  }
 
   return (
     <section className="recovery-panel" aria-label="Filed return recovery actions">
@@ -125,6 +113,10 @@ export function RecoveryActions({
   );
 }
 
+export function hasRecoveryActions(summary: FiledReturnsFlowSummary | null): boolean {
+  return getRecoveryActionState(summary).visible;
+}
+
 export function canManuallyObserveFullFiscalYearTarget(
   summary: FiledReturnsFlowSummary | null,
 ): boolean {
@@ -145,4 +137,33 @@ function cancelFullYearLabel(summary: FiledReturnsFlowSummary): string {
     return "Discard saved run";
   }
   return "Cancel and reset";
+}
+
+function getRecoveryActionState(summary: FiledReturnsFlowSummary | null): {
+  needsFullFiscalYearReview: boolean;
+  needsRunReview: boolean;
+  needsTargetReview: boolean;
+  runActive: boolean;
+  signals: Set<string>;
+  visible: boolean;
+} {
+  const signals = new Set(summary?.flowStep.safeSignals ?? []);
+  const needsRunReview = signals.has("filed-returns-run-needs-review");
+  const needsTargetReview = signals.has("filed-returns-target-review-required");
+  const runActive =
+    signals.has("filed-returns-run-active") || signals.has("full-fiscal-year-run-active");
+  const needsFullFiscalYearReview =
+    Boolean(summary?.fullFiscalYearRecovery) &&
+    (signals.has("full-fiscal-year-download-unconfirmed") ||
+      signals.has("full-fiscal-year-run-interrupted") ||
+      signals.has("full-fiscal-year-resume-confirmation-required") ||
+      signals.has("full-fiscal-year-run-needs-action"));
+  return {
+    needsFullFiscalYearReview,
+    needsRunReview,
+    needsTargetReview,
+    runActive,
+    signals,
+    visible: needsRunReview || needsTargetReview || needsFullFiscalYearReview || runActive,
+  };
 }
