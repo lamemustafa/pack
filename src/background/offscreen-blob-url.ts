@@ -30,12 +30,16 @@ export async function createOffscreenBlobUrl(dataUrl: string): Promise<string | 
 }
 
 export async function stageOffscreenFiledReturn({
+  artifactType,
   dataUrl,
   ledgerId,
+  returnType,
   zipPath,
 }: {
+  artifactType: FiledReturnsConcreteArtifactType;
   dataUrl: string;
   ledgerId: string;
+  returnType: FiledReturnsReturnType;
   zipPath: string;
 }): Promise<OffscreenFiledReturnStageResult> {
   const requestId = createRequestId();
@@ -45,8 +49,10 @@ export async function stageOffscreenFiledReturn({
     target: PACK_OFFSCREEN_BLOB_URL_TARGET,
     payload: {
       requestId,
+      artifactType,
       dataUrl,
       ledgerId,
+      returnType,
       zipPath,
     },
   });

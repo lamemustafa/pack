@@ -44,8 +44,17 @@ async function handleMessage(
   message: PackOffscreenBlobUrlMessage,
 ): Promise<PackOffscreenBlobUrlResponse> {
   if (message.type === "PACK_OFFSCREEN_STAGE_FILED_RETURN") {
-    const blob = dataUrlToBlob(message.payload.dataUrl);
-    if (!blob || blob.size === 0) {
+    const decoded = dataUrlChunksToDecoded([message.payload.dataUrl]);
+    if (
+      !decoded ||
+      decoded.blob.size === 0 ||
+      !isExpectedDecodedDataUrlForReturnType(
+        decoded.metadata,
+        decoded.bytes,
+        message.payload.artifactType,
+        message.payload.returnType,
+      )
+    ) {
       return {
         ok: false,
         requestId: message.payload.requestId,
@@ -56,7 +65,7 @@ async function handleMessage(
       const directory = await getLedgerDirectory(message.payload.ledgerId, true);
       const fileHandle = await getLedgerFileHandle(directory, message.payload.zipPath, true);
       const writable = await fileHandle.createWritable();
-      await writable.write(blob);
+      await writable.write(decoded.blob);
       await writable.close();
       return {
         ok: true,
@@ -76,16 +85,14 @@ async function handleMessage(
   if (message.type === "PACK_OFFSCREEN_STAGE_FILED_RETURN_CHUNK") {
     const key = message.payload.transferId;
     const existing = chunkedFiledReturnsByTransfer.get(key);
-    const transfer =
-      existing ??
-      {
-        chunks: [],
-        artifactType: message.payload.artifactType,
-        ledgerId: message.payload.ledgerId,
-        returnType: message.payload.returnType,
-        totalChunks: message.payload.totalChunks,
-        zipPath: safeZipEntryFilename(message.payload.zipPath),
-      };
+    const transfer = existing ?? {
+      chunks: [],
+      artifactType: message.payload.artifactType,
+      ledgerId: message.payload.ledgerId,
+      returnType: message.payload.returnType,
+      totalChunks: message.payload.totalChunks,
+      zipPath: safeZipEntryFilename(message.payload.zipPath),
+    };
     if (
       transfer.artifactType !== message.payload.artifactType ||
       transfer.ledgerId !== message.payload.ledgerId ||
@@ -103,7 +110,9 @@ async function handleMessage(
     transfer.chunks[message.payload.index] = message.payload.chunk;
     chunkedFiledReturnsByTransfer.set(key, transfer);
 
-    if (transfer.chunks.filter((chunk) => typeof chunk === "string").length < transfer.totalChunks) {
+    if (
+      transfer.chunks.filter((chunk) => typeof chunk === "string").length < transfer.totalChunks
+    ) {
       return {
         ok: true,
         requestId: message.payload.requestId,

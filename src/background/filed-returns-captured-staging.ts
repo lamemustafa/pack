@@ -46,8 +46,10 @@ export async function stageCapturedFiledReturnDownload({
   const bundleKind = deps.stageCapturedDownloads?.bundleKind ?? "full-fiscal-year";
   const signalPrefix = bundleKind === "single-period" ? "single-period" : "full-fiscal-year";
   const staged = await stageOffscreenFiledReturn({
+    artifactType,
     dataUrl: capturedDownloadRequest.dataUrl,
     ledgerId: deps.stageCapturedDownloads?.ledgerId ?? "unknown-ledger",
+    returnType: target.returnType,
     zipPath: safeFiledReturnZipEntryPath(
       scope,
       artifactType,
@@ -151,10 +153,7 @@ export async function stageChunkedCapturedFiledReturnDownload({
   const bundleKind = deps.stageCapturedDownloads?.bundleKind ?? "full-fiscal-year";
   const signalPrefix = bundleKind === "single-period" ? "single-period" : "full-fiscal-year";
   const ledgerId = deps.stageCapturedDownloads?.ledgerId ?? "unknown-ledger";
-  const zipPath = safeFiledReturnZipEntryPath(
-    scope,
-    artifactType,
-  );
+  const zipPath = safeFiledReturnZipEntryPath(scope, artifactType);
 
   let staged: OffscreenFiledReturnStageResult = { status: "failed" };
   for (let index = 0; index < chunkedCaptureRequest.chunkCount; index += 1) {

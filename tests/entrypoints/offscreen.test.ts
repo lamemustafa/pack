@@ -60,6 +60,35 @@ describe("offscreen Blob URL entrypoint", () => {
     ).toBe(false);
   });
 
+  it("requires return and artifact metadata for filed-return staging messages", () => {
+    expect(
+      isPackOffscreenBlobUrlMessage({
+        type: "PACK_OFFSCREEN_STAGE_FILED_RETURN",
+        target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+        payload: {
+          requestId: "stage-request",
+          ledgerId: "ledger-1",
+          zipPath: "complyeaze-pack/gst/2025-26/gstr-2b/may.xlsx",
+          returnType: "GSTR-2B",
+          artifactType: "EXCEL",
+          dataUrl: `data:application/pdf;base64,${btoa("%PDF-1.7 staged")}`,
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isPackOffscreenBlobUrlMessage({
+        type: "PACK_OFFSCREEN_STAGE_FILED_RETURN",
+        target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+        payload: {
+          requestId: "stage-request",
+          ledgerId: "ledger-1",
+          zipPath: "complyeaze-pack/gst/2025-26/gstr-2b/may.xlsx",
+          dataUrl: `data:application/pdf;base64,${btoa("%PDF-1.7 staged")}`,
+        },
+      }),
+    ).toBe(false);
+  });
+
   it("creates, replaces, and revokes Blob URLs by URL value", async () => {
     await loadOffscreenEntrypoint();
 
@@ -138,7 +167,9 @@ describe("offscreen Blob URL entrypoint", () => {
         requestId: "stage-request",
         ledgerId: "ledger-1",
         zipPath: "complyeaze-pack/gst/2025-26/gstr-3b/may.pdf",
-        dataUrl: `data:application/pdf;base64,${btoa("%PDF-1.7 staged")}`,
+        returnType: "GSTR-3B",
+        artifactType: "PDF",
+        dataUrl: `data:application/pdf;base64,${btoa("%PDF-1.7 staged\n%%EOF\n")}`,
       },
     });
 
@@ -324,6 +355,32 @@ describe("offscreen Blob URL entrypoint", () => {
       errorCategory: "invalid-data-url",
     });
     expect(opfsFiles.has("filed-return-packs/ledger-1/may.pdf")).toBe(false);
+  });
+
+  it("rejects non-chunked GSTR-2B bytes that do not match the requested artifact", async () => {
+    await loadOffscreenEntrypoint();
+
+    const rejected = await sendOffscreenMessage({
+      type: "PACK_OFFSCREEN_STAGE_FILED_RETURN",
+      target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+      payload: {
+        requestId: "bad-stage-request",
+        ledgerId: "ledger-1",
+        zipPath: "complyeaze-pack/gst/2025-26/gstr-2b/may.xlsx",
+        returnType: "GSTR-2B",
+        artifactType: "EXCEL",
+        dataUrl: `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${btoa(
+          "PK\u0003\u0004not-a-portal-gstr2b-workbook",
+        )}`,
+      },
+    });
+
+    expect(rejected).toEqual({
+      ok: false,
+      requestId: "bad-stage-request",
+      errorCategory: "invalid-data-url",
+    });
+    expect(opfsFiles.has("filed-return-packs/ledger-1/may.xlsx")).toBe(false);
   });
 
   it("accepts a target-bound chunked GSTR-2B PDF even when visible text is encoded", async () => {

@@ -33,6 +33,8 @@ export interface PackOffscreenStageFiledReturnMessage {
     requestId: string;
     ledgerId: string;
     zipPath: string;
+    returnType: FiledReturnsReturnType;
+    artifactType: FiledReturnsConcreteArtifactType;
     dataUrl: string;
   };
 }
@@ -136,6 +138,8 @@ export function isPackOffscreenBlobUrlMessage(
     return (
       isBoundedString(input.payload.ledgerId, 1, 120) &&
       isSafeZipPath(input.payload.zipPath) &&
+      isFiledReturnsReturnType(input.payload.returnType) &&
+      isFiledReturnsConcreteArtifactType(input.payload.artifactType) &&
       isBoundedString(input.payload.dataUrl, 1, PACK_OFFSCREEN_DATA_URL_MAX_LENGTH)
     );
   }

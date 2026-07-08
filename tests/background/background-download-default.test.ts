@@ -109,7 +109,7 @@ const browserMocks = vi.hoisted(() => {
         {
           result: {
             actionId: details.args?.[0]?.actionId ?? "action-captured",
-            dataUrl: `data:application/pdf;base64,${globalThis.btoa("%PDF-1.7 synthetic")}`,
+            dataUrl: `data:application/pdf;base64,${globalThis.btoa("%PDF-1.7 synthetic\n%%EOF\n")}`,
             safeSignals: ["portal-blob-captured", "native-blob-click-suppressed"],
           },
         },
