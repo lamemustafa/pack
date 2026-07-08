@@ -8,9 +8,9 @@ import {
   supportsFiledReturnsArtifactType,
   type FiledReturnsConcreteArtifactType,
 } from "../../core/filed-returns-artifacts";
+import { dismissKnownFiledReturnsSummaryModal } from "./filed-returns-dialogs";
 import { resolveVisibleFiledReturnDownloadCandidates } from "./filed-returns-download-candidates";
 import { verifyFiledReturnsDownloadTarget } from "./filed-returns-download-target";
-import { dismissKnownFiledReturnsSummaryModal } from "./filed-returns-navigator";
 import {
   asPortalDownloadTriggerResult,
   detectFiledReturnsPortalAvailabilityIssue,

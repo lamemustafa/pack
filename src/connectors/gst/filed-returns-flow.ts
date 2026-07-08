@@ -7,11 +7,9 @@ import {
   normaliseText,
 } from "./filed-returns-dom";
 import { extractFiledReturnsDetailIdentity } from "./filed-returns-detail-identity";
+import { dismissKnownFiledReturnsSummaryModal } from "./filed-returns-dialogs";
 import { resolveVisibleFiledReturnDownloadCandidates } from "./filed-returns-download-candidates";
-import {
-  dismissKnownFiledReturnsSummaryModal,
-  navigateToFiledReturnsPage,
-} from "./filed-returns-navigator";
+import { navigateToFiledReturnsPage } from "./filed-returns-navigator";
 import { openFiledReturnFromApiSearch } from "./filed-returns-api-search";
 import { selectFiledReturnsFiltersAndSearch } from "./filed-returns-filter-form";
 import { detectPositiveNotFiledEvidence } from "./filed-returns-not-filed-evidence";

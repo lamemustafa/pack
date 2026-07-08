@@ -18,8 +18,8 @@ import {
 import {
   dismissSafePostLoginDialogs,
   dismissKnownFiledReturnsSummaryModal,
-  navigateToFiledReturnsPage,
-} from "../../src/connectors/gst/filed-returns-navigator";
+} from "../../src/connectors/gst/filed-returns-dialogs";
+import { navigateToFiledReturnsPage } from "../../src/connectors/gst/filed-returns-navigator";
 
 describe("filed returns navigation matcher", () => {
   it("prefers the explicit View Filed Returns portal candidate", () => {

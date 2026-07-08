@@ -3,8 +3,8 @@ import { activateElement, matchesAcceptedText, normaliseText } from "./filed-ret
 import {
   dismissSafePostLoginDialogs,
   hasVisibleSafePostLoginDialog,
-  navigateToReturnDashboardPage,
-} from "./filed-returns-navigator";
+} from "./filed-returns-dialogs";
+import { navigateToReturnDashboardPage } from "./filed-returns-navigator";
 import { detectFiledReturnsPortalAvailabilityIssue } from "./filed-returns-portal-availability";
 import { findMatchingActionableFiledReturnRows } from "./filed-returns-result-rows";
 import { filedReturnScopeId } from "./filed-returns-return-descriptors";
