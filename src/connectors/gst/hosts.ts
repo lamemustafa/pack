@@ -77,6 +77,7 @@ function getGstPortalTabPriority(url: string | undefined): number {
     const parsed = new URL(url);
     const pathname = parsed.pathname.toLowerCase();
 
+    if (isGstPortalAuthExitPath(pathname)) return -1;
     if (isGstPortalErrorPath(pathname)) return -1;
     if (isGstPortalArtifactPath(pathname)) return -1;
     if (parsed.origin === "https://return.gst.gov.in" && pathname.includes("/returns/auth/")) {
@@ -93,6 +94,10 @@ function getGstPortalTabPriority(url: string | undefined): number {
   } catch {
     return 0;
   }
+}
+
+function isGstPortalAuthExitPath(pathname: string): boolean {
+  return /\/services\/logout(?:\/|$)|\/logout(?:\/|$)/i.test(pathname);
 }
 
 function isGstPortalErrorPath(pathname: string): boolean {
