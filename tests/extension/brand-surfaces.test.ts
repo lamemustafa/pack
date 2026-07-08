@@ -59,18 +59,21 @@ describe("Pack brand surfaces", () => {
       "utf8",
     );
 
-    expect(globalCss).toContain("--pack-popup-width: 800px;");
-    expect(globalCss).toContain("--pack-popup-min-height: 600px;");
-    expect(globalCss).toContain("--pack-popup-max-height: 600px;");
+    expect(globalCss).toContain("--pack-popup-width: 920px;");
+    expect(globalCss).toContain("--pack-popup-min-width: 640px;");
+    expect(globalCss).toContain("--pack-popup-min-height: 680px;");
+    expect(globalCss).toContain("--pack-popup-max-height: 720px;");
     expect(globalCss).toContain("cursor: not-allowed;");
-    expect(popupCss).toContain("grid-template-columns: minmax(0, 1.55fr) minmax(240px, 0.7fr);");
+    expect(popupCss).toContain("grid-template-columns: minmax(0, 1.62fr) minmax(280px, 0.72fr);");
     expect(popupCss).toContain(".run-column");
-    expect(popupCss).toContain("position: static;");
+    expect(popupCss).toContain("position: sticky;");
+    expect(popupCss).toContain("top: 0;");
     expect(controlsCss).toContain(
-      "grid-template-columns: minmax(0, 1.45fr) minmax(175px, 0.75fr);",
+      "grid-template-columns: minmax(0, 1.48fr) minmax(190px, 0.72fr);",
     );
-    expect(controlsCss).toContain("grid-template-columns: minmax(0, 1.3fr) minmax(190px, 0.7fr);");
-    expect(controlsCss).toContain("grid-template-columns: minmax(0, 1fr) minmax(180px, 0.42fr);");
+    expect(controlsCss).toContain("grid-template-columns: minmax(0, 1.34fr) minmax(210px, 0.7fr);");
+    expect(controlsCss).toContain("grid-template-columns: minmax(0, 1fr) minmax(210px, 0.42fr);");
+    expect(controlsCss).toContain(".run-action-details");
     expect(controlsCss).toContain("position: sticky;");
     expect(controlsCss).toContain("bottom: 0;");
     expect(controlsCss).toContain("@media (max-width: 700px)");
