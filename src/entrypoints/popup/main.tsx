@@ -2,9 +2,11 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import "../../styles/global.css";
 import "../../styles/popup.css";
+import "../../styles/popup-target-summary.css";
 import { ScopeForm } from "./components";
 import { RecoveryActions } from "./recovery-actions";
 import { DiagnosticSignals, RunProgress } from "./run-summary";
+import { DownloadTargetSummary } from "./target-summary";
 import { usePackPopupController } from "./use-pack-popup-controller";
 
 function App() {
@@ -17,19 +19,15 @@ function App() {
           <img className="brand-logo" src="/brand/pack-logo-outlined.svg" alt="ComplyEaze Pack" />
           <h1>GST return downloads</h1>
         </div>
-        <p className="brand-mode">{popup.context?.supported ? "Portal ready" : "Local only"}</p>
+        <p className="brand-mode">Local-first</p>
       </header>
 
-      <section className="status-card" aria-live="polite">
-        <p className="status-title">{popup.completionStatus ?? popup.status}</p>
-        <p className="status-detail">
-          {popup.context === null
-            ? "Open GST Portal and choose a filed GST return period to begin."
-            : popup.context.supported
-              ? `Detected ${popup.context.pageKind} on ${popup.context.origin ?? "GST Portal"}.`
-              : (popup.context.requiredAction?.message ?? "This page is outside Pack V0 scope.")}
-        </p>
-      </section>
+      <DownloadTargetSummary
+        completionStatus={popup.completionStatus}
+        context={popup.context}
+        scope={popup.scope}
+        status={popup.status}
+      />
 
       <ScopeForm
         busy={popup.effectiveBusy}

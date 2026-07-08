@@ -1,7 +1,7 @@
 :root {
-  --pack-popup-width: 620px;
+  --pack-popup-width: 720px;
   --pack-popup-min-height: 620px;
-  --pack-popup-max-height: 680px;
+  --pack-popup-max-height: 720px;
   --pack-ink: #101923;
   --pack-muted: #536170;
   --pack-border: #d5dce5;
@@ -9,7 +9,9 @@
   --pack-soft: #f5f7fa;
   --pack-accent: #173a63;
   --pack-accent-strong: #0f2a49;
+  --pack-accent-soft: #e9f1f8;
   --pack-success: #177245;
+  --pack-warning: #8a5b00;
   color: var(--pack-ink);
   background: var(--pack-soft);
   color-scheme: light;

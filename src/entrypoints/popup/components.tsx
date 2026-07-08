@@ -42,8 +42,8 @@ export function ScopeForm({ busy, flowSummary, scope, onScopeChange, onStart }: 
   return (
     <section className="flow-panel" aria-label="Filed return download scope">
       <div className="panel-heading">
-        <p className="section-label">Download setup</p>
-        <h2>Choose what Pack should collect</h2>
+        <p className="section-label">Setup</p>
+        <h2>Return, period, and file format</h2>
       </div>
       <ScopeButtonGroup
         label="Filing"
@@ -99,12 +99,13 @@ export function ScopeForm({ busy, flowSummary, scope, onScopeChange, onStart }: 
         options={periodOptions}
         onChange={(period) => onScopeChange({ ...scope, period })}
       />
-      {fullFiscalYear ? (
-        <p className="scope-note">
-          {getFullFiscalYearNote(scope)}
-        </p>
-      ) : null}
-      <button className="primary-action" type="button" disabled={startAction.disabled} onClick={onStart}>
+      {fullFiscalYear ? <p className="scope-note">{getFullFiscalYearNote(scope)}</p> : null}
+      <button
+        className="primary-action"
+        type="button"
+        disabled={startAction.disabled}
+        onClick={onStart}
+      >
         {startAction.label}
       </button>
     </section>
