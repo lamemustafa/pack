@@ -48,6 +48,10 @@ describe("Pack brand surfaces", () => {
   });
 
   it("keeps the popup target-first and broad enough for operational controls", async () => {
+    const popupSource = await readFile(
+      path.join(rootDir, "src", "entrypoints", "popup", "main.tsx"),
+      "utf8",
+    );
     const globalCss = await readFile(path.join(rootDir, "src", "styles", "global.css"), "utf8");
     const popupCss = await readFile(path.join(rootDir, "src", "styles", "popup.css"), "utf8");
     const controlsCss = await readFile(
@@ -60,15 +64,19 @@ describe("Pack brand surfaces", () => {
     );
 
     expect(globalCss).toContain("--pack-popup-width: 1120px;");
-    expect(globalCss).toContain("--pack-popup-min-width: 820px;");
+    expect(globalCss).toContain("--pack-popup-min-width: 360px;");
     expect(globalCss).toContain("--pack-popup-min-height: 720px;");
     expect(globalCss).toContain("--pack-popup-max-height: 820px;");
     expect(globalCss).toContain("cursor: not-allowed;");
+    expect(popupSource).toContain("Open full workbench");
     expect(popupCss).toContain("width: min(var(--pack-popup-width), 100vw);");
     expect(popupCss).toContain("grid-template-columns: minmax(0, 1.55fr) minmax(320px, 0.9fr);");
+    expect(controlsCss).toContain(".workbench-link");
     expect(popupCss).toContain(".run-column");
     expect(popupCss).toContain("position: sticky;");
     expect(popupCss).toContain("top: 0;");
+    expect(popupCss).toContain("height: auto;");
+    expect(popupCss).toContain("max-height: none;");
     expect(controlsCss).toContain(
       "grid-template-columns: minmax(0, 1.55fr) minmax(220px, 0.72fr);",
     );

@@ -25,6 +25,9 @@ function App() {
           </div>
         </div>
         <div className="brand-badges" aria-label="Pack build status">
+          <a className="workbench-link" href="/popup.html" target="_blank" rel="noreferrer">
+            Open full workbench
+          </a>
           <p className="brand-mode">Local-first</p>
           <p className="build-marker">No credential capture</p>
         </div>

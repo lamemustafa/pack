@@ -251,6 +251,26 @@ html[data-pack-surface="popup"] #root {
 }
 
 @media (max-width: 720px) {
+  html[data-pack-surface="popup"],
+  html[data-pack-surface="popup"] body,
+  html[data-pack-surface="popup"] #root {
+    height: auto;
+    min-height: min(var(--pack-popup-min-height), 100vh);
+  }
+
+  html[data-pack-surface="popup"] body,
+  body:has(.popup-shell) {
+    overflow: auto;
+  }
+
+  .popup-shell {
+    width: 100vw;
+    min-height: min(var(--pack-popup-min-height), 100vh);
+    height: auto;
+    max-height: none;
+    padding: 10px;
+  }
+
   .command-workbench {
     grid-template-columns: 1fr;
   }

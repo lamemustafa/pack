@@ -29,6 +29,33 @@
   color: #4f3b12;
 }
 
+.workbench-link {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--pack-accent);
+  border-radius: 7px;
+  background: var(--pack-accent);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.1;
+  padding: 5px 9px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.workbench-link:hover {
+  border-color: var(--pack-accent-strong);
+  background: var(--pack-accent-strong);
+}
+
+.workbench-link:focus-visible {
+  outline: 2px solid #245b91;
+  outline-offset: 2px;
+}
+
 .scope-section {
   display: grid;
   gap: 8px;
@@ -255,5 +282,18 @@
   .scope-group-file .scope-options,
   .run-action-strip {
     grid-template-columns: 1fr;
+  }
+
+  .run-action-strip {
+    position: static;
+  }
+
+  .primary-action {
+    min-height: 48px;
+  }
+
+  .workbench-link {
+    order: 3;
+    flex-basis: 100%;
   }
 }

@@ -167,7 +167,9 @@ function artifactOptionDescription(
   if (artifactType === "EXCEL") {
     return returnType === "GSTR-2B" ? "Details workbook" : "E-invoice workbook";
   }
-  return returnType === "GSTR-3B" ? "Filed copy" : "Summary PDF";
+  if (returnType === "GSTR-3B") return "Filed copy";
+  if (returnType === "GSTR-2B") return "Summary file";
+  return "Summary copy";
 }
 
 function artifactOptionLabel(
