@@ -1,45 +1,27 @@
 import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "../../core/contracts";
+import { findFiledReturnsFilterRoot } from "./filed-returns-custom-dropdown";
 import {
-  findFieldRoot,
-  findFiledReturnsFilterRoot,
-  selectCustomOptionNearLabel,
-} from "./filed-returns-custom-dropdown";
-import {
-  findKnownGstSelect,
-  filedReturnsFilterFieldMatches,
-  findLabelledSelects,
-  hasFiledReturnsFilterFieldControl,
-} from "./filed-returns-filter-fields";
-import { acceptedFiledReturnsMonthTexts } from "./filed-returns-months";
-import {
-  activateElement,
-  delay,
-  dispatchChange,
-  getClickableElements,
-  matchesAcceptedText,
-  normaliseText,
-} from "./filed-returns-dom";
+  acceptedFilingPeriodOptions,
+  acceptedMonthOptions,
+  type FilterSelectionState,
+  FINANCIAL_YEAR_LABEL,
+  FILING_PERIOD_LABEL,
+  hasFieldControl,
+  isFilterSelectionComplete,
+  MONTH_LABEL,
+  readFilterSelectionState,
+  RETURN_TYPE_LABEL,
+  selectFieldOption,
+  summariseNativeSelectOptions,
+  waitForFieldSelection,
+} from "./filed-returns-filter-selection";
+import { activateElement, delay, getClickableElements, normaliseText } from "./filed-returns-dom";
 import { markFiledReturnsSearchPending } from "./filed-returns-search-state";
 import { filedReturnDescriptor } from "./filed-returns-return-descriptors";
 
 const FIELD_SETTLE_DELAY_MS = 500;
-const FIELD_SETTLE_POLL_MS = 50;
 const FIELD_STABILITY_DELAY_MS = 1_000;
-const FIELD_SELECTION_ATTEMPTS = 8;
 const FIELD_CONVERGENCE_ATTEMPTS = 4;
-const FINANCIAL_YEAR_LABEL = /financial\s+year/i;
-const FILING_PERIOD_LABEL = /^return\s+filing\s+period\b|^period\b/i;
-const MONTH_LABEL = /^month\b|^tax\s+period\b/i;
-const RETURN_TYPE_LABEL = /^return\s+type\b/i;
-type FieldSelectionAttempt = "selected" | "pending" | "missing";
-
-interface FilterSelectionState {
-  financialYearSelected: boolean;
-  periodSelected: boolean;
-  monthFieldPresent: boolean;
-  monthSelected: boolean;
-  returnTypeSelected: boolean;
-}
 
 export async function selectFiledReturnsFiltersAndSearch(
   documentRef: Document,
@@ -161,14 +143,6 @@ export async function selectFiledReturnsFiltersAndSearch(
   };
 }
 
-function acceptedFilingPeriodOptions(scope: FiledReturnsDownloadScope): string[] {
-  return ["Monthly", scope.period];
-}
-
-function acceptedMonthOptions(scope: FiledReturnsDownloadScope): string[] {
-  return acceptedFiledReturnsMonthTexts(scope.period);
-}
-
 async function settleFiledReturnsFilterSelection(
   documentRef: Document,
   scope: FiledReturnsDownloadScope,
@@ -220,51 +194,6 @@ async function settleFiledReturnsFilterSelection(
   return state;
 }
 
-function readFilterSelectionState(
-  documentRef: Document,
-  scope: FiledReturnsDownloadScope,
-): FilterSelectionState {
-  const monthFieldPresent = hasFieldControl(documentRef, MONTH_LABEL);
-  return {
-    financialYearSelected: filedReturnsFilterFieldMatches(documentRef, FINANCIAL_YEAR_LABEL, [
-      scope.financialYear,
-    ]),
-    periodSelected: filedReturnsFilterFieldMatches(
-      documentRef,
-      FILING_PERIOD_LABEL,
-      acceptedFilingPeriodOptions(scope),
-    ),
-    monthFieldPresent,
-    monthSelected:
-      !monthFieldPresent ||
-      filedReturnsFilterFieldMatches(documentRef, MONTH_LABEL, acceptedMonthOptions(scope)),
-    returnTypeSelected: filedReturnsFilterFieldMatches(documentRef, RETURN_TYPE_LABEL, [
-      scope.returnType,
-    ]),
-  };
-}
-
-function isFilterSelectionComplete(state: FilterSelectionState): boolean {
-  return (
-    state.financialYearSelected &&
-    state.periodSelected &&
-    state.monthSelected &&
-    state.returnTypeSelected
-  );
-}
-
-async function waitForFieldSelection(
-  documentRef: Document,
-  labelPattern: RegExp,
-  acceptedTexts: readonly string[],
-): Promise<void> {
-  const attempts = Math.ceil(FIELD_SETTLE_DELAY_MS / FIELD_SETTLE_POLL_MS);
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    if (filedReturnsFilterFieldMatches(documentRef, labelPattern, acceptedTexts)) return;
-    await delay(FIELD_SETTLE_POLL_MS);
-  }
-}
-
 function describeMissingFilterContext(documentRef: Document, state: FilterSelectionState): string {
   const missing: string[] = [];
   if (!state.financialYearSelected) missing.push("financial year");
@@ -294,27 +223,6 @@ function findSearchButton(root: ParentNode): HTMLElement | null {
   );
 }
 
-function summariseNativeSelectOptions(documentRef: Document, labelPattern: RegExp): string {
-  const select =
-    findKnownGstSelect(documentRef, labelPattern) ??
-    findLabelledSelects(documentRef, labelPattern)[0] ??
-    null;
-  if (!select) return "control present but native options were not found";
-
-  const options = Array.from(select.options)
-    .map((option) => normaliseText(option.textContent || option.value))
-    .filter(Boolean);
-  if (options.length === 0) return "no options available";
-
-  const visibleOptions = options.slice(0, 6).join(", ");
-  const suffix = options.length > 6 ? `, +${options.length - 6} more` : "";
-  return `available options: ${visibleOptions}${suffix}`;
-}
-
-function hasFieldControl(documentRef: Document, labelPattern: RegExp): boolean {
-  return hasFiledReturnsFilterFieldControl(documentRef, labelPattern);
-}
-
 function readElementText(element: HTMLElement): string {
   const HTMLInputElementConstructor = element.ownerDocument.defaultView?.HTMLInputElement;
   const inputValue =
@@ -336,75 +244,4 @@ function readElementText(element: HTMLElement): string {
       return true;
     })
     .join(" ");
-}
-
-async function selectFieldOption(
-  documentRef: Document,
-  labelPattern: RegExp,
-  acceptedTexts: readonly string[],
-): Promise<boolean> {
-  for (let attempt = 0; attempt < FIELD_SELECTION_ATTEMPTS; attempt += 1) {
-    const result = await selectOptionNearLabel(documentRef, labelPattern, acceptedTexts);
-    if (result === "selected") return true;
-    if (result === "missing") return false;
-    await delay(FIELD_SETTLE_DELAY_MS);
-  }
-
-  return false;
-}
-
-async function selectOptionNearLabel(
-  documentRef: Document,
-  labelPattern: RegExp,
-  acceptedTexts: readonly string[],
-): Promise<FieldSelectionAttempt> {
-  let hasPendingNativeControl = false;
-  const formRoot = findFiledReturnsFilterRoot(documentRef);
-  if (formRoot) {
-    const scopedKnownSelect = findKnownGstSelect(formRoot, labelPattern);
-    if (scopedKnownSelect) {
-      if (selectOption(scopedKnownSelect, acceptedTexts)) return "selected";
-      hasPendingNativeControl = true;
-    }
-
-    const fieldRoot = findFieldRoot(formRoot, labelPattern);
-    const select = fieldRoot?.querySelector("select");
-    if (select && select !== scopedKnownSelect) {
-      if (selectOption(select, acceptedTexts)) return "selected";
-      hasPendingNativeControl = true;
-    }
-  }
-
-  const knownDocumentSelect = findKnownGstSelect(documentRef, labelPattern);
-  if (knownDocumentSelect) {
-    if (selectOption(knownDocumentSelect, acceptedTexts)) return "selected";
-    hasPendingNativeControl = true;
-  }
-
-  for (const labelledSelect of findLabelledSelects(documentRef, labelPattern)) {
-    if (selectOption(labelledSelect, acceptedTexts)) return "selected";
-    hasPendingNativeControl = true;
-  }
-
-  if (hasPendingNativeControl) return "pending";
-
-  return (await selectCustomOptionNearLabel(documentRef, labelPattern, acceptedTexts))
-    ? "selected"
-    : "missing";
-}
-
-function selectOption(select: HTMLSelectElement, acceptedTexts: readonly string[]): boolean {
-  const selectedText = normaliseText(select.selectedOptions[0]?.textContent || select.value);
-  if (matchesAcceptedText(selectedText, acceptedTexts)) return true;
-
-  const option = Array.from(select.options).find((candidate) => {
-    const text = normaliseText(candidate.textContent || candidate.value);
-    return matchesAcceptedText(text, acceptedTexts);
-  });
-  if (!option) return false;
-
-  select.value = option.value;
-  select.selectedIndex = option.index;
-  dispatchChange(select);
-  return true;
 }
