@@ -8,15 +8,17 @@ import {
 } from "../../src/connectors/gst/filed-returns-download";
 import {
   collectSafeNavigationDiagnostics,
-  dismissSafePostLoginDialogs,
-  dismissKnownFiledReturnsSummaryModal,
   findDialogDismissalCandidateIndex,
   findFiledReturnsNavigationCandidateIndex,
   findReturnDashboardCandidateIndex,
-  navigateToFiledReturnsPage,
-  scoreFiledReturnsSummaryModalDismissalCandidate,
   scoreDialogDismissalCandidate,
   scoreFiledReturnsNavigationCandidate,
+  scoreFiledReturnsSummaryModalDismissalCandidate,
+} from "../../src/connectors/gst/filed-returns-navigation-candidates";
+import {
+  dismissSafePostLoginDialogs,
+  dismissKnownFiledReturnsSummaryModal,
+  navigateToFiledReturnsPage,
 } from "../../src/connectors/gst/filed-returns-navigator";
 
 describe("filed returns navigation matcher", () => {
