@@ -3,7 +3,7 @@ import {
   isPackOffscreenBlobUrlMessage,
   PACK_OFFSCREEN_BLOB_URL_TARGET,
 } from "../../src/core/offscreen-blob-url";
-import { createZip } from "../../src/entrypoints/offscreen/zip";
+import { createPortalGstr2bWorkbook } from "../fixtures/gstr2b-workbook";
 
 type RuntimeListener = (
   message: unknown,
@@ -518,20 +518,6 @@ describe("offscreen Blob URL entrypoint", () => {
 
   function textBytes(text: string): Uint8Array {
     return new TextEncoder().encode(text);
-  }
-
-  function createPortalGstr2bWorkbook(): Uint8Array {
-    return createZip([
-      { path: "[Content_Types].xml", bytes: textBytes("<Types />") },
-      { path: "xl/_rels/workbook.xml.rels", bytes: textBytes("<Relationships />") },
-      { path: "xl/sharedStrings.xml", bytes: textBytes("<sst />") },
-      { path: "xl/styles.xml", bytes: textBytes("<styleSheet />") },
-      { path: "xl/workbook.xml", bytes: textBytes("<workbook />") },
-      ...Array.from({ length: 10 }, (_, index) => ({
-        path: `xl/worksheets/sheet${index + 1}.xml`,
-        bytes: textBytes("<worksheet />"),
-      })),
-    ]);
   }
 
   function bytesToBase64(bytes: Uint8Array): string {

@@ -5,6 +5,7 @@ import {
   isExpectedCapturedDataUrlForTarget,
 } from "../../src/background/captured-download-data-url";
 import { createZip } from "../../src/entrypoints/offscreen/zip";
+import { createPortalGstr2bWorkbook, textBytes } from "../fixtures/gstr2b-workbook";
 
 function base64(input: string): string {
   return globalThis.btoa(input);
@@ -137,24 +138,6 @@ describe("captured download data URL validation", () => {
     ).toBe(true);
   });
 });
-
-function createPortalGstr2bWorkbook(): Uint8Array {
-  return createZip([
-    { path: "[Content_Types].xml", bytes: textBytes("<Types />") },
-    { path: "xl/_rels/workbook.xml.rels", bytes: textBytes("<Relationships />") },
-    { path: "xl/sharedStrings.xml", bytes: textBytes("<sst />") },
-    { path: "xl/styles.xml", bytes: textBytes("<styleSheet />") },
-    { path: "xl/workbook.xml", bytes: textBytes("<workbook />") },
-    ...Array.from({ length: 10 }, (_, index) => ({
-      path: `xl/worksheets/sheet${index + 1}.xml`,
-      bytes: textBytes("<worksheet />"),
-    })),
-  ]);
-}
-
-function textBytes(value: string): Uint8Array {
-  return new TextEncoder().encode(value);
-}
 
 function bytesToBase64(bytes: Uint8Array): string {
   return globalThis.btoa(bytesToBinaryString(bytes));

@@ -6,6 +6,7 @@ import {
   isLikelyXlsxBytes,
 } from "../../src/core/filed-return-artifact-bytes";
 import { createZip } from "../../src/entrypoints/offscreen/zip";
+import { createPortalGstr2bWorkbook, textBytes } from "../fixtures/gstr2b-workbook";
 
 describe("filed-return artifact byte signatures", () => {
   it("requires both PDF magic bytes and an EOF marker", () => {
@@ -43,21 +44,3 @@ describe("filed-return artifact byte signatures", () => {
     expect(isLikelyGstr2bPortalXlsxBytes(weakWorkbook)).toBe(false);
   });
 });
-
-function createPortalGstr2bWorkbook(): Uint8Array {
-  return createZip([
-    { path: "[Content_Types].xml", bytes: textBytes("<Types />") },
-    { path: "xl/_rels/workbook.xml.rels", bytes: textBytes("<Relationships />") },
-    { path: "xl/sharedStrings.xml", bytes: textBytes("<sst />") },
-    { path: "xl/styles.xml", bytes: textBytes("<styleSheet />") },
-    { path: "xl/workbook.xml", bytes: textBytes("<workbook />") },
-    ...Array.from({ length: 10 }, (_, index) => ({
-      path: `xl/worksheets/sheet${index + 1}.xml`,
-      bytes: textBytes("<worksheet />"),
-    })),
-  ]);
-}
-
-function textBytes(value: string): Uint8Array {
-  return new TextEncoder().encode(value);
-}
