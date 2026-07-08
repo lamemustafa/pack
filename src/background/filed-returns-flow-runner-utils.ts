@@ -1,4 +1,6 @@
+import { browser } from "wxt/browser";
 import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "../core/contracts";
+import type { PackMessageResponse } from "../core/messages";
 import {
   filedReturnDescriptor,
   filedReturnScopedSignal,
@@ -77,6 +79,17 @@ export function extractActivePeriod(step: PortalFlowStepResult): string | null {
 
 export function delay(ms: number): Promise<void> {
   return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
+}
+
+export async function persistFlowResponse(
+  response: Extract<PackMessageResponse, { ok: true }>,
+  deps: FiledReturnsFlowRunnerDeps,
+) {
+  if ("observation" in response && response.observation) {
+    await browser.storage.session.set({
+      [deps.storageKeys.observation]: response.observation,
+    });
+  }
 }
 
 function hasDirectDownloadReadySignal(
