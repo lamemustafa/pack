@@ -34,6 +34,10 @@ export function verifyFiledReturnZipBytes(bytes) {
       result.failures.push("outer-entry-compressed");
       continue;
     }
+    if (!isValidDosDate(entry.modifiedDate)) {
+      result.failures.push("invalid-entry-timestamp");
+      continue;
+    }
 
     const entryBytes = readStoredEntryBytes(bytes, entry);
     const extension = extensionOf(entry.name);
@@ -91,6 +95,7 @@ function readZipEntries(bytes) {
       throw new Error("Central directory header is invalid.");
     }
     const compressionMethod = view.getUint16(offset + 10, true);
+    const modifiedDate = view.getUint16(offset + 14, true);
     const compressedSize = view.getUint32(offset + 20, true);
     const uncompressedSize = view.getUint32(offset + 24, true);
     const nameLength = view.getUint16(offset + 28, true);
@@ -105,6 +110,7 @@ function readZipEntries(bytes) {
       compressedSize,
       compressionMethod,
       localHeaderOffset,
+      modifiedDate,
       name: new TextDecoder().decode(bytes.slice(nameStart, nameEnd)),
       uncompressedSize,
     });
@@ -181,6 +187,12 @@ function isLikelyXlsx(bytes) {
 
 function isLikelyXls(bytes) {
   return startsWith(bytes, [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
+}
+
+function isValidDosDate(value) {
+  const day = value & 0x1f;
+  const month = (value >> 5) & 0x0f;
+  return day >= 1 && day <= 31 && month >= 1 && month <= 12;
 }
 
 function startsWith(bytes, prefix) {

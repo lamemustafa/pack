@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -78,6 +78,24 @@ describe("filed return ZIP verifier", () => {
     });
     expect(output).not.toContain("july.xlsx");
   });
+
+  it("rejects ZIP entries with invalid zero DOS dates", async () => {
+    const zipPath = await writeZipFixture([
+      { path: "may.pdf", bytes: syntheticPdf() },
+      { path: "may.xlsx", bytes: syntheticXlsx() },
+    ]);
+    const bytes = await readFile(zipPath);
+    const invalidBytes = zeroZipEntryDates(new Uint8Array(bytes));
+    await writeFile(zipPath, invalidBytes);
+
+    const result = runVerifier(zipPath);
+
+    expect(result.status).toBe(1);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      ok: false,
+      failures: ["invalid-entry-timestamp"],
+    });
+  });
 });
 
 async function writeZipFixture(
@@ -109,4 +127,18 @@ function syntheticXlsx(): Uint8Array {
 
 function textBytes(value: string): Uint8Array {
   return new TextEncoder().encode(value);
+}
+
+function zeroZipEntryDates(bytes: Uint8Array): Uint8Array {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  for (let offset = 0; offset + 4 <= bytes.byteLength; offset += 1) {
+    const signature = view.getUint32(offset, true);
+    if (signature === 0x04034b50 && offset + 14 <= bytes.byteLength) {
+      view.setUint16(offset + 12, 0, true);
+    }
+    if (signature === 0x02014b50 && offset + 16 <= bytes.byteLength) {
+      view.setUint16(offset + 14, 0, true);
+    }
+  }
+  return bytes;
 }

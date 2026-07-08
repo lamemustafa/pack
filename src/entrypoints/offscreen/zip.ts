@@ -3,9 +3,10 @@ export interface ZipEntry {
   bytes: Uint8Array;
 }
 
-export function createZip(entries: readonly ZipEntry[]): Uint8Array {
+export function createZip(entries: readonly ZipEntry[], modifiedAt = new Date()): Uint8Array {
   const localParts: Uint8Array[] = [];
   const centralParts: Uint8Array[] = [];
+  const timestamp = toDosTimestamp(modifiedAt);
   let offset = 0;
 
   for (const entry of entries) {
@@ -17,8 +18,8 @@ export function createZip(entries: readonly ZipEntry[]): Uint8Array {
     localView.setUint16(4, 20, true);
     localView.setUint16(6, 0x0800, true);
     localView.setUint16(8, 0, true);
-    localView.setUint16(10, 0, true);
-    localView.setUint16(12, 0, true);
+    localView.setUint16(10, timestamp.time, true);
+    localView.setUint16(12, timestamp.date, true);
     localView.setUint32(14, crc, true);
     localView.setUint32(18, entry.bytes.length, true);
     localView.setUint32(22, entry.bytes.length, true);
@@ -33,8 +34,8 @@ export function createZip(entries: readonly ZipEntry[]): Uint8Array {
     centralView.setUint16(6, 20, true);
     centralView.setUint16(8, 0x0800, true);
     centralView.setUint16(10, 0, true);
-    centralView.setUint16(12, 0, true);
-    centralView.setUint16(14, 0, true);
+    centralView.setUint16(12, timestamp.time, true);
+    centralView.setUint16(14, timestamp.date, true);
     centralView.setUint32(16, crc, true);
     centralView.setUint32(20, entry.bytes.length, true);
     centralView.setUint32(24, entry.bytes.length, true);
@@ -78,4 +79,20 @@ function crc32(bytes: Uint8Array): number {
     }
   }
   return (crc ^ 0xffffffff) >>> 0;
+}
+
+function toDosTimestamp(value: Date): { date: number; time: number } {
+  const fallback = new Date("2026-01-01T00:00:00.000Z");
+  const date = Number.isFinite(value.getTime()) ? value : fallback;
+  const year = Math.min(2107, Math.max(1980, date.getFullYear()));
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+  const seconds = Math.floor(date.getSeconds() / 2);
+
+  return {
+    date: ((year - 1980) << 9) | (month << 5) | day,
+    time: (hours << 11) | (minutes << 5) | seconds,
+  };
 }

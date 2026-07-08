@@ -9,10 +9,13 @@ describe("offscreen ZIP writer", () => {
       0x72, 0x6b, 0x62, 0x6f, 0x6f, 0x6b,
     ]);
 
-    const zipBytes = createZip([
-      { path: "may.pdf", bytes: pdfBytes },
-      { path: "may.xlsx", bytes: workbookBytes },
-    ]);
+    const zipBytes = createZip(
+      [
+        { path: "may.pdf", bytes: pdfBytes },
+        { path: "may.xlsx", bytes: workbookBytes },
+      ],
+      new Date("2026-07-08T10:30:24.000Z"),
+    );
 
     const entries = extractStoredZipEntries(zipBytes);
 
@@ -20,6 +23,7 @@ describe("offscreen ZIP writer", () => {
     expect(entries.get("may.pdf")).toEqual(pdfBytes);
     expect(entries.get("may.xlsx")).toEqual(workbookBytes);
     expect(findEndOfCentralDirectory(zipBytes).entryCount).toBe(2);
+    expect(readFirstLocalHeaderDate(zipBytes)).toBeGreaterThan(0);
   });
 
   it("preserves simple entry paths without embedding the browser download path", () => {
@@ -34,6 +38,12 @@ describe("offscreen ZIP writer", () => {
     expect([...entries.keys()].some((path) => path.includes("/"))).toBe(false);
   });
 });
+
+function readFirstLocalHeaderDate(zipBytes: Uint8Array): number {
+  const view = new DataView(zipBytes.buffer, zipBytes.byteOffset, zipBytes.byteLength);
+  expect(view.getUint32(0, true)).toBe(0x04034b50);
+  return view.getUint16(12, true);
+}
 
 function extractStoredZipEntries(zipBytes: Uint8Array): Map<string, Uint8Array> {
   const entries = new Map<string, Uint8Array>();
