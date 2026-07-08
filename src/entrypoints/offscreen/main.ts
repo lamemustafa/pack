@@ -25,6 +25,13 @@ const chunkedFiledReturnsByTransfer = new Map<
     zipPath: string;
   }
 >();
+type StagedFiledReturnPayload = {
+  artifactType: FiledReturnsConcreteArtifactType;
+  ledgerId: string;
+  requestId: string;
+  returnType: FiledReturnsReturnType;
+  zipPath: string;
+};
 
 browser.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
   if (!isPackOffscreenBlobUrlMessage(message)) return false;
@@ -44,42 +51,7 @@ async function handleMessage(
   message: PackOffscreenBlobUrlMessage,
 ): Promise<PackOffscreenBlobUrlResponse> {
   if (message.type === "PACK_OFFSCREEN_STAGE_FILED_RETURN") {
-    const decoded = dataUrlChunksToDecoded([message.payload.dataUrl]);
-    if (
-      !decoded ||
-      decoded.blob.size === 0 ||
-      !isExpectedDecodedDataUrlForReturnType(
-        decoded.metadata,
-        decoded.bytes,
-        message.payload.artifactType,
-        message.payload.returnType,
-      )
-    ) {
-      return {
-        ok: false,
-        requestId: message.payload.requestId,
-        errorCategory: "invalid-data-url",
-      };
-    }
-    try {
-      const directory = await getLedgerDirectory(message.payload.ledgerId, true);
-      const fileHandle = await getLedgerFileHandle(directory, message.payload.zipPath, true);
-      const writable = await fileHandle.createWritable();
-      await writable.write(decoded.blob);
-      await writable.close();
-      return {
-        ok: true,
-        requestId: message.payload.requestId,
-        staged: true,
-        byteCountClass: "non-empty",
-      };
-    } catch {
-      return {
-        ok: false,
-        requestId: message.payload.requestId,
-        errorCategory: hasStorageDirectoryApi() ? "stage-failed" : "opfs-unavailable",
-      };
-    }
+    return stageFiledReturnDataUrl(message.payload, [message.payload.dataUrl]);
   }
 
   if (message.type === "PACK_OFFSCREEN_STAGE_FILED_RETURN_CHUNK") {
@@ -122,42 +94,7 @@ async function handleMessage(
     }
 
     chunkedFiledReturnsByTransfer.delete(key);
-    const decoded = dataUrlChunksToDecoded(transfer.chunks);
-    if (
-      !decoded ||
-      decoded.blob.size === 0 ||
-      !isExpectedDecodedDataUrlForReturnType(
-        decoded.metadata,
-        decoded.bytes,
-        transfer.artifactType,
-        transfer.returnType,
-      )
-    ) {
-      return {
-        ok: false,
-        requestId: message.payload.requestId,
-        errorCategory: "invalid-data-url",
-      };
-    }
-    try {
-      const directory = await getLedgerDirectory(message.payload.ledgerId, true);
-      const fileHandle = await getLedgerFileHandle(directory, message.payload.zipPath, true);
-      const writable = await fileHandle.createWritable();
-      await writable.write(decoded.blob);
-      await writable.close();
-      return {
-        ok: true,
-        requestId: message.payload.requestId,
-        staged: true,
-        byteCountClass: "non-empty",
-      };
-    } catch {
-      return {
-        ok: false,
-        requestId: message.payload.requestId,
-        errorCategory: hasStorageDirectoryApi() ? "stage-failed" : "opfs-unavailable",
-      };
-    }
+    return stageFiledReturnDataUrl(message.payload, transfer.chunks);
   }
 
   if (message.type === "PACK_OFFSCREEN_CREATE_FILED_RETURN_ZIP") {
@@ -250,6 +187,49 @@ async function getLedgerDirectory(
   const root = await navigator.storage.getDirectory();
   const packs = await root.getDirectoryHandle("filed-return-packs", { create });
   return packs.getDirectoryHandle(safeDirectorySegment(ledgerId), { create });
+}
+
+async function stageFiledReturnDataUrl(
+  payload: StagedFiledReturnPayload,
+  dataUrlChunks: string[],
+): Promise<PackOffscreenBlobUrlResponse> {
+  const decoded = dataUrlChunksToDecoded(dataUrlChunks);
+  if (
+    !decoded ||
+    decoded.blob.size === 0 ||
+    !isExpectedDecodedDataUrlForReturnType(
+      decoded.metadata,
+      decoded.bytes,
+      payload.artifactType,
+      payload.returnType,
+    )
+  ) {
+    return {
+      ok: false,
+      requestId: payload.requestId,
+      errorCategory: "invalid-data-url",
+    };
+  }
+
+  try {
+    const directory = await getLedgerDirectory(payload.ledgerId, true);
+    const fileHandle = await getLedgerFileHandle(directory, payload.zipPath, true);
+    const writable = await fileHandle.createWritable();
+    await writable.write(decoded.blob);
+    await writable.close();
+    return {
+      ok: true,
+      requestId: payload.requestId,
+      staged: true,
+      byteCountClass: "non-empty",
+    };
+  } catch {
+    return {
+      ok: false,
+      requestId: payload.requestId,
+      errorCategory: hasStorageDirectoryApi() ? "stage-failed" : "opfs-unavailable",
+    };
+  }
 }
 
 async function clearLedgerDirectory(ledgerId: string): Promise<void> {
