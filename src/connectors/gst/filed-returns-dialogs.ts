@@ -5,6 +5,10 @@ import {
   type NavigationCandidateInput,
   type NavigationCandidateScore,
 } from "./filed-returns-navigation-candidates";
+import {
+  forceHideLingeringFiledReturnsSummaryModal,
+  forceHideLingeringSessionExpiryDialog,
+} from "./filed-returns-dialog-hide";
 
 const DIALOG_SETTLE_DELAY_MS = 60;
 const DIALOG_SETTLE_POLL_MS = 15;
@@ -30,8 +34,6 @@ const SAFE_POST_LOGIN_DIALOG_PATTERNS = [
   /goods transport agency\s+annexure/i,
   /logged in session will expire[\s\S]*click continue to extend your session/i,
 ];
-const SESSION_EXPIRY_DIALOG_PATTERN =
-  /logged in session will expire[\s\S]*click continue to extend your session/i;
 
 export async function dismissKnownFiledReturnsSummaryModal(
   documentRef: Document,
@@ -58,6 +60,13 @@ export async function dismissKnownFiledReturnsSummaryModal(
   if (bestElement && bestScore.score >= 60) {
     activateElement(bestElement);
     await waitForDialogRootToSettle(modalRoot);
+    if (forceHideLingeringFiledReturnsSummaryModal(modalRoot)) {
+      return [
+        "detail-summary-modal-dismissed",
+        "detail-summary-modal-force-hidden",
+        ...bestScore.safeSignals,
+      ];
+    }
     return ["detail-summary-modal-dismissed", ...bestScore.safeSignals];
   }
 
@@ -113,7 +122,7 @@ function getVisibleDialogRoots(documentRef: Document): HTMLElement[] {
   );
   roots.push(...getKnownPostLoginDialogRoots(documentRef));
   roots.push(...getKnownFiledReturnsSummaryDialogRoots(documentRef));
-  return dedupeElements(roots);
+  return Array.from(new Set(roots));
 }
 
 function getVisiblePostLoginDialogRoots(documentRef: Document): HTMLElement[] {
@@ -254,33 +263,11 @@ function isElementStillConnectedAndVisible(element: Element): boolean {
   return isHtmlElement(element.ownerDocument, element) && isVisible(element);
 }
 
-function forceHideLingeringSessionExpiryDialog(element: Element): boolean {
-  if (!isHtmlElement(element.ownerDocument, element)) return false;
-
-  const text = element.innerText || element.textContent || "";
-  if (!SESSION_EXPIRY_DIALOG_PATTERN.test(text)) return false;
-
-  element.classList.remove("show", "in");
-  element.setAttribute("aria-hidden", "true");
-  element.style.display = "none";
-
-  const documentRef = element.ownerDocument;
-  documentRef.body?.classList.remove("modal-open");
-  for (const backdrop of Array.from(documentRef.querySelectorAll(".modal-backdrop"))) {
-    backdrop.remove();
-  }
-  return true;
-}
-
 function isHtmlElement(root: ParentNode, element: Element): element is HTMLElement {
   const documentRef = root.nodeType === 9 ? (root as Document) : root.ownerDocument;
   if (!documentRef) return false;
   const HTMLElementConstructor = documentRef.defaultView?.HTMLElement;
   return HTMLElementConstructor ? element instanceof HTMLElementConstructor : false;
-}
-
-function dedupeElements<T extends HTMLElement>(elements: readonly T[]): T[] {
-  return elements.filter((element, index) => elements.indexOf(element) === index);
 }
 
 function delay(ms: number): Promise<void> {

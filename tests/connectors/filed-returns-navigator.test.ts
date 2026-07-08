@@ -216,6 +216,38 @@ describe("filed returns navigation matcher", () => {
     expect(downloadClicked).toBe(0);
   });
 
+  it("force-hides a known summary modal when the portal leaves it mounted after close", async () => {
+    const documentRef = createDocument(`
+      <div class="modal show" style="display:block">
+        <div>System generated summary for GSTR-3B</div>
+        <button aria-label="Close">x</button>
+        <button>DOWNLOAD FILED GSTR-3B</button>
+      </div>
+      <div class="modal-backdrop show"></div>
+    `);
+    documentRef.body.classList.add("modal-open");
+    let closeClicked = 0;
+    documentRef.querySelector("button")?.addEventListener("click", () => {
+      closeClicked += 1;
+    });
+
+    const signals = await dismissKnownFiledReturnsSummaryModal(documentRef);
+    const modal = documentRef.querySelector<HTMLElement>(".modal");
+
+    expect(signals).toEqual(
+      expect.arrayContaining([
+        "detail-summary-modal-dismissed",
+        "detail-summary-modal-force-hidden",
+        "summary-dialog-close",
+      ]),
+    );
+    expect(closeClicked).toBe(1);
+    expect(modal?.style.display).toBe("none");
+    expect(modal?.getAttribute("aria-hidden")).toBe("true");
+    expect(documentRef.body.classList.contains("modal-open")).toBe(false);
+    expect(documentRef.querySelector(".modal-backdrop")).toBeNull();
+  });
+
   it("does not dismiss unrelated modals", async () => {
     const documentRef = createDocument(`
       <div class="modal show" style="display:block">
