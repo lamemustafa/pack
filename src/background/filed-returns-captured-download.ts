@@ -22,7 +22,7 @@ import { withFiledReturnsDownloadDiagnostic } from "./filed-returns-download-dia
 import type { FiledReturnsFlowMessagingDeps } from "./filed-returns-flow-messaging";
 import {
   capturePortalBlobDownloadInMainWorld,
-} from "./main-world-blob-capture";
+} from "./main-world-capture-executor";
 import type { MainWorldChunkedCaptureRequest } from "./main-world-capture-contracts";
 
 export async function startMainWorldCapturedFiledReturnDownload({
