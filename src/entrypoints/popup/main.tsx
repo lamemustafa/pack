@@ -40,6 +40,7 @@ function App() {
           />
           <ScopeForm
             busy={popup.effectiveBusy}
+            context={popup.context}
             flowSummary={popup.scopedFlowSummary}
             scope={popup.scope}
             onScopeChange={popup.setScope}
@@ -49,6 +50,7 @@ function App() {
 
         <aside className="evidence-column" aria-label="Run status and recovery">
           <RunEvidencePanel
+            portalReady={popup.context?.supported === true}
             filedReturnsObservation={popup.filedReturnsObservation}
             scopedFlowSummary={popup.scopedFlowSummary}
             summaryHeading={popup.summaryHeading}
@@ -56,6 +58,7 @@ function App() {
           {showRecovery ? (
             <RecoveryActions
               busy={popup.effectiveBusy}
+              portalReady={popup.context?.supported === true}
               summary={popup.scopedFlowSummary}
               onAcknowledgeInterruptedRun={() => void popup.acknowledgeInterruptedRun()}
               onRetryFullFiscalYearTarget={() => void popup.retryFullFiscalYearTarget()}

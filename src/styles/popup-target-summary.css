@@ -39,6 +39,12 @@
   color: #185d38;
 }
 
+.state-pill-needed {
+  border-color: #ddc58b;
+  background: #fff9eb;
+  color: #5f4300;
+}
+
 .target-metadata {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

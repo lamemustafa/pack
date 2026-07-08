@@ -2,10 +2,12 @@ import type { FiledReturnsFlowSummary, PortalObservation } from "../../core/cont
 import { DiagnosticSignals, RunProgress } from "./run-summary";
 
 export function RunEvidencePanel({
+  portalReady,
   filedReturnsObservation,
   scopedFlowSummary,
   summaryHeading,
 }: {
+  portalReady: boolean;
   filedReturnsObservation: PortalObservation | null;
   scopedFlowSummary: FiledReturnsFlowSummary | null;
   summaryHeading: string | null;
@@ -14,13 +16,13 @@ export function RunEvidencePanel({
     return (
       <section className="evidence-panel evidence-panel-active" aria-label="Run evidence">
         <div className="evidence-heading">
-          <div>
-            <p className="section-label">Run evidence</p>
-            <h2>{summaryHeading}</h2>
-          </div>
-          <RunProgress summary={scopedFlowSummary} />
+        <div>
+          <p className="section-label">Run evidence</p>
+          <h2>{summaryHeading}</h2>
         </div>
-        <p className="status-detail">{scopedFlowSummary.flowStep.safeMessage}</p>
+        <RunProgress summary={scopedFlowSummary} />
+      </div>
+        <p className="status-detail">{displayFlowStepMessage(scopedFlowSummary)}</p>
         <DiagnosticSignals summary={scopedFlowSummary} />
       </section>
     );
@@ -39,10 +41,19 @@ export function RunEvidencePanel({
   return (
     <section className="evidence-panel" aria-label="Run evidence">
       <p className="section-label">Run evidence</p>
-      <h2>No active run</h2>
+      <h2>{portalReady ? "Ready for a local run" : "GST Portal tab needed"}</h2>
       <p className="status-detail">
-        Open an authenticated GST Portal tab, choose a target, then start the local download.
+        {portalReady
+          ? "Choose the target and start when the GST Portal page is still open in this window."
+          : "Open an authenticated GST return dashboard or return page in this window before starting."}
       </p>
     </section>
   );
+}
+
+function displayFlowStepMessage(summary: FiledReturnsFlowSummary): string {
+  if (summary.flowStep.safeSignals.includes("gst-login-tab-opened")) {
+    return "Open a signed-in GST Portal tab, then retry this period or cancel and reset.";
+  }
+  return summary.flowStep.safeMessage;
 }

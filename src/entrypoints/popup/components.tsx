@@ -1,4 +1,8 @@
-import type { FiledReturnsDownloadScope, FiledReturnsFlowSummary } from "../../core/contracts";
+import type {
+  FiledReturnsDownloadScope,
+  FiledReturnsFlowSummary,
+  PortalContext,
+} from "../../core/contracts";
 import {
   FILED_RETURNS_ARTIFACT_TYPES,
   filedReturnsArtifactLabel,
@@ -19,13 +23,21 @@ import { ScopeButtonGroup } from "./scope-button-group";
 
 export interface ScopeFormProps {
   busy: string | null;
+  context: PortalContext | null;
   flowSummary?: FiledReturnsFlowSummary | null;
   scope: FiledReturnsDownloadScope;
   onScopeChange: (scope: FiledReturnsDownloadScope) => void;
   onStart: () => void;
 }
 
-export function ScopeForm({ busy, flowSummary, scope, onScopeChange, onStart }: ScopeFormProps) {
+export function ScopeForm({
+  busy,
+  context,
+  flowSummary,
+  scope,
+  onScopeChange,
+  onStart,
+}: ScopeFormProps) {
   const financialYearOptions = getFiledReturnsFinancialYearOptions();
   const singlePeriodOptions = getFiledReturnsPeriodOptions(scope.financialYear, new Date());
   const scopePeriodOptions = getFiledReturnsScopePeriodOptions(
@@ -44,7 +56,7 @@ export function ScopeForm({ busy, flowSummary, scope, onScopeChange, onStart }: 
     scope.artifactType,
   );
   const fullFiscalYear = isFullFiscalYearScope(scope);
-  const startAction = getScopeFormStartAction(scope, flowSummary, busy, fullFiscalYear);
+  const startAction = getScopeFormStartAction(scope, flowSummary, busy, fullFiscalYear, context);
 
   return (
     <section className="flow-panel" aria-label="Filed return download scope">
@@ -139,6 +151,12 @@ export function ScopeForm({ busy, flowSummary, scope, onScopeChange, onStart }: 
         )}
       </div>
       {fullFiscalYear ? <p className="scope-note">{getFullFiscalYearNote(scope)}</p> : null}
+      {!context?.supported ? (
+        <p className="scope-note scope-note-warning">
+          Open a signed-in GST return dashboard or return page before starting. Pack will not open
+          login pages or reuse stale portal state.
+        </p>
+      ) : null}
       <button
         className="primary-action"
         type="button"
@@ -204,9 +222,11 @@ function getScopeFormStartAction(
   summary: FiledReturnsFlowSummary | null | undefined,
   busy: string | null,
   fullFiscalYear: boolean,
+  context: PortalContext | null,
 ): { disabled: boolean; label: string } {
   if (busy === "start-filed-returns-flow") return { disabled: true, label: "Starting..." };
   if (busy !== null) return { disabled: true, label: defaultStartLabel(fullFiscalYear) };
+  if (!context?.supported) return { disabled: true, label: "Open GST Portal tab first" };
   if (summary && isSameScope(scope, summary.scope)) {
     const signals = new Set(summary.flowStep.safeSignals);
     if (signals.has("filed-returns-run-active") || signals.has("full-fiscal-year-run-active")) {

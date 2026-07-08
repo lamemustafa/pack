@@ -20,6 +20,12 @@
   padding: 11px 12px;
 }
 
+.scope-note-warning {
+  border-color: #ddc58b;
+  background: #fff9eb;
+  color: #4f3b12;
+}
+
 .scope-section {
   display: grid;
   gap: 12px;

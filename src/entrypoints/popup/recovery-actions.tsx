@@ -2,6 +2,7 @@ import type { FiledReturnsFlowSummary } from "../../core/contracts";
 
 export interface RecoveryActionsProps {
   busy: string | null;
+  portalReady: boolean;
   summary: FiledReturnsFlowSummary | null;
   onAcknowledgeInterruptedRun: () => void;
   onRetryFullFiscalYearTarget: () => void;
@@ -12,6 +13,7 @@ export interface RecoveryActionsProps {
 
 export function RecoveryActions({
   busy,
+  portalReady,
   summary,
   onAcknowledgeInterruptedRun,
   onRetryFullFiscalYearTarget,
@@ -24,6 +26,7 @@ export function RecoveryActions({
   const { needsFullFiscalYearReview, needsRunReview, needsTargetReview, runActive, signals } =
     recoveryState;
   const canManuallyObserveFullYear = canManuallyObserveFullFiscalYearTarget(summary);
+  const retryDisabled = busy !== null || !portalReady;
 
   return (
     <section className="recovery-panel" aria-label="Filed return recovery actions">
@@ -53,7 +56,10 @@ export function RecoveryActions({
       ) : null}
       {needsTargetReview ? (
         <>
-          <button type="button" disabled={busy !== null} onClick={onRetryTarget}>
+          {!portalReady ? (
+            <p className="muted">Open a signed-in GST Portal tab before retrying this period.</p>
+          ) : null}
+          <button type="button" disabled={retryDisabled} onClick={onRetryTarget}>
             {busy === "retry-filed-returns-target" ? "Retrying..." : "Retry this period"}
           </button>
           <button
@@ -82,7 +88,10 @@ export function RecoveryActions({
               currently open.
             </p>
           ) : null}
-          <button type="button" disabled={busy !== null} onClick={onRetryFullFiscalYearTarget}>
+          {!portalReady ? (
+            <p className="muted">Open a signed-in GST Portal tab before retrying this period.</p>
+          ) : null}
+          <button type="button" disabled={retryDisabled} onClick={onRetryFullFiscalYearTarget}>
             {busy === "retry-full-fiscal-year-target" ? "Retrying..." : retryFullYearLabel(summary)}
           </button>
           {canManuallyObserveFullYear ? (

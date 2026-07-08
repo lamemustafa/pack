@@ -18,6 +18,9 @@ export function DownloadTargetSummary({
 }) {
   const artifactType = normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType);
   const portalState = context?.supported ? "Portal ready" : "Portal needed";
+  const stateClassName = context?.supported
+    ? "state-pill state-pill-ready"
+    : "state-pill state-pill-needed";
 
   return (
     <section className="target-strip" aria-label="Selected filed return download target">
@@ -26,9 +29,7 @@ export function DownloadTargetSummary({
           <p className="section-label">Selected target</p>
           <h2>{scope.returnType} local download</h2>
         </div>
-        <span className={context?.supported ? "state-pill state-pill-ready" : "state-pill"}>
-          {portalState}
-        </span>
+        <span className={stateClassName}>{portalState}</span>
       </div>
       <dl className="target-metadata">
         <div>
