@@ -51,43 +51,6 @@ export function ScopeForm({
         <h2>Return, period, and file format</h2>
       </div>
       <div className="scope-form-grid">
-        <div className="scope-action-column">
-          <ScopeActionPanel
-            actionCopy={actionCopy}
-            disabled={startAction.disabled}
-            label={startAction.label}
-            onStart={onStart}
-          />
-          <div className="scope-section scope-section-period">
-            <ScopeSelect
-              label="Financial year"
-              value={scope.financialYear}
-              options={formModel.financialYearOptions}
-              onChange={(financialYear) =>
-                onScopeChange(
-                  normaliseFiledReturnsScope({
-                    ...scope,
-                    financialYear,
-                  }),
-                )
-              }
-            />
-            {formModel.fullFiscalYear ? null : (
-              <ScopeSelect
-                label="Period"
-                value={scope.period}
-                options={formModel.singlePeriodOptions}
-                onChange={(period) => onScopeChange({ ...scope, period })}
-              />
-            )}
-          </div>
-          {!context?.supported ? (
-            <p className="scope-note scope-note-warning">
-              Open a signed-in GST return dashboard or return page before starting. Pack will not
-              open login pages or reuse stale portal state.
-            </p>
-          ) : null}
-        </div>
         <div className="scope-section scope-section-primary">
           <ScopeButtonGroup
             className="scope-group-return"
@@ -142,6 +105,41 @@ export function ScopeForm({
             }
           />
         </div>
+        <div className="scope-section scope-section-period">
+          <ScopeSelect
+            label="Financial year"
+            value={scope.financialYear}
+            options={formModel.financialYearOptions}
+            onChange={(financialYear) =>
+              onScopeChange(
+                normaliseFiledReturnsScope({
+                  ...scope,
+                  financialYear,
+                }),
+              )
+            }
+          />
+          {formModel.fullFiscalYear ? null : (
+            <ScopeSelect
+              label="Period"
+              value={scope.period}
+              options={formModel.singlePeriodOptions}
+              onChange={(period) => onScopeChange({ ...scope, period })}
+            />
+          )}
+        </div>
+        {!context?.supported ? (
+          <p className="scope-note scope-note-warning">
+            Open a signed-in GST return dashboard or return page before starting. Pack will not
+            open login pages or reuse stale portal state.
+          </p>
+        ) : null}
+        <ScopeActionPanel
+          actionCopy={actionCopy}
+          disabled={startAction.disabled}
+          label={startAction.label}
+          onStart={onStart}
+        />
       </div>
     </section>
   );

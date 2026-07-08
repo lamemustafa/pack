@@ -14,11 +14,7 @@ export function ScopeActionPanel({
       <div>
         <p className="section-label">Action</p>
         <p className="run-action-copy">{actionCopy.summary}</p>
-        <ul className="run-action-list" aria-label="Run behavior">
-          {actionCopy.details.map((detail) => (
-            <li key={detail}>{detail}</li>
-          ))}
-        </ul>
+        <p className="run-action-detail">{actionCopy.details.slice(0, 3).join(" · ")}</p>
       </div>
       <button className="primary-action" type="button" disabled={disabled} onClick={onStart}>
         {label}

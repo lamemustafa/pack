@@ -60,14 +60,13 @@ describe("Pack brand surfaces", () => {
     );
 
     expect(globalCss).toContain("--pack-popup-width: 800px;");
-    expect(globalCss).toContain("--pack-popup-min-height: 600px;");
+    expect(globalCss).toContain("--pack-popup-min-height: 580px;");
     expect(globalCss).toContain("--pack-popup-max-height: 600px;");
-    expect(popupCss).toContain(".target-column");
-    expect(popupCss).toContain("grid-column: 1 / -1;");
-    expect(popupCss).toContain("grid-row: 1;");
-    expect(popupCss).toContain("grid-column: 2;");
-    expect(popupCss).toContain("grid-row: 2;");
+    expect(popupCss).toContain("grid-template-columns: minmax(0, 1fr) 300px;");
+    expect(popupCss).toContain(".run-column");
+    expect(popupCss).toContain("position: sticky;");
     expect(controlsCss).toContain("grid-template-columns: minmax(0, 1fr) 180px;");
-    expect(targetCss).toContain("grid-template-columns: repeat(4, minmax(0, 1fr));");
+    expect(controlsCss).toContain("border-top: 1px solid #d7e0ea;");
+    expect(targetCss).toContain("grid-template-columns: repeat(2, minmax(0, 1fr));");
   });
 });
