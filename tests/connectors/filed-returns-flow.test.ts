@@ -611,7 +611,10 @@ describe("filed returns guided flow", () => {
     vi.stubGlobal("localStorage", documentRef.defaultView?.localStorage);
     try {
       localStorage.setItem("rtn_prd", "052026");
-      localStorage.setItem("sum052026masked-source", JSON.stringify({ summary: { available: true } }));
+      localStorage.setItem(
+        "sum052026masked-source",
+        JSON.stringify({ summary: { available: true } }),
+      );
 
       const result = await triggerGstr2bDownload(documentRef, {
         actionId: "action-gstr2b-alternate",
@@ -644,7 +647,7 @@ describe("filed returns guided flow", () => {
 
     expect(result.capturedDownloadRequest).toBeUndefined();
     expect(result.mainWorldCaptureRequest).toMatchObject({
-        actionId: "action-gstr2b-excel",
+      actionId: "action-gstr2b-excel",
       signalPrefix: "gstr2b",
     });
   });
@@ -1333,9 +1336,7 @@ describe("filed returns guided flow", () => {
       ]),
     );
     expect(searchClicked).toBe(0);
-    expect(documentRef.querySelector<HTMLSelectElement>("[name='mon']")?.value).toBe(
-      "object:205",
-    );
+    expect(documentRef.querySelector<HTMLSelectElement>("[name='mon']")?.value).toBe("object:205");
 
     const searchResult = await runFiledReturnsDownloadStep(documentRef, {
       artifactType: "PDF",
@@ -5015,6 +5016,48 @@ describe("filed returns guided flow", () => {
     });
     expect(downloadClicked).toBe(0);
   });
+
+  it.each(["PDF", "EXCEL"] as const)(
+    "captures an explicit filed GSTR-2B %s download before any portal click",
+    async (artifactType) => {
+      const documentRef = createGstr2bSummaryDocument();
+      let pdfClicked = 0;
+      let excelClicked = 0;
+      const buttons = documentRef.querySelectorAll("button");
+      buttons[0]?.addEventListener("click", () => {
+        pdfClicked += 1;
+      });
+      buttons[1]?.addEventListener("click", () => {
+        excelClicked += 1;
+      });
+
+      const result = await triggerFiledReturnDownload(documentRef, {
+        actionId: `test-gstr2b-${artifactType.toLowerCase()}`,
+        artifactType,
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-2B",
+      });
+
+      expect(result.downloadTrigger.state).toBe("clicked");
+      expect(result.downloadTrigger.scopeId).toBe("gst-gstr2b-private-v0");
+      expect(result.downloadTrigger.safeSignals).toEqual(
+        expect.arrayContaining([
+          "filed-return-download-clicked",
+          "filed-gstr2b-download-clicked",
+          "filed-gstr2b-portal-blob-download-captured",
+          "filed-gstr2b-extension-download-requested",
+          `filed-return-artifact-clicked:${artifactType}`,
+        ]),
+      );
+      expect(result.mainWorldCaptureRequest).toMatchObject({
+        actionId: `test-gstr2b-${artifactType.toLowerCase()}`,
+        signalPrefix: "filed-gstr2b",
+      });
+      expect(pdfClicked).toBe(0);
+      expect(excelClicked).toBe(0);
+    },
+  );
 
   it("treats the filed GSTR-1 View Summary page as PDF-download ready", async () => {
     const documentRef = createGstDocument(

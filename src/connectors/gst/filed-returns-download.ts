@@ -220,7 +220,7 @@ function tryCaptureFiledReturnBlobDownload(
 
 function supportsFiledReturnBlobCapture(target: FiledReturnsDownloadTarget): boolean {
   if (target.returnType === "GSTR-3B") return (target.artifactType ?? "PDF") === "PDF";
-  return target.returnType === "GSTR-1";
+  return target.returnType === "GSTR-1" || target.returnType === "GSTR-2B";
 }
 
 function detectBlockedPortalState(documentRef: Document): PortalDownloadTriggerResult | null {
