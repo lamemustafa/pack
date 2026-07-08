@@ -16,13 +16,14 @@ html[data-pack-surface="popup"] body {
 
 .popup-shell {
   display: grid;
-  width: min(var(--pack-popup-width), calc(100vw - 24px));
+  width: 100vw;
+  max-width: var(--pack-popup-width);
   min-height: var(--pack-popup-min-height);
   max-height: var(--pack-popup-max-height);
   overflow-y: auto;
   align-content: start;
-  gap: 12px;
-  padding: 14px;
+  gap: 10px;
+  padding: 12px;
   background: var(--pack-soft);
 }
 
@@ -42,7 +43,7 @@ html[data-pack-surface="popup"] body {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 11px 13px;
+  padding: 10px 12px;
 }
 
 .brand-title-block {
@@ -53,14 +54,14 @@ html[data-pack-surface="popup"] body {
 }
 
 .brand-logo {
-  width: 96px;
+  width: 82px;
   max-width: 100%;
   height: auto;
 }
 
 .brand-header h1 {
   margin-top: 2px;
-  font-size: 17px;
+  font-size: 16px;
 }
 
 .brand-badges {
@@ -102,8 +103,8 @@ html[data-pack-surface="popup"] body {
 
 .command-workbench {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
-  gap: 14px;
+  grid-template-columns: minmax(0, 1.45fr) minmax(330px, 0.75fr);
+  gap: 10px;
   align-items: start;
 }
 
@@ -116,7 +117,7 @@ html[data-pack-surface="popup"] body {
 
 .run-column {
   position: sticky;
-  top: 0;
+  top: 10px;
 }
 
 .section-label {
@@ -142,15 +143,15 @@ html[data-pack-surface="popup"] body {
 .panel-heading h2 {
   margin: 0;
   color: var(--pack-ink);
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1.25;
 }
 
 .evidence-panel,
 .recovery-panel {
   display: grid;
-  gap: 10px;
-  padding: 13px;
+  gap: 9px;
+  padding: 12px;
 }
 
 .evidence-panel {
@@ -172,7 +173,7 @@ html[data-pack-surface="popup"] body {
 .evidence-panel h2 {
   margin: 0;
   color: var(--pack-ink);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 800;
   line-height: 1.25;
 }
@@ -202,11 +203,30 @@ html[data-pack-surface="popup"] body {
 }
 
 .fineprint {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: center;
   margin: 0;
   border: 1px solid #dbe3ec;
   border-radius: 8px;
   background: #ffffff;
   padding: 8px 10px;
+}
+
+.fineprint span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fineprint span::before {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--pack-success);
+  content: "";
 }
 
 @media (max-width: 940px) {

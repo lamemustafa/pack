@@ -257,13 +257,12 @@ describe("popup full-year recovery actions", () => {
       }),
     );
 
-    expect(markup).toContain("Captures only portal-generated PDF and Excel controls");
-    expect(markup).toContain("Create one local ZIP from eligible periods.");
-    expect(markup).toContain("Builds one final ZIP handoff");
+    expect(markup).toContain("Collect eligible periods into one local ZIP.");
+    expect(markup).toContain("Hands off one ZIP");
     expect(markup).not.toContain("selected GSTR-1 e-invoice details file");
   });
 
-  it("keeps the primary run action before dense scope controls", () => {
+  it("keeps the primary zip action in the workbench flow", () => {
     const markup = renderToStaticMarkup(
       createElement(ScopeForm, {
         busy: null,
@@ -280,9 +279,9 @@ describe("popup full-year recovery actions", () => {
       }),
     );
 
-    expect(markup.indexOf("Start local full-year run")).toBeGreaterThan(-1);
-    expect(markup.indexOf("Start local full-year run")).toBeLessThan(
-      markup.indexOf("<legend>Return</legend>"),
+    expect(markup.indexOf("Start full-year ZIP")).toBeGreaterThan(-1);
+    expect(markup.indexOf("Start full-year ZIP")).toBeGreaterThan(
+      markup.indexOf("Summary PDF + details Excel"),
     );
   });
 
@@ -303,9 +302,9 @@ describe("popup full-year recovery actions", () => {
       }),
     );
 
-    expect(markup).toContain("Download the selected period through the active GST tab.");
-    expect(markup).toContain("Uses the selected portal page");
-    expect(markup).toContain("Start download");
+    expect(markup).toContain("Collect one period from the active GST tab.");
+    expect(markup).toContain("Target-bound click");
+    expect(markup).toContain("Download selected period");
   });
 
   it("presents interrupted runs as resettable stuck work", () => {
@@ -404,9 +403,9 @@ describe("popup full-year recovery actions", () => {
     expect(markup).not.toContain("Pack opened the GST Portal login page.");
   });
 
-  it("explains final zip save confirmation instead of showing stale unconfirmed copy", () => {
+  it("explains final zip retry instead of showing stale unconfirmed copy", () => {
     const summary = summaryFor("download-unconfirmed");
-    summary.status = "complete";
+    summary.status = "blocked";
     summary.flowStep.state = "download-unconfirmed";
     summary.flowStep.safeSignals = ["full-fiscal-year-zip-download-unconfirmed"];
     summary.flowStep.safeMessage =
@@ -417,11 +416,11 @@ describe("popup full-year recovery actions", () => {
         portalReady: true,
         filedReturnsObservation: null,
         scopedFlowSummary: summary,
-        summaryHeading: "Last filed-returns run: complete",
+        summaryHeading: "Last filed-returns run: blocked",
       }),
     );
 
-    expect(markup).toContain("If the Save panel is open, click Save.");
+    expect(markup).toContain("Retry the final ZIP handoff before starting another full-year run.");
     expect(markup).not.toContain("the final browser download did not complete");
   });
 });

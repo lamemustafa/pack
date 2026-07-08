@@ -71,16 +71,16 @@ export function getScopeActionCopy(
 ): { summary: string; details: string[] } {
   if (!fullFiscalYear) {
     return {
-      summary: "Download the selected period through the active GST tab.",
-      details: ["Uses the selected portal page", "Records local status only"],
+      summary: "Collect one period from the active GST tab.",
+      details: ["Target-bound click", "Local browser download", "No portal data leaves the device"],
     };
   }
 
   const artifactType = normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType);
   const details = [
-    "Visits eligible filed periods",
-    "Builds one final ZIP handoff",
-    "Stops on ambiguous downloads",
+    "Walks each eligible period",
+    "Stages files locally",
+    "Hands off one ZIP",
   ];
 
   if (scope.returnType === "GSTR-2B" && artifactType === "PDF_AND_EXCEL") {
@@ -90,7 +90,7 @@ export function getScopeActionCopy(
     details.push("Includes Excel only when the portal provides it");
   }
   return {
-    summary: "Create one local ZIP from eligible periods.",
+    summary: "Collect eligible periods into one local ZIP.",
     details,
   };
 }
@@ -129,7 +129,7 @@ export function getScopeFormStartAction(
 }
 
 function defaultStartLabel(fullFiscalYear: boolean): string {
-  return fullFiscalYear ? "Start local full-year run" : "Start download";
+  return fullFiscalYear ? "Start full-year ZIP" : "Download selected period";
 }
 
 function isSameScope(left: FiledReturnsDownloadScope, right: FiledReturnsDownloadScope): boolean {

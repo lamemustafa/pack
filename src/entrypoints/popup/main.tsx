@@ -20,8 +20,8 @@ function App() {
         <div className="brand-title-block">
           <img className="brand-logo" src="/brand/pack-logo-outlined.svg" alt="ComplyEaze Pack" />
           <div>
-            <p className="section-label">GST Portal collector</p>
-            <h1>Return file workbench</h1>
+            <p className="section-label">Local GST return files</p>
+            <h1>Pack download console</h1>
           </div>
         </div>
         <div className="brand-badges" aria-label="Pack build status">
@@ -29,6 +29,13 @@ function App() {
           <p className="build-marker">No credential capture</p>
         </div>
       </header>
+
+      <DownloadTargetSummary
+        completionStatus={popup.completionStatus}
+        context={popup.context}
+        scope={popup.scope}
+        status={popup.status}
+      />
 
       <section className="command-workbench" aria-label="GST return download workbench">
         <div className="scope-column">
@@ -43,12 +50,6 @@ function App() {
         </div>
 
         <aside className="run-column" aria-label="Target, run status, and recovery">
-          <DownloadTargetSummary
-            completionStatus={popup.completionStatus}
-            context={popup.context}
-            scope={popup.scope}
-            status={popup.status}
-          />
           <RunEvidencePanel
             portalReady={popup.context?.supported === true}
             filedReturnsObservation={popup.filedReturnsObservation}
@@ -72,9 +73,11 @@ function App() {
         </aside>
       </section>
 
-      <p className="fineprint">
-        No credentials, cookies, OTP, CAPTCHA, or GST documents are sent to ComplyEaze.
-      </p>
+      <footer className="fineprint" aria-label="Pack privacy boundary">
+        <span>No credentials</span>
+        <span>No cookies or OTPs</span>
+        <span>No GST files sent to ComplyEaze</span>
+      </footer>
     </main>
   );
 }

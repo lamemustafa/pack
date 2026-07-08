@@ -125,10 +125,10 @@ describe("popup filed returns flow summary", () => {
             returnType: "GSTR-2B",
             artifactType: "PDF_AND_EXCEL",
           },
-          status: "complete",
+          status: "blocked",
         },
       ),
-    ).toBe("FY 2025-26 GSTR-2B prepared. 12 of 12 periods reconciled; confirm the final ZIP save.");
+    ).toBe("FY 2025-26 GSTR-2B prepared. 12 of 12 periods reconciled; retry the final ZIP save.");
   });
 
   it("shows reset full-year runs as ready for a fresh local run", () => {

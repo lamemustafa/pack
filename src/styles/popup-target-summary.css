@@ -1,13 +1,14 @@
 .target-strip {
   display: grid;
-  gap: 11px;
-  padding: 13px;
+  grid-template-columns: minmax(210px, 0.65fr) minmax(0, 1.65fr) minmax(260px, 0.7fr);
+  gap: 12px;
+  align-items: center;
+  padding: 11px 12px;
 }
 
 .target-strip-header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
+  gap: 7px;
   align-items: start;
 }
 
@@ -47,8 +48,11 @@
 
 .target-metadata {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: minmax(86px, 0.8fr) minmax(82px, 0.7fr) minmax(150px, 1.2fr) minmax(
+      90px,
+      0.8fr
+    );
+  gap: 10px;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -59,10 +63,8 @@
   display: grid;
   gap: 3px;
   min-width: 0;
-  border: 1px solid #d9e2ec;
-  border-radius: 8px;
-  background: #fbfcfe;
-  padding: 8px 9px;
+  border-left: 1px solid #d9e2ec;
+  padding-left: 10px;
 }
 
 .target-metadata dt {
@@ -83,7 +85,19 @@
 .target-status {
   margin: 0;
   color: #324356;
-  font-size: 11px;
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: right;
+}
+
+@media (max-width: 940px) {
+  .target-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .target-status {
+    text-align: left;
+  }
 }
 
 @media (max-width: 560px) {

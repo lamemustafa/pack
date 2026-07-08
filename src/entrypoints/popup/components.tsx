@@ -47,14 +47,16 @@ export function ScopeForm({
   return (
     <section className="flow-panel" aria-label="Filed return download scope">
       <div className="panel-heading">
-        <p className="section-label">Setup</p>
-        <h2>Return, period, and file format</h2>
+        <div>
+          <p className="section-label">Setup</p>
+          <h2>Choose what Pack should collect</h2>
+        </div>
       </div>
       <div className="scope-form-grid">
         <div className="scope-section scope-section-primary">
           <ScopeButtonGroup
             className="scope-group-return"
-            label="Return"
+            label="Return type"
             value={scope.returnType}
             options={returnTypeOptions()}
             onChange={(returnType) =>
@@ -69,7 +71,7 @@ export function ScopeForm({
           {formModel.supportsFullFiscalYear ? (
             <ScopeButtonGroup
               className="scope-group-run-mode"
-              label="Run mode"
+              label="Coverage"
               value={formModel.fullFiscalYear ? "FULL_YEAR" : "SINGLE_PERIOD"}
               options={[
                 { value: "SINGLE_PERIOD", label: "Single period" },
@@ -90,7 +92,7 @@ export function ScopeForm({
           ) : null}
           <ScopeButtonGroup
             className="scope-group-file"
-            label="File"
+            label="Files"
             value={formModel.selectedArtifactType}
             options={formModel.artifactOptions}
             onChange={(artifactType) =>

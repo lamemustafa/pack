@@ -14,7 +14,7 @@ export function getFiledReturnsCompletionStatus(
     matchedSummary.flowStep.state === "download-unconfirmed" &&
     matchedSummary.flowStep.safeSignals.includes("full-fiscal-year-zip-download-unconfirmed")
   ) {
-    return `FY ${matchedSummary.scope.financialYear} ${matchedSummary.scope.returnType} prepared. ${periodCount} of ${totalPeriods} periods reconciled; confirm the final ZIP save.`;
+    return `FY ${matchedSummary.scope.financialYear} ${matchedSummary.scope.returnType} prepared. ${periodCount} of ${totalPeriods} periods reconciled; retry the final ZIP save.`;
   }
   if (matchedSummary.status === "complete") {
     return `FY ${matchedSummary.scope.financialYear} ${matchedSummary.scope.returnType} complete. ${periodCount} of ${totalPeriods} ${periodCount === 1 ? "period" : "periods"} reconciled.`;
