@@ -157,7 +157,7 @@ function artifactOptionDescription(
   returnType: FiledReturnsDownloadScope["returnType"],
   artifactType: (typeof FILED_RETURNS_ARTIFACT_TYPES)[number],
 ): string {
-  if (artifactType === "PDF_AND_EXCEL") return "Single ZIP";
+  if (artifactType === "PDF_AND_EXCEL") return "PDF and Excel";
   if (artifactType === "EXCEL") {
     return returnType === "GSTR-2B" ? "Details workbook" : "E-invoice workbook";
   }
@@ -170,7 +170,7 @@ function artifactOptionLabel(
   returnType: FiledReturnsDownloadScope["returnType"],
   artifactType: (typeof FILED_RETURNS_ARTIFACT_TYPES)[number],
 ): string {
-  if (artifactType === "PDF_AND_EXCEL") return "PDF + Excel ZIP";
+  if (artifactType === "PDF_AND_EXCEL") return "ZIP: PDF + Excel";
   return filedReturnsArtifactLabel(artifactType, returnType);
 }
 

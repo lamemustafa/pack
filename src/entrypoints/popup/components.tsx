@@ -64,7 +64,7 @@ export function ScopeForm({
               label="Range"
               value={formModel.fullFiscalYear ? "FULL_YEAR" : "SINGLE_PERIOD"}
               options={[
-                { value: "SINGLE_PERIOD", label: "One period" },
+                { value: "SINGLE_PERIOD", label: "Single period" },
                 { value: "FULL_YEAR", label: "Full year" },
               ]}
               onChange={(mode) =>
