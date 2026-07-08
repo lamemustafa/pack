@@ -13,7 +13,7 @@ export function RunEvidencePanel({
   summaryHeading: string | null;
 }) {
   if (scopedFlowSummary && summaryHeading) {
-    const previousCompleteRun = scopedFlowSummary.status === "complete" && !portalReady;
+    const previousCompleteRun = scopedFlowSummary.status === "complete";
     return (
       <section
         className={previousCompleteRun ? "evidence-panel" : "evidence-panel evidence-panel-active"}

@@ -466,6 +466,29 @@ describe("popup full-year recovery actions", () => {
     expect(markup).not.toContain("Last filed-returns run: complete");
     expect(markup).not.toContain("evidence-panel-active");
   });
+
+  it("labels completed evidence as previous work before starting a new portal-ready run", () => {
+    const summary = summaryFor("download-unconfirmed");
+    summary.status = "complete";
+    summary.completedPeriods = ["April"];
+    summary.flowStep.state = "downloaded";
+    summary.flowStep.safeSignals = ["full-fiscal-year-complete"];
+    summary.flowStep.safeMessage = "Pack completed the local full fiscal year run.";
+
+    const markup = renderToStaticMarkup(
+      createElement(RunEvidencePanel, {
+        portalReady: true,
+        filedReturnsObservation: null,
+        scopedFlowSummary: summary,
+        summaryHeading: "Last filed-returns run: complete",
+      }),
+    );
+
+    expect(markup).toContain("Previous run");
+    expect(markup).toContain("Previous filed-returns run complete");
+    expect(markup).not.toContain("Last filed-returns run: complete");
+    expect(markup).not.toContain("evidence-panel-active");
+  });
 });
 
 function supportedPortalContext(): PortalContext {

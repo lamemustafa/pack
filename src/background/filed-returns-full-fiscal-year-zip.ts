@@ -22,6 +22,28 @@ export async function exportFullFiscalYearZip(
   if (
     !ledger.targets.some((target) => target.safeSignals.includes("full-fiscal-year-opfs-staged"))
   ) {
+    if (
+      ledger.scope.returnType === "GSTR-2B" &&
+      ledger.scope.artifactType === "PDF_AND_EXCEL" &&
+      ledger.targets.some((target) => target.status === "downloaded")
+    ) {
+      return {
+        ...completeStep,
+        state: "blocked",
+        safeSignals: [
+          ...completeStep.safeSignals,
+          "full-fiscal-year-zip-no-staged-artifacts",
+          "full-fiscal-year-opfs-retained",
+        ],
+        safeMessage:
+          "Pack completed the period checks, but did not stage any files for the final fiscal-year zip.",
+        userAction: {
+          type: "RETRY_PORTAL_GENERATION",
+          message: "Retry the fiscal-year ZIP run from the signed-in GST return page.",
+          canResume: true,
+        },
+      };
+    }
     return completeStep;
   }
 

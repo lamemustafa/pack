@@ -16,6 +16,7 @@ import {
   observeNextBrowserDownload,
 } from "../../src/background/download-observer";
 import { suggestNextBrowserDownloadFilename } from "../../src/background/download-filename-suggester";
+import { exportFullFiscalYearZip } from "../../src/background/filed-returns-full-fiscal-year-zip";
 import { createZip } from "../../src/entrypoints/offscreen/zip";
 import { browser } from "wxt/browser";
 
@@ -858,6 +859,60 @@ describe("filed returns flow runner", () => {
     expect(browser.storage.local.set).toHaveBeenCalledWith({
       "full-year-ledger": expect.objectContaining({ status: "blocked" }),
     });
+  });
+
+  it("blocks GSTR-2B ZIP export when completed targets were not staged", async () => {
+    const now = "2026-06-24T00:00:00.000Z";
+    const ledger: FiledReturnsFullFiscalYearLedger = {
+      schemaVersion: "1.0",
+      ledgerId: "gstr2b-ledger-without-staged-files",
+      status: "blocked",
+      scope: {
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2026-27",
+        period: FULL_FISCAL_YEAR_PERIOD,
+        returnType: "GSTR-2B",
+      },
+      createdAt: now,
+      updatedAt: now,
+      targets: ["April", "May"].map((period) => ({
+        targetId: `GSTR-2B:2026-27:${period}:PDF_AND_EXCEL`,
+        financialYear: "2026-27",
+        period: period as FiledReturnsMonth,
+        returnType: "GSTR-2B",
+        artifactType: "PDF_AND_EXCEL",
+        status: "downloaded",
+        attempts: 1,
+        safeSignals: ["filed-gstr2b-download-clicked"],
+        safeMessage: `${period} downloaded.`,
+        completedAt: now,
+        updatedAt: now,
+      })),
+    };
+
+    const response = await exportFullFiscalYearZip(ledger, {
+      connectorId: "gst",
+      scopeId: "gst-filed-returns-gstr2b-pdf-private-v0",
+      state: "downloaded",
+      safeSignals: ["full-fiscal-year-complete"],
+      safeMessage: "Complete.",
+    });
+
+    expect(response).toMatchObject({
+      state: "blocked",
+      safeSignals: expect.arrayContaining([
+        "full-fiscal-year-complete",
+        "full-fiscal-year-zip-no-staged-artifacts",
+        "full-fiscal-year-opfs-retained",
+      ]),
+      safeMessage:
+        "Pack completed the period checks, but did not stage any files for the final fiscal-year zip.",
+      userAction: {
+        type: "RETRY_PORTAL_GENERATION",
+        canResume: true,
+      },
+    });
+    expect(browser.downloads.download).not.toHaveBeenCalled();
   });
 
   it("exports a single-period GSTR-2B PDF and Excel selection as one zip", async () => {
