@@ -7,10 +7,11 @@ import {
   FULL_FISCAL_YEAR_PERIOD,
   normaliseFiledReturnsScope,
 } from "../../core/filed-returns-scope";
+import { ScopeActionPanel } from "./scope-action-panel";
 import { ScopeButtonGroup } from "./scope-button-group";
 import {
   createScopeFormModel,
-  getFullFiscalYearNote,
+  getScopeActionCopy,
   getScopeFormStartAction,
   getSinglePeriodFallback,
   returnTypeOptions,
@@ -41,6 +42,7 @@ export function ScopeForm({
     formModel.fullFiscalYear,
     context,
   );
+  const actionCopy = getScopeActionCopy(scope, formModel.fullFiscalYear);
 
   return (
     <section className="flow-panel" aria-label="Filed return download scope">
@@ -127,27 +129,12 @@ export function ScopeForm({
               />
             )}
           </div>
-          <div className="run-action-strip">
-            <div>
-              <p className="section-label">Action</p>
-              <p className="run-action-copy">
-                {formModel.fullFiscalYear
-                  ? "Create one local ZIP from each eligible period."
-                  : "Download the selected period through the active GST tab."}
-              </p>
-            </div>
-            <button
-              className="primary-action"
-              type="button"
-              disabled={startAction.disabled}
-              onClick={onStart}
-            >
-              {startAction.label}
-            </button>
-          </div>
-          {formModel.fullFiscalYear ? (
-            <p className="scope-note">{getFullFiscalYearNote(scope)}</p>
-          ) : null}
+          <ScopeActionPanel
+            actionCopy={actionCopy}
+            disabled={startAction.disabled}
+            label={startAction.label}
+            onStart={onStart}
+          />
           {!context?.supported ? (
             <p className="scope-note scope-note-warning">
               Open a signed-in GST return dashboard or return page before starting. Pack will not

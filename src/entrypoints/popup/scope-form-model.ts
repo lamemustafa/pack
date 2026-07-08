@@ -65,18 +65,34 @@ export function getSinglePeriodFallback(
   return options[0]?.value ?? FILED_RETURNS_MONTHS[0];
 }
 
-export function getFullFiscalYearNote(scope: FiledReturnsDownloadScope): string {
+export function getScopeActionCopy(
+  scope: FiledReturnsDownloadScope,
+  fullFiscalYear: boolean,
+): { summary: string; details: string[] } {
+  if (!fullFiscalYear) {
+    return {
+      summary: "Download the selected period through the active GST tab.",
+      details: ["Uses the selected portal page", "Records local status only"],
+    };
+  }
+
   const artifactType = normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType);
-  const base =
-    `Runs eligible filed ${scope.returnType} periods one by one from your signed-in GST ` +
-    "Portal tab. Pack stops on ambiguous downloads and records local status only.";
+  const details = [
+    "Visits eligible filed periods",
+    "Builds one final ZIP handoff",
+    "Stops on ambiguous downloads",
+  ];
+
   if (scope.returnType === "GSTR-2B" && artifactType === "PDF_AND_EXCEL") {
-    return `${base} PDF and Excel are captured only from the portal-generated download controls.`;
+    details.push("Captures only portal-generated PDF and Excel controls");
   }
   if (scope.returnType === "GSTR-1" && artifactType !== "PDF") {
-    return `${base} Excel is included only when the GST Portal provides the selected e-invoice details file.`;
+    details.push("Includes Excel only when the portal provides it");
   }
-  return base;
+  return {
+    summary: "Create one local ZIP from eligible periods.",
+    details,
+  };
 }
 
 export function getScopeFormStartAction(

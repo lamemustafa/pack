@@ -257,10 +257,9 @@ describe("popup full-year recovery actions", () => {
       }),
     );
 
-    expect(markup).toContain(
-      "PDF and Excel are captured only from the portal-generated download controls.",
-    );
-    expect(markup).toContain("Create one local ZIP from each eligible period.");
+    expect(markup).toContain("Captures only portal-generated PDF and Excel controls");
+    expect(markup).toContain("Create one local ZIP from eligible periods.");
+    expect(markup).toContain("Builds one final ZIP handoff");
     expect(markup).not.toContain("selected GSTR-1 e-invoice details file");
   });
 
@@ -282,6 +281,7 @@ describe("popup full-year recovery actions", () => {
     );
 
     expect(markup).toContain("Download the selected period through the active GST tab.");
+    expect(markup).toContain("Uses the selected portal page");
     expect(markup).toContain("Start download");
   });
 
