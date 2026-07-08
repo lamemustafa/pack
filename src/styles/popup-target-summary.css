@@ -66,12 +66,11 @@
 
 .target-metadata dd {
   margin: 0;
-  overflow: hidden;
   color: #172334;
   font-size: 13px;
   font-weight: 800;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .target-status {

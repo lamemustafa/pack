@@ -82,7 +82,7 @@ export function ScopeForm({ busy, flowSummary, scope, onScopeChange, onStart }: 
         />
       </div>
       <div className="scope-section scope-section-period">
-        <ScopeButtonGroup
+        <ScopeSelect
           label="Financial year"
           value={scope.financialYear}
           options={financialYearOptions.map((financialYear) => ({
@@ -98,7 +98,7 @@ export function ScopeForm({ busy, flowSummary, scope, onScopeChange, onStart }: 
             )
           }
         />
-        <ScopeButtonGroup
+        <ScopeSelect
           label="Period"
           value={scope.period}
           options={periodOptions}
@@ -115,6 +115,32 @@ export function ScopeForm({ busy, flowSummary, scope, onScopeChange, onStart }: 
         {startAction.label}
       </button>
     </section>
+  );
+}
+
+function ScopeSelect({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: Array<{ value: string; label: string }>;
+  onChange: (value: string) => void;
+}) {
+  const id = `scope-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+  return (
+    <label className="scope-select" htmlFor={id}>
+      <span>{label}</span>
+      <select id={id} value={value} onChange={(event) => onChange(event.currentTarget.value)}>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
