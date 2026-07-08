@@ -13,12 +13,16 @@ export function RunEvidencePanel({
   summaryHeading: string | null;
 }) {
   if (scopedFlowSummary && summaryHeading) {
+    const previousCompleteRun = scopedFlowSummary.status === "complete" && !portalReady;
     return (
-      <section className="evidence-panel evidence-panel-active" aria-label="Run evidence">
+      <section
+        className={previousCompleteRun ? "evidence-panel" : "evidence-panel evidence-panel-active"}
+        aria-label="Run evidence"
+      >
         <div className="evidence-heading">
           <div>
-            <p className="section-label">Run evidence</p>
-            <h2>{summaryHeading}</h2>
+            <p className="section-label">{previousCompleteRun ? "Previous run" : "Run evidence"}</p>
+            <h2>{previousCompleteRun ? "Previous filed-returns run complete" : summaryHeading}</h2>
           </div>
           <RunProgress summary={scopedFlowSummary} />
         </div>
