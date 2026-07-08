@@ -356,7 +356,7 @@ describe("background filed returns download defaults", () => {
         expectedFileExtensions: [".zip"],
         trustedDownloadIds: new Set([481]),
       }),
-      5 * 60 * 1000,
+      90 * 1000,
     );
     expect(browserMocks.runtime.sendMessage).toHaveBeenCalledWith(
       expect.objectContaining({

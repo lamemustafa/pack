@@ -13,7 +13,7 @@ import {
   safeSinglePeriodZipFilename,
 } from "./filed-returns-download-filename";
 
-const USER_MEDIATED_ZIP_DOWNLOAD_WAIT_MS = 5 * 60 * 1000;
+const USER_MEDIATED_ZIP_DOWNLOAD_WAIT_MS = 90 * 1000;
 
 export async function exportFullFiscalYearZip(
   ledger: FiledReturnsFullFiscalYearLedger,

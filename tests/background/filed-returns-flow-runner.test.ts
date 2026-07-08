@@ -879,7 +879,7 @@ describe("filed returns flow runner", () => {
         expectedFileExtensions: [".zip"],
         trustedDownloadIds: new Set([81]),
       }),
-      5 * 60 * 1000,
+      90 * 1000,
     );
     expect(browser.runtime.sendMessage).toHaveBeenCalledWith(
       expect.objectContaining({
