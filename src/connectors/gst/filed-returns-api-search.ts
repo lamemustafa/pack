@@ -1,31 +1,16 @@
 import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "../../core/contracts";
-import { matchesAcceptedText } from "./filed-returns-dom";
-import { acceptedFiledReturnsPeriodTexts } from "./filed-returns-months";
+import {
+  extractFiledReturnsApiRows,
+  readFiledReturnRowValue,
+  rowMatchesScope,
+  type FiledReturnsApiRow,
+} from "./filed-returns-api-rows";
 import { filedReturnDescriptor } from "./filed-returns-return-descriptors";
 import { toPortalReturnPeriod } from "./filed-returns-return-period";
 
 const EFILED_RETURNS_API_PATH = "/returns/auth/api/efiledReturns";
 const ROLE_STATUS_API_PATH = "/returns/auth/api/rolestatus";
 const GSTR3B_QUARTERLY_ENABLE_PERIOD = "012021";
-
-interface FiledReturnsApiRow {
-  rtntype?: unknown;
-  rtnTyp?: unknown;
-  rtnType?: unknown;
-  rtn_type?: unknown;
-  fy?: unknown;
-  finYear?: unknown;
-  financialYear?: unknown;
-  taxp?: unknown;
-  taxPeriod?: unknown;
-  retPeriod?: unknown;
-  period?: unknown;
-  arn?: unknown;
-  ackNo?: unknown;
-  ackNum?: unknown;
-  dof?: unknown;
-  dateOfFiling?: unknown;
-}
 
 type OpenResultResponse =
   | { ok: true }
@@ -138,35 +123,6 @@ async function queryFiledReturnsApi(
   } catch {
     return null;
   }
-}
-
-function extractFiledReturnsApiRows(payload: unknown): FiledReturnsApiRow[] | null {
-  if (Array.isArray(payload)) return payload.filter(isFiledReturnsApiRow);
-  if (payload && typeof payload === "object") {
-    const data = (payload as { data?: unknown }).data;
-    if (Array.isArray(data)) return data.filter(isFiledReturnsApiRow);
-  }
-  return null;
-}
-
-function isFiledReturnsApiRow(row: unknown): row is FiledReturnsApiRow {
-  return Boolean(row && typeof row === "object");
-}
-
-function rowMatchesScope(row: FiledReturnsApiRow, scope: FiledReturnsDownloadScope): boolean {
-  return (
-    matchesAcceptedText(
-      readFiledReturnRowValue(row, ["rtntype", "rtnTyp", "rtnType", "rtn_type"]),
-      [scope.returnType],
-    ) &&
-    matchesAcceptedText(readFiledReturnRowValue(row, ["fy", "finYear", "financialYear"]), [
-      scope.financialYear,
-    ]) &&
-    matchesAcceptedText(
-      readFiledReturnRowValue(row, ["taxp", "taxPeriod", "retPeriod", "period"]),
-      acceptedFiledReturnsPeriodTexts(scope),
-    )
-  );
 }
 
 async function openApiRowWithPortalNavigation(
@@ -300,19 +256,4 @@ function isAcceptedUserPreference(value: unknown): value is string {
 
 function normaliseReturnTypeForApi(returnType: FiledReturnsDownloadScope["returnType"]): string {
   return returnType.replace(/-/g, "");
-}
-
-function readRowValue(value: unknown): string {
-  return typeof value === "string" ? value : "";
-}
-
-function readFiledReturnRowValue(
-  row: FiledReturnsApiRow,
-  keys: readonly (keyof FiledReturnsApiRow)[],
-): string {
-  for (const key of keys) {
-    const value = readRowValue(row[key]);
-    if (value) return value;
-  }
-  return "";
 }
