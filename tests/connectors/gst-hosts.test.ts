@@ -50,6 +50,16 @@ describe("GST portal host guard", () => {
     ).toEqual({ id: 13, url: "https://services.gst.gov.in/services/auth/fowelcome" });
   });
 
+  it("does not select login pages as actionable work tabs", () => {
+    expect(isSupportedGstPortalUrl("https://services.gst.gov.in/services/login")).toBe(true);
+
+    expect(
+      pickSupportedGstPortalTab([
+        { id: 10, url: "https://services.gst.gov.in/services/login" },
+      ]),
+    ).toBeNull();
+  });
+
   it("does not select GST error pages as actionable portal tabs", () => {
     expect(isSupportedGstPortalUrl("https://services.gst.gov.in/services/error/accessdenied")).toBe(
       true,

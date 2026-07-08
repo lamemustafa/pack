@@ -590,6 +590,48 @@ describe("Pack GST tab selection", () => {
     await expect(getActiveGstTab()).resolves.toMatchObject({ id: 26 });
   });
 
+  it("uses an authenticated services tab instead of a stale login tab", async () => {
+    browserMocks.tabs.query
+      .mockResolvedValueOnce([
+        {
+          active: true,
+          id: 24,
+          url: "https://services.gst.gov.in/services/login",
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          active: false,
+          id: 25,
+          url: "https://services.gst.gov.in/services/auth/fowelcome",
+        },
+      ]);
+    const { getActiveGstTab } = await import("../../src/entrypoints/background");
+
+    await expect(getActiveGstTab()).resolves.toMatchObject({ id: 25 });
+  });
+
+  it("returns null when only a login tab is visible", async () => {
+    browserMocks.tabs.query
+      .mockResolvedValueOnce([
+        {
+          active: true,
+          id: 24,
+          url: "https://services.gst.gov.in/services/login",
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          active: false,
+          id: 25,
+          url: "https://services.gst.gov.in/services/login",
+        },
+      ]);
+    const { getActiveGstTab } = await import("../../src/entrypoints/background");
+
+    await expect(getActiveGstTab()).resolves.toBeNull();
+  });
+
   it("fails closed when multiple GST tabs are equally preferred", async () => {
     browserMocks.tabs.query
       .mockResolvedValueOnce([

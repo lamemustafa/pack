@@ -87,9 +87,7 @@ function getGstPortalTabPriority(url: string | undefined): number {
     if (parsed.origin === "https://services.gst.gov.in" && pathname.includes("/services/auth/")) {
       return 30;
     }
-    if (pathname.includes("/login")) {
-      return 10;
-    }
+    if (pathname.includes("/login")) return -1;
     return 20;
   } catch {
     return 0;

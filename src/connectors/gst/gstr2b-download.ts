@@ -106,12 +106,22 @@ function findGstr2bDownloadControl(
     .filter((element) => {
       const text = normaliseText(readElementText(element));
       const contextText = normaliseText(readElementContextText(element));
-      if (!contextText.includes("gstr-2b")) return false;
-      if (!text.includes("download") && !contextText.includes("download")) return false;
-      if (artifactType === "EXCEL") return text.includes("details") && text.includes("excel");
-      return text.includes("summary") && text.includes("pdf");
+      const comparableText = normaliseDownloadText(text);
+      const comparableContextText = normaliseDownloadText(contextText);
+      if (!comparableContextText.includes("gstr2b")) return false;
+      if (!comparableText.includes("download") && !comparableContextText.includes("download")) {
+        return false;
+      }
+      if (artifactType === "EXCEL") {
+        return comparableText.includes("details") && comparableText.includes("excel");
+      }
+      return comparableText.includes("summary") && comparableText.includes("pdf");
     });
   return candidates.length === 1 ? (candidates[0] ?? null) : null;
+}
+
+function normaliseDownloadText(value: string): string {
+  return value.replace(/[^a-z0-9]/gi, "").toLowerCase();
 }
 
 function isUsableDownloadControl(element: HTMLElement): boolean {
