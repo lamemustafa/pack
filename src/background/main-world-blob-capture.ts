@@ -2,29 +2,14 @@ import type {
   FiledReturnsCapturedDownloadRequest,
   FiledReturnsMainWorldCaptureRequest,
 } from "../core/contracts";
-import {
-  installAnchorDownloadSuppression,
-  installCapturingWindowOpen,
-  installFetchArtifactDiagnostics,
-  installObjectUrlCapture,
-  installPdfMakeCapture,
-  installXhrArtifactDiagnostics,
-  type PdfMakeApi,
-} from "./main-world-capture-hooks";
 import type {
   MainWorldCaptureOutcome,
   MainWorldChunkedCaptureRequest,
 } from "./main-world-capture-contracts";
-import {
-  CAPTURE_SUPPRESSION_SETTLE_MS,
-  DEFAULT_CAPTURE_TRANSFER_CHUNK_SIZE,
-  MAIN_WORLD_CAPTURE_MESSAGE_SOURCE,
-  capturedPortalSafeSignals,
-  escapeCaptureCss,
-  forEachEmbeddedCaptureUrl,
-  isReadableBlob,
-  splitCaptureDataUrlIntoChunks,
-} from "./main-world-capture-utils";
+
+type PdfMakeApi = {
+  createPdf?: unknown;
+};
 
 export async function capturePortalBlobDownload(
   config: FiledReturnsMainWorldCaptureRequest,
@@ -37,6 +22,52 @@ export async function capturePortalBlobDownloadWithDiagnostics(
   config: FiledReturnsMainWorldCaptureRequest,
 ): Promise<MainWorldCaptureOutcome> {
   return new Promise((resolve) => {
+    const cssEscape = (value: string) => {
+      if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
+        return CSS.escape(value);
+      }
+      return value.replace(/["\\]/g, "\\$&");
+    };
+    const isBlobLike = (value: unknown): value is Blob => {
+      if (!value || typeof value !== "object") return false;
+      const candidate = value as Partial<Blob>;
+      return (
+        typeof candidate.size === "number" &&
+        typeof candidate.type === "string" &&
+        typeof candidate.arrayBuffer === "function"
+      );
+    };
+    const isArtifactContentType = (contentType: string) => {
+      const normalised = contentType.toLowerCase();
+      return [
+        "application/pdf",
+        "application/octet-stream",
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument",
+      ].some((expected) => normalised.includes(expected));
+    };
+    const captureSignals = (source: "blob" | "data-url", filename: string | null | undefined) => [
+      ...(source === "blob"
+        ? [
+            `${config.signalPrefix}-portal-blob-captured`,
+            `${config.signalPrefix}-native-blob-click-suppressed`,
+          ]
+        : [
+            `${config.signalPrefix}-portal-data-url-captured`,
+            `${config.signalPrefix}-native-data-click-suppressed`,
+          ]),
+      `${config.signalPrefix}-main-world-capture`,
+      ...(suppressedWindowOpen ? [`${config.signalPrefix}-native-window-open-suppressed`] : []),
+      ...(filename ? [`${config.signalPrefix}-portal-filename-observed`] : []),
+    ];
+    const splitIntoChunks = (capturedUrl: string, chunkSize: number): string[] | null => {
+      const chunks: string[] = [];
+      for (let offset = 0; offset < capturedUrl.length; offset += chunkSize) {
+        chunks.push(capturedUrl.slice(offset, offset + chunkSize));
+      }
+      return chunks.length > 0 && chunks.length <= 200 ? chunks : null;
+    };
+
     const safeFailureSignals = new Set<string>([`${config.signalPrefix}-main-world-capture-armed`]);
     const addSafeSignal = (signal: string) => safeFailureSignals.add(signal);
     const urlApi = window.URL ?? URL;
@@ -76,9 +107,7 @@ export async function capturePortalBlobDownloadWithDiagnostics(
       XMLHttpRequest.prototype.open = originalXhrOpen;
       XMLHttpRequest.prototype.send = originalXhrSend;
       document
-        .querySelector<HTMLElement>(
-          `[${config.controlAttribute}="${escapeCaptureCss(config.controlId)}"]`,
-        )
+        .querySelector<HTMLElement>(`[${config.controlAttribute}="${cssEscape(config.controlId)}"]`)
         ?.removeAttribute(config.controlAttribute);
     };
 
@@ -97,15 +126,12 @@ export async function capturePortalBlobDownloadWithDiagnostics(
       window.setTimeout(() => {
         restore();
         resolve(outcome);
-      }, CAPTURE_SUPPRESSION_SETTLE_MS);
+      }, 1_000);
     };
 
     const settleChunked = (capturedUrl: string, safeSignals: string[]) => {
       if (settled || !config.transferId) return false;
-      const chunks = splitCaptureDataUrlIntoChunks(
-        capturedUrl,
-        config.transferChunkSize ?? DEFAULT_CAPTURE_TRANSFER_CHUNK_SIZE,
-      );
+      const chunks = splitIntoChunks(capturedUrl, config.transferChunkSize ?? 512 * 1024);
       if (!chunks) {
         addSafeSignal(`${config.signalPrefix}-chunk-count-rejected`);
         return false;
@@ -116,7 +142,7 @@ export async function capturePortalBlobDownloadWithDiagnostics(
             actionId: config.actionId,
             chunk,
             index,
-            source: MAIN_WORLD_CAPTURE_MESSAGE_SOURCE,
+            source: "pack-main-world-capture-v1",
             totalChunks: chunks.length,
             transferId: config.transferId,
           },
@@ -138,7 +164,7 @@ export async function capturePortalBlobDownloadWithDiagnostics(
       window.setTimeout(() => {
         restore();
         resolve(outcome);
-      }, CAPTURE_SUPPRESSION_SETTLE_MS);
+      }, 1_000);
       return true;
     };
 
@@ -160,12 +186,7 @@ export async function capturePortalBlobDownloadWithDiagnostics(
           settle(null);
           return;
         }
-        const safeSignals = capturedPortalSafeSignals({
-          filename,
-          signalPrefix: config.signalPrefix,
-          source: "blob",
-          suppressedWindowOpen,
-        });
+        const safeSignals = captureSignals("blob", filename);
         if (settleChunked(reader.result, safeSignals)) return;
         settle({
           actionId: config.actionId,
@@ -187,12 +208,7 @@ export async function capturePortalBlobDownloadWithDiagnostics(
         addSafeSignal(`${config.signalPrefix}-data-url-rejected`);
         return;
       }
-      const safeSignals = capturedPortalSafeSignals({
-        filename,
-        signalPrefix: config.signalPrefix,
-        source: "data-url",
-        suppressedWindowOpen,
-      });
+      const safeSignals = captureSignals("data-url", filename);
       if (settleChunked(dataUrl, safeSignals)) return;
       settle({
         actionId: config.actionId,
@@ -230,7 +246,9 @@ export async function capturePortalBlobDownloadWithDiagnostics(
     };
 
     const captureEmbeddedUrls = (text: string) => {
-      forEachEmbeddedCaptureUrl(text, captureUrl);
+      for (const [url] of text.matchAll(/\b(?:blob|data):[^"'<>\\\s)]+/g)) {
+        captureUrl(url);
+      }
     };
 
     const captureAnchorDownload = (anchor: HTMLAnchorElement) => {
@@ -248,23 +266,91 @@ export async function capturePortalBlobDownloadWithDiagnostics(
       return false;
     };
 
-    installCapturingWindowOpen({
-      addSafeSignal,
-      captureEmbeddedUrls,
-      captureUrl,
-      markSuppressedWindowOpen: () => {
-        suppressedWindowOpen = true;
-      },
-      signalPrefix: config.signalPrefix,
-    });
+    window.open = function open(url?: string | URL) {
+      addSafeSignal(`${config.signalPrefix}-window-open-observed`);
+      suppressedWindowOpen = true;
+      if (url) captureUrl(url);
+      return {
+        close() {
+          return undefined;
+        },
+        document: {
+          close() {
+            return undefined;
+          },
+          open() {
+            return undefined;
+          },
+          write(value: string) {
+            captureEmbeddedUrls(value);
+          },
+        },
+        focus() {
+          return undefined;
+        },
+        location: {
+          assign(value: string | URL) {
+            captureUrl(value);
+          },
+          replace(value: string | URL) {
+            captureUrl(value);
+          },
+          set href(value: string) {
+            captureUrl(value);
+          },
+        },
+      } as unknown as WindowProxy;
+    };
 
-    installPdfMakeCapture(pdfMake, originalPdfMakeCreatePdf, readBlob);
+    if (pdfMake && typeof originalPdfMakeCreatePdf === "function") {
+      pdfMake.createPdf = function createPdf(...args: unknown[]) {
+        const pdf = originalPdfMakeCreatePdf.apply(this, args) as
+          | {
+              download?: (filename?: string | null) => unknown;
+              getBlob?: (callback: (blob: Blob) => void) => unknown;
+              open?: (...openArgs: unknown[]) => unknown;
+              print?: (...printArgs: unknown[]) => unknown;
+            }
+          | null
+          | undefined;
+        if (!pdf || typeof pdf !== "object") return pdf;
+
+        const readPdfBlob = (filename?: string | null) => {
+          if (typeof pdf.getBlob !== "function") return;
+          try {
+            pdf.getBlob((blob) => readBlob(blob, filename));
+          } catch {
+            // Let the capture timeout settle portal/pdfMake generation failures.
+          }
+        };
+
+        if (typeof pdf.download === "function") {
+          pdf.download = function download(filename?: string | null) {
+            readPdfBlob(filename);
+            return undefined;
+          };
+        }
+        if (typeof pdf.open === "function") {
+          pdf.open = function open() {
+            readPdfBlob();
+            return undefined;
+          };
+        }
+        if (typeof pdf.print === "function") {
+          pdf.print = function print() {
+            readPdfBlob();
+            return undefined;
+          };
+        }
+        return pdf;
+      };
+    }
 
     (window as Window & { saveAs?: unknown }).saveAs = function saveAs(
       value: unknown,
       filename?: string | null,
     ) {
-      if (isReadableBlob(value)) {
+      if (isBlobLike(value)) {
         readBlob(value, filename);
         return undefined;
       }
@@ -275,39 +361,88 @@ export async function capturePortalBlobDownloadWithDiagnostics(
       return undefined;
     };
 
-    installFetchArtifactDiagnostics({
-      addSafeSignal,
-      originalFetch,
-      signalPrefix: config.signalPrefix,
-    });
-    installXhrArtifactDiagnostics({
-      addSafeSignal,
-      isSettled: () => settled,
-      originalXhrOpen,
-      originalXhrSend,
-      signalPrefix: config.signalPrefix,
-    });
-    installObjectUrlCapture({
-      addSafeSignal,
-      capturedBlobUrls,
-      capturedBlobsByUrl,
-      maxBytes: config.maxBytes,
-      originalCreateObjectUrl,
-      signalPrefix: config.signalPrefix,
-      urlApi,
-      ...(webkitUrlApi ? { webkitUrlApi } : {}),
-    });
+    window.fetch = function fetch(input: RequestInfo | URL, init?: RequestInit) {
+      return originalFetch.call(window, input, init).then((response) => {
+        const contentType = response.headers.get("content-type");
+        if (contentType && isArtifactContentType(contentType)) {
+          addSafeSignal(`${config.signalPrefix}-fetch-artifact-response-observed`);
+        }
+        return response;
+      });
+    };
 
-    installAnchorDownloadSuppression({
-      captureAnchorDownload,
-      captureBlobUrl,
-      capturedBlobUrls,
-      originalClick,
-      originalDispatchEvent,
-    });
+    XMLHttpRequest.prototype.open = function open(
+      this: XMLHttpRequest,
+      method: string,
+      url: string | URL,
+      async?: boolean,
+      user?: string | null,
+      pass?: string | null,
+    ) {
+      this.addEventListener("load", () => {
+        if (settled) return;
+        const contentType = this.getResponseHeader("content-type");
+        if (contentType && !isArtifactContentType(contentType)) return;
+        addSafeSignal(`${config.signalPrefix}-xhr-artifact-response-observed`);
+      });
+      if (arguments.length <= 2) {
+        const openWithoutAsync = originalXhrOpen as (
+          this: XMLHttpRequest,
+          method: string,
+          url: string | URL,
+        ) => void;
+        return openWithoutAsync.call(this, method, url);
+      }
+      const openWithAsync = originalXhrOpen as (
+        this: XMLHttpRequest,
+        method: string,
+        url: string | URL,
+        async: boolean,
+        user?: string | null,
+        pass?: string | null,
+      ) => void;
+      return openWithAsync.call(this, method, url, async ?? true, user, pass);
+    };
+    XMLHttpRequest.prototype.send = function send(body?: Document | XMLHttpRequestBodyInit | null) {
+      return originalXhrSend.call(this, body);
+    };
+
+    const captureCreateObjectUrl = function createObjectURL(value: Blob | MediaSource) {
+      const blobUrl = originalCreateObjectUrl.call(urlApi, value);
+      if (isBlobLike(value) && value.size > 0 && value.size <= config.maxBytes) {
+        addSafeSignal(`${config.signalPrefix}-create-object-url-observed`);
+        capturedBlobUrls.add(blobUrl);
+        capturedBlobsByUrl.set(blobUrl, value);
+      } else if (isBlobLike(value)) {
+        addSafeSignal(
+          value.size > config.maxBytes
+            ? `${config.signalPrefix}-create-object-url-oversized`
+            : `${config.signalPrefix}-create-object-url-zero-byte`,
+        );
+      }
+      return blobUrl;
+    };
+    urlApi.createObjectURL = captureCreateObjectUrl;
+    if (webkitUrlApi) webkitUrlApi.createObjectURL = captureCreateObjectUrl;
+
+    const shouldSuppressAnchor = (anchor: HTMLAnchorElement) => {
+      if (capturedBlobUrls.has(anchor.href)) {
+        captureBlobUrl(anchor.href, anchor.getAttribute("download"));
+        return true;
+      }
+      return captureAnchorDownload(anchor);
+    };
+    HTMLAnchorElement.prototype.click = function click() {
+      if (shouldSuppressAnchor(this)) return undefined;
+      return originalClick.call(this);
+    };
+    HTMLAnchorElement.prototype.dispatchEvent = function dispatchEvent(event: Event) {
+      if (event.type === "click" && shouldSuppressAnchor(this)) return true;
+      return originalDispatchEvent.call(this, event);
+    };
 
     const control = document.querySelector<HTMLElement>(
-      `[${config.controlAttribute}="${escapeCaptureCss(config.controlId)}"]`,
+      `[${config.controlAttribute}="${cssEscape(config.controlId)}"]`,
     );
     if (!control) {
       addSafeSignal(`${config.signalPrefix}-capture-control-not-found`);

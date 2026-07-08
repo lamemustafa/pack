@@ -16,11 +16,12 @@ export interface MainWorldChunkedCaptureRequest {
 export function isMainWorldCaptureOutcome(value: unknown): value is MainWorldCaptureOutcome {
   if (typeof value !== "object" || value === null) return false;
   const record = value as Record<string, unknown>;
+  const hasValidChunkedCapture = isMainWorldChunkedCaptureRequest(record.chunkedCaptureRequest);
   return (
     (isCapturedDownloadRequest(record.capturedDownloadRequest) ||
-      record.capturedDownloadRequest === null) &&
-    (record.chunkedCaptureRequest === undefined ||
-      isMainWorldChunkedCaptureRequest(record.chunkedCaptureRequest)) &&
+      record.capturedDownloadRequest === null ||
+      (record.capturedDownloadRequest === undefined && hasValidChunkedCapture)) &&
+    (record.chunkedCaptureRequest === undefined || hasValidChunkedCapture) &&
     Array.isArray(record.safeFailureSignals) &&
     record.safeFailureSignals.every((signal) => typeof signal === "string")
   );
