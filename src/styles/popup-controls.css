@@ -1,7 +1,7 @@
 .flow-panel {
   display: grid;
-  gap: 12px;
-  padding: 12px;
+  gap: 14px;
+  padding: 14px;
 }
 
 .panel-heading {
@@ -38,17 +38,18 @@
 .scope-form-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 12px;
+  gap: 14px;
   align-items: start;
 }
 
 .scope-section-primary {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 12px;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: 14px;
 }
 
 .scope-section-period {
-  grid-template-columns: minmax(190px, 0.75fr) minmax(0, 1fr);
+  grid-template-columns: minmax(220px, 0.75fr) minmax(0, 1fr);
+  gap: 14px;
   align-items: end;
 }
 
@@ -73,7 +74,7 @@
 
 .scope-options {
   display: grid;
-  gap: 7px;
+  gap: 8px;
 }
 
 .scope-section-primary .scope-options {
@@ -98,7 +99,7 @@
 
 .scope-option {
   display: inline-flex;
-  min-height: 42px;
+  min-height: 46px;
   cursor: pointer;
   align-items: center;
   justify-content: center;
@@ -106,7 +107,7 @@
   border-radius: 6px;
   background: #ffffff;
   color: #1d2634;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 800;
   line-height: 1.15;
   text-align: center;
@@ -150,18 +151,18 @@
 
 .scope-select select {
   border-color: #c9d2dc;
-  min-height: 42px;
+  min-height: 46px;
 }
 
 .run-action-strip {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 230px;
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) 250px;
+  gap: 14px;
   align-items: stretch;
   border: 1px solid #d4dee8;
   border-radius: 8px;
   background: #fbfcfe;
-  padding: 10px;
+  padding: 12px;
 }
 
 .run-action-copy {
@@ -179,9 +180,9 @@
 }
 
 .primary-action {
-  min-height: 54px;
+  min-height: 58px;
   margin-top: 0;
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .run-action-strip .primary-action {

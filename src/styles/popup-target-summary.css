@@ -1,9 +1,9 @@
 .target-strip {
   display: grid;
-  grid-template-columns: minmax(210px, 0.65fr) minmax(0, 1.65fr) minmax(260px, 0.7fr);
-  gap: 12px;
+  grid-template-columns: minmax(220px, 0.6fr) minmax(0, 1.8fr) minmax(280px, 0.75fr);
+  gap: 14px;
   align-items: center;
-  padding: 11px 12px;
+  padding: 12px 14px;
 }
 
 .target-strip-header {
@@ -15,7 +15,7 @@
 .target-strip h2 {
   margin: 0;
   color: var(--pack-ink);
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.25;
 }
 
@@ -48,11 +48,11 @@
 
 .target-metadata {
   display: grid;
-  grid-template-columns: minmax(86px, 0.8fr) minmax(82px, 0.7fr) minmax(150px, 1.2fr) minmax(
+  grid-template-columns: minmax(96px, 0.8fr) minmax(90px, 0.7fr) minmax(170px, 1.2fr) minmax(
       90px,
       0.8fr
     );
-  gap: 10px;
+  gap: 12px;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -76,7 +76,7 @@
 .target-metadata dd {
   margin: 0;
   color: #172334;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 800;
   line-height: 1.25;
   overflow-wrap: anywhere;
@@ -85,9 +85,10 @@
 .target-status {
   margin: 0;
   color: #324356;
-  font-size: 12px;
+  font-size: 12.5px;
   line-height: 1.35;
   text-align: right;
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 940px) {
