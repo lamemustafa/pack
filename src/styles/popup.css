@@ -117,15 +117,19 @@ html[data-pack-surface="popup"] body {
 
 .scope-column {
   grid-column: 1;
+  grid-row: 2;
 }
 
 .evidence-column {
+  grid-column: 2;
+  grid-row: 2;
   position: sticky;
   top: 0;
 }
 
 .target-column {
   grid-column: 1 / -1;
+  grid-row: 1;
 }
 
 .section-label {
@@ -232,7 +236,15 @@ html[data-pack-surface="popup"] body {
   }
 
   .evidence-column {
+    grid-column: auto;
+    grid-row: auto;
     position: static;
+  }
+
+  .scope-column,
+  .target-column {
+    grid-column: auto;
+    grid-row: auto;
   }
 
   .brand-header {

@@ -263,6 +263,29 @@ describe("popup full-year recovery actions", () => {
     expect(markup).not.toContain("selected GSTR-1 e-invoice details file");
   });
 
+  it("keeps the primary run action before dense scope controls", () => {
+    const markup = renderToStaticMarkup(
+      createElement(ScopeForm, {
+        busy: null,
+        context: supportedPortalContext(),
+        scope: {
+          artifactType: "PDF_AND_EXCEL",
+          financialYear: "2025-26",
+          period: FULL_FISCAL_YEAR_PERIOD,
+          returnType: "GSTR-2B",
+        },
+        flowSummary: null,
+        onScopeChange: () => undefined,
+        onStart: () => undefined,
+      }),
+    );
+
+    expect(markup.indexOf("Start local full-year run")).toBeGreaterThan(-1);
+    expect(markup.indexOf("Start local full-year run")).toBeLessThan(
+      markup.indexOf("<legend>Return</legend>"),
+    );
+  });
+
   it("explains single-period runs as active-tab downloads", () => {
     const markup = renderToStaticMarkup(
       createElement(ScopeForm, {
@@ -334,7 +357,7 @@ describe("popup full-year recovery actions", () => {
     );
 
     expect(markup).toContain("Open a signed-in GST Portal tab before retrying this period.");
-    expect(markup).toContain("<button type=\"button\" disabled=\"\">Retry this period</button>");
+    expect(markup).toContain('<button type="button" disabled="">Retry this period</button>');
     expect(markup).toContain("Cancel and reset");
   });
 
@@ -363,7 +386,8 @@ describe("popup full-year recovery actions", () => {
   it("normalizes older login-opened evidence copy in the run panel", () => {
     const summary = summaryFor("blocked");
     summary.flowStep.safeSignals = ["gst-login-tab-opened"];
-    summary.flowStep.safeMessage = "Pack opened the GST Portal login page. Sign in, then click Start download.";
+    summary.flowStep.safeMessage =
+      "Pack opened the GST Portal login page. Sign in, then click Start download.";
 
     const markup = renderToStaticMarkup(
       createElement(RunEvidencePanel, {

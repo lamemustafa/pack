@@ -64,6 +64,9 @@ describe("Pack brand surfaces", () => {
     expect(globalCss).toContain("--pack-popup-max-height: 600px;");
     expect(popupCss).toContain(".target-column");
     expect(popupCss).toContain("grid-column: 1 / -1;");
+    expect(popupCss).toContain("grid-row: 1;");
+    expect(popupCss).toContain("grid-column: 2;");
+    expect(popupCss).toContain("grid-row: 2;");
     expect(controlsCss).toContain("grid-template-columns: minmax(0, 1fr) 180px;");
     expect(targetCss).toContain("grid-template-columns: repeat(4, minmax(0, 1fr));");
   });
