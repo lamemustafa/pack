@@ -357,6 +357,27 @@ describe("popup full-year recovery actions", () => {
     );
     expect(markup).not.toContain("Pack opened the GST Portal login page.");
   });
+
+  it("explains final zip save confirmation instead of showing stale unconfirmed copy", () => {
+    const summary = summaryFor("download-unconfirmed");
+    summary.status = "complete";
+    summary.flowStep.state = "download-unconfirmed";
+    summary.flowStep.safeSignals = ["full-fiscal-year-zip-download-unconfirmed"];
+    summary.flowStep.safeMessage =
+      "Pack prepared the fiscal-year zip, but the final browser download did not complete.";
+
+    const markup = renderToStaticMarkup(
+      createElement(RunEvidencePanel, {
+        portalReady: true,
+        filedReturnsObservation: null,
+        scopedFlowSummary: summary,
+        summaryHeading: "Last filed-returns run: complete",
+      }),
+    );
+
+    expect(markup).toContain("If the Save panel is open, click Save.");
+    expect(markup).not.toContain("the final browser download did not complete");
+  });
 });
 
 function supportedPortalContext(): PortalContext {

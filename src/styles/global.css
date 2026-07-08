@@ -1,7 +1,7 @@
 :root {
-  --pack-popup-width: 1120px;
-  --pack-popup-min-height: 720px;
-  --pack-popup-max-height: 840px;
+  --pack-popup-width: 780px;
+  --pack-popup-min-height: 560px;
+  --pack-popup-max-height: 620px;
   --pack-ink: #101923;
   --pack-muted: #4c5c6d;
   --pack-border: #ccd6e2;

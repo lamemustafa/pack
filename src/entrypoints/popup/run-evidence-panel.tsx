@@ -55,5 +55,8 @@ function displayFlowStepMessage(summary: FiledReturnsFlowSummary): string {
   if (summary.flowStep.safeSignals.includes("gst-login-tab-opened")) {
     return "Open a signed-in GST Portal tab, then retry this period or cancel and reset.";
   }
+  if (summary.flowStep.safeSignals.includes("full-fiscal-year-zip-download-unconfirmed")) {
+    return "Pack prepared the final ZIP. If the Save panel is open, click Save. If you already saved it, verify the ZIP in Downloads before starting another run.";
+  }
   return summary.flowStep.safeMessage;
 }

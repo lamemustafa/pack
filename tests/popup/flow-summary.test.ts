@@ -103,6 +103,36 @@ describe("popup filed returns flow summary", () => {
     ).toBe("FY 2025-26 GSTR-3B complete. 2 of 2 periods reconciled.");
   });
 
+  it("asks for final zip confirmation when all periods reconciled but browser save is unconfirmed", () => {
+    expect(
+      getFiledReturnsCompletionStatus(
+        {
+          financialYear: "2025-26",
+          period: FULL_FISCAL_YEAR_PERIOD,
+          returnType: "GSTR-2B",
+          artifactType: "PDF_AND_EXCEL",
+        },
+        {
+          ...COMPLETE_SUMMARY,
+          flowStep: {
+            ...COMPLETE_SUMMARY.flowStep,
+            state: "download-unconfirmed",
+            safeSignals: ["full-fiscal-year-zip-download-unconfirmed"],
+          },
+          scope: {
+            financialYear: "2025-26",
+            period: FULL_FISCAL_YEAR_PERIOD,
+            returnType: "GSTR-2B",
+            artifactType: "PDF_AND_EXCEL",
+          },
+          status: "complete",
+        },
+      ),
+    ).toBe(
+      "FY 2025-26 GSTR-2B prepared. 12 of 12 periods reconciled; confirm the final ZIP save.",
+    );
+  });
+
   it("uses the persisted summary status in the popup heading for the selected scope", () => {
     expect(
       getFiledReturnsSummaryHeading(

@@ -1,34 +1,34 @@
 .target-strip {
   display: grid;
-  gap: 14px;
-  padding: 16px;
+  gap: 10px;
+  padding: 12px;
 }
 
 .target-strip-header {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
+  gap: 10px;
   align-items: start;
 }
 
 .target-strip h2 {
   margin: 0;
   color: var(--pack-ink);
-  font-size: 17px;
+  font-size: 15px;
   line-height: 1.25;
 }
 
 .state-pill {
   display: inline-flex;
-  min-height: 28px;
+  min-height: 24px;
   align-items: center;
   justify-content: center;
   border: 1px solid #c8d3de;
   border-radius: 999px;
   background: #f4f7fa;
   color: #26394c;
-  padding: 4px 10px;
-  font-size: 12px;
+  padding: 3px 8px;
+  font-size: 11px;
   font-weight: 750;
   white-space: nowrap;
 }
@@ -47,8 +47,8 @@
 
 .target-metadata {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -62,19 +62,19 @@
   border: 1px solid #d9e2ec;
   border-radius: 8px;
   background: #fbfcfe;
-  padding: 11px 12px;
+  padding: 8px 9px;
 }
 
 .target-metadata dt {
   color: #5c6c7d;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
 }
 
 .target-metadata dd {
   margin: 0;
   color: #172334;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 800;
   line-height: 1.25;
   overflow-wrap: anywhere;
@@ -83,7 +83,7 @@
 .target-status {
   margin: 0;
   color: #324356;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 @media (max-width: 560px) {

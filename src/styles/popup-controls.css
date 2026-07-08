@@ -1,7 +1,7 @@
 .flow-panel {
   display: grid;
-  gap: 16px;
-  padding: 16px;
+  gap: 12px;
+  padding: 12px;
 }
 
 .panel-heading {
@@ -15,9 +15,9 @@
   border-radius: 8px;
   background: #f8fafc;
   color: #37475a;
-  font-size: 12px;
-  line-height: 1.45;
-  padding: 11px 12px;
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 9px 10px;
 }
 
 .scope-note-warning {
@@ -28,7 +28,7 @@
 
 .scope-section {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
 }
 
@@ -49,15 +49,15 @@
 
 .scope-group legend,
 .scope-select span {
-  margin: 0 0 6px;
+  margin: 0 0 5px;
   color: #334155;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 750;
 }
 
 .scope-options {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .scope-section-primary .scope-options {
@@ -73,12 +73,16 @@
 }
 
 .scope-group-file .scope-options {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.scope-group-file .scope-option:nth-child(3) {
+  grid-column: 1 / -1;
 }
 
 .scope-option {
   display: inline-flex;
-  min-height: 38px;
+  min-height: 34px;
   cursor: pointer;
   align-items: center;
   justify-content: center;
@@ -86,7 +90,7 @@
   border-radius: 7px;
   background: #ffffff;
   color: #1d2634;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 750;
   line-height: 1.15;
   text-align: center;
@@ -129,13 +133,13 @@
 
 .scope-select select {
   border-color: #c9d2dc;
-  min-height: 40px;
+  min-height: 36px;
 }
 
 .primary-action {
-  min-height: 46px;
-  margin-top: 2px;
-  font-size: 15px;
+  min-height: 42px;
+  margin-top: 0;
+  font-size: 14px;
 }
 
 .recovery-panel {
