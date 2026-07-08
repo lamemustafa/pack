@@ -41,9 +41,9 @@ html[data-pack-surface="popup"] #root {
   overflow-y: auto;
   overscroll-behavior: contain;
   align-content: start;
-  gap: 14px;
+  gap: 12px;
   margin: 0 auto;
-  padding: 14px;
+  padding: 16px;
   background: var(--pack-soft);
 }
 
@@ -63,7 +63,9 @@ html[data-pack-surface="popup"] #root {
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  padding: 12px 14px;
+  border-color: transparent;
+  background: transparent;
+  padding: 2px 2px 0;
 }
 
 .brand-title-block {
@@ -74,14 +76,14 @@ html[data-pack-surface="popup"] #root {
 }
 
 .brand-logo {
-  width: 72px;
+  width: 56px;
   max-width: 100%;
   height: auto;
 }
 
 .brand-header h1 {
   margin-top: 2px;
-  font-size: 20px;
+  font-size: 21px;
 }
 
 .brand-badges {
@@ -123,7 +125,7 @@ html[data-pack-surface="popup"] #root {
 
 .command-workbench {
   display: grid;
-  grid-template-columns: minmax(0, 1.55fr) minmax(320px, 0.9fr);
+  grid-template-columns: minmax(0, 1.65fr) minmax(340px, 0.72fr);
   gap: 14px;
   align-items: start;
 }
@@ -137,7 +139,7 @@ html[data-pack-surface="popup"] #root {
 
 .run-column {
   position: sticky;
-  top: 0;
+  top: 8px;
 }
 
 .section-label {

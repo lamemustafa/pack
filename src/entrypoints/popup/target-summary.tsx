@@ -28,7 +28,7 @@ export function DownloadTargetSummary({
     <section className="target-strip" aria-label="Selected filed return download target">
       <div className="target-strip-header">
         <div>
-          <p className="section-label">Selected target</p>
+          <p className="section-label">Ready to run</p>
           <h2>{scope.returnType} local download</h2>
         </div>
         <span className={stateClassName}>{portalState}</span>

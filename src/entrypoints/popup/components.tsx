@@ -43,7 +43,7 @@ export function ScopeForm({
       <div className="panel-heading">
         <div>
           <p className="section-label">Setup</p>
-          <h2>Set the local download target</h2>
+          <h2>Choose return files</h2>
         </div>
       </div>
       <div className="scope-form-grid">
