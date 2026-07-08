@@ -12,6 +12,14 @@ describe("capturePortalBlobDownload", () => {
     vi.restoreAllMocks();
   });
 
+  it("keeps the injected function independent of module-scope constants", () => {
+    const source = capturePortalBlobDownloadWithDiagnostics.toString();
+
+    expect(source).not.toContain("CAPTURE_SUPPRESSION_SETTLE_MS");
+    expect(source).not.toContain("MAIN_WORLD_CAPTURE_CHUNK_SIZE");
+    expect(source).not.toContain("PACK_MAIN_WORLD_CAPTURE_MESSAGE_SOURCE");
+  });
+
   it("captures and suppresses portal data-url anchor downloads", async () => {
     const { documentRef } = installMainWorldDom(`
       <button data-pack-gstr2b-capture-action="capture-1">Download</button>

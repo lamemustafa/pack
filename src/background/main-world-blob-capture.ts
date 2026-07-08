@@ -11,10 +11,8 @@ import {
   type MainWorldChunkedCaptureRequest,
 } from "./main-world-capture-contracts";
 
-const CAPTURE_SUPPRESSION_SETTLE_MS = 1_000;
 const MAIN_WORLD_CAPTURE_TIMEOUT_MS = 75_000;
 const MAIN_WORLD_CAPTURE_CHUNK_SIZE = 512 * 1024;
-const PACK_MAIN_WORLD_CAPTURE_MESSAGE_SOURCE = "pack-main-world-capture-v1";
 
 export async function capturePortalBlobDownloadInMainWorld(
   tabId: number,
@@ -91,6 +89,9 @@ export async function capturePortalBlobDownloadWithDiagnostics(
   config: FiledReturnsMainWorldCaptureRequest,
 ): Promise<MainWorldCaptureOutcome> {
   return new Promise((resolve) => {
+    const captureSuppressionSettleMs = 1_000;
+    const defaultTransferChunkSize = 512 * 1024;
+    const mainWorldCaptureMessageSource = "pack-main-world-capture-v1";
     const safeFailureSignals = new Set<string>([`${config.signalPrefix}-main-world-capture-armed`]);
     const addSafeSignal = (signal: string) => safeFailureSignals.add(signal);
     const escapeCss = (value: string) => {
@@ -154,7 +155,7 @@ export async function capturePortalBlobDownloadWithDiagnostics(
       window.setTimeout(() => {
         restore();
         resolve(outcome);
-      }, CAPTURE_SUPPRESSION_SETTLE_MS);
+      }, captureSuppressionSettleMs);
     };
 
     const classifyCapturedArtifactExtension = (capturedUrl: string) => {
@@ -179,7 +180,7 @@ export async function capturePortalBlobDownloadWithDiagnostics(
 
     const settleChunked = (capturedUrl: string, safeSignals: string[]) => {
       if (settled || !config.transferId) return false;
-      const chunkSize = config.transferChunkSize ?? MAIN_WORLD_CAPTURE_CHUNK_SIZE;
+      const chunkSize = config.transferChunkSize ?? defaultTransferChunkSize;
       const chunks: string[] = [];
       for (let offset = 0; offset < capturedUrl.length; offset += chunkSize) {
         chunks.push(capturedUrl.slice(offset, offset + chunkSize));
@@ -194,7 +195,7 @@ export async function capturePortalBlobDownloadWithDiagnostics(
             actionId: config.actionId,
             chunk,
             index,
-            source: PACK_MAIN_WORLD_CAPTURE_MESSAGE_SOURCE,
+            source: mainWorldCaptureMessageSource,
             totalChunks: chunks.length,
             transferId: config.transferId,
           },
@@ -218,7 +219,7 @@ export async function capturePortalBlobDownloadWithDiagnostics(
       window.setTimeout(() => {
         restore();
         resolve(outcome);
-      }, CAPTURE_SUPPRESSION_SETTLE_MS);
+      }, captureSuppressionSettleMs);
       return true;
     };
 
