@@ -32,23 +32,19 @@ import {
 import { clearPackLocalDataWithRecoveryGuard } from "../background/local-data";
 import { startSyntheticDemo } from "../background/synthetic-demo";
 import { runDownloadPromptProbe } from "../background/download-prompt-probe";
+import {
+  PACK_CLEARABLE_LOCAL_STORAGE_KEYS,
+  PACK_LOCAL_STORAGE_KEYS,
+  PACK_SESSION_STORAGE_KEYS,
+  filedReturnsStorageKeys,
+} from "../background/storage-keys";
 
-export const PACK_LOCAL_STORAGE_KEYS = {
-  activeFiledReturnsRun: "pack:active-filed-returns-run",
-  fullFiscalYearLedger: "pack:full-fiscal-year-ledger",
-  install: "pack:install",
-  lastManifest: "pack:last-manifest",
-  targetReview: "pack:filed-returns-target-review",
-} as const;
-
-export const PACK_SESSION_STORAGE_KEYS = {
-  lastContext: "pack:last-context",
-  lastFiledReturnsObservation: "pack:last-filed-returns-observation",
-  lastFiledReturnsFlowSummary: "pack:last-filed-returns-flow-summary",
-  lastGstTabId: "pack:last-gst-tab-id",
-} as const;
-
-export const PACK_CLEARABLE_LOCAL_STORAGE_KEYS = Object.values(PACK_LOCAL_STORAGE_KEYS);
+export {
+  PACK_CLEARABLE_LOCAL_STORAGE_KEYS,
+  PACK_LOCAL_STORAGE_KEYS,
+  PACK_SESSION_STORAGE_KEYS,
+  filedReturnsStorageKeys,
+} from "../background/storage-keys";
 
 const CONTENT_SCRIPT_FILE = "/content-scripts/content.js";
 const OFFICIAL_URL = "https://pack.complyeaze.com";
@@ -225,16 +221,6 @@ function filedReturnsFlowRunnerDeps() {
     preferDirectDownload: true,
     sendMessageToTabWithInjection,
     storageKeys: filedReturnsStorageKeys(),
-  };
-}
-
-function filedReturnsStorageKeys() {
-  return {
-    activeRun: PACK_LOCAL_STORAGE_KEYS.activeFiledReturnsRun,
-    completion: PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary,
-    fullFiscalYearLedger: PACK_LOCAL_STORAGE_KEYS.fullFiscalYearLedger,
-    observation: PACK_SESSION_STORAGE_KEYS.lastFiledReturnsObservation,
-    targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview,
   };
 }
 
