@@ -27,7 +27,7 @@ export {
   scoreFiledGstr3bDownloadCandidate,
 } from "./filed-returns-download-candidates";
 
-const DIALOG_SETTLE_DELAY_MS = 100;
+const DIALOG_SETTLE_DELAY_MS = 60;
 const GSTR1_EXCEL_POST_CLICK_BLOCKED_WAIT_MS = 800;
 const GSTR1_EXCEL_POST_CLICK_BLOCKED_POLL_MS = 100;
 

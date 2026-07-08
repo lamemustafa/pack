@@ -6,8 +6,8 @@ import {
   type NavigationCandidateScore,
 } from "./filed-returns-navigation-candidates";
 
-const DIALOG_SETTLE_DELAY_MS = 100;
-const DIALOG_SETTLE_POLL_MS = 20;
+const DIALOG_SETTLE_DELAY_MS = 60;
+const DIALOG_SETTLE_POLL_MS = 15;
 const MAX_DIALOG_DISMISSALS = 4;
 const CLICKABLE_SELECTOR = [
   "a",

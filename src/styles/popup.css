@@ -1,8 +1,8 @@
 html[data-pack-surface="popup"],
 html[data-pack-surface="popup"] body,
 html[data-pack-surface="popup"] #root {
-  width: var(--pack-popup-width);
-  min-width: var(--pack-popup-width);
+  width: 100vw;
+  min-width: 0;
 }
 
 html[data-pack-surface="popup"] body,
@@ -16,13 +16,13 @@ html[data-pack-surface="popup"] body {
 
 .popup-shell {
   display: grid;
-  width: var(--pack-popup-width);
+  width: min(var(--pack-popup-width), calc(100vw - 24px));
   min-height: var(--pack-popup-min-height);
   max-height: var(--pack-popup-max-height);
   overflow-y: auto;
   align-content: start;
-  gap: 10px;
-  padding: 12px;
+  gap: 12px;
+  padding: 14px;
   background: var(--pack-soft);
 }
 
@@ -42,7 +42,7 @@ html[data-pack-surface="popup"] body {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 9px 11px;
+  padding: 11px 13px;
 }
 
 .brand-title-block {
@@ -60,7 +60,7 @@ html[data-pack-surface="popup"] body {
 
 .brand-header h1 {
   margin-top: 2px;
-  font-size: 16px;
+  font-size: 17px;
 }
 
 .brand-badges {
@@ -102,8 +102,8 @@ html[data-pack-surface="popup"] body {
 
 .command-workbench {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 14px;
   align-items: start;
 }
 
@@ -142,7 +142,7 @@ html[data-pack-surface="popup"] body {
 .panel-heading h2 {
   margin: 0;
   color: var(--pack-ink);
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.25;
 }
 
@@ -150,7 +150,7 @@ html[data-pack-surface="popup"] body {
 .recovery-panel {
   display: grid;
   gap: 10px;
-  padding: 12px;
+  padding: 13px;
 }
 
 .evidence-panel {
@@ -172,7 +172,7 @@ html[data-pack-surface="popup"] body {
 .evidence-panel h2 {
   margin: 0;
   color: var(--pack-ink);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 800;
   line-height: 1.25;
 }
@@ -209,7 +209,7 @@ html[data-pack-surface="popup"] body {
   padding: 8px 10px;
 }
 
-@media (max-width: 820px) {
+@media (max-width: 940px) {
   html[data-pack-surface="popup"],
   html[data-pack-surface="popup"] body,
   html[data-pack-surface="popup"] #root,
