@@ -78,4 +78,23 @@ describe("GST portal host guard", () => {
       ]),
     ).toBeNull();
   });
+
+  it("does not select generated GST artifact tabs as actionable portal tabs", () => {
+    expect(isSupportedGstPortalUrl("https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/report.pdf")).toBe(
+      true,
+    );
+
+    expect(
+      pickSupportedGstPortalTab([
+        { id: 10, url: "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/report.pdf" },
+        { id: 11, url: "https://return.gst.gov.in/returns/auth/dashboard" },
+      ]),
+    ).toEqual({ id: 11, url: "https://return.gst.gov.in/returns/auth/dashboard" });
+
+    expect(
+      pickSupportedGstPortalTab([
+        { id: 12, url: "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/report.xlsx" },
+      ]),
+    ).toBeNull();
+  });
 });

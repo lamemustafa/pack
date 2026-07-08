@@ -453,6 +453,65 @@ describe("Pack GST tab selection", () => {
     await expect(getActiveGstTab()).resolves.toMatchObject({ id: 25 });
   });
 
+  it("ignores generated GST artifact tabs when selecting a working portal tab", async () => {
+    browserMocks.tabs.query
+      .mockResolvedValueOnce([
+        {
+          active: true,
+          id: 24,
+          url: "chrome-extension://pack-test-extension/popup.html",
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          active: false,
+          id: 25,
+          url: "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/report.pdf",
+        },
+        {
+          active: false,
+          id: 26,
+          url: "https://return.gst.gov.in/returns/auth/dashboard",
+        },
+      ]);
+    const { getActiveGstTab } = await import("../../src/entrypoints/background");
+
+    await expect(getActiveGstTab()).resolves.toMatchObject({ id: 26 });
+  });
+
+  it("opens login instead of reusing only generated GST artifact tabs", async () => {
+    browserMocks.tabs.query
+      .mockResolvedValueOnce([
+        {
+          active: true,
+          id: 24,
+          url: "chrome-extension://pack-test-extension/popup.html",
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          active: false,
+          id: 25,
+          url: "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/report.xlsx",
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          active: true,
+          id: 24,
+          url: "chrome-extension://pack-test-extension/popup.html",
+        },
+        {
+          active: false,
+          id: 25,
+          url: "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/report.xlsx",
+        },
+      ]);
+    const { getActiveGstTab } = await import("../../src/entrypoints/background");
+
+    await expect(getActiveGstTab()).resolves.toBeNull();
+  });
+
   it("opens login instead of reusing a stale remembered access-denied tab", async () => {
     browserMocks.storage.session.get.mockResolvedValueOnce({
       "pack:last-gst-tab-id": 25,

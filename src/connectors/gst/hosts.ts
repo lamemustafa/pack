@@ -78,6 +78,7 @@ function getGstPortalTabPriority(url: string | undefined): number {
     const pathname = parsed.pathname.toLowerCase();
 
     if (isGstPortalErrorPath(pathname)) return -1;
+    if (isGstPortalArtifactPath(pathname)) return -1;
     if (parsed.origin === "https://return.gst.gov.in" && pathname.includes("/returns/auth/")) {
       return 40;
     }
@@ -96,4 +97,8 @@ function getGstPortalTabPriority(url: string | undefined): number {
 
 function isGstPortalErrorPath(pathname: string): boolean {
   return /\/services\/error(?:\/|$)|\/error\//i.test(pathname);
+}
+
+function isGstPortalArtifactPath(pathname: string): boolean {
+  return /\.(?:pdf|xls|xlsx|zip)(?:$|[/?#])/i.test(pathname);
 }
