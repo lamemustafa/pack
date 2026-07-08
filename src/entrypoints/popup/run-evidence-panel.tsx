@@ -1,5 +1,5 @@
 import type { FiledReturnsFlowSummary, PortalObservation } from "../../core/contracts";
-import { DiagnosticSignals, RunProgress } from "./run-summary";
+import { DiagnosticSignals, RunProgress, hasDiagnosticSignals } from "./run-summary";
 
 export function RunEvidencePanel({
   portalReady,
@@ -27,7 +27,12 @@ export function RunEvidencePanel({
           <RunProgress summary={scopedFlowSummary} />
         </div>
         <p className="status-detail">{displayFlowStepMessage(scopedFlowSummary)}</p>
-        <DiagnosticSignals summary={scopedFlowSummary} />
+        {hasDiagnosticSignals(scopedFlowSummary) ? (
+          <details className="diagnostic-details">
+            <summary>Safe diagnostics</summary>
+            <DiagnosticSignals summary={scopedFlowSummary} />
+          </details>
+        ) : null}
       </section>
     );
   }

@@ -26,6 +26,10 @@ export function RunProgress({ summary }: { summary: FiledReturnsFlowSummary }) {
   );
 }
 
+export function hasDiagnosticSignals(summary: FiledReturnsFlowSummary): boolean {
+  return summary.flowStep.safeSignals.some(isDownloadDiagnosticSignal);
+}
+
 function isDownloadDiagnosticSignal(signal: string): boolean {
   return (
     signal.includes("blob-capture") ||

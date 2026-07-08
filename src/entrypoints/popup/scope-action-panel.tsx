@@ -19,11 +19,14 @@ export function ScopeActionPanel({
         {label}
       </button>
       {actionCopy.details.length > 0 ? (
-        <ul className="run-action-details" aria-label="Download safeguards">
-          {actionCopy.details.map((detail) => (
-            <li key={detail}>{detail}</li>
-          ))}
-        </ul>
+        <details className="run-action-details">
+          <summary>What Pack will do</summary>
+          <ul aria-label="Download safeguards">
+            {actionCopy.details.map((detail) => (
+              <li key={detail}>{detail}</li>
+            ))}
+          </ul>
+        </details>
       ) : null}
     </div>
   );

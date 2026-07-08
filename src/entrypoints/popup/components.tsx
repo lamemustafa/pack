@@ -39,19 +39,12 @@ export function ScopeForm({
   const actionCopy = getScopeActionCopy(scope, formModel.fullFiscalYear);
 
   return (
-    <section className="flow-panel" aria-label="Filed return download scope">
-      <div className="panel-heading">
-        <div>
-          <p className="section-label">Download setup</p>
-          <h2>Choose return files</h2>
-        </div>
-      </div>
+    <section className="flow-panel" aria-label="Filed return download setup">
       <div className="scope-form-grid">
-        <div className="scope-step">
-          <span className="scope-step-index">1</span>
+        <div className="scope-row">
           <ScopeButtonGroup
             className="scope-group-return"
-            label="Return type"
+            label="Return"
             value={scope.returnType}
             options={returnTypeOptions()}
             onChange={(returnType) =>
@@ -64,8 +57,7 @@ export function ScopeForm({
             }
           />
         </div>
-        <div className="scope-step scope-step-grid">
-          <span className="scope-step-index">2</span>
+        <div className="scope-row scope-row-range">
           {formModel.supportsFullFiscalYear ? (
             <ScopeButtonGroup
               className="scope-group-run-mode"
@@ -88,9 +80,9 @@ export function ScopeForm({
               }
             />
           ) : null}
-          <div className="scope-section-period">
+          <div className="scope-select-row">
             <ScopeSelect
-              label="Financial year"
+              label="FY"
               value={scope.financialYear}
               options={formModel.financialYearOptions}
               onChange={(financialYear) =>
@@ -112,8 +104,7 @@ export function ScopeForm({
             )}
           </div>
         </div>
-        <div className="scope-step">
-          <span className="scope-step-index">3</span>
+        <div className="scope-row">
           <ScopeButtonGroup
             className="scope-group-file"
             label="Output"
@@ -133,7 +124,7 @@ export function ScopeForm({
         </div>
         {!context?.supported ? (
           <p className="scope-note scope-note-warning">
-            Open a signed-in GST return dashboard or return page before starting.
+            Open a signed-in GST return dashboard or return page in this Brave window.
           </p>
         ) : null}
       </div>
