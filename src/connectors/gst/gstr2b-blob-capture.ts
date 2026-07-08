@@ -11,7 +11,6 @@ export function prepareGstr2bPortalBlobDownloadCapture(
 ): FiledReturnsMainWorldCaptureRequest | null {
   return prepareFiledReturnsPortalBlobDownloadCapture(documentRef, control, actionId, {
     signalPrefix: "gstr2b",
-    timeoutMs: 12_000,
   });
 }
 

@@ -494,6 +494,7 @@ describe("filed returns guided flow", () => {
       actionId: "action-gstr2b-pdf",
       signalPrefix: "gstr2b",
     });
+    expect(result.mainWorldCaptureRequest?.timeoutMs).toBeUndefined();
     expect(result.downloadTrigger.safeSignals).toEqual(
       expect.arrayContaining([
         "gstr2b-download-clicked",
