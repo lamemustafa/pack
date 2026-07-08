@@ -49,7 +49,26 @@ export function DownloadTargetSummary({
           <dd>{isFullFiscalYearScope(scope) ? "ZIP handoff" : "Single period"}</dd>
         </div>
       </dl>
-      <p className="target-status">{completionStatus ?? status}</p>
+      <p className="target-status">
+        {currentTargetStatus({
+          completionStatus,
+          context,
+          status,
+        })}
+      </p>
     </section>
   );
+}
+
+function currentTargetStatus({
+  completionStatus,
+  context,
+  status,
+}: {
+  completionStatus: string | null;
+  context: PortalContext | null;
+  status: string;
+}): string {
+  if (!context?.supported) return "Waiting for a supported GST Portal tab.";
+  return completionStatus ?? status;
 }
