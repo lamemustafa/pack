@@ -73,6 +73,7 @@ export interface FiledReturnsFlowRunnerDeps {
   };
   timings?: {
     contentMessageTimeoutMs?: number;
+    detailSummaryModalSettleMs?: number;
     flowStepSettleMs?: number;
     resultRowNavigationSettleMs?: number;
   };

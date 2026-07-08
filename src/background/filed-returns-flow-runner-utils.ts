@@ -7,7 +7,8 @@ import {
 } from "../connectors/gst/filed-returns-return-descriptors";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
 
-export const FLOW_STEP_SETTLE_MS = 1_600;
+export const FLOW_STEP_SETTLE_MS = 600;
+export const DETAIL_SUMMARY_MODAL_SETTLE_MS = 250;
 export const RESULT_ROW_NAVIGATION_SETTLE_MS = 1_500;
 export const MAX_FLOW_STEPS = 6;
 export const MAX_GSTR1_FLOW_STEPS = 12;
@@ -64,6 +65,9 @@ export function getFlowStepSettleMs(
 ): number {
   if (isFiledReturnDetailNavigationStep(step)) {
     return deps.timings?.resultRowNavigationSettleMs ?? RESULT_ROW_NAVIGATION_SETTLE_MS;
+  }
+  if (step.safeSignals.includes("detail-summary-modal")) {
+    return deps.timings?.detailSummaryModalSettleMs ?? DETAIL_SUMMARY_MODAL_SETTLE_MS;
   }
   return deps.timings?.flowStepSettleMs ?? FLOW_STEP_SETTLE_MS;
 }
