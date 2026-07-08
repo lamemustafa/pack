@@ -1,7 +1,7 @@
 .flow-panel {
   display: grid;
-  gap: 12px;
-  padding: 14px;
+  gap: 14px;
+  padding: 16px;
 }
 
 .panel-heading {
@@ -56,28 +56,43 @@
   outline-offset: 2px;
 }
 
-.scope-section {
+.scope-step {
+  position: relative;
   display: grid;
-  gap: 8px;
+  min-width: 0;
+  gap: 10px;
+  border: 1px solid #d8e1eb;
+  border-radius: 8px;
+  background: #fbfdff;
+  padding: 12px 12px 12px 42px;
+}
+
+.scope-step-index {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--pack-accent);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.scope-step-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 0.7fr);
   min-width: 0;
 }
 
 .scope-form-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 12px;
-  align-items: start;
-}
-
-.scope-section-primary {
-  grid-template-columns: minmax(0, 1.4fr) minmax(220px, 0.6fr);
-  gap: 12px;
-  align-items: start;
-}
-
-.scope-section-secondary {
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 0.72fr);
-  gap: 12px;
+  gap: 10px;
   align-items: start;
 }
 
@@ -89,7 +104,7 @@
 }
 
 .scope-group-return {
-  grid-column: 1 / -1;
+  grid-column: auto;
 }
 
 .scope-group {
@@ -131,7 +146,7 @@
 
 .scope-option {
   display: grid;
-  min-height: 48px;
+  min-height: 50px;
   cursor: pointer;
   align-items: start;
   justify-content: stretch;
@@ -146,7 +161,7 @@
   text-align: left;
   word-break: keep-all;
   text-wrap: balance;
-  padding: 9px;
+  padding: 10px;
 }
 
 .scope-option-title,
@@ -211,13 +226,17 @@
   z-index: 2;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(260px, 0.34fr);
-  gap: 12px;
+  gap: 10px 12px;
   align-items: center;
   border: 1px solid #adc1d5;
   border-radius: 8px;
   background: #f2f7fb;
   padding: 12px;
   box-shadow: 0 -4px 10px rgba(16, 25, 35, 0.06);
+}
+
+.run-action-main {
+  min-width: 0;
 }
 
 .run-action-copy {
@@ -228,10 +247,11 @@
 }
 
 .run-action-details {
+  grid-column: 1 / -1;
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
-  margin: 8px 0 0;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
@@ -272,10 +292,8 @@
 }
 
 @media (max-width: 700px) {
-  .scope-section,
   .scope-form-grid,
-  .scope-section-primary,
-  .scope-section-secondary,
+  .scope-step-grid,
   .scope-section-period,
   .scope-group-return .scope-options,
   .scope-group-run-mode .scope-options,

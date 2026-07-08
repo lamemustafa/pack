@@ -42,12 +42,13 @@ export function ScopeForm({
     <section className="flow-panel" aria-label="Filed return download scope">
       <div className="panel-heading">
         <div>
-          <p className="section-label">Setup</p>
+          <p className="section-label">Download setup</p>
           <h2>Choose return files</h2>
         </div>
       </div>
       <div className="scope-form-grid">
-        <div className="scope-section scope-section-primary">
+        <div className="scope-step">
+          <span className="scope-step-index">1</span>
           <ScopeButtonGroup
             className="scope-group-return"
             label="Return type"
@@ -62,6 +63,9 @@ export function ScopeForm({
               )
             }
           />
+        </div>
+        <div className="scope-step scope-step-grid">
+          <span className="scope-step-index">2</span>
           {formModel.supportsFullFiscalYear ? (
             <ScopeButtonGroup
               className="scope-group-run-mode"
@@ -84,24 +88,6 @@ export function ScopeForm({
               }
             />
           ) : null}
-        </div>
-        <div className="scope-section scope-section-secondary">
-          <ScopeButtonGroup
-            className="scope-group-file"
-            label="Output"
-            value={formModel.selectedArtifactType}
-            options={formModel.artifactOptions}
-            onChange={(artifactType) =>
-              onScopeChange(
-                normaliseFiledReturnsScope({
-                  ...scope,
-                  artifactType: artifactType as NonNullable<
-                    FiledReturnsDownloadScope["artifactType"]
-                  >,
-                }),
-              )
-            }
-          />
           <div className="scope-section-period">
             <ScopeSelect
               label="Financial year"
@@ -125,6 +111,25 @@ export function ScopeForm({
               />
             )}
           </div>
+        </div>
+        <div className="scope-step">
+          <span className="scope-step-index">3</span>
+          <ScopeButtonGroup
+            className="scope-group-file"
+            label="Output"
+            value={formModel.selectedArtifactType}
+            options={formModel.artifactOptions}
+            onChange={(artifactType) =>
+              onScopeChange(
+                normaliseFiledReturnsScope({
+                  ...scope,
+                  artifactType: artifactType as NonNullable<
+                    FiledReturnsDownloadScope["artifactType"]
+                  >,
+                }),
+              )
+            }
+          />
         </div>
         {!context?.supported ? (
           <p className="scope-note scope-note-warning">
