@@ -100,6 +100,10 @@ export async function stageOffscreenFiledReturnChunk({
 
 export async function createOffscreenFiledReturnZipUrl(
   ledgerId: string,
+  expected?: {
+    returnType: FiledReturnsReturnType;
+    artifactTypes: FiledReturnsConcreteArtifactType[];
+  },
 ): Promise<{ blobUrl: string; zipEntryCount: number } | null> {
   const requestId = createRequestId();
   await ensureOffscreenDocument();
@@ -109,6 +113,12 @@ export async function createOffscreenFiledReturnZipUrl(
     payload: {
       requestId,
       ledgerId,
+      ...(expected
+        ? {
+            expectedReturnType: expected.returnType,
+            expectedArtifactTypes: expected.artifactTypes,
+          }
+        : {}),
     },
   });
   return isZipResponse(response, requestId)

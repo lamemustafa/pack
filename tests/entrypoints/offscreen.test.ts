@@ -379,6 +379,38 @@ describe("offscreen Blob URL entrypoint", () => {
     expect(opfsFiles.has("filed-return-packs/ledger-1/may.xlsx")).toBe(false);
   });
 
+  it("rejects stale staged GSTR-2B placeholder PDFs before creating the final zip", async () => {
+    await loadOffscreenEntrypoint();
+    opfsFiles.set(
+      "filed-return-packs/ledger-1/may.pdf",
+      new Blob([
+        "%PDF-1.4\nBT (ComplyEaze Pack generated GSTR-2B summary) Tj ET\n%%EOF\n",
+      ]),
+    );
+    opfsFiles.set(
+      "filed-return-packs/ledger-1/may.xlsx",
+      new Blob([toArrayBuffer(createPortalGstr2bWorkbook())]),
+    );
+
+    const zip = await sendOffscreenMessage({
+      type: "PACK_OFFSCREEN_CREATE_FILED_RETURN_ZIP",
+      target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+      payload: {
+        requestId: "zip-request",
+        ledgerId: "ledger-1",
+        expectedReturnType: "GSTR-2B",
+        expectedArtifactTypes: ["PDF", "EXCEL"],
+      },
+    });
+
+    expect(zip).toEqual({
+      ok: false,
+      requestId: "zip-request",
+      errorCategory: "zip-invalid-entry",
+    });
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+  });
+
   it("accepts a target-bound chunked GSTR-2B PDF even when visible text is encoded", async () => {
     await loadOffscreenEntrypoint();
     const pdfBytes = new Uint8Array(24 * 1024);
@@ -526,5 +558,11 @@ describe("offscreen Blob URL entrypoint", () => {
       binary += String.fromCharCode(byte);
     }
     return btoa(binary);
+  }
+
+  function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+    const buffer = new ArrayBuffer(bytes.byteLength);
+    new Uint8Array(buffer).set(bytes);
+    return buffer;
   }
 });

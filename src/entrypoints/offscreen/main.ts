@@ -11,6 +11,7 @@ import {
   dataUrlChunksToDecoded,
   dataUrlToBlob,
   isExpectedDecodedDataUrlForReturnType,
+  isExpectedFiledReturnBytesForReturnType,
 } from "./filed-return-data-url";
 
 const blobUrlsByRequest = new Map<string, string>();
@@ -106,6 +107,21 @@ async function handleMessage(
           ok: false,
           requestId: message.payload.requestId,
           errorCategory: "zip-empty",
+        };
+      }
+      const expectedReturnType = message.payload.expectedReturnType;
+      const expectedArtifactTypes = message.payload.expectedArtifactTypes;
+      if (
+        expectedReturnType &&
+        expectedArtifactTypes &&
+        !entries.every((entry) =>
+          isExpectedZipEntry(entry, expectedArtifactTypes, expectedReturnType),
+        )
+      ) {
+        return {
+          ok: false,
+          requestId: message.payload.requestId,
+          errorCategory: "zip-invalid-entry",
         };
       }
       const zipBytes = createZip(entries);
@@ -250,6 +266,26 @@ function safeZipEntryFilename(zipPath: string): string {
   const fileName = zipPath.split("/").at(-1);
   if (!fileName) throw new Error("Missing filename.");
   return fileName;
+}
+
+function isExpectedZipEntry(
+  entry: ZipEntry,
+  expectedArtifactTypes: readonly FiledReturnsConcreteArtifactType[],
+  expectedReturnType: FiledReturnsReturnType,
+): boolean {
+  const artifactType = artifactTypeFromZipPath(entry.path);
+  return (
+    artifactType !== null &&
+    expectedArtifactTypes.includes(artifactType) &&
+    isExpectedFiledReturnBytesForReturnType(entry.bytes, artifactType, expectedReturnType)
+  );
+}
+
+function artifactTypeFromZipPath(zipPath: string): FiledReturnsConcreteArtifactType | null {
+  const lowerPath = zipPath.toLowerCase();
+  if (lowerPath.endsWith(".pdf")) return "PDF";
+  if (lowerPath.endsWith(".xls") || lowerPath.endsWith(".xlsx")) return "EXCEL";
+  return null;
 }
 
 async function readZipEntries(

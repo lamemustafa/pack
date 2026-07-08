@@ -46,6 +46,15 @@ export function isExpectedDecodedDataUrlForReturnType(
   returnType: FiledReturnsReturnType,
 ): boolean {
   if (!isExpectedDecodedDataUrl(metadata, bytes, artifactType)) return false;
+  return isExpectedFiledReturnBytesForReturnType(bytes, artifactType, returnType);
+}
+
+export function isExpectedFiledReturnBytesForReturnType(
+  bytes: Uint8Array,
+  artifactType: FiledReturnsConcreteArtifactType,
+  returnType: FiledReturnsReturnType,
+): boolean {
+  if (!isExpectedFiledReturnBytes(bytes, artifactType)) return false;
   if (returnType !== "GSTR-2B") return true;
   if (artifactType === "PDF") {
     return bytes.byteLength >= GSTR2B_MIN_PORTAL_PDF_BYTES;
@@ -141,7 +150,7 @@ function isExpectedDecodedDataUrl(
   const normalizedMetadata = metadata.toLowerCase();
   if (artifactType === "PDF") {
     return (
-      isLikelyPdfBytes(bytes) &&
+      isExpectedFiledReturnBytes(bytes, artifactType) &&
       (metadataIncludesExpectedMime(normalizedMetadata, artifactType) ||
         normalizedMetadata.includes("application/octet-stream"))
     );
@@ -149,8 +158,17 @@ function isExpectedDecodedDataUrl(
 
   return (
     metadataIncludesExpectedMime(normalizedMetadata, artifactType) &&
-    (isLikelyXlsxBytes(bytes) || isLikelyXlsBytes(bytes))
+    isExpectedFiledReturnBytes(bytes, artifactType)
   );
+}
+
+function isExpectedFiledReturnBytes(
+  bytes: Uint8Array,
+  artifactType: FiledReturnsConcreteArtifactType,
+): boolean {
+  return artifactType === "PDF"
+    ? isLikelyPdfBytes(bytes)
+    : isLikelyXlsxBytes(bytes) || isLikelyXlsBytes(bytes);
 }
 
 function metadataIncludesExpectedMime(

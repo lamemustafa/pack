@@ -2,6 +2,10 @@ import { browser } from "wxt/browser";
 import type { FiledReturnsFullFiscalYearLedger, PortalFlowStepResult } from "../core/contracts";
 import type { FiledReturnsDownloadScope } from "../core/contracts";
 import {
+  concreteFiledReturnsArtifactTypes,
+  normaliseFiledReturnsArtifactType,
+} from "../core/filed-returns-artifacts";
+import {
   clearOffscreenFiledReturnLedger,
   closeOffscreenBlobDocument,
   createOffscreenFiledReturnZipUrl,
@@ -51,6 +55,7 @@ export async function exportFullFiscalYearZip(
     clearSignalPrefix: "full-fiscal-year",
     completeStep,
     ledgerId: ledger.ledgerId,
+    scope: ledger.scope,
     safeMessage: "Pack exported the fiscal-year return files as one local zip.",
     startRejectedMessage:
       "Pack prepared the fiscal-year zip, but the browser rejected the final save.",
@@ -75,6 +80,7 @@ export async function exportSinglePeriodFiledReturnsZip({
     clearSignalPrefix: "single-period",
     completeStep,
     ledgerId,
+    scope,
     safeMessage: "Pack exported the selected filed-return files as one local zip.",
     startRejectedMessage:
       "Pack prepared the selected filed-return zip, but the browser rejected the final save.",
@@ -96,6 +102,7 @@ async function exportStagedFiledReturnsZip({
   clearSignalPrefix,
   completeStep,
   ledgerId,
+  scope,
   safeMessage,
   startRejectedMessage,
   unconfirmedMessage,
@@ -105,13 +112,19 @@ async function exportStagedFiledReturnsZip({
   clearSignalPrefix: "full-fiscal-year" | "single-period";
   completeStep: PortalFlowStepResult;
   ledgerId: string;
+  scope: FiledReturnsDownloadScope;
   safeMessage: string;
   startRejectedMessage: string;
   unconfirmedMessage: string;
   zipFailedMessage: string;
   zipFilename: string;
 }): Promise<PortalFlowStepResult> {
-  const zip = await createOffscreenFiledReturnZipUrl(ledgerId);
+  const zip = await createOffscreenFiledReturnZipUrl(ledgerId, {
+    returnType: scope.returnType,
+    artifactTypes: concreteFiledReturnsArtifactTypes(
+      normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType),
+    ),
+  });
   if (!zip) {
     const clearSignal = await clearStagedLedgerSignal(ledgerId, clearSignalPrefix);
     await closeOffscreenBlobDocument();

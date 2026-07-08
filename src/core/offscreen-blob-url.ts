@@ -61,6 +61,8 @@ export interface PackOffscreenCreateFiledReturnZipMessage {
   payload: {
     requestId: string;
     ledgerId: string;
+    expectedReturnType?: FiledReturnsReturnType;
+    expectedArtifactTypes?: FiledReturnsConcreteArtifactType[];
   };
 }
 
@@ -120,6 +122,7 @@ export type PackOffscreenBlobUrlResponse =
         | "stage-failed"
         | "stage-chunk-failed"
         | "clear-failed"
+        | "zip-invalid-entry"
         | "zip-empty"
         | "zip-failed";
     };
@@ -162,7 +165,15 @@ export function isPackOffscreenBlobUrlMessage(
     );
   }
   if (input.type === "PACK_OFFSCREEN_CREATE_FILED_RETURN_ZIP") {
-    return isBoundedString(input.payload.ledgerId, 1, 120);
+    return (
+      isBoundedString(input.payload.ledgerId, 1, 120) &&
+      (input.payload.expectedReturnType === undefined ||
+        isFiledReturnsReturnType(input.payload.expectedReturnType)) &&
+      (input.payload.expectedArtifactTypes === undefined ||
+        (Array.isArray(input.payload.expectedArtifactTypes) &&
+          input.payload.expectedArtifactTypes.length > 0 &&
+          input.payload.expectedArtifactTypes.every(isFiledReturnsConcreteArtifactType)))
+    );
   }
   if (input.type === "PACK_OFFSCREEN_CLEAR_FILED_RETURN_LEDGER") {
     return isBoundedString(input.payload.ledgerId, 1, 120);
