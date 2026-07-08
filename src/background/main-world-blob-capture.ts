@@ -3,26 +3,18 @@ import type {
   FiledReturnsCapturedDownloadRequest,
   FiledReturnsMainWorldCaptureRequest,
 } from "../core/contracts";
-import type { FiledReturnsArtifactExtension } from "../core/filed-returns-artifacts";
+import { withTimeout } from "./async-timeout";
+import {
+  isCapturedDownloadRequest,
+  isMainWorldCaptureOutcome,
+  type MainWorldCaptureOutcome,
+  type MainWorldChunkedCaptureRequest,
+} from "./main-world-capture-contracts";
 
 const CAPTURE_SUPPRESSION_SETTLE_MS = 1_000;
 const MAIN_WORLD_CAPTURE_TIMEOUT_MS = 75_000;
 const MAIN_WORLD_CAPTURE_CHUNK_SIZE = 512 * 1024;
 const PACK_MAIN_WORLD_CAPTURE_MESSAGE_SOURCE = "pack-main-world-capture-v1";
-
-export interface MainWorldCaptureOutcome {
-  capturedDownloadRequest: FiledReturnsCapturedDownloadRequest | null;
-  chunkedCaptureRequest?: MainWorldChunkedCaptureRequest;
-  safeFailureSignals: string[];
-}
-
-export interface MainWorldChunkedCaptureRequest {
-  actionId: string;
-  artifactExtension?: FiledReturnsArtifactExtension;
-  chunkCount: number;
-  safeSignals: string[];
-  transferId: string;
-}
 
 export async function capturePortalBlobDownloadInMainWorld(
   tabId: number,
@@ -44,6 +36,7 @@ export async function capturePortalBlobDownloadInMainWorld(
         world: "MAIN",
       }),
       MAIN_WORLD_CAPTURE_TIMEOUT_MS,
+      "main-world-capture-timeout",
     );
     if (isMainWorldCaptureOutcome(injectionResult?.result)) return injectionResult.result;
     if (isCapturedDownloadRequest(injectionResult?.result)) {
@@ -79,65 +72,6 @@ async function prepareContentCaptureTransfer(
   ) {
     throw new Error("main-world-capture-transfer-not-prepared");
   }
-}
-
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error("main-world-capture-timeout")), timeoutMs);
-    promise.then(
-      (value) => {
-        clearTimeout(timeout);
-        resolve(value);
-      },
-      (error: unknown) => {
-        clearTimeout(timeout);
-        reject(error);
-      },
-    );
-  });
-}
-
-function isCapturedDownloadRequest(value: unknown): value is FiledReturnsCapturedDownloadRequest {
-  if (typeof value !== "object" || value === null) return false;
-  const record = value as Record<string, unknown>;
-  return (
-    typeof record.actionId === "string" &&
-    typeof record.dataUrl === "string" &&
-    Array.isArray(record.safeSignals) &&
-    record.safeSignals.every((signal) => typeof signal === "string")
-  );
-}
-
-function isMainWorldCaptureOutcome(value: unknown): value is MainWorldCaptureOutcome {
-  if (typeof value !== "object" || value === null) return false;
-  const record = value as Record<string, unknown>;
-  return (
-    (isCapturedDownloadRequest(record.capturedDownloadRequest) ||
-      record.capturedDownloadRequest === null) &&
-    (record.chunkedCaptureRequest === undefined ||
-      isMainWorldChunkedCaptureRequest(record.chunkedCaptureRequest)) &&
-    Array.isArray(record.safeFailureSignals) &&
-    record.safeFailureSignals.every((signal) => typeof signal === "string")
-  );
-}
-
-function isMainWorldChunkedCaptureRequest(value: unknown): value is MainWorldChunkedCaptureRequest {
-  if (typeof value !== "object" || value === null) return false;
-  const record = value as Record<string, unknown>;
-  return (
-    typeof record.actionId === "string" &&
-    (record.artifactExtension === undefined ||
-      record.artifactExtension === ".pdf" ||
-      record.artifactExtension === ".xls" ||
-      record.artifactExtension === ".xlsx") &&
-    typeof record.transferId === "string" &&
-    typeof record.chunkCount === "number" &&
-    Number.isInteger(record.chunkCount) &&
-    record.chunkCount > 0 &&
-    record.chunkCount <= 200 &&
-    Array.isArray(record.safeSignals) &&
-    record.safeSignals.every((signal) => typeof signal === "string")
-  );
 }
 
 function createTransferId(): string {

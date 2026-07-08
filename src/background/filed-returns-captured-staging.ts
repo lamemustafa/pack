@@ -23,7 +23,7 @@ import {
   stageOffscreenFiledReturn,
   stageOffscreenFiledReturnChunk,
 } from "./offscreen-blob-url";
-import type { MainWorldChunkedCaptureRequest } from "./main-world-blob-capture";
+import type { MainWorldChunkedCaptureRequest } from "./main-world-capture-contracts";
 
 export async function stageCapturedFiledReturnDownload({
   activePeriod,
