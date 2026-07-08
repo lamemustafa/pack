@@ -20,6 +20,7 @@ import type { FiledReturnsFlowMessagingDeps } from "./filed-returns-flow-messagi
 import { persistFiledReturnsTargetReview } from "./filed-returns-target-review";
 import { capturedDownloadSignalPrefix } from "./filed-returns-captured-signals";
 import {
+  type OffscreenFiledReturnStageResult,
   stageOffscreenFiledReturn,
   stageOffscreenFiledReturnChunk,
 } from "./offscreen-blob-url";
@@ -54,7 +55,7 @@ export async function stageCapturedFiledReturnDownload({
     ),
   });
 
-  if (staged !== "staged") {
+  if (staged.status !== "staged") {
     return {
       ok: true,
       flowStep: withFiledReturnsDownloadDiagnostic({
@@ -66,6 +67,7 @@ export async function stageCapturedFiledReturnDownload({
             ...triggerStep.safeSignals,
             ...capturedDownloadRequest.safeSignals,
             `${signalPrefix}-opfs-stage-failed`,
+            ...offscreenStageErrorSignals(signalPrefix, staged),
             ...(activePeriod ? [`filed-return-detail-period:${activePeriod}`] : []),
           ],
           safeMessage:
@@ -154,7 +156,7 @@ export async function stageChunkedCapturedFiledReturnDownload({
     artifactType,
   );
 
-  let staged: "staged" | "failed" = "failed";
+  let staged: OffscreenFiledReturnStageResult = { status: "failed" };
   for (let index = 0; index < chunkedCaptureRequest.chunkCount; index += 1) {
     const chunkResponse = await browser.tabs.sendMessage(tabId, {
       type: "PACK_CONTENT_TAKE_MAIN_WORLD_CAPTURE_CHUNK_V3",
@@ -165,7 +167,7 @@ export async function stageChunkedCapturedFiledReturnDownload({
       },
     });
     if (!isChunkResponse(chunkResponse)) {
-      staged = "failed";
+      staged = { status: "failed" };
       break;
     }
     staged = await stageOffscreenFiledReturnChunk({
@@ -178,7 +180,7 @@ export async function stageChunkedCapturedFiledReturnDownload({
       transferId: chunkedCaptureRequest.transferId,
       zipPath,
     });
-    if (staged !== "staged") break;
+    if (staged.status !== "staged") break;
   }
 
   await browser.tabs
@@ -191,7 +193,7 @@ export async function stageChunkedCapturedFiledReturnDownload({
     })
     .catch(() => undefined);
 
-  if (staged !== "staged") {
+  if (staged.status !== "staged") {
     return {
       ok: true,
       flowStep: withFiledReturnsDownloadDiagnostic({
@@ -203,6 +205,7 @@ export async function stageChunkedCapturedFiledReturnDownload({
             ...triggerStep.safeSignals,
             ...chunkedCaptureRequest.safeSignals,
             `${signalPrefix}-opfs-chunk-stage-failed`,
+            ...offscreenStageErrorSignals(signalPrefix, staged),
             ...(activePeriod ? [`filed-return-detail-period:${activePeriod}`] : []),
           ],
           safeMessage:
@@ -263,6 +266,15 @@ export async function stageChunkedCapturedFiledReturnDownload({
     flowStep,
     ...(flowSummary ? { flowSummary } : {}),
   };
+}
+
+function offscreenStageErrorSignals(
+  signalPrefix: string,
+  staged: OffscreenFiledReturnStageResult,
+): string[] {
+  return staged.status === "failed" && staged.errorCategory
+    ? [`${signalPrefix}-opfs-stage-error:${staged.errorCategory}`]
+    : [];
 }
 
 function isChunkResponse(response: unknown): response is {

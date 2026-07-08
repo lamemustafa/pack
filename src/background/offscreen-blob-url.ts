@@ -9,6 +9,9 @@ import type { FiledReturnsReturnType } from "../core/filed-returns-return-types"
 const OFFSCREEN_DOCUMENT_PATH = "offscreen.html";
 const OFFSCREEN_JUSTIFICATION =
   "Create and revoke a temporary Blob URL for an explicit local GST return download.";
+export type OffscreenFiledReturnStageResult =
+  | { status: "staged" }
+  | { status: "failed"; errorCategory?: string };
 
 let creatingOffscreenDocument: Promise<void> | null = null;
 
@@ -34,7 +37,7 @@ export async function stageOffscreenFiledReturn({
   dataUrl: string;
   ledgerId: string;
   zipPath: string;
-}): Promise<"staged" | "failed"> {
+}): Promise<OffscreenFiledReturnStageResult> {
   const requestId = createRequestId();
   await ensureOffscreenDocument();
   const response = await browser.runtime.sendMessage({
@@ -47,7 +50,7 @@ export async function stageOffscreenFiledReturn({
       zipPath,
     },
   });
-  return isStagedResponse(response, requestId) ? "staged" : "failed";
+  return toStageResult(response, requestId);
 }
 
 export async function stageOffscreenFiledReturnChunk({
@@ -68,7 +71,7 @@ export async function stageOffscreenFiledReturnChunk({
   totalChunks: number;
   transferId: string;
   zipPath: string;
-}): Promise<"staged" | "failed"> {
+}): Promise<OffscreenFiledReturnStageResult> {
   const requestId = createRequestId();
   await ensureOffscreenDocument();
   const response = await browser.runtime.sendMessage({
@@ -86,7 +89,7 @@ export async function stageOffscreenFiledReturnChunk({
       artifactType,
     },
   });
-  return isStagedResponse(response, requestId) ? "staged" : "failed";
+  return toStageResult(response, requestId);
 }
 
 export async function createOffscreenFiledReturnZipUrl(
@@ -225,6 +228,21 @@ function isStagedResponse(
   if (typeof response !== "object" || response === null) return false;
   const record = response as Record<string, unknown>;
   return record.ok === true && record.requestId === requestId && record.staged === true;
+}
+
+function toStageResult(response: unknown, requestId: string): OffscreenFiledReturnStageResult {
+  if (isStagedResponse(response, requestId)) return { status: "staged" };
+  if (typeof response === "object" && response !== null) {
+    const record = response as Record<string, unknown>;
+    if (
+      record.ok === false &&
+      record.requestId === requestId &&
+      typeof record.errorCategory === "string"
+    ) {
+      return { status: "failed", errorCategory: record.errorCategory };
+    }
+  }
+  return { status: "failed" };
 }
 
 function isZipResponse(

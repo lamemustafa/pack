@@ -49,9 +49,6 @@ export function isExpectedCapturedDataUrlForReturnType(
   if (!isExpectedCapturedDataUrl(dataUrl, artifactType)) return false;
   if (returnType !== "GSTR-2B") return true;
   if (artifactType === "PDF") {
-    if (!(dataUrlContainsAscii(dataUrl, "GSTR-2B") || dataUrlContainsAscii(dataUrl, "GSTR2B"))) {
-      return false;
-    }
     return decodedDataUrlByteLength(dataUrl) >= GSTR2B_MIN_PORTAL_PDF_BYTES;
   }
   return isSaneSpreadsheetZipDataUrl(dataUrl);
@@ -105,11 +102,6 @@ function decodeDataUrlPrefix(dataUrl: string, byteCount: number): string | null 
   }
 }
 
-function dataUrlContainsAscii(dataUrl: string, marker: string): boolean {
-  const text = decodeDataUrlText(dataUrl);
-  return text?.toLowerCase().includes(marker.toLowerCase()) ?? false;
-}
-
 function decodedDataUrlByteLength(dataUrl: string): number {
   const commaIndex = dataUrl.indexOf(",");
   if (commaIndex <= 0) return 0;
@@ -132,7 +124,7 @@ function hasSupportedFirstZipLocalHeader(text: string): boolean {
   const generalPurposeFlags = readLittleEndianUint16(text, 6);
   const compressionMethod = readLittleEndianUint16(text, 8);
   if (generalPurposeFlags === null || compressionMethod === null) return false;
-  const unsupportedFlagsMask = 0x0001 | 0x0004 | 0x0008 | 0x0040 | 0x0800 | 0x2000;
+  const unsupportedFlagsMask = 0x0001 | 0x0004 | 0x0008 | 0x0040 | 0x2000;
   return (generalPurposeFlags & unsupportedFlagsMask) === 0 && [0, 8].includes(compressionMethod);
 }
 

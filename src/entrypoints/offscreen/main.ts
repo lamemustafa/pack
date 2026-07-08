@@ -6,8 +6,12 @@ import {
 } from "../../core/offscreen-blob-url";
 import type { FiledReturnsConcreteArtifactType } from "../../core/filed-returns-artifacts";
 import type { FiledReturnsReturnType } from "../../core/filed-returns-return-types";
-import { isExpectedCapturedDataUrlForReturnType } from "../../background/captured-download-data-url";
 import { createZip, type ZipEntry } from "./zip";
+import {
+  dataUrlChunksToDecoded,
+  dataUrlToBlob,
+  isExpectedDecodedDataUrlForReturnType,
+} from "./filed-return-data-url";
 
 const blobUrlsByRequest = new Map<string, string>();
 const chunkedFiledReturnsByTransfer = new Map<
@@ -109,13 +113,13 @@ async function handleMessage(
     }
 
     chunkedFiledReturnsByTransfer.delete(key);
-    const dataUrl = transfer.chunks.join("");
-    const blob = dataUrlToBlob(dataUrl);
+    const decoded = dataUrlChunksToDecoded(transfer.chunks);
     if (
-      !blob ||
-      blob.size === 0 ||
-      !isExpectedCapturedDataUrlForReturnType(
-        dataUrl,
+      !decoded ||
+      decoded.blob.size === 0 ||
+      !isExpectedDecodedDataUrlForReturnType(
+        decoded.metadata,
+        decoded.bytes,
         transfer.artifactType,
         transfer.returnType,
       )
@@ -130,7 +134,7 @@ async function handleMessage(
       const directory = await getLedgerDirectory(message.payload.ledgerId, true);
       const fileHandle = await getLedgerFileHandle(directory, message.payload.zipPath, true);
       const writable = await fileHandle.createWritable();
-      await writable.write(blob);
+      await writable.write(decoded.blob);
       await writable.close();
       return {
         ok: true,
@@ -284,26 +288,4 @@ function safeDirectorySegment(input: string): string {
 
 function hasStorageDirectoryApi(): boolean {
   return typeof navigator.storage?.getDirectory === "function";
-}
-
-function dataUrlToBlob(dataUrl: string): Blob | null {
-  const commaIndex = dataUrl.indexOf(",");
-  if (!dataUrl.startsWith("data:") || commaIndex <= 5) return null;
-
-  const metadata = dataUrl.slice(5, commaIndex);
-  const payload = dataUrl.slice(commaIndex + 1);
-  const mimeType = metadata.split(";")[0] || "application/octet-stream";
-  try {
-    if (metadata.toLowerCase().includes(";base64")) {
-      const binary = atob(payload);
-      const bytes = new Uint8Array(binary.length);
-      for (let index = 0; index < binary.length; index += 1) {
-        bytes[index] = binary.charCodeAt(index);
-      }
-      return new Blob([bytes], { type: mimeType });
-    }
-    return new Blob([decodeURIComponent(payload)], { type: mimeType });
-  } catch {
-    return null;
-  }
 }

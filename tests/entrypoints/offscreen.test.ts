@@ -3,6 +3,7 @@ import {
   isPackOffscreenBlobUrlMessage,
   PACK_OFFSCREEN_BLOB_URL_TARGET,
 } from "../../src/core/offscreen-blob-url";
+import { createZip } from "../../src/entrypoints/offscreen/zip";
 
 type RuntimeListener = (
   message: unknown,
@@ -237,6 +238,48 @@ describe("offscreen Blob URL entrypoint", () => {
     expect(opfsFiles.has("filed-return-packs/ledger-1/may.pdf")).toBe(true);
   });
 
+  it("stages chunked GSTR-2B spreadsheet bytes without relying on a full data-url join", async () => {
+    await loadOffscreenEntrypoint();
+    const zipBytes = createZip([
+      { path: "[Content_Types].xml", bytes: textBytes("<Types />") },
+      { path: "xl/workbook.xml", bytes: textBytes("<workbook />") },
+    ]);
+    const dataUrl = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${bytesToBase64(zipBytes)}`;
+    const chunks = [
+      dataUrl.slice(0, 87),
+      dataUrl.slice(87, 117),
+      dataUrl.slice(117, 211),
+      dataUrl.slice(211),
+    ];
+
+    for (const [index, chunk] of chunks.entries()) {
+      const response = await sendOffscreenMessage({
+        type: "PACK_OFFSCREEN_STAGE_FILED_RETURN_CHUNK",
+        target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+        payload: {
+          requestId: `xlsx-chunk-request-${index}`,
+          transferId: "transfer-xlsx",
+          ledgerId: "ledger-1",
+          zipPath: "complyeaze-pack/gst/2025-26/gstr-2b/may.xlsx",
+          returnType: "GSTR-2B",
+          artifactType: "EXCEL",
+          index,
+          totalChunks: chunks.length,
+          chunk,
+        },
+      });
+      expect(response).toEqual({
+        ok: true,
+        requestId: `xlsx-chunk-request-${index}`,
+        staged: true,
+        byteCountClass: "non-empty",
+      });
+    }
+
+    const staged = opfsFiles.get("filed-return-packs/ledger-1/may.xlsx");
+    expect(staged?.size).toBe(zipBytes.byteLength);
+  });
+
   it("rejects chunked GSTR-2B bytes that do not match the requested artifact", async () => {
     await loadOffscreenEntrypoint();
     const dataUrl = `data:application/pdf;base64,${btoa("%PDF-1.7 not a portal GSTR-2B PDF")}`;
@@ -280,6 +323,40 @@ describe("offscreen Blob URL entrypoint", () => {
       errorCategory: "invalid-data-url",
     });
     expect(opfsFiles.has("filed-return-packs/ledger-1/may.pdf")).toBe(false);
+  });
+
+  it("accepts a target-bound chunked GSTR-2B PDF even when visible text is encoded", async () => {
+    await loadOffscreenEntrypoint();
+    const pdfBytes = new Uint8Array(24 * 1024);
+    pdfBytes.set(textBytes("%PDF-1.7\n1 0 obj\n<< /Filter /FlateDecode >>"));
+    const dataUrl = `data:application/pdf;base64,${bytesToBase64(pdfBytes)}`;
+    const chunks = [dataUrl.slice(0, 19), dataUrl.slice(19, 1024), dataUrl.slice(1024)];
+
+    for (const [index, chunk] of chunks.entries()) {
+      const response = await sendOffscreenMessage({
+        type: "PACK_OFFSCREEN_STAGE_FILED_RETURN_CHUNK",
+        target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+        payload: {
+          requestId: `encoded-pdf-request-${index}`,
+          transferId: "transfer-encoded-pdf",
+          ledgerId: "ledger-1",
+          zipPath: "complyeaze-pack/gst/2025-26/gstr-2b/may.pdf",
+          returnType: "GSTR-2B",
+          artifactType: "PDF",
+          index,
+          totalChunks: chunks.length,
+          chunk,
+        },
+      });
+      expect(response).toEqual({
+        ok: true,
+        requestId: `encoded-pdf-request-${index}`,
+        staged: true,
+        byteCountClass: "non-empty",
+      });
+    }
+
+    expect(opfsFiles.get("filed-return-packs/ledger-1/may.pdf")?.size).toBe(pdfBytes.byteLength);
   });
 
   async function loadOffscreenEntrypoint() {
@@ -382,5 +459,17 @@ describe("offscreen Blob URL entrypoint", () => {
 
   function joinPath(prefix: string, name: string): string {
     return prefix ? `${prefix}/${name}` : name;
+  }
+
+  function textBytes(text: string): Uint8Array {
+    return new TextEncoder().encode(text);
+  }
+
+  function bytesToBase64(bytes: Uint8Array): string {
+    let binary = "";
+    for (const byte of bytes) {
+      binary += String.fromCharCode(byte);
+    }
+    return btoa(binary);
   }
 });

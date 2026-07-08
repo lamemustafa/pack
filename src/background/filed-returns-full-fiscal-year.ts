@@ -64,17 +64,26 @@ export async function startFullFiscalYearDownloadFlow(
     existingLedger.status === "complete" &&
     canCompleteFullFiscalYearLedger(existingLedger) &&
     !options.allowExistingLedgerResume;
+  const replaceUnstartedBlockedSameScopeLedger =
+    existingLedger &&
+    sameFiledReturnsScope(existingLedger.scope, scope) &&
+    (existingLedger.status === "blocked" || existingLedger.status === "cancelled") &&
+    !hasTerminalPositiveTarget(existingLedger) &&
+    !hasDownloadUnconfirmedTarget(existingLedger) &&
+    !options.allowExistingLedgerResume;
   let ledger =
     existingLedger &&
     sameFiledReturnsScope(existingLedger.scope, scope) &&
-    !replaceCompletedSameScopeLedger
+    !replaceCompletedSameScopeLedger &&
+    !replaceUnstartedBlockedSameScopeLedger
       ? reconcileFullFiscalYearLedgerTargets(existingLedger, now, plannedPeriods)
       : createFullFiscalYearLedger(scope, now, plannedPeriods);
 
   if (
     existingLedger &&
     sameFiledReturnsScope(existingLedger.scope, scope) &&
-    !replaceCompletedSameScopeLedger
+    !replaceCompletedSameScopeLedger &&
+    !replaceUnstartedBlockedSameScopeLedger
   ) {
     if (shouldPersistReconciledLedger(existingLedger, ledger)) {
       await persistLedger(deps, ledger);
@@ -86,7 +95,8 @@ export async function startFullFiscalYearDownloadFlow(
   ledger =
     existingLedger &&
     sameFiledReturnsScope(existingLedger.scope, scope) &&
-    !replaceCompletedSameScopeLedger
+    !replaceCompletedSameScopeLedger &&
+    !replaceUnstartedBlockedSameScopeLedger
       ? resumeFullFiscalYearLedger(ledger, now)
       : ledger;
 
@@ -153,6 +163,16 @@ export async function startFullFiscalYearDownloadFlow(
     }
     return { ...response, flowStep, flowSummary };
   }
+}
+
+function hasTerminalPositiveTarget(ledger: FiledReturnsFullFiscalYearLedger): boolean {
+  return ledger.targets.some((target) =>
+    ["downloaded", "manually-observed", "not-filed"].includes(target.status),
+  );
+}
+
+function hasDownloadUnconfirmedTarget(ledger: FiledReturnsFullFiscalYearLedger): boolean {
+  return ledger.targets.some((target) => target.status === "download-unconfirmed");
 }
 
 function responseForExistingLedger(
