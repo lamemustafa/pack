@@ -33,7 +33,7 @@ export function createScopeFormModel(scope: FiledReturnsDownloadScope) {
       supportsFiledReturnsArtifactType(scope.returnType, artifactType),
     ).map((artifactType) => ({
       value: artifactType,
-      label: filedReturnsArtifactLabel(artifactType, scope.returnType),
+      label: artifactOptionLabel(scope.returnType, artifactType),
       description: artifactOptionDescription(scope.returnType, artifactType),
     })),
     financialYearOptions: getFiledReturnsFinancialYearOptions().map((financialYear) => ({
@@ -41,10 +41,7 @@ export function createScopeFormModel(scope: FiledReturnsDownloadScope) {
       label: financialYear,
     })),
     fullFiscalYear,
-    selectedArtifactType: normaliseFiledReturnsArtifactType(
-      scope.returnType,
-      scope.artifactType,
-    ),
+    selectedArtifactType: normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType),
     singlePeriodOptions,
     supportsFullFiscalYear: scopePeriodOptions.some(
       (option) => option.value === FULL_FISCAL_YEAR_PERIOD,
@@ -107,11 +104,7 @@ export function getScopeActionCopy(
     };
   }
 
-  const details = [
-    "Walks each eligible period",
-    "Stages files locally",
-    "Hands off one ZIP",
-  ];
+  const details = ["Walks each eligible period", "Stages files locally", "Hands off one ZIP"];
 
   if (scope.returnType === "GSTR-2B" && artifactType === "PDF_AND_EXCEL") {
     details.push("Captures only portal-generated PDF and Excel controls");
@@ -170,11 +163,19 @@ function artifactOptionDescription(
   returnType: FiledReturnsDownloadScope["returnType"],
   artifactType: (typeof FILED_RETURNS_ARTIFACT_TYPES)[number],
 ): string {
-  if (artifactType === "PDF_AND_EXCEL") return "Best for one ZIP handoff";
+  if (artifactType === "PDF_AND_EXCEL") return "One ZIP handoff";
   if (artifactType === "EXCEL") {
     return returnType === "GSTR-2B" ? "Portal details workbook" : "Portal e-invoice workbook";
   }
   return returnType === "GSTR-3B" ? "Filed return copy" : "Portal summary PDF";
+}
+
+function artifactOptionLabel(
+  returnType: FiledReturnsDownloadScope["returnType"],
+  artifactType: (typeof FILED_RETURNS_ARTIFACT_TYPES)[number],
+): string {
+  if (artifactType === "PDF_AND_EXCEL") return "PDF + Excel";
+  return filedReturnsArtifactLabel(artifactType, returnType);
 }
 
 function isSameScope(left: FiledReturnsDownloadScope, right: FiledReturnsDownloadScope): boolean {

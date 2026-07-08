@@ -48,16 +48,10 @@ export function ScopeForm({
     <section className="flow-panel" aria-label="Filed return download scope">
       <div className="panel-heading">
         <div>
-          <p className="section-label">Setup</p>
+          <p className="section-label">Download setup</p>
           <h2>Choose what Pack should collect</h2>
         </div>
       </div>
-      <ScopeActionPanel
-        actionCopy={actionCopy}
-        disabled={startAction.disabled}
-        label={startAction.label}
-        onStart={onStart}
-      />
       <div className="scope-form-grid">
         <div className="scope-section scope-section-primary">
           <ScopeButtonGroup
@@ -96,6 +90,8 @@ export function ScopeForm({
               }
             />
           ) : null}
+        </div>
+        <div className="scope-section scope-section-secondary">
           <ScopeButtonGroup
             className="scope-group-file"
             label="Files"
@@ -112,37 +108,43 @@ export function ScopeForm({
               )
             }
           />
-        </div>
-        <div className="scope-section scope-section-period">
-          <ScopeSelect
-            label="Financial year"
-            value={scope.financialYear}
-            options={formModel.financialYearOptions}
-            onChange={(financialYear) =>
-              onScopeChange(
-                normaliseFiledReturnsScope({
-                  ...scope,
-                  financialYear,
-                }),
-              )
-            }
-          />
-          {formModel.fullFiscalYear ? null : (
+          <div className="scope-section-period">
             <ScopeSelect
-              label="Period"
-              value={scope.period}
-              options={formModel.singlePeriodOptions}
-              onChange={(period) => onScopeChange({ ...scope, period })}
+              label="Financial year"
+              value={scope.financialYear}
+              options={formModel.financialYearOptions}
+              onChange={(financialYear) =>
+                onScopeChange(
+                  normaliseFiledReturnsScope({
+                    ...scope,
+                    financialYear,
+                  }),
+                )
+              }
             />
-          )}
+            {formModel.fullFiscalYear ? null : (
+              <ScopeSelect
+                label="Period"
+                value={scope.period}
+                options={formModel.singlePeriodOptions}
+                onChange={(period) => onScopeChange({ ...scope, period })}
+              />
+            )}
+          </div>
         </div>
         {!context?.supported ? (
           <p className="scope-note scope-note-warning">
-            Open a signed-in GST return dashboard or return page before starting. Pack will not
-            open login pages or reuse stale portal state.
+            Open a signed-in GST return dashboard or return page before starting. Pack will not open
+            login pages or reuse stale portal state.
           </p>
         ) : null}
       </div>
+      <ScopeActionPanel
+        actionCopy={actionCopy}
+        disabled={startAction.disabled}
+        label={startAction.label}
+        onStart={onStart}
+      />
     </section>
   );
 }

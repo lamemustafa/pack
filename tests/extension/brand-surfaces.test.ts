@@ -62,18 +62,16 @@ describe("Pack brand surfaces", () => {
     expect(globalCss).toContain("--pack-popup-width: 780px;");
     expect(globalCss).toContain("--pack-popup-min-height: 580px;");
     expect(globalCss).toContain("--pack-popup-max-height: 580px;");
-    expect(popupCss).toContain(
-      "grid-template-columns: minmax(0, 1.6fr) minmax(270px, 0.8fr);",
-    );
+    expect(popupCss).toContain("grid-template-columns: minmax(0, 1.6fr) minmax(270px, 0.8fr);");
     expect(popupCss).toContain(".run-column");
     expect(popupCss).toContain("position: static;");
+    expect(controlsCss).toContain("grid-template-columns: minmax(0, 1.5fr) minmax(160px, 0.7fr);");
     expect(controlsCss).toContain(
-      "grid-template-columns: minmax(0, 1fr) minmax(170px, 0.42fr);",
+      "grid-template-columns: minmax(0, 1.35fr) minmax(180px, 0.65fr);",
     );
+    expect(controlsCss).toContain("grid-template-columns: minmax(0, 1fr) minmax(180px, 0.42fr);");
     expect(controlsCss).toContain("@media (max-width: 700px)");
-    expect(targetCss).toContain(
-      "grid-template-columns: minmax(170px, 0.42fr) minmax(0, 1fr);",
-    );
+    expect(targetCss).toContain("grid-template-columns: minmax(170px, 0.42fr) minmax(0, 1fr);");
     expect(targetCss).toContain("grid-template-columns: repeat(4, minmax(0, 1fr));");
   });
 });

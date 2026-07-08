@@ -1,9 +1,9 @@
 .target-strip {
   display: grid;
   grid-template-columns: minmax(170px, 0.42fr) minmax(0, 1fr);
-  gap: 12px;
+  gap: 10px;
   align-items: center;
-  padding: 10px 12px;
+  padding: 8px 10px;
 }
 
 .target-strip-header {
@@ -49,12 +49,12 @@
 .target-metadata {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  gap: 6px;
   border: 0;
   border-radius: 8px;
   background: var(--pack-surface-raised);
   margin: 0;
-  padding: 8px;
+  padding: 7px;
 }
 
 .target-metadata div {
@@ -94,7 +94,7 @@
   line-height: 1.35;
   text-align: left;
   overflow-wrap: anywhere;
-  padding-top: 8px;
+  padding-top: 7px;
 }
 
 @media (max-width: 720px) {

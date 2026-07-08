@@ -1,7 +1,7 @@
 .flow-panel {
   display: grid;
-  gap: 10px;
-  padding: 11px;
+  gap: 9px;
+  padding: 10px;
 }
 
 .panel-heading {
@@ -31,25 +31,33 @@
 
 .scope-section {
   display: grid;
-  gap: 10px;
+  gap: 9px;
   min-width: 0;
 }
 
 .scope-form-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 10px;
+  gap: 9px;
   align-items: start;
 }
 
 .scope-section-primary {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 10px;
+  grid-template-columns: minmax(0, 1.5fr) minmax(160px, 0.7fr);
+  gap: 9px;
+  align-items: start;
+}
+
+.scope-section-secondary {
+  grid-template-columns: minmax(0, 1.35fr) minmax(180px, 0.65fr);
+  gap: 9px;
+  align-items: start;
 }
 
 .scope-section-period {
-  grid-template-columns: minmax(180px, 0.7fr) minmax(0, 1fr);
-  gap: 10px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
   align-items: end;
 }
 
@@ -74,10 +82,10 @@
 
 .scope-options {
   display: grid;
-  gap: 6px;
+  gap: 5px;
 }
 
-.scope-section-primary .scope-options {
+.scope-group-return .scope-options {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
@@ -91,31 +99,27 @@
 }
 
 .scope-group-file .scope-options {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.scope-group-file .scope-option:nth-child(3) {
-  grid-column: 1 / -1;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .scope-option {
   display: grid;
-  min-height: 50px;
+  min-height: 40px;
   cursor: pointer;
-  align-items: center;
-  justify-content: center;
+  align-items: start;
+  justify-content: stretch;
   gap: 3px;
   border: 1px solid #c9d2dc;
   border-radius: 6px;
   background: #ffffff;
   color: #1d2634;
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 800;
   line-height: 1.15;
-  text-align: center;
+  text-align: left;
   word-break: keep-all;
   text-wrap: balance;
-  padding: 7px 8px;
+  padding: 6px 7px;
 }
 
 .scope-option-title,
@@ -126,7 +130,7 @@
 
 .scope-option-description {
   color: #526276;
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 650;
   line-height: 1.2;
 }
@@ -171,17 +175,17 @@
 
 .scope-select select {
   border-color: #c9d2dc;
-  min-height: 42px;
+  min-height: 40px;
 }
 
 .run-action-strip {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(170px, 0.42fr);
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 0.42fr);
   gap: 12px;
   align-items: center;
-  border: 1px solid #d4dee8;
+  border: 1px solid #b9cadc;
   border-radius: 8px;
-  background: var(--pack-accent-soft);
+  background: #f4f8fc;
   padding: 9px;
 }
 
@@ -190,25 +194,6 @@
   color: #24364a;
   font-size: 12px;
   line-height: 1.35;
-}
-
-.run-action-detail {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  margin: 7px 0 0;
-  padding: 0;
-  color: #53657a;
-  font-size: 11px;
-  line-height: 1.35;
-  list-style: none;
-}
-
-.run-action-detail li {
-  border: 1px solid #d7e0ea;
-  border-radius: 999px;
-  background: #ffffff;
-  padding: 3px 7px;
 }
 
 .primary-action {
@@ -235,8 +220,9 @@
   .scope-section,
   .scope-form-grid,
   .scope-section-primary,
+  .scope-section-secondary,
   .scope-section-period,
-  .scope-section-primary .scope-options,
+  .scope-group-return .scope-options,
   .scope-group-run-mode .scope-options,
   .scope-group-file .scope-options,
   .run-action-strip {
