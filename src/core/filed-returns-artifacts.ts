@@ -6,6 +6,7 @@ export const FILED_RETURNS_CONCRETE_ARTIFACT_TYPES = ["PDF", "EXCEL"] as const;
 export type FiledReturnsArtifactType = (typeof FILED_RETURNS_ARTIFACT_TYPES)[number];
 export type FiledReturnsConcreteArtifactType =
   (typeof FILED_RETURNS_CONCRETE_ARTIFACT_TYPES)[number];
+export type FiledReturnsArtifactExtension = ".pdf" | ".xls" | ".xlsx";
 
 export function isFiledReturnsArtifactType(input: unknown): input is FiledReturnsArtifactType {
   return (
@@ -72,7 +73,7 @@ export function filedReturnsConcreteArtifactLabel(
 
 export function filedReturnsArtifactExtension(
   artifactType: FiledReturnsConcreteArtifactType,
-): ".pdf" | ".xlsx" {
+): FiledReturnsArtifactExtension {
   return artifactType === "EXCEL" ? ".xlsx" : ".pdf";
 }
 

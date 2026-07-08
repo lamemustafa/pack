@@ -10,6 +10,7 @@ import type { FiledReturnsConcreteArtifactType } from "../core/filed-returns-art
 import type { PackMessageResponse } from "../core/messages";
 import { withFiledReturnsDownloadDiagnostic } from "./filed-returns-download-diagnostics";
 import { safeFiledReturnZipEntryPath } from "./filed-returns-download-filename";
+import { capturedFiledReturnsArtifactExtension } from "./captured-download-data-url";
 import {
   targetReviewScope,
   withArtifactDownloadMessage,
@@ -46,7 +47,11 @@ export async function stageCapturedFiledReturnDownload({
   const staged = await stageOffscreenFiledReturn({
     dataUrl: capturedDownloadRequest.dataUrl,
     ledgerId: deps.stageCapturedDownloads?.ledgerId ?? "unknown-ledger",
-    zipPath: safeFiledReturnZipEntryPath(scope, artifactType),
+    zipPath: safeFiledReturnZipEntryPath(
+      scope,
+      artifactType,
+      capturedFiledReturnsArtifactExtension(capturedDownloadRequest.dataUrl, artifactType),
+    ),
   });
 
   if (staged !== "staged") {

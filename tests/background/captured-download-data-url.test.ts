@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { isExpectedCapturedDataUrl } from "../../src/background/captured-download-data-url";
+import {
+  capturedFiledReturnsArtifactExtension,
+  isExpectedCapturedDataUrl,
+} from "../../src/background/captured-download-data-url";
 
 function base64(input: string): string {
   return globalThis.btoa(input);
@@ -20,5 +23,19 @@ describe("captured download data URL validation", () => {
         "PDF",
       ),
     ).toBe(false);
+  });
+
+  it("accepts legacy XLS bytes and classifies the captured Excel extension from magic bytes", () => {
+    const xlsDataUrl = `data:application/vnd.ms-excel;base64,${base64(
+      "\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1legacy-xls",
+    )}`;
+    const xlsxDataUrl = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${base64(
+      "PK\u0003\u0004xlsx",
+    )}`;
+
+    expect(isExpectedCapturedDataUrl(xlsDataUrl, "EXCEL")).toBe(true);
+    expect(capturedFiledReturnsArtifactExtension(xlsDataUrl, "EXCEL")).toBe(".xls");
+    expect(isExpectedCapturedDataUrl(xlsxDataUrl, "EXCEL")).toBe(true);
+    expect(capturedFiledReturnsArtifactExtension(xlsxDataUrl, "EXCEL")).toBe(".xlsx");
   });
 });

@@ -9,7 +9,10 @@ import type {
 } from "../core/contracts";
 import type { FiledReturnsConcreteArtifactType } from "../core/filed-returns-artifacts";
 import type { PackMessageResponse } from "../core/messages";
-import { isExpectedCapturedDataUrl } from "./captured-download-data-url";
+import {
+  capturedFiledReturnsArtifactExtension,
+  isExpectedCapturedDataUrl,
+} from "./captured-download-data-url";
 import {
   mergeFlowStepWithDownloadObservation,
   observeBrowserDownloadById,
@@ -245,7 +248,11 @@ export async function startCapturedFiledReturnDownload({
   try {
     startedDownload = await startExtensionBrowserDownload(
       blobUrl,
-      safeFiledReturnDownloadFilename(scope, artifactType),
+      safeFiledReturnDownloadFilename(
+        scope,
+        artifactType,
+        capturedFiledReturnsArtifactExtension(capturedDownloadRequest.dataUrl, artifactType),
+      ),
     );
   } catch {
     startedDownload = { ok: false };

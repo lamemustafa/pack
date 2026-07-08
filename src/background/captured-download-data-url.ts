@@ -1,5 +1,6 @@
 import {
   filedReturnsArtifactMimeTypes,
+  type FiledReturnsArtifactExtension,
   type FiledReturnsConcreteArtifactType,
 } from "../core/filed-returns-artifacts";
 import { PACK_OFFSCREEN_DATA_URL_MAX_LENGTH } from "../core/offscreen-blob-url";
@@ -22,7 +23,18 @@ export function isExpectedCapturedDataUrl(
     );
   }
 
-  return metadataIncludesExpectedMime(metadata, artifactType) && hasZipMagicBytes(dataUrl);
+  return (
+    metadataIncludesExpectedMime(metadata, artifactType) &&
+    (hasZipMagicBytes(dataUrl) || hasOleCompoundFileMagicBytes(dataUrl))
+  );
+}
+
+export function capturedFiledReturnsArtifactExtension(
+  dataUrl: string,
+  artifactType: FiledReturnsConcreteArtifactType,
+): FiledReturnsArtifactExtension {
+  if (artifactType === "PDF") return ".pdf";
+  return hasOleCompoundFileMagicBytes(dataUrl) ? ".xls" : ".xlsx";
 }
 
 function metadataIncludesExpectedMime(
@@ -40,6 +52,10 @@ function hasPdfMagicBytes(dataUrl: string): boolean {
 
 function hasZipMagicBytes(dataUrl: string): boolean {
   return decodeDataUrlPrefix(dataUrl, 4)?.startsWith("PK\u0003\u0004") ?? false;
+}
+
+function hasOleCompoundFileMagicBytes(dataUrl: string): boolean {
+  return decodeDataUrlPrefix(dataUrl, 8)?.startsWith("\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1") ?? false;
 }
 
 function decodeDataUrlPrefix(dataUrl: string, byteCount: number): string | null {
