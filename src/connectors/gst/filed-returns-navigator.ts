@@ -4,25 +4,22 @@ import {
   collectSafeNavigationDiagnostics,
   findFiledReturnsNavigationCandidateIndex,
   findReturnDashboardCandidateIndex,
-  normaliseCandidateText,
   scoreFiledReturnsNavigationCandidate,
   scoreReturnDashboardNavigationCandidate,
-  type NavigationCandidateInput,
 } from "./filed-returns-navigation-candidates";
+import {
+  activateElement,
+  getClickableElements,
+  isReturnsMenuCandidate,
+  isServicesMenuCandidate,
+  isVisible,
+  revealMenuCandidate,
+  toNavigationCandidateInput,
+} from "./filed-returns-navigation-dom";
 import { detectFiledReturnsPortalAvailabilityIssue } from "./filed-returns-portal-availability";
 
 const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
 const MENU_REVEAL_DELAY_MS = 350;
-const CLICKABLE_SELECTOR = [
-  "a",
-  "button",
-  "[role='button']",
-  "[ng-click]",
-  "[data-ng-click]",
-  "[ng-mouseenter]",
-  "[data-ng-mouseenter]",
-  "[data-dismiss='modal']",
-].join(",");
 
 export async function navigateToFiledReturnsPage(
   documentRef: Document,
@@ -280,82 +277,6 @@ function isReturnDashboardRoute(documentRef: Document): boolean {
   return Boolean(location && /\/returns\/auth\/dashboard\/?$/i.test(location.pathname));
 }
 
-function revealMenuCandidate(
-  documentRef: Document,
-  predicate: (candidate: NavigationCandidateInput) => boolean,
-) {
-  const element = getClickableElements(documentRef).find((candidateElement) =>
-    predicate(toNavigationCandidateInput(candidateElement)),
-  );
-  if (!element) return;
-
-  dispatchPointerSequence(element);
-  const FocusEventConstructor = element.ownerDocument.defaultView?.FocusEvent;
-  if (FocusEventConstructor) {
-    element.dispatchEvent(new FocusEventConstructor("focus", { bubbles: true }));
-  }
-  element.click();
-}
-
-function isServicesMenuCandidate(candidate: NavigationCandidateInput): boolean {
-  return /^services\s*$/i.test(normaliseCandidateText([candidate.text, candidate.ariaLabel]));
-}
-
-function isReturnsMenuCandidate(candidate: NavigationCandidateInput): boolean {
-  return /^returns\s*$/i.test(normaliseCandidateText([candidate.text, candidate.ariaLabel]));
-}
-
-function getClickableElements(
-  root: ParentNode,
-  options: { includeHidden?: boolean } = {},
-): HTMLElement[] {
-  const elements = Array.from(root.querySelectorAll(CLICKABLE_SELECTOR)).filter(
-    (element): element is HTMLElement => isHtmlElement(root, element),
-  );
-  return options.includeHidden ? elements : elements.filter(isVisible);
-}
-
-function toNavigationCandidateInput(element: HTMLElement): NavigationCandidateInput {
-  const input: NavigationCandidateInput = {
-    text: element.innerText || element.textContent || "",
-  };
-  const HTMLAnchorElementConstructor = element.ownerDocument.defaultView?.HTMLAnchorElement;
-  const href =
-    HTMLAnchorElementConstructor && element instanceof HTMLAnchorElementConstructor
-      ? element.href
-      : null;
-  const ariaLabel = element.getAttribute("aria-label");
-  const className = element.className;
-  const title = element.getAttribute("title");
-
-  if (href) input.href = href;
-  if (ariaLabel) input.ariaLabel = ariaLabel;
-  if (typeof className === "string" && className.trim()) input.className = className;
-  if (title) input.title = title;
-
-  return input;
-}
-
-function activateElement(element: HTMLElement) {
-  element.scrollIntoView?.({ block: "center", inline: "center" });
-  dispatchPointerSequence(element);
-  element.click();
-}
-
-function dispatchPointerSequence(element: HTMLElement) {
-  const MouseEventConstructor = element.ownerDocument.defaultView?.MouseEvent;
-  if (!MouseEventConstructor) return;
-  for (const type of ["pointerover", "mouseover", "mouseenter", "pointerdown", "mousedown"]) {
-    element.dispatchEvent(
-      new MouseEventConstructor(type, {
-        bubbles: true,
-        cancelable: true,
-        view: element.ownerDocument.defaultView,
-      }),
-    );
-  }
-}
-
 function detectBlockedPortalState(documentRef: Document): PortalNavigationResult | null {
   const issue = detectFiledReturnsPortalAvailabilityIssue(documentRef);
   if (!issue) return null;
@@ -367,20 +288,6 @@ function detectBlockedPortalState(documentRef: Document): PortalNavigationResult
     safeMessage: issue.safeMessage,
     ...(issue.userAction ? { userAction: issue.userAction } : {}),
   };
-}
-
-function isVisible(element: HTMLElement): boolean {
-  const style = element.ownerDocument.defaultView?.getComputedStyle(element);
-  if (!style || style.display === "none" || style.visibility === "hidden") return false;
-  const rect = element.getBoundingClientRect();
-  return rect.width > 0 || rect.height > 0 || element.offsetParent !== null;
-}
-
-function isHtmlElement(root: ParentNode, element: Element): element is HTMLElement {
-  const documentRef = root.nodeType === 9 ? (root as Document) : root.ownerDocument;
-  if (!documentRef) return false;
-  const HTMLElementConstructor = documentRef.defaultView?.HTMLElement;
-  return HTMLElementConstructor ? element instanceof HTMLElementConstructor : false;
 }
 
 function delay(ms: number): Promise<void> {
