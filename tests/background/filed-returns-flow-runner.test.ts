@@ -816,9 +816,8 @@ describe("filed returns flow runner", () => {
       },
       {
         getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
-        sendMessageToTabWithInjection: vi.fn<
-          FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
-        >(),
+        sendMessageToTabWithInjection:
+          vi.fn<FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]>(),
         storageKeys: {
           completion: "completion",
           fullFiscalYearLedger: "full-year-ledger",
@@ -848,9 +847,9 @@ describe("filed returns flow runner", () => {
         totalPeriods: 2,
       },
     });
-    expect(response.ok && "flowStep" in response ? response.flowStep.safeSignals : []).not.toContain(
-      "full-fiscal-year-opfs-cleared",
-    );
+    expect(
+      response.ok && "flowStep" in response ? response.flowStep.safeSignals : [],
+    ).not.toContain("full-fiscal-year-opfs-cleared");
     expect(browser.runtime.sendMessage).not.toHaveBeenCalledWith(
       expect.objectContaining({
         type: "PACK_OFFSCREEN_CLEAR_FILED_RETURN_LEDGER",
@@ -967,7 +966,7 @@ describe("filed returns flow runner", () => {
         expectedFileExtensions: [".zip"],
         trustedDownloadIds: new Set([81]),
       }),
-      90 * 1000,
+      45 * 1000,
     );
     expect(browser.runtime.sendMessage).toHaveBeenCalledWith(
       expect.objectContaining({

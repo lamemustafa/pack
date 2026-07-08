@@ -13,7 +13,7 @@ import {
   safeSinglePeriodZipFilename,
 } from "./filed-returns-download-filename";
 
-const USER_MEDIATED_ZIP_DOWNLOAD_WAIT_MS = 90 * 1000;
+const USER_MEDIATED_ZIP_DOWNLOAD_WAIT_MS = 45 * 1000;
 
 export async function exportFullFiscalYearZip(
   ledger: FiledReturnsFullFiscalYearLedger,
@@ -134,14 +134,19 @@ async function exportStagedFiledReturnsZip({
     };
   }
 
-  const observed = await observeBrowserDownloadById(browser.downloads, downloadId, {
-    armedAt,
-    expectedFileExtensions: [".zip"],
-    expectedMimeTypes: ["application/zip", "application/octet-stream"],
-    expectedOrigins: [],
-    expectedUrlSubstrings: [],
-    trustedDownloadIds: new Set([downloadId]),
-  }, USER_MEDIATED_ZIP_DOWNLOAD_WAIT_MS);
+  const observed = await observeBrowserDownloadById(
+    browser.downloads,
+    downloadId,
+    {
+      armedAt,
+      expectedFileExtensions: [".zip"],
+      expectedMimeTypes: ["application/zip", "application/octet-stream"],
+      expectedOrigins: [],
+      expectedUrlSubstrings: [],
+      trustedDownloadIds: new Set([downloadId]),
+    },
+    USER_MEDIATED_ZIP_DOWNLOAD_WAIT_MS,
+  );
   await revokeOffscreenBlobUrl(zip.blobUrl);
 
   if (observed.state !== "completed") {
