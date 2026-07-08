@@ -171,6 +171,7 @@ describe("filed returns navigation matcher", () => {
     let downloadClicked = 0;
     closeButton?.addEventListener("click", () => {
       closeClicked += 1;
+      closeButton.closest(".modal")?.remove();
     });
     downloadButton?.addEventListener("click", () => {
       downloadClicked += 1;
@@ -198,6 +199,7 @@ describe("filed returns navigation matcher", () => {
     let downloadClicked = 0;
     closeButton?.addEventListener("click", () => {
       closeClicked += 1;
+      closeButton.closest(".modal")?.remove();
     });
     downloadButton?.addEventListener("click", () => {
       downloadClicked += 1;

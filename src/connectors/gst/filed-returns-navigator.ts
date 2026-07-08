@@ -4,6 +4,7 @@ import { detectFiledReturnsPortalAvailabilityIssue } from "./filed-returns-porta
 const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
 const MENU_REVEAL_DELAY_MS = 350;
 const DIALOG_SETTLE_DELAY_MS = 100;
+const DIALOG_SETTLE_POLL_MS = 20;
 const MAX_DIALOG_DISMISSALS = 4;
 const CLICKABLE_SELECTOR = [
   "a",
@@ -424,12 +425,12 @@ export async function dismissKnownFiledReturnsSummaryModal(
 
   if (bestElement && bestScore.score >= 60) {
     activateElement(bestElement);
-    await delay(DIALOG_SETTLE_DELAY_MS);
+    await waitForDialogRootToSettle(modalRoot);
     return ["detail-summary-modal-dismissed", ...bestScore.safeSignals];
   }
 
   dispatchEscapeKey(modalRoot);
-  await delay(DIALOG_SETTLE_DELAY_MS);
+  await waitForDialogRootToSettle(modalRoot);
   return ["detail-summary-modal-escape-attempted"];
 }
 
@@ -582,7 +583,7 @@ export async function dismissSafePostLoginDialogs(documentRef: Document): Promis
     dismissedElements.add(element);
     activateElement(element);
     signals.push("safe-dialog-dismissed", ...score.safeSignals);
-    await delay(DIALOG_SETTLE_DELAY_MS);
+    await waitForDialogRootToSettle(element.closest(MODAL_SELECTOR) ?? element);
   }
 
   return signals;
@@ -772,6 +773,19 @@ function isVisible(element: HTMLElement): boolean {
   if (!style || style.display === "none" || style.visibility === "hidden") return false;
   const rect = element.getBoundingClientRect();
   return rect.width > 0 || rect.height > 0 || element.offsetParent !== null;
+}
+
+async function waitForDialogRootToSettle(element: Element): Promise<void> {
+  const maxAttempts = Math.ceil(DIALOG_SETTLE_DELAY_MS / DIALOG_SETTLE_POLL_MS);
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    if (!isElementStillConnectedAndVisible(element)) return;
+    await delay(DIALOG_SETTLE_POLL_MS);
+  }
+}
+
+function isElementStillConnectedAndVisible(element: Element): boolean {
+  if (!element.isConnected) return false;
+  return isHtmlElement(element.ownerDocument, element) && isVisible(element);
 }
 
 function isHtmlElement(root: ParentNode, element: Element): element is HTMLElement {
