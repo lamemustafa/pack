@@ -1908,6 +1908,31 @@ describe("filed returns guided flow", () => {
       expect.arrayContaining(["gstr2b-auth-route", "gstr2b-summary-loading"]),
     );
   });
+
+  it("waits on a blank GSTR-2B summary route instead of treating it as capture-ready", async () => {
+    const documentRef = createGstDocument(
+      `
+        <app-root>
+          <div class="loader"></div>
+        </app-root>
+      `,
+      "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
+    );
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-2B",
+    });
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining(["gstr2b-auth-route", "gstr2b-summary-loading"]),
+    );
+    expect(result.safeSignals).not.toContain("gstr2b-download-ready");
+  });
+
   it("returns from a stale GSTR-2B summary page when the visible period does not match", async () => {
     const documentRef = createGstDocument(
       `
@@ -2022,8 +2047,10 @@ describe("filed returns guided flow", () => {
       `
         <main>
           <h1>GSTR-2B</h1>
-          <p>April 2026 Auto-drafted ITC Statement</p>
+          <p>Financial Year - 2026-27</p>
+          <p>Return Period - April</p>
           <button data-pdf>DOWNLOAD GSTR-2B SUMMARY (PDF)</button>
+          <button>DOWNLOAD GSTR-2B DETAILS (EXCEL)</button>
         </main>
       `,
       "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",

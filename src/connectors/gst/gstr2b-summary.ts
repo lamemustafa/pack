@@ -19,10 +19,10 @@ const GSTR2B_AUTH_ROUTE = /\/gstr2b\/auth(?:\/|$)/i;
 export function isGstr2bSummaryPage(documentRef: Document, normalisedText: string): boolean {
   const pathname = documentRef.defaultView?.location.pathname ?? "";
   return (
-    GSTR2B_SUMMARY_ROUTE.test(pathname) ||
-    (normalisedText.includes("gstr-2b") &&
-      normalisedText.includes("download gstr-2b summary") &&
-      normalisedText.includes("download gstr-2b details"))
+    GSTR2B_SUMMARY_ROUTE.test(pathname) &&
+    normalisedText.includes("gstr-2b") &&
+    normalisedText.includes("download gstr-2b summary") &&
+    normalisedText.includes("download gstr-2b details")
   );
 }
 
