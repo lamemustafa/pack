@@ -2031,6 +2031,7 @@ describe("filed returns flow runner", () => {
         safeSignals: expect.arrayContaining([
           "gstr2b-dialog-free-capture-unsupported",
           "gstr2b-blob-capture-failed",
+          "gstr2b-main-world-capture-result-rejected",
         ]),
         downloadDiagnostic: {
           returnType: "GSTR-2B",

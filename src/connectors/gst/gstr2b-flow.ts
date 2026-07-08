@@ -1,7 +1,6 @@
 import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "../../core/contracts";
 import { activateElement, matchesAcceptedText, normaliseText } from "./filed-returns-dom";
 import {
-  clickBestReturnDashboardCandidate,
   dismissSafePostLoginDialogs,
   navigateToReturnDashboardPage,
 } from "./filed-returns-navigator";
@@ -132,32 +131,14 @@ export async function runGstr2bDownloadStep(
     };
   }
 
-  const dashboardNavigation = clickBestReturnDashboardCandidate(
-    documentRef,
-    "gstr2b-wrong-page",
-    safeSignals,
-    scopeId,
-  );
-  if (dashboardNavigation) {
-    return {
-      ...dashboardNavigation,
-      safeMessage:
-        "Pack clicked the GST Return Dashboard entry. After the portal loads, click Start download again so Pack can open GSTR-2B from the dashboard row.",
-    };
-  }
-
+  const dashboardNavigation = await navigateToReturnDashboardPage(documentRef, scopeId);
   return {
-    connectorId: "gst",
-    scopeId,
-    state: "user-action-required",
-    safeSignals: ["gstr2b-summary-not-open"],
+    ...dashboardNavigation,
+    safeSignals: ["gstr2b-wrong-page", ...dashboardNavigation.safeSignals],
     safeMessage:
-      "Open the GSTR-2B summary page for the requested month, or select the period on the GST return dashboard and click View for GSTR-2B.",
-    userAction: {
-      type: "NAVIGATE_TO_SUPPORTED_PAGE",
-      message: "Open the GSTR-2B summary page for the requested month.",
-      canResume: true,
-    },
+      dashboardNavigation.state === "clicked"
+        ? "Pack clicked the GST Return Dashboard entry. After the portal loads, click Start download again so Pack can open GSTR-2B from the dashboard row."
+        : dashboardNavigation.safeMessage,
   };
 }
 

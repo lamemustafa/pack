@@ -12,12 +12,14 @@ import { withFiledReturnsDownloadDiagnostic } from "./filed-returns-download-dia
 export function gstr2bDialogFreeUnsupportedStep({
   activePeriod,
   nativeSuppressionSignals,
+  safeFailureSignals,
   scope,
   target,
   triggerStep,
 }: {
   activePeriod: string | null;
   nativeSuppressionSignals: readonly string[];
+  safeFailureSignals: readonly string[];
   scope: FiledReturnsDownloadScope;
   target: FiledReturnsDownloadTarget;
   triggerStep: PortalFlowStepResult;
@@ -34,6 +36,7 @@ export function gstr2bDialogFreeUnsupportedStep({
           ...triggerStep.safeSignals,
           "gstr2b-dialog-free-capture-unsupported",
           "gstr2b-blob-capture-failed",
+          ...safeFailureSignals,
           ...nativeSuppressionSignals,
           ...(activePeriod ? [`filed-return-detail-period:${activePeriod}`] : []),
         ],

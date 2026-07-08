@@ -602,6 +602,7 @@ function revealMenuCandidate(
   if (FocusEventConstructor) {
     element.dispatchEvent(new FocusEventConstructor("focus", { bubbles: true }));
   }
+  element.click();
 }
 
 function isServicesMenuCandidate(candidate: NavigationCandidateInput): boolean {

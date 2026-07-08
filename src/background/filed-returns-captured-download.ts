@@ -93,6 +93,7 @@ export async function startMainWorldCapturedFiledReturnDownload({
     const unsupportedStep = gstr2bDialogFreeUnsupportedStep({
       activePeriod,
       nativeSuppressionSignals,
+      safeFailureSignals,
       scope,
       target,
       triggerStep,

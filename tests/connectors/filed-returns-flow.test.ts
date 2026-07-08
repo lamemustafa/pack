@@ -612,6 +612,56 @@ describe("filed returns guided flow", () => {
     expect(clickedHrefs).toEqual(["https://return.gst.gov.in/returns/auth/dashboard"]);
   });
 
+  it("reveals the Services menu before navigating wrong-page GSTR-2B starts", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <button data-services>Services</button>
+          <nav hidden data-menu></nav>
+          <h1>Electronic Credit Ledger</h1>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/ledger/itcledger",
+    );
+    makeLayoutVisible(documentRef);
+    const menu = documentRef.querySelector<HTMLElement>("[data-menu]");
+    documentRef.querySelector("[data-services]")?.addEventListener("click", () => {
+      menu?.removeAttribute("hidden");
+      const link = documentRef.createElement("a");
+      link.href = "https://return.gst.gov.in/returns/auth/dashboard";
+      link.textContent = "Returns Dashboard";
+      menu?.append(link);
+    });
+
+    const clickedHrefs: string[] = [];
+    const view = documentRef.defaultView;
+    if (!view) throw new Error("Expected JSDOM window.");
+    documentRef.body.addEventListener("click", (event) => {
+      const target = event.target;
+      if (target instanceof view.HTMLAnchorElement) {
+        event.preventDefault();
+        clickedHrefs.push(target.href);
+      }
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      artifactType: "PDF_AND_EXCEL",
+      financialYear: "2025-26",
+      period: "April",
+      returnType: "GSTR-2B",
+    });
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining([
+        "gstr2b-wrong-page",
+        "return-dashboard-after-services-menu",
+        "return-dashboard-candidate-clicked",
+      ]),
+    );
+    expect(clickedHrefs).toEqual(["https://return.gst.gov.in/returns/auth/dashboard"]);
+  });
+
   it("stages the GSTR-2B return dashboard quarter change before selecting the dependent period", async () => {
     const documentRef = createGstDocument(
       `
