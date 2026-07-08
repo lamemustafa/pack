@@ -2,6 +2,7 @@ import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "../../core
 import { activateElement, matchesAcceptedText, normaliseText } from "./filed-returns-dom";
 import {
   dismissSafePostLoginDialogs,
+  hasVisibleSafePostLoginDialog,
   navigateToReturnDashboardPage,
 } from "./filed-returns-navigator";
 import { detectFiledReturnsPortalAvailabilityIssue } from "./filed-returns-portal-availability";
@@ -34,6 +35,17 @@ export async function runGstr2bDownloadStep(
 
   const scopeId = filedReturnScopeId("GSTR-2B");
   const safeSignals = await dismissSafePostLoginDialogs(documentRef);
+  if (hasVisibleSafePostLoginDialog(documentRef)) {
+    return {
+      connectorId: "gst",
+      scopeId,
+      state: "clicked",
+      safeSignals: [...safeSignals, "safe-dialog-still-visible", "gstr2b-dialog-dismissal-waiting"],
+      safeMessage:
+        "Pack clicked the safe GST Portal dialog action and is waiting for the portal overlay to close before continuing.",
+    };
+  }
+
   const text = readDocumentText(documentRef);
   const normalised = normaliseText(text);
 

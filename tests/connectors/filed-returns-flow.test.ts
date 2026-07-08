@@ -224,6 +224,46 @@ describe("filed returns guided flow", () => {
     );
   });
 
+  it("waits when a safe GSTR-2B session warning remains visible after Continue", async () => {
+    const documentRef = createGstr2bSummaryDocument(`
+      <section class="modal show" role="dialog">
+        <h2>Warning</h2>
+        <p>Your logged in session will expire in next 02:54 Minutes. Click Continue to extend your session, or click Logout to logout of the application.</p>
+        <a data-logout href="/services/logout">Logout</a>
+        <button data-continue>Continue</button>
+      </section>
+    `);
+    let continueClicked = 0;
+    let logoutClicked = 0;
+    documentRef.querySelector("[data-continue]")?.addEventListener("click", () => {
+      continueClicked += 1;
+    });
+    documentRef.querySelector("[data-logout]")?.addEventListener("click", (event) => {
+      event.preventDefault();
+      logoutClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      artifactType: "PDF_AND_EXCEL",
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-2B",
+    });
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining([
+        "safe-dialog-dismissed",
+        "dialog-continue",
+        "safe-dialog-still-visible",
+        "gstr2b-dialog-dismissal-waiting",
+      ]),
+    );
+    expect(result.safeSignals).not.toContain("gstr2b-download-ready");
+    expect(continueClicked).toBe(1);
+    expect(logoutClicked).toBe(0);
+  });
+
   it("selects GSTR-2B filters from the filed-returns page", async () => {
     const documentRef = createGstDocument(`
       <main>

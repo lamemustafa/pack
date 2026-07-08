@@ -588,6 +588,10 @@ export async function dismissSafePostLoginDialogs(documentRef: Document): Promis
   return signals;
 }
 
+export function hasVisibleSafePostLoginDialog(documentRef: Document): boolean {
+  return getVisiblePostLoginDialogRoots(documentRef).length > 0;
+}
+
 function revealMenuCandidate(
   documentRef: Document,
   predicate: (candidate: NavigationCandidateInput) => boolean,
