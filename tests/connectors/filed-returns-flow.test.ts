@@ -1214,6 +1214,73 @@ describe("filed returns guided flow", () => {
     expect(searchClicked).toBe(1);
   });
 
+  it("selects GSTR-2B prior-year dashboard filters when the quarter field is absent", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <form name="dashboard" data-ng-submit="returnPrd(dropdownValues.finyr,dropdownValues.reqmonth)">
+            <label for="fin">Financial Year</label>
+            <select name="fin" data-ng-model="dropdownValues.finyr">
+              <option label="2026-27" value="object:187">2026-27</option>
+              <option label="2025-26" value="object:188" selected>2025-26</option>
+            </select>
+            <label for="mon">Period</label>
+            <select name="mon" data-ng-model="dropdownValues.reqmonth">
+              <option label="April" value="object:204" selected>April</option>
+              <option label="May" value="object:205">May</option>
+              <option label="June" value="object:203">June</option>
+            </select>
+            <button class="btn btn-primary srchbtn" type="submit">Search</button>
+          </form>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/dashboard",
+    );
+    makeLayoutVisible(documentRef);
+    let searchClicked = 0;
+    documentRef.querySelector("button")?.addEventListener("click", (event) => {
+      event.preventDefault();
+      searchClicked += 1;
+    });
+
+    const selectResult = await runFiledReturnsDownloadStep(documentRef, {
+      artifactType: "PDF",
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-2B",
+    });
+
+    expect(selectResult.state).toBe("clicked");
+    expect(selectResult.safeSignals).toEqual(
+      expect.arrayContaining([
+        "gstr2b-dashboard-quarter-select-missing",
+        "gstr2b-return-dashboard-filter-selection-in-progress",
+        "period-selected",
+      ]),
+    );
+    expect(searchClicked).toBe(0);
+    expect(documentRef.querySelector<HTMLSelectElement>("[name='mon']")?.value).toBe(
+      "object:205",
+    );
+
+    const searchResult = await runFiledReturnsDownloadStep(documentRef, {
+      artifactType: "PDF",
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-2B",
+    });
+
+    expect(searchResult.state).toBe("clicked");
+    expect(searchResult.safeSignals).toEqual(
+      expect.arrayContaining([
+        "gstr2b-dashboard-quarter-select-missing",
+        "gstr2b-return-dashboard-filters-selected",
+        "search-clicked",
+      ]),
+    );
+    expect(searchClicked).toBe(1);
+  });
+
   it("re-resolves the live GST dashboard period select after quarter changes rebuild it", async () => {
     const documentRef = createGstDocument(
       `

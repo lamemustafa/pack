@@ -60,7 +60,7 @@ export async function selectGstr2bReturnDashboardFiltersAndSearch(
     }
   }
 
-  if (!selectMatches(controls.quarter, acceptedQuarterOptions(scope.period))) {
+  if (controls.quarter && !selectMatches(controls.quarter, acceptedQuarterOptions(scope.period))) {
     const quarterSelected = selectOption(controls.quarter, acceptedQuarterOptions(scope.period));
     if (quarterSelected) {
       controls = await waitForReturnDashboardPeriodOptions(documentRef, scope, controls);
@@ -168,12 +168,12 @@ function acceptedQuarterOptions(period: string): string[] {
 function dashboardFiltersMatch(
   scope: FiledReturnsDownloadScope,
   yearSelect: HTMLSelectElement,
-  quarterSelect: HTMLSelectElement,
+  quarterSelect: HTMLSelectElement | null,
   periodSelect: HTMLSelectElement,
 ): boolean {
   return (
     selectMatches(yearSelect, [scope.financialYear]) &&
-    selectMatches(quarterSelect, acceptedQuarterOptions(scope.period)) &&
+    (!quarterSelect || selectMatches(quarterSelect, acceptedQuarterOptions(scope.period))) &&
     selectMatches(periodSelect, acceptedFiledReturnsMonthTexts(scope.period))
   );
 }

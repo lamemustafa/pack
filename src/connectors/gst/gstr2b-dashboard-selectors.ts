@@ -13,7 +13,7 @@ const PERIOD_LABEL = /^period\b|^tax\s+period\b|^month\b/i;
 
 export type ReturnDashboardControls = {
   year: HTMLSelectElement;
-  quarter: HTMLSelectElement;
+  quarter: HTMLSelectElement | null;
   period: HTMLSelectElement;
   search: HTMLElement;
 };
@@ -34,7 +34,7 @@ export function findReturnDashboardControls(documentRef: Document): ReturnDashbo
     findDashboardControlSelect(root, PERIOD_LABEL, "period") ??
     findDashboardControlSelect(body, PERIOD_LABEL, "period");
   const search = findSearchButton(root) ?? findSearchButton(body);
-  if (!year || !quarter || !period || !search) return null;
+  if (!year || !period || !search) return null;
   return { year, quarter, period, search };
 }
 
@@ -161,7 +161,7 @@ function findNativeReturnDashboardRoot(documentRef: Document): HTMLElement | nul
   const body = documentRef.body;
   if (!body) return null;
   const controls = findOrderedDashboardSelects(body);
-  if (!controls.year || !controls.quarter || !controls.period) return null;
+  if (!controls.year || !controls.period) return null;
   if (!findSearchButton(body)) return null;
   return body;
 }
