@@ -3,6 +3,7 @@ import {
   type FiledReturnsArtifactExtension,
   type FiledReturnsConcreteArtifactType,
 } from "../core/filed-returns-artifacts";
+import type { FiledReturnsDownloadTarget } from "../core/contracts";
 import { PACK_OFFSCREEN_DATA_URL_MAX_LENGTH } from "../core/offscreen-blob-url";
 
 export function isExpectedCapturedDataUrl(
@@ -27,6 +28,16 @@ export function isExpectedCapturedDataUrl(
     metadataIncludesExpectedMime(metadata, artifactType) &&
     (hasZipMagicBytes(dataUrl) || hasOleCompoundFileMagicBytes(dataUrl))
   );
+}
+
+export function isExpectedCapturedDataUrlForTarget(
+  dataUrl: string,
+  artifactType: FiledReturnsConcreteArtifactType,
+  target: FiledReturnsDownloadTarget,
+): boolean {
+  if (!isExpectedCapturedDataUrl(dataUrl, artifactType)) return false;
+  if (target.returnType !== "GSTR-2B") return true;
+  return dataUrlContainsAscii(dataUrl, "GSTR-2B") || dataUrlContainsAscii(dataUrl, "GSTR2B");
 }
 
 export function capturedFiledReturnsArtifactExtension(
@@ -74,5 +85,18 @@ function decodeDataUrlPrefix(dataUrl: string, byteCount: number): string | null 
     return decodeURIComponent(payload.slice(0, byteCount * 3));
   } catch {
     return null;
+  }
+}
+
+function dataUrlContainsAscii(dataUrl: string, marker: string): boolean {
+  const commaIndex = dataUrl.indexOf(",");
+  if (commaIndex <= 0) return false;
+  const metadata = dataUrl.slice(0, commaIndex).toLowerCase();
+  const payload = dataUrl.slice(commaIndex + 1);
+  try {
+    const text = metadata.includes(";base64") ? globalThis.atob(payload) : decodeURIComponent(payload);
+    return text.toLowerCase().includes(marker.toLowerCase());
+  } catch {
+    return false;
   }
 }

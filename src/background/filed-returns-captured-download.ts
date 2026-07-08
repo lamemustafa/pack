@@ -7,7 +7,7 @@ import type {
 } from "../core/contracts";
 import type { FiledReturnsConcreteArtifactType } from "../core/filed-returns-artifacts";
 import type { PackMessageResponse } from "../core/messages";
-import { isExpectedCapturedDataUrl } from "./captured-download-data-url";
+import { isExpectedCapturedDataUrlForTarget } from "./captured-download-data-url";
 import { downloadCapturedFiledReturnThroughExtension } from "./filed-returns-captured-extension-download";
 import {
   gstr2bDialogFreeUnsupportedStep,
@@ -174,7 +174,7 @@ export async function startCapturedFiledReturnDownload({
     );
   }
 
-  if (!isExpectedCapturedDataUrl(capturedDownloadRequest.dataUrl, artifactType)) {
+  if (!isExpectedCapturedDataUrlForTarget(capturedDownloadRequest.dataUrl, artifactType, target)) {
     return capturedDownloadRejected(
       scope,
       target,

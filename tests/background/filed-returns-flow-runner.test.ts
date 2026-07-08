@@ -5786,11 +5786,16 @@ function dataUrlForScriptingDetails(details: unknown): string {
     typeof firstArg === "object" && firstArg !== null && "controlId" in firstArg
       ? String(firstArg.controlId)
       : "";
+  const signalPrefix =
+    typeof firstArg === "object" && firstArg !== null && "signalPrefix" in firstArg
+      ? String(firstArg.signalPrefix)
+      : "";
+  const marker = signalPrefix === "gstr2b" ? " GSTR-2B" : "";
   if (controlId.includes("excel")) {
     return dataUrl(
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "PK\u0003\u0004 synthetic xlsx",
+      `PK\u0003\u0004 synthetic xlsx${marker}`,
     );
   }
-  return dataUrl("application/pdf", "%PDF-1.7 synthetic");
+  return dataUrl("application/pdf", `%PDF-1.7 synthetic${marker}`);
 }

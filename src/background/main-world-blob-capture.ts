@@ -28,6 +28,7 @@ export async function capturePortalBlobDownloadInMainWorld(
   };
   await prepareContentCaptureTransfer(tabId, captureRequest).catch(() => undefined);
   try {
+    const timeoutMs = request.timeoutMs ?? MAIN_WORLD_CAPTURE_TIMEOUT_MS;
     const [injectionResult] = await withTimeout(
       browser.scripting.executeScript({
         args: [captureRequest],
@@ -35,7 +36,7 @@ export async function capturePortalBlobDownloadInMainWorld(
         target: { tabId },
         world: "MAIN",
       }),
-      MAIN_WORLD_CAPTURE_TIMEOUT_MS,
+      timeoutMs,
       "main-world-capture-timeout",
     );
     if (isMainWorldCaptureOutcome(injectionResult?.result)) return injectionResult.result;

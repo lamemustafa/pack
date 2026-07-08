@@ -11,6 +11,7 @@ export function prepareGstr2bPortalBlobDownloadCapture(
 ): FiledReturnsMainWorldCaptureRequest | null {
   return prepareFiledReturnsPortalBlobDownloadCapture(documentRef, control, actionId, {
     signalPrefix: "gstr2b",
+    timeoutMs: 12_000,
   });
 }
 
@@ -18,7 +19,7 @@ export function prepareFiledReturnsPortalBlobDownloadCapture(
   documentRef: Document,
   control: HTMLElement,
   actionId: string,
-  options: { signalPrefix: string },
+  options: { signalPrefix: string; timeoutMs?: number },
 ): FiledReturnsMainWorldCaptureRequest | null {
   const view = documentRef.defaultView;
   if (!view) return null;
@@ -31,6 +32,7 @@ export function prepareFiledReturnsPortalBlobDownloadCapture(
     controlId,
     maxBytes: GSTR2B_CAPTURE_MAX_BYTES,
     signalPrefix: options.signalPrefix,
+    ...(options.timeoutMs ? { timeoutMs: options.timeoutMs } : {}),
   };
 }
 
