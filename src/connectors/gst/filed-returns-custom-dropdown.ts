@@ -7,7 +7,9 @@ import {
   normaliseText,
 } from "./filed-returns-dom";
 
-const CLICK_SETTLE_DELAY_MS = 250;
+const DROPDOWN_POLL_MS = 50;
+const DROPDOWN_OPEN_TIMEOUT_MS = 400;
+const DROPDOWN_SELECTION_TIMEOUT_MS = 400;
 
 export async function selectCustomOptionNearLabel(
   documentRef: Document,
@@ -30,14 +32,17 @@ export async function selectCustomOptionNearLabel(
 
   const beforeOpenElements = new Set(Array.from(documentRef.body.querySelectorAll("*")));
   activateElement(control);
-  await delay(CLICK_SETTLE_DELAY_MS);
 
-  const option = findVisibleOption(documentRef, acceptedTexts, control, beforeOpenElements);
+  const option = await waitForVisibleOption(
+    documentRef,
+    acceptedTexts,
+    control,
+    beforeOpenElements,
+  );
   if (!option) return false;
 
   activateElement(option);
-  await delay(CLICK_SETTLE_DELAY_MS);
-  return matchesAcceptedText(normaliseText(fieldRoot.textContent || ""), acceptedTexts);
+  return waitForFieldTextMatch(fieldRoot, acceptedTexts);
 }
 
 export function findFiledReturnsFilterRoot(documentRef: Document): HTMLElement | null {
@@ -266,4 +271,31 @@ function readElementText(element: Element): string {
   ]
     .filter(Boolean)
     .join(" ");
+}
+
+async function waitForVisibleOption(
+  documentRef: Document,
+  acceptedTexts: readonly string[],
+  openedControl: HTMLElement,
+  beforeOpenElements: ReadonlySet<Element>,
+): Promise<HTMLElement | null> {
+  const startedAt = Date.now();
+  do {
+    const option = findVisibleOption(documentRef, acceptedTexts, openedControl, beforeOpenElements);
+    if (option) return option;
+    await delay(DROPDOWN_POLL_MS);
+  } while (Date.now() - startedAt < DROPDOWN_OPEN_TIMEOUT_MS);
+  return null;
+}
+
+async function waitForFieldTextMatch(
+  fieldRoot: HTMLElement,
+  acceptedTexts: readonly string[],
+): Promise<boolean> {
+  const startedAt = Date.now();
+  do {
+    if (matchesAcceptedText(normaliseText(fieldRoot.textContent || ""), acceptedTexts)) return true;
+    await delay(DROPDOWN_POLL_MS);
+  } while (Date.now() - startedAt < DROPDOWN_SELECTION_TIMEOUT_MS);
+  return false;
 }

@@ -30,6 +30,8 @@ const SAFE_POST_LOGIN_DIALOG_PATTERNS = [
   /goods transport agency\s+annexure/i,
   /logged in session will expire[\s\S]*click continue to extend your session/i,
 ];
+const SESSION_EXPIRY_DIALOG_PATTERN =
+  /logged in session will expire[\s\S]*click continue to extend your session/i;
 
 export async function dismissKnownFiledReturnsSummaryModal(
   documentRef: Document,
@@ -84,7 +86,12 @@ export async function dismissSafePostLoginDialogs(documentRef: Document): Promis
     dismissedElements.add(element);
     activateElement(element);
     signals.push("safe-dialog-dismissed", ...score.safeSignals);
-    await waitForDialogRootToSettle(element.closest(MODAL_SELECTOR) ?? element);
+    const root = element.closest(MODAL_SELECTOR) ?? element;
+    await waitForDialogRootToSettle(root);
+    if (isElementStillConnectedAndVisible(root) && forceHideLingeringSessionExpiryDialog(root)) {
+      signals.push("session-expiry-dialog-force-hidden");
+      await waitForDialogRootToSettle(root);
+    }
   }
 
   return signals;
@@ -245,6 +252,24 @@ async function waitForDialogRootToSettle(element: Element): Promise<void> {
 function isElementStillConnectedAndVisible(element: Element): boolean {
   if (!element.isConnected) return false;
   return isHtmlElement(element.ownerDocument, element) && isVisible(element);
+}
+
+function forceHideLingeringSessionExpiryDialog(element: Element): boolean {
+  if (!isHtmlElement(element.ownerDocument, element)) return false;
+
+  const text = element.innerText || element.textContent || "";
+  if (!SESSION_EXPIRY_DIALOG_PATTERN.test(text)) return false;
+
+  element.classList.remove("show", "in");
+  element.setAttribute("aria-hidden", "true");
+  element.style.display = "none";
+
+  const documentRef = element.ownerDocument;
+  documentRef.body?.classList.remove("modal-open");
+  for (const backdrop of Array.from(documentRef.querySelectorAll(".modal-backdrop"))) {
+    backdrop.remove();
+  }
+  return true;
 }
 
 function isHtmlElement(root: ParentNode, element: Element): element is HTMLElement {

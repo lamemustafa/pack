@@ -773,6 +773,91 @@ describe("filed returns flow runner", () => {
     });
   });
 
+  it("retains staged full-year files when the final zip download is unconfirmed", async () => {
+    const stagedLedger: FiledReturnsFullFiscalYearLedger = {
+      ...createFullFiscalYearLedger({
+        currentPeriod: "May",
+        status: "blocked",
+        targets: [
+          { period: "April", status: "downloaded" },
+          { period: "May", status: "downloaded" },
+        ],
+      }),
+      targets: createFullFiscalYearLedger({
+        targets: [
+          { period: "April", status: "downloaded" },
+          { period: "May", status: "downloaded" },
+        ],
+      }).targets.map((target) => ({
+        ...target,
+        safeSignals: ["full-fiscal-year-opfs-staged"],
+      })),
+    };
+    mockLocalStorageGet({ "full-year-ledger": stagedLedger });
+    vi.mocked(observeBrowserDownloadById).mockResolvedValueOnce({
+      state: "not-observed",
+      safeSignals: ["browser-download-not-observed"],
+      safeMessage: "Download was not observed.",
+      userAction: {
+        type: "ALLOW_MULTIPLE_DOWNLOADS",
+        message: "Allow downloads, then retry.",
+        canResume: true,
+      },
+    });
+
+    const response = await startFiledReturnsDownloadFlow(
+      {
+        financialYear: "2026-27",
+        period: FULL_FISCAL_YEAR_PERIOD,
+        returnType: "GSTR-3B",
+      },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection: vi.fn<
+          FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
+        >(),
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+        },
+        now: () => new Date("2026-06-24T00:00:00+05:30"),
+        timings: {
+          flowStepSettleMs: 0,
+          resultRowNavigationSettleMs: 0,
+        },
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "download-unconfirmed",
+        safeSignals: expect.arrayContaining([
+          "full-fiscal-year-zip-download-started",
+          "full-fiscal-year-zip-download-unconfirmed",
+          "full-fiscal-year-opfs-retained",
+        ]),
+      },
+      flowSummary: {
+        status: "blocked",
+        completedPeriods: ["April", "May"],
+        totalPeriods: 2,
+      },
+    });
+    expect(response.ok && "flowStep" in response ? response.flowStep.safeSignals : []).not.toContain(
+      "full-fiscal-year-opfs-cleared",
+    );
+    expect(browser.runtime.sendMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "PACK_OFFSCREEN_CLEAR_FILED_RETURN_LEDGER",
+      }),
+    );
+    expect(browser.storage.local.set).toHaveBeenCalledWith({
+      "full-year-ledger": expect.objectContaining({ status: "blocked" }),
+    });
+  });
+
   it("exports a single-period GSTR-2B PDF and Excel selection as one zip", async () => {
     const sendMessageToTabWithInjection = vi.fn<
       FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]

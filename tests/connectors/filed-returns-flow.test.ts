@@ -224,7 +224,7 @@ describe("filed returns guided flow", () => {
     );
   });
 
-  it("waits when a safe GSTR-2B session warning remains visible after Continue", async () => {
+  it("continues when a safe GSTR-2B session warning remains visible after Continue", async () => {
     const documentRef = createGstr2bSummaryDocument(`
       <section class="modal show" role="dialog">
         <h2>Warning</h2>
@@ -232,6 +232,7 @@ describe("filed returns guided flow", () => {
         <a data-logout href="/services/logout">Logout</a>
         <button data-continue>Continue</button>
       </section>
+      <div class="modal-backdrop show"></div>
     `);
     let continueClicked = 0;
     let logoutClicked = 0;
@@ -250,18 +251,21 @@ describe("filed returns guided flow", () => {
       returnType: "GSTR-2B",
     });
 
-    expect(result.state).toBe("clicked");
+    expect(result.state).toBe("ready");
     expect(result.safeSignals).toEqual(
       expect.arrayContaining([
         "safe-dialog-dismissed",
         "dialog-continue",
-        "safe-dialog-still-visible",
-        "gstr2b-dialog-dismissal-waiting",
+        "session-expiry-dialog-force-hidden",
+        "gstr2b-download-ready",
       ]),
     );
-    expect(result.safeSignals).not.toContain("gstr2b-download-ready");
+    expect(result.safeSignals).not.toContain("safe-dialog-still-visible");
+    expect(result.safeSignals).not.toContain("gstr2b-dialog-dismissal-waiting");
     expect(continueClicked).toBe(1);
     expect(logoutClicked).toBe(0);
+    expect(documentRef.querySelector<HTMLElement>(".modal")?.style.display).toBe("none");
+    expect(documentRef.querySelector(".modal-backdrop")).toBeNull();
   });
 
   it("selects GSTR-2B filters from the filed-returns page", async () => {

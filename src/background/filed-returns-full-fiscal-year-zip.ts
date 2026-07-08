@@ -116,7 +116,6 @@ async function exportStagedFiledReturnsZip({
     });
   } catch {
     await revokeOffscreenBlobUrl(zip.blobUrl);
-    const clearSignal = await clearStagedLedgerSignal(ledgerId, clearSignalPrefix);
     await closeOffscreenBlobDocument();
     return {
       ...completeStep,
@@ -124,7 +123,7 @@ async function exportStagedFiledReturnsZip({
       safeSignals: [
         ...completeStep.safeSignals,
         `${clearSignalPrefix}-zip-download-start-rejected`,
-        clearSignal,
+        retainedStagedLedgerSignal(clearSignalPrefix),
       ],
       safeMessage: startRejectedMessage,
       userAction: {
@@ -144,10 +143,9 @@ async function exportStagedFiledReturnsZip({
     trustedDownloadIds: new Set([downloadId]),
   }, USER_MEDIATED_ZIP_DOWNLOAD_WAIT_MS);
   await revokeOffscreenBlobUrl(zip.blobUrl);
-  const clearSignal = await clearStagedLedgerSignal(ledgerId, clearSignalPrefix);
-  await closeOffscreenBlobDocument();
 
   if (observed.state !== "completed") {
+    await closeOffscreenBlobDocument();
     return {
       ...completeStep,
       state: observed.state === "failed" ? "blocked" : "download-unconfirmed",
@@ -155,13 +153,16 @@ async function exportStagedFiledReturnsZip({
         ...completeStep.safeSignals,
         `${clearSignalPrefix}-zip-download-started`,
         `${clearSignalPrefix}-zip-download-unconfirmed`,
-        clearSignal,
+        retainedStagedLedgerSignal(clearSignalPrefix),
         ...observed.safeSignals,
       ],
       safeMessage: unconfirmedMessage,
       ...(observed.userAction ? { userAction: observed.userAction } : {}),
     };
   }
+
+  const clearSignal = await clearStagedLedgerSignal(ledgerId, clearSignalPrefix);
+  await closeOffscreenBlobDocument();
 
   return {
     ...completeStep,
@@ -175,6 +176,10 @@ async function exportStagedFiledReturnsZip({
     ],
     safeMessage,
   };
+}
+
+function retainedStagedLedgerSignal(prefix: "full-fiscal-year" | "single-period"): string {
+  return `${prefix}-opfs-retained`;
 }
 
 async function clearStagedLedgerSignal(

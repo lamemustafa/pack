@@ -271,12 +271,23 @@ async function completeRun(
     return { ok: true, flowStep: step, flowSummary: toFullFiscalYearSummary(ledger, step) };
   }
 
-  const completedLedger = completeFullFiscalYearLedger(ledger, deps.now?.() ?? new Date());
-  const step = completeFullFiscalYearStep(completedLedger);
-  await persistLedgerAndSummary(deps, completedLedger, step);
-  const zipStep = await exportFullFiscalYearZip(completedLedger, step);
+  const now = deps.now?.() ?? new Date();
+  const readyLedger: FiledReturnsFullFiscalYearLedger = {
+    ...ledger,
+    status: "blocked",
+    updatedAt: now.toISOString(),
+  };
+  const step = completeFullFiscalYearStep(readyLedger);
+  const zipStep = await exportFullFiscalYearZip(readyLedger, step);
+  if (zipStep.state !== "downloaded") {
+    const summary = toFullFiscalYearSummary(readyLedger, zipStep);
+    await persistLedgerAndSummary(deps, readyLedger, zipStep);
+    return { ok: true, flowStep: summary.flowStep, flowSummary: summary };
+  }
+
+  const completedLedger = completeFullFiscalYearLedger(ledger, now);
   const summary = toFullFiscalYearSummary(completedLedger, zipStep);
-  await persistSummary(deps, summary);
+  await persistLedgerAndSummary(deps, completedLedger, zipStep);
   return { ok: true, flowStep: summary.flowStep, flowSummary: summary };
 }
 
