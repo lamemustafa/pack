@@ -60,13 +60,130 @@ html[data-pack-surface="popup"] #root {
 }
 
 .brand-header {
-  display: grid;
+  display: none;
   min-width: 0;
   align-items: start;
   gap: 10px;
   border-color: transparent;
   background: transparent;
   padding: 2px 2px 0;
+}
+
+.compact-popup-panel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--pack-border);
+  border-radius: 8px;
+  background: var(--pack-surface);
+  padding: 14px;
+}
+
+.compact-status-row,
+.compact-run-status {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.compact-status-row h2 {
+  margin: 2px 0 0;
+  color: var(--pack-ink);
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.compact-target-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.compact-target-list div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  border: 1px solid #dbe3ec;
+  border-radius: 7px;
+  background: #fbfcfe;
+  padding: 8px;
+}
+
+.compact-target-list dt {
+  color: #5c6c7d;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.compact-target-list dd {
+  min-width: 0;
+  margin: 0;
+  color: #172334;
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.compact-help,
+.compact-run-status p {
+  margin: 0;
+  color: #324356;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.compact-run-status {
+  border-top: 1px solid #dbe3ec;
+  padding-top: 10px;
+}
+
+.compact-primary-action {
+  min-height: 44px;
+  width: 100%;
+}
+
+.compact-workbench-link {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #c8d3de;
+  border-radius: 7px;
+  background: #ffffff;
+  color: var(--pack-accent);
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.compact-workbench-link:hover {
+  border-color: #9fb0c1;
+  background: #f6f8fb;
+}
+
+.target-strip,
+.command-workbench,
+.fineprint {
+  display: none;
+}
+
+.popup-shell-workbench .brand-header {
+  display: grid;
+}
+
+.popup-shell-workbench .compact-popup-panel {
+  display: none;
+}
+
+.popup-shell-workbench .target-strip,
+.popup-shell-workbench .command-workbench {
+  display: grid;
+}
+
+.popup-shell-workbench .fineprint {
+  display: flex;
 }
 
 .brand-title-block {
