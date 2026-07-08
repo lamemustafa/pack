@@ -1,5 +1,4 @@
 import type { FiledReturnsCapturedDownloadRequest } from "../core/contracts";
-import type { FiledReturnsArtifactExtension } from "../core/filed-returns-artifacts";
 
 export interface MainWorldCaptureOutcome {
   capturedDownloadRequest: FiledReturnsCapturedDownloadRequest | null;
@@ -9,7 +8,6 @@ export interface MainWorldCaptureOutcome {
 
 export interface MainWorldChunkedCaptureRequest {
   actionId: string;
-  artifactExtension?: FiledReturnsArtifactExtension;
   chunkCount: number;
   safeSignals: string[];
   transferId: string;
@@ -46,7 +44,6 @@ function isMainWorldChunkedCaptureRequest(value: unknown): value is MainWorldChu
   const record = value as Record<string, unknown>;
   return (
     typeof record.actionId === "string" &&
-    isOptionalArtifactExtension(record.artifactExtension) &&
     typeof record.transferId === "string" &&
     typeof record.chunkCount === "number" &&
     Number.isInteger(record.chunkCount) &&
@@ -55,8 +52,4 @@ function isMainWorldChunkedCaptureRequest(value: unknown): value is MainWorldChu
     Array.isArray(record.safeSignals) &&
     record.safeSignals.every((signal) => typeof signal === "string")
   );
-}
-
-function isOptionalArtifactExtension(value: unknown): value is FiledReturnsArtifactExtension | undefined {
-  return value === undefined || value === ".pdf" || value === ".xls" || value === ".xlsx";
 }

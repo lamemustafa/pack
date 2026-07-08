@@ -152,7 +152,6 @@ export async function stageChunkedCapturedFiledReturnDownload({
   const zipPath = safeFiledReturnZipEntryPath(
     scope,
     artifactType,
-    chunkedCaptureRequest.artifactExtension,
   );
 
   let staged: "staged" | "failed" = "failed";

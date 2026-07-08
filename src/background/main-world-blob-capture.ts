@@ -85,26 +85,6 @@ export async function capturePortalBlobDownloadWithDiagnostics(
       }, captureSuppressionSettleMs);
     };
 
-    const classifyCapturedArtifactExtension = (capturedUrl: string) => {
-      const commaIndex = capturedUrl.indexOf(",");
-      if (commaIndex <= 0) return undefined;
-      const metadata = capturedUrl.slice(0, commaIndex).toLowerCase();
-      if (metadata.includes("application/pdf")) return ".pdf";
-      const payload = capturedUrl.slice(commaIndex + 1);
-      let prefix = "";
-      try {
-        prefix = metadata.includes(";base64")
-          ? atob(payload.slice(0, 16))
-          : decodeURIComponent(payload.slice(0, 24));
-      } catch {
-        return undefined;
-      }
-      if (prefix.startsWith("%PDF-")) return ".pdf";
-      if (prefix.startsWith("\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1")) return ".xls";
-      if (prefix.startsWith("PK\u0003\u0004")) return ".xlsx";
-      return undefined;
-    };
-
     const settleChunked = (capturedUrl: string, safeSignals: string[]) => {
       if (settled || !config.transferId) return false;
       const chunkSize = config.transferChunkSize ?? defaultTransferChunkSize;
@@ -130,13 +110,11 @@ export async function capturePortalBlobDownloadWithDiagnostics(
         );
       });
       settled = true;
-      const artifactExtension = classifyCapturedArtifactExtension(capturedUrl);
       const chunkedCaptureRequest: MainWorldChunkedCaptureRequest = {
         actionId: config.actionId,
         chunkCount: chunks.length,
         safeSignals: [...safeSignals, `${config.signalPrefix}-main-world-chunked-capture`],
         transferId: config.transferId,
-        ...(artifactExtension ? { artifactExtension } : {}),
       };
       const outcome: MainWorldCaptureOutcome = {
         capturedDownloadRequest: null,

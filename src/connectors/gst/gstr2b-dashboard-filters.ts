@@ -17,8 +17,8 @@ import {
 
 export { isReturnDashboardStillRendering } from "./gstr2b-dashboard-selectors";
 
-const DASHBOARD_FIELD_SETTLE_DELAY_MS = 500;
-const DASHBOARD_DEPENDENT_FIELD_ATTEMPTS = 6;
+const DASHBOARD_FIELD_SETTLE_DELAY_MS = 150;
+const DASHBOARD_DEPENDENT_FIELD_ATTEMPTS = 12;
 const DASHBOARD_SEARCH_PENDING_MS = 12_000;
 const DASHBOARD_SEARCH_PENDING_ATTRIBUTE = "data-pack-gstr2b-dashboard-search-pending-at";
 

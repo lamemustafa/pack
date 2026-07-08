@@ -469,41 +469,12 @@ describe("capturePortalBlobDownload", () => {
     expect(captured.capturedDownloadRequest).toBeNull();
     expect(captured.chunkedCaptureRequest).toMatchObject({
       actionId: "action-1",
-      artifactExtension: ".pdf",
       transferId: "transfer-1",
     });
     expect(captured.chunkedCaptureRequest?.safeSignals).toEqual(
       expect.arrayContaining(["gstr2b-main-world-chunked-capture"]),
     );
     expect(chunks.join("")).toContain("data:application/pdf;base64,");
-  });
-
-  it("classifies legacy XLS chunked captures before staging", async () => {
-    const { documentRef, view } = installMainWorldDom(`
-      <button data-pack-gstr2b-capture-action="capture-1">Download</button>
-    `);
-    documentRef.querySelector("button")?.addEventListener("click", () => {
-      const blob = new view.Blob(
-        [new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, 1, 2, 3])],
-        {
-          type: "application/vnd.ms-excel",
-        },
-      );
-      const anchor = documentRef.createElement("a");
-      anchor.href = view.URL.createObjectURL(blob);
-      anchor.download = "may.xls";
-      anchor.click();
-    });
-
-    const captured = await capturePortalBlobDownloadWithDiagnostics({
-      ...captureConfig(),
-      transferChunkSize: 12,
-      transferId: "transfer-1",
-    });
-
-    expect(captured.chunkedCaptureRequest).toMatchObject({
-      artifactExtension: ".xls",
-    });
   });
 });
 
