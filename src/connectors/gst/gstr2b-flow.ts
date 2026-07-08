@@ -66,7 +66,7 @@ export async function runGstr2bDownloadStep(
   }
 
   if (isGstr2bSummaryPage(documentRef, normalised)) {
-    const periodGuard = verifyVisibleGstr2bPeriod(normalised, scope);
+    const periodGuard = verifyVisibleGstr2bPeriod(documentRef, normalised, scope);
     if (periodGuard) {
       const recovery = returnFromMismatchedGstr2bSummary(documentRef, scopeId, [
         ...safeSignals,

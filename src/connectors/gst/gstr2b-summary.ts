@@ -56,13 +56,20 @@ export function verifyVisibleGstr2bSummaryScope(
 ): PortalDownloadTriggerResult | null {
   const normalised = normaliseText(readDocumentText(documentRef));
   if (!isGstr2bSummaryPage(documentRef, normalised)) return null;
-  return verifyVisibleGstr2bPeriod(normalised, scope);
+  return verifyVisibleGstr2bPeriod(documentRef, normalised, scope);
 }
 
 export function verifyVisibleGstr2bPeriod(
+  documentRef: Document,
   normalisedText: string,
   scope: FiledReturnsDownloadScope,
 ): PortalDownloadTriggerResult | null {
+  const serverScope = extractGstr2bServerScope(documentRef);
+  if (serverScope) {
+    if (gstr2bScopeMatches(serverScope, scope)) return null;
+    return gstr2bPeriodMismatch(["gstr2b-server-period-mismatch"]);
+  }
+
   const visiblePeriod = extractGstr2bLabelValue(normalisedText, "return period");
   const visibleFinancialYear = extractGstr2bLabelValue(normalisedText, "financial year");
   const monthMatches = visiblePeriod
@@ -75,19 +82,76 @@ export function verifyVisibleGstr2bPeriod(
     : expectedCalendarYears(scope).some((year) => normalisedText.includes(year));
   if (monthMatches && yearMatches) return null;
 
-  return {
-    connectorId: "gst",
-    scopeId: filedReturnScopeId("GSTR-2B"),
-    state: "blocked",
-    safeSignals: ["gstr2b-visible-period-mismatch"],
-    safeMessage:
-      "Pack found a GSTR-2B summary page, but could not verify that its visible period matches the requested scope.",
-    userAction: {
-      type: "NAVIGATE_TO_SUPPORTED_PAGE",
-      message: "Open the GSTR-2B summary page for the requested month and financial year.",
-      canResume: true,
-    },
-  };
+  return gstr2bPeriodMismatch([]);
+
+  function gstr2bPeriodMismatch(extraSignals: string[]): PortalDownloadTriggerResult {
+    return {
+      connectorId: "gst",
+      scopeId: filedReturnScopeId("GSTR-2B"),
+      state: "blocked",
+      safeSignals: ["gstr2b-visible-period-mismatch", ...extraSignals],
+      safeMessage:
+        "Pack found a GSTR-2B summary page, but could not verify that its visible period matches the requested scope.",
+      userAction: {
+        type: "NAVIGATE_TO_SUPPORTED_PAGE",
+        message: "Open the GSTR-2B summary page for the requested month and financial year.",
+        canResume: true,
+      },
+    };
+  }
+}
+
+function gstr2bScopeMatches(
+  pageScope: { financialYear: string; period: string },
+  scope: FiledReturnsDownloadScope,
+): boolean {
+  return (
+    matchesAcceptedText(pageScope.financialYear, [scope.financialYear]) &&
+    matchesAcceptedText(pageScope.period, acceptedFiledReturnsMonthTexts(scope.period))
+  );
+}
+
+function extractGstr2bServerScope(
+  documentRef: Document,
+): { financialYear: string; period: string } | null {
+  const scriptText = Array.from(documentRef.scripts)
+    .map((script) => script.textContent ?? "")
+    .join("\n");
+  if (!/"FORM_TYPE"\s*:\s*"GSTR2B"/i.test(scriptText)) return null;
+
+  const financialYear = matchServerValue(scriptText, "FIN_YEAR");
+  const returnPeriod = matchServerValue(scriptText, "RETURN_PERIOD");
+  if (!financialYear || !returnPeriod) return null;
+
+  const period = monthFromReturnPeriod(returnPeriod);
+  return period ? { financialYear, period } : null;
+}
+
+function matchServerValue(scriptText: string, key: "FIN_YEAR" | "RETURN_PERIOD"): string | null {
+  const match = new RegExp(`"${key}"\\s*:\\s*"([^"]+)"`, "i").exec(scriptText);
+  return match?.[1]?.trim() ?? null;
+}
+
+function monthFromReturnPeriod(returnPeriod: string): string | null {
+  const match = /^(0[1-9]|1[0-2])20\d{2}$/.exec(returnPeriod.trim());
+  if (!match?.[1]) return null;
+  const monthIndex = Number(match[1]) - 1;
+  return (
+    [
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December",
+    ][monthIndex] ?? null
+  );
 }
 
 export function returnFromMismatchedGstr2bSummary(

@@ -2046,6 +2046,87 @@ describe("filed returns guided flow", () => {
     expect(dashboardBackClicked).toBe(1);
   });
 
+  it("uses GSTR-2B server page config to verify the requested summary period", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <h1>GSTR-2B</h1>
+          <p>Auto-drafted ITC Statement</p>
+          <aside>Site year 2026-27</aside>
+          <button>DOWNLOAD GSTR-2B SUMMARY (PDF)</button>
+          <button>DOWNLOAD GSTR-2B DETAILS (EXCEL)</button>
+        </main>
+        <script>
+          var server_urls = {
+            "FIN_YEAR": "2025-26",
+            "RETURN_PERIOD": "052025",
+            "FORM_TYPE": "GSTR2B"
+          };
+        </script>
+      `,
+      "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
+    );
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      artifactType: "PDF_AND_EXCEL",
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-2B",
+    });
+
+    expect(result.state).toBe("ready");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining([
+        "gstr2b-summary-route",
+        "gstr2b-visible-period-verified",
+        "gstr2b-download-ready",
+      ]),
+    );
+  });
+
+  it("returns from a GSTR-2B summary when server page config identifies another period", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <h1>GSTR-2B</h1>
+          <button data-back>BACK TO DASHBOARD</button>
+          <button>DOWNLOAD GSTR-2B SUMMARY (PDF)</button>
+          <button>DOWNLOAD GSTR-2B DETAILS (EXCEL)</button>
+        </main>
+        <script>
+          var server_urls = {
+            "FIN_YEAR": "2025-26",
+            "RETURN_PERIOD": "042025",
+            "FORM_TYPE": "GSTR2B"
+          };
+        </script>
+      `,
+      "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
+    );
+    makeLayoutVisible(documentRef);
+    let dashboardBackClicked = 0;
+    documentRef.querySelector("[data-back]")?.addEventListener("click", () => {
+      dashboardBackClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      artifactType: "PDF_AND_EXCEL",
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-2B",
+    });
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining([
+        "gstr2b-visible-period-mismatch",
+        "gstr2b-server-period-mismatch",
+        "gstr2b-summary-dashboard-back-clicked",
+      ]),
+    );
+    expect(dashboardBackClicked).toBe(1);
+  });
+
   it("rechecks the visible GSTR-2B period before capturing a portal blob", async () => {
     const documentRef = createGstDocument(
       `
