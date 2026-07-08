@@ -7,6 +7,12 @@ body:has(.popup-shell) #root {
   min-width: 0;
 }
 
+html[data-pack-surface="popup"],
+html[data-pack-surface="popup"] body,
+html[data-pack-surface="popup"] #root {
+  height: var(--pack-popup-max-height);
+}
+
 html[data-pack-surface="popup"] body,
 html[data-pack-surface="popup"] #root,
 body:has(.popup-shell),

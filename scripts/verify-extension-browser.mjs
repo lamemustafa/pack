@@ -320,14 +320,14 @@ async function assertPopupPageLoads(browserContext, extensionId) {
     title: document.title,
     shellRect: document.querySelector(".popup-shell")?.getBoundingClientRect().toJSON(),
     shellText: document.querySelector(".popup-shell")?.textContent ?? "",
-    hasEvidenceRail: Boolean(document.querySelector(".evidence-column")),
+    hasEvidenceRail: Boolean(document.querySelector(".run-column .evidence-panel")),
     hasSetupPanel: Boolean(document.querySelector(".scope-column .flow-panel")),
-    hasTargetStrip: Boolean(document.querySelector(".target-column .target-strip")),
+    hasTargetStrip: Boolean(document.querySelector(".target-strip")),
   }));
   if (popupState.title !== "ComplyEaze Pack") {
     throw new Error(`Unexpected popup page title: ${popupState.title}`);
   }
-  if (!popupState.shellText.includes("Return file workbench")) {
+  if (!popupState.shellText.includes("Choose what Pack should collect")) {
     throw new Error("Pack popup did not render the return file workbench UI.");
   }
   if (!popupState.hasTargetStrip || !popupState.hasSetupPanel || !popupState.hasEvidenceRail) {
