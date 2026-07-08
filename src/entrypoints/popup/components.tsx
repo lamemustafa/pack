@@ -48,8 +48,8 @@ export function ScopeForm({
     <section className="flow-panel" aria-label="Filed return download scope">
       <div className="panel-heading">
         <div>
-          <p className="section-label">Download setup</p>
-          <h2>Choose what Pack should collect</h2>
+          <p className="section-label">Setup</p>
+          <h2>Set the local download target</h2>
         </div>
       </div>
       <div className="scope-form-grid">
@@ -71,11 +71,11 @@ export function ScopeForm({
           {formModel.supportsFullFiscalYear ? (
             <ScopeButtonGroup
               className="scope-group-run-mode"
-              label="Coverage"
+              label="Range"
               value={formModel.fullFiscalYear ? "FULL_YEAR" : "SINGLE_PERIOD"}
               options={[
-                { value: "SINGLE_PERIOD", label: "Single period" },
-                { value: "FULL_YEAR", label: "Full fiscal year" },
+                { value: "SINGLE_PERIOD", label: "One period" },
+                { value: "FULL_YEAR", label: "Full year" },
               ]}
               onChange={(mode) =>
                 onScopeChange(
@@ -94,7 +94,7 @@ export function ScopeForm({
         <div className="scope-section scope-section-secondary">
           <ScopeButtonGroup
             className="scope-group-file"
-            label="Files"
+            label="Output"
             value={formModel.selectedArtifactType}
             options={formModel.artifactOptions}
             onChange={(artifactType) =>
@@ -134,8 +134,7 @@ export function ScopeForm({
         </div>
         {!context?.supported ? (
           <p className="scope-note scope-note-warning">
-            Open a signed-in GST return dashboard or return page before starting. Pack will not open
-            login pages or reuse stale portal state.
+            Open a signed-in GST return dashboard or return page before starting.
           </p>
         ) : null}
       </div>

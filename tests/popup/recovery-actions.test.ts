@@ -209,8 +209,8 @@ describe("popup full-year recovery actions", () => {
     expect(markup).toContain('value="EXCEL"');
     expect(markup).toContain("E-invoice details Excel");
     expect(markup).toContain('checked="" value="PDF_AND_EXCEL"');
-    expect(markup).toContain("Summary PDF + e-invoice details Excel");
-    expect(markup).toContain("Full fiscal year");
+    expect(markup).toContain("PDF + Excel ZIP");
+    expect(markup).toContain("Full year");
     expect(markup).not.toContain("monthly GSTR-3B filers only");
   });
 
@@ -236,7 +236,7 @@ describe("popup full-year recovery actions", () => {
     expect(markup).toContain('value="May" selected=""');
     expect(markup).toContain('value="June"');
     expect(markup).toContain('checked="" value="PDF_AND_EXCEL"');
-    expect(markup).toContain("Summary PDF + details Excel");
+    expect(markup).toContain("PDF + Excel ZIP");
     expect(markup).not.toContain("E-invoice details Excel");
   });
 
@@ -257,12 +257,11 @@ describe("popup full-year recovery actions", () => {
       }),
     );
 
-    expect(markup).toContain("Collect eligible periods into one local ZIP.");
-    expect(markup).toContain("Hands off one ZIP");
+    expect(markup).toContain("Create one ZIP for all eligible periods.");
     expect(markup).not.toContain("selected GSTR-1 e-invoice details file");
   });
 
-  it("keeps the primary zip action visible before the dense file controls", () => {
+  it("keeps the primary zip action available for full-year multi-file runs", () => {
     const markup = renderToStaticMarkup(
       createElement(ScopeForm, {
         busy: null,
@@ -279,10 +278,8 @@ describe("popup full-year recovery actions", () => {
       }),
     );
 
-    expect(markup.indexOf("Start full-year ZIP")).toBeGreaterThan(-1);
-    expect(markup.indexOf("Start full-year ZIP")).toBeLessThan(
-      markup.indexOf("Summary PDF + details Excel"),
-    );
+    expect(markup.indexOf("Start ZIP")).toBeGreaterThan(-1);
+    expect(markup).toContain("PDF + Excel ZIP");
   });
 
   it("labels multi-file single-period runs as a single zip handoff", () => {
@@ -303,8 +300,7 @@ describe("popup full-year recovery actions", () => {
     );
 
     expect(markup).toContain("Collect the selected period into one local ZIP.");
-    expect(markup).toContain("One browser handoff");
-    expect(markup).toContain("Start period ZIP");
+    expect(markup).toContain("Start ZIP");
     expect(markup).not.toContain(">Download selected period<");
   });
 
@@ -325,8 +321,7 @@ describe("popup full-year recovery actions", () => {
       }),
     );
 
-    expect(markup).toContain("Collect one period from the active GST tab.");
-    expect(markup).toContain("Target-bound click");
+    expect(markup).toContain("Download one period from the active GST tab.");
     expect(markup).toContain("Download selected period");
   });
 
@@ -401,7 +396,9 @@ describe("popup full-year recovery actions", () => {
     );
 
     expect(markup).toContain("Open GST Portal tab first");
-    expect(markup).toContain("Pack will not open login pages or reuse stale portal state.");
+    expect(markup).toContain(
+      "Open a signed-in GST return dashboard or return page before starting.",
+    );
     expect(markup).not.toContain(">Start local full-year run<");
   });
 
