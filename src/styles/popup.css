@@ -3,8 +3,8 @@ html[data-pack-surface="popup"] body,
 html[data-pack-surface="popup"] #root,
 body:has(.popup-shell),
 body:has(.popup-shell) #root {
-  width: var(--pack-popup-width);
-  min-width: var(--pack-popup-min-width);
+  width: 100vw;
+  min-width: min(var(--pack-popup-min-width), 100vw);
 }
 
 html[data-pack-surface="popup"],
@@ -33,15 +33,17 @@ html[data-pack-surface="popup"] #root {
 
 .popup-shell {
   display: grid;
-  width: var(--pack-popup-width);
+  width: min(var(--pack-popup-width), 100vw);
+  max-width: var(--pack-popup-width);
   min-height: var(--pack-popup-min-height);
   height: min(var(--pack-popup-max-height), 100vh);
   max-height: var(--pack-popup-max-height);
   overflow-y: auto;
   overscroll-behavior: contain;
   align-content: start;
-  gap: 12px;
-  padding: 12px;
+  gap: 14px;
+  margin: 0 auto;
+  padding: 14px;
   background: var(--pack-soft);
 }
 
@@ -60,8 +62,8 @@ html[data-pack-surface="popup"] #root {
   min-width: 0;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
-  padding: 10px 12px;
+  gap: 18px;
+  padding: 12px 14px;
 }
 
 .brand-title-block {
@@ -72,14 +74,14 @@ html[data-pack-surface="popup"] #root {
 }
 
 .brand-logo {
-  width: 64px;
+  width: 72px;
   max-width: 100%;
   height: auto;
 }
 
 .brand-header h1 {
   margin-top: 2px;
-  font-size: 18px;
+  font-size: 20px;
 }
 
 .brand-badges {
@@ -121,8 +123,8 @@ html[data-pack-surface="popup"] #root {
 
 .command-workbench {
   display: grid;
-  grid-template-columns: minmax(0, 1.62fr) minmax(280px, 0.72fr);
-  gap: 12px;
+  grid-template-columns: minmax(0, 1.55fr) minmax(320px, 0.9fr);
+  gap: 14px;
   align-items: start;
 }
 
@@ -141,7 +143,7 @@ html[data-pack-surface="popup"] #root {
 .section-label {
   margin: 0;
   color: #53657a;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 750;
 }
 
@@ -168,8 +170,8 @@ html[data-pack-surface="popup"] #root {
 .evidence-panel,
 .recovery-panel {
   display: grid;
-  gap: 8px;
-  padding: 10px;
+  gap: 10px;
+  padding: 12px;
 }
 
 .evidence-panel {
@@ -230,7 +232,7 @@ html[data-pack-surface="popup"] #root {
   border: 1px solid #dbe3ec;
   border-radius: 8px;
   background: #ffffff;
-  padding: 7px 10px;
+  padding: 8px 12px;
 }
 
 .fineprint span {

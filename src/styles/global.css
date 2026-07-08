@@ -1,8 +1,8 @@
 :root {
-  --pack-popup-width: 920px;
-  --pack-popup-min-width: 640px;
-  --pack-popup-min-height: 680px;
-  --pack-popup-max-height: 720px;
+  --pack-popup-width: 1120px;
+  --pack-popup-min-width: 820px;
+  --pack-popup-min-height: 720px;
+  --pack-popup-max-height: 820px;
   --pack-ink: #101923;
   --pack-muted: #4c5c6d;
   --pack-border: #ccd6e2;

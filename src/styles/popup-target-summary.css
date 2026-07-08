@@ -1,9 +1,9 @@
 .target-strip {
   display: grid;
-  grid-template-columns: minmax(180px, 0.34fr) minmax(0, 1fr);
-  gap: 10px;
+  grid-template-columns: minmax(220px, 0.32fr) minmax(0, 1fr);
+  gap: 12px;
   align-items: center;
-  padding: 9px 10px;
+  padding: 10px 12px;
 }
 
 .target-strip-header {
@@ -15,7 +15,7 @@
 .target-strip h2 {
   margin: 0;
   color: var(--pack-ink);
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.25;
 }
 
@@ -49,12 +49,12 @@
 .target-metadata {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 7px;
+  gap: 8px;
   border: 0;
   border-radius: 8px;
   background: var(--pack-surface-raised);
   margin: 0;
-  padding: 7px;
+  padding: 8px;
 }
 
 .target-run-steps {
@@ -71,7 +71,7 @@
 .target-run-steps li {
   display: flex;
   min-width: 0;
-  min-height: 30px;
+  min-height: 34px;
   align-items: center;
   gap: 7px;
   border: 1px solid #d7e1eb;
@@ -81,7 +81,7 @@
   font-size: 11px;
   font-weight: 750;
   line-height: 1.2;
-  padding: 5px 8px;
+  padding: 6px 9px;
 }
 
 .target-run-steps li::before {
