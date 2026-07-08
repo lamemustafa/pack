@@ -1,40 +1,59 @@
 .flow-panel {
   display: grid;
-  gap: 7px;
-  padding: 9px;
+  gap: 10px;
+  padding: 10px;
+}
+
+.flow-panel-heading {
+  display: grid;
+  gap: 3px;
+}
+
+.flow-panel-heading h2 {
+  margin: 0;
+  color: var(--pack-ink);
+  font-size: 0.9375rem;
+  font-weight: 850;
+  line-height: 1.2;
+}
+
+.flow-panel-heading p {
+  margin: 0;
+  color: #526477;
+  font-size: 0.75rem;
+  line-height: 1.35;
 }
 
 .scope-form-grid {
   display: grid;
-  gap: 6px;
+  gap: 10px;
 }
 
 .scope-row {
   display: grid;
   min-width: 0;
-  gap: 6px;
+  gap: 7px;
 }
 
 .scope-row-range {
-  grid-template-columns: minmax(0, 1.45fr) minmax(104px, 0.85fr);
-  align-items: end;
+  grid-template-columns: 1fr;
 }
 
 .scope-select-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(78px, 1fr));
-  gap: 5px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .scope-note {
   margin: 0;
   border: 1px solid #dbe3ec;
-  border-radius: 7px;
+  border-radius: 10px;
   background: #f8fafc;
   color: #37475a;
   font-size: 0.75rem;
   line-height: 1.35;
-  padding: 7px 8px;
+  padding: 8px 9px;
 }
 
 .scope-note-warning {
@@ -52,45 +71,53 @@
 
 .scope-group legend,
 .scope-select span {
-  margin: 0 0 4px;
+  margin: 0 0 6px;
   color: #26384b;
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 850;
   line-height: 1.2;
 }
 
 .scope-options {
   display: grid;
-  gap: 5px;
+  gap: 7px;
 }
 
-.scope-group-return .scope-options,
-.scope-group-file .scope-options {
+.scope-group-return .scope-options {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.scope-group-run-mode .scope-options {
+.scope-group-run-mode .scope-options,
+.scope-group-file .scope-options {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.scope-group-file .scope-options {
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
 }
 
 .scope-option {
   position: relative;
   display: grid;
-  min-height: 32px;
+  min-height: 42px;
   cursor: pointer;
-  align-items: center;
+  align-content: center;
   justify-content: stretch;
-  gap: 0;
-  border: 1px solid #c9d2dc;
-  border-radius: 999px;
+  gap: 2px;
+  border: 1px solid #d3dde7;
+  border-radius: 12px;
   background: #ffffff;
   color: #1d2634;
-  font-size: 0.71875rem;
+  font-size: 0.8125rem;
   font-weight: 850;
   line-height: 1.15;
   text-align: left;
-  text-wrap: balance;
-  padding: 6px 9px;
+  padding: 7px 10px;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease,
+    color 160ms ease;
 }
 
 .scope-option-title,
@@ -101,6 +128,14 @@
 }
 
 .scope-option-description {
+  color: #607287;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.scope-group-return .scope-option-description,
+.scope-group-file .scope-option-description {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -110,10 +145,6 @@
   border: 0;
   padding: 0;
   margin: -1px;
-  color: #526276;
-  font-size: 0.625rem;
-  font-weight: 700;
-  line-height: 1.15;
 }
 
 .scope-option input {
@@ -129,8 +160,8 @@
 }
 
 .scope-option:hover {
-  border-color: #8da5bd;
-  background: #f7fbff;
+  border-color: #9eb1c5;
+  background: #f8fbff;
 }
 
 .scope-option-selected {
@@ -155,48 +186,55 @@
 }
 
 .scope-select select {
-  min-height: 34px;
-  border-color: #c9d2dc;
-  font-size: 0.75rem;
+  min-height: 42px;
+  border-color: #d3dde7;
+  border-radius: 10px;
+  color: #172436;
+  font-size: 0.8125rem;
   font-weight: 750;
-  padding: 0 8px;
+  padding: 0 10px;
 }
 
-.run-action-strip {
+.popup-action-area {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(176px, 0.82fr);
   gap: 8px;
-  align-items: end;
-  border-top: 1px solid #dbe3ec;
-  padding-top: 7px;
-}
-
-.run-action-main {
-  min-width: 0;
+  border-top: 1px solid #e0e7ef;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.78), #ffffff 28%);
+  padding-top: 9px;
 }
 
 .run-action-copy {
-  margin: 2px 0 0;
-  color: #24364a;
+  margin: 0;
+  color: #526477;
   font-size: 0.75rem;
   line-height: 1.35;
 }
 
 .primary-action {
-  min-height: 38px;
+  min-height: 46px;
   width: 100%;
+  border-radius: 11px;
   font-size: 0.875rem;
+  font-weight: 850;
+  line-height: 1.2;
+  padding: 0 14px;
+}
+
+.primary-action-busy {
+  opacity: 0.86;
 }
 
 .recovery-panel button {
+  min-height: 44px;
   width: 100%;
+  border-radius: 10px;
 }
 
-@media (max-width: 460px) {
-  .scope-row-range,
-  .scope-group-return .scope-options,
-  .scope-group-file .scope-options,
-  .run-action-strip {
-    grid-template-columns: 1fr;
+@media (prefers-reduced-motion: reduce) {
+  .scope-option {
+    transition: none;
   }
 }

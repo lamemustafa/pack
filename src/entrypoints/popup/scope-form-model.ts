@@ -1,7 +1,6 @@
 import type { FiledReturnsDownloadScope, FiledReturnsFlowSummary } from "../../core/contracts";
 import {
   FILED_RETURNS_ARTIFACT_TYPES,
-  filedReturnsArtifactLabel,
   concreteFiledReturnsArtifactTypes,
   normaliseFiledReturnsArtifactType,
   supportsFiledReturnsArtifactType,
@@ -120,7 +119,7 @@ export function getScopeFormStartAction(
   busy: string | null,
   fullFiscalYear: boolean,
 ): { disabled: boolean; label: string } {
-  if (busy === "start-filed-returns-flow") return { disabled: true, label: "Starting..." };
+  if (busy === "start-filed-returns-flow") return { disabled: true, label: "Downloading..." };
   if (busy !== null) return { disabled: true, label: defaultStartLabel(scope, fullFiscalYear) };
   if (summary && isSameScope(scope, summary.scope)) {
     const signals = new Set(summary.flowStep.safeSignals);
@@ -146,11 +145,14 @@ export function getScopeFormStartAction(
 }
 
 function defaultStartLabel(scope: FiledReturnsDownloadScope, fullFiscalYear: boolean): string {
-  if (fullFiscalYear) return "Start ZIP";
   const artifactType = normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType);
-  return concreteFiledReturnsArtifactTypes(artifactType).length > 1
-    ? "Start ZIP"
-    : "Download selected period";
+  const multiFile = concreteFiledReturnsArtifactTypes(artifactType).length > 1;
+  if (fullFiscalYear) {
+    const noun = multiFile ? "files" : "PDFs";
+    return `Download all ${scope.financialYear} ${scope.returnType} ${noun}`;
+  }
+  const noun = multiFile ? "ZIP" : "PDF";
+  return `Download ${scope.period} ${scope.financialYear} ${scope.returnType} ${noun}`;
 }
 
 function artifactOptionDescription(
@@ -170,8 +172,11 @@ function artifactOptionLabel(
   returnType: FiledReturnsDownloadScope["returnType"],
   artifactType: (typeof FILED_RETURNS_ARTIFACT_TYPES)[number],
 ): string {
-  if (artifactType === "PDF_AND_EXCEL") return "ZIP: PDF + Excel";
-  return filedReturnsArtifactLabel(artifactType, returnType);
+  if (artifactType === "PDF_AND_EXCEL") return "PDF + Excel ZIP";
+  if (artifactType === "EXCEL") {
+    return returnType === "GSTR-1" ? "E-invoice Excel" : "Details Excel";
+  }
+  return returnType === "GSTR-3B" ? "PDF" : "Summary PDF";
 }
 
 function isSameScope(left: FiledReturnsDownloadScope, right: FiledReturnsDownloadScope): boolean {

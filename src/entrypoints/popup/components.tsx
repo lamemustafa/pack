@@ -37,9 +37,17 @@ export function ScopeForm({
   const formModel = createScopeFormModel(scope);
   const startAction = getScopeFormStartAction(scope, flowSummary, busy, formModel.fullFiscalYear);
   const actionCopy = getScopeActionCopy(scope, formModel.fullFiscalYear);
+  const portalSupported = context?.supported === true;
+  const disabledReason = portalSupported ? null : getPortalDisabledReason(context);
+  const actionDisabled = startAction.disabled || !portalSupported;
+  const multipleArtifactChoices = formModel.artifactOptions.length > 1;
 
   return (
-    <section className="flow-panel" aria-label="Filed return download setup">
+    <section className="flow-panel" aria-label="Download details">
+      <div className="flow-panel-heading">
+        <h2>Download details</h2>
+        <p>Choose the filed return and period. Pack saves files through this browser.</p>
+      </div>
       <div className="scope-form-grid">
         <div className="scope-row">
           <ScopeButtonGroup
@@ -64,8 +72,16 @@ export function ScopeForm({
               label="Range"
               value={formModel.fullFiscalYear ? "FULL_YEAR" : "SINGLE_PERIOD"}
               options={[
-                { value: "SINGLE_PERIOD", label: "Single period" },
-                { value: "FULL_YEAR", label: "Full year" },
+                {
+                  value: "SINGLE_PERIOD",
+                  label: "Single period",
+                  description: "One month",
+                },
+                {
+                  value: "FULL_YEAR",
+                  label: "Full year",
+                  description: "One ZIP",
+                },
               ]}
               onChange={(mode) =>
                 onScopeChange(
@@ -102,40 +118,63 @@ export function ScopeForm({
                 onChange={(period) => onScopeChange({ ...scope, period })}
               />
             )}
+            {formModel.fullFiscalYear && multipleArtifactChoices ? (
+              <ScopeSelect
+                label="Files"
+                value={formModel.selectedArtifactType}
+                options={formModel.artifactOptions}
+                onChange={(artifactType) =>
+                  onScopeChange(
+                    normaliseFiledReturnsScope({
+                      ...scope,
+                      artifactType: artifactType as NonNullable<
+                        FiledReturnsDownloadScope["artifactType"]
+                      >,
+                    }),
+                  )
+                }
+              />
+            ) : null}
           </div>
         </div>
-        <div className="scope-row">
-          <ScopeButtonGroup
-            className="scope-group-file"
-            label="Output"
-            value={formModel.selectedArtifactType}
-            options={formModel.artifactOptions}
-            onChange={(artifactType) =>
-              onScopeChange(
-                normaliseFiledReturnsScope({
-                  ...scope,
-                  artifactType: artifactType as NonNullable<
-                    FiledReturnsDownloadScope["artifactType"]
-                  >,
-                }),
-              )
-            }
-          />
-        </div>
-        {!context?.supported ? (
-          <p className="scope-note scope-note-warning">
-            Open a signed-in GST return dashboard or return page in this Brave window.
-          </p>
+        {multipleArtifactChoices && !formModel.fullFiscalYear ? (
+          <div className="scope-row">
+            <ScopeSelect
+              label="Files"
+              value={formModel.selectedArtifactType}
+              options={formModel.artifactOptions}
+              onChange={(artifactType) =>
+                onScopeChange(
+                  normaliseFiledReturnsScope({
+                    ...scope,
+                    artifactType: artifactType as NonNullable<
+                      FiledReturnsDownloadScope["artifactType"]
+                    >,
+                  }),
+                )
+              }
+            />
+          </div>
         ) : null}
       </div>
       <ScopeActionPanel
         actionCopy={actionCopy}
-        disabled={startAction.disabled}
+        busy={busy === "start-filed-returns-flow"}
+        disabled={actionDisabled}
+        disabledReason={disabledReason}
         label={startAction.label}
         onStart={onStart}
       />
     </section>
   );
+}
+
+function getPortalDisabledReason(context: PortalContext | null): string {
+  if (context?.pageKind === "gst-auth-landing" || context?.requiredAction?.type === "LOGIN") {
+    return "Refresh or sign in to GST Portal to continue.";
+  }
+  if (context?.pageKind === "unsupported") return "Open a supported filed-return page.";
+  return "Open GST Portal to continue.";
 }
 
 function ScopeSelect({

@@ -9,7 +9,7 @@ describe("popup scope form model", () => {
 
     expect(action).toEqual({
       disabled: false,
-      label: "Start ZIP",
+      label: "Download all 2025-26 GSTR-2B files",
     });
   });
 
@@ -44,7 +44,7 @@ describe("popup scope form model", () => {
 
     expect(action).toEqual({
       disabled: false,
-      label: "Start ZIP",
+      label: "Download all 2025-26 GSTR-2B files",
     });
   });
 });

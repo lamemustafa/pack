@@ -1,21 +1,29 @@
 export function ScopeActionPanel({
   actionCopy,
   disabled,
+  disabledReason,
+  busy,
   label,
   onStart,
 }: {
   actionCopy: { summary: string; details: string[] };
   disabled: boolean;
+  disabledReason?: string | null;
+  busy: boolean;
   label: string;
   onStart: () => void;
 }) {
   return (
-    <div className="run-action-strip">
-      <div className="run-action-main">
-        <p className="section-label">Ready action</p>
-        <p className="run-action-copy">{actionCopy.summary}</p>
-      </div>
-      <button className="primary-action" type="button" disabled={disabled} onClick={onStart}>
+    <div className="popup-action-area">
+      <p className="run-action-copy">
+        {busy ? "Waiting for Chrome to save the file." : disabledReason || actionCopy.summary}
+      </p>
+      <button
+        className={busy ? "primary-action primary-action-busy" : "primary-action"}
+        type="button"
+        disabled={disabled}
+        onClick={onStart}
+      >
         {label}
       </button>
     </div>

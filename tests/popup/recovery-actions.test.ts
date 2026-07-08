@@ -207,9 +207,9 @@ describe("popup full-year recovery actions", () => {
     expect(markup).toContain('value="PDF"');
     expect(markup).toContain("Summary PDF");
     expect(markup).toContain('value="EXCEL"');
-    expect(markup).toContain("E-invoice details Excel");
-    expect(markup).toContain('checked="" value="PDF_AND_EXCEL"');
-    expect(markup).toContain("ZIP: PDF + Excel");
+    expect(markup).toContain("E-invoice Excel");
+    expect(markup).toContain('value="PDF_AND_EXCEL" selected=""');
+    expect(markup).toContain("PDF + Excel ZIP");
     expect(markup).toContain("Single period");
     expect(markup).toContain("Full year");
     expect(markup).not.toContain("monthly GSTR-3B filers only");
@@ -236,9 +236,9 @@ describe("popup full-year recovery actions", () => {
     expect(markup).toContain('value="GSTR-3B"');
     expect(markup).toContain('value="May" selected=""');
     expect(markup).toContain('value="June"');
-    expect(markup).toContain('checked="" value="PDF_AND_EXCEL"');
-    expect(markup).toContain("ZIP: PDF + Excel");
-    expect(markup).not.toContain("E-invoice details Excel");
+    expect(markup).toContain('value="PDF_AND_EXCEL" selected=""');
+    expect(markup).toContain("PDF + Excel ZIP");
+    expect(markup).not.toContain("E-invoice Excel");
   });
 
   it("explains GSTR-2B full-year Excel as portal-generated capture", () => {
@@ -279,8 +279,8 @@ describe("popup full-year recovery actions", () => {
       }),
     );
 
-    expect(markup.indexOf("Start ZIP")).toBeGreaterThan(-1);
-    expect(markup).toContain("ZIP: PDF + Excel");
+    expect(markup).toContain("Download all 2025-26 GSTR-2B files");
+    expect(markup).toContain("PDF + Excel ZIP");
   });
 
   it("labels multi-file single-period runs as a single zip handoff", () => {
@@ -301,7 +301,7 @@ describe("popup full-year recovery actions", () => {
     );
 
     expect(markup).toContain("Collect the selected period into one local ZIP.");
-    expect(markup).toContain("Start ZIP");
+    expect(markup).toContain("Download May 2026-27 GSTR-2B ZIP");
     expect(markup).not.toContain(">Download selected period<");
   });
 
@@ -323,7 +323,7 @@ describe("popup full-year recovery actions", () => {
     );
 
     expect(markup).toContain("Download one period from the active GST tab.");
-    expect(markup).toContain("Download selected period");
+    expect(markup).toContain("Download May 2026-27 GSTR-3B PDF");
   });
 
   it("presents interrupted runs as resettable stuck work", () => {
@@ -379,7 +379,7 @@ describe("popup full-year recovery actions", () => {
     expect(markup).toContain("Cancel and reset");
   });
 
-  it("keeps start available while warning when popup context is inactive", () => {
+  it("disables start with a plain portal-needed reason when popup context is inactive", () => {
     const markup = renderToStaticMarkup(
       createElement(ScopeForm, {
         busy: null,
@@ -396,10 +396,8 @@ describe("popup full-year recovery actions", () => {
       }),
     );
 
-    expect(markup).toContain("Start ZIP");
-    expect(markup).toContain(
-      "Open a signed-in GST return dashboard or return page in this Brave window.",
-    );
+    expect(markup).toContain("Open GST Portal to continue.");
+    expect(markup).toContain('<button class="primary-action" type="button" disabled="">');
     expect(markup).not.toContain("Open GST Portal tab");
   });
 
