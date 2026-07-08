@@ -5,6 +5,11 @@ import {
 import type { FiledReturnsReturnType } from "../../core/filed-returns-return-types";
 
 const GSTR2B_MIN_PORTAL_PDF_BYTES = 20 * 1024;
+const GSTR2B_DETAILS_WORKBOOK_ENTRY_MARKERS = [
+  "[content_types].xml",
+  "xl/workbook.xml",
+  "xl/worksheets/sheet10.xml",
+];
 
 export function dataUrlToBlob(dataUrl: string): Blob | null {
   return dataUrlToDecoded(dataUrl)?.blob ?? null;
@@ -157,9 +162,9 @@ function metadataIncludesExpectedMime(
 }
 
 function isSaneSpreadsheetZipBytes(bytes: Uint8Array): boolean {
+  const normalisedText = bytesToLatin1(bytes).toLowerCase();
   return (
-    bytesIncludeAscii(bytes, "[Content_Types].xml") &&
-    bytesIncludeAscii(bytes, "xl/workbook.xml") &&
+    GSTR2B_DETAILS_WORKBOOK_ENTRY_MARKERS.every((marker) => normalisedText.includes(marker)) &&
     hasSupportedFirstZipLocalHeader(bytes)
   );
 }
@@ -194,29 +199,12 @@ function bytesStartWith(bytes: Uint8Array, marker: readonly number[]): boolean {
   return marker.every((byte, index) => bytes[index] === byte);
 }
 
-function bytesIncludeAscii(bytes: Uint8Array, marker: string): boolean {
-  if (marker.length === 0 || bytes.byteLength < marker.length) return false;
-  const first = marker.charCodeAt(0);
-  const loweredFirst = lowerAscii(first);
-  for (let index = 0; index <= bytes.byteLength - marker.length; index += 1) {
-    if (lowerAscii(bytes[index] ?? -1) !== loweredFirst) continue;
-    let matched = true;
-    for (let markerIndex = 1; markerIndex < marker.length; markerIndex += 1) {
-      if (
-        lowerAscii(bytes[index + markerIndex] ?? -1) !==
-        lowerAscii(marker.charCodeAt(markerIndex))
-      ) {
-        matched = false;
-        break;
-      }
-    }
-    if (matched) return true;
+function bytesToLatin1(bytes: Uint8Array): string {
+  let text = "";
+  for (let offset = 0; offset < bytes.byteLength; offset += 32_768) {
+    text += String.fromCharCode(...bytes.slice(offset, offset + 32_768));
   }
-  return false;
-}
-
-function lowerAscii(byte: number): number {
-  return byte >= 65 && byte <= 90 ? byte + 32 : byte;
+  return text;
 }
 
 const OLE_COMPOUND_FILE_MAGIC = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1] as const;

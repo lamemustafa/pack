@@ -243,6 +243,7 @@ describe("offscreen Blob URL entrypoint", () => {
     const zipBytes = createZip([
       { path: "[Content_Types].xml", bytes: textBytes("<Types />") },
       { path: "xl/workbook.xml", bytes: textBytes("<workbook />") },
+      { path: "xl/worksheets/sheet10.xml", bytes: textBytes("<worksheet />") },
     ]);
     const dataUrl = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${bytesToBase64(zipBytes)}`;
     const chunks = [

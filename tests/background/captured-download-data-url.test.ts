@@ -4,6 +4,7 @@ import {
   isExpectedCapturedDataUrl,
   isExpectedCapturedDataUrlForTarget,
 } from "../../src/background/captured-download-data-url";
+import { createZip } from "../../src/entrypoints/offscreen/zip";
 
 function base64(input: string): string {
   return globalThis.btoa(input);
@@ -49,7 +50,7 @@ describe("captured download data URL validation", () => {
     expect(capturedFiledReturnsArtifactExtension(xlsxDataUrl, "EXCEL")).toBe(".xlsx");
   });
 
-  it("requires a GSTR-2B marker before accepting captured GSTR-2B PDFs", () => {
+  it("requires portal-sized bytes before accepting captured GSTR-2B PDFs", () => {
     const target = gstr2bTarget();
     const portalSizedPdf = `%PDF-1.7 GSTR-2B statement ${"x".repeat(21 * 1024)}`;
 
@@ -101,19 +102,34 @@ describe("captured download data URL validation", () => {
     ).toBe(false);
   });
 
-  it("accepts portal-style spreadsheet ZIP containers for GSTR-2B Excel captures", () => {
-    const zipHeader =
-      "PK\u0003\u0004" +
-      "\u0014\u0000" +
-      "\u0000\u0000" +
-      "\b\u0000" +
-      "\u0000".repeat(18) +
-      "[Content_Types].xml xl/workbook.xml";
+  it("rejects spreadsheet ZIPs that do not look like portal GSTR-2B details workbooks", () => {
+    const oneSheetWorkbook = createZip([
+      { path: "[Content_Types].xml", bytes: textBytes("<Types />") },
+      { path: "xl/workbook.xml", bytes: textBytes('<sheet name="Sheet1" />') },
+    ]);
 
     expect(
       isExpectedCapturedDataUrlForTarget(
-        `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${base64(
-          zipHeader,
+        `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${bytesToBase64(
+          oneSheetWorkbook,
+        )}`,
+        "EXCEL",
+        gstr2bTarget(),
+      ),
+    ).toBe(false);
+  });
+
+  it("accepts portal-style spreadsheet ZIP containers for GSTR-2B Excel captures", () => {
+    const workbook = createZip([
+      { path: "[Content_Types].xml", bytes: textBytes("<Types />") },
+      { path: "xl/workbook.xml", bytes: textBytes("<workbook />") },
+      { path: "xl/worksheets/sheet10.xml", bytes: textBytes("<worksheet />") },
+    ]);
+
+    expect(
+      isExpectedCapturedDataUrlForTarget(
+        `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${bytesToBase64(
+          workbook,
         )}`,
         "EXCEL",
         gstr2bTarget(),
@@ -121,3 +137,13 @@ describe("captured download data URL validation", () => {
     ).toBe(true);
   });
 });
+
+function textBytes(value: string): Uint8Array {
+  return new TextEncoder().encode(value);
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return globalThis.btoa(binary);
+}

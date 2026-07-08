@@ -8,6 +8,11 @@ import type { FiledReturnsReturnType } from "../core/filed-returns-return-types"
 import { PACK_OFFSCREEN_DATA_URL_MAX_LENGTH } from "../core/offscreen-blob-url";
 
 const GSTR2B_MIN_PORTAL_PDF_BYTES = 20 * 1024;
+const GSTR2B_DETAILS_WORKBOOK_ENTRY_MARKERS = [
+  "[content_types].xml",
+  "xl/workbook.xml",
+  "xl/worksheets/sheet10.xml",
+];
 
 export function isExpectedCapturedDataUrl(
   dataUrl: string,
@@ -115,7 +120,12 @@ function decodedDataUrlByteLength(dataUrl: string): number {
 function isSaneSpreadsheetZipDataUrl(dataUrl: string): boolean {
   const text = decodeDataUrlText(dataUrl);
   if (!text) return false;
-  if (!text.includes("[Content_Types].xml") || !text.includes("xl/workbook.xml")) return false;
+  const normalisedText = text.toLowerCase();
+  if (
+    !GSTR2B_DETAILS_WORKBOOK_ENTRY_MARKERS.every((marker) => normalisedText.includes(marker))
+  ) {
+    return false;
+  }
   return hasSupportedFirstZipLocalHeader(text);
 }
 
