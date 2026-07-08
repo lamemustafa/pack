@@ -91,7 +91,7 @@
   padding-top: 10px;
 }
 
-@media (max-width: 940px) {
+@media (max-width: 720px) {
   .target-strip {
     grid-template-columns: 1fr;
   }

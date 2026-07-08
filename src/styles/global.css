@@ -1,5 +1,6 @@
 :root {
   --pack-popup-width: 800px;
+  --pack-popup-min-width: 420px;
   --pack-popup-min-height: 600px;
   --pack-popup-max-height: 600px;
   --pack-ink: #101923;

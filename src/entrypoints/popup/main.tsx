@@ -20,8 +20,8 @@ function App() {
         <div className="brand-title-block">
           <img className="brand-logo" src="/brand/pack-logo-outlined.svg" alt="ComplyEaze Pack" />
           <div>
-            <p className="section-label">Local GST return files</p>
-            <h1>Pack download console</h1>
+            <p className="section-label">GST return downloader</p>
+            <h1>Pack</h1>
           </div>
         </div>
         <div className="brand-badges" aria-label="Pack build status">
