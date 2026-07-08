@@ -19,6 +19,7 @@ import {
 } from "./gstr2b-summary";
 import { findGstr2bDashboardControl } from "./gstr2b-dashboard-view";
 import {
+  clearGstr2bDashboardSearchPending,
   isReturnDashboardRoute,
   isReturnDashboardStillRendering,
   selectGstr2bReturnDashboardFiltersAndSearch,
@@ -133,6 +134,7 @@ export async function runGstr2bDownloadStep(
 
   const viewControl = findGstr2bDashboardControl(documentRef, "view");
   if (viewControl) {
+    clearGstr2bDashboardSearchPending(documentRef);
     activateElement(viewControl);
     return {
       connectorId: "gst",

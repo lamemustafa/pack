@@ -223,7 +223,7 @@ describe("capturePortalBlobDownload", () => {
     expect(nativeOpens).toBe(0);
   });
 
-  it("captures portal fetch responses that contain generated PDF bytes", async () => {
+  it("does not capture passive portal fetch responses before a download handoff", async () => {
     const { documentRef, view } = installMainWorldDom(`
       <button data-pack-gstr2b-capture-action="capture-1">Download</button>
     `);
@@ -242,19 +242,21 @@ describe("capturePortalBlobDownload", () => {
       void view.fetch("/returns/auth/gstr1/generated");
     });
 
-    const captured = await capturePortalBlobDownload(captureConfig());
-
-    expect(captured).toMatchObject({
-      actionId: "action-1",
-      safeSignals: expect.arrayContaining([
-        "gstr2b-portal-blob-captured",
-        "gstr2b-main-world-capture",
-      ]),
+    const captured = await capturePortalBlobDownloadWithDiagnostics({
+      ...captureConfig(),
+      timeoutMs: 5,
     });
-    expect(captured?.dataUrl).toContain("data:application/pdf;base64,");
+
+    expect(captured.capturedDownloadRequest).toBeNull();
+    expect(captured.safeFailureSignals).toEqual(
+      expect.arrayContaining([
+        "gstr2b-fetch-artifact-response-observed",
+        "gstr2b-main-world-capture-timeout",
+      ]),
+    );
   });
 
-  it("captures portal XHR responses that contain generated PDF bytes", async () => {
+  it("does not capture passive portal XHR responses before a download handoff", async () => {
     const { documentRef, view } = installMainWorldDom(`
       <button data-pack-gstr2b-capture-action="capture-1">Download</button>
     `);
@@ -269,16 +271,18 @@ describe("capturePortalBlobDownload", () => {
       xhr.send();
     });
 
-    const captured = await capturePortalBlobDownload(captureConfig());
-
-    expect(captured).toMatchObject({
-      actionId: "action-1",
-      safeSignals: expect.arrayContaining([
-        "gstr2b-portal-blob-captured",
-        "gstr2b-main-world-capture",
-      ]),
+    const captured = await capturePortalBlobDownloadWithDiagnostics({
+      ...captureConfig(),
+      timeoutMs: 5,
     });
-    expect(captured?.dataUrl).toContain("data:application/pdf;base64,");
+
+    expect(captured.capturedDownloadRequest).toBeNull();
+    expect(captured.safeFailureSignals).toEqual(
+      expect.arrayContaining([
+        "gstr2b-xhr-artifact-response-observed",
+        "gstr2b-main-world-capture-timeout",
+      ]),
+    );
   });
 
   it("captures FileSaver-style saveAs blob downloads", async () => {
@@ -450,7 +454,10 @@ describe("capturePortalBlobDownload", () => {
       const blob = new view.Blob(["%PDF-1.7 synthetic chunked"], {
         type: "application/pdf",
       });
-      view.URL.createObjectURL(blob);
+      const anchor = documentRef.createElement("a");
+      anchor.href = view.URL.createObjectURL(blob);
+      anchor.download = "may.pdf";
+      anchor.click();
     });
 
     const captured = await capturePortalBlobDownloadWithDiagnostics({
@@ -482,7 +489,10 @@ describe("capturePortalBlobDownload", () => {
           type: "application/vnd.ms-excel",
         },
       );
-      view.URL.createObjectURL(blob);
+      const anchor = documentRef.createElement("a");
+      anchor.href = view.URL.createObjectURL(blob);
+      anchor.download = "may.xls";
+      anchor.click();
     });
 
     const captured = await capturePortalBlobDownloadWithDiagnostics({

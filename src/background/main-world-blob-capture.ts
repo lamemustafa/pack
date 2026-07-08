@@ -30,7 +30,7 @@ export async function capturePortalBlobDownloadWithDiagnostics(
     const webkitUrlApi = (window as Window & { webkitURL?: typeof URL }).webkitURL;
     const originalCreateObjectUrl = urlApi.createObjectURL;
     const originalWebkitCreateObjectUrl = webkitUrlApi?.createObjectURL;
-    const originalFetch = window.fetch;
+    const originalFetch = window.fetch ?? globalThis.fetch;
     const pdfMake = (window as Window & { pdfMake?: { createPdf?: unknown } }).pdfMake;
     const originalPdfMakeCreatePdf = pdfMake?.createPdf;
     const originalSaveAs = (window as Window & { saveAs?: unknown }).saveAs;
@@ -40,6 +40,7 @@ export async function capturePortalBlobDownloadWithDiagnostics(
     const originalXhrOpen = XMLHttpRequest.prototype.open;
     const originalXhrSend = XMLHttpRequest.prototype.send;
     const capturedBlobUrls = new Set<string>();
+    const capturedBlobsByUrl = new Map<string, Blob>();
     let suppressedWindowOpen = false;
     let restored = false;
     let settled = false;
@@ -200,38 +201,6 @@ export async function capturePortalBlobDownloadWithDiagnostics(
       reader.readAsDataURL(blob);
     };
 
-    const readArrayBuffer = (buffer: ArrayBuffer, contentType?: string | null) => {
-      if (settled) return;
-      if (!buffer.byteLength) {
-        addSafeSignal(`${config.signalPrefix}-array-buffer-zero-byte-rejected`);
-        return;
-      }
-      if (buffer.byteLength > config.maxBytes) {
-        addSafeSignal(`${config.signalPrefix}-array-buffer-oversized-rejected`);
-        return;
-      }
-      const blob = new Blob([buffer], contentType ? { type: contentType } : undefined);
-      readBlob(blob);
-    };
-
-    const readResponseBody = (response: unknown, contentType?: string | null) => {
-      if (settled || !response) return;
-      if (isReadableBlob(response)) {
-        readBlob(response);
-        return;
-      }
-      if (response instanceof ArrayBuffer) {
-        readArrayBuffer(response, contentType);
-        return;
-      }
-      if (ArrayBuffer.isView(response)) {
-        const view = response as ArrayBufferView;
-        const copy = new Uint8Array(view.byteLength);
-        copy.set(new Uint8Array(view.buffer, view.byteOffset, view.byteLength));
-        readArrayBuffer(copy.buffer, contentType);
-      }
-    };
-
     const captureDataUrl = (dataUrl: string, filename?: string | null) => {
       if (settled) return;
       addSafeSignal(`${config.signalPrefix}-data-url-observed`);
@@ -259,7 +228,17 @@ export async function capturePortalBlobDownloadWithDiagnostics(
     const captureBlobUrl = (blobUrl: string, filename?: string | null) => {
       if (settled) return;
       addSafeSignal(`${config.signalPrefix}-blob-url-observed`);
-      void fetch(blobUrl)
+      const capturedBlob = capturedBlobsByUrl.get(blobUrl);
+      if (capturedBlob) {
+        readBlob(capturedBlob, filename);
+        return;
+      }
+      if (typeof originalFetch !== "function") {
+        addSafeSignal(`${config.signalPrefix}-blob-url-fetch-unavailable`);
+        return;
+      }
+      void originalFetch
+        .call(window, blobUrl)
         .then((response) => (response.ok ? response.blob() : null))
         .then((blob) => {
           if (blob) readBlob(blob, filename);
@@ -344,7 +323,10 @@ export async function capturePortalBlobDownloadWithDiagnostics(
     };
 
     const shouldSuppressAnchor = (anchor: HTMLAnchorElement) => {
-      if (capturedBlobUrls.has(anchor.href)) return true;
+      if (capturedBlobUrls.has(anchor.href)) {
+        captureBlobUrl(anchor.href, anchor.getAttribute("download"));
+        return true;
+      }
       return captureAnchorDownload(anchor);
     };
 
@@ -416,11 +398,7 @@ export async function capturePortalBlobDownloadWithDiagnostics(
       return originalFetch.call(window, input, init).then((response) => {
         const contentType = response.headers.get("content-type");
         if (contentType && isPossibleArtifactContentType(contentType)) {
-          void response
-            .clone()
-            .blob()
-            .then((blob) => readBlob(blob))
-            .catch(() => undefined);
+          addSafeSignal(`${config.signalPrefix}-fetch-artifact-response-observed`);
         }
         return response;
       });
@@ -438,7 +416,7 @@ export async function capturePortalBlobDownloadWithDiagnostics(
         if (settled) return;
         const contentType = this.getResponseHeader("content-type");
         if (contentType && !isPossibleArtifactContentType(contentType)) return;
-        readResponseBody(this.response, contentType);
+        addSafeSignal(`${config.signalPrefix}-xhr-artifact-response-observed`);
       });
       if (arguments.length <= 2) {
         const openWithoutAsync = originalXhrOpen as (
@@ -469,7 +447,7 @@ export async function capturePortalBlobDownloadWithDiagnostics(
       if (isReadableBlob(value) && value.size > 0 && value.size <= config.maxBytes) {
         addSafeSignal(`${config.signalPrefix}-create-object-url-observed`);
         capturedBlobUrls.add(blobUrl);
-        readBlob(value);
+        capturedBlobsByUrl.set(blobUrl, value);
       } else if (isReadableBlob(value)) {
         addSafeSignal(
           value.size > config.maxBytes
@@ -506,6 +484,6 @@ export async function capturePortalBlobDownloadWithDiagnostics(
     window.setTimeout(() => {
       addSafeSignal(`${config.signalPrefix}-main-world-capture-timeout`);
       settle(null);
-    }, 60_000);
+    }, config.timeoutMs ?? 60_000);
   });
 }

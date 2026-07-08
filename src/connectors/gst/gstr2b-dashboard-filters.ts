@@ -19,6 +19,8 @@ export { isReturnDashboardStillRendering } from "./gstr2b-dashboard-selectors";
 
 const DASHBOARD_FIELD_SETTLE_DELAY_MS = 500;
 const DASHBOARD_DEPENDENT_FIELD_ATTEMPTS = 6;
+const DASHBOARD_SEARCH_PENDING_MS = 12_000;
+const DASHBOARD_SEARCH_PENDING_ATTRIBUTE = "data-pack-gstr2b-dashboard-search-pending-at";
 
 export async function selectGstr2bReturnDashboardFiltersAndSearch(
   documentRef: Document,
@@ -92,6 +94,24 @@ export async function selectGstr2bReturnDashboardFiltersAndSearch(
     ]);
   }
 
+  if (hasRecentDashboardSearch(documentRef)) {
+    return {
+      connectorId: "gst",
+      scopeId,
+      state: "clicked",
+      safeSignals: [
+        ...safeSignals,
+        ...diagnosticSignals,
+        "gstr2b-return-dashboard-filters-selected",
+        ...selectedDashboardFilterSignals(controls),
+        "gstr2b-return-dashboard-search-results-pending",
+      ],
+      safeMessage:
+        "Pack already searched the GSTR-2B return dashboard for this period and is waiting for the GST Portal results to finish rendering.",
+    };
+  }
+
+  markDashboardSearchPending(documentRef);
   activateElement(controls.search);
   return {
     connectorId: "gst",
@@ -106,6 +126,10 @@ export async function selectGstr2bReturnDashboardFiltersAndSearch(
     ],
     safeMessage: "Pack selected the GSTR-2B return dashboard filters and clicked Search.",
   };
+}
+
+export function clearGstr2bDashboardSearchPending(documentRef: Document): void {
+  documentRef.documentElement.removeAttribute(DASHBOARD_SEARCH_PENDING_ATTRIBUTE);
 }
 
 export function isReturnDashboardRoute(documentRef: Document): boolean {
@@ -132,6 +156,17 @@ function gstr2bDashboardSelectionInProgress(
     safeMessage:
       "Pack selected part of the GSTR-2B return dashboard filters and is waiting for the GST portal to finish updating them.",
   };
+}
+
+function hasRecentDashboardSearch(documentRef: Document): boolean {
+  const pendingAt = Number(
+    documentRef.documentElement.getAttribute(DASHBOARD_SEARCH_PENDING_ATTRIBUTE) ?? "",
+  );
+  return Number.isFinite(pendingAt) && Date.now() - pendingAt < DASHBOARD_SEARCH_PENDING_MS;
+}
+
+function markDashboardSearchPending(documentRef: Document): void {
+  documentRef.documentElement.setAttribute(DASHBOARD_SEARCH_PENDING_ATTRIBUTE, String(Date.now()));
 }
 
 async function waitForReturnDashboardPeriodOptions(

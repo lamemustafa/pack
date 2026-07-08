@@ -8,6 +8,7 @@ import {
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
 
 export const FLOW_STEP_SETTLE_MS = 350;
+export const GSTR2B_DASHBOARD_RESULTS_SETTLE_MS = 1_000;
 export const DETAIL_SUMMARY_MODAL_SETTLE_MS = 120;
 export const RESULT_ROW_NAVIGATION_SETTLE_MS = 800;
 export const MAX_FLOW_STEPS = 6;
@@ -68,6 +69,9 @@ export function getFlowStepSettleMs(
   }
   if (step.safeSignals.includes("detail-summary-modal")) {
     return deps.timings?.detailSummaryModalSettleMs ?? DETAIL_SUMMARY_MODAL_SETTLE_MS;
+  }
+  if (step.safeSignals.includes("gstr2b-return-dashboard-search-results-pending")) {
+    return deps.timings?.flowStepSettleMs ?? GSTR2B_DASHBOARD_RESULTS_SETTLE_MS;
   }
   return deps.timings?.flowStepSettleMs ?? FLOW_STEP_SETTLE_MS;
 }

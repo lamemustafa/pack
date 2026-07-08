@@ -28,7 +28,7 @@ import {
   type FiledReturnsReturnType,
 } from "./filed-returns-return-types";
 
-export const PACK_CONTENT_SCRIPT_PROTOCOL_VERSION = 17;
+export const PACK_CONTENT_SCRIPT_PROTOCOL_VERSION = 19;
 
 export interface MainWorldCaptureTransferPayload {
   actionId: string;

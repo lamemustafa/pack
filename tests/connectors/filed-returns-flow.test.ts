@@ -582,6 +582,26 @@ describe("filed returns guided flow", () => {
     });
   });
 
+  it("uses a visible explicit GSTR-2B PDF control when the portal renders responsive duplicates", async () => {
+    const documentRef = createGstr2bSummaryDocument(`
+      <button data-compact>DOWNLOAD GSTR-2B SUMMARY (PDF)</button>
+    `);
+
+    const result = await triggerGstr2bDownload(documentRef, {
+      actionId: "action-gstr2b-duplicate-visible-pdf",
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-2B",
+    });
+
+    expect(result.downloadTrigger.state).toBe("clicked");
+    expect(result.mainWorldCaptureRequest).toMatchObject({
+      actionId: "action-gstr2b-duplicate-visible-pdf",
+      signalPrefix: "gstr2b",
+    });
+  });
+
   it("captures the portal-generated GSTR-2B file even when localStorage contains period JSON", async () => {
     const documentRef = createGstr2bSummaryDocument();
     vi.stubGlobal("localStorage", documentRef.defaultView?.localStorage);
@@ -1211,6 +1231,56 @@ describe("filed returns guided flow", () => {
     expect(
       result.safeSignals.some((signal) => signal.startsWith("gstr2b-dashboard-selected-quarter:")),
     ).toBe(true);
+    expect(searchClicked).toBe(1);
+  });
+
+  it("waits for GSTR-2B dashboard results after searching instead of clicking Search repeatedly", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <form name="dashboard">
+            <label for="fin">Financial Year</label>
+            <select name="fin">
+              <option selected>2026-27</option>
+            </select>
+            <label for="quarter">Quarter</label>
+            <select name="quarter">
+              <option selected>Quarter 1 (Apr - Jun)</option>
+            </select>
+            <label for="mon">Period</label>
+            <select name="mon">
+              <option selected>May</option>
+            </select>
+            <button type="button" data-search>Search</button>
+          </form>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/dashboard",
+    );
+    makeLayoutVisible(documentRef);
+    let searchClicked = 0;
+    documentRef.querySelector("[data-search]")?.addEventListener("click", () => {
+      searchClicked += 1;
+    });
+
+    const scope: FiledReturnsDownloadScope = {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-2B",
+    };
+
+    const searchResult = await runFiledReturnsDownloadStep(documentRef, scope);
+    const pendingResult = await runFiledReturnsDownloadStep(documentRef, scope);
+
+    expect(searchResult.safeSignals).toContain("search-clicked");
+    expect(pendingResult.state).toBe("clicked");
+    expect(pendingResult.safeSignals).toEqual(
+      expect.arrayContaining([
+        "gstr2b-return-dashboard-filters-selected",
+        "gstr2b-return-dashboard-search-results-pending",
+      ]),
+    );
     expect(searchClicked).toBe(1);
   });
 

@@ -14,11 +14,13 @@ import {
 } from "../core/messages";
 
 const PACK_CONTENT_LISTENER_KEY = `__packContentListenerInstalledV${PACK_CONTENT_SCRIPT_PROTOCOL_VERSION}`;
+const PACK_ACTIVE_CONTENT_PROTOCOL_KEY = "__packActiveContentProtocolVersion";
 const PACK_MAIN_WORLD_CAPTURE_MESSAGE_SOURCE = "pack-main-world-capture-v1";
 const PACK_MAIN_WORLD_CAPTURE_MAX_CHUNKS = 200;
 
 declare global {
   interface Window {
+    [PACK_ACTIVE_CONTENT_PROTOCOL_KEY]?: number;
     [PACK_CONTENT_LISTENER_KEY]?: boolean;
   }
 }
@@ -38,6 +40,7 @@ export default defineContentScript({
   ],
   runAt: "document_idle",
   main() {
+    window[PACK_ACTIVE_CONTENT_PROTOCOL_KEY] = PACK_CONTENT_SCRIPT_PROTOCOL_VERSION;
     if (window[PACK_CONTENT_LISTENER_KEY]) return;
     window[PACK_CONTENT_LISTENER_KEY] = true;
     const mainWorldCaptureTransfers = new Map<string, MainWorldCaptureTransfer>();
@@ -67,6 +70,10 @@ export default defineContentScript({
     }
 
     browser.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+      if (window[PACK_ACTIVE_CONTENT_PROTOCOL_KEY] !== PACK_CONTENT_SCRIPT_PROTOCOL_VERSION) {
+        return false;
+      }
+
       if (!isPackMessage(message)) {
         return false;
       }
