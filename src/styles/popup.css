@@ -42,8 +42,8 @@ html[data-pack-surface="popup"] #root {
   overflow-y: auto;
   overscroll-behavior: contain;
   align-content: start;
-  gap: 10px;
-  padding: 12px;
+  gap: 8px;
+  padding: 10px;
   background: var(--pack-soft);
 }
 
@@ -63,7 +63,7 @@ html[data-pack-surface="popup"] #root {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 9px 12px;
+  padding: 7px 10px;
 }
 
 .brand-title-block {
@@ -74,14 +74,14 @@ html[data-pack-surface="popup"] #root {
 }
 
 .brand-logo {
-  width: 66px;
+  width: 58px;
   max-width: 100%;
   height: auto;
 }
 
 .brand-header h1 {
   margin-top: 2px;
-  font-size: 17px;
+  font-size: 16px;
 }
 
 .brand-badges {
@@ -123,8 +123,8 @@ html[data-pack-surface="popup"] #root {
 
 .command-workbench {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(260px, 0.75fr);
-  gap: 12px;
+  grid-template-columns: minmax(0, 1.55fr) minmax(240px, 0.7fr);
+  gap: 10px;
   align-items: start;
 }
 
@@ -169,12 +169,13 @@ html[data-pack-surface="popup"] #root {
 .evidence-panel,
 .recovery-panel {
   display: grid;
-  gap: 9px;
-  padding: 12px;
+  gap: 8px;
+  padding: 10px;
 }
 
 .evidence-panel {
   align-content: start;
+  background: #fbfcfe;
 }
 
 .evidence-panel-active {
@@ -192,7 +193,7 @@ html[data-pack-surface="popup"] #root {
 .evidence-panel h2 {
   margin: 0;
   color: var(--pack-ink);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 800;
   line-height: 1.25;
 }
@@ -230,7 +231,7 @@ html[data-pack-surface="popup"] #root {
   border: 1px solid #dbe3ec;
   border-radius: 8px;
   background: #ffffff;
-  padding: 8px 11px;
+  padding: 7px 10px;
 }
 
 .fineprint span {

@@ -127,7 +127,7 @@ export function getScopeFormStartAction(
 ): { disabled: boolean; label: string } {
   if (busy === "start-filed-returns-flow") return { disabled: true, label: "Starting..." };
   if (busy !== null) return { disabled: true, label: defaultStartLabel(scope, fullFiscalYear) };
-  if (!context?.supported) return { disabled: true, label: "Open GST Portal tab first" };
+  if (!context?.supported) return { disabled: true, label: "Open GST Portal tab" };
   if (summary && isSameScope(scope, summary.scope)) {
     const signals = new Set(summary.flowStep.safeSignals);
     if (signals.has("filed-returns-run-active") || signals.has("full-fiscal-year-run-active")) {

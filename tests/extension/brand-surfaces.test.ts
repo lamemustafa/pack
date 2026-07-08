@@ -59,19 +59,22 @@ describe("Pack brand surfaces", () => {
       "utf8",
     );
 
-    expect(globalCss).toContain("--pack-popup-width: 780px;");
-    expect(globalCss).toContain("--pack-popup-min-height: 580px;");
-    expect(globalCss).toContain("--pack-popup-max-height: 580px;");
-    expect(popupCss).toContain("grid-template-columns: minmax(0, 1.6fr) minmax(270px, 0.8fr);");
+    expect(globalCss).toContain("--pack-popup-width: 800px;");
+    expect(globalCss).toContain("--pack-popup-min-height: 600px;");
+    expect(globalCss).toContain("--pack-popup-max-height: 600px;");
+    expect(globalCss).toContain("cursor: not-allowed;");
+    expect(popupCss).toContain("grid-template-columns: minmax(0, 1.55fr) minmax(240px, 0.7fr);");
     expect(popupCss).toContain(".run-column");
     expect(popupCss).toContain("position: static;");
-    expect(controlsCss).toContain("grid-template-columns: minmax(0, 1.5fr) minmax(160px, 0.7fr);");
     expect(controlsCss).toContain(
-      "grid-template-columns: minmax(0, 1.35fr) minmax(180px, 0.65fr);",
+      "grid-template-columns: minmax(0, 1.45fr) minmax(175px, 0.75fr);",
     );
+    expect(controlsCss).toContain("grid-template-columns: minmax(0, 1.3fr) minmax(190px, 0.7fr);");
     expect(controlsCss).toContain("grid-template-columns: minmax(0, 1fr) minmax(180px, 0.42fr);");
+    expect(controlsCss).toContain("position: sticky;");
+    expect(controlsCss).toContain("bottom: 0;");
     expect(controlsCss).toContain("@media (max-width: 700px)");
-    expect(targetCss).toContain("grid-template-columns: minmax(170px, 0.42fr) minmax(0, 1fr);");
+    expect(targetCss).toContain("grid-template-columns: minmax(180px, 0.34fr) minmax(0, 1fr);");
     expect(targetCss).toContain("grid-template-columns: repeat(4, minmax(0, 1fr));");
   });
 });

@@ -395,7 +395,7 @@ describe("popup full-year recovery actions", () => {
       }),
     );
 
-    expect(markup).toContain("Open GST Portal tab first");
+    expect(markup).toContain("Open GST Portal tab");
     expect(markup).toContain(
       "Open a signed-in GST return dashboard or return page before starting.",
     );
