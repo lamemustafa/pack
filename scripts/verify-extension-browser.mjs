@@ -87,8 +87,8 @@ try {
     });
   });
 
-  const serviceWorker = await waitForServiceWorker(context);
-  const extensionId = new URL(serviceWorker.url()).host;
+  const extensionId = await resolveExtensionId(context);
+  const serviceWorker = await waitForServiceWorker(context, extensionId);
   await assertServiceWorkerStarted(serviceWorker);
   await assertOptionsPageLoads(context, extensionId);
   await assertPopupPageLoads(context, extensionId);
@@ -221,10 +221,60 @@ async function launchExtensionContext() {
   });
 }
 
-async function waitForServiceWorker(browserContext) {
+async function resolveExtensionId(browserContext) {
+  const existingServiceWorker = browserContext.serviceWorkers()[0];
+  if (existingServiceWorker) return new URL(existingServiceWorker.url()).host;
+
+  const wakePage = await browserContext.newPage();
+  attachPageLogging(wakePage);
+  await wakePage.goto("https://services.gst.gov.in/services/auth/fowelcome", {
+    waitUntil: "domcontentloaded",
+  });
+  try {
+    const deadline = Date.now() + 15_000;
+    while (Date.now() < deadline) {
+      const serviceWorker = browserContext.serviceWorkers()[0];
+      if (serviceWorker) return new URL(serviceWorker.url()).host;
+      const extensionId = await readLoadedExtensionIdFromPreferences();
+      if (extensionId) return extensionId;
+      await delay(150);
+    }
+  } finally {
+    await wakePage.close();
+  }
+
+  throw new Error("Pack extension did not appear in Chrome extension preferences.");
+}
+
+async function readLoadedExtensionIdFromPreferences() {
+  const preferencesPath = path.join(profileDir, "Default", "Preferences");
+  try {
+    const preferences = JSON.parse(await readFile(preferencesPath, "utf8"));
+    const extensionSettings = preferences.extensions?.settings ?? {};
+    for (const [extensionId, settings] of Object.entries(extensionSettings)) {
+      if (settings?.manifest?.name === "ComplyEaze Pack: GST Return Downloader") {
+        return extensionId;
+      }
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+async function waitForServiceWorker(browserContext, extensionId) {
   let [serviceWorker] = browserContext.serviceWorkers();
   if (!serviceWorker) {
-    serviceWorker = await browserContext.waitForEvent("serviceworker", { timeout: 15_000 });
+    const wakePage = await browserContext.newPage();
+    attachPageLogging(wakePage);
+    await wakePage.goto(`chrome-extension://${extensionId}/popup.html`, {
+      waitUntil: "domcontentloaded",
+    });
+    try {
+      serviceWorker = await browserContext.waitForEvent("serviceworker", { timeout: 15_000 });
+    } finally {
+      await wakePage.close();
+    }
   }
   return serviceWorker;
 }
@@ -268,13 +318,31 @@ async function assertPopupPageLoads(browserContext, extensionId) {
   await popupPage.waitForSelector(".popup-shell", { timeout: 5_000 });
   const popupState = await popupPage.evaluate(() => ({
     title: document.title,
+    shellRect: document.querySelector(".popup-shell")?.getBoundingClientRect().toJSON(),
     shellText: document.querySelector(".popup-shell")?.textContent ?? "",
+    hasEvidenceRail: Boolean(document.querySelector(".evidence-column")),
+    hasSetupPanel: Boolean(document.querySelector(".scope-column .flow-panel")),
+    hasTargetStrip: Boolean(document.querySelector(".target-column .target-strip")),
   }));
   if (popupState.title !== "ComplyEaze Pack") {
     throw new Error(`Unexpected popup page title: ${popupState.title}`);
   }
-  if (!popupState.shellText.includes("GST Return Pack")) {
-    throw new Error("Pack popup did not render the GST Return Pack UI.");
+  if (!popupState.shellText.includes("Return file workbench")) {
+    throw new Error("Pack popup did not render the return file workbench UI.");
+  }
+  if (!popupState.hasTargetStrip || !popupState.hasSetupPanel || !popupState.hasEvidenceRail) {
+    throw new Error("Pack popup did not render the target-first workbench layout.");
+  }
+  if (
+    !popupState.shellRect ||
+    popupState.shellRect.width < 790 ||
+    popupState.shellRect.height < 590
+  ) {
+    throw new Error(
+      `Pack popup shell rendered below the expected workbench size: ${JSON.stringify(
+        popupState.shellRect,
+      )}`,
+    );
   }
   await popupPage.close();
 }
