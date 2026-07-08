@@ -346,9 +346,11 @@ describe("extension package verifier", () => {
     expect(script).not.toContain("content-scripts/gstr2b-capture-main.js");
     expect(script).toContain("Pack release must include only the approved content scripts.");
     expect(script).toContain("assertPopupPageLoads");
-    expect(script).toContain("Return file workbench");
+    expect(script).toContain("return file workbench");
     expect(script).toContain("target-first workbench layout");
-    expect(script).toContain("shellRect.width < 790");
+    expect(script).toContain("visibleHeaderText");
+    expect(script).toContain("shellRect.width < 760");
+    expect(script).toContain("shellRect.width > 800");
     expect(script).toContain("https://services.gst.gov.in/services/auth/fowelcome");
     expect(script).toContain("readLoadedExtensionIdFromPreferences");
     expect(script).toContain("chrome-extension://${extensionId}/popup.html");

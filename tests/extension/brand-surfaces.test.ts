@@ -59,9 +59,9 @@ describe("Pack brand surfaces", () => {
       "utf8",
     );
 
-    expect(globalCss).toContain("--pack-popup-width: 820px;");
-    expect(globalCss).toContain("--pack-popup-min-height: 620px;");
-    expect(globalCss).toContain("--pack-popup-max-height: 620px;");
+    expect(globalCss).toContain("--pack-popup-width: 780px;");
+    expect(globalCss).toContain("--pack-popup-min-height: 580px;");
+    expect(globalCss).toContain("--pack-popup-max-height: 580px;");
     expect(popupCss).toContain(
       "grid-template-columns: minmax(0, 1.6fr) minmax(270px, 0.8fr);",
     );

@@ -316,30 +316,47 @@ async function assertPopupPageLoads(browserContext, extensionId) {
   await popupPage.goto(`chrome-extension://${extensionId}/popup.html`);
   await popupPage.waitForLoadState("domcontentloaded");
   await popupPage.waitForSelector(".popup-shell", { timeout: 5_000 });
-  const popupState = await popupPage.evaluate(() => ({
-    title: document.title,
-    shellRect: document.querySelector(".popup-shell")?.getBoundingClientRect().toJSON(),
-    shellText: document.querySelector(".popup-shell")?.textContent ?? "",
-    hasEvidenceRail: Boolean(document.querySelector(".run-column .evidence-panel")),
-    hasSetupPanel: Boolean(document.querySelector(".scope-column .flow-panel")),
-    hasTargetStrip: Boolean(document.querySelector(".target-strip")),
-  }));
+  const popupState = await popupPage.evaluate(() => {
+    const heading = document.querySelector(".brand-header h1");
+    const headingRect = heading?.getBoundingClientRect();
+    const visibleHeading =
+      headingRect && headingRect.width > 0 && headingRect.height > 0
+        ? document.elementFromPoint(
+            headingRect.left + headingRect.width / 2,
+            headingRect.top + headingRect.height / 2,
+          )
+        : null;
+    return {
+      title: document.title,
+      shellRect: document.querySelector(".popup-shell")?.getBoundingClientRect().toJSON(),
+      shellText: document.querySelector(".popup-shell")?.textContent ?? "",
+      hasEvidenceRail: Boolean(document.querySelector(".run-column .evidence-panel")),
+      hasSetupPanel: Boolean(document.querySelector(".scope-column .flow-panel")),
+      hasTargetStrip: Boolean(document.querySelector(".target-strip")),
+      visibleHeaderText: visibleHeading?.textContent ?? "",
+    };
+  });
   if (popupState.title !== "ComplyEaze Pack") {
     throw new Error(`Unexpected popup page title: ${popupState.title}`);
   }
   if (!popupState.shellText.includes("Choose what Pack should collect")) {
     throw new Error("Pack popup did not render the return file workbench UI.");
   }
+  if (!popupState.visibleHeaderText.includes("Pack")) {
+    throw new Error("Pack popup mounted in the DOM but did not visibly paint its header.");
+  }
   if (!popupState.hasTargetStrip || !popupState.hasSetupPanel || !popupState.hasEvidenceRail) {
     throw new Error("Pack popup did not render the target-first workbench layout.");
   }
   if (
     !popupState.shellRect ||
-    popupState.shellRect.width < 790 ||
-    popupState.shellRect.height < 590
+    popupState.shellRect.width < 760 ||
+    popupState.shellRect.height < 560 ||
+    popupState.shellRect.width > 800 ||
+    popupState.shellRect.height > 600
   ) {
     throw new Error(
-      `Pack popup shell rendered below the expected workbench size: ${JSON.stringify(
+      `Pack popup shell rendered outside the expected workbench size: ${JSON.stringify(
         popupState.shellRect,
       )}`,
     );
