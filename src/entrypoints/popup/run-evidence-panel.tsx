@@ -2,13 +2,11 @@ import type { FiledReturnsFlowSummary, PortalObservation } from "../../core/cont
 import { DiagnosticSignals, RunProgress, hasDiagnosticSignals } from "./run-summary";
 
 export function RunEvidencePanel({
-  portalReady,
-  filedReturnsObservation,
   scopedFlowSummary,
   summaryHeading,
 }: {
-  portalReady: boolean;
-  filedReturnsObservation: PortalObservation | null;
+  filedReturnsObservation?: PortalObservation | null;
+  portalReady?: boolean;
   scopedFlowSummary: FiledReturnsFlowSummary | null;
   summaryHeading: string | null;
 }) {
@@ -21,7 +19,7 @@ export function RunEvidencePanel({
       >
         <div className="evidence-heading">
           <div>
-            <p className="section-label">{previousCompleteRun ? "Previous run" : "Run evidence"}</p>
+            <p className="section-label">Status</p>
             <h2>{previousCompleteRun ? "Previous filed-returns run complete" : summaryHeading}</h2>
           </div>
           <RunProgress summary={scopedFlowSummary} />
@@ -37,27 +35,7 @@ export function RunEvidencePanel({
     );
   }
 
-  if (filedReturnsObservation) {
-    return (
-      <section className="evidence-panel" aria-label="Portal observation">
-        <p className="section-label">Portal observation</p>
-        <h2>Filed returns status: {filedReturnsObservation.state}</h2>
-        <p className="status-detail">{filedReturnsObservation.safeMessage}</p>
-      </section>
-    );
-  }
-
-  return (
-    <section className="evidence-panel" aria-label="Run evidence">
-      <p className="section-label">Run evidence</p>
-      <h2>{portalReady ? "Ready for a local run" : "GST Portal tab needed"}</h2>
-      <p className="status-detail">
-        {portalReady
-          ? "Choose the target and start when the GST Portal page is still open in this window."
-          : "Open an authenticated GST return dashboard or return page in this window before starting."}
-      </p>
-    </section>
-  );
+  return null;
 }
 
 function displayFlowStepMessage(summary: FiledReturnsFlowSummary): string {

@@ -180,43 +180,6 @@
   line-height: 1.35;
 }
 
-.run-action-details {
-  margin: 0;
-  border-top: 1px solid #dbe3ec;
-  padding-top: 6px;
-}
-
-.run-action-details summary {
-  min-height: 24px;
-  color: #34465a;
-  font-size: 0.75rem;
-  font-weight: 800;
-}
-
-.run-action-details ul {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  margin: 4px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.run-action-details li {
-  display: inline-flex;
-  min-height: 22px;
-  align-items: center;
-  border: 1px solid #ccd9e6;
-  border-radius: 999px;
-  background: #ffffff;
-  color: #2e4055;
-  font-size: 0.625rem;
-  font-weight: 800;
-  line-height: 1.1;
-  padding: 3px 7px;
-  white-space: nowrap;
-}
-
 .primary-action {
   min-height: 42px;
   width: 100%;

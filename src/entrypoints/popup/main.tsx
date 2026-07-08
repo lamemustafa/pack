@@ -13,12 +13,17 @@ function App() {
   const popup = usePackPopupController();
   const showRecovery = hasRecoveryActions(popup.scopedFlowSummary ?? null);
   const portalReady = popup.context?.supported === true;
+  const showRunStatus = Boolean(popup.scopedFlowSummary && popup.summaryHeading);
 
   return (
     <main className="popup-shell">
       <header className="popup-topbar">
         <div className="popup-title-block">
-          <p className="section-label">Pack</p>
+          <img
+            className="popup-wordmark"
+            src="/brand/pack-logo-outlined.svg"
+            alt="ComplyEaze Pack"
+          />
           <h1>{popup.scope.returnType} download</h1>
         </div>
         <span
@@ -37,33 +42,31 @@ function App() {
         onStart={() => void popup.startFiledReturnsFlow()}
       />
 
-      <section className="run-stack" aria-label="Run status and recovery">
-        <RunEvidencePanel
-          portalReady={portalReady}
-          filedReturnsObservation={popup.filedReturnsObservation}
-          scopedFlowSummary={popup.scopedFlowSummary}
-          summaryHeading={popup.summaryHeading}
-        />
-        {showRecovery ? (
-          <RecoveryActions
-            busy={popup.effectiveBusy}
-            portalReady={portalReady}
-            summary={popup.scopedFlowSummary}
-            onAcknowledgeInterruptedRun={() => void popup.acknowledgeInterruptedRun()}
-            onRetryFullFiscalYearTarget={() => void popup.retryFullFiscalYearTarget()}
-            onRetryTarget={() => void popup.retryFiledReturnsTarget()}
-            onResolveFullFiscalYearTarget={(resolution) =>
-              void popup.resolveFullFiscalYearTarget(resolution)
-            }
-            onResolveTarget={(resolution) => void popup.resolveUnconfirmedDownload(resolution)}
+      {showRunStatus || showRecovery ? (
+        <section className="run-stack" aria-label="Run status and recovery">
+          <RunEvidencePanel
+            scopedFlowSummary={popup.scopedFlowSummary}
+            summaryHeading={popup.summaryHeading}
           />
-        ) : null}
-      </section>
+          {showRecovery ? (
+            <RecoveryActions
+              busy={popup.effectiveBusy}
+              portalReady={portalReady}
+              summary={popup.scopedFlowSummary}
+              onAcknowledgeInterruptedRun={() => void popup.acknowledgeInterruptedRun()}
+              onRetryFullFiscalYearTarget={() => void popup.retryFullFiscalYearTarget()}
+              onRetryTarget={() => void popup.retryFiledReturnsTarget()}
+              onResolveFullFiscalYearTarget={(resolution) =>
+                void popup.resolveFullFiscalYearTarget(resolution)
+              }
+              onResolveTarget={(resolution) => void popup.resolveUnconfirmedDownload(resolution)}
+            />
+          ) : null}
+        </section>
+      ) : null}
 
       <footer className="fineprint" aria-label="Pack privacy boundary">
-        <span>No credentials</span>
-        <span>No cookies or OTPs</span>
-        <span>No GST files sent to ComplyEaze</span>
+        Local only: no credentials, OTPs, cookies, or GST files are sent to ComplyEaze.
       </footer>
     </main>
   );
