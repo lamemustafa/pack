@@ -5768,6 +5768,21 @@ function dataUrl(mimeType: string, body: string): string {
   return `data:${mimeType};base64,${globalThis.btoa(body)}`;
 }
 
+function portalSizedPdfBody(marker: string): string {
+  return `%PDF-1.7 synthetic${marker} ${"x".repeat(21 * 1024)}`;
+}
+
+function saneXlsxBody(marker: string): string {
+  return (
+    "PK\u0003\u0004" +
+    "\u0014\u0000" +
+    "\u0000\u0000" +
+    "\b\u0000" +
+    "\u0000".repeat(18) +
+    `[Content_Types].xml xl/workbook.xml synthetic xlsx${marker}`
+  );
+}
+
 function actionIdFromScriptingDetails(details: unknown): string {
   const args =
     typeof details === "object" && details !== null && "args" in details ? details.args : null;
@@ -5794,8 +5809,8 @@ function dataUrlForScriptingDetails(details: unknown): string {
   if (controlId.includes("excel")) {
     return dataUrl(
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      `PK\u0003\u0004 synthetic xlsx${marker}`,
+      saneXlsxBody(marker),
     );
   }
-  return dataUrl("application/pdf", `%PDF-1.7 synthetic${marker}`);
+  return dataUrl("application/pdf", portalSizedPdfBody(marker));
 }

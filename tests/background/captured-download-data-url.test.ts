@@ -9,6 +9,15 @@ function base64(input: string): string {
   return globalThis.btoa(input);
 }
 
+function gstr2bTarget() {
+  return {
+    actionId: "action",
+    financialYear: "2025-26",
+    period: "April",
+    returnType: "GSTR-2B",
+  } as const;
+}
+
 describe("captured download data URL validation", () => {
   it("accepts generic binary PDF blobs only when PDF magic bytes match", () => {
     expect(
@@ -40,17 +49,13 @@ describe("captured download data URL validation", () => {
     expect(capturedFiledReturnsArtifactExtension(xlsxDataUrl, "EXCEL")).toBe(".xlsx");
   });
 
-  it("requires a GSTR-2B marker before accepting captured GSTR-2B files", () => {
-    const target = {
-      actionId: "action",
-      financialYear: "2025-26",
-      period: "April",
-      returnType: "GSTR-2B",
-    } as const;
+  it("requires a GSTR-2B marker before accepting captured GSTR-2B PDFs", () => {
+    const target = gstr2bTarget();
+    const portalSizedPdf = `%PDF-1.7 GSTR-2B statement ${"x".repeat(21 * 1024)}`;
 
     expect(
       isExpectedCapturedDataUrlForTarget(
-        `data:application/pdf;base64,${base64("%PDF-1.7 GSTR-2B statement")}`,
+        `data:application/pdf;base64,${base64(portalSizedPdf)}`,
         "PDF",
         target,
       ),
@@ -62,5 +67,57 @@ describe("captured download data URL validation", () => {
         target,
       ),
     ).toBe(false);
+  });
+
+  it("rejects tiny local GSTR-2B PDF placeholders even when they contain a GSTR-2B marker", () => {
+    expect(
+      isExpectedCapturedDataUrlForTarget(
+        `data:application/pdf;base64,${base64(
+          "%PDF-1.4 ComplyEaze Pack generated GSTR-2B summary",
+        )}`,
+        "PDF",
+        gstr2bTarget(),
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects malformed GSTR-2B spreadsheet ZIP containers with unsupported local flags", () => {
+    const malformedZipHeader =
+      "PK\u0003\u0004" +
+      "\u0014\u0000" +
+      "\u0014\u0000" +
+      "\u0000\u0000" +
+      "\u0000".repeat(18) +
+      "[Content_Types].xml xl/workbook.xml";
+
+    expect(
+      isExpectedCapturedDataUrlForTarget(
+        `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${base64(
+          malformedZipHeader,
+        )}`,
+        "EXCEL",
+        gstr2bTarget(),
+      ),
+    ).toBe(false);
+  });
+
+  it("accepts portal-style spreadsheet ZIP containers for GSTR-2B Excel captures", () => {
+    const zipHeader =
+      "PK\u0003\u0004" +
+      "\u0014\u0000" +
+      "\u0000\u0000" +
+      "\b\u0000" +
+      "\u0000".repeat(18) +
+      "[Content_Types].xml xl/workbook.xml";
+
+    expect(
+      isExpectedCapturedDataUrlForTarget(
+        `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${base64(
+          zipHeader,
+        )}`,
+        "EXCEL",
+        gstr2bTarget(),
+      ),
+    ).toBe(true);
   });
 });

@@ -6,6 +6,8 @@ import {
 import type { FiledReturnsDownloadTarget } from "../core/contracts";
 import { PACK_OFFSCREEN_DATA_URL_MAX_LENGTH } from "../core/offscreen-blob-url";
 
+const GSTR2B_MIN_PORTAL_PDF_BYTES = 20 * 1024;
+
 export function isExpectedCapturedDataUrl(
   dataUrl: string,
   artifactType: FiledReturnsConcreteArtifactType,
@@ -37,7 +39,13 @@ export function isExpectedCapturedDataUrlForTarget(
 ): boolean {
   if (!isExpectedCapturedDataUrl(dataUrl, artifactType)) return false;
   if (target.returnType !== "GSTR-2B") return true;
-  return dataUrlContainsAscii(dataUrl, "GSTR-2B") || dataUrlContainsAscii(dataUrl, "GSTR2B");
+  if (artifactType === "PDF") {
+    if (!(dataUrlContainsAscii(dataUrl, "GSTR-2B") || dataUrlContainsAscii(dataUrl, "GSTR2B"))) {
+      return false;
+    }
+    return decodedDataUrlByteLength(dataUrl) >= GSTR2B_MIN_PORTAL_PDF_BYTES;
+  }
+  return isSaneSpreadsheetZipDataUrl(dataUrl);
 }
 
 export function capturedFiledReturnsArtifactExtension(
@@ -89,14 +97,49 @@ function decodeDataUrlPrefix(dataUrl: string, byteCount: number): string | null 
 }
 
 function dataUrlContainsAscii(dataUrl: string, marker: string): boolean {
+  const text = decodeDataUrlText(dataUrl);
+  return text?.toLowerCase().includes(marker.toLowerCase()) ?? false;
+}
+
+function decodedDataUrlByteLength(dataUrl: string): number {
   const commaIndex = dataUrl.indexOf(",");
-  if (commaIndex <= 0) return false;
+  if (commaIndex <= 0) return 0;
+  const metadata = dataUrl.slice(0, commaIndex).toLowerCase();
+  const payload = dataUrl.slice(commaIndex + 1);
+  if (!metadata.includes(";base64")) return decodeDataUrlText(dataUrl)?.length ?? 0;
+  const padding = payload.endsWith("==") ? 2 : payload.endsWith("=") ? 1 : 0;
+  return Math.max(0, Math.floor((payload.length * 3) / 4) - padding);
+}
+
+function isSaneSpreadsheetZipDataUrl(dataUrl: string): boolean {
+  const text = decodeDataUrlText(dataUrl);
+  if (!text) return false;
+  if (!text.includes("[Content_Types].xml") || !text.includes("xl/workbook.xml")) return false;
+  return hasSupportedFirstZipLocalHeader(text);
+}
+
+function hasSupportedFirstZipLocalHeader(text: string): boolean {
+  if (!text.startsWith("PK\u0003\u0004") || text.length < 30) return false;
+  const generalPurposeFlags = readLittleEndianUint16(text, 6);
+  const compressionMethod = readLittleEndianUint16(text, 8);
+  if (generalPurposeFlags === null || compressionMethod === null) return false;
+  const unsupportedFlagsMask = 0x0001 | 0x0004 | 0x0008 | 0x0040 | 0x0800 | 0x2000;
+  return (generalPurposeFlags & unsupportedFlagsMask) === 0 && [0, 8].includes(compressionMethod);
+}
+
+function readLittleEndianUint16(text: string, offset: number): number | null {
+  if (text.length < offset + 2) return null;
+  return text.charCodeAt(offset) | (text.charCodeAt(offset + 1) << 8);
+}
+
+function decodeDataUrlText(dataUrl: string): string | null {
+  const commaIndex = dataUrl.indexOf(",");
+  if (commaIndex <= 0) return null;
   const metadata = dataUrl.slice(0, commaIndex).toLowerCase();
   const payload = dataUrl.slice(commaIndex + 1);
   try {
-    const text = metadata.includes(";base64") ? globalThis.atob(payload) : decodeURIComponent(payload);
-    return text.toLowerCase().includes(marker.toLowerCase());
+    return metadata.includes(";base64") ? globalThis.atob(payload) : decodeURIComponent(payload);
   } catch {
-    return false;
+    return null;
   }
 }

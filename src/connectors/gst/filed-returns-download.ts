@@ -28,7 +28,7 @@ export {
 } from "./filed-returns-download-candidates";
 
 const DIALOG_SETTLE_DELAY_MS = 100;
-const GSTR1_EXCEL_POST_CLICK_BLOCKED_WAIT_MS = 1_200;
+const GSTR1_EXCEL_POST_CLICK_BLOCKED_WAIT_MS = 800;
 const GSTR1_EXCEL_POST_CLICK_BLOCKED_POLL_MS = 100;
 
 export interface FiledReturnDownloadTriggerResult {
