@@ -160,6 +160,7 @@ describe("full fiscal-year recovery", () => {
     });
     expect(JSON.stringify(response)).not.toContain("fullFiscalYearRecovery");
     expect(browser.storage.local.remove).toHaveBeenCalledWith("full-year-ledger");
+    expect(browser.storage.local.remove).toHaveBeenCalledWith("target-review");
     expect(browser.storage.session.set).toHaveBeenCalledWith({
       completion: expect.objectContaining({
         status: "cancelled",
@@ -194,6 +195,7 @@ describe("full fiscal-year recovery", () => {
     });
     expect(JSON.stringify(response)).not.toContain("fullFiscalYearRecovery");
     expect(browser.storage.local.remove).toHaveBeenCalledWith("full-year-ledger");
+    expect(browser.storage.local.remove).toHaveBeenCalledWith("target-review");
   });
 
   it("records a manually observed full-year target without marking it browser-confirmed", async () => {

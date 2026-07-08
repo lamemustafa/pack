@@ -128,8 +128,34 @@ describe("popup filed returns flow summary", () => {
           status: "complete",
         },
       ),
+    ).toBe("FY 2025-26 GSTR-2B prepared. 12 of 12 periods reconciled; confirm the final ZIP save.");
+  });
+
+  it("shows reset full-year runs as ready for a fresh local run", () => {
+    expect(
+      getFiledReturnsCompletionStatus(
+        {
+          financialYear: "2025-26",
+          period: FULL_FISCAL_YEAR_PERIOD,
+          returnType: "GSTR-2B",
+          artifactType: "PDF_AND_EXCEL",
+        },
+        {
+          ...COMPLETE_SUMMARY,
+          completedPeriods: [],
+          currentPeriod: "April",
+          scope: {
+            financialYear: "2025-26",
+            period: FULL_FISCAL_YEAR_PERIOD,
+            returnType: "GSTR-2B",
+            artifactType: "PDF_AND_EXCEL",
+          },
+          status: "cancelled",
+          totalPeriods: 12,
+        },
+      ),
     ).toBe(
-      "FY 2025-26 GSTR-2B prepared. 12 of 12 periods reconciled; confirm the final ZIP save.",
+      "Saved FY 2025-26 GSTR-2B run cleared. Start a fresh local run when the GST Portal is ready.",
     );
   });
 
@@ -154,6 +180,16 @@ describe("popup filed returns flow summary", () => {
         { ...COMPLETE_SUMMARY, status: "blocked" },
       ),
     ).toBe("Last filed-returns run: blocked");
+    expect(
+      getFiledReturnsSummaryHeading(
+        {
+          financialYear: "2025-26",
+          period: FULL_FISCAL_YEAR_PERIOD,
+          returnType: "GSTR-3B",
+        },
+        { ...COMPLETE_SUMMARY, status: "cancelled" },
+      ),
+    ).toBe("Ready for a new filed-returns run");
   });
 
   it("does not show stale summary details for a different selected scope", () => {

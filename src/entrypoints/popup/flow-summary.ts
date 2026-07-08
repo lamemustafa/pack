@@ -28,6 +28,9 @@ export function getFiledReturnsCompletionStatus(
   if (matchedSummary.status === "partial") {
     return `FY ${matchedSummary.scope.financialYear} ${matchedSummary.scope.returnType} partial. ${periodCount} of ${totalPeriods} periods reconciled.`;
   }
+  if (matchedSummary.status === "cancelled") {
+    return `Saved FY ${matchedSummary.scope.financialYear} ${matchedSummary.scope.returnType} run cleared. Start a fresh local run when the GST Portal is ready.`;
+  }
   return null;
 }
 
@@ -36,6 +39,7 @@ export function getFiledReturnsSummaryHeading(
   summary: FiledReturnsFlowSummary,
 ): string | null {
   if (!isSameScope(scope, summary.scope)) return null;
+  if (summary.status === "cancelled") return "Ready for a new filed-returns run";
   return `Last filed-returns run: ${summary.status}`;
 }
 

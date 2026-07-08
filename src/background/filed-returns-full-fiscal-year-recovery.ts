@@ -135,7 +135,7 @@ async function discardFullFiscalYearRun(
 
   await browser.storage.local.remove(deps.storageKeys.fullFiscalYearLedger);
   await persistSummary(flowSummary, deps);
-  await clearLegacyTargetReview(target, deps);
+  await clearFullFiscalYearTargetReview(deps);
   return { ok: true, flowStep, flowSummary };
 }
 
@@ -324,4 +324,12 @@ async function clearLegacyTargetReview(
     artifactType: normaliseFiledReturnsArtifactType(target.returnType, target.artifactType),
   };
   await clearFiledReturnsTargetReview(scope, deps);
+}
+
+async function clearFullFiscalYearTargetReview(
+  deps: FullFiscalYearTargetRecoveryDeps,
+): Promise<void> {
+  const key = deps.storageKeys.targetReview;
+  if (!key) return;
+  await browser.storage.local.remove(key);
 }
