@@ -4,8 +4,14 @@ const ZIP_LOCAL_FILE_HEADER = 0x04034b50;
 const ZIP_CENTRAL_DIRECTORY_HEADER = 0x02014b50;
 const ZIP_END_OF_CENTRAL_DIRECTORY = 0x06054b50;
 const MAX_EOCD_SCAN_BYTES = 65_557;
+const GSTR2B_MIN_PORTAL_PDF_BYTES = 20 * 1024;
+const GSTR2B_PORTAL_WORKBOOK_ENTRIES = [
+  "[content_types].xml",
+  "xl/workbook.xml",
+  "xl/worksheets/sheet10.xml",
+];
 
-export function verifyFiledReturnZipBytes(bytes) {
+export function verifyFiledReturnZipBytes(bytes, options = {}) {
   const outerEntries = readZipEntries(bytes);
   const result = {
     ok: false,
@@ -16,6 +22,7 @@ export function verifyFiledReturnZipBytes(bytes) {
     unknown: 0,
     failures: [],
   };
+  const returnType = options.returnType ?? "UNKNOWN";
 
   const seenNames = new Set();
   for (const entry of outerEntries) {
@@ -43,12 +50,20 @@ export function verifyFiledReturnZipBytes(bytes) {
     const extension = extensionOf(entry.name);
     if (extension === ".pdf") {
       result.pdf += 1;
-      if (!isLikelyPdf(entryBytes)) result.failures.push("invalid-pdf");
+      if (!isLikelyPdf(entryBytes)) {
+        result.failures.push("invalid-pdf");
+      } else if (returnType === "GSTR-2B" && entryBytes.byteLength < GSTR2B_MIN_PORTAL_PDF_BYTES) {
+        result.failures.push("invalid-gstr2b-pdf");
+      }
       continue;
     }
     if (extension === ".xlsx") {
       result.xlsx += 1;
-      if (!isLikelyXlsx(entryBytes)) result.failures.push("invalid-xlsx");
+      if (!isLikelyXlsx(entryBytes)) {
+        result.failures.push("invalid-xlsx");
+      } else if (returnType === "GSTR-2B" && !isLikelyGstr2bXlsx(entryBytes)) {
+        result.failures.push("invalid-gstr2b-xlsx");
+      }
       continue;
     }
     if (extension === ".xls") {
@@ -180,6 +195,15 @@ function isLikelyXlsx(bytes) {
   try {
     const names = new Set(readZipEntries(bytes).map((entry) => entry.name));
     return names.has("[Content_Types].xml") && names.has("xl/workbook.xml");
+  } catch {
+    return false;
+  }
+}
+
+function isLikelyGstr2bXlsx(bytes) {
+  try {
+    const names = new Set(readZipEntries(bytes).map((entry) => entry.name.toLowerCase()));
+    return GSTR2B_PORTAL_WORKBOOK_ENTRIES.every((entry) => names.has(entry));
   } catch {
     return false;
   }

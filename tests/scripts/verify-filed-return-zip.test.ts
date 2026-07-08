@@ -27,6 +27,57 @@ describe("filed return ZIP verifier", () => {
     });
   });
 
+  it("accepts a GSTR-2B ZIP only when artifacts match the portal file shape", async () => {
+    const zipPath = await writeZipFixture(
+      [
+        { path: "may.pdf", bytes: syntheticGstr2bPdf() },
+        { path: "may.xlsx", bytes: syntheticGstr2bXlsx() },
+      ],
+      "gstr-2b-fixture.zip",
+    );
+
+    const result = runVerifier(zipPath);
+
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      ok: true,
+      entries: 2,
+      pdf: 1,
+      xlsx: 1,
+      failures: [],
+    });
+  });
+
+  it("rejects tiny GSTR-2B PDFs that look like placeholders", async () => {
+    const zipPath = await writeZipFixture(
+      [{ path: "may.pdf", bytes: syntheticPdf() }],
+      "gstr-2b-fixture.zip",
+    );
+
+    const result = runVerifier(zipPath);
+
+    expect(result.status).toBe(1);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      ok: false,
+      failures: ["invalid-gstr2b-pdf"],
+    });
+  });
+
+  it("rejects generic XLSX files for GSTR-2B evidence", async () => {
+    const zipPath = await writeZipFixture(
+      [{ path: "may.xlsx", bytes: syntheticXlsx() }],
+      "gstr-2b-fixture.zip",
+    );
+
+    const result = runVerifier(zipPath);
+
+    expect(result.status).toBe(1);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      ok: false,
+      failures: ["invalid-gstr2b-xlsx"],
+    });
+  });
+
   it("rejects ZIP entries that embed the browser download path", async () => {
     const unsafePath = "complyeaze-pack/gst/fy/gstr-2b/may.pdf";
     const zipPath = await writeZipFixture([{ path: unsafePath, bytes: syntheticPdf() }]);
@@ -100,9 +151,10 @@ describe("filed return ZIP verifier", () => {
 
 async function writeZipFixture(
   entries: Array<{ path: string; bytes: Uint8Array }>,
+  filename = "fixture.zip",
 ): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), "pack-filed-return-zip-"));
-  const zipPath = path.join(dir, "fixture.zip");
+  const zipPath = path.join(dir, filename);
   await writeFile(zipPath, createZip(entries));
   return zipPath;
 }
@@ -122,6 +174,19 @@ function syntheticXlsx(): Uint8Array {
   return createZip([
     { path: "[Content_Types].xml", bytes: textBytes("<Types />") },
     { path: "xl/workbook.xml", bytes: textBytes("<workbook />") },
+  ]);
+}
+
+function syntheticGstr2bPdf(): Uint8Array {
+  const body = "synthetic filed GSTR-2B PDF\n".repeat(900);
+  return textBytes(`%PDF-1.7\n${body}\n%%EOF\n`);
+}
+
+function syntheticGstr2bXlsx(): Uint8Array {
+  return createZip([
+    { path: "[Content_Types].xml", bytes: textBytes("<Types />") },
+    { path: "xl/workbook.xml", bytes: textBytes("<workbook />") },
+    { path: "xl/worksheets/sheet10.xml", bytes: textBytes("<worksheet />") },
   ]);
 }
 

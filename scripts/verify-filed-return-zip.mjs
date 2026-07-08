@@ -6,13 +6,19 @@ import {
 } from "./lib/filed-return-zip-verifier.mjs";
 
 try {
-  const zipPath = process.argv[2];
+  const { returnType, zipPath } = parseArgs(process.argv.slice(2));
   if (!zipPath) {
-    throw new Error("Usage: node scripts/verify-filed-return-zip.mjs <zip-path>");
+    throw new Error(
+      "Usage: node scripts/verify-filed-return-zip.mjs [--return-type GSTR-2B] <zip-path>",
+    );
   }
 
   const bytes = new Uint8Array(await readFile(zipPath));
-  const result = sanitizeVerificationResult(verifyFiledReturnZipBytes(bytes));
+  const result = sanitizeVerificationResult(
+    verifyFiledReturnZipBytes(bytes, {
+      returnType: returnType ?? inferReturnTypeFromPath(zipPath),
+    }),
+  );
   console.log(JSON.stringify(result, null, 2));
   if (!result.ok) process.exit(1);
 } catch (error) {
@@ -23,4 +29,23 @@ try {
 
 function sanitizeOutput(value) {
   return value.replaceAll(process.cwd(), "<PACK_ROOT>").replaceAll(os.homedir(), "<HOME>");
+}
+
+function parseArgs(args) {
+  let returnType = null;
+  const positional = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--return-type") {
+      returnType = args[index + 1] ?? null;
+      index += 1;
+      continue;
+    }
+    positional.push(arg);
+  }
+  return { returnType, zipPath: positional[0] ?? null };
+}
+
+function inferReturnTypeFromPath(zipPath) {
+  return /gstr[-_\s]?2b/i.test(zipPath) ? "GSTR-2B" : "UNKNOWN";
 }
