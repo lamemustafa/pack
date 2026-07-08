@@ -9,26 +9,21 @@ import { observeFiledReturnsPageText } from "../connectors/gst/filed-returns-obs
 import {
   PACK_CONTENT_SCRIPT_PROTOCOL_VERSION,
   isPackMessage,
-  type MainWorldCaptureTransferPayload,
   type PackMessageResponse,
 } from "../core/messages";
+import {
+  MainWorldCaptureTransferStore,
+  isMainWorldCaptureChunkMessage,
+} from "../content/main-world-capture-transfer";
 
 const PACK_CONTENT_LISTENER_KEY = `__packContentListenerInstalledV${PACK_CONTENT_SCRIPT_PROTOCOL_VERSION}`;
 const PACK_ACTIVE_CONTENT_PROTOCOL_KEY = "__packActiveContentProtocolVersion";
-const PACK_MAIN_WORLD_CAPTURE_MESSAGE_SOURCE = "pack-main-world-capture-v1";
-const PACK_MAIN_WORLD_CAPTURE_MAX_CHUNKS = 200;
 
 declare global {
   interface Window {
     [PACK_ACTIVE_CONTENT_PROTOCOL_KEY]?: number;
     [PACK_CONTENT_LISTENER_KEY]?: boolean;
   }
-}
-
-interface MainWorldCaptureTransfer {
-  actionId: string;
-  chunks: string[];
-  transferId: string;
 }
 
 export default defineContentScript({
@@ -43,16 +38,11 @@ export default defineContentScript({
     window[PACK_ACTIVE_CONTENT_PROTOCOL_KEY] = PACK_CONTENT_SCRIPT_PROTOCOL_VERSION;
     if (window[PACK_CONTENT_LISTENER_KEY]) return;
     window[PACK_CONTENT_LISTENER_KEY] = true;
-    const mainWorldCaptureTransfers = new Map<string, MainWorldCaptureTransfer>();
+    const mainWorldCaptureTransfers = new MainWorldCaptureTransferStore();
 
     window.addEventListener("message", (event: MessageEvent<unknown>) => {
       if (event.source !== window || !isMainWorldCaptureChunkMessage(event.data)) return;
-      const key = mainWorldCaptureTransferKey(event.data);
-      const transfer = mainWorldCaptureTransfers.get(key);
-      if (!transfer || transfer.actionId !== event.data.actionId) return;
-      if (event.data.index >= event.data.totalChunks) return;
-      if (event.data.totalChunks > PACK_MAIN_WORLD_CAPTURE_MAX_CHUNKS) return;
-      transfer.chunks[event.data.index] = event.data.chunk;
+      mainWorldCaptureTransfers.acceptChunk(event.data);
     });
 
     const context = detectGstPortalContext(window.location, document.title);
@@ -251,11 +241,7 @@ export default defineContentScript({
       }
 
       if (message.type === "PACK_CONTENT_PREPARE_MAIN_WORLD_CAPTURE_V3") {
-        mainWorldCaptureTransfers.set(mainWorldCaptureTransferKey(message.payload), {
-          actionId: message.payload.actionId,
-          chunks: [],
-          transferId: message.payload.transferId,
-        });
+        mainWorldCaptureTransfers.prepare(message.payload);
         sendResponse({
           ok: true,
           mainWorldCapturePrepared: true,
@@ -264,8 +250,7 @@ export default defineContentScript({
       }
 
       if (message.type === "PACK_CONTENT_TAKE_MAIN_WORLD_CAPTURE_CHUNK_V3") {
-        const transfer = mainWorldCaptureTransfers.get(mainWorldCaptureTransferKey(message.payload));
-        const chunk = transfer?.chunks[message.payload.index];
+        const chunk = mainWorldCaptureTransfers.takeChunk(message.payload);
         if (typeof chunk !== "string") {
           sendResponse({
             ok: false,
@@ -281,7 +266,7 @@ export default defineContentScript({
       }
 
       if (message.type === "PACK_CONTENT_CLEAR_MAIN_WORLD_CAPTURE_V3") {
-        mainWorldCaptureTransfers.delete(mainWorldCaptureTransferKey(message.payload));
+        mainWorldCaptureTransfers.clear(message.payload);
         sendResponse({
           ok: true,
           mainWorldCaptureCleared: true,
@@ -308,33 +293,4 @@ function sendFiledReturnsObservation() {
       // Service workers can be unavailable during extension reload.
     });
   return observation;
-}
-
-function mainWorldCaptureTransferKey(payload: MainWorldCaptureTransferPayload): string {
-  return `${payload.actionId}:${payload.transferId}`;
-}
-
-function isMainWorldCaptureChunkMessage(input: unknown): input is {
-  actionId: string;
-  chunk: string;
-  index: number;
-  source: typeof PACK_MAIN_WORLD_CAPTURE_MESSAGE_SOURCE;
-  totalChunks: number;
-  transferId: string;
-} {
-  if (typeof input !== "object" || input === null) return false;
-  const record = input as Record<string, unknown>;
-  return (
-    record.source === PACK_MAIN_WORLD_CAPTURE_MESSAGE_SOURCE &&
-    typeof record.actionId === "string" &&
-    typeof record.transferId === "string" &&
-    typeof record.chunk === "string" &&
-    typeof record.index === "number" &&
-    Number.isInteger(record.index) &&
-    record.index >= 0 &&
-    typeof record.totalChunks === "number" &&
-    Number.isInteger(record.totalChunks) &&
-    record.totalChunks > 0 &&
-    record.totalChunks <= PACK_MAIN_WORLD_CAPTURE_MAX_CHUNKS
-  );
 }
