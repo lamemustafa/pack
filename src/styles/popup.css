@@ -63,6 +63,32 @@ html[data-pack-surface="popup"] body {
   white-space: nowrap;
 }
 
+.brand-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: end;
+}
+
+.brand-badges p {
+  margin: 0;
+}
+
+.build-marker {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #b7c9d9;
+  border-radius: 999px;
+  background: #eaf2f8;
+  color: #173a63;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 .panel-heading h2 {
   margin: 0;
   color: var(--pack-ink);
@@ -85,15 +111,9 @@ html[data-pack-surface="popup"] body {
 
 .flow-panel {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  padding: 15px 16px 16px;
-}
-
-.flow-panel > .panel-heading,
-.flow-panel > .scope-note,
-.flow-panel > .primary-action {
-  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  padding: 16px;
 }
 
 .panel-heading {
@@ -118,6 +138,20 @@ html[data-pack-surface="popup"] body {
   padding: 10px 11px;
 }
 
+.scope-section {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.scope-section-primary {
+  grid-template-columns: minmax(0, 0.74fr) minmax(0, 1.26fr);
+}
+
+.scope-section-period {
+  grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
+}
+
 .scope-group {
   min-width: 0;
   border: 0;
@@ -135,6 +169,15 @@ html[data-pack-surface="popup"] body {
 .scope-options {
   display: grid;
   gap: 6px;
+}
+
+.scope-section-primary .scope-options,
+.scope-section-period .scope-options {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.scope-section-period .scope-group:nth-child(2) .scope-options {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .scope-option {
@@ -262,11 +305,18 @@ html[data-pack-surface="popup"] body {
     grid-template-columns: 1fr;
   }
 
+  .scope-section,
+  .scope-section-primary,
+  .scope-section-period,
+  .scope-section-period .scope-group:nth-child(2) .scope-options {
+    grid-template-columns: 1fr;
+  }
+
   .brand-header {
     grid-template-columns: 1fr;
   }
 
-  .brand-mode {
-    justify-self: start;
+  .brand-badges {
+    justify-content: start;
   }
 }

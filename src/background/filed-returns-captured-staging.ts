@@ -149,7 +149,11 @@ export async function stageChunkedCapturedFiledReturnDownload({
   const bundleKind = deps.stageCapturedDownloads?.bundleKind ?? "full-fiscal-year";
   const signalPrefix = bundleKind === "single-period" ? "single-period" : "full-fiscal-year";
   const ledgerId = deps.stageCapturedDownloads?.ledgerId ?? "unknown-ledger";
-  const zipPath = safeFiledReturnZipEntryPath(scope, artifactType);
+  const zipPath = safeFiledReturnZipEntryPath(
+    scope,
+    artifactType,
+    chunkedCaptureRequest.artifactExtension,
+  );
 
   let staged: "staged" | "failed" = "failed";
   for (let index = 0; index < chunkedCaptureRequest.chunkCount; index += 1) {

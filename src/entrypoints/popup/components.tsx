@@ -45,60 +45,66 @@ export function ScopeForm({ busy, flowSummary, scope, onScopeChange, onStart }: 
         <p className="section-label">Setup</p>
         <h2>Return, period, and file format</h2>
       </div>
-      <ScopeButtonGroup
-        label="Filing"
-        value={scope.returnType}
-        options={FILED_RETURNS_RETURN_TYPES.map((returnType) => ({
-          value: returnType,
-          label: returnType,
-        }))}
-        onChange={(returnType) =>
-          onScopeChange(
-            normaliseFiledReturnsScope({
-              ...scope,
-              returnType: returnType as FiledReturnsDownloadScope["returnType"],
-            }),
-          )
-        }
-      />
-      <ScopeButtonGroup
-        label="Download"
-        value={selectedArtifactType}
-        options={artifactOptions.map((artifactType) => ({
-          value: artifactType,
-          label: filedReturnsArtifactLabel(artifactType, scope.returnType),
-        }))}
-        onChange={(artifactType) =>
-          onScopeChange(
-            normaliseFiledReturnsScope({
-              ...scope,
-              artifactType: artifactType as NonNullable<FiledReturnsDownloadScope["artifactType"]>,
-            }),
-          )
-        }
-      />
-      <ScopeButtonGroup
-        label="Financial year"
-        value={scope.financialYear}
-        options={financialYearOptions.map((financialYear) => ({
-          value: financialYear,
-          label: financialYear,
-        }))}
-        onChange={(financialYear) =>
-          onScopeChange(
-            normaliseFiledReturnsScope({
-              ...scope,
-              financialYear,
-            }),
-          )
-        }
-      />
-      <ScopeButtonGroup
-        label="Period"
-        value={scope.period}
-        options={periodOptions}
-        onChange={(period) => onScopeChange({ ...scope, period })}
-      />
+      <div className="scope-section scope-section-primary">
+        <ScopeButtonGroup
+          label="Return"
+          value={scope.returnType}
+          options={FILED_RETURNS_RETURN_TYPES.map((returnType) => ({
+            value: returnType,
+            label: returnType,
+          }))}
+          onChange={(returnType) =>
+            onScopeChange(
+              normaliseFiledReturnsScope({
+                ...scope,
+                returnType: returnType as FiledReturnsDownloadScope["returnType"],
+              }),
+            )
+          }
+        />
+        <ScopeButtonGroup
+          label="File"
+          value={selectedArtifactType}
+          options={artifactOptions.map((artifactType) => ({
+            value: artifactType,
+            label: filedReturnsArtifactLabel(artifactType, scope.returnType),
+          }))}
+          onChange={(artifactType) =>
+            onScopeChange(
+              normaliseFiledReturnsScope({
+                ...scope,
+                artifactType: artifactType as NonNullable<
+                  FiledReturnsDownloadScope["artifactType"]
+                >,
+              }),
+            )
+          }
+        />
+      </div>
+      <div className="scope-section scope-section-period">
+        <ScopeButtonGroup
+          label="Financial year"
+          value={scope.financialYear}
+          options={financialYearOptions.map((financialYear) => ({
+            value: financialYear,
+            label: financialYear,
+          }))}
+          onChange={(financialYear) =>
+            onScopeChange(
+              normaliseFiledReturnsScope({
+                ...scope,
+                financialYear,
+              }),
+            )
+          }
+        />
+        <ScopeButtonGroup
+          label="Period"
+          value={scope.period}
+          options={periodOptions}
+          onChange={(period) => onScopeChange({ ...scope, period })}
+        />
+      </div>
       {fullFiscalYear ? <p className="scope-note">{getFullFiscalYearNote(scope)}</p> : null}
       <button
         className="primary-action"

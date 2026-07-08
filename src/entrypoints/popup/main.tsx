@@ -19,7 +19,10 @@ function App() {
           <img className="brand-logo" src="/brand/pack-logo-outlined.svg" alt="ComplyEaze Pack" />
           <h1>GST return downloads</h1>
         </div>
-        <p className="brand-mode">Local-first</p>
+        <div className="brand-badges" aria-label="Pack build status">
+          <p className="brand-mode">Local-first</p>
+          <p className="build-marker">Target-first UI</p>
+        </div>
       </header>
 
       <DownloadTargetSummary

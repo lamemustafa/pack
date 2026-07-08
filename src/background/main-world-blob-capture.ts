@@ -3,6 +3,7 @@ import type {
   FiledReturnsCapturedDownloadRequest,
   FiledReturnsMainWorldCaptureRequest,
 } from "../core/contracts";
+import type { FiledReturnsArtifactExtension } from "../core/filed-returns-artifacts";
 
 const CAPTURE_SUPPRESSION_SETTLE_MS = 1_000;
 const MAIN_WORLD_CAPTURE_TIMEOUT_MS = 75_000;
@@ -17,6 +18,7 @@ export interface MainWorldCaptureOutcome {
 
 export interface MainWorldChunkedCaptureRequest {
   actionId: string;
+  artifactExtension?: FiledReturnsArtifactExtension;
   chunkCount: number;
   safeSignals: string[];
   transferId: string;
@@ -124,6 +126,10 @@ function isMainWorldChunkedCaptureRequest(value: unknown): value is MainWorldChu
   const record = value as Record<string, unknown>;
   return (
     typeof record.actionId === "string" &&
+    (record.artifactExtension === undefined ||
+      record.artifactExtension === ".pdf" ||
+      record.artifactExtension === ".xls" ||
+      record.artifactExtension === ".xlsx") &&
     typeof record.transferId === "string" &&
     typeof record.chunkCount === "number" &&
     Number.isInteger(record.chunkCount) &&
@@ -216,12 +222,32 @@ export async function capturePortalBlobDownloadWithDiagnostics(
       }, CAPTURE_SUPPRESSION_SETTLE_MS);
     };
 
-    const settleChunked = (dataUrl: string, safeSignals: string[]) => {
+    const classifyCapturedArtifactExtension = (capturedUrl: string) => {
+      const commaIndex = capturedUrl.indexOf(",");
+      if (commaIndex <= 0) return undefined;
+      const metadata = capturedUrl.slice(0, commaIndex).toLowerCase();
+      if (metadata.includes("application/pdf")) return ".pdf";
+      const payload = capturedUrl.slice(commaIndex + 1);
+      let prefix = "";
+      try {
+        prefix = metadata.includes(";base64")
+          ? atob(payload.slice(0, 16))
+          : decodeURIComponent(payload.slice(0, 24));
+      } catch {
+        return undefined;
+      }
+      if (prefix.startsWith("%PDF-")) return ".pdf";
+      if (prefix.startsWith("\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1")) return ".xls";
+      if (prefix.startsWith("PK\u0003\u0004")) return ".xlsx";
+      return undefined;
+    };
+
+    const settleChunked = (capturedUrl: string, safeSignals: string[]) => {
       if (settled || !config.transferId) return false;
       const chunkSize = config.transferChunkSize ?? MAIN_WORLD_CAPTURE_CHUNK_SIZE;
       const chunks: string[] = [];
-      for (let offset = 0; offset < dataUrl.length; offset += chunkSize) {
-        chunks.push(dataUrl.slice(offset, offset + chunkSize));
+      for (let offset = 0; offset < capturedUrl.length; offset += chunkSize) {
+        chunks.push(capturedUrl.slice(offset, offset + chunkSize));
       }
       if (chunks.length === 0 || chunks.length > 200) {
         addSafeSignal(`${config.signalPrefix}-chunk-count-rejected`);
@@ -241,17 +267,17 @@ export async function capturePortalBlobDownloadWithDiagnostics(
         );
       });
       settled = true;
+      const artifactExtension = classifyCapturedArtifactExtension(capturedUrl);
+      const chunkedCaptureRequest: MainWorldChunkedCaptureRequest = {
+        actionId: config.actionId,
+        chunkCount: chunks.length,
+        safeSignals: [...safeSignals, `${config.signalPrefix}-main-world-chunked-capture`],
+        transferId: config.transferId,
+        ...(artifactExtension ? { artifactExtension } : {}),
+      };
       const outcome: MainWorldCaptureOutcome = {
         capturedDownloadRequest: null,
-        chunkedCaptureRequest: {
-          actionId: config.actionId,
-          chunkCount: chunks.length,
-          safeSignals: [
-            ...safeSignals,
-            `${config.signalPrefix}-main-world-chunked-capture`,
-          ],
-          transferId: config.transferId,
-        },
+        chunkedCaptureRequest,
         safeFailureSignals: [],
       };
       window.setTimeout(() => {
