@@ -133,9 +133,7 @@ async function handleMessage(
     case "PACK_GET_CONTEXT":
       return {
         ok: true,
-        context:
-          (await refreshActiveGstContext()) ??
-          (await readSessionValue<PortalContext>(PACK_SESSION_STORAGE_KEYS.lastContext)),
+        context: await refreshActiveGstContext(),
       };
     case "PACK_GET_FILED_RETURNS_OBSERVATION": {
       const refreshedObservation = await refreshActiveFiledReturnsObservation();

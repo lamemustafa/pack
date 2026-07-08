@@ -5222,7 +5222,7 @@ describe("filed returns flow runner", () => {
       ok: true,
       flowStep: {
         state: "login-required",
-        safeSignals: ["gst-login-tab-opened"],
+        safeSignals: ["gst-portal-tab-required"],
       },
       flowSummary: {
         currentPeriod: "March",
@@ -5235,14 +5235,11 @@ describe("filed returns flow runner", () => {
         currentPeriod: "March",
         status: "blocked",
         flowStep: expect.objectContaining({
-          safeSignals: ["gst-login-tab-opened"],
+          safeSignals: ["gst-portal-tab-required"],
         }),
       }),
     });
-    expect(browser.tabs.create).toHaveBeenCalledWith({
-      active: true,
-      url: "https://services.gst.gov.in/services/login",
-    });
+    expect(browser.tabs.create).not.toHaveBeenCalled();
     expect(browser.tabs.query).not.toHaveBeenCalled();
     expect(browser.tabs.update).not.toHaveBeenCalledWith(42, { active: true });
     expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();

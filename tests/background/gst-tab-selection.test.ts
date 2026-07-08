@@ -221,6 +221,45 @@ describe("Pack GST tab selection", () => {
     });
   });
 
+  it("does not show stale cached context when no actionable GST tab exists", async () => {
+    const cachedContext = {
+      origin: "https://return.gst.gov.in",
+      pageKind: "gst-filed-returns",
+      supported: true,
+    };
+
+    browserMocks.storage.session.get.mockResolvedValueOnce({
+      "pack:last-context": cachedContext,
+    });
+    browserMocks.tabs.query
+      .mockResolvedValueOnce([
+        {
+          active: true,
+          id: 30,
+          url: "chrome-extension://pack-test-extension/popup.html",
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          active: false,
+          id: 31,
+          url: "https://services.gst.gov.in/services/login",
+        },
+      ]);
+
+    await import("../../src/entrypoints/background");
+
+    const listener = browserMocks.getMessageListener();
+    expect(listener).not.toBeNull();
+
+    const response = await new Promise((resolve) => {
+      listener?.({ type: "PACK_GET_CONTEXT" }, { id: "pack-test-extension" }, resolve);
+    });
+
+    expect(response).toEqual({ ok: true, context: null });
+    expect(browserMocks.tabs.sendMessage).not.toHaveBeenCalled();
+  });
+
   it("infers a GSTR-2B observation from the active summary route instead of returning stale wrong-page", async () => {
     const { PACK_CONTENT_SCRIPT_PROTOCOL_VERSION } = await import("../../src/core/messages");
     browserMocks.storage.session.get.mockResolvedValue({});

@@ -2,7 +2,7 @@ import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "../core/co
 import type { PackMessageResponse } from "../core/messages";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
-import { getOrOpenGstTab } from "./filed-returns-active-tab";
+import { getRequiredGstTab } from "./filed-returns-active-tab";
 import { runDownloadStepWithRetry } from "./filed-returns-flow-messaging";
 import {
   delay,
@@ -29,8 +29,8 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
   options: { persistSinglePeriodSummary?: boolean } = {},
 ): Promise<PackMessageResponse> {
   const shouldPersistSinglePeriodSummary = options.persistSinglePeriodSummary !== false;
-  const activeTab = await getOrOpenGstTab(deps.getActiveGstTab);
-  if (activeTab.openedForLogin) {
+  const activeTab = await getRequiredGstTab(deps.getActiveGstTab);
+  if (!activeTab) {
     return withPersistedSinglePeriodSummary(
       scope,
       {
@@ -39,11 +39,13 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
           connectorId: "gst",
           scopeId: filedReturnScopeId(scope.returnType),
           state: "login-required",
-          safeSignals: ["gst-login-tab-opened"],
-          safeMessage: "Pack opened the GST Portal login page. Sign in, then click Start download.",
+          safeSignals: ["gst-portal-tab-required"],
+          safeMessage:
+            "Open a signed-in GST Portal return dashboard or return page, then click Start download again.",
           userAction: {
             type: "LOGIN",
-            message: "Sign in to the GST Portal. Pack will resume after you click Start download.",
+            message:
+              "Sign in to the GST Portal and keep the return dashboard or selected return page open.",
             canResume: true,
           },
         },
