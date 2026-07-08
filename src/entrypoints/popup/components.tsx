@@ -52,6 +52,12 @@ export function ScopeForm({
           <h2>Choose what Pack should collect</h2>
         </div>
       </div>
+      <ScopeActionPanel
+        actionCopy={actionCopy}
+        disabled={startAction.disabled}
+        label={startAction.label}
+        onStart={onStart}
+      />
       <div className="scope-form-grid">
         <div className="scope-section scope-section-primary">
           <ScopeButtonGroup
@@ -136,12 +142,6 @@ export function ScopeForm({
             open login pages or reuse stale portal state.
           </p>
         ) : null}
-        <ScopeActionPanel
-          actionCopy={actionCopy}
-          disabled={startAction.disabled}
-          label={startAction.label}
-          onStart={onStart}
-        />
       </div>
     </section>
   );

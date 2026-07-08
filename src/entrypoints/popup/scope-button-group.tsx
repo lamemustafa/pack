@@ -8,7 +8,7 @@ export function ScopeButtonGroup({
   className?: string;
   label: string;
   value: string;
-  options: Array<{ value: string; label: string }>;
+  options: Array<{ value: string; label: string; description?: string }>;
   onChange: (value: string) => void;
 }) {
   const groupName = `scope-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
@@ -31,7 +31,10 @@ export function ScopeButtonGroup({
                 checked={selected}
                 onChange={() => onChange(option.value)}
               />
-              {option.label}
+              <span className="scope-option-title">{option.label}</span>
+              {option.description ? (
+                <span className="scope-option-description">{option.description}</span>
+              ) : null}
             </label>
           );
         })}

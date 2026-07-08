@@ -262,7 +262,7 @@ describe("popup full-year recovery actions", () => {
     expect(markup).not.toContain("selected GSTR-1 e-invoice details file");
   });
 
-  it("keeps the primary zip action in the workbench flow", () => {
+  it("keeps the primary zip action visible before the dense file controls", () => {
     const markup = renderToStaticMarkup(
       createElement(ScopeForm, {
         busy: null,
@@ -280,9 +280,32 @@ describe("popup full-year recovery actions", () => {
     );
 
     expect(markup.indexOf("Start full-year ZIP")).toBeGreaterThan(-1);
-    expect(markup.indexOf("Start full-year ZIP")).toBeGreaterThan(
+    expect(markup.indexOf("Start full-year ZIP")).toBeLessThan(
       markup.indexOf("Summary PDF + details Excel"),
     );
+  });
+
+  it("labels multi-file single-period runs as a single zip handoff", () => {
+    const markup = renderToStaticMarkup(
+      createElement(ScopeForm, {
+        busy: null,
+        context: supportedPortalContext(),
+        scope: {
+          artifactType: "PDF_AND_EXCEL",
+          financialYear: "2026-27",
+          period: "May",
+          returnType: "GSTR-2B",
+        },
+        flowSummary: null,
+        onScopeChange: () => undefined,
+        onStart: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain("Collect the selected period into one local ZIP.");
+    expect(markup).toContain("One browser handoff");
+    expect(markup).toContain("Start period ZIP");
+    expect(markup).not.toContain(">Download selected period<");
   });
 
   it("explains single-period runs as active-tab downloads", () => {

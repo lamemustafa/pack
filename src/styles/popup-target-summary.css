@@ -1,8 +1,8 @@
 .target-strip {
   display: grid;
-  grid-template-columns: minmax(220px, 0.6fr) minmax(0, 1.8fr) minmax(280px, 0.75fr);
+  grid-template-columns: minmax(190px, 0.55fr) minmax(0, 1fr);
   gap: 14px;
-  align-items: center;
+  align-items: start;
   padding: 12px 14px;
 }
 
@@ -48,10 +48,7 @@
 
 .target-metadata {
   display: grid;
-  grid-template-columns: minmax(96px, 0.8fr) minmax(90px, 0.7fr) minmax(170px, 1.2fr) minmax(
-      90px,
-      0.8fr
-    );
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   border: 0;
   border-radius: 8px;
@@ -83,12 +80,15 @@
 }
 
 .target-status {
+  grid-column: 1 / -1;
   margin: 0;
+  border-top: 1px solid #d9e2ec;
   color: #324356;
   font-size: 12.5px;
   line-height: 1.35;
-  text-align: right;
+  text-align: left;
   overflow-wrap: anywhere;
+  padding-top: 10px;
 }
 
 @media (max-width: 940px) {

@@ -6,6 +6,7 @@ import type {
 import {
   FILED_RETURNS_ARTIFACT_TYPES,
   filedReturnsArtifactLabel,
+  concreteFiledReturnsArtifactTypes,
   normaliseFiledReturnsArtifactType,
   supportsFiledReturnsArtifactType,
 } from "../../core/filed-returns-artifacts";
@@ -33,6 +34,7 @@ export function createScopeFormModel(scope: FiledReturnsDownloadScope) {
     ).map((artifactType) => ({
       value: artifactType,
       label: filedReturnsArtifactLabel(artifactType, scope.returnType),
+      description: artifactOptionDescription(scope.returnType, artifactType),
     })),
     financialYearOptions: getFiledReturnsFinancialYearOptions().map((financialYear) => ({
       value: financialYear,
@@ -51,10 +53,27 @@ export function createScopeFormModel(scope: FiledReturnsDownloadScope) {
 }
 
 export function returnTypeOptions() {
-  return FILED_RETURNS_RETURN_TYPES.map((returnType) => ({
-    value: returnType,
-    label: returnType,
-  }));
+  return FILED_RETURNS_RETURN_TYPES.map((returnType) => {
+    if (returnType === "GSTR-3B") {
+      return {
+        value: returnType,
+        label: returnType,
+        description: "Filed summary PDF",
+      };
+    }
+    if (returnType === "GSTR-1") {
+      return {
+        value: returnType,
+        label: returnType,
+        description: "Summary plus e-invoice Excel",
+      };
+    }
+    return {
+      value: returnType,
+      label: returnType,
+      description: "ITC PDF and details workbook",
+    };
+  });
 }
 
 export function getSinglePeriodFallback(
@@ -69,14 +88,25 @@ export function getScopeActionCopy(
   scope: FiledReturnsDownloadScope,
   fullFiscalYear: boolean,
 ): { summary: string; details: string[] } {
+  const artifactType = normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType);
+  const concreteArtifactCount = concreteFiledReturnsArtifactTypes(artifactType).length;
   if (!fullFiscalYear) {
+    if (concreteArtifactCount > 1) {
+      return {
+        summary: "Collect the selected period into one local ZIP.",
+        details: [
+          "Stages PDF and Excel locally",
+          "One browser handoff",
+          "No portal data leaves the device",
+        ],
+      };
+    }
     return {
       summary: "Collect one period from the active GST tab.",
       details: ["Target-bound click", "Local browser download", "No portal data leaves the device"],
     };
   }
 
-  const artifactType = normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType);
   const details = [
     "Walks each eligible period",
     "Stages files locally",
@@ -103,7 +133,7 @@ export function getScopeFormStartAction(
   context: PortalContext | null,
 ): { disabled: boolean; label: string } {
   if (busy === "start-filed-returns-flow") return { disabled: true, label: "Starting..." };
-  if (busy !== null) return { disabled: true, label: defaultStartLabel(fullFiscalYear) };
+  if (busy !== null) return { disabled: true, label: defaultStartLabel(scope, fullFiscalYear) };
   if (!context?.supported) return { disabled: true, label: "Open GST Portal tab first" };
   if (summary && isSameScope(scope, summary.scope)) {
     const signals = new Set(summary.flowStep.safeSignals);
@@ -125,11 +155,26 @@ export function getScopeFormStartAction(
       return { disabled: true, label: "Resume or discard saved run" };
     }
   }
-  return { disabled: false, label: defaultStartLabel(fullFiscalYear) };
+  return { disabled: false, label: defaultStartLabel(scope, fullFiscalYear) };
 }
 
-function defaultStartLabel(fullFiscalYear: boolean): string {
-  return fullFiscalYear ? "Start full-year ZIP" : "Download selected period";
+function defaultStartLabel(scope: FiledReturnsDownloadScope, fullFiscalYear: boolean): string {
+  if (fullFiscalYear) return "Start full-year ZIP";
+  const artifactType = normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType);
+  return concreteFiledReturnsArtifactTypes(artifactType).length > 1
+    ? "Start period ZIP"
+    : "Download selected period";
+}
+
+function artifactOptionDescription(
+  returnType: FiledReturnsDownloadScope["returnType"],
+  artifactType: (typeof FILED_RETURNS_ARTIFACT_TYPES)[number],
+): string {
+  if (artifactType === "PDF_AND_EXCEL") return "Best for one ZIP handoff";
+  if (artifactType === "EXCEL") {
+    return returnType === "GSTR-2B" ? "Portal details workbook" : "Portal e-invoice workbook";
+  }
+  return returnType === "GSTR-3B" ? "Filed return copy" : "Portal summary PDF";
 }
 
 function isSameScope(left: FiledReturnsDownloadScope, right: FiledReturnsDownloadScope): boolean {

@@ -98,11 +98,12 @@
 }
 
 .scope-option {
-  display: inline-flex;
-  min-height: 46px;
+  display: grid;
+  min-height: 58px;
   cursor: pointer;
   align-items: center;
   justify-content: center;
+  gap: 3px;
   border: 1px solid #c9d2dc;
   border-radius: 6px;
   background: #ffffff;
@@ -113,6 +114,24 @@
   text-align: center;
   word-break: keep-all;
   text-wrap: balance;
+  padding: 8px 9px;
+}
+
+.scope-option-title,
+.scope-option-description {
+  display: block;
+  min-width: 0;
+}
+
+.scope-option-description {
+  color: #526276;
+  font-size: 10.5px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.scope-option-selected .scope-option-description {
+  color: #23486e;
 }
 
 .scope-option:hover {
@@ -173,10 +192,22 @@
 }
 
 .run-action-detail {
-  margin: 5px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
   color: #53657a;
   font-size: 11px;
   line-height: 1.35;
+  list-style: none;
+}
+
+.run-action-detail li {
+  border: 1px solid #d7e0ea;
+  border-radius: 999px;
+  background: #ffffff;
+  padding: 3px 7px;
 }
 
 .primary-action {
