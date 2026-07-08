@@ -459,6 +459,37 @@ describe("filed returns guided flow", () => {
     );
   });
 
+  it("finds GSTR-2B download controls when the section carries the return label", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <section>
+            <h1>GSTR-2B</h1>
+            <p>Download auto-drafted ITC statement for May 2026.</p>
+            <button data-pdf>Summary PDF</button>
+            <button data-excel>Details Excel</button>
+          </section>
+        </main>
+      `,
+      "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
+    );
+    makeLayoutVisible(documentRef);
+
+    const result = await triggerGstr2bDownload(documentRef, {
+      actionId: "action-gstr2b-short-labels",
+      artifactType: "EXCEL",
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-2B",
+    });
+
+    expect(result.downloadTrigger.state).toBe("clicked");
+    expect(result.mainWorldCaptureRequest).toMatchObject({
+      actionId: "action-gstr2b-short-labels",
+      signalPrefix: "gstr2b",
+    });
+  });
+
   it("ignores hidden duplicate GSTR-2B download controls on the summary page", async () => {
     const documentRef = createGstr2bSummaryDocument(`
       <button hidden>DOWNLOAD GSTR-2B SUMMARY (PDF)</button>

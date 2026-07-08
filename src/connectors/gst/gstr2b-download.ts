@@ -105,7 +105,9 @@ function findGstr2bDownloadControl(
     .filter((element) => isUsableDownloadControl(element))
     .filter((element) => {
       const text = normaliseText(readElementText(element));
-      if (!text.includes("download") || !text.includes("gstr-2b")) return false;
+      const contextText = normaliseText(readElementContextText(element));
+      if (!contextText.includes("gstr-2b")) return false;
+      if (!text.includes("download") && !contextText.includes("download")) return false;
       if (artifactType === "EXCEL") return text.includes("details") && text.includes("excel");
       return text.includes("summary") && text.includes("pdf");
     });
@@ -142,4 +144,11 @@ function readElementText(element: HTMLElement): string {
     element.getAttribute("aria-label") ?? "",
     element.getAttribute("title") ?? "",
   ].join(" ");
+}
+
+function readElementContextText(element: HTMLElement): string {
+  const closestSection = element.closest(
+    "section, article, main, form, table, tbody, tr, .panel, .card, .row, .container",
+  );
+  return [readElementText(element), closestSection?.textContent ?? ""].join(" ");
 }
