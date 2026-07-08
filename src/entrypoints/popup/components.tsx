@@ -48,100 +48,114 @@ export function ScopeForm({
         <p className="section-label">Setup</p>
         <h2>Return, period, and file format</h2>
       </div>
-      <div className="scope-section scope-section-primary">
-        <ScopeButtonGroup
-          className="scope-group-return"
-          label="Return"
-          value={scope.returnType}
-          options={returnTypeOptions()}
-          onChange={(returnType) =>
-            onScopeChange(
-              normaliseFiledReturnsScope({
-                ...scope,
-                returnType: returnType as FiledReturnsDownloadScope["returnType"],
-              }),
-            )
-          }
-        />
-        {formModel.supportsFullFiscalYear ? (
+      <div className="scope-form-grid">
+        <div className="scope-section scope-section-primary">
           <ScopeButtonGroup
-            className="scope-group-run-mode"
-            label="Run mode"
-            value={formModel.fullFiscalYear ? "FULL_YEAR" : "SINGLE_PERIOD"}
-            options={[
-              { value: "SINGLE_PERIOD", label: "Single period" },
-              { value: "FULL_YEAR", label: "Full fiscal year" },
-            ]}
-            onChange={(mode) =>
+            className="scope-group-return"
+            label="Return"
+            value={scope.returnType}
+            options={returnTypeOptions()}
+            onChange={(returnType) =>
               onScopeChange(
                 normaliseFiledReturnsScope({
                   ...scope,
-                  period:
-                    mode === "FULL_YEAR"
-                      ? FULL_FISCAL_YEAR_PERIOD
-                      : getSinglePeriodFallback(scope.period, formModel.singlePeriodOptions),
+                  returnType: returnType as FiledReturnsDownloadScope["returnType"],
                 }),
               )
             }
           />
-        ) : null}
-        <ScopeButtonGroup
-          className="scope-group-file"
-          label="File"
-          value={formModel.selectedArtifactType}
-          options={formModel.artifactOptions}
-          onChange={(artifactType) =>
-            onScopeChange(
-              normaliseFiledReturnsScope({
-                ...scope,
-                artifactType: artifactType as NonNullable<
-                  FiledReturnsDownloadScope["artifactType"]
-                >,
-              }),
-            )
-          }
-        />
-      </div>
-      <div className="scope-section scope-section-period">
-        <ScopeSelect
-          label="Financial year"
-          value={scope.financialYear}
-          options={formModel.financialYearOptions}
-          onChange={(financialYear) =>
-            onScopeChange(
-              normaliseFiledReturnsScope({
-                ...scope,
-                financialYear,
-              }),
-            )
-          }
-        />
-        {formModel.fullFiscalYear ? null : (
-          <ScopeSelect
-            label="Period"
-            value={scope.period}
-            options={formModel.singlePeriodOptions}
-            onChange={(period) => onScopeChange({ ...scope, period })}
+          {formModel.supportsFullFiscalYear ? (
+            <ScopeButtonGroup
+              className="scope-group-run-mode"
+              label="Run mode"
+              value={formModel.fullFiscalYear ? "FULL_YEAR" : "SINGLE_PERIOD"}
+              options={[
+                { value: "SINGLE_PERIOD", label: "Single period" },
+                { value: "FULL_YEAR", label: "Full fiscal year" },
+              ]}
+              onChange={(mode) =>
+                onScopeChange(
+                  normaliseFiledReturnsScope({
+                    ...scope,
+                    period:
+                      mode === "FULL_YEAR"
+                        ? FULL_FISCAL_YEAR_PERIOD
+                        : getSinglePeriodFallback(scope.period, formModel.singlePeriodOptions),
+                  }),
+                )
+              }
+            />
+          ) : null}
+          <ScopeButtonGroup
+            className="scope-group-file"
+            label="File"
+            value={formModel.selectedArtifactType}
+            options={formModel.artifactOptions}
+            onChange={(artifactType) =>
+              onScopeChange(
+                normaliseFiledReturnsScope({
+                  ...scope,
+                  artifactType: artifactType as NonNullable<
+                    FiledReturnsDownloadScope["artifactType"]
+                  >,
+                }),
+              )
+            }
           />
-        )}
+        </div>
+        <div className="scope-action-column">
+          <div className="scope-section scope-section-period">
+            <ScopeSelect
+              label="Financial year"
+              value={scope.financialYear}
+              options={formModel.financialYearOptions}
+              onChange={(financialYear) =>
+                onScopeChange(
+                  normaliseFiledReturnsScope({
+                    ...scope,
+                    financialYear,
+                  }),
+                )
+              }
+            />
+            {formModel.fullFiscalYear ? null : (
+              <ScopeSelect
+                label="Period"
+                value={scope.period}
+                options={formModel.singlePeriodOptions}
+                onChange={(period) => onScopeChange({ ...scope, period })}
+              />
+            )}
+          </div>
+          <div className="run-action-strip">
+            <div>
+              <p className="section-label">Action</p>
+              <p className="run-action-copy">
+                {formModel.fullFiscalYear
+                  ? "Create one local ZIP from each eligible period."
+                  : "Download the selected period through the active GST tab."}
+              </p>
+            </div>
+            <button
+              className="primary-action"
+              type="button"
+              disabled={startAction.disabled}
+              onClick={onStart}
+            >
+              {startAction.label}
+            </button>
+          </div>
+          {formModel.fullFiscalYear ? (
+            <p className="scope-note">{getFullFiscalYearNote(scope)}</p>
+          ) : null}
+          {!context?.supported ? (
+            <p className="scope-note scope-note-warning">
+              Open a signed-in GST return dashboard or return page before starting. Pack will not
+              open login pages or reuse stale portal state.
+            </p>
+          ) : null}
+        </div>
       </div>
-      {formModel.fullFiscalYear ? (
-        <p className="scope-note">{getFullFiscalYearNote(scope)}</p>
-      ) : null}
-      {!context?.supported ? (
-        <p className="scope-note scope-note-warning">
-          Open a signed-in GST return dashboard or return page before starting. Pack will not open
-          login pages or reuse stale portal state.
-        </p>
-      ) : null}
-      <button
-        className="primary-action"
-        type="button"
-        disabled={startAction.disabled}
-        onClick={onStart}
-      >
-        {startAction.label}
-      </button>
     </section>
   );
 }

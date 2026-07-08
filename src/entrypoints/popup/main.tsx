@@ -38,14 +38,6 @@ function App() {
             scope={popup.scope}
             status={popup.status}
           />
-          <ScopeForm
-            busy={popup.effectiveBusy}
-            context={popup.context}
-            flowSummary={popup.scopedFlowSummary}
-            scope={popup.scope}
-            onScopeChange={popup.setScope}
-            onStart={() => void popup.startFiledReturnsFlow()}
-          />
         </div>
 
         <aside className="evidence-column" aria-label="Run status and recovery">
@@ -70,6 +62,17 @@ function App() {
             />
           ) : null}
         </aside>
+
+        <div className="scope-column">
+          <ScopeForm
+            busy={popup.effectiveBusy}
+            context={popup.context}
+            flowSummary={popup.scopedFlowSummary}
+            scope={popup.scope}
+            onScopeChange={popup.setScope}
+            onStart={() => void popup.startFiledReturnsFlow()}
+          />
+        </div>
       </section>
 
       <p className="fineprint">

@@ -107,10 +107,15 @@ html[data-pack-surface="popup"] body {
 }
 
 .target-column,
+.scope-column,
 .evidence-column {
   display: grid;
   gap: 10px;
   min-width: 0;
+}
+
+.scope-column {
+  grid-column: 1 / -1;
 }
 
 .evidence-column {

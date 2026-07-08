@@ -260,7 +260,29 @@ describe("popup full-year recovery actions", () => {
     expect(markup).toContain(
       "PDF and Excel are captured only from the portal-generated download controls.",
     );
+    expect(markup).toContain("Create one local ZIP from each eligible period.");
     expect(markup).not.toContain("selected GSTR-1 e-invoice details file");
+  });
+
+  it("explains single-period runs as active-tab downloads", () => {
+    const markup = renderToStaticMarkup(
+      createElement(ScopeForm, {
+        busy: null,
+        context: supportedPortalContext(),
+        scope: {
+          artifactType: "PDF",
+          financialYear: "2026-27",
+          period: "May",
+          returnType: "GSTR-3B",
+        },
+        flowSummary: null,
+        onScopeChange: () => undefined,
+        onStart: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain("Download the selected period through the active GST tab.");
+    expect(markup).toContain("Start download");
   });
 
   it("presents interrupted runs as resettable stuck work", () => {
