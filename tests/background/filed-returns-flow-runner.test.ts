@@ -3218,6 +3218,50 @@ describe("filed returns flow runner", () => {
     expect(sendMessageToTabWithInjection).toHaveBeenCalledTimes(8);
   });
 
+  it("waits for the GSTR-2B summary page after opening a dashboard result row", async () => {
+    const responses: PackMessageResponse[] = [
+      filedReturnRowOpened("May"),
+      gstr2bDashboardWaiting(),
+      gstr2bDownloadReady("May"),
+      gstr2bDownloadClicked(),
+    ];
+    const sendMessageToTabWithInjection = vi.fn<
+      FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
+    >(async () => responses.shift() ?? { ok: false, error: "Unexpected call." });
+
+    const response = await startFiledReturnsDownloadFlow(
+      {
+        artifactType: "PDF",
+        financialYear: "2025-26",
+        period: "May",
+        returnType: "GSTR-2B",
+      },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+        },
+        now: () => new Date("2026-07-03T00:00:00.000Z"),
+        timings: {
+          flowStepSettleMs: 0,
+          resultRowNavigationSettleMs: 0,
+        },
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "downloaded",
+        safeSignals: expect.arrayContaining(["filed-gstr2b-download-clicked"]),
+      },
+    });
+    expect(sendMessageToTabWithInjection).toHaveBeenCalledTimes(4);
+  });
+
   it("explains when a direct download is waiting on the browser native Save prompt", async () => {
     const directUrl = "https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=052026";
     vi.mocked(observeBrowserDownloadById).mockResolvedValueOnce({

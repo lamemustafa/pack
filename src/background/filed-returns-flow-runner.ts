@@ -359,5 +359,5 @@ async function triggerSinglePeriodDownloadAndPersistSummary({
 }
 
 function shouldWaitForDetailReadyAfterResultNavigation(scope: FiledReturnsDownloadScope): boolean {
-  return scope.returnType === "GSTR-1";
+  return scope.returnType === "GSTR-1" || scope.returnType === "GSTR-2B";
 }
