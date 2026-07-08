@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  GSTR2B_PORTAL_WORKBOOK_ENTRIES,
+  isLikelyGstr2bPortalXlsxBytes,
   isLikelyPdfBytes,
   isLikelyXlsBytes,
   isLikelyXlsxBytes,
@@ -24,14 +24,39 @@ describe("filed-return artifact byte signatures", () => {
     const workbook = createZip([
       { path: "[Content_Types].xml", bytes: textBytes("<Types />") },
       { path: "xl/workbook.xml", bytes: textBytes("<workbook />") },
-      { path: "xl/worksheets/sheet10.xml", bytes: textBytes("<worksheet />") },
     ]);
     const markerTextOnly = textBytes("PK\u0003\u0004[Content_Types].xml xl/workbook.xml");
 
-    expect(isLikelyXlsxBytes(workbook, GSTR2B_PORTAL_WORKBOOK_ENTRIES)).toBe(true);
-    expect(isLikelyXlsxBytes(markerTextOnly, GSTR2B_PORTAL_WORKBOOK_ENTRIES)).toBe(false);
+    expect(isLikelyXlsxBytes(workbook)).toBe(true);
+    expect(isLikelyXlsxBytes(markerTextOnly)).toBe(false);
+  });
+
+  it("requires a multi-sheet portal workbook shape for GSTR-2B Excel", () => {
+    const portalWorkbook = createPortalGstr2bWorkbook();
+    const weakWorkbook = createZip([
+      { path: "[Content_Types].xml", bytes: textBytes("<Types />") },
+      { path: "xl/workbook.xml", bytes: textBytes("<workbook />") },
+      { path: "xl/worksheets/sheet10.xml", bytes: textBytes("<worksheet />") },
+    ]);
+
+    expect(isLikelyGstr2bPortalXlsxBytes(portalWorkbook)).toBe(true);
+    expect(isLikelyGstr2bPortalXlsxBytes(weakWorkbook)).toBe(false);
   });
 });
+
+function createPortalGstr2bWorkbook(): Uint8Array {
+  return createZip([
+    { path: "[Content_Types].xml", bytes: textBytes("<Types />") },
+    { path: "xl/_rels/workbook.xml.rels", bytes: textBytes("<Relationships />") },
+    { path: "xl/sharedStrings.xml", bytes: textBytes("<sst />") },
+    { path: "xl/styles.xml", bytes: textBytes("<styleSheet />") },
+    { path: "xl/workbook.xml", bytes: textBytes("<workbook />") },
+    ...Array.from({ length: 10 }, (_, index) => ({
+      path: `xl/worksheets/sheet${index + 1}.xml`,
+      bytes: textBytes("<worksheet />"),
+    })),
+  ]);
+}
 
 function textBytes(value: string): Uint8Array {
   return new TextEncoder().encode(value);

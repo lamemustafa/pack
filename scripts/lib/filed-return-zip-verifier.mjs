@@ -7,9 +7,13 @@ const MAX_EOCD_SCAN_BYTES = 65_557;
 const GSTR2B_MIN_PORTAL_PDF_BYTES = 20 * 1024;
 const GSTR2B_PORTAL_WORKBOOK_ENTRIES = [
   "[content_types].xml",
+  "xl/_rels/workbook.xml.rels",
+  "xl/sharedstrings.xml",
+  "xl/styles.xml",
   "xl/workbook.xml",
   "xl/worksheets/sheet10.xml",
 ];
+const GSTR2B_MIN_WORKSHEET_COUNT = 10;
 
 export function verifyFiledReturnZipBytes(bytes, options = {}) {
   const outerEntries = readZipEntries(bytes);
@@ -202,8 +206,13 @@ function isLikelyXlsx(bytes) {
 
 function isLikelyGstr2bXlsx(bytes) {
   try {
-    const names = new Set(readZipEntries(bytes).map((entry) => entry.name.toLowerCase()));
-    return GSTR2B_PORTAL_WORKBOOK_ENTRIES.every((entry) => names.has(entry));
+    const entries = readZipEntries(bytes);
+    const names = new Set(entries.map((entry) => entry.name.toLowerCase()));
+    if (!GSTR2B_PORTAL_WORKBOOK_ENTRIES.every((entry) => names.has(entry))) return false;
+    const worksheetCount = entries.filter((entry) =>
+      /^xl\/worksheets\/sheet\d+\.xml$/i.test(entry.name),
+    ).length;
+    return worksheetCount >= GSTR2B_MIN_WORKSHEET_COUNT;
   } catch {
     return false;
   }

@@ -5,7 +5,7 @@ import {
 } from "../core/filed-returns-artifacts";
 import type { FiledReturnsDownloadTarget } from "../core/contracts";
 import {
-  GSTR2B_PORTAL_WORKBOOK_ENTRIES,
+  isLikelyGstr2bPortalXlsxBytes,
   isLikelyPdfBytes,
   isLikelyXlsBytes,
   isLikelyXlsxBytes,
@@ -58,7 +58,7 @@ export function isExpectedCapturedDataUrlForReturnType(
   if (artifactType === "PDF") {
     return decoded.bytes.byteLength >= GSTR2B_MIN_PORTAL_PDF_BYTES;
   }
-  return isLikelyXlsxBytes(decoded.bytes, GSTR2B_PORTAL_WORKBOOK_ENTRIES);
+  return isLikelyGstr2bPortalXlsxBytes(decoded.bytes);
 }
 
 export function capturedFiledReturnsArtifactExtension(

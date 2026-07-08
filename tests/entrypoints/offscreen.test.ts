@@ -271,11 +271,7 @@ describe("offscreen Blob URL entrypoint", () => {
 
   it("stages chunked GSTR-2B spreadsheet bytes without relying on a full data-url join", async () => {
     await loadOffscreenEntrypoint();
-    const zipBytes = createZip([
-      { path: "[Content_Types].xml", bytes: textBytes("<Types />") },
-      { path: "xl/workbook.xml", bytes: textBytes("<workbook />") },
-      { path: "xl/worksheets/sheet10.xml", bytes: textBytes("<worksheet />") },
-    ]);
+    const zipBytes = createPortalGstr2bWorkbook();
     const dataUrl = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${bytesToBase64(zipBytes)}`;
     const chunks = [
       dataUrl.slice(0, 87),
@@ -522,6 +518,20 @@ describe("offscreen Blob URL entrypoint", () => {
 
   function textBytes(text: string): Uint8Array {
     return new TextEncoder().encode(text);
+  }
+
+  function createPortalGstr2bWorkbook(): Uint8Array {
+    return createZip([
+      { path: "[Content_Types].xml", bytes: textBytes("<Types />") },
+      { path: "xl/_rels/workbook.xml.rels", bytes: textBytes("<Relationships />") },
+      { path: "xl/sharedStrings.xml", bytes: textBytes("<sst />") },
+      { path: "xl/styles.xml", bytes: textBytes("<styleSheet />") },
+      { path: "xl/workbook.xml", bytes: textBytes("<workbook />") },
+      ...Array.from({ length: 10 }, (_, index) => ({
+        path: `xl/worksheets/sheet${index + 1}.xml`,
+        bytes: textBytes("<worksheet />"),
+      })),
+    ]);
   }
 
   function bytesToBase64(bytes: Uint8Array): string {

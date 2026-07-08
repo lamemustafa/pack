@@ -7,9 +7,13 @@ const OLE_COMPOUND_FILE_MAGIC = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]
 
 export const GSTR2B_PORTAL_WORKBOOK_ENTRIES = [
   "[content_types].xml",
+  "xl/_rels/workbook.xml.rels",
+  "xl/sharedstrings.xml",
+  "xl/styles.xml",
   "xl/workbook.xml",
   "xl/worksheets/sheet10.xml",
 ] as const;
+const GSTR2B_MIN_WORKSHEET_COUNT = 10;
 
 export function isLikelyPdfBytes(bytes: Uint8Array): boolean {
   if (!bytesStartWithAscii(bytes, "%PDF-")) return false;
@@ -30,6 +34,18 @@ export function isLikelyXlsxBytes(
   if (!entries) return false;
   const names = new Set(entries.map((entry) => entry.toLowerCase()));
   return requiredEntries.every((entry) => names.has(entry.toLowerCase()));
+}
+
+export function isLikelyGstr2bPortalXlsxBytes(bytes: Uint8Array): boolean {
+  if (!bytesStartWith(bytes, [0x50, 0x4b, 0x03, 0x04])) return false;
+  const entries = readZipEntryNames(bytes);
+  if (!entries) return false;
+  const names = new Set(entries.map((entry) => entry.toLowerCase()));
+  if (!GSTR2B_PORTAL_WORKBOOK_ENTRIES.every((entry) => names.has(entry))) return false;
+  const worksheetCount = entries.filter((entry) =>
+    /^xl\/worksheets\/sheet\d+\.xml$/i.test(entry),
+  ).length;
+  return worksheetCount >= GSTR2B_MIN_WORKSHEET_COUNT;
 }
 
 function readZipEntryNames(bytes: Uint8Array): string[] | null {

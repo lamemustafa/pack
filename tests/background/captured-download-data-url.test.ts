@@ -124,11 +124,7 @@ describe("captured download data URL validation", () => {
   });
 
   it("accepts portal-style spreadsheet ZIP containers for GSTR-2B Excel captures", () => {
-    const workbook = createZip([
-      { path: "[Content_Types].xml", bytes: textBytes("<Types />") },
-      { path: "xl/workbook.xml", bytes: textBytes("<workbook />") },
-      { path: "xl/worksheets/sheet10.xml", bytes: textBytes("<worksheet />") },
-    ]);
+    const workbook = createPortalGstr2bWorkbook();
 
     expect(
       isExpectedCapturedDataUrlForTarget(
@@ -141,6 +137,20 @@ describe("captured download data URL validation", () => {
     ).toBe(true);
   });
 });
+
+function createPortalGstr2bWorkbook(): Uint8Array {
+  return createZip([
+    { path: "[Content_Types].xml", bytes: textBytes("<Types />") },
+    { path: "xl/_rels/workbook.xml.rels", bytes: textBytes("<Relationships />") },
+    { path: "xl/sharedStrings.xml", bytes: textBytes("<sst />") },
+    { path: "xl/styles.xml", bytes: textBytes("<styleSheet />") },
+    { path: "xl/workbook.xml", bytes: textBytes("<workbook />") },
+    ...Array.from({ length: 10 }, (_, index) => ({
+      path: `xl/worksheets/sheet${index + 1}.xml`,
+      bytes: textBytes("<worksheet />"),
+    })),
+  ]);
+}
 
 function textBytes(value: string): Uint8Array {
   return new TextEncoder().encode(value);

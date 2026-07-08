@@ -17,10 +17,12 @@ export function DownloadTargetSummary({
   status: string;
 }) {
   const artifactType = normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType);
+  const fullFiscalYear = isFullFiscalYearScope(scope);
   const portalState = context?.supported ? "Portal ready" : "Portal needed";
   const stateClassName = context?.supported
     ? "state-pill state-pill-ready"
     : "state-pill state-pill-needed";
+  const runSteps = targetRunSteps(scope.returnType, fullFiscalYear);
 
   return (
     <section className="target-strip" aria-label="Selected filed return download target">
@@ -38,7 +40,7 @@ export function DownloadTargetSummary({
         </div>
         <div>
           <dt>Period</dt>
-          <dd>{isFullFiscalYearScope(scope) ? "Full year" : scope.period}</dd>
+          <dd>{fullFiscalYear ? "Full year" : scope.period}</dd>
         </div>
         <div>
           <dt>Artifact</dt>
@@ -46,9 +48,14 @@ export function DownloadTargetSummary({
         </div>
         <div>
           <dt>Mode</dt>
-          <dd>{isFullFiscalYearScope(scope) ? "ZIP handoff" : "Single period"}</dd>
+          <dd>{fullFiscalYear ? "ZIP handoff" : "Single period"}</dd>
         </div>
       </dl>
+      <ol className="target-run-steps" aria-label="Run sequence">
+        {runSteps.map((step) => (
+          <li key={step}>{step}</li>
+        ))}
+      </ol>
       <p className="target-status">
         {currentTargetStatus({
           completionStatus,
@@ -58,6 +65,19 @@ export function DownloadTargetSummary({
       </p>
     </section>
   );
+}
+
+function targetRunSteps(
+  returnType: FiledReturnsDownloadScope["returnType"],
+  fullFiscalYear: boolean,
+): string[] {
+  if (returnType === "GSTR-2B") {
+    return fullFiscalYear
+      ? ["Open each period", "Capture portal files", "Save one ZIP"]
+      : ["Use visible page", "Capture portal files", "Save local ZIP"];
+  }
+  if (fullFiscalYear) return ["Open each period", "Confirm filed page", "Save one ZIP"];
+  return ["Use visible page", "Confirm target", "Save locally"];
 }
 
 function currentTargetStatus({

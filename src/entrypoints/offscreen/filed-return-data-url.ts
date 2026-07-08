@@ -3,7 +3,7 @@ import {
   type FiledReturnsConcreteArtifactType,
 } from "../../core/filed-returns-artifacts";
 import {
-  GSTR2B_PORTAL_WORKBOOK_ENTRIES,
+  isLikelyGstr2bPortalXlsxBytes,
   isLikelyPdfBytes,
   isLikelyXlsBytes,
   isLikelyXlsxBytes,
@@ -50,7 +50,7 @@ export function isExpectedDecodedDataUrlForReturnType(
   if (artifactType === "PDF") {
     return bytes.byteLength >= GSTR2B_MIN_PORTAL_PDF_BYTES;
   }
-  return isLikelyXlsxBytes(bytes, GSTR2B_PORTAL_WORKBOOK_ENTRIES);
+  return isLikelyGstr2bPortalXlsxBytes(bytes);
 }
 
 function dataUrlToDecoded(
