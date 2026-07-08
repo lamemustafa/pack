@@ -19,7 +19,10 @@ import {
   dismissSafePostLoginDialogs,
   dismissKnownFiledReturnsSummaryModal,
 } from "../../src/connectors/gst/filed-returns-dialogs";
-import { navigateToFiledReturnsPage } from "../../src/connectors/gst/filed-returns-navigator";
+import {
+  navigateToFiledReturnsPage,
+  navigateToReturnDashboardPage,
+} from "../../src/connectors/gst/filed-returns-navigator";
 
 describe("filed returns navigation matcher", () => {
   it("prefers the explicit View Filed Returns portal candidate", () => {
@@ -136,6 +139,73 @@ describe("filed returns navigation matcher", () => {
 
     expect(result.state).toBe("clicked");
     expect(fetchCalls).toEqual([]);
+  });
+
+  it("clicks a filed-returns menu item without the fixed menu delay when reveal is synchronous", async () => {
+    const documentRef = createDocument(
+      `
+      <main>
+        <button data-services>Services</button>
+        <nav data-menu hidden></nav>
+      </main>
+    `,
+      "https://services.gst.gov.in/services/auth/fowelcome",
+    );
+    const menu = documentRef.querySelector("[data-menu]");
+    documentRef.querySelector("[data-services]")?.addEventListener("click", () => {
+      menu?.removeAttribute("hidden");
+      const link = documentRef.createElement("a");
+      link.href = "https://return.gst.gov.in/returns/auth/efiledReturns";
+      link.textContent = "View Filed Returns";
+      menu?.append(link);
+    });
+    const restoreSetTimeout = rejectFixedNavigationDelay();
+
+    try {
+      const result = await navigateToFiledReturnsPage(documentRef);
+
+      expect(result.state).toBe("clicked");
+      expect(result.safeSignals).toEqual(
+        expect.arrayContaining(["filed-returns-candidate-clicked", "after-services-menu"]),
+      );
+    } finally {
+      restoreSetTimeout();
+    }
+  });
+
+  it("clicks a return-dashboard menu item without the fixed menu delay when reveal is synchronous", async () => {
+    const documentRef = createDocument(
+      `
+      <main>
+        <button data-services>Services</button>
+        <nav data-menu hidden></nav>
+      </main>
+    `,
+      "https://services.gst.gov.in/services/auth/fowelcome",
+    );
+    const menu = documentRef.querySelector("[data-menu]");
+    documentRef.querySelector("[data-services]")?.addEventListener("click", () => {
+      menu?.removeAttribute("hidden");
+      const link = documentRef.createElement("a");
+      link.href = "https://return.gst.gov.in/returns/auth/dashboard";
+      link.textContent = "Returns Dashboard";
+      menu?.append(link);
+    });
+    const restoreSetTimeout = rejectFixedNavigationDelay();
+
+    try {
+      const result = await navigateToReturnDashboardPage(documentRef, "gst-gstr2b-private-v0");
+
+      expect(result.state).toBe("clicked");
+      expect(result.safeSignals).toEqual(
+        expect.arrayContaining([
+          "return-dashboard-candidate-clicked",
+          "return-dashboard-after-services-menu",
+        ]),
+      );
+    } finally {
+      restoreSetTimeout();
+    }
   });
 
   it("finds the return dashboard entry before broader return actions", () => {
@@ -397,4 +467,17 @@ function createDocument(
       toJSON: () => ({}),
     }) as DOMRect;
   return dom.window.document;
+}
+
+function rejectFixedNavigationDelay(): () => void {
+  const originalSetTimeout = globalThis.setTimeout;
+  globalThis.setTimeout = ((handler: TimerHandler, timeout?: number, ...args: unknown[]) => {
+    if (timeout === 350) {
+      throw new Error("Navigation should not wait for the fixed menu reveal delay.");
+    }
+    return originalSetTimeout(handler, timeout, ...args);
+  }) as typeof globalThis.setTimeout;
+  return () => {
+    globalThis.setTimeout = originalSetTimeout;
+  };
 }

@@ -35,6 +35,14 @@ export async function navigateToFiledReturnsPage(
   if (firstPass) return firstPass;
 
   revealMenuCandidate(documentRef, isServicesMenuCandidate);
+  safeSignals.push(...(await dismissSafePostLoginDialogs(documentRef)));
+  const immediateAfterServices = clickBestFiledReturnsCandidate(
+    documentRef,
+    "after-services-menu",
+    safeSignals,
+  );
+  if (immediateAfterServices) return immediateAfterServices;
+
   await delay(MENU_REVEAL_DELAY_MS);
   safeSignals.push(...(await dismissSafePostLoginDialogs(documentRef)));
 
@@ -46,6 +54,14 @@ export async function navigateToFiledReturnsPage(
   if (afterServices) return afterServices;
 
   revealMenuCandidate(documentRef, isReturnsMenuCandidate);
+  safeSignals.push(...(await dismissSafePostLoginDialogs(documentRef)));
+  const immediateAfterReturns = clickBestFiledReturnsCandidate(
+    documentRef,
+    "after-returns-menu",
+    safeSignals,
+  );
+  if (immediateAfterReturns) return immediateAfterReturns;
+
   await delay(MENU_REVEAL_DELAY_MS);
   safeSignals.push(...(await dismissSafePostLoginDialogs(documentRef)));
 
@@ -115,6 +131,15 @@ export async function navigateToReturnDashboardPage(
   if (firstPass) return firstPass;
 
   revealMenuCandidate(documentRef, isServicesMenuCandidate);
+  safeSignals.push(...(await dismissSafePostLoginDialogs(documentRef)));
+  const immediateAfterServices = clickBestReturnDashboardCandidate(
+    documentRef,
+    "return-dashboard-after-services-menu",
+    safeSignals,
+    scopeId,
+  );
+  if (immediateAfterServices) return immediateAfterServices;
+
   await delay(MENU_REVEAL_DELAY_MS);
   safeSignals.push(...(await dismissSafePostLoginDialogs(documentRef)));
 
@@ -127,6 +152,15 @@ export async function navigateToReturnDashboardPage(
   if (afterServices) return afterServices;
 
   revealMenuCandidate(documentRef, isReturnsMenuCandidate);
+  safeSignals.push(...(await dismissSafePostLoginDialogs(documentRef)));
+  const immediateAfterReturns = clickBestReturnDashboardCandidate(
+    documentRef,
+    "return-dashboard-after-returns-menu",
+    safeSignals,
+    scopeId,
+  );
+  if (immediateAfterReturns) return immediateAfterReturns;
+
   await delay(MENU_REVEAL_DELAY_MS);
   safeSignals.push(...(await dismissSafePostLoginDialogs(documentRef)));
 
