@@ -81,6 +81,8 @@ function getGstPortalTabPriority(url: string | undefined): number {
     if (isGstPortalErrorPath(pathname)) return -1;
     if (isGstPortalArtifactPath(pathname)) return -1;
     if (parsed.origin === "https://return.gst.gov.in" && pathname.includes("/returns/auth/")) {
+      if (pathname.includes("/returns/auth/efiledreturns")) return 43;
+      if (pathname.includes("/returns/auth/dashboard")) return 42;
       return 40;
     }
     if (parsed.origin === "https://gstr2b.gst.gov.in" && pathname.includes("/gstr2b/auth/")) {

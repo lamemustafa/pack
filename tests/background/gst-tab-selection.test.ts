@@ -772,7 +772,7 @@ describe("Pack GST tab selection", () => {
     await expect(getActiveGstTab()).resolves.toBeNull();
   });
 
-  it("fails closed when multiple GST tabs are equally preferred", async () => {
+  it("prefers the filed-return results tab over the return dashboard from the full workbench", async () => {
     browserMocks.tabs.query
       .mockResolvedValueOnce([
         {
@@ -791,6 +791,32 @@ describe("Pack GST tab selection", () => {
           active: false,
           id: 26,
           url: "https://return.gst.gov.in/returns/auth/efiledReturns",
+        },
+      ]);
+    const { getActiveGstTab } = await import("../../src/entrypoints/background");
+
+    await expect(getActiveGstTab()).resolves.toMatchObject({ id: 26 });
+  });
+
+  it("fails closed when multiple GST tabs are equally preferred", async () => {
+    browserMocks.tabs.query
+      .mockResolvedValueOnce([
+        {
+          active: true,
+          id: 24,
+          url: "chrome-extension://pack-test-extension/popup.html",
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          active: false,
+          id: 25,
+          url: "https://return.gst.gov.in/returns/auth/dashboard",
+        },
+        {
+          active: false,
+          id: 26,
+          url: "https://return.gst.gov.in/returns/auth/dashboard?from=menu",
         },
       ]);
     const { getActiveGstTab } = await import("../../src/entrypoints/background");
