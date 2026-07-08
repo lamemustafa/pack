@@ -126,7 +126,9 @@ vi.mock("wxt/browser", () => ({
         {
           result: {
             actionId: "action-captured",
-            dataUrl: `data:application/pdf;base64,${globalThis.btoa("%PDF-1.7 synthetic")}`,
+            dataUrl: `data:application/pdf;base64,${globalThis.btoa(
+              "%PDF-1.7 synthetic\n%%EOF\n",
+            )}`,
             safeSignals: ["portal-blob-captured", "native-blob-click-suppressed"],
           },
         },
@@ -6018,7 +6020,7 @@ function dataUrlBytes(mimeType: string, bytes: Uint8Array): string {
 }
 
 function portalSizedPdfBody(marker: string): string {
-  return `%PDF-1.7 synthetic${marker} ${"x".repeat(21 * 1024)}`;
+  return `%PDF-1.7 synthetic${marker} ${"x".repeat(21 * 1024)}\n%%EOF\n`;
 }
 
 function saneXlsxBytes(marker: string): Uint8Array {

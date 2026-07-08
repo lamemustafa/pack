@@ -23,7 +23,7 @@ describe("captured download data URL validation", () => {
   it("accepts generic binary PDF blobs only when PDF magic bytes match", () => {
     expect(
       isExpectedCapturedDataUrl(
-        `data:application/octet-stream;base64,${base64("%PDF-1.7 synthetic")}`,
+        `data:application/octet-stream;base64,${base64("%PDF-1.7 synthetic\n%%EOF\n")}`,
         "PDF",
       ),
     ).toBe(true);
@@ -40,8 +40,12 @@ describe("captured download data URL validation", () => {
     const xlsDataUrl = `data:application/vnd.ms-excel;base64,${base64(
       "\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1legacy-xls",
     )}`;
+    const xlsxBytes = createZip([
+      { path: "[Content_Types].xml", bytes: textBytes("<Types />") },
+      { path: "xl/workbook.xml", bytes: textBytes("<workbook />") },
+    ]);
     const xlsxDataUrl = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${base64(
-      "PK\u0003\u0004xlsx",
+      bytesToBinaryString(xlsxBytes),
     )}`;
 
     expect(isExpectedCapturedDataUrl(xlsDataUrl, "EXCEL")).toBe(true);
@@ -52,7 +56,7 @@ describe("captured download data URL validation", () => {
 
   it("requires portal-sized bytes before accepting captured GSTR-2B PDFs", () => {
     const target = gstr2bTarget();
-    const portalSizedPdf = `%PDF-1.7 GSTR-2B statement ${"x".repeat(21 * 1024)}`;
+    const portalSizedPdf = `%PDF-1.7 GSTR-2B statement ${"x".repeat(21 * 1024)}\n%%EOF\n`;
 
     expect(
       isExpectedCapturedDataUrlForTarget(
@@ -143,7 +147,11 @@ function textBytes(value: string): Uint8Array {
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
+  return globalThis.btoa(bytesToBinaryString(bytes));
+}
+
+function bytesToBinaryString(bytes: Uint8Array): string {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
-  return globalThis.btoa(binary);
+  return binary;
 }

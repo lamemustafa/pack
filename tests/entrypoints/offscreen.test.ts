@@ -188,7 +188,7 @@ describe("offscreen Blob URL entrypoint", () => {
 
   it("assembles chunked filed-return bytes before staging", async () => {
     await loadOffscreenEntrypoint();
-    const dataUrl = `data:application/pdf;base64,${btoa("%PDF-1.7 chunked staged")}`;
+    const dataUrl = `data:application/pdf;base64,${btoa("%PDF-1.7 chunked staged\n%%EOF\n")}`;
     const chunks = [dataUrl.slice(0, 20), dataUrl.slice(20)];
 
     const first = await sendOffscreenMessage({
@@ -330,6 +330,7 @@ describe("offscreen Blob URL entrypoint", () => {
     await loadOffscreenEntrypoint();
     const pdfBytes = new Uint8Array(24 * 1024);
     pdfBytes.set(textBytes("%PDF-1.7\n1 0 obj\n<< /Filter /FlateDecode >>"));
+    pdfBytes.set(textBytes("\n%%EOF\n"), pdfBytes.byteLength - 8);
     const dataUrl = `data:application/pdf;base64,${bytesToBase64(pdfBytes)}`;
     const chunks = [dataUrl.slice(0, 19), dataUrl.slice(19, 1024), dataUrl.slice(1024)];
 

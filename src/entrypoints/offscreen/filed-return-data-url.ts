@@ -2,14 +2,15 @@ import {
   filedReturnsArtifactMimeTypes,
   type FiledReturnsConcreteArtifactType,
 } from "../../core/filed-returns-artifacts";
+import {
+  GSTR2B_PORTAL_WORKBOOK_ENTRIES,
+  isLikelyPdfBytes,
+  isLikelyXlsBytes,
+  isLikelyXlsxBytes,
+} from "../../core/filed-return-artifact-bytes";
 import type { FiledReturnsReturnType } from "../../core/filed-returns-return-types";
 
 const GSTR2B_MIN_PORTAL_PDF_BYTES = 20 * 1024;
-const GSTR2B_DETAILS_WORKBOOK_ENTRY_MARKERS = [
-  "[content_types].xml",
-  "xl/workbook.xml",
-  "xl/worksheets/sheet10.xml",
-];
 
 export function dataUrlToBlob(dataUrl: string): Blob | null {
   return dataUrlToDecoded(dataUrl)?.blob ?? null;
@@ -49,7 +50,7 @@ export function isExpectedDecodedDataUrlForReturnType(
   if (artifactType === "PDF") {
     return bytes.byteLength >= GSTR2B_MIN_PORTAL_PDF_BYTES;
   }
-  return isSaneSpreadsheetZipBytes(bytes);
+  return isLikelyXlsxBytes(bytes, GSTR2B_PORTAL_WORKBOOK_ENTRIES);
 }
 
 function dataUrlToDecoded(
@@ -140,7 +141,7 @@ function isExpectedDecodedDataUrl(
   const normalizedMetadata = metadata.toLowerCase();
   if (artifactType === "PDF") {
     return (
-      bytesStartWithAscii(bytes, "%PDF-") &&
+      isLikelyPdfBytes(bytes) &&
       (metadataIncludesExpectedMime(normalizedMetadata, artifactType) ||
         normalizedMetadata.includes("application/octet-stream"))
     );
@@ -148,7 +149,7 @@ function isExpectedDecodedDataUrl(
 
   return (
     metadataIncludesExpectedMime(normalizedMetadata, artifactType) &&
-    (bytesStartWithAscii(bytes, "PK\u0003\u0004") || bytesStartWith(bytes, OLE_COMPOUND_FILE_MAGIC))
+    (isLikelyXlsxBytes(bytes) || isLikelyXlsBytes(bytes))
   );
 }
 
@@ -160,51 +161,3 @@ function metadataIncludesExpectedMime(
     metadata.includes(mimeType),
   );
 }
-
-function isSaneSpreadsheetZipBytes(bytes: Uint8Array): boolean {
-  const normalisedText = bytesToLatin1(bytes).toLowerCase();
-  return (
-    GSTR2B_DETAILS_WORKBOOK_ENTRY_MARKERS.every((marker) => normalisedText.includes(marker)) &&
-    hasSupportedFirstZipLocalHeader(bytes)
-  );
-}
-
-function hasSupportedFirstZipLocalHeader(bytes: Uint8Array): boolean {
-  if (!bytesStartWithAscii(bytes, "PK\u0003\u0004") || bytes.byteLength < 30) return false;
-  const generalPurposeFlags = readLittleEndianUint16(bytes, 6);
-  const compressionMethod = readLittleEndianUint16(bytes, 8);
-  if (generalPurposeFlags === null || compressionMethod === null) return false;
-  const unsupportedFlagsMask = 0x0001 | 0x0004 | 0x0008 | 0x0040 | 0x2000;
-  return (generalPurposeFlags & unsupportedFlagsMask) === 0 && [0, 8].includes(compressionMethod);
-}
-
-function readLittleEndianUint16(bytes: Uint8Array, offset: number): number | null {
-  if (bytes.byteLength < offset + 2) return null;
-  const low = bytes[offset];
-  const high = bytes[offset + 1];
-  if (low === undefined || high === undefined) return null;
-  return low | (high << 8);
-}
-
-function bytesStartWithAscii(bytes: Uint8Array, marker: string): boolean {
-  if (bytes.byteLength < marker.length) return false;
-  for (let index = 0; index < marker.length; index += 1) {
-    if ((bytes[index] ?? -1) !== marker.charCodeAt(index)) return false;
-  }
-  return true;
-}
-
-function bytesStartWith(bytes: Uint8Array, marker: readonly number[]): boolean {
-  if (bytes.byteLength < marker.length) return false;
-  return marker.every((byte, index) => bytes[index] === byte);
-}
-
-function bytesToLatin1(bytes: Uint8Array): string {
-  let text = "";
-  for (let offset = 0; offset < bytes.byteLength; offset += 32_768) {
-    text += String.fromCharCode(...bytes.slice(offset, offset + 32_768));
-  }
-  return text;
-}
-
-const OLE_COMPOUND_FILE_MAGIC = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1] as const;
