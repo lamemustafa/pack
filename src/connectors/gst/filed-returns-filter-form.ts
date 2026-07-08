@@ -23,6 +23,7 @@ import { markFiledReturnsSearchPending } from "./filed-returns-search-state";
 import { filedReturnDescriptor } from "./filed-returns-return-descriptors";
 
 const FIELD_SETTLE_DELAY_MS = 500;
+const FIELD_SETTLE_POLL_MS = 50;
 const FIELD_STABILITY_DELAY_MS = 1_000;
 const FIELD_SELECTION_ATTEMPTS = 8;
 const FIELD_CONVERGENCE_ATTEMPTS = 4;
@@ -50,14 +51,22 @@ export async function selectFiledReturnsFiltersAndSearch(
   let financialYearSelected = await selectFieldOption(documentRef, FINANCIAL_YEAR_LABEL, [
     scope.financialYear,
   ]);
-  if (financialYearSelected) await delay(FIELD_SETTLE_DELAY_MS);
+  if (financialYearSelected) {
+    await waitForFieldSelection(documentRef, FINANCIAL_YEAR_LABEL, [scope.financialYear]);
+  }
 
   let periodSelected = await selectFieldOption(
     documentRef,
     FILING_PERIOD_LABEL,
     acceptedFilingPeriodOptions(scope),
   );
-  if (periodSelected) await delay(FIELD_SETTLE_DELAY_MS);
+  if (periodSelected) {
+    await waitForFieldSelection(
+      documentRef,
+      FILING_PERIOD_LABEL,
+      acceptedFilingPeriodOptions(scope),
+    );
+  }
 
   let monthFieldPresent = hasFieldControl(documentRef, MONTH_LABEL);
   let monthSelected = !monthFieldPresent;
@@ -65,7 +74,9 @@ export async function selectFiledReturnsFiltersAndSearch(
     monthSelected = await selectFieldOption(documentRef, MONTH_LABEL, acceptedMonthOptions(scope));
     monthFieldPresent = monthFieldPresent || hasFieldControl(documentRef, MONTH_LABEL);
   }
-  if (monthFieldPresent && monthSelected) await delay(FIELD_SETTLE_DELAY_MS);
+  if (monthFieldPresent && monthSelected) {
+    await waitForFieldSelection(documentRef, MONTH_LABEL, acceptedMonthOptions(scope));
+  }
 
   let returnTypeSelected = await selectFieldOption(documentRef, RETURN_TYPE_LABEL, [
     scope.returnType,
@@ -74,7 +85,9 @@ export async function selectFiledReturnsFiltersAndSearch(
     await delay(FIELD_SETTLE_DELAY_MS);
     monthSelected = await selectFieldOption(documentRef, MONTH_LABEL, acceptedMonthOptions(scope));
     monthFieldPresent = monthFieldPresent || hasFieldControl(documentRef, MONTH_LABEL);
-    if (monthSelected) await delay(FIELD_SETTLE_DELAY_MS);
+    if (monthSelected) {
+      await waitForFieldSelection(documentRef, MONTH_LABEL, acceptedMonthOptions(scope));
+    }
   }
 
   const settledSelection = await settleFiledReturnsFilterSelection(documentRef, scope);
@@ -171,19 +184,23 @@ async function settleFiledReturnsFilterSelection(
 
     if (!state.financialYearSelected) {
       await selectFieldOption(documentRef, FINANCIAL_YEAR_LABEL, [scope.financialYear]);
-      await delay(FIELD_SETTLE_DELAY_MS);
+      await waitForFieldSelection(documentRef, FINANCIAL_YEAR_LABEL, [scope.financialYear]);
     }
 
     state = readFilterSelectionState(documentRef, scope);
     if (state.financialYearSelected && !state.periodSelected) {
       await selectFieldOption(documentRef, FILING_PERIOD_LABEL, acceptedFilingPeriodOptions(scope));
-      await delay(FIELD_SETTLE_DELAY_MS);
+      await waitForFieldSelection(
+        documentRef,
+        FILING_PERIOD_LABEL,
+        acceptedFilingPeriodOptions(scope),
+      );
     }
 
     state = readFilterSelectionState(documentRef, scope);
     if (state.periodSelected && !state.returnTypeSelected) {
       await selectFieldOption(documentRef, RETURN_TYPE_LABEL, [scope.returnType]);
-      await delay(FIELD_SETTLE_DELAY_MS);
+      await waitForFieldSelection(documentRef, RETURN_TYPE_LABEL, [scope.returnType]);
     }
 
     state = readFilterSelectionState(documentRef, scope);
@@ -194,7 +211,7 @@ async function settleFiledReturnsFilterSelection(
       !state.monthSelected
     ) {
       await selectFieldOption(documentRef, MONTH_LABEL, acceptedMonthOptions(scope));
-      await delay(FIELD_SETTLE_DELAY_MS);
+      await waitForFieldSelection(documentRef, MONTH_LABEL, acceptedMonthOptions(scope));
     }
 
     state = readFilterSelectionState(documentRef, scope);
@@ -234,6 +251,18 @@ function isFilterSelectionComplete(state: FilterSelectionState): boolean {
     state.monthSelected &&
     state.returnTypeSelected
   );
+}
+
+async function waitForFieldSelection(
+  documentRef: Document,
+  labelPattern: RegExp,
+  acceptedTexts: readonly string[],
+): Promise<void> {
+  const attempts = Math.ceil(FIELD_SETTLE_DELAY_MS / FIELD_SETTLE_POLL_MS);
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (filedReturnsFilterFieldMatches(documentRef, labelPattern, acceptedTexts)) return;
+    await delay(FIELD_SETTLE_POLL_MS);
+  }
 }
 
 function describeMissingFilterContext(documentRef: Document, state: FilterSelectionState): string {
