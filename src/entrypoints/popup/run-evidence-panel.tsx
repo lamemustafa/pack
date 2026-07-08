@@ -16,12 +16,12 @@ export function RunEvidencePanel({
     return (
       <section className="evidence-panel evidence-panel-active" aria-label="Run evidence">
         <div className="evidence-heading">
-        <div>
-          <p className="section-label">Run evidence</p>
-          <h2>{summaryHeading}</h2>
+          <div>
+            <p className="section-label">Run evidence</p>
+            <h2>{summaryHeading}</h2>
+          </div>
+          <RunProgress summary={scopedFlowSummary} />
         </div>
-        <RunProgress summary={scopedFlowSummary} />
-      </div>
         <p className="status-detail">{displayFlowStepMessage(scopedFlowSummary)}</p>
         <DiagnosticSignals summary={scopedFlowSummary} />
       </section>

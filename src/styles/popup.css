@@ -21,8 +21,8 @@ html[data-pack-surface="popup"] body {
   max-height: var(--pack-popup-max-height);
   overflow-y: auto;
   align-content: start;
-  gap: 12px;
-  padding: 14px;
+  gap: 10px;
+  padding: 12px;
   background: var(--pack-soft);
 }
 
@@ -42,7 +42,7 @@ html[data-pack-surface="popup"] body {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 11px 12px;
+  padding: 9px 11px;
 }
 
 .brand-title-block {
@@ -53,14 +53,14 @@ html[data-pack-surface="popup"] body {
 }
 
 .brand-logo {
-  width: 108px;
+  width: 96px;
   max-width: 100%;
   height: auto;
 }
 
 .brand-header h1 {
   margin-top: 2px;
-  font-size: 17px;
+  font-size: 16px;
 }
 
 .brand-badges {
@@ -107,29 +107,16 @@ html[data-pack-surface="popup"] body {
   align-items: start;
 }
 
-.target-column,
 .scope-column,
-.evidence-column {
+.run-column {
   display: grid;
   gap: 10px;
   min-width: 0;
 }
 
-.scope-column {
-  grid-column: 1;
-  grid-row: 2;
-}
-
-.evidence-column {
-  grid-column: 2;
-  grid-row: 2;
+.run-column {
   position: sticky;
   top: 0;
-}
-
-.target-column {
-  grid-column: 1 / -1;
-  grid-row: 1;
 }
 
 .section-label {
@@ -235,16 +222,8 @@ html[data-pack-surface="popup"] body {
     grid-template-columns: 1fr;
   }
 
-  .evidence-column {
-    grid-column: auto;
-    grid-row: auto;
+  .run-column {
     position: static;
-  }
-
-  .scope-column,
-  .target-column {
-    grid-column: auto;
-    grid-row: auto;
   }
 
   .brand-header {

@@ -31,16 +31,24 @@ function App() {
       </header>
 
       <section className="command-workbench" aria-label="GST return download workbench">
-        <div className="target-column">
+        <div className="scope-column">
+          <ScopeForm
+            busy={popup.effectiveBusy}
+            context={popup.context}
+            flowSummary={popup.scopedFlowSummary}
+            scope={popup.scope}
+            onScopeChange={popup.setScope}
+            onStart={() => void popup.startFiledReturnsFlow()}
+          />
+        </div>
+
+        <aside className="run-column" aria-label="Target, run status, and recovery">
           <DownloadTargetSummary
             completionStatus={popup.completionStatus}
             context={popup.context}
             scope={popup.scope}
             status={popup.status}
           />
-        </div>
-
-        <aside className="evidence-column" aria-label="Run status and recovery">
           <RunEvidencePanel
             portalReady={popup.context?.supported === true}
             filedReturnsObservation={popup.filedReturnsObservation}
@@ -62,17 +70,6 @@ function App() {
             />
           ) : null}
         </aside>
-
-        <div className="scope-column">
-          <ScopeForm
-            busy={popup.effectiveBusy}
-            context={popup.context}
-            flowSummary={popup.scopedFlowSummary}
-            scope={popup.scope}
-            onScopeChange={popup.setScope}
-            onStart={() => void popup.startFiledReturnsFlow()}
-          />
-        </div>
       </section>
 
       <p className="fineprint">
