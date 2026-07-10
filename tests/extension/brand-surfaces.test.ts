@@ -47,7 +47,7 @@ describe("Pack brand surfaces", () => {
     expect(optionsHtml).toContain('href="/favicon.ico"');
   });
 
-  it("keeps the popup target-first and broad enough for operational controls", async () => {
+  it("keeps the browser-action popup compact and task-first", async () => {
     const popupSource = await readFile(
       path.join(rootDir, "src", "entrypoints", "popup", "main.tsx"),
       "utf8",
@@ -58,37 +58,26 @@ describe("Pack brand surfaces", () => {
       path.join(rootDir, "src", "styles", "popup-controls.css"),
       "utf8",
     );
-    const targetCss = await readFile(
-      path.join(rootDir, "src", "styles", "popup-target-summary.css"),
+    const popupComponentsSource = await readFile(
+      path.join(rootDir, "src", "entrypoints", "popup", "components.tsx"),
       "utf8",
     );
-
-    expect(globalCss).toContain("--pack-popup-width: 1120px;");
-    expect(globalCss).toContain("--pack-popup-min-width: 360px;");
-    expect(globalCss).toContain("--pack-popup-min-height: 720px;");
-    expect(globalCss).toContain("--pack-popup-max-height: 820px;");
+    const packSummarySource = await readFile(
+      path.join(rootDir, "src", "entrypoints", "popup", "pack-summary.tsx"),
+      "utf8",
+    );
+    expect(globalCss).toContain("--pack-action-popup-width: 420px;");
+    expect(globalCss).toContain("--pack-action-popup-max-height: 540px;");
     expect(globalCss).toContain("cursor: not-allowed;");
-    expect(popupSource).toContain("Open full workbench");
-    expect(popupCss).toContain("width: min(var(--pack-popup-width), 100vw);");
-    expect(popupCss).toContain("grid-template-columns: minmax(0, 1.55fr) minmax(320px, 0.9fr);");
-    expect(controlsCss).toContain(".workbench-link");
-    expect(popupCss).toContain(".run-column");
-    expect(popupCss).toContain("position: sticky;");
-    expect(popupCss).toContain("top: 0;");
-    expect(popupCss).toContain("height: auto;");
-    expect(popupCss).toContain("max-height: none;");
-    expect(controlsCss).toContain(
-      "grid-template-columns: minmax(0, 1.55fr) minmax(220px, 0.72fr);",
-    );
-    expect(controlsCss).toContain(
-      "grid-template-columns: minmax(0, 1.25fr) minmax(260px, 0.85fr);",
-    );
-    expect(controlsCss).toContain("grid-template-columns: minmax(0, 1fr) minmax(240px, 0.42fr);");
-    expect(controlsCss).toContain(".run-action-details");
+    expect(popupComponentsSource).toContain("What should Pack download?");
+    expect(packSummarySource).toContain("Your pack");
+    expect(popupSource).toContain("PortalStatusCard");
+    expect(popupCss).toContain(".portal-status-card");
+    expect(popupCss).toContain(".pack-summary");
+    expect(controlsCss).toContain(".advanced-options");
     expect(controlsCss).toContain("position: sticky;");
     expect(controlsCss).toContain("bottom: 0;");
-    expect(controlsCss).toContain("@media (max-width: 700px)");
-    expect(targetCss).toContain("grid-template-columns: minmax(220px, 0.32fr) minmax(0, 1fr);");
-    expect(targetCss).toContain("grid-template-columns: repeat(4, minmax(0, 1fr));");
+    expect(popupCss).not.toContain("radial-gradient");
+    expect(controlsCss).not.toContain("linear-gradient");
   });
 });

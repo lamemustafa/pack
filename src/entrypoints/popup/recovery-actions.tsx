@@ -31,8 +31,8 @@ export function RecoveryActions({
   return (
     <section className="recovery-panel" aria-label="Filed return recovery actions">
       <div className="panel-heading">
-        <p className="section-label">Needs attention</p>
-        <h2>Resolve the current run</h2>
+        <p className="section-label">Run controls</p>
+        <h2>Continue this download</h2>
       </div>
       {runActive ? (
         <>

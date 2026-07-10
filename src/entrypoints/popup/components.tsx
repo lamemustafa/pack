@@ -41,11 +41,12 @@ export function ScopeForm({
   const disabledReason = portalSupported ? null : getPortalDisabledReason(context);
   const actionDisabled = startAction.disabled || !portalSupported;
   const multipleArtifactChoices = formModel.artifactOptions.length > 1;
+  const controlsDisabled = busy !== null || flowSummary?.status === "running";
 
   return (
-    <section className="flow-panel" aria-label="Download details">
+    <section id="download-details" className="flow-panel" aria-label="Download details">
       <div className="flow-panel-heading">
-        <h2>Download details</h2>
+        <h2>What should Pack download?</h2>
         <p>Choose the filed return and period. Pack saves files through this browser.</p>
       </div>
       <div className="scope-form-grid">
@@ -55,6 +56,7 @@ export function ScopeForm({
             label="Return"
             value={scope.returnType}
             options={returnTypeOptions()}
+            disabled={controlsDisabled}
             onChange={(returnType) =>
               onScopeChange(
                 normaliseFiledReturnsScope({
@@ -83,6 +85,7 @@ export function ScopeForm({
                   description: "One ZIP",
                 },
               ]}
+              disabled={controlsDisabled}
               onChange={(mode) =>
                 onScopeChange(
                   normaliseFiledReturnsScope({
@@ -101,6 +104,7 @@ export function ScopeForm({
               label="FY"
               value={scope.financialYear}
               options={formModel.financialYearOptions}
+              disabled={controlsDisabled}
               onChange={(financialYear) =>
                 onScopeChange(
                   normaliseFiledReturnsScope({
@@ -115,14 +119,21 @@ export function ScopeForm({
                 label="Period"
                 value={scope.period}
                 options={formModel.singlePeriodOptions}
+                disabled={controlsDisabled}
                 onChange={(period) => onScopeChange({ ...scope, period })}
               />
             )}
-            {formModel.fullFiscalYear && multipleArtifactChoices ? (
+          </div>
+        </div>
+        {multipleArtifactChoices ? (
+          <details className="advanced-options">
+            <summary>More options</summary>
+            <div className="scope-row">
               <ScopeSelect
-                label="Files"
+                label="File format"
                 value={formModel.selectedArtifactType}
                 options={formModel.artifactOptions}
+                disabled={controlsDisabled}
                 onChange={(artifactType) =>
                   onScopeChange(
                     normaliseFiledReturnsScope({
@@ -134,27 +145,8 @@ export function ScopeForm({
                   )
                 }
               />
-            ) : null}
-          </div>
-        </div>
-        {multipleArtifactChoices && !formModel.fullFiscalYear ? (
-          <div className="scope-row">
-            <ScopeSelect
-              label="Files"
-              value={formModel.selectedArtifactType}
-              options={formModel.artifactOptions}
-              onChange={(artifactType) =>
-                onScopeChange(
-                  normaliseFiledReturnsScope({
-                    ...scope,
-                    artifactType: artifactType as NonNullable<
-                      FiledReturnsDownloadScope["artifactType"]
-                    >,
-                  }),
-                )
-              }
-            />
-          </div>
+            </div>
+          </details>
         ) : null}
       </div>
       <ScopeActionPanel
@@ -181,18 +173,25 @@ function ScopeSelect({
   label,
   value,
   options,
+  disabled = false,
   onChange,
 }: {
   label: string;
   value: string;
   options: Array<{ value: string; label: string }>;
+  disabled?: boolean;
   onChange: (value: string) => void;
 }) {
   const id = `scope-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
   return (
     <label className="scope-select" htmlFor={id}>
       <span>{label}</span>
-      <select id={id} value={value} onChange={(event) => onChange(event.currentTarget.value)}>
+      <select
+        id={id}
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.currentTarget.value)}
+      >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}

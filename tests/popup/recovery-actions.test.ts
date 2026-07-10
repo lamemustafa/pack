@@ -179,7 +179,7 @@ describe("popup full-year recovery actions", () => {
       }),
     );
 
-    expect(markup).toContain("Resolve current period first");
+    expect(markup).toContain("Retry after checking GST Portal");
     expect(markup).not.toContain("Start download");
   });
 
@@ -356,7 +356,7 @@ describe("popup full-year recovery actions", () => {
       }),
     );
 
-    expect(markup).toContain("Reset stuck run first");
+    expect(markup).toContain("Reset interrupted run");
     expect(markup).not.toContain("Start download");
   });
 

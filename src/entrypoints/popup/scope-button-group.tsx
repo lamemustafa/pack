@@ -3,12 +3,14 @@ export function ScopeButtonGroup({
   label,
   value,
   options,
+  disabled = false,
   onChange,
 }: {
   className?: string;
   label: string;
   value: string;
   options: Array<{ value: string; label: string; description?: string }>;
+  disabled?: boolean;
   onChange: (value: string) => void;
 }) {
   const groupName = `scope-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
@@ -22,13 +24,22 @@ export function ScopeButtonGroup({
           return (
             <label
               key={option.value}
-              className={selected ? "scope-option scope-option-selected" : "scope-option"}
+              className={
+                disabled
+                  ? selected
+                    ? "scope-option scope-option-selected scope-option-disabled"
+                    : "scope-option scope-option-disabled"
+                  : selected
+                    ? "scope-option scope-option-selected"
+                    : "scope-option"
+              }
             >
               <input
                 type="radio"
                 name={groupName}
                 value={option.value}
                 checked={selected}
+                disabled={disabled}
                 onChange={() => onChange(option.value)}
               />
               <span className="scope-option-title">{option.label}</span>

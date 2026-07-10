@@ -127,7 +127,7 @@ export function getScopeFormStartAction(
       return { disabled: true, label: "Run in progress" };
     }
     if (signals.has("filed-returns-run-needs-review")) {
-      return { disabled: true, label: "Reset stuck run first" };
+      return { disabled: true, label: "Reset interrupted run" };
     }
     if (
       signals.has("filed-returns-target-review-required") ||
@@ -135,7 +135,7 @@ export function getScopeFormStartAction(
       signals.has("full-fiscal-year-run-interrupted") ||
       (signals.has("full-fiscal-year-run-needs-action") && !signals.has("gst-portal-tab-required"))
     ) {
-      return { disabled: true, label: "Resolve current period first" };
+      return { disabled: true, label: "Retry after checking GST Portal" };
     }
     if (signals.has("full-fiscal-year-resume-confirmation-required")) {
       return { disabled: true, label: "Resume or discard saved run" };

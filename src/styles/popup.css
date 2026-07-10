@@ -38,7 +38,7 @@ html[data-pack-surface="popup"] #root {
   overflow-y: auto;
   overscroll-behavior: contain;
   margin: 0;
-  background: radial-gradient(circle at 14% 0%, rgba(23, 58, 99, 0.1), transparent 32%), #eef3f8;
+  background: #eef3f8;
   padding: 12px;
 }
 
@@ -108,6 +108,12 @@ html[data-pack-surface="popup"] #root {
   font-weight: 850;
   line-height: 1.1;
   white-space: nowrap;
+}
+
+.state-pill-neutral {
+  border-color: #c8d3de;
+  background: #f7f9fb;
+  color: #43566b;
 }
 
 .state-pill-ready {
@@ -192,10 +198,81 @@ html[data-pack-surface="popup"] #root {
   color: #8b2a20;
 }
 
+.pack-summary {
+  display: grid;
+  gap: 5px;
+  border: 1px solid #d4dfeb;
+  border-radius: 12px;
+  background: #f8fbfe;
+  padding: 10px 12px;
+}
+
+.pack-summary-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pack-summary h2 {
+  margin: 2px 0 0;
+  color: var(--pack-ink);
+  font-size: 0.8125rem;
+  font-weight: 850;
+  line-height: 1.2;
+}
+
+.pack-summary-line,
+.pack-summary-meta {
+  margin: 0;
+  color: #40566f;
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.pack-summary-meta {
+  color: #64768a;
+  font-size: 0.6875rem;
+}
+
+.pack-motif {
+  display: grid;
+  width: 31px;
+  height: 25px;
+  flex: 0 0 auto;
+  align-content: center;
+  justify-items: center;
+}
+
+.pack-motif span {
+  display: block;
+  width: 22px;
+  height: 6px;
+  border: 1px solid #7894b2;
+  border-radius: 3px;
+  background: #e9f1f8;
+}
+
+.pack-motif span:nth-child(1) {
+  transform: translateY(8px) rotate(8deg);
+}
+
+.pack-motif span:nth-child(2) {
+  transform: translateY(3px) rotate(-4deg);
+}
+
 .portal-status-content {
   display: grid;
   min-width: 0;
   gap: 4px;
+}
+
+.portal-status-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .portal-status-content h2 {

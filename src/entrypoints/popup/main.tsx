@@ -1,12 +1,13 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { browser } from "wxt/browser";
+import type { FiledReturnsFlowSummary } from "../../core/contracts";
 import "../../styles/global.css";
 import "../../styles/popup.css";
 import "../../styles/popup-controls.css";
-import "../../styles/popup-target-summary.css";
-import type { FiledReturnsFlowSummary, PortalContext } from "../../core/contracts";
 import { ScopeForm } from "./components";
+import { PackSummary } from "./pack-summary";
+import { getPopupPresentationState, type PopupPresentationState } from "./presentation-state";
 import { RecoveryActions, hasRecoveryActions } from "./recovery-actions";
 import { RunProgress } from "./run-summary";
 import { usePackPopupController } from "./use-pack-popup-controller";
@@ -15,7 +16,19 @@ function App() {
   const popup = usePackPopupController();
   const showRecovery = hasRecoveryActions(popup.scopedFlowSummary ?? null);
   const portalReady = popup.context?.supported === true;
-  const portalStatus = getPortalStatus(popup.context, popup.scopedFlowSummary, popup.effectiveBusy);
+  const presentation = getPopupPresentationState(
+    popup.context,
+    popup.scopedFlowSummary,
+    popup.effectiveBusy,
+  );
+  const showBuilder = [
+    "ready",
+    "downloading",
+    "partial",
+    "complete",
+    "unavailable",
+    "blocked",
+  ].includes(presentation.kind);
 
   return (
     <main className="popup-shell">
@@ -31,23 +44,28 @@ function App() {
             <p>GST return PDF downloader</p>
           </div>
         </div>
-        <span className={`state-pill state-pill-${portalStatus.tone}`}>{portalStatus.badge}</span>
       </header>
 
       <PortalStatusCard
-        status={portalStatus}
+        status={presentation}
         summary={popup.scopedFlowSummary}
         onOpenDownloads={() => void browser.downloads.showDefaultFolder()}
+        onOpenPortal={() => void browser.tabs.create({ url: "https://www.gst.gov.in" })}
       />
 
-      <ScopeForm
-        busy={popup.effectiveBusy}
-        context={popup.context}
-        flowSummary={popup.scopedFlowSummary}
-        scope={popup.scope}
-        onScopeChange={popup.setScope}
-        onStart={() => void popup.startFiledReturnsFlow()}
-      />
+      {showBuilder ? (
+        <>
+          <ScopeForm
+            busy={popup.effectiveBusy}
+            context={popup.context}
+            flowSummary={popup.scopedFlowSummary}
+            scope={popup.scope}
+            onScopeChange={popup.setScope}
+            onStart={() => void popup.startFiledReturnsFlow()}
+          />
+          <PackSummary scope={popup.scope} summary={popup.scopedFlowSummary} />
+        </>
+      ) : null}
 
       {showRecovery ? (
         <section className="run-stack" aria-label="Run status and recovery">
@@ -69,7 +87,7 @@ function App() {
       <footer className="fineprint" aria-label="Pack privacy boundary">
         <span>Runs locally. GST login and PDFs stay on your device.</span>
         <span className="fineprint-links">
-          <a href="https://github.com/lamemustafa/pack#privacy" target="_blank" rel="noreferrer">
+          <a href="https://pack.complyeaze.com/privacy" target="_blank" rel="noreferrer">
             Data handling
           </a>
           <span aria-hidden="true">·</span>
@@ -82,49 +100,42 @@ function App() {
   );
 }
 
-interface PortalStatusCardState {
-  badge: string;
-  body: string;
-  icon: string;
-  kind: "needed" | "detected" | "unsupported" | "expired" | "downloading" | "success" | "error";
-  primaryAction?: "open-gst" | "downloads";
-  secondaryHref?: string;
-  secondaryLabel?: string;
-  title: string;
-  tone: "needed" | "ready" | "warning" | "success" | "danger";
-}
-
 function PortalStatusCard({
   status,
   summary,
   onOpenDownloads,
+  onOpenPortal,
 }: {
-  status: PortalStatusCardState;
+  status: PopupPresentationState;
   summary: FiledReturnsFlowSummary | null;
   onOpenDownloads: () => void;
+  onOpenPortal: () => void;
 }) {
   return (
-    <section className={`portal-status-card portal-status-card-${status.tone}`}>
+    <section className={`portal-status-card portal-status-card-${status.tone}`} aria-live="polite">
       <div className="status-icon" aria-hidden="true">
         {status.icon}
       </div>
       <div className="portal-status-content">
-        <p className="section-label">GST Portal status</p>
+        <div className="portal-status-heading">
+          <p className="section-label">GST Portal status</p>
+          <span className={`state-pill state-pill-${status.tone}`}>{status.badge}</span>
+        </div>
         <h2>{status.title}</h2>
         <p>{status.body}</p>
         {status.kind === "downloading" && summary ? <RunProgress summary={summary} /> : null}
         <div className="status-actions">
-          {status.primaryAction === "open-gst" ? (
-            <a
-              className="button-link"
-              href="https://www.gst.gov.in"
-              target="_blank"
-              rel="noreferrer"
-            >
+          {status.kind === "unsupported" ? (
+            <button className="button-link" type="button" onClick={onOpenPortal}>
               Open GST Portal
-            </a>
+            </button>
           ) : null}
-          {status.primaryAction === "downloads" ? (
+          {status.kind === "session-expired" ? (
+            <button className="button-link" type="button" onClick={onOpenPortal}>
+              Open GST Portal sign-in
+            </button>
+          ) : null}
+          {status.kind === "complete" || status.kind === "unavailable" ? (
             <>
               <a className="button-link secondary-button-link" href="#download-details">
                 Download another
@@ -134,110 +145,10 @@ function PortalStatusCard({
               </button>
             </>
           ) : null}
-          {status.secondaryHref && status.secondaryLabel ? (
-            <a className="text-link" href={status.secondaryHref} target="_blank" rel="noreferrer">
-              {status.secondaryLabel}
-            </a>
-          ) : null}
         </div>
       </div>
     </section>
   );
-}
-
-function getPortalStatus(
-  context: PortalContext | null,
-  summary: FiledReturnsFlowSummary | null,
-  busy: string | null,
-): PortalStatusCardState {
-  if (busy === "start-filed-returns-flow" || summary?.status === "running") {
-    return {
-      badge: "Portal detected",
-      body: "Waiting for Chrome to save the PDF.",
-      icon: "↓",
-      kind: "downloading",
-      title: "Downloading...",
-      tone: "ready",
-    };
-  }
-
-  if (summary?.status === "complete") {
-    return {
-      badge: "Saved",
-      body: "The requested return file was saved through your browser.",
-      icon: "✓",
-      kind: "success",
-      primaryAction: "downloads",
-      title: "PDF saved",
-      tone: "success",
-    };
-  }
-
-  if (summary?.status === "blocked" || summary?.status === "cancelled") {
-    const expired = summary.flowStep.safeSignals.includes("gst-login-tab-opened");
-    return {
-      badge: expired ? "Session expired" : "Needs attention",
-      body: expired
-        ? "Your GST session may have expired. Refresh the GST Portal and try again."
-        : displaySafeError(summary),
-      icon: "!",
-      kind: expired ? "expired" : "error",
-      title: expired ? "Refresh GST Portal" : "Download needs review",
-      tone: expired ? "warning" : "danger",
-    };
-  }
-
-  if (context?.pageKind === "gst-auth-landing" || context?.requiredAction?.type === "LOGIN") {
-    return {
-      badge: "Session expired",
-      body: "Your GST session may have expired. Refresh the GST Portal and try again.",
-      icon: "!",
-      kind: "expired",
-      title: "Refresh GST Portal",
-      tone: "warning",
-    };
-  }
-
-  if (context?.supported) {
-    return {
-      badge: "Portal detected",
-      body: "Choose the return and period to download.",
-      icon: "✓",
-      kind: "detected",
-      title: "GST Portal detected",
-      tone: "ready",
-    };
-  }
-
-  if (context?.pageKind === "unsupported") {
-    return {
-      badge: "Unsupported page",
-      body: "Open a filed-return dashboard or supported return page in this browser.",
-      icon: "!",
-      kind: "unsupported",
-      title: "Unsupported GST page",
-      tone: "warning",
-    };
-  }
-
-  return {
-    badge: "Portal needed",
-    body: "Sign in to GST Portal in this browser, then open Pack again.",
-    icon: "⌂",
-    kind: "needed",
-    primaryAction: "open-gst",
-    secondaryHref: "https://github.com/lamemustafa/pack#how-it-works",
-    secondaryLabel: "How it works",
-    title: "Open the GST Portal",
-    tone: "needed",
-  };
-}
-
-function displaySafeError(summary: FiledReturnsFlowSummary): string {
-  if (summary.flowStep.safeSignals.includes("full-fiscal-year-zip-download-unconfirmed")) {
-    return "Pack prepared the ZIP, but Chrome did not confirm the save. Retry the final handoff.";
-  }
-  return summary.flowStep.safeMessage || "Pack could not complete this download. Retry detection.";
 }
 
 createRoot(document.getElementById("root") as HTMLElement).render(
