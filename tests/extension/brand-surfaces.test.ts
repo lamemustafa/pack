@@ -19,7 +19,7 @@ describe("Pack brand surfaces", () => {
       "utf8",
     );
 
-    expect(popupSource).toContain("/brand/pack-logo-outlined.svg");
+    expect(popupSource).toContain("/brand/pack-logo-header.svg");
     expect(popupSource).not.toContain("ReviewerTools");
     expect(popupSource).not.toContain("PACK_CLEAR_LOCAL_DATA");
     expect(popupControllerSource).toContain("PACK_ACKNOWLEDGE_INTERRUPTED_RUN");
@@ -43,8 +43,8 @@ describe("Pack brand surfaces", () => {
       "utf8",
     );
 
-    expect(popupHtml).toContain('href="/favicon.ico"');
-    expect(optionsHtml).toContain('href="/favicon.ico"');
+    expect(popupHtml).toContain('href="/brand/pack-favicon.svg"');
+    expect(optionsHtml).toContain('href="/brand/pack-favicon.svg"');
   });
 
   it("keeps the browser-action popup compact and task-first", async () => {
@@ -67,12 +67,14 @@ describe("Pack brand surfaces", () => {
       "utf8",
     );
     expect(globalCss).toContain("--pack-action-popup-width: 420px;");
-    expect(globalCss).toContain("--pack-action-popup-max-height: 540px;");
+    expect(globalCss).toContain("--pack-action-popup-max-height: 560px;");
     expect(globalCss).toContain("cursor: not-allowed;");
-    expect(popupComponentsSource).toContain("What should Pack download?");
+    expect(popupComponentsSource).toContain("Download GST returns");
     expect(packSummarySource).toContain("Your pack");
-    expect(popupSource).toContain("PortalStatusCard");
-    expect(popupCss).toContain(".portal-status-card");
+    expect(popupSource).toContain("InlineStatus");
+    expect(popupCss).toContain(".inline-status");
+    expect(popupCss).toContain("overflow-y: auto;");
+    expect(popupCss).not.toContain("border-left-width: 3px;");
     expect(popupCss).toContain(".pack-summary");
     expect(controlsCss).toContain(".advanced-options");
     expect(controlsCss).toContain("position: sticky;");

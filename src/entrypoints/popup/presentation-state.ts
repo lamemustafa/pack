@@ -37,6 +37,11 @@ export function getPopupPresentationState(
     };
   }
 
+  // A stale run summary must not mask the active tab's portal state.
+  if (context && !context.supported) {
+    return getUnsupportedContextState(context);
+  }
+
   if (summary?.status === "complete") {
     const unavailable = summary.flowStep.safeSignals.some((signal) =>
       signal.includes("artifact-unavailable"),
@@ -96,7 +101,7 @@ export function getPopupPresentationState(
     }
     if (summary.currentPeriod) {
       return {
-        badge: "Action needed",
+        badge: "Needs review",
         body: `Pack stopped at ${summary.currentPeriod}. Retry the download after checking that period on GST Portal.`,
         icon: "!",
         kind: "blocked",
@@ -105,7 +110,7 @@ export function getPopupPresentationState(
       };
     }
     return {
-      badge: "Action needed",
+      badge: "Needs review",
       body: "Pack could not finish this download. Retry after checking the GST Portal page.",
       icon: "!",
       kind: "error",
@@ -126,18 +131,7 @@ export function getPopupPresentationState(
   }
 
   if (context.pageKind === "gst-auth-landing" || context.pageKind === "unsupported") {
-    return {
-      badge: context.pageKind === "gst-auth-landing" ? "Sign-in needed" : "Unsupported tab",
-      body:
-        context.pageKind === "gst-auth-landing"
-          ? "Sign in directly on the GST Portal, then open Pack again."
-          : "Open GST Portal and navigate to filed returns to use Pack.",
-      icon: context.pageKind === "gst-auth-landing" ? "!" : "⌂",
-      kind: context.pageKind === "gst-auth-landing" ? "session-expired" : "unsupported",
-      title:
-        context.pageKind === "gst-auth-landing" ? "Sign in on GST Portal" : "Ready when you are",
-      tone: context.pageKind === "gst-auth-landing" ? "warning" : "neutral",
-    };
+    return getUnsupportedContextState(context);
   }
 
   return {
@@ -147,6 +141,20 @@ export function getPopupPresentationState(
     kind: "ready",
     title: "GST Portal page detected",
     tone: "ready",
+  };
+}
+
+function getUnsupportedContextState(context: PortalContext): PopupPresentationState {
+  const authRequired = context.pageKind === "gst-auth-landing";
+  return {
+    badge: authRequired ? "Sign-in needed" : "Unsupported tab",
+    body: authRequired
+      ? "Sign in directly on the GST Portal, then open Pack again."
+      : "Open GST Portal and navigate to filed returns to use Pack.",
+    icon: authRequired ? "!" : "⌂",
+    kind: authRequired ? "session-expired" : "unsupported",
+    title: authRequired ? "Sign in on GST Portal" : "Ready when you are",
+    tone: authRequired ? "warning" : "neutral",
   };
 }
 

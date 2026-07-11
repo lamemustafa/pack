@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" role="img" viewBox="0 0 512 512" aria-labelledby="title">
+<title id="title">Pack browser extension icon</title>
+
+
+    <rect x="18" y="18" width="476" height="476" rx="112" fill="#0D2A66"/>
+    <path d="M148 94H306L365 153V251H148C129 251 114 236 114 217V128C114 109 129 94 148 94Z" fill="#A9C8FF"/>
+    <path d="M116 132H271L330 191V277H116C97 277 82 262 82 243V166C82 147 97 132 116 132Z" fill="#FFFFFF"/>
+    <path d="M70 222C70 201 87 184 108 184H181L210 213H405C426 213 443 230 443 251V392C443 421 420 444 391 444H122C93 444 70 421 70 392V222Z" fill="#1E5BFF"/>
+    <path d="M256 223V344" stroke="#FFFFFF" stroke-width="24" stroke-linecap="round"/>
+    <path d="M225 259H287M225 301H287" stroke="#FFFFFF" stroke-width="17" stroke-linecap="round"/>
+    <circle cx="256" cy="370" r="35" fill="#FFFFFF"/>
+    <circle cx="401" cy="133" r="48" fill="#20C997" stroke="#0D2A66" stroke-width="12"/>
+    <path d="M380 133L395 148L424 119" fill="none" stroke="#FFFFFF" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+
+</svg>

@@ -27,98 +27,101 @@ export function RecoveryActions({
     recoveryState;
   const canManuallyObserveFullYear = canManuallyObserveFullFiscalYearTarget(summary);
   const retryDisabled = busy !== null || !portalReady;
-
   return (
-    <section className="recovery-panel" aria-label="Filed return recovery actions">
-      <div className="panel-heading">
-        <p className="section-label">Run controls</p>
-        <h2>Continue this download</h2>
-      </div>
-      {runActive ? (
-        <>
-          <button type="button" disabled>
-            Run in progress
-          </button>
-          <p className="muted">
-            Retry controls appear automatically if the run stops making progress.
-          </p>
-        </>
-      ) : null}
-      {needsRunReview ? (
-        <button
-          type="button"
-          className="secondary"
-          disabled={busy !== null}
-          onClick={onAcknowledgeInterruptedRun}
-        >
-          {busy === "acknowledge-interrupted-run" ? "Resetting..." : "Reset stuck run"}
-        </button>
-      ) : null}
-      {needsTargetReview ? (
-        <>
-          {!portalReady ? (
-            <p className="muted">Open a signed-in GST Portal tab before retrying this period.</p>
-          ) : null}
-          <button type="button" disabled={retryDisabled} onClick={onRetryTarget}>
-            {busy === "retry-filed-returns-target" ? "Retrying..." : "Retry this period"}
-          </button>
-          <button
-            type="button"
-            className="secondary"
-            disabled={busy !== null}
-            onClick={() => onResolveTarget("downloaded")}
-          >
-            {busy === "resolve-unconfirmed-download" ? "Saving..." : "Mark reviewed manually"}
-          </button>
-          <button
-            type="button"
-            className="secondary"
-            disabled={busy !== null}
-            onClick={() => onResolveTarget("cancelled")}
-          >
-            {busy === "cancel-unconfirmed-download" ? "Cancelling..." : "Cancel and reset"}
-          </button>
-        </>
-      ) : null}
-      {needsFullFiscalYearReview ? (
-        <>
-          {signals.has("full-fiscal-year-resume-confirmation-required") ? (
+    <details className="recovery-details">
+      <summary>More run controls</summary>
+      <div className="recovery-details-content" aria-label="Filed return recovery actions">
+        {runActive ? (
+          <>
+            <button type="button" disabled>
+              Run in progress
+            </button>
             <p className="muted">
-              This saved run is not bound to a GST account. Continue only if the same GST account is
-              currently open.
+              Retry controls appear automatically if the run stops making progress.
             </p>
-          ) : null}
-          {!portalReady ? (
-            <p className="muted">Open a signed-in GST Portal tab before retrying this period.</p>
-          ) : null}
-          <button type="button" disabled={retryDisabled} onClick={onRetryFullFiscalYearTarget}>
-            {busy === "retry-full-fiscal-year-target" ? "Retrying..." : retryFullYearLabel(summary)}
+          </>
+        ) : null}
+        {needsRunReview ? (
+          <button
+            type="button"
+            className="secondary"
+            disabled={busy !== null}
+            onClick={onAcknowledgeInterruptedRun}
+          >
+            {busy === "acknowledge-interrupted-run" ? "Resetting..." : "Reset stuck run"}
           </button>
-          {canManuallyObserveFullYear ? (
+        ) : null}
+        {needsTargetReview ? (
+          <>
+            {!portalReady ? (
+              <p className="muted">Open a signed-in GST Portal tab before retrying this period.</p>
+            ) : null}
+            <button type="button" disabled={retryDisabled} onClick={onRetryTarget}>
+              {busy === "retry-filed-returns-target" ? "Retrying..." : "Retry this period"}
+            </button>
             <button
               type="button"
               className="secondary"
               disabled={busy !== null}
-              onClick={() => onResolveFullFiscalYearTarget("manually-observed")}
+              onClick={() => onResolveTarget("downloaded")}
             >
-              {busy === "resolve-full-fiscal-year-target"
-                ? "Saving..."
-                : "Mark as manually observed"}
+              {busy === "resolve-unconfirmed-download" ? "Saving..." : "Mark reviewed manually"}
             </button>
-          ) : null}
-          <button
-            type="button"
-            className="secondary"
-            disabled={busy !== null}
-            onClick={() => onResolveFullFiscalYearTarget("cancelled")}
-          >
-            {busy === "cancel-full-fiscal-year-target"
-              ? "Cancelling..."
-              : cancelFullYearLabel(summary)}
-          </button>
-        </>
-      ) : null}
-    </section>
+            <button
+              type="button"
+              className="secondary"
+              disabled={busy !== null}
+              onClick={() => onResolveTarget("cancelled")}
+            >
+              {busy === "cancel-unconfirmed-download" ? "Cancelling..." : "Cancel and reset"}
+            </button>
+          </>
+        ) : null}
+        {needsFullFiscalYearReview ? (
+          <>
+            {signals.has("full-fiscal-year-resume-confirmation-required") ? (
+              <p className="muted">
+                This saved run is not bound to a GST account. Continue only if the same GST account
+                is currently open.
+              </p>
+            ) : null}
+            {!portalReady ? (
+              <p className="muted">Open a signed-in GST Portal tab before retrying this period.</p>
+            ) : null}
+            <button type="button" disabled={retryDisabled} onClick={onRetryFullFiscalYearTarget}>
+              {busy === "retry-full-fiscal-year-target"
+                ? "Retrying..."
+                : retryFullYearLabel(summary)}
+            </button>
+            {canManuallyObserveFullYear ? (
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy !== null}
+                onClick={() => onResolveFullFiscalYearTarget("manually-observed")}
+              >
+                {busy === "resolve-full-fiscal-year-target"
+                  ? "Saving..."
+                  : "Mark as manually observed"}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="secondary"
+              disabled={busy !== null}
+              onClick={() => onResolveFullFiscalYearTarget("cancelled")}
+            >
+              {busy === "cancel-full-fiscal-year-target"
+                ? "Cancelling..."
+                : cancelFullYearLabel(summary)}
+            </button>
+          </>
+        ) : null}
+        {!portalReady ? (
+          <p className="muted">Open a signed-in GST Portal tab before retrying.</p>
+        ) : null}
+      </div>
+    </details>
   );
 }
 

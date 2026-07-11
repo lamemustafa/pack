@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" role="img" viewBox="0 0 512 512" aria-labelledby="title">
+<title id="title">Pack logo mark</title>
+
+
+    <!-- stacked return documents -->
+    <path d="M196 46H335L394 105V258H196C178 258 164 244 164 226V78C164 60 178 46 196 46Z" fill="#A9C8FF"/>
+    <path d="M335 46V105H394" fill="none" stroke="#FFFFFF" stroke-width="16" stroke-linejoin="round" opacity="0.8"/>
+
+    <path d="M154 76H307L366 135V281H154C136 281 122 267 122 249V108C122 90 136 76 154 76Z" fill="#6E9FFF"/>
+    <path d="M307 76V135H366" fill="none" stroke="#FFFFFF" stroke-width="16" stroke-linejoin="round" opacity="0.86"/>
+
+    <path d="M112 111H279L338 170V302H112C94 302 80 288 80 270V143C80 125 94 111 112 111Z" fill="#E6F0FF" stroke="#BFD4FF" stroke-width="6"/>
+    <path d="M279 111V170H338" fill="none" stroke="#FFFFFF" stroke-width="16" stroke-linejoin="round"/>
+
+    <!-- packed folder / archive pouch -->
+    <path d="M62 206C62 184 80 166 102 166H176L207 198H410C432 198 450 216 450 238V392C450 424 424 450 392 450H120C88 450 62 424 62 392V206Z" fill="#1456D9"/>
+    <path d="M62 250C116 270 181 281 256 281C331 281 396 270 450 250V392C450 424 424 450 392 450H120C88 450 62 424 62 392V250Z" fill="#0D2A66" opacity="0.22"/>
+
+    <!-- zipper -->
+    <path d="M256 207V342" stroke="#FFFFFF" stroke-width="16" stroke-linecap="round"/>
+    <path d="M235 229H277M235 257H277M235 285H277M235 313H277" stroke="#FFFFFF" stroke-width="11" stroke-linecap="round"/>
+    <path d="M256 342C232 342 216 359 216 382C216 405 233 420 256 420C279 420 296 405 296 382C296 359 280 342 256 342ZM256 365C266 365 272 372 272 382C272 392 266 398 256 398C246 398 240 392 240 382C240 372 246 365 256 365Z" fill="#FFFFFF"/>
+
+    <!-- completed / trusted badge -->
+    <circle cx="402" cy="142" r="47" fill="#20C997" stroke="#FFFFFF" stroke-width="8"/>
+    <path d="M380 142L395 157L425 126" fill="none" stroke="#FFFFFF" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+
+</svg>

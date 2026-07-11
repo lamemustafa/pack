@@ -1,7 +1,10 @@
 .flow-panel {
   display: grid;
   gap: 10px;
-  padding: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .flow-panel-heading {
@@ -12,7 +15,7 @@
 .flow-panel-heading h2 {
   margin: 0;
   color: var(--pack-ink);
-  font-size: 0.9375rem;
+  font-size: 1.125rem;
   font-weight: 850;
   line-height: 1.2;
 }
@@ -20,7 +23,7 @@
 .flow-panel-heading p {
   margin: 0;
   color: #526477;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   line-height: 1.35;
 }
 
@@ -113,13 +116,13 @@
 .scope-option {
   position: relative;
   display: grid;
-  min-height: 42px;
+  min-height: 40px;
   cursor: pointer;
   align-content: center;
   justify-content: stretch;
   gap: 2px;
   border: 1px solid #d3dde7;
-  border-radius: 12px;
+  border-radius: 8px;
   background: #ffffff;
   color: #1d2634;
   font-size: 0.8125rem;
@@ -189,10 +192,10 @@
 }
 
 .scope-option-selected {
-  border-color: var(--pack-accent);
-  background: #eef5fb;
-  color: var(--pack-accent-strong);
-  box-shadow: inset 0 0 0 1px var(--pack-accent);
+  border-color: #5d86af;
+  background: #edf3fa;
+  color: #244d7c;
+  box-shadow: none;
 }
 
 .scope-option-selected .scope-option-description {
@@ -225,9 +228,9 @@
   z-index: 1;
   display: grid;
   gap: 8px;
-  border-top: 1px solid #e0e7ef;
-  background: #ffffff;
-  padding-top: 9px;
+  border-top: 1px solid #d8e1ec;
+  background: #eef3f8;
+  padding: 10px 0 2px;
 }
 
 .run-action-copy {
@@ -240,7 +243,7 @@
 .primary-action {
   min-height: 46px;
   width: 100%;
-  border-radius: 11px;
+  border-radius: 8px;
   font-size: 0.875rem;
   font-weight: 850;
   line-height: 1.2;
@@ -255,6 +258,30 @@
   min-height: 44px;
   width: 100%;
   border-radius: 10px;
+}
+
+.recovery-details {
+  border-top: 1px solid #d8e1ec;
+  padding-top: 8px;
+}
+
+.recovery-details summary {
+  min-height: 28px;
+  color: #5e6b80;
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+
+.recovery-details-content {
+  display: grid;
+  gap: 8px;
+  padding-top: 8px;
+}
+
+.recovery-details-content button {
+  min-height: 36px;
+  width: 100%;
+  border-radius: 7px;
 }
 
 @media (prefers-reduced-motion: reduce) {

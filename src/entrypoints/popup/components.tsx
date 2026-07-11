@@ -24,6 +24,7 @@ export interface ScopeFormProps {
   scope: FiledReturnsDownloadScope;
   onScopeChange: (scope: FiledReturnsDownloadScope) => void;
   onStart: () => void;
+  showPrimaryAction?: boolean;
 }
 
 export function ScopeForm({
@@ -33,21 +34,17 @@ export function ScopeForm({
   scope,
   onScopeChange,
   onStart,
+  showPrimaryAction = true,
 }: ScopeFormProps) {
   const formModel = createScopeFormModel(scope);
-  const startAction = getScopeFormStartAction(scope, flowSummary, busy, formModel.fullFiscalYear);
-  const actionCopy = getScopeActionCopy(scope, formModel.fullFiscalYear);
-  const portalSupported = context?.supported === true;
-  const disabledReason = portalSupported ? null : getPortalDisabledReason(context);
-  const actionDisabled = startAction.disabled || !portalSupported;
   const multipleArtifactChoices = formModel.artifactOptions.length > 1;
   const controlsDisabled = busy !== null || flowSummary?.status === "running";
 
   return (
     <section id="download-details" className="flow-panel" aria-label="Download details">
       <div className="flow-panel-heading">
-        <h2>What should Pack download?</h2>
-        <p>Choose the filed return and period. Pack saves files through this browser.</p>
+        <h2>Download GST returns</h2>
+        <p>Choose a return and period to save through this browser.</p>
       </div>
       <div className="scope-form-grid">
         <div className="scope-row">
@@ -149,15 +146,47 @@ export function ScopeForm({
           </details>
         ) : null}
       </div>
-      <ScopeActionPanel
-        actionCopy={actionCopy}
-        busy={busy === "start-filed-returns-flow"}
-        disabled={actionDisabled}
-        disabledReason={disabledReason}
-        label={startAction.label}
-        onStart={onStart}
-      />
+      {showPrimaryAction ? (
+        <ScopeFormAction
+          busy={busy}
+          context={context}
+          flowSummary={flowSummary ?? null}
+          scope={scope}
+          onStart={onStart}
+        />
+      ) : null}
     </section>
+  );
+}
+
+export function ScopeFormAction({
+  busy,
+  context,
+  flowSummary,
+  scope,
+  onStart,
+}: {
+  busy: string | null;
+  context: PortalContext | null;
+  flowSummary?: FiledReturnsFlowSummary | null;
+  scope: FiledReturnsDownloadScope;
+  onStart: () => void;
+}) {
+  const formModel = createScopeFormModel(scope);
+  const startAction = getScopeFormStartAction(scope, flowSummary, busy, formModel.fullFiscalYear);
+  const actionCopy = getScopeActionCopy(scope, formModel.fullFiscalYear);
+  const portalSupported = context?.supported === true;
+  const disabledReason = portalSupported ? null : getPortalDisabledReason(context);
+
+  return (
+    <ScopeActionPanel
+      actionCopy={actionCopy}
+      busy={busy === "start-filed-returns-flow"}
+      disabled={startAction.disabled || !portalSupported}
+      disabledReason={disabledReason}
+      label={startAction.label}
+      onStart={onStart}
+    />
   );
 }
 

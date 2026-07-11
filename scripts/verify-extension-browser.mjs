@@ -316,47 +316,57 @@ async function assertPopupPageLoads(browserContext, extensionId) {
   await popupPage.goto(`chrome-extension://${extensionId}/popup.html`);
   await popupPage.waitForLoadState("domcontentloaded");
   await popupPage.waitForSelector(".popup-shell", { timeout: 5_000 });
+  await popupPage.waitForFunction(
+    () =>
+      document.body.textContent?.includes("Checking this tab") ||
+      document.body.textContent?.includes("Open the GST Portal to use Pack") ||
+      document.body.textContent?.includes("Sign in again on the GST Portal"),
+    undefined,
+    { timeout: 5_000 },
+  );
   const popupState = await popupPage.evaluate(() => {
-    const heading = document.querySelector(".brand-header h1");
-    const headingRect = heading?.getBoundingClientRect();
-    const visibleHeading =
-      headingRect && headingRect.width > 0 && headingRect.height > 0
+    const wordmark = document.querySelector(".popup-wordmark");
+    const wordmarkRect = wordmark?.getBoundingClientRect();
+    const visibleWordmark =
+      wordmarkRect && wordmarkRect.width > 0 && wordmarkRect.height > 0
         ? document.elementFromPoint(
-            headingRect.left + headingRect.width / 2,
-            headingRect.top + headingRect.height / 2,
+            wordmarkRect.left + wordmarkRect.width / 2,
+            wordmarkRect.top + wordmarkRect.height / 2,
           )
         : null;
     return {
       title: document.title,
       shellRect: document.querySelector(".popup-shell")?.getBoundingClientRect().toJSON(),
       shellText: document.querySelector(".popup-shell")?.textContent ?? "",
-      hasEvidenceRail: Boolean(document.querySelector(".run-column .evidence-panel")),
-      hasSetupPanel: Boolean(document.querySelector(".scope-column .flow-panel")),
-      hasTargetStrip: Boolean(document.querySelector(".target-strip")),
-      visibleHeaderText: visibleHeading?.textContent ?? "",
+      hasContextState: Boolean(document.querySelector(".context-state")),
+      visibleWordmark: visibleWordmark?.getAttribute("alt") ?? "",
     };
   });
   if (popupState.title !== "ComplyEaze Pack") {
     throw new Error(`Unexpected popup page title: ${popupState.title}`);
   }
-  if (!popupState.shellText.includes("Choose what Pack should collect")) {
-    throw new Error("Pack popup did not render the return file workbench UI.");
+  if (
+    !popupState.shellText.includes("Checking this tab") &&
+    !popupState.shellText.includes("Open the GST Portal to use Pack") &&
+    !popupState.shellText.includes("Sign in again on the GST Portal")
+  ) {
+    throw new Error("Pack popup did not render a valid context state.");
   }
-  if (!popupState.visibleHeaderText.includes("Pack")) {
-    throw new Error("Pack popup mounted in the DOM but did not visibly paint its header.");
+  if (!popupState.visibleWordmark.includes("Pack by ComplyEaze")) {
+    throw new Error("Pack popup mounted in the DOM but did not visibly paint its brand header.");
   }
-  if (!popupState.hasTargetStrip || !popupState.hasSetupPanel || !popupState.hasEvidenceRail) {
-    throw new Error("Pack popup did not render the target-first workbench layout.");
+  if (!popupState.hasContextState) {
+    throw new Error("Pack popup did not render its context state.");
   }
   if (
     !popupState.shellRect ||
-    popupState.shellRect.width < 760 ||
-    popupState.shellRect.height < 560 ||
-    popupState.shellRect.width > 800 ||
-    popupState.shellRect.height > 600
+    popupState.shellRect.width < 380 ||
+    popupState.shellRect.width > 460 ||
+    popupState.shellRect.height < 180 ||
+    popupState.shellRect.height > 700
   ) {
     throw new Error(
-      `Pack popup shell rendered outside the expected workbench size: ${JSON.stringify(
+      `Pack popup shell rendered outside the expected compact size: ${JSON.stringify(
         popupState.shellRect,
       )}`,
     );

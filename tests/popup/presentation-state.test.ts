@@ -23,6 +23,13 @@ describe("popup presentation state", () => {
     expect(state.body).toContain("filed returns");
   });
 
+  it("does not let a previous blocked run mask an unsupported active tab", () => {
+    const state = getPopupPresentationState(unsupportedContext(), blockedSummary(), null);
+
+    expect(state.kind).toBe("unsupported");
+    expect(state.title).toBe("Ready when you are");
+  });
+
   it("does not describe a partial completion as a failure", () => {
     const state = getPopupPresentationState(supportedContext(), partialSummary(), null);
 
