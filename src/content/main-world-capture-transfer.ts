@@ -49,7 +49,9 @@ export function mainWorldCaptureTransferKey(payload: MainWorldCaptureTransferPay
   return `${payload.actionId}:${payload.transferId}`;
 }
 
-export function isMainWorldCaptureChunkMessage(input: unknown): input is MainWorldCaptureChunkMessage {
+export function isMainWorldCaptureChunkMessage(
+  input: unknown,
+): input is MainWorldCaptureChunkMessage {
   if (typeof input !== "object" || input === null) return false;
   const record = input as Record<string, unknown>;
   return (

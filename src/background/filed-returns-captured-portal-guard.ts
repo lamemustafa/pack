@@ -44,8 +44,7 @@ export function gstr2bDialogFreeUnsupportedStep({
           "Pack could not complete a dialog-free GSTR-2B download in this Brave profile. Use the GST Portal download manually for this period; Pack will not keep retrying this path until a reviewed direct endpoint is added.",
         userAction: {
           type: "NAVIGATE_TO_SUPPORTED_PAGE",
-          message:
-            "Use the visible GST Portal GSTR-2B download control manually for this period.",
+          message: "Use the visible GST Portal GSTR-2B download control manually for this period.",
           canResume: false,
         },
       },

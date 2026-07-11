@@ -78,10 +78,7 @@ export function summariseFullFiscalYearLedger(
     }
     return toFullFiscalYearSummary(ledger, activeFullFiscalYearStep(ledger));
   }
-  return toFullFiscalYearSummary(
-    ledger,
-    recoverableActionRequiredFullFiscalYearStep(ledger),
-  );
+  return toFullFiscalYearSummary(ledger, recoverableActionRequiredFullFiscalYearStep(ledger));
 }
 
 export function needsResumeConfirmation(ledger: FiledReturnsFullFiscalYearLedger): boolean {
@@ -210,9 +207,7 @@ function recoverableActionRequiredFullFiscalYearStep(
     connectorId: "gst",
     scopeId: filedReturnsScopeId(ledger.scope.returnType),
     state: "blocked",
-    safeSignals: Array.from(
-      new Set(["full-fiscal-year-run-needs-action", ...target.safeSignals]),
-    ),
+    safeSignals: Array.from(new Set(["full-fiscal-year-run-needs-action", ...target.safeSignals])),
     safeMessage:
       target.safeMessage ||
       `Pack needs action before it can continue the FY ${ledger.scope.financialYear} run.`,

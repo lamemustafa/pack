@@ -144,8 +144,7 @@ function selectBestGstr2bDownloadControl(
 ): HTMLElement | null {
   if (candidates.length === 0) return null;
 
-  const expectedTerms =
-    artifactType === "EXCEL" ? ["details", "excel"] : ["summary", "pdf"];
+  const expectedTerms = artifactType === "EXCEL" ? ["details", "excel"] : ["summary", "pdf"];
   return (
     candidates
       .map((element) => ({

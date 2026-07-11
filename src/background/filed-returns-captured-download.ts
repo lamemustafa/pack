@@ -20,9 +20,7 @@ import {
 } from "./filed-returns-captured-staging";
 import { withFiledReturnsDownloadDiagnostic } from "./filed-returns-download-diagnostics";
 import type { FiledReturnsFlowMessagingDeps } from "./filed-returns-flow-messaging";
-import {
-  capturePortalBlobDownloadInMainWorld,
-} from "./main-world-capture-executor";
+import { capturePortalBlobDownloadInMainWorld } from "./main-world-capture-executor";
 import type { MainWorldChunkedCaptureRequest } from "./main-world-capture-contracts";
 
 export async function startMainWorldCapturedFiledReturnDownload({

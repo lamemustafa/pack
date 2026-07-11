@@ -383,9 +383,7 @@ describe("offscreen Blob URL entrypoint", () => {
     await loadOffscreenEntrypoint();
     opfsFiles.set(
       "filed-return-packs/ledger-1/may.pdf",
-      new Blob([
-        "%PDF-1.4\nBT (ComplyEaze Pack generated GSTR-2B summary) Tj ET\n%%EOF\n",
-      ]),
+      new Blob(["%PDF-1.4\nBT (ComplyEaze Pack generated GSTR-2B summary) Tj ET\n%%EOF\n"]),
     );
     opfsFiles.set(
       "filed-return-packs/ledger-1/may.xlsx",

@@ -144,17 +144,16 @@ export function usePackPopupController() {
     [applyFlowResponse, filedReturnsFlowSummary?.scope, withBusy],
   );
 
-  const getFullFiscalYearRecoveryPayload = React.useCallback(():
-    | FullFiscalYearTargetRecoveryPayload
-    | null => {
-    const recovery = filedReturnsFlowSummary?.fullFiscalYearRecovery;
-    if (!recovery) return null;
-    return {
-      ledgerId: recovery.ledgerId,
-      targetId: recovery.targetId,
-      expectedRevision: recovery.expectedRevision,
-    };
-  }, [filedReturnsFlowSummary?.fullFiscalYearRecovery]);
+  const getFullFiscalYearRecoveryPayload =
+    React.useCallback((): FullFiscalYearTargetRecoveryPayload | null => {
+      const recovery = filedReturnsFlowSummary?.fullFiscalYearRecovery;
+      if (!recovery) return null;
+      return {
+        ledgerId: recovery.ledgerId,
+        targetId: recovery.targetId,
+        expectedRevision: recovery.expectedRevision,
+      };
+    }, [filedReturnsFlowSummary?.fullFiscalYearRecovery]);
 
   const retryFullFiscalYearTarget = React.useCallback(async () => {
     const payload = getFullFiscalYearRecoveryPayload();

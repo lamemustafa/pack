@@ -247,7 +247,9 @@ function isMainWorldCaptureTransferPayload(
 function isMainWorldCaptureChunkPayload(
   input: unknown,
 ): input is MainWorldCaptureTransferPayload & { index: number } {
-  return isRecord(input) && isMainWorldCaptureTransferPayload(input) && typeof input.index === "number";
+  return (
+    isRecord(input) && isMainWorldCaptureTransferPayload(input) && typeof input.index === "number"
+  );
 }
 
 function isFullFiscalYearTargetRecoveryPayload(

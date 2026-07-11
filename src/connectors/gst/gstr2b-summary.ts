@@ -31,10 +31,7 @@ export function isGstr2bAuthRoute(documentRef: Document): boolean {
   return GSTR2B_AUTH_ROUTE.test(pathname);
 }
 
-export function hasGstr2bLoginEvidence(
-  documentRef: Document,
-  normalisedText: string,
-): boolean {
+export function hasGstr2bLoginEvidence(documentRef: Document, normalisedText: string): boolean {
   const pathname = documentRef.defaultView?.location.pathname ?? "";
   if (/(?:\/services\/login|\/login)$/i.test(pathname)) return true;
   if (

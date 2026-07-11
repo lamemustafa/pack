@@ -260,10 +260,12 @@ describe("capturePortalBlobDownload", () => {
     const { documentRef, view } = installMainWorldDom(`
       <button data-pack-gstr2b-capture-action="capture-1">Download</button>
     `);
-    installFakeXhr(view, () =>
-      new view.Blob(["%PDF-1.7 synthetic"], {
-        type: "application/pdf",
-      }),
+    installFakeXhr(
+      view,
+      () =>
+        new view.Blob(["%PDF-1.7 synthetic"], {
+          type: "application/pdf",
+        }),
     );
     documentRef.querySelector("button")?.addEventListener("click", () => {
       const xhr = new view.XMLHttpRequest();
