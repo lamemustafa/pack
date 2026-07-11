@@ -1,10 +1,4 @@
-const SESSION_EXPIRY_DIALOG_PATTERN =
-  /logged in session will expire[\s\S]*click continue to extend your session/i;
 const SUMMARY_MODAL_PATTERN = /system generated summary for gstr[\s-]?3b/i;
-
-export function forceHideLingeringSessionExpiryDialog(element: Element): boolean {
-  return forceHideLingeringModal(element, SESSION_EXPIRY_DIALOG_PATTERN);
-}
 
 export function forceHideLingeringFiledReturnsSummaryModal(element: Element): boolean {
   return forceHideLingeringModal(element, SUMMARY_MODAL_PATTERN, { requireVisible: true });

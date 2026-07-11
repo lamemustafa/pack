@@ -224,7 +224,7 @@ describe("filed returns guided flow", () => {
     );
   });
 
-  it("continues when a safe GSTR-2B session warning remains visible after Continue", async () => {
+  it("waits for the GST portal to close a session warning after Continue", async () => {
     const documentRef = createGstr2bSummaryDocument(`
       <section class="modal show" role="dialog">
         <h2>Warning</h2>
@@ -251,21 +251,19 @@ describe("filed returns guided flow", () => {
       returnType: "GSTR-2B",
     });
 
-    expect(result.state).toBe("ready");
+    expect(result.state).toBe("clicked");
     expect(result.safeSignals).toEqual(
       expect.arrayContaining([
         "safe-dialog-dismissed",
         "dialog-continue",
-        "session-expiry-dialog-force-hidden",
-        "gstr2b-download-ready",
+        "safe-dialog-still-visible",
+        "gstr2b-dialog-dismissal-waiting",
       ]),
     );
-    expect(result.safeSignals).not.toContain("safe-dialog-still-visible");
-    expect(result.safeSignals).not.toContain("gstr2b-dialog-dismissal-waiting");
     expect(continueClicked).toBe(1);
     expect(logoutClicked).toBe(0);
-    expect(documentRef.querySelector<HTMLElement>(".modal")?.style.display).toBe("none");
-    expect(documentRef.querySelector(".modal-backdrop")).toBeNull();
+    expect(documentRef.querySelector<HTMLElement>(".modal")?.style.display).not.toBe("none");
+    expect(documentRef.querySelector(".modal-backdrop")).not.toBeNull();
   });
 
   it("selects GSTR-2B filters from the filed-returns page", async () => {

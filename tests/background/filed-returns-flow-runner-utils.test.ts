@@ -3,6 +3,7 @@ import type { PortalFlowStepResult } from "../../src/core/contracts";
 import {
   DETAIL_SUMMARY_MODAL_SETTLE_MS,
   FLOW_STEP_SETTLE_MS,
+  PORTAL_NAVIGATION_SETTLE_MS,
   RESULT_ROW_NAVIGATION_SETTLE_MS,
   getFlowStepSettleMs,
 } from "../../src/background/filed-returns-flow-runner-utils";
@@ -61,6 +62,28 @@ describe("filed returns flow runner wait policy", () => {
     ).toBe(DETAIL_SUMMARY_MODAL_SETTLE_MS);
   });
 
+  it("waits for top-level GST navigation to settle before probing again", () => {
+    expect(
+      getFlowStepSettleMs(
+        {
+          ...BASE_STEP,
+          safeSignals: ["filed-returns-candidate-clicked"],
+        },
+        BASE_DEPS,
+      ),
+    ).toBe(PORTAL_NAVIGATION_SETTLE_MS);
+
+    expect(
+      getFlowStepSettleMs(
+        {
+          ...BASE_STEP,
+          safeSignals: ["return-dashboard-candidate-clicked"],
+        },
+        BASE_DEPS,
+      ),
+    ).toBe(PORTAL_NAVIGATION_SETTLE_MS);
+  });
+
   it("uses the generic continuation settle for non-navigation steps", () => {
     expect(getFlowStepSettleMs(BASE_STEP, BASE_DEPS)).toBe(FLOW_STEP_SETTLE_MS);
   });
@@ -83,6 +106,7 @@ describe("filed returns flow runner wait policy", () => {
       timings: {
         detailSummaryModalSettleMs: 1,
         flowStepSettleMs: 2,
+        portalNavigationSettleMs: 4,
         resultRowNavigationSettleMs: 3,
       },
     };
@@ -97,6 +121,15 @@ describe("filed returns flow runner wait policy", () => {
       ),
     ).toBe(1);
     expect(getFlowStepSettleMs(BASE_STEP, deps)).toBe(2);
+    expect(
+      getFlowStepSettleMs(
+        {
+          ...BASE_STEP,
+          safeSignals: ["filed-returns-candidate-clicked"],
+        },
+        deps,
+      ),
+    ).toBe(4);
     expect(
       getFlowStepSettleMs(
         {

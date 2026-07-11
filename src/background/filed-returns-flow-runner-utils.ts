@@ -10,6 +10,7 @@ import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
 export const FLOW_STEP_SETTLE_MS = 150;
 export const DETAIL_SUMMARY_MODAL_SETTLE_MS = 60;
 export const RESULT_ROW_NAVIGATION_SETTLE_MS = 400;
+export const PORTAL_NAVIGATION_SETTLE_MS = 1_000;
 export const MAX_FLOW_STEPS = 6;
 export const MAX_GSTR1_FLOW_STEPS = 12;
 export const MAX_GSTR2B_FLOW_STEPS = 12;
@@ -66,6 +67,9 @@ export function getFlowStepSettleMs(
   if (isFiledReturnDetailNavigationStep(step)) {
     return deps.timings?.resultRowNavigationSettleMs ?? RESULT_ROW_NAVIGATION_SETTLE_MS;
   }
+  if (isPortalNavigationStep(step)) {
+    return deps.timings?.portalNavigationSettleMs ?? PORTAL_NAVIGATION_SETTLE_MS;
+  }
   if (step.safeSignals.includes("detail-summary-modal")) {
     return deps.timings?.detailSummaryModalSettleMs ?? DETAIL_SUMMARY_MODAL_SETTLE_MS;
   }
@@ -112,5 +116,15 @@ function isFiledReturnDetailNavigationStep(step: PortalFlowStepResult): boolean 
     step.safeSignals.includes("filed-return-result-view-clicked") ||
     step.safeSignals.includes("filed-return-api-result-posted") ||
     step.safeSignals.includes("gstr2b-dashboard-view-clicked")
+  );
+}
+
+function isPortalNavigationStep(step: PortalFlowStepResult): boolean {
+  return step.safeSignals.some((signal) =>
+    [
+      "filed-returns-candidate-clicked",
+      "hidden-filed-returns-candidate-clicked",
+      "return-dashboard-candidate-clicked",
+    ].includes(signal),
   );
 }

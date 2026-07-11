@@ -45,7 +45,11 @@ export default defineContentScript({
       mainWorldCaptureTransfers.acceptChunk(event.data);
     });
 
-    const context = detectGstPortalContext(window.location, document.title);
+    const context = detectGstPortalContext(
+      window.location,
+      document.title,
+      document.body?.innerText ?? "",
+    );
     void browser.runtime
       .sendMessage({
         type: "PACK_CONTENT_CONTEXT",
@@ -78,7 +82,11 @@ export default defineContentScript({
       }
 
       if (message.type === "PACK_CONTENT_REFRESH_CONTEXT_V3") {
-        const refreshedContext = detectGstPortalContext(window.location, document.title);
+        const refreshedContext = detectGstPortalContext(
+          window.location,
+          document.title,
+          document.body?.innerText ?? "",
+        );
         void browser.runtime
           .sendMessage({
             type: "PACK_CONTENT_CONTEXT",

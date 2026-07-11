@@ -152,7 +152,7 @@ describe("filed returns navigation matcher", () => {
       "https://services.gst.gov.in/services/auth/fowelcome",
     );
     const menu = documentRef.querySelector("[data-menu]");
-    documentRef.querySelector("[data-services]")?.addEventListener("click", () => {
+    documentRef.querySelector("[data-services]")?.addEventListener("mouseover", () => {
       menu?.removeAttribute("hidden");
       const link = documentRef.createElement("a");
       link.href = "https://return.gst.gov.in/returns/auth/efiledReturns";

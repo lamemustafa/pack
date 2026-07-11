@@ -5,10 +5,7 @@ import {
   type NavigationCandidateInput,
   type NavigationCandidateScore,
 } from "./filed-returns-navigation-candidates";
-import {
-  forceHideLingeringFiledReturnsSummaryModal,
-  forceHideLingeringSessionExpiryDialog,
-} from "./filed-returns-dialog-hide";
+import { forceHideLingeringFiledReturnsSummaryModal } from "./filed-returns-dialog-hide";
 
 const DIALOG_SETTLE_DELAY_MS = 60;
 const DIALOG_SETTLE_POLL_MS = 15;
@@ -97,10 +94,6 @@ export async function dismissSafePostLoginDialogs(documentRef: Document): Promis
     signals.push("safe-dialog-dismissed", ...score.safeSignals);
     const root = element.closest(MODAL_SELECTOR) ?? element;
     await waitForDialogRootToSettle(root);
-    if (isElementStillConnectedAndVisible(root) && forceHideLingeringSessionExpiryDialog(root)) {
-      signals.push("session-expiry-dialog-force-hidden");
-      await waitForDialogRootToSettle(root);
-    }
   }
 
   return signals;

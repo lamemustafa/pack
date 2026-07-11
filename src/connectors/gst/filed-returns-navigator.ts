@@ -131,7 +131,7 @@ export async function navigateToReturnDashboardPage(
   );
   if (firstPass) return firstPass;
 
-  revealMenuCandidate(documentRef, isServicesMenuCandidate);
+  revealMenuCandidate(documentRef, isServicesMenuCandidate, { click: true });
   safeSignals.push(...(await dismissSafePostLoginDialogs(documentRef)));
   const immediateAfterServices = clickBestReturnDashboardCandidate(
     documentRef,
@@ -152,7 +152,7 @@ export async function navigateToReturnDashboardPage(
   );
   if (afterServices) return afterServices;
 
-  revealMenuCandidate(documentRef, isReturnsMenuCandidate);
+  revealMenuCandidate(documentRef, isReturnsMenuCandidate, { click: true });
   safeSignals.push(...(await dismissSafePostLoginDialogs(documentRef)));
   const immediateAfterReturns = clickBestReturnDashboardCandidate(
     documentRef,

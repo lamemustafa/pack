@@ -17,6 +17,7 @@ const CLICKABLE_SELECTOR = [
 export function revealMenuCandidate(
   documentRef: Document,
   predicate: (candidate: NavigationCandidateInput) => boolean,
+  options: { click?: boolean } = {},
 ) {
   const element = getClickableElements(documentRef).find((candidateElement) =>
     predicate(toNavigationCandidateInput(candidateElement)),
@@ -28,7 +29,7 @@ export function revealMenuCandidate(
   if (FocusEventConstructor) {
     element.dispatchEvent(new FocusEventConstructor("focus", { bubbles: true }));
   }
-  element.click();
+  if (options.click) element.click();
 }
 
 export function isServicesMenuCandidate(candidate: NavigationCandidateInput): boolean {
