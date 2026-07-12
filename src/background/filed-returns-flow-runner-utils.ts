@@ -12,12 +12,19 @@ export const DETAIL_SUMMARY_MODAL_SETTLE_MS = 60;
 export const RESULT_ROW_NAVIGATION_SETTLE_MS = 400;
 export const PORTAL_NAVIGATION_SETTLE_MS = 1_000;
 export const MAX_FLOW_STEPS = 6;
+export const MAX_GSTR3B_FLOW_STEPS = 12;
 export const MAX_GSTR1_FLOW_STEPS = 12;
 export const MAX_GSTR2B_FLOW_STEPS = 12;
 
 export function shouldContinueFlow(step: PortalFlowStepResult): boolean {
   if (step.safeSignals.includes("filed-return-download-clicked")) return false;
   if (step.safeSignals.includes("filed-gstr3b-download-clicked")) return false;
+  if (
+    step.safeSignals.includes("detail-summary-modal-close-blocked") ||
+    step.safeSignals.includes("detail-summary-modal-close-control-not-found")
+  ) {
+    return false;
+  }
   if (
     step.safeSignals.includes("gstr-3b-detail-route") &&
     step.safeSignals.includes("filed-returns-heading")
@@ -28,6 +35,7 @@ export function shouldContinueFlow(step: PortalFlowStepResult): boolean {
 }
 
 export function maxFlowStepsFor(scope: FiledReturnsDownloadScope): number {
+  if (scope.returnType === "GSTR-3B") return MAX_GSTR3B_FLOW_STEPS;
   if (scope.returnType === "GSTR-1") return MAX_GSTR1_FLOW_STEPS;
   return scope.returnType === "GSTR-2B" ? MAX_GSTR2B_FLOW_STEPS : MAX_FLOW_STEPS;
 }

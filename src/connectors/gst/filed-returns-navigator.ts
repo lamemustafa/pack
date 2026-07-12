@@ -19,7 +19,7 @@ import {
 import { detectFiledReturnsPortalAvailabilityIssue } from "./filed-returns-portal-availability";
 
 const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
-const MENU_REVEAL_DELAY_MS = 350;
+const MENU_REVEAL_DELAY_MS = 1_000;
 
 export async function navigateToFiledReturnsPage(
   documentRef: Document,

@@ -7,7 +7,10 @@ import {
   filedReturnsConcreteArtifactLabel,
   supportsFiledReturnsArtifactType,
 } from "../../core/filed-returns-artifacts";
-import { dismissKnownFiledReturnsSummaryModal } from "./filed-returns-dialogs";
+import {
+  dismissKnownFiledReturnsSummaryModal,
+  isFiledReturnsSummaryModalDismissalBlocked,
+} from "./filed-returns-dialogs";
 import { detectFiledReturnDetailPage } from "./filed-returns-detail-page-guard";
 import { resolveVisibleFiledReturnDownloadCandidates } from "./filed-returns-download-candidates";
 import { verifyFiledReturnsDownloadTarget } from "./filed-returns-download-target";
@@ -29,6 +32,7 @@ export {
 } from "./filed-returns-download-candidates";
 
 const DIALOG_SETTLE_DELAY_MS = 60;
+const GSTR3B_CAPTURE_TIMEOUT_MS = 5_000;
 
 export interface FiledReturnDownloadTriggerResult {
   downloadTrigger: PortalDownloadTriggerResult;
@@ -74,6 +78,24 @@ export async function triggerFiledReturnDownload(
   }
 
   const safeSignals = await dismissKnownFiledReturnsSummaryModal(documentRef);
+  if (isFiledReturnsSummaryModalDismissalBlocked(safeSignals)) {
+    return {
+      downloadTrigger: {
+        connectorId: "gst",
+        scopeId,
+        state: "blocked",
+        safeSignals,
+        safeMessage:
+          "The GST Portal kept its GSTR-3B summary overlay open, so Pack did not start a download. Wait for the portal to settle, then retry.",
+        userAction: {
+          type: "WAIT_FOR_PORTAL_AVAILABILITY",
+          message:
+            "Wait for the GST Portal overlay to finish closing. If it remains open, use its Close control, then retry Pack.",
+          canResume: true,
+        },
+      },
+    };
+  }
   const pageGuard = detectFiledReturnDetailPage(documentRef, target.returnType, artifactType);
   if (!pageGuard.isDetailPage) {
     return {
@@ -152,11 +174,13 @@ export async function triggerFiledReturnDownload(
     ...score.safeSignals,
   ];
 
-  const mainWorldCaptureRequest = tryCaptureFiledReturnBlobDownload(documentRef, target, {
-    control: element,
-    safeSignals: clickedSignals,
-    scopeId,
-  });
+  const mainWorldCaptureRequest = target.forcePortalClick
+    ? null
+    : tryCaptureFiledReturnBlobDownload(documentRef, target, {
+        control: element,
+        safeSignals: clickedSignals,
+        scopeId,
+      });
   if (mainWorldCaptureRequest) {
     return {
       mainWorldCaptureRequest,
@@ -211,7 +235,10 @@ function tryCaptureFiledReturnBlobDownload(
     documentRef,
     context.control,
     target.actionId,
-    { signalPrefix: signalPrefix.endsWith("-") ? signalPrefix.slice(0, -1) : signalPrefix },
+    {
+      signalPrefix: signalPrefix.endsWith("-") ? signalPrefix.slice(0, -1) : signalPrefix,
+      ...(target.returnType === "GSTR-3B" ? { timeoutMs: GSTR3B_CAPTURE_TIMEOUT_MS } : {}),
+    },
   );
   if (mainWorldCaptureRequest) return mainWorldCaptureRequest;
   context.safeSignals.push(filedReturnScopedSignal(target.returnType, "blob-capture-failed"));

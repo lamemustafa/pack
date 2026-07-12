@@ -160,7 +160,7 @@ describe("full fiscal-year recovery", () => {
     });
     expect(JSON.stringify(response)).not.toContain("fullFiscalYearRecovery");
     expect(browser.storage.local.remove).toHaveBeenCalledWith("full-year-ledger");
-    expect(browser.storage.local.remove).toHaveBeenCalledWith("target-review");
+    expect(browser.storage.local.remove).not.toHaveBeenCalledWith("target-review");
     expect(browser.storage.session.set).toHaveBeenCalledWith({
       completion: expect.objectContaining({
         status: "cancelled",
@@ -175,6 +175,20 @@ describe("full fiscal-year recovery", () => {
         targetStatus: "blocked",
         safeSignals: ["filed-return-result-row-not-found"],
       }),
+      "target-review": {
+        schemaVersion: "1.0",
+        targetId: "GSTR-1:2025-26:May",
+        status: "download-unconfirmed",
+        scope: {
+          financialYear: "2025-26",
+          period: "May",
+          returnType: "GSTR-1",
+          artifactType: "PDF",
+        },
+        safeSignals: ["browser-download-size-unknown"],
+        safeMessage: "Unrelated review.",
+        updatedAt: "2026-06-24T00:00:00.000Z",
+      },
     });
 
     const response = await resolveFullFiscalYearTarget(
@@ -195,7 +209,7 @@ describe("full fiscal-year recovery", () => {
     });
     expect(JSON.stringify(response)).not.toContain("fullFiscalYearRecovery");
     expect(browser.storage.local.remove).toHaveBeenCalledWith("full-year-ledger");
-    expect(browser.storage.local.remove).toHaveBeenCalledWith("target-review");
+    expect(browser.storage.local.remove).not.toHaveBeenCalledWith("target-review");
   });
 
   it("records a manually observed full-year target without marking it browser-confirmed", async () => {

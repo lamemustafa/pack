@@ -34,14 +34,20 @@ export async function readFiledReturnsTargetReview(
   return review;
 }
 
-export async function readCurrentFiledReturnsTargetReviewSummary(
+export async function readCurrentFiledReturnsTargetReview(
   deps: FiledReturnsTargetReviewDeps,
-): Promise<FiledReturnsFlowSummary | null> {
+): Promise<FiledReturnsTargetReview | null> {
   const key = deps.storageKeys.targetReview;
   if (!key) return null;
 
   const values = await browser.storage.local.get(key);
-  const review = parseFiledReturnsTargetReview(values[key]);
+  return parseFiledReturnsTargetReview(values[key]);
+}
+
+export async function readCurrentFiledReturnsTargetReviewSummary(
+  deps: FiledReturnsTargetReviewDeps,
+): Promise<FiledReturnsFlowSummary | null> {
+  const review = await readCurrentFiledReturnsTargetReview(deps);
   return review ? toTargetReviewSummary(review) : null;
 }
 
@@ -199,7 +205,7 @@ function targetReviewStep(review: FiledReturnsTargetReview): PortalFlowStepResul
   };
 }
 
-function noTargetReviewResponse(scope: FiledReturnsDownloadScope): PackMessageResponse {
+export function noTargetReviewResponse(scope: FiledReturnsDownloadScope): PackMessageResponse {
   const flowStep: PortalFlowStepResult = {
     connectorId: "gst",
     scopeId: filedReturnScopeId(scope.returnType),

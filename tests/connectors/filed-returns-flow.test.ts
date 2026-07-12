@@ -3341,7 +3341,7 @@ describe("filed returns guided flow", () => {
       });
 
       const resultPromise = runFiledReturnsDownloadStep(documentRef, scope);
-      await vi.advanceTimersByTimeAsync(12_000);
+      await vi.runAllTimersAsync();
       const result = await resultPromise;
 
       expect(result.state).toBe("clicked");
@@ -3407,7 +3407,7 @@ describe("filed returns guided flow", () => {
         period: "May",
         returnType: "GSTR-3B",
       });
-      await vi.advanceTimersByTimeAsync(45_000);
+      await vi.runAllTimersAsync();
       const result = await resultPromise;
 
       expect(result.state).toBe("clicked");
@@ -3503,7 +3503,7 @@ describe("filed returns guided flow", () => {
     }
   }, 12_000);
 
-  it("stops with a clear action when the GST API finds a row but role status is unavailable", async () => {
+  it("falls back to the portal filter flow when API role status is unavailable", async () => {
     vi.useFakeTimers();
     try {
       const documentRef = createGstDocument(`
@@ -3527,6 +3527,7 @@ describe("filed returns guided flow", () => {
             <div>Month</div>
             <select id="periodValue" title="Month">
               <option>Select</option>
+              <option value="string:March">March</option>
             </select>
           </div>
           <div>
@@ -3551,26 +3552,33 @@ describe("filed returns guided flow", () => {
         ],
         roleStatus: null,
       });
+      let searchClicked = 0;
+      documentRef.querySelector("#lotsearch")?.addEventListener("click", () => {
+        searchClicked += 1;
+      });
 
       const resultPromise = runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
       await vi.advanceTimersByTimeAsync(47_000);
       const result = await resultPromise;
 
-      expect(result.state).toBe("user-action-required");
+      expect(result.state).toBe("clicked");
       expect(result.safeSignals).toEqual(
         expect.arrayContaining([
-          "filed-return-api-searched",
-          "filed-return-api-result-found",
-          "filed-return-api-result-role-status-unavailable",
+          "financial-year-selected",
+          "period-selected",
+          "month-selected",
+          "return-type-selected",
+          "search-clicked",
         ]),
       );
-      expect(result.userAction?.canResume).toBe(true);
+      expect(result.safeSignals).not.toContain("filed-return-api-result-posted");
+      expect(searchClicked).toBe(1);
     } finally {
       vi.useRealTimers();
     }
   }, 12_000);
 
-  it("blocks API detail handoff when role status omits user preference", async () => {
+  it("uses portal filters instead of defaulting monthly when role status omits user preference", async () => {
     vi.useFakeTimers();
     try {
       const documentRef = createGstDocument(`
@@ -3580,7 +3588,7 @@ describe("filed returns guided flow", () => {
           <select id="finYr"><option>Select</option><option value="string:2025-26">2025-26</option></select>
           <label>Return Filing Period</label>
           <select id="optValue"><option>Select</option><option value="string:Monthly">Monthly</option></select>
-          <select id="periodValue" title="Month"><option>Select</option></select>
+          <select id="periodValue" title="Month"><option>Select</option><option value="string:March">March</option></select>
           <label>Return Type</label>
           <select id="retTyp"><option>Select</option><option value="string:GSTR3B">GSTR3B</option></select>
           <button id="lotsearch" type="button">Search</button>
@@ -3590,18 +3598,19 @@ describe("filed returns guided flow", () => {
         rows: [{ rtntype: "GSTR3B", fy: "2025-26", taxp: "March" }],
         roleStatus: {},
       });
+      let searchClicked = 0;
+      documentRef.querySelector("#lotsearch")?.addEventListener("click", () => {
+        searchClicked += 1;
+      });
 
       const resultPromise = runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
       await vi.advanceTimersByTimeAsync(47_000);
       const result = await resultPromise;
 
-      expect(result.state).toBe("user-action-required");
-      expect(result.safeSignals).toEqual(
-        expect.arrayContaining([
-          "filed-return-api-result-found",
-          "filed-return-api-result-role-status-unavailable",
-        ]),
-      );
+      expect(result.state).toBe("clicked");
+      expect(result.safeSignals).toEqual(expect.arrayContaining(["search-clicked"]));
+      expect(result.safeSignals).not.toContain("filed-return-api-result-posted");
+      expect(searchClicked).toBe(1);
     } finally {
       vi.useRealTimers();
     }
@@ -4855,6 +4864,44 @@ describe("filed returns guided flow", () => {
     expect(downloadClicked).toBe(0);
   });
 
+  it("returns a retryable block without mutating a portal-owned summary overlay", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <nav>Returns / Filed Returns / GSTR-3B</nav>
+        <h1>GSTR-3B - Monthly Return</h1>
+        <div>Status - Filed</div>
+        <div>Financial Year - 2025-26</div>
+        <div>Return Period - March</div>
+        <button data-download>DOWNLOAD FILED GSTR-3B</button>
+        <section class="modal show" style="display:block">
+          <h2>System generated summary for GSTR-3B:</h2>
+          <button aria-label="Close">x</button>
+        </section>
+        <div class="modal-backdrop show"></div>
+      </main>
+    `);
+    makeLayoutVisible(documentRef);
+    documentRef.body.classList.add("modal-open");
+    const modal = documentRef.querySelector<HTMLElement>(".modal");
+    const backdrop = documentRef.querySelector<HTMLElement>(".modal-backdrop");
+    const modalStyle = modal?.getAttribute("style");
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result).toMatchObject({
+      state: "blocked",
+      safeSignals: expect.arrayContaining([
+        "detail-summary-modal-close-blocked",
+        "detail-summary-modal",
+      ]),
+      userAction: { type: "WAIT_FOR_PORTAL_AVAILABILITY", canResume: true },
+    });
+    expect(modal?.isConnected).toBe(true);
+    expect(modal?.getAttribute("style")).toBe(modalStyle);
+    expect(documentRef.body.classList.contains("modal-open")).toBe(true);
+    expect(backdrop?.isConnected).toBe(true);
+  });
+
   it("parses colon and line-separated detail identity from the download detail component", async () => {
     const documentRef = createDocument(`
       <main>
@@ -4976,8 +5023,89 @@ describe("filed returns guided flow", () => {
     expect(result.mainWorldCaptureRequest).toMatchObject({
       actionId: "test-action",
       signalPrefix: "filed-gstr3b",
+      timeoutMs: 5_000,
     });
     expect(downloadClicked).toBe(0);
+  });
+
+  it("clicks the verified GSTR-3B portal control when capture falls back", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <nav>Returns / Filed Returns</nav>
+        <h1>GSTR-3B - Monthly Return</h1>
+        <div>Status - Filed</div>
+        <div>Financial Year - 2025-26</div>
+        <div>Return Period - March</div>
+        <button>DOWNLOAD FILED GSTR-3B</button>
+      </main>
+    `);
+    makeLayoutVisible(documentRef);
+    let downloadClicked = 0;
+    documentRef.querySelector("button")?.addEventListener("click", () => {
+      downloadClicked += 1;
+    });
+
+    const result = await triggerFiledReturnDownload(documentRef, {
+      actionId: "test-action",
+      financialYear: "2025-26",
+      forcePortalClick: true,
+      period: "March",
+      returnType: "GSTR-3B",
+    });
+
+    expect(result.downloadTrigger.safeSignals).toEqual(
+      expect.arrayContaining(["filed-return-download-clicked", "filed-gstr3b-download-clicked"]),
+    );
+    expect(result.mainWorldCaptureRequest).toBeUndefined();
+    expect(downloadClicked).toBe(1);
+  });
+
+  it("does not trigger a GSTR-3B download while the portal summary overlay remains open", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <nav>Returns / Filed Returns</nav>
+        <h1>GSTR-3B - Monthly Return</h1>
+        <div>Status - Filed</div>
+        <div>Financial Year - 2025-26</div>
+        <div>Return Period - March</div>
+        <button data-download>DOWNLOAD FILED GSTR-3B</button>
+        <section class="modal show" style="display:block">
+          <h2>System generated summary for GSTR-3B:</h2>
+          <button aria-label="Close">x</button>
+        </section>
+        <div class="modal-backdrop show"></div>
+      </main>
+    `);
+    makeLayoutVisible(documentRef);
+    documentRef.body.classList.add("modal-open");
+    const modal = documentRef.querySelector<HTMLElement>(".modal");
+    const backdrop = documentRef.querySelector<HTMLElement>(".modal-backdrop");
+    let closeClicked = 0;
+    let downloadClicked = 0;
+    documentRef.querySelector("[aria-label='Close']")?.addEventListener("click", () => {
+      closeClicked += 1;
+    });
+    documentRef.querySelector("[data-download]")?.addEventListener("click", () => {
+      downloadClicked += 1;
+    });
+
+    const result = await triggerFiledReturnDownload(documentRef, {
+      actionId: "test-action",
+      financialYear: "2025-26",
+      period: "March",
+      returnType: "GSTR-3B",
+    });
+
+    expect(result.downloadTrigger).toMatchObject({
+      state: "blocked",
+      safeSignals: expect.arrayContaining(["detail-summary-modal-close-blocked"]),
+      userAction: { type: "WAIT_FOR_PORTAL_AVAILABILITY", canResume: true },
+    });
+    expect(closeClicked).toBe(1);
+    expect(downloadClicked).toBe(0);
+    expect(modal?.isConnected).toBe(true);
+    expect(documentRef.body.classList.contains("modal-open")).toBe(true);
+    expect(backdrop?.isConnected).toBe(true);
   });
 
   it("clicks an explicit filed GSTR-1 PDF download when target identity matches", async () => {
@@ -5648,6 +5776,59 @@ describe("filed returns guided flow", () => {
 
     expect(result.state).toBe("candidate-not-found");
     expect(logoutClicked).toBe(0);
+  });
+
+  it("leaves Return Filing Period unselected when the live portal instructs it", async () => {
+    vi.useFakeTimers();
+    try {
+      const documentRef = createDocument(`
+        <main>
+          <h1>View Filed Returns</h1>
+          <p>
+            To view the filed GST ITC-01/02A/03 forms, please click on Search post selection of
+            Financial Year and Return Type. Please do not select any value in Return Filing Period.
+          </p>
+          <form name="efiledReturns">
+            <label>Financial Year</label>
+            <select id="finYr"><option>Select</option><option>2026-27</option></select>
+            <label>Return Filing Period</label>
+            <select id="optValue"><option>Select</option><option>Monthly</option></select>
+            <label>Return Type</label>
+            <select id="retTyp"><option>Select</option><option>GSTR3B</option></select>
+            <button id="lotsearch" type="button">Search</button>
+          </form>
+        </main>
+      `);
+      const scope: FiledReturnsDownloadScope = {
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-3B",
+      };
+      let searchClicked = 0;
+      documentRef.querySelector("#lotsearch")?.addEventListener("click", () => {
+        searchClicked += 1;
+      });
+
+      const resultPromise = runFiledReturnsDownloadStep(documentRef, scope);
+      await vi.advanceTimersByTimeAsync(10_000);
+      const result = await resultPromise;
+
+      expect(result.state).toBe("clicked");
+      expect(result.safeSignals).toEqual(
+        expect.arrayContaining([
+          "financial-year-selected",
+          "return-filing-period-left-unselected",
+          "return-type-selected",
+          "search-clicked",
+        ]),
+      );
+      expect(documentRef.querySelector<HTMLSelectElement>("#finYr")?.value).toBe("2026-27");
+      expect(documentRef.querySelector<HTMLSelectElement>("#optValue")?.value).toBe("Select");
+      expect(documentRef.querySelector<HTMLSelectElement>("#retTyp")?.value).toBe("GSTR3B");
+      expect(searchClicked).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("selects stable GST native selects when labels and selects are split across columns", async () => {

@@ -15,12 +15,14 @@ import { delay, dispatchChange, matchesAcceptedText, normaliseText } from "./fil
 
 const FIELD_SETTLE_DELAY_MS = 500;
 const FIELD_SETTLE_POLL_MS = 50;
-const FIELD_SELECTION_ATTEMPTS = 8;
+const FIELD_SELECTION_ATTEMPTS = 24;
 
 export const FINANCIAL_YEAR_LABEL = /financial\s+year/i;
 export const FILING_PERIOD_LABEL = /^return\s+filing\s+period\b|^period\b/i;
 export const MONTH_LABEL = /^month\b|^tax\s+period\b/i;
 export const RETURN_TYPE_LABEL = /^return\s+type\b/i;
+const LEAVE_FILING_PERIOD_UNSELECTED_PATTERN =
+  /please\s+do\s+not\s+select\s+any\s+value\s+in\s+['"]?return\s+filing\s+period/i;
 
 type FieldSelectionAttempt = "selected" | "pending" | "missing";
 
@@ -38,6 +40,11 @@ export function acceptedFilingPeriodOptions(scope: FiledReturnsDownloadScope): s
 
 export function acceptedMonthOptions(scope: FiledReturnsDownloadScope): string[] {
   return acceptedFiledReturnsMonthTexts(scope.period);
+}
+
+export function shouldLeaveFilingPeriodUnselected(documentRef: Document): boolean {
+  const pageText = documentRef.body?.innerText ?? documentRef.body?.textContent ?? "";
+  return LEAVE_FILING_PERIOD_UNSELECTED_PATTERN.test(pageText);
 }
 
 export function hasFieldControl(documentRef: Document, labelPattern: RegExp): boolean {
@@ -84,7 +91,12 @@ export async function waitForFieldSelection(
 ): Promise<void> {
   const attempts = Math.ceil(FIELD_SETTLE_DELAY_MS / FIELD_SETTLE_POLL_MS);
   for (let attempt = 0; attempt < attempts; attempt += 1) {
-    if (filedReturnsFilterFieldMatches(documentRef, labelPattern, acceptedTexts)) return;
+    if (filedReturnsFilterFieldMatches(documentRef, labelPattern, acceptedTexts)) {
+      // GST replaces dependent select options asynchronously after a change event.
+      // Keep the established settle window before probing the next field.
+      await delay(FIELD_SETTLE_DELAY_MS);
+      return;
+    }
     await delay(FIELD_SETTLE_POLL_MS);
   }
 }
@@ -171,8 +183,18 @@ function selectOption(select: HTMLSelectElement, acceptedTexts: readonly string[
   });
   if (!option) return false;
 
-  select.value = option.value;
+  select.focus?.({ preventScroll: true });
+  const SelectConstructor = select.ownerDocument.defaultView?.HTMLSelectElement;
+  const nativeValueSetter = SelectConstructor
+    ? Object.getOwnPropertyDescriptor(SelectConstructor.prototype, "value")?.set
+    : undefined;
+  if (nativeValueSetter) {
+    nativeValueSetter.call(select, option.value);
+  } else {
+    select.value = option.value;
+  }
   select.selectedIndex = option.index;
   dispatchChange(select);
+  select.blur?.();
   return true;
 }

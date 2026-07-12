@@ -286,7 +286,74 @@ describe("filed returns navigation matcher", () => {
     expect(downloadClicked).toBe(0);
   });
 
-  it("force-hides a known summary modal when the portal leaves it mounted after close", async () => {
+  it("waits briefly for the portal to render its summary Close control", async () => {
+    const documentRef = createDocument(`
+      <div class="modal show" style="display:block">
+        <div>System generated summary for GSTR-3B</div>
+        <div data-actions></div>
+      </div>
+    `);
+    globalThis.setTimeout(() => {
+      const closeButton = documentRef.createElement("button");
+      closeButton.setAttribute("aria-label", "Close");
+      closeButton.textContent = "x";
+      closeButton.addEventListener("click", () => closeButton.closest(".modal")?.remove());
+      documentRef.querySelector("[data-actions]")?.append(closeButton);
+    }, 30);
+
+    const signals = await dismissKnownFiledReturnsSummaryModal(documentRef);
+
+    expect(signals).toEqual(
+      expect.arrayContaining([
+        "detail-summary-modal-dismissed",
+        "detail-summary-modal-close-clicked",
+        "summary-dialog-close",
+      ]),
+    );
+    expect(documentRef.querySelector(".modal")).toBeNull();
+  });
+
+  it("accepts a summary overlay that the portal dismisses naturally while Pack waits", async () => {
+    const documentRef = createDocument(`
+      <div class="modal show" style="display:block">
+        <div>System generated summary for GSTR-3B</div>
+      </div>
+    `);
+    globalThis.setTimeout(() => documentRef.querySelector(".modal")?.remove(), 30);
+
+    const signals = await dismissKnownFiledReturnsSummaryModal(documentRef);
+
+    expect(signals).toEqual(["detail-summary-modal-dismissed"]);
+  });
+
+  it("does not report dismissal when the portal replaces the summary overlay after Close", async () => {
+    const documentRef = createDocument(`
+      <div class="modal show" style="display:block">
+        <div>System generated summary for GSTR-3B</div>
+        <button aria-label="Close">x</button>
+      </div>
+    `);
+    documentRef.querySelector("button")?.addEventListener("click", () => {
+      documentRef.querySelector(".modal")?.remove();
+      const replacement = documentRef.createElement("div");
+      replacement.className = "modal show";
+      replacement.style.display = "block";
+      replacement.textContent = "System generated summary for GSTR-3B";
+      documentRef.body.append(replacement);
+    });
+
+    const signals = await dismissKnownFiledReturnsSummaryModal(documentRef);
+
+    expect(signals).toEqual(
+      expect.arrayContaining([
+        "detail-summary-modal-close-blocked",
+        "detail-summary-modal-close-clicked",
+      ]),
+    );
+    expect(documentRef.querySelector(".modal")).not.toBeNull();
+  });
+
+  it("never hides, removes, or restyles a summary modal or backdrop when portal close stalls", async () => {
     const documentRef = createDocument(`
       <div class="modal show" style="display:block">
         <div>System generated summary for GSTR-3B</div>
@@ -296,26 +363,33 @@ describe("filed returns navigation matcher", () => {
       <div class="modal-backdrop show"></div>
     `);
     documentRef.body.classList.add("modal-open");
+    const modal = documentRef.querySelector<HTMLElement>(".modal");
+    const backdrop = documentRef.querySelector<HTMLElement>(".modal-backdrop");
+    const initialModalClass = modal?.className;
+    const initialModalStyle = modal?.getAttribute("style");
+    const initialBackdropClass = backdrop?.className;
     let closeClicked = 0;
     documentRef.querySelector("button")?.addEventListener("click", () => {
       closeClicked += 1;
     });
 
     const signals = await dismissKnownFiledReturnsSummaryModal(documentRef);
-    const modal = documentRef.querySelector<HTMLElement>(".modal");
 
     expect(signals).toEqual(
       expect.arrayContaining([
-        "detail-summary-modal-dismissed",
-        "detail-summary-modal-force-hidden",
+        "detail-summary-modal-close-blocked",
+        "detail-summary-modal-close-clicked",
         "summary-dialog-close",
       ]),
     );
     expect(closeClicked).toBe(1);
-    expect(modal?.style.display).toBe("none");
-    expect(modal?.getAttribute("aria-hidden")).toBe("true");
-    expect(documentRef.body.classList.contains("modal-open")).toBe(false);
-    expect(documentRef.querySelector(".modal-backdrop")).toBeNull();
+    expect(modal?.isConnected).toBe(true);
+    expect(modal?.className).toBe(initialModalClass);
+    expect(modal?.getAttribute("style")).toBe(initialModalStyle);
+    expect(modal?.hasAttribute("aria-hidden")).toBe(false);
+    expect(documentRef.body.classList.contains("modal-open")).toBe(true);
+    expect(backdrop?.isConnected).toBe(true);
+    expect(backdrop?.className).toBe(initialBackdropClass);
   });
 
   it("does not dismiss unrelated modals", async () => {
@@ -335,6 +409,27 @@ describe("filed returns navigation matcher", () => {
 
     expect(signals).toEqual([]);
     expect(closeClicked).toBe(0);
+  });
+
+  it("does not use non-dismissive actions when a known summary overlay has no Close control", async () => {
+    const documentRef = createDocument(`
+      <div class="modal show" style="display:block">
+        <div>System generated summary for GSTR-3B</div>
+        <button>Proceed</button>
+        <button>DOWNLOAD FILED GSTR-3B</button>
+      </div>
+    `);
+    let clicked = 0;
+    for (const button of Array.from(documentRef.querySelectorAll("button"))) {
+      button.addEventListener("click", () => {
+        clicked += 1;
+      });
+    }
+
+    const signals = await dismissKnownFiledReturnsSummaryModal(documentRef);
+
+    expect(signals).toEqual(["detail-summary-modal-close-control-not-found"]);
+    expect(clicked).toBe(0);
   });
 
   it("scores only dismissive summary modal actions", () => {

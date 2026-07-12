@@ -79,6 +79,10 @@ export type PackMessage =
   | { type: "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD"; payload: FiledReturnsDownloadTarget }
   | { type: "PACK_RUN_FILED_RETURNS_DOWNLOAD_STEP"; payload: FiledReturnsDownloadScope }
   | { type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW"; payload: FiledReturnsDownloadScope }
+  | {
+      type: "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW";
+      payload: FiledReturnsFreshStartPayload;
+    }
   | { type: "PACK_START_SYNTHETIC_DEMO"; payload?: { downloadArtifacts?: boolean } }
   | {
       type: "PACK_RUN_DOWNLOAD_PROMPT_PROBE";
@@ -164,6 +168,15 @@ export interface FullFiscalYearTargetRecoveryPayload {
   expectedRevision: number;
 }
 
+export interface FiledReturnsFreshStartPayload {
+  scope: FiledReturnsDownloadScope;
+  recovery:
+    | { kind: "target-review"; scope: FiledReturnsDownloadScope }
+    | ({
+        kind: "full-fiscal-year";
+      } & FullFiscalYearTargetRecoveryPayload);
+}
+
 export function isPackMessage(input: unknown): input is PackMessage {
   if (!isRecord(input) || typeof input.type !== "string") return false;
 
@@ -222,6 +235,8 @@ export function isPackMessage(input: unknown): input is PackMessage {
       );
     case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
       return isFiledReturnsStartScope(input.payload);
+    case "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW":
+      return isFiledReturnsFreshStartPayload(input.payload);
     case "PACK_START_SYNTHETIC_DEMO":
       return (
         input.payload === undefined ||
@@ -284,6 +299,21 @@ function isUnconfirmedDownloadResolution(input: unknown): input is {
   if (input.resolution !== "downloaded" && input.resolution !== "cancelled") return false;
   return isFiledReturnsStartScope(input.scope) && input.scope.period !== FULL_FISCAL_YEAR_PERIOD;
 }
+function isFiledReturnsFreshStartPayload(input: unknown): input is FiledReturnsFreshStartPayload {
+  if (!isRecord(input) || !isFiledReturnsStartScope(input.scope) || !isRecord(input.recovery)) {
+    return false;
+  }
+  if (input.recovery.kind === "target-review") {
+    return (
+      isFiledReturnsStartScope(input.recovery.scope) &&
+      input.recovery.scope.period !== FULL_FISCAL_YEAR_PERIOD
+    );
+  }
+  return (
+    input.recovery.kind === "full-fiscal-year" &&
+    isFullFiscalYearTargetRecoveryPayload(input.recovery)
+  );
+}
 
 function isBoundedString(input: unknown, minLength: number, maxLength: number): input is string {
   return typeof input === "string" && input.length >= minLength && input.length <= maxLength;
@@ -301,6 +331,9 @@ function isFiledReturnsDownloadTarget(input: unknown): input is FiledReturnsDown
   if (!isFiledReturnsDownloadScope(input)) return false;
   if (input.period === "ALL" || input.period === FULL_FISCAL_YEAR_PERIOD) return false;
   if (input.artifactType !== undefined && !isFiledReturnsConcreteArtifactType(input.artifactType)) {
+    return false;
+  }
+  if (input.forcePortalClick !== undefined && typeof input.forcePortalClick !== "boolean") {
     return false;
   }
   return true;

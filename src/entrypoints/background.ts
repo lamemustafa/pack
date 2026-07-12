@@ -10,15 +10,15 @@ import { readCurrentFiledReturnsFlowSummary } from "../background/filed-returns-
 import { resolveFullFiscalYearTarget } from "../background/filed-returns-full-fiscal-year-recovery";
 import {
   retryFullFiscalYearTargetDownloadFlow,
+  retryFiledReturnsTargetDownloadFlow,
+  startFreshFiledReturnsDownloadFlow,
   startFiledReturnsDownloadFlow,
 } from "../background/filed-returns-flow-runner";
-import {
-  clearFiledReturnsTargetReview,
-  resolveUnconfirmedFiledReturnsDownload,
-} from "../background/filed-returns-target-review";
+import { resolveUnconfirmedFiledReturnsDownload } from "../background/filed-returns-target-review";
 import { clearPackLocalDataWithRecoveryGuard } from "../background/local-data";
 import { startSyntheticDemo } from "../background/synthetic-demo";
 import { runDownloadPromptProbe } from "../background/download-prompt-probe";
+import { selectFiledReturnsFiltersInMainWorldForTab } from "../background/main-world-filed-returns-filter-executor";
 import {
   PACK_CLEARABLE_LOCAL_STORAGE_KEYS,
   PACK_LOCAL_STORAGE_KEYS,
@@ -156,10 +156,7 @@ async function handleMessage(
         storageKeys: { activeRun: PACK_LOCAL_STORAGE_KEYS.activeFiledReturnsRun },
       });
     case "PACK_RETRY_FILED_RETURNS_TARGET":
-      await clearFiledReturnsTargetReview(message.payload, {
-        storageKeys: { targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview },
-      });
-      return startFiledReturnsDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
+      return retryFiledReturnsTargetDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
     case "PACK_RETRY_FULL_FISCAL_YEAR_TARGET":
       return retryFullFiscalYearTargetDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
     case "PACK_RESOLVE_UNCONFIRMED_DOWNLOAD":
@@ -181,6 +178,8 @@ async function handleMessage(
       );
     case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
       return startFiledReturnsDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
+    case "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW":
+      return startFreshFiledReturnsDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
     case "PACK_START_SYNTHETIC_DEMO":
       return startSyntheticDemo({
         productVersion: packRuntimeVersion(),
@@ -212,7 +211,11 @@ function packRuntimeVersion() {
 function filedReturnsFlowRunnerDeps() {
   return {
     getActiveGstTab,
-    preferDirectDownload: true,
+    // The authenticated portal click/capture remains the default. Browser-initiated
+    // direct endpoint downloads are retained for targeted tests only: Brave can
+    // reject their initiator context even when the active portal session is valid.
+    preferDirectDownload: false,
+    selectFiltersInMainWorld: selectFiledReturnsFiltersInMainWorldForTab,
     sendMessageToTabWithInjection,
     storageKeys: filedReturnsStorageKeys(),
   };

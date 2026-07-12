@@ -1,11 +1,12 @@
 import {
   findDialogDismissalCandidateIndex,
   scoreDialogDismissalCandidate,
-  scoreFiledReturnsSummaryModalDismissalCandidate,
   type NavigationCandidateInput,
-  type NavigationCandidateScore,
 } from "./filed-returns-navigation-candidates";
-import { forceHideLingeringFiledReturnsSummaryModal } from "./filed-returns-dialog-hide";
+export {
+  dismissKnownFiledReturnsSummaryModal,
+  isFiledReturnsSummaryModalDismissalBlocked,
+} from "./filed-returns-summary-overlay";
 
 const DIALOG_SETTLE_DELAY_MS = 60;
 const DIALOG_SETTLE_POLL_MS = 15;
@@ -21,7 +22,6 @@ const CLICKABLE_SELECTOR = [
   "[data-dismiss='modal']",
 ].join(",");
 const MODAL_SELECTOR = ".modal.in, .modal.show, .modal-open .modal, [role='dialog']";
-const SUMMARY_MODAL_PATTERN = /system generated summary for gstr[\s-]?3b/i;
 const SAFE_POST_LOGIN_DIALOG_PATTERNS = [
   /would you like to authenticate aadhaar or upload e-?kyc documents/i,
   /dashboard\s*>\s*my profile\s*>\s*aadhaar authentication status/i,
@@ -31,46 +31,6 @@ const SAFE_POST_LOGIN_DIALOG_PATTERNS = [
   /goods transport agency\s+annexure/i,
   /logged in session will expire[\s\S]*click continue to extend your session/i,
 ];
-
-export async function dismissKnownFiledReturnsSummaryModal(
-  documentRef: Document,
-): Promise<string[]> {
-  const modalRoot = getVisibleDialogRoots(documentRef).find((root) =>
-    SUMMARY_MODAL_PATTERN.test(root.innerText || root.textContent || ""),
-  );
-  if (!modalRoot) return [];
-
-  const clickableElements = getClickableElements(modalRoot);
-  let bestElement: HTMLElement | null = null;
-  let bestScore: NavigationCandidateScore = { score: 0, safeSignals: [] };
-
-  for (const element of clickableElements) {
-    const score = scoreFiledReturnsSummaryModalDismissalCandidate(
-      toNavigationCandidateInput(element),
-    );
-    if (score.score > bestScore.score) {
-      bestScore = score;
-      bestElement = element;
-    }
-  }
-
-  if (bestElement && bestScore.score >= 60) {
-    activateElement(bestElement);
-    await waitForDialogRootToSettle(modalRoot);
-    if (forceHideLingeringFiledReturnsSummaryModal(modalRoot)) {
-      return [
-        "detail-summary-modal-dismissed",
-        "detail-summary-modal-force-hidden",
-        ...bestScore.safeSignals,
-      ];
-    }
-    return ["detail-summary-modal-dismissed", ...bestScore.safeSignals];
-  }
-
-  dispatchEscapeKey(modalRoot);
-  await waitForDialogRootToSettle(modalRoot);
-  return ["detail-summary-modal-escape-attempted"];
-}
 
 export async function dismissSafePostLoginDialogs(documentRef: Document): Promise<string[]> {
   const signals: string[] = [];
@@ -114,7 +74,6 @@ function getVisibleDialogRoots(documentRef: Document): HTMLElement[] {
     (element): element is HTMLElement => isHtmlElement(documentRef, element) && isVisible(element),
   );
   roots.push(...getKnownPostLoginDialogRoots(documentRef));
-  roots.push(...getKnownFiledReturnsSummaryDialogRoots(documentRef));
   return Array.from(new Set(roots));
 }
 
@@ -137,30 +96,6 @@ function getKnownPostLoginDialogRoots(documentRef: Document): HTMLElement[] {
     for (let depth = 0; current && depth < 8; depth += 1) {
       const text = current.innerText || current.textContent || "";
       if (SAFE_POST_LOGIN_DIALOG_PATTERNS.some((pattern) => pattern.test(text))) {
-        roots.push(current);
-        break;
-      }
-      current = current.parentElement;
-    }
-  }
-
-  return roots.filter((element) => isVisible(element));
-}
-
-function getKnownFiledReturnsSummaryDialogRoots(documentRef: Document): HTMLElement[] {
-  const roots: HTMLElement[] = [];
-  const dismissiveElements = getClickableElements(documentRef).filter((element) => {
-    const score = scoreFiledReturnsSummaryModalDismissalCandidate(
-      toNavigationCandidateInput(element),
-    );
-    return score.score >= 60 && isVisible(element);
-  });
-
-  for (const element of dismissiveElements) {
-    let current: HTMLElement | null = element;
-    for (let depth = 0; current && depth < 8; depth += 1) {
-      const text = current.innerText || current.textContent || "";
-      if (SUMMARY_MODAL_PATTERN.test(text)) {
         roots.push(current);
         break;
       }
@@ -220,22 +155,6 @@ function dispatchPointerSequence(element: HTMLElement) {
   }
 }
 
-function dispatchEscapeKey(element: HTMLElement) {
-  const KeyboardEventConstructor = element.ownerDocument.defaultView?.KeyboardEvent;
-  if (!KeyboardEventConstructor) return;
-
-  for (const target of [element, element.ownerDocument]) {
-    target.dispatchEvent(
-      new KeyboardEventConstructor("keydown", {
-        bubbles: true,
-        cancelable: true,
-        key: "Escape",
-        code: "Escape",
-      }),
-    );
-  }
-}
-
 function isVisible(element: HTMLElement): boolean {
   const style = element.ownerDocument.defaultView?.getComputedStyle(element);
   if (!style || style.display === "none" || style.visibility === "hidden") return false;
@@ -243,8 +162,11 @@ function isVisible(element: HTMLElement): boolean {
   return rect.width > 0 || rect.height > 0 || element.offsetParent !== null;
 }
 
-async function waitForDialogRootToSettle(element: Element): Promise<void> {
-  const maxAttempts = Math.ceil(DIALOG_SETTLE_DELAY_MS / DIALOG_SETTLE_POLL_MS);
+async function waitForDialogRootToSettle(
+  element: Element,
+  settleDelayMs = DIALOG_SETTLE_DELAY_MS,
+): Promise<void> {
+  const maxAttempts = Math.ceil(settleDelayMs / DIALOG_SETTLE_POLL_MS);
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     if (!isElementStillConnectedAndVisible(element)) return;
     await delay(DIALOG_SETTLE_POLL_MS);

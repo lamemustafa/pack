@@ -7,6 +7,7 @@ export interface DownloadObservationContext {
   expectedMimeTypes: readonly string[];
   expectedUrlSubstrings?: readonly string[];
   ignoredFilenames?: readonly string[];
+  allowTargetBoundBlobOrData?: boolean;
   trustedDownloadIds?: Set<number>;
 }
 
@@ -30,6 +31,13 @@ export function isPotentialDownloadCandidate(
 ): boolean {
   if (isTrustedDownload(item, context)) return startsAfterArmedTime(item, context.armedAt);
   if (!startsAfterArmedTime(item, context.armedAt)) return false;
+  if (
+    context.allowTargetBoundBlobOrData &&
+    hasBlobOrDataUrl(item) &&
+    hasExpectedFileEvidence(item, context)
+  ) {
+    return true;
+  }
   return hasExpectedOrigin(item, context.expectedOrigins);
 }
 
@@ -56,6 +64,18 @@ function hasExpectedOrigin(item: DownloadCreatedItem, expectedOrigins: readonly 
     .map((value) => (value ? parseOrigin(value) : null))
     .filter(isNonNullableString);
   return origins.some((origin) => expectedOrigins.includes(origin));
+}
+
+function hasBlobOrDataUrl(item: DownloadCreatedItem): boolean {
+  return [item.url, item.finalUrl].some((value) => {
+    if (!value) return false;
+    try {
+      const protocol = new URL(value).protocol;
+      return protocol === "blob:" || protocol === "data:";
+    } catch {
+      return false;
+    }
+  });
 }
 
 function isTrustedDownload(

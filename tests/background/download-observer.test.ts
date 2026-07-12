@@ -138,6 +138,80 @@ describe("download observer", () => {
     });
   });
 
+  it.each([
+    ["blob", "blob:null/generated-pdf"],
+    ["data", "data:application/pdf;base64,JVBERi0xLjQK"],
+  ])(
+    "accepts a target-bound portal-click %s PDF without weakening normal origin checks",
+    async (_urlClass, url) => {
+      const armedAt = new Date("2026-06-24T10:00:00.000Z");
+      const downloads = createDownloadsApi([
+        {
+          id: 211,
+          state: "complete",
+          fileSize: 1024,
+          mime: "application/pdf",
+          startTime: "2026-06-24T10:00:02.000Z",
+          url,
+        },
+      ]);
+      const observation = observeNextBrowserDownload(downloads, {
+        allowTargetBoundBlobOrData: true,
+        armedAt,
+        expectedFileExtensions: [".pdf"],
+        expectedMimeTypes: ["application/pdf"],
+        expectedOrigins: ["https://return.gst.gov.in"],
+      });
+
+      downloads.created.emit({
+        id: 211,
+        mime: "application/pdf",
+        startTime: "2026-06-24T10:00:02.000Z",
+        state: "complete",
+        url,
+      });
+
+      await expect(observation.promise).resolves.toMatchObject({
+        state: "completed",
+        safeSignals: expect.arrayContaining(["browser-download-non-empty"]),
+      });
+    },
+  );
+
+  it("keeps blob PDFs without a target-bound portal click on strict origin correlation", async () => {
+    const downloads = createDownloadsApi([
+      {
+        id: 212,
+        state: "complete",
+        fileSize: 1024,
+        mime: "application/pdf",
+        startTime: "2026-06-24T10:00:02.000Z",
+        url: "blob:null/generated-pdf",
+      },
+    ]);
+    const observation = observeNextBrowserDownload(
+      downloads,
+      {
+        armedAt: new Date("2026-06-24T10:00:00.000Z"),
+        expectedFileExtensions: [".pdf"],
+        expectedMimeTypes: ["application/pdf"],
+        expectedOrigins: ["https://return.gst.gov.in"],
+      },
+      1_000,
+    );
+
+    downloads.created.emit({
+      id: 212,
+      mime: "application/pdf",
+      startTime: "2026-06-24T10:00:02.000Z",
+      state: "complete",
+      url: "blob:null/generated-pdf",
+    });
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    await expect(observation.promise).resolves.toMatchObject({ state: "not-observed" });
+  });
+
   it("observes only the browser download id returned by the direct download API", async () => {
     const downloads = createDownloadsApi([
       {

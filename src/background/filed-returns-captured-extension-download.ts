@@ -98,7 +98,7 @@ export async function downloadCapturedFiledReturnThroughExtension({
           safeSignals: [
             ...triggerStep.safeSignals,
             ...capturedDownloadRequest.safeSignals,
-            "gstr2b-extension-download-start-rejected",
+            `${capturedDownloadSignalPrefix(target)}-extension-download-start-rejected`,
             ...(activePeriod ? [`filed-return-detail-period:${activePeriod}`] : []),
           ],
           safeMessage:

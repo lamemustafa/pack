@@ -124,7 +124,7 @@ export function observeFiledReturnsPageText(
       state: "filters-required",
       safeSignals,
       safeMessage:
-        "The filed returns filter form is visible. Select Financial Year, Return Filing Period, Return Type, then click Search.",
+        "The filed returns filter form is visible. Pack will follow the portal's visible filter instructions before searching.",
     };
   }
 

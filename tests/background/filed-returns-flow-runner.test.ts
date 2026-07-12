@@ -8,6 +8,8 @@ import type { FiledReturnsFullFiscalYearLedger } from "../../src/core/contracts"
 import {
   retryFullFiscalYearTargetDownloadFlow,
   startFiledReturnsDownloadFlow,
+  retryFiledReturnsTargetDownloadFlow,
+  startFreshFiledReturnsDownloadFlow,
   type ActiveGstTab,
   type FiledReturnsFlowRunnerDeps,
 } from "../../src/background/filed-returns-flow-runner";
@@ -1328,6 +1330,100 @@ describe("filed returns flow runner", () => {
       "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
       "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V3",
     ]);
+  });
+
+  it("falls back to one target-bound GSTR-3B portal click when main-world capture fails", async () => {
+    vi.mocked(browser.scripting.executeScript).mockResolvedValueOnce([
+      {
+        result: {
+          capturedDownloadRequest: null,
+          safeFailureSignals: ["filed-gstr3b-main-world-capture-timeout"],
+        },
+      },
+    ] as never);
+    const responses: PackMessageResponse[] = [
+      filedReturnDownloadReady("May"),
+      {
+        ok: true,
+        mainWorldCaptureRequest: {
+          actionId: "action-captured",
+          controlAttribute: "data-pack-gstr2b-capture-action",
+          controlId: "control-gstr3b-pdf",
+          maxBytes: 36 * 1024 * 1024,
+          signalPrefix: "filed-gstr3b",
+        },
+        downloadTrigger: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+          state: "clicked",
+          safeSignals: ["filed-return-download-clicked", "filed-gstr3b-download-clicked"],
+          safeMessage: "Capture armed.",
+        },
+      },
+      {
+        ok: true,
+        downloadTrigger: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+          state: "clicked",
+          safeSignals: ["filed-return-download-clicked", "filed-gstr3b-download-clicked"],
+          safeMessage: "Portal download clicked.",
+        },
+      },
+    ];
+    const sendMessageToTabWithInjection = vi.fn<
+      FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
+    >(async (_tabId, message) => {
+      const response = responses.shift() ?? { ok: false, error: "Unexpected call." };
+      if (
+        message.type === "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3" &&
+        "mainWorldCaptureRequest" in response
+      ) {
+        response.mainWorldCaptureRequest.actionId = message.payload.actionId;
+      }
+      return response;
+    });
+
+    const response = await startFiledReturnsDownloadFlow(
+      {
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-3B",
+      },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+        },
+        timings: {
+          flowStepSettleMs: 0,
+          resultRowNavigationSettleMs: 0,
+        },
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "downloaded",
+        safeSignals: expect.arrayContaining(["filed-gstr3b-capture-fallback-portal-click"]),
+      },
+    });
+    expect(sendMessageToTabWithInjection.mock.calls.map(([, message]) => message.type)).toEqual([
+      "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
+      "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
+      "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
+    ]);
+    expect(sendMessageToTabWithInjection.mock.calls.at(-1)?.[1].payload).toMatchObject({
+      forcePortalClick: true,
+    });
+    expect(vi.mocked(observeNextBrowserDownload).mock.calls.at(-1)?.[1]).toMatchObject({
+      allowTargetBoundBlobOrData: true,
+    });
+    expect(vi.mocked(observeNextBrowserDownload).mock.calls.at(-1)?.[2]).toBe(120_000);
   });
 
   it("saves captured May GSTR-3B portal PDF blobs through the extension downloads API after direct fallback", async () => {
@@ -3090,6 +3186,62 @@ describe("filed returns flow runner", () => {
           period: "May",
           returnType: "GSTR-1",
         },
+      },
+    });
+    expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
+  });
+
+  it("blocks a different period while an earlier target still needs review", async () => {
+    mockLocalStorageGet({
+      "target-review": {
+        schemaVersion: "1.0",
+        targetId: "GSTR-3B:2026-27:April",
+        status: "download-unconfirmed",
+        scope: {
+          financialYear: "2026-27",
+          period: "April",
+          returnType: "GSTR-3B",
+        },
+        safeSignals: ["browser-download-not-observed"],
+        safeMessage: "Pack could not confirm the April browser download.",
+        updatedAt: "2026-07-12T10:00:00.000Z",
+      },
+    });
+    const sendMessageToTabWithInjection =
+      vi.fn<FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]>();
+
+    const response = await startFiledReturnsDownloadFlow(
+      {
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-3B",
+      },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+          targetReview: "target-review",
+        },
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "user-action-required",
+        safeSignals: ["filed-returns-target-review-required"],
+      },
+      flowSummary: {
+        currentPeriod: "April",
+        scope: {
+          financialYear: "2026-27",
+          period: "April",
+          returnType: "GSTR-3B",
+        },
+        status: "blocked",
       },
     });
     expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
@@ -5640,6 +5792,67 @@ describe("filed returns flow runner", () => {
     expect(sendMessageToTabWithInjection).toHaveBeenCalledTimes(3);
   });
 
+  it("uses the main-world filter fallback once before resuming the target-bound flow", async () => {
+    const responses: PackMessageResponse[] = [
+      {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+          state: "candidate-not-found",
+          safeSignals: ["filed-return-filter-candidate-not-found"],
+          safeMessage: "Filed-return filters are not ready.",
+        },
+      },
+      filedReturnDownloadReady("May"),
+      filedReturnDownloadClicked(),
+    ];
+    const sendMessageToTabWithInjection = vi.fn<
+      FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
+    >(async () => responses.shift() ?? { ok: false, error: "Unexpected call." });
+    const selectFiltersInMainWorld = vi.fn<
+      NonNullable<FiledReturnsFlowRunnerDeps["selectFiltersInMainWorld"]>
+    >(async () => ({
+      state: "searched",
+      safeSignals: ["main-world-search-clicked"],
+    }));
+
+    const response = await startFiledReturnsDownloadFlow(
+      {
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-3B",
+      },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        selectFiltersInMainWorld,
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+        },
+        timings: {
+          flowStepSettleMs: 0,
+          resultRowNavigationSettleMs: 0,
+        },
+      },
+    );
+
+    expect(response).toMatchObject({ ok: true, flowStep: { state: "downloaded" } });
+    expect(selectFiltersInMainWorld).toHaveBeenCalledTimes(1);
+    expect(selectFiltersInMainWorld).toHaveBeenCalledWith(17, {
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-3B",
+    });
+    expect(sendMessageToTabWithInjection.mock.calls.map(([, message]) => message.type)).toEqual([
+      "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
+      "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
+      "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
+    ]);
+  });
+
   it("treats positive not-filed evidence as a reconciled single-period result", async () => {
     const responses: PackMessageResponse[] = [
       {
@@ -5851,6 +6064,141 @@ describe("filed returns flow runner", () => {
       }),
     });
   });
+  it("keeps a single-period review intact when another run is active", async () => {
+    mockLocalStorageGet({
+      "active-run": {
+        schemaVersion: "1.0",
+        runId: "run-existing",
+        revision: 1,
+        scope: { financialYear: "2026-27", period: "May", returnType: "GSTR-3B" },
+        status: "running",
+        leaseUpdatedAt: "2026-06-24T00:00:00.000Z",
+      },
+      "target-review": {
+        schemaVersion: "1.0",
+        targetId: "GSTR-3B:2025-26:March",
+        status: "download-unconfirmed",
+        scope: { financialYear: "2025-26", period: "March", returnType: "GSTR-3B" },
+        safeSignals: ["browser-download-size-unknown"],
+        safeMessage: "Pack could not confirm the browser download.",
+        updatedAt: "2026-06-24T00:00:00.000Z",
+      },
+    });
+
+    const response = await retryFiledReturnsTargetDownloadFlow(
+      { financialYear: "2025-26", period: "March", returnType: "GSTR-3B" },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection: vi.fn(),
+        storageKeys: {
+          activeRun: "active-run",
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+          targetReview: "target-review",
+        },
+        now: () => new Date("2026-06-24T00:00:05.000Z"),
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: { safeSignals: ["filed-returns-run-active"] },
+    });
+    expect(browser.storage.local.remove).not.toHaveBeenCalledWith("target-review");
+  });
+
+  it("discards a reviewed target only after acquiring the lease, then starts the selected run", async () => {
+    mockLocalStorageGet({
+      "target-review": {
+        schemaVersion: "1.0",
+        targetId: "GSTR-3B:2025-26:March",
+        status: "download-unconfirmed",
+        scope: { financialYear: "2025-26", period: "March", returnType: "GSTR-3B" },
+        safeSignals: ["browser-download-size-unknown"],
+        safeMessage: "Pack could not confirm the browser download.",
+        updatedAt: "2026-06-24T00:00:00.000Z",
+      },
+    });
+    const responses: PackMessageResponse[] = [
+      filedReturnRowOpened("May"),
+      filedReturnDownloadClicked(),
+    ];
+    const sendMessageToTabWithInjection = vi.fn<
+      FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
+    >(async () => responses.shift() ?? { ok: false, error: "Unexpected call." });
+
+    const response = await startFreshFiledReturnsDownloadFlow(
+      {
+        scope: { financialYear: "2025-26", period: "May", returnType: "GSTR-3B" },
+        recovery: {
+          kind: "target-review",
+          scope: { financialYear: "2025-26", period: "March", returnType: "GSTR-3B" },
+        },
+      },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+          targetReview: "target-review",
+        },
+        timings: { flowStepSettleMs: 0, resultRowNavigationSettleMs: 0 },
+      },
+    );
+
+    expect(response).toMatchObject({ ok: true, flowSummary: { status: "complete" } });
+    expect(browser.storage.local.remove).toHaveBeenCalledWith("target-review");
+    expect(sendMessageToTabWithInjection).toHaveBeenCalled();
+    expect(sendMessageToTabWithInjection.mock.calls[0]?.[1].payload.period).toBe("May");
+  });
+
+  it("rejects a stale fresh-start revision without discarding the saved full-year run", async () => {
+    mockLocalStorageGet({
+      "full-year-ledger": {
+        ...createFullFiscalYearLedger({
+          status: "blocked",
+          currentPeriod: "April",
+          targets: [{ period: "April", status: "blocked" }],
+        }),
+        revision: 2,
+      },
+    });
+    const sendMessageToTabWithInjection =
+      vi.fn<FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]>();
+
+    const response = await startFreshFiledReturnsDownloadFlow(
+      {
+        scope: { financialYear: "2026-27", period: "May", returnType: "GSTR-3B" },
+        recovery: {
+          kind: "full-fiscal-year",
+          ledgerId: "ledger-existing",
+          targetId: "GSTR-3B:2026-27:April",
+          expectedRevision: 1,
+        },
+      },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          activeRun: "active-run",
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+          targetReview: "target-review",
+        },
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: { safeSignals: ["full-fiscal-year-recovery-stale"] },
+    });
+    expect(browser.storage.local.remove).not.toHaveBeenCalledWith("full-year-ledger");
+    expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
+  });
 });
 
 function filedReturnRowOpened(period: FiledReturnsMonth): PackMessageResponse {
@@ -5891,6 +6239,46 @@ function filedReturnApiResultPosted(period: FiledReturnsMonth): PackMessageRespo
     },
   };
 }
+it("preserves an actionable full-year ledger when a different scope starts normally", async () => {
+  mockLocalStorageGet({
+    "full-year-ledger": createFullFiscalYearLedger({
+      status: "blocked",
+      currentPeriod: "April",
+      targets: [{ period: "April", status: "blocked" }],
+    }),
+  });
+  const sendMessageToTabWithInjection =
+    vi.fn<FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]>();
+
+  const response = await startFiledReturnsDownloadFlow(
+    {
+      financialYear: "2025-26",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-1",
+      artifactType: "PDF",
+    },
+    {
+      getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+      sendMessageToTabWithInjection,
+      storageKeys: {
+        completion: "completion",
+        fullFiscalYearLedger: "full-year-ledger",
+        observation: "observation",
+      },
+    },
+  );
+
+  expect(response).toMatchObject({
+    ok: true,
+    flowStep: { safeSignals: expect.arrayContaining(["full-fiscal-year-run-needs-action"]) },
+  });
+  expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
+  expect(browser.storage.local.set).not.toHaveBeenCalledWith({
+    "full-year-ledger": expect.objectContaining({
+      scope: expect.objectContaining({ returnType: "GSTR-1" }),
+    }),
+  });
+});
 
 function filedReturnDownloadReady(period: FiledReturnsMonth): PackMessageResponse {
   return {

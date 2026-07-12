@@ -2,7 +2,10 @@ import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "../../core
 import { runGstr2bDownloadStep } from "./gstr2b-flow";
 import { activateElement } from "./filed-returns-dom";
 import { extractFiledReturnsDetailIdentity } from "./filed-returns-detail-identity";
-import { dismissKnownFiledReturnsSummaryModal } from "./filed-returns-dialogs";
+import {
+  dismissKnownFiledReturnsSummaryModal,
+  isFiledReturnsSummaryModalDismissalBlocked,
+} from "./filed-returns-dialogs";
 import { navigateToFiledReturnsPage } from "./filed-returns-navigator";
 import { openFiledReturnFromApiSearch } from "./filed-returns-api-search";
 import { selectFiledReturnsFiltersAndSearch } from "./filed-returns-filter-form";
@@ -58,12 +61,19 @@ export async function runFiledReturnsDownloadStep(
     );
   }
 
-  await dismissKnownFiledReturnsSummaryModal(documentRef);
+  const summaryModalSignals = await dismissKnownFiledReturnsSummaryModal(documentRef);
   const observation = observeFiledReturnsPageText(getBodyText(documentRef), {
     ...(documentRef.defaultView?.location.pathname
       ? { pathname: documentRef.defaultView.location.pathname }
       : {}),
   });
+
+  if (
+    observation.state === "detail-summary-modal-open" &&
+    isFiledReturnsSummaryModalDismissalBlocked(summaryModalSignals)
+  ) {
+    return summaryModalBlockedResult(scopeId, [...summaryModalSignals, ...observation.safeSignals]);
+  }
 
   if (observation.state === "login-required") {
     clearFiledReturnsSearchAttempt(documentRef);
@@ -133,12 +143,16 @@ export async function runFiledReturnsDownloadStep(
 
   if (observation.state === "filters-required") {
     const apiSearchResult = await openFiledReturnFromApiSearch(documentRef, scope, scopeId);
-    if (apiSearchResult) return apiSearchResult;
+    if (apiSearchResult && !shouldFallBackToPortalFilterSelection(apiSearchResult)) {
+      return apiSearchResult;
+    }
 
     const selectionResult = await selectFiledReturnsFiltersAndSearch(documentRef, scope, scopeId);
     if (shouldTryApiSearchFallback(selectionResult)) {
       const apiSearchResult = await openFiledReturnFromApiSearch(documentRef, scope, scopeId);
-      if (apiSearchResult) return apiSearchResult;
+      if (apiSearchResult && !shouldFallBackToPortalFilterSelection(apiSearchResult)) {
+        return apiSearchResult;
+      }
     }
     return selectionResult;
   }
@@ -182,6 +196,23 @@ export async function runFiledReturnsDownloadStep(
     },
     observation.userAction,
   );
+}
+
+function summaryModalBlockedResult(scopeId: string, safeSignals: string[]): PortalFlowStepResult {
+  return {
+    connectorId: "gst",
+    scopeId,
+    state: "blocked",
+    safeSignals: [...new Set(safeSignals)],
+    safeMessage:
+      "Pack could not confirm that the GST Portal dismissed its GSTR-3B summary overlay. Wait for the portal to settle, then retry.",
+    userAction: {
+      type: "WAIT_FOR_PORTAL_AVAILABILITY",
+      message:
+        "Wait for the GST Portal overlay to finish closing. If it remains open, use its Close control, then retry Pack.",
+      canResume: true,
+    },
+  };
 }
 
 function openFiledReturnResultRow(
@@ -247,6 +278,10 @@ function shouldTryApiSearchFallback(step: PortalFlowStepResult): boolean {
     step.safeSignals.includes("filed-return-filter-selection-in-progress") ||
     step.safeSignals.includes("filed-return-filter-candidate-not-found")
   );
+}
+
+function shouldFallBackToPortalFilterSelection(step: PortalFlowStepResult): boolean {
+  return step.safeSignals.includes("filed-return-api-result-role-status-unavailable");
 }
 
 function withOptionalUserAction(

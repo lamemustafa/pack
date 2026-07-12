@@ -203,6 +203,8 @@ export interface FiledReturnsDownloadTarget {
   period: string;
   returnType: FiledReturnsReturnType;
   artifactType?: FiledReturnsConcreteArtifactType;
+  /** Internal one-shot fallback after a failed main-world capture. */
+  forcePortalClick?: boolean;
 }
 
 export interface FiledReturnsDirectDownloadRequest {

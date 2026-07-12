@@ -23,6 +23,8 @@ import {
 } from "./filed-returns-step-limit";
 import { withPersistedSinglePeriodSummary } from "./filed-returns-single-period-summary";
 
+const MAIN_WORLD_FILTER_SEARCH_SETTLE_MS = 1_000;
+
 export async function startSinglePeriodFiledReturnsDownloadFlow(
   scope: FiledReturnsDownloadScope,
   deps: FiledReturnsFlowRunnerDeps,
@@ -66,6 +68,7 @@ async function runSinglePeriodSteps(
 ): Promise<PackMessageResponse> {
   let lastStep: PortalFlowStepResult | null = null;
   let activePeriod: string | null = null;
+  let mainWorldFilterAttempted = false;
   for (let attempt = 0; attempt < maxFlowStepsFor(scope); attempt += 1) {
     const response = await runScopedDownloadStepWithRetry(deps, tabId, scope);
     if (!response.ok || !("flowStep" in response)) {
@@ -119,6 +122,20 @@ async function runSinglePeriodSteps(
         scope,
         tabId,
       });
+    }
+
+    if (
+      !mainWorldFilterAttempted &&
+      lastStep.state === "candidate-not-found" &&
+      lastStep.safeSignals.includes("filed-return-filter-candidate-not-found") &&
+      deps.selectFiltersInMainWorld
+    ) {
+      mainWorldFilterAttempted = true;
+      const mainWorldSelection = await deps.selectFiltersInMainWorld(tabId, scope);
+      if (mainWorldSelection.state === "searched") {
+        await delay(MAIN_WORLD_FILTER_SEARCH_SETTLE_MS);
+        continue;
+      }
     }
 
     if (!shouldContinueFlow(lastStep)) {

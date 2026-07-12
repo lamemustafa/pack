@@ -3,9 +3,12 @@ import type { PortalFlowStepResult } from "../../src/core/contracts";
 import {
   DETAIL_SUMMARY_MODAL_SETTLE_MS,
   FLOW_STEP_SETTLE_MS,
+  MAX_GSTR3B_FLOW_STEPS,
   PORTAL_NAVIGATION_SETTLE_MS,
   RESULT_ROW_NAVIGATION_SETTLE_MS,
   getFlowStepSettleMs,
+  maxFlowStepsFor,
+  shouldContinueFlow,
 } from "../../src/background/filed-returns-flow-runner-utils";
 import type { FiledReturnsFlowRunnerDeps } from "../../src/background/filed-returns-flow-runner";
 
@@ -62,6 +65,16 @@ describe("filed returns flow runner wait policy", () => {
     ).toBe(DETAIL_SUMMARY_MODAL_SETTLE_MS);
   });
 
+  it("does not auto-retry after the portal keeps its summary overlay open", () => {
+    expect(
+      shouldContinueFlow({
+        ...BASE_STEP,
+        state: "blocked",
+        safeSignals: ["detail-summary-modal", "detail-summary-modal-close-blocked"],
+      }),
+    ).toBe(false);
+  });
+
   it("waits for top-level GST navigation to settle before probing again", () => {
     expect(
       getFlowStepSettleMs(
@@ -98,6 +111,17 @@ describe("filed returns flow runner wait policy", () => {
         BASE_DEPS,
       ),
     ).toBe(FLOW_STEP_SETTLE_MS);
+  });
+
+  it("gives a fresh-login GSTR-3B flow the same bounded navigation budget as other returns", () => {
+    expect(
+      maxFlowStepsFor({
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-3B",
+      }),
+    ).toBe(MAX_GSTR3B_FLOW_STEPS);
+    expect(MAX_GSTR3B_FLOW_STEPS).toBe(12);
   });
 
   it("keeps test/runtime timing overrides explicit", () => {
