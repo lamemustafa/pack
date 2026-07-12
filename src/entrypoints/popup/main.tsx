@@ -13,17 +13,18 @@ import { usePackPopupController } from "./use-pack-popup-controller";
 
 function App() {
   const popup = usePackPopupController();
-  const showRecovery = hasRecoveryActions(popup.scopedFlowSummary ?? null);
+  const displaySummary = popup.recoverySummary ?? popup.scopedFlowSummary;
+  const showRecovery = hasRecoveryActions(displaySummary ?? null);
   const portalReady = popup.context?.supported === true;
   const presentation = getPopupPresentationState(
     popup.context,
-    popup.scopedFlowSummary,
+    displaySummary,
     popup.effectiveBusy,
   );
   const showBuilder =
     popup.context?.supported === true &&
     !["loading", "unsupported", "session-expired"].includes(presentation.kind);
-  const statusOwnsPrimaryAction = hasInlinePrimaryAction(presentation, popup.scopedFlowSummary);
+  const statusOwnsPrimaryAction = hasInlinePrimaryAction(presentation, displaySummary);
 
   return (
     <main className="popup-shell">
@@ -46,8 +47,9 @@ function App() {
           <ScopeForm
             busy={popup.effectiveBusy}
             context={popup.context}
-            flowSummary={popup.scopedFlowSummary}
+            flowSummary={displaySummary}
             scope={popup.scope}
+            scopeLockedForReview={popup.scopeLockedForReview}
             onScopeChange={popup.setScope}
             onStart={() => void popup.startFiledReturnsFlow()}
             showPrimaryAction={false}
@@ -59,9 +61,9 @@ function App() {
             onRetryFullFiscalYearTarget={() => void popup.retryFullFiscalYearTarget()}
             onRetryTarget={() => void popup.retryFiledReturnsTarget()}
             presentation={presentation}
-            summary={popup.scopedFlowSummary}
+            summary={displaySummary}
           />
-          {!statusOwnsPrimaryAction ? (
+          {!statusOwnsPrimaryAction && !popup.recoverySummary ? (
             <ScopeFormAction
               busy={popup.effectiveBusy}
               context={popup.context}
@@ -82,7 +84,8 @@ function App() {
         <RecoveryActions
           busy={popup.effectiveBusy}
           portalReady={portalReady}
-          summary={popup.scopedFlowSummary}
+          summary={displaySummary}
+          onStartFresh={() => void popup.startFreshFiledReturnsFlow()}
           onAcknowledgeInterruptedRun={() => void popup.acknowledgeInterruptedRun()}
           onRetryFullFiscalYearTarget={() => void popup.retryFullFiscalYearTarget()}
           onRetryTarget={() => void popup.retryFiledReturnsTarget()}

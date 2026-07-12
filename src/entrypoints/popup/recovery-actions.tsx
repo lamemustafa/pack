@@ -9,6 +9,7 @@ export interface RecoveryActionsProps {
   onRetryTarget: () => void;
   onResolveFullFiscalYearTarget: (resolution: "manually-observed" | "cancelled") => void;
   onResolveTarget: (resolution: "downloaded" | "cancelled") => void;
+  onStartFresh: () => void;
 }
 
 export function RecoveryActions({
@@ -20,6 +21,7 @@ export function RecoveryActions({
   onRetryTarget,
   onResolveFullFiscalYearTarget,
   onResolveTarget,
+  onStartFresh,
 }: RecoveryActionsProps) {
   const recoveryState = getRecoveryActionState(summary);
   if (!summary || !recoveryState.visible) return null;
@@ -28,8 +30,8 @@ export function RecoveryActions({
   const canManuallyObserveFullYear = canManuallyObserveFullFiscalYearTarget(summary);
   const retryDisabled = busy !== null || !portalReady;
   return (
-    <details className="recovery-details">
-      <summary>More run controls</summary>
+    <details className="recovery-details" open>
+      <summary>Saved run options</summary>
       <div className="recovery-details-content" aria-label="Filed return recovery actions">
         {runActive ? (
           <>
@@ -53,11 +55,22 @@ export function RecoveryActions({
         ) : null}
         {needsTargetReview ? (
           <>
+            <p className="muted">Why Pack paused: {summary.flowStep.safeMessage}</p>
             {!portalReady ? (
               <p className="muted">Open a signed-in GST Portal tab before retrying this period.</p>
             ) : null}
             <button type="button" disabled={retryDisabled} onClick={onRetryTarget}>
               {busy === "retry-filed-returns-target" ? "Retrying..." : "Retry this period"}
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              disabled={retryDisabled}
+              onClick={onStartFresh}
+            >
+              {busy === "start-fresh-filed-returns-flow"
+                ? "Starting fresh..."
+                : "Discard saved state and start selected download"}
             </button>
             <button
               type="button"
@@ -79,6 +92,7 @@ export function RecoveryActions({
         ) : null}
         {needsFullFiscalYearReview ? (
           <>
+            <p className="muted">Why Pack paused: {summary.flowStep.safeMessage}</p>
             {signals.has("full-fiscal-year-resume-confirmation-required") ? (
               <p className="muted">
                 This saved run is not bound to a GST account. Continue only if the same GST account
@@ -92,6 +106,16 @@ export function RecoveryActions({
               {busy === "retry-full-fiscal-year-target"
                 ? "Retrying..."
                 : retryFullYearLabel(summary)}
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              disabled={retryDisabled}
+              onClick={onStartFresh}
+            >
+              {busy === "start-fresh-filed-returns-flow"
+                ? "Starting fresh..."
+                : "Discard saved run and start selected download"}
             </button>
             {canManuallyObserveFullYear ? (
               <button
@@ -165,11 +189,7 @@ function getRecoveryActionState(summary: FiledReturnsFlowSummary | null): {
   const runActive =
     signals.has("filed-returns-run-active") || signals.has("full-fiscal-year-run-active");
   const needsFullFiscalYearReview =
-    Boolean(summary?.fullFiscalYearRecovery) &&
-    (signals.has("full-fiscal-year-download-unconfirmed") ||
-      signals.has("full-fiscal-year-run-interrupted") ||
-      signals.has("full-fiscal-year-resume-confirmation-required") ||
-      signals.has("full-fiscal-year-run-needs-action"));
+    Boolean(summary?.fullFiscalYearRecovery) && summary?.status !== "running" && !runActive;
   return {
     needsFullFiscalYearReview,
     needsRunReview,

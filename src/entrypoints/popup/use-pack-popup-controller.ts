@@ -19,11 +19,12 @@ import {
   getFiledReturnsCompletionStatus,
   getFiledReturnsSummaryHeading,
   getScopeMatchedFiledReturnsSummary,
+  hasUnresolvedFiledReturnsRecovery,
 } from "./flow-summary";
 
 export function usePackPopupController() {
   const [status, setStatus] = React.useState("Loading Pack context...");
-  const [scope, setScope] = React.useState<FiledReturnsDownloadScope>(
+  const [scope, setScopeState] = React.useState<FiledReturnsDownloadScope>(
     DEFAULT_FILED_RETURNS_DOWNLOAD_SCOPE,
   );
   const [context, setContext] = React.useState<PortalContext | null>(null);
@@ -45,7 +46,7 @@ export function usePackPopupController() {
       if (summaryResponse.ok && "flowSummary" in summaryResponse) {
         const flowSummary = summaryResponse.flowSummary;
         setFiledReturnsFlowSummary(flowSummary);
-        if (flowSummary) setScope(flowSummary.scope);
+        if (flowSummary) setScopeState(flowSummary.scope);
       }
 
       if (contextResponse.ok && "context" in contextResponse) {
@@ -66,7 +67,7 @@ export function usePackPopupController() {
       setStatus(response.flowStep.safeMessage);
       if ("flowSummary" in response && response.flowSummary) {
         setFiledReturnsFlowSummary(response.flowSummary);
-        setScope(response.flowSummary.scope);
+        setScopeState(response.flowSummary.scope);
       }
       if ("observation" in response) {
         setFiledReturnsObservation(response.observation);
@@ -155,6 +156,32 @@ export function usePackPopupController() {
       };
     }, [filedReturnsFlowSummary?.fullFiscalYearRecovery]);
 
+  const startFreshFiledReturnsFlow = React.useCallback(async () => {
+    if (!filedReturnsFlowSummary || !hasUnresolvedFiledReturnsRecovery(filedReturnsFlowSummary)) {
+      return;
+    }
+    const fullFiscalYearRecovery = getFullFiscalYearRecoveryPayload();
+    const recovery = fullFiscalYearRecovery
+      ? { kind: "full-fiscal-year" as const, ...fullFiscalYearRecovery }
+      : { kind: "target-review" as const, scope: filedReturnsFlowSummary.scope };
+
+    await withBusy("start-fresh-filed-returns-flow", async () => {
+      const response = await sendPackMessage({
+        type: "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW",
+        payload: {
+          scope: normaliseFiledReturnsScope(scope),
+          recovery,
+        },
+      });
+      applyFlowResponse(response);
+    });
+  }, [
+    applyFlowResponse,
+    filedReturnsFlowSummary,
+    getFullFiscalYearRecoveryPayload,
+    scope,
+    withBusy,
+  ]);
   const retryFullFiscalYearTarget = React.useCallback(async () => {
     const payload = getFullFiscalYearRecoveryPayload();
     if (!payload) return;
@@ -193,6 +220,13 @@ export function usePackPopupController() {
   );
 
   const completionStatus = getFiledReturnsCompletionStatus(scope, filedReturnsFlowSummary);
+  const recoverySummary = hasUnresolvedFiledReturnsRecovery(filedReturnsFlowSummary)
+    ? filedReturnsFlowSummary
+    : null;
+  const scopeLockedForReview = recoverySummary !== null;
+  const setScope = React.useCallback((nextScope: FiledReturnsDownloadScope) => {
+    setScopeState(nextScope);
+  }, []);
   const scopedFlowSummary = getScopeMatchedFiledReturnsSummary(scope, filedReturnsFlowSummary);
   const summaryHeading = scopedFlowSummary
     ? getFiledReturnsSummaryHeading(scope, scopedFlowSummary)
@@ -205,14 +239,17 @@ export function usePackPopupController() {
     context,
     effectiveBusy,
     filedReturnsObservation,
+    recoverySummary,
     resolveFullFiscalYearTarget,
     resolveUnconfirmedDownload,
     retryFiledReturnsTarget,
     retryFullFiscalYearTarget,
     scope,
+    scopeLockedForReview,
     scopedFlowSummary,
     setScope,
     startFiledReturnsFlow,
+    startFreshFiledReturnsFlow,
     status,
     summaryHeading,
   };

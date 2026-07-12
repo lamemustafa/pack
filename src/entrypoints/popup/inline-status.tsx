@@ -23,7 +23,7 @@ export function InlineStatus({
   if (!copy) return null;
 
   const actionBusy = busy !== null;
-  const primaryAction = getPrimaryAction(presentation, summary, {
+  const primaryAction = getInlinePrimaryAction(presentation, summary, {
     onOpenPortal,
     onRetryFullFiscalYearTarget,
     onRetryTarget,
@@ -121,10 +121,21 @@ function getInlineStatusCopy(
     };
   }
   if (presentation.kind === "blocked" && summary?.currentPeriod) {
+    const signals = new Set(summary.flowStep.safeSignals);
+    const needsTargetReview = signals.has("filed-returns-target-review-required");
+    const needsFullFiscalYearRecovery = Boolean(summary.fullFiscalYearRecovery);
     return {
-      body: "Pack could not confirm this filed return for the selected period.",
+      body: needsTargetReview
+        ? `Resolve ${summary.currentPeriod} before choosing another period. Retry it, or open More run controls to mark it reviewed after checking Browser Downloads, or cancel and reset.`
+        : needsFullFiscalYearRecovery
+          ? getFullFiscalYearRecoveryBody(summary.currentPeriod, signals)
+          : "Pack could not confirm this filed return for the selected period.",
       icon: "!",
-      title: `${summary.currentPeriod} needs a quick check`,
+      title: needsTargetReview
+        ? `${summary.currentPeriod} needs review`
+        : needsFullFiscalYearRecovery
+          ? `Full-year run paused at ${summary.currentPeriod}`
+          : `${summary.currentPeriod} needs a quick check`,
       tone: "warning",
     };
   }
@@ -139,7 +150,17 @@ function getInlineStatusCopy(
   return null;
 }
 
-function getPrimaryAction(
+function getFullFiscalYearRecoveryBody(currentPeriod: string, signals: Set<string>): string {
+  if (signals.has("detail-summary-modal-close-blocked")) {
+    return `The GST Portal kept its summary overlay open after Pack clicked its recognized Close control. Close it in the portal, then retry ${currentPeriod} to continue the saved full-year run.`;
+  }
+  if (signals.has("detail-summary-modal-close-control-not-found")) {
+    return `The GST Portal summary overlay opened before Pack found a recognized Close control. Wait for it to finish loading, then retry ${currentPeriod} to continue the saved full-year run.`;
+  }
+  return `The saved full-year run paused at ${currentPeriod}. Resolve the GST Portal page, then retry this period to continue the remaining periods.`;
+}
+
+export function getInlinePrimaryAction(
   presentation: PopupPresentationState,
   summary: FiledReturnsFlowSummary | null,
   actions: Pick<
@@ -153,20 +174,17 @@ function getPrimaryAction(
   if (!summary) return null;
 
   const signals = new Set(summary.flowStep.safeSignals);
+  if (presentation.kind === "blocked" && summary.fullFiscalYearRecovery) {
+    return {
+      label: summary.currentPeriod ? `Retry ${summary.currentPeriod}` : "Resume saved period",
+      onClick: actions.onRetryFullFiscalYearTarget,
+    };
+  }
   if (presentation.kind === "blocked" && summary.currentPeriod) {
     return { label: `Retry ${summary.currentPeriod}`, onClick: actions.onRetryTarget };
   }
   if (signals.has("filed-returns-target-review-required") && summary.currentPeriod) {
     return { label: `Retry ${summary.currentPeriod}`, onClick: actions.onRetryTarget };
-  }
-  if (
-    summary.fullFiscalYearRecovery &&
-    (signals.has("full-fiscal-year-download-unconfirmed") ||
-      signals.has("full-fiscal-year-run-interrupted") ||
-      signals.has("full-fiscal-year-run-needs-action") ||
-      signals.has("full-fiscal-year-resume-confirmation-required"))
-  ) {
-    return { label: "Resume saved period", onClick: actions.onRetryFullFiscalYearTarget };
   }
   return null;
 }

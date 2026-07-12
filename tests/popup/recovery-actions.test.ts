@@ -27,6 +27,7 @@ describe("popup full-year recovery actions", () => {
         onAcknowledgeInterruptedRun: () => undefined,
         onRetryFullFiscalYearTarget: () => undefined,
         onRetryTarget: () => undefined,
+        onStartFresh: () => undefined,
         onResolveFullFiscalYearTarget: () => undefined,
         onResolveTarget: () => undefined,
       }),
@@ -34,6 +35,8 @@ describe("popup full-year recovery actions", () => {
 
     expect(markup).toContain("Resume saved run");
     expect(markup).toContain("Discard saved run");
+    expect(markup).toContain("Discard saved run and start selected download");
+    expect(markup).toContain("Saved run options");
   });
 
   it("shows the same-account warning only for resume confirmation", () => {
@@ -44,6 +47,7 @@ describe("popup full-year recovery actions", () => {
         summary: summaryFor("pending", "full-fiscal-year-resume-confirmation-required"),
         onAcknowledgeInterruptedRun: () => undefined,
         onRetryFullFiscalYearTarget: () => undefined,
+        onStartFresh: () => undefined,
         onRetryTarget: () => undefined,
         onResolveFullFiscalYearTarget: () => undefined,
         onResolveTarget: () => undefined,
@@ -60,6 +64,7 @@ describe("popup full-year recovery actions", () => {
           portalReady: true,
           summary: summaryFor(targetStatus),
           onAcknowledgeInterruptedRun: () => undefined,
+          onStartFresh: () => undefined,
           onRetryFullFiscalYearTarget: () => undefined,
           onRetryTarget: () => undefined,
           onResolveFullFiscalYearTarget: () => undefined,
@@ -80,6 +85,7 @@ describe("popup full-year recovery actions", () => {
           busy: null,
           portalReady: true,
           summary: summaryFor(targetStatus),
+          onStartFresh: () => undefined,
           onAcknowledgeInterruptedRun: () => undefined,
           onRetryFullFiscalYearTarget: () => undefined,
           onRetryTarget: () => undefined,
@@ -97,6 +103,7 @@ describe("popup full-year recovery actions", () => {
       createElement(RecoveryActions, {
         busy: null,
         portalReady: true,
+        onStartFresh: () => undefined,
         summary: targetReviewSummary(),
         onAcknowledgeInterruptedRun: () => undefined,
         onRetryFullFiscalYearTarget: () => undefined,
@@ -107,14 +114,19 @@ describe("popup full-year recovery actions", () => {
     );
 
     expect(markup).toContain("Retry this period");
+    expect(markup).toContain("Discard saved state and start selected download");
     expect(markup).toContain("Cancel and reset");
     expect(markup).not.toContain("Cancel target");
+    expect(markup).toContain(
+      "Why Pack paused: Pack could not confirm the browser download for May.",
+    );
   });
 
   it("uses retry-first copy for a blocked full-year period", () => {
     const markup = renderToStaticMarkup(
       createElement(RecoveryActions, {
         busy: null,
+        onStartFresh: () => undefined,
         portalReady: true,
         summary: summaryFor("blocked"),
         onAcknowledgeInterruptedRun: () => undefined,
@@ -130,6 +142,26 @@ describe("popup full-year recovery actions", () => {
     expect(markup).not.toContain("Retry full-year period");
   });
 
+  it("shows full-year recovery controls even when the portal step carries only overlay signals", () => {
+    const markup = renderToStaticMarkup(
+      createElement(RecoveryActions, {
+        onStartFresh: () => undefined,
+        busy: null,
+        portalReady: true,
+        summary: summaryFor("blocked", "detail-summary-modal-close-control-not-found"),
+        onAcknowledgeInterruptedRun: () => undefined,
+        onRetryFullFiscalYearTarget: () => undefined,
+        onRetryTarget: () => undefined,
+        onResolveFullFiscalYearTarget: () => undefined,
+        onResolveTarget: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain("Retry this period");
+    expect(markup).toContain("Cancel and reset");
+    expect(markup).toContain("Why Pack paused: Needs action.");
+  });
+
   it("shows an active-run control state without pretending pause is available", () => {
     const markup = renderToStaticMarkup(
       createElement(RecoveryActions, {
@@ -140,6 +172,7 @@ describe("popup full-year recovery actions", () => {
         onRetryFullFiscalYearTarget: () => undefined,
         onRetryTarget: () => undefined,
         onResolveFullFiscalYearTarget: () => undefined,
+        onStartFresh: () => undefined,
         onResolveTarget: () => undefined,
       }),
     );
@@ -336,6 +369,7 @@ describe("popup full-year recovery actions", () => {
         onRetryFullFiscalYearTarget: () => undefined,
         onRetryTarget: () => undefined,
         onResolveFullFiscalYearTarget: () => undefined,
+        onStartFresh: () => undefined,
         onResolveTarget: () => undefined,
       }),
     );
@@ -371,6 +405,7 @@ describe("popup full-year recovery actions", () => {
         onRetryTarget: () => undefined,
         onResolveFullFiscalYearTarget: () => undefined,
         onResolveTarget: () => undefined,
+        onStartFresh: () => undefined,
       }),
     );
 

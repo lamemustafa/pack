@@ -12,6 +12,7 @@ describe("popup presentation state", () => {
     ["complete", supportedContext(), completeSummary(), null],
     ["unavailable", supportedContext(), unavailableSummary(), null],
     ["blocked", supportedContext(), blockedSummary(), null],
+    ["ready", supportedContext(), cancelledSummary(), null],
   ] as const)("maps %s to one actionable state", (kind, context, summary, busy) => {
     expect(getPopupPresentationState(context, summary, busy).kind).toBe(kind);
   });
@@ -36,6 +37,16 @@ describe("popup presentation state", () => {
     expect(state.tone).toBe("warning");
     expect(state.title).toBe("Download partly complete");
     expect(state.tone).not.toBe("danger");
+  });
+
+  it("returns a cancelled target review to a fresh runnable state", () => {
+    const state = getPopupPresentationState(supportedContext(), cancelledSummary(), null);
+
+    expect(state).toMatchObject({
+      kind: "ready",
+      title: "Ready for a new download",
+      tone: "ready",
+    });
   });
 });
 
@@ -104,4 +115,11 @@ function unavailableSummary() {
 
 function blockedSummary() {
   return summary("blocked", ["filed-returns-target-review-required"]);
+}
+
+function cancelledSummary(): FiledReturnsFlowSummary {
+  return {
+    ...summary("cancelled", ["filed-returns-target-cancelled"]),
+    currentPeriod: "May",
+  };
 }

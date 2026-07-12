@@ -1,6 +1,24 @@
 import type { FiledReturnsDownloadScope, FiledReturnsFlowSummary } from "../../core/contracts";
 import { normaliseFiledReturnsArtifactType } from "../../core/filed-returns-artifacts";
 
+export function hasUnresolvedFiledReturnsTargetReview(
+  summary: FiledReturnsFlowSummary | null,
+): boolean {
+  return Boolean(
+    summary?.status === "blocked" &&
+    summary.flowStep.safeSignals.includes("filed-returns-target-review-required"),
+  );
+}
+
+export function hasUnresolvedFiledReturnsRecovery(
+  summary: FiledReturnsFlowSummary | null,
+): boolean {
+  return Boolean(
+    hasUnresolvedFiledReturnsTargetReview(summary) ||
+    (summary?.status === "blocked" && summary.fullFiscalYearRecovery),
+  );
+}
+
 export function getFiledReturnsCompletionStatus(
   scope: FiledReturnsDownloadScope,
   summary: FiledReturnsFlowSummary | null,

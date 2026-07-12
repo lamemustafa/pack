@@ -88,7 +88,18 @@ export function getPopupPresentationState(
     };
   }
 
-  if (summary?.status === "blocked" || summary?.status === "cancelled") {
+  if (summary?.status === "cancelled") {
+    return {
+      badge: "Reset",
+      body: "The previous recovery state was cleared. Start a fresh download when ready.",
+      icon: "✓",
+      kind: "ready",
+      title: "Ready for a new download",
+      tone: "ready",
+    };
+  }
+
+  if (summary?.status === "blocked") {
     if (summary.flowStep.safeSignals.includes("filed-return-positively-not-filed")) {
       return {
         badge: "Unavailable",

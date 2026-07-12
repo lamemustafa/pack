@@ -3,6 +3,8 @@ import {
   getFiledReturnsCompletionStatus,
   getScopeMatchedFiledReturnsSummary,
   getFiledReturnsSummaryHeading,
+  hasUnresolvedFiledReturnsRecovery,
+  hasUnresolvedFiledReturnsTargetReview,
 } from "../../src/entrypoints/popup/flow-summary";
 import type { FiledReturnsFlowSummary } from "../../src/core/contracts";
 import { FULL_FISCAL_YEAR_PERIOD } from "../../src/core/filed-returns-scope";
@@ -226,5 +228,40 @@ describe("popup filed returns flow summary", () => {
         COMPLETE_SUMMARY,
       ),
     ).toBe(COMPLETE_SUMMARY);
+  });
+
+  it("identifies an unresolved target review that must keep ownership of the scope", () => {
+    const targetReviewSummary: FiledReturnsFlowSummary = {
+      ...COMPLETE_SUMMARY,
+      currentPeriod: "April",
+      status: "blocked",
+      flowStep: {
+        ...COMPLETE_SUMMARY.flowStep,
+        state: "download-unconfirmed",
+        safeSignals: ["filed-returns-target-review-required"],
+      },
+    };
+
+    expect(hasUnresolvedFiledReturnsTargetReview(targetReviewSummary)).toBe(true);
+    expect(hasUnresolvedFiledReturnsTargetReview(COMPLETE_SUMMARY)).toBe(false);
+    expect(
+      hasUnresolvedFiledReturnsTargetReview({ ...targetReviewSummary, status: "cancelled" }),
+    ).toBe(false);
+  });
+
+  it("keeps a blocked full-year recovery bound to its saved scope", () => {
+    const summary: FiledReturnsFlowSummary = {
+      ...COMPLETE_SUMMARY,
+      status: "blocked",
+      fullFiscalYearRecovery: {
+        ledgerId: "ledger-safe",
+        targetId: "target-safe",
+        expectedRevision: 2,
+        targetStatus: "blocked",
+      },
+    };
+
+    expect(hasUnresolvedFiledReturnsRecovery(summary)).toBe(true);
+    expect(hasUnresolvedFiledReturnsRecovery(COMPLETE_SUMMARY)).toBe(false);
   });
 });

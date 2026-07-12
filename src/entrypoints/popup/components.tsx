@@ -22,6 +22,7 @@ export interface ScopeFormProps {
   context: PortalContext | null;
   flowSummary?: FiledReturnsFlowSummary | null;
   scope: FiledReturnsDownloadScope;
+  scopeLockedForReview?: boolean;
   onScopeChange: (scope: FiledReturnsDownloadScope) => void;
   onStart: () => void;
   showPrimaryAction?: boolean;
@@ -32,6 +33,7 @@ export function ScopeForm({
   context,
   flowSummary,
   scope,
+  scopeLockedForReview = false,
   onScopeChange,
   onStart,
   showPrimaryAction = true,
@@ -146,6 +148,12 @@ export function ScopeForm({
           </details>
         ) : null}
       </div>
+      {scopeLockedForReview && flowSummary?.currentPeriod ? (
+        <p className="scope-note scope-note-warning" role="status">
+          A saved run is paused at {flowSummary.currentPeriod}. You can change this selection, then
+          resume the saved run or explicitly discard it and start the selected download below.
+        </p>
+      ) : null}
       {showPrimaryAction ? (
         <ScopeFormAction
           busy={busy}
