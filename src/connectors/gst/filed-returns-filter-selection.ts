@@ -23,6 +23,11 @@ export const MONTH_LABEL = /^month\b|^tax\s+period\b/i;
 export const RETURN_TYPE_LABEL = /^return\s+type\b/i;
 const LEAVE_FILING_PERIOD_UNSELECTED_PATTERN =
   /please\s+do\s+not\s+select\s+any\s+value\s+in\s+['"]?return\s+filing\s+period/i;
+const RETURN_TYPE_INSTRUCTION_PATTERNS: Record<FiledReturnsDownloadScope["returnType"], RegExp> = {
+  "GSTR-1": /\bgstr\s*[- ]?\s*1\b/i,
+  "GSTR-3B": /\bgstr\s*[- ]?\s*3b\b/i,
+  "GSTR-2B": /\bgstr\s*[- ]?\s*2b\b/i,
+};
 
 type FieldSelectionAttempt = "selected" | "pending" | "missing";
 
@@ -42,9 +47,20 @@ export function acceptedMonthOptions(scope: FiledReturnsDownloadScope): string[]
   return acceptedFiledReturnsMonthTexts(scope.period);
 }
 
-export function shouldLeaveFilingPeriodUnselected(documentRef: Document): boolean {
-  const pageText = documentRef.body?.innerText ?? documentRef.body?.textContent ?? "";
-  return LEAVE_FILING_PERIOD_UNSELECTED_PATTERN.test(pageText);
+export function shouldLeaveFilingPeriodUnselected(
+  documentRef: Document,
+  returnType: FiledReturnsDownloadScope["returnType"],
+): boolean {
+  const returnTypePattern = RETURN_TYPE_INSTRUCTION_PATTERNS[returnType];
+  return Array.from(
+    documentRef.querySelectorAll<HTMLElement>("p, li, [role='note'], [role='alert']"),
+  ).some((element) => {
+    const instructionText = element.innerText || element.textContent || "";
+    return (
+      LEAVE_FILING_PERIOD_UNSELECTED_PATTERN.test(instructionText) &&
+      returnTypePattern.test(instructionText)
+    );
+  });
 }
 
 export function hasFieldControl(documentRef: Document, labelPattern: RegExp): boolean {

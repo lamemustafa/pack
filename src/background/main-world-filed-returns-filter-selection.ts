@@ -23,13 +23,28 @@ export async function selectFiledReturnsFiltersInMainWorld(
       return candidate === expected || candidate.includes(expected);
     });
   };
-  const pageText = document.body?.innerText ?? document.body?.textContent ?? "";
-  const leaveFilingPeriodUnselected =
-    /please\s+do\s+not\s+select\s+any\s+value\s+in\s+['"]?return\s+filing\s+period/i.test(pageText);
-  const findSelect = (kind: "financial-year" | "filing-period" | "return-type") => {
+  const leaveFilingPeriodUnselectedPattern =
+    /please\s+do\s+not\s+select\s+any\s+value\s+in\s+['"]?return\s+filing\s+period/i;
+  const returnTypeInstructionPatterns: Record<FiledReturnsDownloadScope["returnType"], RegExp> = {
+    "GSTR-1": /\bgstr\s*[- ]?\s*1\b/i,
+    "GSTR-3B": /\bgstr\s*[- ]?\s*3b\b/i,
+    "GSTR-2B": /\bgstr\s*[- ]?\s*2b\b/i,
+  };
+  const returnTypeInstructionPattern = returnTypeInstructionPatterns[scope.returnType];
+  const leaveFilingPeriodUnselected = Array.from(
+    document.querySelectorAll<HTMLElement>("p, li, [role='note'], [role='alert']"),
+  ).some((element) => {
+    const instructionText = element.innerText || element.textContent || "";
+    return (
+      leaveFilingPeriodUnselectedPattern.test(instructionText) &&
+      returnTypeInstructionPattern.test(instructionText)
+    );
+  });
+  const findSelect = (kind: "financial-year" | "filing-period" | "month" | "return-type") => {
     const patterns = {
       "financial-year": /\bfinyr\b|financial\s*year|financialyear/i,
       "filing-period": /\boptvalue\b|filing\s*period|filingperiod/i,
+      month: /\bmonth\b|\bmth\b/i,
       "return-type": /\brettyp\b|return\s*type|gstvalue|gsttype/i,
     } as const;
     return (
@@ -53,7 +68,7 @@ export async function selectFiledReturnsFiltersInMainWorld(
     );
   };
   const selectOption = async (
-    kind: "financial-year" | "filing-period" | "return-type",
+    kind: "financial-year" | "filing-period" | "month" | "return-type",
     accepted: readonly string[],
   ) => {
     const startedAt = Date.now();
@@ -98,6 +113,29 @@ export async function selectFiledReturnsFiltersInMainWorld(
     return { state: "waiting", safeSignals: ["main-world-filing-period-not-ready"] };
   }
 
+  await new Promise((resolve) => setTimeout(resolve, 1_000));
+  const monthSelect = findSelect("month");
+  const monthAliases: Record<string, string[]> = {
+    april: ["April", "Apr"],
+    may: ["May"],
+    june: ["June", "Jun"],
+    july: ["July", "Jul"],
+    august: ["August", "Aug"],
+    september: ["September", "Sep", "Sept"],
+    october: ["October", "Oct"],
+    november: ["November", "Nov"],
+    december: ["December", "Dec"],
+    january: ["January", "Jan"],
+    february: ["February", "Feb"],
+    march: ["March", "Mar"],
+  };
+  const monthSelected =
+    !monthSelect ||
+    (await selectOption("month", monthAliases[normalise(scope.period)] ?? [scope.period]));
+  if (!monthSelected) {
+    return { state: "waiting", safeSignals: ["main-world-month-not-ready"] };
+  }
+
   const returnTypeSelected = await selectOption("return-type", [scope.returnType]);
   if (!returnTypeSelected) {
     return { state: "waiting", safeSignals: ["main-world-return-type-not-ready"] };
@@ -120,6 +158,7 @@ export async function selectFiledReturnsFiltersInMainWorld(
     safeSignals: [
       "main-world-financial-year-selected",
       ...(leaveFilingPeriodUnselected ? ["return-filing-period-left-unselected"] : []),
+      ...(monthSelect ? ["main-world-month-selected"] : []),
       "main-world-return-type-selected",
       "main-world-search-clicked",
     ],

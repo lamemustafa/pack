@@ -5778,7 +5778,7 @@ describe("filed returns guided flow", () => {
     expect(logoutClicked).toBe(0);
   });
 
-  it("leaves Return Filing Period unselected when the live portal instructs it", async () => {
+  it("selects GSTR-1 filing period when the page instruction belongs to unrelated forms", async () => {
     vi.useFakeTimers();
     try {
       const documentRef = createDocument(`
@@ -5793,8 +5793,10 @@ describe("filed returns guided flow", () => {
             <select id="finYr"><option>Select</option><option>2026-27</option></select>
             <label>Return Filing Period</label>
             <select id="optValue"><option>Select</option><option>Monthly</option></select>
+            <label>Month</label>
+            <select id="month"><option>Select</option><option>May</option></select>
             <label>Return Type</label>
-            <select id="retTyp"><option>Select</option><option>GSTR3B</option></select>
+            <select id="retTyp"><option>Select</option><option>GSTR-1/IFF/GSTR-1A</option></select>
             <button id="lotsearch" type="button">Search</button>
           </form>
         </main>
@@ -5802,7 +5804,7 @@ describe("filed returns guided flow", () => {
       const scope: FiledReturnsDownloadScope = {
         financialYear: "2026-27",
         period: "May",
-        returnType: "GSTR-3B",
+        returnType: "GSTR-1",
       };
       let searchClicked = 0;
       documentRef.querySelector("#lotsearch")?.addEventListener("click", () => {
@@ -5817,14 +5819,19 @@ describe("filed returns guided flow", () => {
       expect(result.safeSignals).toEqual(
         expect.arrayContaining([
           "financial-year-selected",
-          "return-filing-period-left-unselected",
+          "period-selected",
+          "month-selected",
           "return-type-selected",
           "search-clicked",
         ]),
       );
+      expect(result.safeSignals).not.toContain("return-filing-period-left-unselected");
       expect(documentRef.querySelector<HTMLSelectElement>("#finYr")?.value).toBe("2026-27");
-      expect(documentRef.querySelector<HTMLSelectElement>("#optValue")?.value).toBe("Select");
-      expect(documentRef.querySelector<HTMLSelectElement>("#retTyp")?.value).toBe("GSTR3B");
+      expect(documentRef.querySelector<HTMLSelectElement>("#optValue")?.value).toBe("Monthly");
+      expect(documentRef.querySelector<HTMLSelectElement>("#month")?.value).toBe("May");
+      expect(documentRef.querySelector<HTMLSelectElement>("#retTyp")?.value).toBe(
+        "GSTR-1/IFF/GSTR-1A",
+      );
       expect(searchClicked).toBe(1);
     } finally {
       vi.useRealTimers();

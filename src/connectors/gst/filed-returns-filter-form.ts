@@ -31,7 +31,10 @@ export async function selectFiledReturnsFiltersAndSearch(
 ): Promise<PortalFlowStepResult> {
   const descriptor = filedReturnDescriptor(scope.returnType);
   const selectSignals: string[] = [];
-  const leaveFilingPeriodUnselected = shouldLeaveFilingPeriodUnselected(documentRef);
+  const leaveFilingPeriodUnselected = shouldLeaveFilingPeriodUnselected(
+    documentRef,
+    scope.returnType,
+  );
   let financialYearSelected = await selectFieldOption(documentRef, FINANCIAL_YEAR_LABEL, [
     scope.financialYear,
   ]);
