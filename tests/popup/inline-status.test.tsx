@@ -37,13 +37,23 @@ const blockedSummary: FiledReturnsFlowSummary = {
 describe("inline filed-return recovery status", () => {
   it("offers an explicit retry for a blocked period", () => {
     expect(hasInlinePrimaryAction(blockedPresentation, blockedSummary)).toBe(true);
+    const onRestartTarget = vi.fn();
+    const onRetryTarget = vi.fn();
+    const action = getInlinePrimaryAction(blockedPresentation, blockedSummary, {
+      onOpenPortal: vi.fn(),
+      onRestartTarget,
+      onRetryFullFiscalYearTarget: vi.fn(),
+      onRetryTarget,
+    });
+    action?.onClick();
 
     const markup = renderToStaticMarkup(
       <InlineStatus
         busy={null}
         onOpenPortal={vi.fn()}
+        onRestartTarget={onRestartTarget}
         onRetryFullFiscalYearTarget={vi.fn()}
-        onRetryTarget={vi.fn()}
+        onRetryTarget={onRetryTarget}
         presentation={blockedPresentation}
         summary={blockedSummary}
       />,
@@ -53,6 +63,8 @@ describe("inline filed-return recovery status", () => {
     expect(markup).toContain(
       "Select the filed return filters in the GST portal, then start Pack again.",
     );
+    expect(onRestartTarget).toHaveBeenCalledOnce();
+    expect(onRetryTarget).not.toHaveBeenCalled();
   });
 
   it("explains that an unresolved target review blocks choosing another period", () => {
@@ -64,12 +76,22 @@ describe("inline filed-return recovery status", () => {
         safeSignals: ["filed-returns-target-review-required"],
       },
     };
+    const onRestartTarget = vi.fn();
+    const onRetryTarget = vi.fn();
+    const action = getInlinePrimaryAction(blockedPresentation, targetReviewSummary, {
+      onOpenPortal: vi.fn(),
+      onRestartTarget,
+      onRetryFullFiscalYearTarget: vi.fn(),
+      onRetryTarget,
+    });
+    action?.onClick();
     const markup = renderToStaticMarkup(
       <InlineStatus
         busy={null}
         onOpenPortal={vi.fn()}
+        onRestartTarget={onRestartTarget}
         onRetryFullFiscalYearTarget={vi.fn()}
-        onRetryTarget={vi.fn()}
+        onRetryTarget={onRetryTarget}
         presentation={blockedPresentation}
         summary={targetReviewSummary}
       />,
@@ -80,10 +102,13 @@ describe("inline filed-return recovery status", () => {
     expect(markup).toContain("More run controls");
     expect(markup).toContain("after checking Browser Downloads");
     expect(markup).toContain("Retry May");
+    expect(onRetryTarget).toHaveBeenCalledOnce();
+    expect(onRestartTarget).not.toHaveBeenCalled();
   });
 
   it("routes a blocked full-year period to the revision-checked full-year retry", () => {
     const onRetryFullFiscalYearTarget = vi.fn();
+    const onRestartTarget = vi.fn();
     const onRetryTarget = vi.fn();
     const fullYearSummary: FiledReturnsFlowSummary = {
       ...blockedSummary,
@@ -101,6 +126,7 @@ describe("inline filed-return recovery status", () => {
     };
     const action = getInlinePrimaryAction(blockedPresentation, fullYearSummary, {
       onOpenPortal: vi.fn(),
+      onRestartTarget,
       onRetryFullFiscalYearTarget,
       onRetryTarget,
     });
@@ -115,6 +141,7 @@ describe("inline filed-return recovery status", () => {
       <InlineStatus
         busy={null}
         onOpenPortal={vi.fn()}
+        onRestartTarget={onRestartTarget}
         onRetryFullFiscalYearTarget={onRetryFullFiscalYearTarget}
         onRetryTarget={onRetryTarget}
         presentation={blockedPresentation}
@@ -144,6 +171,7 @@ describe("inline filed-return recovery status", () => {
       <InlineStatus
         busy={null}
         onOpenPortal={vi.fn()}
+        onRestartTarget={vi.fn()}
         onRetryFullFiscalYearTarget={vi.fn()}
         onRetryTarget={vi.fn()}
         presentation={blockedPresentation}

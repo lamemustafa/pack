@@ -58,6 +58,7 @@ function App() {
           <InlineStatus
             busy={popup.effectiveBusy}
             onOpenPortal={() => void browser.tabs.create({ url: "https://www.gst.gov.in" })}
+            onRestartTarget={() => void popup.startFiledReturnsFlow()}
             onRetryFullFiscalYearTarget={() => void popup.retryFullFiscalYearTarget()}
             onRetryTarget={() => void popup.retryFiledReturnsTarget()}
             presentation={presentation}

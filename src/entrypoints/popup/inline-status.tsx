@@ -5,6 +5,7 @@ import { RunProgress } from "./run-summary";
 export interface InlineStatusProps {
   busy: string | null;
   onOpenPortal: () => void;
+  onRestartTarget: () => void;
   onRetryFullFiscalYearTarget: () => void;
   onRetryTarget: () => void;
   presentation: PopupPresentationState;
@@ -14,6 +15,7 @@ export interface InlineStatusProps {
 export function InlineStatus({
   busy,
   onOpenPortal,
+  onRestartTarget,
   onRetryFullFiscalYearTarget,
   onRetryTarget,
   presentation,
@@ -25,6 +27,7 @@ export function InlineStatus({
   const actionBusy = busy !== null;
   const primaryAction = getInlinePrimaryAction(presentation, summary, {
     onOpenPortal,
+    onRestartTarget,
     onRetryFullFiscalYearTarget,
     onRetryTarget,
   });
@@ -165,7 +168,7 @@ export function getInlinePrimaryAction(
   summary: FiledReturnsFlowSummary | null,
   actions: Pick<
     InlineStatusProps,
-    "onOpenPortal" | "onRetryFullFiscalYearTarget" | "onRetryTarget"
+    "onOpenPortal" | "onRestartTarget" | "onRetryFullFiscalYearTarget" | "onRetryTarget"
   >,
 ): { label: string; onClick: () => void } | null {
   if (presentation.kind === "error") {
@@ -180,11 +183,11 @@ export function getInlinePrimaryAction(
       onClick: actions.onRetryFullFiscalYearTarget,
     };
   }
-  if (presentation.kind === "blocked" && summary.currentPeriod) {
-    return { label: `Retry ${summary.currentPeriod}`, onClick: actions.onRetryTarget };
-  }
   if (signals.has("filed-returns-target-review-required") && summary.currentPeriod) {
     return { label: `Retry ${summary.currentPeriod}`, onClick: actions.onRetryTarget };
+  }
+  if (presentation.kind === "blocked" && summary.currentPeriod) {
+    return { label: `Retry ${summary.currentPeriod}`, onClick: actions.onRestartTarget };
   }
   return null;
 }
