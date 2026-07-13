@@ -4,6 +4,25 @@ import { FULL_FISCAL_YEAR_PERIOD } from "../../src/core/filed-returns-scope";
 import { getScopeFormStartAction } from "../../src/entrypoints/popup/scope-form-model";
 
 describe("popup scope form model", () => {
+  it("names a single GSTR-1 Excel action truthfully", () => {
+    const action = getScopeFormStartAction(
+      {
+        artifactType: "EXCEL",
+        financialYear: "2026-27",
+        period: "June",
+        returnType: "GSTR-1",
+      },
+      null,
+      null,
+      false,
+    );
+
+    expect(action).toEqual({
+      disabled: false,
+      label: "Download June 2026-27 GSTR-1 Excel",
+    });
+  });
+
   it("keeps the full workbench start action available when portal context is inactive", () => {
     const action = getScopeFormStartAction(fullYearGstr2bScope(), null, null, true);
 
