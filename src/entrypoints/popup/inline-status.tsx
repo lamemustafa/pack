@@ -129,7 +129,7 @@ function getInlineStatusCopy(
         ? `Resolve ${summary.currentPeriod} before choosing another period. Retry it, or open More run controls to mark it reviewed after checking Browser Downloads, or cancel and reset.`
         : needsFullFiscalYearRecovery
           ? getFullFiscalYearRecoveryBody(summary.currentPeriod, signals)
-          : "Pack could not confirm this filed return for the selected period.",
+          : summary.flowStep.safeMessage,
       icon: "!",
       title: needsTargetReview
         ? `${summary.currentPeriod} needs review`

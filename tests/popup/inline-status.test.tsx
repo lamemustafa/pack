@@ -50,6 +50,9 @@ describe("inline filed-return recovery status", () => {
     );
 
     expect(markup).toContain("Retry May");
+    expect(markup).toContain(
+      "Select the filed return filters in the GST portal, then start Pack again.",
+    );
   });
 
   it("explains that an unresolved target review blocks choosing another period", () => {
