@@ -19,6 +19,7 @@ import { clearPackLocalDataWithRecoveryGuard } from "../background/local-data";
 import { startSyntheticDemo } from "../background/synthetic-demo";
 import { runDownloadPromptProbe } from "../background/download-prompt-probe";
 import { selectFiledReturnsFiltersInMainWorldForTab } from "../background/main-world-filed-returns-filter-executor";
+import { clickGstr1ResultViewWithDebugger } from "../background/gstr1-debugger-view";
 import {
   PACK_CLEARABLE_LOCAL_STORAGE_KEYS,
   PACK_LOCAL_STORAGE_KEYS,
@@ -210,6 +211,7 @@ function packRuntimeVersion() {
 
 function filedReturnsFlowRunnerDeps() {
   return {
+    clickGstr1ResultViewWithDebugger,
     getActiveGstTab,
     // The authenticated portal click/capture remains the default. Browser-initiated
     // direct endpoint downloads are retained for targeted tests only: Brave can

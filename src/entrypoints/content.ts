@@ -6,6 +6,9 @@ import { triggerGstr2bDownload } from "../connectors/gst/gstr2b-download";
 import { resolveFiledGstr3bVerifiedPdfDownloadRequest } from "../connectors/gst/filed-returns-direct-download-probe";
 import { navigateToFiledReturnsPage } from "../connectors/gst/filed-returns-navigator";
 import { observeFiledReturnsPageText } from "../connectors/gst/filed-returns-observer";
+import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
+import { markFiledReturnsSearchPending } from "../connectors/gst/filed-returns-search-state";
+import { resolveGstr1FiledReturnViewPoint } from "../connectors/gst/filed-returns-result-row-navigation";
 import {
   PACK_CONTENT_SCRIPT_PROTOCOL_VERSION,
   isPackMessage,
@@ -243,6 +246,45 @@ export default defineContentScript({
               ok: false,
               error:
                 error instanceof Error ? error.message : "Filed returns download flow step failed.",
+            } satisfies PackMessageResponse),
+          );
+        return true;
+      }
+
+      if (message.type === "PACK_CONTENT_MARK_FILED_RETURNS_SEARCH_PENDING_V3") {
+        markFiledReturnsSearchPending(document, message.payload);
+        sendResponse({
+          ok: true,
+          flowStep: {
+            connectorId: "gst",
+            scopeId: filedReturnScopeId(message.payload.returnType),
+            state: "clicked",
+            safeSignals: ["filed-return-search-pending-marked"],
+            safeMessage: "Pack prepared target-bound filed-return search tracking.",
+          },
+        } satisfies PackMessageResponse);
+        return false;
+      }
+
+      if (message.type === "PACK_CONTENT_RESOLVE_GSTR1_VIEW_POINT_V3") {
+        void resolveGstr1FiledReturnViewPoint(document, message.payload)
+          .then((resolution) => {
+            if (!resolution.ok) {
+              sendResponse({
+                ok: true,
+                flowStep: resolution.flowStep,
+              } satisfies PackMessageResponse);
+              return;
+            }
+            sendResponse({
+              ok: true,
+              gstr1ViewPoint: resolution.point,
+            } satisfies PackMessageResponse);
+          })
+          .catch(() =>
+            sendResponse({
+              ok: false,
+              error: "GSTR-1_VIEW_POINT_UNAVAILABLE",
             } satisfies PackMessageResponse),
           );
         return true;

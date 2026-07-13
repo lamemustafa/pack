@@ -12,6 +12,7 @@ import {
   isFiledReturnsSummaryModalDismissalBlocked,
 } from "./filed-returns-dialogs";
 import { detectFiledReturnDetailPage } from "./filed-returns-detail-page-guard";
+import { clickPortalElement } from "./filed-returns-dom";
 import { resolveVisibleFiledReturnDownloadCandidates } from "./filed-returns-download-candidates";
 import { verifyFiledReturnsDownloadTarget } from "./filed-returns-download-target";
 import { waitForPostClickBlockedState } from "./filed-returns-post-click-blocked-state";
@@ -247,7 +248,7 @@ function tryCaptureFiledReturnBlobDownload(
 
 function supportsFiledReturnBlobCapture(target: FiledReturnsDownloadTarget): boolean {
   if (target.returnType === "GSTR-3B") return (target.artifactType ?? "PDF") === "PDF";
-  return target.returnType === "GSTR-1" || target.returnType === "GSTR-2B";
+  return target.returnType === "GSTR-2B";
 }
 
 function detectBlockedPortalState(documentRef: Document): PortalDownloadTriggerResult | null {
@@ -258,7 +259,7 @@ function detectBlockedPortalState(documentRef: Document): PortalDownloadTriggerR
 function activateElement(element: HTMLElement) {
   element.scrollIntoView?.({ block: "center", inline: "center" });
   dispatchPointerSequence(element);
-  element.click();
+  clickPortalElement(element);
 }
 
 function dispatchPointerSequence(element: HTMLElement) {

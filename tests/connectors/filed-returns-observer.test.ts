@@ -176,6 +176,16 @@ describe("filed returns private observer", () => {
     );
   });
 
+  it("recognises the trailing-slash filed GSTR-1 detail route", () => {
+    const observation = observeFiledReturnsPageText("GSTR-1", {
+      pathname: "/returns/auth/gstr1/",
+    });
+
+    expect(observation.safeSignals).toEqual(
+      expect.arrayContaining(["gstr-1-detail-route", "filed-returns-heading", "gstr-1"]),
+    );
+  });
+
   it("marks the filed GSTR-1 detail route as ready when Excel controls are visible", () => {
     const observation = observeFiledReturnsPageText(
       `
@@ -299,6 +309,17 @@ describe("filed returns private observer", () => {
     expect(observation.state).toBe("page-settling");
     expect(observation.safeSignals).toEqual(
       expect.arrayContaining(["filed-returns-route", "filed-returns-heading"]),
+    );
+  });
+
+  it("keeps waiting when Search appears before the filed-return filters", () => {
+    const observation = observeFiledReturnsPageText("View Filed Returns Search", {
+      pathname: "/returns/auth/efiledReturns",
+    });
+
+    expect(observation.state).toBe("page-settling");
+    expect(observation.safeSignals).toEqual(
+      expect.arrayContaining(["filed-returns-route", "search-action"]),
     );
   });
 

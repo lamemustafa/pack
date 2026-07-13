@@ -20,7 +20,14 @@ export async function selectFiledReturnsFiltersInMainWorld(
     const candidate = comparable(value);
     return accepted.some((item) => {
       const expected = comparable(item);
-      return candidate === expected || candidate.includes(expected);
+      if (candidate === expected || !expected) return candidate === expected;
+      let index = candidate.indexOf(expected);
+      while (index >= 0) {
+        const followingCharacter = candidate[index + expected.length] ?? "";
+        if (!/\d$/.test(expected) || !/^\d$/.test(followingCharacter)) return true;
+        index = candidate.indexOf(expected, index + 1);
+      }
+      return false;
     });
   };
   const leaveFilingPeriodUnselectedPattern =
@@ -101,6 +108,15 @@ export async function selectFiledReturnsFiltersInMainWorld(
     }
     return false;
   };
+  const selectedOptionMatches = (
+    kind: "financial-year" | "filing-period" | "month" | "return-type",
+    accepted: readonly string[],
+  ) => {
+    const select = findSelect(kind);
+    return Boolean(
+      select && matches(select.selectedOptions[0]?.textContent || select.value, accepted),
+    );
+  };
 
   const financialYearSelected = await selectOption("financial-year", [scope.financialYear]);
   if (!financialYearSelected) {
@@ -114,7 +130,12 @@ export async function selectFiledReturnsFiltersInMainWorld(
   }
 
   await new Promise((resolve) => setTimeout(resolve, 1_000));
-  const monthSelect = findSelect("month");
+  const returnTypeSelected = await selectOption("return-type", [scope.returnType]);
+  if (!returnTypeSelected) {
+    return { state: "waiting", safeSignals: ["main-world-return-type-not-ready"] };
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, 1_000));
   const monthAliases: Record<string, string[]> = {
     april: ["April", "Apr"],
     may: ["May"],
@@ -129,16 +150,25 @@ export async function selectFiledReturnsFiltersInMainWorld(
     february: ["February", "Feb"],
     march: ["March", "Mar"],
   };
-  const monthSelected =
-    !monthSelect ||
-    (await selectOption("month", monthAliases[normalise(scope.period)] ?? [scope.period]));
+  const acceptedMonths = monthAliases[normalise(scope.period)] ?? [scope.period];
+  const monthSelect = findSelect("month");
+  const monthSelected = !monthSelect || (await selectOption("month", acceptedMonths));
   if (!monthSelected) {
     return { state: "waiting", safeSignals: ["main-world-month-not-ready"] };
   }
 
-  const returnTypeSelected = await selectOption("return-type", [scope.returnType]);
-  if (!returnTypeSelected) {
-    return { state: "waiting", safeSignals: ["main-world-return-type-not-ready"] };
+  await new Promise((resolve) => setTimeout(resolve, 1_000));
+  const currentMonthSelect = findSelect("month");
+  const filtersStable =
+    selectedOptionMatches("financial-year", [scope.financialYear]) &&
+    (leaveFilingPeriodUnselected ||
+      selectedOptionMatches("filing-period", ["Monthly", scope.period])) &&
+    selectedOptionMatches("return-type", [scope.returnType]) &&
+    (monthSelect
+      ? Boolean(currentMonthSelect) && selectedOptionMatches("month", acceptedMonths)
+      : !currentMonthSelect);
+  if (!filtersStable) {
+    return { state: "waiting", safeSignals: ["main-world-filter-selection-unstable"] };
   }
 
   const search = Array.from(

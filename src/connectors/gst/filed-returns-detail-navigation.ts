@@ -6,55 +6,53 @@ import {
   normaliseText,
 } from "./filed-returns-dom";
 import type { extractFiledReturnsDetailIdentity } from "./filed-returns-detail-identity";
-import { resolveVisibleFiledReturnDownloadCandidates } from "./filed-returns-download-candidates";
-import {
-  filedReturnDescriptor,
-  filedReturnScopedSignal,
-  filedReturnScopeId,
-} from "./filed-returns-return-descriptors";
-
-export function returnFromFiledReturnDeadEndBack(
-  documentRef: Document,
-  scope: FiledReturnsDownloadScope,
-  safeSignals: readonly string[],
-): PortalFlowStepResult | null {
-  const pathname = documentRef.defaultView?.location.pathname ?? "";
-  if (!filedReturnDescriptor(scope.returnType).detailRoutePattern.test(pathname)) return null;
-
-  const hasDownloadControl =
-    resolveVisibleFiledReturnDownloadCandidates(documentRef, scope.returnType, "PDF").length > 0 ||
-    resolveVisibleFiledReturnDownloadCandidates(documentRef, scope.returnType, "EXCEL").length > 0;
-  if (hasDownloadControl) return null;
-
-  const backControl = getClickableElements(documentRef).find((element) => {
-    const text = normaliseText(element.innerText || element.textContent || "");
-    return text === "back" || text === "[go back]" || text === "go back";
-  });
-  if (!backControl) return null;
-
-  activateElement(backControl);
-  const descriptor = filedReturnDescriptor(scope.returnType);
-  return {
-    connectorId: "gst",
-    scopeId: filedReturnScopeId(scope.returnType),
-    state: "clicked",
-    safeSignals: [
-      ...safeSignals,
-      filedReturnScopedSignal(scope.returnType, "detail-dead-end-back-clicked"),
-    ],
-    safeMessage: `Pack found a filed ${descriptor.label} page without download controls and clicked Back so it can reopen the requested period from the dashboard.`,
-  };
-}
+import { navigateToFiledReturnsPage } from "./filed-returns-navigator";
+import { filedReturnDescriptor, filedReturnScopeId } from "./filed-returns-return-descriptors";
 
 export function shouldReturnFromMismatchedDetail(
   detailIdentity: ReturnType<typeof extractFiledReturnsDetailIdentity>,
   scope: FiledReturnsDownloadScope,
 ): boolean {
   if (!detailIdentity.period || !detailIdentity.financialYear) return false;
+  return !filedReturnDetailIdentityMatchesScope(detailIdentity, scope);
+}
+
+export function filedReturnDetailIdentityMatchesScope(
+  detailIdentity: ReturnType<typeof extractFiledReturnsDetailIdentity>,
+  scope: FiledReturnsDownloadScope,
+): boolean {
+  if (!detailIdentity.period || !detailIdentity.financialYear) return false;
   return (
-    detailIdentity.returnType !== scope.returnType ||
-    !matchesAcceptedText(detailIdentity.period, [scope.period]) ||
-    !matchesAcceptedText(detailIdentity.financialYear, [scope.financialYear])
+    detailIdentity.returnType === scope.returnType &&
+    matchesAcceptedText(detailIdentity.period, [scope.period]) &&
+    matchesAcceptedText(detailIdentity.financialYear, [scope.financialYear])
+  );
+}
+
+export async function returnFromMismatchedFiledGstr1Page(
+  documentRef: Document,
+  scope: FiledReturnsDownloadScope,
+  detailIdentity: ReturnType<typeof extractFiledReturnsDetailIdentity>,
+): Promise<PortalFlowStepResult | null> {
+  if (scope.returnType !== "GSTR-1") return null;
+  if (!shouldReturnFromMismatchedDetail(detailIdentity, scope)) return null;
+
+  const navigation = await navigateToFiledReturnsPage(documentRef);
+  if (navigation.state !== "candidate-not-found") {
+    return {
+      ...navigation,
+      scopeId: filedReturnScopeId("GSTR-1"),
+      safeSignals: ["filed-gstr1-scope-switch-navigation", ...navigation.safeSignals],
+      safeMessage:
+        navigation.state === "clicked"
+          ? "Pack used the GST Portal navigation to leave the prior filed GSTR-1 period before selecting the requested period."
+          : navigation.safeMessage,
+    };
+  }
+
+  return (
+    returnFromMismatchedFiledGstr1Summary(documentRef, scope, detailIdentity) ??
+    clickFiledReturnDetailBack(documentRef, scope)
   );
 }
 
@@ -127,6 +125,59 @@ export function returnFromFiledGstr1SummaryForExcel(
   };
 }
 
+export function waitForFiledGstr1ExcelControl(
+  scope: FiledReturnsDownloadScope,
+  safeSignals: readonly string[],
+  isTargetBoundDetail: boolean,
+): PortalFlowStepResult | null {
+  if (scope.returnType !== "GSTR-1" || scope.artifactType !== "EXCEL") return null;
+  if (!isTargetBoundDetail || safeSignals.includes("download-excel-gstr-1")) return null;
+  if (safeSignals.includes("gstr-1-summary-route") || safeSignals.includes("download-pdf-gstr-1")) {
+    return null;
+  }
+
+  return {
+    connectorId: "gst",
+    scopeId: filedReturnScopeId("GSTR-1"),
+    state: "clicked",
+    safeSignals: ["filed-gstr1-target-bound-detail", "filed-gstr1-excel-control-pending"],
+    safeMessage:
+      "Pack verified the filed GSTR-1 period and is waiting for its e-invoice details Excel control.",
+  };
+}
+
+export function returnFromMismatchedFiledGstr1Summary(
+  documentRef: Document,
+  scope: FiledReturnsDownloadScope,
+  detailIdentity: ReturnType<typeof extractFiledReturnsDetailIdentity>,
+): PortalFlowStepResult | null {
+  if (scope.returnType !== "GSTR-1") return null;
+  if (!isGstr1SummaryRoute(documentRef)) return null;
+  if (!shouldReturnFromMismatchedDetail(detailIdentity, scope)) return null;
+
+  const view = documentRef.defaultView;
+  if (!view) {
+    return {
+      connectorId: "gst",
+      scopeId: filedReturnScopeId("GSTR-1"),
+      state: "user-action-required",
+      safeSignals: ["filed-gstr1-summary-period-mismatch", "filed-gstr1-summary-back-unavailable"],
+      safeMessage:
+        "Pack found a filed GSTR-1 summary for a different period, but could not return to the prior portal page.",
+    };
+  }
+
+  view.history.back();
+  return {
+    connectorId: "gst",
+    scopeId: filedReturnScopeId("GSTR-1"),
+    state: "clicked",
+    safeSignals: ["filed-gstr1-summary-period-mismatch", "filed-gstr1-summary-back-clicked"],
+    safeMessage:
+      "Pack returned from the prior filed GSTR-1 summary before selecting the requested period.",
+  };
+}
+
 export function clickFiledGstr1SummaryForPdf(
   documentRef: Document,
   scope: FiledReturnsDownloadScope,
@@ -138,7 +189,20 @@ export function clickFiledGstr1SummaryForPdf(
   if (isGstr1SummaryRoute(documentRef)) return null;
 
   const summaryControl = findGstr1ViewSummaryControl(documentRef);
-  if (!summaryControl) return null;
+  if (!summaryControl) {
+    return {
+      connectorId: "gst",
+      scopeId: filedReturnScopeId("GSTR-1"),
+      state: "clicked",
+      safeSignals: [
+        safeSignals.includes("gstr-1-detail-route")
+          ? "gstr-1-detail-route"
+          : "filed-gstr1-target-bound-detail",
+        "filed-gstr1-summary-view-pending",
+      ],
+      safeMessage: "Pack is waiting for the filed GSTR-1 View Summary control.",
+    };
+  }
 
   activateElement(summaryControl);
   return {
@@ -162,7 +226,7 @@ function scopeIncludesPdfArtifact(scope: FiledReturnsDownloadScope): boolean {
 }
 
 function isGstr1SummaryRoute(documentRef: Document): boolean {
-  return /\/returns\/auth\/gstr1\/gstr1sum$/i.test(
+  return /\/returns\/auth\/gstr1\/gstr1sum\/?$/i.test(
     documentRef.defaultView?.location.pathname ?? "",
   );
 }

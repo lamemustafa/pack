@@ -3,6 +3,7 @@ import {
   type NavigationCandidateInput,
   type NavigationCandidateScore,
 } from "./filed-returns-navigation-candidates";
+import { clickPortalElement } from "./filed-returns-dom";
 
 const SUMMARY_DIALOG_SETTLE_DELAY_MS = 1_000;
 const SUMMARY_DIALOG_CONTROL_WAIT_MS = 1_000;
@@ -147,7 +148,7 @@ function activateElement(element: HTMLElement): void {
       );
     }
   }
-  element.click();
+  clickPortalElement(element);
 }
 
 function isVisible(element: HTMLElement): boolean {

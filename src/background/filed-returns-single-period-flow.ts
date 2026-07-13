@@ -79,6 +79,26 @@ async function runSinglePeriodSteps(
     lastStep = response.flowStep;
     activePeriod = extractActivePeriod(lastStep) ?? activePeriod;
 
+    if (
+      lastStep.safeSignals.includes("filed-gstr1-result-view-user-action-required") &&
+      deps.clickGstr1ResultViewWithDebugger
+    ) {
+      const debuggerStep = await deps.clickGstr1ResultViewWithDebugger(tabId, scope);
+      const debuggerResponse = { ok: true as const, flowStep: debuggerStep };
+      await persistFlowResponse(debuggerResponse, deps);
+      lastStep = debuggerStep;
+      if (!shouldContinueFlow(debuggerStep)) {
+        return withPersistedSinglePeriodSummary(
+          scope,
+          debuggerResponse,
+          deps,
+          shouldPersistSinglePeriodSummary,
+        );
+      }
+      await delay(getFlowStepSettleMs(debuggerStep, deps));
+      continue;
+    }
+
     if (lastStep.safeSignals.includes("filed-return-api-result-posted")) {
       return waitForDetailReadyThenTrigger({
         activePeriod,
@@ -131,6 +151,14 @@ async function runSinglePeriodSteps(
       deps.selectFiltersInMainWorld
     ) {
       mainWorldFilterAttempted = true;
+      try {
+        await deps.sendMessageToTabWithInjection(tabId, {
+          type: "PACK_CONTENT_MARK_FILED_RETURNS_SEARCH_PENDING_V3",
+          payload: scope,
+        });
+      } catch {
+        // Without the isolated-world marker, later filter-bound row matching stays disabled.
+      }
       const mainWorldSelection = await deps.selectFiltersInMainWorld(tabId, scope);
       if (mainWorldSelection.state === "searched") {
         await delay(MAIN_WORLD_FILTER_SEARCH_SETTLE_MS);

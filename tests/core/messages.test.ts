@@ -60,6 +60,27 @@ describe("message boundary", () => {
     expect(isPackMessage({ type: "PACK_CONTENT_NAVIGATE_FILED_RETURNS_V3" })).toBe(true);
     expect(
       isPackMessage({
+        type: "PACK_CONTENT_MARK_FILED_RETURNS_SEARCH_PENDING_V3",
+        payload: {
+          financialYear: "2025-26",
+          period: "March",
+          returnType: "GSTR-3B",
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isPackMessage({
+        type: "PACK_CONTENT_RESOLVE_GSTR1_VIEW_POINT_V3",
+        payload: {
+          artifactType: "PDF",
+          financialYear: "2025-26",
+          period: "March",
+          returnType: "GSTR-1",
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isPackMessage({
         type: "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD",
         payload: {
           actionId: "action-1",

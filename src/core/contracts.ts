@@ -197,13 +197,18 @@ export interface FiledReturnsDownloadScope {
   completedPeriods?: string[];
 }
 
+export interface FiledReturnsTargetBoundViewPoint {
+  x: number;
+  y: number;
+}
+
 export interface FiledReturnsDownloadTarget {
   actionId: string;
   financialYear: string;
   period: string;
   returnType: FiledReturnsReturnType;
   artifactType?: FiledReturnsConcreteArtifactType;
-  /** Internal one-shot fallback after a failed main-world capture. */
+  /** Internal explicit portal-click mode with target-bound blob/data observation. */
   forcePortalClick?: boolean;
 }
 

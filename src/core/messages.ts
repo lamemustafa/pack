@@ -5,6 +5,7 @@ import type {
   FiledReturnsFlowSummary,
   FiledReturnsDirectDownloadRequest,
   FiledReturnsDownloadScope,
+  FiledReturnsTargetBoundViewPoint,
   FiledReturnsDownloadTarget,
   PortalDownloadTriggerResult,
   PortalContext,
@@ -28,7 +29,7 @@ import {
   type FiledReturnsReturnType,
 } from "./filed-returns-return-types";
 
-export const PACK_CONTENT_SCRIPT_PROTOCOL_VERSION = 19;
+export const PACK_CONTENT_SCRIPT_PROTOCOL_VERSION = 29;
 
 export interface MainWorldCaptureTransferPayload {
   actionId: string;
@@ -105,6 +106,14 @@ export type PackMessage =
       payload: FiledReturnsDownloadScope;
     }
   | {
+      type: "PACK_CONTENT_MARK_FILED_RETURNS_SEARCH_PENDING_V3";
+      payload: FiledReturnsDownloadScope;
+    }
+  | {
+      type: "PACK_CONTENT_RESOLVE_GSTR1_VIEW_POINT_V3";
+      payload: FiledReturnsDownloadScope;
+    }
+  | {
       type: "PACK_CONTENT_PREPARE_MAIN_WORLD_CAPTURE_V3";
       payload: MainWorldCaptureTransferPayload;
     }
@@ -159,6 +168,7 @@ export type PackMessageResponse =
   | { ok: true; mainWorldCapturePrepared: true }
   | { ok: true; mainWorldCaptureChunk: string }
   | { ok: true; mainWorldCaptureCleared: true }
+  | { ok: true; gstr1ViewPoint: FiledReturnsTargetBoundViewPoint }
   | { ok: true; cleared: true }
   | { ok: false; error: string };
 
@@ -222,6 +232,8 @@ export function isPackMessage(input: unknown): input is PackMessage {
       return isFiledReturnsDownloadTarget(input.payload);
     case "PACK_RUN_FILED_RETURNS_DOWNLOAD_STEP":
     case "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3":
+    case "PACK_CONTENT_MARK_FILED_RETURNS_SEARCH_PENDING_V3":
+    case "PACK_CONTENT_RESOLVE_GSTR1_VIEW_POINT_V3":
       return isFiledReturnsDownloadScope(input.payload);
     case "PACK_CONTENT_PREPARE_MAIN_WORLD_CAPTURE_V3":
     case "PACK_CONTENT_CLEAR_MAIN_WORLD_CAPTURE_V3":

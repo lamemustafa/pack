@@ -3,19 +3,17 @@ import { normaliseText } from "./filed-returns-dom";
 import { acceptedFiledReturnsPeriodTexts } from "./filed-returns-months";
 import { findMatchingFiledReturnRows } from "./filed-returns-result-rows";
 import { filedReturnsFilterFieldMatches } from "./filed-returns-filter-fields";
-import {
-  consumeSettledFiledReturnsSearchForScope,
-  hasSettledFiledReturnsSearchForScope,
-} from "./filed-returns-search-state";
+import { consumeSettledFiledReturnsSearchForScope } from "./filed-returns-search-state";
 
 export function detectPositiveNotFiledEvidence(
   documentRef: Document,
   scope: FiledReturnsDownloadScope,
   scopeId: string,
+  searchSettled: boolean,
 ): PortalFlowStepResult | null {
   const resultsContainer = findSettledNoRecordResultsContainer(documentRef);
   if (!resultsContainer) return null;
-  if (!hasSubmittedSearchForScope(documentRef, scope)) return null;
+  if (!searchSettled) return null;
   if (!filterFormMatchesScope(documentRef, scope)) return null;
   if (hasMatchingResultRow(documentRef, scope)) return null;
   consumeSettledFiledReturnsSearchForScope(documentRef, scope);
@@ -28,13 +26,6 @@ export function detectPositiveNotFiledEvidence(
     safeMessage:
       "Pack found a settled GST Portal no-records result for the selected GSTR-3B period.",
   };
-}
-
-function hasSubmittedSearchForScope(
-  documentRef: Document,
-  scope: FiledReturnsDownloadScope,
-): boolean {
-  return hasSettledFiledReturnsSearchForScope(documentRef, scope);
 }
 
 function filterFormMatchesScope(documentRef: Document, scope: FiledReturnsDownloadScope): boolean {

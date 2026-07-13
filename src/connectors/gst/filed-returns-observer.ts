@@ -133,8 +133,7 @@ export function observeFiledReturnsPageText(
     !safeSignals.includes("view-download-column") &&
     !safeSignals.includes("download-filed-gstr-3b") &&
     !safeSignals.includes("download-filed-gstr-1") &&
-    !safeSignals.includes("download-excel-gstr-1") &&
-    !safeSignals.includes("search-action")
+    !safeSignals.includes("download-excel-gstr-1")
   ) {
     return {
       connectorId: "gst",

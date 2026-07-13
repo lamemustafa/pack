@@ -29,8 +29,33 @@ export function activateElement(element: HTMLElement) {
       );
     }
   }
-  element.click();
+  clickPortalElement(element);
   void delay(CLICK_SETTLE_DELAY_MS);
+}
+
+export function clickPortalElement(element: HTMLElement): void {
+  if (!hasJavascriptUrlActivation(element)) {
+    element.click();
+    return;
+  }
+
+  const MouseEventConstructor = element.ownerDocument.defaultView?.MouseEvent;
+  const EventConstructor = element.ownerDocument.defaultView?.Event;
+  if (!EventConstructor) return;
+  const clickEvent = MouseEventConstructor
+    ? new MouseEventConstructor("click", {
+        bubbles: true,
+        cancelable: true,
+        view: element.ownerDocument.defaultView,
+      })
+    : new EventConstructor("click", { bubbles: true, cancelable: true });
+  clickEvent.preventDefault();
+  element.dispatchEvent(clickEvent);
+}
+
+function hasJavascriptUrlActivation(element: HTMLElement): boolean {
+  const activationElement = element.closest<HTMLElement>("a[href]") ?? element;
+  return /^javascript:/i.test(activationElement.getAttribute("href")?.trim() ?? "");
 }
 
 export function dispatchChange(element: HTMLElement) {
@@ -73,7 +98,8 @@ export function matchesAcceptedText(text: string, acceptedTexts: readonly string
   const comparableText = normaliseComparable(text);
   return acceptedTexts.some((accepted) => {
     const comparableAccepted = normaliseComparable(accepted);
-    return comparableText === comparableAccepted || comparableText.includes(comparableAccepted);
+    if (comparableText === comparableAccepted) return true;
+    return containsComparableWithoutNumericPrefixCollision(comparableText, comparableAccepted);
   });
 }
 
@@ -91,4 +117,18 @@ export function delay(ms: number): Promise<void> {
 
 function normaliseComparable(value: string): string {
   return normaliseText(value).replace(/[^a-z0-9]/g, "");
+}
+
+function containsComparableWithoutNumericPrefixCollision(
+  comparableText: string,
+  comparableAccepted: string,
+): boolean {
+  if (!comparableAccepted) return false;
+  let index = comparableText.indexOf(comparableAccepted);
+  while (index >= 0) {
+    const followingCharacter = comparableText[index + comparableAccepted.length] ?? "";
+    if (!/\d$/.test(comparableAccepted) || !/^\d$/.test(followingCharacter)) return true;
+    index = comparableText.indexOf(comparableAccepted, index + 1);
+  }
+  return false;
 }

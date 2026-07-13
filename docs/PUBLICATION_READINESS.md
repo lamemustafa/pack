@@ -94,7 +94,9 @@ stable-release claims.
 - [x] Manifest V3.
 - [x] Exact GST host permission allow-list only.
 - [x] No `<all_urls>`, cookies, history, webRequest, debugger/CDP,
-      nativeMessaging, tabs, identity, or externally_connectable.
+      nativeMessaging, tabs, identity, or externally_connectable in the default release manifest.
+      An explicitly enabled local-only GSTR-1 experiment adds debugger permission to dispatch one
+      target-bound View click; that build is not release-eligible.
 - [x] Restrictive extension CSP.
 - [x] No remote executable code allowed by package verifier.
 - [x] No extension analytics SDK.

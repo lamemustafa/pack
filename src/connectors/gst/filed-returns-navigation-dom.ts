@@ -1,3 +1,4 @@
+import { clickPortalElement } from "./filed-returns-dom";
 import {
   normaliseCandidateText,
   type NavigationCandidateInput,
@@ -29,7 +30,7 @@ export function revealMenuCandidate(
   if (FocusEventConstructor) {
     element.dispatchEvent(new FocusEventConstructor("focus", { bubbles: true }));
   }
-  if (options.click) element.click();
+  if (options.click) clickPortalElement(element);
 }
 
 export function isServicesMenuCandidate(candidate: NavigationCandidateInput): boolean {
@@ -74,7 +75,7 @@ export function toNavigationCandidateInput(element: HTMLElement): NavigationCand
 export function activateElement(element: HTMLElement) {
   element.scrollIntoView?.({ block: "center", inline: "center" });
   dispatchPointerSequence(element);
-  element.click();
+  clickPortalElement(element);
 }
 
 export function isVisible(element: HTMLElement): boolean {

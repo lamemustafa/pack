@@ -48,7 +48,14 @@ const expectedPackagedBrandAssets = [
   "brand/pack-logo-reversed.svg",
   "brand/pack-logo-reversed-outlined.svg",
 ];
-const expectedPermissions = ["downloads", "offscreen", "scripting", "storage"];
+const allowLocalGstr1Debugger = process.env.PACK_ALLOW_LOCAL_GSTR1_DEBUGGER === "1";
+const expectedPermissions = [
+  "downloads",
+  "offscreen",
+  "scripting",
+  "storage",
+  ...(allowLocalGstr1Debugger ? ["debugger"] : []),
+];
 const expectedHostPermissions = [
   "https://www.gst.gov.in/*",
   "https://services.gst.gov.in/*",
@@ -108,8 +115,15 @@ for (const permission of expectedPermissions) {
 for (const permission of manifest.permissions ?? []) {
   if (!expectedPermissions.includes(permission))
     throw new Error(`Unexpected permission present: ${permission}`);
-  if (forbiddenPermissions.has(permission))
+  if (
+    forbiddenPermissions.has(permission) &&
+    !(allowLocalGstr1Debugger && permission === "debugger")
+  )
     throw new Error(`Forbidden permission present: ${permission}`);
+}
+
+if ((manifest.optional_permissions ?? []).length > 0) {
+  throw new Error("Pack must not expose optional permissions.");
 }
 
 if ((manifest.host_permissions ?? []).length !== expectedHostPermissions.length) {

@@ -1,6 +1,5 @@
 import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "../../core/contracts";
 import { runGstr2bDownloadStep } from "./gstr2b-flow";
-import { activateElement } from "./filed-returns-dom";
 import { extractFiledReturnsDetailIdentity } from "./filed-returns-detail-identity";
 import {
   dismissKnownFiledReturnsSummaryModal,
@@ -14,20 +13,26 @@ import { observeFiledReturnsPageText } from "./filed-returns-observer";
 import {
   clickFiledGstr1SummaryForPdf,
   clickFiledReturnDetailBack,
+  filedReturnDetailIdentityMatchesScope,
   isGstr2bSummaryRoute,
   returnFromFiledGstr1SummaryForExcel,
-  returnFromFiledReturnDeadEndBack,
+  returnFromMismatchedFiledGstr1Page,
   shouldReturnFromMismatchedDetail,
+  waitForFiledGstr1ExcelControl,
 } from "./filed-returns-detail-navigation";
 import { getBodyText } from "./filed-returns-page-text";
 import { detectFiledReturnsPortalAvailabilityIssue } from "./filed-returns-portal-availability";
-import { findMatchingActionableFiledReturnRows } from "./filed-returns-result-rows";
+import { openFiledReturnResultRow } from "./filed-returns-result-row-navigation";
 import {
   filedReturnDescriptor,
   filedReturnScopedSignal,
   filedReturnScopeId,
 } from "./filed-returns-return-descriptors";
-import { clearFiledReturnsSearchAttempt } from "./filed-returns-search-state";
+import {
+  clearFiledReturnsSearchAttempt,
+  hasPendingFiledReturnsSearchForScope,
+  hasSettledFiledReturnsSearchForScope,
+} from "./filed-returns-search-state";
 
 export async function runFiledReturnsDownloadStep(
   documentRef: Document,
@@ -67,6 +72,7 @@ export async function runFiledReturnsDownloadStep(
       ? { pathname: documentRef.defaultView.location.pathname }
       : {}),
   });
+  const searchSettled = hasSettledFiledReturnsSearchForScope(documentRef, scope);
 
   if (
     observation.state === "detail-summary-modal-open" &&
@@ -89,13 +95,32 @@ export async function runFiledReturnsDownloadStep(
     );
   }
 
-  if (observation.state !== "ready") {
-    const deadEndBackNavigation = returnFromFiledReturnDeadEndBack(
+  if (scope.returnType === "GSTR-1") {
+    const detailIdentity = extractFiledReturnsDetailIdentity(documentRef, scope.returnType);
+    const mismatchedPageNavigation = await returnFromMismatchedFiledGstr1Page(
       documentRef,
       scope,
-      observation.safeSignals,
+      detailIdentity,
     );
-    if (deadEndBackNavigation) return deadEndBackNavigation;
+    if (mismatchedPageNavigation) return mismatchedPageNavigation;
+    const isTargetBoundDetail = filedReturnDetailIdentityMatchesScope(detailIdentity, scope);
+    if (observation.safeSignals.includes("gstr-1-detail-route") || isTargetBoundDetail) {
+      if (shouldReturnFromMismatchedDetail(detailIdentity, scope)) {
+        return clickFiledReturnDetailBack(documentRef, scope);
+      }
+      const gstr1SummaryNavigation = clickFiledGstr1SummaryForPdf(
+        documentRef,
+        scope,
+        observation.safeSignals,
+      );
+      if (gstr1SummaryNavigation) return gstr1SummaryNavigation;
+      const gstr1ExcelControlWait = waitForFiledGstr1ExcelControl(
+        scope,
+        observation.safeSignals,
+        isTargetBoundDetail,
+      );
+      if (gstr1ExcelControlWait) return gstr1ExcelControlWait;
+    }
   }
 
   if (observation.state === "ready") {
@@ -109,18 +134,6 @@ export async function runFiledReturnsDownloadStep(
       observation.safeSignals,
     );
     if (gstr1DetailNavigation) return gstr1DetailNavigation;
-    const gstr1SummaryNavigation = clickFiledGstr1SummaryForPdf(
-      documentRef,
-      scope,
-      observation.safeSignals,
-    );
-    if (gstr1SummaryNavigation) return gstr1SummaryNavigation;
-    const deadEndBackNavigation = returnFromFiledReturnDeadEndBack(
-      documentRef,
-      scope,
-      observation.safeSignals,
-    );
-    if (deadEndBackNavigation) return deadEndBackNavigation;
     return {
       connectorId: "gst",
       scopeId,
@@ -135,10 +148,29 @@ export async function runFiledReturnsDownloadStep(
   }
 
   if (isFiledReturnsSearchSurface(observation.safeSignals)) {
-    const notFiledEvidence = detectPositiveNotFiledEvidence(documentRef, scope, scopeId);
+    const notFiledEvidence = detectPositiveNotFiledEvidence(
+      documentRef,
+      scope,
+      scopeId,
+      searchSettled,
+    );
     if (notFiledEvidence) {
       return notFiledEvidence;
     }
+  }
+
+  if (
+    (observation.state === "filters-required" ||
+      observation.state === "filed-return-results-visible") &&
+    hasPendingFiledReturnsSearchForScope(documentRef, scope)
+  ) {
+    return {
+      connectorId: "gst",
+      scopeId,
+      state: "clicked",
+      safeSignals: ["filed-return-search-results-pending"],
+      safeMessage: "Pack is waiting for the GST Portal's filed-return search results.",
+    };
   }
 
   if (observation.state === "filters-required") {
@@ -158,7 +190,15 @@ export async function runFiledReturnsDownloadStep(
   }
 
   if (observation.state === "filed-return-results-visible") {
-    return openFiledReturnResultRow(documentRef, scope);
+    const resultRow = openFiledReturnResultRow(documentRef, scope, searchSettled);
+    if (
+      scope.returnType === "GSTR-1" &&
+      resultRow.safeSignals.includes("filed-return-result-row-not-found") &&
+      !searchSettled
+    ) {
+      return selectFiledReturnsFiltersAndSearch(documentRef, scope, scopeId);
+    }
+    return resultRow;
   }
 
   if (observation.state === "page-settling") {
@@ -168,6 +208,22 @@ export async function runFiledReturnsDownloadStep(
       state: "clicked",
       safeSignals: [...observation.safeSignals, "filed-returns-page-settling"],
       safeMessage: observation.safeMessage,
+    };
+  }
+
+  if (
+    scope.returnType === "GSTR-1" &&
+    (observation.state === "download-not-visible" || observation.state === "wrong-page") &&
+    observation.safeSignals.includes("gstr-1") &&
+    isAuthenticatedGstr1Route(documentRef)
+  ) {
+    return {
+      connectorId: "gst",
+      scopeId,
+      state: "clicked",
+      safeSignals: [...observation.safeSignals, "filed-gstr1-controls-pending"],
+      safeMessage:
+        "Pack is waiting for the authenticated GSTR-1 page to expose its target identity and download controls.",
     };
   }
 
@@ -198,6 +254,10 @@ export async function runFiledReturnsDownloadStep(
   );
 }
 
+function isAuthenticatedGstr1Route(documentRef: Document): boolean {
+  return /^\/returns\/auth\/gstr1(?:\/|$)/i.test(documentRef.defaultView?.location.pathname ?? "");
+}
+
 function summaryModalBlockedResult(scopeId: string, safeSignals: string[]): PortalFlowStepResult {
   return {
     connectorId: "gst",
@@ -212,54 +272,6 @@ function summaryModalBlockedResult(scopeId: string, safeSignals: string[]): Port
         "Wait for the GST Portal overlay to finish closing. If it remains open, use its Close control, then retry Pack.",
       canResume: true,
     },
-  };
-}
-
-function openFiledReturnResultRow(
-  documentRef: Document,
-  scope: FiledReturnsDownloadScope,
-): PortalFlowStepResult {
-  const descriptor = filedReturnDescriptor(scope.returnType);
-  const scopeId = filedReturnScopeId(scope.returnType);
-  const actionableRows = findMatchingActionableFiledReturnRows(documentRef, scope);
-
-  if (actionableRows.length > 1) {
-    return {
-      connectorId: "gst",
-      scopeId,
-      state: "blocked",
-      safeSignals: ["filed-return-result-row-ambiguous"],
-      safeMessage: `Pack found more than one filed ${descriptor.label} result row for the requested period. Open the correct row manually, then start Pack again.`,
-      userAction: {
-        type: "NAVIGATE_TO_SUPPORTED_PAGE",
-        message: `Open the exact filed ${descriptor.label} row for the requested period.`,
-        canResume: true,
-      },
-    };
-  }
-
-  const actionableRow = actionableRows[0];
-  if (actionableRow) {
-    activateElement(actionableRow.view);
-    return {
-      connectorId: "gst",
-      scopeId,
-      state: "clicked",
-      safeSignals: [
-        "filed-return-result-view-clicked",
-        `result-row-${descriptor.signalSlug}`,
-        ...(actionableRow.period ? [`filed-return-result-period:${actionableRow.period}`] : []),
-      ],
-      safeMessage: `Pack opened the filed ${descriptor.label} result row.`,
-    };
-  }
-
-  return {
-    connectorId: "gst",
-    scopeId,
-    state: "candidate-not-found",
-    safeSignals: ["filed-return-result-row-not-found"],
-    safeMessage: `Pack could not find a filed ${descriptor.label} result row for the selected period. Check the portal results and start Pack again.`,
   };
 }
 

@@ -19,6 +19,7 @@ import {
 } from "../../src/background/download-observer";
 import { suggestNextBrowserDownloadFilename } from "../../src/background/download-filename-suggester";
 import { exportFullFiscalYearZip } from "../../src/background/filed-returns-full-fiscal-year-zip";
+import { MAX_GSTR1_FLOW_STEPS } from "../../src/background/filed-returns-flow-runner-utils";
 import { createPortalGstr2bWorkbook } from "../fixtures/gstr2b-workbook";
 import { browser } from "wxt/browser";
 
@@ -1627,9 +1628,17 @@ describe("filed returns flow runner", () => {
       "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
       "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
     ]);
+    expect(sendMessageToTabWithInjection.mock.calls.at(-1)?.[1].payload).toMatchObject({
+      forcePortalClick: true,
+    });
+    expect(vi.mocked(observeNextBrowserDownload).mock.calls.at(-1)?.[1]).toMatchObject({
+      allowTargetBoundBlobOrData: true,
+    });
+    expect(vi.mocked(observeNextBrowserDownload).mock.calls.at(-1)?.[2]).toBe(120_000);
     expect(suggestNextBrowserDownloadFilename).toHaveBeenCalledWith(
       browser.downloads,
       expect.objectContaining({
+        allowTargetBoundBlobOrData: true,
         expectedMimeTypes: ["application/pdf"],
         expectedOrigins: expect.arrayContaining(["https://return.gst.gov.in"]),
       }),
@@ -3247,6 +3256,125 @@ describe("filed returns flow runner", () => {
     expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
   });
 
+  it("continues a GSTR-1 run after the debugger clicks the exact filed result View", async () => {
+    const responses: PackMessageResponse[] = [
+      {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
+          state: "user-action-required",
+          safeSignals: ["filed-gstr1-result-view-user-action-required", "result-row-gstr1"],
+          safeMessage: "The exact View control requires trusted input.",
+        },
+      },
+      filedGstr1DownloadReady("May", "PDF"),
+      filedGstr1DownloadClicked("PDF"),
+    ];
+    const sendMessageToTabWithInjection = vi.fn<
+      FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
+    >(async () => responses.shift() ?? { ok: false, error: "Unexpected call." });
+    const clickGstr1ResultViewWithDebugger = vi.fn(async () => ({
+      connectorId: "gst" as const,
+      scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
+      state: "clicked" as const,
+      safeSignals: ["filed-gstr1-result-view-debugger-clicked"],
+      safeMessage: "Clicked the exact View control.",
+    }));
+
+    const response = await startFiledReturnsDownloadFlow(
+      {
+        artifactType: "PDF",
+        financialYear: "2025-26",
+        period: "May",
+        returnType: "GSTR-1",
+      },
+      {
+        clickGstr1ResultViewWithDebugger,
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+        },
+        timings: {
+          flowStepSettleMs: 0,
+          resultRowNavigationSettleMs: 0,
+        },
+      },
+    );
+
+    expect(clickGstr1ResultViewWithDebugger).toHaveBeenCalledWith(
+      ACTIVE_GST_TAB.id,
+      expect.objectContaining({ period: "May", returnType: "GSTR-1" }),
+    );
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: { state: "downloaded" },
+      flowSummary: { completedPeriods: ["May"], status: "complete" },
+    });
+  });
+
+  it("keeps the GSTR-1 View step retryable when debugger input is unavailable", async () => {
+    const sendMessageToTabWithInjection = vi.fn<
+      FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
+    >(async () => ({
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
+        state: "user-action-required",
+        safeSignals: ["filed-gstr1-result-view-user-action-required", "result-row-gstr1"],
+        safeMessage: "The exact View control requires trusted input.",
+      },
+    }));
+    const clickGstr1ResultViewWithDebugger = vi.fn(async () => ({
+      connectorId: "gst" as const,
+      scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
+      state: "user-action-required" as const,
+      safeSignals: [
+        "filed-gstr1-result-view-user-action-required",
+        "filed-gstr1-debugger-input-unavailable",
+      ],
+      safeMessage: "Automatic View input is unavailable.",
+      userAction: {
+        type: "NAVIGATE_TO_SUPPORTED_PAGE" as const,
+        message: "Click the exact View control.",
+        canResume: true,
+      },
+    }));
+
+    const response = await startFiledReturnsDownloadFlow(
+      {
+        artifactType: "PDF",
+        financialYear: "2025-26",
+        period: "May",
+        returnType: "GSTR-1",
+      },
+      {
+        clickGstr1ResultViewWithDebugger,
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+        },
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "user-action-required",
+        safeSignals: expect.arrayContaining(["filed-gstr1-debugger-input-unavailable"]),
+      },
+      flowSummary: { completedPeriods: [], status: "blocked" },
+    });
+    expect(observeNextBrowserDownload).not.toHaveBeenCalled();
+  });
+
   it("persists a single-period download result for popup status", async () => {
     const responses: PackMessageResponse[] = [
       filedReturnDownloadReady("May"),
@@ -3415,6 +3543,7 @@ describe("filed returns flow runner", () => {
         now: () => new Date("2026-07-03T00:00:00.000Z"),
         timings: {
           flowStepSettleMs: 0,
+          portalNavigationSettleMs: 0,
           resultRowNavigationSettleMs: 0,
         },
       },
@@ -3448,7 +3577,7 @@ describe("filed returns flow runner", () => {
     expect("flowStep" in response).toBe(true);
     if (!("flowStep" in response)) throw new Error("Expected a flow-step response.");
     expect(response.flowStep.safeMessage).not.toContain("clicked Search");
-    expect(sendMessageToTabWithInjection).toHaveBeenCalledTimes(12);
+    expect(sendMessageToTabWithInjection).toHaveBeenCalledTimes(MAX_GSTR1_FLOW_STEPS);
     expect(browser.storage.session.set).toHaveBeenCalledWith({
       completion: expect.objectContaining({
         currentPeriod: "June",
@@ -5804,6 +5933,16 @@ describe("filed returns flow runner", () => {
           safeMessage: "Filed-return filters are not ready.",
         },
       },
+      {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+          state: "clicked",
+          safeSignals: ["filed-return-search-pending-marked"],
+          safeMessage: "Search tracking prepared.",
+        },
+      },
       filedReturnDownloadReady("May"),
       filedReturnDownloadClicked(),
     ];
@@ -5848,6 +5987,7 @@ describe("filed returns flow runner", () => {
     });
     expect(sendMessageToTabWithInjection.mock.calls.map(([, message]) => message.type)).toEqual([
       "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
+      "PACK_CONTENT_MARK_FILED_RETURNS_SEARCH_PENDING_V3",
       "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
       "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
     ]);

@@ -3,6 +3,7 @@ import {
   scoreDialogDismissalCandidate,
   type NavigationCandidateInput,
 } from "./filed-returns-navigation-candidates";
+import { clickPortalElement } from "./filed-returns-dom";
 export {
   dismissKnownFiledReturnsSummaryModal,
   isFiledReturnsSummaryModalDismissalBlocked,
@@ -138,7 +139,7 @@ function toNavigationCandidateInput(element: HTMLElement): NavigationCandidateIn
 function activateElement(element: HTMLElement) {
   element.scrollIntoView?.({ block: "center", inline: "center" });
   dispatchPointerSequence(element);
-  element.click();
+  clickPortalElement(element);
 }
 
 function dispatchPointerSequence(element: HTMLElement) {

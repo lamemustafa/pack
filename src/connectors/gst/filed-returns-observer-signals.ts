@@ -122,15 +122,15 @@ function isFiledReturnsRoute(hints: FiledReturnsObservationHints): boolean {
 }
 
 function isGstr3bDetailRoute(hints: FiledReturnsObservationHints): boolean {
-  return hints.pathname ? /\/returns\/auth\/gstr3b$/i.test(hints.pathname) : false;
+  return hints.pathname ? /\/returns\/auth\/gstr3b\/?$/i.test(hints.pathname) : false;
 }
 
 function isGstr1DetailRoute(hints: FiledReturnsObservationHints): boolean {
-  return hints.pathname ? /\/returns\/auth\/gstr1$/i.test(hints.pathname) : false;
+  return hints.pathname ? /\/returns\/auth\/gstr1\/?$/i.test(hints.pathname) : false;
 }
 
 function isGstr1SummaryRoute(hints: FiledReturnsObservationHints): boolean {
-  return hints.pathname ? /\/returns\/auth\/gstr1\/gstr1sum$/i.test(hints.pathname) : false;
+  return hints.pathname ? /\/returns\/auth\/gstr1\/gstr1sum\/?$/i.test(hints.pathname) : false;
 }
 
 function isGstr2bSummaryRoute(hints: FiledReturnsObservationHints): boolean {

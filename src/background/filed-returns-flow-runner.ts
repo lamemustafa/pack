@@ -1,4 +1,4 @@
-import type { FiledReturnsDownloadScope } from "../core/contracts";
+import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "../core/contracts";
 import type {
   FullFiscalYearTargetRecoveryPayload,
   FiledReturnsFreshStartPayload,
@@ -42,11 +42,17 @@ export interface FiledReturnsFlowRunnerDeps {
       {
         type:
           | "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3"
+          | "PACK_CONTENT_MARK_FILED_RETURNS_SEARCH_PENDING_V3"
+          | "PACK_CONTENT_RESOLVE_GSTR1_VIEW_POINT_V3"
           | "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3"
           | "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V3";
       }
     >,
   ) => Promise<PackMessageResponse>;
+  clickGstr1ResultViewWithDebugger?: (
+    tabId: number,
+    scope: FiledReturnsDownloadScope,
+  ) => Promise<PortalFlowStepResult>;
   storageKeys: {
     activeRun?: string;
     completion: string;

@@ -71,6 +71,54 @@ describe("extension package verifier", () => {
     expect(result.output).toContain("debugger");
   });
 
+  it("accepts debugger only for an explicitly allowed local GSTR-1 package", async () => {
+    const outputDir = await createValidPackage();
+    const manifestPath = path.join(outputDir, "manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+      permissions: string[];
+    };
+    await writeFile(
+      manifestPath,
+      `${JSON.stringify(
+        {
+          ...manifest,
+          permissions: [...manifest.permissions, "debugger"],
+        },
+        null,
+        2,
+      )}\n`,
+    );
+
+    const result = await runVerifier(outputDir, {
+      PACK_ALLOW_LOCAL_GSTR1_DEBUGGER: "1",
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.output).toContain("Pack WXT extension package verification passed.");
+  });
+
+  it("rejects optional debugger even for the local GSTR-1 package verifier", async () => {
+    const outputDir = await createValidPackage();
+    const manifestPath = path.join(outputDir, "manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<string, unknown>;
+    await writeFile(
+      manifestPath,
+      `${JSON.stringify(
+        {
+          ...manifest,
+          optional_permissions: ["debugger"],
+        },
+        null,
+        2,
+      )}\n`,
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("optional permissions");
+  });
+
   it("rejects analytics, crash-reporting, and replay markers in packaged artifacts", async () => {
     const cases = [
       {

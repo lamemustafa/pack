@@ -3,6 +3,7 @@ import type { PortalFlowStepResult } from "../../src/core/contracts";
 import {
   DETAIL_SUMMARY_MODAL_SETTLE_MS,
   FLOW_STEP_SETTLE_MS,
+  MAX_GSTR1_FLOW_STEPS,
   MAX_GSTR3B_FLOW_STEPS,
   PORTAL_NAVIGATION_SETTLE_MS,
   RESULT_ROW_NAVIGATION_SETTLE_MS,
@@ -95,6 +96,63 @@ describe("filed returns flow runner wait policy", () => {
         BASE_DEPS,
       ),
     ).toBe(PORTAL_NAVIGATION_SETTLE_MS);
+
+    expect(
+      getFlowStepSettleMs(
+        {
+          ...BASE_STEP,
+          safeSignals: ["filed-returns-page-settling"],
+        },
+        BASE_DEPS,
+      ),
+    ).toBe(PORTAL_NAVIGATION_SETTLE_MS);
+
+    for (const safeSignal of [
+      "filed-return-detail-back-clicked",
+      "filed-gstr1-summary-back-clicked",
+    ]) {
+      expect(
+        getFlowStepSettleMs(
+          {
+            ...BASE_STEP,
+            safeSignals: [safeSignal],
+          },
+          BASE_DEPS,
+        ),
+      ).toBe(PORTAL_NAVIGATION_SETTLE_MS);
+    }
+
+    for (const safeSignal of ["search-clicked", "filed-return-search-results-pending"]) {
+      expect(
+        getFlowStepSettleMs(
+          {
+            ...BASE_STEP,
+            safeSignals: [safeSignal],
+          },
+          BASE_DEPS,
+        ),
+      ).toBe(PORTAL_NAVIGATION_SETTLE_MS);
+    }
+
+    expect(
+      getFlowStepSettleMs(
+        {
+          ...BASE_STEP,
+          safeSignals: ["filed-gstr1-excel-control-pending"],
+        },
+        BASE_DEPS,
+      ),
+    ).toBe(PORTAL_NAVIGATION_SETTLE_MS);
+
+    expect(
+      getFlowStepSettleMs(
+        {
+          ...BASE_STEP,
+          safeSignals: ["filed-gstr1-controls-pending"],
+        },
+        BASE_DEPS,
+      ),
+    ).toBe(PORTAL_NAVIGATION_SETTLE_MS);
   });
 
   it("uses the generic continuation settle for non-navigation steps", () => {
@@ -122,6 +180,17 @@ describe("filed returns flow runner wait policy", () => {
       }),
     ).toBe(MAX_GSTR3B_FLOW_STEPS);
     expect(MAX_GSTR3B_FLOW_STEPS).toBe(12);
+  });
+
+  it("allows GSTR-1 search results the full ordinary observation window", () => {
+    expect(
+      maxFlowStepsFor({
+        financialYear: "2025-26",
+        period: "April",
+        returnType: "GSTR-1",
+      }),
+    ).toBe(MAX_GSTR1_FLOW_STEPS);
+    expect(MAX_GSTR1_FLOW_STEPS).toBe(30);
   });
 
   it("keeps test/runtime timing overrides explicit", () => {

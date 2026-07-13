@@ -17,7 +17,9 @@ describe("main-world filed-return filter selection", () => {
         <select id="finYr"><option>Select</option><option>2026-27</option></select>
         <select id="optValue"><option>Select</option><option>Monthly</option></select>
         <select id="month"><option>Select</option><option>May</option></select>
-        <select id="retTyp"><option>Select</option><option>GSTR-1/IFF/GSTR-1A</option></select>
+        <select id="retTyp">
+          <option>Select</option><option>GSTR-10</option><option>GSTR-1/IFF/GSTR-1A</option>
+        </select>
         <button>Search</button>
       </main>
     `).window;
@@ -32,6 +34,10 @@ describe("main-world filed-return filter selection", () => {
     let searched = 0;
     windowRef.document.querySelector("button")?.addEventListener("click", () => {
       searched += 1;
+    });
+    windowRef.document.querySelector("#retTyp")?.addEventListener("change", () => {
+      const month = windowRef.document.querySelector<HTMLSelectElement>("#month");
+      if (month) month.value = "Select";
     });
 
     const outcome = await selectFiledReturnsFiltersInMainWorld({
@@ -50,6 +56,46 @@ describe("main-world filed-return filter selection", () => {
       "GSTR-1/IFF/GSTR-1A",
     );
     expect(searched).toBe(1);
+  });
+
+  it("does not search when dependent filters lose stability", async () => {
+    const windowRef = new JSDOM(`
+      <main>
+        <select id="finYr"><option>Select</option><option>2026-27</option></select>
+        <select id="optValue"><option>Select</option><option>Monthly</option></select>
+        <select id="month"><option>Select</option><option>May</option></select>
+        <select id="retTyp"><option>Select</option><option>GSTR-1/IFF/GSTR-1A</option></select>
+        <button>Search</button>
+      </main>
+    `).window;
+    const browserGlobals = windowRef as unknown as {
+      HTMLSelectElement: typeof HTMLSelectElement;
+      Event: typeof Event;
+    };
+    vi.stubGlobal("window", windowRef);
+    vi.stubGlobal("document", windowRef.document);
+    vi.stubGlobal("HTMLSelectElement", browserGlobals.HTMLSelectElement);
+    vi.stubGlobal("Event", browserGlobals.Event);
+    let searched = 0;
+    windowRef.document.querySelector("button")?.addEventListener("click", () => {
+      searched += 1;
+    });
+    windowRef.document.querySelector("#month")?.addEventListener("change", () => {
+      const returnType = windowRef.document.querySelector<HTMLSelectElement>("#retTyp");
+      if (returnType) returnType.value = "Select";
+    });
+
+    const outcome = await selectFiledReturnsFiltersInMainWorld({
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-1",
+    });
+
+    expect(outcome).toEqual({
+      state: "waiting",
+      safeSignals: ["main-world-filter-selection-unstable"],
+    });
+    expect(searched).toBe(0);
   });
 
   it("honours an unselected-period instruction that explicitly names the requested return", async () => {

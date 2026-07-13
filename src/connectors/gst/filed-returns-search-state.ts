@@ -6,6 +6,7 @@ interface FiledReturnsSearchAttempt {
   signature: string;
   preSearchFingerprint: string;
   preSearchLoadingFingerprint: string | null;
+  candidateResultFingerprint: string | null;
   sawResultSurfaceLoading: boolean;
   settled: boolean;
   createdAt: number;
@@ -29,6 +30,7 @@ export function markFiledReturnsSearchPending(
     signature: filedReturnsSearchSignature(scope),
     preSearchFingerprint: resultFingerprint(documentRef),
     preSearchLoadingFingerprint: loadingFingerprint(documentRef),
+    candidateResultFingerprint: null,
     sawResultSurfaceLoading: false,
     settled: false,
     createdAt: Date.now(),
@@ -52,18 +54,42 @@ export function hasSettledFiledReturnsSearchForScope(
     currentLoadingFingerprint !== attempt.preSearchLoadingFingerprint
   ) {
     attempt.sawResultSurfaceLoading = true;
+    attempt.candidateResultFingerprint = null;
     attempt.settled = false;
     return false;
   }
   if (attempt.settled) return true;
 
   const currentFingerprint = resultFingerprint(documentRef);
-  if (attempt.sawResultSurfaceLoading || currentFingerprint !== attempt.preSearchFingerprint) {
-    attempt.settled = true;
-    return true;
+  const hasPostSearchResultEvidence =
+    attempt.sawResultSurfaceLoading || currentFingerprint !== attempt.preSearchFingerprint;
+  if (!hasPostSearchResultEvidence) {
+    attempt.candidateResultFingerprint = null;
+    return false;
   }
 
+  if (attempt.candidateResultFingerprint !== currentFingerprint) {
+    attempt.candidateResultFingerprint = currentFingerprint;
+    return false;
+  }
+
+  // The portal can render a stable result row before its View action is ready.
+  // Defer the first settled result so the runner observes one more unchanged cycle.
+  attempt.settled = true;
   return false;
+}
+
+export function hasPendingFiledReturnsSearchForScope(
+  documentRef: Document,
+  scope: FiledReturnsDownloadScope,
+): boolean {
+  const attempt = searchAttempts.get(documentRef);
+  if (!attempt || attempt.signature !== filedReturnsSearchSignature(scope)) return false;
+  if (Date.now() - attempt.createdAt > SEARCH_ATTEMPT_TTL_MS) {
+    searchAttempts.delete(documentRef);
+    return false;
+  }
+  return !attempt.settled;
 }
 
 export function consumeSettledFiledReturnsSearchForScope(

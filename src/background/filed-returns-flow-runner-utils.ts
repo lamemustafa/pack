@@ -13,7 +13,7 @@ export const RESULT_ROW_NAVIGATION_SETTLE_MS = 400;
 export const PORTAL_NAVIGATION_SETTLE_MS = 1_000;
 export const MAX_FLOW_STEPS = 6;
 export const MAX_GSTR3B_FLOW_STEPS = 12;
-export const MAX_GSTR1_FLOW_STEPS = 12;
+export const MAX_GSTR1_FLOW_STEPS = 30;
 export const MAX_GSTR2B_FLOW_STEPS = 12;
 
 export function shouldContinueFlow(step: PortalFlowStepResult): boolean {
@@ -131,8 +131,15 @@ function isPortalNavigationStep(step: PortalFlowStepResult): boolean {
   return step.safeSignals.some((signal) =>
     [
       "filed-returns-candidate-clicked",
+      "filed-return-detail-back-clicked",
+      "filed-returns-page-settling",
+      "filed-return-search-results-pending",
+      "filed-gstr1-controls-pending",
+      "filed-gstr1-excel-control-pending",
+      "filed-gstr1-summary-back-clicked",
       "hidden-filed-returns-candidate-clicked",
       "return-dashboard-candidate-clicked",
+      "search-clicked",
     ].includes(signal),
   );
 }

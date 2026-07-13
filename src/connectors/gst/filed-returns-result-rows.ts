@@ -15,21 +15,31 @@ export interface MatchingActionableFiledReturnRow extends MatchingFiledReturnRow
   view: HTMLElement;
 }
 
+export interface MatchingFilterBoundGstr1Result {
+  container: HTMLElement;
+  period: null;
+  view: HTMLElement;
+}
+
+export interface FiledReturnsResultRowMatchOptions {
+  allowFilterBoundScope?: boolean;
+}
+
 export function findMatchingFiledReturnRows(
   root: ParentNode,
   scope: FiledReturnsDownloadScope,
+  options: FiledReturnsResultRowMatchOptions = {},
 ): MatchingFiledReturnRow[] {
   return Array.from(root.querySelectorAll("tr"))
     .map((row) => ({ row, identity: extractResultRowIdentity(row) }))
     .filter(({ row, identity }) => {
       const rowText = readElementText(row);
       const period = canonicalResultRowPeriod(identity.period ?? extractTaxPeriodFromRow(row));
-      const financialYear = identity.financialYear ?? rowText;
       const returnType = identity.returnType ?? rowText;
       return (
         matchesAcceptedText(returnType, [scope.returnType]) &&
-        matchesAcceptedText(financialYear, [scope.financialYear]) &&
-        periodMatchesScope(period, scope)
+        financialYearMatchesScope(identity.financialYear, rowText, scope, options) &&
+        periodMatchesScope(period, scope, options)
       );
     })
     .map(({ row, identity }) => ({
@@ -41,8 +51,9 @@ export function findMatchingFiledReturnRows(
 export function findMatchingActionableFiledReturnRows(
   root: ParentNode,
   scope: FiledReturnsDownloadScope,
+  options: FiledReturnsResultRowMatchOptions = {},
 ): MatchingActionableFiledReturnRow[] {
-  return findMatchingFiledReturnRows(root, scope)
+  return findMatchingFiledReturnRows(root, scope, options)
     .map(({ row, period }) => ({
       row,
       period,
@@ -53,9 +64,82 @@ export function findMatchingActionableFiledReturnRows(
     .filter((candidate): candidate is MatchingActionableFiledReturnRow => Boolean(candidate.view));
 }
 
-function periodMatchesScope(period: string | null, scope: FiledReturnsDownloadScope): boolean {
-  if (!period) return false;
+export function findMatchingFilterBoundGstr1Results(
+  root: ParentNode,
+): MatchingFilterBoundGstr1Result[] {
+  return getClickableElements(root)
+    .filter((view) => isVisibleResultControl(view) && isExactViewAction(view))
+    .map((view) => ({ view, container: findNearestGstr1ResultContainer(view) }))
+    .filter((candidate): candidate is { view: HTMLElement; container: HTMLElement } =>
+      Boolean(candidate.container),
+    )
+    .map(({ view, container }) => ({ view, container, period: null }));
+}
+
+function findNearestGstr1ResultContainer(view: HTMLElement): HTMLElement | null {
+  if (view.closest("tr")) return null;
+  let current = view.parentElement;
+  while (current && current !== current.ownerDocument.body) {
+    if (["MAIN", "FORM"].includes(current.tagName)) return null;
+    if (isCandidateResultContainer(current)) {
+      const comparable = normaliseText(readElementText(current)).replace(/[^a-z0-9]/g, "");
+      if (
+        comparable.includes("gstr1") &&
+        !/gstr(?:2a|2b|3b|4|9)/.test(comparable) &&
+        getClickableElements(current).filter(
+          (element) => isVisibleResultControl(element) && isExactViewAction(element),
+        ).length === 1
+      ) {
+        return current;
+      }
+    }
+    current = current.parentElement;
+  }
+  return null;
+}
+
+function isCandidateResultContainer(element: HTMLElement): boolean {
+  return (
+    ["ARTICLE", "LI", "SECTION", "DIV"].includes(element.tagName) ||
+    element.getAttribute("role") === "row"
+  );
+}
+
+function isExactViewAction(element: HTMLElement): boolean {
+  return /^view$/i.test(normaliseText(readElementText(element)));
+}
+
+function isVisibleResultControl(element: HTMLElement): boolean {
+  if (element.hidden || element.getAttribute("aria-hidden") === "true") return false;
+  const style = element.ownerDocument.defaultView?.getComputedStyle(element);
+  return !style || (style.display !== "none" && style.visibility !== "hidden");
+}
+
+function periodMatchesScope(
+  period: string | null,
+  scope: FiledReturnsDownloadScope,
+  options: FiledReturnsResultRowMatchOptions,
+): boolean {
+  if (!period) return options.allowFilterBoundScope === true;
   return matchesAcceptedText(period, acceptedFiledReturnsPeriodTexts(scope));
+}
+
+function financialYearMatchesScope(
+  explicitFinancialYear: string | null,
+  rowText: string,
+  scope: FiledReturnsDownloadScope,
+  options: FiledReturnsResultRowMatchOptions,
+): boolean {
+  if (explicitFinancialYear) {
+    return matchesAcceptedText(explicitFinancialYear, [scope.financialYear]);
+  }
+  if (matchesAcceptedText(rowText, [scope.financialYear])) return true;
+  if (hasFinancialYearText(rowText)) return false;
+  return options.allowFilterBoundScope === true;
+}
+
+function hasFinancialYearText(text: string): boolean {
+  return /\b20\d{2}\s*[-–]\s*\d{2}\b/.test(text);
 }
 
 function canonicalResultRowPeriod(period: string | null): string | null {

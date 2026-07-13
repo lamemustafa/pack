@@ -12,6 +12,7 @@ import { filedReturnDescriptor } from "../connectors/gst/filed-returns-return-de
 import {
   shouldFallBackAfterCaptureFailure,
   shouldFallBackToPortalClick,
+  targetBoundPortalClickObservationTimeoutMs,
   withCaptureFallbackSignal,
 } from "../connectors/gst/filed-returns-download-fallback";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
@@ -38,8 +39,6 @@ import {
   type FiledReturnsFlowMessagingDeps,
 } from "./filed-returns-flow-messaging";
 import { persistFiledReturnsTargetReview } from "./filed-returns-target-review";
-
-const PORTAL_CLICK_DOWNLOAD_WAIT_MS = 120_000;
 
 type FlowStepResponse = Extract<PackMessageResponse, { ok: true; flowStep: PortalFlowStepResult }>;
 
@@ -96,7 +95,7 @@ export async function triggerAndObserveFiledReturnDownload({
     filename,
   );
   const detailDownloadObservation = target.forcePortalClick
-    ? observeFiledReturnDownload(observationContext, PORTAL_CLICK_DOWNLOAD_WAIT_MS)
+    ? observeFiledReturnDownload(observationContext, targetBoundPortalClickObservationTimeoutMs())
     : observeFiledReturnDownload(observationContext);
   const observedDownloadPromise = detailDownloadObservation.promise.finally(() => {
     detailDownloadFilenameSuggestion.stop();
@@ -142,6 +141,7 @@ export async function triggerAndObserveFiledReturnDownload({
         tabId,
         targetOverride: { ...target, forcePortalClick: true },
       }),
+      target,
     );
   }
 
@@ -210,6 +210,7 @@ function createDownloadTarget(
     actionId: createActionId(),
     artifactType,
     financialYear: scope.financialYear,
+    ...(scope.returnType === "GSTR-1" ? { forcePortalClick: true } : {}),
     period: scope.period,
     returnType: scope.returnType,
   };

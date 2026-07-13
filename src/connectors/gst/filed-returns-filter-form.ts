@@ -160,6 +160,19 @@ export async function selectFiledReturnsFiltersAndSearch(
   };
 }
 
+export function filedReturnsFilterSelectionMatchesScope(
+  documentRef: Document,
+  scope: FiledReturnsDownloadScope,
+): boolean {
+  return isFilterSelectionComplete(
+    readPortalFilterSelectionState(
+      documentRef,
+      scope,
+      shouldLeaveFilingPeriodUnselected(documentRef, scope.returnType),
+    ),
+  );
+}
+
 async function settleFiledReturnsFilterSelection(
   documentRef: Document,
   scope: FiledReturnsDownloadScope,
