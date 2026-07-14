@@ -1,5 +1,6 @@
 import type { FiledReturnsDownloadScope, FiledReturnsFlowSummary } from "../../core/contracts";
 import { normaliseFiledReturnsArtifactType } from "../../core/filed-returns-artifacts";
+import { FULL_FISCAL_YEAR_PERIOD } from "../../core/filed-returns-scope";
 
 export function hasUnresolvedFiledReturnsTargetReview(
   summary: FiledReturnsFlowSummary | null,
@@ -16,6 +17,29 @@ export function hasUnresolvedFiledReturnsRecovery(
   return Boolean(
     hasUnresolvedFiledReturnsTargetReview(summary) ||
     (summary?.status === "blocked" && summary.fullFiscalYearRecovery),
+  );
+}
+
+export function canRetryFullFiscalYearZipWithoutPortal(
+  summary: FiledReturnsFlowSummary | null | undefined,
+): boolean {
+  if (
+    !summary ||
+    summary.scope.period !== FULL_FISCAL_YEAR_PERIOD ||
+    summary.status !== "blocked"
+  ) {
+    return false;
+  }
+  const signals = new Set(summary.flowStep.safeSignals);
+  if (!signals.has("full-fiscal-year-opfs-retained")) return false;
+  return (
+    signals.has("full-fiscal-year-final-zip-retry") ||
+    [...signals].some(
+      (signal) =>
+        signal.startsWith("full-fiscal-year-zip-") &&
+        !signal.includes("artifact-staging-incomplete") &&
+        !signal.includes("missing-artifact-count"),
+    )
   );
 }
 

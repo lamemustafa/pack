@@ -88,10 +88,8 @@ export async function startFiledReturnsDownloadFlow(
   scope: FiledReturnsDownloadScope,
   deps: FiledReturnsFlowRunnerDeps,
 ): Promise<PackMessageResponse> {
-  if (!isFullFiscalYearScope(scope)) {
-    const targetReview = await readCurrentFiledReturnsTargetReview(deps);
-    if (targetReview) return responseForFiledReturnsTargetReview(targetReview);
-  }
+  const targetReview = await readCurrentFiledReturnsTargetReview(deps);
+  if (targetReview) return responseForFiledReturnsTargetReview(targetReview);
 
   if (isFullFiscalYearScope(scope)) {
     const existingLedger = await readLedger(deps.storageKeys.fullFiscalYearLedger);
@@ -105,6 +103,7 @@ export async function startFiledReturnsDownloadFlow(
       const existingLedgerResponse = responseForExistingLedger(
         existingLedger,
         deps.now?.() ?? new Date(),
+        { blockRetainedStaging: true },
       );
       if (existingLedgerResponse) return existingLedgerResponse;
     }

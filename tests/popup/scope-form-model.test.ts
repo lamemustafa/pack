@@ -66,6 +66,30 @@ describe("popup scope form model", () => {
       label: "Download all 2025-26 GSTR-2B files",
     });
   });
+
+  it("labels a retained final ZIP as a portal-independent retry", () => {
+    const scope = fullYearGstr2bScope();
+    const action = getScopeFormStartAction(
+      scope,
+      {
+        scope,
+        status: "blocked",
+        completedPeriods: ["April", "May"],
+        totalPeriods: 2,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr2b-pdf-excel-private-v0",
+          state: "blocked",
+          safeSignals: ["full-fiscal-year-final-zip-retry", "full-fiscal-year-opfs-retained"],
+          safeMessage: "Retry local cleanup.",
+        },
+      },
+      null,
+      true,
+    );
+
+    expect(action).toEqual({ disabled: false, label: "Retry final ZIP" });
+  });
 });
 
 function fullYearGstr2bScope(): FiledReturnsDownloadScope {

@@ -1,4 +1,5 @@
 import type { FiledReturnsFlowSummary, PortalContext } from "../../core/contracts";
+import { canRetryFullFiscalYearZipWithoutPortal } from "./flow-summary";
 
 export type PopupPresentationKind =
   | "loading"
@@ -34,6 +35,17 @@ export function getPopupPresentationState(
       kind: "downloading",
       title: "Packing your files",
       tone: "ready",
+    };
+  }
+
+  if (canRetryFullFiscalYearZipWithoutPortal(summary)) {
+    return {
+      badge: "ZIP retry",
+      body: summary?.flowStep.safeMessage ?? "Retry the retained fiscal-year ZIP.",
+      icon: "!",
+      kind: "blocked",
+      title: "Finish the saved fiscal-year ZIP",
+      tone: "warning",
     };
   }
 

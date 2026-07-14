@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  canRetryFullFiscalYearZipWithoutPortal,
   getFiledReturnsCompletionStatus,
   getScopeMatchedFiledReturnsSummary,
   getFiledReturnsSummaryHeading,
@@ -263,5 +264,36 @@ describe("popup filed returns flow summary", () => {
 
     expect(hasUnresolvedFiledReturnsRecovery(summary)).toBe(true);
     expect(hasUnresolvedFiledReturnsRecovery(COMPLETE_SUMMARY)).toBe(false);
+  });
+
+  it("allows only retained final-ZIP work to retry without a portal tab", () => {
+    const finalZipRetry: FiledReturnsFlowSummary = {
+      ...COMPLETE_SUMMARY,
+      status: "blocked",
+      flowStep: {
+        ...COMPLETE_SUMMARY.flowStep,
+        state: "blocked",
+        safeSignals: [
+          "full-fiscal-year-final-zip-retry",
+          "full-fiscal-year-zip-cleanup-pending",
+          "full-fiscal-year-opfs-retained",
+        ],
+      },
+    };
+
+    expect(canRetryFullFiscalYearZipWithoutPortal(finalZipRetry)).toBe(true);
+    expect(
+      canRetryFullFiscalYearZipWithoutPortal({
+        ...finalZipRetry,
+        flowStep: {
+          ...finalZipRetry.flowStep,
+          safeSignals: [
+            "full-fiscal-year-zip-artifact-staging-incomplete",
+            "full-fiscal-year-opfs-retained",
+          ],
+        },
+      }),
+    ).toBe(false);
+    expect(canRetryFullFiscalYearZipWithoutPortal(COMPLETE_SUMMARY)).toBe(false);
   });
 });

@@ -5,6 +5,7 @@ import "../../styles/global.css";
 import "../../styles/popup.css";
 import "../../styles/popup-controls.css";
 import { ScopeForm, ScopeFormAction } from "./components";
+import { canRetryFullFiscalYearZipWithoutPortal } from "./flow-summary";
 import { hasInlinePrimaryAction, InlineStatus } from "./inline-status";
 import { PackSummary } from "./pack-summary";
 import { getPopupPresentationState, type PopupPresentationState } from "./presentation-state";
@@ -21,8 +22,9 @@ function App() {
     displaySummary,
     popup.effectiveBusy,
   );
+  const portalIndependentZipRetry = canRetryFullFiscalYearZipWithoutPortal(displaySummary);
   const showBuilder =
-    popup.context?.supported === true &&
+    (popup.context?.supported === true || portalIndependentZipRetry) &&
     !["loading", "unsupported", "session-expired"].includes(presentation.kind);
   const statusOwnsPrimaryAction = hasInlinePrimaryAction(presentation, displaySummary);
 
@@ -42,7 +44,9 @@ function App() {
         <>
           <p className="portal-context-line">
             <span className="portal-context-dot" aria-hidden="true" />
-            GST Portal page detected
+            {portalIndependentZipRetry
+              ? "Local ZIP recovery available"
+              : "GST Portal page detected"}
           </p>
           <ScopeForm
             busy={popup.effectiveBusy}

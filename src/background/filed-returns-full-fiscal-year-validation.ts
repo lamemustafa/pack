@@ -56,6 +56,12 @@ export function isFullFiscalYearLedger(input: unknown): input is FiledReturnsFul
     return false;
   }
   if (!ledger.status || !VALID_LEDGER_STATUSES.has(ledger.status)) return false;
+  if (ledger.zipPhase !== undefined && ledger.zipPhase !== "downloaded-cleanup-pending") {
+    return false;
+  }
+  if (ledger.zipPhase === "downloaded-cleanup-pending" && ledger.status !== "blocked") {
+    return false;
+  }
   if (!isValidTimestamp(ledger.createdAt) || !isValidTimestamp(ledger.updatedAt)) return false;
   if (ledger.lastReconciledAt !== undefined && !isValidTimestamp(ledger.lastReconciledAt)) {
     return false;

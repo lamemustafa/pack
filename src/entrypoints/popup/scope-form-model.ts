@@ -14,6 +14,7 @@ import {
   isFullFiscalYearScope,
 } from "../../core/filed-returns-scope";
 import { FILED_RETURNS_RETURN_TYPES } from "../../core/filed-returns-return-types";
+import { canRetryFullFiscalYearZipWithoutPortal } from "./flow-summary";
 
 export function createScopeFormModel(scope: FiledReturnsDownloadScope) {
   const singlePeriodOptions = getFiledReturnsPeriodOptions(scope.financialYear, new Date());
@@ -121,6 +122,13 @@ export function getScopeFormStartAction(
 ): { disabled: boolean; label: string } {
   if (busy === "start-filed-returns-flow") return { disabled: true, label: "Downloading..." };
   if (busy !== null) return { disabled: true, label: defaultStartLabel(scope, fullFiscalYear) };
+  if (
+    summary &&
+    canRetryFullFiscalYearZipWithoutPortal(summary) &&
+    isSameScope(scope, summary.scope)
+  ) {
+    return { disabled: false, label: "Retry final ZIP" };
+  }
   if (summary && isSameScope(scope, summary.scope)) {
     const signals = new Set(summary.flowStep.safeSignals);
     if (signals.has("filed-returns-run-active") || signals.has("full-fiscal-year-run-active")) {

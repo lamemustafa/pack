@@ -33,11 +33,30 @@ export function hasDownloadUnconfirmedTarget(ledger: FiledReturnsFullFiscalYearL
   return ledger.targets.some((target) => target.status === "download-unconfirmed");
 }
 
+export function hasRetainedFullFiscalYearStaging(
+  ledger: FiledReturnsFullFiscalYearLedger,
+): boolean {
+  if (ledger.zipPhase === "downloaded-cleanup-pending") return true;
+  if (ledger.status === "complete") return false;
+  return ledger.targets.some((target) =>
+    target.safeSignals.some(
+      (signal) =>
+        signal === "full-fiscal-year-opfs-staged" ||
+        signal.startsWith("full-fiscal-year-opfs-staged:"),
+    ),
+  );
+}
+
 export function responseForExistingLedger(
   ledger: FiledReturnsFullFiscalYearLedger,
   now: Date,
-  options: { allowExistingLedgerResume?: boolean } = {},
+  options: { allowExistingLedgerResume?: boolean; blockRetainedStaging?: boolean } = {},
 ): PackMessageResponse | null {
+  if (options.blockRetainedStaging && hasRetainedFullFiscalYearStaging(ledger)) {
+    const step = retainedStagingScopeConflictStep(ledger);
+    return { ok: true, flowStep: step, flowSummary: toFullFiscalYearSummary(ledger, step) };
+  }
+
   const unconfirmedDownload = ledger.targets.some(
     (target) => target.status === "download-unconfirmed",
   );
@@ -80,12 +99,8 @@ export function responseForExistingLedger(
 
   if (hasActionRequiredFullFiscalYearTarget(ledger)) {
     const displayLedger = coerceInconsistentCompleteLedger(ledger, now);
-    const step = blockedFullFiscalYearStep("full-fiscal-year-run-needs-action", displayLedger);
-    return {
-      ok: true,
-      flowStep: step,
-      flowSummary: toFullFiscalYearSummary(displayLedger, step),
-    };
+    const summary = summariseFullFiscalYearLedger(displayLedger, now);
+    return { ok: true, flowStep: summary.flowStep, flowSummary: summary };
   }
 
   if (!options.allowExistingLedgerResume && needsResumeConfirmation(ledger)) {
@@ -98,6 +113,30 @@ export function responseForExistingLedger(
   }
 
   return null;
+}
+
+function retainedStagingScopeConflictStep(
+  ledger: FiledReturnsFullFiscalYearLedger,
+): PortalFlowStepResult {
+  const finalZipRetry = canCompleteFullFiscalYearLedger(ledger);
+  return {
+    connectorId: "gst",
+    scopeId: filedReturnScopeId(ledger.scope.returnType),
+    state: "blocked",
+    safeSignals: [
+      "full-fiscal-year-retained-staging-scope-conflict",
+      "full-fiscal-year-opfs-retained",
+      ...(finalZipRetry ? ["full-fiscal-year-final-zip-retry"] : []),
+    ],
+    safeMessage: finalZipRetry
+      ? `Pack retained the prepared FY ${ledger.scope.financialYear} files. Retry that final ZIP before starting another full-year selection.`
+      : `Pack retained staged files for FY ${ledger.scope.financialYear}. Resolve or discard that saved run before starting another full-year selection.`,
+    userAction: {
+      type: "RETRY_PORTAL_GENERATION",
+      message: "Return to the saved full-year selection and finish or discard it first.",
+      canResume: true,
+    },
+  };
 }
 
 export function shouldPersistReconciledLedger(

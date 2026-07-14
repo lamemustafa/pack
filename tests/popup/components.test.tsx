@@ -2,7 +2,8 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { FiledReturnsFlowSummary, PortalContext } from "../../src/core/contracts";
-import { ScopeForm } from "../../src/entrypoints/popup/components";
+import { FULL_FISCAL_YEAR_PERIOD } from "../../src/core/filed-returns-scope";
+import { ScopeForm, ScopeFormAction } from "../../src/entrypoints/popup/components";
 
 const context: PortalContext = {
   connectorId: "gst",
@@ -71,5 +72,54 @@ describe("popup scope form", () => {
     expect(markup).toContain("A saved run is paused at April");
     expect(markup).toContain("explicitly discard it and start the selected download");
     expect(markup).not.toMatch(/<select[^>]*disabled=""/);
+  });
+
+  it("enables retained final-ZIP retry without a supported portal tab", () => {
+    const scope = {
+      artifactType: "PDF" as const,
+      financialYear: "2025-26",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-3B" as const,
+    };
+    const summary: FiledReturnsFlowSummary = {
+      scope,
+      status: "blocked",
+      completedPeriods: ["April", "May"],
+      totalPeriods: 2,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "blocked",
+        safeSignals: ["full-fiscal-year-final-zip-retry", "full-fiscal-year-opfs-retained"],
+        safeMessage: "Retry local cleanup.",
+      },
+    };
+    const markup = renderToStaticMarkup(
+      <ScopeFormAction
+        busy={null}
+        context={{ connectorId: "gst", pageKind: "unsupported", supported: false }}
+        flowSummary={summary}
+        scope={scope}
+        onStart={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain("Retry final ZIP");
+    expect(markup).not.toContain("disabled");
+    expect(markup).not.toContain("Open GST Portal to continue");
+
+    const formMarkup = renderToStaticMarkup(
+      <ScopeForm
+        busy={null}
+        context={{ connectorId: "gst", pageKind: "unsupported", supported: false }}
+        flowSummary={summary}
+        scope={scope}
+        onScopeChange={vi.fn()}
+        onStart={vi.fn()}
+        showPrimaryAction={false}
+      />,
+    );
+    expect(formMarkup).toMatch(/<select[^>]*disabled=""/);
+    expect(formMarkup).toMatch(/<input[^>]*disabled=""/);
   });
 });

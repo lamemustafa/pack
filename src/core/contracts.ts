@@ -345,6 +345,7 @@ export interface FiledReturnsFullFiscalYearLedger {
   ledgerId: string;
   revision?: number;
   status: "running" | "complete" | "partial" | "blocked" | "cancelled";
+  zipPhase?: "downloaded-cleanup-pending";
   scope: FiledReturnsDownloadScope;
   currentTargetId?: string;
   createdAt: string;

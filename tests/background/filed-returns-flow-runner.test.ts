@@ -463,14 +463,15 @@ describe("filed returns flow runner", () => {
         ],
       }),
     });
-    const completedLedgerCallIndex = vi
+    const cleanupPendingLedgerCallIndex = vi
       .mocked(browser.storage.local.set)
       .mock.calls.findIndex(([value]) => {
         const ledger = (value as Record<string, unknown>)["full-year-ledger"];
         return (
           typeof ledger === "object" &&
           ledger !== null &&
-          (ledger as Record<string, unknown>).status === "complete"
+          (ledger as Record<string, unknown>).status === "blocked" &&
+          (ledger as Record<string, unknown>).zipPhase === "downloaded-cleanup-pending"
         );
       });
     const clearStagingCallIndex = vi
@@ -483,10 +484,10 @@ describe("filed returns flow runner", () => {
           (message as unknown as Record<string, unknown>).type ===
             "PACK_OFFSCREEN_CLEAR_FILED_RETURN_LEDGER",
       );
-    expect(completedLedgerCallIndex).toBeGreaterThanOrEqual(0);
+    expect(cleanupPendingLedgerCallIndex).toBeGreaterThanOrEqual(0);
     expect(clearStagingCallIndex).toBeGreaterThanOrEqual(0);
     expect(
-      vi.mocked(browser.storage.local.set).mock.invocationCallOrder[completedLedgerCallIndex]!,
+      vi.mocked(browser.storage.local.set).mock.invocationCallOrder[cleanupPendingLedgerCallIndex]!,
     ).toBeLessThan(
       vi.mocked(browser.runtime.sendMessage).mock.invocationCallOrder[clearStagingCallIndex]!,
     );
@@ -1017,6 +1018,129 @@ describe("filed returns flow runner", () => {
     expect(browser.runtime.sendMessage).not.toHaveBeenCalledWith(
       expect.objectContaining({ type: "PACK_OFFSCREEN_CLEAR_FILED_RETURN_LEDGER" }),
     );
+  });
+
+  it("keeps a confirmed final ZIP blocked until retained staging cleanup succeeds", async () => {
+    stagedZipEntryCount = 2;
+    const stagedLedger: FiledReturnsFullFiscalYearLedger = {
+      ...createFullFiscalYearLedger({
+        status: "blocked",
+        targets: [
+          { period: "April", status: "downloaded" },
+          { period: "May", status: "downloaded" },
+        ],
+      }),
+      targets: createFullFiscalYearLedger({
+        targets: [
+          { period: "April", status: "downloaded" },
+          { period: "May", status: "downloaded" },
+        ],
+      }).targets.map((target) => ({
+        ...target,
+        safeSignals: ["full-fiscal-year-opfs-staged", "full-fiscal-year-opfs-staged:PDF"],
+      })),
+    };
+    mockLocalStorageGet({ "full-year-ledger": stagedLedger });
+    const defaultRuntimeHandler = vi.mocked(browser.runtime.sendMessage).getMockImplementation()!;
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message: unknown) => {
+      if (
+        typeof message === "object" &&
+        message !== null &&
+        "type" in message &&
+        message.type === "PACK_OFFSCREEN_CLEAR_FILED_RETURN_LEDGER"
+      ) {
+        const requestId =
+          "payload" in message &&
+          typeof message.payload === "object" &&
+          message.payload !== null &&
+          "requestId" in message.payload
+            ? message.payload.requestId
+            : undefined;
+        return { ok: false, requestId, errorCategory: "clear-failed" };
+      }
+      return (defaultRuntimeHandler as (value: unknown) => unknown)(message);
+    });
+
+    const response = await startFiledReturnsDownloadFlow(stagedLedger.scope, {
+      getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+      sendMessageToTabWithInjection:
+        vi.fn<FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]>(),
+      storageKeys: {
+        completion: "completion",
+        fullFiscalYearLedger: "full-year-ledger",
+        observation: "observation",
+      },
+      now: () => new Date("2026-06-24T00:00:00.000Z"),
+    });
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "blocked",
+        safeSignals: expect.arrayContaining([
+          "full-fiscal-year-zip-downloaded",
+          "full-fiscal-year-zip-cleanup-pending",
+          "full-fiscal-year-opfs-clear-failed",
+          "full-fiscal-year-opfs-retained",
+        ]),
+      },
+      flowSummary: { status: "blocked" },
+    });
+    expect(browser.storage.local.set).toHaveBeenCalledWith({
+      "full-year-ledger": expect.objectContaining({
+        status: "blocked",
+        zipPhase: "downloaded-cleanup-pending",
+      }),
+    });
+    expect(browser.storage.local.set).not.toHaveBeenCalledWith({
+      "full-year-ledger": expect.objectContaining({ status: "complete" }),
+    });
+  });
+
+  it("finishes retained ZIP cleanup without reopening a GST Portal tab", async () => {
+    const cleanupPendingLedger: FiledReturnsFullFiscalYearLedger = {
+      ...createFullFiscalYearLedger({
+        status: "blocked",
+        targets: [
+          { period: "April", status: "downloaded" },
+          { period: "May", status: "downloaded" },
+        ],
+      }),
+      zipPhase: "downloaded-cleanup-pending",
+    };
+    mockLocalStorageGet({ "full-year-ledger": cleanupPendingLedger });
+    const getActiveGstTab = vi.fn(async () => null);
+
+    const response = await startFiledReturnsDownloadFlow(cleanupPendingLedger.scope, {
+      getActiveGstTab,
+      sendMessageToTabWithInjection:
+        vi.fn<FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]>(),
+      storageKeys: {
+        completion: "completion",
+        fullFiscalYearLedger: "full-year-ledger",
+        observation: "observation",
+      },
+      now: () => new Date("2026-06-24T00:01:00.000Z"),
+    });
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "downloaded",
+        safeSignals: expect.arrayContaining([
+          "full-fiscal-year-complete",
+          "full-fiscal-year-opfs-cleared",
+        ]),
+      },
+      flowSummary: { status: "complete" },
+    });
+    expect(getActiveGstTab).not.toHaveBeenCalled();
+    expect(browser.downloads.download).not.toHaveBeenCalled();
+    expect(browser.storage.local.set).toHaveBeenCalledWith({
+      "full-year-ledger": expect.not.objectContaining({
+        zipPhase: "downloaded-cleanup-pending",
+      }),
+    });
   });
 
   it("blocks full-year ZIP export when only some completed target artifacts were staged", async () => {
@@ -3778,6 +3902,60 @@ describe("filed returns flow runner", () => {
     expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
   });
 
+  it("blocks a full-year start while a single-period target still needs review", async () => {
+    mockLocalStorageGet({
+      "target-review": {
+        schemaVersion: "1.0",
+        targetId: "GSTR-3B:2026-27:April",
+        status: "download-unconfirmed",
+        scope: {
+          financialYear: "2026-27",
+          period: "April",
+          returnType: "GSTR-3B",
+        },
+        safeSignals: ["browser-download-not-observed"],
+        safeMessage: "Pack could not confirm the April browser download.",
+        updatedAt: "2026-07-12T10:00:00.000Z",
+      },
+    });
+    const sendMessageToTabWithInjection =
+      vi.fn<FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]>();
+
+    const response = await startFiledReturnsDownloadFlow(
+      {
+        financialYear: "2026-27",
+        period: FULL_FISCAL_YEAR_PERIOD,
+        returnType: "GSTR-3B",
+      },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+          targetReview: "target-review",
+        },
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "user-action-required",
+        safeSignals: ["filed-returns-target-review-required"],
+      },
+      flowSummary: {
+        currentPeriod: "April",
+        scope: { period: "April", returnType: "GSTR-3B" },
+      },
+    });
+    expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
+    expect(browser.storage.local.set).not.toHaveBeenCalledWith({
+      "full-year-ledger": expect.anything(),
+    });
+  });
+
   it("continues a GSTR-1 run after the debugger clicks the exact filed result View", async () => {
     const responses: PackMessageResponse[] = [
       {
@@ -5493,6 +5671,69 @@ describe("filed returns flow runner", () => {
     });
   });
 
+  it("keeps an older completed run blocked when its retained staging cannot be cleared", async () => {
+    const completedLedger = createFullFiscalYearLedger({
+      status: "complete",
+      targets: [
+        { period: "April", status: "downloaded" },
+        { period: "May", status: "downloaded" },
+      ],
+    });
+    mockLocalStorageGet({ "full-year-ledger": completedLedger });
+    const defaultRuntimeHandler = vi.mocked(browser.runtime.sendMessage).getMockImplementation()!;
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message: unknown) => {
+      if (
+        typeof message === "object" &&
+        message !== null &&
+        "type" in message &&
+        message.type === "PACK_OFFSCREEN_CLEAR_FILED_RETURN_LEDGER"
+      ) {
+        const requestId =
+          "payload" in message &&
+          typeof message.payload === "object" &&
+          message.payload !== null &&
+          "requestId" in message.payload
+            ? message.payload.requestId
+            : undefined;
+        return { ok: false, requestId, errorCategory: "clear-failed" };
+      }
+      return (defaultRuntimeHandler as (value: unknown) => unknown)(message);
+    });
+    const sendMessageToTabWithInjection =
+      vi.fn<FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]>();
+
+    const response = await startFiledReturnsDownloadFlow(completedLedger.scope, {
+      getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+      sendMessageToTabWithInjection,
+      storageKeys: {
+        completion: "completion",
+        fullFiscalYearLedger: "full-year-ledger",
+        observation: "observation",
+      },
+      now: () => new Date("2026-06-24T00:02:00.000Z"),
+    });
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "blocked",
+        safeSignals: expect.arrayContaining([
+          "full-fiscal-year-final-zip-retry",
+          "full-fiscal-year-zip-cleanup-pending",
+          "full-fiscal-year-opfs-clear-failed",
+        ]),
+      },
+      flowSummary: { status: "blocked" },
+    });
+    expect(browser.storage.local.set).toHaveBeenCalledWith({
+      "full-year-ledger": expect.objectContaining({
+        status: "blocked",
+        zipPhase: "downloaded-cleanup-pending",
+      }),
+    });
+    expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
+  });
+
   it("starts a clean current-year run when a completed ledger gains a newly eligible month", async () => {
     mockLocalStorageGet({
       "full-year-ledger": createFullFiscalYearLedger({
@@ -6972,6 +7213,103 @@ it("preserves an actionable full-year ledger when a different scope starts norma
   expect(browser.storage.local.set).not.toHaveBeenCalledWith({
     "full-year-ledger": expect.objectContaining({
       scope: expect.objectContaining({ returnType: "GSTR-1" }),
+    }),
+  });
+});
+
+it("blocks another full-year scope while a prepared ZIP ledger is retained", async () => {
+  const retainedLedger = createFullFiscalYearLedger({
+    status: "blocked",
+    targets: [
+      { period: "April", status: "downloaded" },
+      { period: "May", status: "downloaded" },
+    ],
+  });
+  mockLocalStorageGet({ "full-year-ledger": retainedLedger });
+  const sendMessageToTabWithInjection =
+    vi.fn<FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]>();
+
+  const response = await startFiledReturnsDownloadFlow(
+    {
+      artifactType: "PDF",
+      financialYear: "2025-26",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-1",
+    },
+    {
+      getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+      sendMessageToTabWithInjection,
+      storageKeys: {
+        completion: "completion",
+        fullFiscalYearLedger: "full-year-ledger",
+        observation: "observation",
+      },
+    },
+  );
+
+  expect(response).toMatchObject({
+    ok: true,
+    flowStep: {
+      state: "blocked",
+      safeSignals: expect.arrayContaining([
+        "full-fiscal-year-retained-staging-scope-conflict",
+        "full-fiscal-year-final-zip-retry",
+        "full-fiscal-year-opfs-retained",
+      ]),
+    },
+    flowSummary: {
+      scope: retainedLedger.scope,
+      status: "blocked",
+    },
+  });
+  expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
+  expect(browser.storage.local.set).not.toHaveBeenCalled();
+});
+
+it("preserves partially staged artifacts before replacing a blocked same-scope run", async () => {
+  const partialLedger = createFullFiscalYearLedger({
+    status: "blocked",
+    currentPeriod: "April",
+    targets: [{ period: "April", status: "blocked" }],
+  });
+  partialLedger.targets[0] = {
+    ...partialLedger.targets[0]!,
+    safeSignals: ["full-fiscal-year-opfs-staged", "full-fiscal-year-opfs-staged:PDF"],
+  };
+  mockLocalStorageGet({ "full-year-ledger": partialLedger });
+  const sendMessageToTabWithInjection =
+    vi.fn<FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]>();
+
+  const response = await startFiledReturnsDownloadFlow(partialLedger.scope, {
+    getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+    sendMessageToTabWithInjection,
+    storageKeys: {
+      completion: "completion",
+      fullFiscalYearLedger: "full-year-ledger",
+      observation: "observation",
+    },
+  });
+
+  expect(response).toMatchObject({
+    ok: true,
+    flowStep: {
+      state: "blocked",
+      safeSignals: expect.arrayContaining([
+        "full-fiscal-year-run-needs-action",
+        "full-fiscal-year-opfs-staged:PDF",
+      ]),
+    },
+    flowSummary: {
+      fullFiscalYearRecovery: {
+        ledgerId: partialLedger.ledgerId,
+        targetId: partialLedger.targets[0]!.targetId,
+      },
+    },
+  });
+  expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
+  expect(browser.storage.local.set).not.toHaveBeenCalledWith({
+    "full-year-ledger": expect.objectContaining({
+      ledgerId: expect.not.stringMatching(/^ledger-existing$/),
     }),
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FiledReturnsFlowSummary, PortalContext } from "../../src/core/contracts";
+import { FULL_FISCAL_YEAR_PERIOD } from "../../src/core/filed-returns-scope";
 import { getPopupPresentationState } from "../../src/entrypoints/popup/presentation-state";
 
 describe("popup presentation state", () => {
@@ -29,6 +30,26 @@ describe("popup presentation state", () => {
 
     expect(state.kind).toBe("unsupported");
     expect(state.title).toBe("Ready when you are");
+  });
+
+  it("keeps retained final-ZIP recovery actionable on an unsupported tab", () => {
+    const retainedZipSummary: FiledReturnsFlowSummary = {
+      ...COMPLETE_FULL_YEAR_SUMMARY,
+      status: "blocked",
+      flowStep: {
+        ...COMPLETE_FULL_YEAR_SUMMARY.flowStep,
+        state: "blocked",
+        safeSignals: ["full-fiscal-year-final-zip-retry", "full-fiscal-year-opfs-retained"],
+        safeMessage: "Retry local cleanup.",
+      },
+    };
+
+    expect(getPopupPresentationState(unsupportedContext(), retainedZipSummary, null)).toMatchObject(
+      {
+        kind: "blocked",
+        title: "Finish the saved fiscal-year ZIP",
+      },
+    );
   });
 
   it("does not describe a partial completion as a failure", () => {
@@ -123,3 +144,22 @@ function cancelledSummary(): FiledReturnsFlowSummary {
     currentPeriod: "May",
   };
 }
+
+const COMPLETE_FULL_YEAR_SUMMARY: FiledReturnsFlowSummary = {
+  scope: {
+    artifactType: "PDF",
+    financialYear: "2025-26",
+    period: FULL_FISCAL_YEAR_PERIOD,
+    returnType: "GSTR-3B",
+  },
+  status: "complete",
+  completedPeriods: ["April", "May"],
+  totalPeriods: 2,
+  flowStep: {
+    connectorId: "gst",
+    scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+    state: "downloaded",
+    safeSignals: ["full-fiscal-year-complete"],
+    safeMessage: "Complete.",
+  },
+};

@@ -9,6 +9,7 @@ import {
 } from "../../core/filed-returns-scope";
 import { ScopeActionPanel } from "./scope-action-panel";
 import { ScopeButtonGroup } from "./scope-button-group";
+import { canRetryFullFiscalYearZipWithoutPortal } from "./flow-summary";
 import {
   createScopeFormModel,
   getScopeActionCopy,
@@ -40,7 +41,10 @@ export function ScopeForm({
 }: ScopeFormProps) {
   const formModel = createScopeFormModel(scope);
   const multipleArtifactChoices = formModel.artifactOptions.length > 1;
-  const controlsDisabled = busy !== null || flowSummary?.status === "running";
+  const controlsDisabled =
+    busy !== null ||
+    flowSummary?.status === "running" ||
+    canRetryFullFiscalYearZipWithoutPortal(flowSummary);
 
   return (
     <section id="download-details" className="flow-panel" aria-label="Download details">
@@ -184,13 +188,15 @@ export function ScopeFormAction({
   const startAction = getScopeFormStartAction(scope, flowSummary, busy, formModel.fullFiscalYear);
   const actionCopy = getScopeActionCopy(scope, formModel.fullFiscalYear);
   const portalSupported = context?.supported === true;
-  const disabledReason = portalSupported ? null : getPortalDisabledReason(context);
+  const portalIndependentRetry = canRetryFullFiscalYearZipWithoutPortal(flowSummary);
+  const portalReady = portalSupported || portalIndependentRetry;
+  const disabledReason = portalReady ? null : getPortalDisabledReason(context);
 
   return (
     <ScopeActionPanel
       actionCopy={actionCopy}
       busy={busy === "start-filed-returns-flow"}
-      disabled={startAction.disabled || !portalSupported}
+      disabled={startAction.disabled || !portalReady}
       disabledReason={disabledReason}
       label={startAction.label}
       onStart={onStart}

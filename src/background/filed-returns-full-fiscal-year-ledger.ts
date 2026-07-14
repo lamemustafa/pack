@@ -215,8 +215,10 @@ export function completeFullFiscalYearLedger(
   now: Date,
 ): FiledReturnsFullFiscalYearLedger {
   const ledgerWithoutCurrentTarget = withoutCurrentTarget(ledger);
+  const completedLedger = { ...ledgerWithoutCurrentTarget };
+  delete completedLedger.zipPhase;
   return {
-    ...ledgerWithoutCurrentTarget,
+    ...completedLedger,
     revision: nextRevision(ledger),
     status: "complete",
     updatedAt: now.toISOString(),

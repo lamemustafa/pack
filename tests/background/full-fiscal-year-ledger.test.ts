@@ -214,6 +214,26 @@ describe("full fiscal year ledger", () => {
         targets: [{ ...createTarget("April", "downloaded"), status: "unknown" }],
       }),
     ).toBe(false);
+    expect(
+      isFullFiscalYearLedger({
+        ...createLedger([["April", "downloaded"]]),
+        status: "blocked",
+        zipPhase: "downloaded-cleanup-pending",
+      }),
+    ).toBe(true);
+    expect(
+      isFullFiscalYearLedger({
+        ...createLedger([["April", "downloaded"]]),
+        status: "complete",
+        zipPhase: "downloaded-cleanup-pending",
+      }),
+    ).toBe(false);
+    expect(
+      isFullFiscalYearLedger({
+        ...createLedger([["April", "downloaded"]]),
+        zipPhase: "unknown",
+      }),
+    ).toBe(false);
   });
 
   it("validates GSTR-1 full fiscal year ledgers with artifact-specific targets", () => {
