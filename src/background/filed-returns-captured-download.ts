@@ -88,6 +88,28 @@ export async function startMainWorldCapturedFiledReturnDownload({
     });
   }
   if (!capturedDownloadRequest) {
+    const postClickBlockedState = await inspectPostCaptureBlockedState(deps, tabId, target);
+    if (postClickBlockedState) {
+      return {
+        ok: true,
+        flowStep: withFiledReturnsDownloadDiagnostic({
+          attemptClass: "captured-portal-request",
+          flowStep: {
+            ...postClickBlockedState,
+            safeSignals: Array.from(
+              new Set([
+                ...triggerStep.safeSignals,
+                ...safeFailureSignals,
+                ...nativeSuppressionSignals,
+                ...postClickBlockedState.safeSignals,
+                ...(activePeriod ? [`filed-return-detail-period:${activePeriod}`] : []),
+              ]),
+            ),
+          },
+          target,
+        }),
+      };
+    }
     const unsupportedStep = gstr2bDialogFreeUnsupportedStep({
       activePeriod,
       nativeSuppressionSignals,
@@ -142,6 +164,30 @@ export async function startMainWorldCapturedFiledReturnDownload({
     target,
     triggerStep,
   });
+}
+
+async function inspectPostCaptureBlockedState(
+  deps: FiledReturnsFlowMessagingDeps,
+  tabId: number,
+  target: FiledReturnsDownloadTarget,
+): Promise<PortalFlowStepResult | null> {
+  if (target.returnType !== "GSTR-1" || target.artifactType !== "EXCEL") return null;
+  try {
+    const response = await deps.sendMessageToTabWithInjection(tabId, {
+      type: "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3",
+      payload: target,
+    });
+    if (
+      response.ok &&
+      "flowStep" in response &&
+      response.flowStep.safeSignals.includes("filed-gstr1-excel-no-details-available")
+    ) {
+      return response.flowStep;
+    }
+  } catch {
+    // Preserve the generic capture failure when the content script cannot inspect the dialog.
+  }
+  return null;
 }
 
 export async function startCapturedFiledReturnDownload({

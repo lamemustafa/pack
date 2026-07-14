@@ -47,16 +47,39 @@ describe("filed-return capture fallback", () => {
     expect(shouldFallBackAfterCaptureFailure(response, BASE_TARGET)).toBe(false);
   });
 
-  it("does not broaden the fallback to GSTR-1 Excel or GSTR-2B", () => {
+  it("keeps GSTR-1 capture failures out of the fallback", () => {
     expect(
       shouldFallBackAfterCaptureFailure(captureFailure("filed-gstr1-blob-capture-failed"), {
         ...BASE_TARGET,
         artifactType: "EXCEL",
       }),
     ).toBe(false);
-    expect(
-      shouldFallBackAfterCaptureFailure(captureFailure("filed-gstr2b-blob-capture-failed"), {
+  });
+
+  it.each(["PDF", "EXCEL"] as const)(
+    "uses one target-bound GSTR-2B portal click after a failed %s capture",
+    (artifactType) => {
+      const target = {
         ...BASE_TARGET,
+        artifactType,
+        returnType: "GSTR-2B" as const,
+      };
+      const response = captureFailure("gstr2b-blob-capture-failed");
+
+      expect(shouldFallBackAfterCaptureFailure(response, target)).toBe(true);
+      expect(withCaptureFallbackSignal(response, target)).toMatchObject({
+        flowStep: {
+          safeSignals: expect.arrayContaining(["filed-gstr2b-capture-fallback-portal-click"]),
+        } satisfies Partial<PortalFlowStepResult>,
+      });
+    },
+  );
+
+  it("never adds another fallback after the target-bound portal click", () => {
+    expect(
+      shouldFallBackAfterCaptureFailure(captureFailure("gstr2b-blob-capture-failed"), {
+        ...BASE_TARGET,
+        forcePortalClick: true,
         returnType: "GSTR-2B",
       }),
     ).toBe(false);

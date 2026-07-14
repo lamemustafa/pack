@@ -25,7 +25,12 @@ export function shouldFallBackAfterCaptureFailure(
   response: PackMessageResponse,
   target: FiledReturnsDownloadTarget,
 ): boolean {
-  if (target.returnType !== "GSTR-3B" || !response.ok || !("flowStep" in response)) {
+  if (
+    (target.returnType !== "GSTR-3B" && target.returnType !== "GSTR-2B") ||
+    target.forcePortalClick ||
+    !response.ok ||
+    !("flowStep" in response)
+  ) {
     return false;
   }
   const signals = new Set(response.flowStep.safeSignals);
@@ -33,6 +38,7 @@ export function shouldFallBackAfterCaptureFailure(
   const scopedPrefix = signalPrefix.endsWith("-") ? signalPrefix.slice(0, -1) : signalPrefix;
   return [
     "filed-return-offscreen-blob-url-rejected",
+    ...(target.returnType === "GSTR-2B" ? ["gstr2b-blob-capture-failed"] : []),
     `${scopedPrefix}-blob-capture-failed`,
     `${scopedPrefix}-captured-download-data-url-rejected`,
     `${scopedPrefix}-extension-download-start-rejected`,

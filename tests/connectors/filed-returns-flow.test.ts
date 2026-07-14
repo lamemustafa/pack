@@ -7,8 +7,8 @@ import {
   triggerFiledReturnDownload,
   triggerFiledReturnFiledPdfDownload,
 } from "../../src/connectors/gst/filed-returns-download";
-import { triggerGstr2bDownload } from "../../src/connectors/gst/gstr2b-download";
 import { navigateToFiledReturnsPage } from "../../src/connectors/gst/filed-returns-navigator";
+import { detectPostClickBlockedState } from "../../src/connectors/gst/filed-returns-post-click-blocked-state";
 import {
   hasPendingFiledReturnsSearchForScope,
   hasSettledFiledReturnsSearchForScope,
@@ -500,7 +500,7 @@ describe("filed returns guided flow", () => {
   it("captures the portal-generated GSTR-2B PDF instead of generating a local artifact", async () => {
     const documentRef = createGstr2bSummaryDocument();
 
-    const result = await triggerGstr2bDownload(documentRef, {
+    const result = await triggerFiledReturnDownload(documentRef, {
       actionId: "action-gstr2b-pdf",
       artifactType: "PDF",
       financialYear: "2026-27",
@@ -508,20 +508,57 @@ describe("filed returns guided flow", () => {
       returnType: "GSTR-2B",
     });
 
-    expect(result.capturedDownloadRequest).toBeUndefined();
     expect(result.mainWorldCaptureRequest).toMatchObject({
       actionId: "action-gstr2b-pdf",
-      signalPrefix: "gstr2b",
+      signalPrefix: "filed-gstr2b",
     });
-    expect(result.mainWorldCaptureRequest?.timeoutMs).toBeUndefined();
+    expect(result.mainWorldCaptureRequest?.timeoutMs).toBe(15_000);
     expect(result.downloadTrigger.safeSignals).toEqual(
       expect.arrayContaining([
-        "gstr2b-download-clicked",
-        "gstr2b-portal-blob-download-captured",
-        "gstr2b-extension-download-requested",
+        "filed-return-download-clicked",
+        "filed-gstr2b-download-clicked",
+        "filed-gstr2b-portal-blob-download-captured",
+        "filed-gstr2b-extension-download-requested",
       ]),
     );
   });
+
+  it.each(["PDF", "EXCEL"] as const)(
+    "uses the verified GSTR-2B %s portal control for the target-bound fallback",
+    async (artifactType) => {
+      const documentRef = createGstr2bSummaryDocument();
+      const expectedControl = Array.from(documentRef.querySelectorAll<HTMLElement>("button")).find(
+        (element) =>
+          element.textContent?.includes(artifactType === "EXCEL" ? "DETAILS" : "SUMMARY"),
+      );
+      let clickCount = 0;
+      expectedControl?.addEventListener("click", () => {
+        clickCount += 1;
+      });
+
+      const result = await triggerFiledReturnDownload(documentRef, {
+        actionId: `action-gstr2b-${artifactType.toLowerCase()}-fallback`,
+        artifactType,
+        financialYear: "2026-27",
+        forcePortalClick: true,
+        period: "May",
+        returnType: "GSTR-2B",
+      });
+
+      expect(result.mainWorldCaptureRequest).toBeUndefined();
+      expect(clickCount).toBe(0);
+      await new Promise<void>((resolve) => documentRef.defaultView?.setTimeout(resolve, 0));
+      expect(clickCount).toBe(1);
+      expect(result.downloadTrigger).toMatchObject({
+        state: "clicked",
+        safeSignals: expect.arrayContaining([
+          "filed-gstr2b-download-clicked",
+          "filed-gstr2b-portal-blob-download-click-scheduled",
+          `filed-return-artifact-clicked:${artifactType}`,
+        ]),
+      });
+    },
+  );
 
   it("finds GSTR-2B download controls when the section carries the return label", async () => {
     const documentRef = createGstDocument(
@@ -529,7 +566,8 @@ describe("filed returns guided flow", () => {
         <main>
           <section>
             <h1>GSTR-2B</h1>
-            <p>Download auto-drafted ITC statement for May 2026.</p>
+            <p>Financial Year - 2026-27</p>
+            <p>Return Period - May</p>
             <button data-pdf>Summary PDF</button>
             <button data-excel>Details Excel</button>
           </section>
@@ -539,7 +577,7 @@ describe("filed returns guided flow", () => {
     );
     makeLayoutVisible(documentRef);
 
-    const result = await triggerGstr2bDownload(documentRef, {
+    const result = await triggerFiledReturnDownload(documentRef, {
       actionId: "action-gstr2b-short-labels",
       artifactType: "EXCEL",
       financialYear: "2026-27",
@@ -550,7 +588,7 @@ describe("filed returns guided flow", () => {
     expect(result.downloadTrigger.state).toBe("clicked");
     expect(result.mainWorldCaptureRequest).toMatchObject({
       actionId: "action-gstr2b-short-labels",
-      signalPrefix: "gstr2b",
+      signalPrefix: "filed-gstr2b",
     });
   });
 
@@ -569,7 +607,7 @@ describe("filed returns guided flow", () => {
     );
     makeLayoutVisible(documentRef);
 
-    const result = await triggerGstr2bDownload(documentRef, {
+    const result = await triggerFiledReturnDownload(documentRef, {
       actionId: "action-gstr2b-live-label",
       artifactType: "PDF",
       financialYear: "2026-27",
@@ -580,7 +618,7 @@ describe("filed returns guided flow", () => {
     expect(result.downloadTrigger.state).toBe("clicked");
     expect(result.mainWorldCaptureRequest).toMatchObject({
       actionId: "action-gstr2b-live-label",
-      signalPrefix: "gstr2b",
+      signalPrefix: "filed-gstr2b",
     });
   });
 
@@ -590,7 +628,7 @@ describe("filed returns guided flow", () => {
       <button aria-disabled="true">DOWNLOAD GSTR-2B DETAILS (EXCEL)</button>
     `);
 
-    const result = await triggerGstr2bDownload(documentRef, {
+    const result = await triggerFiledReturnDownload(documentRef, {
       actionId: "action-gstr2b-visible-control",
       artifactType: "PDF",
       financialYear: "2026-27",
@@ -599,19 +637,18 @@ describe("filed returns guided flow", () => {
     });
 
     expect(result.downloadTrigger.state).toBe("clicked");
-    expect(result.capturedDownloadRequest).toBeUndefined();
     expect(result.mainWorldCaptureRequest).toMatchObject({
       actionId: "action-gstr2b-visible-control",
-      signalPrefix: "gstr2b",
+      signalPrefix: "filed-gstr2b",
     });
   });
 
-  it("uses a visible explicit GSTR-2B PDF control when the portal renders responsive duplicates", async () => {
+  it("blocks when the portal renders multiple visible GSTR-2B PDF controls", async () => {
     const documentRef = createGstr2bSummaryDocument(`
       <button data-compact>DOWNLOAD GSTR-2B SUMMARY (PDF)</button>
     `);
 
-    const result = await triggerGstr2bDownload(documentRef, {
+    const result = await triggerFiledReturnDownload(documentRef, {
       actionId: "action-gstr2b-duplicate-visible-pdf",
       artifactType: "PDF",
       financialYear: "2026-27",
@@ -619,11 +656,11 @@ describe("filed returns guided flow", () => {
       returnType: "GSTR-2B",
     });
 
-    expect(result.downloadTrigger.state).toBe("clicked");
-    expect(result.mainWorldCaptureRequest).toMatchObject({
-      actionId: "action-gstr2b-duplicate-visible-pdf",
-      signalPrefix: "gstr2b",
-    });
+    expect(result.downloadTrigger.state).toBe("candidate-not-found");
+    expect(result.downloadTrigger.safeSignals).toContain(
+      "filed-gstr2b-download-candidate-ambiguous",
+    );
+    expect(result.mainWorldCaptureRequest).toBeUndefined();
   });
 
   it("captures the portal-generated GSTR-2B file even when localStorage contains period JSON", async () => {
@@ -636,7 +673,7 @@ describe("filed returns guided flow", () => {
         JSON.stringify({ summary: { available: true } }),
       );
 
-      const result = await triggerGstr2bDownload(documentRef, {
+      const result = await triggerFiledReturnDownload(documentRef, {
         actionId: "action-gstr2b-alternate",
         artifactType: "PDF",
         financialYear: "2026-27",
@@ -644,10 +681,9 @@ describe("filed returns guided flow", () => {
         returnType: "GSTR-2B",
       });
 
-      expect(result.capturedDownloadRequest).toBeUndefined();
       expect(result.mainWorldCaptureRequest).toMatchObject({
         actionId: "action-gstr2b-alternate",
-        signalPrefix: "gstr2b",
+        signalPrefix: "filed-gstr2b",
       });
     } finally {
       vi.unstubAllGlobals();
@@ -657,7 +693,7 @@ describe("filed returns guided flow", () => {
   it("captures the portal-generated GSTR-2B Excel instead of generating a local workbook", async () => {
     const documentRef = createGstr2bSummaryDocument();
 
-    const result = await triggerGstr2bDownload(documentRef, {
+    const result = await triggerFiledReturnDownload(documentRef, {
       actionId: "action-gstr2b-excel",
       artifactType: "EXCEL",
       financialYear: "2026-27",
@@ -665,10 +701,9 @@ describe("filed returns guided flow", () => {
       returnType: "GSTR-2B",
     });
 
-    expect(result.capturedDownloadRequest).toBeUndefined();
     expect(result.mainWorldCaptureRequest).toMatchObject({
       actionId: "action-gstr2b-excel",
-      signalPrefix: "gstr2b",
+      signalPrefix: "filed-gstr2b",
     });
   });
 
@@ -679,7 +714,7 @@ describe("filed returns guided flow", () => {
       localStorage.setItem("rtn_prd", "042026");
       localStorage.setItem("sum052026", JSON.stringify({ summary: { available: true } }));
 
-      const result = await triggerGstr2bDownload(documentRef, {
+      const result = await triggerFiledReturnDownload(documentRef, {
         actionId: "action-gstr2b-stale",
         artifactType: "PDF",
         financialYear: "2026-27",
@@ -687,7 +722,6 @@ describe("filed returns guided flow", () => {
         returnType: "GSTR-2B",
       });
 
-      expect(result.capturedDownloadRequest).toBeUndefined();
       expect(result.mainWorldCaptureRequest).toBeDefined();
     } finally {
       vi.unstubAllGlobals();
@@ -2167,7 +2201,7 @@ describe("filed returns guided flow", () => {
       pdfClicked += 1;
     });
 
-    const result = await triggerGstr2bDownload(documentRef, {
+    const result = await triggerFiledReturnDownload(documentRef, {
       actionId: "action-1",
       artifactType: "PDF",
       financialYear: "2026-27",
@@ -2176,7 +2210,7 @@ describe("filed returns guided flow", () => {
     });
 
     expect(result.downloadTrigger.state).toBe("blocked");
-    expect(result.downloadTrigger.safeSignals).toContain("gstr2b-visible-period-mismatch");
+    expect(result.downloadTrigger.safeSignals).toContain("filed-return-download-target-mismatch");
     expect(result.mainWorldCaptureRequest).toBeUndefined();
     expect(pdfClicked).toBe(0);
   });
@@ -2186,7 +2220,8 @@ describe("filed returns guided flow", () => {
       `
         <main>
           <h1>GSTR-2B</h1>
-          <p>May 2026 Auto-drafted ITC Statement</p>
+          <p>Financial Year - 2026-27</p>
+          <p>Return Period - May</p>
           <button data-pdf>DOWNLOAD GSTR-2B SUMMARY (PDF)</button>
           <button data-excel>DOWNLOAD GSTR-2B DETAILS (EXCEL)</button>
         </main>
@@ -2213,7 +2248,7 @@ describe("filed returns guided flow", () => {
       anchor.click();
     });
 
-    const result = await triggerGstr2bDownload(documentRef, {
+    const result = await triggerFiledReturnDownload(documentRef, {
       actionId: "action-1",
       artifactType: "EXCEL",
       financialYear: "2026-27",
@@ -2224,17 +2259,17 @@ describe("filed returns guided flow", () => {
     expect(result.downloadTrigger.state).toBe("clicked");
     expect(result.downloadTrigger.safeSignals).toEqual(
       expect.arrayContaining([
-        "gstr2b-download-clicked",
-        "gstr2b-portal-blob-download-captured",
-        "gstr2b-final-period-verified",
-        "gstr2b-artifact-clicked:EXCEL",
+        "filed-return-download-clicked",
+        "filed-gstr2b-download-clicked",
+        "filed-gstr2b-portal-blob-download-captured",
+        "filed-return-artifact-clicked:EXCEL",
       ]),
     );
     expect(result.mainWorldCaptureRequest).toMatchObject({
       actionId: "action-1",
       controlAttribute: "data-pack-gstr2b-capture-action",
       maxBytes: 36 * 1024 * 1024,
-      signalPrefix: "gstr2b",
+      signalPrefix: "filed-gstr2b",
     });
     expect(pdfClicked).toBe(0);
     expect(excelClicked).toBe(0);
@@ -3754,7 +3789,7 @@ describe("filed returns guided flow", () => {
     expect(gstr3bClicked).toBe(1);
   });
 
-  it("requires a trusted click for the filed GSTR-1 result row", async () => {
+  it("automatically clicks only the exact filed GSTR-1 result row once", async () => {
     const scope: FiledReturnsDownloadScope = {
       financialYear: "2025-26",
       period: "March",
@@ -3785,23 +3820,45 @@ describe("filed returns guided flow", () => {
       gstr1Clicked += 1;
     });
 
-    const result = await runFiledReturnsDownloadStep(documentRef, scope);
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_000);
+    try {
+      const result = await runFiledReturnsDownloadStep(documentRef, scope);
 
-    expect(result.state).toBe("user-action-required");
-    expect(result.scopeId).toBe("gst-filed-returns-gstr1-pdf-private-v0");
-    expect(result.safeSignals).toEqual(
-      expect.arrayContaining([
-        "filed-gstr1-result-view-user-action-required",
-        "result-row-gstr1",
-        "filed-return-result-period:March",
-      ]),
-    );
-    expect(result.userAction).toMatchObject({ canResume: true });
-    expect(gstr3bClicked).toBe(0);
-    expect(gstr1Clicked).toBe(0);
+      expect(result.state).toBe("clicked");
+      expect(result.scopeId).toBe("gst-filed-returns-gstr1-pdf-private-v0");
+      expect(result.safeSignals).toEqual(
+        expect.arrayContaining([
+          "filed-gstr1-result-view-auto-clicked",
+          "filed-return-result-view-clicked",
+          "result-row-gstr1",
+          "filed-return-result-period:March",
+        ]),
+      );
+      expect(gstr3bClicked).toBe(0);
+      expect(gstr1Clicked).toBe(1);
+
+      const pending = await runFiledReturnsDownloadStep(documentRef, scope);
+      expect(pending.state).toBe("clicked");
+      expect(pending.safeSignals).toContain("filed-gstr1-result-view-navigation-pending");
+      expect(gstr1Clicked).toBe(1);
+
+      now.mockReturnValue(4_000);
+      const retry = await runFiledReturnsDownloadStep(documentRef, scope);
+      expect(retry.state).toBe("user-action-required");
+      expect(retry.safeSignals).toEqual(
+        expect.arrayContaining([
+          "filed-gstr1-result-view-user-action-required",
+          "filed-gstr1-result-view-auto-attempt-failed",
+        ]),
+      );
+      expect(retry.userAction).toMatchObject({ canResume: true });
+      expect(gstr1Clicked).toBe(1);
+    } finally {
+      now.mockRestore();
+    }
   });
 
-  it("does not synthesize a filed GSTR-1 JavaScript View anchor click", async () => {
+  it("automatically activates a target-bound filed GSTR-1 JavaScript View anchor", async () => {
     const scope: FiledReturnsDownloadScope = {
       financialYear: "2025-26",
       period: "March",
@@ -3825,12 +3882,12 @@ describe("filed returns guided flow", () => {
 
     const result = await runFiledReturnsDownloadStep(documentRef, scope);
 
-    expect(result.state).toBe("user-action-required");
-    expect(result.safeSignals).toContain("filed-gstr1-result-view-user-action-required");
-    expect(clicked).toBe(0);
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toContain("filed-gstr1-result-view-auto-clicked");
+    expect(clicked).toBe(1);
   });
 
-  it("requires a trusted click for a filter-bound GSTR-1 row", async () => {
+  it("automatically clicks one exact filter-bound GSTR-1 row", async () => {
     const scope: FiledReturnsDownloadScope = {
       financialYear: "2025-26",
       period: "April",
@@ -3845,11 +3902,11 @@ describe("filed returns guided flow", () => {
 
     const result = await runFiledReturnsDownloadStep(documentRef, scope);
 
-    expect(result.state).toBe("user-action-required");
+    expect(result.state).toBe("clicked");
     expect(result.safeSignals).toEqual(
-      expect.arrayContaining(["filed-gstr1-result-view-user-action-required", "result-row-gstr1"]),
+      expect.arrayContaining(["filed-gstr1-result-view-auto-clicked", "result-row-gstr1"]),
     );
-    expect(clicked).toBe(0);
+    expect(clicked).toBe(1);
   });
 
   it("resubmits GSTR-1 filters instead of trusting an untracked result row", async () => {
@@ -3945,7 +4002,7 @@ describe("filed returns guided flow", () => {
     expect(clicked).toBe(0);
   });
 
-  it("requires a trusted click for one filter-bound GSTR-1 result card", async () => {
+  it("automatically clicks one exact filter-bound GSTR-1 result card", async () => {
     const scope: FiledReturnsDownloadScope = {
       financialYear: "2025-26",
       period: "April",
@@ -3960,14 +4017,14 @@ describe("filed returns guided flow", () => {
 
     const result = await runFiledReturnsDownloadStep(documentRef, scope);
 
-    expect(result.state).toBe("user-action-required");
+    expect(result.state).toBe("clicked");
     expect(result.safeSignals).toEqual(
       expect.arrayContaining([
-        "filed-gstr1-result-view-user-action-required",
-        "filed-return-filter-bound-result-view-ready",
+        "filed-gstr1-result-view-auto-clicked",
+        "filed-return-filter-bound-result-view-clicked",
       ]),
     );
-    expect(clicked).toBe(0);
+    expect(clicked).toBe(1);
   });
 
   it("blocks duplicate filter-bound GSTR-1 result cards", async () => {
@@ -5350,7 +5407,7 @@ describe("filed returns guided flow", () => {
     expect(backdrop?.isConnected).toBe(true);
   });
 
-  it("clicks an explicit filed GSTR-1 PDF download when target identity matches", async () => {
+  it("captures an explicit filed GSTR-1 PDF download before any portal click", async () => {
     const documentRef = createDocument(`
       <main>
         <nav>Returns / Filed Returns</nav>
@@ -5377,10 +5434,19 @@ describe("filed returns guided flow", () => {
     expect(result.downloadTrigger.state).toBe("clicked");
     expect(result.downloadTrigger.scopeId).toBe("gst-filed-returns-gstr1-pdf-private-v0");
     expect(result.downloadTrigger.safeSignals).toEqual(
-      expect.arrayContaining(["filed-return-download-clicked", "filed-gstr1-download-clicked"]),
+      expect.arrayContaining([
+        "filed-return-download-clicked",
+        "filed-gstr1-download-clicked",
+        "filed-gstr1-portal-blob-download-captured",
+        "filed-gstr1-extension-download-requested",
+      ]),
     );
-    expect(result.mainWorldCaptureRequest).toBeUndefined();
-    expect(downloadClicked).toBe(1);
+    expect(result.mainWorldCaptureRequest).toMatchObject({
+      actionId: "test-action",
+      signalPrefix: "filed-gstr1",
+      timeoutMs: 15_000,
+    });
+    expect(downloadClicked).toBe(0);
   });
 
   it.each(["PDF", "EXCEL"] as const)(
@@ -5457,7 +5523,7 @@ describe("filed returns guided flow", () => {
     );
   });
 
-  it("clicks the filed GSTR-1 View Summary PDF download when target identity matches", async () => {
+  it("captures the filed GSTR-1 View Summary PDF before any portal click", async () => {
     const documentRef = createGstDocument(
       `
         <main>
@@ -5495,10 +5561,16 @@ describe("filed returns guided flow", () => {
         "download-pdf-gstr1-visible",
         "filed-return-download-clicked",
         "text-download-pdf-gstr1",
+        "filed-gstr1-portal-blob-download-captured",
+        "filed-gstr1-extension-download-requested",
       ]),
     );
-    expect(result.mainWorldCaptureRequest).toBeUndefined();
-    expect(downloadClicked).toBe(1);
+    expect(result.mainWorldCaptureRequest).toMatchObject({
+      actionId: "test-action",
+      signalPrefix: "filed-gstr1",
+      timeoutMs: 15_000,
+    });
+    expect(downloadClicked).toBe(0);
   });
 
   it("returns from the filed GSTR-1 View Summary page before an Excel-only trigger", async () => {
@@ -5706,7 +5778,7 @@ describe("filed returns guided flow", () => {
     expect(back).not.toHaveBeenCalled();
   });
 
-  it("clicks an explicit filed GSTR-1 e-invoice details Excel download when target identity matches", async () => {
+  it("captures an explicit filed GSTR-1 e-invoice details Excel before any portal click", async () => {
     const documentRef = createDocument(`
       <main>
         <nav>Returns / Filed Returns</nav>
@@ -5743,14 +5815,20 @@ describe("filed returns guided flow", () => {
         "filed-return-download-clicked",
         "filed-gstr1-download-clicked",
         "text-download-excel-gstr1",
+        "filed-gstr1-portal-blob-download-captured",
+        "filed-gstr1-extension-download-requested",
       ]),
     );
-    expect(result.mainWorldCaptureRequest).toBeUndefined();
+    expect(result.mainWorldCaptureRequest).toMatchObject({
+      actionId: "test-action",
+      signalPrefix: "filed-gstr1",
+      timeoutMs: 15_000,
+    });
     expect(pdfClicked).toBe(0);
-    expect(excelClicked).toBe(1);
+    expect(excelClicked).toBe(0);
   });
 
-  it("classifies the GSTR-1 e-invoice no-details modal after an Excel click", async () => {
+  it("classifies the GSTR-1 e-invoice no-details modal after the capture click", async () => {
     const documentRef = createDocument(`
       <main>
         <nav>Returns / Filed Returns</nav>
@@ -5777,23 +5855,28 @@ describe("filed returns guided flow", () => {
       }, 400);
     });
 
-    const result = await triggerFiledReturnDownload(documentRef, {
+    const target = {
       actionId: "test-action",
-      artifactType: "EXCEL",
+      artifactType: "EXCEL" as const,
       financialYear: "2025-26",
       period: "May",
-      returnType: "GSTR-1",
-    });
+      returnType: "GSTR-1" as const,
+    };
+    documentRef.querySelector<HTMLElement>("[data-excel]")?.click();
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 450));
+    const result = detectPostClickBlockedState(documentRef, target, [
+      "filed-return-download-clicked",
+      "filed-gstr1-download-clicked",
+    ]);
 
-    expect(result.downloadTrigger.state).toBe("blocked");
-    expect(result.downloadTrigger.safeSignals).toEqual(
+    expect(result?.state).toBe("blocked");
+    expect(result?.safeSignals).toEqual(
       expect.arrayContaining([
         "filed-return-download-clicked",
         "filed-gstr1-download-clicked",
         "filed-gstr1-excel-no-details-available",
       ]),
     );
-    expect(result.mainWorldCaptureRequest).toBeUndefined();
     expect(excelClicked).toBe(1);
   });
 

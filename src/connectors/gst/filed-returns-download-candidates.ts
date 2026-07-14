@@ -55,6 +55,10 @@ export function scoreFiledReturnDownloadCandidate(
     score += 120;
     safeSignals.push(`text-download-pdf-${descriptor.signalSlug}`);
   }
+  if (returnType === "GSTR-2B" && /\bsummary\b/.test(searchable) && /\bpdf\b/.test(searchable)) {
+    score += 120;
+    safeSignals.push("text-summary-pdf-gstr2b");
+  }
   if (/\bdownload\b/.test(searchable) && /\bfiled\b/.test(searchable)) {
     score += 50;
     safeSignals.push("text-download-filed");
@@ -106,6 +110,10 @@ function scoreFiledReturnExcelDownloadCandidate(
   if (/\bdownload\b/.test(searchable) && /\be-?invoices?\b/.test(searchable)) {
     score += 80;
     safeSignals.push(`text-download-einvoice-${descriptor.signalSlug}`);
+  }
+  if (returnType === "GSTR-2B" && /\bdetails?\b/.test(searchable) && /\bexcel\b/.test(searchable)) {
+    score += 180;
+    safeSignals.push("text-details-excel-gstr2b");
   }
 
   if (descriptor.explicitDownloadPattern.test(searchable) || /\bpdf\b/.test(searchable)) {

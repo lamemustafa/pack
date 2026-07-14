@@ -98,6 +98,10 @@ export type PackMessage =
       payload: FiledReturnsDownloadTarget;
     }
   | {
+      type: "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3";
+      payload: FiledReturnsDownloadTarget;
+    }
+  | {
       type: "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V3";
       payload: FiledReturnsDownloadTarget;
     }
@@ -228,6 +232,7 @@ export function isPackMessage(input: unknown): input is PackMessage {
       return isFullFiscalYearTargetResolution(input.payload);
     case "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD":
     case "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3":
+    case "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3":
     case "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V3":
       return isFiledReturnsDownloadTarget(input.payload);
     case "PACK_RUN_FILED_RETURNS_DOWNLOAD_STEP":

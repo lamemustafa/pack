@@ -11,7 +11,11 @@ import {
   findMatchingFiledReturnRows,
 } from "./filed-returns-result-rows";
 import { filedReturnDescriptor, filedReturnScopeId } from "./filed-returns-return-descriptors";
-import { hasSettledFiledReturnsSearchForScope } from "./filed-returns-search-state";
+import {
+  gstr1ViewActivationStateForScope,
+  hasSettledFiledReturnsSearchForScope,
+  markGstr1ViewActivationAttempted,
+} from "./filed-returns-search-state";
 
 interface ResolvedFiledReturnResultCandidates {
   actionableRows: ReturnType<typeof findMatchingActionableFiledReturnRows>;
@@ -68,30 +72,38 @@ export function openFiledReturnResultRow(
 
   const actionableResult = actionableRows[0] ?? filterBoundResults[0];
   if (actionableResult) {
-    if (scope.returnType === "GSTR-1") {
+    const gstr1ViewActivationState =
+      scope.returnType === "GSTR-1"
+        ? gstr1ViewActivationStateForScope(documentRef, scope)
+        : "not-attempted";
+    if (gstr1ViewActivationState === "navigation-pending") {
       return {
         connectorId: "gst",
         scopeId,
-        state: "user-action-required",
+        state: "clicked",
         safeSignals: [
-          "filed-gstr1-result-view-user-action-required",
+          "filed-gstr1-result-view-navigation-pending",
           "result-row-gstr1",
           ...(actionableResult.period
             ? [`filed-return-result-period:${actionableResult.period}`]
             : []),
-          ...(filterBoundResults[0] === actionableResult
-            ? ["filed-return-filter-bound-result-view-ready"]
-            : []),
         ],
-        safeMessage: `Pack verified the filed GSTR-1 result for ${scope.period}. Click that row's exact View control in the GST Portal, then reopen Pack and retry this period.`,
-        userAction: {
-          type: "NAVIGATE_TO_SUPPORTED_PAGE",
-          message: `Click View on the filed GSTR-1 result for ${scope.period}, then reopen Pack and retry this period.`,
-          canResume: true,
-        },
+        safeMessage: `Pack is waiting for the filed GSTR-1 ${scope.period} detail page after the exact View action.`,
       };
     }
+    if (gstr1ViewActivationState === "expired") {
+      return gstr1ViewUserActionRequired(
+        scope,
+        scopeId,
+        actionableResult,
+        filterBoundResults[0] === actionableResult,
+        true,
+      );
+    }
 
+    if (scope.returnType === "GSTR-1") {
+      markGstr1ViewActivationAttempted(documentRef, scope);
+    }
     activateElement(actionableResult.view);
     return {
       connectorId: "gst",
@@ -100,6 +112,7 @@ export function openFiledReturnResultRow(
       safeSignals: [
         "filed-return-result-view-clicked",
         `result-row-${descriptor.signalSlug}`,
+        ...(scope.returnType === "GSTR-1" ? ["filed-gstr1-result-view-auto-clicked"] : []),
         ...(actionableResult.period
           ? [`filed-return-result-period:${actionableResult.period}`]
           : []),
@@ -125,24 +138,30 @@ export async function resolveGstr1FiledReturnViewPoint(
   scope: FiledReturnsDownloadScope,
 ): Promise<Gstr1ViewPointResolution> {
   const searchSettled = hasSettledFiledReturnsSearchForScope(documentRef, scope);
-  const fallback = openFiledReturnResultRow(documentRef, scope, searchSettled);
-  if (
-    scope.returnType !== "GSTR-1" ||
-    !fallback.safeSignals.includes("filed-gstr1-result-view-user-action-required")
-  ) {
-    return { ok: false, flowStep: fallback };
-  }
-
   const { actionableRows, filterBoundResults, matchingRows } = resolveResultCandidates(
     documentRef,
     scope,
     searchSettled,
   );
-  if (matchingRows.length + filterBoundResults.length !== 1) {
-    return { ok: false, flowStep: fallback };
+  const actionableResult = actionableRows[0] ?? filterBoundResults[0];
+  if (
+    scope.returnType !== "GSTR-1" ||
+    matchingRows.length + filterBoundResults.length !== 1 ||
+    !actionableResult
+  ) {
+    return {
+      ok: false,
+      flowStep: openFiledReturnResultRow(documentRef, scope, searchSettled),
+    };
   }
-  const view = actionableRows[0]?.view ?? filterBoundResults[0]?.view;
-  if (!view) return { ok: false, flowStep: fallback };
+  const fallback = gstr1ViewUserActionRequired(
+    scope,
+    filedReturnScopeId("GSTR-1"),
+    actionableResult,
+    filterBoundResults[0] === actionableResult,
+    false,
+  );
+  const view = actionableResult.view;
 
   view.scrollIntoView?.({ block: "center", inline: "center" });
   await delay(50);
@@ -175,6 +194,37 @@ export async function resolveGstr1FiledReturnViewPoint(
   }
 
   return { ok: true, point: { x, y } };
+}
+
+function gstr1ViewUserActionRequired(
+  scope: FiledReturnsDownloadScope,
+  scopeId: string,
+  actionableResult:
+    | ResolvedFiledReturnResultCandidates["actionableRows"][number]
+    | ResolvedFiledReturnResultCandidates["filterBoundResults"][number],
+  filterBound: boolean,
+  autoAttemptFailed: boolean,
+): PortalFlowStepResult {
+  return {
+    connectorId: "gst",
+    scopeId,
+    state: "user-action-required",
+    safeSignals: [
+      "filed-gstr1-result-view-user-action-required",
+      ...(autoAttemptFailed ? ["filed-gstr1-result-view-auto-attempt-failed"] : []),
+      "result-row-gstr1",
+      ...(actionableResult.period ? [`filed-return-result-period:${actionableResult.period}`] : []),
+      ...(filterBound ? ["filed-return-filter-bound-result-view-ready"] : []),
+    ],
+    safeMessage: autoAttemptFailed
+      ? `Pack verified the filed GSTR-1 result for ${scope.period}, but the automatic View attempt did not open it. Click that row's exact View control in the GST Portal, then reopen Pack and retry this period.`
+      : `Pack verified the filed GSTR-1 result for ${scope.period}. Click that row's exact View control in the GST Portal, then reopen Pack and retry this period.`,
+    userAction: {
+      type: "NAVIGATE_TO_SUPPORTED_PAGE",
+      message: `Click View on the filed GSTR-1 result for ${scope.period}, then reopen Pack and retry this period.`,
+      canResume: true,
+    },
+  };
 }
 
 function resolveResultCandidates(

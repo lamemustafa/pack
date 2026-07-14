@@ -1,6 +1,9 @@
 import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
-import { clickPortalElement } from "../../src/connectors/gst/filed-returns-dom";
+import {
+  clickPortalElement,
+  scheduleElementActivation,
+} from "../../src/connectors/gst/filed-returns-dom";
 
 describe("filed-return portal clicks", () => {
   it("dispatches a cancelled click for a JavaScript URL without activating the URL", () => {
@@ -39,5 +42,22 @@ describe("filed-return portal clicks", () => {
 
     expect(clickCount).toBe(1);
     expect(defaultPrevented).toBe(false);
+  });
+
+  it("defers portal activation until the current response task has returned", async () => {
+    const documentRef = new JSDOM('<button data-control type="button">Download</button>').window
+      .document;
+    const control = documentRef.querySelector<HTMLElement>("[data-control]");
+    if (!control) throw new Error("Expected a synthetic portal control.");
+    let clickCount = 0;
+    control.addEventListener("click", () => {
+      clickCount += 1;
+    });
+
+    scheduleElementActivation(control);
+
+    expect(clickCount).toBe(0);
+    await new Promise<void>((resolve) => documentRef.defaultView?.setTimeout(resolve, 0));
+    expect(clickCount).toBe(1);
   });
 });

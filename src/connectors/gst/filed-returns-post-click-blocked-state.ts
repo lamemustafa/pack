@@ -21,7 +21,7 @@ export async function waitForPostClickBlockedState(
   return null;
 }
 
-function detectPostClickBlockedState(
+export function detectPostClickBlockedState(
   documentRef: Document,
   target: FiledReturnsDownloadTarget,
   safeSignals: string[],

@@ -1,4 +1,3 @@
-const CLICK_SETTLE_DELAY_MS = 250;
 const CLICKABLE_SELECTOR = [
   "a",
   "button",
@@ -30,7 +29,15 @@ export function activateElement(element: HTMLElement) {
     }
   }
   clickPortalElement(element);
-  void delay(CLICK_SETTLE_DELAY_MS);
+}
+
+export function scheduleElementActivation(element: HTMLElement): void {
+  const view = element.ownerDocument.defaultView;
+  if (view) {
+    view.setTimeout(() => activateElement(element), 0);
+    return;
+  }
+  globalThis.setTimeout(() => activateElement(element), 0);
 }
 
 export function clickPortalElement(element: HTMLElement): void {

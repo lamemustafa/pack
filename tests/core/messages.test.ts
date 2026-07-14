@@ -101,6 +101,18 @@ describe("message boundary", () => {
         },
       }),
     ).toBe(true);
+    expect(
+      isPackMessage({
+        type: "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3",
+        payload: {
+          actionId: "action-1",
+          artifactType: "EXCEL",
+          financialYear: "2025-26",
+          period: "March",
+          returnType: "GSTR-1",
+        },
+      }),
+    ).toBe(true);
     expect(isPackMessage({ type: "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD" })).toBe(false);
     expect(
       isPackMessage({

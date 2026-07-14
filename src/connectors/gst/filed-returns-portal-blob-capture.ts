@@ -1,18 +1,8 @@
 import type { FiledReturnsMainWorldCaptureRequest } from "../../core/contracts";
-import {
-  GSTR2B_CAPTURE_CONTROL_ATTRIBUTE,
-  GSTR2B_CAPTURE_MAX_BYTES,
-} from "./gstr2b-capture-bridge";
 
-export function prepareGstr2bPortalBlobDownloadCapture(
-  documentRef: Document,
-  control: HTMLElement,
-  actionId: string,
-): FiledReturnsMainWorldCaptureRequest | null {
-  return prepareFiledReturnsPortalBlobDownloadCapture(documentRef, control, actionId, {
-    signalPrefix: "gstr2b",
-  });
-}
+// Keep the established attribute value because in-flight capture requests persist it across worlds.
+const FILED_RETURNS_CAPTURE_CONTROL_ATTRIBUTE = "data-pack-gstr2b-capture-action";
+const FILED_RETURNS_CAPTURE_MAX_BYTES = 36 * 1024 * 1024;
 
 export function prepareFiledReturnsPortalBlobDownloadCapture(
   documentRef: Document,
@@ -24,12 +14,12 @@ export function prepareFiledReturnsPortalBlobDownloadCapture(
   if (!view) return null;
 
   const controlId = createCaptureToken(view);
-  control.setAttribute(GSTR2B_CAPTURE_CONTROL_ATTRIBUTE, controlId);
+  control.setAttribute(FILED_RETURNS_CAPTURE_CONTROL_ATTRIBUTE, controlId);
   return {
     actionId,
-    controlAttribute: GSTR2B_CAPTURE_CONTROL_ATTRIBUTE,
+    controlAttribute: FILED_RETURNS_CAPTURE_CONTROL_ATTRIBUTE,
     controlId,
-    maxBytes: GSTR2B_CAPTURE_MAX_BYTES,
+    maxBytes: FILED_RETURNS_CAPTURE_MAX_BYTES,
     signalPrefix: options.signalPrefix,
     ...(options.timeoutMs ? { timeoutMs: options.timeoutMs } : {}),
   };

@@ -12,7 +12,16 @@ interface FiledReturnsSearchAttempt {
   createdAt: number;
 }
 
+interface Gstr1ViewActivationAttempt {
+  attemptedAt: number;
+  signature: string;
+}
+
+export type Gstr1ViewActivationState = "not-attempted" | "navigation-pending" | "expired";
+
 const searchAttempts = new WeakMap<Document, FiledReturnsSearchAttempt>();
+const gstr1ViewActivationAttempts = new WeakMap<Document, Gstr1ViewActivationAttempt>();
+const GSTR1_VIEW_NAVIGATION_PENDING_MS = 3_000;
 const SEARCH_ATTEMPT_TTL_MS = 2 * 60 * 1000;
 const resultRootIds = new WeakMap<Element, number>();
 let nextResultRootId = 1;
@@ -26,6 +35,7 @@ export function markFiledReturnsSearchPending(
   documentRef: Document,
   scope: FiledReturnsDownloadScope,
 ): void {
+  gstr1ViewActivationAttempts.delete(documentRef);
   searchAttempts.set(documentRef, {
     signature: filedReturnsSearchSignature(scope),
     preSearchFingerprint: resultFingerprint(documentRef),
@@ -34,6 +44,29 @@ export function markFiledReturnsSearchPending(
     sawResultSurfaceLoading: false,
     settled: false,
     createdAt: Date.now(),
+  });
+}
+
+export function gstr1ViewActivationStateForScope(
+  documentRef: Document,
+  scope: FiledReturnsDownloadScope,
+): Gstr1ViewActivationState {
+  const attempt = gstr1ViewActivationAttempts.get(documentRef);
+  if (!attempt || attempt.signature !== filedReturnsSearchSignature(scope)) {
+    return "not-attempted";
+  }
+  return Date.now() - attempt.attemptedAt < GSTR1_VIEW_NAVIGATION_PENDING_MS
+    ? "navigation-pending"
+    : "expired";
+}
+
+export function markGstr1ViewActivationAttempted(
+  documentRef: Document,
+  scope: FiledReturnsDownloadScope,
+): void {
+  gstr1ViewActivationAttempts.set(documentRef, {
+    attemptedAt: Date.now(),
+    signature: filedReturnsSearchSignature(scope),
   });
 }
 
@@ -104,6 +137,7 @@ export function consumeSettledFiledReturnsSearchForScope(
 
 export function clearFiledReturnsSearchAttempt(documentRef: Document): void {
   searchAttempts.delete(documentRef);
+  gstr1ViewActivationAttempts.delete(documentRef);
 }
 
 function resultFingerprint(documentRef: Document): string {

@@ -12,7 +12,7 @@ import {
   isFiledReturnsSummaryModalDismissalBlocked,
 } from "./filed-returns-dialogs";
 import { detectFiledReturnDetailPage } from "./filed-returns-detail-page-guard";
-import { clickPortalElement } from "./filed-returns-dom";
+import { activateElement, scheduleElementActivation } from "./filed-returns-dom";
 import { resolveVisibleFiledReturnDownloadCandidates } from "./filed-returns-download-candidates";
 import { verifyFiledReturnsDownloadTarget } from "./filed-returns-download-target";
 import { waitForPostClickBlockedState } from "./filed-returns-post-click-blocked-state";
@@ -25,12 +25,15 @@ import {
   filedReturnScopedSignal,
   filedReturnScopeId,
 } from "./filed-returns-return-descriptors";
-import { prepareFiledReturnsPortalBlobDownloadCapture } from "./gstr2b-blob-capture";
+import { prepareFiledReturnsPortalBlobDownloadCapture } from "./filed-returns-portal-blob-capture";
 
 export {
   findFiledGstr3bDownloadCandidateIndex,
   scoreFiledGstr3bDownloadCandidate,
 } from "./filed-returns-download-candidates";
+
+const GSTR2B_CAPTURE_TIMEOUT_MS = 15_000;
+const GSTR1_CAPTURE_TIMEOUT_MS = 15_000;
 
 const DIALOG_SETTLE_DELAY_MS = 60;
 const GSTR3B_CAPTURE_TIMEOUT_MS = 5_000;
@@ -175,6 +178,23 @@ export async function triggerFiledReturnDownload(
     ...score.safeSignals,
   ];
 
+  if (target.forcePortalClick && target.returnType === "GSTR-2B") {
+    scheduleElementActivation(element);
+    return {
+      downloadTrigger: {
+        connectorId: "gst",
+        scopeId,
+        state: "clicked",
+        safeSignals: [
+          ...clickedSignals,
+          filedReturnScopedSignal(target.returnType, "portal-blob-download-click-scheduled"),
+          `filed-return-artifact-clicked:${artifactType}`,
+        ],
+        safeMessage: `Pack scheduled the GST Portal's verified filed ${descriptor.label} ${artifactLabel} download control.`,
+      },
+    };
+  }
+
   const mainWorldCaptureRequest = target.forcePortalClick
     ? null
     : tryCaptureFiledReturnBlobDownload(documentRef, target, {
@@ -238,7 +258,9 @@ function tryCaptureFiledReturnBlobDownload(
     target.actionId,
     {
       signalPrefix: signalPrefix.endsWith("-") ? signalPrefix.slice(0, -1) : signalPrefix,
+      ...(target.returnType === "GSTR-1" ? { timeoutMs: GSTR1_CAPTURE_TIMEOUT_MS } : {}),
       ...(target.returnType === "GSTR-3B" ? { timeoutMs: GSTR3B_CAPTURE_TIMEOUT_MS } : {}),
+      ...(target.returnType === "GSTR-2B" ? { timeoutMs: GSTR2B_CAPTURE_TIMEOUT_MS } : {}),
     },
   );
   if (mainWorldCaptureRequest) return mainWorldCaptureRequest;
@@ -248,32 +270,12 @@ function tryCaptureFiledReturnBlobDownload(
 
 function supportsFiledReturnBlobCapture(target: FiledReturnsDownloadTarget): boolean {
   if (target.returnType === "GSTR-3B") return (target.artifactType ?? "PDF") === "PDF";
-  return target.returnType === "GSTR-2B";
+  return target.returnType === "GSTR-1" || target.returnType === "GSTR-2B";
 }
 
 function detectBlockedPortalState(documentRef: Document): PortalDownloadTriggerResult | null {
   const issue = detectFiledReturnsPortalAvailabilityIssue(documentRef);
   return issue ? asPortalDownloadTriggerResult(issue) : null;
-}
-
-function activateElement(element: HTMLElement) {
-  element.scrollIntoView?.({ block: "center", inline: "center" });
-  dispatchPointerSequence(element);
-  clickPortalElement(element);
-}
-
-function dispatchPointerSequence(element: HTMLElement) {
-  const MouseEventConstructor = element.ownerDocument.defaultView?.MouseEvent;
-  if (!MouseEventConstructor) return;
-  for (const type of ["pointerover", "mouseover", "mouseenter", "pointerdown", "mousedown"]) {
-    element.dispatchEvent(
-      new MouseEventConstructor(type, {
-        bubbles: true,
-        cancelable: true,
-        view: element.ownerDocument.defaultView,
-      }),
-    );
-  }
 }
 
 function delay(ms: number): Promise<void> {

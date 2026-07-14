@@ -129,7 +129,10 @@ export async function triggerAndObserveFiledReturnDownload({
       target,
       triggerStep: triggerResponse.downloadTrigger,
     });
-    if (!shouldFallBackAfterCaptureFailure(captureResponse, target)) {
+    if (
+      deps.stageCapturedDownloads ||
+      !shouldFallBackAfterCaptureFailure(captureResponse, target)
+    ) {
       return captureResponse;
     }
     return withCaptureFallbackSignal(
@@ -210,7 +213,6 @@ function createDownloadTarget(
     actionId: createActionId(),
     artifactType,
     financialYear: scope.financialYear,
-    ...(scope.returnType === "GSTR-1" ? { forcePortalClick: true } : {}),
     period: scope.period,
     returnType: scope.returnType,
   };

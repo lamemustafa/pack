@@ -2,10 +2,10 @@ import { browser } from "wxt/browser";
 import { detectGstPortalContext } from "../connectors/gst/detect";
 import { runFiledReturnsDownloadStep } from "../connectors/gst/filed-returns-flow";
 import { triggerFiledReturnDownload } from "../connectors/gst/filed-returns-download";
-import { triggerGstr2bDownload } from "../connectors/gst/gstr2b-download";
 import { resolveFiledGstr3bVerifiedPdfDownloadRequest } from "../connectors/gst/filed-returns-direct-download-probe";
 import { navigateToFiledReturnsPage } from "../connectors/gst/filed-returns-navigator";
 import { observeFiledReturnsPageText } from "../connectors/gst/filed-returns-observer";
+import { detectPostClickBlockedState } from "../connectors/gst/filed-returns-post-click-blocked-state";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import { markFiledReturnsSearchPending } from "../connectors/gst/filed-returns-search-state";
 import { resolveGstr1FiledReturnViewPoint } from "../connectors/gst/filed-returns-result-row-navigation";
@@ -130,44 +130,6 @@ export default defineContentScript({
       }
 
       if (message.type === "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3") {
-        if (message.payload.returnType === "GSTR-2B") {
-          void triggerGstr2bDownload(document, message.payload)
-            .then(({ capturedDownloadRequest, mainWorldCaptureRequest, downloadTrigger }) => {
-              const observation = sendFiledReturnsObservation();
-              if (capturedDownloadRequest) {
-                sendResponse({
-                  ok: true,
-                  capturedDownloadRequest,
-                  downloadTrigger,
-                  observation,
-                } satisfies PackMessageResponse);
-                return;
-              }
-              if (mainWorldCaptureRequest) {
-                sendResponse({
-                  ok: true,
-                  mainWorldCaptureRequest,
-                  downloadTrigger,
-                  observation,
-                } satisfies PackMessageResponse);
-                return;
-              }
-              sendResponse({
-                ok: true,
-                downloadTrigger,
-                observation,
-              } satisfies PackMessageResponse);
-            })
-            .catch((error: unknown) =>
-              sendResponse({
-                ok: false,
-                error:
-                  error instanceof Error ? error.message : "Filed return download trigger failed.",
-              } satisfies PackMessageResponse),
-            );
-          return true;
-        }
-
         void triggerFiledReturnDownload(document, message.payload)
           .then(({ mainWorldCaptureRequest, downloadTrigger }) => {
             const observation = sendFiledReturnsObservation();
@@ -194,6 +156,21 @@ export default defineContentScript({
             } satisfies PackMessageResponse),
           );
         return true;
+      }
+
+      if (message.type === "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3") {
+        const flowStep = detectPostClickBlockedState(document, message.payload, []);
+        sendResponse({
+          ok: true,
+          flowStep: flowStep ?? {
+            connectorId: "gst",
+            scopeId: filedReturnScopeId(message.payload.returnType),
+            state: "candidate-not-found",
+            safeSignals: ["filed-return-post-click-blocked-state-not-found"],
+            safeMessage: "Pack did not find a recognized post-click portal block.",
+          },
+        } satisfies PackMessageResponse);
+        return false;
       }
 
       if (message.type === "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V3") {
