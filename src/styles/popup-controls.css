@@ -55,13 +55,6 @@
   padding-top: 9px;
 }
 
-.advanced-options summary {
-  min-height: 32px;
-  color: #34506e;
-  font-size: 0.75rem;
-  font-weight: 800;
-}
-
 .scope-note {
   margin: 0;
   border: 1px solid #dbe3ec;

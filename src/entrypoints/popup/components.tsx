@@ -125,10 +125,10 @@ export function ScopeForm({
           </div>
         </div>
         {multipleArtifactChoices ? (
-          <details className="advanced-options">
-            <summary>More options</summary>
+          <div className="advanced-options">
             <div className="scope-row">
-              <ScopeSelect
+              <ScopeButtonGroup
+                className="scope-group-file"
                 label="File format"
                 value={formModel.selectedArtifactType}
                 options={formModel.artifactOptions}
@@ -145,7 +145,7 @@ export function ScopeForm({
                 }
               />
             </div>
-          </details>
+          </div>
         ) : null}
       </div>
       {scopeLockedForReview && flowSummary?.currentPeriod ? (

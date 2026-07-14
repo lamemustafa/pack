@@ -241,7 +241,7 @@ describe("popup full-year recovery actions", () => {
     expect(markup).toContain("Summary PDF");
     expect(markup).toContain('value="EXCEL"');
     expect(markup).toContain("E-invoice Excel");
-    expect(markup).toContain('value="PDF_AND_EXCEL" selected=""');
+    expect(markup).toContain('checked="" value="PDF_AND_EXCEL"');
     expect(markup).toContain("PDF + Excel ZIP");
     expect(markup).toContain("Single period");
     expect(markup).toContain("Full year");
@@ -269,7 +269,7 @@ describe("popup full-year recovery actions", () => {
     expect(markup).toContain('value="GSTR-3B"');
     expect(markup).toContain('value="May" selected=""');
     expect(markup).toContain('value="June"');
-    expect(markup).toContain('value="PDF_AND_EXCEL" selected=""');
+    expect(markup).toContain('checked="" value="PDF_AND_EXCEL"');
     expect(markup).toContain("PDF + Excel ZIP");
     expect(markup).not.toContain("E-invoice Excel");
   });

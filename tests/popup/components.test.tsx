@@ -27,6 +27,33 @@ const targetReviewSummary: FiledReturnsFlowSummary = {
 };
 
 describe("popup scope form", () => {
+  it("renders exposed GST artifact formats as an accessible radio group", () => {
+    const markup = renderToStaticMarkup(
+      <ScopeForm
+        busy={null}
+        context={context}
+        scope={{
+          financialYear: "2026-27",
+          period: "April",
+          returnType: "GSTR-2B",
+          artifactType: "PDF",
+        }}
+        onScopeChange={vi.fn()}
+        onStart={vi.fn()}
+        showPrimaryAction={false}
+      />,
+    );
+
+    expect(markup).toContain("<legend>File format</legend>");
+    expect(markup).toContain('name="scope-file-format"');
+    expect(markup).toContain("Summary PDF");
+    expect(markup).toContain("Details Excel");
+    expect(markup).toContain("PDF + Excel ZIP");
+    expect(markup).not.toContain("<details");
+    expect(markup).not.toContain("More options");
+    expect(markup).not.toContain('id="scope-file-format"');
+  });
+
   it("keeps scope controls usable while explaining the explicit recovery choice", () => {
     const markup = renderToStaticMarkup(
       <ScopeForm
