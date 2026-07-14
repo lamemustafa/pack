@@ -19,7 +19,10 @@ import {
   readFullFiscalYearTargetRecoveryScope,
   resolveFullFiscalYearTarget,
 } from "./filed-returns-full-fiscal-year-recovery";
-import { sameFiledReturnsScope } from "./filed-returns-full-fiscal-year-ledger";
+import {
+  canCompleteFullFiscalYearLedger,
+  sameFiledReturnsScope,
+} from "./filed-returns-full-fiscal-year-ledger";
 import { readLedger, responseForExistingLedger } from "./filed-returns-full-fiscal-year-run-state";
 import {
   clearFiledReturnsTargetReview,
@@ -45,6 +48,7 @@ export interface FiledReturnsFlowRunnerDeps {
           | "PACK_CONTENT_MARK_FILED_RETURNS_SEARCH_PENDING_V3"
           | "PACK_CONTENT_RESOLVE_GSTR1_VIEW_POINT_V3"
           | "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3"
+          | "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3"
           | "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V3";
       }
     >,
@@ -91,7 +95,13 @@ export async function startFiledReturnsDownloadFlow(
 
   if (isFullFiscalYearScope(scope)) {
     const existingLedger = await readLedger(deps.storageKeys.fullFiscalYearLedger);
-    if (existingLedger && !sameFiledReturnsScope(existingLedger.scope, scope)) {
+    const replaceableCompletedLedger =
+      existingLedger?.status === "complete" && canCompleteFullFiscalYearLedger(existingLedger);
+    if (
+      existingLedger &&
+      !sameFiledReturnsScope(existingLedger.scope, scope) &&
+      !replaceableCompletedLedger
+    ) {
       const existingLedgerResponse = responseForExistingLedger(
         existingLedger,
         deps.now?.() ?? new Date(),

@@ -17,6 +17,7 @@ import {
 } from "./download-observer-results";
 
 const DEFAULT_DOWNLOAD_WAIT_MS = 30_000;
+const COMPLETED_DOWNLOAD_RECHECK_MS = 500;
 
 export type SafeDownloadObservationState = "completed" | "failed" | "not-observed";
 
@@ -76,19 +77,22 @@ export async function observeBrowserDownloadById(
   timeoutMs = DEFAULT_DOWNLOAD_WAIT_MS,
 ): Promise<SafeDownloadObservation> {
   const [initialItem] = await downloads.search({ id: downloadId }).catch(() => []);
-  if (initialItem?.state === "complete") {
-    return completedObservation(downloads, downloadId, context, initialItem);
-  }
   if (initialItem?.state === "interrupted") {
     return failedObservation(initialItem.error);
   }
 
   return new Promise<SafeDownloadObservation>((resolve) => {
+    let completedItem: DownloadCreatedItem | undefined = initialItem;
+    let completedCheckInFlight = false;
+    let lastUnconfirmedObservation: SafeDownloadObservation | null = null;
+    let recheckId: ReturnType<typeof globalThis.setTimeout> | null = null;
     let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
     let settled = false;
 
     const cleanup = () => {
       downloads.onChanged.removeListener(onChanged);
+      if (recheckId) globalThis.clearTimeout(recheckId);
+      recheckId = null;
       if (timeoutId) globalThis.clearTimeout(timeoutId);
       timeoutId = null;
     };
@@ -103,7 +107,7 @@ export async function observeBrowserDownloadById(
     function onChanged(delta: DownloadDelta) {
       if (delta.id !== downloadId) return;
       if (delta.state?.current === "complete") {
-        void completedObservation(downloads, downloadId, context).then(settle);
+        void checkCompletedDownload();
         return;
       }
       if (delta.state?.current === "interrupted") {
@@ -112,11 +116,14 @@ export async function observeBrowserDownloadById(
     }
 
     downloads.onChanged.addListener(onChanged);
+    if (initialItem?.state === "complete") {
+      void checkCompletedDownload(initialItem);
+    }
     void downloads
       .search({ id: downloadId })
       .then(([latestItem]) => {
         if (latestItem?.state === "complete") {
-          void completedObservation(downloads, downloadId, context, latestItem).then(settle);
+          void checkCompletedDownload(latestItem);
           return;
         }
         if (latestItem?.state === "interrupted") {
@@ -125,9 +132,37 @@ export async function observeBrowserDownloadById(
       })
       .catch(() => undefined);
     timeoutId = globalThis.setTimeout(() => {
-      settle(downloadNotObserved());
+      settle(lastUnconfirmedObservation ?? downloadNotObserved());
     }, timeoutMs);
+
+    async function checkCompletedDownload(fallbackItem = completedItem) {
+      if (settled || completedCheckInFlight) return;
+      completedCheckInFlight = true;
+      completedItem = fallbackItem;
+      const observation = await completedObservation(downloads, downloadId, context, fallbackItem);
+      completedCheckInFlight = false;
+      if (settled) return;
+      if (!shouldRecheckCompletedDownload(observation)) {
+        settle(observation);
+        return;
+      }
+      lastUnconfirmedObservation = observation;
+      if (recheckId) globalThis.clearTimeout(recheckId);
+      recheckId = globalThis.setTimeout(() => {
+        recheckId = null;
+        void checkCompletedDownload();
+      }, COMPLETED_DOWNLOAD_RECHECK_MS);
+    }
   });
+}
+
+function shouldRecheckCompletedDownload(observation: SafeDownloadObservation): boolean {
+  return (
+    observation.state === "not-observed" &&
+    observation.safeSignals.some((signal) =>
+      ["browser-download-search-missing", "browser-download-size-unknown"].includes(signal),
+    )
+  );
 }
 
 export function observeNextBrowserDownload(

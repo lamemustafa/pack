@@ -19,6 +19,7 @@ import {
   discardSinglePeriodFiledReturnsZip,
   exportSinglePeriodFiledReturnsZip,
 } from "./filed-returns-full-fiscal-year-zip";
+import { persistFiledReturnsTargetReview } from "./filed-returns-target-review";
 import { runDownloadStepWithRetry } from "./filed-returns-flow-messaging";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
 import {
@@ -183,13 +184,16 @@ export async function triggerSelectedArtifacts({
   if (!("flowStep" in response) || response.flowStep.state !== "downloaded") return response;
   if (!response.flowStep.safeSignals.includes("single-period-opfs-staged")) return response;
 
+  const zipFlowStep = await exportSinglePeriodFiledReturnsZip({
+    completeStep: response.flowStep,
+    ledgerId: singlePeriodBundleLedgerId,
+    scope,
+  });
+  const flowSummary = await persistFiledReturnsTargetReview(scope, zipFlowStep, artifactDeps);
   return {
     ...response,
-    flowStep: await exportSinglePeriodFiledReturnsZip({
-      completeStep: response.flowStep,
-      ledgerId: singlePeriodBundleLedgerId,
-      scope,
-    }),
+    flowStep: zipFlowStep,
+    ...(flowSummary ? { flowSummary } : {}),
   };
 }
 

@@ -444,6 +444,83 @@ describe("download observer", () => {
     });
   });
 
+  it("rechecks a trusted completed download until non-empty size evidence is available", async () => {
+    const created = createEvent<DownloadCreatedItem>();
+    const changed = createEvent<DownloadDelta>();
+    const completedWithoutSize = {
+      id: 83,
+      mime: "application/zip",
+      startTime: "2026-06-24T10:00:02.000Z",
+      state: "complete",
+      url: "blob:https://extension.invalid/pack-zip",
+    };
+    const search = vi
+      .fn()
+      .mockResolvedValueOnce([{ id: 83, state: "in_progress" }])
+      .mockResolvedValueOnce([completedWithoutSize])
+      .mockResolvedValueOnce([completedWithoutSize])
+      .mockResolvedValueOnce([{ ...completedWithoutSize, fileSize: 4096 }]);
+
+    const observation = observeBrowserDownloadById(
+      {
+        onCreated: created.api,
+        onChanged: changed.api,
+        search,
+      },
+      83,
+      {
+        armedAt: new Date("2026-06-24T10:00:00.000Z"),
+        expectedFileExtensions: [".zip"],
+        expectedMimeTypes: ["application/zip"],
+        expectedOrigins: [],
+        expectedUrlSubstrings: [],
+        trustedDownloadIds: new Set([83]),
+      },
+      1_000,
+    );
+
+    await vi.advanceTimersByTimeAsync(500);
+
+    await expect(observation).resolves.toMatchObject({
+      state: "completed",
+      safeSignals: expect.arrayContaining([
+        "browser-download-completed",
+        "browser-download-non-empty",
+      ]),
+    });
+  });
+
+  it("keeps a trusted completed download unconfirmed when size stays unknown", async () => {
+    const completedWithoutSize = {
+      id: 84,
+      mime: "application/zip",
+      startTime: "2026-06-24T10:00:02.000Z",
+      state: "complete",
+      url: "blob:https://extension.invalid/pack-zip",
+    };
+    const downloads = createDownloadsApi([completedWithoutSize]);
+    const observation = observeBrowserDownloadById(
+      downloads,
+      84,
+      {
+        armedAt: new Date("2026-06-24T10:00:00.000Z"),
+        expectedFileExtensions: [".zip"],
+        expectedMimeTypes: ["application/zip"],
+        expectedOrigins: [],
+        expectedUrlSubstrings: [],
+        trustedDownloadIds: new Set([84]),
+      },
+      1_000,
+    );
+
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    await expect(observation).resolves.toMatchObject({
+      state: "not-observed",
+      safeSignals: expect.arrayContaining(["browser-download-size-unknown"]),
+    });
+  });
+
   it("rejects a GST-origin download that is not plausibly a PDF", async () => {
     const downloads = createDownloadsApi([
       {

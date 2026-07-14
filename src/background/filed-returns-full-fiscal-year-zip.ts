@@ -23,33 +23,27 @@ export async function exportFullFiscalYearZip(
   ledger: FiledReturnsFullFiscalYearLedger,
   completeStep: PortalFlowStepResult,
 ): Promise<PortalFlowStepResult> {
-  if (
-    !ledger.targets.some((target) => target.safeSignals.includes("full-fiscal-year-opfs-staged"))
-  ) {
-    if (
-      ledger.scope.returnType === "GSTR-2B" &&
-      ledger.scope.artifactType === "PDF_AND_EXCEL" &&
-      ledger.targets.some((target) => target.status === "downloaded")
-    ) {
-      return {
-        ...completeStep,
-        state: "blocked",
-        safeSignals: [
-          ...completeStep.safeSignals,
-          "full-fiscal-year-zip-no-staged-artifacts",
-          "full-fiscal-year-opfs-retained",
-        ],
-        safeMessage:
-          "Pack completed the period checks, but did not stage any files for the final fiscal-year zip.",
-        userAction: {
-          type: "RETRY_PORTAL_GENERATION",
-          message: "Retry the fiscal-year ZIP run from the signed-in GST return page.",
-          canResume: true,
-        },
-      };
-    }
-    return completeStep;
+  const staging = fullFiscalYearStagingRequirement(ledger);
+  if (staging.missingArtifactCount > 0) {
+    return {
+      ...completeStep,
+      state: "blocked",
+      safeSignals: [
+        ...completeStep.safeSignals,
+        "full-fiscal-year-zip-artifact-staging-incomplete",
+        `full-fiscal-year-zip-missing-artifact-count:${staging.missingArtifactCount}`,
+        "full-fiscal-year-opfs-retained",
+      ],
+      safeMessage:
+        "Pack did not stage every required period file, so it did not export an incomplete fiscal-year zip.",
+      userAction: {
+        type: "RETRY_PORTAL_GENERATION",
+        message: "Retry the unresolved periods before exporting the fiscal-year zip.",
+        canResume: true,
+      },
+    };
   }
+  if (staging.expectedArtifactCount === 0) return completeStep;
 
   return exportStagedFiledReturnsZip({
     clearSignalPrefix: "full-fiscal-year",
@@ -64,6 +58,7 @@ export async function exportFullFiscalYearZip(
     zipFailedMessage:
       "Pack staged the fiscal-year files, but could not prepare the final zip export.",
     zipFilename: safeFullFiscalYearZipFilename(ledger.scope),
+    expectedZipEntryCount: staging.expectedArtifactCount,
   });
 }
 
@@ -108,6 +103,7 @@ async function exportStagedFiledReturnsZip({
   unconfirmedMessage,
   zipFailedMessage,
   zipFilename,
+  expectedZipEntryCount,
 }: {
   clearSignalPrefix: "full-fiscal-year" | "single-period";
   completeStep: PortalFlowStepResult;
@@ -118,6 +114,7 @@ async function exportStagedFiledReturnsZip({
   unconfirmedMessage: string;
   zipFailedMessage: string;
   zipFilename: string;
+  expectedZipEntryCount?: number;
 }): Promise<PortalFlowStepResult> {
   const zip = await createOffscreenFiledReturnZipUrl(ledgerId, {
     returnType: scope.returnType,
@@ -137,6 +134,29 @@ async function exportStagedFiledReturnsZip({
         clearSignal,
       ],
       safeMessage: zipFailedMessage,
+    };
+  }
+
+  if (typeof expectedZipEntryCount === "number" && zip.zipEntryCount !== expectedZipEntryCount) {
+    await revokeOffscreenBlobUrl(zip.blobUrl);
+    await closeOffscreenBlobDocument();
+    return {
+      ...completeStep,
+      state: "blocked",
+      safeSignals: [
+        ...completeStep.safeSignals,
+        "full-fiscal-year-zip-entry-count-mismatch",
+        `full-fiscal-year-zip-expected-entry-count:${expectedZipEntryCount}`,
+        `full-fiscal-year-zip-actual-entry-count:${zip.zipEntryCount}`,
+        "full-fiscal-year-opfs-retained",
+      ],
+      safeMessage:
+        "Pack rejected the fiscal-year zip because its staged entry count was incomplete.",
+      userAction: {
+        type: "RETRY_PORTAL_GENERATION",
+        message: "Retry the unresolved periods before exporting the fiscal-year zip.",
+        canResume: true,
+      },
     };
   }
 
@@ -185,6 +205,10 @@ async function exportStagedFiledReturnsZip({
   await revokeOffscreenBlobUrl(zip.blobUrl);
 
   if (observed.state !== "completed") {
+    const stagedLedgerSignal =
+      clearSignalPrefix === "single-period"
+        ? await clearStagedLedgerSignal(ledgerId, clearSignalPrefix)
+        : retainedStagedLedgerSignal(clearSignalPrefix);
     await closeOffscreenBlobDocument();
     return {
       ...completeStep,
@@ -193,7 +217,7 @@ async function exportStagedFiledReturnsZip({
         ...completeStep.safeSignals,
         `${clearSignalPrefix}-zip-download-started`,
         `${clearSignalPrefix}-zip-download-unconfirmed`,
-        retainedStagedLedgerSignal(clearSignalPrefix),
+        stagedLedgerSignal,
         ...observed.safeSignals,
       ],
       safeMessage: unconfirmedMessage,
@@ -216,6 +240,26 @@ async function exportStagedFiledReturnsZip({
     ],
     safeMessage,
   };
+}
+
+function fullFiscalYearStagingRequirement(ledger: FiledReturnsFullFiscalYearLedger): {
+  expectedArtifactCount: number;
+  missingArtifactCount: number;
+} {
+  let expectedArtifactCount = 0;
+  let missingArtifactCount = 0;
+  for (const target of ledger.targets) {
+    if (target.status === "not-filed") continue;
+    const signals = new Set(target.safeSignals);
+    for (const artifactType of concreteFiledReturnsArtifactTypes(target.artifactType)) {
+      if (signals.has(`filed-return-artifact-unavailable:${artifactType}`)) continue;
+      expectedArtifactCount += 1;
+      if (!signals.has(`full-fiscal-year-opfs-staged:${artifactType}`)) {
+        missingArtifactCount += 1;
+      }
+    }
+  }
+  return { expectedArtifactCount, missingArtifactCount };
 }
 
 function retainedStagedLedgerSignal(prefix: "full-fiscal-year" | "single-period"): string {

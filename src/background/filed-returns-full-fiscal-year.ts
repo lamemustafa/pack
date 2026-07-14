@@ -37,6 +37,7 @@ import {
 } from "./filed-returns-full-fiscal-year-run-state";
 import {
   mergeRetriedArtifactSignals,
+  requireFullFiscalYearArtifactsStaged,
   scopeForFullFiscalYearTarget,
 } from "./filed-returns-full-fiscal-year-artifacts";
 import { exportFullFiscalYearZip } from "./filed-returns-full-fiscal-year-zip";
@@ -146,7 +147,10 @@ export async function startFullFiscalYearDownloadFlow(
       return response;
     }
 
-    const flowStep = mergeRetriedArtifactSignals(previousTargetSafeSignals, response.flowStep);
+    const flowStep = requireFullFiscalYearArtifactsStaged(
+      retryScope,
+      mergeRetriedArtifactSignals(previousTargetSafeSignals, response.flowStep),
+    );
     const targetStatus = targetStatusFromFlowStep(flowStep);
     ledger = markFullFiscalYearTargetTerminal(
       ledger,

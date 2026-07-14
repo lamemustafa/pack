@@ -97,6 +97,7 @@ export async function stageCapturedFiledReturnDownload({
             ...capturedDownloadRequest.safeSignals,
             `${capturedDownloadSignalPrefix(target)}-${signalPrefix}-zip-staged`,
             `${signalPrefix}-opfs-staged`,
+            `${signalPrefix}-opfs-staged:${artifactType}`,
             ...(activePeriod ? [`filed-return-detail-period:${activePeriod}`] : []),
           ],
           safeMessage:
@@ -232,6 +233,7 @@ export async function stageChunkedCapturedFiledReturnDownload({
             ...chunkedCaptureRequest.safeSignals,
             `${capturedDownloadSignalPrefix(target)}-${signalPrefix}-zip-staged`,
             `${signalPrefix}-opfs-staged`,
+            `${signalPrefix}-opfs-staged:${artifactType}`,
             `${signalPrefix}-opfs-chunk-staged`,
             ...(activePeriod ? [`filed-return-detail-period:${activePeriod}`] : []),
           ],
