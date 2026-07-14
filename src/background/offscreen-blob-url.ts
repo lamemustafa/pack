@@ -58,45 +58,6 @@ export async function stageOffscreenFiledReturn({
   return toStageResult(response, requestId);
 }
 
-export async function stageOffscreenFiledReturnChunk({
-  chunk,
-  index,
-  ledgerId,
-  returnType,
-  artifactType,
-  totalChunks,
-  transferId,
-  zipPath,
-}: {
-  chunk: string;
-  index: number;
-  ledgerId: string;
-  returnType: FiledReturnsReturnType;
-  artifactType: FiledReturnsConcreteArtifactType;
-  totalChunks: number;
-  transferId: string;
-  zipPath: string;
-}): Promise<OffscreenFiledReturnStageResult> {
-  const requestId = createRequestId();
-  await ensureOffscreenDocument();
-  const response = await browser.runtime.sendMessage({
-    type: "PACK_OFFSCREEN_STAGE_FILED_RETURN_CHUNK",
-    target: PACK_OFFSCREEN_BLOB_URL_TARGET,
-    payload: {
-      requestId,
-      chunk,
-      index,
-      ledgerId,
-      totalChunks,
-      transferId,
-      zipPath,
-      returnType,
-      artifactType,
-    },
-  });
-  return toStageResult(response, requestId);
-}
-
 export async function createOffscreenFiledReturnZipUrl(
   ledgerId: string,
   expected?: {

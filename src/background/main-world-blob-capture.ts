@@ -2,10 +2,7 @@ import type {
   FiledReturnsCapturedDownloadRequest,
   FiledReturnsMainWorldCaptureRequest,
 } from "../core/contracts";
-import type {
-  MainWorldCaptureOutcome,
-  MainWorldChunkedCaptureRequest,
-} from "./main-world-capture-contracts";
+import type { MainWorldCaptureOutcome } from "./main-world-capture-contracts";
 
 type PdfMakeApi = {
   createPdf?: unknown;
@@ -60,14 +57,6 @@ export async function capturePortalBlobDownloadWithDiagnostics(
       ...(suppressedWindowOpen ? [`${config.signalPrefix}-native-window-open-suppressed`] : []),
       ...(filename ? [`${config.signalPrefix}-portal-filename-observed`] : []),
     ];
-    const splitIntoChunks = (capturedUrl: string, chunkSize: number): string[] | null => {
-      const chunks: string[] = [];
-      for (let offset = 0; offset < capturedUrl.length; offset += chunkSize) {
-        chunks.push(capturedUrl.slice(offset, offset + chunkSize));
-      }
-      return chunks.length > 0 && chunks.length <= 200 ? chunks : null;
-    };
-
     const safeFailureSignals = new Set<string>([`${config.signalPrefix}-main-world-capture-armed`]);
     const addSafeSignal = (signal: string) => safeFailureSignals.add(signal);
     const urlApi = window.URL ?? URL;
@@ -129,45 +118,6 @@ export async function capturePortalBlobDownloadWithDiagnostics(
       }, 1_000);
     };
 
-    const settleChunked = (capturedUrl: string, safeSignals: string[]) => {
-      if (settled || !config.transferId) return false;
-      const chunks = splitIntoChunks(capturedUrl, config.transferChunkSize ?? 512 * 1024);
-      if (!chunks) {
-        addSafeSignal(`${config.signalPrefix}-chunk-count-rejected`);
-        return false;
-      }
-      chunks.forEach((chunk, index) => {
-        window.postMessage(
-          {
-            actionId: config.actionId,
-            chunk,
-            index,
-            source: "pack-main-world-capture-v1",
-            totalChunks: chunks.length,
-            transferId: config.transferId,
-          },
-          window.location.origin,
-        );
-      });
-      settled = true;
-      const chunkedCaptureRequest: MainWorldChunkedCaptureRequest = {
-        actionId: config.actionId,
-        chunkCount: chunks.length,
-        safeSignals: [...safeSignals, `${config.signalPrefix}-main-world-chunked-capture`],
-        transferId: config.transferId,
-      };
-      const outcome: MainWorldCaptureOutcome = {
-        capturedDownloadRequest: null,
-        chunkedCaptureRequest,
-        safeFailureSignals: [],
-      };
-      window.setTimeout(() => {
-        restore();
-        resolve(outcome);
-      }, 1_000);
-      return true;
-    };
-
     const readBlob = (blob: Blob, filename?: string | null) => {
       if (settled) return;
       if (!blob.size) {
@@ -187,7 +137,6 @@ export async function capturePortalBlobDownloadWithDiagnostics(
           return;
         }
         const safeSignals = captureSignals("blob", filename);
-        if (settleChunked(reader.result, safeSignals)) return;
         settle({
           actionId: config.actionId,
           dataUrl: reader.result,
@@ -209,7 +158,6 @@ export async function capturePortalBlobDownloadWithDiagnostics(
         return;
       }
       const safeSignals = captureSignals("data-url", filename);
-      if (settleChunked(dataUrl, safeSignals)) return;
       settle({
         actionId: config.actionId,
         dataUrl,

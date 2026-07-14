@@ -231,8 +231,6 @@ export interface FiledReturnsMainWorldCaptureRequest {
   maxBytes: number;
   signalPrefix: string;
   timeoutMs?: number;
-  transferId?: string;
-  transferChunkSize?: number;
 }
 
 export interface FiledReturnsTargetReview {

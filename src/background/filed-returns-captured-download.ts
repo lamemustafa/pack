@@ -14,14 +14,10 @@ import {
   suppressNativePortalDownloadsDuringCapture,
 } from "./filed-returns-captured-portal-guard";
 import { capturedDownloadRejected } from "./filed-returns-captured-rejected";
-import {
-  stageCapturedFiledReturnDownload,
-  stageChunkedCapturedFiledReturnDownload,
-} from "./filed-returns-captured-staging";
+import { stageCapturedFiledReturnDownload } from "./filed-returns-captured-staging";
 import { withFiledReturnsDownloadDiagnostic } from "./filed-returns-download-diagnostics";
 import type { FiledReturnsFlowMessagingDeps } from "./filed-returns-flow-messaging";
 import { capturePortalBlobDownloadInMainWorld } from "./main-world-capture-executor";
-import type { MainWorldChunkedCaptureRequest } from "./main-world-capture-contracts";
 
 export async function startMainWorldCapturedFiledReturnDownload({
   activePeriod,
@@ -55,39 +51,18 @@ export async function startMainWorldCapturedFiledReturnDownload({
 
   const nativeSuppression = suppressNativePortalDownloadsDuringCapture(scope, artifactType);
   let capturedDownloadRequest: FiledReturnsCapturedDownloadRequest | null = null;
-  let chunkedCaptureRequest: MainWorldChunkedCaptureRequest | undefined;
   let safeFailureSignals: string[] = [];
   try {
     const captureOutcome = await capturePortalBlobDownloadInMainWorld(
       tabId,
       mainWorldCaptureRequest,
-      { chunkedTransfer: Boolean(deps.stageCapturedDownloads) },
     );
     capturedDownloadRequest = captureOutcome.capturedDownloadRequest;
-    chunkedCaptureRequest = captureOutcome.chunkedCaptureRequest;
     safeFailureSignals = captureOutcome.safeFailureSignals;
   } finally {
     nativeSuppression.stop();
   }
   const nativeSuppressionSignals = nativeSuppression.safeSignals();
-  if (!capturedDownloadRequest && chunkedCaptureRequest && deps.stageCapturedDownloads) {
-    if (nativeSuppressionSignals.length > 0) {
-      chunkedCaptureRequest = {
-        ...chunkedCaptureRequest,
-        safeSignals: [...chunkedCaptureRequest.safeSignals, ...nativeSuppressionSignals],
-      };
-    }
-    return stageChunkedCapturedFiledReturnDownload({
-      activePeriod,
-      artifactType,
-      chunkedCaptureRequest,
-      deps,
-      scope,
-      tabId,
-      target,
-      triggerStep,
-    });
-  }
   if (!capturedDownloadRequest) {
     const postClickBlockedState = await inspectPostCaptureBlockedState(deps, tabId, target);
     if (postClickBlockedState) {

@@ -1,6 +1,7 @@
 import type {
   FiledReturnsDownloadScope,
   FiledReturnsFullFiscalYearLedger,
+  PortalFlowStepResult,
 } from "../core/contracts";
 import type { PackMessageResponse } from "../core/messages";
 import { getFiledReturnsFullFiscalYearPeriods } from "../core/filed-returns-scope";
@@ -40,7 +41,10 @@ import {
   requireFullFiscalYearArtifactsStaged,
   scopeForFullFiscalYearTarget,
 } from "./filed-returns-full-fiscal-year-artifacts";
-import { exportFullFiscalYearZip } from "./filed-returns-full-fiscal-year-zip";
+import {
+  discardFullFiscalYearFiledReturnsZip,
+  exportFullFiscalYearZip,
+} from "./filed-returns-full-fiscal-year-zip";
 
 export type SinglePeriodRunner = (
   scope: FiledReturnsDownloadScope,
@@ -73,6 +77,15 @@ export async function startFullFiscalYearDownloadFlow(
     !hasTerminalPositiveTarget(existingLedger) &&
     !hasDownloadUnconfirmedTarget(existingLedger) &&
     !options.allowExistingLedgerResume;
+  if (replaceCompletedSameScopeLedger) {
+    const clearSignal = await discardFullFiscalYearFiledReturnsZip(existingLedger.ledgerId);
+    if (clearSignal !== "full-fiscal-year-opfs-cleared") {
+      const step = completedRunCleanupBlockedStep(existingLedger);
+      const summary = toFullFiscalYearSummary(existingLedger, step);
+      await persistSummary(deps, summary);
+      return { ok: true, flowStep: step, flowSummary: summary };
+    }
+  }
   let ledger =
     existingLedger &&
     sameFiledReturnsScope(existingLedger.scope, scope) &&
@@ -198,7 +211,55 @@ async function completeRun(
   }
 
   const completedLedger = completeFullFiscalYearLedger(ledger, now);
-  const summary = toFullFiscalYearSummary(completedLedger, zipStep);
   await persistLedgerAndSummary(deps, completedLedger, zipStep);
-  return { ok: true, flowStep: summary.flowStep, flowSummary: summary };
+  const clearSignal = await discardFullFiscalYearFiledReturnsZip(completedLedger.ledgerId);
+  const finalZipStep = withFullFiscalYearCleanupSignal(zipStep, clearSignal);
+  const summary = toFullFiscalYearSummary(completedLedger, finalZipStep);
+  await persistSummary(deps, summary);
+  return { ok: true, flowStep: finalZipStep, flowSummary: summary };
+}
+
+function withFullFiscalYearCleanupSignal(
+  zipStep: PortalFlowStepResult,
+  clearSignal: string,
+): PortalFlowStepResult {
+  const retainedSignal = "full-fiscal-year-opfs-retained";
+  return {
+    ...zipStep,
+    safeSignals: Array.from(
+      new Set([
+        ...(clearSignal === "full-fiscal-year-opfs-cleared"
+          ? zipStep.safeSignals.filter((signal) => signal !== retainedSignal)
+          : zipStep.safeSignals),
+        clearSignal,
+        ...(clearSignal === "full-fiscal-year-opfs-cleared" ? [] : [retainedSignal]),
+      ]),
+    ),
+  };
+}
+
+function completedRunCleanupBlockedStep(
+  ledger: FiledReturnsFullFiscalYearLedger,
+): PortalFlowStepResult {
+  return {
+    connectorId: "gst",
+    scopeId: stepScopeId(ledger),
+    state: "blocked",
+    safeSignals: [
+      "full-fiscal-year-completed-staging-cleanup-failed",
+      "full-fiscal-year-opfs-clear-failed",
+      "full-fiscal-year-opfs-retained",
+    ],
+    safeMessage:
+      "Pack kept the completed fiscal-year run because its retained local staging could not be cleared safely.",
+    userAction: {
+      type: "RETRY_PORTAL_GENERATION",
+      message: "Retry after Pack can clear the retained fiscal-year staging.",
+      canResume: true,
+    },
+  };
+}
+
+function stepScopeId(ledger: FiledReturnsFullFiscalYearLedger): string {
+  return completeFullFiscalYearStep(ledger).scopeId;
 }

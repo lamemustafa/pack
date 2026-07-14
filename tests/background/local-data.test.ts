@@ -413,6 +413,74 @@ describe("Pack local data clearing", () => {
     });
   });
 
+  it("preserves a final ZIP retry summary over a blocked completed-target ledger", async () => {
+    const updatedAt = "2026-06-24T00:10:00.000Z";
+    const sessionSummary: FiledReturnsFlowSummary = {
+      scope: {
+        financialYear: "2026-27",
+        period: FULL_FISCAL_YEAR_PERIOD,
+        returnType: "GSTR-3B",
+      },
+      status: "blocked",
+      updatedAt,
+      completedPeriods: ["April"],
+      totalPeriods: 1,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "download-unconfirmed",
+        safeSignals: [
+          "full-fiscal-year-zip-download-unconfirmed",
+          "full-fiscal-year-opfs-retained",
+        ],
+        safeMessage: "The final ZIP download was not confirmed.",
+        userAction: {
+          type: "ALLOW_MULTIPLE_DOWNLOADS",
+          message: "Allow downloads, then retry the ZIP export.",
+          canResume: true,
+        },
+      },
+    };
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      key === "pack:full-fiscal-year-ledger"
+        ? {
+            [key]: {
+              schemaVersion: "1.0",
+              ledgerId: "ledger-ready-for-zip-retry",
+              revision: 3,
+              status: "blocked",
+              scope: sessionSummary.scope,
+              createdAt: "2026-06-24T00:00:00.000Z",
+              updatedAt,
+              targets: [
+                {
+                  targetId: "GSTR-3B:2026-27:April",
+                  financialYear: "2026-27",
+                  period: "April",
+                  returnType: "GSTR-3B",
+                  status: "downloaded",
+                  attempts: 1,
+                  safeSignals: ["full-fiscal-year-opfs-staged:PDF"],
+                  safeMessage: "Staged.",
+                  updatedAt,
+                },
+              ],
+            },
+          }
+        : {},
+    );
+    browserMocks.storage.session.get.mockResolvedValue({
+      "pack:last-filed-returns-flow-summary": sessionSummary,
+    });
+
+    const summary = await readCurrentFiledReturnsFlowSummary({
+      storageKeys: filedReturnsCurrentStateStorageKeys,
+      now: () => new Date("2026-06-24T00:11:00.000Z"),
+    });
+
+    expect(summary).toEqual(sessionSummary);
+  });
+
   it("prefers a newer single-period summary over a completed full-year ledger", async () => {
     const sessionSummary: FiledReturnsFlowSummary = {
       scope: {

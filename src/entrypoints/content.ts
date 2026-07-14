@@ -14,10 +14,6 @@ import {
   isPackMessage,
   type PackMessageResponse,
 } from "../core/messages";
-import {
-  MainWorldCaptureTransferStore,
-  isMainWorldCaptureChunkMessage,
-} from "../content/main-world-capture-transfer";
 
 const PACK_CONTENT_LISTENER_KEY = `__packContentListenerInstalledV${PACK_CONTENT_SCRIPT_PROTOCOL_VERSION}`;
 const PACK_ACTIVE_CONTENT_PROTOCOL_KEY = "__packActiveContentProtocolVersion";
@@ -41,12 +37,6 @@ export default defineContentScript({
     window[PACK_ACTIVE_CONTENT_PROTOCOL_KEY] = PACK_CONTENT_SCRIPT_PROTOCOL_VERSION;
     if (window[PACK_CONTENT_LISTENER_KEY]) return;
     window[PACK_CONTENT_LISTENER_KEY] = true;
-    const mainWorldCaptureTransfers = new MainWorldCaptureTransferStore();
-
-    window.addEventListener("message", (event: MessageEvent<unknown>) => {
-      if (event.source !== window || !isMainWorldCaptureChunkMessage(event.data)) return;
-      mainWorldCaptureTransfers.acceptChunk(event.data);
-    });
 
     const context = detectGstPortalContext(
       window.location,
@@ -265,40 +255,6 @@ export default defineContentScript({
             } satisfies PackMessageResponse),
           );
         return true;
-      }
-
-      if (message.type === "PACK_CONTENT_PREPARE_MAIN_WORLD_CAPTURE_V3") {
-        mainWorldCaptureTransfers.prepare(message.payload);
-        sendResponse({
-          ok: true,
-          mainWorldCapturePrepared: true,
-        } satisfies PackMessageResponse);
-        return false;
-      }
-
-      if (message.type === "PACK_CONTENT_TAKE_MAIN_WORLD_CAPTURE_CHUNK_V3") {
-        const chunk = mainWorldCaptureTransfers.takeChunk(message.payload);
-        if (typeof chunk !== "string") {
-          sendResponse({
-            ok: false,
-            error: "Pack could not read the captured filed-return chunk.",
-          } satisfies PackMessageResponse);
-          return false;
-        }
-        sendResponse({
-          ok: true,
-          mainWorldCaptureChunk: chunk,
-        } satisfies PackMessageResponse);
-        return false;
-      }
-
-      if (message.type === "PACK_CONTENT_CLEAR_MAIN_WORLD_CAPTURE_V3") {
-        mainWorldCaptureTransfers.clear(message.payload);
-        sendResponse({
-          ok: true,
-          mainWorldCaptureCleared: true,
-        } satisfies PackMessageResponse);
-        return false;
       }
 
       return false;

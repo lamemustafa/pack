@@ -5,8 +5,6 @@ import type { FiledReturnsReturnType } from "./filed-returns-return-types";
 
 export const PACK_OFFSCREEN_BLOB_URL_TARGET = "pack-offscreen-blob-url";
 export const PACK_OFFSCREEN_DATA_URL_MAX_LENGTH = 50 * 1024 * 1024;
-export const PACK_OFFSCREEN_DATA_URL_CHUNK_MAX_LENGTH = 1024 * 1024;
-export const PACK_OFFSCREEN_DATA_URL_MAX_CHUNKS = 200;
 
 export interface PackOffscreenCreateBlobUrlMessage {
   type: "PACK_OFFSCREEN_CREATE_BLOB_URL";
@@ -39,22 +37,6 @@ export interface PackOffscreenStageFiledReturnMessage {
   };
 }
 
-export interface PackOffscreenStageFiledReturnChunkMessage {
-  type: "PACK_OFFSCREEN_STAGE_FILED_RETURN_CHUNK";
-  target: typeof PACK_OFFSCREEN_BLOB_URL_TARGET;
-  payload: {
-    requestId: string;
-    transferId: string;
-    ledgerId: string;
-    zipPath: string;
-    returnType: FiledReturnsReturnType;
-    artifactType: FiledReturnsConcreteArtifactType;
-    index: number;
-    totalChunks: number;
-    chunk: string;
-  };
-}
-
 export interface PackOffscreenCreateFiledReturnZipMessage {
   type: "PACK_OFFSCREEN_CREATE_FILED_RETURN_ZIP";
   target: typeof PACK_OFFSCREEN_BLOB_URL_TARGET;
@@ -79,7 +61,6 @@ export type PackOffscreenBlobUrlMessage =
   | PackOffscreenCreateBlobUrlMessage
   | PackOffscreenRevokeBlobUrlMessage
   | PackOffscreenStageFiledReturnMessage
-  | PackOffscreenStageFiledReturnChunkMessage
   | PackOffscreenCreateFiledReturnZipMessage
   | PackOffscreenClearFiledReturnLedgerMessage;
 
@@ -120,7 +101,6 @@ export type PackOffscreenBlobUrlResponse =
         | "blob-url-failed"
         | "opfs-unavailable"
         | "stage-failed"
-        | "stage-chunk-failed"
         | "clear-failed"
         | "zip-invalid-entry"
         | "zip-empty"
@@ -144,24 +124,6 @@ export function isPackOffscreenBlobUrlMessage(
       isFiledReturnsReturnType(input.payload.returnType) &&
       isFiledReturnsConcreteArtifactType(input.payload.artifactType) &&
       isBoundedString(input.payload.dataUrl, 1, PACK_OFFSCREEN_DATA_URL_MAX_LENGTH)
-    );
-  }
-  if (input.type === "PACK_OFFSCREEN_STAGE_FILED_RETURN_CHUNK") {
-    return (
-      isBoundedString(input.payload.transferId, 8, 120) &&
-      isBoundedString(input.payload.ledgerId, 1, 120) &&
-      isSafeZipPath(input.payload.zipPath) &&
-      isFiledReturnsReturnType(input.payload.returnType) &&
-      isFiledReturnsConcreteArtifactType(input.payload.artifactType) &&
-      typeof input.payload.index === "number" &&
-      Number.isInteger(input.payload.index) &&
-      input.payload.index >= 0 &&
-      typeof input.payload.totalChunks === "number" &&
-      Number.isInteger(input.payload.totalChunks) &&
-      input.payload.totalChunks > 0 &&
-      input.payload.totalChunks <= PACK_OFFSCREEN_DATA_URL_MAX_CHUNKS &&
-      input.payload.index < input.payload.totalChunks &&
-      isBoundedString(input.payload.chunk, 1, PACK_OFFSCREEN_DATA_URL_CHUNK_MAX_LENGTH)
     );
   }
   if (input.type === "PACK_OFFSCREEN_CREATE_FILED_RETURN_ZIP") {

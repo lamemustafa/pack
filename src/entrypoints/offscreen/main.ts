@@ -15,17 +15,6 @@ import {
 } from "./filed-return-data-url";
 
 const blobUrlsByRequest = new Map<string, string>();
-const chunkedFiledReturnsByTransfer = new Map<
-  string,
-  {
-    chunks: string[];
-    artifactType: FiledReturnsConcreteArtifactType;
-    ledgerId: string;
-    returnType: FiledReturnsReturnType;
-    totalChunks: number;
-    zipPath: string;
-  }
->();
 type StagedFiledReturnPayload = {
   artifactType: FiledReturnsConcreteArtifactType;
   ledgerId: string;
@@ -53,49 +42,6 @@ async function handleMessage(
 ): Promise<PackOffscreenBlobUrlResponse> {
   if (message.type === "PACK_OFFSCREEN_STAGE_FILED_RETURN") {
     return stageFiledReturnDataUrl(message.payload, [message.payload.dataUrl]);
-  }
-
-  if (message.type === "PACK_OFFSCREEN_STAGE_FILED_RETURN_CHUNK") {
-    const key = message.payload.transferId;
-    const existing = chunkedFiledReturnsByTransfer.get(key);
-    const transfer = existing ?? {
-      chunks: [],
-      artifactType: message.payload.artifactType,
-      ledgerId: message.payload.ledgerId,
-      returnType: message.payload.returnType,
-      totalChunks: message.payload.totalChunks,
-      zipPath: safeZipEntryFilename(message.payload.zipPath),
-    };
-    if (
-      transfer.artifactType !== message.payload.artifactType ||
-      transfer.ledgerId !== message.payload.ledgerId ||
-      transfer.returnType !== message.payload.returnType ||
-      transfer.zipPath !== safeZipEntryFilename(message.payload.zipPath) ||
-      transfer.totalChunks !== message.payload.totalChunks
-    ) {
-      chunkedFiledReturnsByTransfer.delete(key);
-      return {
-        ok: false,
-        requestId: message.payload.requestId,
-        errorCategory: "stage-chunk-failed",
-      };
-    }
-    transfer.chunks[message.payload.index] = message.payload.chunk;
-    chunkedFiledReturnsByTransfer.set(key, transfer);
-
-    if (
-      transfer.chunks.filter((chunk) => typeof chunk === "string").length < transfer.totalChunks
-    ) {
-      return {
-        ok: true,
-        requestId: message.payload.requestId,
-        staged: true,
-        byteCountClass: "non-empty",
-      };
-    }
-
-    chunkedFiledReturnsByTransfer.delete(key);
-    return stageFiledReturnDataUrl(message.payload, transfer.chunks);
   }
 
   if (message.type === "PACK_OFFSCREEN_CREATE_FILED_RETURN_ZIP") {

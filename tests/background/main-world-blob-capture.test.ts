@@ -18,6 +18,7 @@ describe("capturePortalBlobDownload", () => {
     expect(source).not.toContain("CAPTURE_SUPPRESSION_SETTLE_MS");
     expect(source).not.toContain("MAIN_WORLD_CAPTURE_CHUNK_SIZE");
     expect(source).not.toContain("PACK_MAIN_WORLD_CAPTURE_MESSAGE_SOURCE");
+    expect(source).not.toContain("window.postMessage");
   });
 
   it("captures and suppresses portal data-url anchor downloads", async () => {
@@ -441,19 +442,16 @@ describe("capturePortalBlobDownload", () => {
     expect(nativeClicks).toBe(0);
   });
 
-  it("emits chunked capture metadata when a transfer id is provided", async () => {
+  it("returns captured bytes only through the extension injection result", async () => {
     const { documentRef, view } = installMainWorldDom(`
       <button data-pack-gstr2b-capture-action="capture-1">Download</button>
     `);
-    const chunks: string[] = [];
+    const pageMessages: unknown[] = [];
     view.addEventListener("message", (event) => {
-      const data = event.data as { chunk?: string; index?: number; source?: string };
-      if (data.source === "pack-main-world-capture-v1" && typeof data.index === "number") {
-        chunks[data.index] = data.chunk ?? "";
-      }
+      pageMessages.push(event.data);
     });
     documentRef.querySelector("button")?.addEventListener("click", () => {
-      const blob = new view.Blob(["%PDF-1.7 synthetic chunked"], {
+      const blob = new view.Blob(["%PDF-1.7 synthetic private capture"], {
         type: "application/pdf",
       });
       const anchor = documentRef.createElement("a");
@@ -462,21 +460,13 @@ describe("capturePortalBlobDownload", () => {
       anchor.click();
     });
 
-    const captured = await capturePortalBlobDownloadWithDiagnostics({
-      ...captureConfig(),
-      transferChunkSize: 12,
-      transferId: "transfer-1",
-    });
+    const captured = await capturePortalBlobDownloadWithDiagnostics(captureConfig());
 
-    expect(captured.capturedDownloadRequest).toBeNull();
-    expect(captured.chunkedCaptureRequest).toMatchObject({
+    expect(captured.capturedDownloadRequest).toMatchObject({
       actionId: "action-1",
-      transferId: "transfer-1",
+      dataUrl: expect.stringContaining("data:application/pdf;base64,"),
     });
-    expect(captured.chunkedCaptureRequest?.safeSignals).toEqual(
-      expect.arrayContaining(["gstr2b-main-world-chunked-capture"]),
-    );
-    expect(chunks.join("")).toContain("data:application/pdf;base64,");
+    expect(pageMessages).toEqual([]);
   });
 });
 

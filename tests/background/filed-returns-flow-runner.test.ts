@@ -463,6 +463,33 @@ describe("filed returns flow runner", () => {
         ],
       }),
     });
+    const completedLedgerCallIndex = vi
+      .mocked(browser.storage.local.set)
+      .mock.calls.findIndex(([value]) => {
+        const ledger = (value as Record<string, unknown>)["full-year-ledger"];
+        return (
+          typeof ledger === "object" &&
+          ledger !== null &&
+          (ledger as Record<string, unknown>).status === "complete"
+        );
+      });
+    const clearStagingCallIndex = vi
+      .mocked(browser.runtime.sendMessage)
+      .mock.calls.findIndex(
+        ([message]) =>
+          typeof message === "object" &&
+          message !== null &&
+          "type" in message &&
+          (message as unknown as Record<string, unknown>).type ===
+            "PACK_OFFSCREEN_CLEAR_FILED_RETURN_LEDGER",
+      );
+    expect(completedLedgerCallIndex).toBeGreaterThanOrEqual(0);
+    expect(clearStagingCallIndex).toBeGreaterThanOrEqual(0);
+    expect(
+      vi.mocked(browser.storage.local.set).mock.invocationCallOrder[completedLedgerCallIndex]!,
+    ).toBeLessThan(
+      vi.mocked(browser.runtime.sendMessage).mock.invocationCallOrder[clearStagingCallIndex]!,
+    );
   });
 
   it("stages GSTR-1 full-year PDF and Excel artifacts for one final ZIP", async () => {
@@ -640,19 +667,15 @@ describe("filed returns flow runner", () => {
     expect(
       vi.mocked(browser.storage.local.set).mock.invocationCallOrder[preExportLedgerCallIndex],
     ).toBeLessThan(vi.mocked(browser.downloads.download).mock.invocationCallOrder.at(-1) ?? 0);
-    const chunkedCaptureConfigs = vi
+    const stagedCaptureConfigs = vi
       .mocked(browser.scripting.executeScript)
       .mock.calls.map(([details]) => captureConfigFromScriptingDetails(details))
       .filter((config) => config?.controlId);
-    expect(chunkedCaptureConfigs).not.toHaveLength(0);
-    expect(chunkedCaptureConfigs).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          transferChunkSize: expect.any(Number),
-          transferId: expect.any(String),
-        }),
-      ]),
-    );
+    expect(stagedCaptureConfigs).not.toHaveLength(0);
+    for (const captureConfig of stagedCaptureConfigs) {
+      expect(captureConfig).not.toHaveProperty("transferId");
+      expect(captureConfig).not.toHaveProperty("transferChunkSize");
+    }
     expect(browser.runtime.sendMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         type: "PACK_OFFSCREEN_STAGE_FILED_RETURN",

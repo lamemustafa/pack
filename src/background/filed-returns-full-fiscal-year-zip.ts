@@ -243,8 +243,13 @@ async function exportStagedFiledReturnsZip({
     };
   }
 
-  const clearSignal = await clearStagedLedgerSignal(ledgerId, clearSignalPrefix);
-  await closeOffscreenBlobDocument();
+  const stagedLedgerSignal =
+    clearSignalPrefix === "full-fiscal-year"
+      ? retainedStagedLedgerSignal(clearSignalPrefix)
+      : await clearStagedLedgerSignal(ledgerId, clearSignalPrefix);
+  if (clearSignalPrefix === "single-period") {
+    await closeOffscreenBlobDocument();
+  }
 
   return {
     ...completeStep,
@@ -253,7 +258,7 @@ async function exportStagedFiledReturnsZip({
       `${clearSignalPrefix}-zip-download-started`,
       `${clearSignalPrefix}-zip-downloaded`,
       `${clearSignalPrefix}-zip-entry-count:${zip.zipEntryCount}`,
-      clearSignal,
+      stagedLedgerSignal,
       ...observed.safeSignals,
     ],
     safeMessage,
