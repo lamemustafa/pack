@@ -13,8 +13,7 @@ const ROLE_STATUS_API_PATH = "/returns/auth/api/rolestatus";
 const GSTR3B_QUARTERLY_ENABLE_PERIOD = "012021";
 
 type OpenResultResponse =
-  | { ok: true }
-  | { ok: false; reason: "role-status-unavailable" | "portal-storage-unavailable" };
+  { ok: true } | { ok: false; reason: "role-status-unavailable" | "portal-storage-unavailable" };
 
 export async function openFiledReturnFromApiSearch(
   documentRef: Document,
