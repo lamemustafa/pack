@@ -27,7 +27,8 @@ Portal credentials.
 The extension requests:
 
 - `downloads`;
-- `offscreen`;
+- `offscreen`, limited to the bundled Blob/OPFS ZIP workflow approved in
+  [GitHub issue #79](https://github.com/lamemustafa/pack/issues/79);
 - `scripting`;
 - `storage`;
 - exact host access for:
