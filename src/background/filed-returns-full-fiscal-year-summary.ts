@@ -15,7 +15,6 @@ import { isFullFiscalYearLedgerStale } from "./filed-returns-full-fiscal-year-le
 
 const COMPLETED_SUMMARY_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
   "downloaded",
-  "manually-observed",
   "not-filed",
 ]);
 
@@ -142,13 +141,16 @@ function isRecoverableFullFiscalYearTarget(target: FiledReturnsFullFiscalYearTar
     target.status === "running" ||
     target.status === "blocked" ||
     target.status === "failed" ||
-    target.status === "cancelled"
+    target.status === "cancelled" ||
+    target.status === "manually-observed"
   );
 }
 
 function hasRecoverableActionRequiredTarget(ledger: FiledReturnsFullFiscalYearLedger): boolean {
   return ledger.targets.some((target) =>
-    ["blocked", "failed", "cancelled", "download-unconfirmed"].includes(target.status),
+    ["blocked", "failed", "cancelled", "download-unconfirmed", "manually-observed"].includes(
+      target.status,
+    ),
   );
 }
 

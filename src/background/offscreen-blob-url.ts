@@ -10,8 +10,7 @@ const OFFSCREEN_DOCUMENT_PATH = "offscreen.html";
 const OFFSCREEN_JUSTIFICATION =
   "Create and revoke a temporary Blob URL for an explicit local GST return download.";
 export type OffscreenFiledReturnStageResult =
-  | { status: "staged" }
-  | { status: "failed"; errorCategory?: string };
+  { status: "staged" } | { status: "failed"; errorCategory?: string };
 
 let creatingOffscreenDocument: Promise<void> | null = null;
 

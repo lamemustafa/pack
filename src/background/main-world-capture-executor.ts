@@ -14,14 +14,18 @@ const MAIN_WORLD_CAPTURE_CHUNK_SIZE = 512 * 1024;
 export async function capturePortalBlobDownloadInMainWorld(
   tabId: number,
   request: FiledReturnsMainWorldCaptureRequest,
+  options: { chunkedTransfer?: boolean } = {},
 ): Promise<MainWorldCaptureOutcome> {
-  const transferId = createTransferId();
-  const captureRequest: FiledReturnsMainWorldCaptureRequest & { transferId: string } = {
+  const transferId = options.chunkedTransfer ? createTransferId() : null;
+  const captureRequest: FiledReturnsMainWorldCaptureRequest = {
     ...request,
-    transferChunkSize: MAIN_WORLD_CAPTURE_CHUNK_SIZE,
-    transferId,
+    ...(transferId ? { transferChunkSize: MAIN_WORLD_CAPTURE_CHUNK_SIZE, transferId } : {}),
   };
-  await prepareContentCaptureTransfer(tabId, captureRequest).catch(() => undefined);
+  if (transferId) {
+    await prepareContentCaptureTransfer(tabId, { ...captureRequest, transferId }).catch(
+      () => undefined,
+    );
+  }
   try {
     const timeoutMs = request.timeoutMs ?? MAIN_WORLD_CAPTURE_TIMEOUT_MS;
     const [injectionResult] = await withTimeout(

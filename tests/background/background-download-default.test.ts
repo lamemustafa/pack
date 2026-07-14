@@ -276,7 +276,6 @@ describe("background filed returns download defaults", () => {
     expect(sentActionMessageTypes()).toEqual([
       "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
       "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
-      "PACK_CONTENT_PREPARE_MAIN_WORLD_CAPTURE_V3",
     ]);
   });
 

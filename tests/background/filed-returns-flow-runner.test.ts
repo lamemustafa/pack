@@ -619,6 +619,40 @@ describe("filed returns flow runner", () => {
         url: "blob:chrome-extension://pack/full-year.zip",
       }),
     );
+    const preExportLedgerCallIndex = vi
+      .mocked(browser.storage.local.set)
+      .mock.calls.findIndex(([value]) => {
+        const ledger = (value as Record<string, unknown>)["full-year-ledger"];
+        if (typeof ledger !== "object" || ledger === null) return false;
+        const record = ledger as Record<string, unknown>;
+        return (
+          record.status === "blocked" &&
+          Array.isArray(record.targets) &&
+          record.targets.every(
+            (target) =>
+              typeof target === "object" &&
+              target !== null &&
+              (target as Record<string, unknown>).status === "downloaded",
+          )
+        );
+      });
+    expect(preExportLedgerCallIndex).toBeGreaterThanOrEqual(0);
+    expect(
+      vi.mocked(browser.storage.local.set).mock.invocationCallOrder[preExportLedgerCallIndex],
+    ).toBeLessThan(vi.mocked(browser.downloads.download).mock.invocationCallOrder.at(-1) ?? 0);
+    const chunkedCaptureConfigs = vi
+      .mocked(browser.scripting.executeScript)
+      .mock.calls.map(([details]) => captureConfigFromScriptingDetails(details))
+      .filter((config) => config?.controlId);
+    expect(chunkedCaptureConfigs).not.toHaveLength(0);
+    expect(chunkedCaptureConfigs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          transferChunkSize: expect.any(Number),
+          transferId: expect.any(String),
+        }),
+      ]),
+    );
     expect(browser.runtime.sendMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         type: "PACK_OFFSCREEN_STAGE_FILED_RETURN",
@@ -903,6 +937,63 @@ describe("filed returns flow runner", () => {
     expect(browser.storage.local.set).toHaveBeenCalledWith({
       "full-year-ledger": expect.objectContaining({ status: "blocked" }),
     });
+  });
+
+  it("retains staged full-year files when ZIP creation fails transiently", async () => {
+    const stagedLedger: FiledReturnsFullFiscalYearLedger = {
+      ...createFullFiscalYearLedger({
+        currentPeriod: "May",
+        status: "blocked",
+        targets: [
+          { period: "April", status: "downloaded" },
+          { period: "May", status: "downloaded" },
+        ],
+      }),
+      targets: createFullFiscalYearLedger({
+        targets: [
+          { period: "April", status: "downloaded" },
+          { period: "May", status: "downloaded" },
+        ],
+      }).targets.map((target) => ({
+        ...target,
+        safeSignals: ["full-fiscal-year-opfs-staged", "full-fiscal-year-opfs-staged:PDF"],
+      })),
+    };
+    vi.mocked(browser.runtime.sendMessage).mockImplementationOnce(async (message: unknown) => {
+      const requestId =
+        typeof message === "object" &&
+        message !== null &&
+        "payload" in message &&
+        typeof message.payload === "object" &&
+        message.payload !== null &&
+        "requestId" in message.payload
+          ? message.payload.requestId
+          : undefined;
+      return { ok: false, requestId, errorCategory: "zip-failed" };
+    });
+
+    const response = await exportFullFiscalYearZip(stagedLedger, {
+      connectorId: "gst",
+      scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+      state: "downloaded",
+      safeSignals: ["full-fiscal-year-complete"],
+      safeMessage: "Complete.",
+    });
+
+    expect(response).toMatchObject({
+      state: "blocked",
+      safeSignals: expect.arrayContaining([
+        "full-fiscal-year-zip-export-failed",
+        "full-fiscal-year-opfs-retained",
+      ]),
+      userAction: {
+        type: "RETRY_PORTAL_GENERATION",
+        canResume: true,
+      },
+    });
+    expect(browser.runtime.sendMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "PACK_OFFSCREEN_CLEAR_FILED_RETURN_LEDGER" }),
+    );
   });
 
   it("blocks full-year ZIP export when only some completed target artifacts were staged", async () => {
@@ -2378,6 +2469,11 @@ describe("filed returns flow runner", () => {
     );
     const observationContext = vi.mocked(observeBrowserDownloadById).mock.calls.at(-1)?.[2];
     expect(observationContext?.trustedDownloadIds?.has(81)).toBe(true);
+    const captureConfig = captureConfigFromScriptingDetails(
+      vi.mocked(browser.scripting.executeScript).mock.calls.at(-1)?.[0],
+    );
+    expect(captureConfig).not.toHaveProperty("transferId");
+    expect(captureConfig).not.toHaveProperty("transferChunkSize");
     expect(sendMessageToTabWithInjection.mock.calls.map(([, message]) => message.type)).toEqual([
       "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
       "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
@@ -7222,6 +7318,15 @@ function actionIdFromScriptingDetails(details: unknown): string {
     return String(firstArg.actionId);
   }
   return "action-captured";
+}
+
+function captureConfigFromScriptingDetails(details: unknown): Record<string, unknown> | undefined {
+  const args =
+    typeof details === "object" && details !== null && "args" in details ? details.args : null;
+  const firstArg = Array.isArray(args) ? args[0] : null;
+  return typeof firstArg === "object" && firstArg !== null
+    ? (firstArg as Record<string, unknown>)
+    : undefined;
 }
 
 function dataUrlForScriptingDetails(details: unknown): string {

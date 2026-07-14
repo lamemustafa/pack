@@ -249,9 +249,20 @@ async function stageFiledReturnDataUrl(
 }
 
 async function clearLedgerDirectory(ledgerId: string): Promise<void> {
-  const root = await navigator.storage.getDirectory();
-  const packs = await root.getDirectoryHandle("filed-return-packs", { create: false });
-  await packs.removeEntry(safeDirectorySegment(ledgerId), { recursive: true });
+  try {
+    const root = await navigator.storage.getDirectory();
+    const packs = await root.getDirectoryHandle("filed-return-packs", { create: false });
+    await packs.removeEntry(safeDirectorySegment(ledgerId), { recursive: true });
+  } catch (error) {
+    if (isNotFoundError(error)) return;
+    throw error;
+  }
+}
+
+function isNotFoundError(error: unknown): boolean {
+  return (
+    typeof error === "object" && error !== null && "name" in error && error.name === "NotFoundError"
+  );
 }
 
 async function getLedgerFileHandle(

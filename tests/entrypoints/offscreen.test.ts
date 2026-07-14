@@ -60,6 +60,34 @@ describe("offscreen Blob URL entrypoint", () => {
     ).toBe(false);
   });
 
+  it("treats an already-absent staged ledger as cleared", async () => {
+    vi.stubGlobal("navigator", {
+      storage: {
+        getDirectory: vi.fn(async () => ({
+          async getDirectoryHandle() {
+            throw { name: "NotFoundError" };
+          },
+        })),
+      },
+    });
+    await loadOffscreenEntrypoint();
+
+    const response = await sendOffscreenMessage({
+      type: "PACK_OFFSCREEN_CLEAR_FILED_RETURN_LEDGER",
+      target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+      payload: {
+        requestId: "clear-missing-request",
+        ledgerId: "ledger-missing",
+      },
+    });
+
+    expect(response).toEqual({
+      ok: true,
+      requestId: "clear-missing-request",
+      cleared: true,
+    });
+  });
+
   it("requires return and artifact metadata for filed-return staging messages", () => {
     expect(
       isPackOffscreenBlobUrlMessage({

@@ -93,6 +93,12 @@ export async function discardSinglePeriodFiledReturnsZip(ledgerId: string): Prom
   return clearSignal;
 }
 
+export async function discardFullFiscalYearFiledReturnsZip(ledgerId: string): Promise<string> {
+  const clearSignal = await clearStagedLedgerSignal(ledgerId, "full-fiscal-year");
+  await closeOffscreenBlobDocument();
+  return clearSignal;
+}
+
 async function exportStagedFiledReturnsZip({
   clearSignalPrefix,
   completeStep,
@@ -123,7 +129,10 @@ async function exportStagedFiledReturnsZip({
     ),
   });
   if (!zip) {
-    const clearSignal = await clearStagedLedgerSignal(ledgerId, clearSignalPrefix);
+    const stagedLedgerSignal =
+      clearSignalPrefix === "full-fiscal-year"
+        ? retainedStagedLedgerSignal(clearSignalPrefix)
+        : await clearStagedLedgerSignal(ledgerId, clearSignalPrefix);
     await closeOffscreenBlobDocument();
     return {
       ...completeStep,
@@ -131,9 +140,18 @@ async function exportStagedFiledReturnsZip({
       safeSignals: [
         ...completeStep.safeSignals,
         `${clearSignalPrefix}-zip-export-failed`,
-        clearSignal,
+        stagedLedgerSignal,
       ],
       safeMessage: zipFailedMessage,
+      ...(clearSignalPrefix === "full-fiscal-year"
+        ? {
+            userAction: {
+              type: "RETRY_PORTAL_GENERATION" as const,
+              message: "Retry the retained fiscal-year zip export.",
+              canResume: true,
+            },
+          }
+        : {}),
     };
   }
 

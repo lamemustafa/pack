@@ -61,6 +61,7 @@ export async function startMainWorldCapturedFiledReturnDownload({
     const captureOutcome = await capturePortalBlobDownloadInMainWorld(
       tabId,
       mainWorldCaptureRequest,
+      { chunkedTransfer: Boolean(deps.stageCapturedDownloads) },
     );
     capturedDownloadRequest = captureOutcome.capturedDownloadRequest;
     chunkedCaptureRequest = captureOutcome.chunkedCaptureRequest;

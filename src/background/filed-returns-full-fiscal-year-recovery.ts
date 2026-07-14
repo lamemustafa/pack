@@ -16,6 +16,7 @@ import { toFullFiscalYearSummary } from "./filed-returns-full-fiscal-year-summar
 import { clearFiledReturnsTargetReview } from "./filed-returns-target-review";
 import { normaliseFiledReturnsArtifactType } from "../core/filed-returns-artifacts";
 import { filedReturnsScopeId } from "../core/filed-returns-return-types";
+import { discardFullFiscalYearFiledReturnsZip } from "./filed-returns-full-fiscal-year-zip";
 
 const RECOVERABLE_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
   "pending",
@@ -24,6 +25,7 @@ const RECOVERABLE_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStat
   "blocked",
   "failed",
   "cancelled",
+  "manually-observed",
 ]);
 const FINAL_SIDE_EFFECT_SIGNALS = new Set([
   "filed-return-download-clicked",
@@ -130,13 +132,24 @@ async function discardFullFiscalYearRun(
     flowStep,
     now,
   );
-  const flowSummary = toFullFiscalYearSummary(cancelledLedger, flowStep);
-  delete flowSummary.fullFiscalYearRecovery;
+  const clearSignal = await discardFullFiscalYearFiledReturnsZip(ledger.ledgerId);
+  if (clearSignal !== "full-fiscal-year-opfs-cleared") {
+    const cleanupStep = discardCleanupFailedStep(ledger);
+    const cleanupSummary = toFullFiscalYearSummary(ledger, cleanupStep);
+    await persistSummary(cleanupSummary, deps);
+    return { ok: true, flowStep: cleanupStep, flowSummary: cleanupSummary };
+  }
 
+  const clearedFlowStep: PortalFlowStepResult = {
+    ...flowStep,
+    safeSignals: [...flowStep.safeSignals, clearSignal],
+  };
+  const flowSummary = toFullFiscalYearSummary(cancelledLedger, clearedFlowStep);
+  delete flowSummary.fullFiscalYearRecovery;
   await browser.storage.local.remove(deps.storageKeys.fullFiscalYearLedger);
   await persistSummary(flowSummary, deps);
   await clearLegacyTargetReview(target, deps);
-  return { ok: true, flowStep, flowSummary };
+  return { ok: true, flowStep: clearedFlowStep, flowSummary };
 }
 
 async function runRecoveryCriticalSection<T>(action: () => Promise<T>): Promise<T> {
@@ -250,8 +263,16 @@ function manuallyObservedStep(target: FiledReturnsFullFiscalYearTarget): PortalF
     connectorId: "gst",
     scopeId: filedReturnsScopeId(target.returnType),
     state: "user-action-required",
-    safeSignals: ["filed-returns-target-manually-observed"],
-    safeMessage: `Pack recorded ${target.period} as manually observed after user review of browser Downloads.`,
+    safeSignals: [
+      "filed-returns-target-manually-observed",
+      "full-fiscal-year-manual-observation-needs-restaging",
+    ],
+    safeMessage: `Pack recorded the browser download for ${target.period}, but still needs a retry to stage it in the fiscal-year zip.`,
+    userAction: {
+      type: "RETRY_PORTAL_GENERATION",
+      message: `Retry ${target.period} so Pack can stage the verified file in the fiscal-year zip.`,
+      canResume: true,
+    },
   };
 }
 
@@ -269,6 +290,26 @@ function discardedRunStep(target: FiledReturnsFullFiscalYearTarget): PortalFlowS
     state: "user-action-required",
     safeSignals: ["full-fiscal-year-run-discarded"],
     safeMessage: `Pack discarded the saved full fiscal-year run before resuming ${target.period}.`,
+  };
+}
+
+function discardCleanupFailedStep(ledger: FiledReturnsFullFiscalYearLedger): PortalFlowStepResult {
+  return {
+    connectorId: "gst",
+    scopeId: filedReturnsScopeId(ledger.scope.returnType),
+    state: "blocked",
+    safeSignals: [
+      "full-fiscal-year-run-discard-cleanup-failed",
+      "full-fiscal-year-opfs-clear-failed",
+      "full-fiscal-year-opfs-retained",
+    ],
+    safeMessage:
+      "Pack could not clear the retained fiscal-year files, so it kept the saved run available for another discard attempt.",
+    userAction: {
+      type: "RETRY_PORTAL_GENERATION",
+      message: "Retry discarding the saved run.",
+      canResume: true,
+    },
   };
 }
 

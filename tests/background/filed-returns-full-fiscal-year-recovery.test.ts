@@ -19,14 +19,21 @@ const browserMocks = vi.hoisted(() => ({
     },
   },
 }));
+const zipMocks = vi.hoisted(() => ({
+  discardFullFiscalYearFiledReturnsZip: vi.fn(async () => "full-fiscal-year-opfs-cleared"),
+}));
 
 vi.mock("wxt/browser", () => ({
   browser: browserMocks,
 }));
+vi.mock("../../src/background/filed-returns-full-fiscal-year-zip", () => zipMocks);
 
 describe("full fiscal-year recovery", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    zipMocks.discardFullFiscalYearFiledReturnsZip.mockResolvedValue(
+      "full-fiscal-year-opfs-cleared",
+    );
   });
 
   it("rejects stale target recovery revisions without mutating storage", async () => {
@@ -151,7 +158,7 @@ describe("full fiscal-year recovery", () => {
       ok: true,
       flowStep: {
         state: "user-action-required",
-        safeSignals: ["full-fiscal-year-run-discarded"],
+        safeSignals: ["full-fiscal-year-run-discarded", "full-fiscal-year-opfs-cleared"],
       },
       flowSummary: {
         status: "cancelled",
@@ -159,6 +166,7 @@ describe("full fiscal-year recovery", () => {
       },
     });
     expect(JSON.stringify(response)).not.toContain("fullFiscalYearRecovery");
+    expect(zipMocks.discardFullFiscalYearFiledReturnsZip).toHaveBeenCalledWith("ledger-existing");
     expect(browser.storage.local.remove).toHaveBeenCalledWith("full-year-ledger");
     expect(browser.storage.local.remove).not.toHaveBeenCalledWith("target-review");
     expect(browser.storage.session.set).toHaveBeenCalledWith({
@@ -204,7 +212,7 @@ describe("full fiscal-year recovery", () => {
     expect(response).toMatchObject({
       ok: true,
       flowStep: {
-        safeSignals: ["full-fiscal-year-run-discarded"],
+        safeSignals: ["full-fiscal-year-run-discarded", "full-fiscal-year-opfs-cleared"],
       },
     });
     expect(JSON.stringify(response)).not.toContain("fullFiscalYearRecovery");
@@ -212,7 +220,7 @@ describe("full fiscal-year recovery", () => {
     expect(browser.storage.local.remove).not.toHaveBeenCalledWith("target-review");
   });
 
-  it("records a manually observed full-year target without marking it browser-confirmed", async () => {
+  it("keeps a manually observed full-year target recoverable for ZIP restaging", async () => {
     mockLocalStorageGet({
       "full-year-ledger": createRecoveryLedger({ revision: 2 }),
     });
@@ -231,11 +239,17 @@ describe("full fiscal-year recovery", () => {
       ok: true,
       flowStep: {
         state: "user-action-required",
-        safeSignals: ["filed-returns-target-manually-observed"],
+        safeSignals: [
+          "filed-returns-target-manually-observed",
+          "full-fiscal-year-manual-observation-needs-restaging",
+        ],
       },
       flowSummary: {
-        status: "complete",
-        completedPeriods: ["April"],
+        status: "partial",
+        completedPeriods: [],
+        fullFiscalYearRecovery: {
+          targetStatus: "manually-observed",
+        },
       },
     });
     expect(JSON.stringify(response)).not.toContain("browser-confirmed");
@@ -246,9 +260,82 @@ describe("full fiscal-year recovery", () => {
     });
     expect(browser.storage.session.set).toHaveBeenCalledWith({
       completion: expect.objectContaining({
-        completedPeriods: ["April"],
+        completedPeriods: [],
+        fullFiscalYearRecovery: expect.objectContaining({
+          targetStatus: "manually-observed",
+        }),
       }),
     });
+  });
+
+  it("resets a manually observed target when the user retries ZIP staging", async () => {
+    mockLocalStorageGet({
+      "full-year-ledger": createRecoveryLedger({
+        revision: 2,
+        targetStatus: "manually-observed",
+        safeSignals: [
+          "filed-returns-target-manually-observed",
+          "full-fiscal-year-manual-observation-needs-restaging",
+        ],
+      }),
+    });
+
+    const recovery = await prepareFullFiscalYearTargetRetry(
+      {
+        ledgerId: "ledger-existing",
+        targetId: "GSTR-3B:2026-27:April",
+        expectedRevision: 2,
+      },
+      recoveryDeps(),
+    );
+
+    expect(recovery).toMatchObject({
+      ok: true,
+      ledger: {
+        status: "running",
+        targets: [expect.objectContaining({ status: "pending" })],
+      },
+    });
+  });
+
+  it("retains the saved ledger when discard cannot clear staged files", async () => {
+    zipMocks.discardFullFiscalYearFiledReturnsZip.mockResolvedValueOnce(
+      "full-fiscal-year-opfs-clear-failed",
+    );
+    mockLocalStorageGet({
+      "full-year-ledger": createRecoveryLedger({
+        revision: 2,
+        targetStatus: "blocked",
+        safeSignals: ["full-fiscal-year-opfs-staged:PDF"],
+      }),
+    });
+
+    const response = await resolveFullFiscalYearTarget(
+      {
+        ledgerId: "ledger-existing",
+        targetId: "GSTR-3B:2026-27:April",
+        expectedRevision: 2,
+      },
+      "cancelled",
+      recoveryDeps(),
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "blocked",
+        safeSignals: expect.arrayContaining([
+          "full-fiscal-year-run-discard-cleanup-failed",
+          "full-fiscal-year-opfs-retained",
+        ]),
+      },
+      flowSummary: {
+        fullFiscalYearRecovery: {
+          targetStatus: "blocked",
+        },
+      },
+    });
+    expect(browser.storage.local.remove).not.toHaveBeenCalledWith("full-year-ledger");
   });
 
   it("rejects manual observation when the target has no final-click evidence", async () => {

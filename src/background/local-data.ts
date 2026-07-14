@@ -2,6 +2,7 @@ import { browser } from "wxt/browser";
 import type { PackMessageResponse } from "../core/messages";
 import { readActiveFiledReturnsRunSummary } from "./filed-returns-active-run";
 import { isFullFiscalYearLedger } from "./filed-returns-full-fiscal-year-ledger";
+import { discardFullFiscalYearFiledReturnsZip } from "./filed-returns-full-fiscal-year-zip";
 import { readCurrentFiledReturnsTargetReviewSummary } from "./filed-returns-target-review";
 
 export interface PackLocalDataDeps {
@@ -22,6 +23,18 @@ export async function clearPackLocalDataWithRecoveryGuard(
       error:
         "Pack has unresolved filed-return recovery state. Cancel or resolve the run before clearing local data.",
     };
+  }
+
+  const ledger = await readLocalValue<unknown>(deps.storageKeys.fullFiscalYearLedger);
+  if (isFullFiscalYearLedger(ledger)) {
+    const clearSignal = await discardFullFiscalYearFiledReturnsZip(ledger.ledgerId);
+    if (clearSignal !== "full-fiscal-year-opfs-cleared") {
+      return {
+        ok: false,
+        error:
+          "Pack could not clear retained fiscal-year files. Retry clearing local data before removing the saved ledger.",
+      };
+    }
   }
 
   await browser.storage.session.clear();

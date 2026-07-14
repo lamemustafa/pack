@@ -19,7 +19,6 @@ const ACTIVE_LEDGER_STALE_MS = 30_000;
 const FULL_FISCAL_YEAR_PLAN_VERSION = "filed-returns-monthly-v2";
 const POSITIVE_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
   "downloaded",
-  "manually-observed",
   "not-filed",
 ]);
 
@@ -263,6 +262,7 @@ function ledgerStatus(
 ): FiledReturnsFullFiscalYearLedger["status"] {
   if (targets.every((target) => POSITIVE_TARGET_STATUSES.has(target.status))) return "complete";
   if (lastStatus === "cancelled") return "cancelled";
+  if (lastStatus === "manually-observed") return "partial";
   if (POSITIVE_TARGET_STATUSES.has(lastStatus)) return "partial";
   return "blocked";
 }

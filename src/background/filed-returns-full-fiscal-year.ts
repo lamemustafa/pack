@@ -186,6 +186,10 @@ async function completeRun(
     updatedAt: now.toISOString(),
   };
   const step = completeFullFiscalYearStep(readyLedger);
+  // Persist a resumable pre-export state before the browser download can suspend
+  // this MV3 worker. A later start can then retry the retained staged ZIP without
+  // re-running already completed portal targets.
+  await persistLedger(deps, readyLedger);
   const zipStep = await exportFullFiscalYearZip(readyLedger, step);
   if (zipStep.state !== "downloaded") {
     const summary = toFullFiscalYearSummary(readyLedger, zipStep);
