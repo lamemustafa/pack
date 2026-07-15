@@ -192,7 +192,55 @@ describe("live run evidence", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.errors).toContain(
-        "pass evidence must include one downloaded evidence entry per downloaded target",
+        "pass evidence must include one unique period per downloaded target",
+      );
+    }
+  });
+
+  it("rejects duplicate downloaded target and action identities", () => {
+    const first = createValidEvidence().downloadEvidence[0];
+    const result = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      counts: { ...createValidEvidence().counts, downloaded: 2, notFiled: 10 },
+      downloadEvidence: [first, { ...first }],
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors).toEqual(
+        expect.arrayContaining([
+          "pass evidence must include one unique period per downloaded target",
+          "pass evidence cannot duplicate a downloaded period and artifact",
+          "pass evidence cannot reuse a downloaded actionId",
+        ]),
+      );
+    }
+  });
+
+  it("rejects unknown endpoints and unresolved statuses from pass evidence", () => {
+    const first = createValidEvidence().downloadEvidence[0];
+    const unknownEndpoint = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      downloadEvidence: [{ ...first, endpointClass: "unknown" }],
+    });
+    const failedRow = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      downloadEvidence: [
+        first,
+        { ...first, actionId: "action-failed", period: "May", status: "failed" },
+      ],
+    });
+
+    expect(unknownEndpoint.ok).toBe(false);
+    if (!unknownEndpoint.ok) {
+      expect(unknownEndpoint.errors).toContain(
+        "downloadEvidence[0].endpointClass cannot be unknown for passed downloads",
+      );
+    }
+    expect(failedRow.ok).toBe(false);
+    if (!failedRow.ok) {
+      expect(failedRow.errors).toContain(
+        "pass evidence cannot include unresolved downloadEvidence statuses",
       );
     }
   });

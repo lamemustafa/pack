@@ -235,17 +235,7 @@ function validateDownloadEvidence(
   if (evidence.outcome === "pass" && input.length === 0) {
     errors.push("pass evidence must include downloadEvidence");
   }
-  const downloadedEvidenceCount = input.filter(
-    (entry) => isRecord(entry) && entry.status === "downloaded",
-  ).length;
-  if (
-    evidence.outcome === "pass" &&
-    isRecord(evidence.counts) &&
-    typeof evidence.counts.downloaded === "number" &&
-    downloadedEvidenceCount < evidence.counts.downloaded
-  ) {
-    errors.push("pass evidence must include one downloaded evidence entry per downloaded target");
-  }
+  validatePassDownloadEvidenceReconciliation(input, evidence, errors);
   input.forEach((entry, index) => {
     if (!isRecord(entry)) {
       errors.push(`downloadEvidence[${index}] must be an object`);
@@ -284,7 +274,7 @@ function validateDownloadEvidence(
       `downloadEvidence[${index}].downloadPathClass`,
       errors,
     );
-    validateDownloadEndpointPathConsistency(entry, index, errors);
+    validateDownloadEndpointPathConsistency(entry, evidence, index, errors);
     requireOneOf(entry.status, DOWNLOAD_STATUSES, `downloadEvidence[${index}].status`, errors);
     requireOneOf(
       entry.askWhereToSave,
@@ -314,8 +304,50 @@ function validateDownloadEvidence(
   });
 }
 
+function validatePassDownloadEvidenceReconciliation(
+  entries: unknown[],
+  evidence: Record<string, unknown>,
+  errors: string[],
+): void {
+  if (evidence.outcome !== "pass" || !isRecord(evidence.counts)) return;
+  const downloadedEntries = entries.filter(
+    (entry): entry is Record<string, unknown> => isRecord(entry) && entry.status === "downloaded",
+  );
+  const downloadedTargetPeriods = new Set(
+    downloadedEntries
+      .map((entry) => entry.period)
+      .filter((period): period is string => typeof period === "string"),
+  );
+  if (
+    typeof evidence.counts.downloaded === "number" &&
+    downloadedTargetPeriods.size < evidence.counts.downloaded
+  ) {
+    errors.push("pass evidence must include one unique period per downloaded target");
+  }
+  const targetIdentities = new Set(
+    downloadedEntries.map((entry) => `${String(entry.period)}:${String(entry.artifactType)}`),
+  );
+  if (targetIdentities.size !== downloadedEntries.length) {
+    errors.push("pass evidence cannot duplicate a downloaded period and artifact");
+  }
+  const actionIds = new Set(downloadedEntries.map((entry) => entry.actionId));
+  if (actionIds.size !== downloadedEntries.length) {
+    errors.push("pass evidence cannot reuse a downloaded actionId");
+  }
+  if (
+    entries.some(
+      (entry) =>
+        isRecord(entry) &&
+        ["blocked", "failed", "user-action-required", "unsupported"].includes(String(entry.status)),
+    )
+  ) {
+    errors.push("pass evidence cannot include unresolved downloadEvidence statuses");
+  }
+}
+
 function validateDownloadEndpointPathConsistency(
   entry: Record<string, unknown>,
+  evidence: Record<string, unknown>,
   index: number,
   errors: string[],
 ): void {
@@ -324,8 +356,15 @@ function validateDownloadEndpointPathConsistency(
   }
   const endpoint = entry.endpointClass;
   const path = entry.downloadPathClass;
+  if (endpoint === "unknown") {
+    if (evidence.outcome === "pass" || entry.status === "downloaded") {
+      errors.push(
+        `downloadEvidence[${index}].endpointClass cannot be unknown for passed downloads`,
+      );
+    }
+    return;
+  }
   const matchesRuntimePath =
-    endpoint === "unknown" ||
     (endpoint === "gstr3b-getgenpdf" && path.startsWith("extension-direct-")) ||
     (endpoint.includes("portal-blob-captured-download") &&
       path.startsWith("captured-portal-request-")) ||
