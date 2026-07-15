@@ -222,7 +222,7 @@ async function launchExtensionContext() {
 }
 
 async function resolveExtensionId(browserContext) {
-  const existingServiceWorker = browserContext.serviceWorkers()[0];
+  const existingServiceWorker = findExtensionServiceWorker(browserContext);
   if (existingServiceWorker) return new URL(existingServiceWorker.url()).host;
 
   const wakePage = await browserContext.newPage();
@@ -233,7 +233,7 @@ async function resolveExtensionId(browserContext) {
   try {
     const deadline = Date.now() + 15_000;
     while (Date.now() < deadline) {
-      const serviceWorker = browserContext.serviceWorkers()[0];
+      const serviceWorker = findExtensionServiceWorker(browserContext);
       if (serviceWorker) return new URL(serviceWorker.url()).host;
       const extensionId = await readLoadedExtensionIdFromPreferences();
       if (extensionId) return extensionId;
@@ -263,20 +263,45 @@ async function readLoadedExtensionIdFromPreferences() {
 }
 
 async function waitForServiceWorker(browserContext, extensionId) {
-  let [serviceWorker] = browserContext.serviceWorkers();
+  let serviceWorker = findExtensionServiceWorker(browserContext, extensionId);
   if (!serviceWorker) {
     const wakePage = await browserContext.newPage();
     attachPageLogging(wakePage);
-    await wakePage.goto(`chrome-extension://${extensionId}/popup.html`, {
-      waitUntil: "domcontentloaded",
-    });
+    const serviceWorkerEvent = browserContext
+      .waitForEvent("serviceworker", {
+        predicate: (worker) => isExtensionServiceWorker(worker, extensionId),
+        timeout: 15_000,
+      })
+      .catch(() => null);
     try {
-      serviceWorker = await browserContext.waitForEvent("serviceworker", { timeout: 15_000 });
+      await wakePage.goto(`chrome-extension://${extensionId}/popup.html`, {
+        waitUntil: "domcontentloaded",
+      });
+      serviceWorker =
+        findExtensionServiceWorker(browserContext, extensionId) ?? (await serviceWorkerEvent);
     } finally {
       await wakePage.close();
     }
   }
+  if (!serviceWorker) throw new Error("Pack extension service worker did not start.");
   return serviceWorker;
+}
+
+function findExtensionServiceWorker(browserContext, extensionId) {
+  return browserContext
+    .serviceWorkers()
+    .find((worker) => isExtensionServiceWorker(worker, extensionId));
+}
+
+function isExtensionServiceWorker(worker, extensionId) {
+  try {
+    const workerUrl = new URL(worker.url());
+    return (
+      workerUrl.protocol === "chrome-extension:" && (!extensionId || workerUrl.host === extensionId)
+    );
+  } catch {
+    return false;
+  }
 }
 
 async function assertServiceWorkerStarted(serviceWorker) {

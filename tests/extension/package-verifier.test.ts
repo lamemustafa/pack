@@ -403,6 +403,14 @@ describe("extension package verifier", () => {
     expect(script).toContain("readLoadedExtensionIdFromPreferences");
     expect(script).toContain("chrome-extension://${extensionId}/popup.html");
     expect(script).toContain('waitForEvent("serviceworker"');
+    expect(script.indexOf('waitForEvent("serviceworker"')).toBeLessThan(
+      script.indexOf("wakePage.goto(`chrome-extension://${extensionId}/popup.html`"),
+    );
+    expect(script).toContain("findExtensionServiceWorker(browserContext, extensionId)");
+    expect(script).toContain(
+      "predicate: (worker) => isExtensionServiceWorker(worker, extensionId)",
+    );
+    expect(script).toContain('workerUrl.protocol === "chrome-extension:"');
     expect(script).toContain("assertNoBrowserRuntimeFailures");
     expect(script).toContain("Pack host permissions must stay on the approved GST allow-list");
     expect(script).toContain("buildApprovedOrigins(manifest)");
