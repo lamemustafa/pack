@@ -69,14 +69,19 @@ export function verifyVisibleGstr2bPeriod(
 
   const visiblePeriod = extractGstr2bLabelValue(normalisedText, "return period");
   const visibleFinancialYear = extractGstr2bLabelValue(normalisedText, "financial year");
-  const monthMatches = visiblePeriod
-    ? matchesAcceptedText(visiblePeriod, acceptedFiledReturnsMonthTexts(scope.period))
-    : acceptedFiledReturnsMonthTexts(scope.period).some((period) =>
-        matchesAcceptedText(normalisedText, [period]),
-      );
-  const yearMatches = visibleFinancialYear
-    ? matchesAcceptedText(visibleFinancialYear, [scope.financialYear])
-    : expectedCalendarYears(scope).some((year) => normalisedText.includes(year));
+  const statementScope = extractGstr2bStatementScope(documentRef);
+  const verifiedPeriod = visiblePeriod ?? statementScope?.period ?? null;
+  const verifiedFinancialYear = visibleFinancialYear ?? statementScope?.financialYear ?? null;
+  if (!verifiedPeriod || !verifiedFinancialYear) {
+    // Whole-page month/year matches are not target evidence: generated-on text and table
+    // content can mention another period. Only labels or the portal statement heading qualify.
+    return gstr2bPeriodMismatch(["gstr2b-labelled-period-evidence-missing"]);
+  }
+  const monthMatches = matchesAcceptedText(
+    verifiedPeriod,
+    acceptedFiledReturnsMonthTexts(scope.period),
+  );
+  const yearMatches = matchesAcceptedText(verifiedFinancialYear, [scope.financialYear]);
   if (monthMatches && yearMatches) return null;
 
   return gstr2bPeriodMismatch([]);
@@ -220,13 +225,75 @@ function extractGstr2bLabelValue(
   return match?.[1]?.trim() ?? null;
 }
 
-function expectedCalendarYears(scope: FiledReturnsDownloadScope): string[] {
-  const match = /^(20\d{2})-\d{2}$/.exec(scope.financialYear);
-  if (!match?.[1]) return [];
-  const startYear = Number(match[1]);
-  return scope.period === "January" || scope.period === "February" || scope.period === "March"
-    ? [String(startYear + 1)]
-    : [String(startYear)];
+function extractGstr2bStatementScope(
+  documentRef: Document,
+): { financialYear: string; period: string } | null {
+  const statementTextSelector = "h1, h2, h3, h4, h5, h6, p, div, span, [role='heading']";
+  const monthPattern =
+    "january|february|march|april|may|june|july|august|september|october|november|december";
+  const statementPattern = new RegExp(
+    `^(${monthPattern})\\s+(20\\d{2})\\s+auto\\s*-?\\s*drafted\\s+itc\\s+statement$`,
+    "i",
+  );
+  const statementElements = Array.from(documentRef.querySelectorAll(statementTextSelector)).filter(
+    isVisibleStatementElement,
+  );
+  for (const element of statementElements) {
+    const text = normaliseText(element.textContent || "");
+    const match = statementPattern.exec(text);
+    if (!match?.[1] || !match[2]) continue;
+    return statementScopeFromMonthAndYear(match[1], Number(match[2]));
+  }
+
+  const statementDescriptors = statementElements.filter((element) =>
+    /^auto\s*-?\s*drafted\s+itc\s+statement\s+for\s+the\s+month$/i.test(
+      normaliseText(element.textContent || ""),
+    ),
+  );
+  if (statementDescriptors.length === 0) return null;
+
+  const standalonePeriodPattern = new RegExp(`^(${monthPattern})\\s+(20\\d{2})$`, "i");
+  const scopes = statementDescriptors
+    .flatMap((descriptor) =>
+      Array.from(descriptor.parentElement?.children ?? [])
+        .filter((element) => element.matches(statementTextSelector))
+        .filter(isVisibleStatementElement),
+    )
+    .map((element) => standalonePeriodPattern.exec(normaliseText(element.textContent || "")))
+    .map((match) =>
+      match?.[1] && match[2] ? statementScopeFromMonthAndYear(match[1], Number(match[2])) : null,
+    )
+    .filter((scope): scope is { financialYear: string; period: string } => Boolean(scope));
+  const uniqueScopes = new Map(
+    scopes.map((scope) => [`${scope.financialYear}:${normaliseText(scope.period)}`, scope]),
+  );
+  return uniqueScopes.size === 1 ? ([...uniqueScopes.values()][0] ?? null) : null;
+}
+
+function isVisibleStatementElement(element: Element): boolean {
+  if (element.closest("script, style, template, noscript, [hidden], [aria-hidden='true']")) {
+    return false;
+  }
+  const view = element.ownerDocument.defaultView;
+  for (let current: Element | null = element; current; current = current.parentElement) {
+    const htmlElement = current as HTMLElement;
+    const style = view?.getComputedStyle(htmlElement);
+    if (style?.display === "none" || style?.visibility === "hidden") return false;
+  }
+  return true;
+}
+
+function statementScopeFromMonthAndYear(
+  period: string,
+  calendarYear: number,
+): { financialYear: string; period: string } {
+  const financialYearStart = ["january", "february", "march"].includes(normaliseText(period))
+    ? calendarYear - 1
+    : calendarYear;
+  return {
+    financialYear: `${financialYearStart}-${String((financialYearStart + 1) % 100).padStart(2, "0")}`,
+    period,
+  };
 }
 
 function findGstr2bSummaryDashboardBackControl(documentRef: Document): HTMLElement | null {

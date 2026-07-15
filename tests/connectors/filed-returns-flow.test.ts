@@ -1112,18 +1112,22 @@ describe("filed returns guided flow", () => {
       searchClicked += 1;
     });
 
-    const result = await runFiledReturnsDownloadStep(documentRef, {
+    const scope: FiledReturnsDownloadScope = {
       artifactType: "PDF",
       financialYear: "2026-27",
       period: "May",
       returnType: "GSTR-2B",
-    });
+    };
 
+    const searchResult = await runFiledReturnsDownloadStep(documentRef, scope);
+    const result = await runFiledReturnsDownloadStep(documentRef, scope);
+
+    expect(searchResult.safeSignals).toContain("search-clicked");
     expect(result.state).toBe("clicked");
     expect(result.safeSignals).toContain("gstr2b-dashboard-view-clicked");
     expect(gstr1ViewClicked).toBe(0);
     expect(gstr2bViewClicked).toBe(1);
-    expect(searchClicked).toBe(0);
+    expect(searchClicked).toBe(1);
   });
 
   it("waits for the GSTR-2B return dashboard controls when the portal shell is still blank", async () => {
@@ -1181,8 +1185,166 @@ describe("filed returns guided flow", () => {
         "gstr2b-dashboard-selected-year:2026-27",
       ]),
     );
-    expect(result.safeMessage).toContain("waiting for the remaining dashboard controls");
+    expect(result.safeMessage).toContain("waiting for target-bound dashboard controls");
     expect(result.safeMessage).toContain("Diagnostic signals:");
+  });
+
+  it("does not open an unscoped GSTR-2B View when dashboard filters are absent", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <article>
+            <h3>Auto-drafted ITC Statement GSTR-2B</h3>
+            <button data-gstr2b-view>VIEW</button>
+          </article>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/dashboard",
+    );
+    makeLayoutVisible(documentRef);
+    let viewClicked = 0;
+    documentRef.querySelector("[data-gstr2b-view]")?.addEventListener("click", () => {
+      viewClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-2B",
+    });
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toContain("gstr2b-dashboard-view-unscoped");
+    expect(result.safeSignals).not.toContain("gstr2b-dashboard-view-clicked");
+    expect(viewClicked).toBe(0);
+  });
+
+  it("preserves GSTR-2B View recovery when scoped search controls disappear", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <form data-filters>
+            <select name="fin"><option selected>2026-27</option></select>
+            <select name="quarter"><option selected>Quarter 1 (Apr - Jun)</option></select>
+            <select name="mon"><option selected>May</option></select>
+            <button type="button">Search</button>
+          </form>
+          <article>
+            <h3>Auto-drafted ITC Statement GSTR-2B</h3>
+            <button data-gstr2b-view>VIEW</button>
+          </article>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/dashboard",
+    );
+    makeLayoutVisible(documentRef);
+    let viewClicked = 0;
+    documentRef.querySelector("[data-gstr2b-view]")?.addEventListener("click", () => {
+      viewClicked += 1;
+    });
+    const scope: FiledReturnsDownloadScope = {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-2B",
+    };
+
+    const searchResult = await runFiledReturnsDownloadStep(documentRef, scope);
+    documentRef.querySelector("[data-filters]")?.remove();
+    const viewResult = await runFiledReturnsDownloadStep(documentRef, scope);
+
+    expect(searchResult.safeSignals).toContain("search-clicked");
+    expect(viewResult.safeSignals).toContain("gstr2b-dashboard-view-clicked");
+    expect(viewClicked).toBe(1);
+  });
+
+  it("preserves target-bound GSTR-2B View recovery after the search retry window", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <form data-filters>
+            <select name="fin"><option selected>2026-27</option></select>
+            <select name="quarter"><option selected>Quarter 1 (Apr - Jun)</option></select>
+            <select name="mon"><option selected>May</option></select>
+            <button type="button">Search</button>
+          </form>
+          <article>
+            <h3>Auto-drafted ITC Statement GSTR-2B</h3>
+            <button data-gstr2b-view>VIEW</button>
+          </article>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/dashboard",
+    );
+    makeLayoutVisible(documentRef);
+    let viewClicked = 0;
+    documentRef.querySelector("[data-gstr2b-view]")?.addEventListener("click", () => {
+      viewClicked += 1;
+    });
+    const scope: FiledReturnsDownloadScope = {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-2B",
+    };
+    const now = vi.spyOn(Date, "now");
+    now.mockReturnValue(1_000);
+
+    const searchResult = await runFiledReturnsDownloadStep(documentRef, scope);
+    documentRef.querySelector("[data-filters]")?.remove();
+    now.mockReturnValue(20_000);
+    const viewResult = await runFiledReturnsDownloadStep(documentRef, scope);
+
+    now.mockRestore();
+    expect(searchResult.safeSignals).toContain("search-clicked");
+    expect(viewResult.safeSignals).toContain("gstr2b-dashboard-view-clicked");
+    expect(viewClicked).toBe(1);
+  });
+
+  it("invalidates GSTR-2B View recovery when dashboard filters change after Search", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <form data-filters>
+            <select name="fin"><option selected>2026-27</option></select>
+            <select name="quarter"><option selected>Quarter 1 (Apr - Jun)</option></select>
+            <select name="mon"><option selected>May</option><option>June</option></select>
+            <button type="button">Search</button>
+          </form>
+          <article>
+            <h3>Auto-drafted ITC Statement GSTR-2B</h3>
+            <button data-gstr2b-view>VIEW</button>
+          </article>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/dashboard",
+    );
+    makeLayoutVisible(documentRef);
+    let viewClicked = 0;
+    documentRef.querySelector("[data-gstr2b-view]")?.addEventListener("click", () => {
+      viewClicked += 1;
+    });
+    const scope: FiledReturnsDownloadScope = {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-2B",
+    };
+
+    const searchResult = await runFiledReturnsDownloadStep(documentRef, scope);
+    const period = documentRef.querySelector<HTMLSelectElement>("select[name='mon']");
+    period!.value = "June";
+    period!.dispatchEvent(new documentRef.defaultView!.Event("change", { bubbles: true }));
+    const changedFilterResult = await runFiledReturnsDownloadStep(documentRef, scope);
+    documentRef.querySelector("[data-filters]")?.remove();
+    const viewResult = await runFiledReturnsDownloadStep(documentRef, scope);
+
+    expect(searchResult.safeSignals).toContain("search-clicked");
+    expect(changedFilterResult.safeSignals).toContain("period-selected");
+    expect(changedFilterResult.safeSignals).not.toContain("gstr2b-dashboard-view-clicked");
+    expect(viewResult.safeSignals).toContain("gstr2b-dashboard-view-unscoped");
+    expect(viewClicked).toBe(0);
   });
 
   it("selects GSTR-2B dashboard filters when the search button ancestor omits labels", async () => {
@@ -1845,13 +2007,17 @@ describe("filed returns guided flow", () => {
       downloadClicked += 1;
     });
 
-    const result = await runFiledReturnsDownloadStep(documentRef, {
+    const scope: FiledReturnsDownloadScope = {
       artifactType: "PDF",
       financialYear: "2026-27",
       period: "June",
       returnType: "GSTR-2B",
-    });
+    };
 
+    const searchResult = await runFiledReturnsDownloadStep(documentRef, scope);
+    const result = await runFiledReturnsDownloadStep(documentRef, scope);
+
+    expect(searchResult.safeSignals).toContain("search-clicked");
     expect(result.state).toBe("clicked");
     expect(result.safeSignals).toContain("gstr2b-dashboard-view-clicked");
     expect(gstr1Clicked).toBe(0);
@@ -1863,6 +2029,12 @@ describe("filed returns guided flow", () => {
     const documentRef = createGstDocument(
       `
         <main>
+          <form>
+            <select name="fin"><option selected>2026-27</option></select>
+            <select name="quarter"><option selected>Quarter 1 (Apr - Jun)</option></select>
+            <select name="mon"><option selected>June</option></select>
+            <button type="button">Search</button>
+          </form>
           <div>
             <a>Details of outward supplies of goods or services GSTR-1</a>
             <button data-gstr1-view>VIEW</button>
@@ -1896,13 +2068,17 @@ describe("filed returns guided flow", () => {
       downloadClicked += 1;
     });
 
-    const result = await runFiledReturnsDownloadStep(documentRef, {
+    const scope: FiledReturnsDownloadScope = {
       artifactType: "PDF",
       financialYear: "2026-27",
       period: "June",
       returnType: "GSTR-2B",
-    });
+    };
 
+    const searchResult = await runFiledReturnsDownloadStep(documentRef, scope);
+    const result = await runFiledReturnsDownloadStep(documentRef, scope);
+
+    expect(searchResult.safeSignals).toContain("search-clicked");
     expect(result.state).toBe("clicked");
     expect(result.safeSignals).toContain("gstr2b-dashboard-view-clicked");
     expect(gstr1Clicked).toBe(0);
@@ -1949,13 +2125,17 @@ describe("filed returns guided flow", () => {
       viewClicked += 1;
     });
 
-    const result = await runFiledReturnsDownloadStep(documentRef, {
+    const scope: FiledReturnsDownloadScope = {
       artifactType: "PDF",
       financialYear: "2026-27",
       period: "May",
       returnType: "GSTR-2B",
-    });
+    };
 
+    const searchResult = await runFiledReturnsDownloadStep(documentRef, scope);
+    const result = await runFiledReturnsDownloadStep(documentRef, scope);
+
+    expect(searchResult.safeSignals).toContain("search-clicked");
     expect(result.state).toBe("clicked");
     expect(result.safeSignals).toContain("gstr2b-dashboard-view-clicked");
     expect(viewClicked).toBe(1);
@@ -2015,18 +2195,64 @@ describe("filed returns guided flow", () => {
       gstr3bClicked += 1;
     });
 
-    const result = await runFiledReturnsDownloadStep(documentRef, {
+    const scope: FiledReturnsDownloadScope = {
       artifactType: "PDF",
       financialYear: "2026-27",
       period: "May",
       returnType: "GSTR-2B",
-    });
+    };
 
+    const searchResult = await runFiledReturnsDownloadStep(documentRef, scope);
+    const result = await runFiledReturnsDownloadStep(documentRef, scope);
+
+    expect(searchResult.safeSignals).toContain("search-clicked");
     expect(result.state).toBe("clicked");
     expect(result.safeSignals).toContain("gstr2b-dashboard-view-clicked");
     expect(gstr1Clicked).toBe(0);
     expect(gstr2bClicked).toBe(1);
     expect(gstr3bClicked).toBe(0);
+  });
+
+  it("opens a searched GSTR-2B View when only the quarter label wording drifts", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <form>
+            <select name="fin"><option selected>2026-27</option></select>
+            <select name="quarter">
+              <option selected>Quarter 1 (Apr - Jun)</option>
+              <option>Qtr 1</option>
+            </select>
+            <select name="mon"><option selected>May</option></select>
+            <button type="button">Search</button>
+          </form>
+          <article>
+            <h3>Auto-drafted ITC Statement GSTR-2B</h3>
+            <button data-gstr2b-view>VIEW</button>
+          </article>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/dashboard",
+    );
+    makeLayoutVisible(documentRef);
+    let viewClicked = 0;
+    documentRef.querySelector("[data-gstr2b-view]")?.addEventListener("click", () => {
+      viewClicked += 1;
+    });
+    const scope: FiledReturnsDownloadScope = {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-2B",
+    };
+
+    const searchResult = await runFiledReturnsDownloadStep(documentRef, scope);
+    documentRef.querySelector<HTMLSelectElement>("select[name='quarter']")!.value = "Qtr 1";
+    const viewResult = await runFiledReturnsDownloadStep(documentRef, scope);
+
+    expect(searchResult.safeSignals).toContain("search-clicked");
+    expect(viewResult.safeSignals).toContain("gstr2b-dashboard-view-clicked");
+    expect(viewClicked).toBe(1);
   });
 
   it("waits on the GSTR-2B app route until summary download controls render", async () => {
@@ -2106,6 +2332,188 @@ describe("filed returns guided flow", () => {
         "gstr2b-summary-back-clicked",
       ]),
     );
+    expect(back).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects incidental GSTR-2B month and year text without labelled scope evidence", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <h1>GSTR-2B</h1>
+          <p>Generated in May for the 2026-27 portal cycle.</p>
+          <button>DOWNLOAD GSTR-2B SUMMARY (PDF)</button>
+          <button>DOWNLOAD GSTR-2B DETAILS (EXCEL)</button>
+        </main>
+      `,
+      "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
+    );
+    const back = vi.spyOn(documentRef.defaultView!.history, "back").mockImplementation(() => {});
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-2B",
+    });
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining([
+        "gstr2b-labelled-period-evidence-missing",
+        "gstr2b-summary-period-mismatch",
+        "gstr2b-summary-back-clicked",
+      ]),
+    );
+    expect(back).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts the structured GSTR-2B statement identity when labels are absent", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <h1>GSTR-2B</h1>
+          <p>May 2026 Auto-drafted ITC Statement</p>
+          <button>DOWNLOAD GSTR-2B SUMMARY (PDF)</button>
+          <button>DOWNLOAD GSTR-2B DETAILS (EXCEL)</button>
+        </main>
+      `,
+      "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
+    );
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-2B",
+    });
+
+    expect(result.state).toBe("ready");
+    expect(result.safeSignals).toContain("gstr2b-visible-period-verified");
+  });
+
+  it("accepts the structured GSTR-2B statement identity in a visible div", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <h1>GSTR-2B</h1>
+          <div>May 2026 Auto-drafted ITC Statement</div>
+          <button>DOWNLOAD GSTR-2B SUMMARY (PDF)</button>
+          <button>DOWNLOAD GSTR-2B DETAILS (EXCEL)</button>
+        </main>
+      `,
+      "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
+    );
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-2B",
+    });
+
+    expect(result.state).toBe("ready");
+  });
+
+  it("accepts the split GSTR-2B statement identity when labels are absent", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <h1>Auto-drafted ITC Statement for the month</h1>
+          <p>GSTR-2B</p>
+          <p>May 2026</p>
+          <button>DOWNLOAD GSTR-2B SUMMARY (PDF)</button>
+          <button>DOWNLOAD GSTR-2B DETAILS (EXCEL)</button>
+        </main>
+      `,
+      "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
+    );
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-2B",
+    });
+
+    expect(result.state).toBe("ready");
+    expect(result.safeSignals).toContain("gstr2b-visible-period-verified");
+  });
+
+  it("ignores an unrelated footer date beside a split GSTR-2B statement identity", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <h1>Auto-drafted ITC Statement for the month</h1>
+          <p>GSTR-2B</p>
+          <p>May 2026</p>
+          <footer><p>April 2026</p></footer>
+          <button>DOWNLOAD GSTR-2B SUMMARY (PDF)</button>
+          <button>DOWNLOAD GSTR-2B DETAILS (EXCEL)</button>
+        </main>
+      `,
+      "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
+    );
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-2B",
+    });
+
+    expect(result.state).toBe("ready");
+  });
+
+  it("rejects ambiguous split GSTR-2B statement periods", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <h1>Auto-drafted ITC Statement for the month</h1>
+          <p>GSTR-2B</p>
+          <p>April 2026</p>
+          <p>May 2026</p>
+          <button>DOWNLOAD GSTR-2B SUMMARY (PDF)</button>
+          <button>DOWNLOAD GSTR-2B DETAILS (EXCEL)</button>
+        </main>
+      `,
+      "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
+    );
+    const back = vi.spyOn(documentRef.defaultView!.history, "back").mockImplementation(() => {});
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-2B",
+    });
+
+    expect(result.safeSignals).toContain("gstr2b-labelled-period-evidence-missing");
+    expect(back).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects accessibility-only GSTR-2B statement period evidence", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <h1>Auto-drafted ITC Statement for the month</h1>
+          <p>GSTR-2B</p>
+          <button aria-label="May 2026"></button>
+          <button>DOWNLOAD GSTR-2B SUMMARY (PDF)</button>
+          <button>DOWNLOAD GSTR-2B DETAILS (EXCEL)</button>
+        </main>
+      `,
+      "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
+    );
+    const back = vi.spyOn(documentRef.defaultView!.history, "back").mockImplementation(() => {});
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-2B",
+    });
+
+    expect(result.safeSignals).toContain("gstr2b-labelled-period-evidence-missing");
     expect(back).toHaveBeenCalledTimes(1);
   });
 

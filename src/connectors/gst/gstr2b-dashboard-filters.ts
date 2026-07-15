@@ -32,23 +32,34 @@ export async function selectGstr2bReturnDashboardFiltersAndSearch(
   const diagnosticSignals = diagnoseReturnDashboardControls(documentRef);
   let controls = findReturnDashboardControls(documentRef);
   if (!controls) {
-    if (findGstr2bDashboardControl(documentRef, "view")) return null;
+    const viewControl = findGstr2bDashboardControl(documentRef, "view");
+    if (viewControl && hasDashboardSearchForScope(documentRef, scope)) {
+      return null;
+    }
 
     return {
       connectorId: "gst",
       scopeId,
       state: "clicked",
-      safeSignals: [...safeSignals, ...diagnosticSignals],
+      safeSignals: [
+        ...safeSignals,
+        ...diagnosticSignals,
+        ...(viewControl ? ["gstr2b-dashboard-view-unscoped"] : []),
+      ],
       safeMessage:
-        "Pack recognized the GST Return Dashboard and is waiting for the remaining dashboard controls to render. Diagnostic signals: " +
+        "Pack recognized the GST Return Dashboard and is waiting for target-bound dashboard controls to render. Diagnostic signals: " +
         diagnosticSignals.join(", "),
     };
   }
 
   const viewControl = findGstr2bDashboardControl(documentRef, "view");
-  if (viewControl) {
-    if (dashboardFiltersMatch(scope, controls.year, controls.quarter, controls.period)) return null;
-    if (dashboardYearAndPeriodMatch(scope, controls.year, controls.period)) return null;
+  if (
+    viewControl &&
+    hasDashboardSearchForScope(documentRef, scope) &&
+    (dashboardFiltersMatch(scope, controls.year, controls.quarter, controls.period) ||
+      dashboardYearAndPeriodMatch(scope, controls.year, controls.period))
+  ) {
+    return null;
   }
 
   if (!selectMatches(controls.year, [scope.financialYear])) {
@@ -170,11 +181,20 @@ function hasRecentDashboardSearch(
   const pendingAt = Number(
     documentRef.documentElement.getAttribute(DASHBOARD_SEARCH_PENDING_ATTRIBUTE) ?? "",
   );
-  const pendingScope = documentRef.documentElement.getAttribute(DASHBOARD_SEARCH_SCOPE_ATTRIBUTE);
   return (
     Number.isFinite(pendingAt) &&
     Date.now() - pendingAt < DASHBOARD_SEARCH_PENDING_MS &&
-    pendingScope === dashboardSearchScope(scope)
+    hasDashboardSearchForScope(documentRef, scope)
+  );
+}
+
+function hasDashboardSearchForScope(
+  documentRef: Document,
+  scope: FiledReturnsDownloadScope,
+): boolean {
+  return (
+    documentRef.documentElement.getAttribute(DASHBOARD_SEARCH_SCOPE_ATTRIBUTE) ===
+    dashboardSearchScope(scope)
   );
 }
 
