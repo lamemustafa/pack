@@ -12,6 +12,7 @@ import {
 import { filedReturnsScopeId } from "../core/filed-returns-return-types";
 import { isUnconfirmedBrowserDownloadSignal } from "./download-evidence-signals";
 import { isFullFiscalYearLedgerStale } from "./filed-returns-full-fiscal-year-ledger";
+import { fullFiscalYearZipPhaseStep } from "./filed-returns-full-fiscal-year-zip-phase";
 
 const COMPLETED_SUMMARY_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
   "downloaded",
@@ -51,6 +52,8 @@ export function summariseFullFiscalYearLedger(
   if (ledger.targets.some((target) => target.status === "download-unconfirmed")) {
     return toFullFiscalYearSummary(ledger, downloadUnconfirmedFullFiscalYearStep(ledger));
   }
+  const zipPhaseStep = fullFiscalYearZipPhaseStep(ledger);
+  if (zipPhaseStep) return toFullFiscalYearSummary(ledger, zipPhaseStep);
   if (ledger.status === "complete") {
     return toFullFiscalYearSummary(ledger, completeFullFiscalYearStep(ledger));
   }

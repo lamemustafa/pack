@@ -22,6 +22,7 @@ import {
   summariseFullFiscalYearLedger,
   toFullFiscalYearSummary,
 } from "./filed-returns-full-fiscal-year-summary";
+import { hasLegacyRetainedStaging } from "./filed-returns-full-fiscal-year-zip-phase";
 
 export function hasTerminalPositiveTarget(ledger: FiledReturnsFullFiscalYearLedger): boolean {
   return ledger.targets.some((target) =>
@@ -36,8 +37,9 @@ export function hasDownloadUnconfirmedTarget(ledger: FiledReturnsFullFiscalYearL
 export function hasRetainedFullFiscalYearStaging(
   ledger: FiledReturnsFullFiscalYearLedger,
 ): boolean {
-  if (ledger.zipPhase === "downloaded-cleanup-pending") return true;
-  if (ledger.status === "complete") return false;
+  if (ledger.zipPhase === "cleaned") return false;
+  if (ledger.zipPhase !== undefined) return true;
+  if (hasLegacyRetainedStaging(ledger)) return true;
   return ledger.targets.some((target) =>
     target.safeSignals.some(
       (signal) =>

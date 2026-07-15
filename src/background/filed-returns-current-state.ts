@@ -31,6 +31,12 @@ export async function readCurrentFiledReturnsFlowSummary(
   });
   if (activeRunSummary) return activeRunSummary;
 
+  const targetReviewSummary = await readCurrentFiledReturnsTargetReviewSummary({
+    storageKeys: { targetReview: deps.storageKeys.targetReview },
+    ...(deps.now ? { now: deps.now } : {}),
+  });
+  if (targetReviewSummary) return targetReviewSummary;
+
   const ledger = await readLocalValue<unknown>(deps.storageKeys.fullFiscalYearLedger);
   if (isFullFiscalYearLedger(ledger) && isRetainedZipRetrySummary(completionSummary, ledger)) {
     return completionSummary;
@@ -38,12 +44,6 @@ export async function readCurrentFiledReturnsFlowSummary(
   if (isFullFiscalYearLedger(ledger) && isActionableFullFiscalYearLedger(ledger)) {
     return summariseFullFiscalYearLedger(ledger, deps.now?.());
   }
-
-  const targetReviewSummary = await readCurrentFiledReturnsTargetReviewSummary({
-    storageKeys: { targetReview: deps.storageKeys.targetReview },
-    ...(deps.now ? { now: deps.now } : {}),
-  });
-  if (targetReviewSummary) return targetReviewSummary;
 
   if (isFullFiscalYearLedger(ledger) && isNewerSinglePeriodSummary(completionSummary, ledger)) {
     return completionSummary;

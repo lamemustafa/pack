@@ -49,7 +49,13 @@ import {
   createFullFiscalYearCleanupPendingState,
   finishFullFiscalYearCleanup,
   markFullFiscalYearCleanupPending,
+  markFullFiscalYearExportPhase,
+  markFullFiscalYearRestagingRequired,
 } from "./filed-returns-full-fiscal-year-cleanup";
+import {
+  fullFiscalYearZipPhaseStep,
+  hasLegacyRetainedStaging,
+} from "./filed-returns-full-fiscal-year-zip-phase";
 
 export type SinglePeriodRunner = (
   scope: FiledReturnsDownloadScope,
@@ -67,11 +73,33 @@ export async function startFullFiscalYearDownloadFlow(
 ): Promise<PackMessageResponse> {
   const now = deps.now?.() ?? new Date();
   const existingLedger = await readLedger(deps.storageKeys.fullFiscalYearLedger);
+  const sameScopeExistingLedger =
+    existingLedger && sameFiledReturnsScope(existingLedger.scope, scope) ? existingLedger : null;
   if (
-    existingLedger?.zipPhase === "downloaded-cleanup-pending" &&
-    sameFiledReturnsScope(existingLedger.scope, scope)
+    sameScopeExistingLedger &&
+    [
+      "downloaded-cleanup-pending",
+      "no-artifacts-cleanup-pending",
+      "legacy-cleanup-pending",
+    ].includes(sameScopeExistingLedger.zipPhase ?? "")
   ) {
-    return finishFullFiscalYearCleanup(deps, existingLedger);
+    return finishFullFiscalYearCleanup(deps, sameScopeExistingLedger);
+  }
+  if (sameScopeExistingLedger && hasLegacyRetainedStaging(sameScopeExistingLedger)) {
+    const cleanupPendingLedger = markFullFiscalYearCleanupPending(
+      sameScopeExistingLedger,
+      now,
+      "legacy-cleanup-pending",
+    );
+    const step = fullFiscalYearZipPhaseStep(cleanupPendingLedger)!;
+    await persistLedgerAndSummary(deps, cleanupPendingLedger, step);
+    return finishFullFiscalYearCleanup(deps, cleanupPendingLedger);
+  }
+  if (
+    sameScopeExistingLedger &&
+    ["export-pending", "export-retry-pending"].includes(sameScopeExistingLedger.zipPhase ?? "")
+  ) {
+    return completeRun(deps, sameScopeExistingLedger);
   }
   const plannedPeriods = getFiledReturnsFullFiscalYearPeriods(scope.financialYear, now);
 
@@ -80,6 +108,7 @@ export async function startFullFiscalYearDownloadFlow(
     sameFiledReturnsScope(existingLedger.scope, scope) &&
     existingLedger.status === "complete" &&
     canCompleteFullFiscalYearLedger(existingLedger) &&
+    !hasRetainedFullFiscalYearStaging(existingLedger) &&
     !options.allowExistingLedgerResume;
   const replaceUnstartedBlockedSameScopeLedger =
     existingLedger &&
@@ -185,6 +214,12 @@ export async function startFullFiscalYearDownloadFlow(
       flowStep,
       deps.now?.() ?? new Date(),
     );
+    if (
+      (targetStatus === "downloaded" || targetStatus === "not-filed") &&
+      canCompleteFullFiscalYearLedger(ledger)
+    ) {
+      ledger = markFullFiscalYearExportPhase(ledger, deps.now?.() ?? new Date(), "export-pending");
+    }
     await persistLedgerAndMaybeSummary(deps, ledger, flowStep);
 
     if (targetStatus === "downloaded" || targetStatus === "not-filed") continue;
@@ -206,11 +241,10 @@ async function completeRun(
   }
 
   const now = deps.now?.() ?? new Date();
-  const readyLedger: FiledReturnsFullFiscalYearLedger = {
-    ...ledger,
-    status: "blocked",
-    updatedAt: now.toISOString(),
-  };
+  const readyLedger =
+    ledger.zipPhase === "export-pending" || ledger.zipPhase === "export-retry-pending"
+      ? ledger
+      : markFullFiscalYearExportPhase(ledger, now, "export-pending");
   const step = completeFullFiscalYearStep(readyLedger);
   // Persist a resumable pre-export state before the browser download can suspend
   // this MV3 worker. A later start can then retry the retained staged ZIP without
@@ -218,8 +252,20 @@ async function completeRun(
   await persistLedger(deps, readyLedger);
   const zipStep = await exportFullFiscalYearZip(readyLedger, step);
   if (zipStep.state !== "downloaded") {
-    const summary = toFullFiscalYearSummary(readyLedger, zipStep);
-    await persistLedgerAndSummary(deps, readyLedger, zipStep);
+    const nextLedger = zipStep.safeSignals.some(
+      (signal) =>
+        signal === "full-fiscal-year-zip-artifact-staging-incomplete" ||
+        signal === "full-fiscal-year-zip-entry-count-mismatch",
+    )
+      ? markFullFiscalYearRestagingRequired(readyLedger, now)
+      : markFullFiscalYearExportPhase(readyLedger, now, "export-retry-pending");
+    const phaseStep = fullFiscalYearZipPhaseStep(nextLedger)!;
+    const persistedStep = {
+      ...zipStep,
+      safeSignals: Array.from(new Set([...zipStep.safeSignals, ...phaseStep.safeSignals])),
+    };
+    const summary = toFullFiscalYearSummary(nextLedger, persistedStep);
+    await persistLedgerAndSummary(deps, nextLedger, persistedStep);
     return { ok: true, flowStep: summary.flowStep, flowSummary: summary };
   }
 

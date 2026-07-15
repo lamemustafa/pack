@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FULL_FISCAL_YEAR_PERIOD } from "../../src/core/filed-returns-scope";
-import type { FiledReturnsFlowSummary } from "../../src/core/contracts";
+import type {
+  FiledReturnsFlowSummary,
+  FiledReturnsFullFiscalYearLedger,
+} from "../../src/core/contracts";
 import { readCurrentFiledReturnsFlowSummary } from "../../src/background/filed-returns-current-state";
 
 const filedReturnsCurrentStateStorageKeys = {
@@ -481,6 +484,71 @@ describe("Pack local data clearing", () => {
     expect(summary).toEqual(sessionSummary);
   });
 
+  it.each([
+    ["export-retry-pending", "full-fiscal-year-final-zip-retry"],
+    ["downloaded-cleanup-pending", "full-fiscal-year-local-cleanup-retry"],
+  ] as const)(
+    "reconstructs %s recovery from the local ledger after session storage is lost",
+    async (zipPhase, expectedSignal) => {
+      const ledger = createDurableZipPhaseLedger(zipPhase);
+      browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+        key === "pack:full-fiscal-year-ledger" ? { [key]: ledger } : {},
+      );
+      browserMocks.storage.session.get.mockResolvedValue({});
+
+      const summary = await readCurrentFiledReturnsFlowSummary({
+        storageKeys: filedReturnsCurrentStateStorageKeys,
+        now: () => new Date("2026-06-24T00:11:00.000Z"),
+      });
+
+      expect(summary).toMatchObject({
+        status: "blocked",
+        scope: ledger.scope,
+        flowStep: {
+          state: "blocked",
+          safeSignals: expect.arrayContaining([expectedSignal, "full-fiscal-year-opfs-retained"]),
+        },
+      });
+    },
+  );
+
+  it("shows unresolved target review before durable full-year ZIP recovery", async () => {
+    const ledger = createDurableZipPhaseLedger("export-retry-pending");
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) => {
+      if (key === "pack:full-fiscal-year-ledger") return { [key]: ledger };
+      if (key === "pack:filed-returns-target-review") {
+        return {
+          [key]: {
+            schemaVersion: "1.0",
+            targetId: "GSTR-3B:2026-27:May",
+            status: "download-unconfirmed",
+            scope: {
+              financialYear: "2026-27",
+              period: "May",
+              returnType: "GSTR-3B",
+            },
+            safeSignals: ["browser-download-not-observed"],
+            safeMessage: "The browser download was not confirmed.",
+            updatedAt: "2026-06-24T00:10:00.000Z",
+          },
+        };
+      }
+      return {};
+    });
+    browserMocks.storage.session.get.mockResolvedValue({});
+
+    const summary = await readCurrentFiledReturnsFlowSummary({
+      storageKeys: filedReturnsCurrentStateStorageKeys,
+      now: () => new Date("2026-06-24T00:11:00.000Z"),
+    });
+
+    expect(summary).toMatchObject({
+      scope: { period: "May" },
+      status: "blocked",
+      flowStep: { safeSignals: ["filed-returns-target-review-required"] },
+    });
+  });
+
   it("prefers a newer single-period summary over a completed full-year ledger", async () => {
     const sessionSummary: FiledReturnsFlowSummary = {
       scope: {
@@ -610,3 +678,37 @@ describe("Pack local data clearing", () => {
     });
   });
 });
+
+function createDurableZipPhaseLedger(
+  zipPhase: NonNullable<FiledReturnsFullFiscalYearLedger["zipPhase"]>,
+): FiledReturnsFullFiscalYearLedger {
+  const updatedAt = "2026-06-24T00:10:00.000Z";
+  return {
+    schemaVersion: "1.0",
+    ledgerId: "ledger-durable-zip-phase",
+    revision: 4,
+    status: zipPhase === "cleaned" ? "complete" : "blocked",
+    zipPhase,
+    scope: {
+      financialYear: "2026-27",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-3B",
+    },
+    createdAt: "2026-06-24T00:00:00.000Z",
+    updatedAt,
+    targets: [
+      {
+        targetId: "GSTR-3B:2026-27:April",
+        financialYear: "2026-27",
+        period: "April",
+        returnType: "GSTR-3B",
+        status: "downloaded",
+        attempts: 1,
+        safeSignals: ["full-fiscal-year-opfs-staged:PDF"],
+        safeMessage: "Staged.",
+        updatedAt,
+        completedAt: updatedAt,
+      },
+    ],
+  };
+}

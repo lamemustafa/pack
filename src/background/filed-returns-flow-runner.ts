@@ -23,7 +23,11 @@ import {
   canCompleteFullFiscalYearLedger,
   sameFiledReturnsScope,
 } from "./filed-returns-full-fiscal-year-ledger";
-import { readLedger, responseForExistingLedger } from "./filed-returns-full-fiscal-year-run-state";
+import {
+  hasRetainedFullFiscalYearStaging,
+  readLedger,
+  responseForExistingLedger,
+} from "./filed-returns-full-fiscal-year-run-state";
 import {
   clearFiledReturnsTargetReview,
   noTargetReviewResponse,
@@ -94,7 +98,9 @@ export async function startFiledReturnsDownloadFlow(
   if (isFullFiscalYearScope(scope)) {
     const existingLedger = await readLedger(deps.storageKeys.fullFiscalYearLedger);
     const replaceableCompletedLedger =
-      existingLedger?.status === "complete" && canCompleteFullFiscalYearLedger(existingLedger);
+      existingLedger?.status === "complete" &&
+      canCompleteFullFiscalYearLedger(existingLedger) &&
+      !hasRetainedFullFiscalYearStaging(existingLedger);
     if (
       existingLedger &&
       !sameFiledReturnsScope(existingLedger.scope, scope) &&
@@ -132,6 +138,9 @@ export async function retryFullFiscalYearTargetDownloadFlow(
   payload: FullFiscalYearTargetRecoveryPayload,
   deps: FiledReturnsFlowRunnerDeps,
 ): Promise<PackMessageResponse> {
+  const targetReview = await readCurrentFiledReturnsTargetReview(deps);
+  if (targetReview) return responseForFiledReturnsTargetReview(targetReview);
+
   const recoveryScope = await readFullFiscalYearTargetRecoveryScope(payload, deps);
   if ("response" in recoveryScope) return recoveryScope.response;
 

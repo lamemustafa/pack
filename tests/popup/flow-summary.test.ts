@@ -294,6 +294,18 @@ describe("popup filed returns flow summary", () => {
         },
       }),
     ).toBe(false);
+    expect(
+      canRetryFullFiscalYearZipWithoutPortal({
+        ...finalZipRetry,
+        flowStep: {
+          ...finalZipRetry.flowStep,
+          safeSignals: [
+            "full-fiscal-year-zip-entry-count-mismatch",
+            "full-fiscal-year-opfs-retained",
+          ],
+        },
+      }),
+    ).toBe(false);
     expect(canRetryFullFiscalYearZipWithoutPortal(COMPLETE_SUMMARY)).toBe(false);
   });
 });

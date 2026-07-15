@@ -43,7 +43,14 @@ export async function exportFullFiscalYearZip(
       },
     };
   }
-  if (staging.expectedArtifactCount === 0) return completeStep;
+  if (staging.expectedArtifactCount === 0) {
+    return {
+      ...completeStep,
+      safeSignals: [...completeStep.safeSignals, "full-fiscal-year-no-zip-artifacts"],
+      safeMessage:
+        "Pack reconciled the fiscal year, but no filed-return artifacts were available for a ZIP.",
+    };
+  }
 
   return exportStagedFiledReturnsZip({
     clearSignalPrefix: "full-fiscal-year",

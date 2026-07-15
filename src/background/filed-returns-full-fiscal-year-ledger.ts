@@ -96,7 +96,7 @@ export function reconcileFullFiscalYearLedgerTargets(
     .filter((target) => !existingTargetIds.has(target.targetId));
   const targets = [...ledger.targets, ...missingTargets];
 
-  return {
+  const reconciledLedger: FiledReturnsFullFiscalYearLedger = {
     ...ledger,
     revision: missingTargets.length > 0 ? nextRevision(ledger) : (ledger.revision ?? 1),
     planVersion: FULL_FISCAL_YEAR_PLAN_VERSION,
@@ -109,6 +109,8 @@ export function reconcileFullFiscalYearLedgerTargets(
     lastReconciledAt: timestamp,
     targets,
   };
+  if (missingTargets.length > 0) delete reconciledLedger.zipPhase;
+  return reconciledLedger;
 }
 
 export function resumeFullFiscalYearLedger(
@@ -155,7 +157,7 @@ export function markFullFiscalYearTargetRunning(
   now: Date,
 ): FiledReturnsFullFiscalYearLedger {
   const timestamp = now.toISOString();
-  return {
+  const runningLedger: FiledReturnsFullFiscalYearLedger = {
     ...ledger,
     revision: nextRevision(ledger),
     status: "running",
@@ -175,6 +177,8 @@ export function markFullFiscalYearTargetRunning(
         : target,
     ),
   };
+  delete runningLedger.zipPhase;
+  return runningLedger;
 }
 
 export function markFullFiscalYearTargetTerminal(
@@ -215,13 +219,12 @@ export function completeFullFiscalYearLedger(
   now: Date,
 ): FiledReturnsFullFiscalYearLedger {
   const ledgerWithoutCurrentTarget = withoutCurrentTarget(ledger);
-  const completedLedger = { ...ledgerWithoutCurrentTarget };
-  delete completedLedger.zipPhase;
   return {
-    ...completedLedger,
+    ...ledgerWithoutCurrentTarget,
     revision: nextRevision(ledger),
     status: "complete",
     updatedAt: now.toISOString(),
+    zipPhase: "cleaned",
   };
 }
 

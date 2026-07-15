@@ -34,12 +34,9 @@ export function canRetryFullFiscalYearZipWithoutPortal(
   if (!signals.has("full-fiscal-year-opfs-retained")) return false;
   return (
     signals.has("full-fiscal-year-final-zip-retry") ||
-    [...signals].some(
-      (signal) =>
-        signal.startsWith("full-fiscal-year-zip-") &&
-        !signal.includes("artifact-staging-incomplete") &&
-        !signal.includes("missing-artifact-count"),
-    )
+    signals.has("full-fiscal-year-local-cleanup-retry") ||
+    signals.has("full-fiscal-year-zip-export-pending") ||
+    signals.has("full-fiscal-year-zip-phase:export-retry-pending")
   );
 }
 

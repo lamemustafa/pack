@@ -236,7 +236,7 @@ function resetFullFiscalYearTargetForRetry(
   now: Date,
 ): FiledReturnsFullFiscalYearLedger {
   const timestamp = now.toISOString();
-  return {
+  const retryLedger: FiledReturnsFullFiscalYearLedger = {
     ...ledger,
     revision: (ledger.revision ?? 1) + 1,
     status: "running",
@@ -256,6 +256,8 @@ function resetFullFiscalYearTargetForRetry(
         : candidate,
     ),
   };
+  delete retryLedger.zipPhase;
+  return retryLedger;
 }
 
 function manuallyObservedStep(target: FiledReturnsFullFiscalYearTarget): PortalFlowStepResult {
