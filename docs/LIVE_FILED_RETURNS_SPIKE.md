@@ -162,7 +162,7 @@ filed-returns filter form and to refuse broad page-level controls. Do not run
 another live attempt until a fresh user login is available.
 
 Save-dialog Phase 0 finding on 2026-07-07: the real Brave profile loaded from
-`/private/tmp/pack-gstr2b-downloads/.output/chrome-mv3` showed native macOS
+the local unpacked MV3 build showed native macOS
 Save panels for the local synthetic reviewer demo even though
 `src/background/synthetic-demo.ts` calls `chrome.downloads.download` with
 `saveAs: false`. The queued synthetic prompts included filed-return-like
@@ -172,17 +172,16 @@ extension-owned data URL downloads. It is not proof for GST direct HTTPS or
 offscreen Blob URL downloads, but it raises the bar for live Phase 0: each live
 run must record both the path taken and whether the browser profile has
 ask-where-to-save enabled before claiming dialog-free behavior.
-Follow-up profile check found `download.prompt_for_download: true` in
-`~/Library/Application Support/BraveSoftware/Brave-Browser/Default/Preferences`
-for that Brave profile.
+Follow-up profile check found `download.prompt_for_download: true` in the local
+preferences for that Brave test profile.
 
 Continuation evidence on 2026-07-07: the rebuilt source package was copied back
-to `/private/tmp/pack-gstr2b-downloads/.output/chrome-mv3`, the unpacked Brave
+to the local unpacked MV3 build directory, the unpacked Brave
 extension details page showed version `0.3.3` with the expected GST host access,
 and the stale queued synthetic Save panels were cancelled rather than saved. The
 Pack Options page then rendered the source-build controls, including the
-foreground File System Access probe. The only GST tab visible in Brave was
-`https://services.gst.gov.in/services/logout`, so real portal artifact testing
+foreground File System Access probe. The only GST tab visible in Brave was a
+recognized GST logout page, so real portal artifact testing
 could not continue in that session without a fresh GST login.
 
 Resumed-login evidence on 2026-07-07: after a fresh user login in the same real
@@ -706,8 +705,8 @@ attempted until the user returns after services are available.
 
 ## 2026-07-07 May-only Brave retry finding
 
-After rebuilding and reloading the local Brave unpacked extension from
-`/private/tmp/pack-gstr2b-downloads/.output/chrome-mv3`, Pack was retried only
+After rebuilding and reloading the local Brave unpacked extension from the local
+unpacked MV3 build directory, Pack was retried only
 for GSTR-3B PDF, FY `2026-27`, period May. The real Brave profile had
 ask-where-to-save enabled. The extension package verifier and browser-host
 verifier passed before this live retry.
