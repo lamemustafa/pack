@@ -34,6 +34,7 @@ export function isPotentialDownloadCandidate(
   if (
     context.allowTargetBoundBlobOrData &&
     hasBlobOrDataUrl(item) &&
+    hasExpectedOrigin(item, context.expectedOrigins) &&
     hasExpectedFileEvidence(item, context)
   ) {
     return true;

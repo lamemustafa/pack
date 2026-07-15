@@ -7,6 +7,7 @@ import type {
 } from "../core/contracts";
 import type { FiledReturnsConcreteArtifactType } from "../core/filed-returns-artifacts";
 import type { PackMessageResponse } from "../core/messages";
+import { filedReturnScopedSignal } from "../connectors/gst/filed-returns-return-descriptors";
 import { isExpectedCapturedDataUrlForTarget } from "./captured-download-data-url";
 import { downloadCapturedFiledReturnThroughExtension } from "./filed-returns-captured-extension-download";
 import {
@@ -44,7 +45,7 @@ export async function startMainWorldCapturedFiledReturnDownload({
     return capturedDownloadRejected(
       scope,
       target,
-      "gstr2b-captured-download-action-mismatch",
+      filedReturnScopedSignal(target.returnType, "captured-download-action-mismatch"),
       "Pack rejected the filed-return capture request because it did not match the active download action.",
     );
   }
@@ -189,7 +190,7 @@ export async function startCapturedFiledReturnDownload({
     return capturedDownloadRejected(
       scope,
       target,
-      "gstr2b-captured-download-action-mismatch",
+      filedReturnScopedSignal(target.returnType, "captured-download-action-mismatch"),
       "Pack rejected the captured filed-return file because it did not match the active download action.",
     );
   }
@@ -198,7 +199,7 @@ export async function startCapturedFiledReturnDownload({
     return capturedDownloadRejected(
       scope,
       target,
-      "gstr2b-captured-download-data-url-rejected",
+      filedReturnScopedSignal(target.returnType, "captured-download-data-url-rejected"),
       "Pack rejected the captured filed-return file because the generated file type did not match the requested artifact.",
     );
   }

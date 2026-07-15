@@ -196,6 +196,10 @@ async function exportStagedFiledReturnsZip({
     });
   } catch {
     await revokeOffscreenBlobUrl(zip.blobUrl);
+    const stagedLedgerSignal =
+      clearSignalPrefix === "single-period"
+        ? await clearStagedLedgerSignal(ledgerId, clearSignalPrefix)
+        : retainedStagedLedgerSignal(clearSignalPrefix);
     await closeOffscreenBlobDocument();
     return {
       ...completeStep,
@@ -203,7 +207,7 @@ async function exportStagedFiledReturnsZip({
       safeSignals: [
         ...completeStep.safeSignals,
         `${clearSignalPrefix}-zip-download-start-rejected`,
-        retainedStagedLedgerSignal(clearSignalPrefix),
+        stagedLedgerSignal,
       ],
       safeMessage: startRejectedMessage,
       userAction: {

@@ -108,6 +108,7 @@ const DOWNLOAD_EVIDENCE_KEYS = [
 const DOWNLOAD_ENDPOINT_CLASSES = [
   "gstr3b-getgenpdf",
   "gstr3b-portal-rendered-download",
+  "gstr3b-portal-blob-captured-download",
   "gstr1-pdf-portal-rendered-download",
   "gstr1-excel-portal-rendered-download",
   "gstr1-pdf-portal-blob-captured-download",

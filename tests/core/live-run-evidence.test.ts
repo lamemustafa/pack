@@ -144,6 +144,21 @@ describe("live run evidence", () => {
     ).toMatchObject({ ok: true });
   });
 
+  it("accepts captured GSTR-3B endpoint evidence metadata", () => {
+    expect(
+      validateLiveRunEvidence({
+        ...createValidEvidence(),
+        downloadEvidence: [
+          {
+            ...createValidEvidence().downloadEvidence[0],
+            endpointClass: "gstr3b-portal-blob-captured-download",
+            downloadPathClass: "captured-portal-request-data",
+          },
+        ],
+      }),
+    ).toMatchObject({ ok: true });
+  });
+
   it("scans raw evidence JSON before parsing", () => {
     const source = JSON.stringify({
       ...createValidEvidence(),

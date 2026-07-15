@@ -18,7 +18,11 @@ import {
   observeNextBrowserDownload,
 } from "../../src/background/download-observer";
 import { suggestNextBrowserDownloadFilename } from "../../src/background/download-filename-suggester";
-import { exportFullFiscalYearZip } from "../../src/background/filed-returns-full-fiscal-year-zip";
+import {
+  exportFullFiscalYearZip,
+  exportSinglePeriodFiledReturnsZip,
+} from "../../src/background/filed-returns-full-fiscal-year-zip";
+import { startCapturedFiledReturnDownload } from "../../src/background/filed-returns-captured-download";
 import {
   requireFullFiscalYearArtifactsStaged,
   scopeForFullFiscalYearTarget,
@@ -1342,6 +1346,43 @@ describe("filed returns flow runner", () => {
     });
     expect(response.safeSignals).not.toContain("full-fiscal-year-zip-downloaded");
     expect(browser.downloads.download).not.toHaveBeenCalled();
+  });
+
+  it("clears single-period staging when the browser rejects the final ZIP start", async () => {
+    stagedZipEntryCount = 2;
+    vi.mocked(browser.downloads.download).mockRejectedValueOnce(new Error("save rejected"));
+
+    const response = await exportSinglePeriodFiledReturnsZip({
+      completeStep: {
+        connectorId: "gst",
+        scopeId: "gst-gstr2b-private-v0",
+        state: "downloaded",
+        safeSignals: ["filed-return-artifact-downloaded:PDF"],
+        safeMessage: "Artifacts staged.",
+      },
+      ledgerId: "single-period-ledger",
+      scope: {
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-2B",
+      },
+    });
+
+    expect(response).toMatchObject({
+      state: "blocked",
+      safeSignals: expect.arrayContaining([
+        "single-period-zip-download-start-rejected",
+        "single-period-opfs-cleared",
+      ]),
+    });
+    expect(response.safeSignals).not.toContain("single-period-opfs-retained");
+    expect(browser.runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "PACK_OFFSCREEN_CLEAR_FILED_RETURN_LEDGER",
+        payload: expect.objectContaining({ ledgerId: "single-period-ledger" }),
+      }),
+    );
   });
 
   it("exports a combined GSTR-1 ZIP when PDF is staged and optional Excel is unavailable", async () => {
@@ -2723,7 +2764,7 @@ describe("filed returns flow runner", () => {
     ]);
   });
 
-  it("rejects captured GSTR-2B payloads that do not match the requested artifact", async () => {
+  it("falls back once after a captured GSTR-2B payload does not match the requested artifact", async () => {
     vi.mocked(browser.scripting.executeScript).mockImplementationOnce(async (details) => [
       {
         result: {
@@ -2798,8 +2839,8 @@ describe("filed returns flow runner", () => {
     expect(response).toMatchObject({
       ok: true,
       flowStep: {
-        state: "blocked",
-        safeSignals: ["gstr2b-captured-download-data-url-rejected"],
+        state: "downloaded",
+        safeSignals: expect.arrayContaining(["filed-gstr2b-capture-fallback-portal-click"]),
         downloadDiagnostic: {
           schemaVersion: "1.0",
           eventType: "filed-return-download-path",
@@ -2809,14 +2850,67 @@ describe("filed returns flow runner", () => {
           period: "May",
           endpointClass: "gstr2b-portal-blob-captured-download",
           artifactType: "PDF",
-          downloadPathClass: "captured-portal-request-unknown",
-          status: "blocked",
-          errorCategory: "gstr2b-captured-download-data-url-rejected",
+          downloadPathClass: "captured-portal-request-https",
+          status: "downloaded",
         },
       },
     });
-    expect(browser.downloads.download).not.toHaveBeenCalled();
-    expect(observeBrowserDownloadById).not.toHaveBeenCalled();
+    expect(sendMessageToTabWithInjection.mock.calls.map(([, message]) => message.type)).toEqual([
+      "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
+      "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
+      "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
+    ]);
+    expect(sendMessageToTabWithInjection.mock.calls.at(-1)?.[1].payload).toMatchObject({
+      forcePortalClick: true,
+    });
+  });
+
+  it("attributes rejected captured payloads to the target return type", async () => {
+    const response = await startCapturedFiledReturnDownload({
+      activePeriod: "May",
+      armedAt: new Date("2026-06-24T10:00:00.000Z"),
+      artifactType: "PDF",
+      capturedDownloadRequest: {
+        actionId: "action-gstr3b",
+        dataUrl: dataUrl("text/plain", "not a pdf"),
+        safeSignals: ["portal-blob-captured"],
+      },
+      deps: {
+        sendMessageToTabWithInjection: vi.fn(),
+        storageKeys: {},
+      },
+      scope: {
+        artifactType: "PDF",
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-3B",
+      },
+      target: {
+        actionId: "action-gstr3b",
+        artifactType: "PDF",
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-3B",
+      },
+      triggerStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "clicked",
+        safeSignals: ["filed-gstr3b-download-clicked"],
+        safeMessage: "Clicked.",
+      },
+    });
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        safeSignals: ["filed-gstr3b-captured-download-data-url-rejected"],
+        downloadDiagnostic: {
+          returnType: "GSTR-3B",
+          errorCategory: "filed-gstr3b-captured-download-data-url-rejected",
+        },
+      },
+    });
   });
 
   it("blocks when Brave rejects the extension-owned GSTR-2B captured download", async () => {
