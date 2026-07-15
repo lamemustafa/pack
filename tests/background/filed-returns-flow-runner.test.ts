@@ -7879,6 +7879,45 @@ it("blocks another full-year scope while a prepared ZIP ledger is retained", asy
   expect(browser.storage.local.set).not.toHaveBeenCalled();
 });
 
+it("blocks a new full-year run when malformed metadata retains an OPFS cleanup id", async () => {
+  mockLocalStorageGet({
+    "full-year-ledger": {
+      ledgerId: "retained-malformed-ledger",
+      schemaVersion: "unexpected",
+    },
+  });
+  const sendMessageToTabWithInjection =
+    vi.fn<FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]>();
+
+  const response = await startFiledReturnsDownloadFlow(
+    {
+      artifactType: "PDF",
+      financialYear: "2025-26",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-3B",
+    },
+    {
+      getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+      sendMessageToTabWithInjection,
+      storageKeys: {
+        completion: "completion",
+        fullFiscalYearLedger: "full-year-ledger",
+        observation: "observation",
+      },
+    },
+  );
+
+  expect(response).toMatchObject({
+    ok: true,
+    flowStep: {
+      state: "blocked",
+      safeSignals: ["full-fiscal-year-ledger-malformed", "full-fiscal-year-opfs-retained"],
+    },
+  });
+  expect(browser.storage.local.set).not.toHaveBeenCalled();
+  expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
+});
+
 it("preserves partially staged artifacts before replacing a blocked same-scope run", async () => {
   const partialLedger = createFullFiscalYearLedger({
     status: "blocked",

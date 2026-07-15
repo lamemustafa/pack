@@ -1,4 +1,4 @@
-import { getClickableElements, normaliseText } from "./filed-returns-dom";
+import { getClickableElements, isVisible, normaliseText } from "./filed-returns-dom";
 
 export function findGstr2bDashboardControl(
   documentRef: Document,
@@ -66,6 +66,7 @@ function findNearbyGstr2bIntentControl(documentRef: Document, intent: "view"): H
 }
 
 function matchesGstr2bIntentControl(element: HTMLElement, intent: "view"): boolean {
+  if (!isVisible(element)) return false;
   const label = normaliseText(readElementText(element));
   if (intent === "view" && /^view$/.test(label)) return true;
 

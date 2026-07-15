@@ -157,7 +157,8 @@ function isExpectedDecodedDataUrl(
   }
 
   return (
-    metadataIncludesExpectedMime(normalizedMetadata, artifactType) &&
+    (metadataIncludesExpectedMime(normalizedMetadata, artifactType) ||
+      normalizedMetadata.includes("application/octet-stream")) &&
     isExpectedFiledReturnBytes(bytes, artifactType)
   );
 }

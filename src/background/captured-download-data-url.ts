@@ -33,7 +33,8 @@ export function isExpectedCapturedDataUrl(
   }
 
   return (
-    metadataIncludesExpectedMime(metadata, artifactType) &&
+    (metadataIncludesExpectedMime(metadata, artifactType) ||
+      metadata.includes("application/octet-stream")) &&
     (isLikelyXlsxBytes(decoded.bytes) || isLikelyXlsBytes(decoded.bytes))
   );
 }

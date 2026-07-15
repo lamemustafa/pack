@@ -78,6 +78,36 @@ describe("capturePortalBlobDownload", () => {
     expect(nativeClicks).toBe(0);
   });
 
+  it("suppresses an exact-action HTTPS anchor without installing a global download listener", async () => {
+    const { documentRef } = installMainWorldDom(`
+      <button data-pack-gstr2b-capture-action="capture-1">Download</button>
+    `);
+    let nativeClicks = 0;
+    documentRef.defaultView!.HTMLAnchorElement.prototype.click = function click() {
+      nativeClicks += 1;
+    };
+    documentRef.querySelector("button")?.addEventListener("click", () => {
+      const anchor = documentRef.createElement("a");
+      anchor.href = "https://gstr2b.gst.gov.in/synthetic.pdf";
+      anchor.download = "may.pdf";
+      anchor.click();
+    });
+
+    const outcome = await capturePortalBlobDownloadWithDiagnostics({
+      ...captureConfig(),
+      timeoutMs: 20,
+    });
+
+    expect(outcome).toMatchObject({
+      capturedDownloadRequest: null,
+      safeFailureSignals: expect.arrayContaining([
+        "gstr2b-native-https-download-suppressed",
+        "gstr2b-main-world-capture-timeout",
+      ]),
+    });
+    expect(nativeClicks).toBe(0);
+  });
+
   it("captures and suppresses pre-existing portal blob anchor downloads", async () => {
     const { documentRef, view } = installMainWorldDom(`
       <button data-pack-gstr2b-capture-action="capture-1">Download</button>

@@ -26,6 +26,7 @@ import {
 import {
   hasRetainedFullFiscalYearStaging,
   readLedger,
+  readRecoverableMalformedLedgerId,
   responseForExistingLedger,
 } from "./filed-returns-full-fiscal-year-run-state";
 import {
@@ -97,6 +98,36 @@ export async function startFiledReturnsDownloadFlow(
   if (targetReview) return responseForFiledReturnsTargetReview(targetReview);
 
   if (isFullFiscalYearScope(scope)) {
+    const malformedLedgerId = await readRecoverableMalformedLedgerId(
+      deps.storageKeys.fullFiscalYearLedger,
+    );
+    if (malformedLedgerId) {
+      const flowStep: PortalFlowStepResult = {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-private-v0",
+        state: "blocked",
+        safeSignals: ["full-fiscal-year-ledger-malformed", "full-fiscal-year-opfs-retained"],
+        safeMessage:
+          "Pack found retained fiscal-year staging with damaged recovery metadata and will not overwrite it.",
+        userAction: {
+          type: "RETRY_PORTAL_GENERATION",
+          message:
+            "Use Clear local Pack data to remove the retained staging before starting again.",
+          canResume: false,
+        },
+      };
+      return {
+        ok: true,
+        flowStep,
+        flowSummary: {
+          scope,
+          status: "blocked",
+          completedPeriods: [],
+          totalPeriods: 12,
+          flowStep,
+        },
+      };
+    }
     const existingLedger = await readLedger(deps.storageKeys.fullFiscalYearLedger);
     const replaceableCompletedLedger =
       existingLedger?.status === "complete" &&

@@ -1274,6 +1274,45 @@ describe("filed returns guided flow", () => {
     }
   });
 
+  it("ignores hidden GSTR-2B View templates after Search", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <form>
+            <select name="fin"><option selected>2026-27</option></select>
+            <select name="quarter"><option selected>Quarter 1 (Apr - Jun)</option></select>
+            <select name="mon"><option selected>May</option></select>
+            <button type="button" data-search>Search</button>
+          </form>
+          <article>
+            <h3>Auto-drafted ITC Statement GSTR-2B</h3>
+            <button hidden data-gstr2b-view data-ng-click="page_rtp()">VIEW</button>
+          </article>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/dashboard",
+    );
+    makeLayoutVisible(documentRef);
+    let viewClicked = 0;
+    documentRef.querySelector("[data-gstr2b-view]")?.addEventListener("click", () => {
+      viewClicked += 1;
+    });
+
+    const scope: FiledReturnsDownloadScope = {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-2B",
+    };
+    const searchResult = await runFiledReturnsDownloadStep(documentRef, scope);
+    const pendingResult = await runFiledReturnsDownloadStep(documentRef, scope);
+
+    expect(searchResult.safeSignals).toContain("search-clicked");
+    expect(pendingResult.safeSignals).toContain("gstr2b-return-dashboard-search-results-pending");
+    expect(pendingResult.safeSignals).not.toContain("gstr2b-dashboard-view-clicked");
+    expect(viewClicked).toBe(0);
+  });
+
   it("never releases an unchanged pre-search GSTR-2B View despite nearby mutations", async () => {
     vi.useFakeTimers();
     try {

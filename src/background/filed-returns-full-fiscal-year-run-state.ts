@@ -12,6 +12,7 @@ import {
   hasActionRequiredFullFiscalYearTarget,
   isFullFiscalYearLedger,
   isFullFiscalYearLedgerStale,
+  recoverableFullFiscalYearLedgerId,
 } from "./filed-returns-full-fiscal-year-ledger";
 import {
   activeFullFiscalYearStep,
@@ -157,6 +158,12 @@ export async function readLedger(key: string): Promise<FiledReturnsFullFiscalYea
   const values = await browser.storage.local.get(key);
   const ledger = values[key];
   return isFullFiscalYearLedger(ledger) ? ledger : null;
+}
+
+export async function readRecoverableMalformedLedgerId(key: string): Promise<string | null> {
+  const values = await browser.storage.local.get(key);
+  const ledger = values[key];
+  return isFullFiscalYearLedger(ledger) ? null : recoverableFullFiscalYearLedgerId(ledger);
 }
 
 export async function persistLedger(

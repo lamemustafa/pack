@@ -242,6 +242,10 @@ export async function capturePortalBlobDownloadWithDiagnostics(
         captureBlobUrl(anchor.href, anchor.getAttribute("download"), true);
         return true;
       }
+      if (controlClickActive && /^https?:/i.test(anchor.href)) {
+        addSafeSignal(`${config.signalPrefix}-native-https-download-suppressed`);
+        return true;
+      }
       return false;
     };
 

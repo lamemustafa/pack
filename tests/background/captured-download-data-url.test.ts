@@ -52,6 +52,12 @@ describe("captured download data URL validation", () => {
     expect(isExpectedCapturedDataUrl(xlsDataUrl, "EXCEL")).toBe(true);
     expect(capturedFiledReturnsArtifactExtension(xlsDataUrl, "EXCEL")).toBe(".xls");
     expect(isExpectedCapturedDataUrl(xlsxDataUrl, "EXCEL")).toBe(true);
+    expect(
+      isExpectedCapturedDataUrl(
+        `data:application/octet-stream;base64,${base64(bytesToBinaryString(xlsxBytes))}`,
+        "EXCEL",
+      ),
+    ).toBe(true);
     expect(capturedFiledReturnsArtifactExtension(xlsxDataUrl, "EXCEL")).toBe(".xlsx");
   });
 
