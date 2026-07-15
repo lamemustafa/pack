@@ -32,6 +32,7 @@ type PortalAvailabilityIssue = Pick<
 
 export function detectFiledReturnsPortalAvailabilityIssue(
   documentRef: Document,
+  scopeId = FILED_RETURNS_SCOPE_ID,
 ): PortalAvailabilityIssue | null {
   const windowRef = documentRef.defaultView;
   const path = windowRef?.location.pathname ?? "";
@@ -40,7 +41,7 @@ export function detectFiledReturnsPortalAvailabilityIssue(
   if (isScheduledDowntimeOutagePage(documentRef, bodyText)) {
     return {
       connectorId: "gst",
-      scopeId: FILED_RETURNS_SCOPE_ID,
+      scopeId,
       state: "blocked",
       safeSignals: ["portal-scheduled-downtime"],
       safeMessage:
@@ -59,7 +60,7 @@ export function detectFiledReturnsPortalAvailabilityIssue(
   if (isSystemErrorPath || isSystemErrorText) {
     return {
       connectorId: "gst",
-      scopeId: FILED_RETURNS_SCOPE_ID,
+      scopeId,
       state: "blocked",
       safeSignals: ["portal-system-error"],
       safeMessage:
@@ -77,7 +78,7 @@ export function detectFiledReturnsPortalAvailabilityIssue(
 
   return {
     connectorId: "gst",
-    scopeId: FILED_RETURNS_SCOPE_ID,
+    scopeId,
     state: /session|login/i.test(bodyText) ? "login-required" : "blocked",
     safeSignals: ["portal-blocked-or-session-expired"],
     safeMessage:

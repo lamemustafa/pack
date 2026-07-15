@@ -62,11 +62,11 @@ export async function triggerFiledReturnDownload(
   documentRef: Document,
   target: FiledReturnsDownloadTarget,
 ): Promise<FiledReturnDownloadTriggerResult> {
-  const blockedState = detectBlockedPortalState(documentRef);
+  const scopeId = filedReturnScopeId(target.returnType);
+  const blockedState = detectBlockedPortalState(documentRef, scopeId);
   if (blockedState) return { downloadTrigger: blockedState };
 
   const descriptor = filedReturnDescriptor(target.returnType);
-  const scopeId = filedReturnScopeId(target.returnType);
   const artifactType = target.artifactType ?? "PDF";
   const artifactLabel = filedReturnsConcreteArtifactLabel(artifactType);
   if (!supportsFiledReturnsArtifactType(target.returnType, artifactType)) {
@@ -273,8 +273,11 @@ function supportsFiledReturnBlobCapture(target: FiledReturnsDownloadTarget): boo
   return target.returnType === "GSTR-1" || target.returnType === "GSTR-2B";
 }
 
-function detectBlockedPortalState(documentRef: Document): PortalDownloadTriggerResult | null {
-  const issue = detectFiledReturnsPortalAvailabilityIssue(documentRef);
+function detectBlockedPortalState(
+  documentRef: Document,
+  scopeId: string,
+): PortalDownloadTriggerResult | null {
+  const issue = detectFiledReturnsPortalAvailabilityIssue(documentRef, scopeId);
   return issue ? asPortalDownloadTriggerResult(issue) : null;
 }
 

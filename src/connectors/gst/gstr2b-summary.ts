@@ -62,29 +62,37 @@ export function verifyVisibleGstr2bPeriod(
   scope: FiledReturnsDownloadScope,
 ): PortalDownloadTriggerResult | null {
   const serverScope = extractGstr2bServerScope(documentRef);
-  if (serverScope) {
-    if (gstr2bScopeMatches(serverScope, scope)) return null;
-    return gstr2bPeriodMismatch(["gstr2b-server-period-mismatch"]);
-  }
-
   const visiblePeriod = extractGstr2bLabelValue(normalisedText, "return period");
   const visibleFinancialYear = extractGstr2bLabelValue(normalisedText, "financial year");
   const statementScope = extractGstr2bStatementScope(documentRef);
-  const verifiedPeriod = visiblePeriod ?? statementScope?.period ?? null;
-  const verifiedFinancialYear = visibleFinancialYear ?? statementScope?.financialYear ?? null;
-  if (!verifiedPeriod || !verifiedFinancialYear) {
+
+  if (serverScope && !gstr2bScopeMatches(serverScope, scope)) {
+    return gstr2bPeriodMismatch(["gstr2b-server-period-mismatch"]);
+  }
+
+  const labelledEvidenceMatches =
+    (!visiblePeriod ||
+      matchesAcceptedText(visiblePeriod, acceptedFiledReturnsMonthTexts(scope.period))) &&
+    (!visibleFinancialYear || matchesAcceptedText(visibleFinancialYear, [scope.financialYear]));
+  if (!labelledEvidenceMatches) {
+    return gstr2bPeriodMismatch(serverScope ? ["gstr2b-server-visible-period-conflict"] : []);
+  }
+
+  const hasCompleteLabelledEvidence = Boolean(visiblePeriod && visibleFinancialYear);
+  if (hasCompleteLabelledEvidence) return null;
+
+  if (statementScope && !gstr2bScopeMatches(statementScope, scope)) {
+    return gstr2bPeriodMismatch(serverScope ? ["gstr2b-server-visible-period-conflict"] : []);
+  }
+
+  if (serverScope) return null;
+
+  if (!statementScope) {
     // Whole-page month/year matches are not target evidence: generated-on text and table
     // content can mention another period. Only labels or the portal statement heading qualify.
     return gstr2bPeriodMismatch(["gstr2b-labelled-period-evidence-missing"]);
   }
-  const monthMatches = matchesAcceptedText(
-    verifiedPeriod,
-    acceptedFiledReturnsMonthTexts(scope.period),
-  );
-  const yearMatches = matchesAcceptedText(verifiedFinancialYear, [scope.financialYear]);
-  if (monthMatches && yearMatches) return null;
-
-  return gstr2bPeriodMismatch([]);
+  return null;
 
   function gstr2bPeriodMismatch(extraSignals: string[]): PortalDownloadTriggerResult {
     return {

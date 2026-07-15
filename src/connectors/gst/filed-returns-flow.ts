@@ -42,7 +42,7 @@ export async function runFiledReturnsDownloadStep(
 
   const descriptor = filedReturnDescriptor(scope.returnType);
   const scopeId = filedReturnScopeId(scope.returnType);
-  const portalAvailabilityIssue = detectFiledReturnsPortalAvailabilityIssue(documentRef);
+  const portalAvailabilityIssue = detectFiledReturnsPortalAvailabilityIssue(documentRef, scopeId);
   if (portalAvailabilityIssue) {
     clearFiledReturnsSearchAttempt(documentRef);
     return portalAvailabilityIssue;

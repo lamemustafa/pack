@@ -36,10 +36,10 @@ export async function runGstr2bDownloadStep(
   documentRef: Document,
   scope: FiledReturnsDownloadScope,
 ): Promise<PortalFlowStepResult> {
-  const portalAvailabilityIssue = detectFiledReturnsPortalAvailabilityIssue(documentRef);
+  const scopeId = filedReturnScopeId("GSTR-2B");
+  const portalAvailabilityIssue = detectFiledReturnsPortalAvailabilityIssue(documentRef, scopeId);
   if (portalAvailabilityIssue) return portalAvailabilityIssue;
 
-  const scopeId = filedReturnScopeId("GSTR-2B");
   const safeSignals = await dismissSafePostLoginDialogs(documentRef);
   if (hasVisibleSafePostLoginDialog(documentRef)) {
     return {

@@ -22,6 +22,17 @@ const DASHBOARD_DEPENDENT_FIELD_ATTEMPTS = 12;
 const DASHBOARD_SEARCH_PENDING_MS = 12_000;
 const DASHBOARD_SEARCH_PENDING_ATTRIBUTE = "data-pack-gstr2b-dashboard-search-pending-at";
 const DASHBOARD_SEARCH_SCOPE_ATTRIBUTE = "data-pack-gstr2b-dashboard-search-scope";
+interface DashboardSearchAttempt {
+  candidateView: HTMLElement | null;
+  candidateMutationVersion: number | null;
+  lastMutationAt: number | null;
+  mutationVersion: number;
+  observer: MutationObserver | null;
+  previousView: HTMLElement | null;
+  scope: string;
+  startedAt: number;
+}
+const dashboardSearchAttempts = new WeakMap<Document, DashboardSearchAttempt>();
 
 export async function selectGstr2bReturnDashboardFiltersAndSearch(
   documentRef: Document,
@@ -33,9 +44,11 @@ export async function selectGstr2bReturnDashboardFiltersAndSearch(
   let controls = findReturnDashboardControls(documentRef);
   if (!controls) {
     const viewControl = findGstr2bDashboardControl(documentRef, "view");
-    if (viewControl && hasDashboardSearchForScope(documentRef, scope)) {
+    if (viewControl && hasSettledDashboardSearchForScope(documentRef, scope, viewControl)) {
       return null;
     }
+
+    const searchPending = hasRecentDashboardSearch(documentRef, scope);
 
     return {
       connectorId: "gst",
@@ -44,7 +57,11 @@ export async function selectGstr2bReturnDashboardFiltersAndSearch(
       safeSignals: [
         ...safeSignals,
         ...diagnosticSignals,
-        ...(viewControl ? ["gstr2b-dashboard-view-unscoped"] : []),
+        ...(searchPending
+          ? ["gstr2b-return-dashboard-search-results-pending"]
+          : viewControl
+            ? ["gstr2b-dashboard-view-unscoped"]
+            : []),
       ],
       safeMessage:
         "Pack recognized the GST Return Dashboard and is waiting for target-bound dashboard controls to render. Diagnostic signals: " +
@@ -55,7 +72,7 @@ export async function selectGstr2bReturnDashboardFiltersAndSearch(
   const viewControl = findGstr2bDashboardControl(documentRef, "view");
   if (
     viewControl &&
-    hasDashboardSearchForScope(documentRef, scope) &&
+    hasSettledDashboardSearchForScope(documentRef, scope, viewControl) &&
     (dashboardFiltersMatch(scope, controls.year, controls.quarter, controls.period) ||
       dashboardYearAndPeriodMatch(scope, controls.year, controls.period))
   ) {
@@ -126,7 +143,7 @@ export async function selectGstr2bReturnDashboardFiltersAndSearch(
     };
   }
 
-  markDashboardSearchPending(documentRef, scope);
+  markDashboardSearchPending(documentRef, scope, viewControl);
   activateElement(controls.search);
   return {
     connectorId: "gst",
@@ -146,6 +163,8 @@ export async function selectGstr2bReturnDashboardFiltersAndSearch(
 export function clearGstr2bDashboardSearchPending(documentRef: Document): void {
   documentRef.documentElement.removeAttribute(DASHBOARD_SEARCH_PENDING_ATTRIBUTE);
   documentRef.documentElement.removeAttribute(DASHBOARD_SEARCH_SCOPE_ATTRIBUTE);
+  dashboardSearchAttempts.get(documentRef)?.observer?.disconnect();
+  dashboardSearchAttempts.delete(documentRef);
 }
 
 export function isReturnDashboardRoute(documentRef: Document): boolean {
@@ -181,10 +200,15 @@ function hasRecentDashboardSearch(
   const pendingAt = Number(
     documentRef.documentElement.getAttribute(DASHBOARD_SEARCH_PENDING_ATTRIBUTE) ?? "",
   );
+  const attempt = dashboardSearchAttempts.get(documentRef);
+  const lastProgressAt =
+    attempt?.scope === dashboardSearchScope(scope)
+      ? (attempt.lastMutationAt ?? pendingAt)
+      : pendingAt;
   return (
     Number.isFinite(pendingAt) &&
-    Date.now() - pendingAt < DASHBOARD_SEARCH_PENDING_MS &&
-    hasDashboardSearchForScope(documentRef, scope)
+    hasDashboardSearchForScope(documentRef, scope) &&
+    Date.now() - lastProgressAt < DASHBOARD_SEARCH_PENDING_MS
   );
 }
 
@@ -198,12 +222,72 @@ function hasDashboardSearchForScope(
   );
 }
 
-function markDashboardSearchPending(documentRef: Document, scope: FiledReturnsDownloadScope): void {
-  documentRef.documentElement.setAttribute(DASHBOARD_SEARCH_PENDING_ATTRIBUTE, String(Date.now()));
-  documentRef.documentElement.setAttribute(
-    DASHBOARD_SEARCH_SCOPE_ATTRIBUTE,
-    dashboardSearchScope(scope),
-  );
+function hasSettledDashboardSearchForScope(
+  documentRef: Document,
+  scope: FiledReturnsDownloadScope,
+  viewControl: HTMLElement,
+): boolean {
+  if (!hasDashboardSearchForScope(documentRef, scope)) return false;
+  const attempt = dashboardSearchAttempts.get(documentRef);
+  if (!attempt || attempt.scope !== dashboardSearchScope(scope)) return false;
+  if (Date.now() - attempt.startedAt >= DASHBOARD_SEARCH_PENDING_MS) return true;
+  if (attempt.previousView === viewControl && attempt.mutationVersion === 0) {
+    return false;
+  }
+  if (
+    attempt.candidateView !== viewControl ||
+    attempt.candidateMutationVersion !== attempt.mutationVersion
+  ) {
+    attempt.candidateView = viewControl;
+    attempt.candidateMutationVersion = attempt.mutationVersion;
+    return false;
+  }
+  return true;
+}
+
+function markDashboardSearchPending(
+  documentRef: Document,
+  scope: FiledReturnsDownloadScope,
+  previousView: HTMLElement | null,
+): void {
+  const scopeSignature = dashboardSearchScope(scope);
+  const startedAt = Date.now();
+  dashboardSearchAttempts.get(documentRef)?.observer?.disconnect();
+  const attempt: DashboardSearchAttempt = {
+    candidateView: null,
+    candidateMutationVersion: null,
+    lastMutationAt: null,
+    mutationVersion: 0,
+    observer: null,
+    previousView,
+    scope: scopeSignature,
+    startedAt,
+  };
+  const resultRoot = previousView ? findDashboardResultRoot(previousView) : null;
+  const MutationObserverConstructor = documentRef.defaultView?.MutationObserver;
+  if (resultRoot && MutationObserverConstructor) {
+    attempt.observer = new MutationObserverConstructor(() => {
+      attempt.mutationVersion += 1;
+      attempt.lastMutationAt = Date.now();
+    });
+    attempt.observer.observe(resultRoot, {
+      attributes: true,
+      characterData: true,
+      childList: true,
+      subtree: true,
+    });
+  }
+  documentRef.documentElement.setAttribute(DASHBOARD_SEARCH_PENDING_ATTRIBUTE, String(startedAt));
+  documentRef.documentElement.setAttribute(DASHBOARD_SEARCH_SCOPE_ATTRIBUTE, scopeSignature);
+  dashboardSearchAttempts.set(documentRef, attempt);
+}
+
+function findDashboardResultRoot(viewControl: HTMLElement): HTMLElement {
+  let current = viewControl.parentElement;
+  for (let depth = 0; current && depth < 6; depth += 1, current = current.parentElement) {
+    if (/gstr-?2b/.test(normaliseText(current.textContent ?? ""))) return current;
+  }
+  return viewControl.parentElement ?? viewControl;
 }
 
 function dashboardSearchScope(scope: FiledReturnsDownloadScope): string {
