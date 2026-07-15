@@ -116,6 +116,20 @@ describe("live evidence template generator", () => {
     });
     expect(evidence.profile).toBe("clean-test-profile");
     expect(evidence.limitations).toBeUndefined();
+    expect(evidence.downloadEvidence).toHaveLength(24);
+    const artifactsByPeriod = new Map<string, Set<string>>();
+    for (const row of evidence.downloadEvidence) {
+      const artifacts = artifactsByPeriod.get(row.period) ?? new Set<string>();
+      artifacts.add(row.artifactType);
+      artifactsByPeriod.set(row.period, artifacts);
+    }
+    expect(artifactsByPeriod.size).toBe(12);
+    for (const artifacts of artifactsByPeriod.values()) {
+      expect([...artifacts].sort()).toEqual(["EXCEL", "PDF"]);
+    }
+    expect(
+      new Set(evidence.downloadEvidence.map((row: { actionId: string }) => row.actionId)).size,
+    ).toBe(24);
   });
 
   it("accepts explicit limitation codes for blocked evidence only", () => {

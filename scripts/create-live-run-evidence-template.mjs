@@ -154,23 +154,16 @@ try {
       ...counts,
     },
     checks,
-    downloadEvidence: Array.from(
-      { length: outcome === "pass" ? Math.max(1, counts.downloaded) : 1 },
-      (_, index) => ({
-        actionId: `manual-entry-required-${index + 1}`,
-        returnType,
-        artifactType: artifactType === "PDF_AND_EXCEL" ? "PDF" : artifactType,
-        financialYear,
-        period: period === "FULL_FISCAL_YEAR" ? MONTHS[index % MONTHS.length] : period,
-        endpointClass: defaultEndpointClass(returnType, artifactType),
-        downloadPathClass: defaultDownloadPathClass(returnType),
-        status: outcome === "pass" ? "downloaded" : "user-action-required",
-        askWhereToSave: options["ask-where-to-save"] ?? "unknown",
-        filenameCollision: options["filename-collision"] ?? "unknown",
-        multipleDownloadPrompt: options["multiple-download-prompt"] ?? "unknown",
-        exactZipBuild: zipSha256,
-      }),
-    ),
+    downloadEvidence: createDownloadEvidenceRows({
+      artifactType,
+      counts,
+      financialYear,
+      options,
+      outcome,
+      period,
+      returnType,
+      zipSha256,
+    }),
     ...(limitations.length > 0 ? { limitations } : {}),
     redaction: {
       containsGstin: false,
@@ -323,6 +316,39 @@ function defaultEndpointClass(returnType, artifactType) {
   if (returnType === "GSTR-1") return "gstr1-pdf-portal-blob-captured-download";
   if (returnType === "GSTR-2B") return "gstr2b-portal-blob-captured-download";
   return "unknown";
+}
+
+function createDownloadEvidenceRows({
+  artifactType,
+  counts,
+  financialYear,
+  options,
+  outcome,
+  period,
+  returnType,
+  zipSha256,
+}) {
+  const targetCount = outcome === "pass" ? Math.max(1, counts.downloaded) : 1;
+  const concreteArtifacts =
+    outcome === "pass" && artifactType === "PDF_AND_EXCEL"
+      ? ["PDF", "EXCEL"]
+      : [artifactType === "PDF_AND_EXCEL" ? "PDF" : artifactType];
+  return Array.from({ length: targetCount }, (_, targetIndex) =>
+    concreteArtifacts.map((concreteArtifact, artifactIndex) => ({
+      actionId: `manual-entry-required-${targetIndex * concreteArtifacts.length + artifactIndex + 1}`,
+      returnType,
+      artifactType: concreteArtifact,
+      financialYear,
+      period: period === "FULL_FISCAL_YEAR" ? MONTHS[targetIndex % MONTHS.length] : period,
+      endpointClass: defaultEndpointClass(returnType, concreteArtifact),
+      downloadPathClass: defaultDownloadPathClass(returnType),
+      status: outcome === "pass" ? "downloaded" : "user-action-required",
+      askWhereToSave: options["ask-where-to-save"] ?? "unknown",
+      filenameCollision: options["filename-collision"] ?? "unknown",
+      multipleDownloadPrompt: options["multiple-download-prompt"] ?? "unknown",
+      exactZipBuild: zipSha256,
+    })),
+  ).flat();
 }
 
 function defaultDownloadPathClass(returnType) {

@@ -334,6 +334,22 @@ function validatePassDownloadEvidenceReconciliation(
   if (actionIds.size !== downloadedEntries.length) {
     errors.push("pass evidence cannot reuse a downloaded actionId");
   }
+  if (evidence.artifactType === "PDF_AND_EXCEL") {
+    const artifactsByPeriod = new Map<string, Set<string>>();
+    downloadedEntries.forEach((entry) => {
+      if (typeof entry.period !== "string" || typeof entry.artifactType !== "string") return;
+      const artifacts = artifactsByPeriod.get(entry.period) ?? new Set<string>();
+      artifacts.add(entry.artifactType);
+      artifactsByPeriod.set(entry.period, artifacts);
+    });
+    if (
+      Array.from(artifactsByPeriod.values()).some(
+        (artifacts) => !artifacts.has("PDF") || !artifacts.has("EXCEL"),
+      )
+    ) {
+      errors.push("pass combined evidence must include PDF and EXCEL for each downloaded period");
+    }
+  }
   if (
     entries.some(
       (entry) =>

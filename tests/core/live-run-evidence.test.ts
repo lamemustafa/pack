@@ -106,6 +106,15 @@ describe("live run evidence", () => {
           endpointClass: "gstr1-pdf-portal-blob-captured-download",
           downloadPathClass: "captured-portal-request-data",
         },
+        {
+          ...createValidEvidence().downloadEvidence[0],
+          actionId: "action-gstr1-excel",
+          artifactType: "EXCEL",
+          returnType: "GSTR-1",
+          financialYear: "2025-26",
+          endpointClass: "gstr1-excel-portal-blob-captured-download",
+          downloadPathClass: "captured-portal-request-data",
+        },
       ],
     });
 
@@ -125,6 +134,33 @@ describe("live run evidence", () => {
     expect(validGstr1Combined).toMatchObject({ ok: true });
   });
 
+  it("requires both concrete artifacts for every downloaded combined period", () => {
+    const pdfOnly = createValidEvidence().downloadEvidence[0];
+    const result = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      returnType: "GSTR-1",
+      artifactType: "PDF_AND_EXCEL",
+      financialYear: "2025-26",
+      downloadEvidence: [
+        {
+          ...pdfOnly,
+          actionId: "action-gstr1-pdf",
+          returnType: "GSTR-1",
+          financialYear: "2025-26",
+          endpointClass: "gstr1-pdf-portal-blob-captured-download",
+          downloadPathClass: "captured-portal-request-data",
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors).toContain(
+        "pass combined evidence must include PDF and EXCEL for each downloaded period",
+      );
+    }
+  });
+
   it("accepts redacted GSTR-2B PDF and Excel evidence metadata", () => {
     expect(
       validateLiveRunEvidence({
@@ -135,6 +171,14 @@ describe("live run evidence", () => {
           {
             ...createValidEvidence().downloadEvidence[0],
             actionId: "action-gstr2b-pdf",
+            returnType: "GSTR-2B",
+            endpointClass: "gstr2b-portal-blob-captured-download",
+            downloadPathClass: "captured-portal-request-data",
+          },
+          {
+            ...createValidEvidence().downloadEvidence[0],
+            actionId: "action-gstr2b-excel",
+            artifactType: "EXCEL",
             returnType: "GSTR-2B",
             endpointClass: "gstr2b-portal-blob-captured-download",
             downloadPathClass: "captured-portal-request-data",
