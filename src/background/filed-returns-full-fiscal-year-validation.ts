@@ -98,6 +98,16 @@ export function isFullFiscalYearLedger(input: unknown): input is FiledReturnsFul
   return true;
 }
 
+export function recoverableFullFiscalYearLedgerId(input: unknown): string | null {
+  if (!input || typeof input !== "object") return null;
+  const ledgerId = (input as { ledgerId?: unknown }).ledgerId;
+  return typeof ledgerId === "string" &&
+    ledgerId.length <= 120 &&
+    /^[a-zA-Z0-9._-]+$/.test(ledgerId)
+    ? ledgerId
+    : null;
+}
+
 function isFullFiscalYearScope(
   scope: Partial<FiledReturnsDownloadScope> | undefined,
 ): scope is FiledReturnsDownloadScope {

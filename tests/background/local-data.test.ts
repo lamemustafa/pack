@@ -362,6 +362,55 @@ describe("Pack local data clearing", () => {
     expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
   });
 
+  it("clears a safe full-year ledger id recovered from malformed metadata", async () => {
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      key === "pack:full-fiscal-year-ledger"
+        ? {
+            [key]: {
+              ledgerId: "recoverable-full-year-ledger",
+              schemaVersion: "unexpected",
+            },
+          }
+        : {},
+    );
+    const background = await import("../../src/entrypoints/background");
+
+    const response = await background.clearPackLocalData();
+
+    expect(response).toEqual({ ok: true, cleared: true });
+    expect(zipMocks.discardFullFiscalYearFiledReturnsZip).toHaveBeenCalledWith(
+      "recoverable-full-year-ledger",
+    );
+    expect(browserMocks.storage.local.remove).toHaveBeenCalledWith(
+      background.PACK_CLEARABLE_LOCAL_STORAGE_KEYS,
+    );
+  });
+
+  it("fails closed when malformed full-year metadata has no safe cleanup id", async () => {
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      key === "pack:full-fiscal-year-ledger"
+        ? {
+            [key]: {
+              ledgerId: "unsafe/ledger",
+              schemaVersion: "unexpected",
+            },
+          }
+        : {},
+    );
+    const background = await import("../../src/entrypoints/background");
+
+    const response = await background.clearPackLocalData();
+
+    expect(response).toEqual({
+      ok: false,
+      error:
+        "Pack could not verify retained fiscal-year staging. Retry clearing local data before removing saved state.",
+    });
+    expect(zipMocks.discardFullFiscalYearFiledReturnsZip).not.toHaveBeenCalled();
+    expect(browserMocks.storage.session.clear).not.toHaveBeenCalled();
+    expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
+  });
+
   it("restricts local storage to trusted extension contexts on startup", async () => {
     await import("../../src/entrypoints/background");
 

@@ -104,6 +104,9 @@ export async function resolveUnconfirmedFiledReturnsDownload(
 ): Promise<PackMessageResponse> {
   const review = await readFiledReturnsTargetReview(scope, deps);
   if (!review) return noTargetReviewResponse(scope);
+  if (hasSinglePeriodCleanupFailure(review.safeSignals)) {
+    return responseForFiledReturnsTargetReview(review);
+  }
 
   await clearFiledReturnsTargetReview(scope, deps);
   const flowStep: PortalFlowStepResult = {
@@ -191,6 +194,21 @@ function toTargetReviewSummary(
 }
 
 function targetReviewStep(review: FiledReturnsTargetReview): PortalFlowStepResult {
+  if (hasSinglePeriodCleanupFailure(review.safeSignals)) {
+    return {
+      connectorId: "gst",
+      scopeId: filedReturnScopeId(review.scope.returnType),
+      state: "blocked",
+      safeSignals: ["single-period-opfs-clear-failed", "single-period-opfs-cleanup-required"],
+      safeMessage:
+        "Pack cannot complete this review while temporary selected-file staging remains uncleared.",
+      userAction: {
+        type: "RETRY_PORTAL_GENERATION",
+        message: "Retry so Pack can clear the retained temporary staging before completion.",
+        canResume: true,
+      },
+    };
+  }
   return {
     connectorId: "gst",
     scopeId: filedReturnScopeId(review.scope.returnType),
@@ -228,6 +246,7 @@ export function noTargetReviewResponse(scope: FiledReturnsDownloadScope): PackMe
 }
 
 function requiresTargetReview(step: PortalFlowStepResult): boolean {
+  if (hasSinglePeriodCleanupFailure(step.safeSignals)) return false;
   return (
     step.state === "download-unconfirmed" ||
     step.safeSignals.some((signal) =>
@@ -239,6 +258,10 @@ function requiresTargetReview(step: PortalFlowStepResult): boolean {
       ].includes(signal),
     )
   );
+}
+
+function hasSinglePeriodCleanupFailure(safeSignals: readonly string[]): boolean {
+  return safeSignals.includes("single-period-opfs-clear-failed");
 }
 
 function sameFiledReturnsScope(

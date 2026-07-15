@@ -140,6 +140,10 @@ export async function capturePortalBlobDownloadWithDiagnostics(
         addSafeSignal(`${config.signalPrefix}-blob-oversized-rejected`);
         return;
       }
+      if (blob.type && !isArtifactContentType(blob.type)) {
+        addSafeSignal(`${config.signalPrefix}-blob-content-type-rejected`);
+        return;
+      }
       addSafeSignal(`${config.signalPrefix}-blob-bytes-accepted`);
       const reader = new FileReader();
       reader.addEventListener("load", () => {
@@ -171,6 +175,12 @@ export async function capturePortalBlobDownloadWithDiagnostics(
       addSafeSignal(`${config.signalPrefix}-data-url-observed`);
       if (!dataUrl.startsWith("data:") || dataUrl.length > config.maxBytes * 2) {
         addSafeSignal(`${config.signalPrefix}-data-url-rejected`);
+        return;
+      }
+      const metadataEnd = dataUrl.indexOf(",");
+      const contentType = metadataEnd > 5 ? dataUrl.slice(5, metadataEnd).split(";", 1)[0] : "";
+      if (!contentType || !isArtifactContentType(contentType)) {
+        addSafeSignal(`${config.signalPrefix}-data-url-content-type-rejected`);
         return;
       }
       const safeSignals = captureSignals("data-url", filename);
@@ -378,6 +388,10 @@ export async function capturePortalBlobDownloadWithDiagnostics(
       const actionBound = controlClickActive;
       return originalFetch.call(window, input, init).then((response) => {
         const contentType = response.headers.get("content-type");
+        if (actionBound && contentType && !isArtifactContentType(contentType)) {
+          addSafeSignal(`${config.signalPrefix}-fetch-content-type-rejected`);
+          return response;
+        }
         if (actionBound && contentType && isArtifactContentType(contentType)) {
           addSafeSignal(`${config.signalPrefix}-fetch-artifact-response-observed`);
         }
@@ -397,9 +411,12 @@ export async function capturePortalBlobDownloadWithDiagnostics(
       if (actionBoundXhrs.has(this)) {
         this.addEventListener("load", () => {
           if (settled) return;
-          if (isBlobLike(this.response)) actionBoundBlobs.add(this.response);
           const contentType = this.getResponseHeader("content-type");
-          if (contentType && !isArtifactContentType(contentType)) return;
+          if (contentType && !isArtifactContentType(contentType)) {
+            addSafeSignal(`${config.signalPrefix}-xhr-content-type-rejected`);
+            return;
+          }
+          if (isBlobLike(this.response)) actionBoundBlobs.add(this.response);
           addSafeSignal(`${config.signalPrefix}-xhr-artifact-response-observed`);
         });
       }

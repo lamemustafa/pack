@@ -1,7 +1,10 @@
 import { browser } from "wxt/browser";
 import type { PackMessageResponse } from "../core/messages";
 import { readActiveFiledReturnsRunSummary } from "./filed-returns-active-run";
-import { isFullFiscalYearLedger } from "./filed-returns-full-fiscal-year-ledger";
+import {
+  isFullFiscalYearLedger,
+  recoverableFullFiscalYearLedgerId,
+} from "./filed-returns-full-fiscal-year-ledger";
 import {
   discardFullFiscalYearFiledReturnsZip,
   discardSinglePeriodFiledReturnsZip,
@@ -59,8 +62,18 @@ export async function clearPackLocalDataWithRecoveryGuard(
   }
 
   const ledger = await readLocalValue<unknown>(deps.storageKeys.fullFiscalYearLedger);
-  if (isFullFiscalYearLedger(ledger)) {
-    const clearSignal = await discardFullFiscalYearFiledReturnsZip(ledger.ledgerId);
+  const fullFiscalYearLedgerId = isFullFiscalYearLedger(ledger)
+    ? ledger.ledgerId
+    : recoverableFullFiscalYearLedgerId(ledger);
+  if (ledger && !fullFiscalYearLedgerId) {
+    return {
+      ok: false,
+      error:
+        "Pack could not verify retained fiscal-year staging. Retry clearing local data before removing saved state.",
+    };
+  }
+  if (fullFiscalYearLedgerId) {
+    const clearSignal = await discardFullFiscalYearFiledReturnsZip(fullFiscalYearLedgerId);
     if (clearSignal !== "full-fiscal-year-opfs-cleared") {
       return {
         ok: false,

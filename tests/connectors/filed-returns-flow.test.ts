@@ -1167,7 +1167,7 @@ describe("filed returns guided flow", () => {
     expect(searchClicked).toBe(1);
   });
 
-  it("waits for an in-place GSTR-2B dashboard result update to stabilize after Search", async () => {
+  it("keeps the unchanged GSTR-2B View pending after an in-place status mutation", async () => {
     const documentRef = createGstDocument(
       `
         <main>
@@ -1210,13 +1210,16 @@ describe("filed returns guided flow", () => {
     documentRef.querySelector("article")?.append(resultStatus);
     await Promise.resolve();
     const stabilizingResult = await runFiledReturnsDownloadStep(documentRef, scope);
-    const settledResult = await runFiledReturnsDownloadStep(documentRef, scope);
+    const stillPendingResult = await runFiledReturnsDownloadStep(documentRef, scope);
 
     expect(stabilizingResult.safeSignals).toContain(
       "gstr2b-return-dashboard-search-results-pending",
     );
-    expect(settledResult.safeSignals).toContain("gstr2b-dashboard-view-clicked");
-    expect(viewClicked).toBe(1);
+    expect(stillPendingResult.safeSignals).toContain(
+      "gstr2b-return-dashboard-search-results-pending",
+    );
+    expect(stillPendingResult.safeSignals).not.toContain("gstr2b-dashboard-view-clicked");
+    expect(viewClicked).toBe(0);
   });
 
   it("requires manual recovery instead of releasing an unchanged pre-search GSTR-2B View", async () => {
@@ -1271,7 +1274,7 @@ describe("filed returns guided flow", () => {
     }
   });
 
-  it("releases a post-search GSTR-2B result after the hard mutation budget", async () => {
+  it("never releases an unchanged pre-search GSTR-2B View despite nearby mutations", async () => {
     vi.useFakeTimers();
     try {
       const documentRef = createGstDocument(
@@ -1326,10 +1329,14 @@ describe("filed returns guided flow", () => {
       if (status) status.textContent = "Loading 12";
       await Promise.resolve();
       await vi.advanceTimersByTimeAsync(1_000);
-      const settledAfterBudget = await runFiledReturnsDownloadStep(documentRef, scope);
-      expect(settledAfterBudget.safeSignals).toContain("gstr2b-dashboard-view-clicked");
+      const recoveryAfterBudget = await runFiledReturnsDownloadStep(documentRef, scope);
+      expect(recoveryAfterBudget.state).toBe("user-action-required");
+      expect(recoveryAfterBudget.safeSignals).toContain(
+        "gstr2b-dashboard-view-unchanged-after-search",
+      );
+      expect(recoveryAfterBudget.safeSignals).not.toContain("gstr2b-dashboard-view-clicked");
       expect(searchClicked).toBe(1);
-      expect(viewClicked).toBe(1);
+      expect(viewClicked).toBe(0);
     } finally {
       vi.useRealTimers();
     }

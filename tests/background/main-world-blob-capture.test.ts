@@ -51,6 +51,33 @@ describe("capturePortalBlobDownload", () => {
     expect(nativeClicks).toBe(0);
   });
 
+  it("ignores an action-bound HTML data URL and waits for the filed-return artifact", async () => {
+    const { documentRef } = installMainWorldDom(`
+      <button data-pack-gstr2b-capture-action="capture-1">Download</button>
+    `);
+    let nativeClicks = 0;
+    documentRef.defaultView!.HTMLAnchorElement.prototype.click = function click() {
+      nativeClicks += 1;
+    };
+    documentRef.querySelector("button")?.addEventListener("click", () => {
+      const errorAnchor = documentRef.createElement("a");
+      errorAnchor.href = `data:text/html;base64,${btoa("synthetic portal error")}`;
+      errorAnchor.download = "error.html";
+      errorAnchor.click();
+
+      const artifactAnchor = documentRef.createElement("a");
+      artifactAnchor.href = `data:application/pdf;base64,${btoa("%PDF-1.7 synthetic")}`;
+      artifactAnchor.download = "may.pdf";
+      artifactAnchor.click();
+    });
+
+    const captured = await capturePortalBlobDownload(captureConfig());
+
+    expect(captured?.dataUrl).toContain("data:application/pdf;base64,");
+    expect(captured?.dataUrl).not.toContain("data:text/html");
+    expect(nativeClicks).toBe(0);
+  });
+
   it("captures and suppresses pre-existing portal blob anchor downloads", async () => {
     const { documentRef, view } = installMainWorldDom(`
       <button data-pack-gstr2b-capture-action="capture-1">Download</button>

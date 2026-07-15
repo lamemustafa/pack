@@ -10,10 +10,7 @@ import type { PackMessageResponse } from "../core/messages";
 import { filedReturnScopedSignal } from "../connectors/gst/filed-returns-return-descriptors";
 import { isExpectedCapturedDataUrlForTarget } from "./captured-download-data-url";
 import { downloadCapturedFiledReturnThroughExtension } from "./filed-returns-captured-extension-download";
-import {
-  gstr2bDialogFreeUnsupportedStep,
-  suppressNativePortalDownloadsDuringCapture,
-} from "./filed-returns-captured-portal-guard";
+import { gstr2bDialogFreeUnsupportedStep } from "./filed-returns-captured-portal-guard";
 import { capturedDownloadRejected } from "./filed-returns-captured-rejected";
 import { stageCapturedFiledReturnDownload } from "./filed-returns-captured-staging";
 import { withFiledReturnsDownloadDiagnostic } from "./filed-returns-download-diagnostics";
@@ -50,20 +47,9 @@ export async function startMainWorldCapturedFiledReturnDownload({
     );
   }
 
-  const nativeSuppression = suppressNativePortalDownloadsDuringCapture(scope, artifactType);
-  let capturedDownloadRequest: FiledReturnsCapturedDownloadRequest | null = null;
-  let safeFailureSignals: string[] = [];
-  try {
-    const captureOutcome = await capturePortalBlobDownloadInMainWorld(
-      tabId,
-      mainWorldCaptureRequest,
-    );
-    capturedDownloadRequest = captureOutcome.capturedDownloadRequest;
-    safeFailureSignals = captureOutcome.safeFailureSignals;
-  } finally {
-    nativeSuppression.stop();
-  }
-  const nativeSuppressionSignals = nativeSuppression.safeSignals();
+  const captureOutcome = await capturePortalBlobDownloadInMainWorld(tabId, mainWorldCaptureRequest);
+  const capturedDownloadRequest = captureOutcome.capturedDownloadRequest;
+  const safeFailureSignals = captureOutcome.safeFailureSignals;
   if (!capturedDownloadRequest) {
     const postClickBlockedState = await inspectPostCaptureBlockedState(deps, tabId, target);
     if (postClickBlockedState) {
@@ -77,7 +63,6 @@ export async function startMainWorldCapturedFiledReturnDownload({
               new Set([
                 ...triggerStep.safeSignals,
                 ...safeFailureSignals,
-                ...nativeSuppressionSignals,
                 ...postClickBlockedState.safeSignals,
                 ...(activePeriod ? [`filed-return-detail-period:${activePeriod}`] : []),
               ]),
@@ -89,7 +74,6 @@ export async function startMainWorldCapturedFiledReturnDownload({
     }
     const unsupportedStep = gstr2bDialogFreeUnsupportedStep({
       activePeriod,
-      nativeSuppressionSignals,
       safeFailureSignals,
       scope,
       target,
@@ -108,7 +92,6 @@ export async function startMainWorldCapturedFiledReturnDownload({
             ...triggerStep.safeSignals,
             `${mainWorldCaptureRequest.signalPrefix}-blob-capture-failed`,
             ...safeFailureSignals,
-            ...nativeSuppressionSignals,
             ...(activePeriod ? [`filed-return-detail-period:${activePeriod}`] : []),
           ],
           safeMessage:
@@ -124,13 +107,6 @@ export async function startMainWorldCapturedFiledReturnDownload({
       }),
     };
   }
-  if (nativeSuppressionSignals.length > 0) {
-    capturedDownloadRequest = {
-      ...capturedDownloadRequest,
-      safeSignals: [...capturedDownloadRequest.safeSignals, ...nativeSuppressionSignals],
-    };
-  }
-
   return startCapturedFiledReturnDownload({
     activePeriod,
     armedAt,

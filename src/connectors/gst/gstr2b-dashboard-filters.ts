@@ -262,15 +262,7 @@ function hasSettledDashboardSearchForScope(
   if (!hasDashboardSearchForScope(documentRef, scope)) return false;
   const attempt = dashboardSearchAttempts.get(documentRef);
   if (!attempt || attempt.scope !== dashboardSearchScope(scope)) return false;
-  if (attempt.previousView === viewControl && attempt.mutationVersion === 0) {
-    return false;
-  }
-  if (
-    attempt.mutationVersion > 0 &&
-    Date.now() - attempt.startedAt >= DASHBOARD_SEARCH_PENDING_MS
-  ) {
-    return true;
-  }
+  if (attempt.previousView === viewControl) return false;
   if (
     attempt.candidateView !== viewControl ||
     attempt.candidateMutationVersion !== attempt.mutationVersion
@@ -292,7 +284,6 @@ function hasExpiredUnchangedDashboardSearch(
     attempt &&
     attempt.scope === dashboardSearchScope(scope) &&
     attempt.previousView === viewControl &&
-    attempt.mutationVersion === 0 &&
     Date.now() - attempt.startedAt >= DASHBOARD_SEARCH_PENDING_MS,
   );
 }

@@ -13,7 +13,10 @@ import { FULL_FISCAL_YEAR_PERIOD, type FiledReturnsMonth } from "../core/filed-r
 import type { FiledReturnsReturnType } from "../core/filed-returns-return-types";
 import { GST_CONNECTOR_DESCRIPTOR } from "../connectors/gst/constants";
 import { PACK_PRODUCT_VERSION } from "../extension/version";
-export { isFullFiscalYearLedger } from "./filed-returns-full-fiscal-year-validation";
+export {
+  isFullFiscalYearLedger,
+  recoverableFullFiscalYearLedgerId,
+} from "./filed-returns-full-fiscal-year-validation";
 
 const ACTIVE_LEDGER_STALE_MS = 30_000;
 const FULL_FISCAL_YEAR_PLAN_VERSION = "filed-returns-monthly-v2";

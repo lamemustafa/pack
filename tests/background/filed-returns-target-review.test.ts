@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { resolveUnconfirmedFiledReturnsDownload } from "../../src/background/filed-returns-target-review";
+import {
+  persistFiledReturnsTargetReview,
+  resolveUnconfirmedFiledReturnsDownload,
+} from "../../src/background/filed-returns-target-review";
 
 const browserMocks = vi.hoisted(() => ({
   storage: {
@@ -83,5 +86,61 @@ describe("filed returns target review", () => {
         }),
       }),
     });
+  });
+
+  it("does not let manual review hide retained single-period staging", async () => {
+    const scope = {
+      artifactType: "PDF_AND_EXCEL" as const,
+      financialYear: "2025-26",
+      period: "March",
+      returnType: "GSTR-2B" as const,
+    };
+    const review = {
+      schemaVersion: "1.0",
+      targetId: "GSTR-2B:2025-26:March:PDF_AND_EXCEL",
+      status: "download-unconfirmed",
+      scope,
+      safeSignals: ["single-period-zip-download-unconfirmed", "single-period-opfs-clear-failed"],
+      safeMessage: "The ZIP download was unconfirmed and staging cleanup failed.",
+      updatedAt: "2026-06-24T00:00:00.000Z",
+    };
+    browserMocks.storage.local.get.mockResolvedValue({ "target-review": review });
+
+    const response = await resolveUnconfirmedFiledReturnsDownload(scope, "downloaded", {
+      storageKeys: { completion: "completion", targetReview: "target-review" },
+    });
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "blocked",
+        safeSignals: ["single-period-opfs-clear-failed", "single-period-opfs-cleanup-required"],
+      },
+      flowSummary: { status: "blocked", completedPeriods: [] },
+    });
+    expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
+    expect(browserMocks.storage.session.set).not.toHaveBeenCalled();
+  });
+
+  it("does not create generic target review for a cleanup-failed ZIP", async () => {
+    const summary = await persistFiledReturnsTargetReview(
+      {
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2025-26",
+        period: "March",
+        returnType: "GSTR-2B",
+      },
+      {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr2b-pdf-private-v0",
+        state: "download-unconfirmed",
+        safeSignals: ["single-period-zip-download-unconfirmed", "single-period-opfs-clear-failed"],
+        safeMessage: "Cleanup failed.",
+      },
+      { storageKeys: { targetReview: "target-review" } },
+    );
+
+    expect(summary).toBeNull();
+    expect(browserMocks.storage.local.set).not.toHaveBeenCalled();
   });
 });
