@@ -241,6 +241,20 @@ describe("live run evidence", () => {
     }
   });
 
+  it("allows an all-not-filed pass without fabricated download evidence", () => {
+    const result = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      counts: {
+        ...createValidEvidence().counts,
+        downloaded: 0,
+        notFiled: 12,
+      },
+      downloadEvidence: [],
+    });
+
+    expect(result).toMatchObject({ ok: true });
+  });
+
   it("rejects duplicate downloaded target and action identities", () => {
     const first = createValidEvidence().downloadEvidence[0];
     const result = validateLiveRunEvidence({

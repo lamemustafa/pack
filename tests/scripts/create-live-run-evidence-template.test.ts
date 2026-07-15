@@ -132,6 +132,69 @@ describe("live evidence template generator", () => {
     ).toBe(24);
   });
 
+  it("does not fabricate download rows when every passing target was not filed", () => {
+    const evidence = runTemplate([
+      "--return-type",
+      "GSTR-1",
+      "--artifact-type",
+      "PDF",
+      "--financial-year",
+      "2025-26",
+      "--period",
+      "FULL_FISCAL_YEAR",
+      "--outcome",
+      "pass",
+      "--downloaded",
+      "0",
+      "--not-filed",
+      "12",
+      "--clean-test-profile",
+      "--human-verified-account",
+      "--human-verified-periods",
+      "--all-files-non-empty",
+      "--service-worker-restart-resume-checked",
+      "--browser-restart-resume-checked",
+      "--clear-local-data-checked",
+      "--browser-summary-captured",
+      ...stableArgs,
+    ]);
+
+    expect(validateLiveRunEvidence(evidence)).toMatchObject({ ok: true });
+    expect(evidence.counts).toMatchObject({ downloaded: 0, notFiled: 12 });
+    expect(evidence.downloadEvidence).toEqual([]);
+  });
+
+  it("defaults GSTR-3B evidence to the capture-first runtime path", () => {
+    const evidence = runTemplate([
+      "--return-type",
+      "GSTR-3B",
+      "--artifact-type",
+      "PDF",
+      "--financial-year",
+      "2025-26",
+      "--period",
+      "April",
+      "--outcome",
+      "pass",
+      "--clean-test-profile",
+      "--human-verified-account",
+      "--human-verified-periods",
+      "--all-files-non-empty",
+      "--clear-local-data-checked",
+      "--browser-summary-captured",
+      ...stableArgs,
+    ]);
+
+    expect(validateLiveRunEvidence(evidence)).toMatchObject({ ok: true });
+    expect(evidence.downloadEvidence).toEqual([
+      expect.objectContaining({
+        endpointClass: "gstr3b-portal-blob-captured-download",
+        downloadPathClass: "captured-portal-request-unknown",
+        status: "downloaded",
+      }),
+    ]);
+  });
+
   it("accepts explicit limitation codes for blocked evidence only", () => {
     const evidence = runTemplate([
       "--return-type",

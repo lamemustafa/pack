@@ -232,7 +232,8 @@ function validateDownloadEvidence(
     errors.push("downloadEvidence must be an array");
     return;
   }
-  if (evidence.outcome === "pass" && input.length === 0) {
+  const downloadedCount = isRecord(evidence.counts) ? evidence.counts.downloaded : undefined;
+  if (evidence.outcome === "pass" && input.length === 0 && downloadedCount !== 0) {
     errors.push("pass evidence must include downloadEvidence");
   }
   validatePassDownloadEvidenceReconciliation(input, evidence, errors);
@@ -320,7 +321,7 @@ function validatePassDownloadEvidenceReconciliation(
   );
   if (
     typeof evidence.counts.downloaded === "number" &&
-    downloadedTargetPeriods.size < evidence.counts.downloaded
+    downloadedTargetPeriods.size !== evidence.counts.downloaded
   ) {
     errors.push("pass evidence must include one unique period per downloaded target");
   }

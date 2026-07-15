@@ -309,7 +309,7 @@ function collectLimitations(input, { checks, outcome, profile, scenario }) {
 }
 
 function defaultEndpointClass(returnType, artifactType) {
-  if (returnType === "GSTR-3B") return "gstr3b-getgenpdf";
+  if (returnType === "GSTR-3B") return "gstr3b-portal-blob-captured-download";
   if (returnType === "GSTR-1" && artifactType === "EXCEL") {
     return "gstr1-excel-portal-blob-captured-download";
   }
@@ -328,7 +328,7 @@ function createDownloadEvidenceRows({
   returnType,
   zipSha256,
 }) {
-  const targetCount = outcome === "pass" ? Math.max(1, counts.downloaded) : 1;
+  const targetCount = outcome === "pass" ? counts.downloaded : 1;
   const concreteArtifacts =
     outcome === "pass" && artifactType === "PDF_AND_EXCEL"
       ? ["PDF", "EXCEL"]
@@ -341,7 +341,7 @@ function createDownloadEvidenceRows({
       financialYear,
       period: period === "FULL_FISCAL_YEAR" ? MONTHS[targetIndex % MONTHS.length] : period,
       endpointClass: defaultEndpointClass(returnType, concreteArtifact),
-      downloadPathClass: defaultDownloadPathClass(returnType),
+      downloadPathClass: "captured-portal-request-unknown",
       status: outcome === "pass" ? "downloaded" : "user-action-required",
       askWhereToSave: options["ask-where-to-save"] ?? "unknown",
       filenameCollision: options["filename-collision"] ?? "unknown",
@@ -349,10 +349,6 @@ function createDownloadEvidenceRows({
       exactZipBuild: zipSha256,
     })),
   ).flat();
-}
-
-function defaultDownloadPathClass(returnType) {
-  return returnType === "GSTR-3B" ? "extension-direct-unknown" : "captured-portal-request-unknown";
 }
 
 function toCamelCountKey(key) {
