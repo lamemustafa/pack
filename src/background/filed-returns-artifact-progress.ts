@@ -9,15 +9,81 @@ import {
   normaliseFiledReturnsArtifactType,
   type FiledReturnsConcreteArtifactType,
 } from "../core/filed-returns-artifacts";
+import { closeOffscreenBlobDocument, clearOffscreenFiledReturnLedger } from "./offscreen-blob-url";
+import { PACK_LOCAL_STORAGE_KEYS } from "./storage-keys";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
 
-export function createSinglePeriodBundleLedgerId(scope: FiledReturnsDownloadScope): string {
+interface SinglePeriodStagingRecord {
+  ledgerId: string;
+  schemaVersion: "1.0";
+}
+
+export class InvalidSinglePeriodStagingRecordError extends Error {
+  constructor(readonly recoverableLedgerId: string | null) {
+    super("Invalid staging record.");
+  }
+}
+
+export function createSinglePeriodBundleLedgerId(): string {
   const suffix =
     globalThis.crypto?.randomUUID?.() ??
     `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
-  return ["single-period", scope.returnType, scope.financialYear, scope.period, suffix]
-    .join(":")
-    .replace(/[^a-zA-Z0-9:._-]/g, "_");
+  return `single-period:${suffix.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+}
+
+export async function reserveSinglePeriodBundleLedger(): Promise<string | null> {
+  let existing: SinglePeriodStagingRecord | null;
+  try {
+    existing = await readSinglePeriodStagingRecord();
+  } catch {
+    return null;
+  }
+  if (existing) {
+    const cleared = await clearOffscreenFiledReturnLedger(existing.ledgerId).catch(() => "failed");
+    await closeOffscreenBlobDocument();
+    if (cleared !== "cleared") return null;
+    await clearSinglePeriodStagingRecord(existing.ledgerId);
+  }
+
+  const ledgerId = createSinglePeriodBundleLedgerId();
+  const record: SinglePeriodStagingRecord = { ledgerId, schemaVersion: "1.0" };
+  try {
+    await browser.storage.local.set({ [PACK_LOCAL_STORAGE_KEYS.singlePeriodStaging]: record });
+    return ledgerId;
+  } catch {
+    return null;
+  }
+}
+
+export async function readSinglePeriodStagingRecord(): Promise<SinglePeriodStagingRecord | null> {
+  const values = await browser.storage.local.get(PACK_LOCAL_STORAGE_KEYS.singlePeriodStaging);
+  const record = values[PACK_LOCAL_STORAGE_KEYS.singlePeriodStaging];
+  if (record === undefined) return null;
+  if (!record || typeof record !== "object") {
+    throw new InvalidSinglePeriodStagingRecordError(null);
+  }
+  const candidate = record as Partial<SinglePeriodStagingRecord>;
+  const recoverableLedgerId = recoverableSinglePeriodLedgerId(candidate);
+  if (candidate.schemaVersion !== "1.0" || !recoverableLedgerId) {
+    throw new InvalidSinglePeriodStagingRecordError(recoverableLedgerId);
+  }
+  return { ledgerId: recoverableLedgerId, schemaVersion: "1.0" };
+}
+
+export async function clearSinglePeriodStagingRecord(ledgerId: string): Promise<void> {
+  const record = await readSinglePeriodStagingRecord().catch(() => null);
+  if (record?.ledgerId !== ledgerId) return;
+  await browser.storage.local.remove(PACK_LOCAL_STORAGE_KEYS.singlePeriodStaging).catch(() => {});
+}
+
+function recoverableSinglePeriodLedgerId(
+  candidate: Partial<SinglePeriodStagingRecord>,
+): string | null {
+  return typeof candidate.ledgerId === "string" &&
+    candidate.ledgerId.length <= 120 &&
+    /^single-period:[a-zA-Z0-9._-]+$/.test(candidate.ledgerId)
+    ? candidate.ledgerId
+    : null;
 }
 
 export function toOptionalArtifactUnavailableFlowStep({

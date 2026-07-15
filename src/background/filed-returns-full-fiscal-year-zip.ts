@@ -16,6 +16,7 @@ import {
   safeFullFiscalYearZipFilename,
   safeSinglePeriodZipFilename,
 } from "./filed-returns-download-filename";
+import { clearSinglePeriodStagingRecord } from "./filed-returns-artifact-progress";
 
 const USER_MEDIATED_ZIP_DOWNLOAD_WAIT_MS = 45 * 1000;
 
@@ -354,7 +355,9 @@ async function clearStagedLedgerSignal(
   ledgerId: string,
   prefix: "full-fiscal-year" | "single-period",
 ): Promise<string> {
-  return (await clearOffscreenFiledReturnLedger(ledgerId)) === "cleared"
-    ? `${prefix}-opfs-cleared`
-    : `${prefix}-opfs-clear-failed`;
+  const cleared = (await clearOffscreenFiledReturnLedger(ledgerId)) === "cleared";
+  if (cleared && prefix === "single-period") {
+    await clearSinglePeriodStagingRecord(ledgerId);
+  }
+  return cleared ? `${prefix}-opfs-cleared` : `${prefix}-opfs-clear-failed`;
 }

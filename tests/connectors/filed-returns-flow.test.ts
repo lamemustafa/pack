@@ -1219,7 +1219,7 @@ describe("filed returns guided flow", () => {
     expect(viewClicked).toBe(1);
   });
 
-  it("releases an unchanged target-filtered GSTR-2B result after the search budget", async () => {
+  it("requires manual recovery instead of releasing an unchanged pre-search GSTR-2B View", async () => {
     vi.useFakeTimers();
     try {
       const documentRef = createGstDocument(
@@ -1254,18 +1254,24 @@ describe("filed returns guided flow", () => {
       const searchResult = await runFiledReturnsDownloadStep(documentRef, scope);
       const pendingResult = await runFiledReturnsDownloadStep(documentRef, scope);
       await vi.advanceTimersByTimeAsync(12_000);
-      const settledResult = await runFiledReturnsDownloadStep(documentRef, scope);
+      const recoveryResult = await runFiledReturnsDownloadStep(documentRef, scope);
 
       expect(searchResult.safeSignals).toContain("search-clicked");
       expect(pendingResult.safeSignals).toContain("gstr2b-return-dashboard-search-results-pending");
-      expect(settledResult.safeSignals).toContain("gstr2b-dashboard-view-clicked");
-      expect(viewClicked).toBe(1);
+      expect(recoveryResult.state).toBe("user-action-required");
+      expect(recoveryResult.safeSignals).toContain("gstr2b-dashboard-view-unchanged-after-search");
+      expect(recoveryResult.safeSignals).not.toContain("gstr2b-dashboard-view-clicked");
+      expect(recoveryResult.userAction).toMatchObject({
+        type: "NAVIGATE_TO_SUPPORTED_PAGE",
+        canResume: true,
+      });
+      expect(viewClicked).toBe(0);
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it("uses the hard GSTR-2B search budget when the target result keeps mutating", async () => {
+  it("releases a post-search GSTR-2B result after the hard mutation budget", async () => {
     vi.useFakeTimers();
     try {
       const documentRef = createGstDocument(
@@ -1320,8 +1326,8 @@ describe("filed returns guided flow", () => {
       if (status) status.textContent = "Loading 12";
       await Promise.resolve();
       await vi.advanceTimersByTimeAsync(1_000);
-      const settledResult = await runFiledReturnsDownloadStep(documentRef, scope);
-      expect(settledResult.safeSignals).toContain("gstr2b-dashboard-view-clicked");
+      const settledAfterBudget = await runFiledReturnsDownloadStep(documentRef, scope);
+      expect(settledAfterBudget.safeSignals).toContain("gstr2b-dashboard-view-clicked");
       expect(searchClicked).toBe(1);
       expect(viewClicked).toBe(1);
     } finally {

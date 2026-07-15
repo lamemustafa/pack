@@ -2,7 +2,14 @@ import { browser } from "wxt/browser";
 import type { PackMessageResponse } from "../core/messages";
 import { readActiveFiledReturnsRunSummary } from "./filed-returns-active-run";
 import { isFullFiscalYearLedger } from "./filed-returns-full-fiscal-year-ledger";
-import { discardFullFiscalYearFiledReturnsZip } from "./filed-returns-full-fiscal-year-zip";
+import {
+  discardFullFiscalYearFiledReturnsZip,
+  discardSinglePeriodFiledReturnsZip,
+} from "./filed-returns-full-fiscal-year-zip";
+import {
+  InvalidSinglePeriodStagingRecordError,
+  readSinglePeriodStagingRecord,
+} from "./filed-returns-artifact-progress";
 import { readCurrentFiledReturnsTargetReviewSummary } from "./filed-returns-target-review";
 
 export interface PackLocalDataDeps {
@@ -23,6 +30,32 @@ export async function clearPackLocalDataWithRecoveryGuard(
       error:
         "Pack has unresolved filed-return recovery state. Cancel or resolve the run before clearing local data.",
     };
+  }
+
+  let singlePeriodStaging;
+  try {
+    singlePeriodStaging = await readSinglePeriodStagingRecord();
+  } catch (error) {
+    if (!(error instanceof InvalidSinglePeriodStagingRecordError)) {
+      return {
+        ok: false,
+        error:
+          "Pack could not verify temporary selected-file staging. Retry clearing local data before removing saved state.",
+      };
+    }
+    singlePeriodStaging = error.recoverableLedgerId
+      ? { ledgerId: error.recoverableLedgerId, schemaVersion: "1.0" as const }
+      : null;
+  }
+  if (singlePeriodStaging) {
+    const clearSignal = await discardSinglePeriodFiledReturnsZip(singlePeriodStaging.ledgerId);
+    if (clearSignal !== "single-period-opfs-cleared") {
+      return {
+        ok: false,
+        error:
+          "Pack could not clear temporary selected-file staging. Retry clearing local data before removing saved state.",
+      };
+    }
   }
 
   const ledger = await readLocalValue<unknown>(deps.storageKeys.fullFiscalYearLedger);

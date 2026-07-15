@@ -7,10 +7,10 @@ import {
 } from "../core/filed-returns-artifacts";
 import {
   combineDownloadedArtifactFlowSteps,
-  createSinglePeriodBundleLedgerId,
   markArtifactProgressNeedsReview,
   persistPartialArtifactSummary,
   readPersistedArtifactProgress,
+  reserveSinglePeriodBundleLedger,
   selectedArtifactsSafeMessage,
   toOptionalArtifactUnavailableFlowStep,
 } from "./filed-returns-artifact-progress";
@@ -49,8 +49,15 @@ export async function triggerSelectedArtifacts({
   );
   const singlePeriodBundleLedgerId =
     artifactTypes.length > 1 && !deps.stageCapturedDownloads
-      ? createSinglePeriodBundleLedgerId(scope)
+      ? await reserveSinglePeriodBundleLedger()
       : null;
+  if (artifactTypes.length > 1 && !deps.stageCapturedDownloads && !singlePeriodBundleLedgerId) {
+    return {
+      ok: false,
+      error:
+        "Pack could not prepare durable local staging for the selected files. Clear local Pack data, then retry.",
+    };
+  }
   const artifactDeps: FiledReturnsFlowRunnerDeps = singlePeriodBundleLedgerId
     ? {
         ...deps,
@@ -82,7 +89,9 @@ export async function triggerSelectedArtifacts({
       scope,
       tabId,
     });
-    if (!pagePreparation.ok) return pagePreparation.response;
+    if (!pagePreparation.ok) {
+      return releaseSinglePeriodStaging(pagePreparation.response, singlePeriodBundleLedgerId);
+    }
     activePeriod = pagePreparation.activePeriod;
 
     const response = await triggerAndObserveFiledReturnDownload({
@@ -92,7 +101,9 @@ export async function triggerSelectedArtifacts({
       scope,
       tabId,
     });
-    if (!response.ok || !("flowStep" in response)) return response;
+    if (!response.ok || !("flowStep" in response)) {
+      return releaseSinglePeriodStaging(response, singlePeriodBundleLedgerId);
+    }
     if (response.flowStep.state !== "downloaded") {
       const unavailableArtifactFlowStep = toOptionalArtifactUnavailableFlowStep({
         artifactType,
@@ -108,7 +119,9 @@ export async function triggerSelectedArtifacts({
         continue;
       }
 
-      if (!combinedFlowStep || artifactTypes.length === 1) return response;
+      if (!combinedFlowStep || artifactTypes.length === 1) {
+        return releaseSinglePeriodStaging(response, singlePeriodBundleLedgerId);
+      }
 
       if (singlePeriodBundleLedgerId) {
         const clearSignal = await discardSinglePeriodFiledReturnsZip(singlePeriodBundleLedgerId);
@@ -156,10 +169,13 @@ export async function triggerSelectedArtifacts({
   }
 
   if (!combinedFlowStep) {
-    return {
-      ok: false,
-      error: "Pack could not resolve a filed-return artifact selection.",
-    };
+    return releaseSinglePeriodStaging(
+      {
+        ok: false,
+        error: "Pack could not resolve a filed-return artifact selection.",
+      },
+      singlePeriodBundleLedgerId,
+    );
   }
 
   if (!lastResponse) {
@@ -183,8 +199,12 @@ export async function triggerSelectedArtifacts({
           },
   };
   if (!singlePeriodBundleLedgerId || artifactTypes.length === 1 || !response.ok) return response;
-  if (!("flowStep" in response) || response.flowStep.state !== "downloaded") return response;
-  if (!response.flowStep.safeSignals.includes("single-period-opfs-staged")) return response;
+  if (!("flowStep" in response) || response.flowStep.state !== "downloaded") {
+    return releaseSinglePeriodStaging(response, singlePeriodBundleLedgerId);
+  }
+  if (!response.flowStep.safeSignals.includes("single-period-opfs-staged")) {
+    return releaseSinglePeriodStaging(response, singlePeriodBundleLedgerId);
+  }
 
   const zipFlowStep = await exportSinglePeriodFiledReturnsZip({
     completeStep: response.flowStep,
@@ -196,6 +216,20 @@ export async function triggerSelectedArtifacts({
     ...response,
     flowStep: zipFlowStep,
     ...(flowSummary ? { flowSummary } : {}),
+  };
+}
+
+async function releaseSinglePeriodStaging(
+  response: PackMessageResponse,
+  ledgerId: string | null,
+): Promise<PackMessageResponse> {
+  if (!ledgerId) return response;
+  const clearSignal = await discardSinglePeriodFiledReturnsZip(ledgerId);
+  if (clearSignal === "single-period-opfs-cleared") return response;
+  return {
+    ok: false,
+    error:
+      "Pack could not clear temporary selected-file staging after the attempt. Retry clearing local Pack data before starting another selected-file download.",
   };
 }
 

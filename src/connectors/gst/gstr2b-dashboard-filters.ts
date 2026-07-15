@@ -47,6 +47,9 @@ export async function selectGstr2bReturnDashboardFiltersAndSearch(
     if (viewControl && hasSettledDashboardSearchForScope(documentRef, scope, viewControl)) {
       return null;
     }
+    if (viewControl && hasExpiredUnchangedDashboardSearch(documentRef, scope, viewControl)) {
+      return unchangedDashboardViewRecovery(scopeId, safeSignals, diagnosticSignals);
+    }
 
     const searchPending = hasRecentDashboardSearch(documentRef, scope);
 
@@ -126,6 +129,10 @@ export async function selectGstr2bReturnDashboardFiltersAndSearch(
     ]);
   }
 
+  if (viewControl && hasExpiredUnchangedDashboardSearch(documentRef, scope, viewControl)) {
+    return unchangedDashboardViewRecovery(scopeId, safeSignals, diagnosticSignals);
+  }
+
   if (hasRecentDashboardSearch(documentRef, scope)) {
     return {
       connectorId: "gst",
@@ -157,6 +164,31 @@ export async function selectGstr2bReturnDashboardFiltersAndSearch(
       "search-clicked",
     ],
     safeMessage: "Pack selected the GSTR-2B return dashboard filters and clicked Search.",
+  };
+}
+
+function unchangedDashboardViewRecovery(
+  scopeId: string,
+  safeSignals: readonly string[],
+  diagnosticSignals: readonly string[],
+): PortalFlowStepResult {
+  return {
+    connectorId: "gst",
+    scopeId,
+    state: "user-action-required",
+    safeSignals: [
+      ...safeSignals,
+      ...diagnosticSignals,
+      "gstr2b-dashboard-view-unchanged-after-search",
+    ],
+    safeMessage:
+      "The GST Portal did not refresh the visible GSTR-2B View result after Search, so Pack could not prove that it belongs to the selected period.",
+    userAction: {
+      type: "NAVIGATE_TO_SUPPORTED_PAGE",
+      message:
+        "Open the selected GSTR-2B View manually, then start Pack again from the GSTR-2B summary page.",
+      canResume: true,
+    },
   };
 }
 
@@ -230,9 +262,14 @@ function hasSettledDashboardSearchForScope(
   if (!hasDashboardSearchForScope(documentRef, scope)) return false;
   const attempt = dashboardSearchAttempts.get(documentRef);
   if (!attempt || attempt.scope !== dashboardSearchScope(scope)) return false;
-  if (Date.now() - attempt.startedAt >= DASHBOARD_SEARCH_PENDING_MS) return true;
   if (attempt.previousView === viewControl && attempt.mutationVersion === 0) {
     return false;
+  }
+  if (
+    attempt.mutationVersion > 0 &&
+    Date.now() - attempt.startedAt >= DASHBOARD_SEARCH_PENDING_MS
+  ) {
+    return true;
   }
   if (
     attempt.candidateView !== viewControl ||
@@ -243,6 +280,21 @@ function hasSettledDashboardSearchForScope(
     return false;
   }
   return true;
+}
+
+function hasExpiredUnchangedDashboardSearch(
+  documentRef: Document,
+  scope: FiledReturnsDownloadScope,
+  viewControl: HTMLElement,
+): boolean {
+  const attempt = dashboardSearchAttempts.get(documentRef);
+  return Boolean(
+    attempt &&
+    attempt.scope === dashboardSearchScope(scope) &&
+    attempt.previousView === viewControl &&
+    attempt.mutationVersion === 0 &&
+    Date.now() - attempt.startedAt >= DASHBOARD_SEARCH_PENDING_MS,
+  );
 }
 
 function markDashboardSearchPending(

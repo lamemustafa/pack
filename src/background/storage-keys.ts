@@ -3,6 +3,7 @@ export const PACK_LOCAL_STORAGE_KEYS = {
   fullFiscalYearLedger: "pack:full-fiscal-year-ledger",
   install: "pack:install",
   lastManifest: "pack:last-manifest",
+  singlePeriodStaging: "pack:single-period-staging",
   targetReview: "pack:filed-returns-target-review",
 } as const;
 

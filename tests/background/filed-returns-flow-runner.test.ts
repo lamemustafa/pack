@@ -1746,7 +1746,99 @@ describe("filed returns flow runner", () => {
         }),
       }),
     );
+    const stagingReservationIndex = vi
+      .mocked(browser.storage.local.set)
+      .mock.calls.findIndex(
+        ([values]) =>
+          typeof values === "object" && values !== null && "pack:single-period-staging" in values,
+      );
+    const firstArtifactStageIndex = vi
+      .mocked(browser.runtime.sendMessage)
+      .mock.calls.findIndex(
+        ([message]) =>
+          typeof message === "object" &&
+          message !== null &&
+          (message as { type?: unknown }).type === "PACK_OFFSCREEN_STAGE_FILED_RETURN",
+      );
+    expect(stagingReservationIndex).toBeGreaterThanOrEqual(0);
+    expect(firstArtifactStageIndex).toBeGreaterThanOrEqual(0);
+    const stagingReservationOrder = vi.mocked(browser.storage.local.set).mock.invocationCallOrder[
+      stagingReservationIndex
+    ];
+    const firstArtifactStageOrder = vi.mocked(browser.runtime.sendMessage).mock.invocationCallOrder[
+      firstArtifactStageIndex
+    ];
+    expect(stagingReservationOrder).toBeDefined();
+    expect(firstArtifactStageOrder).toBeDefined();
+    expect(stagingReservationOrder!).toBeLessThan(firstArtifactStageOrder!);
     expect(observeBrowserDownloadById).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears reserved single-period staging when the first selected artifact is blocked", async () => {
+    const sendMessageToTabWithInjection = vi.fn<
+      FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
+    >(async (_tabId, message) => {
+      if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3") {
+        return {
+          ok: true,
+          flowStep: {
+            connectorId: "gst",
+            scopeId: "gst-gstr2b-private-v0",
+            state: "ready",
+            safeSignals: ["gstr2b-summary-route", "filed-return-download-ready"],
+            safeMessage: "Ready.",
+          },
+        } as PackMessageResponse;
+      }
+
+      if (message.type === "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3") {
+        return {
+          ok: true,
+          downloadTrigger: {
+            connectorId: "gst",
+            scopeId: "gst-gstr2b-private-v0",
+            state: "blocked",
+            safeSignals: ["portal-system-error"],
+            safeMessage: "The portal blocked the first selected artifact.",
+          },
+        } as PackMessageResponse;
+      }
+
+      return { ok: false, error: "Unexpected call." };
+    });
+
+    const response = await startFiledReturnsDownloadFlow(
+      {
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-2B",
+      },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+        },
+        timings: {
+          flowStepSettleMs: 0,
+          resultRowNavigationSettleMs: 0,
+        },
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "blocked",
+        safeSignals: expect.arrayContaining(["portal-system-error"]),
+      },
+    });
+    expect(browser.runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "PACK_OFFSCREEN_CLEAR_FILED_RETURN_LEDGER" }),
+    );
   });
 
   it("continues a GSTR-1 full fiscal year when a PDF is downloaded but Excel is unavailable", async () => {

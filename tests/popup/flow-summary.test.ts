@@ -287,6 +287,22 @@ describe("popup filed returns flow summary", () => {
         ...finalZipRetry,
         flowStep: {
           ...finalZipRetry.flowStep,
+          state: "download-unconfirmed",
+          safeSignals: [
+            "full-fiscal-year-final-zip-retry",
+            "full-fiscal-year-zip-download-started",
+            "full-fiscal-year-zip-download-unconfirmed",
+            "full-fiscal-year-zip-phase:download-started",
+            "full-fiscal-year-opfs-retained",
+          ],
+        },
+      }),
+    ).toBe(true);
+    expect(
+      canRetryFullFiscalYearZipWithoutPortal({
+        ...finalZipRetry,
+        flowStep: {
+          ...finalZipRetry.flowStep,
           safeSignals: [
             "full-fiscal-year-zip-artifact-staging-incomplete",
             "full-fiscal-year-opfs-retained",
