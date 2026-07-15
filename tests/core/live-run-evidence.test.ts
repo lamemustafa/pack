@@ -12,7 +12,7 @@ describe("live run evidence", () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.evidence.counts.downloaded).toBe(10);
+      expect(result.evidence.counts.downloaded).toBe(1);
       expect(result.evidence.redaction.containsGstin).toBe(false);
     }
   });
@@ -157,6 +157,44 @@ describe("live run evidence", () => {
         ],
       }),
     ).toMatchObject({ ok: true });
+  });
+
+  it("rejects endpoint and path combinations that runtime diagnostics cannot emit", () => {
+    const result = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      downloadEvidence: [
+        {
+          ...createValidEvidence().downloadEvidence[0],
+          endpointClass: "gstr3b-getgenpdf",
+          downloadPathClass: "captured-portal-request-data",
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors).toContain(
+        "downloadEvidence[0].endpointClass is inconsistent with downloadPathClass",
+      );
+    }
+  });
+
+  it("requires one downloaded evidence entry per downloaded target", () => {
+    const result = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      counts: {
+        ...createValidEvidence().counts,
+        downloaded: 10,
+        notFiled: 2,
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors).toContain(
+        "pass evidence must include one downloaded evidence entry per downloaded target",
+      );
+    }
   });
 
   it("scans raw evidence JSON before parsing", () => {
@@ -547,8 +585,8 @@ describe("live run evidence", () => {
         failed: 0,
         blocked: 0,
         manuallyObserved: 0,
-        notFiled: 2,
-        downloaded: 10,
+        notFiled: 11,
+        downloaded: 1,
       },
     };
 
@@ -584,8 +622,8 @@ function createValidEvidence(): LiveRunEvidence {
     outcome: "pass",
     counts: {
       eligibleTargets: 12,
-      downloaded: 10,
-      notFiled: 2,
+      downloaded: 1,
+      notFiled: 11,
       manuallyObserved: 0,
       blocked: 0,
       failed: 0,

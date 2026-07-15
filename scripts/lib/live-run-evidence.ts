@@ -235,6 +235,17 @@ function validateDownloadEvidence(
   if (evidence.outcome === "pass" && input.length === 0) {
     errors.push("pass evidence must include downloadEvidence");
   }
+  const downloadedEvidenceCount = input.filter(
+    (entry) => isRecord(entry) && entry.status === "downloaded",
+  ).length;
+  if (
+    evidence.outcome === "pass" &&
+    isRecord(evidence.counts) &&
+    typeof evidence.counts.downloaded === "number" &&
+    downloadedEvidenceCount < evidence.counts.downloaded
+  ) {
+    errors.push("pass evidence must include one downloaded evidence entry per downloaded target");
+  }
   input.forEach((entry, index) => {
     if (!isRecord(entry)) {
       errors.push(`downloadEvidence[${index}] must be an object`);
@@ -273,6 +284,7 @@ function validateDownloadEvidence(
       `downloadEvidence[${index}].downloadPathClass`,
       errors,
     );
+    validateDownloadEndpointPathConsistency(entry, index, errors);
     requireOneOf(entry.status, DOWNLOAD_STATUSES, `downloadEvidence[${index}].status`, errors);
     requireOneOf(
       entry.askWhereToSave,
@@ -300,6 +312,27 @@ function validateDownloadEvidence(
       errors,
     );
   });
+}
+
+function validateDownloadEndpointPathConsistency(
+  entry: Record<string, unknown>,
+  index: number,
+  errors: string[],
+): void {
+  if (typeof entry.endpointClass !== "string" || typeof entry.downloadPathClass !== "string") {
+    return;
+  }
+  const endpoint = entry.endpointClass;
+  const path = entry.downloadPathClass;
+  const matchesRuntimePath =
+    endpoint === "unknown" ||
+    (endpoint === "gstr3b-getgenpdf" && path.startsWith("extension-direct-")) ||
+    (endpoint.includes("portal-blob-captured-download") &&
+      path.startsWith("captured-portal-request-")) ||
+    (endpoint.includes("portal-rendered-download") && path.startsWith("portal-click-"));
+  if (!matchesRuntimePath) {
+    errors.push(`downloadEvidence[${index}].endpointClass is inconsistent with downloadPathClass`);
+  }
 }
 
 function validateDownloadScopeConsistency(

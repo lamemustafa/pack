@@ -154,22 +154,23 @@ try {
       ...counts,
     },
     checks,
-    downloadEvidence: [
-      {
-        actionId: "manual-entry-required",
+    downloadEvidence: Array.from(
+      { length: outcome === "pass" ? Math.max(1, counts.downloaded) : 1 },
+      (_, index) => ({
+        actionId: `manual-entry-required-${index + 1}`,
         returnType,
         artifactType: artifactType === "PDF_AND_EXCEL" ? "PDF" : artifactType,
         financialYear,
-        period: period === "FULL_FISCAL_YEAR" ? "April" : period,
+        period: period === "FULL_FISCAL_YEAR" ? MONTHS[index % MONTHS.length] : period,
         endpointClass: defaultEndpointClass(returnType, artifactType),
-        downloadPathClass: "captured-portal-request-unknown",
+        downloadPathClass: defaultDownloadPathClass(returnType),
         status: outcome === "pass" ? "downloaded" : "user-action-required",
         askWhereToSave: options["ask-where-to-save"] ?? "unknown",
         filenameCollision: options["filename-collision"] ?? "unknown",
         multipleDownloadPrompt: options["multiple-download-prompt"] ?? "unknown",
         exactZipBuild: zipSha256,
-      },
-    ],
+      }),
+    ),
     ...(limitations.length > 0 ? { limitations } : {}),
     redaction: {
       containsGstin: false,
@@ -322,6 +323,10 @@ function defaultEndpointClass(returnType, artifactType) {
   if (returnType === "GSTR-1") return "gstr1-pdf-portal-blob-captured-download";
   if (returnType === "GSTR-2B") return "gstr2b-portal-blob-captured-download";
   return "unknown";
+}
+
+function defaultDownloadPathClass(returnType) {
+  return returnType === "GSTR-3B" ? "extension-direct-unknown" : "captured-portal-request-unknown";
 }
 
 function toCamelCountKey(key) {
