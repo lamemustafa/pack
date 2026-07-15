@@ -109,6 +109,10 @@ export type PackMessage =
       payload: FiledReturnsDownloadScope;
     }
   | {
+      type: "PACK_CONTENT_CLEAR_FILED_RETURNS_SEARCH_PENDING_V3";
+      payload: FiledReturnsDownloadScope;
+    }
+  | {
       type: "PACK_CONTENT_RESOLVE_GSTR1_VIEW_POINT_V3";
       payload: FiledReturnsDownloadScope;
     };
@@ -218,6 +222,7 @@ export function isPackMessage(input: unknown): input is PackMessage {
     case "PACK_RUN_FILED_RETURNS_DOWNLOAD_STEP":
     case "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3":
     case "PACK_CONTENT_MARK_FILED_RETURNS_SEARCH_PENDING_V3":
+    case "PACK_CONTENT_CLEAR_FILED_RETURNS_SEARCH_PENDING_V3":
     case "PACK_CONTENT_RESOLVE_GSTR1_VIEW_POINT_V3":
       return isFiledReturnsDownloadScope(input.payload);
     case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":

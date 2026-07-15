@@ -140,6 +140,19 @@ export function clearFiledReturnsSearchAttempt(documentRef: Document): void {
   gstr1ViewActivationAttempts.delete(documentRef);
 }
 
+export function clearFiledReturnsSearchAttemptForScope(
+  documentRef: Document,
+  scope: FiledReturnsDownloadScope,
+): void {
+  const signature = filedReturnsSearchSignature(scope);
+  if (searchAttempts.get(documentRef)?.signature === signature) {
+    searchAttempts.delete(documentRef);
+  }
+  if (gstr1ViewActivationAttempts.get(documentRef)?.signature === signature) {
+    gstr1ViewActivationAttempts.delete(documentRef);
+  }
+}
+
 function resultFingerprint(documentRef: Document): string {
   const candidates = resultContainers(documentRef);
   if (candidates.length === 0) return "__no-result-surface__";

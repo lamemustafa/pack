@@ -7,7 +7,10 @@ import { navigateToFiledReturnsPage } from "../connectors/gst/filed-returns-navi
 import { observeFiledReturnsPageText } from "../connectors/gst/filed-returns-observer";
 import { detectPostClickBlockedState } from "../connectors/gst/filed-returns-post-click-blocked-state";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
-import { markFiledReturnsSearchPending } from "../connectors/gst/filed-returns-search-state";
+import {
+  clearFiledReturnsSearchAttemptForScope,
+  markFiledReturnsSearchPending,
+} from "../connectors/gst/filed-returns-search-state";
 import { resolveGstr1FiledReturnViewPoint } from "../connectors/gst/filed-returns-result-row-navigation";
 import {
   PACK_CONTENT_SCRIPT_PROTOCOL_VERSION,
@@ -228,6 +231,21 @@ export default defineContentScript({
             state: "clicked",
             safeSignals: ["filed-return-search-pending-marked"],
             safeMessage: "Pack prepared target-bound filed-return search tracking.",
+          },
+        } satisfies PackMessageResponse);
+        return false;
+      }
+
+      if (message.type === "PACK_CONTENT_CLEAR_FILED_RETURNS_SEARCH_PENDING_V3") {
+        clearFiledReturnsSearchAttemptForScope(document, message.payload);
+        sendResponse({
+          ok: true,
+          flowStep: {
+            connectorId: "gst",
+            scopeId: filedReturnScopeId(message.payload.returnType),
+            state: "clicked",
+            safeSignals: ["filed-return-search-pending-cleared"],
+            safeMessage: "Pack cleared an unsubmitted filed-return search attempt.",
           },
         } satisfies PackMessageResponse);
         return false;

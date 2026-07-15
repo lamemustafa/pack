@@ -70,6 +70,16 @@ describe("message boundary", () => {
     ).toBe(true);
     expect(
       isPackMessage({
+        type: "PACK_CONTENT_CLEAR_FILED_RETURNS_SEARCH_PENDING_V3",
+        payload: {
+          financialYear: "2025-26",
+          period: "March",
+          returnType: "GSTR-3B",
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isPackMessage({
         type: "PACK_CONTENT_RESOLVE_GSTR1_VIEW_POINT_V3",
         payload: {
           artifactType: "PDF",

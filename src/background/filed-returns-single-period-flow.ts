@@ -159,11 +159,20 @@ async function runSinglePeriodSteps(
       } catch {
         // Without the isolated-world marker, later filter-bound row matching stays disabled.
       }
-      const mainWorldSelection = await deps.selectFiltersInMainWorld(tabId, scope);
+      let mainWorldSelection: Awaited<
+        ReturnType<NonNullable<FiledReturnsFlowRunnerDeps["selectFiltersInMainWorld"]>>
+      >;
+      try {
+        mainWorldSelection = await deps.selectFiltersInMainWorld(tabId, scope);
+      } catch (error) {
+        await clearUnsubmittedMainWorldSearch(deps, tabId, scope);
+        throw error;
+      }
       if (mainWorldSelection.state === "searched") {
         await delay(MAIN_WORLD_FILTER_SEARCH_SETTLE_MS);
         continue;
       }
+      await clearUnsubmittedMainWorldSearch(deps, tabId, scope);
     }
 
     if (!shouldContinueFlow(lastStep)) {
@@ -191,6 +200,21 @@ async function runSinglePeriodSteps(
     deps,
     shouldPersistSinglePeriodSummary,
   );
+}
+
+async function clearUnsubmittedMainWorldSearch(
+  deps: FiledReturnsFlowRunnerDeps,
+  tabId: number,
+  scope: FiledReturnsDownloadScope,
+): Promise<void> {
+  try {
+    await deps.sendMessageToTabWithInjection(tabId, {
+      type: "PACK_CONTENT_CLEAR_FILED_RETURNS_SEARCH_PENDING_V3",
+      payload: scope,
+    });
+  } catch {
+    // A failed best-effort clear cannot make an unsubmitted search target-bound.
+  }
 }
 
 async function waitForDetailReadyThenTrigger({

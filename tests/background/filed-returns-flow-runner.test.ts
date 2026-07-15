@@ -7241,6 +7241,76 @@ describe("filed returns flow runner", () => {
     ]);
   });
 
+  it("clears search tracking when the main-world fallback does not submit Search", async () => {
+    const responses: PackMessageResponse[] = [
+      {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+          state: "candidate-not-found",
+          safeSignals: ["filed-return-filter-candidate-not-found"],
+          safeMessage: "Filed-return filters are not ready.",
+        },
+      },
+      {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+          state: "clicked",
+          safeSignals: ["filed-return-search-pending-marked"],
+          safeMessage: "Search tracking prepared.",
+        },
+      },
+      {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+          state: "clicked",
+          safeSignals: ["filed-return-search-pending-cleared"],
+          safeMessage: "Search tracking cleared.",
+        },
+      },
+    ];
+    const sendMessageToTabWithInjection = vi.fn<
+      FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
+    >(async () => responses.shift() ?? { ok: false, error: "Unexpected call." });
+    const selectFiltersInMainWorld = vi.fn<
+      NonNullable<FiledReturnsFlowRunnerDeps["selectFiltersInMainWorld"]>
+    >(async () => ({ state: "waiting", safeSignals: ["main-world-filter-selection-unstable"] }));
+
+    const response = await startFiledReturnsDownloadFlow(
+      {
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-3B",
+      },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        selectFiltersInMainWorld,
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+        },
+        timings: { flowStepSettleMs: 0, resultRowNavigationSettleMs: 0 },
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: { state: "candidate-not-found" },
+    });
+    expect(sendMessageToTabWithInjection.mock.calls.map(([, message]) => message.type)).toEqual([
+      "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
+      "PACK_CONTENT_MARK_FILED_RETURNS_SEARCH_PENDING_V3",
+      "PACK_CONTENT_CLEAR_FILED_RETURNS_SEARCH_PENDING_V3",
+    ]);
+  });
+
   it("treats positive not-filed evidence as a reconciled single-period result", async () => {
     const responses: PackMessageResponse[] = [
       {
