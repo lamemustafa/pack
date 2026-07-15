@@ -74,6 +74,9 @@ export async function capturePortalBlobDownloadWithDiagnostics(
     const originalXhrSend = XMLHttpRequest.prototype.send;
     const capturedBlobUrls = new Set<string>();
     const capturedBlobsByUrl = new Map<string, Blob>();
+    const actionBoundBlobs = new WeakSet<Blob>();
+    const actionBoundXhrs = new WeakSet<XMLHttpRequest>();
+    let controlClickActive = false;
     let suppressedWindowOpen = false;
     let restored = false;
     let settled = false;
@@ -118,8 +121,13 @@ export async function capturePortalBlobDownloadWithDiagnostics(
       }, 1_000);
     };
 
-    const readBlob = (blob: Blob, filename?: string | null) => {
+    const readBlob = (blob: Blob, filename?: string | null, actionBound = false) => {
       if (settled) return;
+      if (!actionBound && !actionBoundBlobs.has(blob)) {
+        addSafeSignal(`${config.signalPrefix}-unbound-blob-ignored`);
+        return;
+      }
+      actionBoundBlobs.add(blob);
       if (!blob.size) {
         addSafeSignal(`${config.signalPrefix}-blob-zero-byte-rejected`);
         return;
@@ -150,8 +158,12 @@ export async function capturePortalBlobDownloadWithDiagnostics(
       reader.readAsDataURL(blob);
     };
 
-    const captureDataUrl = (dataUrl: string, filename?: string | null) => {
+    const captureDataUrl = (dataUrl: string, filename?: string | null, actionBound = false) => {
       if (settled) return;
+      if (!actionBound) {
+        addSafeSignal(`${config.signalPrefix}-unbound-data-url-ignored`);
+        return;
+      }
       addSafeSignal(`${config.signalPrefix}-data-url-observed`);
       if (!dataUrl.startsWith("data:") || dataUrl.length > config.maxBytes * 2) {
         addSafeSignal(`${config.signalPrefix}-data-url-rejected`);
@@ -165,12 +177,16 @@ export async function capturePortalBlobDownloadWithDiagnostics(
       });
     };
 
-    const captureBlobUrl = (blobUrl: string, filename?: string | null) => {
+    const captureBlobUrl = (blobUrl: string, filename?: string | null, actionBound = false) => {
       if (settled) return;
+      if (!actionBound) {
+        addSafeSignal(`${config.signalPrefix}-unbound-blob-url-ignored`);
+        return;
+      }
       addSafeSignal(`${config.signalPrefix}-blob-url-observed`);
       const capturedBlob = capturedBlobsByUrl.get(blobUrl);
       if (capturedBlob) {
-        readBlob(capturedBlob, filename);
+        readBlob(capturedBlob, filename, true);
         return;
       }
       if (typeof originalFetch !== "function") {
@@ -181,43 +197,47 @@ export async function capturePortalBlobDownloadWithDiagnostics(
         .call(window, blobUrl)
         .then((response) => (response.ok ? response.blob() : null))
         .then((blob) => {
-          if (blob) readBlob(blob, filename);
+          if (blob) readBlob(blob, filename, true);
           else addSafeSignal(`${config.signalPrefix}-blob-url-fetch-rejected`);
         })
         .catch(() => addSafeSignal(`${config.signalPrefix}-blob-url-fetch-failed`));
     };
 
-    const captureUrl = (value: string | URL, filename?: string | null) => {
+    const captureUrl = (value: string | URL, filename?: string | null, actionBound = false) => {
       const nextUrl = String(value);
-      if (nextUrl.startsWith("data:")) captureDataUrl(nextUrl, filename);
-      if (nextUrl.startsWith("blob:")) captureBlobUrl(nextUrl, filename);
+      if (nextUrl.startsWith("data:")) captureDataUrl(nextUrl, filename, actionBound);
+      if (nextUrl.startsWith("blob:")) captureBlobUrl(nextUrl, filename, actionBound);
     };
 
-    const captureEmbeddedUrls = (text: string) => {
+    const captureEmbeddedUrls = (text: string, actionBound = false) => {
       for (const [url] of text.matchAll(/\b(?:blob|data):[^"'<>\\\s)]+/g)) {
-        captureUrl(url);
+        captureUrl(url, undefined, actionBound);
       }
     };
 
     const captureAnchorDownload = (anchor: HTMLAnchorElement) => {
       if (!anchor.hasAttribute("download")) return false;
       if (anchor.href.startsWith("data:")) {
-        captureDataUrl(anchor.href, anchor.getAttribute("download"));
+        if (!controlClickActive) return false;
+        captureDataUrl(anchor.href, anchor.getAttribute("download"), true);
         return true;
       }
       if (anchor.href.startsWith("blob:")) {
-        if (!capturedBlobUrls.has(anchor.href)) {
-          captureBlobUrl(anchor.href, anchor.getAttribute("download"));
-        }
+        const actionBound = controlClickActive || capturedBlobUrls.has(anchor.href);
+        if (!actionBound) return false;
+        captureBlobUrl(anchor.href, anchor.getAttribute("download"), true);
         return true;
       }
       return false;
     };
 
     window.open = function open(url?: string | URL) {
+      if (!controlClickActive) {
+        return originalWindowOpen.call(window, url);
+      }
       addSafeSignal(`${config.signalPrefix}-window-open-observed`);
       suppressedWindowOpen = true;
-      if (url) captureUrl(url);
+      if (url) captureUrl(url, undefined, true);
       return {
         close() {
           return undefined;
@@ -230,7 +250,7 @@ export async function capturePortalBlobDownloadWithDiagnostics(
             return undefined;
           },
           write(value: string) {
-            captureEmbeddedUrls(value);
+            captureEmbeddedUrls(value, true);
           },
         },
         focus() {
@@ -238,13 +258,13 @@ export async function capturePortalBlobDownloadWithDiagnostics(
         },
         location: {
           assign(value: string | URL) {
-            captureUrl(value);
+            captureUrl(value, undefined, true);
           },
           replace(value: string | URL) {
-            captureUrl(value);
+            captureUrl(value, undefined, true);
           },
           set href(value: string) {
-            captureUrl(value);
+            captureUrl(value, undefined, true);
           },
         },
       } as unknown as WindowProxy;
@@ -252,6 +272,7 @@ export async function capturePortalBlobDownloadWithDiagnostics(
 
     if (pdfMake && typeof originalPdfMakeCreatePdf === "function") {
       pdfMake.createPdf = function createPdf(...args: unknown[]) {
+        const actionBound = controlClickActive;
         const pdf = originalPdfMakeCreatePdf.apply(this, args) as
           | {
               download?: (filename?: string | null) => unknown;
@@ -262,11 +283,12 @@ export async function capturePortalBlobDownloadWithDiagnostics(
           | null
           | undefined;
         if (!pdf || typeof pdf !== "object") return pdf;
+        if (!actionBound) return pdf;
 
         const readPdfBlob = (filename?: string | null) => {
           if (typeof pdf.getBlob !== "function") return;
           try {
-            pdf.getBlob((blob) => readBlob(blob, filename));
+            pdf.getBlob((blob) => readBlob(blob, filename, true));
           } catch {
             // Let the capture timeout settle portal/pdfMake generation failures.
           }
@@ -298,21 +320,28 @@ export async function capturePortalBlobDownloadWithDiagnostics(
       value: unknown,
       filename?: string | null,
     ) {
+      const actionBound = controlClickActive || (isBlobLike(value) && actionBoundBlobs.has(value));
+      if (!actionBound) {
+        return typeof originalSaveAs === "function"
+          ? originalSaveAs.call(window, value, filename)
+          : undefined;
+      }
       if (isBlobLike(value)) {
-        readBlob(value, filename);
+        readBlob(value, filename, true);
         return undefined;
       }
       if (typeof value === "string") {
-        captureUrl(value, filename);
+        captureUrl(value, filename, true);
         return undefined;
       }
       return undefined;
     };
 
     window.fetch = function fetch(input: RequestInfo | URL, init?: RequestInit) {
+      const actionBound = controlClickActive;
       return originalFetch.call(window, input, init).then((response) => {
         const contentType = response.headers.get("content-type");
-        if (contentType && isArtifactContentType(contentType)) {
+        if (actionBound && contentType && isArtifactContentType(contentType)) {
           addSafeSignal(`${config.signalPrefix}-fetch-artifact-response-observed`);
         }
         return response;
@@ -327,12 +356,15 @@ export async function capturePortalBlobDownloadWithDiagnostics(
       user?: string | null,
       pass?: string | null,
     ) {
-      this.addEventListener("load", () => {
-        if (settled) return;
-        const contentType = this.getResponseHeader("content-type");
-        if (contentType && !isArtifactContentType(contentType)) return;
-        addSafeSignal(`${config.signalPrefix}-xhr-artifact-response-observed`);
-      });
+      if (controlClickActive) actionBoundXhrs.add(this);
+      if (actionBoundXhrs.has(this)) {
+        this.addEventListener("load", () => {
+          if (settled) return;
+          const contentType = this.getResponseHeader("content-type");
+          if (contentType && !isArtifactContentType(contentType)) return;
+          addSafeSignal(`${config.signalPrefix}-xhr-artifact-response-observed`);
+        });
+      }
       if (arguments.length <= 2) {
         const openWithoutAsync = originalXhrOpen as (
           this: XMLHttpRequest,
@@ -357,16 +389,20 @@ export async function capturePortalBlobDownloadWithDiagnostics(
 
     const captureCreateObjectUrl = function createObjectURL(value: Blob | MediaSource) {
       const blobUrl = originalCreateObjectUrl.call(urlApi, value);
-      if (isBlobLike(value) && value.size > 0 && value.size <= config.maxBytes) {
+      const actionBound = isBlobLike(value) && (controlClickActive || actionBoundBlobs.has(value));
+      if (actionBound && value.size > 0 && value.size <= config.maxBytes) {
         addSafeSignal(`${config.signalPrefix}-create-object-url-observed`);
+        actionBoundBlobs.add(value);
         capturedBlobUrls.add(blobUrl);
         capturedBlobsByUrl.set(blobUrl, value);
-      } else if (isBlobLike(value)) {
+      } else if (actionBound) {
         addSafeSignal(
           value.size > config.maxBytes
             ? `${config.signalPrefix}-create-object-url-oversized`
             : `${config.signalPrefix}-create-object-url-zero-byte`,
         );
+      } else if (isBlobLike(value)) {
+        addSafeSignal(`${config.signalPrefix}-unbound-create-object-url-ignored`);
       }
       return blobUrl;
     };
@@ -375,7 +411,7 @@ export async function capturePortalBlobDownloadWithDiagnostics(
 
     const shouldSuppressAnchor = (anchor: HTMLAnchorElement) => {
       if (capturedBlobUrls.has(anchor.href)) {
-        captureBlobUrl(anchor.href, anchor.getAttribute("download"));
+        captureBlobUrl(anchor.href, anchor.getAttribute("download"), true);
         return true;
       }
       return captureAnchorDownload(anchor);
@@ -398,11 +434,14 @@ export async function capturePortalBlobDownloadWithDiagnostics(
       return;
     }
     try {
+      controlClickActive = true;
       control.click();
     } catch {
       addSafeSignal(`${config.signalPrefix}-capture-control-click-threw`);
       settle(null);
       return;
+    } finally {
+      controlClickActive = false;
     }
     window.setTimeout(() => {
       addSafeSignal(`${config.signalPrefix}-main-world-capture-timeout`);

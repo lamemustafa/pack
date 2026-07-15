@@ -138,11 +138,13 @@ export async function retryFullFiscalYearTargetDownloadFlow(
   payload: FullFiscalYearTargetRecoveryPayload,
   deps: FiledReturnsFlowRunnerDeps,
 ): Promise<PackMessageResponse> {
-  const targetReview = await readCurrentFiledReturnsTargetReview(deps);
-  if (targetReview) return responseForFiledReturnsTargetReview(targetReview);
-
   const recoveryScope = await readFullFiscalYearTargetRecoveryScope(payload, deps);
   if ("response" in recoveryScope) return recoveryScope.response;
+
+  const targetReview = await readCurrentFiledReturnsTargetReview(deps);
+  if (targetReview && targetReview.targetId !== payload.targetId) {
+    return responseForFiledReturnsTargetReview(targetReview);
+  }
 
   const activeRun = await acquireFiledReturnsRun(recoveryScope.scope, deps);
   if ("response" in activeRun) return activeRun.response;

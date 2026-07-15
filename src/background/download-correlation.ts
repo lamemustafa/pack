@@ -30,6 +30,8 @@ export function isPotentialDownloadCandidate(
 ): boolean {
   if (isTrustedDownload(item, context)) return startsAfterArmedTime(item, context.armedAt);
   if (!startsAfterArmedTime(item, context.armedAt)) return false;
+  // Native blob/data events have no origin or action identity of their own. Only an
+  // extension-owned download ID can correlate them to the exact portal action.
   if (hasBlobOrDataUrl(item)) return false;
   return hasExpectedOrigin(item, context.expectedOrigins);
 }

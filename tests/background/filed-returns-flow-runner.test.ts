@@ -3827,6 +3827,18 @@ describe("filed returns flow runner", () => {
     expect(response.flowStep.safeSignals).toEqual(
       expect.arrayContaining(["filed-return-artifact-unconfirmed:EXCEL"]),
     );
+    const completionWrites = vi.mocked(browser.storage.session.set).mock.calls;
+    expect(completionWrites.at(-1)?.[0]).toEqual({
+      completion: expect.objectContaining({
+        status: "blocked",
+        flowStep: expect.objectContaining({
+          safeSignals: expect.arrayContaining([
+            "single-period-zip-incomplete",
+            "single-period-opfs-cleared",
+          ]),
+        }),
+      }),
+    });
     expect(browser.storage.local.set).toHaveBeenCalledWith({
       "target-review": expect.objectContaining({
         targetId: "GSTR-1:2025-26:May:EXCEL",
@@ -6332,6 +6344,65 @@ describe("filed returns flow runner", () => {
     expect(browser.storage.local.set).not.toHaveBeenCalledWith({
       "full-year-ledger": expect.anything(),
     });
+  });
+
+  it("clears the matching legacy target review before retrying a full-year target", async () => {
+    mockLocalStorageGet({
+      "full-year-ledger": createFullFiscalYearLedger({
+        status: "blocked",
+        currentPeriod: "April",
+        targets: [{ period: "April", status: "blocked" }],
+      }),
+      "target-review": {
+        schemaVersion: "1.0",
+        targetId: "GSTR-3B:2026-27:April",
+        status: "download-unconfirmed",
+        scope: {
+          financialYear: "2026-27",
+          period: "April",
+          returnType: "GSTR-3B",
+        },
+        safeSignals: ["browser-download-not-observed"],
+        safeMessage: "The browser download was not confirmed.",
+        updatedAt: "2026-06-24T00:00:00.000Z",
+      },
+    });
+
+    const response = await retryFullFiscalYearTargetDownloadFlow(
+      {
+        ledgerId: "ledger-existing",
+        targetId: "GSTR-3B:2026-27:April",
+        expectedRevision: 1,
+      },
+      {
+        getActiveGstTab: vi.fn(async () => null),
+        sendMessageToTabWithInjection: vi.fn(),
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+          targetReview: "target-review",
+        },
+      },
+    );
+
+    expect(response).not.toMatchObject({
+      flowStep: { safeSignals: ["filed-returns-target-review-required"] },
+    });
+    expect(browser.storage.local.remove).toHaveBeenCalledWith("target-review");
+    expect(vi.mocked(browser.storage.local.set).mock.calls).toEqual(
+      expect.arrayContaining([
+        [
+          {
+            "full-year-ledger": expect.objectContaining({
+              currentTargetId: "GSTR-3B:2026-27:April",
+              status: "running",
+              targets: [expect.objectContaining({ period: "April", status: "pending" })],
+            }),
+          },
+        ],
+      ]),
+    );
   });
 
   it("explicitly resumes a reconciled current-year ledger with newly eligible periods", async () => {

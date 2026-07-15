@@ -508,6 +508,40 @@ describe("capturePortalBlobDownload", () => {
     expect(view.XMLHttpRequest.prototype.send).toBe(originalXhrSend);
     expect(control.hasAttribute("data-pack-gstr2b-capture-action")).toBe(false);
   });
+
+  it("leaves a delayed blob download from a previous page action untouched", async () => {
+    const { documentRef, view } = installMainWorldDom(`
+      <button data-pack-gstr2b-capture-action="capture-1">Download</button>
+    `);
+    let nativeClicks = 0;
+    documentRef.defaultView!.HTMLAnchorElement.prototype.click = function click() {
+      nativeClicks += 1;
+    };
+    view.setTimeout(() => {
+      const anchor = documentRef.createElement("a");
+      anchor.href = view.URL.createObjectURL(
+        new view.Blob(["%PDF-1.7 unrelated delayed bytes"], {
+          type: "application/pdf",
+        }),
+      );
+      anchor.download = "previous.pdf";
+      anchor.click();
+    }, 0);
+
+    const outcome = await capturePortalBlobDownloadWithDiagnostics({
+      ...captureConfig(),
+      timeoutMs: 20,
+    });
+
+    expect(outcome).toMatchObject({
+      capturedDownloadRequest: null,
+      safeFailureSignals: expect.arrayContaining([
+        "gstr2b-unbound-create-object-url-ignored",
+        "gstr2b-main-world-capture-timeout",
+      ]),
+    });
+    expect(nativeClicks).toBe(1);
+  });
 });
 
 function captureConfig(): FiledReturnsMainWorldCaptureRequest {

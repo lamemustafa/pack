@@ -188,8 +188,11 @@ function getRecoveryActionState(summary: FiledReturnsFlowSummary | null): {
   const needsTargetReview = signals.has("filed-returns-target-review-required");
   const runActive =
     signals.has("filed-returns-run-active") || signals.has("full-fiscal-year-run-active");
+  const needsResumeConfirmation = signals.has("full-fiscal-year-resume-confirmation-required");
   const needsFullFiscalYearReview =
-    Boolean(summary?.fullFiscalYearRecovery) && summary?.status !== "running" && !runActive;
+    Boolean(summary?.fullFiscalYearRecovery) &&
+    (summary?.status !== "running" || needsResumeConfirmation) &&
+    !runActive;
   return {
     needsFullFiscalYearReview,
     needsRunReview,

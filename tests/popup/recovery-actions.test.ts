@@ -19,11 +19,12 @@ describe("popup full-year recovery actions", () => {
   });
 
   it("renders resume and discard immediately for a pending saved full-year run", () => {
+    const pendingSummary = summaryFor("pending", "full-fiscal-year-resume-confirmation-required");
     const markup = renderToStaticMarkup(
       createElement(RecoveryActions, {
         busy: null,
         portalReady: true,
-        summary: summaryFor("pending", "full-fiscal-year-resume-confirmation-required"),
+        summary: { ...pendingSummary, status: "running" },
         onAcknowledgeInterruptedRun: () => undefined,
         onRetryFullFiscalYearTarget: () => undefined,
         onRetryTarget: () => undefined,

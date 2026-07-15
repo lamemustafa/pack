@@ -112,7 +112,7 @@ export async function triggerSelectedArtifacts({
 
       if (singlePeriodBundleLedgerId) {
         const clearSignal = await discardSinglePeriodFiledReturnsZip(singlePeriodBundleLedgerId);
-        return {
+        const incompleteResponse = {
           ...response,
           flowStep: {
             ...response.flowStep,
@@ -127,6 +127,8 @@ export async function triggerSelectedArtifacts({
               "Pack could not complete every selected filed-return artifact, so it did not export a partial zip.",
           },
         };
+        delete incompleteResponse.flowSummary;
+        return incompleteResponse;
       }
 
       const flowStep = markArtifactProgressNeedsReview(

@@ -9,13 +9,16 @@ import {
 } from "./main-world-capture-contracts";
 
 const MAIN_WORLD_CAPTURE_TIMEOUT_MS = 75_000;
+const MAIN_WORLD_CAPTURE_RESTORE_HEADROOM_MS = 2_000;
 
 export async function capturePortalBlobDownloadInMainWorld(
   tabId: number,
   request: FiledReturnsMainWorldCaptureRequest,
 ): Promise<MainWorldCaptureOutcome> {
   try {
-    const timeoutMs = request.timeoutMs ?? MAIN_WORLD_CAPTURE_TIMEOUT_MS;
+    const timeoutMs = request.timeoutMs
+      ? request.timeoutMs + MAIN_WORLD_CAPTURE_RESTORE_HEADROOM_MS
+      : MAIN_WORLD_CAPTURE_TIMEOUT_MS;
     const [injectionResult] = await withTimeout(
       browser.scripting.executeScript({
         args: [request],
