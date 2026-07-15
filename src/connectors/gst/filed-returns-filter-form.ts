@@ -1,8 +1,10 @@
 import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "../../core/contracts";
 import { findFiledReturnsFilterRoot } from "./filed-returns-custom-dropdown";
+import { filedReturnsFilterFieldMatches } from "./filed-returns-filter-fields";
 import {
   acceptedFilingPeriodOptions,
   acceptedMonthOptions,
+  acceptedUnselectedFilingPeriodOptions,
   type FilterSelectionState,
   FINANCIAL_YEAR_LABEL,
   FILING_PERIOD_LABEL,
@@ -42,25 +44,22 @@ export async function selectFiledReturnsFiltersAndSearch(
     await waitForFieldSelection(documentRef, FINANCIAL_YEAR_LABEL, [scope.financialYear]);
   }
 
-  let periodSelected =
-    leaveFilingPeriodUnselected && hasFieldControl(documentRef, FILING_PERIOD_LABEL);
-  if (!leaveFilingPeriodUnselected) {
-    periodSelected = await selectFieldOption(
+  let periodSelected = await selectFieldOption(
+    documentRef,
+    FILING_PERIOD_LABEL,
+    leaveFilingPeriodUnselected
+      ? acceptedUnselectedFilingPeriodOptions()
+      : acceptedFilingPeriodOptions(scope),
+  );
+  if (periodSelected) {
+    await waitForFieldSelection(
       documentRef,
       FILING_PERIOD_LABEL,
-      acceptedFilingPeriodOptions(scope),
+      leaveFilingPeriodUnselected
+        ? acceptedUnselectedFilingPeriodOptions()
+        : acceptedFilingPeriodOptions(scope),
     );
-  }
-  if (periodSelected) {
-    if (leaveFilingPeriodUnselected) {
-      selectSignals.push("return-filing-period-left-unselected");
-    } else {
-      await waitForFieldSelection(
-        documentRef,
-        FILING_PERIOD_LABEL,
-        acceptedFilingPeriodOptions(scope),
-      );
-    }
+    if (leaveFilingPeriodUnselected) selectSignals.push("return-filing-period-left-unselected");
   }
 
   let monthFieldPresent = hasFieldControl(documentRef, MONTH_LABEL);
@@ -197,13 +196,12 @@ async function settleFiledReturnsFilterSelection(
     }
 
     state = readPortalFilterSelectionState(documentRef, scope, leaveFilingPeriodUnselected);
-    if (!leaveFilingPeriodUnselected && state.financialYearSelected && !state.periodSelected) {
-      await selectFieldOption(documentRef, FILING_PERIOD_LABEL, acceptedFilingPeriodOptions(scope));
-      await waitForFieldSelection(
-        documentRef,
-        FILING_PERIOD_LABEL,
-        acceptedFilingPeriodOptions(scope),
-      );
+    if (state.financialYearSelected && !state.periodSelected) {
+      const acceptedPeriodOptions = leaveFilingPeriodUnselected
+        ? acceptedUnselectedFilingPeriodOptions()
+        : acceptedFilingPeriodOptions(scope);
+      await selectFieldOption(documentRef, FILING_PERIOD_LABEL, acceptedPeriodOptions);
+      await waitForFieldSelection(documentRef, FILING_PERIOD_LABEL, acceptedPeriodOptions);
     }
 
     state = readPortalFilterSelectionState(documentRef, scope, leaveFilingPeriodUnselected);
@@ -238,7 +236,13 @@ function readPortalFilterSelectionState(
   return leaveFilingPeriodUnselected
     ? {
         ...state,
-        periodSelected: hasFieldControl(documentRef, FILING_PERIOD_LABEL),
+        periodSelected:
+          hasFieldControl(documentRef, FILING_PERIOD_LABEL) &&
+          filedReturnsFilterFieldMatches(
+            documentRef,
+            FILING_PERIOD_LABEL,
+            acceptedUnselectedFilingPeriodOptions(),
+          ),
       }
     : state;
 }

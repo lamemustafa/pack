@@ -21,6 +21,7 @@ const DASHBOARD_FIELD_SETTLE_DELAY_MS = 150;
 const DASHBOARD_DEPENDENT_FIELD_ATTEMPTS = 12;
 const DASHBOARD_SEARCH_PENDING_MS = 12_000;
 const DASHBOARD_SEARCH_PENDING_ATTRIBUTE = "data-pack-gstr2b-dashboard-search-pending-at";
+const DASHBOARD_SEARCH_SCOPE_ATTRIBUTE = "data-pack-gstr2b-dashboard-search-scope";
 
 export async function selectGstr2bReturnDashboardFiltersAndSearch(
   documentRef: Document,
@@ -53,6 +54,7 @@ export async function selectGstr2bReturnDashboardFiltersAndSearch(
   if (!selectMatches(controls.year, [scope.financialYear])) {
     const yearSelected = selectOption(controls.year, [scope.financialYear]);
     if (yearSelected) {
+      clearGstr2bDashboardSearchPending(documentRef);
       await delay(DASHBOARD_FIELD_SETTLE_DELAY_MS);
       controls = findReturnDashboardControls(documentRef) ?? controls;
       return gstr2bDashboardSelectionInProgress(scopeId, safeSignals, diagnosticSignals, [
@@ -65,6 +67,7 @@ export async function selectGstr2bReturnDashboardFiltersAndSearch(
   if (controls.quarter && !selectMatches(controls.quarter, acceptedQuarterOptions(scope.period))) {
     const quarterSelected = selectOption(controls.quarter, acceptedQuarterOptions(scope.period));
     if (quarterSelected) {
+      clearGstr2bDashboardSearchPending(documentRef);
       controls = await waitForReturnDashboardPeriodOptions(documentRef, scope, controls);
       return gstr2bDashboardSelectionInProgress(scopeId, safeSignals, diagnosticSignals, [
         "quarter-selected",
@@ -79,6 +82,7 @@ export async function selectGstr2bReturnDashboardFiltersAndSearch(
       acceptedFiledReturnsMonthTexts(scope.period),
     );
     if (periodSelected) {
+      clearGstr2bDashboardSearchPending(documentRef);
       await delay(DASHBOARD_FIELD_SETTLE_DELAY_MS);
       controls = findReturnDashboardControls(documentRef) ?? controls;
       return gstr2bDashboardSelectionInProgress(scopeId, safeSignals, diagnosticSignals, [
@@ -94,7 +98,7 @@ export async function selectGstr2bReturnDashboardFiltersAndSearch(
     ]);
   }
 
-  if (hasRecentDashboardSearch(documentRef)) {
+  if (hasRecentDashboardSearch(documentRef, scope)) {
     return {
       connectorId: "gst",
       scopeId,
@@ -111,7 +115,7 @@ export async function selectGstr2bReturnDashboardFiltersAndSearch(
     };
   }
 
-  markDashboardSearchPending(documentRef);
+  markDashboardSearchPending(documentRef, scope);
   activateElement(controls.search);
   return {
     connectorId: "gst",
@@ -130,6 +134,7 @@ export async function selectGstr2bReturnDashboardFiltersAndSearch(
 
 export function clearGstr2bDashboardSearchPending(documentRef: Document): void {
   documentRef.documentElement.removeAttribute(DASHBOARD_SEARCH_PENDING_ATTRIBUTE);
+  documentRef.documentElement.removeAttribute(DASHBOARD_SEARCH_SCOPE_ATTRIBUTE);
 }
 
 export function isReturnDashboardRoute(documentRef: Document): boolean {
@@ -158,15 +163,31 @@ function gstr2bDashboardSelectionInProgress(
   };
 }
 
-function hasRecentDashboardSearch(documentRef: Document): boolean {
+function hasRecentDashboardSearch(
+  documentRef: Document,
+  scope: FiledReturnsDownloadScope,
+): boolean {
   const pendingAt = Number(
     documentRef.documentElement.getAttribute(DASHBOARD_SEARCH_PENDING_ATTRIBUTE) ?? "",
   );
-  return Number.isFinite(pendingAt) && Date.now() - pendingAt < DASHBOARD_SEARCH_PENDING_MS;
+  const pendingScope = documentRef.documentElement.getAttribute(DASHBOARD_SEARCH_SCOPE_ATTRIBUTE);
+  return (
+    Number.isFinite(pendingAt) &&
+    Date.now() - pendingAt < DASHBOARD_SEARCH_PENDING_MS &&
+    pendingScope === dashboardSearchScope(scope)
+  );
 }
 
-function markDashboardSearchPending(documentRef: Document): void {
+function markDashboardSearchPending(documentRef: Document, scope: FiledReturnsDownloadScope): void {
   documentRef.documentElement.setAttribute(DASHBOARD_SEARCH_PENDING_ATTRIBUTE, String(Date.now()));
+  documentRef.documentElement.setAttribute(
+    DASHBOARD_SEARCH_SCOPE_ATTRIBUTE,
+    dashboardSearchScope(scope),
+  );
+}
+
+function dashboardSearchScope(scope: FiledReturnsDownloadScope): string {
+  return `${normaliseText(scope.financialYear)}:${normaliseText(scope.period)}`;
 }
 
 async function waitForReturnDashboardPeriodOptions(

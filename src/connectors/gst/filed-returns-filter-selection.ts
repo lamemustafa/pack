@@ -16,6 +16,7 @@ import { delay, dispatchChange, matchesAcceptedText, normaliseText } from "./fil
 const FIELD_SETTLE_DELAY_MS = 500;
 const FIELD_SETTLE_POLL_MS = 50;
 const FIELD_SELECTION_ATTEMPTS = 24;
+const UNSELECTED_FILING_PERIOD_OPTIONS = ["Select", "Please Select"];
 
 export const FINANCIAL_YEAR_LABEL = /financial\s+year/i;
 export const FILING_PERIOD_LABEL = /^return\s+filing\s+period\b|^period\b/i;
@@ -45,6 +46,10 @@ export function acceptedFilingPeriodOptions(scope: FiledReturnsDownloadScope): s
 
 export function acceptedMonthOptions(scope: FiledReturnsDownloadScope): string[] {
   return acceptedFiledReturnsMonthTexts(scope.period);
+}
+
+export function acceptedUnselectedFilingPeriodOptions(): readonly string[] {
+  return UNSELECTED_FILING_PERIOD_OPTIONS;
 }
 
 export function shouldLeaveFilingPeriodUnselected(

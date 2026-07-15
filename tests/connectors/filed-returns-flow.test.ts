@@ -1389,6 +1389,47 @@ describe("filed returns guided flow", () => {
     expect(searchClicked).toBe(1);
   });
 
+  it("does not reuse a pending GSTR-2B dashboard search after the target period changes", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <form name="dashboard">
+            <label for="fin">Financial Year</label>
+            <select name="fin"><option selected>2026-27</option></select>
+            <label for="quarter">Quarter</label>
+            <select name="quarter"><option selected>Quarter 1 (Apr - Jun)</option></select>
+            <label for="mon">Period</label>
+            <select name="mon"><option>April</option><option selected>May</option></select>
+            <button type="button" data-search>Search</button>
+          </form>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/dashboard",
+    );
+    makeLayoutVisible(documentRef);
+    let searchClicked = 0;
+    documentRef.querySelector("[data-search]")?.addEventListener("click", () => {
+      searchClicked += 1;
+    });
+    const mayScope: FiledReturnsDownloadScope = {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-2B",
+    };
+    const aprilScope: FiledReturnsDownloadScope = { ...mayScope, period: "April" };
+
+    const maySearch = await runFiledReturnsDownloadStep(documentRef, mayScope);
+    const aprilSelection = await runFiledReturnsDownloadStep(documentRef, aprilScope);
+    const aprilSearch = await runFiledReturnsDownloadStep(documentRef, aprilScope);
+
+    expect(maySearch.safeSignals).toContain("search-clicked");
+    expect(aprilSelection.safeSignals).toContain("period-selected");
+    expect(aprilSearch.safeSignals).toContain("search-clicked");
+    expect(aprilSearch.safeSignals).not.toContain("gstr2b-return-dashboard-search-results-pending");
+    expect(searchClicked).toBe(2);
+  });
+
   it("selects GSTR-2B prior-year dashboard filters when the quarter field is absent", async () => {
     const documentRef = createGstDocument(
       `
@@ -6408,6 +6449,47 @@ describe("filed returns guided flow", () => {
       expect(documentRef.querySelector<HTMLSelectElement>("#retTyp")?.value).toBe(
         "GSTR-1/IFF/GSTR-1A",
       );
+      expect(searchClicked).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("clears a stale isolated-world filing period when GSTR-2B requires it blank", async () => {
+    vi.useFakeTimers();
+    try {
+      const documentRef = createGstDocument(`
+        <main>
+          <h1>View Filed Returns</h1>
+          <p>For GSTR-2B, please do not select any value in Return Filing Period.</p>
+          <form name="efiledReturns">
+            <label>Financial Year</label>
+            <select id="finYr"><option>Select</option><option>2026-27</option></select>
+            <label>Return Filing Period</label>
+            <select id="optValue"><option>Select</option><option selected>Monthly</option></select>
+            <label>Return Type</label>
+            <select id="retTyp"><option>Select</option><option>GSTR-2B</option></select>
+            <button id="lotsearch" type="button">Search</button>
+          </form>
+        </main>
+      `);
+      const scope: FiledReturnsDownloadScope = {
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-2B",
+      };
+      let searchClicked = 0;
+      documentRef.querySelector("#lotsearch")?.addEventListener("click", () => {
+        searchClicked += 1;
+      });
+
+      const resultPromise = runFiledReturnsDownloadStep(documentRef, scope);
+      await vi.advanceTimersByTimeAsync(10_000);
+      const result = await resultPromise;
+
+      expect(result.state).toBe("clicked");
+      expect(result.safeSignals).toContain("return-filing-period-left-unselected");
+      expect(documentRef.querySelector<HTMLSelectElement>("#optValue")?.value).toBe("Select");
       expect(searchClicked).toBe(1);
     } finally {
       vi.useRealTimers();

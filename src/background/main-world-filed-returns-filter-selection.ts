@@ -32,6 +32,7 @@ export async function selectFiledReturnsFiltersInMainWorld(
   };
   const leaveFilingPeriodUnselectedPattern =
     /please\s+do\s+not\s+select\s+any\s+value\s+in\s+['"]?return\s+filing\s+period/i;
+  const unselectedFilingPeriodOptions = ["Select", "Please Select"];
   const returnTypeInstructionPatterns: Record<FiledReturnsDownloadScope["returnType"], RegExp> = {
     "GSTR-1": /\bgstr\s*[- ]?\s*1\b/i,
     "GSTR-3B": /\bgstr\s*[- ]?\s*3b\b/i,
@@ -123,8 +124,10 @@ export async function selectFiledReturnsFiltersInMainWorld(
     return { state: "waiting", safeSignals: ["main-world-financial-year-not-ready"] };
   }
 
-  const filingPeriodSelected =
-    leaveFilingPeriodUnselected || (await selectOption("filing-period", ["Monthly", scope.period]));
+  const filingPeriodSelected = await selectOption(
+    "filing-period",
+    leaveFilingPeriodUnselected ? unselectedFilingPeriodOptions : ["Monthly", scope.period],
+  );
   if (!filingPeriodSelected) {
     return { state: "waiting", safeSignals: ["main-world-filing-period-not-ready"] };
   }
@@ -161,8 +164,10 @@ export async function selectFiledReturnsFiltersInMainWorld(
   const currentMonthSelect = findSelect("month");
   const filtersStable =
     selectedOptionMatches("financial-year", [scope.financialYear]) &&
-    (leaveFilingPeriodUnselected ||
-      selectedOptionMatches("filing-period", ["Monthly", scope.period])) &&
+    selectedOptionMatches(
+      "filing-period",
+      leaveFilingPeriodUnselected ? unselectedFilingPeriodOptions : ["Monthly", scope.period],
+    ) &&
     selectedOptionMatches("return-type", [scope.returnType]) &&
     (monthSelect
       ? Boolean(currentMonthSelect) && selectedOptionMatches("month", acceptedMonths)

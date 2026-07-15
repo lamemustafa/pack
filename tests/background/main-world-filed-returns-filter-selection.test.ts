@@ -127,4 +127,34 @@ describe("main-world filed-return filter selection", () => {
     expect(outcome.safeSignals).toContain("return-filing-period-left-unselected");
     expect(windowRef.document.querySelector<HTMLSelectElement>("#optValue")?.value).toBe("Select");
   });
+
+  it("clears a stale filing period before a GSTR-2B search that requires no period", async () => {
+    const windowRef = new JSDOM(`
+      <main>
+        <p>For GSTR-2B, please do not select any value in Return Filing Period.</p>
+        <select id="finYr"><option>Select</option><option>2026-27</option></select>
+        <select id="optValue"><option>Select</option><option selected>Monthly</option></select>
+        <select id="retTyp"><option>Select</option><option>GSTR-2B</option></select>
+        <button>Search</button>
+      </main>
+    `).window;
+    const browserGlobals = windowRef as unknown as {
+      HTMLSelectElement: typeof HTMLSelectElement;
+      Event: typeof Event;
+    };
+    vi.stubGlobal("window", windowRef);
+    vi.stubGlobal("document", windowRef.document);
+    vi.stubGlobal("HTMLSelectElement", browserGlobals.HTMLSelectElement);
+    vi.stubGlobal("Event", browserGlobals.Event);
+
+    const outcome = await selectFiledReturnsFiltersInMainWorld({
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-2B",
+    });
+
+    expect(outcome.state).toBe("searched");
+    expect(outcome.safeSignals).toContain("return-filing-period-left-unselected");
+    expect(windowRef.document.querySelector<HTMLSelectElement>("#optValue")?.value).toBe("Select");
+  });
 });
