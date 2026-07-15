@@ -10,6 +10,11 @@ import { findMatchingActionableFiledReturnRows } from "./filed-returns-result-ro
 import { filedReturnScopeId } from "./filed-returns-return-descriptors";
 import { selectFiledReturnsFiltersAndSearch } from "./filed-returns-filter-form";
 import {
+  consumeSettledFiledReturnsSearchForScope,
+  hasPendingFiledReturnsSearchForScope,
+  hasSettledFiledReturnsSearchForScope,
+} from "./filed-returns-search-state";
+import {
   hasGstr2bLoginEvidence,
   isGstr2bAuthRoute,
   isGstr2bSummaryPage,
@@ -161,6 +166,21 @@ async function selectGstr2bFiledReturnsFiltersOrResult(
   scope: FiledReturnsDownloadScope,
   scopeId: string,
 ): Promise<PortalFlowStepResult | null> {
+  const searchPending = hasPendingFiledReturnsSearchForScope(documentRef, scope);
+  const searchSettled = hasSettledFiledReturnsSearchForScope(documentRef, scope);
+  if (searchPending && !searchSettled) {
+    return {
+      connectorId: "gst",
+      scopeId,
+      state: "clicked",
+      safeSignals: [
+        "filed-return-search-results-pending",
+        "gstr2b-filed-return-search-results-pending",
+      ],
+      safeMessage: "Pack is waiting for the GST Portal's filed GSTR-2B search results.",
+    };
+  }
+
   const actionableRows = findMatchingActionableFiledReturnRows(documentRef, scope);
   if (actionableRows.length > 1) {
     return {
@@ -180,12 +200,14 @@ async function selectGstr2bFiledReturnsFiltersOrResult(
 
   const actionableRow = actionableRows[0];
   if (actionableRow) {
+    consumeSettledFiledReturnsSearchForScope(documentRef, scope);
     activateElement(actionableRow.view);
     return {
       connectorId: "gst",
       scopeId,
       state: "clicked",
       safeSignals: [
+        "filed-return-result-view-clicked",
         "gstr2b-filed-return-result-view-clicked",
         ...(actionableRow.period ? [`filed-return-result-period:${actionableRow.period}`] : []),
       ],

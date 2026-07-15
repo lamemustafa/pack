@@ -1,12 +1,35 @@
 import type { FiledReturnsDownloadTarget, PortalDownloadTriggerResult } from "../../core/contracts";
+import { normaliseText } from "./filed-returns-dom";
 import { extractFiledReturnsDetailIdentity } from "./filed-returns-detail-identity";
 import { filedReturnScopeId } from "./filed-returns-return-descriptors";
+import {
+  isGstr2bSummaryPage,
+  readDocumentText,
+  verifyVisibleGstr2bSummaryScope,
+} from "./gstr2b-summary";
 
 export function verifyFiledReturnsDownloadTarget(
   documentRef: Document,
   target: FiledReturnsDownloadTarget,
   baseSignals: readonly string[],
 ): PortalDownloadTriggerResult | null {
+  if (target.returnType === "GSTR-2B") {
+    const normalisedText = normaliseText(readDocumentText(documentRef));
+    if (isGstr2bSummaryPage(documentRef, normalisedText)) {
+      const summaryGuard = verifyVisibleGstr2bSummaryScope(documentRef, target);
+      return summaryGuard
+        ? {
+            ...summaryGuard,
+            safeSignals: [
+              ...baseSignals,
+              ...summaryGuard.safeSignals,
+              "filed-return-download-target-mismatch",
+            ],
+          }
+        : null;
+    }
+  }
+
   const identity = extractFiledReturnsDetailIdentity(documentRef, target.returnType);
   const mismatches = [
     !identity.returnType || identity.returnType !== target.returnType,

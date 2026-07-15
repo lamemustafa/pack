@@ -137,6 +137,7 @@ function isPortalNavigationStep(step: PortalFlowStepResult): boolean {
       "filed-gstr1-controls-pending",
       "filed-gstr1-excel-control-pending",
       "filed-gstr1-summary-back-clicked",
+      "gstr2b-return-dashboard-search-results-pending",
       "hidden-filed-returns-candidate-clicked",
       "return-dashboard-candidate-clicked",
       "search-clicked",

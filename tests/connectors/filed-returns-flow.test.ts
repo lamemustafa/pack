@@ -431,9 +431,53 @@ describe("filed returns guided flow", () => {
 
     expect(result.state).toBe("clicked");
     expect(result.safeSignals).toEqual(
-      expect.arrayContaining(["gstr2b-filed-return-result-view-clicked"]),
+      expect.arrayContaining([
+        "filed-return-result-view-clicked",
+        "gstr2b-filed-return-result-view-clicked",
+      ]),
     );
     expect(viewClicked).toBe(1);
+  });
+
+  it("waits for one pending GSTR-2B filed-return search instead of clicking Search again", async () => {
+    const scope: FiledReturnsDownloadScope = {
+      artifactType: "PDF_AND_EXCEL",
+      financialYear: "2025-26",
+      period: "April",
+      returnType: "GSTR-2B",
+    };
+    const documentRef = createGstDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <label>Financial Year</label>
+          <select><option selected>2025-26</option></select>
+          <label>Return Filing Period</label>
+          <select><option selected>Monthly</option></select>
+          <label>Month</label>
+          <select><option selected>April</option></select>
+          <label>Return Type</label>
+          <select><option selected>GSTR-2B</option></select>
+          <button type="button">Search</button>
+        </form>
+      </main>
+    `);
+    let searched = 0;
+    documentRef.querySelector("button")?.addEventListener("click", () => {
+      searched += 1;
+    });
+    markFiledReturnsSearchPending(documentRef, scope);
+
+    const result = await runFiledReturnsDownloadStep(documentRef, scope);
+
+    expect(result).toMatchObject({
+      state: "clicked",
+      safeSignals: expect.arrayContaining([
+        "filed-return-search-results-pending",
+        "gstr2b-filed-return-search-results-pending",
+      ]),
+    });
+    expect(searched).toBe(0);
   });
 
   it("ignores unrelated GSTR-2B localStorage when deciding portal-capture readiness", async () => {
@@ -2213,6 +2257,49 @@ describe("filed returns guided flow", () => {
     expect(result.downloadTrigger.safeSignals).toContain("filed-return-download-target-mismatch");
     expect(result.mainWorldCaptureRequest).toBeUndefined();
     expect(pdfClicked).toBe(0);
+  });
+
+  it("reuses GSTR-2B server scope when visible labels are incomplete at capture time", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <h1>GSTR-2B</h1>
+          <p>Auto-drafted ITC Statement</p>
+          <aside>Site year 2026-27</aside>
+          <button data-pdf>DOWNLOAD GSTR-2B SUMMARY (PDF)</button>
+          <button>DOWNLOAD GSTR-2B DETAILS (EXCEL)</button>
+        </main>
+        <script>
+          var server_urls = {
+            "FIN_YEAR": "2025-26",
+            "RETURN_PERIOD": "052025",
+            "FORM_TYPE": "GSTR2B"
+          };
+        </script>
+      `,
+      "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
+    );
+    makeLayoutVisible(documentRef);
+
+    const result = await triggerFiledReturnDownload(documentRef, {
+      actionId: "action-server-scope",
+      artifactType: "PDF",
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-2B",
+    });
+
+    expect(result.downloadTrigger).toMatchObject({
+      state: "clicked",
+      safeSignals: expect.arrayContaining([
+        "filed-return-download-clicked",
+        "filed-gstr2b-download-clicked",
+      ]),
+    });
+    expect(result.mainWorldCaptureRequest).toMatchObject({
+      actionId: "action-server-scope",
+      signalPrefix: "filed-gstr2b",
+    });
   });
 
   it("clicks only the requested GSTR-2B details Excel control", async () => {

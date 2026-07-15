@@ -159,7 +159,7 @@ describe("filed returns flow runner wait policy", () => {
     expect(getFlowStepSettleMs(BASE_STEP, BASE_DEPS)).toBe(FLOW_STEP_SETTLE_MS);
   });
 
-  it("keeps GSTR-2B dashboard result polling on the generic cadence", () => {
+  it("uses the portal-navigation wait for pending GSTR-2B dashboard results", () => {
     expect(
       getFlowStepSettleMs(
         {
@@ -168,7 +168,7 @@ describe("filed returns flow runner wait policy", () => {
         },
         BASE_DEPS,
       ),
-    ).toBe(FLOW_STEP_SETTLE_MS);
+    ).toBe(PORTAL_NAVIGATION_SETTLE_MS);
   });
 
   it("gives a fresh-login GSTR-3B flow the same bounded navigation budget as other returns", () => {
