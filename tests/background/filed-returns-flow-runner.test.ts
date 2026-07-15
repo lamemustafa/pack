@@ -1385,6 +1385,59 @@ describe("filed returns flow runner", () => {
     );
   });
 
+  it("blocks single-period completion when temporary staging cleanup fails", async () => {
+    stagedZipEntryCount = 2;
+    const defaultRuntimeHandler = vi.mocked(browser.runtime.sendMessage).getMockImplementation()!;
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message: unknown) => {
+      if (
+        typeof message === "object" &&
+        message !== null &&
+        "type" in message &&
+        message.type === "PACK_OFFSCREEN_CLEAR_FILED_RETURN_LEDGER"
+      ) {
+        const requestId =
+          "payload" in message &&
+          typeof message.payload === "object" &&
+          message.payload !== null &&
+          "requestId" in message.payload
+            ? message.payload.requestId
+            : undefined;
+        return { ok: false, requestId, errorCategory: "clear-failed" };
+      }
+      return (defaultRuntimeHandler as (value: unknown) => unknown)(message);
+    });
+
+    const response = await exportSinglePeriodFiledReturnsZip({
+      completeStep: {
+        connectorId: "gst",
+        scopeId: "gst-gstr2b-private-v0",
+        state: "downloaded",
+        safeSignals: ["filed-return-artifact-downloaded:PDF"],
+        safeMessage: "Artifacts staged.",
+      },
+      ledgerId: "single-period-ledger",
+      scope: {
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-2B",
+      },
+    });
+
+    expect(response).toMatchObject({
+      state: "blocked",
+      safeSignals: expect.arrayContaining([
+        "single-period-zip-downloaded",
+        "single-period-opfs-clear-failed",
+        "single-period-opfs-retained",
+      ]),
+      userAction: {
+        type: "RETRY_PORTAL_GENERATION",
+        canResume: true,
+      },
+    });
+  });
+
   it("exports a combined GSTR-1 ZIP when PDF is staged and optional Excel is unavailable", async () => {
     stagedZipEntryCount = 1;
     const now = "2026-07-14T00:00:00.000Z";
@@ -2018,9 +2071,9 @@ describe("filed returns flow runner", () => {
     expect(sendMessageToTabWithInjection.mock.calls.at(-1)?.[1].payload).toMatchObject({
       forcePortalClick: true,
     });
-    expect(vi.mocked(observeNextBrowserDownload).mock.calls.at(-1)?.[1]).toMatchObject({
-      allowTargetBoundBlobOrData: true,
-    });
+    expect(vi.mocked(observeNextBrowserDownload).mock.calls.at(-1)?.[1]).not.toHaveProperty(
+      "allowTargetBoundBlobOrData",
+    );
     expect(vi.mocked(observeNextBrowserDownload).mock.calls.at(-1)?.[2]).toBe(120_000);
   });
 
@@ -3127,9 +3180,9 @@ describe("filed returns flow runner", () => {
         period: "May",
         returnType: "GSTR-2B",
       });
-      expect(vi.mocked(observeNextBrowserDownload).mock.calls.at(-1)?.[1]).toMatchObject({
-        allowTargetBoundBlobOrData: true,
-      });
+      expect(vi.mocked(observeNextBrowserDownload).mock.calls.at(-1)?.[1]).not.toHaveProperty(
+        "allowTargetBoundBlobOrData",
+      );
       expect(vi.mocked(observeNextBrowserDownload).mock.calls.at(-1)?.[2]).toBe(120_000);
     },
   );

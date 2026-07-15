@@ -397,7 +397,13 @@ export async function capturePortalBlobDownloadWithDiagnostics(
       settle(null);
       return;
     }
-    control.click();
+    try {
+      control.click();
+    } catch {
+      addSafeSignal(`${config.signalPrefix}-capture-control-click-threw`);
+      settle(null);
+      return;
+    }
     window.setTimeout(() => {
       addSafeSignal(`${config.signalPrefix}-main-world-capture-timeout`);
       settle(null);

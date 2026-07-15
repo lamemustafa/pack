@@ -468,6 +468,46 @@ describe("capturePortalBlobDownload", () => {
     });
     expect(pageMessages).toEqual([]);
   });
+
+  it("restores every main-world hook when the portal control click throws", async () => {
+    const { documentRef, view } = installMainWorldDom(`
+      <button data-pack-gstr2b-capture-action="capture-1">Download</button>
+    `);
+    const originalFetch = vi.fn();
+    Object.defineProperty(view, "fetch", {
+      configurable: true,
+      value: originalFetch,
+      writable: true,
+    });
+    const originalCreateObjectUrl = view.URL.createObjectURL;
+    const originalWindowOpen = view.open;
+    const originalAnchorClick = view.HTMLAnchorElement.prototype.click;
+    const originalAnchorDispatch = view.HTMLAnchorElement.prototype.dispatchEvent;
+    const originalXhrOpen = view.XMLHttpRequest.prototype.open;
+    const originalXhrSend = view.XMLHttpRequest.prototype.send;
+    const control = documentRef.querySelector<HTMLButtonElement>("button")!;
+    control.click = () => {
+      throw new Error("synthetic portal click failure");
+    };
+
+    const outcome = await capturePortalBlobDownloadWithDiagnostics(captureConfig());
+
+    expect(outcome).toMatchObject({
+      capturedDownloadRequest: null,
+      safeFailureSignals: expect.arrayContaining([
+        "gstr2b-main-world-capture-armed",
+        "gstr2b-capture-control-click-threw",
+      ]),
+    });
+    expect(view.URL.createObjectURL).toBe(originalCreateObjectUrl);
+    expect(view.fetch).toBe(originalFetch);
+    expect(view.open).toBe(originalWindowOpen);
+    expect(view.HTMLAnchorElement.prototype.click).toBe(originalAnchorClick);
+    expect(view.HTMLAnchorElement.prototype.dispatchEvent).toBe(originalAnchorDispatch);
+    expect(view.XMLHttpRequest.prototype.open).toBe(originalXhrOpen);
+    expect(view.XMLHttpRequest.prototype.send).toBe(originalXhrSend);
+    expect(control.hasAttribute("data-pack-gstr2b-capture-action")).toBe(false);
+  });
 });
 
 function captureConfig(): FiledReturnsMainWorldCaptureRequest {

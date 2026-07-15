@@ -208,7 +208,7 @@ export interface FiledReturnsDownloadTarget {
   period: string;
   returnType: FiledReturnsReturnType;
   artifactType?: FiledReturnsConcreteArtifactType;
-  /** Internal explicit portal-click mode with target-bound blob/data observation. */
+  /** Internal explicit portal-click mode; completion still requires action-bound browser evidence. */
   forcePortalClick?: boolean;
 }
 

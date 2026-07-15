@@ -260,6 +260,28 @@ async function exportStagedFiledReturnsZip({
       : await clearStagedLedgerSignal(ledgerId, clearSignalPrefix);
   if (clearSignalPrefix === "single-period") {
     await closeOffscreenBlobDocument();
+    if (stagedLedgerSignal !== "single-period-opfs-cleared") {
+      return {
+        ...completeStep,
+        state: "blocked",
+        safeSignals: [
+          ...completeStep.safeSignals,
+          "single-period-zip-download-started",
+          "single-period-zip-downloaded",
+          `single-period-zip-entry-count:${zip.zipEntryCount}`,
+          stagedLedgerSignal,
+          "single-period-opfs-retained",
+          ...observed.safeSignals,
+        ],
+        safeMessage:
+          "Pack downloaded the selected ZIP but could not clear its temporary local staging.",
+        userAction: {
+          type: "RETRY_PORTAL_GENERATION",
+          message: "Retry the selected download after Pack can clear its temporary staging.",
+          canResume: true,
+        },
+      };
+    }
   }
 
   return {

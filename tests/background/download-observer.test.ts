@@ -117,6 +117,7 @@ describe("download observer", () => {
       expectedFileExtensions: [".pdf"],
       expectedMimeTypes: ["application/pdf"],
       expectedOrigins: ["https://return.gst.gov.in"],
+      trustedDownloadIds: new Set([21]),
     });
 
     downloads.created.emit({
@@ -161,11 +162,11 @@ describe("download observer", () => {
         },
       ]);
       const observation = observeNextBrowserDownload(downloads, {
-        allowTargetBoundBlobOrData: true,
         armedAt,
         expectedFileExtensions: [".pdf"],
         expectedMimeTypes: ["application/pdf"],
         expectedOrigins: ["https://return.gst.gov.in"],
+        trustedDownloadIds: new Set([211]),
       });
 
       downloads.created.emit({
@@ -192,7 +193,6 @@ describe("download observer", () => {
     const observation = observeNextBrowserDownload(
       downloads,
       {
-        allowTargetBoundBlobOrData: true,
         armedAt: new Date("2026-06-24T10:00:00.000Z"),
         expectedFileExtensions: [".pdf"],
         expectedMimeTypes: ["application/pdf"],

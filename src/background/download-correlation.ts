@@ -7,7 +7,6 @@ export interface DownloadObservationContext {
   expectedMimeTypes: readonly string[];
   expectedUrlSubstrings?: readonly string[];
   ignoredFilenames?: readonly string[];
-  allowTargetBoundBlobOrData?: boolean;
   trustedDownloadIds?: Set<number>;
 }
 
@@ -31,14 +30,7 @@ export function isPotentialDownloadCandidate(
 ): boolean {
   if (isTrustedDownload(item, context)) return startsAfterArmedTime(item, context.armedAt);
   if (!startsAfterArmedTime(item, context.armedAt)) return false;
-  if (
-    context.allowTargetBoundBlobOrData &&
-    hasBlobOrDataUrl(item) &&
-    hasExpectedOrigin(item, context.expectedOrigins) &&
-    hasExpectedFileEvidence(item, context)
-  ) {
-    return true;
-  }
+  if (hasBlobOrDataUrl(item)) return false;
   return hasExpectedOrigin(item, context.expectedOrigins);
 }
 

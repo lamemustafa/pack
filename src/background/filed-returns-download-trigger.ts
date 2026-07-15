@@ -83,7 +83,6 @@ export async function triggerAndObserveFiledReturnDownload({
   const trustedDownloadIds = new Set<number>();
   const observationContext = {
     ...expectedDownloadForScope(scope, artifactType),
-    ...(target.forcePortalClick ? { allowTargetBoundBlobOrData: true } : {}),
     armedAt,
     expectedUrlSubstrings: [],
     ignoredFilenames: [filename],

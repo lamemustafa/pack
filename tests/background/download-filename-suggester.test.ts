@@ -173,13 +173,12 @@ describe("download filename suggester", () => {
     expect(downloads.determiningFilename.listenerCount()).toBe(0);
   });
 
-  it("does not trust an unscoped blob download during a portal-click fallback", () => {
+  it("does not promote blob downloads to trusted ids without action-bound evidence", () => {
     const downloads = createDownloadsApi();
     const trustedDownloadIds = new Set<number>();
     suggestNextBrowserDownloadFilename(
       downloads,
       {
-        allowTargetBoundBlobOrData: true,
         armedAt: new Date("2026-06-24T10:00:00.000Z"),
         expectedFileExtensions: [".pdf"],
         expectedMimeTypes: ["application/pdf"],
@@ -189,7 +188,7 @@ describe("download filename suggester", () => {
       "complyeaze-pack/gst/2026-27/gstr-3b/may.pdf",
     );
     const unrelatedSuggest = vi.fn();
-    const gstSuggest = vi.fn();
+    const gstOriginSuggest = vi.fn();
 
     downloads.determiningFilename.emit(
       {
@@ -207,16 +206,13 @@ describe("download filename suggester", () => {
         startTime: "2026-06-24T10:00:02.000Z",
         url: "blob:https://return.gst.gov.in/target-pdf",
       },
-      gstSuggest,
+      gstOriginSuggest,
     );
 
     expect(unrelatedSuggest).toHaveBeenCalledWith();
     expect(trustedDownloadIds.has(98)).toBe(false);
-    expect(gstSuggest).toHaveBeenCalledWith({
-      conflictAction: "uniquify",
-      filename: "complyeaze-pack/gst/2026-27/gstr-3b/may.pdf",
-    });
-    expect(trustedDownloadIds.has(99)).toBe(true);
+    expect(gstOriginSuggest).toHaveBeenCalledWith();
+    expect(trustedDownloadIds.has(99)).toBe(false);
   });
 });
 
