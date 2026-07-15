@@ -348,6 +348,7 @@ export interface FiledReturnsFullFiscalYearLedger {
   zipPhase?:
     | "export-pending"
     | "export-retry-pending"
+    | "download-started"
     | "restaging-required"
     | "downloaded-cleanup-pending"
     | "no-artifacts-cleanup-pending"

@@ -43,6 +43,7 @@ const VALID_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
 const VALID_ZIP_PHASES = new Set<NonNullable<FiledReturnsFullFiscalYearLedger["zipPhase"]>>([
   "export-pending",
   "export-retry-pending",
+  "download-started",
   "restaging-required",
   "downloaded-cleanup-pending",
   "no-artifacts-cleanup-pending",

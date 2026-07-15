@@ -22,6 +22,7 @@ const USER_MEDIATED_ZIP_DOWNLOAD_WAIT_MS = 45 * 1000;
 export async function exportFullFiscalYearZip(
   ledger: FiledReturnsFullFiscalYearLedger,
   completeStep: PortalFlowStepResult,
+  options: { onDownloadStarted?: () => Promise<void> } = {},
 ): Promise<PortalFlowStepResult> {
   const staging = fullFiscalYearStagingRequirement(ledger);
   if (staging.missingArtifactCount > 0) {
@@ -66,6 +67,7 @@ export async function exportFullFiscalYearZip(
       "Pack staged the fiscal-year files, but could not prepare the final zip export.",
     zipFilename: safeFullFiscalYearZipFilename(ledger.scope),
     expectedZipEntryCount: staging.expectedArtifactCount,
+    ...(options.onDownloadStarted ? { onDownloadStarted: options.onDownloadStarted } : {}),
   });
 }
 
@@ -117,6 +119,7 @@ async function exportStagedFiledReturnsZip({
   zipFailedMessage,
   zipFilename,
   expectedZipEntryCount,
+  onDownloadStarted,
 }: {
   clearSignalPrefix: "full-fiscal-year" | "single-period";
   completeStep: PortalFlowStepResult;
@@ -128,6 +131,7 @@ async function exportStagedFiledReturnsZip({
   zipFailedMessage: string;
   zipFilename: string;
   expectedZipEntryCount?: number;
+  onDownloadStarted?: () => Promise<void>;
 }): Promise<PortalFlowStepResult> {
   const zip = await createOffscreenFiledReturnZipUrl(ledgerId, {
     returnType: scope.returnType,
@@ -213,6 +217,30 @@ async function exportStagedFiledReturnsZip({
       userAction: {
         type: "ALLOW_MULTIPLE_DOWNLOADS",
         message: "Allow downloads for Pack, then retry the zip export.",
+        canResume: true,
+      },
+    };
+  }
+
+  try {
+    await onDownloadStarted?.();
+  } catch {
+    await revokeOffscreenBlobUrl(zip.blobUrl);
+    await closeOffscreenBlobDocument();
+    return {
+      ...completeStep,
+      state: "download-unconfirmed",
+      safeSignals: [
+        ...completeStep.safeSignals,
+        `${clearSignalPrefix}-zip-download-started`,
+        `${clearSignalPrefix}-zip-download-state-persist-failed`,
+        retainedStagedLedgerSignal(clearSignalPrefix),
+      ],
+      safeMessage:
+        "Pack started the ZIP download but could not save its recovery state. Check browser Downloads before retrying.",
+      userAction: {
+        type: "RETRY_PORTAL_GENERATION",
+        message: "Check browser Downloads first. Retry only if the ZIP is absent.",
         canResume: true,
       },
     };

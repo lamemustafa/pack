@@ -1,4 +1,5 @@
 import type { FiledReturnsFlowSummary } from "../../core/contracts";
+import { FULL_FISCAL_YEAR_PERIOD } from "../../core/filed-returns-scope";
 import type { PopupPresentationState } from "./presentation-state";
 import { RunProgress } from "./run-summary";
 
@@ -93,7 +94,7 @@ function getInlineStatusCopy(
   }
   if (presentation.kind === "complete") {
     const periods = summary?.completedPeriods.length ?? 0;
-    const isFullYear = summary?.scope.period === "ALL";
+    const isFullYear = summary?.scope.period === FULL_FISCAL_YEAR_PERIOD;
     return {
       body: isFullYear
         ? `${periods} periods saved as one ZIP.`

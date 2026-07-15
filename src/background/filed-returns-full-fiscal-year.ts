@@ -49,7 +49,7 @@ import {
   createFullFiscalYearCleanupPendingState,
   finishFullFiscalYearCleanup,
   markFullFiscalYearCleanupPending,
-  markFullFiscalYearExportPhase,
+  markFullFiscalYearZipPhase,
   markFullFiscalYearRestagingRequired,
 } from "./filed-returns-full-fiscal-year-cleanup";
 import {
@@ -97,7 +97,9 @@ export async function startFullFiscalYearDownloadFlow(
   }
   if (
     sameScopeExistingLedger &&
-    ["export-pending", "export-retry-pending"].includes(sameScopeExistingLedger.zipPhase ?? "")
+    ["export-pending", "export-retry-pending", "download-started"].includes(
+      sameScopeExistingLedger.zipPhase ?? "",
+    )
   ) {
     return completeRun(deps, sameScopeExistingLedger);
   }
@@ -218,7 +220,7 @@ export async function startFullFiscalYearDownloadFlow(
       (targetStatus === "downloaded" || targetStatus === "not-filed") &&
       canCompleteFullFiscalYearLedger(ledger)
     ) {
-      ledger = markFullFiscalYearExportPhase(ledger, deps.now?.() ?? new Date(), "export-pending");
+      ledger = markFullFiscalYearZipPhase(ledger, deps.now?.() ?? new Date(), "export-pending");
     }
     await persistLedgerAndMaybeSummary(deps, ledger, flowStep);
 
@@ -244,21 +246,36 @@ async function completeRun(
   const readyLedger =
     ledger.zipPhase === "export-pending" || ledger.zipPhase === "export-retry-pending"
       ? ledger
-      : markFullFiscalYearExportPhase(ledger, now, "export-pending");
+      : markFullFiscalYearZipPhase(
+          ledger,
+          now,
+          ledger.zipPhase === "download-started" ? "export-retry-pending" : "export-pending",
+        );
   const step = completeFullFiscalYearStep(readyLedger);
   // Persist a resumable pre-export state before the browser download can suspend
   // this MV3 worker. A later start can then retry the retained staged ZIP without
   // re-running already completed portal targets.
   await persistLedger(deps, readyLedger);
-  const zipStep = await exportFullFiscalYearZip(readyLedger, step);
+  let exportLedger = readyLedger;
+  const zipStep = await exportFullFiscalYearZip(readyLedger, step, {
+    onDownloadStarted: async () => {
+      exportLedger = markFullFiscalYearZipPhase(
+        exportLedger,
+        deps.now?.() ?? new Date(),
+        "download-started",
+      );
+      const downloadStartedStep = fullFiscalYearZipPhaseStep(exportLedger)!;
+      await persistLedgerAndSummary(deps, exportLedger, downloadStartedStep);
+    },
+  });
   if (zipStep.state !== "downloaded") {
     const nextLedger = zipStep.safeSignals.some(
       (signal) =>
         signal === "full-fiscal-year-zip-artifact-staging-incomplete" ||
         signal === "full-fiscal-year-zip-entry-count-mismatch",
     )
-      ? markFullFiscalYearRestagingRequired(readyLedger, now)
-      : markFullFiscalYearExportPhase(readyLedger, now, "export-retry-pending");
+      ? markFullFiscalYearRestagingRequired(exportLedger, now)
+      : markFullFiscalYearZipPhase(exportLedger, now, "export-retry-pending");
     const phaseStep = fullFiscalYearZipPhaseStep(nextLedger)!;
     const persistedStep = {
       ...zipStep,
@@ -269,7 +286,7 @@ async function completeRun(
     return { ok: true, flowStep: summary.flowStep, flowSummary: summary };
   }
 
-  const cleanupPending = createFullFiscalYearCleanupPendingState(readyLedger, zipStep);
+  const cleanupPending = createFullFiscalYearCleanupPendingState(exportLedger, zipStep);
   await persistLedgerAndSummary(deps, cleanupPending.ledger, cleanupPending.step);
   return finishFullFiscalYearCleanup(deps, cleanupPending.ledger);
 }

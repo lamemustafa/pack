@@ -76,6 +76,7 @@ export async function capturePortalBlobDownloadWithDiagnostics(
     const capturedBlobsByUrl = new Map<string, Blob>();
     const actionBoundBlobs = new WeakSet<Blob>();
     const actionBoundXhrs = new WeakSet<XMLHttpRequest>();
+    const actionBoundResponseRestorers: Array<() => void> = [];
     let controlClickActive = false;
     let suppressedWindowOpen = false;
     let restored = false;
@@ -98,6 +99,9 @@ export async function capturePortalBlobDownloadWithDiagnostics(
       HTMLAnchorElement.prototype.dispatchEvent = originalDispatchEvent;
       XMLHttpRequest.prototype.open = originalXhrOpen;
       XMLHttpRequest.prototype.send = originalXhrSend;
+      while (actionBoundResponseRestorers.length > 0) {
+        actionBoundResponseRestorers.pop()?.();
+      }
       document
         .querySelector<HTMLElement>(`[${config.controlAttribute}="${cssEscape(config.controlId)}"]`)
         ?.removeAttribute(config.controlAttribute);
@@ -337,6 +341,39 @@ export async function capturePortalBlobDownloadWithDiagnostics(
       return undefined;
     };
 
+    const bindActionBoundFetchResponse = (response: Response): Response => {
+      const originalResponseBlob = response.blob;
+      if (typeof originalResponseBlob !== "function") return response;
+      const readActionBoundBlob = async () => {
+        const blob = await originalResponseBlob.call(response);
+        if (isBlobLike(blob)) actionBoundBlobs.add(blob);
+        return blob;
+      };
+      try {
+        const originalBlobDescriptor = Object.getOwnPropertyDescriptor(response, "blob");
+        Object.defineProperty(response, "blob", {
+          configurable: true,
+          value: readActionBoundBlob,
+        });
+        actionBoundResponseRestorers.push(() => {
+          if (originalBlobDescriptor) {
+            Object.defineProperty(response, "blob", originalBlobDescriptor);
+          } else {
+            delete (response as unknown as { blob?: () => Promise<Blob> }).blob;
+          }
+        });
+        return response;
+      } catch {
+        return new Proxy(response, {
+          get(target, property) {
+            if (property === "blob") return readActionBoundBlob;
+            const value = Reflect.get(target, property, target);
+            return typeof value === "function" ? value.bind(target) : value;
+          },
+        });
+      }
+    };
+
     window.fetch = function fetch(input: RequestInfo | URL, init?: RequestInit) {
       const actionBound = controlClickActive;
       return originalFetch.call(window, input, init).then((response) => {
@@ -344,7 +381,7 @@ export async function capturePortalBlobDownloadWithDiagnostics(
         if (actionBound && contentType && isArtifactContentType(contentType)) {
           addSafeSignal(`${config.signalPrefix}-fetch-artifact-response-observed`);
         }
-        return response;
+        return actionBound ? bindActionBoundFetchResponse(response) : response;
       });
     };
 
@@ -360,6 +397,7 @@ export async function capturePortalBlobDownloadWithDiagnostics(
       if (actionBoundXhrs.has(this)) {
         this.addEventListener("load", () => {
           if (settled) return;
+          if (isBlobLike(this.response)) actionBoundBlobs.add(this.response);
           const contentType = this.getResponseHeader("content-type");
           if (contentType && !isArtifactContentType(contentType)) return;
           addSafeSignal(`${config.signalPrefix}-xhr-artifact-response-observed`);

@@ -257,6 +257,53 @@ describe("capturePortalBlobDownload", () => {
     );
   });
 
+  it("preserves action binding through an asynchronous fetch blob handoff", async () => {
+    const { documentRef, view } = installMainWorldDom(`
+      <button data-pack-gstr2b-capture-action="capture-1">Download</button>
+    `);
+    let nativeClicks = 0;
+    documentRef.defaultView!.HTMLAnchorElement.prototype.click = function click() {
+      nativeClicks += 1;
+    };
+    const readResponseBlob = vi.fn(
+      async () =>
+        new view.Blob(["%PDF-1.7 action-bound fetch bytes"], {
+          type: "application/pdf",
+        }),
+    );
+    const response = {
+      blob: readResponseBlob,
+      headers: {
+        get: (name: string) => (name.toLowerCase() === "content-type" ? "application/pdf" : null),
+      },
+    };
+    view.fetch = vi.fn(async () => response) as unknown as typeof fetch;
+    documentRef.querySelector("button")?.addEventListener("click", () => {
+      void view
+        .fetch("/returns/auth/gstr1/generated")
+        .then((response) => response.blob())
+        .then((blob) => {
+          const anchor = documentRef.createElement("a");
+          anchor.href = view.URL.createObjectURL(blob);
+          anchor.download = "may.pdf";
+          anchor.click();
+        });
+    });
+
+    const captured = await capturePortalBlobDownload(captureConfig());
+
+    expect(captured).toMatchObject({
+      actionId: "action-1",
+      safeSignals: expect.arrayContaining([
+        "gstr2b-portal-blob-captured",
+        "gstr2b-native-blob-click-suppressed",
+        "gstr2b-main-world-capture",
+      ]),
+    });
+    expect(nativeClicks).toBe(0);
+    expect(response.blob).toBe(readResponseBlob);
+  });
+
   it("does not capture passive portal XHR responses before a download handoff", async () => {
     const { documentRef, view } = installMainWorldDom(`
       <button data-pack-gstr2b-capture-action="capture-1">Download</button>

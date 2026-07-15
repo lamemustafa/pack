@@ -57,10 +57,10 @@ export function markFullFiscalYearCleanupPending(
   return cleanupPendingLedger;
 }
 
-export function markFullFiscalYearExportPhase(
+export function markFullFiscalYearZipPhase(
   ledger: FiledReturnsFullFiscalYearLedger,
   now: Date,
-  zipPhase: "export-pending" | "export-retry-pending",
+  zipPhase: "export-pending" | "export-retry-pending" | "download-started",
 ): FiledReturnsFullFiscalYearLedger {
   const exportLedger: FiledReturnsFullFiscalYearLedger = {
     ...ledger,

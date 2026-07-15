@@ -218,6 +218,13 @@ describe("full fiscal year ledger", () => {
       isFullFiscalYearLedger({
         ...createLedger([["April", "downloaded"]]),
         status: "blocked",
+        zipPhase: "download-started",
+      }),
+    ).toBe(true);
+    expect(
+      isFullFiscalYearLedger({
+        ...createLedger([["April", "downloaded"]]),
+        status: "blocked",
         zipPhase: "downloaded-cleanup-pending",
       }),
     ).toBe(true);

@@ -456,6 +456,28 @@ describe("filed returns flow runner", () => {
     expect(
       vi.mocked(browser.storage.local.set).mock.invocationCallOrder[exportPendingLedgerCallIndex]!,
     ).toBeLessThan(vi.mocked(browser.downloads.download).mock.invocationCallOrder[0]!);
+    const downloadStartedLedgerCallIndex = vi
+      .mocked(browser.storage.local.set)
+      .mock.calls.findIndex(([value]) => {
+        const ledger = (value as Record<string, unknown>)["full-year-ledger"];
+        return (
+          typeof ledger === "object" &&
+          ledger !== null &&
+          (ledger as Record<string, unknown>).status === "blocked" &&
+          (ledger as Record<string, unknown>).zipPhase === "download-started"
+        );
+      });
+    expect(downloadStartedLedgerCallIndex).toBeGreaterThanOrEqual(0);
+    expect(vi.mocked(browser.downloads.download).mock.invocationCallOrder[0]!).toBeLessThan(
+      vi.mocked(browser.storage.local.set).mock.invocationCallOrder[
+        downloadStartedLedgerCallIndex
+      ]!,
+    );
+    expect(
+      vi.mocked(browser.storage.local.set).mock.invocationCallOrder[
+        downloadStartedLedgerCallIndex
+      ]!,
+    ).toBeLessThan(vi.mocked(observeBrowserDownloadById).mock.invocationCallOrder[0]!);
     expect(browser.storage.session.set).toHaveBeenCalledWith({
       completion: expect.objectContaining({
         completedAt: expect.any(String),
@@ -1211,6 +1233,62 @@ describe("filed returns flow runner", () => {
     expect(browser.storage.local.set).toHaveBeenCalledWith({
       "full-year-ledger": expect.not.objectContaining({
         zipPhase: "downloaded-cleanup-pending",
+      }),
+    });
+  });
+
+  it("retries a durably recorded final ZIP handoff without repeating portal targets", async () => {
+    stagedZipEntryCount = 2;
+    const downloadStartedLedger: FiledReturnsFullFiscalYearLedger = {
+      ...createFullFiscalYearLedger({
+        status: "blocked",
+        targets: [
+          { period: "April", status: "downloaded" },
+          { period: "May", status: "downloaded" },
+        ],
+      }),
+      zipPhase: "download-started",
+      targets: createFullFiscalYearLedger({
+        targets: [
+          { period: "April", status: "downloaded" },
+          { period: "May", status: "downloaded" },
+        ],
+      }).targets.map((target) => ({
+        ...target,
+        safeSignals: ["full-fiscal-year-opfs-staged", "full-fiscal-year-opfs-staged:PDF"],
+      })),
+    };
+    mockLocalStorageGet({ "full-year-ledger": downloadStartedLedger });
+    const getActiveGstTab = vi.fn(async () => null);
+    const sendMessageToTabWithInjection =
+      vi.fn<FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]>();
+
+    const response = await startFiledReturnsDownloadFlow(downloadStartedLedger.scope, {
+      getActiveGstTab,
+      sendMessageToTabWithInjection,
+      storageKeys: {
+        completion: "completion",
+        fullFiscalYearLedger: "full-year-ledger",
+        observation: "observation",
+      },
+      now: () => new Date("2026-06-24T00:01:00.000Z"),
+    });
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "downloaded",
+        safeSignals: expect.arrayContaining(["full-fiscal-year-complete"]),
+      },
+      flowSummary: { status: "complete" },
+    });
+    expect(getActiveGstTab).not.toHaveBeenCalled();
+    expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
+    expect(browser.downloads.download).toHaveBeenCalledOnce();
+    expect(browser.storage.local.set).toHaveBeenCalledWith({
+      "full-year-ledger": expect.objectContaining({
+        status: "blocked",
+        zipPhase: "export-retry-pending",
       }),
     });
   });

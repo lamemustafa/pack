@@ -24,18 +24,22 @@ export function fullFiscalYearZipPhaseStep(
   }
 
   const downloaded = ledger.zipPhase === "downloaded-cleanup-pending";
+  const downloadStarted = ledger.zipPhase === "download-started";
   const noArtifacts = ledger.zipPhase === "no-artifacts-cleanup-pending";
   const cleanup =
     downloaded || noArtifacts || ledger.zipPhase === "legacy-cleanup-pending" || legacyRetained;
   return {
     connectorId: "gst",
     scopeId: filedReturnsScopeId(ledger.scope.returnType),
-    state: "blocked",
+    state: downloadStarted ? "download-unconfirmed" : "blocked",
     safeSignals: [
       ...(cleanup
         ? ["full-fiscal-year-local-cleanup-retry"]
         : ["full-fiscal-year-final-zip-retry"]),
       ...(downloaded ? ["full-fiscal-year-zip-downloaded"] : []),
+      ...(downloadStarted
+        ? ["full-fiscal-year-zip-download-started", "full-fiscal-year-zip-download-unconfirmed"]
+        : []),
       ...(noArtifacts ? ["full-fiscal-year-no-zip-artifacts"] : []),
       legacyRetained
         ? "full-fiscal-year-zip-phase:legacy-cleanup-pending"
@@ -46,7 +50,9 @@ export function fullFiscalYearZipPhaseStep(
     ],
     safeMessage: cleanup
       ? "Pack retained local fiscal-year staging and can finish cleanup without reopening the GST Portal."
-      : "Pack retained the prepared fiscal-year files and can retry the final ZIP without repeating portal periods.",
+      : downloadStarted
+        ? "Pack started the final fiscal-year ZIP download before the previous run stopped. Check browser Downloads before retrying it."
+        : "Pack retained the prepared fiscal-year files and can retry the final ZIP without repeating portal periods.",
   };
 }
 

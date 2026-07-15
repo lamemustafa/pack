@@ -485,11 +485,12 @@ describe("Pack local data clearing", () => {
   });
 
   it.each([
-    ["export-retry-pending", "full-fiscal-year-final-zip-retry"],
-    ["downloaded-cleanup-pending", "full-fiscal-year-local-cleanup-retry"],
+    ["export-retry-pending", "full-fiscal-year-final-zip-retry", "blocked"],
+    ["download-started", "full-fiscal-year-zip-download-unconfirmed", "download-unconfirmed"],
+    ["downloaded-cleanup-pending", "full-fiscal-year-local-cleanup-retry", "blocked"],
   ] as const)(
     "reconstructs %s recovery from the local ledger after session storage is lost",
-    async (zipPhase, expectedSignal) => {
+    async (zipPhase, expectedSignal, expectedState) => {
       const ledger = createDurableZipPhaseLedger(zipPhase);
       browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
         key === "pack:full-fiscal-year-ledger" ? { [key]: ledger } : {},
@@ -505,7 +506,7 @@ describe("Pack local data clearing", () => {
         status: "blocked",
         scope: ledger.scope,
         flowStep: {
-          state: "blocked",
+          state: expectedState,
           safeSignals: expect.arrayContaining([expectedSignal, "full-fiscal-year-opfs-retained"]),
         },
       });

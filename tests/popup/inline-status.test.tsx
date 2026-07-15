@@ -2,6 +2,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { FiledReturnsFlowSummary } from "../../src/core/contracts";
+import { FULL_FISCAL_YEAR_PERIOD } from "../../src/core/filed-returns-scope";
 import {
   getInlinePrimaryAction,
   InlineStatus,
@@ -35,6 +36,42 @@ const blockedSummary: FiledReturnsFlowSummary = {
 };
 
 describe("inline filed-return recovery status", () => {
+  it("describes a completed full fiscal year as one ZIP", () => {
+    const summary: FiledReturnsFlowSummary = {
+      ...blockedSummary,
+      scope: { ...blockedSummary.scope, period: FULL_FISCAL_YEAR_PERIOD },
+      status: "complete",
+      completedPeriods: ["April", "May"],
+      totalPeriods: 2,
+      flowStep: {
+        ...blockedSummary.flowStep,
+        state: "downloaded",
+        safeSignals: ["full-fiscal-year-complete", "full-fiscal-year-zip-downloaded"],
+      },
+    };
+    const markup = renderToStaticMarkup(
+      <InlineStatus
+        busy={null}
+        onOpenPortal={vi.fn()}
+        onRestartTarget={vi.fn()}
+        onRetryFullFiscalYearTarget={vi.fn()}
+        onRetryTarget={vi.fn()}
+        presentation={{
+          badge: "Complete",
+          body: "Complete.",
+          icon: "✓",
+          kind: "complete",
+          title: "Download complete",
+          tone: "success",
+        }}
+        summary={summary}
+      />,
+    );
+
+    expect(markup).toContain("2 periods saved as one ZIP.");
+    expect(markup).not.toContain("The selected file was saved by your browser.");
+  });
+
   it("offers an explicit retry for a blocked period", () => {
     expect(hasInlinePrimaryAction(blockedPresentation, blockedSummary)).toBe(true);
     const onRestartTarget = vi.fn();
