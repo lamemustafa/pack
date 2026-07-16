@@ -6004,7 +6004,7 @@ describe("filed returns guided flow", () => {
     expect(hasSettledFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(true);
   });
 
-  it("settles when the filed-return result container is replaced with identical no-record content", async () => {
+  it("does not treat an identical replacement DOM node as fresh result evidence", async () => {
     const documentRef = createDocument(`
       <main>
         <h1>View Filed Returns</h1>
@@ -6030,7 +6030,8 @@ describe("filed returns guided flow", () => {
 
     expect(hasSettledFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(false);
     expect(hasSettledFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(false);
-    expect(hasSettledFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(true);
+    expect(hasSettledFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(false);
+    expect(hasUnchangedFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(true);
   });
 
   it("consumes settled not-filed evidence after returning a terminal result", async () => {

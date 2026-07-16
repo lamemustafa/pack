@@ -9,7 +9,7 @@ interface FiledReturnsSearchAttempt {
   preSearchResultWasSettledForScope: boolean;
   candidateResultFingerprint: string | null;
   sawResultSurfaceLoading: boolean;
-  unchangedResultAfterLoading: boolean;
+  unchangedResultObserved: boolean;
   settled: boolean;
   createdAt: number;
 }
@@ -33,8 +33,6 @@ const gstr1ViewActivationAttempts = new WeakMap<Document, Gstr1ViewActivationAtt
 const GSTR1_VIEW_NAVIGATION_PENDING_MS = 3_000;
 const SEARCH_ATTEMPT_TTL_MS = 2 * 60 * 1000;
 const SETTLED_SEARCH_EVIDENCE_TTL_MS = 30_000;
-const resultRootIds = new WeakMap<Element, number>();
-let nextResultRootId = 1;
 
 function filedReturnsSearchSignature(scope: FiledReturnsDownloadScope): string {
   const artifactType = normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType);
@@ -61,7 +59,7 @@ export function markFiledReturnsSearchPending(
       settledEvidence.fingerprint === preSearchFingerprint,
     candidateResultFingerprint: null,
     sawResultSurfaceLoading: false,
-    unchangedResultAfterLoading: false,
+    unchangedResultObserved: false,
     settled: false,
     createdAt: Date.now(),
   });
@@ -109,7 +107,7 @@ export function hasSettledFiledReturnsSearchForScope(
     attempt.sawResultSurfaceLoading = true;
     attempt.candidateResultFingerprint = null;
     attempt.settled = false;
-    attempt.unchangedResultAfterLoading = false;
+    attempt.unchangedResultObserved = false;
     return false;
   }
   if (attempt.settled) return true;
@@ -118,18 +116,14 @@ export function hasSettledFiledReturnsSearchForScope(
   const hasTrustedIdenticalRefresh =
     attempt.sawResultSurfaceLoading && attempt.preSearchResultWasSettledForScope;
   if (currentFingerprint === attempt.preSearchFingerprint && !hasTrustedIdenticalRefresh) {
-    if (!attempt.sawResultSurfaceLoading) {
-      attempt.candidateResultFingerprint = null;
-      return false;
-    }
     if (attempt.candidateResultFingerprint !== currentFingerprint) {
       attempt.candidateResultFingerprint = currentFingerprint;
       return false;
     }
-    attempt.unchangedResultAfterLoading = true;
+    attempt.unchangedResultObserved = true;
     return false;
   }
-  attempt.unchangedResultAfterLoading = false;
+  attempt.unchangedResultObserved = false;
 
   if (attempt.candidateResultFingerprint !== currentFingerprint) {
     attempt.candidateResultFingerprint = currentFingerprint;
@@ -165,7 +159,7 @@ export function hasUnchangedFiledReturnsSearchForScope(
     return false;
   }
   return (
-    attempt?.signature === filedReturnsSearchSignature(scope) && attempt.unchangedResultAfterLoading
+    attempt?.signature === filedReturnsSearchSignature(scope) && attempt.unchangedResultObserved
   );
 }
 
@@ -230,8 +224,10 @@ function resultContainers(documentRef: Document): Element[] {
 
 function fingerprintElement(element: Element): string {
   const text = normaliseText(visibleText(element));
+  // A new DOM instance is not proof that the portal returned fresh results: client-side
+  // frameworks can rebuild stale markup. Compare only observable result content and require
+  // a trusted loading transition for a same-scope identical refresh.
   return JSON.stringify({
-    rootId: resultRootId(element),
     textHash: hashVisibleText(text),
     noRecordCount: (text.match(/\bno\s+(records?|data|results?)\s+found\b/g) ?? []).length,
     tableCount: element.querySelectorAll("table").length,
@@ -287,15 +283,6 @@ function loadingFingerprint(root: ParentNode): string | null {
     busyCount: busyElements.length,
     loadingTextCount,
   });
-}
-
-function resultRootId(element: Element): number {
-  const existing = resultRootIds.get(element);
-  if (existing) return existing;
-  const id = nextResultRootId;
-  nextResultRootId += 1;
-  resultRootIds.set(element, id);
-  return id;
 }
 
 function visibleText(root: Element | null): string {

@@ -224,6 +224,34 @@ describe("target-bound filed GSTR-1 View point", () => {
     expect(findMatchingFilterBoundGstr1Results(documentRef, SCOPE)).toEqual([]);
   });
 
+  it("stops labeled period parsing before Date of Filing", () => {
+    const documentRef = createFilterBoundResultDocument();
+    documentRef
+      .querySelector("article")
+      ?.append(" Tax Period: April Date of Filing: May 11, 2025 FY 2025-26");
+
+    expect(findMatchingFilterBoundGstr1Results(documentRef, SCOPE)).toHaveLength(1);
+  });
+
+  it("rejects standalone GSTR-1A while preserving a combined GSTR-1 identity", () => {
+    const standalone = createFilterBoundResultDocument();
+    const standaloneHeading = standalone.querySelector("article h2");
+    if (standaloneHeading) standaloneHeading.textContent = "GSTR-1A";
+    expect(findMatchingFilterBoundGstr1Results(standalone, SCOPE)).toEqual([]);
+
+    const combined = createFilterBoundResultDocument();
+    const combinedHeading = combined.querySelector("article h2");
+    if (combinedHeading) combinedHeading.textContent = "GSTR-1 / IFF / GSTR-1A";
+    expect(findMatchingFilterBoundGstr1Results(combined, SCOPE)).toHaveLength(1);
+  });
+
+  it("rejects a conflicting space-separated labeled FY", () => {
+    const documentRef = createFilterBoundResultDocument();
+    documentRef.querySelector("article")?.append(" Tax Period: April FY 2024 25");
+
+    expect(findMatchingFilterBoundGstr1Results(documentRef, SCOPE)).toEqual([]);
+  });
+
   it("rejects another return identity on the outer card around a GSTR-1 View wrapper", () => {
     const documentRef = createFilterBoundResultDocument();
     const article = documentRef.querySelector("article");

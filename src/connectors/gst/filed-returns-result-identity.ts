@@ -92,7 +92,7 @@ function extractExplicitPeriodEvidence(
       text
         .slice(valueStart)
         .split(
-          /\b(?:financial\s*year|fy|return\s*type|status|filed(?:\s+on)?|view|acknowledg(?:e)?ment)\b/i,
+          /\b(?:financial\s*year|fy|return\s*type|status|date\s+of\s+filing|filing\s+date|filed(?:\s+on)?|view|acknowledg(?:e)?ment)\b/i,
           1,
         )[0] ?? "";
     const rawValues = Array.from(fieldValue.matchAll(/\b[a-z]+\b/gi)).map((value) =>
@@ -127,7 +127,7 @@ function extractMonthValues(text: string | null): string[] {
 function extractFinancialYearEvidence(text: string): { valid: boolean; values: string[] } {
   const labeledMatches = Array.from(
     text.matchAll(
-      /\b(?:financial\s*year|fy)\b\s*(?:[-:]\s*)?(20\d{2})\s*[-\u2013/]\s*(\d{2}|\d{4})(?!\d)/gi,
+      /\b(?:financial\s*year|fy)\b\s*(?:[-:]\s*)?(20\d{2})(?:\s*[-\u2013/]\s*|\s+)(\d{2}|\d{4})(?!\d)/gi,
     ),
   );
   const bareMatches = Array.from(
@@ -143,7 +143,7 @@ function extractFinancialYearEvidence(text: string): { valid: boolean; values: s
 function hasMalformedLabeledFinancialYear(text: string): boolean {
   return Array.from(
     text.matchAll(
-      /\b(?:financial\s*year|fy)\b\s*(?:[-:]\s*)?(20\d{2})\s*[-\u2013/]\s*(\d{2}|\d{4})(?!\d)/gi,
+      /\b(?:financial\s*year|fy)\b\s*(?:[-:]\s*)?(20\d{2})(?:\s*[-\u2013/]\s*|\s+)(\d{2}|\d{4})(?!\d)/gi,
     ),
   ).some((match) => !canonicalFinancialYear(match[1], match[2]));
 }
@@ -167,9 +167,11 @@ export function returnIdentityMatchesScope(
   const identities = Array.from(text.matchAll(/\bgstr\s*[-]?\s*(\d+[a-z]?)\b/gi)).flatMap(
     (match) => (match[1] ? [match[1].toLowerCase()] : []),
   );
-  const acceptedIdentities =
-    scope.returnType === "GSTR-1"
-      ? new Set(["1", "1a"])
-      : new Set([scope.returnType.replace("GSTR-", "").toLowerCase()]);
-  return identities.length > 0 && identities.every((identity) => acceptedIdentities.has(identity));
+  if (scope.returnType === "GSTR-1") {
+    return (
+      identities.includes("1") && identities.every((identity) => ["1", "1a"].includes(identity))
+    );
+  }
+  const acceptedIdentity = scope.returnType.replace("GSTR-", "").toLowerCase();
+  return identities.length > 0 && identities.every((identity) => identity === acceptedIdentity);
 }
