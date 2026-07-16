@@ -55,7 +55,7 @@ Files are saved by Chrome to the user's device. Pack does not require a Pack or 
 
 The package also contains private source-build experiments for GSTR-2B and full-fiscal-year ZIP workflows. These are not Store-supported claims for this alpha release.
 
-Pack operates only on the declared GST Portal hosts after a user starts a download. It keeps limited redacted recovery state locally so interrupted work does not retry blindly. Temporary artifact bytes may be staged in browser-local storage only for an explicit ZIP operation and are cleared after confirmed export or explicit discard.
+Pack's content script runs only on the four declared GST Portal hosts. When a supported page loads, it reads page context locally so Pack can identify eligible workflows; artifact capture and downloads start only after an explicit user action. Pack keeps limited redacted recovery state locally so interrupted work does not retry blindly. Temporary artifact bytes may be staged in browser-local OPFS for explicit capture or ZIP operations. Pack normally removes those bytes after confirmed export or explicit discard; if local cleanup fails, it retains them with a cleanup-pending status until a later cleanup attempt succeeds.
 
 ComplyEaze Pack is an independent third-party tool. It is not affiliated with, endorsed by, or operated by GSTN, CBIC, or the Government of India.
 ```
@@ -85,7 +85,7 @@ Permission justifications:
 ### `downloads`
 
 ```text
-Used only after an explicit user action to save a target-bound GST Portal artifact or Pack-created ZIP locally and to verify that Chrome reports a completed, non-empty download.
+Used only after an explicit user action to save a target-bound GST Portal artifact or Pack-created ZIP locally, verify that Chrome reports a completed non-empty download, or create bounded synthetic reviewer-demo and download-prompt diagnostic files from Pack's Options page.
 ```
 
 ### `offscreen`
@@ -97,13 +97,13 @@ Used only for a bundled extension-owned offscreen document to create and revoke 
 ### `scripting`
 
 ```text
-Used only on the four declared GST Portal hosts to detect supported filed-return pages, verify the selected return, financial year, period, and artifact identity, and activate user-requested portal download controls.
+Used only on the four declared GST Portal hosts to detect supported filed-return pages; verify the selected return, financial year, period, and artifact identity; activate user-requested portal download controls; and, for action-bound capture paths, intercept the resulting fetch, XHR, or Blob response in the page's main world so the selected PDF or Excel bytes can be saved locally or staged in OPFS.
 ```
 
 ### `storage`
 
 ```text
-Used for local-only install metadata, selected scope and run lease, redacted recovery status, and synthetic demo summaries. It does not store credentials, cookies, OTPs, CAPTCHA responses, taxpayer identifiers, portal HTML, URLs, filenames, paths, or tax values. Temporary artifact bytes are isolated in browser-local OPFS, not chrome.storage, and are cleared after confirmed export or explicit discard.
+Used for local-only install metadata, the allow-listed GST origin, selected scope and run lease, redacted recovery status, and synthetic demo summaries including synthetic filenames and relative paths. It does not store credentials, cookies, OTPs, CAPTCHA responses, taxpayer identifiers, portal HTML, raw GST Portal URLs, real GST filenames or local paths, or tax values. Temporary artifact bytes are isolated in browser-local OPFS, not chrome.storage. Pack normally removes those bytes after confirmed export or explicit discard; if cleanup fails, it retains them locally with a cleanup-pending status until a later cleanup attempt succeeds.
 ```
 
 ### Host permissions
@@ -124,8 +124,9 @@ Chrome defines handling to include local processing and storage. Select the
 categories Pack necessarily handles while moving a user's chosen filed return:
 
 - [x] Personally identifiable information — a selected GST document can contain
-      taxpayer identifiers or names; Pack does not parse, persist in extension
-      state, or transmit them.
+      taxpayer identifiers or names; Pack does not extract them into extension
+      metadata or transmit them. Selected artifact bytes can be staged temporarily
+      in browser-local OPFS and retained locally if cleanup fails.
 - [x] Financial and payment information — a selected GST return can contain tax
       and transaction values; Pack handles the artifact bytes locally only for the
       requested download/ZIP.
@@ -150,9 +151,11 @@ requires disclosure:
 ## Asset Inventory
 
 Use the seven generated PNGs under
-[`assets/exports/`](assets/exports/). They are deterministic exports from the
-source SVGs, contain synthetic UI only, and exclude GST Portal screenshots,
-taxpayer data, filenames, paths, and downloaded content.
+[`assets/exports/`](assets/exports/). They are generated from the source SVGs,
+contain synthetic UI only, and exclude GST Portal screenshots, taxpayer data,
+real GST filenames, local paths, and downloaded content. The committed hashes
+pin the reviewed dashboard bytes; regeneration on a host with different installed
+fonts can produce different pixels, so upload the committed hash-matched exports.
 
 | Dashboard slot     | Export                                                      |
 | ------------------ | ----------------------------------------------------------- |

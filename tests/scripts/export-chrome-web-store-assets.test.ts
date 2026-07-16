@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { inflateSync } from "node:zlib";
 import { afterEach, describe, expect, it } from "vitest";
+import { assertOpaqueRgbPng } from "../../scripts/export-chrome-web-store-assets.mjs";
 
 const rootDir = process.cwd();
 const createdDirs: string[] = [];
@@ -82,7 +83,36 @@ describe("Chrome Web Store asset exporter", () => {
       expect(readNonWhitePixelRatio(buffer)).toBeGreaterThan(0.1);
     }
   });
+
+  it("rejects an RGB PNG with a transparency chunk", async () => {
+    const exportDir = await mkTempExportDir();
+    const result = await runExporter(exportDir);
+    expect(result.status).toBe(0);
+    const file = "small-promo-440x280.png";
+    const buffer = await readFile(path.join(exportDir, file));
+
+    expect(() =>
+      assertOpaqueRgbPng(
+        insertPngChunkBeforeIdat(buffer, "tRNS", Buffer.from([0, 0, 0, 0, 0, 0])),
+        {
+          file,
+          height: 280,
+          width: 440,
+        },
+      ),
+    ).toThrow("must not contain a PNG transparency chunk");
+  });
 });
+
+function insertPngChunkBeforeIdat(buffer: Buffer, type: string, data: Buffer): Buffer {
+  const idatOffset = buffer.indexOf(Buffer.from("IDAT")) - 4;
+  expect(idatOffset).toBeGreaterThan(7);
+  const chunk = Buffer.alloc(12 + data.length);
+  chunk.writeUInt32BE(data.length, 0);
+  chunk.write(type, 4, 4, "ascii");
+  data.copy(chunk, 8);
+  return Buffer.concat([buffer.subarray(0, idatOffset), chunk, buffer.subarray(idatOffset)]);
+}
 
 async function mkTempExportDir(): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), "pack-cws-assets-"));

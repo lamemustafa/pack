@@ -85,7 +85,7 @@ export async function exportChromeWebStoreAssets({
           path: outputPath,
           type: "png",
         });
-        assertPngDimensions(buffer, asset);
+        assertOpaqueRgbPng(buffer, asset);
         exportedAssets.push({
           file: asset.file,
           height: asset.height,
@@ -170,7 +170,7 @@ function renderPage(svg, asset) {
 </html>`;
 }
 
-function assertPngDimensions(buffer, asset) {
+export function assertOpaqueRgbPng(buffer, asset) {
   const signature = buffer.subarray(0, 8).toString("hex");
   if (signature !== "89504e470d0a1a0a") {
     throw new Error(`${asset.file} export is not a PNG.`);
@@ -189,6 +189,26 @@ function assertPngDimensions(buffer, asset) {
       `${asset.file} must be an opaque 24-bit RGB PNG; got bit depth ${bitDepth ?? "missing"} and color type ${colorType ?? "missing"}.`,
     );
   }
+  if (readPngChunkTypes(buffer).includes("tRNS")) {
+    throw new Error(`${asset.file} must not contain a PNG transparency chunk.`);
+  }
+}
+
+function readPngChunkTypes(buffer) {
+  const types = [];
+  let offset = 8;
+  while (offset + 12 <= buffer.length) {
+    const length = buffer.readUInt32BE(offset);
+    const nextOffset = offset + 12 + length;
+    if (nextOffset > buffer.length) {
+      throw new Error("PNG contains a truncated chunk.");
+    }
+    const type = buffer.subarray(offset + 4, offset + 8).toString("ascii");
+    types.push(type);
+    offset = nextOffset;
+    if (type === "IEND") break;
+  }
+  return types;
 }
 
 function sha256(buffer) {
