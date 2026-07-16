@@ -3,8 +3,8 @@
   <desc id="desc">Synthetic screenshot showing local reviewer demo outputs.</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#0f6b73" />
-      <stop offset="1" stop-color="#243b53" />
+      <stop offset="0" stop-color="#143f73" />
+      <stop offset="1" stop-color="#17243b" />
     </linearGradient>
     <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
       <feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#020617" flood-opacity="0.22" />
@@ -12,10 +12,10 @@
   </defs>
   <rect width="1280" height="800" fill="url(#bg)" />
   <text x="92" y="112" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="48" font-weight="820">Reviewer demo runs locally</text>
-  <text x="94" y="158" fill="#ccfbf1" font-family="Inter, Arial, sans-serif" font-size="21">Inspect Pack without real GST Portal credentials or taxpayer files.</text>
+  <text x="94" y="158" fill="#dbeafe" font-family="Inter, Arial, sans-serif" font-size="21">Inspect Pack without real GST Portal credentials or taxpayer files.</text>
   <rect x="92" y="220" width="500" height="440" rx="28" fill="#ffffff" filter="url(#shadow)" />
   <text x="136" y="284" fill="#0f172a" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="800">Options page</text>
-  <rect x="136" y="324" width="360" height="58" rx="16" fill="#0f766e" />
+  <rect x="136" y="324" width="360" height="58" rx="16" fill="#1d4f85" />
   <text x="196" y="360" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="800">Run local reviewer demo</text>
   <rect x="136" y="412" width="360" height="58" rx="16" fill="#f1f5f9" />
   <text x="176" y="448" fill="#334155" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="750">Last synthetic demo manifest</text>
@@ -29,8 +29,8 @@
   <text x="730" y="439" fill="#3730a3" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="750">Pack-Demo / exceptions.csv</text>
   <rect x="700" y="484" width="408" height="56" rx="14" fill="#eef2ff" />
   <text x="730" y="519" fill="#3730a3" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="750">Pack-Demo / index.html</text>
-  <rect x="700" y="582" width="408" height="42" rx="21" fill="#ecfeff" stroke="#99f6e4" />
-  <text x="730" y="609" fill="#0f766e" font-family="Inter, Arial, sans-serif" font-size="15" font-weight="750">Demo artifacts use synthetic data only</text>
+  <rect x="700" y="582" width="408" height="42" rx="21" fill="#eff6ff" stroke="#bfdbfe" />
+  <text x="730" y="609" fill="#1d4f85" font-family="Inter, Arial, sans-serif" font-size="15" font-weight="750">Demo artifacts use synthetic data only</text>
   <rect x="92" y="700" width="846" height="48" rx="24" fill="#ffffff" opacity="0.14" />
   <text x="124" y="731" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="750">No account prompt. No GST credentials requested. No document upload.</text>
 </svg>

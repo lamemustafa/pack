@@ -8,7 +8,7 @@
   </defs>
   <rect width="1280" height="800" fill="#eef2f7" />
   <rect x="76" y="58" width="1128" height="684" rx="28" fill="#ffffff" filter="url(#shadow)" />
-  <rect x="76" y="58" width="1128" height="94" rx="28" fill="#0f6b73" />
+  <rect x="76" y="58" width="1128" height="94" rx="28" fill="#143f73" />
   <text x="126" y="118" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="31" font-weight="800">ComplyEaze Pack Options</text>
   <text x="126" y="216" fill="#0f172a" font-family="Inter, Arial, sans-serif" font-size="38" font-weight="780">Local-first controls</text>
   <text x="126" y="258" fill="#64748b" font-family="Inter, Arial, sans-serif" font-size="19">Review what Pack stores in this browser profile and clear it when needed.</text>
@@ -22,13 +22,13 @@
   <text x="190" y="549" fill="#334155" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="700">Synthetic demo manifest summary</text>
   <rect x="640" y="310" width="438" height="276" rx="22" fill="#f8fafc" stroke="#e2e8f0" />
   <text x="680" y="364" fill="#0f172a" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="780">Excluded from storage</text>
-  <rect x="680" y="402" width="310" height="42" rx="12" fill="#ecfeff" stroke="#99f6e4" />
-  <text x="704" y="429" fill="#0f766e" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="700">Credentials, OTPs, CAPTCHA</text>
-  <rect x="680" y="462" width="310" height="42" rx="12" fill="#ecfeff" stroke="#99f6e4" />
-  <text x="704" y="489" fill="#0f766e" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="700">GSTIN, PAN, taxpayer names</text>
-  <rect x="680" y="522" width="310" height="42" rx="12" fill="#ecfeff" stroke="#99f6e4" />
-  <text x="704" y="549" fill="#0f766e" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="700">Portal HTML, filenames, local paths</text>
-  <rect x="126" y="626" width="344" height="62" rx="18" fill="#0f766e" />
+  <rect x="680" y="402" width="310" height="42" rx="12" fill="#eff6ff" stroke="#bfdbfe" />
+  <text x="704" y="429" fill="#1d4f85" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="700">Credentials, OTPs, CAPTCHA</text>
+  <rect x="680" y="462" width="310" height="42" rx="12" fill="#eff6ff" stroke="#bfdbfe" />
+  <text x="704" y="489" fill="#1d4f85" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="700">GSTIN, PAN, taxpayer names</text>
+  <rect x="680" y="522" width="310" height="42" rx="12" fill="#eff6ff" stroke="#bfdbfe" />
+  <text x="704" y="549" fill="#1d4f85" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="700">Portal HTML, filenames, local paths</text>
+  <rect x="126" y="626" width="344" height="62" rx="18" fill="#1d4f85" />
   <text x="176" y="664" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="800">Clear local Pack data</text>
   <rect x="510" y="626" width="462" height="62" rx="18" fill="#fff7ed" stroke="#fed7aa" />
   <text x="544" y="664" fill="#9a3412" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="750">Synthetic screenshot. No real GST data shown.</text>

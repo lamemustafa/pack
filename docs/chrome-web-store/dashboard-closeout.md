@@ -5,10 +5,12 @@ not replace the protected package submit workflow. It records the manual Chrome
 Web Store Developer Dashboard steps that cannot be proved from source control
 alone.
 
-For `v0.3.2`, a maintainer-provided Chrome Web Store publication email on
-2026-07-06 records item ID `nfnbhekccajjfgkppolomflaeledoccb`, item name
-`ComplyEaze Pack: GSTR-1/GSTR-3B Downloader`, version `0.3.2`, and visibility
-`Public`.
+The public item remains on `v0.3.2`. The exact `v0.4.0` package upload
+succeeded in workflow run `29507382500`, but publication is blocked by
+incomplete dashboard requirements. The 2026-07-16 dashboard snapshots show a
+blank required `offscreen` justification, stale GSTR-3B-only text, stale
+promotional assets, and data-usage selections that do not disclose local
+handling.
 
 ## Source Inputs
 
@@ -33,11 +35,12 @@ Official Chrome references to re-check before editing the dashboard:
 
 1. Open the Chrome Web Store Developer Dashboard for the existing Pack item:
    `nfnbhekccajjfgkppolomflaeledoccb`.
-2. Confirm the dashboard package under review or published package matches the
-   exact release upload. For `v0.3.2`, this is the upload submitted by GitHub
-   Actions run `28704776806`.
-3. Copy the title, short description, opening description, and government
-   non-affiliation disclaimer from [`listing.md`](listing.md).
+2. Confirm the dashboard package under review is version `0.4.0`, source commit
+   `eb21404d274917876fcba20abce09216ce6348f4`, and release asset SHA-256
+   `6ee4be24cafbe15db69275cac4da6b212f3de49b0f747eb9909eed7d293347c6`.
+3. Copy every Store listing and Privacy practices field from
+   [`listing.md`](listing.md). Do not keep the previous GSTR-3B-only
+   description or permission justifications.
 4. Upload the generated PNG exports from [`assets/exports/`](assets/exports/):
    `small-promo-440x280.png`,
    `marquee-promo-1400x560.png`,
@@ -49,15 +52,19 @@ Official Chrome references to re-check before editing the dashboard:
 5. Reconfirm every uploaded image is synthetic/redacted and contains no real GST
    Portal screenshot, taxpayer name, GSTIN/PAN, portal HTML, downloaded GST
    file, local path, cookie, header, OTP, or CAPTCHA content.
-6. Fill the privacy-practices fields from the actual runtime behavior checked in
-   [`../PRIVACY_QA.md`](../PRIVACY_QA.md). Do not answer a privacy question as
-   "no data" only because the data remains local; Chrome's policy still treats
-   locally handled user information as needing truthful disclosure.
+6. Fill the privacy-practices fields from the exact checklist in
+   [`listing.md`](listing.md) and runtime behavior checked in
+   [`../PRIVACY_QA.md`](../PRIVACY_QA.md). Select personally identifiable
+   information, financial and payment information, and website content because
+   Chrome treats local processing as handling. Leave authentication, web
+   history, and user activity unchecked because Pack does not request or retain
+   those classes.
 7. Fill reviewer/test instructions from
    [`../CHROME_REVIEWER_TEST.md`](../CHROME_REVIEWER_TEST.md). Do not provide
    real GST Portal credentials or taxpayer data.
-8. Submit the dashboard update and record the dashboard image/listing review
-   state in [`listing.md`](listing.md) and
+8. Save the dashboard draft and confirm no required-field warning remains.
+9. Submit the dashboard update for review and record the image/listing/privacy
+   review state in [`listing.md`](listing.md) and
    [`../PUBLICATION_READINESS.md`](../PUBLICATION_READINESS.md).
 
 ## Status Monitor Closeout
@@ -74,7 +81,7 @@ status environment.
 After the environment is configured, dispatch `Chrome Web Store Status` with:
 
 ```text
-expected_version=0.3.2
+expected_version=0.4.0
 require_published=false
 ```
 
@@ -83,18 +90,17 @@ requiring final publication. After Chrome publishes the item, dispatch the same
 workflow with:
 
 ```text
-expected_version=0.3.2
+expected_version=0.4.0
 require_published=true
 ```
 
 Record the run IDs and final state in
-[`../PUBLICATION_READINESS.md`](../PUBLICATION_READINESS.md). For `v0.3.2`, the
-publication email is already recorded; the `require_published=true` status run
-is evidence hardening after read-only status credentials are available.
+[`../PUBLICATION_READINESS.md`](../PUBLICATION_READINESS.md). Do not treat the
+successful package upload or a saved dashboard draft as publication evidence.
 
 ## Evidence To Record
 
-Before considering the GSTR-1 Store closeout done, record:
+Before considering the `v0.4.0` Store closeout done, record:
 
 - dashboard listing text review state;
 - dashboard screenshot and promotional image review state;

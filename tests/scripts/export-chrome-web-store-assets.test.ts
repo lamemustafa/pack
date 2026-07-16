@@ -78,6 +78,7 @@ describe("Chrome Web Store asset exporter", () => {
         height: asset.height,
         width: asset.width,
       });
+      expect(readPngColorMode(buffer)).toEqual({ bitDepth: 8, colorType: 2 });
       expect(readNonWhitePixelRatio(buffer)).toBeGreaterThan(0.1);
     }
   });
@@ -87,6 +88,16 @@ async function mkTempExportDir(): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), "pack-cws-assets-"));
   createdDirs.push(dir);
   return dir;
+}
+
+function readPngColorMode(buffer: Buffer): {
+  bitDepth: number | undefined;
+  colorType: number | undefined;
+} {
+  return {
+    bitDepth: buffer[24],
+    colorType: buffer[25],
+  };
 }
 
 async function runExporter(exportDir: string): Promise<{ output: string; status: number }> {

@@ -25,17 +25,17 @@
   <text x="150" y="331" fill="#334155" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="700">FY 2025-26</text>
   <rect x="338" y="298" width="148" height="54" rx="12" fill="#f1f5f9" />
   <text x="369" y="331" fill="#334155" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="700">April</text>
-  <rect x="506" y="298" width="172" height="54" rx="12" fill="#243b53" />
+  <rect x="506" y="298" width="172" height="54" rx="12" fill="#17243b" />
   <text x="542" y="331" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="750">GSTR-3B</text>
   <rect x="128" y="392" width="612" height="96" rx="16" fill="#f8fafc" stroke="#e2e8f0" />
   <text x="154" y="428" fill="#0f172a" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="750">Filed return PDF</text>
   <text x="154" y="458" fill="#64748b" font-family="Inter, Arial, sans-serif" font-size="16">Downloaded locally from the user's active session.</text>
-  <rect x="584" y="417" width="122" height="40" rx="20" fill="#0f766e" />
+  <rect x="584" y="417" width="122" height="40" rx="20" fill="#1d4f85" />
   <text x="611" y="442" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="750">Download</text>
-  <rect x="128" y="530" width="404" height="42" rx="21" fill="#ecfeff" stroke="#99f6e4" />
-  <text x="154" y="557" fill="#0f766e" font-family="Inter, Arial, sans-serif" font-size="15" font-weight="700">No GST Portal credentials handled by Pack</text>
+  <rect x="128" y="530" width="404" height="42" rx="21" fill="#eff6ff" stroke="#bfdbfe" />
+  <text x="154" y="557" fill="#1d4f85" font-family="Inter, Arial, sans-serif" font-size="15" font-weight="700">No GST Portal credentials handled by Pack</text>
   <rect x="840" y="150" width="334" height="552" rx="28" fill="#ffffff" filter="url(#shadow)" />
-  <rect x="840" y="150" width="334" height="86" rx="28" fill="#0f6b73" />
+  <rect x="840" y="150" width="334" height="86" rx="28" fill="#143f73" />
   <text x="884" y="204" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="26" font-weight="800">ComplyEaze Pack</text>
   <text x="884" y="273" fill="#0f172a" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="750">Single-period PDF</text>
   <text x="884" y="306" fill="#64748b" font-family="Inter, Arial, sans-serif" font-size="15">Active GST Portal session detected</text>
@@ -43,7 +43,7 @@
   <text x="908" y="369" fill="#334155" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="700">Return type: GSTR-3B</text>
   <rect x="884" y="408" width="246" height="50" rx="14" fill="#f1f5f9" />
   <text x="908" y="439" fill="#334155" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="700">Period: Apr 2025</text>
-  <rect x="884" y="482" width="246" height="62" rx="18" fill="#0f766e" />
+  <rect x="884" y="482" width="246" height="62" rx="18" fill="#1d4f85" />
   <text x="934" y="520" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="800">Download locally</text>
   <rect x="884" y="574" width="246" height="56" rx="16" fill="#fff7ed" stroke="#fed7aa" />
   <text x="908" y="598" fill="#9a3412" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="750">Synthetic screenshot</text>

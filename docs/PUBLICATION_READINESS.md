@@ -7,7 +7,7 @@ stable-release claims.
 ## Current Decision
 
 - Canonical product name: **ComplyEaze Pack**.
-- First Chrome listing title: **ComplyEaze Pack: GSTR-1/GSTR-3B Downloader**.
+- Current package title: **ComplyEaze Pack: GST Return Downloader**.
 - V0 Chrome Web Store listing:
   `https://chromewebstore.google.com/detail/complyeaze-pack-gst-gstr/nfnbhekccajjfgkppolomflaeledoccb`.
 - Store-published GitHub release for GSTR-1 support:
@@ -27,7 +27,11 @@ stable-release claims.
   `ComplyEaze Pack: GSTR-1/GSTR-3B Downloader`, version `0.3.2`, and visibility
   `Public`.
 - Repository source has since advanced to `v0.4.0`; the current Store-published
-  package evidence is for `v0.3.2` only.
+  package evidence is for `v0.3.2` only. Workflow run `29507382500` built and
+  verified the exact `v0.4.0` package and uploaded it with Store state
+  `SUCCEEDED`, but publish returned HTTP 400 because dashboard requirements
+  were incomplete. The pending ZIP SHA-256 is
+  `6ee4be24cafbe15db69275cac4da6b212f3de49b0f747eb9909eed7d293347c6`.
 - V0 purpose: download filed GSTR-3B PDFs, GSTR-1 summary PDFs, and optional
   GSTR-1 e-invoice details Excel files locally from the user's active,
   manually authenticated GST Portal session when the GST Portal exposes those
@@ -125,14 +129,16 @@ stable-release claims.
 - [ ] Legal review of live GST Portal terms against exact extension behaviour.
 - [ ] Privacy Policy, Terms, support URL, source URL, and limited-use statement
       are live and accessible without login.
-- [ ] Chrome privacy declarations match the exact final build. Do not answer
-      "no data" merely because data stays local if the dashboard asks about
-      local access or processing.
+- [ ] Chrome privacy declarations match the exact final build. For `v0.4.0`,
+      disclose personally identifiable information, financial and payment
+      information, and website content because Chrome counts local processing.
+      Keep authentication information, web history, and user activity
+      unchecked unless runtime behavior changes.
 - [x] Source-controlled Store screenshots and promotional images use only
-      synthetic/redacted data. The seven `v0.3.2` PNG exports were generated
-      with `pnpm store:assets`, visually checked, and recorded in
+      synthetic/redacted data. The seven `v0.4.0` PNG exports were generated
+      from refreshed source SVGs, visually checked, and recorded in
       `docs/chrome-web-store/assets/exports/asset-hashes.json`.
-- [ ] Upload the generated `v0.3.2` Store screenshot/promotional PNGs to the
+- [ ] Upload the generated `v0.4.0` Store screenshot/promotional PNGs to the
       Chrome Web Store dashboard, then record dashboard image review state.
 - [ ] Exact ZIP tested in a clean Chrome profile.
 - [ ] Exact ZIP tested against the live GSTR-3B and GSTR-1 flows by an
@@ -218,14 +224,16 @@ stable-release claims.
       `nfnbhekccajjfgkppolomflaeledoccb`, item name
       `ComplyEaze Pack: GSTR-1/GSTR-3B Downloader`, item type `extension`,
       version `0.3.2`, and visibility `Public`.
+- [x] Upload the exact `v0.4.0` package. Workflow run `29507382500` reported
+      upload state `SUCCEEDED`; publication remains blocked on dashboard
+      closeout and is not claimed complete.
 - [x] Add a read-only Chrome Web Store status monitor for submitted packages.
       Scheduled runs use the dedicated `chrome-web-store-status` environment so
       publication/rejection monitoring is not blocked by the protected publishing
       approval gate.
-- [ ] Optional evidence hardening: record a read-only Chrome Web Store Status
-      run with `expected_version=0.3.2` and `require_published=true`, plus any
-      dashboard-held listing/assets/privacy-practices field snapshots the
-      maintainer wants retained outside the Chrome Web Store email. Use
+- [ ] Record a read-only Chrome Web Store Status run with
+      `expected_version=0.4.0` and `require_published=false` after dashboard
+      submission, then `require_published=true` after publication. Use
       [`docs/chrome-web-store/dashboard-closeout.md`](chrome-web-store/dashboard-closeout.md)
       for the dashboard and read-only status-monitor closeout checklist.
 
@@ -234,37 +242,13 @@ stable-release claims.
 Canonical dashboard copy and current asset inventory are maintained in
 [`docs/chrome-web-store/listing.md`](chrome-web-store/listing.md).
 
-Title:
-
-```text
-ComplyEaze Pack: GSTR-1/GSTR-3B Downloader
-```
-
-Short description:
-
-```text
-Alpha: locally download filed GSTR-1 and GSTR-3B documents from your active GST Portal session.
-```
-
-Opening description:
-
-```text
-ComplyEaze Pack helps you download your own filed GSTR-3B PDFs, GSTR-1 summary
-PDFs, and optional GSTR-1 e-invoice details Excel files from the GST Portal
-using your active browser session. It does not ask for or store GST Portal
-credentials, OTPs, CAPTCHA responses, cookies, or session tokens.
-```
-
-Required disclaimer:
-
-```text
-ComplyEaze Pack is not affiliated with, endorsed by, or operated by GSTN, CBIC,
-or the Government of India.
-```
+Copy exact fields from that brief; do not maintain a second, potentially stale
+version here.
 
 ## Not Yet Stable Or Broad-Claim Ready Until
 
-The V0 listing exists for Store-published `v0.3.2`, and the source-build alpha
+The V0 listing exists for Store-published `v0.3.2`, `v0.4.0` is uploaded but not
+yet published, and the source-build alpha
 full-year workflow has maintainer evidence for automatic local downloads after
 user initiation. Pack must not claim stable Chrome Web Store maturity,
 store-facing full-year availability, durable restart-safe full-year support,

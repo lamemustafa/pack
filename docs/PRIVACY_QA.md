@@ -60,6 +60,17 @@ For each release candidate:
   manifest metadata, and session observations.
 - Confirm the privacy policy, store declarations, and reviewer instructions
   still match actual runtime behavior.
+- Confirm Chrome Web Store data-usage declarations include personally
+  identifiable information, financial and payment information, and website
+  content. A selected filed return can contain taxpayer identifiers and tax or
+  transaction values, and Chrome requires disclosure even when Pack only
+  handles them locally. Do not select authentication information, web history,
+  or user activity unless the runtime begins requesting or retaining those
+  categories.
+- Confirm the `offscreen` justification describes only the bundled extension
+  document's temporary Blob URL, local OPFS staging/cleanup, and ZIP assembly
+  work. It must not imply remote content, background browsing, or persistent
+  extension-storage of artifact bytes.
 
 Any server communication, new portal host, credential handling, analytics,
 cloud upload, or account requirement is a material privacy change and needs a

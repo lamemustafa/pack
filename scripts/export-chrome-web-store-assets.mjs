@@ -182,6 +182,13 @@ function assertPngDimensions(buffer, asset) {
       `${asset.file} must be ${asset.width}x${asset.height}; got ${width}x${height}.`,
     );
   }
+  const bitDepth = buffer[24];
+  const colorType = buffer[25];
+  if (bitDepth !== 8 || colorType !== 2) {
+    throw new Error(
+      `${asset.file} must be an opaque 24-bit RGB PNG; got bit depth ${bitDepth ?? "missing"} and color type ${colorType ?? "missing"}.`,
+    );
+  }
 }
 
 function sha256(buffer) {
