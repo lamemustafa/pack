@@ -29,7 +29,7 @@ import {
   type FiledReturnsReturnType,
 } from "./filed-returns-return-types";
 
-export const PACK_CONTENT_SCRIPT_PROTOCOL_VERSION = 30;
+export const PACK_CONTENT_SCRIPT_PROTOCOL_VERSION = 31;
 
 export interface DownloadPromptProbeResult {
   status: "started" | "start-rejected";

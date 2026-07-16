@@ -63,6 +63,12 @@ vi.mock("wxt/browser", () => ({
 }));
 
 describe("Pack GST tab selection", () => {
+  it("uses protocol version 31 for activation-message reinjection", async () => {
+    const { PACK_CONTENT_SCRIPT_PROTOCOL_VERSION } = await import("../../src/core/messages");
+
+    expect(PACK_CONTENT_SCRIPT_PROTOCOL_VERSION).toBe(31);
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();

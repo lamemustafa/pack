@@ -86,6 +86,44 @@ describe("target-bound filed GSTR-1 View point", () => {
     ).toHaveLength(1);
   });
 
+  it("accepts decorated month values in an explicit Tax Period cell", () => {
+    for (const period of ["April 2025", "Apr-2025"]) {
+      const documentRef = createTableResultDocument(
+        ["Return Type", "Financial Year", "Tax Period", "Status", "View"],
+        ["GSTR-1 / IFF", "2025-26", period, "Filed", "View"],
+      );
+
+      expect(findMatchingFiledReturnRows(documentRef, SCOPE)).toHaveLength(1);
+    }
+  });
+
+  it("rejects a decorated explicit period cell containing a conflicting month", () => {
+    const documentRef = createTableResultDocument(
+      ["Return Type", "Financial Year", "Tax Period", "Status", "View"],
+      ["GSTR-1 / IFF", "2025-26", "April / May 2025", "Filed", "View"],
+    );
+
+    expect(findMatchingFiledReturnRows(documentRef, SCOPE)).toEqual([]);
+  });
+
+  it("ignores ISO filing dates when a dedicated FY cell matches", () => {
+    const documentRef = createTableResultDocument(
+      ["Return Type", "Financial Year", "Tax Period", "Status", "View"],
+      ["GSTR-1 / IFF", "2025-26", "April", "Filed on 2025-04-20", "View"],
+    );
+
+    expect(findMatchingFiledReturnRows(documentRef, SCOPE)).toHaveLength(1);
+  });
+
+  it("rejects a date-shaped value when it is explicitly labeled as FY", () => {
+    const documentRef = createTableResultDocument(
+      ["Return Type", "Financial Year", "Tax Period", "Status", "View"],
+      ["GSTR-1 / IFF", "2025-26", "April", "Filed FY 2025-04-20", "View"],
+    );
+
+    expect(findMatchingFiledReturnRows(documentRef, SCOPE)).toEqual([]);
+  });
+
   it("uses the outer result card identity instead of an inner View wrapper", () => {
     const documentRef = createFilterBoundResultDocument();
     const article = documentRef.querySelector("article");
@@ -96,6 +134,31 @@ describe("target-bound filed GSTR-1 View point", () => {
     `;
 
     expect(findMatchingFilterBoundGstr1Results(documentRef, SCOPE)).toEqual([]);
+  });
+
+  it("does not promote a valid card into its unrelated search-results surface", () => {
+    const documentRef = createFilterBoundResultDocument();
+    documentRef
+      .querySelector("section")
+      ?.append(" Instructions for GSTR-2B and FY 2024/25 results");
+
+    expect(findMatchingFilterBoundGstr1Results(documentRef, SCOPE)).toHaveLength(1);
+  });
+
+  it("does not promote a valid card into an unlabeled outer section", () => {
+    const documentRef = createFilterBoundResultDocument();
+    const section = documentRef.querySelector("section");
+    section?.removeAttribute("aria-label");
+    section?.append(" Instructions for GSTR-2B and FY 2024/25 results");
+
+    expect(findMatchingFilterBoundGstr1Results(documentRef, SCOPE)).toHaveLength(1);
+  });
+
+  it("does not mistake a result-card class for the surrounding results surface", () => {
+    const documentRef = createFilterBoundResultDocument();
+    documentRef.querySelector("article")?.setAttribute("class", "result-card");
+
+    expect(findMatchingFilterBoundGstr1Results(documentRef, SCOPE)).toHaveLength(1);
   });
 
   it("rejects another return identity on the outer card around a GSTR-1 View wrapper", () => {

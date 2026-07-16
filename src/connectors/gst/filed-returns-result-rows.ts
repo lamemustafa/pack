@@ -108,7 +108,15 @@ function filterBoundIdentityMatchesScope(
 }
 
 function extractFinancialYearEvidence(text: string): { valid: boolean; values: string[] } {
-  const matches = Array.from(text.matchAll(/\b(20\d{2})\s*[-\u2013/]\s*(\d{2}|\d{4})(?!\d)/g));
+  const labeledMatches = Array.from(
+    text.matchAll(
+      /\b(?:financial\s*year|fy)\b\s*(?:[-:]\s*)?(20\d{2})\s*[-\u2013/]\s*(\d{2}|\d{4})(?!\d)/gi,
+    ),
+  );
+  const bareMatches = Array.from(
+    text.matchAll(/\b(20\d{2})\s*[-\u2013/]\s*(\d{2}|\d{4})(?!\d|\s*[-/]\s*\d)/g),
+  );
+  const matches = [...labeledMatches, ...bareMatches];
   const values = matches
     .map((match) => canonicalFinancialYear(match[1], match[2]))
     .filter((financialYear): financialYear is string => Boolean(financialYear));
@@ -142,6 +150,8 @@ function findGstr1ResultContainer(view: HTMLElement): HTMLElement | null {
   let current = view.parentElement;
   while (current && current !== current.ownerDocument.body) {
     if (["MAIN", "FORM"].includes(current.tagName)) break;
+    if (isResultSurfaceBoundary(current)) break;
+    if (current.tagName === "SECTION" && result) break;
     if (isCandidateResultContainer(current)) {
       if (
         getClickableElements(current).filter(
@@ -149,11 +159,26 @@ function findGstr1ResultContainer(view: HTMLElement): HTMLElement | null {
         ).length === 1
       ) {
         result = current;
+        if (isSemanticResultCard(current)) break;
       }
     }
     current = current.parentElement;
   }
   return result;
+}
+
+function isSemanticResultCard(element: HTMLElement): boolean {
+  return ["ARTICLE", "LI"].includes(element.tagName) || element.getAttribute("role") === "row";
+}
+
+function isResultSurfaceBoundary(element: HTMLElement): boolean {
+  return [element.getAttribute("aria-label"), element.id, element.className].some(
+    (value) =>
+      typeof value === "string" &&
+      /(?:^|[-_\s])(?:search[-_\s]*results?|results(?:[-_\s]*(?:container|panel|surface|list|table))?)(?:$|[-_\s])/i.test(
+        value,
+      ),
+  );
 }
 
 function isCandidateResultContainer(element: HTMLElement): boolean {
@@ -201,14 +226,29 @@ function periodMatchForScope(
     return { period: null, state: "conflict" };
   }
   const canonicalExplicitPeriod = canonicalFiledReturnsMonth(explicitPeriod);
-  if (explicitPeriod && !canonicalExplicitPeriod) {
+  const explicitPeriodValues = extractMonthValues(explicitPeriod);
+  if (explicitPeriod && !canonicalExplicitPeriod && explicitPeriodValues.length === 0) {
     return { period: null, state: "conflict" };
   }
-  if (canonicalExplicitPeriod && canonicalExplicitPeriod !== scope.period) {
-    return { period: canonicalExplicitPeriod, state: "conflict" };
+  if (
+    explicitPeriodValues.some((period) => period !== scope.period) ||
+    (canonicalExplicitPeriod && canonicalExplicitPeriod !== scope.period)
+  ) {
+    return {
+      period: canonicalExplicitPeriod ?? explicitPeriodValues[0] ?? null,
+      state: "conflict",
+    };
   }
-  const period = canonicalExplicitPeriod ?? evidence.values[0] ?? null;
+  const period = canonicalExplicitPeriod ?? explicitPeriodValues[0] ?? evidence.values[0] ?? null;
   return { period, state: period ? "match" : "absent" };
+}
+
+function extractMonthValues(text: string | null): string[] {
+  if (!text) return [];
+  return Array.from(text.matchAll(/\b[a-z]+\b/gi)).flatMap((match) => {
+    const period = canonicalFiledReturnsMonth(match[0]);
+    return period ? [period] : [];
+  });
 }
 
 function financialYearMatchForScope(
@@ -216,6 +256,7 @@ function financialYearMatchForScope(
   rowText: string,
   scope: FiledReturnsDownloadScope,
 ): "absent" | "conflict" | "match" {
+  if (hasMalformedLabeledFinancialYear(rowText)) return "conflict";
   const rowEvidence = extractFinancialYearEvidence(rowText);
   if (
     !rowEvidence.valid ||
@@ -235,6 +276,14 @@ function financialYearMatchForScope(
     return matchesAcceptedText(explicitFinancialYear, [scope.financialYear]) ? "match" : "conflict";
   }
   return matchesAcceptedText(rowText, [scope.financialYear]) ? "match" : "absent";
+}
+
+function hasMalformedLabeledFinancialYear(text: string): boolean {
+  return Array.from(
+    text.matchAll(
+      /\b(?:financial\s*year|fy)\b\s*(?:[-:]\s*)?(20\d{2})\s*[-\u2013/]\s*(\d{2}|\d{4})(?!\d)/gi,
+    ),
+  ).some((match) => !canonicalFinancialYear(match[1], match[2]));
 }
 
 function canonicalFinancialYear(
