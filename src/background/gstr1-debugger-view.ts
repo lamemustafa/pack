@@ -18,6 +18,10 @@ export interface Gstr1DebuggerViewDeps {
     point: FiledReturnsTargetBoundViewPoint,
   ) => Promise<void>;
   hasPermission: () => Promise<boolean>;
+  markViewActivation: (
+    tabId: number,
+    scope: FiledReturnsDownloadScope,
+  ) => Promise<PackMessageResponse>;
   resolveViewPoint: (
     tabId: number,
     scope: FiledReturnsDownloadScope,
@@ -63,6 +67,10 @@ export async function clickGstr1ResultViewWithDebugger(
       return debuggerUnavailableStep(scope, "filed-gstr1-debugger-view-point-unavailable");
     }
 
+    const activationResponse = await deps.markViewActivation(tabId, scope);
+    if (!activationResponse.ok) {
+      return debuggerUnavailableStep(scope, "filed-gstr1-debugger-input-unavailable");
+    }
     await deps.dispatchMouseEvent(tabId, "mouseMoved", attachedResponse.gstr1ViewPoint);
     await deps.dispatchMouseEvent(tabId, "mousePressed", attachedResponse.gstr1ViewPoint);
     await deps.dispatchMouseEvent(tabId, "mouseReleased", attachedResponse.gstr1ViewPoint);
@@ -110,6 +118,11 @@ const chromeDebuggerViewDeps: Gstr1DebuggerViewDeps = {
   resolveViewPoint: (tabId, scope) =>
     sendMessageToTabWithInjection(tabId, {
       type: "PACK_CONTENT_RESOLVE_GSTR1_VIEW_POINT_V3",
+      payload: scope,
+    }),
+  markViewActivation: (tabId, scope) =>
+    sendMessageToTabWithInjection(tabId, {
+      type: "PACK_CONTENT_MARK_GSTR1_VIEW_ACTIVATION_V3",
       payload: scope,
     }),
   dispatchMouseEvent: async (tabId, type, point) => {

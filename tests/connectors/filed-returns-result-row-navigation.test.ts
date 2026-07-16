@@ -5,7 +5,10 @@ import {
   openFiledReturnResultRow,
   resolveGstr1FiledReturnViewPoint,
 } from "../../src/connectors/gst/filed-returns-result-row-navigation";
-import { findMatchingFiledReturnRows } from "../../src/connectors/gst/filed-returns-result-rows";
+import {
+  findMatchingFiledReturnRows,
+  findMatchingFilterBoundGstr1Results,
+} from "../../src/connectors/gst/filed-returns-result-rows";
 import {
   hasSettledFiledReturnsSearchForScope,
   markFiledReturnsSearchPending,
@@ -44,6 +47,91 @@ describe("target-bound filed GSTR-1 View point", () => {
     expect(
       findMatchingFiledReturnRows(documentRef, SCOPE, { allowFilterBoundScope: true }),
     ).toEqual([]);
+  });
+
+  it("rejects a dedicated FY cell when another row cell conflicts", () => {
+    const documentRef = createTableResultDocument(
+      ["Return Type", "Financial Year", "Status", "View"],
+      ["GSTR-1 / IFF", "2025-26", "Filed FY 2024/25", "View"],
+    );
+
+    expect(
+      findMatchingFiledReturnRows(documentRef, SCOPE, { allowFilterBoundScope: true }),
+    ).toEqual([]);
+  });
+
+  it("rejects an explicit conflicting period before filter-binding a row", () => {
+    const documentRef = createTableResultDocument(
+      ["Return Type", "Status", "View"],
+      ["GSTR-1 / IFF", "Filed Tax Period: May", "View"],
+    );
+
+    expect(
+      findMatchingFiledReturnRows(documentRef, SCOPE, { allowFilterBoundScope: true }),
+    ).toEqual([]);
+  });
+
+  it("preserves an exact quarterly-cadence GSTR-3B row", () => {
+    const documentRef = createTableResultDocument(
+      ["Return Type", "Financial Year", "Tax Period", "Status", "View"],
+      ["GSTR-3B", "2025-26", "April", "Return Filing Period: Quarterly", "View"],
+    );
+
+    expect(
+      findMatchingFiledReturnRows(documentRef, {
+        financialYear: "2025-26",
+        period: "April",
+        returnType: "GSTR-3B",
+      }),
+    ).toHaveLength(1);
+  });
+
+  it("uses the outer result card identity instead of an inner View wrapper", () => {
+    const documentRef = createFilterBoundResultDocument();
+    const article = documentRef.querySelector("article");
+    if (!article) throw new Error("Expected result card.");
+    article.innerHTML = `
+      <div><h2>GSTR-1 / IFF</h2><button data-view>View</button></div>
+      <p>Tax Period: May</p><p>FY 2024/25</p>
+    `;
+
+    expect(findMatchingFilterBoundGstr1Results(documentRef, SCOPE)).toEqual([]);
+  });
+
+  it("rejects another return identity on the outer card around a GSTR-1 View wrapper", () => {
+    const documentRef = createFilterBoundResultDocument();
+    const article = documentRef.querySelector("article");
+    if (!article) throw new Error("Expected result card.");
+    article.innerHTML = `
+      <div><h2>GSTR-1 / IFF</h2><button data-view>View</button></div>
+      <p>Related return: GSTR-12</p>
+    `;
+
+    expect(findMatchingFilterBoundGstr1Results(documentRef, SCOPE)).toEqual([]);
+  });
+
+  it("rejects a GSTR-10 card for a filter-bound GSTR-1 target", () => {
+    const documentRef = createFilterBoundResultDocument();
+    const heading = documentRef.querySelector("article h2");
+    if (heading) heading.textContent = "GSTR-10";
+
+    expect(findMatchingFilterBoundGstr1Results(documentRef, SCOPE)).toEqual([]);
+  });
+
+  it("rejects a View control inside a hidden result ancestor", () => {
+    const documentRef = createFilterBoundResultDocument();
+    documentRef.querySelector("section")?.setAttribute("hidden", "");
+
+    expect(findMatchingFilterBoundGstr1Results(documentRef, SCOPE)).toEqual([]);
+  });
+
+  it("rejects quarterly cadence on a monthly filter-bound card", () => {
+    const documentRef = createFilterBoundResultDocument();
+    documentRef
+      .querySelector("article")
+      ?.append(" Return Filing Period: Quarterly Tax Period: April FY 2025-26");
+
+    expect(findMatchingFilterBoundGstr1Results(documentRef, SCOPE)).toEqual([]);
   });
 
   it("returns the center of one visible unobscured exact result action", async () => {
@@ -158,6 +246,20 @@ function createExactResultDocument(resultCount: number): Document {
     { url: "https://return.gst.gov.in/returns/auth/efiledReturns" },
   );
   return dom.window.document;
+}
+
+function createTableResultDocument(headers: string[], cells: string[]): Document {
+  return new JSDOM(
+    `<!doctype html><html><body><main><table>
+      <thead><tr>${headers.map((header) => `<th>${header}</th>`).join("")}</tr></thead>
+      <tbody><tr>${cells
+        .map((cell, index) =>
+          index === cells.length - 1 ? `<td><button>${cell}</button></td>` : `<td>${cell}</td>`,
+        )
+        .join("")}</tr></tbody>
+    </table></main></body></html>`,
+    { url: "https://return.gst.gov.in/returns/auth/efiledReturns" },
+  ).window.document;
 }
 
 function createFilterBoundResultDocument(surface: "card" | "table" = "card"): Document {

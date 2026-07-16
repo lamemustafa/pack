@@ -115,6 +115,10 @@ export type PackMessage =
   | {
       type: "PACK_CONTENT_RESOLVE_GSTR1_VIEW_POINT_V3";
       payload: FiledReturnsDownloadScope;
+    }
+  | {
+      type: "PACK_CONTENT_MARK_GSTR1_VIEW_ACTIVATION_V3";
+      payload: FiledReturnsDownloadScope;
     };
 
 export type PackMessageResponse =
@@ -225,6 +229,8 @@ export function isPackMessage(input: unknown): input is PackMessage {
     case "PACK_CONTENT_CLEAR_FILED_RETURNS_SEARCH_PENDING_V3":
     case "PACK_CONTENT_RESOLVE_GSTR1_VIEW_POINT_V3":
       return isFiledReturnsDownloadScope(input.payload);
+    case "PACK_CONTENT_MARK_GSTR1_VIEW_ACTIVATION_V3":
+      return isFiledReturnsDownloadScope(input.payload) && input.payload.returnType === "GSTR-1";
     case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
       return isFiledReturnsStartScope(input.payload);
     case "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW":

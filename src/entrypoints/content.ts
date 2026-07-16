@@ -9,6 +9,7 @@ import { detectPostClickBlockedState } from "../connectors/gst/filed-returns-pos
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import {
   clearFiledReturnsSearchAttemptForScope,
+  markGstr1ViewActivationAttempted,
   markFiledReturnsSearchPending,
 } from "../connectors/gst/filed-returns-search-state";
 import { resolveGstr1FiledReturnViewPoint } from "../connectors/gst/filed-returns-result-row-navigation";
@@ -273,6 +274,21 @@ export default defineContentScript({
             } satisfies PackMessageResponse),
           );
         return true;
+      }
+
+      if (message.type === "PACK_CONTENT_MARK_GSTR1_VIEW_ACTIVATION_V3") {
+        markGstr1ViewActivationAttempted(document, message.payload);
+        sendResponse({
+          ok: true,
+          flowStep: {
+            connectorId: "gst",
+            scopeId: filedReturnScopeId("GSTR-1"),
+            state: "clicked",
+            safeSignals: ["filed-gstr1-result-view-navigation-pending"],
+            safeMessage: "Pack marked the exact GSTR-1 View action as navigation-pending.",
+          },
+        } satisfies PackMessageResponse);
+        return false;
       }
 
       return false;

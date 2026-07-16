@@ -18,6 +18,16 @@ function createDeps(overrides: Partial<Gstr1DebuggerViewDeps> = {}): Gstr1Debugg
     detach: vi.fn(async () => undefined),
     dispatchMouseEvent: vi.fn(async () => undefined),
     hasPermission: vi.fn(async () => true),
+    markViewActivation: vi.fn(async () => ({
+      ok: true as const,
+      flowStep: {
+        connectorId: "gst" as const,
+        scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
+        state: "clicked" as const,
+        safeSignals: ["filed-gstr1-result-view-navigation-pending"],
+        safeMessage: "Pending.",
+      },
+    })),
     resolveViewPoint: vi.fn(async () => ({
       ok: true as const,
       gstr1ViewPoint: { x: 120, y: 240 },
@@ -53,6 +63,7 @@ describe("target-bound GSTR-1 debugger View input", () => {
     expect(deps.attach).toHaveBeenCalledWith(42);
     expect(deps.resolveViewPoint).toHaveBeenNthCalledWith(1, 42, SCOPE);
     expect(deps.resolveViewPoint).toHaveBeenNthCalledWith(2, 42, SCOPE);
+    expect(deps.markViewActivation).toHaveBeenCalledWith(42, SCOPE);
     expect(deps.dispatchMouseEvent).toHaveBeenNthCalledWith(1, 42, "mouseMoved", {
       x: 120,
       y: 240,
@@ -66,6 +77,21 @@ describe("target-bound GSTR-1 debugger View input", () => {
       y: 240,
     });
     expect(deps.dispatchMouseEvent).toHaveBeenCalledTimes(3);
+    expect(deps.detach).toHaveBeenCalledWith(42);
+  });
+
+  it("does not dispatch debugger input when the navigation marker cannot be persisted", async () => {
+    const deps = createDeps({
+      markViewActivation: vi.fn(async () => ({
+        ok: false as const,
+        error: "GSTR-1_VIEW_ACTIVATION_UNAVAILABLE",
+      })),
+    });
+
+    const result = await clickGstr1ResultViewWithDebugger(42, SCOPE, deps);
+
+    expect(result.safeSignals).toContain("filed-gstr1-debugger-input-unavailable");
+    expect(deps.dispatchMouseEvent).not.toHaveBeenCalled();
     expect(deps.detach).toHaveBeenCalledWith(42);
   });
 
