@@ -14,10 +14,7 @@ export function hasUnresolvedFiledReturnsTargetReview(
 export function hasUnresolvedFiledReturnsRecovery(
   summary: FiledReturnsFlowSummary | null,
 ): boolean {
-  return Boolean(
-    hasUnresolvedFiledReturnsTargetReview(summary) ||
-    (summary?.status === "blocked" && summary.fullFiscalYearRecovery),
-  );
+  return Boolean(hasUnresolvedFiledReturnsTargetReview(summary) || summary?.fullFiscalYearRecovery);
 }
 
 export function canRetryFullFiscalYearZipWithoutPortal(
@@ -36,6 +33,7 @@ export function canRetryFullFiscalYearZipWithoutPortal(
     signals.has("full-fiscal-year-final-zip-retry") ||
     signals.has("full-fiscal-year-local-cleanup-retry") ||
     signals.has("full-fiscal-year-zip-export-pending") ||
+    signals.has("full-fiscal-year-zip-phase:download-started") ||
     signals.has("full-fiscal-year-zip-phase:export-retry-pending")
   );
 }

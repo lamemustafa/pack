@@ -264,6 +264,7 @@ describe("popup filed returns flow summary", () => {
 
     expect(hasUnresolvedFiledReturnsRecovery(summary)).toBe(true);
     expect(hasUnresolvedFiledReturnsRecovery(COMPLETE_SUMMARY)).toBe(false);
+    expect(hasUnresolvedFiledReturnsRecovery({ ...summary, status: "partial" })).toBe(true);
   });
 
   it("allows only retained final-ZIP work to retry without a portal tab", () => {
@@ -292,6 +293,19 @@ describe("popup filed returns flow summary", () => {
             "full-fiscal-year-final-zip-retry",
             "full-fiscal-year-zip-download-started",
             "full-fiscal-year-zip-download-unconfirmed",
+            "full-fiscal-year-zip-phase:download-started",
+            "full-fiscal-year-opfs-retained",
+          ],
+        },
+      }),
+    ).toBe(true);
+    expect(
+      canRetryFullFiscalYearZipWithoutPortal({
+        ...finalZipRetry,
+        flowStep: {
+          ...finalZipRetry.flowStep,
+          state: "download-unconfirmed",
+          safeSignals: [
             "full-fiscal-year-zip-phase:download-started",
             "full-fiscal-year-opfs-retained",
           ],

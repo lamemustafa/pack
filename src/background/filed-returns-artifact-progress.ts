@@ -9,7 +9,6 @@ import {
   normaliseFiledReturnsArtifactType,
   type FiledReturnsConcreteArtifactType,
 } from "../core/filed-returns-artifacts";
-import { closeOffscreenBlobDocument, clearOffscreenFiledReturnLedger } from "./offscreen-blob-url";
 import { PACK_LOCAL_STORAGE_KEYS } from "./storage-keys";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
 
@@ -38,12 +37,7 @@ export async function reserveSinglePeriodBundleLedger(): Promise<string | null> 
   } catch {
     return null;
   }
-  if (existing) {
-    const cleared = await clearOffscreenFiledReturnLedger(existing.ledgerId).catch(() => "failed");
-    await closeOffscreenBlobDocument();
-    if (cleared !== "cleared") return null;
-    await clearSinglePeriodStagingRecord(existing.ledgerId);
-  }
+  if (existing) return null;
 
   const ledgerId = createSinglePeriodBundleLedgerId();
   const record: SinglePeriodStagingRecord = { ledgerId, schemaVersion: "1.0" };

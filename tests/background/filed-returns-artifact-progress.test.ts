@@ -51,7 +51,7 @@ describe("single-period filed-return staging ownership", () => {
     expect(ledgerId).not.toContain("202");
   });
 
-  it("clears an abandoned staged ledger before reserving another one", async () => {
+  it("preserves retained staging instead of repeating portal artifacts after restart", async () => {
     state.local["pack:single-period-staging"] = {
       ledgerId: "single-period:abandoned",
       schemaVersion: "1.0",
@@ -59,21 +59,26 @@ describe("single-period filed-return staging ownership", () => {
 
     const ledgerId = await reserveSinglePeriodBundleLedger();
 
-    expect(offscreenMocks.clearOffscreenFiledReturnLedger).toHaveBeenCalledWith(
-      "single-period:abandoned",
-    );
-    expect(ledgerId).toMatch(/^single-period:/);
-    expect(ledgerId).not.toBe("single-period:abandoned");
+    expect(ledgerId).toBeNull();
+    expect(offscreenMocks.clearOffscreenFiledReturnLedger).not.toHaveBeenCalled();
+    expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
+    expect(state.local["pack:single-period-staging"]).toEqual({
+      ledgerId: "single-period:abandoned",
+      schemaVersion: "1.0",
+    });
   });
 
-  it("fails closed when abandoned staging cannot be cleared", async () => {
+  it("does not let cleanup availability change retained staging ownership", async () => {
     state.local["pack:single-period-staging"] = {
       ledgerId: "single-period:abandoned",
       schemaVersion: "1.0",
     };
     offscreenMocks.clearOffscreenFiledReturnLedger.mockResolvedValue("failed");
 
-    await expect(reserveSinglePeriodBundleLedger()).resolves.toBeNull();
+    const ledgerId = await reserveSinglePeriodBundleLedger();
+
+    expect(ledgerId).toBeNull();
+    expect(offscreenMocks.clearOffscreenFiledReturnLedger).not.toHaveBeenCalled();
     expect(browserMocks.storage.local.set).not.toHaveBeenCalled();
     expect(state.local["pack:single-period-staging"]).toEqual({
       ledgerId: "single-period:abandoned",
