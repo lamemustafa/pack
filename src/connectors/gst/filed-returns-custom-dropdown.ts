@@ -15,6 +15,7 @@ export async function selectCustomOptionNearLabel(
   documentRef: Document,
   labelPattern: RegExp,
   acceptedTexts: readonly string[],
+  matchesText: (text: string, acceptedTexts: readonly string[]) => boolean = matchesAcceptedText,
 ): Promise<boolean> {
   const formRoot = findFiledReturnsFilterRoot(documentRef);
   if (!formRoot) return false;
@@ -25,7 +26,7 @@ export async function selectCustomOptionNearLabel(
   const currentText = normaliseText(
     getCustomDropdownControls(fieldRoot).map(readElementText).join(" "),
   );
-  if (matchesAcceptedText(currentText, acceptedTexts)) return true;
+  if (matchesText(currentText, acceptedTexts)) return true;
 
   const control = getCustomDropdownControls(fieldRoot).find((candidate) => isVisible(candidate));
   if (!control) return false;
@@ -38,11 +39,12 @@ export async function selectCustomOptionNearLabel(
     acceptedTexts,
     control,
     beforeOpenElements,
+    matchesText,
   );
   if (!option) return false;
 
   activateElement(option);
-  return waitForFieldTextMatch(fieldRoot, acceptedTexts);
+  return waitForFieldTextMatch(fieldRoot, acceptedTexts, matchesText);
 }
 
 export function findFiledReturnsFilterRoot(documentRef: Document): HTMLElement | null {
@@ -148,10 +150,11 @@ function readElementText(element: Element): string {
 async function waitForFieldTextMatch(
   fieldRoot: HTMLElement,
   acceptedTexts: readonly string[],
+  matchesText: (text: string, acceptedTexts: readonly string[]) => boolean,
 ): Promise<boolean> {
   const startedAt = Date.now();
   do {
-    if (matchesAcceptedText(normaliseText(fieldRoot.textContent || ""), acceptedTexts)) return true;
+    if (matchesText(normaliseText(fieldRoot.textContent || ""), acceptedTexts)) return true;
     await delay(DROPDOWN_POLL_MS);
   } while (Date.now() - startedAt < DROPDOWN_SELECTION_TIMEOUT_MS);
   return false;

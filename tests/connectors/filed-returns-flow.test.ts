@@ -3172,7 +3172,7 @@ describe("filed returns guided flow", () => {
     expect(dashboardBackClicked).toBe(1);
   });
 
-  it("trusts matching explicit GSTR-2B labels over incidental statement text", async () => {
+  it("rejects a statement heading that conflicts with matching GSTR-2B labels", async () => {
     const documentRef = createGstDocument(
       `
         <main>
@@ -3201,8 +3201,9 @@ describe("filed returns guided flow", () => {
       returnType: "GSTR-2B",
     });
 
-    expect(result.state).toBe("ready");
-    expect(result.safeSignals).toContain("gstr2b-visible-period-verified");
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toContain("gstr2b-visible-period-mismatch");
+    expect(result.safeSignals).toContain("gstr2b-server-visible-period-conflict");
   });
 
   it("returns from a GSTR-2B summary when server page config identifies another period", async () => {

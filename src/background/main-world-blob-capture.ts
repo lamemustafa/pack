@@ -68,6 +68,12 @@ export async function capturePortalBlobDownloadWithDiagnostics(
     const originalPdfMakeCreatePdf = pdfMake?.createPdf;
     const originalSaveAs = (window as Window & { saveAs?: unknown }).saveAs;
     const originalWindowOpen = window.open;
+    const originalSetTimeout = window.setTimeout;
+    const callOriginalSetTimeout = (
+      handler: TimerHandler,
+      timeout?: number,
+      ...args: unknown[]
+    ): number => Reflect.apply(originalSetTimeout, window, [handler, timeout, ...args]) as number;
     const originalClick = HTMLAnchorElement.prototype.click;
     const originalDispatchEvent = HTMLAnchorElement.prototype.dispatchEvent;
     const originalXhrOpen = XMLHttpRequest.prototype.open;
@@ -95,6 +101,7 @@ export async function capturePortalBlobDownloadWithDiagnostics(
       }
       (window as Window & { saveAs?: unknown }).saveAs = originalSaveAs;
       window.open = originalWindowOpen;
+      window.setTimeout = originalSetTimeout;
       HTMLAnchorElement.prototype.click = originalClick;
       HTMLAnchorElement.prototype.dispatchEvent = originalDispatchEvent;
       XMLHttpRequest.prototype.open = originalXhrOpen;
@@ -248,6 +255,37 @@ export async function capturePortalBlobDownloadWithDiagnostics(
       }
       return false;
     };
+
+    window.setTimeout = function setTimeout(
+      handler: TimerHandler,
+      timeout?: number,
+      ...args: unknown[]
+    ) {
+      const actionBound = controlClickActive;
+      if (!actionBound || typeof handler !== "function") {
+        return callOriginalSetTimeout(handler, timeout, ...args);
+      }
+      return callOriginalSetTimeout(
+        (...callbackArgs: unknown[]) => {
+          const previouslyActive = controlClickActive;
+          controlClickActive = true;
+          try {
+            handler(...callbackArgs);
+          } finally {
+            const restorePreviousBinding = () => {
+              controlClickActive = previouslyActive;
+            };
+            if (typeof window.queueMicrotask === "function") {
+              window.queueMicrotask(restorePreviousBinding);
+            } else {
+              void Promise.resolve().then(restorePreviousBinding);
+            }
+          }
+        },
+        timeout,
+        ...args,
+      );
+    } as unknown as typeof window.setTimeout;
 
     window.open = function open(url?: string | URL) {
       const urlText = url ? String(url) : "";
@@ -564,7 +602,14 @@ export async function capturePortalBlobDownloadWithDiagnostics(
       settle(null);
       return;
     } finally {
-      controlClickActive = false;
+      const clearSynchronousActionBinding = () => {
+        controlClickActive = false;
+      };
+      if (typeof window.queueMicrotask === "function") {
+        window.queueMicrotask(clearSynchronousActionBinding);
+      } else {
+        void Promise.resolve().then(clearSynchronousActionBinding);
+      }
     }
     window.setTimeout(() => {
       addSafeSignal(`${config.signalPrefix}-main-world-capture-timeout`);

@@ -79,11 +79,11 @@ export function verifyVisibleGstr2bPeriod(
   }
 
   const hasCompleteLabelledEvidence = Boolean(visiblePeriod && visibleFinancialYear);
-  if (hasCompleteLabelledEvidence) return null;
-
   if (statementScope && !gstr2bScopeMatches(statementScope, scope)) {
     return gstr2bPeriodMismatch(serverScope ? ["gstr2b-server-visible-period-conflict"] : []);
   }
+
+  if (hasCompleteLabelledEvidence) return null;
 
   if (serverScope) return null;
 

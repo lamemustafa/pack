@@ -48,6 +48,10 @@ export function acceptedMonthOptions(scope: FiledReturnsDownloadScope): string[]
   return acceptedFiledReturnsMonthTexts(scope.period);
 }
 
+export function acceptedReturnTypeOptions(scope: FiledReturnsDownloadScope): string[] {
+  return scope.returnType === "GSTR-1" ? ["GSTR-1", "GSTR-1/IFF/GSTR-1A"] : [scope.returnType];
+}
+
 export function acceptedUnselectedFilingPeriodOptions(): readonly string[] {
   return UNSELECTED_FILING_PERIOD_OPTIONS;
 }
@@ -90,9 +94,12 @@ export function readFilterSelectionState(
     monthSelected:
       !monthFieldPresent ||
       filedReturnsFilterFieldMatches(documentRef, MONTH_LABEL, acceptedMonthOptions(scope)),
-    returnTypeSelected: filedReturnsFilterFieldMatches(documentRef, RETURN_TYPE_LABEL, [
-      scope.returnType,
-    ]),
+    returnTypeSelected: filedReturnsFilterFieldMatches(
+      documentRef,
+      RETURN_TYPE_LABEL,
+      acceptedReturnTypeOptions(scope),
+      matchesExactReturnTypeText,
+    ),
   };
 }
 
@@ -112,7 +119,14 @@ export async function waitForFieldSelection(
 ): Promise<void> {
   const attempts = Math.ceil(FIELD_SETTLE_DELAY_MS / FIELD_SETTLE_POLL_MS);
   for (let attempt = 0; attempt < attempts; attempt += 1) {
-    if (filedReturnsFilterFieldMatches(documentRef, labelPattern, acceptedTexts)) {
+    if (
+      filedReturnsFilterFieldMatches(
+        documentRef,
+        labelPattern,
+        acceptedTexts,
+        matcherForField(labelPattern),
+      )
+    ) {
       // GST replaces dependent select options asynchronously after a change event.
       // Keep the established settle window before probing the next field.
       await delay(FIELD_SETTLE_DELAY_MS);
@@ -161,46 +175,51 @@ async function selectOptionNearLabel(
 ): Promise<FieldSelectionAttempt> {
   let hasPendingNativeControl = false;
   const formRoot = findFiledReturnsFilterRoot(documentRef);
+  const matchesText = matcherForField(labelPattern);
   if (formRoot) {
     const scopedKnownSelect = findKnownGstSelect(formRoot, labelPattern);
     if (scopedKnownSelect) {
-      if (selectOption(scopedKnownSelect, acceptedTexts)) return "selected";
+      if (selectOption(scopedKnownSelect, acceptedTexts, matchesText)) return "selected";
       hasPendingNativeControl = true;
     }
 
     const fieldRoot = findFieldRoot(formRoot, labelPattern);
     const select = fieldRoot?.querySelector("select");
     if (select && select !== scopedKnownSelect) {
-      if (selectOption(select, acceptedTexts)) return "selected";
+      if (selectOption(select, acceptedTexts, matchesText)) return "selected";
       hasPendingNativeControl = true;
     }
   }
 
   const knownDocumentSelect = findKnownGstSelect(documentRef, labelPattern);
   if (knownDocumentSelect) {
-    if (selectOption(knownDocumentSelect, acceptedTexts)) return "selected";
+    if (selectOption(knownDocumentSelect, acceptedTexts, matchesText)) return "selected";
     hasPendingNativeControl = true;
   }
 
   for (const labelledSelect of findLabelledSelects(documentRef, labelPattern)) {
-    if (selectOption(labelledSelect, acceptedTexts)) return "selected";
+    if (selectOption(labelledSelect, acceptedTexts, matchesText)) return "selected";
     hasPendingNativeControl = true;
   }
 
   if (hasPendingNativeControl) return "pending";
 
-  return (await selectCustomOptionNearLabel(documentRef, labelPattern, acceptedTexts))
+  return (await selectCustomOptionNearLabel(documentRef, labelPattern, acceptedTexts, matchesText))
     ? "selected"
     : "missing";
 }
 
-function selectOption(select: HTMLSelectElement, acceptedTexts: readonly string[]): boolean {
+function selectOption(
+  select: HTMLSelectElement,
+  acceptedTexts: readonly string[],
+  matchesText: (text: string, acceptedTexts: readonly string[]) => boolean,
+): boolean {
   const selectedText = normaliseText(select.selectedOptions[0]?.textContent || select.value);
-  if (matchesAcceptedText(selectedText, acceptedTexts)) return true;
+  if (matchesText(selectedText, acceptedTexts)) return true;
 
   const option = Array.from(select.options).find((candidate) => {
     const text = normaliseText(candidate.textContent || candidate.value);
-    return matchesAcceptedText(text, acceptedTexts);
+    return matchesText(text, acceptedTexts);
   });
   if (!option) return false;
 
@@ -218,4 +237,24 @@ function selectOption(select: HTMLSelectElement, acceptedTexts: readonly string[
   dispatchChange(select);
   select.blur?.();
   return true;
+}
+
+function matcherForField(
+  labelPattern: RegExp,
+): (text: string, acceptedTexts: readonly string[]) => boolean {
+  return labelPattern === RETURN_TYPE_LABEL ? matchesExactReturnTypeText : matchesAcceptedText;
+}
+
+function matchesExactReturnTypeText(text: string, acceptedTexts: readonly string[]): boolean {
+  const comparableText = comparableReturnTypeText(text);
+  return acceptedTexts.some((acceptedText) => {
+    const comparableAccepted = comparableReturnTypeText(acceptedText);
+    return (
+      comparableText === comparableAccepted || comparableText === `returntype${comparableAccepted}`
+    );
+  });
+}
+
+function comparableReturnTypeText(value: string): string {
+  return normaliseText(value).replace(/[^a-z0-9]/g, "");
 }

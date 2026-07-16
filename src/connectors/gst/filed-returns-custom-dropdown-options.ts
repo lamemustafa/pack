@@ -42,10 +42,17 @@ export async function waitForVisibleCustomDropdownOption(
   acceptedTexts: readonly string[],
   openedControl: HTMLElement,
   beforeOpenElements: ReadonlySet<Element>,
+  matchesText: (text: string, acceptedTexts: readonly string[]) => boolean = matchesAcceptedText,
 ): Promise<HTMLElement | null> {
   const startedAt = Date.now();
   do {
-    const option = findVisibleOption(documentRef, acceptedTexts, openedControl, beforeOpenElements);
+    const option = findVisibleOption(
+      documentRef,
+      acceptedTexts,
+      openedControl,
+      beforeOpenElements,
+      matchesText,
+    );
     if (option) return option;
     await delay(DROPDOWN_POLL_MS);
   } while (Date.now() - startedAt < DROPDOWN_OPEN_TIMEOUT_MS);
@@ -57,6 +64,7 @@ function findVisibleOption(
   acceptedTexts: readonly string[],
   openedControl: HTMLElement,
   beforeOpenElements: ReadonlySet<Element>,
+  matchesText: (text: string, acceptedTexts: readonly string[]) => boolean,
 ): HTMLElement | null {
   for (const root of candidateOptionRoots(documentRef, openedControl, beforeOpenElements)) {
     const candidates = root.matches(OPTION_SELECTOR)
@@ -67,7 +75,7 @@ function findVisibleOption(
       if (element === openedControl || openedControl.contains(element)) continue;
       if (!isVisible(element)) continue;
       const text = normaliseText(readElementText(element));
-      if (text.length > 0 && text.length <= 80 && matchesAcceptedText(text, acceptedTexts)) {
+      if (text.length > 0 && text.length <= 80 && matchesText(text, acceptedTexts)) {
         return element;
       }
     }

@@ -311,6 +311,30 @@ describe("capturePortalBlobDownload", () => {
     expect(captured?.safeSignals).toContain("gstr2b-native-window-open-suppressed");
   });
 
+  it("keeps a timer scheduled by the exact action bound until its callback runs", async () => {
+    const { documentRef, view } = installMainWorldDom(`
+      <button data-pack-gstr2b-capture-action="capture-1">Download</button>
+    `);
+    documentRef.querySelector("button")?.addEventListener("click", () => {
+      view.setTimeout(() => {
+        void Promise.resolve().then(() => {
+          const blobUrl = view.URL.createObjectURL(
+            new view.Blob(["%PDF-1.7 synthetic"], { type: "application/pdf" }),
+          );
+          const anchor = documentRef.createElement("a");
+          anchor.href = blobUrl;
+          anchor.download = "may.pdf";
+          anchor.click();
+        });
+      }, 0);
+    });
+
+    const captured = await capturePortalBlobDownload(captureConfig());
+
+    expect(captured?.dataUrl).toContain("data:application/pdf;base64,");
+    expect(captured?.safeSignals).toContain("gstr2b-main-world-capture");
+  });
+
   it("captures and suppresses PDFMake-style child-window blob navigation", async () => {
     const { documentRef, view } = installMainWorldDom(`
       <button data-pack-gstr2b-capture-action="capture-1">Download</button>

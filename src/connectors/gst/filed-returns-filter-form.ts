@@ -4,6 +4,7 @@ import { filedReturnsFilterFieldMatches } from "./filed-returns-filter-fields";
 import {
   acceptedFilingPeriodOptions,
   acceptedMonthOptions,
+  acceptedReturnTypeOptions,
   acceptedUnselectedFilingPeriodOptions,
   type FilterSelectionState,
   FINANCIAL_YEAR_LABEL,
@@ -72,9 +73,11 @@ export async function selectFiledReturnsFiltersAndSearch(
     await waitForFieldSelection(documentRef, MONTH_LABEL, acceptedMonthOptions(scope));
   }
 
-  let returnTypeSelected = await selectFieldOption(documentRef, RETURN_TYPE_LABEL, [
-    scope.returnType,
-  ]);
+  let returnTypeSelected = await selectFieldOption(
+    documentRef,
+    RETURN_TYPE_LABEL,
+    acceptedReturnTypeOptions(scope),
+  );
   if (periodSelected && returnTypeSelected && monthFieldPresent && !monthSelected) {
     await delay(FIELD_SETTLE_DELAY_MS);
     monthSelected = await selectFieldOption(documentRef, MONTH_LABEL, acceptedMonthOptions(scope));
@@ -206,8 +209,8 @@ async function settleFiledReturnsFilterSelection(
 
     state = readPortalFilterSelectionState(documentRef, scope, leaveFilingPeriodUnselected);
     if (state.periodSelected && !state.returnTypeSelected) {
-      await selectFieldOption(documentRef, RETURN_TYPE_LABEL, [scope.returnType]);
-      await waitForFieldSelection(documentRef, RETURN_TYPE_LABEL, [scope.returnType]);
+      await selectFieldOption(documentRef, RETURN_TYPE_LABEL, acceptedReturnTypeOptions(scope));
+      await waitForFieldSelection(documentRef, RETURN_TYPE_LABEL, acceptedReturnTypeOptions(scope));
     }
 
     state = readPortalFilterSelectionState(documentRef, scope, leaveFilingPeriodUnselected);
