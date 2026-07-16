@@ -4,6 +4,13 @@ All notable changes to ComplyEaze Pack are documented here.
 
 ## Unreleased
 
+## [0.4.1](https://github.com/lamemustafa/pack/compare/v0.4.0...v0.4.1) (2026-07-16)
+
+
+### Documentation
+
+* **agent:** align reviewed manifest boundaries ([#82](https://github.com/lamemustafa/pack/issues/82)) ([818ebf7](https://github.com/lamemustafa/pack/commit/818ebf7f4ca6b13ebf92dad9d166fe6fb63be804))
+
 ## [0.4.0](https://github.com/lamemustafa/pack/compare/v0.3.3...v0.4.0) (2026-07-16)
 
 
