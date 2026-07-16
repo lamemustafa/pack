@@ -5020,6 +5020,71 @@ describe("filed returns guided flow", () => {
     expect(clicked).toBe(0);
   });
 
+  it("rejects a filter-bound GSTR-1 card when a cadence label precedes a conflicting month", async () => {
+    const scope: FiledReturnsDownloadScope = {
+      financialYear: "2025-26",
+      period: "April",
+      returnType: "GSTR-1",
+    };
+    const documentRef = createFilterBoundGstr1Results(0, 1);
+    documentRef
+      .querySelector("article")
+      ?.append(" Return Filing Period: Monthly Tax Period: May FY 2025-26");
+    markPackSubmittedSearch(documentRef, scope);
+    let clicked = 0;
+    documentRef.querySelector("button[data-card-view]")?.addEventListener("click", () => {
+      clicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, scope);
+
+    expect(result.state).toBe("candidate-not-found");
+    expect(result.safeSignals).toContain("filed-return-result-row-not-found");
+    expect(clicked).toBe(0);
+  });
+
+  it("rejects malformed explicit scope labels on a filter-bound GSTR-1 card", async () => {
+    const scope: FiledReturnsDownloadScope = {
+      financialYear: "2025-26",
+      period: "April",
+      returnType: "GSTR-1",
+    };
+    const documentRef = createFilterBoundGstr1Results(0, 1);
+    documentRef.querySelector("article")?.append(" Tax Period: Unknown FY 2025/27");
+    markPackSubmittedSearch(documentRef, scope);
+    let clicked = 0;
+    documentRef.querySelector("button[data-card-view]")?.addEventListener("click", () => {
+      clicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, scope);
+
+    expect(result.state).toBe("candidate-not-found");
+    expect(result.safeSignals).toContain("filed-return-result-row-not-found");
+    expect(clicked).toBe(0);
+  });
+
+  it("rejects a filter-bound GSTR-1 row with a conflicting slash-form FY", async () => {
+    const scope: FiledReturnsDownloadScope = {
+      financialYear: "2025-26",
+      period: "April",
+      returnType: "GSTR-1",
+    };
+    const documentRef = createFilterBoundGstr1Results();
+    documentRef.querySelector("tbody tr td:nth-child(2)")?.append(" FY 2024/25");
+    markPackSubmittedSearch(documentRef, scope);
+    let clicked = 0;
+    documentRef.querySelector("button[data-view]")?.addEventListener("click", () => {
+      clicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, scope);
+
+    expect(result.state).toBe("candidate-not-found");
+    expect(result.safeSignals).toContain("filed-return-result-row-not-found");
+    expect(clicked).toBe(0);
+  });
+
   it("accepts a filter-bound GSTR-1 card with matching explicit period and FY", async () => {
     const scope: FiledReturnsDownloadScope = {
       financialYear: "2025-26",

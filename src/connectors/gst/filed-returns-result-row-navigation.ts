@@ -97,7 +97,7 @@ export function openFiledReturnResultRow(
         scope,
         scopeId,
         actionableResult,
-        filterBoundResults[0] === actionableResult,
+        actionableResult.filterBound,
         true,
       );
     }
@@ -105,7 +105,7 @@ export function openFiledReturnResultRow(
     if (scope.returnType === "GSTR-1") {
       markGstr1ViewActivationAttempted(documentRef, scope);
     }
-    const isFilterBoundResult = filterBoundResults[0] === actionableResult;
+    const isFilterBoundResult = actionableResult.filterBound;
     if (searchSettled && !isFilterBoundResult) {
       consumeSettledFiledReturnsSearchForScope(documentRef, scope);
     }
@@ -161,7 +161,7 @@ export async function resolveGstr1FiledReturnViewPoint(
     scope,
     filedReturnScopeId("GSTR-1"),
     actionableResult,
-    filterBoundResults[0] === actionableResult,
+    actionableResult.filterBound,
     false,
   );
   const view = actionableResult.view;

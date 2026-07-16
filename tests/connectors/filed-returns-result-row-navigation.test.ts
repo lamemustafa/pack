@@ -1,7 +1,11 @@
 import { JSDOM } from "jsdom";
 import { describe, expect, it, vi } from "vitest";
 import type { FiledReturnsDownloadScope } from "../../src/core/contracts";
-import { resolveGstr1FiledReturnViewPoint } from "../../src/connectors/gst/filed-returns-result-row-navigation";
+import {
+  openFiledReturnResultRow,
+  resolveGstr1FiledReturnViewPoint,
+} from "../../src/connectors/gst/filed-returns-result-row-navigation";
+import { findMatchingFiledReturnRows } from "../../src/connectors/gst/filed-returns-result-rows";
 import {
   hasSettledFiledReturnsSearchForScope,
   markFiledReturnsSearchPending,
@@ -15,6 +19,33 @@ const SCOPE: FiledReturnsDownloadScope = {
 };
 
 describe("target-bound filed GSTR-1 View point", () => {
+  it("rejects a filter-bound table row with a conflicting slash-form FY", () => {
+    const documentRef = createFilterBoundResultDocument("table");
+    documentRef.querySelector("tbody tr td:nth-child(2)")?.append(" FY 2024/25");
+
+    expect(
+      findMatchingFiledReturnRows(documentRef, SCOPE, { allowFilterBoundScope: true }),
+    ).toEqual([]);
+  });
+
+  it("rejects a filter-bound table row containing requested and conflicting FY values", () => {
+    const documentRef = createFilterBoundResultDocument("table");
+    documentRef.querySelector("tbody tr td:nth-child(2)")?.append(" FY 2025-26 FY 2024/25");
+
+    expect(
+      findMatchingFiledReturnRows(documentRef, SCOPE, { allowFilterBoundScope: true }),
+    ).toEqual([]);
+  });
+
+  it("rejects a malformed four-digit FY end year", () => {
+    const documentRef = createFilterBoundResultDocument("table");
+    documentRef.querySelector("tbody tr td:nth-child(2)")?.append(" FY 2025/2126");
+
+    expect(
+      findMatchingFiledReturnRows(documentRef, SCOPE, { allowFilterBoundScope: true }),
+    ).toEqual([]);
+  });
+
   it("returns the center of one visible unobscured exact result action", async () => {
     const documentRef = createExactResultDocument(1);
     const view = documentRef.querySelector<HTMLElement>("[data-view='0']");
@@ -77,6 +108,35 @@ describe("target-bound filed GSTR-1 View point", () => {
     expect(preflight).toEqual({ ok: true, point: { x: 140, y: 220 } });
     expect(attached).toEqual(preflight);
   });
+
+  it("preserves a filter-bound table row after an automatic View attempt expires", async () => {
+    const now = vi.spyOn(Date, "now");
+    let currentTime = 1_000;
+    now.mockImplementation(() => currentTime);
+    try {
+      const documentRef = createFilterBoundResultDocument("table");
+      const resultSurface = documentRef.querySelector("section");
+      const view = documentRef.querySelector<HTMLElement>("[data-view]");
+      if (!resultSurface || !view) throw new Error("Expected filter-bound result controls.");
+      resultSurface.remove();
+      markFiledReturnsSearchPending(documentRef, SCOPE);
+      documentRef.querySelector("main")?.append(resultSurface);
+      expect(hasSettledFiledReturnsSearchForScope(documentRef, SCOPE)).toBe(false);
+      expect(hasSettledFiledReturnsSearchForScope(documentRef, SCOPE)).toBe(false);
+      expect(hasSettledFiledReturnsSearchForScope(documentRef, SCOPE)).toBe(true);
+
+      const clicked = openFiledReturnResultRow(documentRef, SCOPE, true);
+      expect(clicked.safeSignals).toContain("filed-return-filter-bound-result-view-clicked");
+
+      currentTime += 3_001;
+      setLayout(documentRef, view, { left: 100, top: 200, width: 80, height: 40 });
+      const retry = await resolveGstr1FiledReturnViewPoint(documentRef, SCOPE);
+
+      expect(retry).toEqual({ ok: true, point: { x: 140, y: 220 } });
+    } finally {
+      now.mockRestore();
+    }
+  });
 });
 
 function createExactResultDocument(resultCount: number): Document {
@@ -100,7 +160,11 @@ function createExactResultDocument(resultCount: number): Document {
   return dom.window.document;
 }
 
-function createFilterBoundResultDocument(): Document {
+function createFilterBoundResultDocument(surface: "card" | "table" = "card"): Document {
+  const result =
+    surface === "card"
+      ? `<article><h2>GSTR-1 / IFF</h2><p>Filed return</p><button data-view>View</button></article>`
+      : `<table><thead><tr><th>Return Type</th><th>Status</th><th>View</th></tr></thead><tbody><tr><td>GSTR-1 / IFF</td><td>Filed</td><td><button data-view>View</button></td></tr></tbody></table>`;
   return new JSDOM(
     `<!doctype html><html><body><main>
       <form name="efiledReturns">
@@ -110,7 +174,7 @@ function createFilterBoundResultDocument(): Document {
         <label>Return Type</label><select><option selected>GSTR-1/IFF/GSTR-1A</option></select>
       </form>
       <section aria-label="Search results">
-        <article><h2>GSTR-1 / IFF</h2><p>Filed return</p><button data-view>View</button></article>
+        ${result}
       </section>
     </main></body></html>`,
     { url: "https://return.gst.gov.in/returns/auth/efiledReturns" },
