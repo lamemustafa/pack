@@ -12,8 +12,10 @@ its own git repository.
   metadata to ComplyEaze in normal V0 behavior.
 - Do not add analytics, backend telemetry, remote selector configs, remote
   executable code, `externally_connectable`, or broad host permissions.
-- Keep WXT manifest permissions to `downloads`, `scripting`, `storage`, and
-  exact GST hosts unless a reviewed design issue approves the change.
+- Keep WXT manifest permissions to the reviewed set: `downloads`, `offscreen`,
+  `scripting`, and `storage`. Keep host permissions to the exact four GST hosts
+  in `src/extension/manifest-policy.ts`. Any further permission or host change
+  requires a reviewed design issue and matching package-verifier coverage.
 - Keep shared contracts portal-neutral; keep GST logic in `src/connectors/gst`.
 - Follow `docs/AGENT_REVIEW_RECTIFY.md` for non-trivial changes, review-rectify
   loops, release work, and logical commit segregation.
