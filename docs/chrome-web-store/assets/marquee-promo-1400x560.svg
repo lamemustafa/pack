@@ -1,11 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1400" height="560" viewBox="0 0 1400 560" role="img" aria-labelledby="title desc">
   <title id="title">ComplyEaze Pack marquee promotional image source</title>
-  <desc id="desc">Synthetic Chrome Web Store marquee source for Pack v0.3.2. It shows no real GST Portal or taxpayer data.</desc>
+  <desc id="desc">Synthetic Chrome Web Store marquee source for Pack v0.4.0. It shows no real GST Portal or taxpayer data.</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#0b3b46" />
-      <stop offset="0.52" stop-color="#0f6b73" />
-      <stop offset="1" stop-color="#18324a" />
+      <stop offset="0" stop-color="#102a4f" />
+      <stop offset="0.52" stop-color="#1d4f85" />
+      <stop offset="1" stop-color="#17243b" />
     </linearGradient>
     <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#ffffff" />
@@ -16,28 +16,28 @@
     </filter>
   </defs>
   <rect width="1400" height="560" fill="url(#bg)" />
-  <path d="M0 430C190 360 346 386 506 426C672 468 850 540 1060 450C1204 388 1302 382 1400 404V560H0Z" fill="#d9f99d" opacity="0.16" />
+  <path d="M0 430C190 360 346 386 506 426C672 468 850 540 1060 450C1204 388 1302 382 1400 404V560H0Z" fill="#93c5fd" opacity="0.17" />
   <g transform="translate(112 128)">
     <text x="0" y="0" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="64" font-weight="750">ComplyEaze Pack</text>
-    <text x="4" y="68" fill="#d9f99d" font-family="Inter, Arial, sans-serif" font-size="31" font-weight="650">GSTR-1 and GSTR-3B local downloads</text>
-    <text x="4" y="124" fill="#e2e8f0" font-family="Inter, Arial, sans-serif" font-size="24">Source-first alpha for authorised GST Portal sessions</text>
+    <text x="4" y="68" fill="#bfdbfe" font-family="Inter, Arial, sans-serif" font-size="31" font-weight="650">Filed GSTR-1 and GSTR-3B downloads</text>
+    <text x="4" y="124" fill="#e2e8f0" font-family="Inter, Arial, sans-serif" font-size="24">Local-first alpha for your active GST Portal session</text>
     <g transform="translate(4 178)">
       <rect x="0" y="0" width="270" height="54" rx="27" fill="#ffffff" opacity="0.18" />
-      <text x="28" y="35" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="20" font-weight="650">No credentials stored</text>
+      <text x="28" y="35" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="20" font-weight="650">No Pack account needed</text>
       <rect x="298" y="0" width="260" height="54" rx="27" fill="#ffffff" opacity="0.18" />
       <text x="326" y="35" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="20" font-weight="650">Files stay local</text>
     </g>
   </g>
   <g transform="translate(880 78)" filter="url(#cardShadow)">
     <rect width="386" height="398" rx="28" fill="url(#panel)" />
-    <rect x="34" y="38" width="166" height="18" rx="9" fill="#0f6b73" />
+    <rect x="34" y="38" width="166" height="18" rx="9" fill="#1d4f85" />
     <rect x="34" y="83" width="318" height="70" rx="16" fill="#f1f5f9" />
     <text x="60" y="126" fill="#334155" font-family="Inter, Arial, sans-serif" font-size="23" font-weight="700">Filed returns</text>
-    <rect x="34" y="176" width="146" height="100" rx="18" fill="#0f766e" />
-    <rect x="206" y="176" width="146" height="100" rx="18" fill="#243b53" />
+    <rect x="34" y="176" width="146" height="100" rx="18" fill="#1d4f85" />
+    <rect x="206" y="176" width="146" height="100" rx="18" fill="#17243b" />
     <text x="69" y="232" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="26" font-weight="750">GSTR-1</text>
     <text x="235" y="232" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="26" font-weight="750">GSTR-3B</text>
-    <rect x="34" y="306" width="318" height="50" rx="25" fill="#f59e0b" />
-    <text x="84" y="338" fill="#111827" font-family="Inter, Arial, sans-serif" font-size="20" font-weight="750">Download selected period</text>
+    <rect x="34" y="306" width="318" height="50" rx="25" fill="#1d4f85" />
+    <text x="84" y="338" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="20" font-weight="750">Download selected period</text>
   </g>
 </svg>

@@ -4,49 +4,49 @@
     {
       "file": "small-promo-440x280.png",
       "height": 280,
-      "sha256": "dd2be16f7f660fc5d6222dfd22cc64443cfc86df95c3ecdaed8ccee39d3461dd",
+      "sha256": "8ab52389de440d2c3957922e9dcc0c766a06b767a5933c25ff11d09ed952e54d",
       "source": "small-promo-440x280.svg",
       "width": 440
     },
     {
       "file": "marquee-promo-1400x560.png",
       "height": 560,
-      "sha256": "a9e387d317e2ff66ab6357a0b142852f2980a8fa31642e3e9a4b32620fd8ac98",
+      "sha256": "6097bf88a0e482234b34b16dff17bdd53e1762a27ea9b6d3f51dc1852aba5c0a",
       "source": "marquee-promo-1400x560.svg",
       "width": 1400
     },
     {
       "file": "screenshot-local-downloads-1280x800.png",
       "height": 800,
-      "sha256": "76b5917b8c3e2d516f4a9d293078989b035e529306527c11058003c505339e8e",
+      "sha256": "4f3c4dbdb163022ba1d78ceb0ad9ff841a8885babf8d68a9ee82cb60be2d8acb",
       "source": "screenshot-local-downloads-1280x800.svg",
       "width": 1280
     },
     {
       "file": "screenshot-gstr3b-summary-pdf-1280x800.png",
       "height": 800,
-      "sha256": "16b47ddaf6426614947ae855529182f7980373d03c3517cf964d79c89fde599e",
+      "sha256": "f764fa8cbe44e006ff65dcbdefaa3398b3a6538348fd491c26a670ebebd09bc5",
       "source": "screenshot-gstr3b-summary-pdf-1280x800.svg",
       "width": 1280
     },
     {
       "file": "screenshot-local-review-state-1280x800.png",
       "height": 800,
-      "sha256": "39a74caa403ec96c2d6fe2850163145ee6a99fcfa692eeac0927bfb2e1db364a",
+      "sha256": "8ae1ff6df21a59fa4d88b85f82d8a785f2d04b0aaaa57ed091368c675856ae8c",
       "source": "screenshot-local-review-state-1280x800.svg",
       "width": 1280
     },
     {
       "file": "screenshot-options-clear-data-1280x800.png",
       "height": 800,
-      "sha256": "b10bca84078df36b62f864827e157dda0b063b845812bfe0c8c93359db003d15",
+      "sha256": "cb6ed48ac4c38913115b8c24b4869c508926251ca9fbc9ea31f9b20f0c8d7134",
       "source": "screenshot-options-clear-data-1280x800.svg",
       "width": 1280
     },
     {
       "file": "screenshot-reviewer-demo-1280x800.png",
       "height": 800,
-      "sha256": "02a599565c113e83d7b47283946143f190a43f214f846188de4547853482338b",
+      "sha256": "a6d66974398fd9053b9199c6e5521740bd3e2b12e2c831b778e19097bef1ef43",
       "source": "screenshot-reviewer-demo-1280x800.svg",
       "width": 1280
     }

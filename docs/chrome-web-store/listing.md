@@ -1,134 +1,179 @@
 # Chrome Web Store Listing
 
-This file is the source-controlled listing brief for the Chrome Web Store
-dashboard. Package upload and publish are automated separately; dashboard
-listing text, screenshots, promo assets, and privacy-practices fields are
-dashboard-held evidence and should be rechecked for each Store release.
+This file is the source-controlled listing and privacy-practices brief for the
+Chrome Web Store dashboard. Package upload and publish are automated
+separately; dashboard text, assets, declarations, and reviewer instructions
+remain dashboard-held evidence.
 
-Use [`dashboard-closeout.md`](dashboard-closeout.md) for the manual dashboard
-upload, privacy-practices, reviewer-instructions, and read-only status-monitor
-steps that remain after the protected package submit workflow succeeds.
+Use [`dashboard-closeout.md`](dashboard-closeout.md) for the action sequence.
 
-## Current Public Listing
+## Current Store State
 
-- Status: V0 listing available for the existing published package.
-- Verified source release: GitHub
-  [`v0.3.2`](https://github.com/lamemustafa/pack/releases/tag/v0.3.2)
-  includes GSTR-1 support. The Chrome ZIP asset is
-  `https://github.com/lamemustafa/pack/releases/download/v0.3.2/complyeazepack-0.3.2-chrome.zip`
-  with SHA-256
-  `6bd41a364a2466f0f255bef1b44e93694cc8d95431e7661fea5be3d52c9cdddb`.
-- Package update: the `v0.3.2` package was submitted through protected workflow
-  dispatch on 2026-07-04. Run `28704776806` uploaded the verified package with
-  upload state `SUCCEEDED`, publish state `PENDING_REVIEW`, and no warnings.
-- Publication state: a maintainer-provided Chrome Web Store publication email
-  on 2026-07-06 records item ID `nfnbhekccajjfgkppolomflaeledoccb`, item name
-  `ComplyEaze Pack: GSTR-1/GSTR-3B Downloader`, version `0.3.2`, and visibility
-  `Public`.
-- Evidence-hardening gap: the read-only Chrome Web Store Status workflow still
-  needs a `require_published=true` run after status-environment credentials are
-  available. Dashboard-held field snapshots can be added if maintainers want
-  evidence beyond the publication email.
-- External boundary: no official, GSTN-approved, filing, reconciliation, all GST
-  returns, backend sync, or professional-review claim.
+- Published package: `v0.3.2`.
+- Pending package: `v0.4.0`, source commit
+  `eb21404d274917876fcba20abce09216ce6348f4`.
+- Release asset: `complyeazepack-0.4.0-chrome.zip`.
+- Release asset SHA-256:
+  `6ee4be24cafbe15db69275cac4da6b212f3de49b0f747eb9909eed7d293347c6`.
+- GitHub release: <https://github.com/lamemustafa/pack/releases/tag/v0.4.0>.
+- Workflow run `29507382500` built, tested, verified, zipped, published the
+  prerelease assets, and uploaded the exact ZIP to Chrome Web Store. The Store
+  upload state was `SUCCEEDED`; publish returned HTTP 400 because dashboard
+  requirements were incomplete.
+- The dashboard screenshots supplied on 2026-07-16 show stale GSTR-3B-only
+  copy/assets and a blank required `offscreen` permission justification.
 
-## Recommended Store Copy
+The Store-supported alpha claims remain GSTR-1 and GSTR-3B single-period
+downloads. Private GSTR-2B and full-fiscal-year workflows are source-build
+experiments and must not be advertised as Store-supported features.
 
-Title:
+## Store Listing Fields
+
+Title from package:
 
 ```text
-ComplyEaze Pack: GSTR-1/GSTR-3B Downloader
+ComplyEaze Pack: GST Return Downloader
 ```
 
-Short description:
+Summary from package:
 
 ```text
-Alpha: locally download filed GSTR-1 and GSTR-3B documents from your active GST Portal session.
+Alpha: locally download GSTR-1/GSTR-3B files; private GSTR-2B downloads are source-build experimental.
 ```
 
-Opening description:
+Description:
 
 ```text
-ComplyEaze Pack helps authorised users locally download filed GSTR-3B PDFs,
-filed GSTR-1 summary PDFs, and optional GSTR-1 e-invoice details Excel files
-from an active GST Portal browser session. It does not ask for or store GST
-Portal credentials, OTPs, CAPTCHA responses, cookies, or session tokens.
+Download filed GST returns locally from your active GST Portal session.
+
+ComplyEaze Pack helps authorised users download their own filed GST returns using GST Portal pages already open in Chrome. The Store-supported alpha scope is:
+
+• GSTR-3B: filed-return summary PDF
+• GSTR-1: summary PDF and, when the portal provides it, e-invoice details Excel
+
+Files are saved by Chrome to the user's device. Pack does not require a Pack or ComplyEaze account. It does not ask for or store GST Portal credentials, OTPs, CAPTCHA responses, cookies, or session tokens, and it does not upload GST documents or return contents to ComplyEaze.
+
+The package also contains private source-build experiments for GSTR-2B and full-fiscal-year ZIP workflows. These are not Store-supported claims for this alpha release.
+
+Pack's content script runs only on the four declared GST Portal hosts. When a supported page loads, it reads page context locally so Pack can identify eligible workflows; artifact capture and downloads start only after an explicit user action. Pack keeps limited redacted recovery state locally so interrupted work does not retry blindly. Temporary artifact bytes may be staged in browser-local OPFS for explicit capture or ZIP operations. Pack normally removes those bytes after confirmed export or explicit discard; if local cleanup fails, it retains them with a cleanup-pending status until a later cleanup attempt succeeds.
+
+ComplyEaze Pack is an independent third-party tool. It is not affiliated with, endorsed by, or operated by GSTN, CBIC, or the Government of India.
 ```
 
-Required disclaimer:
+Other fields:
+
+| Field          | Value                                 |
+| -------------- | ------------------------------------- |
+| Category       | `Tools`                               |
+| Official URL   | `complyeaze.com`                      |
+| Homepage URL   | `https://pack.complyeaze.com/gst`     |
+| Support URL    | `https://pack.complyeaze.com/support` |
+| Mature content | Off                                   |
+| Payments       | Free of charge                        |
+| Visibility     | Public                                |
+
+## Privacy Practices Fields
+
+Single purpose:
 
 ```text
-ComplyEaze Pack is an independent third-party tool. It is not affiliated with,
-endorsed by, or operated by GSTN, CBIC, or the Government of India.
+ComplyEaze Pack lets authorised GST Portal users locally download their own selected filed-return artifacts from an active browser session. It does not file returns, request credentials, or transmit GST documents to ComplyEaze.
 ```
 
-## Release Evidence For Dashboard Update
+Permission justifications:
 
-| Item                 | Evidence                                                                                                                  |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Source tag           | [`v0.3.2`](https://github.com/lamemustafa/pack/releases/tag/v0.3.2)                                                       |
-| Source commit        | `7bc2c2604f045c1d5547f6ab63a84dbb91de161e`                                                                                |
-| Chrome ZIP asset     | `complyeazepack-0.3.2-chrome.zip`                                                                                         |
-| Chrome ZIP SHA-256   | `6bd41a364a2466f0f255bef1b44e93694cc8d95431e7661fea5be3d52c9cdddb`                                                        |
-| Release workflow     | GitHub Actions run `28702352034`; package, exact-ZIP verification, provenance, and GitHub release asset upload passed.    |
-| Store dry-run        | GitHub Actions run `28704697827`; downloaded and verified `v0.3.2` release assets and produced a dry-run publish request. |
-| Store package submit | GitHub Actions run `28704776806`; upload state `SUCCEEDED`, publish state `PENDING_REVIEW`, warnings `[]`.                |
-| Store publication    | Maintainer-provided Chrome Web Store publication email dated 2026-07-06.                                                  |
+### `downloads`
 
-The publication email records item ID `nfnbhekccajjfgkppolomflaeledoccb`, item
-name `ComplyEaze Pack: GSTR-1/GSTR-3B Downloader`, version `0.3.2`, and
-visibility `Public`.
+```text
+Used only after an explicit user action to save a target-bound GST Portal artifact or Pack-created ZIP locally, verify that Chrome reports a completed non-empty download, or create bounded synthetic reviewer-demo and download-prompt diagnostic files from Pack's Options page.
+```
+
+### `offscreen`
+
+```text
+Used only for a bundled extension-owned offscreen document to create and revoke temporary Blob URLs, stage user-selected PDF or Excel bytes in browser-local OPFS for interrupted ZIP recovery, and assemble a requested ZIP. It loads no remote content and closes after the bounded operation.
+```
+
+### `scripting`
+
+```text
+Used only on the four declared GST Portal hosts to detect supported filed-return pages; verify the selected return, financial year, period, and artifact identity; activate user-requested portal download controls; and, for action-bound capture paths, intercept the resulting fetch, XHR, or Blob response in the page's main world so the selected PDF or Excel bytes can be saved locally or staged in OPFS.
+```
+
+### `storage`
+
+```text
+Used for local-only install metadata, the allow-listed GST origin, selected scope and run lease, redacted recovery status, and synthetic demo summaries including synthetic filenames and relative paths. It does not store credentials, cookies, OTPs, CAPTCHA responses, taxpayer identifiers, portal HTML, raw GST Portal URLs, real GST filenames or local paths, or tax values. Temporary artifact bytes are isolated in browser-local OPFS, not chrome.storage. Pack normally removes those bytes after confirmed export or explicit discard; if cleanup fails, it retains them locally with a cleanup-pending status until a later cleanup attempt succeeds.
+```
+
+### Host permissions
+
+```text
+Required only for four exact GST Portal hosts to detect supported filed-return pages, validate the selected return, financial year, period, and artifact, and execute user-initiated local downloads. Pack does not use broad host access, read credentials or cookies, or send portal data to ComplyEaze.
+```
+
+Remote code:
+
+```text
+No, I am not using remote code.
+```
+
+### Data usage selections
+
+Chrome defines handling to include local processing and storage. Select the
+categories Pack necessarily handles while moving a user's chosen filed return:
+
+- [x] Personally identifiable information — a selected GST document can contain
+      taxpayer identifiers or names; Pack does not extract them into extension
+      metadata or transmit them. Selected artifact bytes can be staged temporarily
+      in browser-local OPFS and retained locally if cleanup fails.
+- [x] Financial and payment information — a selected GST return can contain tax
+      and transaction values; Pack handles the artifact bytes locally only for the
+      requested download/ZIP.
+- [x] Website content — Pack reads supported GST Portal page state and controls
+      locally to identify and download the selected artifact.
+- [ ] Health information.
+- [ ] Authentication information — Pack does not request, read, store, or
+      transmit credentials, cookies, OTPs, CAPTCHA responses, or session tokens.
+- [ ] Personal communications.
+- [ ] Location.
+- [ ] Web history — Pack does not collect or retain a list of visited pages.
+- [ ] User activity — Pack does not log clicks, keystrokes, mouse movement, or
+      browsing activity.
+
+Certify all three Limited Use statements. Privacy policy URL:
+`https://pack.complyeaze.com/privacy`.
+
+Chrome's official FAQ explicitly states that local processing or storage still
+requires disclosure:
+<https://developer.chrome.com/docs/webstore/program-policies/user-data-faq>.
 
 ## Asset Inventory
 
-Committed brand and icon assets:
+Use the seven generated PNGs under
+[`assets/exports/`](assets/exports/). They are generated from the source SVGs,
+contain synthetic UI only, and exclude GST Portal screenshots, taxpayer data,
+real GST filenames, local paths, and downloaded content. The committed hashes
+pin the reviewed dashboard bytes; regeneration on a host with different installed
+fonts can produce different pixels, so upload the committed hash-matched exports.
 
-| Asset                                 | SHA-256                                                            |
-| ------------------------------------- | ------------------------------------------------------------------ |
-| `public/brand/pack-logo.svg`          | `be48b4275f5f8352b6eaacab2e7921530fa57844c361673c4e1072b80822cbfb` |
-| `public/brand/pack-logo-reversed.svg` | `307ff5d7aea758f85282befa1cf5e7c4e29a6e39c286c34f070264571de8a87e` |
-| `public/brand/pack-icon.svg`          | `89938003655923e2c9a777093bb65223e3eab39deab28ad11fa6a2e1ccaaa67a` |
-| `public/icons/icon-128.png`           | `3a5d56c19e499ac6d51579589fb867449cad3ce0926fe57bcdc3a9203aa08f26` |
-| `public/icons/icon-256.png`           | `aec654f6dda6525fdbb03448c99e917a8143332c3e2d1b1bb4ccded83cc5c2c6` |
-| `public/icons/icon-512.png`           | `6380a02494c5da2c1cd4297dcfb5bc53448d95cd117d804c5a5d38f1f390def3` |
+| Dashboard slot     | Export                                                      |
+| ------------------ | ----------------------------------------------------------- |
+| Store icon         | `public/icons/icon-128.png`                                 |
+| Small promo tile   | `assets/exports/small-promo-440x280.png`                    |
+| Marquee promo tile | `assets/exports/marquee-promo-1400x560.png`                 |
+| Screenshot 1       | `assets/exports/screenshot-gstr3b-summary-pdf-1280x800.png` |
+| Screenshot 2       | `assets/exports/screenshot-local-downloads-1280x800.png`    |
+| Screenshot 3       | `assets/exports/screenshot-local-review-state-1280x800.png` |
+| Screenshot 4       | `assets/exports/screenshot-options-clear-data-1280x800.png` |
+| Screenshot 5       | `assets/exports/screenshot-reviewer-demo-1280x800.png`      |
 
-Synthetic source-controlled Store asset drafts:
+The asset filenames, dimensions, source files, and current SHA-256 values are
+recorded in `assets/exports/asset-hashes.json`.
 
-| Asset                                                                     | Intended dashboard slot        | Notes                                     |
-| ------------------------------------------------------------------------- | ------------------------------ | ----------------------------------------- |
-| `docs/chrome-web-store/assets/small-promo-440x280.svg`                    | Small promotional image source | Synthetic, no portal/account data.        |
-| `docs/chrome-web-store/assets/marquee-promo-1400x560.svg`                 | Optional marquee image source  | Synthetic, no portal/account data.        |
-| `docs/chrome-web-store/assets/screenshot-local-downloads-1280x800.svg`    | Screenshot source              | Synthetic GSTR-1 PDF/Excel view.          |
-| `docs/chrome-web-store/assets/screenshot-gstr3b-summary-pdf-1280x800.svg` | Screenshot source              | Synthetic GSTR-3B PDF view.               |
-| `docs/chrome-web-store/assets/screenshot-local-review-state-1280x800.svg` | Screenshot source              | Synthetic local target-review state.      |
-| `docs/chrome-web-store/assets/screenshot-options-clear-data-1280x800.svg` | Screenshot source              | Synthetic local storage/privacy controls. |
-| `docs/chrome-web-store/assets/screenshot-reviewer-demo-1280x800.svg`      | Screenshot source              | Synthetic reviewer demo output.           |
+## Dashboard Evidence Boundary
 
-Generated Store dashboard PNG exports:
-
-| Asset                                                                             | Intended dashboard slot | SHA-256                                                            |
-| --------------------------------------------------------------------------------- | ----------------------- | ------------------------------------------------------------------ |
-| `docs/chrome-web-store/assets/exports/small-promo-440x280.png`                    | Small promotional image | `dd2be16f7f660fc5d6222dfd22cc64443cfc86df95c3ecdaed8ccee39d3461dd` |
-| `docs/chrome-web-store/assets/exports/marquee-promo-1400x560.png`                 | Optional marquee image  | `a9e387d317e2ff66ab6357a0b142852f2980a8fa31642e3e9a4b32620fd8ac98` |
-| `docs/chrome-web-store/assets/exports/screenshot-local-downloads-1280x800.png`    | Screenshot              | `76b5917b8c3e2d516f4a9d293078989b035e529306527c11058003c505339e8e` |
-| `docs/chrome-web-store/assets/exports/screenshot-gstr3b-summary-pdf-1280x800.png` | Screenshot              | `16b47ddaf6426614947ae855529182f7980373d03c3517cf964d79c89fde599e` |
-| `docs/chrome-web-store/assets/exports/screenshot-local-review-state-1280x800.png` | Screenshot              | `39a74caa403ec96c2d6fe2850163145ee6a99fcfa692eeac0927bfb2e1db364a` |
-| `docs/chrome-web-store/assets/exports/screenshot-options-clear-data-1280x800.png` | Screenshot              | `b10bca84078df36b62f864827e157dda0b063b845812bfe0c8c93359db003d15` |
-| `docs/chrome-web-store/assets/exports/screenshot-reviewer-demo-1280x800.png`      | Screenshot              | `02a599565c113e83d7b47283946143f190a43f214f846188de4547853482338b` |
-| `docs/chrome-web-store/assets/exports/asset-hashes.json`                          | Export manifest         | Tracks file names, dimensions, sources, and SHA-256 hashes.        |
-
-Chrome's current image guidance is recorded in
-[`docs/chrome-web-store/assets/README.md`](assets/README.md). Export dashboard
-uploads from the source assets only after visual QA confirms the generated PNGs
-remain legible and contain no real GST Portal/account data. The current PNG
-exports were generated with `pnpm store:assets` and visually checked as
-synthetic/redacted source-controlled assets. The Store-published `v0.3.2`
-evidence is the maintainer-provided Chrome Web Store publication email; retain
-dashboard-held field snapshots separately if stricter asset-by-asset evidence is
-needed.
-
-Dashboard-held items to recheck before future Store releases:
-
-- Upload the generated screenshot and promotional PNG exports to the dashboard.
-- Record Chrome Web Store image/listing review state for the uploaded exports.
-- Privacy-practices declarations aligned with `docs/PRIVACY_QA.md`.
+Saving the draft, submitting for review, and final publication are external
+dashboard actions. Record the exact dashboard review state after each action;
+source-controlled text and exports alone do not prove the dashboard accepted
+them.
