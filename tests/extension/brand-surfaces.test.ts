@@ -29,6 +29,11 @@ describe("Pack brand surfaces", () => {
     expect(popupControllerSource).toContain("PACK_RESOLVE_FULL_FISCAL_YEAR_TARGET");
     expect(optionsSource).toContain("/icons/icon-48.png");
     expect(optionsSource).toContain("PACK_START_SYNTHETIC_DEMO");
+    expect(optionsSource).toContain("runSyntheticDemo(false)");
+    expect(optionsSource).toContain("runSyntheticDemo(true)");
+    expect(optionsSource).toContain("Download synthetic demo files");
+    expect(optionsSource).toContain("Confirm their completion in browser Downloads.");
+    expect(optionsSource).toContain("Review browser download permissions, then try again.");
     expect(optionsSource).toContain("Last synthetic demo manifest");
     expect(optionsSource).toContain("PACK_CLEAR_LOCAL_DATA");
   });

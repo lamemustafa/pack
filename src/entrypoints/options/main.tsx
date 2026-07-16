@@ -49,23 +49,29 @@ function OptionsPage() {
     }
   }
 
-  async function runSyntheticDemo() {
-    setBusy("demo");
+  async function runSyntheticDemo(downloadArtifacts: boolean) {
+    setBusy(downloadArtifacts ? "demo-downloads" : "demo-manifest");
     try {
       const response = (await browser.runtime.sendMessage({
         type: "PACK_START_SYNTHETIC_DEMO",
-        payload: { downloadArtifacts: false },
+        payload: { downloadArtifacts },
       })) as PackMessageResponse;
       if (response.ok && "downloaded" in response) {
         setManifestSummary(formatManifestSummary(response.manifest));
         setStatus(
           response.downloaded > 0
-            ? `Synthetic reviewer demo created with ${response.downloaded} local downloads.`
+            ? `Pack started ${response.downloaded} synthetic demo downloads. Confirm their completion in browser Downloads.`
             : "Synthetic reviewer demo manifest created without starting local downloads.",
         );
       } else {
         setStatus(response.ok ? "Unexpected Pack response." : response.error);
       }
+    } catch {
+      setStatus(
+        downloadArtifacts
+          ? "The browser did not accept every synthetic demo download. Review browser download permissions, then try again."
+          : "Pack could not create the synthetic reviewer demo. Try again.",
+      );
     } finally {
       setBusy(null);
     }
@@ -126,9 +132,17 @@ function OptionsPage() {
           type="button"
           className="secondary"
           disabled={busy !== null}
-          onClick={() => void runSyntheticDemo()}
+          onClick={() => void runSyntheticDemo(false)}
         >
-          {busy === "demo" ? "Building demo..." : "Run local reviewer demo"}
+          {busy === "demo-manifest" ? "Building manifest..." : "Run local reviewer demo"}
+        </button>
+        <button
+          type="button"
+          className="secondary"
+          disabled={busy !== null}
+          onClick={() => void runSyntheticDemo(true)}
+        >
+          {busy === "demo-downloads" ? "Starting downloads..." : "Download synthetic demo files"}
         </button>
         <button
           type="button"

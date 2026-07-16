@@ -11,16 +11,19 @@ Portal credentials.
 3. Confirm the popup opens without any Axal, ComplyEaze, or Pack account prompt.
 4. Open Pack options.
 5. Click `Run local reviewer demo`.
-6. Confirm Chrome downloads a Pack manifest, exception CSV, and demo index
-   file under `Pack-Demo/`.
-7. Click `Last synthetic demo manifest` to inspect the local demo manifest summary.
-8. Optionally click `Probe data URL download` or `Probe offscreen Blob download`
-   to inspect browser download-prompt behavior with synthetic local-only bytes.
-9. Optionally click `Check folder access`, choose a test folder, and confirm the
-   Options page reports synthetic read-back evidence without retaining a folder
-   handle.
-10. Click `Clear local Pack data`.
-11. Reopen Pack options and confirm the previous manifest state has been cleared.
+6. Confirm the local demo manifest summary appears without requiring a download.
+7. Click `Download synthetic demo files`.
+8. Confirm Chrome downloads a Pack manifest, exception CSV, and demo index
+   file under `Pack-Demo/`, and confirm each download completes in Chrome
+   Downloads.
+9. Click `Last synthetic demo manifest` to inspect the local demo manifest summary.
+10. Optionally click `Probe data URL download` or `Probe offscreen Blob download`
+    to inspect browser download-prompt behavior with synthetic local-only bytes.
+11. Optionally click `Check folder access`, choose a test folder, and confirm the
+    Options page reports synthetic read-back evidence without retaining a folder
+    handle.
+12. Click `Clear local Pack data`.
+13. Reopen Pack options and confirm the previous manifest state has been cleared.
 
 ## Expected permissions
 
