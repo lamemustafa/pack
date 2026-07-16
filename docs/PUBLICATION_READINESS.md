@@ -26,7 +26,7 @@ stable-release claims.
   2026-07-06 records item ID `nfnbhekccajjfgkppolomflaeledoccb`, item name
   `ComplyEaze Pack: GSTR-1/GSTR-3B Downloader`, version `0.3.2`, and visibility
   `Public`.
-- Repository source has since advanced to `v0.3.3`; the current Store-published
+- Repository source has since advanced to `v0.4.0`; the current Store-published
   package evidence is for `v0.3.2` only.
 - V0 purpose: download filed GSTR-3B PDFs, GSTR-1 summary PDFs, and optional
   GSTR-1 e-invoice details Excel files locally from the user's active,
