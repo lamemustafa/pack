@@ -140,8 +140,8 @@ skip ahead or "fix forward" past a failing gate without the user's input.
 
 Before treating a ZIP as store-ready, do the manual smoke test described in
 `docs/RELEASE.md`'s "Manual clean-profile QA" section: load
-`.output/chrome-mv3` in a clean Chrome profile, confirm the permission prompt
-lists only the 3 GST hosts plus downloads/storage, confirm the popup stays
+`.output/chrome-mv3` in a clean Chrome profile, confirm the generated manifest
+lists only the 4 reviewed GST hosts plus downloads/offscreen/scripting/storage, confirm the popup stays
 dormant off GST domains, run the synthetic demo from Pack Options, confirm
 downloaded files land under `Pack-Demo/`, confirm the generated manifest and
 exceptions file look obviously synthetic, clear local Pack data from Options,

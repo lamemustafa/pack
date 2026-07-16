@@ -61,8 +61,9 @@ pass/fail per item with file:line evidence.
    just a privacy one).
 4. **No expanded reach.** No `externally_connectable`, no new host permissions,
    no broadening beyond the exact permission set in
-   `src/extension/manifest-policy.ts` (`downloads`, `scripting`, `storage`, and
-   only `www.gst.gov.in`, `services.gst.gov.in`, `return.gst.gov.in`). If the
+   `src/extension/manifest-policy.ts` (`downloads`, `offscreen`, `scripting`,
+   `storage`, and only `www.gst.gov.in`, `services.gst.gov.in`,
+   `return.gst.gov.in`, `gstr2b.gst.gov.in`). If the
    diff touches that file, diff it against the current committed version and
    flag every change as Critical pending explicit human sign-off — do not wave
    through "looks fine" here.

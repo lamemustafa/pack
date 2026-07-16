@@ -62,8 +62,9 @@ still report every step you attempted or skipped.
 6. `wxt build` (production build to `.output/chrome-mv3`).
 7. `node scripts/verify-extension-package.mjs .output/chrome-mv3`
    (`pnpm verify:package`) — confirms exact manifest permissions
-   (`downloads`, `scripting`, `storage`), exact 3 GST hosts
-   (`www.gst.gov.in`, `services.gst.gov.in`, `return.gst.gov.in`), CSP,
+   (`downloads`, `offscreen`, `scripting`, `storage`), exact 4 GST hosts
+   (`www.gst.gov.in`, `services.gst.gov.in`, `return.gst.gov.in`,
+   `gstr2b.gst.gov.in`), CSP,
    metadata, and icons.
 8. `node scripts/assert-clean-worktree.mjs` (`pnpm verify:clean`) — confirms
    the build did not dirty tracked files.
@@ -150,8 +151,8 @@ Structure your final output as:
    from a human — network access, a real Chrome/Brave host, CWS credentials,
    etc.).
 5. **Non-negotiables spot-check** — explicitly confirm or flag: manifest
-   permissions are exactly `["downloads","scripting","storage"]`, hosts are
-   exactly the 3 GST hosts, no `externally_connectable`, no analytics/remote
+   permissions are exactly `["downloads","offscreen","scripting","storage"]`,
+   hosts are exactly the 4 GST hosts, no `externally_connectable`, no analytics/remote
    code, GST-specific logic still confined to `src/connectors/gst`.
 
 Never soften a fail/blocked into a pass to make the report look cleaner. If
