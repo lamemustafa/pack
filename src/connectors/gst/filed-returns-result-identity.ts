@@ -131,7 +131,7 @@ function extractFinancialYearEvidence(text: string): { valid: boolean; values: s
     ),
   );
   const bareMatches = Array.from(
-    text.matchAll(/\b(20\d{2})\s*[-\u2013/]\s*(\d{2}|\d{4})(?!\d|\s*[-/]\s*\d)/g),
+    text.matchAll(/\b(20\d{2})\s*[-\u2013/]\s*(\d{2}|\d{4})(?!\d|\s*[-\u2013/]\s*\d)/g),
   );
   const matches = [...labeledMatches, ...bareMatches];
   const values = matches

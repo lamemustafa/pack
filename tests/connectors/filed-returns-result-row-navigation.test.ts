@@ -115,6 +115,15 @@ describe("target-bound filed GSTR-1 View point", () => {
     expect(findMatchingFiledReturnRows(documentRef, SCOPE)).toHaveLength(1);
   });
 
+  it("ignores en-dash filing dates when a dedicated FY cell matches", () => {
+    const documentRef = createTableResultDocument(
+      ["Return Type", "Financial Year", "Tax Period", "Status", "View"],
+      ["GSTR-1 / IFF", "2025-26", "April", "Filed on 2025–04–20", "View"],
+    );
+
+    expect(findMatchingFiledReturnRows(documentRef, SCOPE)).toHaveLength(1);
+  });
+
   it("rejects a date-shaped value when it is explicitly labeled as FY", () => {
     const documentRef = createTableResultDocument(
       ["Return Type", "Financial Year", "Tax Period", "Status", "View"],
@@ -145,13 +154,26 @@ describe("target-bound filed GSTR-1 View point", () => {
     expect(findMatchingFilterBoundGstr1Results(documentRef, SCOPE)).toHaveLength(1);
   });
 
-  it("does not promote a valid card into an unlabeled outer section", () => {
+  it("does not promote a semantic card into an unlabeled outer section", () => {
     const documentRef = createFilterBoundResultDocument();
     const section = documentRef.querySelector("section");
     section?.removeAttribute("aria-label");
     section?.append(" Instructions for GSTR-2B and FY 2024/25 results");
 
     expect(findMatchingFilterBoundGstr1Results(documentRef, SCOPE)).toHaveLength(1);
+  });
+
+  it("evaluates identity on an unlabeled section card around an inner View wrapper", () => {
+    const documentRef = createFilterBoundResultDocument();
+    const section = documentRef.querySelector("section");
+    if (!section) throw new Error("Expected result section.");
+    section.removeAttribute("aria-label");
+    section.innerHTML = `
+      <div><h2>GSTR-1 / IFF</h2><button data-view>View</button></div>
+      <p>Tax Period: May</p><p>FY 2024/25</p>
+    `;
+
+    expect(findMatchingFilterBoundGstr1Results(documentRef, SCOPE)).toEqual([]);
   });
 
   it("does not mistake a result-card class for the surrounding results surface", () => {

@@ -110,7 +110,6 @@ function findGstr1ResultContainer(view: HTMLElement): HTMLElement | null {
   while (current && current !== current.ownerDocument.body) {
     if (["MAIN", "FORM"].includes(current.tagName)) break;
     if (isResultSurfaceBoundary(current)) break;
-    if (current.tagName === "SECTION" && result) break;
     if (isCandidateResultContainer(current)) {
       if (
         getClickableElements(current).filter(
