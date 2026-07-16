@@ -380,7 +380,7 @@ describe("extension package verifier", () => {
     expect(packageJson.scripts["verify:browser"]).toBe(
       "node scripts/verify-extension-browser.mjs .output/chrome-mv3",
     );
-    expect(packageJson.devDependencies["@playwright/test"]).toBe("1.55.1");
+    expect(packageJson.devDependencies["@playwright/test"]).toBe("1.61.1");
   });
 
   it("keeps browser release verification fail-closed around popup, scripts, network, and runtime errors", async () => {
