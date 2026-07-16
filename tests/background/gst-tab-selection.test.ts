@@ -122,6 +122,8 @@ describe("Pack GST tab selection", () => {
       if (message.type === "PACK_CONTENT_PING_V2") {
         return { ok: true, context: null };
       }
+      const contentMessage = unwrapContentRequest(message);
+      expect(contentMessage.type).toBe("PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3");
       return {
         ok: true,
         flowStep: {
@@ -153,11 +155,14 @@ describe("Pack GST tab selection", () => {
       target: { tabId: 33 },
     });
     expect(browserMocks.tabs.sendMessage).toHaveBeenLastCalledWith(33, {
-      type: "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
+      type: "PACK_CONTENT_REQUEST_V31",
       payload: {
-        financialYear: "2025-26",
-        period: "March",
-        returnType: "GSTR-3B",
+        type: "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
+        payload: {
+          financialYear: "2025-26",
+          period: "March",
+          returnType: "GSTR-3B",
+        },
       },
     });
   });
@@ -198,7 +203,7 @@ describe("Pack GST tab selection", () => {
           contentScriptVersion: PACK_CONTENT_SCRIPT_PROTOCOL_VERSION,
         };
       }
-      if (message.type === "PACK_CONTENT_REFRESH_CONTEXT_V3") {
+      if (unwrapContentRequest(message).type === "PACK_CONTENT_REFRESH_CONTEXT_V3") {
         const { PACK_CONTENT_SCRIPT_PROTOCOL_VERSION } = await import("../../src/core/messages");
         return {
           ok: true,
@@ -220,7 +225,8 @@ describe("Pack GST tab selection", () => {
 
     expect(response).toMatchObject({ ok: true, context: liveContext });
     expect(browserMocks.tabs.sendMessage).toHaveBeenCalledWith(31, {
-      type: "PACK_CONTENT_REFRESH_CONTEXT_V3",
+      type: "PACK_CONTENT_REQUEST_V31",
+      payload: { type: "PACK_CONTENT_REFRESH_CONTEXT_V3" },
     });
     expect(browserMocks.storage.session.set).toHaveBeenCalledWith({
       "pack:last-context": liveContext,
@@ -311,7 +317,9 @@ describe("Pack GST tab selection", () => {
           contentScriptVersion: PACK_CONTENT_SCRIPT_PROTOCOL_VERSION,
         };
       }
-      if (message.type === "PACK_CONTENT_REFRESH_FILED_RETURNS_OBSERVATION_V3") {
+      if (
+        unwrapContentRequest(message).type === "PACK_CONTENT_REFRESH_FILED_RETURNS_OBSERVATION_V3"
+      ) {
         return { ok: false, error: "No live observation." };
       }
       return { ok: false, error: "Unexpected message." };
@@ -348,6 +356,12 @@ describe("Pack GST tab selection", () => {
       },
     });
   });
+
+  function unwrapContentRequest(message: { payload?: unknown; type: string }): { type?: string } {
+    return message.type === "PACK_CONTENT_REQUEST_V31" && message.payload
+      ? (message.payload as { type?: string })
+      : message;
+  }
 
   it("finds a GST tab by approved host patterns when the popup is open as a tab", async () => {
     browserMocks.tabs.query

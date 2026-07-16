@@ -85,7 +85,12 @@ export function markFullFiscalYearRestagingRequired(
           ...target,
           status: "blocked" as const,
           safeSignals: Array.from(
-            new Set([...target.safeSignals, "full-fiscal-year-restaging-required"]),
+            new Set([
+              ...target.safeSignals.filter(
+                (signal) => !signal.startsWith("full-fiscal-year-opfs-staged:"),
+              ),
+              "full-fiscal-year-restaging-required",
+            ]),
           ),
           safeMessage: `Pack needs to restage ${target.period} before rebuilding the fiscal-year ZIP.`,
           updatedAt: timestamp,

@@ -8,6 +8,7 @@ import {
 import { observeFiledReturnsPageText } from "../connectors/gst/filed-returns-observer";
 import type { PortalContext, PortalObservation } from "../core/contracts";
 import {
+  PACK_CONTENT_REQUEST_ENVELOPE_TYPE,
   PACK_CONTENT_SCRIPT_PROTOCOL_VERSION,
   type PackMessage,
   type PackMessageResponse,
@@ -154,12 +155,16 @@ export async function sendMessageToTabWithInjection(
   >,
 ): Promise<PackMessageResponse> {
   await ensureContentScript(tabId);
+  const request = {
+    type: PACK_CONTENT_REQUEST_ENVELOPE_TYPE,
+    payload: message,
+  };
   try {
-    return (await browser.tabs.sendMessage(tabId, message)) as PackMessageResponse;
+    return (await browser.tabs.sendMessage(tabId, request)) as PackMessageResponse;
   } catch (error) {
     if (!isMissingReceivingEndError(error)) throw error;
     await ensureContentScript(tabId);
-    return browser.tabs.sendMessage(tabId, message) as Promise<PackMessageResponse>;
+    return browser.tabs.sendMessage(tabId, request) as Promise<PackMessageResponse>;
   }
 }
 

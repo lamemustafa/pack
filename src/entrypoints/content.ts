@@ -14,6 +14,7 @@ import {
 } from "../connectors/gst/filed-returns-search-state";
 import { resolveGstr1FiledReturnViewPoint } from "../connectors/gst/filed-returns-result-row-navigation";
 import {
+  PACK_CONTENT_REQUEST_ENVELOPE_TYPE,
   PACK_CONTENT_SCRIPT_PROTOCOL_VERSION,
   isPackMessage,
   type PackMessageResponse,
@@ -65,11 +66,12 @@ export default defineContentScript({
         return false;
       }
 
-      if (!isPackMessage(message)) {
+      const contentMessage = unwrapContentRequest(message);
+      if (!isPackMessage(contentMessage)) {
         return false;
       }
 
-      if (message.type === "PACK_CONTENT_PING_V2") {
+      if (contentMessage.type === "PACK_CONTENT_PING_V2") {
         sendResponse({
           ok: true,
           context: null,
@@ -78,7 +80,7 @@ export default defineContentScript({
         return false;
       }
 
-      if (message.type === "PACK_CONTENT_REFRESH_CONTEXT_V3") {
+      if (contentMessage.type === "PACK_CONTENT_REFRESH_CONTEXT_V3") {
         const refreshedContext = detectGstPortalContext(
           window.location,
           document.title,
@@ -100,7 +102,7 @@ export default defineContentScript({
         return false;
       }
 
-      if (message.type === "PACK_CONTENT_NAVIGATE_FILED_RETURNS_V3") {
+      if (contentMessage.type === "PACK_CONTENT_NAVIGATE_FILED_RETURNS_V3") {
         void navigateToFiledReturnsPage(document)
           .then((navigation) =>
             sendResponse({ ok: true, navigation } satisfies PackMessageResponse),
@@ -114,7 +116,7 @@ export default defineContentScript({
         return true;
       }
 
-      if (message.type === "PACK_CONTENT_REFRESH_FILED_RETURNS_OBSERVATION_V3") {
+      if (contentMessage.type === "PACK_CONTENT_REFRESH_FILED_RETURNS_OBSERVATION_V3") {
         const observation = sendFiledReturnsObservation();
         sendResponse({
           ok: true,
@@ -123,8 +125,8 @@ export default defineContentScript({
         return false;
       }
 
-      if (message.type === "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3") {
-        void triggerFiledReturnDownload(document, message.payload)
+      if (contentMessage.type === "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3") {
+        void triggerFiledReturnDownload(document, contentMessage.payload)
           .then(({ mainWorldCaptureRequest, downloadTrigger }) => {
             const observation = sendFiledReturnsObservation();
             if (mainWorldCaptureRequest) {
@@ -152,13 +154,13 @@ export default defineContentScript({
         return true;
       }
 
-      if (message.type === "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3") {
-        const flowStep = detectPostClickBlockedState(document, message.payload, []);
+      if (contentMessage.type === "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3") {
+        const flowStep = detectPostClickBlockedState(document, contentMessage.payload, []);
         sendResponse({
           ok: true,
           flowStep: flowStep ?? {
             connectorId: "gst",
-            scopeId: filedReturnScopeId(message.payload.returnType),
+            scopeId: filedReturnScopeId(contentMessage.payload.returnType),
             state: "candidate-not-found",
             safeSignals: ["filed-return-post-click-blocked-state-not-found"],
             safeMessage: "Pack did not find a recognized post-click portal block.",
@@ -167,8 +169,8 @@ export default defineContentScript({
         return false;
       }
 
-      if (message.type === "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V3") {
-        void resolveFiledGstr3bVerifiedPdfDownloadRequest(document, message.payload)
+      if (contentMessage.type === "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V3") {
+        void resolveFiledGstr3bVerifiedPdfDownloadRequest(document, contentMessage.payload)
           .then((resolved) => {
             const observation = sendFiledReturnsObservation();
             if (!resolved.ok) {
@@ -183,7 +185,7 @@ export default defineContentScript({
             sendResponse({
               ok: true,
               directDownloadRequest: {
-                actionId: message.payload.actionId,
+                actionId: contentMessage.payload.actionId,
                 url: new URL(resolved.pdfPath, window.location.origin).href,
                 safeSignals: resolved.safeSignals,
               },
@@ -202,8 +204,8 @@ export default defineContentScript({
         return true;
       }
 
-      if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3") {
-        void runFiledReturnsDownloadStep(document, message.payload)
+      if (contentMessage.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3") {
+        void runFiledReturnsDownloadStep(document, contentMessage.payload)
           .then((flowStep) => {
             const observation = sendFiledReturnsObservation();
             sendResponse({
@@ -222,13 +224,13 @@ export default defineContentScript({
         return true;
       }
 
-      if (message.type === "PACK_CONTENT_MARK_FILED_RETURNS_SEARCH_PENDING_V3") {
-        markFiledReturnsSearchPending(document, message.payload);
+      if (contentMessage.type === "PACK_CONTENT_MARK_FILED_RETURNS_SEARCH_PENDING_V3") {
+        markFiledReturnsSearchPending(document, contentMessage.payload);
         sendResponse({
           ok: true,
           flowStep: {
             connectorId: "gst",
-            scopeId: filedReturnScopeId(message.payload.returnType),
+            scopeId: filedReturnScopeId(contentMessage.payload.returnType),
             state: "clicked",
             safeSignals: ["filed-return-search-pending-marked"],
             safeMessage: "Pack prepared target-bound filed-return search tracking.",
@@ -237,13 +239,13 @@ export default defineContentScript({
         return false;
       }
 
-      if (message.type === "PACK_CONTENT_CLEAR_FILED_RETURNS_SEARCH_PENDING_V3") {
-        clearFiledReturnsSearchAttemptForScope(document, message.payload);
+      if (contentMessage.type === "PACK_CONTENT_CLEAR_FILED_RETURNS_SEARCH_PENDING_V3") {
+        clearFiledReturnsSearchAttemptForScope(document, contentMessage.payload);
         sendResponse({
           ok: true,
           flowStep: {
             connectorId: "gst",
-            scopeId: filedReturnScopeId(message.payload.returnType),
+            scopeId: filedReturnScopeId(contentMessage.payload.returnType),
             state: "clicked",
             safeSignals: ["filed-return-search-pending-cleared"],
             safeMessage: "Pack cleared an unsubmitted filed-return search attempt.",
@@ -252,8 +254,8 @@ export default defineContentScript({
         return false;
       }
 
-      if (message.type === "PACK_CONTENT_RESOLVE_GSTR1_VIEW_POINT_V3") {
-        void resolveGstr1FiledReturnViewPoint(document, message.payload)
+      if (contentMessage.type === "PACK_CONTENT_RESOLVE_GSTR1_VIEW_POINT_V3") {
+        void resolveGstr1FiledReturnViewPoint(document, contentMessage.payload)
           .then((resolution) => {
             if (!resolution.ok) {
               sendResponse({
@@ -276,8 +278,8 @@ export default defineContentScript({
         return true;
       }
 
-      if (message.type === "PACK_CONTENT_MARK_GSTR1_VIEW_ACTIVATION_V3") {
-        markGstr1ViewActivationAttempted(document, message.payload);
+      if (contentMessage.type === "PACK_CONTENT_MARK_GSTR1_VIEW_ACTIVATION_V3") {
+        markGstr1ViewActivationAttempted(document, contentMessage.payload);
         sendResponse({
           ok: true,
           flowStep: {
@@ -310,4 +312,10 @@ function sendFiledReturnsObservation() {
       // Service workers can be unavailable during extension reload.
     });
   return observation;
+}
+
+function unwrapContentRequest(message: unknown): unknown {
+  if (!message || typeof message !== "object") return message;
+  const envelope = message as { payload?: unknown; type?: unknown };
+  return envelope.type === PACK_CONTENT_REQUEST_ENVELOPE_TYPE ? envelope.payload : message;
 }

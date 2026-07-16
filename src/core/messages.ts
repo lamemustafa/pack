@@ -30,6 +30,8 @@ import {
 } from "./filed-returns-return-types";
 
 export const PACK_CONTENT_SCRIPT_PROTOCOL_VERSION = 31;
+export const PACK_CONTENT_REQUEST_ENVELOPE_TYPE =
+  `PACK_CONTENT_REQUEST_V${PACK_CONTENT_SCRIPT_PROTOCOL_VERSION}` as const;
 
 export interface DownloadPromptProbeResult {
   status: "started" | "start-rejected";

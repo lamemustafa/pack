@@ -12,6 +12,8 @@ import {
 import { isFiledReturnsReturnType } from "../core/filed-returns-return-types";
 import type { PackMessageResponse } from "../core/messages";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
+import { readSinglePeriodStagingRecord } from "./filed-returns-artifact-progress";
+import { discardSinglePeriodFiledReturnsZip } from "./filed-returns-full-fiscal-year-zip";
 
 export interface FiledReturnsTargetReviewDeps {
   storageKeys: {
@@ -139,6 +141,51 @@ export async function resolveUnconfirmedFiledReturnsDownload(
   };
 }
 
+export async function retryCompletedSinglePeriodZipCleanup(
+  scope: FiledReturnsDownloadScope,
+  deps: FiledReturnsTargetReviewDeps,
+): Promise<PackMessageResponse | null> {
+  const review = await readFiledReturnsTargetReview(scope, deps);
+  if (!review || !hasSinglePeriodCleanupFailure(review.safeSignals)) return null;
+
+  let stagingRecord;
+  try {
+    stagingRecord = await readSinglePeriodStagingRecord();
+  } catch {
+    return responseForFiledReturnsTargetReview(review);
+  }
+  const clearSignal = stagingRecord
+    ? await discardSinglePeriodFiledReturnsZip(stagingRecord.ledgerId)
+    : "single-period-opfs-cleared";
+  if (clearSignal !== "single-period-opfs-cleared") {
+    return responseForFiledReturnsTargetReview(review);
+  }
+
+  await clearFiledReturnsTargetReview(scope, deps);
+  const flowStep: PortalFlowStepResult = {
+    connectorId: "gst",
+    scopeId: filedReturnScopeId(scope.returnType),
+    state: "downloaded",
+    safeSignals: [
+      "single-period-zip-downloaded",
+      "single-period-opfs-cleanup-completed",
+      clearSignal,
+    ],
+    safeMessage:
+      "Pack kept the completed selected-file ZIP and cleared its temporary local staging.",
+  };
+  const flowSummary: FiledReturnsFlowSummary = {
+    scope,
+    status: "complete",
+    completedPeriods: [scope.period],
+    totalPeriods: 1,
+    updatedAt: (deps.now?.() ?? new Date()).toISOString(),
+    flowStep,
+  };
+  await persistResolvedTargetReviewSummary(flowSummary, deps);
+  return { ok: true, flowStep, flowSummary };
+}
+
 async function persistResolvedTargetReviewSummary(
   flowSummary: FiledReturnsFlowSummary,
   deps: FiledReturnsTargetReviewDeps,
@@ -246,7 +293,7 @@ export function noTargetReviewResponse(scope: FiledReturnsDownloadScope): PackMe
 }
 
 function requiresTargetReview(step: PortalFlowStepResult): boolean {
-  if (hasSinglePeriodCleanupFailure(step.safeSignals)) return false;
+  if (hasSinglePeriodCleanupFailure(step.safeSignals)) return true;
   return (
     step.state === "download-unconfirmed" ||
     step.safeSignals.some((signal) =>

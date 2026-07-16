@@ -205,6 +205,7 @@ describe("background filed returns download defaults", () => {
 
   it("prefers target-bound portal capture over the unreliable direct request", async () => {
     browserMocks.tabs.sendMessage.mockImplementation(async (_tabId, message: PackMessage) => {
+      message = unwrapContentRequest(message);
       if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3") {
         return {
           ok: true,
@@ -283,6 +284,7 @@ describe("background filed returns download defaults", () => {
     const financialYear = "2026-27";
     const periods = getFiledReturnsFullFiscalYearPeriods(financialYear);
     browserMocks.tabs.sendMessage.mockImplementation(async (_tabId, message: PackMessage) => {
+      message = unwrapContentRequest(message);
       if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3") {
         return {
           ok: true,
@@ -398,6 +400,7 @@ describe("background filed returns download defaults", () => {
 
   it("does not use the GSTR-3B direct-download resolver for GSTR-2B", async () => {
     browserMocks.tabs.sendMessage.mockImplementation(async (_tabId, message: PackMessage) => {
+      message = unwrapContentRequest(message);
       if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3") {
         return {
           ok: true,
@@ -621,6 +624,21 @@ async function sendBackgroundMessage(message: PackMessage): Promise<PackMessageR
 
 function sentActionMessageTypes(): string[] {
   return browserMocks.tabs.sendMessage.mock.calls
-    .map(([, message]) => message.type)
+    .map(([, message]) => unwrapContentRequest(message as PackMessage).type)
     .filter((type) => type !== "PACK_CONTENT_PING_V2");
+}
+
+function unwrapContentRequest(message: unknown): PackMessage {
+  if (
+    message &&
+    typeof message === "object" &&
+    "type" in message &&
+    message.type === "PACK_CONTENT_REQUEST_V31" &&
+    "payload" in message &&
+    message.payload &&
+    typeof message.payload === "object"
+  ) {
+    return message.payload as PackMessage;
+  }
+  return message as PackMessage;
 }

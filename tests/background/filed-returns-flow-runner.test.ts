@@ -27,6 +27,7 @@ import {
   requireFullFiscalYearArtifactsStaged,
   scopeForFullFiscalYearTarget,
 } from "../../src/background/filed-returns-full-fiscal-year-artifacts";
+import { markFullFiscalYearRestagingRequired } from "../../src/background/filed-returns-full-fiscal-year-cleanup";
 import { MAX_GSTR1_FLOW_STEPS } from "../../src/background/filed-returns-flow-runner-utils";
 import { createPortalGstr2bWorkbook } from "../fixtures/gstr2b-workbook";
 import { browser } from "wxt/browser";
@@ -1599,6 +1600,29 @@ describe("filed returns flow runner", () => {
       ]),
       userAction: { type: "RETRY_PORTAL_GENERATION", canResume: true },
     });
+  });
+
+  it("drops stale OPFS staging evidence before a full-year restaging retry", () => {
+    const baseLedger = createFullFiscalYearLedger({
+      currentPeriod: "April",
+      targets: [{ period: "April", status: "downloaded" }],
+    });
+    const ledger = {
+      ...baseLedger,
+      targets: baseLedger.targets.map((target) => ({
+        ...target,
+        safeSignals: ["filed-return-artifact-downloaded:PDF", "full-fiscal-year-opfs-staged:PDF"],
+      })),
+    };
+
+    const restaging = markFullFiscalYearRestagingRequired(
+      ledger,
+      new Date("2026-07-14T00:01:00.000Z"),
+    );
+
+    expect(restaging.targets[0]?.safeSignals).toContain("filed-return-artifact-downloaded:PDF");
+    expect(restaging.targets[0]?.safeSignals).toContain("full-fiscal-year-restaging-required");
+    expect(restaging.targets[0]?.safeSignals).not.toContain("full-fiscal-year-opfs-staged:PDF");
   });
 
   it("retries the combined artifact that lacks full-year staging evidence", () => {
@@ -7656,6 +7680,60 @@ describe("filed returns flow runner", () => {
       flowStep: { safeSignals: ["filed-returns-run-active"] },
     });
     expect(browser.storage.local.remove).not.toHaveBeenCalledWith("target-review");
+  });
+
+  it("retries only local cleanup after a completed single-period ZIP", async () => {
+    const scope = {
+      artifactType: "PDF_AND_EXCEL" as const,
+      financialYear: "2025-26",
+      period: "March",
+      returnType: "GSTR-2B" as const,
+    };
+    mockLocalStorageGet({
+      "pack:single-period-staging": {
+        ledgerId: "single-period:cleanup-only",
+        schemaVersion: "1.0",
+      },
+      "target-review": {
+        schemaVersion: "1.0",
+        targetId: "GSTR-2B:2025-26:March:PDF_AND_EXCEL",
+        status: "download-unconfirmed",
+        scope,
+        safeSignals: ["single-period-zip-downloaded", "single-period-opfs-clear-failed"],
+        safeMessage: "ZIP complete; cleanup failed.",
+        updatedAt: "2026-06-24T00:00:00.000Z",
+      },
+    });
+    const sendMessageToTabWithInjection =
+      vi.fn<FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]>();
+
+    const response = await retryFiledReturnsTargetDownloadFlow(scope, {
+      getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+      sendMessageToTabWithInjection,
+      storageKeys: {
+        completion: "completion",
+        fullFiscalYearLedger: "full-year-ledger",
+        observation: "observation",
+        targetReview: "target-review",
+      },
+      now: () => new Date("2026-06-24T00:00:05.000Z"),
+    });
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "downloaded",
+        safeSignals: expect.arrayContaining([
+          "single-period-zip-downloaded",
+          "single-period-opfs-cleanup-completed",
+          "single-period-opfs-cleared",
+        ]),
+      },
+      flowSummary: { status: "complete", completedPeriods: ["March"] },
+    });
+    expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
+    expect(browser.downloads.download).not.toHaveBeenCalled();
+    expect(browser.storage.local.remove).toHaveBeenCalledWith("target-review");
   });
 
   it("discards a reviewed target only after acquiring the lease, then starts the selected run", async () => {

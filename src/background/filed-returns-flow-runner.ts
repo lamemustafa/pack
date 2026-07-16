@@ -34,6 +34,7 @@ import {
   noTargetReviewResponse,
   readFiledReturnsTargetReview,
   readCurrentFiledReturnsTargetReview,
+  retryCompletedSinglePeriodZipCleanup,
   resolveUnconfirmedFiledReturnsDownload,
   responseForFiledReturnsTargetReview,
 } from "./filed-returns-target-review";
@@ -210,6 +211,8 @@ export async function retryFiledReturnsTargetDownloadFlow(
 
   const stopLeaseRenewal = startFiledReturnsRunLeaseRenewal(activeRun.run, deps);
   try {
+    const cleanupResponse = await retryCompletedSinglePeriodZipCleanup(scope, deps);
+    if (cleanupResponse) return cleanupResponse;
     await clearFiledReturnsTargetReview(scope, deps);
     return startSinglePeriodFiledReturnsDownloadFlow(scope, deps);
   } finally {

@@ -259,21 +259,25 @@ export async function capturePortalBlobDownloadWithDiagnostics(
       addSafeSignal(`${config.signalPrefix}-window-open-observed`);
       suppressedWindowOpen = true;
       if (url) captureUrl(url, undefined, true);
+      const fakeDocument = {
+        close() {
+          return undefined;
+        },
+        open() {
+          return fakeDocument;
+        },
+        write(...values: string[]) {
+          captureEmbeddedUrls(values.join(""), true);
+        },
+        writeln(...values: string[]) {
+          captureEmbeddedUrls(values.join(""), true);
+        },
+      };
       return {
         close() {
           return undefined;
         },
-        document: {
-          close() {
-            return undefined;
-          },
-          open() {
-            return undefined;
-          },
-          write(value: string) {
-            captureEmbeddedUrls(value, true);
-          },
-        },
+        document: fakeDocument,
         focus() {
           return undefined;
         },

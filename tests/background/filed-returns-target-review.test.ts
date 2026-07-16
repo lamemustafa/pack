@@ -122,7 +122,7 @@ describe("filed returns target review", () => {
     expect(browserMocks.storage.session.set).not.toHaveBeenCalled();
   });
 
-  it("does not create generic target review for a cleanup-failed ZIP", async () => {
+  it("persists a cleanup-only target review for a cleanup-failed ZIP", async () => {
     const summary = await persistFiledReturnsTargetReview(
       {
         artifactType: "PDF_AND_EXCEL",
@@ -140,7 +140,16 @@ describe("filed returns target review", () => {
       { storageKeys: { targetReview: "target-review" } },
     );
 
-    expect(summary).toBeNull();
-    expect(browserMocks.storage.local.set).not.toHaveBeenCalled();
+    expect(summary).toMatchObject({
+      status: "blocked",
+      flowStep: {
+        safeSignals: ["single-period-opfs-clear-failed", "single-period-opfs-cleanup-required"],
+      },
+    });
+    expect(browserMocks.storage.local.set).toHaveBeenCalledWith({
+      "target-review": expect.objectContaining({
+        safeSignals: expect.arrayContaining(["single-period-opfs-clear-failed"]),
+      }),
+    });
   });
 });

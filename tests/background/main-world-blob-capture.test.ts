@@ -414,6 +414,34 @@ describe("capturePortalBlobDownload", () => {
     expect(nativeOpens).toBe(0);
   });
 
+  it("supports child document open, variadic write, and writeln handoffs", async () => {
+    const { documentRef, view } = installMainWorldDom(`
+      <button data-pack-gstr2b-capture-action="capture-1">Download</button>
+    `);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        blob: async () =>
+          new view.Blob(["%PDF-1.7 synthetic"], {
+            type: "application/pdf",
+          }),
+      })),
+    );
+    documentRef.querySelector("button")?.addEventListener("click", () => {
+      const childWindow = view.open("", "_blank");
+      const childDocument = childWindow?.document.open();
+      childDocument?.write('<iframe src="', "blob:https://gstr2b.gst.gov.in/generated", '">');
+      childDocument?.writeln("</iframe>");
+      childDocument?.close();
+    });
+
+    const captured = await capturePortalBlobDownload(captureConfig());
+
+    expect(captured?.dataUrl).toContain("data:application/pdf;base64,");
+    expect(captured?.safeSignals).toContain("gstr2b-native-window-open-suppressed");
+  });
+
   it("does not capture passive portal fetch responses before a download handoff", async () => {
     const { documentRef, view } = installMainWorldDom(`
       <button data-pack-gstr2b-capture-action="capture-1">Download</button>
