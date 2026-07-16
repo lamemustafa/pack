@@ -161,6 +161,47 @@ describe("target-bound filed GSTR-1 View point", () => {
     expect(findMatchingFilterBoundGstr1Results(documentRef, SCOPE)).toHaveLength(1);
   });
 
+  it("does not mistake singular search-result item metadata for a results surface", () => {
+    for (const value of ["search-result", "search-results-item", "results-card"]) {
+      for (const attribute of ["class", "id", "aria-label"]) {
+        const documentRef = createFilterBoundResultDocument();
+        documentRef.querySelector("article")?.setAttribute(attribute, value);
+
+        expect(findMatchingFilterBoundGstr1Results(documentRef, SCOPE)).toHaveLength(1);
+      }
+    }
+  });
+
+  it("recognizes an exact search-results token among unrelated classes", () => {
+    const documentRef = createFilterBoundResultDocument();
+    const section = documentRef.querySelector("section");
+    section?.removeAttribute("aria-label");
+    section?.setAttribute("class", "gst-shell search-results ng-scope");
+    section?.append(" Instructions for GSTR-2B and FY 2024/25 results");
+
+    expect(findMatchingFilterBoundGstr1Results(documentRef, SCOPE)).toHaveLength(1);
+  });
+
+  it("does not treat prose mentioning results as a surface name", () => {
+    const documentRef = createFilterBoundResultDocument();
+    documentRef
+      .querySelector("article")
+      ?.setAttribute("aria-label", "GSTR-1 results for the selected period");
+
+    expect(findMatchingFilterBoundGstr1Results(documentRef, SCOPE)).toHaveLength(1);
+  });
+
+  it("rejects every conflicting month in labeled card period evidence", () => {
+    const documentRef = createFilterBoundResultDocument();
+    documentRef
+      .querySelector("article")
+      ?.append(
+        " Tax Period: April, additional portal explanatory copy that exceeds the old field cap, then May 2025 FY 2025-26",
+      );
+
+    expect(findMatchingFilterBoundGstr1Results(documentRef, SCOPE)).toEqual([]);
+  });
+
   it("rejects another return identity on the outer card around a GSTR-1 View wrapper", () => {
     const documentRef = createFilterBoundResultDocument();
     const article = documentRef.querySelector("article");

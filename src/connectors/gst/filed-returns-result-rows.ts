@@ -1,7 +1,13 @@
 import type { FiledReturnsDownloadScope } from "../../core/contracts";
-import { getClickableElements, matchesAcceptedText, normaliseText } from "./filed-returns-dom";
+import { getClickableElements, normaliseText } from "./filed-returns-dom";
 import { extractTaxPeriodFromRow } from "./filed-returns-detail-identity";
-import { canonicalFiledReturnsMonth } from "./filed-returns-months";
+import {
+  canonicalResultRowPeriod,
+  filterBoundResultIdentityMatchesScope,
+  returnIdentityMatchesScope,
+  resultRowFinancialYearMatch,
+  resultRowPeriodMatch,
+} from "./filed-returns-result-identity";
 
 export interface MatchingFiledReturnRow {
   filterBound: boolean;
@@ -34,10 +40,14 @@ export function findMatchingFiledReturnRows(
       const identity = extractResultRowIdentity(row);
       const rowText = readResultRowText(row);
       const explicitPeriod = identity.period ?? extractTaxPeriodFromRow(row);
-      const periodMatch = periodMatchForScope(explicitPeriod, rowText, scope);
+      const periodMatch = resultRowPeriodMatch(explicitPeriod, rowText, scope);
       const period = canonicalResultRowPeriod(explicitPeriod) ?? periodMatch.period;
       const returnType = identity.returnType ?? rowText;
-      const financialYearMatch = financialYearMatchForScope(identity.financialYear, rowText, scope);
+      const financialYearMatch = resultRowFinancialYearMatch(
+        identity.financialYear,
+        rowText,
+        scope,
+      );
       return {
         filterBound:
           options.allowFilterBoundScope === true &&
@@ -87,61 +97,10 @@ export function findMatchingFilterBoundGstr1Results(
     .filter((candidate): candidate is { view: HTMLElement; container: HTMLElement } =>
       Boolean(candidate.container),
     )
-    .filter(({ container }) => filterBoundIdentityMatchesScope(container, scope))
+    .filter(({ container }) =>
+      filterBoundResultIdentityMatchesScope(normaliseText(readElementText(container)), scope),
+    )
     .map(({ view, container }) => ({ view, container, filterBound: true, period: null }));
-}
-
-function filterBoundIdentityMatchesScope(
-  container: HTMLElement,
-  scope: FiledReturnsDownloadScope,
-): boolean {
-  const text = normaliseText(readElementText(container));
-  const financialYearEvidence = extractFinancialYearEvidence(text);
-  const periodEvidence = extractExplicitPeriodEvidence(text, false);
-  return (
-    returnIdentityMatchesScope(text, scope) &&
-    financialYearEvidence.valid &&
-    financialYearEvidence.values.every((financialYear) => financialYear === scope.financialYear) &&
-    periodEvidence.valid &&
-    periodEvidence.values.every((period) => period === scope.period)
-  );
-}
-
-function extractFinancialYearEvidence(text: string): { valid: boolean; values: string[] } {
-  const labeledMatches = Array.from(
-    text.matchAll(
-      /\b(?:financial\s*year|fy)\b\s*(?:[-:]\s*)?(20\d{2})\s*[-\u2013/]\s*(\d{2}|\d{4})(?!\d)/gi,
-    ),
-  );
-  const bareMatches = Array.from(
-    text.matchAll(/\b(20\d{2})\s*[-\u2013/]\s*(\d{2}|\d{4})(?!\d|\s*[-/]\s*\d)/g),
-  );
-  const matches = [...labeledMatches, ...bareMatches];
-  const values = matches
-    .map((match) => canonicalFinancialYear(match[1], match[2]))
-    .filter((financialYear): financialYear is string => Boolean(financialYear));
-  return { valid: values.length === matches.length, values };
-}
-
-function extractExplicitPeriodEvidence(
-  text: string,
-  allowQuarterlyCadence: boolean,
-): { valid: boolean; values: string[] } {
-  const matches = Array.from(
-    text.matchAll(/\b(?:(?:return|tax)\s*(?:filing\s*)?period|month)\b\s*(?:[-:]\s*)?([a-z]+)\b/gi),
-  );
-  const values: string[] = [];
-  let valid = true;
-  for (const match of matches) {
-    const rawPeriod = match[1]?.toLowerCase();
-    const period = canonicalFiledReturnsMonth(rawPeriod);
-    if (period) {
-      values.push(period);
-    } else if (rawPeriod !== "monthly" && !(allowQuarterlyCadence && rawPeriod === "quarterly")) {
-      valid = false;
-    }
-  }
-  return { valid, values };
 }
 
 function findGstr1ResultContainer(view: HTMLElement): HTMLElement | null {
@@ -172,12 +131,24 @@ function isSemanticResultCard(element: HTMLElement): boolean {
 }
 
 function isResultSurfaceBoundary(element: HTMLElement): boolean {
-  return [element.getAttribute("aria-label"), element.id, element.className].some(
-    (value) =>
-      typeof value === "string" &&
-      /(?:^|[-_\s])(?:search[-_\s]*results?|results(?:[-_\s]*(?:container|panel|surface|list|table))?)(?:$|[-_\s])/i.test(
-        value,
-      ),
+  if (
+    [element.getAttribute("aria-label"), element.id].some((value) =>
+      typeof value === "string" ? isNamedResultSurfaceValue(value) : false,
+    )
+  ) {
+    return true;
+  }
+  return element.className
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .some((token) => isNamedResultSurfaceValue(token));
+}
+
+function isNamedResultSurfaceValue(value: string): boolean {
+  const normalised = value.trim().toLowerCase();
+  return /^(?:search[-_\s]+results(?:[-_\s]+(?:container|panel|surface|list|table))?|results(?:[-_\s]+(?:container|panel|surface|list|table))?)$/.test(
+    normalised,
   );
 }
 
@@ -192,18 +163,6 @@ function isExactViewAction(element: HTMLElement): boolean {
   return /^view$/i.test(normaliseText(readElementText(element)));
 }
 
-function returnIdentityMatchesScope(text: string, scope: FiledReturnsDownloadScope): boolean {
-  if (!matchesAcceptedText(text, [scope.returnType])) return false;
-  const identities = Array.from(text.matchAll(/\bgstr\s*[-]?\s*(\d+[a-z]?)\b/gi)).flatMap(
-    (match) => (match[1] ? [match[1].toLowerCase()] : []),
-  );
-  const acceptedIdentities =
-    scope.returnType === "GSTR-1"
-      ? new Set(["1", "1a"])
-      : new Set([scope.returnType.replace("GSTR-", "").toLowerCase()]);
-  return identities.length > 0 && identities.every((identity) => acceptedIdentities.has(identity));
-}
-
 function isVisibleResultControl(element: HTMLElement): boolean {
   let current: HTMLElement | null = element;
   while (current) {
@@ -214,91 +173,6 @@ function isVisibleResultControl(element: HTMLElement): boolean {
     current = current.parentElement;
   }
   return true;
-}
-
-function periodMatchForScope(
-  explicitPeriod: string | null,
-  rowText: string,
-  scope: FiledReturnsDownloadScope,
-): { period: string | null; state: "absent" | "conflict" | "match" } {
-  const evidence = extractExplicitPeriodEvidence(rowText, scope.returnType !== "GSTR-1");
-  if (!evidence.valid || evidence.values.some((period) => period !== scope.period)) {
-    return { period: null, state: "conflict" };
-  }
-  const canonicalExplicitPeriod = canonicalFiledReturnsMonth(explicitPeriod);
-  const explicitPeriodValues = extractMonthValues(explicitPeriod);
-  if (explicitPeriod && !canonicalExplicitPeriod && explicitPeriodValues.length === 0) {
-    return { period: null, state: "conflict" };
-  }
-  if (
-    explicitPeriodValues.some((period) => period !== scope.period) ||
-    (canonicalExplicitPeriod && canonicalExplicitPeriod !== scope.period)
-  ) {
-    return {
-      period: canonicalExplicitPeriod ?? explicitPeriodValues[0] ?? null,
-      state: "conflict",
-    };
-  }
-  const period = canonicalExplicitPeriod ?? explicitPeriodValues[0] ?? evidence.values[0] ?? null;
-  return { period, state: period ? "match" : "absent" };
-}
-
-function extractMonthValues(text: string | null): string[] {
-  if (!text) return [];
-  return Array.from(text.matchAll(/\b[a-z]+\b/gi)).flatMap((match) => {
-    const period = canonicalFiledReturnsMonth(match[0]);
-    return period ? [period] : [];
-  });
-}
-
-function financialYearMatchForScope(
-  explicitFinancialYear: string | null,
-  rowText: string,
-  scope: FiledReturnsDownloadScope,
-): "absent" | "conflict" | "match" {
-  if (hasMalformedLabeledFinancialYear(rowText)) return "conflict";
-  const rowEvidence = extractFinancialYearEvidence(rowText);
-  if (
-    !rowEvidence.valid ||
-    rowEvidence.values.some((financialYear) => financialYear !== scope.financialYear)
-  ) {
-    return "conflict";
-  }
-  if (rowEvidence.values.length > 0) return "match";
-  if (explicitFinancialYear) {
-    const evidence = extractFinancialYearEvidence(explicitFinancialYear);
-    if (evidence.values.length > 0) {
-      return evidence.valid &&
-        evidence.values.every((financialYear) => financialYear === scope.financialYear)
-        ? "match"
-        : "conflict";
-    }
-    return matchesAcceptedText(explicitFinancialYear, [scope.financialYear]) ? "match" : "conflict";
-  }
-  return matchesAcceptedText(rowText, [scope.financialYear]) ? "match" : "absent";
-}
-
-function hasMalformedLabeledFinancialYear(text: string): boolean {
-  return Array.from(
-    text.matchAll(
-      /\b(?:financial\s*year|fy)\b\s*(?:[-:]\s*)?(20\d{2})\s*[-\u2013/]\s*(\d{2}|\d{4})(?!\d)/gi,
-    ),
-  ).some((match) => !canonicalFinancialYear(match[1], match[2]));
-}
-
-function canonicalFinancialYear(
-  startYear: string | undefined,
-  rawEndYear: string | undefined,
-): string | null {
-  if (!startYear || !rawEndYear) return null;
-  const expectedEndYear = Number(startYear) + 1;
-  if (rawEndYear.length === 4 && Number(rawEndYear) !== expectedEndYear) return null;
-  const endYear = rawEndYear.length === 4 ? rawEndYear.slice(2) : rawEndYear;
-  return Number(endYear) === expectedEndYear % 100 ? `${startYear}-${endYear}` : null;
-}
-
-function canonicalResultRowPeriod(period: string | null): string | null {
-  return canonicalFiledReturnsMonth(period);
 }
 
 function readResultRowText(row: HTMLTableRowElement): string {
