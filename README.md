@@ -198,9 +198,13 @@ Pack uses Chrome extension storage only inside the current browser profile.
 
 The Options page "Clear local Pack data" control removes the local keys above
 and clears Pack session storage. Pack does not store GST Portal credentials,
-OTPs, CAPTCHA values, cookies, GSTIN/PAN, taxpayer names, downloaded PDFs, portal
-HTML, raw URLs/referrers, local download paths, filenames, or raw network
-captures.
+OTPs, CAPTCHA values, cookies, GSTIN/PAN, taxpayer names, portal HTML, raw
+URLs/referrers, local download paths, filenames, or raw network captures.
+Generated ZIP bytes exist only transiently in memory. Source PDF and spreadsheet
+bytes may also be written to the temporary local OPFS staging described below;
+interrupted exports or cleanup failures may retain that staging locally across
+saved-run recovery attempts. Pack removes it only after confirmed cleanup or an
+explicit discard that successfully clears the retained staging.
 
 The Options page also includes a foreground File System Access probe for
 Chromium browsers. It runs only after a user click, writes and reads back a
@@ -216,10 +220,12 @@ does not transmit this metadata, and the current live path does not persist raw
 URLs, referrers, absolute local paths, or filenames.
 
 Where the source-build alpha uses the reviewed capture path, Pack may hold GST
-artifact bytes transiently in memory or OPFS only during an explicit
-user-started, target-bound local download or full-year ZIP export. Those bytes
-must not be written to extension storage, IndexedDB, Cache Storage, diagnostics,
-logs, telemetry, support bundles, or ComplyEaze systems.
+artifact bytes transiently in memory or temporary local OPFS staging only for
+an explicit user-started, target-bound local download or ZIP export and its
+saved recovery/cleanup lifecycle. Pack clears that staging after confirmed
+handoff and successful cleanup. Those bytes must not be written to extension
+storage, IndexedDB, Cache Storage, diagnostics, logs, telemetry, support
+bundles, or ComplyEaze systems.
 
 ## Privacy Invariants
 

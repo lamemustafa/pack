@@ -38,10 +38,13 @@ stable-release claims.
   it until exact-ZIP clean-profile, real-browser restart/resume,
   reconciliation, and privacy-review evidence are recorded for the release.
 - V0 does not collect GST Portal credentials, OTPs, CAPTCHA responses, cookies,
-  or session tokens, and does not store, log, or upload GST document contents.
-  The direct-download compatibility path is URL-only: it reviews GST endpoint
-  metadata in the authenticated page context and hands only the reviewed GST URL
-  to the browser download manager, without reading or retaining PDF bytes.
+  or session tokens, and does not log or upload GST document contents. The
+  source-build capture path may use temporary local OPFS staging for an explicit
+  target-bound ZIP export and its saved recovery/cleanup lifecycle, as described
+  in the README and privacy QA checklist. The direct-download compatibility path
+  is URL-only: it reviews GST endpoint metadata in the authenticated page context
+  and hands only the reviewed GST URL to the browser download manager, without
+  reading or retaining PDF bytes.
 - ComplyEaze Pack is not affiliated with, endorsed by, or operated by GSTN, CBIC,
   or the Government of India.
 
