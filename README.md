@@ -44,7 +44,7 @@ uploaded `v0.3.2` with upload state `SUCCEEDED`, publish state
 publication email on 2026-07-06 records item ID
 `nfnbhekccajjfgkppolomflaeledoccb`, item name
 `ComplyEaze Pack: GSTR-1/GSTR-3B Downloader`, version `0.3.2`, and visibility
-`Public`. The repository source has since advanced to `v0.3.3`; do not treat
+`Public`. The repository source has since advanced to `v0.4.0`; do not treat
 that newer source release as Store-published until its own Store evidence is
 recorded.
 Live manifest/index/exception-file generation is outside the current alpha.
