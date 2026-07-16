@@ -1,6 +1,6 @@
 {
   "name": "@complyeaze/pack",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "private": true,
   "description": "ComplyEaze Pack: local-first GST filed-return downloader for GSTR-3B/GSTR-1 files, with private GSTR-2B source-build support.",
   "type": "module",

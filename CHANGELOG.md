@@ -4,6 +4,29 @@ All notable changes to ComplyEaze Pack are documented here.
 
 ## Unreleased
 
+## [0.4.0](https://github.com/lamemustafa/pack/compare/v0.3.3...v0.4.0) (2026-07-16)
+
+
+### Features
+
+* **gstr2b:** add private GSTR-2B downloads ([#66](https://github.com/lamemustafa/pack/issues/66)) ([00636f4](https://github.com/lamemustafa/pack/commit/00636f43a186177e4d290ff34b598f8d0f4cfc3c))
+
+
+### Fixes
+
+* **gst:** stabilize filed-return downloads and recovery ([#78](https://github.com/lamemustafa/pack/issues/78)) ([1d706da](https://github.com/lamemustafa/pack/commit/1d706da37f130652fb7aabb14310e2a404360d11))
+
+
+### Documentation
+
+* **cws:** record v0.3.2 publication ([94318f5](https://github.com/lamemustafa/pack/commit/94318f516645819abe8627555fa6e8ab2cd89842))
+
+
+### Maintenance
+
+* **deps:** align Pack dev dependency updates ([a3ac659](https://github.com/lamemustafa/pack/commit/a3ac659fc79cee04b85ea8f8f83e80c1422a578e))
+* **deps:** update validated test tooling ([#80](https://github.com/lamemustafa/pack/issues/80)) ([494bfa4](https://github.com/lamemustafa/pack/commit/494bfa459e2954ab55f19fc72bc2a1b33ef32ab7))
+
 ## [0.3.3](https://github.com/lamemustafa/pack/compare/v0.3.2...v0.3.3) (2026-07-05)
 
 
