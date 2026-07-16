@@ -1,0 +1,284 @@
+.flow-panel {
+  display: grid;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.flow-panel-heading {
+  display: grid;
+  gap: 3px;
+}
+
+.flow-panel-heading h2 {
+  margin: 0;
+  color: var(--pack-ink);
+  font-size: 1.125rem;
+  font-weight: 850;
+  line-height: 1.2;
+}
+
+.flow-panel-heading p {
+  margin: 0;
+  color: #526477;
+  font-size: 0.8125rem;
+  line-height: 1.35;
+}
+
+.scope-form-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.scope-row {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+}
+
+.scope-row-range {
+  grid-template-columns: 1fr;
+}
+
+.scope-select-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.advanced-options {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid #e1e8f0;
+  padding-top: 9px;
+}
+
+.scope-note {
+  margin: 0;
+  border: 1px solid #dbe3ec;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #37475a;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  padding: 8px 9px;
+}
+
+.scope-note-warning {
+  border-color: #ddc58b;
+  background: #fff9eb;
+  color: #4f3b12;
+}
+
+.scope-group {
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.scope-group legend,
+.scope-select span {
+  margin: 0 0 6px;
+  color: #26384b;
+  font-size: 0.75rem;
+  font-weight: 850;
+  line-height: 1.2;
+}
+
+.scope-options {
+  display: grid;
+  gap: 7px;
+}
+
+.scope-group-return .scope-options {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.scope-group-run-mode .scope-options,
+.scope-group-file .scope-options {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.scope-group-file .scope-options {
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+}
+
+.scope-option {
+  position: relative;
+  display: grid;
+  min-height: 40px;
+  cursor: pointer;
+  align-content: center;
+  justify-content: stretch;
+  gap: 2px;
+  border: 1px solid #d3dde7;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1d2634;
+  font-size: 0.8125rem;
+  font-weight: 850;
+  line-height: 1.15;
+  text-align: left;
+  padding: 7px 10px;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease,
+    color 160ms ease;
+}
+
+.scope-option-title,
+.scope-option-description {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.scope-option-description {
+  color: #607287;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.scope-group-return .scope-option-description,
+.scope-group-file .scope-option-description {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+  padding: 0;
+  margin: -1px;
+}
+
+.scope-option input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+  padding: 0;
+  margin: -1px;
+}
+
+.scope-option:hover {
+  border-color: #9eb1c5;
+  background: #f8fbff;
+}
+
+.scope-option-disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.scope-option-disabled:hover {
+  border-color: #d3dde7;
+  background: #ffffff;
+}
+
+.scope-option-selected {
+  border-color: #5d86af;
+  background: #edf3fa;
+  color: #244d7c;
+  box-shadow: none;
+}
+
+.scope-option-selected .scope-option-description {
+  color: #23486e;
+}
+
+.scope-option:has(input:focus-visible) {
+  outline: 2px solid #245b91;
+  outline-offset: 2px;
+}
+
+.scope-select {
+  display: grid;
+  gap: 0;
+}
+
+.scope-select select {
+  min-height: 42px;
+  border-color: #d3dde7;
+  border-radius: 10px;
+  color: #172436;
+  font-size: 0.8125rem;
+  font-weight: 750;
+  padding: 0 10px;
+}
+
+.popup-action-area {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid #d8e1ec;
+  background: #eef3f8;
+  padding: 10px 0 2px;
+}
+
+.run-action-copy {
+  margin: 0;
+  color: #526477;
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.primary-action {
+  min-height: 46px;
+  width: 100%;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 850;
+  line-height: 1.2;
+  padding: 0 14px;
+}
+
+.primary-action-busy {
+  opacity: 0.86;
+}
+
+.recovery-panel button {
+  min-height: 44px;
+  width: 100%;
+  border-radius: 10px;
+}
+
+.recovery-details {
+  border-top: 1px solid #d8e1ec;
+  padding-top: 8px;
+}
+
+.recovery-details summary {
+  min-height: 28px;
+  color: #5e6b80;
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+
+.recovery-details-content {
+  display: grid;
+  gap: 8px;
+  padding-top: 8px;
+}
+
+.recovery-details-content button {
+  min-height: 36px;
+  width: 100%;
+  border-radius: 7px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scope-option {
+    transition: none;
+  }
+}

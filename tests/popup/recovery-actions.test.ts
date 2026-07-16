@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { FiledReturnsFlowSummary } from "../../src/core/contracts";
+import type { FiledReturnsFlowSummary, PortalContext } from "../../src/core/contracts";
 import { FULL_FISCAL_YEAR_PERIOD } from "../../src/core/filed-returns-scope";
+import { ScopeForm } from "../../src/entrypoints/popup/components";
 import {
   canManuallyObserveFullFiscalYearTarget,
   RecoveryActions,
-  ScopeForm,
-} from "../../src/entrypoints/popup/components";
+} from "../../src/entrypoints/popup/recovery-actions";
+import { RunEvidencePanel } from "../../src/entrypoints/popup/run-evidence-panel";
 
 describe("popup full-year recovery actions", () => {
   it("offers manual observation only for final-click recovery states", () => {
@@ -18,13 +19,16 @@ describe("popup full-year recovery actions", () => {
   });
 
   it("renders resume and discard immediately for a pending saved full-year run", () => {
+    const pendingSummary = summaryFor("pending", "full-fiscal-year-resume-confirmation-required");
     const markup = renderToStaticMarkup(
       createElement(RecoveryActions, {
         busy: null,
-        summary: summaryFor("pending", "full-fiscal-year-resume-confirmation-required"),
+        portalReady: true,
+        summary: { ...pendingSummary, status: "running" },
         onAcknowledgeInterruptedRun: () => undefined,
         onRetryFullFiscalYearTarget: () => undefined,
         onRetryTarget: () => undefined,
+        onStartFresh: () => undefined,
         onResolveFullFiscalYearTarget: () => undefined,
         onResolveTarget: () => undefined,
       }),
@@ -32,15 +36,36 @@ describe("popup full-year recovery actions", () => {
 
     expect(markup).toContain("Resume saved run");
     expect(markup).toContain("Discard saved run");
+    expect(markup).toContain("Discard saved run and start selected download");
+    expect(markup).toContain("Saved run options");
   });
 
-  it("shows the same-account warning on every full-year recovery path", () => {
+  it("shows the same-account warning only for resume confirmation", () => {
+    const resumeMarkup = renderToStaticMarkup(
+      createElement(RecoveryActions, {
+        busy: null,
+        portalReady: true,
+        summary: summaryFor("pending", "full-fiscal-year-resume-confirmation-required"),
+        onAcknowledgeInterruptedRun: () => undefined,
+        onRetryFullFiscalYearTarget: () => undefined,
+        onStartFresh: () => undefined,
+        onRetryTarget: () => undefined,
+        onResolveFullFiscalYearTarget: () => undefined,
+        onResolveTarget: () => undefined,
+      }),
+    );
+    expect(resumeMarkup).toContain(
+      "This saved run is not bound to a GST account. Continue only if the same GST account is currently open.",
+    );
+
     for (const targetStatus of ["blocked", "failed", "cancelled"] as const) {
       const markup = renderToStaticMarkup(
         createElement(RecoveryActions, {
           busy: null,
+          portalReady: true,
           summary: summaryFor(targetStatus),
           onAcknowledgeInterruptedRun: () => undefined,
+          onStartFresh: () => undefined,
           onRetryFullFiscalYearTarget: () => undefined,
           onRetryTarget: () => undefined,
           onResolveFullFiscalYearTarget: () => undefined,
@@ -48,7 +73,7 @@ describe("popup full-year recovery actions", () => {
         }),
       );
 
-      expect(markup).toContain(
+      expect(markup).not.toContain(
         "This saved run is not bound to a GST account. Continue only if the same GST account is currently open.",
       );
     }
@@ -59,7 +84,9 @@ describe("popup full-year recovery actions", () => {
       const markup = renderToStaticMarkup(
         createElement(RecoveryActions, {
           busy: null,
+          portalReady: true,
           summary: summaryFor(targetStatus),
+          onStartFresh: () => undefined,
           onAcknowledgeInterruptedRun: () => undefined,
           onRetryFullFiscalYearTarget: () => undefined,
           onRetryTarget: () => undefined,
@@ -76,6 +103,8 @@ describe("popup full-year recovery actions", () => {
     const markup = renderToStaticMarkup(
       createElement(RecoveryActions, {
         busy: null,
+        portalReady: true,
+        onStartFresh: () => undefined,
         summary: targetReviewSummary(),
         onAcknowledgeInterruptedRun: () => undefined,
         onRetryFullFiscalYearTarget: () => undefined,
@@ -86,14 +115,64 @@ describe("popup full-year recovery actions", () => {
     );
 
     expect(markup).toContain("Retry this period");
+    expect(markup).toContain("Discard saved state and start selected download");
     expect(markup).toContain("Cancel and reset");
     expect(markup).not.toContain("Cancel target");
+    expect(markup).toContain(
+      "Why Pack paused: Pack could not confirm the browser download for May.",
+    );
+  });
+
+  it("does not offer manual completion for an incomplete selected-file ZIP", () => {
+    const summary = targetReviewSummary();
+    summary.scope.artifactType = "PDF_AND_EXCEL";
+    summary.flowStep.safeSignals.push("single-period-zip-incomplete");
+    const markup = renderToStaticMarkup(
+      createElement(RecoveryActions, {
+        busy: null,
+        portalReady: false,
+        summary,
+        onStartFresh: () => undefined,
+        onAcknowledgeInterruptedRun: () => undefined,
+        onRetryFullFiscalYearTarget: () => undefined,
+        onRetryTarget: () => undefined,
+        onResolveFullFiscalYearTarget: () => undefined,
+        onResolveTarget: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain("Cancel and reset");
+    expect(markup).not.toContain("Mark reviewed manually");
+  });
+
+  it("keeps portal-dependent destructive restart disabled without a GST tab", () => {
+    const markup = renderToStaticMarkup(
+      createElement(RecoveryActions, {
+        busy: null,
+        portalReady: false,
+        summary: targetReviewSummary(),
+        onStartFresh: () => undefined,
+        onAcknowledgeInterruptedRun: () => undefined,
+        onRetryFullFiscalYearTarget: () => undefined,
+        onRetryTarget: () => undefined,
+        onResolveFullFiscalYearTarget: () => undefined,
+        onResolveTarget: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain(
+      '<button type="button" class="secondary" disabled="">Discard saved state and start selected download</button>',
+    );
+    expect(markup).toContain("Mark reviewed manually");
+    expect(markup).toContain("Cancel and reset");
   });
 
   it("uses retry-first copy for a blocked full-year period", () => {
     const markup = renderToStaticMarkup(
       createElement(RecoveryActions, {
         busy: null,
+        onStartFresh: () => undefined,
+        portalReady: true,
         summary: summaryFor("blocked"),
         onAcknowledgeInterruptedRun: () => undefined,
         onRetryFullFiscalYearTarget: () => undefined,
@@ -108,15 +187,37 @@ describe("popup full-year recovery actions", () => {
     expect(markup).not.toContain("Retry full-year period");
   });
 
+  it("shows full-year recovery controls even when the portal step carries only overlay signals", () => {
+    const markup = renderToStaticMarkup(
+      createElement(RecoveryActions, {
+        onStartFresh: () => undefined,
+        busy: null,
+        portalReady: true,
+        summary: summaryFor("blocked", "detail-summary-modal-close-control-not-found"),
+        onAcknowledgeInterruptedRun: () => undefined,
+        onRetryFullFiscalYearTarget: () => undefined,
+        onRetryTarget: () => undefined,
+        onResolveFullFiscalYearTarget: () => undefined,
+        onResolveTarget: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain("Retry this period");
+    expect(markup).toContain("Cancel and reset");
+    expect(markup).toContain("Why Pack paused: Needs action.");
+  });
+
   it("shows an active-run control state without pretending pause is available", () => {
     const markup = renderToStaticMarkup(
       createElement(RecoveryActions, {
         busy: null,
+        portalReady: true,
         summary: activeRunSummary(),
         onAcknowledgeInterruptedRun: () => undefined,
         onRetryFullFiscalYearTarget: () => undefined,
         onRetryTarget: () => undefined,
         onResolveFullFiscalYearTarget: () => undefined,
+        onStartFresh: () => undefined,
         onResolveTarget: () => undefined,
       }),
     );
@@ -132,6 +233,7 @@ describe("popup full-year recovery actions", () => {
     const markup = renderToStaticMarkup(
       createElement(ScopeForm, {
         busy: null,
+        context: supportedPortalContext(),
         scope: activeRunSummary().scope,
         flowSummary: activeRunSummary(),
         onScopeChange: () => undefined,
@@ -147,6 +249,7 @@ describe("popup full-year recovery actions", () => {
     const markup = renderToStaticMarkup(
       createElement(ScopeForm, {
         busy: null,
+        context: supportedPortalContext(),
         scope: targetReviewSummary().scope,
         flowSummary: targetReviewSummary(),
         onScopeChange: () => undefined,
@@ -154,7 +257,7 @@ describe("popup full-year recovery actions", () => {
       }),
     );
 
-    expect(markup).toContain("Resolve current period first");
+    expect(markup).toContain("Retry after checking GST Portal");
     expect(markup).not.toContain("Start download");
   });
 
@@ -162,6 +265,7 @@ describe("popup full-year recovery actions", () => {
     const markup = renderToStaticMarkup(
       createElement(ScopeForm, {
         busy: null,
+        context: supportedPortalContext(),
         scope: {
           artifactType: "PDF_AND_EXCEL",
           financialYear: "2025-26",
@@ -181,10 +285,11 @@ describe("popup full-year recovery actions", () => {
     expect(markup).toContain('value="PDF"');
     expect(markup).toContain("Summary PDF");
     expect(markup).toContain('value="EXCEL"');
-    expect(markup).toContain("E-invoice details Excel");
+    expect(markup).toContain("E-invoice Excel");
     expect(markup).toContain('checked="" value="PDF_AND_EXCEL"');
-    expect(markup).toContain("Summary PDF + e-invoice details Excel");
-    expect(markup).toContain("Full fiscal year");
+    expect(markup).toContain("PDF + Excel ZIP");
+    expect(markup).toContain("Single period");
+    expect(markup).toContain("Full year");
     expect(markup).not.toContain("monthly GSTR-3B filers only");
   });
 
@@ -192,6 +297,7 @@ describe("popup full-year recovery actions", () => {
     const markup = renderToStaticMarkup(
       createElement(ScopeForm, {
         busy: null,
+        context: supportedPortalContext(),
         scope: {
           artifactType: "PDF_AND_EXCEL",
           financialYear: "2026-27",
@@ -206,22 +312,109 @@ describe("popup full-year recovery actions", () => {
 
     expect(markup).toContain('checked="" value="GSTR-2B"');
     expect(markup).toContain('value="GSTR-3B"');
-    expect(markup).toContain('checked="" value="May"');
+    expect(markup).toContain('value="May" selected=""');
     expect(markup).toContain('value="June"');
     expect(markup).toContain('checked="" value="PDF_AND_EXCEL"');
-    expect(markup).toContain("Summary PDF + details Excel");
-    expect(markup).not.toContain("E-invoice details Excel");
+    expect(markup).toContain("PDF + Excel ZIP");
+    expect(markup).not.toContain("E-invoice Excel");
+  });
+
+  it("explains GSTR-2B full-year Excel as portal-generated capture", () => {
+    const markup = renderToStaticMarkup(
+      createElement(ScopeForm, {
+        busy: null,
+        context: supportedPortalContext(),
+        scope: {
+          artifactType: "PDF_AND_EXCEL",
+          financialYear: "2025-26",
+          period: FULL_FISCAL_YEAR_PERIOD,
+          returnType: "GSTR-2B",
+        },
+        flowSummary: null,
+        onScopeChange: () => undefined,
+        onStart: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain("Create one ZIP for all eligible periods.");
+    expect(markup).not.toContain("selected GSTR-1 e-invoice details file");
+  });
+
+  it("keeps the primary zip action available for full-year multi-file runs", () => {
+    const markup = renderToStaticMarkup(
+      createElement(ScopeForm, {
+        busy: null,
+        context: supportedPortalContext(),
+        scope: {
+          artifactType: "PDF_AND_EXCEL",
+          financialYear: "2025-26",
+          period: FULL_FISCAL_YEAR_PERIOD,
+          returnType: "GSTR-2B",
+        },
+        flowSummary: null,
+        onScopeChange: () => undefined,
+        onStart: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain("Download all 2025-26 GSTR-2B files");
+    expect(markup).toContain("PDF + Excel ZIP");
+  });
+
+  it("labels multi-file single-period runs as a single zip handoff", () => {
+    const markup = renderToStaticMarkup(
+      createElement(ScopeForm, {
+        busy: null,
+        context: supportedPortalContext(),
+        scope: {
+          artifactType: "PDF_AND_EXCEL",
+          financialYear: "2026-27",
+          period: "May",
+          returnType: "GSTR-2B",
+        },
+        flowSummary: null,
+        onScopeChange: () => undefined,
+        onStart: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain("Collect the selected period into one local ZIP.");
+    expect(markup).toContain("Download May 2026-27 GSTR-2B ZIP");
+    expect(markup).not.toContain(">Download selected period<");
+  });
+
+  it("explains single-period runs as active-tab downloads", () => {
+    const markup = renderToStaticMarkup(
+      createElement(ScopeForm, {
+        busy: null,
+        context: supportedPortalContext(),
+        scope: {
+          artifactType: "PDF",
+          financialYear: "2026-27",
+          period: "May",
+          returnType: "GSTR-3B",
+        },
+        flowSummary: null,
+        onScopeChange: () => undefined,
+        onStart: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain("Download one period from the active GST tab.");
+    expect(markup).toContain("Download May 2026-27 GSTR-3B PDF");
   });
 
   it("presents interrupted runs as resettable stuck work", () => {
     const markup = renderToStaticMarkup(
       createElement(RecoveryActions, {
         busy: null,
+        portalReady: true,
         summary: interruptedRunSummary(),
         onAcknowledgeInterruptedRun: () => undefined,
         onRetryFullFiscalYearTarget: () => undefined,
         onRetryTarget: () => undefined,
         onResolveFullFiscalYearTarget: () => undefined,
+        onStartFresh: () => undefined,
         onResolveTarget: () => undefined,
       }),
     );
@@ -234,6 +427,7 @@ describe("popup full-year recovery actions", () => {
     const markup = renderToStaticMarkup(
       createElement(ScopeForm, {
         busy: null,
+        context: supportedPortalContext(),
         scope: interruptedRunSummary().scope,
         flowSummary: interruptedRunSummary(),
         onScopeChange: () => undefined,
@@ -241,10 +435,148 @@ describe("popup full-year recovery actions", () => {
       }),
     );
 
-    expect(markup).toContain("Reset stuck run first");
+    expect(markup).toContain("Reset interrupted run");
     expect(markup).not.toContain("Start download");
   });
+
+  it("keeps reset available but disables retry when the portal tab is missing", () => {
+    const markup = renderToStaticMarkup(
+      createElement(RecoveryActions, {
+        busy: null,
+        portalReady: false,
+        summary: summaryFor("blocked"),
+        onAcknowledgeInterruptedRun: () => undefined,
+        onRetryFullFiscalYearTarget: () => undefined,
+        onRetryTarget: () => undefined,
+        onResolveFullFiscalYearTarget: () => undefined,
+        onResolveTarget: () => undefined,
+        onStartFresh: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain("Open a signed-in GST Portal tab before retrying this period.");
+    expect(markup).toContain('<button type="button" disabled="">Retry this period</button>');
+    expect(markup).toContain("Cancel and reset");
+  });
+
+  it("disables start with a plain portal-needed reason when popup context is inactive", () => {
+    const markup = renderToStaticMarkup(
+      createElement(ScopeForm, {
+        busy: null,
+        context: null,
+        scope: {
+          artifactType: "PDF_AND_EXCEL",
+          financialYear: "2025-26",
+          period: FULL_FISCAL_YEAR_PERIOD,
+          returnType: "GSTR-2B",
+        },
+        flowSummary: null,
+        onScopeChange: () => undefined,
+        onStart: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain("Open GST Portal to continue.");
+    expect(markup).toContain('<button class="primary-action" type="button" disabled="">');
+    expect(markup).not.toContain("Open GST Portal tab");
+  });
+
+  it("normalizes older login-opened evidence copy in the run panel", () => {
+    const summary = summaryFor("blocked");
+    summary.flowStep.safeSignals = ["gst-login-tab-opened"];
+    summary.flowStep.safeMessage =
+      "Pack opened the GST Portal login page. Sign in, then click Start download.";
+
+    const markup = renderToStaticMarkup(
+      createElement(RunEvidencePanel, {
+        portalReady: false,
+        filedReturnsObservation: null,
+        scopedFlowSummary: summary,
+        summaryHeading: "Last filed-returns run: blocked",
+      }),
+    );
+
+    expect(markup).toContain(
+      "Open a signed-in GST Portal tab, then retry this period or cancel and reset.",
+    );
+    expect(markup).not.toContain("Pack opened the GST Portal login page.");
+  });
+
+  it("explains final zip retry instead of showing stale unconfirmed copy", () => {
+    const summary = summaryFor("download-unconfirmed");
+    summary.status = "blocked";
+    summary.flowStep.state = "download-unconfirmed";
+    summary.flowStep.safeSignals = ["full-fiscal-year-zip-download-unconfirmed"];
+    summary.flowStep.safeMessage =
+      "Pack prepared the fiscal-year zip, but the final browser download did not complete.";
+
+    const markup = renderToStaticMarkup(
+      createElement(RunEvidencePanel, {
+        portalReady: true,
+        filedReturnsObservation: null,
+        scopedFlowSummary: summary,
+        summaryHeading: "Last filed-returns run: blocked",
+      }),
+    );
+
+    expect(markup).toContain("Retry the final ZIP handoff before starting another full-year run.");
+    expect(markup).not.toContain("the final browser download did not complete");
+  });
+
+  it("labels completed evidence as previous work when the portal tab is missing", () => {
+    const summary = summaryFor("download-unconfirmed");
+    summary.status = "complete";
+    summary.completedPeriods = ["April"];
+    summary.flowStep.state = "downloaded";
+    summary.flowStep.safeSignals = ["full-fiscal-year-complete"];
+    summary.flowStep.safeMessage = "Pack completed the local full fiscal year run.";
+
+    const markup = renderToStaticMarkup(
+      createElement(RunEvidencePanel, {
+        portalReady: false,
+        filedReturnsObservation: null,
+        scopedFlowSummary: summary,
+        summaryHeading: "Last filed-returns run: complete",
+      }),
+    );
+
+    expect(markup).toContain("Status");
+    expect(markup).toContain("Previous filed-returns run complete");
+    expect(markup).not.toContain("Last filed-returns run: complete");
+    expect(markup).not.toContain("evidence-panel-active");
+  });
+
+  it("labels completed evidence as previous work before starting a new portal-ready run", () => {
+    const summary = summaryFor("download-unconfirmed");
+    summary.status = "complete";
+    summary.completedPeriods = ["April"];
+    summary.flowStep.state = "downloaded";
+    summary.flowStep.safeSignals = ["full-fiscal-year-complete"];
+    summary.flowStep.safeMessage = "Pack completed the local full fiscal year run.";
+
+    const markup = renderToStaticMarkup(
+      createElement(RunEvidencePanel, {
+        portalReady: true,
+        filedReturnsObservation: null,
+        scopedFlowSummary: summary,
+        summaryHeading: "Last filed-returns run: complete",
+      }),
+    );
+
+    expect(markup).toContain("Status");
+    expect(markup).toContain("Previous filed-returns run complete");
+    expect(markup).not.toContain("Last filed-returns run: complete");
+    expect(markup).not.toContain("evidence-panel-active");
+  });
 });
+
+function supportedPortalContext(): PortalContext {
+  return {
+    connectorId: "gst",
+    pageKind: "gst-filed-returns",
+    supported: true,
+  };
+}
 
 function summaryFor(
   targetStatus: NonNullable<FiledReturnsFlowSummary["fullFiscalYearRecovery"]>["targetStatus"],

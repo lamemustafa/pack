@@ -7,12 +7,14 @@ import type { FiledReturnsFullFiscalYearLedger } from "../../src/core/contracts"
 import {
   createFullFiscalYearTargetId,
   isFullFiscalYearLedger,
+  markFullFiscalYearTargetRunning,
   nextRunnableFullFiscalYearTarget,
 } from "../../src/background/filed-returns-full-fiscal-year-ledger";
 import {
   summariseFullFiscalYearLedger,
   targetStatusFromFlowStep,
 } from "../../src/background/filed-returns-full-fiscal-year";
+import { responseForExistingLedger } from "../../src/background/filed-returns-full-fiscal-year-run-state";
 
 describe("full fiscal year ledger", () => {
   it("does not select later targets while an unconfirmed download needs acknowledgement", () => {
@@ -33,6 +35,56 @@ describe("full fiscal year ledger", () => {
     for (const status of ["blocked", "failed", "cancelled"] as const) {
       expect(nextRunnableFullFiscalYearTarget(createLedger([["April", status]]))).toBeNull();
     }
+  });
+
+  it("lets an explicitly approved target retry run while other restaging targets stay blocked", () => {
+    const ledger = createLedger([
+      ["April", "pending"],
+      ["May", "blocked"],
+    ]);
+    ledger.status = "running";
+    ledger.currentTargetId = ledger.targets[0]!.targetId;
+    ledger.targets[0] = {
+      ...ledger.targets[0]!,
+      safeSignals: ["full-fiscal-year-target-retry-approved"],
+    };
+
+    expect(
+      responseForExistingLedger(ledger, new Date("2026-06-24T00:01:00.000Z"), {
+        allowExistingLedgerResume: true,
+      }),
+    ).toBeNull();
+    expect(responseForExistingLedger(ledger, new Date("2026-06-24T00:01:00.000Z"))).toMatchObject({
+      ok: true,
+      flowStep: { state: "blocked" },
+    });
+  });
+
+  it("preserves durable staged-artifact signals when a target starts running", () => {
+    const ledger = createLedger([["April", "pending"]], {
+      artifactType: "PDF_AND_EXCEL",
+      returnType: "GSTR-2B",
+    });
+    ledger.targets[0] = {
+      ...ledger.targets[0]!,
+      safeSignals: [
+        "full-fiscal-year-opfs-staged:PDF",
+        "filed-return-artifact-downloaded:PDF",
+        "portal-system-error",
+      ],
+    };
+
+    const running = markFullFiscalYearTargetRunning(
+      ledger,
+      ledger.targets[0]!.targetId,
+      new Date("2026-06-24T00:01:00.000Z"),
+    );
+
+    expect(running.targets[0]?.safeSignals).toEqual([
+      "full-fiscal-year-opfs-staged:PDF",
+      "filed-return-artifact-downloaded:PDF",
+      "full-fiscal-year-target-running",
+    ]);
   });
 
   it("summarises saved pending running ledgers as explicit resume confirmation", () => {
@@ -100,6 +152,44 @@ describe("full fiscal year ledger", () => {
       ]);
       expect(summary.flowStep.safeMessage).toContain("same GST account");
     }
+  });
+
+  it("surfaces a blocked target before generic resume confirmation", () => {
+    const ledger = createLedger([
+      ["April", "blocked"],
+      ["May", "pending"],
+    ]);
+    const summary = summariseFullFiscalYearLedger({
+      ...ledger,
+      targets: ledger.targets.map((target) =>
+        target.period === "April"
+          ? {
+              ...target,
+              safeSignals: ["portal-system-error"],
+              safeMessage: "The GST portal returned a system-error page.",
+            }
+          : target,
+      ),
+      status: "blocked",
+      currentTargetId: "GSTR-3B:2026-27:April",
+    });
+
+    expect(summary).toMatchObject({
+      status: "blocked",
+      currentPeriod: "April",
+      fullFiscalYearRecovery: {
+        targetId: "GSTR-3B:2026-27:April",
+        targetStatus: "blocked",
+      },
+      flowStep: {
+        state: "blocked",
+        safeSignals: expect.arrayContaining([
+          "full-fiscal-year-run-needs-action",
+          "portal-system-error",
+        ]),
+        safeMessage: "The GST portal returned a system-error page.",
+      },
+    });
   });
 
   it("maps only positive not-filed evidence to a terminal not-filed target", () => {
@@ -174,6 +264,33 @@ describe("full fiscal year ledger", () => {
       isFullFiscalYearLedger({
         ...createLedger([["April", "downloaded"]]),
         targets: [{ ...createTarget("April", "downloaded"), status: "unknown" }],
+      }),
+    ).toBe(false);
+    expect(
+      isFullFiscalYearLedger({
+        ...createLedger([["April", "downloaded"]]),
+        status: "blocked",
+        zipPhase: "download-started",
+      }),
+    ).toBe(true);
+    expect(
+      isFullFiscalYearLedger({
+        ...createLedger([["April", "downloaded"]]),
+        status: "blocked",
+        zipPhase: "downloaded-cleanup-pending",
+      }),
+    ).toBe(true);
+    expect(
+      isFullFiscalYearLedger({
+        ...createLedger([["April", "downloaded"]]),
+        status: "complete",
+        zipPhase: "downloaded-cleanup-pending",
+      }),
+    ).toBe(false);
+    expect(
+      isFullFiscalYearLedger({
+        ...createLedger([["April", "downloaded"]]),
+        zipPhase: "unknown",
       }),
     ).toBe(false);
   });

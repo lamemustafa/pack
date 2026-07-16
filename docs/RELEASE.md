@@ -98,8 +98,9 @@ Before submitting a ZIP to a browser store:
 2. Confirm the permission prompt lists only GST Portal host access plus
    downloads/storage.
 3. Open the popup outside GST domains and confirm the extension stays dormant.
-4. Open Pack Options, run the synthetic demo, and confirm files are downloaded
-   under `Pack-Demo/`.
+4. Open Pack Options, run the synthetic demo, then click
+   `Download synthetic demo files` and confirm files are downloaded under
+   `Pack-Demo/` and complete in browser Downloads.
 5. Open the generated manifest and exceptions file and confirm all values are
    obviously synthetic.
 6. Use the options page to clear local Pack data.

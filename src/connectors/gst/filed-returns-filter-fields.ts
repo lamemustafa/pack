@@ -10,6 +10,8 @@ export interface FiledReturnsFilterFieldState {
   selectedText: string | null;
 }
 
+type AcceptedTextMatcher = (text: string, acceptedTexts: readonly string[]) => boolean;
+
 export function readFiledReturnsFilterFieldState(
   documentRef: Document,
   labelPattern: RegExp,
@@ -28,8 +30,14 @@ export function filedReturnsFilterFieldMatches(
   documentRef: Document,
   labelPattern: RegExp,
   acceptedTexts: readonly string[],
+  matchesText: AcceptedTextMatcher = matchesAcceptedText,
 ): boolean {
-  const evaluation = evaluateFiledReturnsFilterField(documentRef, labelPattern, acceptedTexts);
+  const evaluation = evaluateFiledReturnsFilterField(
+    documentRef,
+    labelPattern,
+    acceptedTexts,
+    matchesText,
+  );
   if (evaluation.status === "matched") return true;
   if (evaluation.status === "mismatched") return false;
 
@@ -40,7 +48,7 @@ export function filedReturnsFilterFieldMatches(
   if (!fallbackSelect) return false;
 
   const selectedText = readElementText(fallbackSelect.selectedOptions[0]) || fallbackSelect.value;
-  return matchesAcceptedText(selectedText, acceptedTexts);
+  return matchesText(selectedText, acceptedTexts);
 }
 
 export function hasFiledReturnsFilterFieldControl(
@@ -132,6 +140,7 @@ function evaluateFiledReturnsFilterField(
   documentRef: Document,
   labelPattern: RegExp,
   acceptedTexts: readonly string[],
+  matchesText: AcceptedTextMatcher = matchesAcceptedText,
 ): FieldEvaluation {
   const formRoot = findScopedFilterRoot(documentRef);
   const scopedSelects = formRoot
@@ -144,6 +153,7 @@ function evaluateFiledReturnsFilterField(
     return evaluateSelectedTexts(
       scopedSelects.map((select) => readElementText(select.selectedOptions[0]) || select.value),
       acceptedTexts,
+      matchesText,
     );
   }
 
@@ -153,13 +163,14 @@ function evaluateFiledReturnsFilterField(
     return evaluateSelectedTexts(
       [readElementText(scopedSelect.selectedOptions[0]) || scopedSelect.value],
       acceptedTexts,
+      matchesText,
     );
   }
 
   const customText = fieldRoot
     ? normaliseText(getCustomDropdownControls(fieldRoot).map(readElementText).join(" "))
     : "";
-  if (customText) return evaluateSelectedTexts([customText], acceptedTexts);
+  if (customText) return evaluateSelectedTexts([customText], acceptedTexts, matchesText);
 
   return {
     status: "unresolved",
@@ -221,6 +232,7 @@ function readNativeSelectState(select: HTMLSelectElement): FiledReturnsFilterFie
 function evaluateSelectedTexts(
   selectedTexts: readonly string[],
   acceptedTexts: readonly string[],
+  matchesText: AcceptedTextMatcher = matchesAcceptedText,
 ): FieldEvaluation {
   const nonEmptyTexts = selectedTexts.map(normaliseText).filter(Boolean);
   if (nonEmptyTexts.length === 0) {
@@ -231,8 +243,7 @@ function evaluateSelectedTexts(
   }
 
   const hasOnlyMatches =
-    acceptedTexts.length > 0 &&
-    nonEmptyTexts.every((text) => matchesAcceptedText(text, acceptedTexts));
+    acceptedTexts.length > 0 && nonEmptyTexts.every((text) => matchesText(text, acceptedTexts));
   return {
     status: hasOnlyMatches ? "matched" : "mismatched",
     state: { present: true, selectedText: nonEmptyTexts.join(" ") },

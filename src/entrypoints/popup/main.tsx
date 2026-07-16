@@ -1,255 +1,160 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { browser } from "wxt/browser";
-import type {
-  FiledReturnsDownloadScope,
-  FiledReturnsFlowSummary,
-  PortalContext,
-  PortalObservation,
-} from "../../core/contracts";
-import type {
-  FullFiscalYearTargetRecoveryPayload,
-  PackMessage,
-  PackMessageResponse,
-} from "../../core/messages";
-import {
-  DEFAULT_FILED_RETURNS_DOWNLOAD_SCOPE,
-  normaliseFiledReturnsScope,
-} from "../../core/filed-returns-scope";
 import "../../styles/global.css";
-import { RecoveryActions, ScopeForm } from "./components";
-import {
-  getFiledReturnsCompletionStatus,
-  getFiledReturnsSummaryHeading,
-  getScopeMatchedFiledReturnsSummary,
-} from "./flow-summary";
+import "../../styles/popup.css";
+import "../../styles/popup-controls.css";
+import { ScopeForm, ScopeFormAction } from "./components";
+import { canRetryFullFiscalYearZipWithoutPortal } from "./flow-summary";
+import { hasInlinePrimaryAction, InlineStatus } from "./inline-status";
+import { PackSummary } from "./pack-summary";
+import { getPopupPresentationState, type PopupPresentationState } from "./presentation-state";
+import { RecoveryActions, hasRecoveryActions } from "./recovery-actions";
+import { usePackPopupController } from "./use-pack-popup-controller";
 
 function App() {
-  const [status, setStatus] = React.useState("Loading Pack context...");
-  const [scope, setScope] = React.useState<FiledReturnsDownloadScope>(
-    DEFAULT_FILED_RETURNS_DOWNLOAD_SCOPE,
+  const popup = usePackPopupController();
+  const displaySummary = popup.recoverySummary ?? popup.scopedFlowSummary;
+  const showRecovery = hasRecoveryActions(displaySummary ?? null);
+  const portalReady = popup.context?.supported === true;
+  const presentation = getPopupPresentationState(
+    popup.context,
+    displaySummary,
+    popup.effectiveBusy,
   );
-  const [context, setContext] = React.useState<PortalContext | null>(null);
-  const [filedReturnsObservation, setFiledReturnsObservation] =
-    React.useState<PortalObservation | null>(null);
-  const [filedReturnsFlowSummary, setFiledReturnsFlowSummary] =
-    React.useState<FiledReturnsFlowSummary | null>(null);
-  const [busy, setBusy] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    void Promise.all([
-      sendPackMessage({ type: "PACK_GET_CONTEXT" }),
-      sendPackMessage({ type: "PACK_GET_FILED_RETURNS_OBSERVATION" }),
-      sendPackMessage({ type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" }),
-    ]).then(([contextResponse, observationResponse, summaryResponse]) => {
-      if (observationResponse.ok && "observation" in observationResponse) {
-        setFiledReturnsObservation(observationResponse.observation);
-      }
-      if (summaryResponse.ok && "flowSummary" in summaryResponse) {
-        const flowSummary = summaryResponse.flowSummary;
-        setFiledReturnsFlowSummary(flowSummary);
-        if (flowSummary) setScope(flowSummary.scope);
-      }
-
-      if (contextResponse.ok && "context" in contextResponse) {
-        setContext(contextResponse.context);
-        setStatus(
-          contextResponse.context?.supported
-            ? "GST context detected."
-            : "Pack is dormant until you start an action.",
-        );
-      } else {
-        setStatus(contextResponse.ok ? "Unexpected Pack response." : contextResponse.error);
-      }
-    });
-  }, []);
-
-  async function startFiledReturnsFlow() {
-    await withBusy("start-filed-returns-flow", async () => {
-      const response = await sendPackMessage({
-        type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",
-        payload: normaliseFiledReturnsScope(scope),
-      });
-      applyFlowResponse(response);
-    });
-  }
-
-  async function acknowledgeInterruptedRun() {
-    await withBusy("acknowledge-interrupted-run", async () => {
-      const response = await sendPackMessage({ type: "PACK_ACKNOWLEDGE_INTERRUPTED_RUN" });
-      if (response.ok && "flowStep" in response) {
-        setStatus(response.flowStep.safeMessage);
-        setFiledReturnsFlowSummary(null);
-      } else {
-        setStatus(response.ok ? "Unexpected Pack response." : response.error);
-      }
-    });
-  }
-
-  async function retryFiledReturnsTarget() {
-    const recoveryScope = filedReturnsFlowSummary?.scope;
-    if (!recoveryScope) return;
-
-    await withBusy("retry-filed-returns-target", async () => {
-      const response = await sendPackMessage({
-        type: "PACK_RETRY_FILED_RETURNS_TARGET",
-        payload: recoveryScope,
-      });
-      applyFlowResponse(response);
-    });
-  }
-
-  async function resolveUnconfirmedDownload(resolution: "downloaded" | "cancelled") {
-    const recoveryScope = filedReturnsFlowSummary?.scope;
-    if (!recoveryScope) return;
-
-    await withBusy(
-      resolution === "downloaded" ? "resolve-unconfirmed-download" : "cancel-unconfirmed-download",
-      async () => {
-        const response = await sendPackMessage({
-          type: "PACK_RESOLVE_UNCONFIRMED_DOWNLOAD",
-          payload: {
-            scope: recoveryScope,
-            resolution,
-          },
-        });
-        applyFlowResponse(response);
-      },
-    );
-  }
-
-  async function retryFullFiscalYearTarget() {
-    const payload = getFullFiscalYearRecoveryPayload();
-    if (!payload) return;
-
-    await withBusy("retry-full-fiscal-year-target", async () => {
-      const response = await sendPackMessage({
-        type: "PACK_RETRY_FULL_FISCAL_YEAR_TARGET",
-        payload,
-      });
-      applyFlowResponse(response);
-    });
-  }
-
-  async function resolveFullFiscalYearTarget(resolution: "manually-observed" | "cancelled") {
-    const payload = getFullFiscalYearRecoveryPayload();
-    if (!payload) return;
-
-    await withBusy(
-      resolution === "manually-observed"
-        ? "resolve-full-fiscal-year-target"
-        : "cancel-full-fiscal-year-target",
-      async () => {
-        const response = await sendPackMessage({
-          type: "PACK_RESOLVE_FULL_FISCAL_YEAR_TARGET",
-          payload: {
-            ...payload,
-            resolution,
-          },
-        });
-        applyFlowResponse(response);
-      },
-    );
-  }
-
-  function applyFlowResponse(response: PackMessageResponse) {
-    if (response.ok && "flowStep" in response) {
-      setStatus(response.flowStep.safeMessage);
-      if ("flowSummary" in response && response.flowSummary) {
-        setFiledReturnsFlowSummary(response.flowSummary);
-        setScope(response.flowSummary.scope);
-      }
-      if ("observation" in response) {
-        setFiledReturnsObservation(response.observation);
-      }
-    } else {
-      setStatus(response.ok ? "Unexpected Pack response." : response.error);
-    }
-  }
-
-  async function withBusy(name: string, action: () => Promise<void>) {
-    setBusy(name);
-    try {
-      await action();
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  function getFullFiscalYearRecoveryPayload(): FullFiscalYearTargetRecoveryPayload | null {
-    const recovery = filedReturnsFlowSummary?.fullFiscalYearRecovery;
-    if (!recovery) return null;
-    return {
-      ledgerId: recovery.ledgerId,
-      targetId: recovery.targetId,
-      expectedRevision: recovery.expectedRevision,
-    };
-  }
-
-  const completionStatus = getFiledReturnsCompletionStatus(scope, filedReturnsFlowSummary);
-  const scopedFlowSummary = getScopeMatchedFiledReturnsSummary(scope, filedReturnsFlowSummary);
-  const summaryHeading = scopedFlowSummary
-    ? getFiledReturnsSummaryHeading(scope, scopedFlowSummary)
-    : null;
+  const portalIndependentZipRetry = canRetryFullFiscalYearZipWithoutPortal(displaySummary);
+  const showBuilder =
+    (popup.context?.supported === true || portalIndependentZipRetry) &&
+    !["loading", "unsupported", "session-expired"].includes(presentation.kind);
+  const statusOwnsPrimaryAction = hasInlinePrimaryAction(presentation, displaySummary);
 
   return (
     <main className="popup-shell">
-      <header className="brand-header">
-        <img className="brand-logo" src="/brand/pack-logo-outlined.svg" alt="ComplyEaze Pack" />
-        <p className="brand-mode">GST Return Pack</p>
-        <h1 className="sr-only">ComplyEaze Pack GST Return Pack</h1>
+      <header className="popup-topbar">
+        <div className="popup-brand">
+          <img
+            className="popup-wordmark"
+            src="/brand/pack-logo-header.svg"
+            alt="Pack by ComplyEaze"
+          />
+        </div>
       </header>
 
-      <section className="state" aria-live="polite">
-        <p>{completionStatus ?? status}</p>
-        <p className="muted">
-          {context === null
-            ? "Open GST Portal and choose a filed GST return period to begin."
-            : context.supported
-              ? `Detected ${context.pageKind} on ${context.origin ?? "GST Portal"}.`
-              : (context.requiredAction?.message ?? "This page is outside Pack V0 scope.")}
-        </p>
-      </section>
+      {showBuilder ? (
+        <>
+          <p className="portal-context-line">
+            <span className="portal-context-dot" aria-hidden="true" />
+            {portalIndependentZipRetry
+              ? "Local ZIP recovery available"
+              : "GST Portal page detected"}
+          </p>
+          <ScopeForm
+            busy={popup.effectiveBusy}
+            context={popup.context}
+            flowSummary={displaySummary}
+            scope={popup.scope}
+            scopeLockedForReview={popup.scopeLockedForReview}
+            onScopeChange={popup.setScope}
+            onStart={() => void popup.startFiledReturnsFlow()}
+            showPrimaryAction={false}
+          />
+          <PackSummary scope={popup.scope} summary={popup.scopedFlowSummary} />
+          <InlineStatus
+            busy={popup.effectiveBusy}
+            onOpenPortal={() => void browser.tabs.create({ url: "https://www.gst.gov.in" })}
+            onRestartTarget={() => void popup.startFiledReturnsFlow()}
+            onRetryFullFiscalYearTarget={() => void popup.retryFullFiscalYearTarget()}
+            onRetryTarget={() => void popup.retryFiledReturnsTarget()}
+            presentation={presentation}
+            summary={displaySummary}
+          />
+          {!statusOwnsPrimaryAction && !popup.recoverySummary ? (
+            <ScopeFormAction
+              busy={popup.effectiveBusy}
+              context={popup.context}
+              flowSummary={popup.scopedFlowSummary}
+              scope={popup.scope}
+              onStart={() => void popup.startFiledReturnsFlow()}
+            />
+          ) : null}
+        </>
+      ) : (
+        <ContextState
+          status={presentation}
+          onOpenPortal={() => void browser.tabs.create({ url: "https://www.gst.gov.in" })}
+        />
+      )}
 
-      <ScopeForm
-        busy={busy}
-        flowSummary={filedReturnsFlowSummary}
-        scope={scope}
-        onScopeChange={setScope}
-        onStart={() => void startFiledReturnsFlow()}
-      />
-
-      {scopedFlowSummary && summaryHeading ? (
-        <section className="state">
-          <p>{summaryHeading}</p>
-          <p className="muted">{scopedFlowSummary.flowStep.safeMessage}</p>
-        </section>
-      ) : filedReturnsObservation ? (
-        <section className="state">
-          <p>Filed returns status: {filedReturnsObservation.state}</p>
-          <p className="muted">{filedReturnsObservation.safeMessage}</p>
-        </section>
+      {showRecovery ? (
+        <RecoveryActions
+          busy={popup.effectiveBusy}
+          portalReady={portalReady}
+          summary={displaySummary}
+          onStartFresh={() => void popup.startFreshFiledReturnsFlow()}
+          onAcknowledgeInterruptedRun={() => void popup.acknowledgeInterruptedRun()}
+          onRetryFullFiscalYearTarget={() => void popup.retryFullFiscalYearTarget()}
+          onRetryTarget={() => void popup.retryFiledReturnsTarget()}
+          onResolveFullFiscalYearTarget={(resolution) =>
+            void popup.resolveFullFiscalYearTarget(resolution)
+          }
+          onResolveTarget={(resolution) => void popup.resolveUnconfirmedDownload(resolution)}
+        />
       ) : null}
 
-      <RecoveryActions
-        busy={busy}
-        summary={scopedFlowSummary}
-        onAcknowledgeInterruptedRun={() => void acknowledgeInterruptedRun()}
-        onRetryFullFiscalYearTarget={() => void retryFullFiscalYearTarget()}
-        onRetryTarget={() => void retryFiledReturnsTarget()}
-        onResolveFullFiscalYearTarget={(resolution) => void resolveFullFiscalYearTarget(resolution)}
-        onResolveTarget={(resolution) => void resolveUnconfirmedDownload(resolution)}
-      />
-
-      <p className="fineprint">
-        No credentials, cookies, OTP, CAPTCHA, or GST documents are sent to ComplyEaze.
-      </p>
+      <footer className="fineprint" aria-label="Pack privacy boundary">
+        <span>Local only · GST login and PDFs stay on your device.</span>
+        <span className="fineprint-links">
+          <a href="https://pack.complyeaze.com/privacy" target="_blank" rel="noreferrer">
+            Details
+          </a>
+        </span>
+      </footer>
     </main>
   );
 }
 
-async function sendPackMessage(message: PackMessage): Promise<PackMessageResponse> {
-  return browser.runtime.sendMessage(message) as Promise<PackMessageResponse>;
+function ContextState({
+  status,
+  onOpenPortal,
+}: {
+  status: PopupPresentationState;
+  onOpenPortal: () => void;
+}) {
+  const isSessionExpired = status.kind === "session-expired";
+  const isChecking = status.kind === "loading";
+  return (
+    <section className="context-state" aria-live="polite">
+      <div className="context-state-icon" aria-hidden="true">
+        {isSessionExpired ? "!" : "↗"}
+      </div>
+      <div className="context-state-content">
+        <p className="context-state-kicker">GST Portal status</p>
+        <h2>
+          {isChecking
+            ? "Checking this tab"
+            : isSessionExpired
+              ? "Sign in again on the GST Portal"
+              : "Open the GST Portal to use Pack"}
+        </h2>
+        <p>
+          {isChecking
+            ? "Checking for a supported GST Portal page in this browser."
+            : isSessionExpired
+              ? "Your GST Portal session appears to have expired. Sign in there, then reopen Pack."
+              : "Navigate to the filed returns page. Pack will detect the supported page automatically."}
+        </p>
+        {!isChecking ? (
+          <button
+            className="primary-action context-state-action"
+            type="button"
+            onClick={onOpenPortal}
+          >
+            {isSessionExpired ? "Open GST Portal sign-in" : "Open GST Portal"}
+          </button>
+        ) : null}
+      </div>
+    </section>
+  );
 }
 
 createRoot(document.getElementById("root") as HTMLElement).render(

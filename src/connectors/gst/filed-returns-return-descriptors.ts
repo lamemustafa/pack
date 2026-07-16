@@ -49,9 +49,11 @@ export const FILED_RETURN_DESCRIPTORS: Record<FiledReturnsReturnType, FiledRetur
     scopeId: filedReturnsScopeId("GSTR-2B"),
     signalSlug: filedReturnsSafeSlug("GSTR-2B"),
     detailRoutePattern: /\/gstr2b\/auth\/gstr2b\/summary\/?$/i,
-    detailHeadingPattern: /\bgstr[\s-]?2b\b/i,
-    explicitDownloadPattern: /\bdownload\s+gstr[\s-]?2b\s+summary\s*\(?\s*pdf\s*\)?\b/i,
-    excelDownloadPattern: /\bdownload\s+gstr[\s-]?2b\s+details\s*\(?\s*excel\s*\)?\b/i,
+    detailHeadingPattern: /\bgstr[^a-z0-9]?2b\b/i,
+    explicitDownloadPattern: /\bdownload\s+gstr[^a-z0-9]?2b\s+summary\s*\(?\s*pdf\s*\)?\b/i,
+    excelDownloadPattern:
+      /(?:\bdownload\s+gstr[^a-z0-9]?2b\s+details?\s*\(?\s*excel\s*\)?\b|\bdetails?\s*\(?\s*excel\s*\)?\b)/i,
+    secondaryDownloadPattern: /\bsummary\s*\(?\s*pdf\s*\)?\b/i,
     supportsDirectDownload: false,
   },
 };

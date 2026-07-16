@@ -15,6 +15,7 @@ import {
   type FiledReturnsFlowMessagingDeps,
   resolveDirectDownloadRequestOnce,
 } from "./filed-returns-flow-messaging";
+import { withFiledReturnsDownloadDiagnostic } from "./filed-returns-download-diagnostics";
 import {
   FILED_RETURNS_SCOPE_ID,
   directDownloadActionMismatchResponse,
@@ -49,32 +50,35 @@ export async function triggerDirectFiledReturnDownload({
   target: FiledReturnsDownloadTarget;
 }): Promise<PackMessageResponse | null> {
   if (target.artifactType && target.artifactType !== "PDF") {
-    return {
-      ok: true,
-      flowStep: {
-        connectorId: "gst",
-        scopeId: FILED_RETURNS_SCOPE_ID,
-        state: "blocked",
-        safeSignals: ["filed-gstr3b-direct-download-artifact-rejected"],
-        safeMessage:
-          "Pack will not use the reviewed filed GSTR-3B direct PDF endpoint for a non-PDF artifact.",
+    return withDirectDownloadDiagnostic(
+      {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: FILED_RETURNS_SCOPE_ID,
+          state: "blocked",
+          safeSignals: ["filed-gstr3b-direct-download-artifact-rejected"],
+          safeMessage:
+            "Pack will not use the reviewed filed GSTR-3B direct PDF endpoint for a non-PDF artifact.",
+        },
       },
-    };
+      target,
+    );
   }
 
   const response = await resolveDirectDownloadRequestOnce(deps, tabId, target);
   if (!response.ok) return response;
-  if ("flowStep" in response) return response;
+  if ("flowStep" in response) return withDirectDownloadDiagnostic(response, target);
   if ("downloadTrigger" in response) return directDownloadTriggerResponse(response, activePeriod);
   if (!("directDownloadRequest" in response)) return null;
   if (response.directDownloadRequest.actionId !== target.actionId) {
-    return directDownloadActionMismatchResponse(activePeriod);
+    return withDirectDownloadDiagnostic(directDownloadActionMismatchResponse(activePeriod), target);
   }
   if (!isReviewedGstDownloadUrl(response.directDownloadRequest.url)) {
-    return directDownloadOriginRejectedResponse(activePeriod);
+    return withDirectDownloadDiagnostic(directDownloadOriginRejectedResponse(activePeriod), target);
   }
   if (!isExpectedFiledReturnDirectDownloadUrl(response.directDownloadRequest.url, scope)) {
-    return directDownloadUrlMismatchResponse(activePeriod);
+    return withDirectDownloadDiagnostic(directDownloadUrlMismatchResponse(activePeriod), target);
   }
 
   const armedAt = new Date();
@@ -83,7 +87,7 @@ export async function triggerDirectFiledReturnDownload({
     safeFiledReturnDownloadFilename(scope, "PDF"),
   );
   if (!startedDownload.ok) {
-    return directDownloadStartRejectedResponse(activePeriod);
+    return withDirectDownloadDiagnostic(directDownloadStartRejectedResponse(activePeriod), target);
   }
 
   const directTriggerStep: PortalFlowStepResult = {
@@ -104,9 +108,14 @@ export async function triggerDirectFiledReturnDownload({
     expectedUrlSubstrings: targetUrlSubstrings(scope),
     trustedDownloadIds: new Set([startedDownload.id]),
   });
-  const flowStep = explainDirectDownloadPromptIfNeeded(
-    mergeFlowStepWithDownloadObservation(directTriggerStep, observedDownload),
-  );
+  const flowStep = withFiledReturnsDownloadDiagnostic({
+    attemptClass: "extension-direct",
+    flowStep: explainDirectDownloadPromptIfNeeded(
+      mergeFlowStepWithDownloadObservation(directTriggerStep, observedDownload),
+    ),
+    safeEvidence: observedDownload.safeEvidence,
+    target,
+  });
   let flowSummary: FiledReturnsFlowSummary | null = null;
   if (deps.persistTargetReview !== false) {
     flowSummary = await persistFiledReturnsTargetReview(scope, flowStep, deps);
@@ -116,6 +125,21 @@ export async function triggerDirectFiledReturnDownload({
     flowStep,
     ...(flowSummary ? { flowSummary } : {}),
     ...(response.observation ? { observation: response.observation } : {}),
+  };
+}
+
+function withDirectDownloadDiagnostic(
+  response: PackMessageResponse,
+  target: FiledReturnsDownloadTarget,
+): PackMessageResponse {
+  if (!response.ok || !("flowStep" in response)) return response;
+  return {
+    ...response,
+    flowStep: withFiledReturnsDownloadDiagnostic({
+      attemptClass: "extension-direct",
+      flowStep: response.flowStep,
+      target,
+    }),
   };
 }
 

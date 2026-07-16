@@ -12,7 +12,7 @@ describe("live run evidence", () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.evidence.counts.downloaded).toBe(10);
+      expect(result.evidence.counts.downloaded).toBe(1);
       expect(result.evidence.redaction.containsGstin).toBe(false);
     }
   });
@@ -97,6 +97,25 @@ describe("live run evidence", () => {
       returnType: "GSTR-1",
       artifactType: "PDF_AND_EXCEL",
       financialYear: "2025-26",
+      downloadEvidence: [
+        {
+          ...createValidEvidence().downloadEvidence[0],
+          actionId: "action-gstr1-pdf",
+          returnType: "GSTR-1",
+          financialYear: "2025-26",
+          endpointClass: "gstr1-pdf-portal-blob-captured-download",
+          downloadPathClass: "captured-portal-request-data",
+        },
+        {
+          ...createValidEvidence().downloadEvidence[0],
+          actionId: "action-gstr1-excel",
+          artifactType: "EXCEL",
+          returnType: "GSTR-1",
+          financialYear: "2025-26",
+          endpointClass: "gstr1-excel-portal-blob-captured-download",
+          downloadPathClass: "captured-portal-request-data",
+        },
+      ],
     });
 
     expect(missingReturnType.ok).toBe(false);
@@ -115,14 +134,173 @@ describe("live run evidence", () => {
     expect(validGstr1Combined).toMatchObject({ ok: true });
   });
 
+  it("requires both concrete artifacts for every downloaded combined period", () => {
+    const pdfOnly = createValidEvidence().downloadEvidence[0];
+    const result = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      returnType: "GSTR-1",
+      artifactType: "PDF_AND_EXCEL",
+      financialYear: "2025-26",
+      downloadEvidence: [
+        {
+          ...pdfOnly,
+          actionId: "action-gstr1-pdf",
+          returnType: "GSTR-1",
+          financialYear: "2025-26",
+          endpointClass: "gstr1-pdf-portal-blob-captured-download",
+          downloadPathClass: "captured-portal-request-data",
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors).toContain(
+        "pass combined evidence must include PDF and EXCEL for each downloaded period",
+      );
+    }
+  });
+
   it("accepts redacted GSTR-2B PDF and Excel evidence metadata", () => {
     expect(
       validateLiveRunEvidence({
         ...createValidEvidence(),
         returnType: "GSTR-2B",
         artifactType: "PDF_AND_EXCEL",
+        downloadEvidence: [
+          {
+            ...createValidEvidence().downloadEvidence[0],
+            actionId: "action-gstr2b-pdf",
+            returnType: "GSTR-2B",
+            endpointClass: "gstr2b-portal-blob-captured-download",
+            downloadPathClass: "captured-portal-request-data",
+          },
+          {
+            ...createValidEvidence().downloadEvidence[0],
+            actionId: "action-gstr2b-excel",
+            artifactType: "EXCEL",
+            returnType: "GSTR-2B",
+            endpointClass: "gstr2b-portal-blob-captured-download",
+            downloadPathClass: "captured-portal-request-data",
+          },
+        ],
       }),
     ).toMatchObject({ ok: true });
+  });
+
+  it("accepts captured GSTR-3B endpoint evidence metadata", () => {
+    expect(
+      validateLiveRunEvidence({
+        ...createValidEvidence(),
+        downloadEvidence: [
+          {
+            ...createValidEvidence().downloadEvidence[0],
+            endpointClass: "gstr3b-portal-blob-captured-download",
+            downloadPathClass: "captured-portal-request-data",
+          },
+        ],
+      }),
+    ).toMatchObject({ ok: true });
+  });
+
+  it("rejects endpoint and path combinations that runtime diagnostics cannot emit", () => {
+    const result = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      downloadEvidence: [
+        {
+          ...createValidEvidence().downloadEvidence[0],
+          endpointClass: "gstr3b-getgenpdf",
+          downloadPathClass: "captured-portal-request-data",
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors).toContain(
+        "downloadEvidence[0].endpointClass is inconsistent with downloadPathClass",
+      );
+    }
+  });
+
+  it("requires one downloaded evidence entry per downloaded target", () => {
+    const result = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      counts: {
+        ...createValidEvidence().counts,
+        downloaded: 10,
+        notFiled: 2,
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors).toContain(
+        "pass evidence must include one unique period per downloaded target",
+      );
+    }
+  });
+
+  it("allows an all-not-filed pass without fabricated download evidence", () => {
+    const result = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      counts: {
+        ...createValidEvidence().counts,
+        downloaded: 0,
+        notFiled: 12,
+      },
+      downloadEvidence: [],
+    });
+
+    expect(result).toMatchObject({ ok: true });
+  });
+
+  it("rejects duplicate downloaded target and action identities", () => {
+    const first = createValidEvidence().downloadEvidence[0];
+    const result = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      counts: { ...createValidEvidence().counts, downloaded: 2, notFiled: 10 },
+      downloadEvidence: [first, { ...first }],
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors).toEqual(
+        expect.arrayContaining([
+          "pass evidence must include one unique period per downloaded target",
+          "pass evidence cannot duplicate a downloaded period and artifact",
+          "pass evidence cannot reuse a downloaded actionId",
+        ]),
+      );
+    }
+  });
+
+  it("rejects unknown endpoints and unresolved statuses from pass evidence", () => {
+    const first = createValidEvidence().downloadEvidence[0];
+    const unknownEndpoint = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      downloadEvidence: [{ ...first, endpointClass: "unknown" }],
+    });
+    const failedRow = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      downloadEvidence: [
+        first,
+        { ...first, actionId: "action-failed", period: "May", status: "failed" },
+      ],
+    });
+
+    expect(unknownEndpoint.ok).toBe(false);
+    if (!unknownEndpoint.ok) {
+      expect(unknownEndpoint.errors).toContain(
+        "downloadEvidence[0].endpointClass cannot be unknown for passed downloads",
+      );
+    }
+    expect(failedRow.ok).toBe(false);
+    if (!failedRow.ok) {
+      expect(failedRow.errors).toContain(
+        "pass evidence cannot include unresolved downloadEvidence statuses",
+      );
+    }
   });
 
   it("scans raw evidence JSON before parsing", () => {
@@ -162,6 +340,32 @@ describe("live run evidence", () => {
     expect(result.ok).toBe(false);
     if (!result.ok)
       expect(result.errors).toContain("checks.browserRestartResumeChecked must be true");
+  });
+
+  it("requires pass evidence to include sanitized download path evidence", () => {
+    const missing = { ...createValidEvidence() } as Record<string, unknown>;
+    delete missing.downloadEvidence;
+    const invalidPath = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      downloadEvidence: [
+        {
+          ...createValidEvidence().downloadEvidence[0],
+          downloadPathClass: "raw-url",
+        },
+      ],
+    });
+
+    const missingResult = validateLiveRunEvidence(missing);
+
+    expect(missingResult.ok).toBe(false);
+    if (!missingResult.ok)
+      expect(missingResult.errors).toContain("downloadEvidence must be an array");
+    expect(invalidPath.ok).toBe(false);
+    if (!invalidPath.ok) {
+      expect(invalidPath.errors).toContain(
+        "downloadEvidence[0].downloadPathClass must be one of extension-direct-https, extension-direct-blob, extension-direct-data, extension-direct-unknown, portal-click-https, portal-click-blob, portal-click-data, portal-click-unknown, portal-click-after-direct-fallback-https, portal-click-after-direct-fallback-blob, portal-click-after-direct-fallback-data, portal-click-after-direct-fallback-unknown, captured-portal-request-https, captured-portal-request-blob, captured-portal-request-data, captured-portal-request-unknown",
+      );
+    }
   });
 
   it("requires pass evidence to have reconciled targets and no blocking counts", () => {
@@ -487,8 +691,8 @@ describe("live run evidence", () => {
         failed: 0,
         blocked: 0,
         manuallyObserved: 0,
-        notFiled: 2,
-        downloaded: 10,
+        notFiled: 11,
+        downloaded: 1,
       },
     };
 
@@ -524,8 +728,8 @@ function createValidEvidence(): LiveRunEvidence {
     outcome: "pass",
     counts: {
       eligibleTargets: 12,
-      downloaded: 10,
-      notFiled: 2,
+      downloaded: 1,
+      notFiled: 11,
       manuallyObserved: 0,
       blocked: 0,
       failed: 0,
@@ -541,6 +745,22 @@ function createValidEvidence(): LiveRunEvidence {
       browserSummaryCaptured: true,
       unexpectedNetworkDestinations: 0,
     },
+    downloadEvidence: [
+      {
+        actionId: "action-april",
+        returnType: "GSTR-3B",
+        artifactType: "PDF",
+        financialYear: "2026-27",
+        period: "April",
+        endpointClass: "gstr3b-getgenpdf",
+        downloadPathClass: "extension-direct-https",
+        status: "downloaded",
+        askWhereToSave: "off",
+        filenameCollision: "absent",
+        multipleDownloadPrompt: "not-shown",
+        exactZipBuild: "b".repeat(64),
+      },
+    ],
     redaction: {
       containsGstin: false,
       containsPan: false,

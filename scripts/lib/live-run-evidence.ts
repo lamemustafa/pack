@@ -5,6 +5,7 @@ import type {
   LiveRunEvidence,
   LiveRunEvidenceChecks,
   LiveRunEvidenceCounts,
+  LiveRunDownloadEvidence,
   LiveRunEvidenceLimitation,
   LiveRunEvidenceRedaction,
   LiveRunEvidenceValidationResult,
@@ -64,6 +65,7 @@ const LIVE_RUN_EVIDENCE_KEYS = [
   "outcome",
   "counts",
   "checks",
+  "downloadEvidence",
   "limitations",
   "redaction",
   "mediaArtifacts",
@@ -89,6 +91,59 @@ const CHECK_KEYS = [
   "unexpectedNetworkDestinations",
 ];
 const MEDIA_ARTIFACT_KEYS = ["kind", "classification", "redactionMethod", "sha256"];
+const DOWNLOAD_EVIDENCE_KEYS = [
+  "actionId",
+  "returnType",
+  "artifactType",
+  "financialYear",
+  "period",
+  "endpointClass",
+  "downloadPathClass",
+  "status",
+  "askWhereToSave",
+  "filenameCollision",
+  "multipleDownloadPrompt",
+  "exactZipBuild",
+];
+const DOWNLOAD_ENDPOINT_CLASSES = [
+  "gstr3b-getgenpdf",
+  "gstr3b-portal-rendered-download",
+  "gstr3b-portal-blob-captured-download",
+  "gstr1-pdf-portal-rendered-download",
+  "gstr1-excel-portal-rendered-download",
+  "gstr1-pdf-portal-blob-captured-download",
+  "gstr1-excel-portal-blob-captured-download",
+  "gstr2b-portal-blob-captured-download",
+  "filed-return-portal-rendered-download",
+  "unknown",
+] as const;
+const DOWNLOAD_PATH_CLASSES = [
+  "extension-direct-https",
+  "extension-direct-blob",
+  "extension-direct-data",
+  "extension-direct-unknown",
+  "portal-click-https",
+  "portal-click-blob",
+  "portal-click-data",
+  "portal-click-unknown",
+  "portal-click-after-direct-fallback-https",
+  "portal-click-after-direct-fallback-blob",
+  "portal-click-after-direct-fallback-data",
+  "portal-click-after-direct-fallback-unknown",
+  "captured-portal-request-https",
+  "captured-portal-request-blob",
+  "captured-portal-request-data",
+  "captured-portal-request-unknown",
+] as const;
+const DOWNLOAD_STATUSES = [
+  "downloaded",
+  "not-filed",
+  "unavailable-on-portal",
+  "user-action-required",
+  "unsupported",
+  "blocked",
+  "failed",
+] as const;
 const LIMITATIONS: LiveRunEvidenceLimitation[] = [
   "clean-profile-not-verified",
   "human-account-match-not-verified",
@@ -158,6 +213,7 @@ export function validateLiveRunEvidence(input: unknown): LiveRunEvidenceValidati
   }
   validateCounts(input.counts, input.outcome, errors);
   validateChecks(input.checks, input.scenario, input.outcome, errors);
+  validateDownloadEvidence(input.downloadEvidence, input, errors);
   validateLimitations(input.limitations, input.outcome, errors);
   validateRedaction(input.redaction, errors);
   validateMediaArtifacts(input.mediaArtifacts, errors);
@@ -165,6 +221,197 @@ export function validateLiveRunEvidence(input: unknown): LiveRunEvidenceValidati
 
   if (errors.length > 0) return { ok: false, errors };
   return { ok: true, evidence: input as unknown as LiveRunEvidence };
+}
+
+function validateDownloadEvidence(
+  input: unknown,
+  evidence: Record<string, unknown>,
+  errors: string[],
+): void {
+  if (!Array.isArray(input)) {
+    errors.push("downloadEvidence must be an array");
+    return;
+  }
+  const downloadedCount = isRecord(evidence.counts) ? evidence.counts.downloaded : undefined;
+  if (evidence.outcome === "pass" && input.length === 0 && downloadedCount !== 0) {
+    errors.push("pass evidence must include downloadEvidence");
+  }
+  validatePassDownloadEvidenceReconciliation(input, evidence, errors);
+  input.forEach((entry, index) => {
+    if (!isRecord(entry)) {
+      errors.push(`downloadEvidence[${index}] must be an object`);
+      return;
+    }
+    requireOnlyKeys(entry, DOWNLOAD_EVIDENCE_KEYS, `downloadEvidence[${index}]`, errors);
+    requireBoundedString(entry.actionId, `downloadEvidence[${index}].actionId`, errors, 4, 120);
+    requireOneOf(
+      entry.returnType,
+      ["GSTR-3B", "GSTR-1", "GSTR-2B"],
+      `downloadEvidence[${index}].returnType`,
+      errors,
+    );
+    requireOneOf(
+      entry.artifactType,
+      ["PDF", "EXCEL"],
+      `downloadEvidence[${index}].artifactType`,
+      errors,
+    );
+    requirePattern(
+      entry.financialYear,
+      FINANCIAL_YEAR,
+      `downloadEvidence[${index}].financialYear`,
+      errors,
+    );
+    requireOneOf(entry.period, PERIODS, `downloadEvidence[${index}].period`, errors);
+    requireOneOf(
+      entry.endpointClass,
+      DOWNLOAD_ENDPOINT_CLASSES,
+      `downloadEvidence[${index}].endpointClass`,
+      errors,
+    );
+    requireOneOf(
+      entry.downloadPathClass,
+      DOWNLOAD_PATH_CLASSES,
+      `downloadEvidence[${index}].downloadPathClass`,
+      errors,
+    );
+    validateDownloadEndpointPathConsistency(entry, evidence, index, errors);
+    requireOneOf(entry.status, DOWNLOAD_STATUSES, `downloadEvidence[${index}].status`, errors);
+    requireOneOf(
+      entry.askWhereToSave,
+      ["on", "off", "unknown"],
+      `downloadEvidence[${index}].askWhereToSave`,
+      errors,
+    );
+    requireOneOf(
+      entry.filenameCollision,
+      ["present", "absent", "unknown"],
+      `downloadEvidence[${index}].filenameCollision`,
+      errors,
+    );
+    requireOneOf(
+      entry.multipleDownloadPrompt,
+      ["shown", "not-shown", "unknown"],
+      `downloadEvidence[${index}].multipleDownloadPrompt`,
+      errors,
+    );
+    requirePattern(entry.exactZipBuild, HEX_64, `downloadEvidence[${index}].exactZipBuild`, errors);
+    validateDownloadScopeConsistency(
+      entry as Partial<LiveRunDownloadEvidence>,
+      evidence,
+      index,
+      errors,
+    );
+  });
+}
+
+function validatePassDownloadEvidenceReconciliation(
+  entries: unknown[],
+  evidence: Record<string, unknown>,
+  errors: string[],
+): void {
+  if (evidence.outcome !== "pass" || !isRecord(evidence.counts)) return;
+  const downloadedEntries = entries.filter(
+    (entry): entry is Record<string, unknown> => isRecord(entry) && entry.status === "downloaded",
+  );
+  const downloadedTargetPeriods = new Set(
+    downloadedEntries
+      .map((entry) => entry.period)
+      .filter((period): period is string => typeof period === "string"),
+  );
+  if (
+    typeof evidence.counts.downloaded === "number" &&
+    downloadedTargetPeriods.size !== evidence.counts.downloaded
+  ) {
+    errors.push("pass evidence must include one unique period per downloaded target");
+  }
+  const targetIdentities = new Set(
+    downloadedEntries.map((entry) => `${String(entry.period)}:${String(entry.artifactType)}`),
+  );
+  if (targetIdentities.size !== downloadedEntries.length) {
+    errors.push("pass evidence cannot duplicate a downloaded period and artifact");
+  }
+  const actionIds = new Set(downloadedEntries.map((entry) => entry.actionId));
+  if (actionIds.size !== downloadedEntries.length) {
+    errors.push("pass evidence cannot reuse a downloaded actionId");
+  }
+  if (evidence.artifactType === "PDF_AND_EXCEL") {
+    const artifactsByPeriod = new Map<string, Set<string>>();
+    downloadedEntries.forEach((entry) => {
+      if (typeof entry.period !== "string" || typeof entry.artifactType !== "string") return;
+      const artifacts = artifactsByPeriod.get(entry.period) ?? new Set<string>();
+      artifacts.add(entry.artifactType);
+      artifactsByPeriod.set(entry.period, artifacts);
+    });
+    if (
+      Array.from(artifactsByPeriod.values()).some(
+        (artifacts) => !artifacts.has("PDF") || !artifacts.has("EXCEL"),
+      )
+    ) {
+      errors.push("pass combined evidence must include PDF and EXCEL for each downloaded period");
+    }
+  }
+  if (
+    entries.some(
+      (entry) =>
+        isRecord(entry) &&
+        ["blocked", "failed", "user-action-required", "unsupported"].includes(String(entry.status)),
+    )
+  ) {
+    errors.push("pass evidence cannot include unresolved downloadEvidence statuses");
+  }
+}
+
+function validateDownloadEndpointPathConsistency(
+  entry: Record<string, unknown>,
+  evidence: Record<string, unknown>,
+  index: number,
+  errors: string[],
+): void {
+  if (typeof entry.endpointClass !== "string" || typeof entry.downloadPathClass !== "string") {
+    return;
+  }
+  const endpoint = entry.endpointClass;
+  const path = entry.downloadPathClass;
+  if (endpoint === "unknown") {
+    if (evidence.outcome === "pass" || entry.status === "downloaded") {
+      errors.push(
+        `downloadEvidence[${index}].endpointClass cannot be unknown for passed downloads`,
+      );
+    }
+    return;
+  }
+  const matchesRuntimePath =
+    (endpoint === "gstr3b-getgenpdf" && path.startsWith("extension-direct-")) ||
+    (endpoint.includes("portal-blob-captured-download") &&
+      path.startsWith("captured-portal-request-")) ||
+    (endpoint.includes("portal-rendered-download") && path.startsWith("portal-click-"));
+  if (!matchesRuntimePath) {
+    errors.push(`downloadEvidence[${index}].endpointClass is inconsistent with downloadPathClass`);
+  }
+}
+
+function validateDownloadScopeConsistency(
+  entry: Partial<LiveRunDownloadEvidence>,
+  evidence: Record<string, unknown>,
+  index: number,
+  errors: string[],
+): void {
+  if (entry.returnType !== evidence.returnType) {
+    errors.push(`downloadEvidence[${index}].returnType must match evidence returnType`);
+  }
+  if (entry.financialYear !== evidence.financialYear) {
+    errors.push(`downloadEvidence[${index}].financialYear must match evidence financialYear`);
+  }
+  if (evidence.scenario === "single-period" && entry.period !== evidence.period) {
+    errors.push(`downloadEvidence[${index}].period must match single-period evidence period`);
+  }
+  if (evidence.artifactType === "PDF" && entry.artifactType !== "PDF") {
+    errors.push(`downloadEvidence[${index}].artifactType must match PDF evidence`);
+  }
+  if (evidence.artifactType === "EXCEL" && entry.artifactType !== "EXCEL") {
+    errors.push(`downloadEvidence[${index}].artifactType must match EXCEL evidence`);
+  }
 }
 
 export function validateLiveRunEvidenceJson(source: string): LiveRunEvidenceValidationResult {

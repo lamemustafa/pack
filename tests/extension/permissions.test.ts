@@ -16,7 +16,7 @@ describe("extension permission posture", () => {
     expect(PACK_EXTENSION_NAME).toBe("ComplyEaze Pack: GST Return Downloader");
     expect(PACK_EXTENSION_SHORT_NAME).toBe("ComplyEaze Pack");
     expect(PACK_EXTENSION_DESCRIPTION).toBe(
-      "Alpha: locally download GSTR-1/GSTR-3B files; private GSTR-2B support may still show the browser save dialog.",
+      "Alpha: locally download GSTR-1/GSTR-3B files; private GSTR-2B downloads are source-build experimental.",
     );
     expect(PACK_EXTENSION_HOMEPAGE_URL).toBe("https://pack.complyeaze.com/gst");
     expect(PACK_EXTENSION_ICONS).toEqual({
@@ -29,8 +29,16 @@ describe("extension permission posture", () => {
   });
 
   it("keeps the V0 permission set narrow", () => {
-    expect([...PACK_EXTENSION_PERMISSIONS].sort()).toEqual(["downloads", "scripting", "storage"]);
+    expect([...PACK_EXTENSION_PERMISSIONS].sort()).toEqual([
+      "downloads",
+      "offscreen",
+      "scripting",
+      "storage",
+    ]);
     expect(PACK_EXTENSION_PERMISSIONS).not.toContain("cookies");
+    expect(PACK_EXTENSION_PERMISSIONS).not.toContain("debugger");
+    expect(PACK_EXTENSION_PERMISSIONS).not.toContain("webRequest");
+    expect(PACK_EXTENSION_PERMISSIONS).not.toContain("nativeMessaging");
     expect(PACK_EXTENSION_PERMISSIONS).not.toContain("tabs");
     expect(PACK_EXTENSION_PERMISSIONS).not.toContain("alarms");
     expect(PACK_EXTENSION_PERMISSIONS).not.toContain("identity");

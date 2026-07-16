@@ -172,6 +172,48 @@ describe("download filename suggester", () => {
     expect(trustedDownloadIds.has(97)).toBe(true);
     expect(downloads.determiningFilename.listenerCount()).toBe(0);
   });
+
+  it("does not promote blob downloads to trusted ids without action-bound evidence", () => {
+    const downloads = createDownloadsApi();
+    const trustedDownloadIds = new Set<number>();
+    suggestNextBrowserDownloadFilename(
+      downloads,
+      {
+        armedAt: new Date("2026-06-24T10:00:00.000Z"),
+        expectedFileExtensions: [".pdf"],
+        expectedMimeTypes: ["application/pdf"],
+        expectedOrigins: ["https://return.gst.gov.in"],
+        trustedDownloadIds,
+      },
+      "complyeaze-pack/gst/2026-27/gstr-3b/may.pdf",
+    );
+    const unrelatedSuggest = vi.fn();
+    const gstOriginSuggest = vi.fn();
+
+    downloads.determiningFilename.emit(
+      {
+        id: 98,
+        mime: "application/pdf",
+        startTime: "2026-06-24T10:00:01.000Z",
+        url: "blob:null/unrelated-pdf",
+      },
+      unrelatedSuggest,
+    );
+    downloads.determiningFilename.emit(
+      {
+        id: 99,
+        mime: "application/pdf",
+        startTime: "2026-06-24T10:00:02.000Z",
+        url: "blob:https://return.gst.gov.in/target-pdf",
+      },
+      gstOriginSuggest,
+    );
+
+    expect(unrelatedSuggest).toHaveBeenCalledWith();
+    expect(trustedDownloadIds.has(98)).toBe(false);
+    expect(gstOriginSuggest).toHaveBeenCalledWith();
+    expect(trustedDownloadIds.has(99)).toBe(false);
+  });
 });
 
 function createDownloadsApi() {

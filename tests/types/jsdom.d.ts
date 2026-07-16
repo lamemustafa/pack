@@ -4,6 +4,7 @@ declare module "jsdom" {
       html?: string,
       options?: {
         pretendToBeVisual?: boolean;
+        url?: string;
       },
     );
 

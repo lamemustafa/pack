@@ -49,4 +49,59 @@ describe("GST portal host guard", () => {
       ]),
     ).toEqual({ id: 13, url: "https://services.gst.gov.in/services/auth/fowelcome" });
   });
+
+  it("prefers filed-return results over the return dashboard", () => {
+    expect(
+      pickSupportedGstPortalTab([
+        { id: 12, url: "https://return.gst.gov.in/returns/auth/dashboard" },
+        { id: 13, url: "https://return.gst.gov.in/returns/auth/efiledReturns" },
+      ]),
+    ).toEqual({ id: 13, url: "https://return.gst.gov.in/returns/auth/efiledReturns" });
+  });
+
+  it("does not select login pages as actionable work tabs", () => {
+    expect(isSupportedGstPortalUrl("https://services.gst.gov.in/services/login")).toBe(true);
+
+    expect(
+      pickSupportedGstPortalTab([{ id: 10, url: "https://services.gst.gov.in/services/login" }]),
+    ).toBeNull();
+  });
+
+  it("does not select GST error pages as actionable portal tabs", () => {
+    expect(isSupportedGstPortalUrl("https://services.gst.gov.in/services/error/accessdenied")).toBe(
+      true,
+    );
+
+    expect(
+      pickSupportedGstPortalTab([
+        { id: 10, url: "https://services.gst.gov.in/services/error/accessdenied" },
+        { id: 11, url: "https://return.gst.gov.in/returns/auth/dashboard" },
+      ]),
+    ).toEqual({ id: 11, url: "https://return.gst.gov.in/returns/auth/dashboard" });
+
+    expect(
+      pickSupportedGstPortalTab([
+        { id: 12, url: "https://services.gst.gov.in/services/error/accessdenied" },
+      ]),
+    ).toBeNull();
+  });
+
+  it("does not select generated GST artifact tabs as actionable portal tabs", () => {
+    expect(isSupportedGstPortalUrl("https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/report.pdf")).toBe(
+      true,
+    );
+
+    expect(
+      pickSupportedGstPortalTab([
+        { id: 10, url: "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/report.pdf" },
+        { id: 11, url: "https://return.gst.gov.in/returns/auth/dashboard" },
+      ]),
+    ).toEqual({ id: 11, url: "https://return.gst.gov.in/returns/auth/dashboard" });
+
+    expect(
+      pickSupportedGstPortalTab([
+        { id: 12, url: "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/report.xlsx" },
+      ]),
+    ).toBeNull();
+  });
 });

@@ -1,0 +1,49 @@
+import type { FiledReturnsFlowSummary, PortalObservation } from "../../core/contracts";
+import { DiagnosticSignals, RunProgress, hasDiagnosticSignals } from "./run-summary";
+
+export function RunEvidencePanel({
+  scopedFlowSummary,
+  summaryHeading,
+}: {
+  filedReturnsObservation?: PortalObservation | null;
+  portalReady?: boolean;
+  scopedFlowSummary: FiledReturnsFlowSummary | null;
+  summaryHeading: string | null;
+}) {
+  if (scopedFlowSummary && summaryHeading) {
+    const previousCompleteRun = scopedFlowSummary.status === "complete";
+    return (
+      <section
+        className={previousCompleteRun ? "evidence-panel" : "evidence-panel evidence-panel-active"}
+        aria-label="Run evidence"
+      >
+        <div className="evidence-heading">
+          <div>
+            <p className="section-label">Status</p>
+            <h2>{previousCompleteRun ? "Previous filed-returns run complete" : summaryHeading}</h2>
+          </div>
+          <RunProgress summary={scopedFlowSummary} />
+        </div>
+        <p className="status-detail">{displayFlowStepMessage(scopedFlowSummary)}</p>
+        {hasDiagnosticSignals(scopedFlowSummary) ? (
+          <details className="diagnostic-details">
+            <summary>Safe diagnostics</summary>
+            <DiagnosticSignals summary={scopedFlowSummary} />
+          </details>
+        ) : null}
+      </section>
+    );
+  }
+
+  return null;
+}
+
+function displayFlowStepMessage(summary: FiledReturnsFlowSummary): string {
+  if (summary.flowStep.safeSignals.includes("gst-login-tab-opened")) {
+    return "Open a signed-in GST Portal tab, then retry this period or cancel and reset.";
+  }
+  if (summary.flowStep.safeSignals.includes("full-fiscal-year-zip-download-unconfirmed")) {
+    return "Pack prepared the final ZIP but the browser did not confirm the save. Retry the final ZIP handoff before starting another full-year run.";
+  }
+  return summary.flowStep.safeMessage;
+}

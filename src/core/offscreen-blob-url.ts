@@ -1,0 +1,176 @@
+import { isFiledReturnsConcreteArtifactType } from "./filed-returns-artifacts";
+import { isFiledReturnsReturnType } from "./filed-returns-return-types";
+import type { FiledReturnsConcreteArtifactType } from "./filed-returns-artifacts";
+import type { FiledReturnsReturnType } from "./filed-returns-return-types";
+
+export const PACK_OFFSCREEN_BLOB_URL_TARGET = "pack-offscreen-blob-url";
+export const PACK_OFFSCREEN_DATA_URL_MAX_LENGTH = 50 * 1024 * 1024;
+
+export interface PackOffscreenCreateBlobUrlMessage {
+  type: "PACK_OFFSCREEN_CREATE_BLOB_URL";
+  target: typeof PACK_OFFSCREEN_BLOB_URL_TARGET;
+  payload: {
+    requestId: string;
+    dataUrl: string;
+  };
+}
+
+export interface PackOffscreenRevokeBlobUrlMessage {
+  type: "PACK_OFFSCREEN_REVOKE_BLOB_URL";
+  target: typeof PACK_OFFSCREEN_BLOB_URL_TARGET;
+  payload: {
+    requestId: string;
+    blobUrl: string;
+  };
+}
+
+export interface PackOffscreenStageFiledReturnMessage {
+  type: "PACK_OFFSCREEN_STAGE_FILED_RETURN";
+  target: typeof PACK_OFFSCREEN_BLOB_URL_TARGET;
+  payload: {
+    requestId: string;
+    ledgerId: string;
+    zipPath: string;
+    returnType: FiledReturnsReturnType;
+    artifactType: FiledReturnsConcreteArtifactType;
+    dataUrl: string;
+  };
+}
+
+export interface PackOffscreenCreateFiledReturnZipMessage {
+  type: "PACK_OFFSCREEN_CREATE_FILED_RETURN_ZIP";
+  target: typeof PACK_OFFSCREEN_BLOB_URL_TARGET;
+  payload: {
+    requestId: string;
+    ledgerId: string;
+    expectedReturnType?: FiledReturnsReturnType;
+    expectedArtifactTypes?: FiledReturnsConcreteArtifactType[];
+  };
+}
+
+export interface PackOffscreenClearFiledReturnLedgerMessage {
+  type: "PACK_OFFSCREEN_CLEAR_FILED_RETURN_LEDGER";
+  target: typeof PACK_OFFSCREEN_BLOB_URL_TARGET;
+  payload: {
+    requestId: string;
+    ledgerId: string;
+  };
+}
+
+export interface PackOffscreenClearAllFiledReturnLedgersMessage {
+  type: "PACK_OFFSCREEN_CLEAR_ALL_FILED_RETURN_LEDGERS";
+  target: typeof PACK_OFFSCREEN_BLOB_URL_TARGET;
+  payload: {
+    requestId: string;
+  };
+}
+
+export type PackOffscreenBlobUrlMessage =
+  | PackOffscreenCreateBlobUrlMessage
+  | PackOffscreenRevokeBlobUrlMessage
+  | PackOffscreenStageFiledReturnMessage
+  | PackOffscreenCreateFiledReturnZipMessage
+  | PackOffscreenClearFiledReturnLedgerMessage
+  | PackOffscreenClearAllFiledReturnLedgersMessage;
+
+export type PackOffscreenBlobUrlResponse =
+  | {
+      ok: true;
+      requestId: string;
+      blobUrl: string;
+    }
+  | {
+      ok: true;
+      requestId: string;
+      revoked: true;
+    }
+  | {
+      ok: true;
+      requestId: string;
+      staged: true;
+      byteCountClass: "non-empty";
+    }
+  | {
+      ok: true;
+      requestId: string;
+      blobUrl: string;
+      zipEntryCount: number;
+    }
+  | {
+      ok: true;
+      requestId: string;
+      cleared: true;
+    }
+  | {
+      ok: false;
+      requestId?: string;
+      errorCategory:
+        | "invalid-message"
+        | "invalid-data-url"
+        | "blob-url-failed"
+        | "opfs-unavailable"
+        | "stage-failed"
+        | "clear-failed"
+        | "zip-invalid-entry"
+        | "zip-empty"
+        | "zip-failed";
+    };
+
+export function isPackOffscreenBlobUrlMessage(
+  input: unknown,
+): input is PackOffscreenBlobUrlMessage {
+  if (!isRecord(input)) return false;
+  if (input.target !== PACK_OFFSCREEN_BLOB_URL_TARGET) return false;
+  if (!isRecord(input.payload)) return false;
+  if (!isBoundedString(input.payload.requestId, 8, 120)) return false;
+  if (input.type === "PACK_OFFSCREEN_CREATE_BLOB_URL") {
+    return isBoundedString(input.payload.dataUrl, 1, PACK_OFFSCREEN_DATA_URL_MAX_LENGTH);
+  }
+  if (input.type === "PACK_OFFSCREEN_STAGE_FILED_RETURN") {
+    return (
+      isBoundedString(input.payload.ledgerId, 1, 120) &&
+      isSafeZipPath(input.payload.zipPath) &&
+      isFiledReturnsReturnType(input.payload.returnType) &&
+      isFiledReturnsConcreteArtifactType(input.payload.artifactType) &&
+      isBoundedString(input.payload.dataUrl, 1, PACK_OFFSCREEN_DATA_URL_MAX_LENGTH)
+    );
+  }
+  if (input.type === "PACK_OFFSCREEN_CREATE_FILED_RETURN_ZIP") {
+    return (
+      isBoundedString(input.payload.ledgerId, 1, 120) &&
+      (input.payload.expectedReturnType === undefined ||
+        isFiledReturnsReturnType(input.payload.expectedReturnType)) &&
+      (input.payload.expectedArtifactTypes === undefined ||
+        (Array.isArray(input.payload.expectedArtifactTypes) &&
+          input.payload.expectedArtifactTypes.length > 0 &&
+          input.payload.expectedArtifactTypes.every(isFiledReturnsConcreteArtifactType)))
+    );
+  }
+  if (input.type === "PACK_OFFSCREEN_CLEAR_FILED_RETURN_LEDGER") {
+    return isBoundedString(input.payload.ledgerId, 1, 120);
+  }
+  if (input.type === "PACK_OFFSCREEN_CLEAR_ALL_FILED_RETURN_LEDGERS") {
+    return Object.keys(input.payload).length === 1;
+  }
+  if (input.type === "PACK_OFFSCREEN_REVOKE_BLOB_URL") {
+    return isBoundedString(input.payload.blobUrl, 1, 4096);
+  }
+  return false;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isBoundedString(value: unknown, minLength: number, maxLength: number): value is string {
+  return typeof value === "string" && value.length >= minLength && value.length <= maxLength;
+}
+
+function isSafeZipPath(value: unknown): value is string {
+  return (
+    isBoundedString(value, 1, 220) &&
+    !value.startsWith("/") &&
+    !value.includes("\\") &&
+    !value.split("/").some((part) => part.length === 0 || part === "." || part === "..")
+  );
+}

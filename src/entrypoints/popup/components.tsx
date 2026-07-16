@@ -1,296 +1,246 @@
-import type { FiledReturnsDownloadScope, FiledReturnsFlowSummary } from "../../core/contracts";
+import type {
+  FiledReturnsDownloadScope,
+  FiledReturnsFlowSummary,
+  PortalContext,
+} from "../../core/contracts";
 import {
-  FILED_RETURNS_ARTIFACT_TYPES,
-  filedReturnsArtifactLabel,
-  normaliseFiledReturnsArtifactType,
-  supportsFiledReturnsArtifactType,
-} from "../../core/filed-returns-artifacts";
-import {
-  getFiledReturnsFinancialYearOptions,
-  getFiledReturnsScopePeriodOptions,
-  isFullFiscalYearScope,
+  FULL_FISCAL_YEAR_PERIOD,
   normaliseFiledReturnsScope,
 } from "../../core/filed-returns-scope";
-import { FILED_RETURNS_RETURN_TYPES } from "../../core/filed-returns-return-types";
+import { ScopeActionPanel } from "./scope-action-panel";
 import { ScopeButtonGroup } from "./scope-button-group";
+import { canRetryFullFiscalYearZipWithoutPortal } from "./flow-summary";
+import {
+  createScopeFormModel,
+  getScopeActionCopy,
+  getScopeFormStartAction,
+  getSinglePeriodFallback,
+  returnTypeOptions,
+} from "./scope-form-model";
 
 export interface ScopeFormProps {
   busy: string | null;
+  context: PortalContext | null;
   flowSummary?: FiledReturnsFlowSummary | null;
   scope: FiledReturnsDownloadScope;
+  scopeLockedForReview?: boolean;
   onScopeChange: (scope: FiledReturnsDownloadScope) => void;
   onStart: () => void;
+  showPrimaryAction?: boolean;
 }
 
-export interface RecoveryActionsProps {
-  busy: string | null;
-  summary: FiledReturnsFlowSummary | null;
-  onAcknowledgeInterruptedRun: () => void;
-  onRetryFullFiscalYearTarget: () => void;
-  onRetryTarget: () => void;
-  onResolveFullFiscalYearTarget: (resolution: "manually-observed" | "cancelled") => void;
-  onResolveTarget: (resolution: "downloaded" | "cancelled") => void;
-}
-
-export function RecoveryActions({
+export function ScopeForm({
   busy,
-  summary,
-  onAcknowledgeInterruptedRun,
-  onRetryFullFiscalYearTarget,
-  onRetryTarget,
-  onResolveFullFiscalYearTarget,
-  onResolveTarget,
-}: RecoveryActionsProps) {
-  if (!summary) return null;
-
-  const signals = new Set(summary.flowStep.safeSignals);
-  const needsRunReview = signals.has("filed-returns-run-needs-review");
-  const needsTargetReview = signals.has("filed-returns-target-review-required");
-  const runActive =
-    signals.has("filed-returns-run-active") || signals.has("full-fiscal-year-run-active");
-  const needsFullFiscalYearReview =
-    Boolean(summary.fullFiscalYearRecovery) &&
-    (signals.has("full-fiscal-year-download-unconfirmed") ||
-      signals.has("full-fiscal-year-run-interrupted") ||
-      signals.has("full-fiscal-year-resume-confirmation-required") ||
-      signals.has("full-fiscal-year-run-needs-action"));
-  const canManuallyObserveFullYear = canManuallyObserveFullFiscalYearTarget(summary);
-  if (!needsRunReview && !needsTargetReview && !needsFullFiscalYearReview && !runActive) {
-    return null;
-  }
+  context,
+  flowSummary,
+  scope,
+  scopeLockedForReview = false,
+  onScopeChange,
+  onStart,
+  showPrimaryAction = true,
+}: ScopeFormProps) {
+  const formModel = createScopeFormModel(scope);
+  const multipleArtifactChoices = formModel.artifactOptions.length > 1;
+  const controlsDisabled =
+    busy !== null ||
+    flowSummary?.status === "running" ||
+    canRetryFullFiscalYearZipWithoutPortal(flowSummary);
 
   return (
-    <section className="actions" aria-label="Filed return recovery actions">
-      {runActive ? (
-        <>
-          <button type="button" disabled>
-            Run in progress
-          </button>
-          <p className="muted">
-            Retry controls appear automatically if the run stops making progress.
-          </p>
-        </>
-      ) : null}
-      {needsRunReview ? (
-        <button
-          type="button"
-          className="secondary"
-          disabled={busy !== null}
-          onClick={onAcknowledgeInterruptedRun}
-        >
-          {busy === "acknowledge-interrupted-run" ? "Resetting..." : "Reset stuck run"}
-        </button>
-      ) : null}
-      {needsTargetReview ? (
-        <>
-          <button type="button" disabled={busy !== null} onClick={onRetryTarget}>
-            {busy === "retry-filed-returns-target" ? "Retrying..." : "Retry this period"}
-          </button>
-          <button
-            type="button"
-            className="secondary"
-            disabled={busy !== null}
-            onClick={() => onResolveTarget("downloaded")}
-          >
-            {busy === "resolve-unconfirmed-download" ? "Saving..." : "Mark reviewed manually"}
-          </button>
-          <button
-            type="button"
-            className="secondary"
-            disabled={busy !== null}
-            onClick={() => onResolveTarget("cancelled")}
-          >
-            {busy === "cancel-unconfirmed-download" ? "Cancelling..." : "Cancel and reset"}
-          </button>
-        </>
-      ) : null}
-      {needsFullFiscalYearReview ? (
-        <>
-          <p className="muted">
-            This saved run is not bound to a GST account. Continue only if the same GST account is
-            currently open.
-          </p>
-          <button type="button" disabled={busy !== null} onClick={onRetryFullFiscalYearTarget}>
-            {busy === "retry-full-fiscal-year-target" ? "Retrying..." : retryFullYearLabel(summary)}
-          </button>
-          {canManuallyObserveFullYear ? (
-            <button
-              type="button"
-              className="secondary"
-              disabled={busy !== null}
-              onClick={() => onResolveFullFiscalYearTarget("manually-observed")}
-            >
-              {busy === "resolve-full-fiscal-year-target"
-                ? "Saving..."
-                : "Mark as manually observed"}
-            </button>
+    <section id="download-details" className="flow-panel" aria-label="Download details">
+      <div className="flow-panel-heading">
+        <h2>Download GST returns</h2>
+        <p>Choose a return and period to save through this browser.</p>
+      </div>
+      <div className="scope-form-grid">
+        <div className="scope-row">
+          <ScopeButtonGroup
+            className="scope-group-return"
+            label="Return"
+            value={scope.returnType}
+            options={returnTypeOptions()}
+            disabled={controlsDisabled}
+            onChange={(returnType) =>
+              onScopeChange(
+                normaliseFiledReturnsScope({
+                  ...scope,
+                  returnType: returnType as FiledReturnsDownloadScope["returnType"],
+                }),
+              )
+            }
+          />
+        </div>
+        <div className="scope-row scope-row-range">
+          {formModel.supportsFullFiscalYear ? (
+            <ScopeButtonGroup
+              className="scope-group-run-mode"
+              label="Range"
+              value={formModel.fullFiscalYear ? "FULL_YEAR" : "SINGLE_PERIOD"}
+              options={[
+                {
+                  value: "SINGLE_PERIOD",
+                  label: "Single period",
+                  description: "One month",
+                },
+                {
+                  value: "FULL_YEAR",
+                  label: "Full year",
+                  description: "One ZIP",
+                },
+              ]}
+              disabled={controlsDisabled}
+              onChange={(mode) =>
+                onScopeChange(
+                  normaliseFiledReturnsScope({
+                    ...scope,
+                    period:
+                      mode === "FULL_YEAR"
+                        ? FULL_FISCAL_YEAR_PERIOD
+                        : getSinglePeriodFallback(scope.period, formModel.singlePeriodOptions),
+                  }),
+                )
+              }
+            />
           ) : null}
-          <button
-            type="button"
-            className="secondary"
-            disabled={busy !== null}
-            onClick={() => onResolveFullFiscalYearTarget("cancelled")}
-          >
-            {busy === "cancel-full-fiscal-year-target"
-              ? "Cancelling..."
-              : cancelFullYearLabel(summary)}
-          </button>
-        </>
-      ) : null}
-    </section>
-  );
-}
-
-export function canManuallyObserveFullFiscalYearTarget(
-  summary: FiledReturnsFlowSummary | null,
-): boolean {
-  return summary?.fullFiscalYearRecovery?.targetStatus === "download-unconfirmed";
-}
-
-function retryFullYearLabel(summary: FiledReturnsFlowSummary): string {
-  if (summary.flowStep.safeSignals.includes("full-fiscal-year-resume-confirmation-required")) {
-    return "Resume saved run";
-  }
-  return summary.fullFiscalYearRecovery?.targetStatus === "pending"
-    ? "Resume saved period"
-    : "Retry this period";
-}
-
-function cancelFullYearLabel(summary: FiledReturnsFlowSummary): string {
-  if (summary.flowStep.safeSignals.includes("full-fiscal-year-resume-confirmation-required")) {
-    return "Discard saved run";
-  }
-  return "Cancel and reset";
-}
-
-export function ScopeForm({ busy, flowSummary, scope, onScopeChange, onStart }: ScopeFormProps) {
-  const financialYearOptions = getFiledReturnsFinancialYearOptions();
-  const periodOptions = getFiledReturnsScopePeriodOptions(
-    scope.financialYear,
-    new Date(),
-    scope.returnType,
-  );
-  const artifactOptions = FILED_RETURNS_ARTIFACT_TYPES.filter((artifactType) =>
-    supportsFiledReturnsArtifactType(scope.returnType, artifactType),
-  );
-  const selectedArtifactType = normaliseFiledReturnsArtifactType(
-    scope.returnType,
-    scope.artifactType,
-  );
-  const fullFiscalYear = isFullFiscalYearScope(scope);
-  const startAction = getScopeFormStartAction(scope, flowSummary, busy, fullFiscalYear);
-
-  return (
-    <section className="flow-panel" aria-label="Filed return download scope">
-      <ScopeButtonGroup
-        label="Filing"
-        value={scope.returnType}
-        options={FILED_RETURNS_RETURN_TYPES.map((returnType) => ({
-          value: returnType,
-          label: returnType,
-        }))}
-        onChange={(returnType) =>
-          onScopeChange(
-            normaliseFiledReturnsScope({
-              ...scope,
-              returnType: returnType as FiledReturnsDownloadScope["returnType"],
-            }),
-          )
-        }
-      />
-      <ScopeButtonGroup
-        label="Download"
-        value={selectedArtifactType}
-        options={artifactOptions.map((artifactType) => ({
-          value: artifactType,
-          label: filedReturnsArtifactLabel(artifactType, scope.returnType),
-        }))}
-        onChange={(artifactType) =>
-          onScopeChange(
-            normaliseFiledReturnsScope({
-              ...scope,
-              artifactType: artifactType as NonNullable<FiledReturnsDownloadScope["artifactType"]>,
-            }),
-          )
-        }
-      />
-      <ScopeButtonGroup
-        label="Financial year"
-        value={scope.financialYear}
-        options={financialYearOptions.map((financialYear) => ({
-          value: financialYear,
-          label: financialYear,
-        }))}
-        onChange={(financialYear) =>
-          onScopeChange(
-            normaliseFiledReturnsScope({
-              ...scope,
-              financialYear,
-            }),
-          )
-        }
-      />
-      <ScopeButtonGroup
-        label="Period"
-        value={scope.period}
-        options={periodOptions}
-        onChange={(period) => onScopeChange({ ...scope, period })}
-      />
-      {fullFiscalYear ? (
-        <p className="muted">
-          Runs eligible filed {scope.returnType} periods one by one from your signed-in GST Portal
-          tab. Pack stops on ambiguous downloads and records local status only. Excel is available
-          only when the GST Portal provides the selected GSTR-1 e-invoice details file.
+          <div className="scope-select-row">
+            <ScopeSelect
+              label="FY"
+              value={scope.financialYear}
+              options={formModel.financialYearOptions}
+              disabled={controlsDisabled}
+              onChange={(financialYear) =>
+                onScopeChange(
+                  normaliseFiledReturnsScope({
+                    ...scope,
+                    financialYear,
+                  }),
+                )
+              }
+            />
+            {formModel.fullFiscalYear ? null : (
+              <ScopeSelect
+                label="Period"
+                value={scope.period}
+                options={formModel.singlePeriodOptions}
+                disabled={controlsDisabled}
+                onChange={(period) => onScopeChange({ ...scope, period })}
+              />
+            )}
+          </div>
+        </div>
+        {multipleArtifactChoices ? (
+          <div className="advanced-options">
+            <div className="scope-row">
+              <ScopeButtonGroup
+                className="scope-group-file"
+                label="File format"
+                value={formModel.selectedArtifactType}
+                options={formModel.artifactOptions}
+                disabled={controlsDisabled}
+                onChange={(artifactType) =>
+                  onScopeChange(
+                    normaliseFiledReturnsScope({
+                      ...scope,
+                      artifactType: artifactType as NonNullable<
+                        FiledReturnsDownloadScope["artifactType"]
+                      >,
+                    }),
+                  )
+                }
+              />
+            </div>
+          </div>
+        ) : null}
+      </div>
+      {scopeLockedForReview && flowSummary?.currentPeriod ? (
+        <p className="scope-note scope-note-warning" role="status">
+          A saved run is paused at {flowSummary.currentPeriod}. You can change this selection, then
+          resume the saved run or explicitly discard it and start the selected download below.
         </p>
       ) : null}
-      <button type="button" disabled={startAction.disabled} onClick={onStart}>
-        {startAction.label}
-      </button>
+      {showPrimaryAction ? (
+        <ScopeFormAction
+          busy={busy}
+          context={context}
+          flowSummary={flowSummary ?? null}
+          scope={scope}
+          onStart={onStart}
+        />
+      ) : null}
     </section>
   );
 }
 
-function getScopeFormStartAction(
-  scope: FiledReturnsDownloadScope,
-  summary: FiledReturnsFlowSummary | null | undefined,
-  busy: string | null,
-  fullFiscalYear: boolean,
-): { disabled: boolean; label: string } {
-  if (busy === "start-filed-returns-flow") return { disabled: true, label: "Starting..." };
-  if (busy !== null) return { disabled: true, label: defaultStartLabel(fullFiscalYear) };
-  if (summary && isSameScope(scope, summary.scope)) {
-    const signals = new Set(summary.flowStep.safeSignals);
-    if (signals.has("filed-returns-run-active") || signals.has("full-fiscal-year-run-active")) {
-      return { disabled: true, label: "Run in progress" };
-    }
-    if (signals.has("filed-returns-run-needs-review")) {
-      return { disabled: true, label: "Reset stuck run first" };
-    }
-    if (
-      signals.has("filed-returns-target-review-required") ||
-      signals.has("full-fiscal-year-download-unconfirmed") ||
-      signals.has("full-fiscal-year-run-interrupted") ||
-      signals.has("full-fiscal-year-run-needs-action")
-    ) {
-      return { disabled: true, label: "Resolve current period first" };
-    }
-    if (signals.has("full-fiscal-year-resume-confirmation-required")) {
-      return { disabled: true, label: "Resume or discard saved run" };
-    }
-  }
-  return { disabled: false, label: defaultStartLabel(fullFiscalYear) };
-}
+export function ScopeFormAction({
+  busy,
+  context,
+  flowSummary,
+  scope,
+  onStart,
+}: {
+  busy: string | null;
+  context: PortalContext | null;
+  flowSummary?: FiledReturnsFlowSummary | null;
+  scope: FiledReturnsDownloadScope;
+  onStart: () => void;
+}) {
+  const formModel = createScopeFormModel(scope);
+  const startAction = getScopeFormStartAction(scope, flowSummary, busy, formModel.fullFiscalYear);
+  const actionCopy = getScopeActionCopy(scope, formModel.fullFiscalYear);
+  const portalSupported = context?.supported === true;
+  const portalIndependentRetry = canRetryFullFiscalYearZipWithoutPortal(flowSummary);
+  const portalReady = portalSupported || portalIndependentRetry;
+  const disabledReason = portalReady ? null : getPortalDisabledReason(context);
 
-function defaultStartLabel(fullFiscalYear: boolean): string {
-  return fullFiscalYear ? "Start local full-year run" : "Start download";
-}
-
-function isSameScope(left: FiledReturnsDownloadScope, right: FiledReturnsDownloadScope): boolean {
   return (
-    left.financialYear === right.financialYear &&
-    left.period === right.period &&
-    left.returnType === right.returnType &&
-    normaliseFiledReturnsArtifactType(left.returnType, left.artifactType) ===
-      normaliseFiledReturnsArtifactType(right.returnType, right.artifactType)
+    <ScopeActionPanel
+      actionCopy={actionCopy}
+      busy={busy === "start-filed-returns-flow"}
+      disabled={startAction.disabled || !portalReady}
+      disabledReason={disabledReason}
+      label={startAction.label}
+      onStart={onStart}
+    />
+  );
+}
+
+function getPortalDisabledReason(context: PortalContext | null): string {
+  if (context?.pageKind === "gst-auth-landing" || context?.requiredAction?.type === "LOGIN") {
+    return "Refresh or sign in to GST Portal to continue.";
+  }
+  if (context?.pageKind === "unsupported") return "Open a supported filed-return page.";
+  return "Open GST Portal to continue.";
+}
+
+function ScopeSelect({
+  label,
+  value,
+  options,
+  disabled = false,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: Array<{ value: string; label: string }>;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}) {
+  const id = `scope-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+  return (
+    <label className="scope-select" htmlFor={id}>
+      <span>{label}</span>
+      <select
+        id={id}
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.currentTarget.value)}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }

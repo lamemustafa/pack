@@ -15,6 +15,7 @@ export interface FiledReturnsFlowMessagingDeps {
         type:
           | "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3"
           | "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3"
+          | "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3"
           | "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V3";
       }
     >,
@@ -25,6 +26,10 @@ export interface FiledReturnsFlowMessagingDeps {
   now?: () => Date;
   persistTargetReview?: boolean;
   preferDirectDownload?: boolean;
+  stageCapturedDownloads?: {
+    bundleKind?: "full-fiscal-year" | "single-period";
+    ledgerId: string;
+  };
   timings?: {
     contentMessageTimeoutMs?: number;
   };

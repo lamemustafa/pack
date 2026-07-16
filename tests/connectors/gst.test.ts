@@ -16,7 +16,22 @@ describe("GST connector", () => {
     expect(context.origin).toBe("https://return.gst.gov.in");
   });
 
-  it("treats the post-login fowelcome shell as a supported GST auth landing", () => {
+  it("treats an authenticated fowelcome dashboard as usable portal context", () => {
+    const url = new URL("https://services.gst.gov.in/services/auth/fowelcome");
+    const context = detectGstPortalContext(
+      url as unknown as Location,
+      "Goods and Services Tax",
+      "Last logged in on 01/01/2026\nReturns Calendar (Last 5 return periods)\nWelcome Example Trading Private Limited to GST Common Portal",
+    );
+
+    expect(context).toMatchObject({
+      supported: true,
+      pageKind: "supported-gst-return-page",
+      origin: "https://services.gst.gov.in",
+    });
+  });
+
+  it("keeps an empty fowelcome shell as sign-in required", () => {
     const url = new URL("https://services.gst.gov.in/services/auth/fowelcome");
     const context = detectGstPortalContext(url as unknown as Location, "Goods and Services Tax");
 
@@ -32,6 +47,30 @@ describe("GST connector", () => {
     expect(context.supported).toBe(true);
     expect(context.pageKind).toBe("gst-filed-returns");
     expect(context.safeTitle).toBeUndefined();
+  });
+
+  it("recognizes the authenticated Returns quick-links hub as usable navigation context", () => {
+    const url = new URL("https://services.gst.gov.in/services/auth/quicklinks/returns");
+    const context = detectGstPortalContext(url as unknown as Location, "Returns Quick Links");
+
+    expect(context).toMatchObject({
+      connectorId: "gst",
+      supported: true,
+      origin: "https://services.gst.gov.in",
+      pageKind: "gst-portal",
+    });
+  });
+
+  it("recognizes the authenticated services dashboard as usable navigation context", () => {
+    const url = new URL("https://services.gst.gov.in/services/auth/dashboard");
+    const context = detectGstPortalContext(url as unknown as Location, "GST Dashboard");
+
+    expect(context).toMatchObject({
+      connectorId: "gst",
+      supported: true,
+      origin: "https://services.gst.gov.in",
+      pageKind: "gst-portal",
+    });
   });
 
   it("detects the filed GSTR-3B detail page as part of the private live scope", () => {

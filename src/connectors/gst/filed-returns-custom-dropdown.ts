@@ -6,13 +6,16 @@ import {
   matchesAcceptedText,
   normaliseText,
 } from "./filed-returns-dom";
+import { waitForVisibleCustomDropdownOption } from "./filed-returns-custom-dropdown-options";
 
-const CLICK_SETTLE_DELAY_MS = 250;
+const DROPDOWN_POLL_MS = 50;
+const DROPDOWN_SELECTION_TIMEOUT_MS = 400;
 
 export async function selectCustomOptionNearLabel(
   documentRef: Document,
   labelPattern: RegExp,
   acceptedTexts: readonly string[],
+  matchesText: (text: string, acceptedTexts: readonly string[]) => boolean = matchesAcceptedText,
 ): Promise<boolean> {
   const formRoot = findFiledReturnsFilterRoot(documentRef);
   if (!formRoot) return false;
@@ -23,21 +26,25 @@ export async function selectCustomOptionNearLabel(
   const currentText = normaliseText(
     getCustomDropdownControls(fieldRoot).map(readElementText).join(" "),
   );
-  if (matchesAcceptedText(currentText, acceptedTexts)) return true;
+  if (matchesText(currentText, acceptedTexts)) return true;
 
   const control = getCustomDropdownControls(fieldRoot).find((candidate) => isVisible(candidate));
   if (!control) return false;
 
   const beforeOpenElements = new Set(Array.from(documentRef.body.querySelectorAll("*")));
   activateElement(control);
-  await delay(CLICK_SETTLE_DELAY_MS);
 
-  const option = findVisibleOption(documentRef, acceptedTexts, control, beforeOpenElements);
+  const option = await waitForVisibleCustomDropdownOption(
+    documentRef,
+    acceptedTexts,
+    control,
+    beforeOpenElements,
+    matchesText,
+  );
   if (!option) return false;
 
   activateElement(option);
-  await delay(CLICK_SETTLE_DELAY_MS);
-  return matchesAcceptedText(normaliseText(fieldRoot.textContent || ""), acceptedTexts);
+  return waitForFieldTextMatch(fieldRoot, acceptedTexts, matchesText);
 }
 
 export function findFiledReturnsFilterRoot(documentRef: Document): HTMLElement | null {
@@ -123,134 +130,6 @@ function getClickableSearchButtons(documentRef: Document): HTMLElement[] {
     .filter((element) => /^search$/i.test(normaliseText(readElementText(element))));
 }
 
-function findVisibleOption(
-  documentRef: Document,
-  acceptedTexts: readonly string[],
-  openedControl: HTMLElement,
-  beforeOpenElements: ReadonlySet<Element>,
-): HTMLElement | null {
-  const optionRoots = candidateOptionRoots(documentRef, openedControl, beforeOpenElements);
-  const selector = [
-    "[role='option']",
-    ".ui-select-choices-row",
-    ".select2-results li",
-    ".chosen-results li",
-    "li",
-    "a",
-    "button",
-    "span",
-    "[role='listbox'] div",
-    ".dropdown-menu div",
-    ".ui-select-choices div",
-    ".select2-results div",
-  ].join(",");
-
-  for (const root of optionRoots) {
-    const candidates = root.matches(selector)
-      ? [root, ...Array.from(root.querySelectorAll(selector))]
-      : Array.from(root.querySelectorAll(selector));
-    for (const element of candidates) {
-      if (!isHtmlElement(documentRef, element)) continue;
-      if (element === openedControl || openedControl.contains(element)) continue;
-      if (!isVisible(element)) continue;
-      const text = normaliseText(readElementText(element));
-      if (text.length > 0 && text.length <= 80 && matchesAcceptedText(text, acceptedTexts)) {
-        return element;
-      }
-    }
-  }
-
-  return null;
-}
-
-function candidateOptionRoots(
-  documentRef: Document,
-  openedControl: HTMLElement,
-  beforeOpenElements: ReadonlySet<Element>,
-): HTMLElement[] {
-  const roots: HTMLElement[] = [];
-  const controlledRoot = findAriaControlledRoot(documentRef, openedControl);
-  if (controlledRoot) roots.push(controlledRoot);
-
-  const fieldOverlay = closestOptionContainer(openedControl);
-  if (fieldOverlay) roots.push(fieldOverlay);
-
-  roots.push(...newOverlayRoots(documentRef, beforeOpenElements));
-  roots.push(...newOptionRoots(documentRef, beforeOpenElements));
-
-  return Array.from(new Set(roots));
-}
-
-function findAriaControlledRoot(
-  documentRef: Document,
-  openedControl: HTMLElement,
-): HTMLElement | null {
-  const controls = openedControl.getAttribute("aria-controls");
-  if (!controls) return null;
-
-  for (const id of controls.split(/\s+/)) {
-    if (!id) continue;
-    const candidate = documentRef.getElementById(id);
-    if (candidate && isHtmlElement(documentRef, candidate) && isVisible(candidate)) {
-      return candidate;
-    }
-  }
-
-  return null;
-}
-
-function closestOptionContainer(openedControl: HTMLElement): HTMLElement | null {
-  const overlaySelector = [
-    "[role='listbox']",
-    ".ui-select-choices",
-    ".select2-drop",
-    ".select2-results",
-    ".chosen-drop",
-    ".dropdown-menu",
-  ].join(",");
-  const fieldRoot = openedControl.closest("div, section, form");
-  const candidate = fieldRoot?.querySelector(overlaySelector);
-  return candidate && isHtmlElement(openedControl.ownerDocument, candidate) && isVisible(candidate)
-    ? candidate
-    : null;
-}
-
-function newOverlayRoots(
-  documentRef: Document,
-  beforeOpenElements: ReadonlySet<Element>,
-): HTMLElement[] {
-  const overlaySelector = [
-    "[role='listbox']",
-    ".ui-select-choices",
-    ".select2-drop",
-    ".select2-results",
-    ".chosen-drop",
-    ".dropdown-menu",
-  ].join(",");
-
-  return Array.from(documentRef.body.querySelectorAll(overlaySelector)).filter(
-    (element): element is HTMLElement =>
-      isHtmlElement(documentRef, element) && !beforeOpenElements.has(element) && isVisible(element),
-  );
-}
-
-function newOptionRoots(
-  documentRef: Document,
-  beforeOpenElements: ReadonlySet<Element>,
-): HTMLElement[] {
-  const optionSelector = [
-    "[role='option']",
-    ".ui-select-choices-row",
-    ".select2-results li",
-    ".chosen-results li",
-  ].join(",");
-
-  return Array.from(documentRef.body.querySelectorAll(optionSelector)).filter(
-    (element): element is HTMLElement =>
-      isHtmlElement(documentRef, element) && !beforeOpenElements.has(element) && isVisible(element),
-  );
-}
-
 function readElementText(element: Element): string {
   const HTMLInputElementConstructor = element.ownerDocument.defaultView?.HTMLInputElement;
   const inputValue =
@@ -266,4 +145,17 @@ function readElementText(element: Element): string {
   ]
     .filter(Boolean)
     .join(" ");
+}
+
+async function waitForFieldTextMatch(
+  fieldRoot: HTMLElement,
+  acceptedTexts: readonly string[],
+  matchesText: (text: string, acceptedTexts: readonly string[]) => boolean,
+): Promise<boolean> {
+  const startedAt = Date.now();
+  do {
+    if (matchesText(normaliseText(fieldRoot.textContent || ""), acceptedTexts)) return true;
+    await delay(DROPDOWN_POLL_MS);
+  } while (Date.now() - startedAt < DROPDOWN_SELECTION_TIMEOUT_MS);
+  return false;
 }

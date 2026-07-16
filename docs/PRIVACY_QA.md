@@ -33,6 +33,14 @@ For each release candidate:
 - Confirm live download observation remains bounded to a user-initiated run and
   does not persist or transmit raw download URLs, referrers, absolute local
   paths, filenames, portal HTML, or taxpayer identifiers.
+- Confirm transient artifact-byte handling is used only for an explicit
+  user-started, target-bound local download or ZIP export and its saved
+  recovery/cleanup lifecycle. Generated ZIP bytes must remain transiently in
+  memory. Captured PDF/XLS bytes may also use temporary local OPFS staging;
+  interrupted exports or cleanup failures may retain that staging across
+  recovery attempts until confirmed cleanup or a successful explicit discard.
+  Artifact bytes must not be written to extension storage, IndexedDB, Cache
+  Storage, diagnostics, logs, telemetry, support bundles, or ComplyEaze systems.
 - Confirm `pack:active-filed-returns-run`, when present, contains only the
   selected financial year, period, return type, artifact type, run ID,
   revision, status, and lease timestamp needed to prevent overlapping local
@@ -45,9 +53,11 @@ For each release candidate:
   signals/messages, and timestamps. It must not contain raw URLs/referrers,
   local paths, filenames, GSTIN/PAN, taxpayer names, ARNs, portal HTML, cookies,
   credentials, OTP, or CAPTCHA data.
-- Confirm "Clear local Pack data" is only exposed from Pack Options and removes
-  the active run marker, target-review marker, full fiscal year ledger,
-  install/demo manifest metadata, and session observations.
+- Confirm "Clear local Pack data" is only exposed from Pack Options, blocks
+  while filed-return recovery remains unresolved, clears recoverable temporary
+  OPFS staging before deleting its ledger identifiers, and then removes the
+  active run marker, target-review marker, full fiscal year ledger, install/demo
+  manifest metadata, and session observations.
 - Confirm the privacy policy, store declarations, and reviewer instructions
   still match actual runtime behavior.
 

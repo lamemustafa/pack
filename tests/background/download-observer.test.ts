@@ -93,7 +93,158 @@ describe("download observer", () => {
     await expect(observation.promise).resolves.toMatchObject({
       state: "completed",
       safeSignals: expect.arrayContaining(["browser-download-id:13"]),
+      safeEvidence: {
+        byteCountClass: "non-empty",
+        downloadId: 13,
+        mimeClass: "pdf",
+        urlClass: "https",
+      },
     });
+  });
+
+  it("redacts blob download metadata to safe evidence classes", async () => {
+    const downloads = createDownloadsApi([
+      {
+        id: 21,
+        state: "complete",
+        fileSize: 1024,
+        mime: "application/pdf",
+        url: "blob:https://return.gst.gov.in/generated-pdf",
+      },
+    ]);
+    const observation = observeNextBrowserDownload(downloads, {
+      armedAt: new Date("2026-06-24T10:00:00.000Z"),
+      expectedFileExtensions: [".pdf"],
+      expectedMimeTypes: ["application/pdf"],
+      expectedOrigins: ["https://return.gst.gov.in"],
+      trustedDownloadIds: new Set([21]),
+    });
+
+    downloads.created.emit({
+      id: 21,
+      mime: "application/pdf",
+      startTime: "2026-06-24T10:00:02.000Z",
+      state: "complete",
+      url: "blob:https://return.gst.gov.in/generated-pdf",
+    });
+
+    await expect(observation.promise).resolves.toMatchObject({
+      state: "completed",
+      safeEvidence: {
+        byteCountClass: "non-empty",
+        downloadId: 21,
+        mimeClass: "pdf",
+        urlClass: "blob",
+      },
+    });
+  });
+
+  it.each([
+    ["GST-origin blob", "blob:https://return.gst.gov.in/generated-pdf", undefined],
+    [
+      "data URL with GST referrer",
+      "data:application/pdf;base64,JVBERi0xLjQK",
+      "https://return.gst.gov.in/returns/auth/gstr3b",
+    ],
+  ])(
+    "accepts a target-bound portal-click %s PDF without weakening origin checks",
+    async (_urlClass, url, referrer) => {
+      const armedAt = new Date("2026-06-24T10:00:00.000Z");
+      const downloads = createDownloadsApi([
+        {
+          id: 211,
+          state: "complete",
+          fileSize: 1024,
+          mime: "application/pdf",
+          ...(referrer ? { referrer } : {}),
+          startTime: "2026-06-24T10:00:02.000Z",
+          url,
+        },
+      ]);
+      const observation = observeNextBrowserDownload(downloads, {
+        armedAt,
+        expectedFileExtensions: [".pdf"],
+        expectedMimeTypes: ["application/pdf"],
+        expectedOrigins: ["https://return.gst.gov.in"],
+        trustedDownloadIds: new Set([211]),
+      });
+
+      downloads.created.emit({
+        id: 211,
+        mime: "application/pdf",
+        ...(referrer ? { referrer } : {}),
+        startTime: "2026-06-24T10:00:02.000Z",
+        state: "complete",
+        url,
+      });
+
+      await expect(observation.promise).resolves.toMatchObject({
+        state: "completed",
+        safeSignals: expect.arrayContaining(["browser-download-non-empty"]),
+      });
+    },
+  );
+
+  it.each([
+    ["blob", "blob:null/generated-pdf"],
+    ["data", "data:application/pdf;base64,JVBERi0xLjQK"],
+  ])("rejects an untrusted portal-click %s PDF without GST origin evidence", async (_kind, url) => {
+    const downloads = createDownloadsApi([]);
+    const observation = observeNextBrowserDownload(
+      downloads,
+      {
+        armedAt: new Date("2026-06-24T10:00:00.000Z"),
+        expectedFileExtensions: [".pdf"],
+        expectedMimeTypes: ["application/pdf"],
+        expectedOrigins: ["https://return.gst.gov.in"],
+      },
+      1_000,
+    );
+
+    downloads.created.emit({
+      id: 213,
+      mime: "application/pdf",
+      startTime: "2026-06-24T10:00:02.000Z",
+      state: "complete",
+      url,
+    });
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    await expect(observation.promise).resolves.toMatchObject({ state: "not-observed" });
+  });
+
+  it("keeps blob PDFs without a target-bound portal click on strict origin correlation", async () => {
+    const downloads = createDownloadsApi([
+      {
+        id: 212,
+        state: "complete",
+        fileSize: 1024,
+        mime: "application/pdf",
+        startTime: "2026-06-24T10:00:02.000Z",
+        url: "blob:null/generated-pdf",
+      },
+    ]);
+    const observation = observeNextBrowserDownload(
+      downloads,
+      {
+        armedAt: new Date("2026-06-24T10:00:00.000Z"),
+        expectedFileExtensions: [".pdf"],
+        expectedMimeTypes: ["application/pdf"],
+        expectedOrigins: ["https://return.gst.gov.in"],
+      },
+      1_000,
+    );
+
+    downloads.created.emit({
+      id: 212,
+      mime: "application/pdf",
+      startTime: "2026-06-24T10:00:02.000Z",
+      state: "complete",
+      url: "blob:null/generated-pdf",
+    });
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    await expect(observation.promise).resolves.toMatchObject({ state: "not-observed" });
   });
 
   it("observes only the browser download id returned by the direct download API", async () => {
@@ -325,6 +476,83 @@ describe("download observer", () => {
     ).resolves.toMatchObject({
       state: "completed",
       safeSignals: expect.arrayContaining(["browser-download-id:82"]),
+    });
+  });
+
+  it("rechecks a trusted completed download until non-empty size evidence is available", async () => {
+    const created = createEvent<DownloadCreatedItem>();
+    const changed = createEvent<DownloadDelta>();
+    const completedWithoutSize = {
+      id: 83,
+      mime: "application/zip",
+      startTime: "2026-06-24T10:00:02.000Z",
+      state: "complete",
+      url: "blob:https://extension.invalid/pack-zip",
+    };
+    const search = vi
+      .fn()
+      .mockResolvedValueOnce([{ id: 83, state: "in_progress" }])
+      .mockResolvedValueOnce([completedWithoutSize])
+      .mockResolvedValueOnce([completedWithoutSize])
+      .mockResolvedValueOnce([{ ...completedWithoutSize, fileSize: 4096 }]);
+
+    const observation = observeBrowserDownloadById(
+      {
+        onCreated: created.api,
+        onChanged: changed.api,
+        search,
+      },
+      83,
+      {
+        armedAt: new Date("2026-06-24T10:00:00.000Z"),
+        expectedFileExtensions: [".zip"],
+        expectedMimeTypes: ["application/zip"],
+        expectedOrigins: [],
+        expectedUrlSubstrings: [],
+        trustedDownloadIds: new Set([83]),
+      },
+      1_000,
+    );
+
+    await vi.advanceTimersByTimeAsync(500);
+
+    await expect(observation).resolves.toMatchObject({
+      state: "completed",
+      safeSignals: expect.arrayContaining([
+        "browser-download-completed",
+        "browser-download-non-empty",
+      ]),
+    });
+  });
+
+  it("keeps a trusted completed download unconfirmed when size stays unknown", async () => {
+    const completedWithoutSize = {
+      id: 84,
+      mime: "application/zip",
+      startTime: "2026-06-24T10:00:02.000Z",
+      state: "complete",
+      url: "blob:https://extension.invalid/pack-zip",
+    };
+    const downloads = createDownloadsApi([completedWithoutSize]);
+    const observation = observeBrowserDownloadById(
+      downloads,
+      84,
+      {
+        armedAt: new Date("2026-06-24T10:00:00.000Z"),
+        expectedFileExtensions: [".zip"],
+        expectedMimeTypes: ["application/zip"],
+        expectedOrigins: [],
+        expectedUrlSubstrings: [],
+        trustedDownloadIds: new Set([84]),
+      },
+      1_000,
+    );
+
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    await expect(observation).resolves.toMatchObject({
+      state: "not-observed",
+      safeSignals: expect.arrayContaining(["browser-download-size-unknown"]),
     });
   });
 

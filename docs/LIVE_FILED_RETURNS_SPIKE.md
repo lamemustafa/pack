@@ -161,6 +161,72 @@ download. The executor was tightened to scope custom dropdown interaction to the
 filed-returns filter form and to refuse broad page-level controls. Do not run
 another live attempt until a fresh user login is available.
 
+Save-dialog Phase 0 finding on 2026-07-07: the real Brave profile loaded from
+the local unpacked MV3 build showed native macOS
+Save panels for the local synthetic reviewer demo even though
+`src/background/synthetic-demo.ts` calls `chrome.downloads.download` with
+`saveAs: false`. The queued synthetic prompts included filed-return-like
+GSTR-1, GSTR-3B and GSTR-2B filenames. Treat this as evidence that
+`saveAs:false` does not suppress the profile's ask-where-to-save behavior for
+extension-owned data URL downloads. It is not proof for GST direct HTTPS or
+offscreen Blob URL downloads, but it raises the bar for live Phase 0: each live
+run must record both the path taken and whether the browser profile has
+ask-where-to-save enabled before claiming dialog-free behavior.
+Follow-up profile check found `download.prompt_for_download: true` in the local
+preferences for that Brave test profile.
+
+Continuation evidence on 2026-07-07: the rebuilt source package was copied back
+to the local unpacked MV3 build directory, the unpacked Brave
+extension details page showed version `0.3.3` with the expected GST host access,
+and the stale queued synthetic Save panels were cancelled rather than saved. The
+Pack Options page then rendered the source-build controls, including the
+foreground File System Access probe. The only GST tab visible in Brave was a
+recognized GST logout page, so real portal artifact testing
+could not continue in that session without a fresh GST login.
+
+Resumed-login evidence on 2026-07-07: after a fresh user login in the same real
+Brave profile, Pack started from the full-tab popup with `GSTR-3B`, PDF,
+FY `2026-27`, and period `June`. Pack reached the portal-rendered
+`View Filed Returns` filter form, selected the requested scope and stopped with
+the portal's no-record outcome; no native Save panel appeared because no filed
+row or download control was available. Retrying the adjacent single-period
+`May` scope reached the filed GSTR-3B detail page and clicked the portal
+`DOWNLOAD FILED GSTR-3B` control, but Brave opened a native macOS Save panel
+from `return.gst.gov.in` instead of reporting a completed dialog-free download.
+The panel was cancelled and no artifact was saved. Treat this as confirmed
+path-taken evidence for the portal-click fallback in the real profile, not as a
+successful `saveAs:false`/captured-byte result.
+
+OPFS ZIP retry evidence on 2026-07-07: after rebuilding and reloading the same
+real Brave profile, Pack ran filed `GSTR-3B` PDF for FY `2025-26` with
+`Full fiscal year` selected. The run processed all 12 filed periods and the
+popup reported `FY 2025-26 GSTR-3B complete. 12 of 12 periods reconciled.`
+No native Save panel appeared for individual months. After the final period,
+Brave opened one native macOS Save panel for the generated full-year ZIP; saving
+that ZIP completed in the browser download shelf. This confirms the current
+floor for the real prompt-for-download Brave profile is one user-mediated
+full-year ZIP save, not one prompt per period, when the OPFS staging path is
+used.
+
+Current-year May retry evidence on 2026-07-07: in the same logged-in session,
+Pack ran filed `GSTR-3B` PDF for FY `2026-27`, period `May`. After dismissing
+the known system-generated summary modal, Brave reported a completed May PDF in
+the download shelf and no native Save panel was observed for that single-period
+run. Treat this as real-profile May evidence only; do not generalize it to all
+periods, return types or browsers without the corresponding path-taken signals.
+
+Prompt-source follow-up on 2026-07-07: the same real Brave profile still had
+the browser's prompt-for-download preference enabled. The rebuilt source-build
+Options page ran two synthetic local-only probes with `saveAs:false`: a
+`data:` URL probe and an offscreen-created `blob:` URL probe. Both opened the
+native macOS Save panel. This resolves the May inconsistency against the
+offscreen-Blob hypothesis: the silent May result was not proof that
+extension-owned offscreen Blob downloads bypass the browser prompt in this
+profile. Treat May as a separate path-taken question; current evidence supports
+the full-year OPFS ZIP floor of one user-mediated ZIP save in this prompting
+profile, while per-period silent behavior still requires recorded path-taken
+diagnostics before it can be claimed.
+
 Seventh live test update: the filed-returns filter form could still fail to
 select the intended period or return type because the GST page renders labels as
 normal form text and populates return-type options after the period selection
@@ -317,6 +383,59 @@ and did not check service-worker or browser-restart resume behavior. No live
 portal screenshots, recordings, downloaded files, filenames, local paths,
 GSTIN/PAN, taxpayer names, raw portal HTML, cookies, headers, tokens, OTPs, or
 CAPTCHA data were retained.
+
+## Phase 0 save-dialog diagnostics
+
+Future native Save dialog evidence must record the path Pack actually ran, not
+just whether a browser download event appeared. Pack records this through a
+sanitized `filed-return-download-path` diagnostic attached to the filed-return
+flow step. The diagnostic is limited to:
+
+- local action id;
+- return type, financial year, period and artifact type;
+- reviewed endpoint class;
+- path class: extension direct, portal click, or portal click after direct
+  fallback, combined with a redacted URL-scheme class such as `https`, `blob`,
+  `data` or `unknown`;
+- browser download id, MIME class, byte-count class and error category when the
+  browser exposes those as safe metadata.
+
+The diagnostic must not include raw URLs, query strings, headers, cookies,
+tokens, filenames, local paths, GSTIN/PAN, taxpayer names, portal HTML, response
+bodies or PDF/XLS bytes. Phase 0 acceptance requires clean Chrome, clean Brave
+and the real profile where the native Save dialog appeared, with "Ask where to
+save each file" tested on and off. If GSTR-3B direct downloads pass this matrix,
+the next decision is whether a GSTR-3B-only V0 cut is acceptable or whether Pack
+must continue into GSTR-1 PDF/Excel endpoint discovery before claiming
+full-year dialog-free support.
+
+## Transient artifact-byte boundary
+
+Pack may handle filed-return PDF/XLS bytes only as transient in-memory data for
+an explicit user-started, target-bound local download. The service worker owns
+the byte path: it injects a one-shot `chrome.scripting.executeScript` function
+into the active GST tab's main world, clicks only the previously marked target
+control, receives the generated blob as the script result, validates MIME, size
+and file magic, creates a bundled offscreen document for a temporary extension
+Blob URL, starts `chrome.downloads.download({ saveAs: false })`, waits for the
+terminal browser-download state, revokes the Blob URL, closes the offscreen
+document, and then drops the bytes.
+
+Raw artifact bytes must not be sent through page-observable `postMessage`,
+runtime messages from content scripts, extension storage, IndexedDB, Cache
+Storage, logs, diagnostics, evidence files, support bundles, telemetry, or any
+ComplyEaze system. Package verification rejects raw `dataUrl` handoff through
+page or runtime message APIs except the bounded service-worker to bundled
+offscreen-document message used to mint the temporary Blob URL.
+
+## File System Access foreground probe
+
+The File System Access spike lives only in the Options page. It requires a user
+click, asks the browser for a directory picker, writes a synthetic Pack probe
+file, reads it back for byte-count and hash evidence, and removes the probe file.
+It does not store file or directory handles in IndexedDB or extension storage,
+does not process GST artifact bytes, and is not an unattended background-save
+path. Brave support remains live-evidence-gated.
 
 ## 2026-07-02 private GSTR-1 observation
 
@@ -583,3 +702,52 @@ The GST Portal returned a bare scheduled-downtime page during the live retry
 window. Pack now treats that as `portal-scheduled-downtime`: the run stops with a
 retry-later action, and no login, selector, API-search or final-download step is
 attempted until the user returns after services are available.
+
+## 2026-07-07 May-only Brave retry finding
+
+After rebuilding and reloading the local Brave unpacked extension from the local
+unpacked MV3 build directory, Pack was retried only
+for GSTR-3B PDF, FY `2026-27`, period May. The real Brave profile had
+ask-where-to-save enabled. The extension package verifier and browser-host
+verifier passed before this live retry.
+
+The first retest after adding GSTR-3B portal-blob capture still opened the
+native Save panel through the portal click path. Treat that as ambiguous because
+the already-open GST detail tab could still have been running the previous
+content-script protocol version. The implementation now bumps the content-script
+protocol version so already-open GST tabs fail the ping and receive the rebuilt
+packaged content script before the next filed-return message.
+
+The second May-only retest after the protocol bump did not reach the download
+control. The GST Portal redirected to the login page, and Pack surfaced a
+blocked state instructing the user to sign in and retry. Treat this as
+auth-expired evidence only; it does not prove or disprove dialog suppression for
+the new GSTR-3B captured-blob path. No live portal screenshots, recordings,
+downloaded files, filenames, local paths, GSTIN/PAN, taxpayer names, raw portal
+HTML, cookies, headers, tokens, OTPs, CAPTCHA data, or downloaded PDF bytes were
+retained.
+
+Third May-only retry after the user restored an authenticated Brave session:
+Pack was run only for GSTR-3B PDF, FY `2026-27`, period May. Pack navigated from
+the authenticated GST welcome context to the filed GSTR-3B detail route and the
+browser opened the native Save panel for a May GSTR-3B PDF. The Save panel was
+cancelled without saving. Pack then reported the run as blocked at May with the
+portal-click/no-completed-download message. Treat this as live evidence that
+the May GSTR-3B flow still reaches a user-mediated native Save panel in the real
+Brave profile with ask-where-to-save enabled; it is not evidence of a completed
+dialog-free extension-owned captured-blob download. No live portal screenshots,
+recordings, downloaded files, filenames, local paths, GSTIN/PAN, taxpayer names,
+raw portal HTML, cookies, headers, tokens, OTPs, CAPTCHA data, or downloaded PDF
+bytes were retained.
+
+Login-free download-manager control after adding the one-file Options probe:
+the same unpacked Brave profile opened the native Save panel immediately for a
+synthetic extension-owned text download started through
+`chrome.downloads.download({ saveAs: false })`. The panel was cancelled without
+saving. Options retained only the safe diagnostic result: `status: started`,
+`download-prompt-probe-started`, `download-prompt-probe-save-as-false`, a
+download id, synthetic filename class, tiny synthetic byte-count class, and
+`localOnly: true`. Treat this as clean evidence that this Brave profile's
+ask-where-to-save preference can override extension-owned `saveAs:false`; a
+captured-blob implementation that still hands bytes to `chrome.downloads` will
+not be dialog-free in this profile.

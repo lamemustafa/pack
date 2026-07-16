@@ -10,21 +10,30 @@ describe("Pack brand surfaces", () => {
       path.join(rootDir, "src", "entrypoints", "popup", "main.tsx"),
       "utf8",
     );
+    const popupControllerSource = await readFile(
+      path.join(rootDir, "src", "entrypoints", "popup", "use-pack-popup-controller.ts"),
+      "utf8",
+    );
     const optionsSource = await readFile(
       path.join(rootDir, "src", "entrypoints", "options", "main.tsx"),
       "utf8",
     );
 
-    expect(popupSource).toContain("/brand/pack-logo-outlined.svg");
+    expect(popupSource).toContain("/brand/pack-logo-header.svg");
     expect(popupSource).not.toContain("ReviewerTools");
     expect(popupSource).not.toContain("PACK_CLEAR_LOCAL_DATA");
-    expect(popupSource).toContain("PACK_ACKNOWLEDGE_INTERRUPTED_RUN");
-    expect(popupSource).toContain("PACK_RETRY_FILED_RETURNS_TARGET");
-    expect(popupSource).toContain("PACK_RESOLVE_UNCONFIRMED_DOWNLOAD");
-    expect(popupSource).toContain("PACK_RETRY_FULL_FISCAL_YEAR_TARGET");
-    expect(popupSource).toContain("PACK_RESOLVE_FULL_FISCAL_YEAR_TARGET");
+    expect(popupControllerSource).toContain("PACK_ACKNOWLEDGE_INTERRUPTED_RUN");
+    expect(popupControllerSource).toContain("PACK_RETRY_FILED_RETURNS_TARGET");
+    expect(popupControllerSource).toContain("PACK_RESOLVE_UNCONFIRMED_DOWNLOAD");
+    expect(popupControllerSource).toContain("PACK_RETRY_FULL_FISCAL_YEAR_TARGET");
+    expect(popupControllerSource).toContain("PACK_RESOLVE_FULL_FISCAL_YEAR_TARGET");
     expect(optionsSource).toContain("/icons/icon-48.png");
     expect(optionsSource).toContain("PACK_START_SYNTHETIC_DEMO");
+    expect(optionsSource).toContain("runSyntheticDemo(false)");
+    expect(optionsSource).toContain("runSyntheticDemo(true)");
+    expect(optionsSource).toContain("Download synthetic demo files");
+    expect(optionsSource).toContain("Confirm their completion in browser Downloads.");
+    expect(optionsSource).toContain("Review browser download permissions, then try again.");
     expect(optionsSource).toContain("Last synthetic demo manifest");
     expect(optionsSource).toContain("PACK_CLEAR_LOCAL_DATA");
   });
@@ -39,7 +48,43 @@ describe("Pack brand surfaces", () => {
       "utf8",
     );
 
-    expect(popupHtml).toContain('href="/favicon.ico"');
-    expect(optionsHtml).toContain('href="/favicon.ico"');
+    expect(popupHtml).toContain('href="/brand/pack-favicon.svg"');
+    expect(optionsHtml).toContain('href="/brand/pack-favicon.svg"');
+  });
+
+  it("keeps the browser-action popup compact and task-first", async () => {
+    const popupSource = await readFile(
+      path.join(rootDir, "src", "entrypoints", "popup", "main.tsx"),
+      "utf8",
+    );
+    const globalCss = await readFile(path.join(rootDir, "src", "styles", "global.css"), "utf8");
+    const popupCss = await readFile(path.join(rootDir, "src", "styles", "popup.css"), "utf8");
+    const controlsCss = await readFile(
+      path.join(rootDir, "src", "styles", "popup-controls.css"),
+      "utf8",
+    );
+    const popupComponentsSource = await readFile(
+      path.join(rootDir, "src", "entrypoints", "popup", "components.tsx"),
+      "utf8",
+    );
+    const packSummarySource = await readFile(
+      path.join(rootDir, "src", "entrypoints", "popup", "pack-summary.tsx"),
+      "utf8",
+    );
+    expect(globalCss).toContain("--pack-action-popup-width: 420px;");
+    expect(globalCss).toContain("--pack-action-popup-max-height: 560px;");
+    expect(globalCss).toContain("cursor: not-allowed;");
+    expect(popupComponentsSource).toContain("Download GST returns");
+    expect(packSummarySource).toContain("Your pack");
+    expect(popupSource).toContain("InlineStatus");
+    expect(popupCss).toContain(".inline-status");
+    expect(popupCss).toContain("overflow-y: auto;");
+    expect(popupCss).not.toContain("border-left-width: 3px;");
+    expect(popupCss).toContain(".pack-summary");
+    expect(controlsCss).toContain(".advanced-options");
+    expect(controlsCss).toContain("position: sticky;");
+    expect(controlsCss).toContain("bottom: 0;");
+    expect(popupCss).not.toContain("radial-gradient");
+    expect(controlsCss).not.toContain("linear-gradient");
   });
 });

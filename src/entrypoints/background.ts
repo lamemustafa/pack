@@ -1,17 +1,7 @@
 import { browser } from "wxt/browser";
-import {
-  isSupportedGstPortalUrl,
-  pickSupportedGstPortalTab,
-  pickUniquePreferredGstPortalTab,
-} from "../connectors/gst/hosts";
-import type { ArchiveManifest, PortalContext, PortalObservation } from "../core/contracts";
+import type { ArchiveManifest, PortalObservation } from "../core/contracts";
 import { PACK_PRODUCT_VERSION } from "../extension/version";
-import {
-  PACK_CONTENT_SCRIPT_PROTOCOL_VERSION,
-  isPackMessage,
-  type PackMessage,
-  type PackMessageResponse,
-} from "../core/messages";
+import { isPackMessage, type PackMessageResponse } from "../core/messages";
 import {
   acknowledgeInterruptedFiledReturnsRun,
   readActiveFiledReturnsRunSummary,
@@ -20,36 +10,48 @@ import { readCurrentFiledReturnsFlowSummary } from "../background/filed-returns-
 import { resolveFullFiscalYearTarget } from "../background/filed-returns-full-fiscal-year-recovery";
 import {
   retryFullFiscalYearTargetDownloadFlow,
+  retryFiledReturnsTargetDownloadFlow,
+  startFreshFiledReturnsDownloadFlow,
   startFiledReturnsDownloadFlow,
-  type ActiveGstTab,
 } from "../background/filed-returns-flow-runner";
-import {
-  clearFiledReturnsTargetReview,
-  resolveUnconfirmedFiledReturnsDownload,
-} from "../background/filed-returns-target-review";
+import { resolveUnconfirmedFiledReturnsDownload } from "../background/filed-returns-target-review";
 import { clearPackLocalDataWithRecoveryGuard } from "../background/local-data";
 import { startSyntheticDemo } from "../background/synthetic-demo";
+import { runDownloadPromptProbe } from "../background/download-prompt-probe";
+import { selectFiledReturnsFiltersInMainWorldForTab } from "../background/main-world-filed-returns-filter-executor";
+import { clickGstr1ResultViewWithDebugger } from "../background/gstr1-debugger-view";
+import {
+  PACK_CLEARABLE_LOCAL_STORAGE_KEYS,
+  PACK_LOCAL_STORAGE_KEYS,
+  PACK_SESSION_STORAGE_KEYS,
+  filedReturnsStorageKeys,
+} from "../background/storage-keys";
+import {
+  getActiveGstTab,
+  inferActiveFiledReturnsObservation,
+  isSupportedGstBrowserTab,
+  refreshActiveFiledReturnsObservation,
+  refreshActiveGstContext,
+  rememberActiveGstTabById,
+  rememberGstTabIfSupported,
+  sendMessageToTabWithInjection,
+} from "../background/gst-tab-context";
 
-export const PACK_LOCAL_STORAGE_KEYS = {
-  activeFiledReturnsRun: "pack:active-filed-returns-run",
-  fullFiscalYearLedger: "pack:full-fiscal-year-ledger",
-  install: "pack:install",
-  lastManifest: "pack:last-manifest",
-  targetReview: "pack:filed-returns-target-review",
-} as const;
+export {
+  PACK_CLEARABLE_LOCAL_STORAGE_KEYS,
+  PACK_LOCAL_STORAGE_KEYS,
+  PACK_SESSION_STORAGE_KEYS,
+  filedReturnsStorageKeys,
+} from "../background/storage-keys";
+export {
+  getActiveGstTab,
+  isCurrentContentScriptPingResponse,
+  rememberActiveGstTabById,
+  rememberGstTabIfSupported,
+  sendMessageToTabWithInjection,
+} from "../background/gst-tab-context";
 
-export const PACK_SESSION_STORAGE_KEYS = {
-  lastContext: "pack:last-context",
-  lastFiledReturnsObservation: "pack:last-filed-returns-observation",
-  lastFiledReturnsFlowSummary: "pack:last-filed-returns-flow-summary",
-  lastGstTabId: "pack:last-gst-tab-id",
-} as const;
-
-export const PACK_CLEARABLE_LOCAL_STORAGE_KEYS = Object.values(PACK_LOCAL_STORAGE_KEYS);
-
-const CONTENT_SCRIPT_FILE = "/content-scripts/content.js";
 const OFFICIAL_URL = "https://pack.complyeaze.com";
-const contentInjectionByTab = new Map<number, Promise<void>>();
 
 export default defineBackground(() => {
   void restrictLocalStorageToTrustedContexts().catch(() => undefined);
@@ -92,14 +94,6 @@ export async function restrictLocalStorageToTrustedContexts(): Promise<void> {
   await storageArea.setAccessLevel?.({ accessLevel: "TRUSTED_CONTEXTS" });
 }
 
-export function isCurrentContentScriptPingResponse(response: PackMessageResponse): boolean {
-  return (
-    response.ok &&
-    "contentScriptVersion" in response &&
-    response.contentScriptVersion === PACK_CONTENT_SCRIPT_PROTOCOL_VERSION
-  );
-}
-
 async function handleMessage(
   message: unknown,
   sender: Browser.runtime.MessageSender,
@@ -130,16 +124,20 @@ async function handleMessage(
     case "PACK_GET_CONTEXT":
       return {
         ok: true,
-        context: await readSessionValue<PortalContext>(PACK_SESSION_STORAGE_KEYS.lastContext),
+        context: await refreshActiveGstContext(),
       };
-    case "PACK_GET_FILED_RETURNS_OBSERVATION":
-      await refreshActiveFiledReturnsObservation();
+    case "PACK_GET_FILED_RETURNS_OBSERVATION": {
+      const refreshedObservation = await refreshActiveFiledReturnsObservation();
       return {
         ok: true,
-        observation: await readSessionValue<PortalObservation>(
-          PACK_SESSION_STORAGE_KEYS.lastFiledReturnsObservation,
-        ),
+        observation:
+          refreshedObservation ??
+          (await inferActiveFiledReturnsObservation()) ??
+          (await readSessionValue<PortalObservation>(
+            PACK_SESSION_STORAGE_KEYS.lastFiledReturnsObservation,
+          )),
       };
+    }
     case "PACK_GET_FILED_RETURNS_FLOW_SUMMARY":
       return {
         ok: true,
@@ -159,10 +157,7 @@ async function handleMessage(
         storageKeys: { activeRun: PACK_LOCAL_STORAGE_KEYS.activeFiledReturnsRun },
       });
     case "PACK_RETRY_FILED_RETURNS_TARGET":
-      await clearFiledReturnsTargetReview(message.payload, {
-        storageKeys: { targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview },
-      });
-      return startFiledReturnsDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
+      return retryFiledReturnsTargetDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
     case "PACK_RETRY_FULL_FISCAL_YEAR_TARGET":
       return retryFullFiscalYearTargetDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
     case "PACK_RESOLVE_UNCONFIRMED_DOWNLOAD":
@@ -184,12 +179,20 @@ async function handleMessage(
       );
     case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
       return startFiledReturnsDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
+    case "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW":
+      return startFreshFiledReturnsDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
     case "PACK_START_SYNTHETIC_DEMO":
       return startSyntheticDemo({
         productVersion: packRuntimeVersion(),
         officialUrl: OFFICIAL_URL,
         storageKeys: { lastManifest: PACK_LOCAL_STORAGE_KEYS.lastManifest },
+        downloadArtifacts: message.payload?.downloadArtifacts === true,
       });
+    case "PACK_RUN_DOWNLOAD_PROMPT_PROBE":
+      return {
+        ok: true,
+        downloadPromptProbe: await runDownloadPromptProbe(message.payload?.sourceClass),
+      };
     case "PACK_CLEAR_LOCAL_DATA":
       return clearPackLocalData();
     case "PACK_GET_LAST_MANIFEST":
@@ -208,38 +211,16 @@ function packRuntimeVersion() {
 
 function filedReturnsFlowRunnerDeps() {
   return {
+    clickGstr1ResultViewWithDebugger,
     getActiveGstTab,
-    preferDirectDownload: true,
+    // The authenticated portal click/capture remains the default. Browser-initiated
+    // direct endpoint downloads are retained for targeted tests only: Brave can
+    // reject their initiator context even when the active portal session is valid.
+    preferDirectDownload: false,
+    selectFiltersInMainWorld: selectFiledReturnsFiltersInMainWorldForTab,
     sendMessageToTabWithInjection,
     storageKeys: filedReturnsStorageKeys(),
   };
-}
-
-function filedReturnsStorageKeys() {
-  return {
-    activeRun: PACK_LOCAL_STORAGE_KEYS.activeFiledReturnsRun,
-    completion: PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary,
-    fullFiscalYearLedger: PACK_LOCAL_STORAGE_KEYS.fullFiscalYearLedger,
-    observation: PACK_SESSION_STORAGE_KEYS.lastFiledReturnsObservation,
-    targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview,
-  };
-}
-
-async function refreshActiveFiledReturnsObservation(): Promise<void> {
-  const activeTab = await getActiveGstTab();
-  if (!activeTab) return;
-
-  const response = await sendMessageToTabWithInjection(activeTab.id, {
-    type: "PACK_CONTENT_REFRESH_FILED_RETURNS_OBSERVATION_V3",
-  });
-
-  if (!response.ok) return;
-
-  if ("observation" in response && response.observation) {
-    await browser.storage.session.set({
-      [PACK_SESSION_STORAGE_KEYS.lastFiledReturnsObservation]: response.observation,
-    });
-  }
 }
 
 export async function clearPackLocalData(): Promise<PackMessageResponse> {
@@ -251,117 +232,6 @@ export async function clearPackLocalData(): Promise<PackMessageResponse> {
       targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview,
     },
   });
-}
-
-export async function getActiveGstTab(): Promise<ActiveGstTab | null> {
-  const activeCurrentWindowTabs = await browser.tabs.query({ active: true, currentWindow: true });
-  const activeGstTab = pickSupportedGstPortalTab<Browser.tabs.Tab>(activeCurrentWindowTabs);
-  if (activeGstTab) return activeGstTab;
-
-  const rememberedGstTab = await readRememberedGstTab();
-  if (rememberedGstTab) return rememberedGstTab;
-
-  const currentWindowTabs = await browser.tabs.query({ currentWindow: true });
-  const fallbackGstTabs = currentWindowTabs.filter(
-    (tab): tab is Browser.tabs.Tab & { id: number } =>
-      typeof tab.id === "number" && isSupportedGstPortalUrl(tab.url),
-  );
-  if (fallbackGstTabs.length === 1) return fallbackGstTabs[0] ?? null;
-  return pickUniquePreferredGstPortalTab(fallbackGstTabs);
-}
-
-export async function rememberActiveGstTabById(tabId: number): Promise<void> {
-  try {
-    await rememberGstTabIfSupported(await browser.tabs.get(tabId));
-  } catch {
-    // Tabs can disappear while Brave is switching focus; that should not interrupt Pack.
-  }
-}
-
-export async function rememberGstTabIfSupported(tab: Browser.tabs.Tab | undefined): Promise<void> {
-  if (!isSupportedGstBrowserTab(tab)) return;
-  await browser.storage.session.set({
-    [PACK_SESSION_STORAGE_KEYS.lastGstTabId]: tab.id,
-  });
-}
-
-async function readRememberedGstTab(): Promise<ActiveGstTab | null> {
-  const tabId = await readSessionValue<number>(PACK_SESSION_STORAGE_KEYS.lastGstTabId);
-  if (typeof tabId !== "number") return null;
-
-  try {
-    const tab = await browser.tabs.get(tabId);
-    if (typeof tab.id !== "number" || !isSupportedGstPortalUrl(tab.url)) return null;
-    return tab as ActiveGstTab;
-  } catch {
-    return null;
-  }
-}
-
-function isSupportedGstBrowserTab(
-  tab: Browser.tabs.Tab | undefined,
-): tab is Browser.tabs.Tab & { id: number } {
-  return typeof tab?.id === "number" && isSupportedGstPortalUrl(tab.url);
-}
-
-export async function sendMessageToTabWithInjection(
-  tabId: number,
-  message: Extract<
-    PackMessage,
-    {
-      type:
-        | "PACK_CONTENT_NAVIGATE_FILED_RETURNS_V3"
-        | "PACK_CONTENT_REFRESH_FILED_RETURNS_OBSERVATION_V3"
-        | "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3"
-        | "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V3"
-        | "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3";
-    }
-  >,
-): Promise<PackMessageResponse> {
-  await ensureContentScript(tabId);
-  try {
-    return (await browser.tabs.sendMessage(tabId, message)) as PackMessageResponse;
-  } catch (error) {
-    if (!isMissingReceivingEndError(error)) throw error;
-    await ensureContentScript(tabId);
-    return browser.tabs.sendMessage(tabId, message) as Promise<PackMessageResponse>;
-  }
-}
-
-async function ensureContentScript(tabId: number): Promise<void> {
-  if (await pingContentScript(tabId)) return;
-
-  let injection = contentInjectionByTab.get(tabId);
-  if (!injection) {
-    injection = browser.scripting
-      .executeScript({
-        files: [CONTENT_SCRIPT_FILE],
-        target: { tabId },
-      })
-      .then(() => undefined)
-      .finally(() => {
-        contentInjectionByTab.delete(tabId);
-      });
-    contentInjectionByTab.set(tabId, injection);
-  }
-
-  await injection;
-}
-
-async function pingContentScript(tabId: number): Promise<boolean> {
-  try {
-    const response = (await browser.tabs.sendMessage(tabId, {
-      type: "PACK_CONTENT_PING_V2",
-    })) as PackMessageResponse;
-    return isCurrentContentScriptPingResponse(response);
-  } catch {
-    return false;
-  }
-}
-
-function isMissingReceivingEndError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /receiving end does not exist|could not establish connection/i.test(message);
 }
 
 async function readSessionValue<T>(key: string): Promise<T | null> {

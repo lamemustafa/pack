@@ -38,10 +38,13 @@ stable-release claims.
   it until exact-ZIP clean-profile, real-browser restart/resume,
   reconciliation, and privacy-review evidence are recorded for the release.
 - V0 does not collect GST Portal credentials, OTPs, CAPTCHA responses, cookies,
-  or session tokens, and does not store, log, or upload GST document contents.
-  The direct-download compatibility path is URL-only: it reviews GST endpoint
-  metadata in the authenticated page context and hands only the reviewed GST URL
-  to the browser download manager, without reading or retaining PDF bytes.
+  or session tokens, and does not log or upload GST document contents. The
+  source-build capture path may use temporary local OPFS staging for an explicit
+  target-bound ZIP export and its saved recovery/cleanup lifecycle, as described
+  in the README and privacy QA checklist. The direct-download compatibility path
+  is URL-only: it reviews GST endpoint metadata in the authenticated page context
+  and hands only the reviewed GST URL to the browser download manager, without
+  reading or retaining PDF bytes.
 - ComplyEaze Pack is not affiliated with, endorsed by, or operated by GSTN, CBIC,
   or the Government of India.
 
@@ -93,8 +96,10 @@ stable-release claims.
 
 - [x] Manifest V3.
 - [x] Exact GST host permission allow-list only.
-- [x] No `<all_urls>`, cookies, history, webRequest, tabs, identity, or
-      externally_connectable.
+- [x] No `<all_urls>`, cookies, history, webRequest, debugger/CDP,
+      nativeMessaging, tabs, identity, or externally_connectable in the default release manifest.
+      An explicitly enabled local-only GSTR-1 experiment adds debugger permission to dispatch one
+      target-bound View click; that build is not release-eligible.
 - [x] Restrictive extension CSP.
 - [x] No remote executable code allowed by package verifier.
 - [x] No extension analytics SDK.
@@ -140,30 +145,48 @@ stable-release claims.
 - [ ] Authorised live full fiscal year run reconciles every eligible target as
       downloaded, positively not filed, blocked, or failed in the local ledger.
 - [ ] Direct browser-download default is tested in clean Chrome and Brave
-      profiles with "Ask where to save each file" on and off, and the
-      portal-click fallback is verified to stop on unconfirmed or ambiguous
-      evidence without repeating completed full-year targets.
-      Active-profile Brave testing on 2026-07-01 cleared the immediate native
-      Save dialog blocker for one GSTR-3B single-month run and a two-period
-      local flow run. Active-profile Brave testing on 2026-07-03 completed
-      one GSTR-1 PDF+Excel single-month run and one FY 2025-26 GSTR-1
-      PDF+Excel full-year run in the unpacked source build. No exact-ZIP
-      clean-profile Chrome/Brave full-year evidence is recorded yet, so
-      browser-profile and release-package acceptance remains open.
-      Local packaging follow-up on 2026-07-03 rebuilt the Chrome MV3 package,
-      produced `.output/complyeazepack-0.2.2-chrome.zip`, and updated the
-      exact-ZIP verifier to emit package-policy and SHA-256 evidence before the
-      browser-host step. The unpacked package, extracted ZIP package policy, and
-      ZIP checksum were verified locally. The recorded SHA-256 is
-      `58395617e5a5557f2b4c2091396937e82a5f7a857d94127702dff5881babe3e4`.
-      The exact-ZIP verifier still stops at the browser-host step because
-      Codex's macOS sandbox denies Chromium Crashpad application-support access
-      before Pack loads. The verifier now reports that as a sanitized
-      environmental blocker; no browser assertions ran in that attempt.
-      Focused unit coverage confirms explicit full-year resume does not repeat
-      a downloaded period and stale running ledgers do not auto-resume after a
-      service-worker restart, but real Chrome/Brave service-worker and
-      browser-restart evidence is still required before durable full-year
+      profiles plus the real profile where the native Save dialog appeared,
+      with "Ask where to save each file" on and off, existing filename
+      collisions, and multiple-download prompt conditions. Each run must record
+      sanitized path-taken evidence that distinguishes the extension-owned
+      direct path from portal-click and portal-click-after-direct-fallback
+      paths. If this gate passes for GSTR-3B only, record the product decision
+      to stop at GSTR-3B or proceed to GSTR-1 PDF/Excel endpoint discovery
+      before making full-year dialog-free claims.
+- [ ] Transient artifact-byte handling is limited to explicit user-started,
+      target-bound local downloads. The service worker owns main-world capture,
+      MIME/size/magic validation, offscreen temporary Blob URL creation,
+      `chrome.downloads.download({ saveAs: false })`, terminal browser-download
+      observation, Blob URL revocation, offscreen close, and byte disposal. Raw
+      PDF/XLS bytes must not cross page `postMessage`, content-script runtime
+      messages, extension storage, IndexedDB, Cache Storage, diagnostics, live
+      evidence, logs, telemetry, support bundles, or ComplyEaze systems.
+- [ ] File System Access remains a foreground Options-only probe until live
+      browser evidence proves a broader flow. The probe is user-click-mediated,
+      writes and reads back only synthetic bytes in a user-chosen folder, removes
+      the probe file, stores no file or directory handle, and is not used for
+      unattended background artifact automation.
+      Live evidence notes: Active-profile Brave testing on 2026-07-01 cleared the
+      immediate native Save dialog blocker for one GSTR-3B single-month run and a
+      two-period local flow run. Active-profile Brave testing on 2026-07-03 completed
+      one GSTR-1 PDF+Excel single-month run and one FY 2025-26 GSTR-1 PDF+Excel
+      full-year run in the unpacked source build. No exact-ZIP clean-profile
+      Chrome/Brave full-year evidence is recorded yet, so browser-profile and
+      release-package acceptance remains open. Local packaging follow-up on
+      2026-07-03 rebuilt the Chrome MV3 package, produced
+      `.output/complyeazepack-0.2.2-chrome.zip`, and updated the exact-ZIP verifier to
+      emit package-policy and SHA-256 evidence before the browser-host step. The
+      unpacked package, extracted ZIP package policy, and ZIP checksum were verified
+      locally. The recorded SHA-256 is
+      `58395617e5a5557f2b4c2091396937e82a5f7a857d94127702dff5881babe3e4`. The
+      exact-ZIP verifier still stops at the browser-host step because Codex's macOS
+      sandbox denies Chromium Crashpad application-support access before Pack loads.
+      The verifier now reports that as a sanitized environmental blocker; no browser
+      assertions ran in that attempt. Focused unit coverage confirms explicit
+      full-year resume does not repeat a downloaded period and stale running ledgers
+      do not auto-resume after a service-worker restart, but real Chrome/Brave
+      service-worker and browser-restart evidence is still required before durable
+      full-year
       claims.
 - [ ] Network/storage audit confirms no unexpected destinations or sensitive
       persistence.

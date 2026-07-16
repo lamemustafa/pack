@@ -3,19 +3,25 @@ import { describe, expect, it } from "vitest";
 import {
   findFiledGstr3bDownloadCandidateIndex,
   scoreFiledGstr3bDownloadCandidate,
+  triggerFiledReturnDownload,
   triggerFiledGstr3bFiledPdfDownload,
 } from "../../src/connectors/gst/filed-returns-download";
 import {
   collectSafeNavigationDiagnostics,
-  dismissSafePostLoginDialogs,
-  dismissKnownFiledReturnsSummaryModal,
   findDialogDismissalCandidateIndex,
   findFiledReturnsNavigationCandidateIndex,
   findReturnDashboardCandidateIndex,
-  navigateToFiledReturnsPage,
-  scoreFiledReturnsSummaryModalDismissalCandidate,
   scoreDialogDismissalCandidate,
   scoreFiledReturnsNavigationCandidate,
+  scoreFiledReturnsSummaryModalDismissalCandidate,
+} from "../../src/connectors/gst/filed-returns-navigation-candidates";
+import {
+  dismissSafePostLoginDialogs,
+  dismissKnownFiledReturnsSummaryModal,
+} from "../../src/connectors/gst/filed-returns-dialogs";
+import {
+  navigateToFiledReturnsPage,
+  navigateToReturnDashboardPage,
 } from "../../src/connectors/gst/filed-returns-navigator";
 
 describe("filed returns navigation matcher", () => {
@@ -135,6 +141,73 @@ describe("filed returns navigation matcher", () => {
     expect(fetchCalls).toEqual([]);
   });
 
+  it("clicks a filed-returns menu item without the fixed menu delay when reveal is synchronous", async () => {
+    const documentRef = createDocument(
+      `
+      <main>
+        <button data-services>Services</button>
+        <nav data-menu hidden></nav>
+      </main>
+    `,
+      "https://services.gst.gov.in/services/auth/fowelcome",
+    );
+    const menu = documentRef.querySelector("[data-menu]");
+    documentRef.querySelector("[data-services]")?.addEventListener("mouseover", () => {
+      menu?.removeAttribute("hidden");
+      const link = documentRef.createElement("a");
+      link.href = "https://return.gst.gov.in/returns/auth/efiledReturns";
+      link.textContent = "View Filed Returns";
+      menu?.append(link);
+    });
+    const restoreSetTimeout = rejectFixedNavigationDelay();
+
+    try {
+      const result = await navigateToFiledReturnsPage(documentRef);
+
+      expect(result.state).toBe("clicked");
+      expect(result.safeSignals).toEqual(
+        expect.arrayContaining(["filed-returns-candidate-clicked", "after-services-menu"]),
+      );
+    } finally {
+      restoreSetTimeout();
+    }
+  });
+
+  it("clicks a return-dashboard menu item without the fixed menu delay when reveal is synchronous", async () => {
+    const documentRef = createDocument(
+      `
+      <main>
+        <button data-services>Services</button>
+        <nav data-menu hidden></nav>
+      </main>
+    `,
+      "https://services.gst.gov.in/services/auth/fowelcome",
+    );
+    const menu = documentRef.querySelector("[data-menu]");
+    documentRef.querySelector("[data-services]")?.addEventListener("click", () => {
+      menu?.removeAttribute("hidden");
+      const link = documentRef.createElement("a");
+      link.href = "https://return.gst.gov.in/returns/auth/dashboard";
+      link.textContent = "Returns Dashboard";
+      menu?.append(link);
+    });
+    const restoreSetTimeout = rejectFixedNavigationDelay();
+
+    try {
+      const result = await navigateToReturnDashboardPage(documentRef, "gst-gstr2b-private-v0");
+
+      expect(result.state).toBe("clicked");
+      expect(result.safeSignals).toEqual(
+        expect.arrayContaining([
+          "return-dashboard-candidate-clicked",
+          "return-dashboard-after-services-menu",
+        ]),
+      );
+    } finally {
+      restoreSetTimeout();
+    }
+  });
+
   it("finds the return dashboard entry before broader return actions", () => {
     const index = findReturnDashboardCandidateIndex([
       { text: "File Returns" },
@@ -170,6 +243,7 @@ describe("filed returns navigation matcher", () => {
     let downloadClicked = 0;
     closeButton?.addEventListener("click", () => {
       closeClicked += 1;
+      closeButton.closest(".modal")?.remove();
     });
     downloadButton?.addEventListener("click", () => {
       downloadClicked += 1;
@@ -182,6 +256,140 @@ describe("filed returns navigation matcher", () => {
     );
     expect(closeClicked).toBe(1);
     expect(downloadClicked).toBe(0);
+  });
+
+  it("dismisses known summary modals with icon-only close buttons", async () => {
+    const documentRef = createDocument(`
+      <div class="modal show" style="display:block">
+        <div>System generated summary for GSTR-3B</div>
+        <button class="close" type="button"><span aria-hidden="true">×</span></button>
+        <button>DOWNLOAD FILED GSTR-3B</button>
+      </div>
+    `);
+    const [closeButton, downloadButton] = Array.from(documentRef.querySelectorAll("button"));
+    let closeClicked = 0;
+    let downloadClicked = 0;
+    closeButton?.addEventListener("click", () => {
+      closeClicked += 1;
+      closeButton.closest(".modal")?.remove();
+    });
+    downloadButton?.addEventListener("click", () => {
+      downloadClicked += 1;
+    });
+
+    const signals = await dismissKnownFiledReturnsSummaryModal(documentRef);
+
+    expect(signals).toEqual(
+      expect.arrayContaining(["detail-summary-modal-dismissed", "summary-dialog-close-class"]),
+    );
+    expect(closeClicked).toBe(1);
+    expect(downloadClicked).toBe(0);
+  });
+
+  it("waits briefly for the portal to render its summary Close control", async () => {
+    const documentRef = createDocument(`
+      <div class="modal show" style="display:block">
+        <div>System generated summary for GSTR-3B</div>
+        <div data-actions></div>
+      </div>
+    `);
+    globalThis.setTimeout(() => {
+      const closeButton = documentRef.createElement("button");
+      closeButton.setAttribute("aria-label", "Close");
+      closeButton.textContent = "x";
+      closeButton.addEventListener("click", () => closeButton.closest(".modal")?.remove());
+      documentRef.querySelector("[data-actions]")?.append(closeButton);
+    }, 30);
+
+    const signals = await dismissKnownFiledReturnsSummaryModal(documentRef);
+
+    expect(signals).toEqual(
+      expect.arrayContaining([
+        "detail-summary-modal-dismissed",
+        "detail-summary-modal-close-clicked",
+        "summary-dialog-close",
+      ]),
+    );
+    expect(documentRef.querySelector(".modal")).toBeNull();
+  });
+
+  it("accepts a summary overlay that the portal dismisses naturally while Pack waits", async () => {
+    const documentRef = createDocument(`
+      <div class="modal show" style="display:block">
+        <div>System generated summary for GSTR-3B</div>
+      </div>
+    `);
+    globalThis.setTimeout(() => documentRef.querySelector(".modal")?.remove(), 30);
+
+    const signals = await dismissKnownFiledReturnsSummaryModal(documentRef);
+
+    expect(signals).toEqual(["detail-summary-modal-dismissed"]);
+  });
+
+  it("does not report dismissal when the portal replaces the summary overlay after Close", async () => {
+    const documentRef = createDocument(`
+      <div class="modal show" style="display:block">
+        <div>System generated summary for GSTR-3B</div>
+        <button aria-label="Close">x</button>
+      </div>
+    `);
+    documentRef.querySelector("button")?.addEventListener("click", () => {
+      documentRef.querySelector(".modal")?.remove();
+      const replacement = documentRef.createElement("div");
+      replacement.className = "modal show";
+      replacement.style.display = "block";
+      replacement.textContent = "System generated summary for GSTR-3B";
+      documentRef.body.append(replacement);
+    });
+
+    const signals = await dismissKnownFiledReturnsSummaryModal(documentRef);
+
+    expect(signals).toEqual(
+      expect.arrayContaining([
+        "detail-summary-modal-close-blocked",
+        "detail-summary-modal-close-clicked",
+      ]),
+    );
+    expect(documentRef.querySelector(".modal")).not.toBeNull();
+  });
+
+  it("never hides, removes, or restyles a summary modal or backdrop when portal close stalls", async () => {
+    const documentRef = createDocument(`
+      <div class="modal show" style="display:block">
+        <div>System generated summary for GSTR-3B</div>
+        <button aria-label="Close">x</button>
+        <button>DOWNLOAD FILED GSTR-3B</button>
+      </div>
+      <div class="modal-backdrop show"></div>
+    `);
+    documentRef.body.classList.add("modal-open");
+    const modal = documentRef.querySelector<HTMLElement>(".modal");
+    const backdrop = documentRef.querySelector<HTMLElement>(".modal-backdrop");
+    const initialModalClass = modal?.className;
+    const initialModalStyle = modal?.getAttribute("style");
+    const initialBackdropClass = backdrop?.className;
+    let closeClicked = 0;
+    documentRef.querySelector("button")?.addEventListener("click", () => {
+      closeClicked += 1;
+    });
+
+    const signals = await dismissKnownFiledReturnsSummaryModal(documentRef);
+
+    expect(signals).toEqual(
+      expect.arrayContaining([
+        "detail-summary-modal-close-blocked",
+        "detail-summary-modal-close-clicked",
+        "summary-dialog-close",
+      ]),
+    );
+    expect(closeClicked).toBe(1);
+    expect(modal?.isConnected).toBe(true);
+    expect(modal?.className).toBe(initialModalClass);
+    expect(modal?.getAttribute("style")).toBe(initialModalStyle);
+    expect(modal?.hasAttribute("aria-hidden")).toBe(false);
+    expect(documentRef.body.classList.contains("modal-open")).toBe(true);
+    expect(backdrop?.isConnected).toBe(true);
+    expect(backdrop?.className).toBe(initialBackdropClass);
   });
 
   it("does not dismiss unrelated modals", async () => {
@@ -203,6 +411,27 @@ describe("filed returns navigation matcher", () => {
     expect(closeClicked).toBe(0);
   });
 
+  it("does not use non-dismissive actions when a known summary overlay has no Close control", async () => {
+    const documentRef = createDocument(`
+      <div class="modal show" style="display:block">
+        <div>System generated summary for GSTR-3B</div>
+        <button>Proceed</button>
+        <button>DOWNLOAD FILED GSTR-3B</button>
+      </div>
+    `);
+    let clicked = 0;
+    for (const button of Array.from(documentRef.querySelectorAll("button"))) {
+      button.addEventListener("click", () => {
+        clicked += 1;
+      });
+    }
+
+    const signals = await dismissKnownFiledReturnsSummaryModal(documentRef);
+
+    expect(signals).toEqual(["detail-summary-modal-close-control-not-found"]);
+    expect(clicked).toBe(0);
+  });
+
   it("scores only dismissive summary modal actions", () => {
     expect(
       scoreFiledReturnsSummaryModalDismissalCandidate({ text: "DOWNLOAD FILED GSTR-3B" }).score,
@@ -212,6 +441,9 @@ describe("filed returns navigation matcher", () => {
     );
     expect(
       scoreFiledReturnsSummaryModalDismissalCandidate({ text: "x", ariaLabel: "Close" }).score,
+    ).toBeGreaterThanOrEqual(80);
+    expect(
+      scoreFiledReturnsSummaryModalDismissalCandidate({ text: "", className: "close" }).score,
     ).toBeGreaterThanOrEqual(80);
   });
 
@@ -236,7 +468,7 @@ describe("filed returns navigation matcher", () => {
     expect(scoreFiledGstr3bDownloadCandidate({ text: "SUBMIT" }).score).toBeLessThan(0);
   });
 
-  it("triggers only the selected filed GSTR-3B PDF download control", async () => {
+  it("arms only the selected filed GSTR-3B PDF download control for capture", async () => {
     const documentRef = createDocument(`
       <main>
         <h1>GSTR-3B - Monthly Return</h1>
@@ -257,18 +489,25 @@ describe("filed returns navigation matcher", () => {
       systemClicked += 1;
     });
 
-    const result = await triggerFiledGstr3bFiledPdfDownload(documentRef, {
+    const result = await triggerFiledReturnDownload(documentRef, {
       actionId: "test-action",
       financialYear: "2025-26",
       period: "March",
       returnType: "GSTR-3B",
     });
 
-    expect(result.state).toBe("clicked");
-    expect(result.safeSignals).toEqual(
-      expect.arrayContaining(["filed-gstr3b-download-clicked", "text-download-filed-gstr3b"]),
+    expect(result.downloadTrigger.state).toBe("clicked");
+    expect(result.downloadTrigger.safeSignals).toEqual(
+      expect.arrayContaining([
+        "filed-gstr3b-download-clicked",
+        "text-download-filed-gstr3b",
+        "filed-gstr3b-portal-blob-download-captured",
+      ]),
     );
-    expect(filedClicked).toBe(1);
+    expect("mainWorldCaptureRequest" in result).toBe(true);
+    expect(filedButton?.hasAttribute("data-pack-gstr2b-capture-action")).toBe(true);
+    expect(systemLink?.hasAttribute("data-pack-gstr2b-capture-action")).toBe(false);
+    expect(filedClicked).toBe(0);
     expect(systemClicked).toBe(0);
   });
 
@@ -323,4 +562,17 @@ function createDocument(
       toJSON: () => ({}),
     }) as DOMRect;
   return dom.window.document;
+}
+
+function rejectFixedNavigationDelay(): () => void {
+  const originalSetTimeout = globalThis.setTimeout;
+  globalThis.setTimeout = ((handler: TimerHandler, timeout?: number, ...args: unknown[]) => {
+    if (timeout === 350) {
+      throw new Error("Navigation should not wait for the fixed menu reveal delay.");
+    }
+    return originalSetTimeout(handler, timeout, ...args);
+  }) as typeof globalThis.setTimeout;
+  return () => {
+    globalThis.setTimeout = originalSetTimeout;
+  };
 }

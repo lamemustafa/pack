@@ -1,4 +1,9 @@
-import type { UserActionRequired } from "../core/contracts";
+import type {
+  BrowserDownloadSafeEvidence,
+  FiledReturnsDownloadByteCountClass,
+  FiledReturnsDownloadMimeClass,
+  UserActionRequired,
+} from "../core/contracts";
 import {
   isExpectedDownloadCandidate,
   type DownloadObservationContext,
@@ -34,6 +39,7 @@ export async function completedObservation(
       safeMessage:
         "The browser reported a filed-return PDF download, but the file appears to be empty. Retry from the GST Portal detail page.",
       userAction: retryPortalGenerationAction(),
+      safeEvidence: safeEvidenceForDownload(downloadId, item, "zero"),
     };
   }
 
@@ -47,6 +53,7 @@ export async function completedObservation(
     ],
     safeMessage:
       "The browser reported that the filed-return PDF download completed. Check the local downloads folder for the GST Portal PDF.",
+    safeEvidence: safeEvidenceForDownload(downloadId, item, "non-empty"),
   };
 }
 
@@ -108,6 +115,62 @@ function firstKnownSize(item: DownloadCreatedItem | undefined): number | null {
   );
   if (knownSizes.length === 0) return null;
   return Math.max(...knownSizes);
+}
+
+function safeEvidenceForDownload(
+  downloadId: number,
+  item: DownloadCreatedItem,
+  byteCountClass: FiledReturnsDownloadByteCountClass,
+): BrowserDownloadSafeEvidence {
+  return {
+    downloadId,
+    urlClass: classifyUrl(item),
+    mimeClass: classifyMime(item.mime),
+    byteCountClass,
+  };
+}
+
+function classifyUrl(item: DownloadCreatedItem): BrowserDownloadSafeEvidence["urlClass"] {
+  const schemes = [item.url, item.finalUrl, item.referrer].map((value) => parseScheme(value));
+  if (schemes.includes("blob")) return "blob";
+  if (schemes.includes("data")) return "data";
+  if (schemes.includes("http") || schemes.includes("https")) return "https";
+  return "unknown";
+}
+
+function parseScheme(value: string | undefined): string | null {
+  if (!value) return null;
+  const match = /^([a-z][a-z0-9+.-]*):/i.exec(value);
+  return match?.[1]?.toLowerCase() ?? null;
+}
+
+function classifyMime(mime: string | undefined): FiledReturnsDownloadMimeClass {
+  const value = mime?.toLowerCase().trim();
+  if (!value) return "missing";
+  if (value.includes("pdf")) return "pdf";
+  if (
+    value.includes("spreadsheet") ||
+    value.includes("excel") ||
+    value.includes("officedocument")
+  ) {
+    return "spreadsheet";
+  }
+  if (
+    [
+      "application/octet-stream",
+      "binary/octet-stream",
+      "application/download",
+      "application/force-download",
+      "application/x-download",
+    ].includes(value)
+  ) {
+    return "generic-binary";
+  }
+  if (value.includes("html")) return "html";
+  if (value.includes("json")) return "json";
+  if (value.startsWith("text/")) return "text";
+  if (value.startsWith("image/")) return "image";
+  return "other";
 }
 
 async function safeDownloadSearch(

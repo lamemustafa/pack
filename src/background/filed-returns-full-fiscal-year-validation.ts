@@ -40,6 +40,16 @@ const VALID_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
   "failed",
   "cancelled",
 ]);
+const VALID_ZIP_PHASES = new Set<NonNullable<FiledReturnsFullFiscalYearLedger["zipPhase"]>>([
+  "export-pending",
+  "export-retry-pending",
+  "download-started",
+  "restaging-required",
+  "downloaded-cleanup-pending",
+  "no-artifacts-cleanup-pending",
+  "legacy-cleanup-pending",
+  "cleaned",
+]);
 
 export function isFullFiscalYearLedger(input: unknown): input is FiledReturnsFullFiscalYearLedger {
   if (!input || typeof input !== "object") return false;
@@ -56,6 +66,17 @@ export function isFullFiscalYearLedger(input: unknown): input is FiledReturnsFul
     return false;
   }
   if (!ledger.status || !VALID_LEDGER_STATUSES.has(ledger.status)) return false;
+  if (ledger.zipPhase !== undefined && !VALID_ZIP_PHASES.has(ledger.zipPhase)) {
+    return false;
+  }
+  if (ledger.zipPhase === "cleaned" && ledger.status !== "complete") return false;
+  if (
+    ledger.zipPhase !== undefined &&
+    ledger.zipPhase !== "cleaned" &&
+    ledger.status !== "blocked"
+  ) {
+    return false;
+  }
   if (!isValidTimestamp(ledger.createdAt) || !isValidTimestamp(ledger.updatedAt)) return false;
   if (ledger.lastReconciledAt !== undefined && !isValidTimestamp(ledger.lastReconciledAt)) {
     return false;
@@ -75,6 +96,16 @@ export function isFullFiscalYearLedger(input: unknown): input is FiledReturnsFul
 
   if (ledger.currentTargetId !== undefined && !targetIds.has(ledger.currentTargetId)) return false;
   return true;
+}
+
+export function recoverableFullFiscalYearLedgerId(input: unknown): string | null {
+  if (!input || typeof input !== "object") return null;
+  const ledgerId = (input as { ledgerId?: unknown }).ledgerId;
+  return typeof ledgerId === "string" &&
+    ledgerId.length <= 120 &&
+    /^[a-zA-Z0-9._-]+$/.test(ledgerId)
+    ? ledgerId
+    : null;
 }
 
 function isFullFiscalYearScope(

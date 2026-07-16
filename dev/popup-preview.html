@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en" data-pack-surface="popup">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pack popup preview</title>
+    <link rel="stylesheet" href="../src/styles/global.css" />
+    <link rel="stylesheet" href="../src/styles/popup.css" />
+    <link rel="stylesheet" href="../src/styles/popup-controls.css" />
+    <style>
+      body {
+        min-width: 420px;
+      }
+      .preview-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        padding: 8px;
+        background: #172033;
+      }
+      .preview-toolbar button {
+        min-height: 30px;
+        border: 1px solid #91a8c0;
+        border-radius: 6px;
+        background: transparent;
+        color: #fff;
+        padding: 0 8px;
+        font: inherit;
+        font-size: 11px;
+      }
+      .preview-toolbar button[aria-pressed="true"] {
+        background: #fff;
+        color: #172033;
+      }
+    </style>
+  </head>
+  <body>
+    <nav class="preview-toolbar" aria-label="Preview states">
+      <button data-state="ready" aria-pressed="true">Ready</button>
+      <button data-state="ready-single">Single month</button>
+      <button data-state="blocked">Blocked</button>
+      <button data-state="downloading">Downloading</button>
+      <button data-state="partial">Partial</button>
+      <button data-state="complete">Complete</button>
+      <button data-state="unsupported">Unsupported</button>
+      <button data-state="session-expired">Session expired</button>
+      <button data-state="unexpected-error">Unexpected error</button>
+    </nav>
+    <main class="popup-shell" id="preview"></main>
+    <script>
+      const states = {
+        ready: { status: "", action: "Download all 2025-26 GSTR-2B files" },
+        "ready-single": { status: "", action: "Download May 2025-26 GSTR-2B PDF" },
+        blocked: {
+          status:
+            '<section class="inline-status inline-status-warning"><span class="inline-status-icon">!</span><div class="inline-status-content"><strong>March 2026 needs a quick check</strong><p>Pack could not confirm this filed return for the selected period.</p><button class="inline-status-primary">Retry March 2026</button></div></section>',
+          action: "",
+        },
+        downloading: {
+          status:
+            '<section class="inline-status inline-status-neutral"><span class="inline-status-icon">↓</span><div class="inline-status-content"><strong>Packing your files</strong><p>Keep the GST Portal tab open while Pack prepares the files.</p><div class="run-progress"><div class="run-progress-track"><span style="width:58%"></span></div><span>7/12</span></div></div></section>',
+          action: "Packing your files",
+        },
+        partial: {
+          status:
+            '<section class="inline-status inline-status-warning"><span class="inline-status-icon">!</span><div class="inline-status-content"><strong>March 2026 could not be confirmed</strong><p>11 of 12 periods downloaded. Pack could not confirm the remaining selection.</p><button class="inline-status-primary">Retry March 2026</button></div></section>',
+          action: "",
+        },
+        complete: {
+          status:
+            '<section class="inline-status inline-status-success"><span class="inline-status-icon">✓</span><div class="inline-status-content"><strong>Download complete</strong><p>12 periods saved as one ZIP.</p></div></section>',
+          action: "Download all 2025-26 GSTR-2B files",
+        },
+        unsupported: {
+          empty:
+            '<section class="context-state"><div class="context-state-icon">↗</div><div class="context-state-content"><p class="context-state-kicker">GST Portal status</p><h2>Open the GST Portal to use Pack</h2><p>Navigate to the filed returns page. Pack will detect the supported page automatically.</p><button class="primary-action context-state-action">Open GST Portal</button></div></section>',
+        },
+        "session-expired": {
+          empty:
+            '<section class="context-state"><div class="context-state-icon">!</div><div class="context-state-content"><p class="context-state-kicker">GST Portal status</p><h2>Sign in again on the GST Portal</h2><p>Your GST Portal session appears to have expired. Sign in there, then reopen Pack.</p><button class="primary-action context-state-action">Open GST Portal sign-in</button></div></section>',
+        },
+        "unexpected-error": {
+          status:
+            '<section class="inline-status inline-status-warning"><span class="inline-status-icon">!</span><div class="inline-status-content"><strong>Pack could not confirm the download</strong><p>Reopen the filed-return page on the GST Portal, then retry.</p><button class="inline-status-primary">Open GST Portal</button></div></section>',
+          action: "",
+        },
+      };
+      const builder = () =>
+        `<p class="portal-context-line"><span class="portal-context-dot"></span>GST Portal page detected</p><section class="flow-panel"><div class="flow-panel-heading"><h2>Download GST returns</h2><p>Choose a return and period to save through this browser.</p></div><div class="scope-form-grid"><fieldset class="scope-group scope-group-return"><legend>Return</legend><div class="scope-options"><label class="scope-option"><span class="scope-option-title">GSTR-3B</span></label><label class="scope-option"><span class="scope-option-title">GSTR-1</span></label><label class="scope-option scope-option-selected"><span class="scope-option-title">GSTR-2B</span></label></div></fieldset><div class="scope-row scope-row-range"><fieldset class="scope-group scope-group-run-mode"><legend>Period</legend><div class="scope-options"><label class="scope-option"><span class="scope-option-title">Single month</span></label><label class="scope-option scope-option-selected"><span class="scope-option-title">Full year</span></label></div></fieldset><div class="scope-select-row"><label class="scope-select"><span>Financial year</span><select><option>2025-26</option></select></label></div></div><details class="advanced-options"><summary>More options</summary></details></div></section><section class="pack-summary" aria-label="Your pack"><div class="pack-summary-heading"><div><p class="section-label">Your pack</p><h2>GSTR-2B · FY 2025–26</h2></div><div class="pack-motif"><span></span><span></span><span></span></div></div><p class="pack-summary-line">12 periods · PDF + Excel · One ZIP</p><p class="pack-summary-meta">Saved locally by your browser</p></section>`;
+      function render(state) {
+        const item = states[state];
+        document
+          .querySelectorAll("[data-state]")
+          .forEach((button) =>
+            button.setAttribute("aria-pressed", String(button.dataset.state === state)),
+          );
+        const content =
+          item.empty ||
+          `${builder()}${item.status}${item.action ? `<div class="popup-action-area"><p class="run-action-copy">Create one ZIP for all eligible periods.</p><button class="primary-action">${item.action}</button></div>` : ""}`;
+        document.querySelector("#preview").innerHTML =
+          `<header class="popup-topbar"><div class="popup-brand"><img class="popup-wordmark" src="../public/brand/pack-logo-header.svg" alt="Pack by ComplyEaze" /></div></header>${content}<footer class="fineprint"><span>Local only · No GST files uploaded · Details</span></footer>`;
+      }
+      document
+        .querySelectorAll("[data-state]")
+        .forEach((button) => button.addEventListener("click", () => render(button.dataset.state)));
+      render("ready");
+    </script>
+  </body>
+</html>

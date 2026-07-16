@@ -38,12 +38,6 @@ const expectedContentScripts = [
     ],
     runAt: "document_idle",
   },
-  {
-    js: ["content-scripts/gstr2b-capture-main.js"],
-    matches: ["https://gstr2b.gst.gov.in/*"],
-    runAt: "document_start",
-    world: "MAIN",
-  },
 ];
 const hostileOrigin = "https://hostile-pack.invalid";
 const expectedDeniedNetworkProbe = "https://unexpected-pack-network.invalid/tracker.png";
@@ -93,8 +87,8 @@ try {
     });
   });
 
-  const serviceWorker = await waitForServiceWorker(context);
-  const extensionId = new URL(serviceWorker.url()).host;
+  const extensionId = await resolveExtensionId(context);
+  const serviceWorker = await waitForServiceWorker(context, extensionId);
   await assertServiceWorkerStarted(serviceWorker);
   await assertOptionsPageLoads(context, extensionId);
   await assertPopupPageLoads(context, extensionId);
@@ -227,12 +221,87 @@ async function launchExtensionContext() {
   });
 }
 
-async function waitForServiceWorker(browserContext) {
-  let [serviceWorker] = browserContext.serviceWorkers();
-  if (!serviceWorker) {
-    serviceWorker = await browserContext.waitForEvent("serviceworker", { timeout: 15_000 });
+async function resolveExtensionId(browserContext) {
+  const existingServiceWorker = findExtensionServiceWorker(browserContext);
+  if (existingServiceWorker) return new URL(existingServiceWorker.url()).host;
+
+  const wakePage = await browserContext.newPage();
+  attachPageLogging(wakePage);
+  await wakePage.goto("https://services.gst.gov.in/services/auth/fowelcome", {
+    waitUntil: "domcontentloaded",
+  });
+  try {
+    const deadline = Date.now() + 15_000;
+    while (Date.now() < deadline) {
+      const serviceWorker = findExtensionServiceWorker(browserContext);
+      if (serviceWorker) return new URL(serviceWorker.url()).host;
+      const extensionId = await readLoadedExtensionIdFromPreferences();
+      if (extensionId) return extensionId;
+      await delay(150);
+    }
+  } finally {
+    await wakePage.close();
   }
+
+  throw new Error("Pack extension did not appear in Chrome extension preferences.");
+}
+
+async function readLoadedExtensionIdFromPreferences() {
+  const preferencesPath = path.join(profileDir, "Default", "Preferences");
+  try {
+    const preferences = JSON.parse(await readFile(preferencesPath, "utf8"));
+    const extensionSettings = preferences.extensions?.settings ?? {};
+    for (const [extensionId, settings] of Object.entries(extensionSettings)) {
+      if (settings?.manifest?.name === "ComplyEaze Pack: GST Return Downloader") {
+        return extensionId;
+      }
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+async function waitForServiceWorker(browserContext, extensionId) {
+  let serviceWorker = findExtensionServiceWorker(browserContext, extensionId);
+  if (!serviceWorker) {
+    const wakePage = await browserContext.newPage();
+    attachPageLogging(wakePage);
+    const serviceWorkerEvent = browserContext
+      .waitForEvent("serviceworker", {
+        predicate: (worker) => isExtensionServiceWorker(worker, extensionId),
+        timeout: 15_000,
+      })
+      .catch(() => null);
+    try {
+      await wakePage.goto(`chrome-extension://${extensionId}/popup.html`, {
+        waitUntil: "domcontentloaded",
+      });
+      serviceWorker =
+        findExtensionServiceWorker(browserContext, extensionId) ?? (await serviceWorkerEvent);
+    } finally {
+      await wakePage.close();
+    }
+  }
+  if (!serviceWorker) throw new Error("Pack extension service worker did not start.");
   return serviceWorker;
+}
+
+function findExtensionServiceWorker(browserContext, extensionId) {
+  return browserContext
+    .serviceWorkers()
+    .find((worker) => isExtensionServiceWorker(worker, extensionId));
+}
+
+function isExtensionServiceWorker(worker, extensionId) {
+  try {
+    const workerUrl = new URL(worker.url());
+    return (
+      workerUrl.protocol === "chrome-extension:" && (!extensionId || workerUrl.host === extensionId)
+    );
+  } catch {
+    return false;
+  }
 }
 
 async function assertServiceWorkerStarted(serviceWorker) {
@@ -272,15 +341,60 @@ async function assertPopupPageLoads(browserContext, extensionId) {
   await popupPage.goto(`chrome-extension://${extensionId}/popup.html`);
   await popupPage.waitForLoadState("domcontentloaded");
   await popupPage.waitForSelector(".popup-shell", { timeout: 5_000 });
-  const popupState = await popupPage.evaluate(() => ({
-    title: document.title,
-    shellText: document.querySelector(".popup-shell")?.textContent ?? "",
-  }));
+  await popupPage.waitForFunction(
+    () =>
+      document.body.textContent?.includes("Checking this tab") ||
+      document.body.textContent?.includes("Open the GST Portal to use Pack") ||
+      document.body.textContent?.includes("Sign in again on the GST Portal"),
+    undefined,
+    { timeout: 5_000 },
+  );
+  const popupState = await popupPage.evaluate(() => {
+    const wordmark = document.querySelector(".popup-wordmark");
+    const wordmarkRect = wordmark?.getBoundingClientRect();
+    const visibleWordmark =
+      wordmarkRect && wordmarkRect.width > 0 && wordmarkRect.height > 0
+        ? document.elementFromPoint(
+            wordmarkRect.left + wordmarkRect.width / 2,
+            wordmarkRect.top + wordmarkRect.height / 2,
+          )
+        : null;
+    return {
+      title: document.title,
+      shellRect: document.querySelector(".popup-shell")?.getBoundingClientRect().toJSON(),
+      shellText: document.querySelector(".popup-shell")?.textContent ?? "",
+      hasContextState: Boolean(document.querySelector(".context-state")),
+      visibleWordmark: visibleWordmark?.getAttribute("alt") ?? "",
+    };
+  });
   if (popupState.title !== "ComplyEaze Pack") {
     throw new Error(`Unexpected popup page title: ${popupState.title}`);
   }
-  if (!popupState.shellText.includes("GST Return Pack")) {
-    throw new Error("Pack popup did not render the GST Return Pack UI.");
+  if (
+    !popupState.shellText.includes("Checking this tab") &&
+    !popupState.shellText.includes("Open the GST Portal to use Pack") &&
+    !popupState.shellText.includes("Sign in again on the GST Portal")
+  ) {
+    throw new Error("Pack popup did not render a valid context state.");
+  }
+  if (!popupState.visibleWordmark.includes("Pack by ComplyEaze")) {
+    throw new Error("Pack popup mounted in the DOM but did not visibly paint its brand header.");
+  }
+  if (!popupState.hasContextState) {
+    throw new Error("Pack popup did not render its context state.");
+  }
+  if (
+    !popupState.shellRect ||
+    popupState.shellRect.width < 380 ||
+    popupState.shellRect.width > 460 ||
+    popupState.shellRect.height < 180 ||
+    popupState.shellRect.height > 700
+  ) {
+    throw new Error(
+      `Pack popup shell rendered outside the expected compact size: ${JSON.stringify(
+        popupState.shellRect,
+      )}`,
+    );
   }
   await popupPage.close();
 }

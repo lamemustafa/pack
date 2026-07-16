@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FULL_FISCAL_YEAR_PERIOD } from "../../src/core/filed-returns-scope";
-import type { FiledReturnsFlowSummary } from "../../src/core/contracts";
+import type {
+  FiledReturnsFlowSummary,
+  FiledReturnsFullFiscalYearLedger,
+} from "../../src/core/contracts";
 import { readCurrentFiledReturnsFlowSummary } from "../../src/background/filed-returns-current-state";
 
 const filedReturnsCurrentStateStorageKeys = {
@@ -54,15 +57,26 @@ const browserMocks = vi.hoisted(() => ({
     sendMessage: vi.fn(async () => ({ ok: true })),
   },
 }));
+const zipMocks = vi.hoisted(() => ({
+  discardAllFiledReturnsStaging: vi.fn(async () => "filed-returns-opfs-cleared"),
+  discardFullFiscalYearFiledReturnsZip: vi.fn(async () => "full-fiscal-year-opfs-cleared"),
+  discardSinglePeriodFiledReturnsZip: vi.fn(async () => "single-period-opfs-cleared"),
+}));
 
 vi.mock("wxt/browser", () => ({
   browser: browserMocks,
 }));
+vi.mock("../../src/background/filed-returns-full-fiscal-year-zip", () => zipMocks);
 
 describe("Pack local data clearing", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
+    zipMocks.discardFullFiscalYearFiledReturnsZip.mockResolvedValue(
+      "full-fiscal-year-opfs-cleared",
+    );
+    zipMocks.discardSinglePeriodFiledReturnsZip.mockResolvedValue("single-period-opfs-cleared");
+    zipMocks.discardAllFiledReturnsStaging.mockResolvedValue("filed-returns-opfs-cleared");
     vi.stubGlobal("defineBackground", (entrypoint: () => void) => {
       entrypoint();
       return entrypoint;
@@ -126,6 +140,312 @@ describe("Pack local data clearing", () => {
       ok: false,
       error:
         "Pack has unresolved filed-return recovery state. Cancel or resolve the run before clearing local data.",
+    });
+    expect(browserMocks.storage.session.clear).not.toHaveBeenCalled();
+    expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
+  });
+
+  it("clears retained full-year files before removing a completed ledger", async () => {
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      key === "pack:full-fiscal-year-ledger"
+        ? {
+            [key]: {
+              schemaVersion: "1.0",
+              ledgerId: "ledger-complete",
+              revision: 3,
+              status: "complete",
+              scope: {
+                financialYear: "2026-27",
+                period: FULL_FISCAL_YEAR_PERIOD,
+                returnType: "GSTR-3B",
+              },
+              createdAt: "2026-06-24T00:00:00.000Z",
+              updatedAt: "2026-06-24T00:01:00.000Z",
+              targets: [
+                {
+                  targetId: "GSTR-3B:2026-27:April",
+                  financialYear: "2026-27",
+                  period: "April",
+                  returnType: "GSTR-3B",
+                  status: "downloaded",
+                  attempts: 1,
+                  safeSignals: ["full-fiscal-year-opfs-staged:PDF"],
+                  safeMessage: "Staged.",
+                  updatedAt: "2026-06-24T00:01:00.000Z",
+                },
+              ],
+            },
+          }
+        : {},
+    );
+    const background = await import("../../src/entrypoints/background");
+
+    const response = await background.clearPackLocalData();
+
+    expect(response).toEqual({ ok: true, cleared: true });
+    expect(zipMocks.discardFullFiscalYearFiledReturnsZip).toHaveBeenCalledWith("ledger-complete");
+    expect(browserMocks.storage.local.remove).toHaveBeenCalledWith(
+      background.PACK_CLEARABLE_LOCAL_STORAGE_KEYS,
+    );
+  });
+
+  it("clears durably recorded single-period staging before removing local state", async () => {
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      key === "pack:single-period-staging"
+        ? {
+            [key]: {
+              ledgerId: "single-period:ledger",
+              schemaVersion: "1.0",
+            },
+          }
+        : {},
+    );
+    const background = await import("../../src/entrypoints/background");
+
+    const response = await background.clearPackLocalData();
+
+    expect(response).toEqual({ ok: true, cleared: true });
+    expect(zipMocks.discardSinglePeriodFiledReturnsZip).toHaveBeenCalledWith(
+      "single-period:ledger",
+    );
+    expect(browserMocks.storage.local.remove).toHaveBeenCalledWith(
+      background.PACK_CLEARABLE_LOCAL_STORAGE_KEYS,
+    );
+  });
+
+  it("keeps local state when single-period staging ownership cannot be verified", async () => {
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) => {
+      if (key === "pack:single-period-staging") throw new Error("synthetic storage failure");
+      return {};
+    });
+    const background = await import("../../src/entrypoints/background");
+
+    const response = await background.clearPackLocalData();
+
+    expect(response).toEqual({
+      ok: false,
+      error:
+        "Pack could not verify temporary selected-file staging. Retry clearing local data before removing saved state.",
+    });
+    expect(browserMocks.storage.session.clear).not.toHaveBeenCalled();
+    expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
+  });
+
+  it("recovers an explicit local-data reset from malformed staging metadata", async () => {
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      key === "pack:single-period-staging" ? { [key]: { schemaVersion: "unexpected" } } : {},
+    );
+    const background = await import("../../src/entrypoints/background");
+
+    const response = await background.clearPackLocalData();
+
+    expect(response).toEqual({ ok: true, cleared: true });
+    expect(zipMocks.discardAllFiledReturnsStaging).toHaveBeenCalledTimes(1);
+    expect(zipMocks.discardSinglePeriodFiledReturnsZip).not.toHaveBeenCalled();
+    expect(browserMocks.storage.session.clear).toHaveBeenCalledTimes(1);
+    expect(browserMocks.storage.local.remove).toHaveBeenCalledWith(
+      background.PACK_CLEARABLE_LOCAL_STORAGE_KEYS,
+    );
+  });
+
+  it("clears a safe opaque ledger id recovered from malformed staging metadata", async () => {
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      key === "pack:single-period-staging"
+        ? {
+            [key]: {
+              ledgerId: "single-period:recoverable",
+              schemaVersion: "unexpected",
+            },
+          }
+        : {},
+    );
+    const background = await import("../../src/entrypoints/background");
+
+    const response = await background.clearPackLocalData();
+
+    expect(response).toEqual({ ok: true, cleared: true });
+    expect(zipMocks.discardSinglePeriodFiledReturnsZip).toHaveBeenCalledWith(
+      "single-period:recoverable",
+    );
+  });
+
+  it("does not delete full-year staging when single-period cleanup fails", async () => {
+    zipMocks.discardSinglePeriodFiledReturnsZip.mockResolvedValueOnce(
+      "single-period-opfs-clear-failed",
+    );
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) => {
+      if (key === "pack:single-period-staging") {
+        return {
+          [key]: {
+            ledgerId: "single-period:ledger",
+            schemaVersion: "1.0",
+          },
+        };
+      }
+      if (key === "pack:full-fiscal-year-ledger") {
+        return {
+          [key]: {
+            schemaVersion: "1.0",
+            ledgerId: "ledger-complete",
+            revision: 3,
+            status: "complete",
+            scope: {
+              financialYear: "2026-27",
+              period: FULL_FISCAL_YEAR_PERIOD,
+              returnType: "GSTR-3B",
+            },
+            createdAt: "2026-06-24T00:00:00.000Z",
+            updatedAt: "2026-06-24T00:01:00.000Z",
+            targets: [],
+          },
+        };
+      }
+      return {};
+    });
+    const background = await import("../../src/entrypoints/background");
+
+    const response = await background.clearPackLocalData();
+
+    expect(response).toEqual({
+      ok: false,
+      error:
+        "Pack could not clear temporary selected-file staging. Retry clearing local data before removing saved state.",
+    });
+    expect(zipMocks.discardFullFiscalYearFiledReturnsZip).not.toHaveBeenCalled();
+    expect(browserMocks.storage.session.clear).not.toHaveBeenCalled();
+    expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
+  });
+
+  it("keeps local state when retained full-year files cannot be cleared", async () => {
+    zipMocks.discardFullFiscalYearFiledReturnsZip.mockResolvedValueOnce(
+      "full-fiscal-year-opfs-clear-failed",
+    );
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      key === "pack:full-fiscal-year-ledger"
+        ? {
+            [key]: {
+              schemaVersion: "1.0",
+              ledgerId: "ledger-complete",
+              revision: 3,
+              status: "complete",
+              scope: {
+                financialYear: "2026-27",
+                period: FULL_FISCAL_YEAR_PERIOD,
+                returnType: "GSTR-3B",
+              },
+              createdAt: "2026-06-24T00:00:00.000Z",
+              updatedAt: "2026-06-24T00:01:00.000Z",
+              targets: [
+                {
+                  targetId: "GSTR-3B:2026-27:April",
+                  financialYear: "2026-27",
+                  period: "April",
+                  returnType: "GSTR-3B",
+                  status: "downloaded",
+                  attempts: 1,
+                  safeSignals: ["full-fiscal-year-opfs-staged:PDF"],
+                  safeMessage: "Staged.",
+                  updatedAt: "2026-06-24T00:01:00.000Z",
+                },
+              ],
+            },
+          }
+        : {},
+    );
+    const background = await import("../../src/entrypoints/background");
+
+    const response = await background.clearPackLocalData();
+
+    expect(response).toEqual({
+      ok: false,
+      error:
+        "Pack could not clear retained fiscal-year files. Retry clearing local data before removing the saved ledger.",
+    });
+    expect(browserMocks.storage.session.clear).not.toHaveBeenCalled();
+    expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
+  });
+
+  it("clears a safe full-year ledger id recovered from malformed metadata", async () => {
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      key === "pack:full-fiscal-year-ledger"
+        ? {
+            [key]: {
+              ledgerId: "recoverable-full-year-ledger",
+              schemaVersion: "unexpected",
+            },
+          }
+        : {},
+    );
+    const background = await import("../../src/entrypoints/background");
+
+    const response = await background.clearPackLocalData();
+
+    expect(response).toEqual({ ok: true, cleared: true });
+    expect(zipMocks.discardFullFiscalYearFiledReturnsZip).toHaveBeenCalledWith(
+      "recoverable-full-year-ledger",
+    );
+    expect(browserMocks.storage.local.remove).toHaveBeenCalledWith(
+      background.PACK_CLEARABLE_LOCAL_STORAGE_KEYS,
+    );
+  });
+
+  it("clears all retained staging when malformed full-year metadata has no safe cleanup id", async () => {
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      key === "pack:full-fiscal-year-ledger"
+        ? {
+            [key]: {
+              ledgerId: "unsafe/ledger",
+              schemaVersion: "unexpected",
+            },
+          }
+        : {},
+    );
+    const background = await import("../../src/entrypoints/background");
+
+    const response = await background.clearPackLocalData();
+
+    expect(response).toEqual({ ok: true, cleared: true });
+    expect(zipMocks.discardAllFiledReturnsStaging).toHaveBeenCalledTimes(1);
+    expect(zipMocks.discardFullFiscalYearFiledReturnsZip).not.toHaveBeenCalled();
+    expect(browserMocks.storage.session.clear).toHaveBeenCalledTimes(1);
+    expect(browserMocks.storage.local.remove).toHaveBeenCalledWith(
+      background.PACK_CLEARABLE_LOCAL_STORAGE_KEYS,
+    );
+  });
+
+  it.each(["", 0, false])(
+    "clears all retained staging for a falsy malformed full-year ledger (%j)",
+    async (malformedLedger) => {
+      browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+        key === "pack:full-fiscal-year-ledger" ? { [key]: malformedLedger } : {},
+      );
+      const background = await import("../../src/entrypoints/background");
+
+      const response = await background.clearPackLocalData();
+
+      expect(response).toEqual({ ok: true, cleared: true });
+      expect(zipMocks.discardAllFiledReturnsStaging).toHaveBeenCalledTimes(1);
+      expect(browserMocks.storage.local.remove).toHaveBeenCalledWith(
+        background.PACK_CLEARABLE_LOCAL_STORAGE_KEYS,
+      );
+    },
+  );
+
+  it("keeps local state when the explicit broad staging clear fails", async () => {
+    zipMocks.discardAllFiledReturnsStaging.mockResolvedValueOnce("filed-returns-opfs-clear-failed");
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      key === "pack:full-fiscal-year-ledger"
+        ? { [key]: { ledgerId: "unsafe/ledger", schemaVersion: "unexpected" } }
+        : {},
+    );
+    const background = await import("../../src/entrypoints/background");
+
+    const response = await background.clearPackLocalData();
+
+    expect(response).toEqual({
+      ok: false,
+      error:
+        "Pack could not clear temporary filed-return staging. Retry clearing local data before removing saved state.",
     });
     expect(browserMocks.storage.session.clear).not.toHaveBeenCalled();
     expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
@@ -313,6 +633,140 @@ describe("Pack local data clearing", () => {
     });
   });
 
+  it("preserves a final ZIP retry summary over a blocked completed-target ledger", async () => {
+    const updatedAt = "2026-06-24T00:10:00.000Z";
+    const sessionSummary: FiledReturnsFlowSummary = {
+      scope: {
+        financialYear: "2026-27",
+        period: FULL_FISCAL_YEAR_PERIOD,
+        returnType: "GSTR-3B",
+      },
+      status: "blocked",
+      updatedAt,
+      completedPeriods: ["April"],
+      totalPeriods: 1,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "download-unconfirmed",
+        safeSignals: [
+          "full-fiscal-year-zip-download-unconfirmed",
+          "full-fiscal-year-opfs-retained",
+        ],
+        safeMessage: "The final ZIP download was not confirmed.",
+        userAction: {
+          type: "ALLOW_MULTIPLE_DOWNLOADS",
+          message: "Allow downloads, then retry the ZIP export.",
+          canResume: true,
+        },
+      },
+    };
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      key === "pack:full-fiscal-year-ledger"
+        ? {
+            [key]: {
+              schemaVersion: "1.0",
+              ledgerId: "ledger-ready-for-zip-retry",
+              revision: 3,
+              status: "blocked",
+              scope: sessionSummary.scope,
+              createdAt: "2026-06-24T00:00:00.000Z",
+              updatedAt,
+              targets: [
+                {
+                  targetId: "GSTR-3B:2026-27:April",
+                  financialYear: "2026-27",
+                  period: "April",
+                  returnType: "GSTR-3B",
+                  status: "downloaded",
+                  attempts: 1,
+                  safeSignals: ["full-fiscal-year-opfs-staged:PDF"],
+                  safeMessage: "Staged.",
+                  updatedAt,
+                },
+              ],
+            },
+          }
+        : {},
+    );
+    browserMocks.storage.session.get.mockResolvedValue({
+      "pack:last-filed-returns-flow-summary": sessionSummary,
+    });
+
+    const summary = await readCurrentFiledReturnsFlowSummary({
+      storageKeys: filedReturnsCurrentStateStorageKeys,
+      now: () => new Date("2026-06-24T00:11:00.000Z"),
+    });
+
+    expect(summary).toEqual(sessionSummary);
+  });
+
+  it.each([
+    ["export-retry-pending", "full-fiscal-year-final-zip-retry", "blocked"],
+    ["download-started", "full-fiscal-year-zip-download-unconfirmed", "download-unconfirmed"],
+    ["downloaded-cleanup-pending", "full-fiscal-year-local-cleanup-retry", "blocked"],
+  ] as const)(
+    "reconstructs %s recovery from the local ledger after session storage is lost",
+    async (zipPhase, expectedSignal, expectedState) => {
+      const ledger = createDurableZipPhaseLedger(zipPhase);
+      browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+        key === "pack:full-fiscal-year-ledger" ? { [key]: ledger } : {},
+      );
+      browserMocks.storage.session.get.mockResolvedValue({});
+
+      const summary = await readCurrentFiledReturnsFlowSummary({
+        storageKeys: filedReturnsCurrentStateStorageKeys,
+        now: () => new Date("2026-06-24T00:11:00.000Z"),
+      });
+
+      expect(summary).toMatchObject({
+        status: "blocked",
+        scope: ledger.scope,
+        flowStep: {
+          state: expectedState,
+          safeSignals: expect.arrayContaining([expectedSignal, "full-fiscal-year-opfs-retained"]),
+        },
+      });
+    },
+  );
+
+  it("shows unresolved target review before durable full-year ZIP recovery", async () => {
+    const ledger = createDurableZipPhaseLedger("export-retry-pending");
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) => {
+      if (key === "pack:full-fiscal-year-ledger") return { [key]: ledger };
+      if (key === "pack:filed-returns-target-review") {
+        return {
+          [key]: {
+            schemaVersion: "1.0",
+            targetId: "GSTR-3B:2026-27:May",
+            status: "download-unconfirmed",
+            scope: {
+              financialYear: "2026-27",
+              period: "May",
+              returnType: "GSTR-3B",
+            },
+            safeSignals: ["browser-download-not-observed"],
+            safeMessage: "The browser download was not confirmed.",
+            updatedAt: "2026-06-24T00:10:00.000Z",
+          },
+        };
+      }
+      return {};
+    });
+    browserMocks.storage.session.get.mockResolvedValue({});
+
+    const summary = await readCurrentFiledReturnsFlowSummary({
+      storageKeys: filedReturnsCurrentStateStorageKeys,
+      now: () => new Date("2026-06-24T00:11:00.000Z"),
+    });
+
+    expect(summary).toMatchObject({
+      scope: { period: "May" },
+      status: "blocked",
+      flowStep: { safeSignals: ["filed-returns-target-review-required"] },
+    });
+  });
+
   it("prefers a newer single-period summary over a completed full-year ledger", async () => {
     const sessionSummary: FiledReturnsFlowSummary = {
       scope: {
@@ -442,3 +896,37 @@ describe("Pack local data clearing", () => {
     });
   });
 });
+
+function createDurableZipPhaseLedger(
+  zipPhase: NonNullable<FiledReturnsFullFiscalYearLedger["zipPhase"]>,
+): FiledReturnsFullFiscalYearLedger {
+  const updatedAt = "2026-06-24T00:10:00.000Z";
+  return {
+    schemaVersion: "1.0",
+    ledgerId: "ledger-durable-zip-phase",
+    revision: 4,
+    status: zipPhase === "cleaned" ? "complete" : "blocked",
+    zipPhase,
+    scope: {
+      financialYear: "2026-27",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-3B",
+    },
+    createdAt: "2026-06-24T00:00:00.000Z",
+    updatedAt,
+    targets: [
+      {
+        targetId: "GSTR-3B:2026-27:April",
+        financialYear: "2026-27",
+        period: "April",
+        returnType: "GSTR-3B",
+        status: "downloaded",
+        attempts: 1,
+        safeSignals: ["full-fiscal-year-opfs-staged:PDF"],
+        safeMessage: "Staged.",
+        updatedAt,
+        completedAt: updatedAt,
+      },
+    ],
+  };
+}

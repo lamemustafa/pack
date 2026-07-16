@@ -1,12 +1,16 @@
 import type { FiledReturnsDownloadScope } from "../../core/contracts";
-import { getClickableElements, matchesAcceptedText, normaliseText } from "./filed-returns-dom";
+import { getClickableElements, normaliseText } from "./filed-returns-dom";
 import { extractTaxPeriodFromRow } from "./filed-returns-detail-identity";
 import {
-  acceptedFiledReturnsPeriodTexts,
-  canonicalFiledReturnsMonth,
-} from "./filed-returns-months";
+  canonicalResultRowPeriod,
+  filterBoundResultIdentityMatchesScope,
+  returnIdentityMatchesScope,
+  resultRowFinancialYearMatch,
+  resultRowPeriodMatch,
+} from "./filed-returns-result-identity";
 
 export interface MatchingFiledReturnRow {
+  filterBound: boolean;
   row: HTMLTableRowElement;
   period: string | null;
 }
@@ -15,35 +19,65 @@ export interface MatchingActionableFiledReturnRow extends MatchingFiledReturnRow
   view: HTMLElement;
 }
 
+export interface MatchingFilterBoundGstr1Result {
+  container: HTMLElement;
+  filterBound: true;
+  period: null;
+  view: HTMLElement;
+}
+
+export interface FiledReturnsResultRowMatchOptions {
+  allowFilterBoundScope?: boolean;
+}
+
 export function findMatchingFiledReturnRows(
   root: ParentNode,
   scope: FiledReturnsDownloadScope,
+  options: FiledReturnsResultRowMatchOptions = {},
 ): MatchingFiledReturnRow[] {
   return Array.from(root.querySelectorAll("tr"))
-    .map((row) => ({ row, identity: extractResultRowIdentity(row) }))
-    .filter(({ row, identity }) => {
-      const rowText = readElementText(row);
-      const period = canonicalResultRowPeriod(identity.period ?? extractTaxPeriodFromRow(row));
-      const financialYear = identity.financialYear ?? rowText;
+    .map((row) => {
+      const identity = extractResultRowIdentity(row);
+      const rowText = readResultRowText(row);
+      const explicitPeriod = identity.period ?? extractTaxPeriodFromRow(row);
+      const periodMatch = resultRowPeriodMatch(explicitPeriod, rowText, scope);
+      const period = canonicalResultRowPeriod(explicitPeriod) ?? periodMatch.period;
       const returnType = identity.returnType ?? rowText;
-      return (
-        matchesAcceptedText(returnType, [scope.returnType]) &&
-        matchesAcceptedText(financialYear, [scope.financialYear]) &&
-        periodMatchesScope(period, scope)
+      const financialYearMatch = resultRowFinancialYearMatch(
+        identity.financialYear,
+        rowText,
+        scope,
       );
+      return {
+        filterBound:
+          options.allowFilterBoundScope === true &&
+          (periodMatch.state === "absent" || financialYearMatch === "absent"),
+        matches:
+          returnIdentityMatchesScope(returnType, scope) &&
+          financialYearMatch !== "conflict" &&
+          (financialYearMatch === "match" || options.allowFilterBoundScope === true) &&
+          periodMatch.state !== "conflict" &&
+          (periodMatch.state === "match" || options.allowFilterBoundScope === true),
+        period,
+        row,
+      };
     })
-    .map(({ row, identity }) => ({
+    .filter(({ matches }) => matches)
+    .map(({ filterBound, period, row }) => ({
+      filterBound,
       row,
-      period: canonicalResultRowPeriod(identity.period ?? extractTaxPeriodFromRow(row)),
+      period,
     }));
 }
 
 export function findMatchingActionableFiledReturnRows(
   root: ParentNode,
   scope: FiledReturnsDownloadScope,
+  options: FiledReturnsResultRowMatchOptions = {},
 ): MatchingActionableFiledReturnRow[] {
-  return findMatchingFiledReturnRows(root, scope)
-    .map(({ row, period }) => ({
+  return findMatchingFiledReturnRows(root, scope, options)
+    .map(({ filterBound, row, period }) => ({
+      filterBound,
       row,
       period,
       view: getClickableElements(row).find((element) =>
@@ -53,13 +87,117 @@ export function findMatchingActionableFiledReturnRows(
     .filter((candidate): candidate is MatchingActionableFiledReturnRow => Boolean(candidate.view));
 }
 
-function periodMatchesScope(period: string | null, scope: FiledReturnsDownloadScope): boolean {
-  if (!period) return false;
-  return matchesAcceptedText(period, acceptedFiledReturnsPeriodTexts(scope));
+export function findMatchingFilterBoundGstr1Results(
+  root: ParentNode,
+  scope: FiledReturnsDownloadScope,
+): MatchingFilterBoundGstr1Result[] {
+  return getClickableElements(root)
+    .filter((view) => isVisibleResultControl(view) && isExactViewAction(view))
+    .map((view) => ({ view, container: findGstr1ResultContainer(view) }))
+    .filter((candidate): candidate is { view: HTMLElement; container: HTMLElement } =>
+      Boolean(candidate.container),
+    )
+    .filter(({ container }) =>
+      filterBoundResultIdentityMatchesScope(readVisibleResultIdentityText(container), scope),
+    )
+    .map(({ view, container }) => ({ view, container, filterBound: true, period: null }));
 }
 
-function canonicalResultRowPeriod(period: string | null): string | null {
-  return canonicalFiledReturnsMonth(period) ?? period;
+function findGstr1ResultContainer(view: HTMLElement): HTMLElement | null {
+  if (view.closest("tr")) return null;
+  let result: HTMLElement | null = null;
+  let current = view.parentElement;
+  while (current && current !== current.ownerDocument.body) {
+    if (["MAIN", "FORM"].includes(current.tagName)) break;
+    if (isResultSurfaceBoundary(current)) break;
+    if (isCandidateResultContainer(current)) {
+      if (
+        getClickableElements(current).filter(
+          (element) => isVisibleResultControl(element) && isExactViewAction(element),
+        ).length === 1
+      ) {
+        if (!result || !isSemanticResultCard(result) || isSemanticResultCard(current)) {
+          result = current;
+        }
+      }
+    }
+    current = current.parentElement;
+  }
+  return result;
+}
+
+function isSemanticResultCard(element: HTMLElement): boolean {
+  return ["ARTICLE", "LI"].includes(element.tagName) || element.getAttribute("role") === "row";
+}
+
+function isResultSurfaceBoundary(element: HTMLElement): boolean {
+  if (
+    [element.getAttribute("aria-label"), element.id].some((value) =>
+      typeof value === "string" ? isNamedResultSurfaceValue(value) : false,
+    )
+  ) {
+    return true;
+  }
+  return element.className
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .some((token) => isNamedResultSurfaceValue(token));
+}
+
+function isNamedResultSurfaceValue(value: string): boolean {
+  const normalised = value.trim().toLowerCase();
+  return /^(?:search[-_\s]+results(?:[-_\s]+(?:container|panel|surface|list|table))?|results(?:[-_\s]+(?:container|panel|surface|list|table))?)$/.test(
+    normalised,
+  );
+}
+
+function isCandidateResultContainer(element: HTMLElement): boolean {
+  return (
+    ["ARTICLE", "LI", "SECTION", "DIV"].includes(element.tagName) ||
+    element.getAttribute("role") === "row"
+  );
+}
+
+function isExactViewAction(element: HTMLElement): boolean {
+  return /^view$/i.test(normaliseText(readElementText(element)));
+}
+
+function isVisibleResultControl(element: HTMLElement): boolean {
+  let current: HTMLElement | null = element;
+  while (current) {
+    if (current.hidden || current.getAttribute("aria-hidden") === "true") return false;
+    const style = current.ownerDocument.defaultView?.getComputedStyle(current);
+    if (style && (style.display === "none" || style.visibility === "hidden")) return false;
+    if (current === current.ownerDocument.body) break;
+    current = current.parentElement;
+  }
+  return true;
+}
+
+function readVisibleResultIdentityText(container: HTMLElement): string {
+  return [container, ...Array.from(container.querySelectorAll<HTMLElement>("*"))]
+    .filter(isResultIdentityTextElement)
+    .flatMap((element) =>
+      Array.from(element.childNodes)
+        .filter((node) => node.nodeType === node.TEXT_NODE)
+        .map((node) => node.textContent ?? ""),
+    )
+    .filter(Boolean)
+    .join(" ");
+}
+
+function isResultIdentityTextElement(element: HTMLElement): boolean {
+  if (!isVisibleResultControl(element)) return false;
+  if (["INPUT", "OPTION", "SELECT"].includes(element.tagName)) return false;
+  return !element.closest("a, button, [role='button'], [ng-click], [data-ng-click]");
+}
+
+function readResultRowText(row: HTMLTableRowElement): string {
+  const cells = Array.from(row.querySelectorAll("td"));
+  return cells.length > 0
+    ? cells.map((cell) => readElementText(cell)).join(" ")
+    : readElementText(row);
 }
 
 function extractResultRowIdentity(row: Element): {

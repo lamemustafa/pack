@@ -12,6 +12,8 @@ import {
 import { isFiledReturnsReturnType } from "../core/filed-returns-return-types";
 import type { PackMessageResponse } from "../core/messages";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
+import { readSinglePeriodStagingRecord } from "./filed-returns-artifact-progress";
+import { discardSinglePeriodFiledReturnsZip } from "./filed-returns-full-fiscal-year-zip";
 
 export interface FiledReturnsTargetReviewDeps {
   storageKeys: {
@@ -34,14 +36,20 @@ export async function readFiledReturnsTargetReview(
   return review;
 }
 
-export async function readCurrentFiledReturnsTargetReviewSummary(
+export async function readCurrentFiledReturnsTargetReview(
   deps: FiledReturnsTargetReviewDeps,
-): Promise<FiledReturnsFlowSummary | null> {
+): Promise<FiledReturnsTargetReview | null> {
   const key = deps.storageKeys.targetReview;
   if (!key) return null;
 
   const values = await browser.storage.local.get(key);
-  const review = parseFiledReturnsTargetReview(values[key]);
+  return parseFiledReturnsTargetReview(values[key]);
+}
+
+export async function readCurrentFiledReturnsTargetReviewSummary(
+  deps: FiledReturnsTargetReviewDeps,
+): Promise<FiledReturnsFlowSummary | null> {
+  const review = await readCurrentFiledReturnsTargetReview(deps);
   return review ? toTargetReviewSummary(review) : null;
 }
 
@@ -98,6 +106,12 @@ export async function resolveUnconfirmedFiledReturnsDownload(
 ): Promise<PackMessageResponse> {
   const review = await readFiledReturnsTargetReview(scope, deps);
   if (!review) return noTargetReviewResponse(scope);
+  if (
+    hasSinglePeriodCleanupFailure(review.safeSignals) ||
+    (resolution === "downloaded" && review.safeSignals.includes("single-period-zip-incomplete"))
+  ) {
+    return responseForFiledReturnsTargetReview(review);
+  }
 
   await clearFiledReturnsTargetReview(scope, deps);
   const flowStep: PortalFlowStepResult = {
@@ -128,6 +142,51 @@ export async function resolveUnconfirmedFiledReturnsDownload(
     flowStep,
     flowSummary,
   };
+}
+
+export async function retryCompletedSinglePeriodZipCleanup(
+  scope: FiledReturnsDownloadScope,
+  deps: FiledReturnsTargetReviewDeps,
+): Promise<PackMessageResponse | null> {
+  const review = await readFiledReturnsTargetReview(scope, deps);
+  if (!review || !hasSinglePeriodCleanupFailure(review.safeSignals)) return null;
+
+  let stagingRecord;
+  try {
+    stagingRecord = await readSinglePeriodStagingRecord();
+  } catch {
+    return responseForFiledReturnsTargetReview(review);
+  }
+  const clearSignal = stagingRecord
+    ? await discardSinglePeriodFiledReturnsZip(stagingRecord.ledgerId)
+    : "single-period-opfs-cleared";
+  if (clearSignal !== "single-period-opfs-cleared") {
+    return responseForFiledReturnsTargetReview(review);
+  }
+
+  await clearFiledReturnsTargetReview(scope, deps);
+  const flowStep: PortalFlowStepResult = {
+    connectorId: "gst",
+    scopeId: filedReturnScopeId(scope.returnType),
+    state: "downloaded",
+    safeSignals: [
+      "single-period-zip-downloaded",
+      "single-period-opfs-cleanup-completed",
+      clearSignal,
+    ],
+    safeMessage:
+      "Pack kept the completed selected-file ZIP and cleared its temporary local staging.",
+  };
+  const flowSummary: FiledReturnsFlowSummary = {
+    scope,
+    status: "complete",
+    completedPeriods: [scope.period],
+    totalPeriods: 1,
+    updatedAt: (deps.now?.() ?? new Date()).toISOString(),
+    flowStep,
+  };
+  await persistResolvedTargetReviewSummary(flowSummary, deps);
+  return { ok: true, flowStep, flowSummary };
 }
 
 async function persistResolvedTargetReviewSummary(
@@ -185,11 +244,31 @@ function toTargetReviewSummary(
 }
 
 function targetReviewStep(review: FiledReturnsTargetReview): PortalFlowStepResult {
+  if (hasSinglePeriodCleanupFailure(review.safeSignals)) {
+    return {
+      connectorId: "gst",
+      scopeId: filedReturnScopeId(review.scope.returnType),
+      state: "blocked",
+      safeSignals: ["single-period-opfs-clear-failed", "single-period-opfs-cleanup-required"],
+      safeMessage:
+        "Pack cannot complete this review while temporary selected-file staging remains uncleared.",
+      userAction: {
+        type: "RETRY_PORTAL_GENERATION",
+        message: "Retry so Pack can clear the retained temporary staging before completion.",
+        canResume: true,
+      },
+    };
+  }
   return {
     connectorId: "gst",
     scopeId: filedReturnScopeId(review.scope.returnType),
     state: "user-action-required",
-    safeSignals: ["filed-returns-target-review-required"],
+    safeSignals: [
+      "filed-returns-target-review-required",
+      ...(review.safeSignals.includes("single-period-zip-incomplete")
+        ? ["single-period-zip-incomplete"]
+        : []),
+    ],
     safeMessage: review.safeMessage,
     userAction: {
       type: "RETRY_PORTAL_GENERATION",
@@ -199,7 +278,7 @@ function targetReviewStep(review: FiledReturnsTargetReview): PortalFlowStepResul
   };
 }
 
-function noTargetReviewResponse(scope: FiledReturnsDownloadScope): PackMessageResponse {
+export function noTargetReviewResponse(scope: FiledReturnsDownloadScope): PackMessageResponse {
   const flowStep: PortalFlowStepResult = {
     connectorId: "gst",
     scopeId: filedReturnScopeId(scope.returnType),
@@ -222,8 +301,11 @@ function noTargetReviewResponse(scope: FiledReturnsDownloadScope): PackMessageRe
 }
 
 function requiresTargetReview(step: PortalFlowStepResult): boolean {
+  if (hasSinglePeriodCleanupFailure(step.safeSignals)) return true;
+  if (step.safeSignals.includes("filed-gstr1-excel-no-details-available")) return false;
   return (
     step.state === "download-unconfirmed" ||
+    step.safeSignals.some((signal) => signal.endsWith("-main-world-capture-timeout")) ||
     step.safeSignals.some((signal) =>
       [
         "browser-download-size-unknown",
@@ -233,6 +315,10 @@ function requiresTargetReview(step: PortalFlowStepResult): boolean {
       ].includes(signal),
     )
   );
+}
+
+function hasSinglePeriodCleanupFailure(safeSignals: readonly string[]): boolean {
+  return safeSignals.includes("single-period-opfs-clear-failed");
 }
 
 function sameFiledReturnsScope(

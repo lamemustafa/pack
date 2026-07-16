@@ -27,7 +27,7 @@ const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
 const expectedName = "ComplyEaze Pack: GST Return Downloader";
 const expectedShortName = "ComplyEaze Pack";
 const expectedDescription =
-  "Alpha: locally download GSTR-1/GSTR-3B files; private GSTR-2B support may still show the browser save dialog.";
+  "Alpha: locally download GSTR-1/GSTR-3B files; private GSTR-2B downloads are source-build experimental.";
 const expectedHomepageUrl = "https://pack.complyeaze.com/gst";
 const expectedIcons = {
   16: "icons/icon-16.png",
@@ -48,7 +48,14 @@ const expectedPackagedBrandAssets = [
   "brand/pack-logo-reversed.svg",
   "brand/pack-logo-reversed-outlined.svg",
 ];
-const expectedPermissions = ["downloads", "scripting", "storage"];
+const allowLocalGstr1Debugger = process.env.PACK_ALLOW_LOCAL_GSTR1_DEBUGGER === "1";
+const expectedPermissions = [
+  "downloads",
+  "offscreen",
+  "scripting",
+  "storage",
+  ...(allowLocalGstr1Debugger ? ["debugger"] : []),
+];
 const expectedHostPermissions = [
   "https://www.gst.gov.in/*",
   "https://services.gst.gov.in/*",
@@ -58,6 +65,7 @@ const expectedHostPermissions = [
 
 const forbiddenPermissions = new Set([
   "cookies",
+  "debugger",
   "history",
   "webRequest",
   "webRequestBlocking",
@@ -97,6 +105,7 @@ for (const [size, iconPath] of Object.entries(expectedIcons)) {
 for (const assetPath of expectedPackagedBrandAssets) {
   await readFile(path.join(outputDir, assetPath));
 }
+await readFile(path.join(outputDir, "offscreen.html"));
 
 for (const permission of expectedPermissions) {
   if (!manifest.permissions?.includes(permission))
@@ -106,8 +115,15 @@ for (const permission of expectedPermissions) {
 for (const permission of manifest.permissions ?? []) {
   if (!expectedPermissions.includes(permission))
     throw new Error(`Unexpected permission present: ${permission}`);
-  if (forbiddenPermissions.has(permission))
+  if (
+    forbiddenPermissions.has(permission) &&
+    !(allowLocalGstr1Debugger && permission === "debugger")
+  )
     throw new Error(`Forbidden permission present: ${permission}`);
+}
+
+if ((manifest.optional_permissions ?? []).length > 0) {
+  throw new Error("Pack must not expose optional permissions.");
 }
 
 if ((manifest.host_permissions ?? []).length !== expectedHostPermissions.length) {
@@ -211,6 +227,18 @@ const forbiddenPackSourcePatterns = [
   /\bcookie_jar\b/i,
   /\bcredential_store\b/i,
   /\bapi_secret\b/i,
+  /\bindexedDB\b/i,
+  /\bcaches\.open\s*\(/i,
+];
+const forbiddenRawArtifactHandoffPatterns = [
+  {
+    label: "raw artifact dataUrl postMessage",
+    pattern: /postMessage\s*\([\s\S]{0,800}\bdataUrl\b/i,
+  },
+  {
+    label: "raw artifact dataUrl runtime sendMessage",
+    pattern: /runtime\.sendMessage\s*\([\s\S]{0,800}\bdataUrl\b/i,
+  },
 ];
 
 for (const file of await listFiles(outputDir)) {
@@ -248,6 +276,13 @@ for (const file of await listFiles(path.join(process.cwd(), "src"))) {
       throw new Error(
         `Sensitive Pack source marker ${pattern} in ${path.relative(process.cwd(), file)}`,
       );
+  }
+  for (const { label, pattern } of forbiddenRawArtifactHandoffPatterns) {
+    const relativeSourcePath = path.relative(process.cwd(), file);
+    if (relativeSourcePath === "src/background/offscreen-blob-url.ts") continue;
+    if (pattern.test(contents)) {
+      throw new Error(`${label} in ${path.relative(process.cwd(), file)}`);
+    }
   }
   assertNoForbiddenTelemetry(contents, file);
 }

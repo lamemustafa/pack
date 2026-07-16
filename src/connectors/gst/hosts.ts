@@ -5,6 +5,13 @@ const GST_PORTAL_ORIGINS = new Set([
   "https://gstr2b.gst.gov.in",
 ]);
 
+export const GST_PORTAL_TAB_URL_PATTERNS = [
+  "https://www.gst.gov.in/*",
+  "https://services.gst.gov.in/*",
+  "https://return.gst.gov.in/*",
+  "https://gstr2b.gst.gov.in/*",
+] as const;
+
 export interface GstPortalTabCandidate {
   id?: number | undefined;
   url?: string | undefined;
@@ -20,6 +27,10 @@ export function isSupportedGstPortalUrl(url: string | undefined): boolean {
   }
 }
 
+export function isActionableGstPortalTabUrl(url: string | undefined): boolean {
+  return isSupportedGstPortalUrl(url) && getGstPortalTabPriority(url) >= 0;
+}
+
 export function pickSupportedGstPortalTab<T extends GstPortalTabCandidate>(
   candidates: readonly T[],
 ): (T & { id: number }) | null {
@@ -27,7 +38,7 @@ export function pickSupportedGstPortalTab<T extends GstPortalTabCandidate>(
   let selectedPriority = -1;
 
   for (const candidate of candidates) {
-    if (typeof candidate.id === "number" && isSupportedGstPortalUrl(candidate.url)) {
+    if (typeof candidate.id === "number" && isActionableGstPortalTabUrl(candidate.url)) {
       const priority = getGstPortalTabPriority(candidate.url);
       if (priority > selectedPriority) {
         selected = candidate as T & { id: number };
@@ -44,7 +55,7 @@ export function pickUniquePreferredGstPortalTab<T extends GstPortalTabCandidate>
   const ranked = candidates
     .filter(
       (candidate): candidate is T & { id: number } =>
-        typeof candidate.id === "number" && isSupportedGstPortalUrl(candidate.url),
+        typeof candidate.id === "number" && isActionableGstPortalTabUrl(candidate.url),
     )
     .map((candidate) => ({
       candidate,
@@ -66,7 +77,12 @@ function getGstPortalTabPriority(url: string | undefined): number {
     const parsed = new URL(url);
     const pathname = parsed.pathname.toLowerCase();
 
+    if (isGstPortalAuthExitPath(pathname)) return -1;
+    if (isGstPortalErrorPath(pathname)) return -1;
+    if (isGstPortalArtifactPath(pathname)) return -1;
     if (parsed.origin === "https://return.gst.gov.in" && pathname.includes("/returns/auth/")) {
+      if (pathname.includes("/returns/auth/efiledreturns")) return 43;
+      if (pathname.includes("/returns/auth/dashboard")) return 42;
       return 40;
     }
     if (parsed.origin === "https://gstr2b.gst.gov.in" && pathname.includes("/gstr2b/auth/")) {
@@ -75,11 +91,21 @@ function getGstPortalTabPriority(url: string | undefined): number {
     if (parsed.origin === "https://services.gst.gov.in" && pathname.includes("/services/auth/")) {
       return 30;
     }
-    if (pathname.includes("/login")) {
-      return 10;
-    }
+    if (pathname.includes("/login")) return -1;
     return 20;
   } catch {
     return 0;
   }
+}
+
+function isGstPortalAuthExitPath(pathname: string): boolean {
+  return /\/services\/logout(?:\/|$)|\/logout(?:\/|$)/i.test(pathname);
+}
+
+function isGstPortalErrorPath(pathname: string): boolean {
+  return /\/services\/error(?:\/|$)|\/error\//i.test(pathname);
+}
+
+function isGstPortalArtifactPath(pathname: string): boolean {
+  return /\.(?:pdf|xls|xlsx|zip)(?:$|[/?#])/i.test(pathname);
 }

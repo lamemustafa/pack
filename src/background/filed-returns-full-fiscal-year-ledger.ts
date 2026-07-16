@@ -13,13 +13,16 @@ import { FULL_FISCAL_YEAR_PERIOD, type FiledReturnsMonth } from "../core/filed-r
 import type { FiledReturnsReturnType } from "../core/filed-returns-return-types";
 import { GST_CONNECTOR_DESCRIPTOR } from "../connectors/gst/constants";
 import { PACK_PRODUCT_VERSION } from "../extension/version";
-export { isFullFiscalYearLedger } from "./filed-returns-full-fiscal-year-validation";
+import { durableFullFiscalYearArtifactSignals } from "./filed-returns-full-fiscal-year-artifacts";
+export {
+  isFullFiscalYearLedger,
+  recoverableFullFiscalYearLedgerId,
+} from "./filed-returns-full-fiscal-year-validation";
 
 const ACTIVE_LEDGER_STALE_MS = 30_000;
 const FULL_FISCAL_YEAR_PLAN_VERSION = "filed-returns-monthly-v2";
 const POSITIVE_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
   "downloaded",
-  "manually-observed",
   "not-filed",
 ]);
 
@@ -97,7 +100,7 @@ export function reconcileFullFiscalYearLedgerTargets(
     .filter((target) => !existingTargetIds.has(target.targetId));
   const targets = [...ledger.targets, ...missingTargets];
 
-  return {
+  const reconciledLedger: FiledReturnsFullFiscalYearLedger = {
     ...ledger,
     revision: missingTargets.length > 0 ? nextRevision(ledger) : (ledger.revision ?? 1),
     planVersion: FULL_FISCAL_YEAR_PLAN_VERSION,
@@ -110,6 +113,8 @@ export function reconcileFullFiscalYearLedgerTargets(
     lastReconciledAt: timestamp,
     targets,
   };
+  if (missingTargets.length > 0) delete reconciledLedger.zipPhase;
+  return reconciledLedger;
 }
 
 export function resumeFullFiscalYearLedger(
@@ -156,7 +161,7 @@ export function markFullFiscalYearTargetRunning(
   now: Date,
 ): FiledReturnsFullFiscalYearLedger {
   const timestamp = now.toISOString();
-  return {
+  const runningLedger: FiledReturnsFullFiscalYearLedger = {
     ...ledger,
     revision: nextRevision(ledger),
     status: "running",
@@ -168,7 +173,10 @@ export function markFullFiscalYearTargetRunning(
             ...target,
             status: "running",
             attempts: target.attempts + 1,
-            safeSignals: ["full-fiscal-year-target-running"],
+            safeSignals: [
+              ...durableFullFiscalYearArtifactSignals(target.safeSignals),
+              "full-fiscal-year-target-running",
+            ],
             safeMessage: `Checking ${target.period}.`,
             startedAt: target.startedAt ?? timestamp,
             updatedAt: timestamp,
@@ -176,6 +184,8 @@ export function markFullFiscalYearTargetRunning(
         : target,
     ),
   };
+  delete runningLedger.zipPhase;
+  return runningLedger;
 }
 
 export function markFullFiscalYearTargetTerminal(
@@ -193,6 +203,9 @@ export function markFullFiscalYearTargetTerminal(
           status,
           safeSignals: flowStep.safeSignals,
           safeMessage: flowStep.safeMessage,
+          ...(flowStep.downloadDiagnostic
+            ? { downloadDiagnostic: flowStep.downloadDiagnostic }
+            : {}),
           ...(POSITIVE_TARGET_STATUSES.has(status) ? { completedAt: timestamp } : {}),
           updatedAt: timestamp,
         }
@@ -218,6 +231,7 @@ export function completeFullFiscalYearLedger(
     revision: nextRevision(ledger),
     status: "complete",
     updatedAt: now.toISOString(),
+    zipPhase: "cleaned",
   };
 }
 
@@ -260,6 +274,7 @@ function ledgerStatus(
 ): FiledReturnsFullFiscalYearLedger["status"] {
   if (targets.every((target) => POSITIVE_TARGET_STATUSES.has(target.status))) return "complete";
   if (lastStatus === "cancelled") return "cancelled";
+  if (lastStatus === "manually-observed") return "partial";
   if (POSITIVE_TARGET_STATUSES.has(lastStatus)) return "partial";
   return "blocked";
 }

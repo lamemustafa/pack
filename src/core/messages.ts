@@ -1,9 +1,11 @@
 import type {
   ArchiveManifest,
   FiledReturnsCapturedDownloadRequest,
+  FiledReturnsMainWorldCaptureRequest,
   FiledReturnsFlowSummary,
   FiledReturnsDirectDownloadRequest,
   FiledReturnsDownloadScope,
+  FiledReturnsTargetBoundViewPoint,
   FiledReturnsDownloadTarget,
   PortalDownloadTriggerResult,
   PortalContext,
@@ -27,13 +29,26 @@ import {
   type FiledReturnsReturnType,
 } from "./filed-returns-return-types";
 
-export const PACK_CONTENT_SCRIPT_PROTOCOL_VERSION = 11;
+export const PACK_CONTENT_SCRIPT_PROTOCOL_VERSION = 31;
+export const PACK_CONTENT_REQUEST_ENVELOPE_TYPE =
+  `PACK_CONTENT_REQUEST_V${PACK_CONTENT_SCRIPT_PROTOCOL_VERSION}` as const;
+
+export interface DownloadPromptProbeResult {
+  status: "started" | "start-rejected";
+  safeSignals: string[];
+  safeMessage: string;
+  filenameClass: "synthetic-download-prompt-probe";
+  saveAsFalse: true;
+  sourceClass: "data-url" | "offscreen-blob-url";
+  downloadId?: number;
+}
 
 export type PackMessage =
   | { type: "PACK_CONTENT_CONTEXT"; payload: PortalContext }
   | { type: "PACK_FILED_RETURNS_OBSERVATION"; payload: PortalObservation }
   | { type: "PACK_PING" }
   | { type: "PACK_CONTENT_PING_V2" }
+  | { type: "PACK_CONTENT_REFRESH_CONTEXT_V3" }
   | { type: "PACK_GET_CONTEXT" }
   | { type: "PACK_GET_FILED_RETURNS_OBSERVATION" }
   | { type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" }
@@ -62,7 +77,15 @@ export type PackMessage =
   | { type: "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD"; payload: FiledReturnsDownloadTarget }
   | { type: "PACK_RUN_FILED_RETURNS_DOWNLOAD_STEP"; payload: FiledReturnsDownloadScope }
   | { type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW"; payload: FiledReturnsDownloadScope }
-  | { type: "PACK_START_SYNTHETIC_DEMO" }
+  | {
+      type: "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW";
+      payload: FiledReturnsFreshStartPayload;
+    }
+  | { type: "PACK_START_SYNTHETIC_DEMO"; payload?: { downloadArtifacts?: boolean } }
+  | {
+      type: "PACK_RUN_DOWNLOAD_PROMPT_PROBE";
+      payload?: { sourceClass?: "data-url" | "offscreen-blob-url" };
+    }
   | { type: "PACK_CLEAR_LOCAL_DATA" }
   | { type: "PACK_GET_LAST_MANIFEST" }
   | { type: "PACK_CONTENT_REFRESH_FILED_RETURNS_OBSERVATION_V3" }
@@ -72,11 +95,31 @@ export type PackMessage =
       payload: FiledReturnsDownloadTarget;
     }
   | {
+      type: "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3";
+      payload: FiledReturnsDownloadTarget;
+    }
+  | {
       type: "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V3";
       payload: FiledReturnsDownloadTarget;
     }
   | {
       type: "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3";
+      payload: FiledReturnsDownloadScope;
+    }
+  | {
+      type: "PACK_CONTENT_MARK_FILED_RETURNS_SEARCH_PENDING_V3";
+      payload: FiledReturnsDownloadScope;
+    }
+  | {
+      type: "PACK_CONTENT_CLEAR_FILED_RETURNS_SEARCH_PENDING_V3";
+      payload: FiledReturnsDownloadScope;
+    }
+  | {
+      type: "PACK_CONTENT_RESOLVE_GSTR1_VIEW_POINT_V3";
+      payload: FiledReturnsDownloadScope;
+    }
+  | {
+      type: "PACK_CONTENT_MARK_GSTR1_VIEW_ACTIVATION_V3";
       payload: FiledReturnsDownloadScope;
     };
 
@@ -99,6 +142,12 @@ export type PackMessageResponse =
     }
   | {
       ok: true;
+      mainWorldCaptureRequest: FiledReturnsMainWorldCaptureRequest;
+      downloadTrigger: PortalDownloadTriggerResult;
+      observation?: PortalObservation | null;
+    }
+  | {
+      ok: true;
       capturedDownloadRequest: FiledReturnsCapturedDownloadRequest;
       downloadTrigger: PortalDownloadTriggerResult;
       observation?: PortalObservation | null;
@@ -112,6 +161,8 @@ export type PackMessageResponse =
   | { ok: true; flowSummary: FiledReturnsFlowSummary | null }
   | { ok: true; manifest: ArchiveManifest | null }
   | { ok: true; downloaded: number; manifest: ArchiveManifest }
+  | { ok: true; downloadPromptProbe: DownloadPromptProbeResult }
+  | { ok: true; gstr1ViewPoint: FiledReturnsTargetBoundViewPoint }
   | { ok: true; cleared: true }
   | { ok: false; error: string };
 
@@ -119,6 +170,15 @@ export interface FullFiscalYearTargetRecoveryPayload {
   ledgerId: string;
   targetId: string;
   expectedRevision: number;
+}
+
+export interface FiledReturnsFreshStartPayload {
+  scope: FiledReturnsDownloadScope;
+  recovery:
+    | { kind: "target-review"; scope: FiledReturnsDownloadScope }
+    | ({
+        kind: "full-fiscal-year";
+      } & FullFiscalYearTargetRecoveryPayload);
 }
 
 export function isPackMessage(input: unknown): input is PackMessage {
@@ -132,12 +192,21 @@ export function isPackMessage(input: unknown): input is PackMessage {
     case "PACK_PING":
     case "PACK_CONTENT_PING_V2":
     case "PACK_GET_CONTEXT":
+    case "PACK_RUN_DOWNLOAD_PROMPT_PROBE":
+      return (
+        input.payload === undefined ||
+        (isRecord(input.payload) &&
+          (input.payload.sourceClass === undefined ||
+            input.payload.sourceClass === "data-url" ||
+            input.payload.sourceClass === "offscreen-blob-url"))
+      );
     case "PACK_GET_FILED_RETURNS_OBSERVATION":
     case "PACK_GET_FILED_RETURNS_FLOW_SUMMARY":
     case "PACK_GET_ACTIVE_FILED_RETURNS_RUN":
     case "PACK_ACKNOWLEDGE_INTERRUPTED_RUN":
     case "PACK_REFRESH_FILED_RETURNS_OBSERVATION":
     case "PACK_NAVIGATE_FILED_RETURNS":
+    case "PACK_CONTENT_REFRESH_CONTEXT_V3":
     case "PACK_CONTENT_REFRESH_FILED_RETURNS_OBSERVATION_V3":
     case "PACK_CONTENT_NAVIGATE_FILED_RETURNS_V3":
       return true;
@@ -153,14 +222,28 @@ export function isPackMessage(input: unknown): input is PackMessage {
       return isFullFiscalYearTargetResolution(input.payload);
     case "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD":
     case "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3":
+    case "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3":
     case "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V3":
       return isFiledReturnsDownloadTarget(input.payload);
     case "PACK_RUN_FILED_RETURNS_DOWNLOAD_STEP":
     case "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3":
+    case "PACK_CONTENT_MARK_FILED_RETURNS_SEARCH_PENDING_V3":
+    case "PACK_CONTENT_CLEAR_FILED_RETURNS_SEARCH_PENDING_V3":
+    case "PACK_CONTENT_RESOLVE_GSTR1_VIEW_POINT_V3":
       return isFiledReturnsDownloadScope(input.payload);
+    case "PACK_CONTENT_MARK_GSTR1_VIEW_ACTIVATION_V3":
+      return isFiledReturnsDownloadScope(input.payload) && input.payload.returnType === "GSTR-1";
     case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
       return isFiledReturnsStartScope(input.payload);
+    case "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW":
+      return isFiledReturnsFreshStartPayload(input.payload);
     case "PACK_START_SYNTHETIC_DEMO":
+      return (
+        input.payload === undefined ||
+        (isRecord(input.payload) &&
+          (input.payload.downloadArtifacts === undefined ||
+            typeof input.payload.downloadArtifacts === "boolean"))
+      );
     case "PACK_CLEAR_LOCAL_DATA":
     case "PACK_GET_LAST_MANIFEST":
       return true;
@@ -201,6 +284,21 @@ function isUnconfirmedDownloadResolution(input: unknown): input is {
   if (input.resolution !== "downloaded" && input.resolution !== "cancelled") return false;
   return isFiledReturnsStartScope(input.scope) && input.scope.period !== FULL_FISCAL_YEAR_PERIOD;
 }
+function isFiledReturnsFreshStartPayload(input: unknown): input is FiledReturnsFreshStartPayload {
+  if (!isRecord(input) || !isFiledReturnsStartScope(input.scope) || !isRecord(input.recovery)) {
+    return false;
+  }
+  if (input.recovery.kind === "target-review") {
+    return (
+      isFiledReturnsStartScope(input.recovery.scope) &&
+      input.recovery.scope.period !== FULL_FISCAL_YEAR_PERIOD
+    );
+  }
+  return (
+    input.recovery.kind === "full-fiscal-year" &&
+    isFullFiscalYearTargetRecoveryPayload(input.recovery)
+  );
+}
 
 function isBoundedString(input: unknown, minLength: number, maxLength: number): input is string {
   return typeof input === "string" && input.length >= minLength && input.length <= maxLength;
@@ -218,6 +316,9 @@ function isFiledReturnsDownloadTarget(input: unknown): input is FiledReturnsDown
   if (!isFiledReturnsDownloadScope(input)) return false;
   if (input.period === "ALL" || input.period === FULL_FISCAL_YEAR_PERIOD) return false;
   if (input.artifactType !== undefined && !isFiledReturnsConcreteArtifactType(input.artifactType)) {
+    return false;
+  }
+  if (input.forcePortalClick !== undefined && typeof input.forcePortalClick !== "boolean") {
     return false;
   }
   return true;
