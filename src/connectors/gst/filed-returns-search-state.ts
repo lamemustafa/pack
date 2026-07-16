@@ -6,8 +6,10 @@ interface FiledReturnsSearchAttempt {
   signature: string;
   preSearchFingerprint: string;
   preSearchLoadingFingerprint: string | null;
+  preSearchResultWasSettledForScope: boolean;
   candidateResultFingerprint: string | null;
   sawResultSurfaceLoading: boolean;
+  unchangedResultAfterLoading: boolean;
   settled: boolean;
   createdAt: number;
 }
@@ -17,12 +19,20 @@ interface Gstr1ViewActivationAttempt {
   signature: string;
 }
 
+interface SettledFiledReturnsSearchEvidence {
+  fingerprint: string;
+  settledAt: number;
+  signature: string;
+}
+
 export type Gstr1ViewActivationState = "not-attempted" | "navigation-pending" | "expired";
 
 const searchAttempts = new WeakMap<Document, FiledReturnsSearchAttempt>();
+const settledSearchEvidence = new WeakMap<Document, SettledFiledReturnsSearchEvidence>();
 const gstr1ViewActivationAttempts = new WeakMap<Document, Gstr1ViewActivationAttempt>();
 const GSTR1_VIEW_NAVIGATION_PENDING_MS = 3_000;
 const SEARCH_ATTEMPT_TTL_MS = 2 * 60 * 1000;
+const SETTLED_SEARCH_EVIDENCE_TTL_MS = 30_000;
 const resultRootIds = new WeakMap<Element, number>();
 let nextResultRootId = 1;
 
@@ -36,12 +46,22 @@ export function markFiledReturnsSearchPending(
   scope: FiledReturnsDownloadScope,
 ): void {
   gstr1ViewActivationAttempts.delete(documentRef);
+  const signature = filedReturnsSearchSignature(scope);
+  const preSearchFingerprint = resultFingerprint(documentRef);
+  const settledEvidence = settledSearchEvidence.get(documentRef);
+  const settledEvidenceIsFresh =
+    settledEvidence && Date.now() - settledEvidence.settledAt <= SETTLED_SEARCH_EVIDENCE_TTL_MS;
   searchAttempts.set(documentRef, {
-    signature: filedReturnsSearchSignature(scope),
-    preSearchFingerprint: resultFingerprint(documentRef),
+    signature,
+    preSearchFingerprint,
     preSearchLoadingFingerprint: loadingFingerprint(documentRef),
+    preSearchResultWasSettledForScope:
+      Boolean(settledEvidenceIsFresh) &&
+      settledEvidence?.signature === signature &&
+      settledEvidence.fingerprint === preSearchFingerprint,
     candidateResultFingerprint: null,
     sawResultSurfaceLoading: false,
+    unchangedResultAfterLoading: false,
     settled: false,
     createdAt: Date.now(),
   });
@@ -89,17 +109,27 @@ export function hasSettledFiledReturnsSearchForScope(
     attempt.sawResultSurfaceLoading = true;
     attempt.candidateResultFingerprint = null;
     attempt.settled = false;
+    attempt.unchangedResultAfterLoading = false;
     return false;
   }
   if (attempt.settled) return true;
 
   const currentFingerprint = resultFingerprint(documentRef);
-  const hasPostSearchResultEvidence =
-    attempt.sawResultSurfaceLoading || currentFingerprint !== attempt.preSearchFingerprint;
-  if (!hasPostSearchResultEvidence) {
-    attempt.candidateResultFingerprint = null;
+  const hasTrustedIdenticalRefresh =
+    attempt.sawResultSurfaceLoading && attempt.preSearchResultWasSettledForScope;
+  if (currentFingerprint === attempt.preSearchFingerprint && !hasTrustedIdenticalRefresh) {
+    if (!attempt.sawResultSurfaceLoading) {
+      attempt.candidateResultFingerprint = null;
+      return false;
+    }
+    if (attempt.candidateResultFingerprint !== currentFingerprint) {
+      attempt.candidateResultFingerprint = currentFingerprint;
+      return false;
+    }
+    attempt.unchangedResultAfterLoading = true;
     return false;
   }
+  attempt.unchangedResultAfterLoading = false;
 
   if (attempt.candidateResultFingerprint !== currentFingerprint) {
     attempt.candidateResultFingerprint = currentFingerprint;
@@ -125,18 +155,38 @@ export function hasPendingFiledReturnsSearchForScope(
   return !attempt.settled;
 }
 
+export function hasUnchangedFiledReturnsSearchForScope(
+  documentRef: Document,
+  scope: FiledReturnsDownloadScope,
+): boolean {
+  const attempt = searchAttempts.get(documentRef);
+  if (attempt && Date.now() - attempt.createdAt > SEARCH_ATTEMPT_TTL_MS) {
+    searchAttempts.delete(documentRef);
+    return false;
+  }
+  return (
+    attempt?.signature === filedReturnsSearchSignature(scope) && attempt.unchangedResultAfterLoading
+  );
+}
+
 export function consumeSettledFiledReturnsSearchForScope(
   documentRef: Document,
   scope: FiledReturnsDownloadScope,
 ): void {
   const attempt = searchAttempts.get(documentRef);
   if (attempt?.signature === filedReturnsSearchSignature(scope) && attempt.settled) {
+    settledSearchEvidence.set(documentRef, {
+      fingerprint: resultFingerprint(documentRef),
+      settledAt: Date.now(),
+      signature: attempt.signature,
+    });
     searchAttempts.delete(documentRef);
   }
 }
 
 export function clearFiledReturnsSearchAttempt(documentRef: Document): void {
   searchAttempts.delete(documentRef);
+  settledSearchEvidence.delete(documentRef);
   gstr1ViewActivationAttempts.delete(documentRef);
 }
 
@@ -147,6 +197,9 @@ export function clearFiledReturnsSearchAttemptForScope(
   const signature = filedReturnsSearchSignature(scope);
   if (searchAttempts.get(documentRef)?.signature === signature) {
     searchAttempts.delete(documentRef);
+  }
+  if (settledSearchEvidence.get(documentRef)?.signature === signature) {
+    settledSearchEvidence.delete(documentRef);
   }
   if (gstr1ViewActivationAttempts.get(documentRef)?.signature === signature) {
     gstr1ViewActivationAttempts.delete(documentRef);
@@ -179,6 +232,7 @@ function fingerprintElement(element: Element): string {
   const text = normaliseText(visibleText(element));
   return JSON.stringify({
     rootId: resultRootId(element),
+    textHash: hashVisibleText(text),
     noRecordCount: (text.match(/\bno\s+(records?|data|results?)\s+found\b/g) ?? []).length,
     tableCount: element.querySelectorAll("table").length,
     rowCount: element.querySelectorAll("tr").length,
@@ -187,6 +241,14 @@ function fingerprintElement(element: Element): string {
     viewActionCount: (text.match(/\bview\b|\bdownload\b/g) ?? []).length,
     textLengthBucket: Math.min(100, Math.ceil(text.length / 25)),
   });
+}
+
+function hashVisibleText(text: string): string {
+  let hash = 2_166_136_261;
+  for (let index = 0; index < text.length; index += 1) {
+    hash = Math.imul(hash ^ text.charCodeAt(index), 16_777_619);
+  }
+  return (hash >>> 0).toString(36);
 }
 
 function isResultSurface(element: Element): boolean {

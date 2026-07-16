@@ -30,8 +30,10 @@ import {
 } from "./filed-returns-return-descriptors";
 import {
   clearFiledReturnsSearchAttempt,
+  clearFiledReturnsSearchAttemptForScope,
   hasPendingFiledReturnsSearchForScope,
   hasSettledFiledReturnsSearchForScope,
+  hasUnchangedFiledReturnsSearchForScope,
 } from "./filed-returns-search-state";
 
 export async function runFiledReturnsDownloadStep(
@@ -144,6 +146,23 @@ export async function runFiledReturnsDownloadStep(
         ...detailIdentity.safeSignals,
       ],
       safeMessage: `Pack found the filed ${descriptor.label} detail page and is ready to start the browser download.`,
+    };
+  }
+
+  if (hasUnchangedFiledReturnsSearchForScope(documentRef, scope)) {
+    clearFiledReturnsSearchAttemptForScope(documentRef, scope);
+    return {
+      connectorId: "gst",
+      scopeId,
+      state: "candidate-not-found",
+      safeSignals: ["filed-return-search-results-unchanged"],
+      safeMessage:
+        "The GST Portal left the previous filed-return results unchanged after Search. Retry this period instead of using the stale result.",
+      userAction: {
+        type: "NAVIGATE_TO_SUPPORTED_PAGE",
+        message: "Retry the selected filed-return period after the GST Portal results refresh.",
+        canResume: true,
+      },
     };
   }
 

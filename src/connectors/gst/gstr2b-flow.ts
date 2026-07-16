@@ -10,9 +10,11 @@ import { findMatchingActionableFiledReturnRows } from "./filed-returns-result-ro
 import { filedReturnScopeId } from "./filed-returns-return-descriptors";
 import { selectFiledReturnsFiltersAndSearch } from "./filed-returns-filter-form";
 import {
+  clearFiledReturnsSearchAttemptForScope,
   consumeSettledFiledReturnsSearchForScope,
   hasPendingFiledReturnsSearchForScope,
   hasSettledFiledReturnsSearchForScope,
+  hasUnchangedFiledReturnsSearchForScope,
 } from "./filed-returns-search-state";
 import {
   hasGstr2bLoginEvidence,
@@ -169,6 +171,25 @@ async function selectGstr2bFiledReturnsFiltersOrResult(
   const searchPending = hasPendingFiledReturnsSearchForScope(documentRef, scope);
   const searchSettled = hasSettledFiledReturnsSearchForScope(documentRef, scope);
   if (searchPending && !searchSettled) {
+    if (hasUnchangedFiledReturnsSearchForScope(documentRef, scope)) {
+      clearFiledReturnsSearchAttemptForScope(documentRef, scope);
+      return {
+        connectorId: "gst",
+        scopeId,
+        state: "candidate-not-found",
+        safeSignals: [
+          "filed-return-search-results-unchanged",
+          "gstr2b-filed-return-search-results-unchanged",
+        ],
+        safeMessage:
+          "The GST Portal left the previous filed GSTR-2B results unchanged after Search. Retry this period instead of using the stale result.",
+        userAction: {
+          type: "NAVIGATE_TO_SUPPORTED_PAGE",
+          message: "Retry the selected GSTR-2B period after the GST Portal results refresh.",
+          canResume: true,
+        },
+      };
+    }
     return {
       connectorId: "gst",
       scopeId,

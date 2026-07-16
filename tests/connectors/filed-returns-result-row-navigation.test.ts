@@ -2,6 +2,10 @@ import { JSDOM } from "jsdom";
 import { describe, expect, it, vi } from "vitest";
 import type { FiledReturnsDownloadScope } from "../../src/core/contracts";
 import { resolveGstr1FiledReturnViewPoint } from "../../src/connectors/gst/filed-returns-result-row-navigation";
+import {
+  hasSettledFiledReturnsSearchForScope,
+  markFiledReturnsSearchPending,
+} from "../../src/connectors/gst/filed-returns-search-state";
 
 const SCOPE: FiledReturnsDownloadScope = {
   artifactType: "PDF",
@@ -53,6 +57,26 @@ describe("target-bound filed GSTR-1 View point", () => {
       },
     });
   });
+
+  it("preserves a filter-bound card across debugger point preflight and re-resolution", async () => {
+    const documentRef = createFilterBoundResultDocument();
+    const resultSurface = documentRef.querySelector("section");
+    const view = documentRef.querySelector<HTMLElement>("[data-view]");
+    if (!resultSurface || !view) throw new Error("Expected filter-bound result controls.");
+    resultSurface.remove();
+    markFiledReturnsSearchPending(documentRef, SCOPE);
+    documentRef.querySelector("main")?.append(resultSurface);
+    expect(hasSettledFiledReturnsSearchForScope(documentRef, SCOPE)).toBe(false);
+    expect(hasSettledFiledReturnsSearchForScope(documentRef, SCOPE)).toBe(false);
+    expect(hasSettledFiledReturnsSearchForScope(documentRef, SCOPE)).toBe(true);
+    setLayout(documentRef, view, { left: 100, top: 200, width: 80, height: 40 });
+
+    const preflight = await resolveGstr1FiledReturnViewPoint(documentRef, SCOPE);
+    const attached = await resolveGstr1FiledReturnViewPoint(documentRef, SCOPE);
+
+    expect(preflight).toEqual({ ok: true, point: { x: 140, y: 220 } });
+    expect(attached).toEqual(preflight);
+  });
 });
 
 function createExactResultDocument(resultCount: number): Document {
@@ -74,6 +98,23 @@ function createExactResultDocument(resultCount: number): Document {
     { url: "https://return.gst.gov.in/returns/auth/efiledReturns" },
   );
   return dom.window.document;
+}
+
+function createFilterBoundResultDocument(): Document {
+  return new JSDOM(
+    `<!doctype html><html><body><main>
+      <form name="efiledReturns">
+        <label>Financial Year</label><select><option selected>2025-26</option></select>
+        <label>Return Filing Period</label><select><option selected>Monthly</option></select>
+        <label>Month</label><select><option selected>April</option></select>
+        <label>Return Type</label><select><option selected>GSTR-1/IFF/GSTR-1A</option></select>
+      </form>
+      <section aria-label="Search results">
+        <article><h2>GSTR-1 / IFF</h2><p>Filed return</p><button data-view>View</button></article>
+      </section>
+    </main></body></html>`,
+    { url: "https://return.gst.gov.in/returns/auth/efiledReturns" },
+  ).window.document;
 }
 
 function setLayout(

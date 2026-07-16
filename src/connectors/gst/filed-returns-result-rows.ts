@@ -66,6 +66,7 @@ export function findMatchingActionableFiledReturnRows(
 
 export function findMatchingFilterBoundGstr1Results(
   root: ParentNode,
+  scope: FiledReturnsDownloadScope,
 ): MatchingFilterBoundGstr1Result[] {
   return getClickableElements(root)
     .filter((view) => isVisibleResultControl(view) && isExactViewAction(view))
@@ -73,7 +74,35 @@ export function findMatchingFilterBoundGstr1Results(
     .filter((candidate): candidate is { view: HTMLElement; container: HTMLElement } =>
       Boolean(candidate.container),
     )
+    .filter(({ container }) => filterBoundIdentityMatchesScope(container, scope))
     .map(({ view, container }) => ({ view, container, period: null }));
+}
+
+function filterBoundIdentityMatchesScope(
+  container: HTMLElement,
+  scope: FiledReturnsDownloadScope,
+): boolean {
+  const text = normaliseText(readElementText(container));
+  const explicitFinancialYear = extractExplicitFinancialYear(text);
+  const explicitPeriod = extractExplicitPeriod(text);
+  return (
+    (!explicitFinancialYear || explicitFinancialYear === scope.financialYear) &&
+    (!explicitPeriod || explicitPeriod === scope.period)
+  );
+}
+
+function extractExplicitFinancialYear(text: string): string | null {
+  const match =
+    /\b(?:financial\s*year|fy)\b\s*(?:[-:]\s*)?(20\d{2})\s*[-\u2013/]\s*(\d{2}|\d{4})\b/.exec(text);
+  if (!match?.[1] || !match[2]) return null;
+  const endYear = match[2].length === 4 ? match[2].slice(2) : match[2];
+  return Number(endYear) === (Number(match[1]) + 1) % 100 ? `${match[1]}-${endYear}` : null;
+}
+
+function extractExplicitPeriod(text: string): string | null {
+  const match =
+    /\b(?:(?:return|tax)\s*(?:filing\s*)?period|month)\b\s*(?:[-:]\s*)?([a-z]+)\b/i.exec(text);
+  return canonicalFiledReturnsMonth(match?.[1]);
 }
 
 function findNearestGstr1ResultContainer(view: HTMLElement): HTMLElement | null {

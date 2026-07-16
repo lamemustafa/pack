@@ -12,8 +12,10 @@ import {
 import { navigateToFiledReturnsPage } from "../../src/connectors/gst/filed-returns-navigator";
 import { detectPostClickBlockedState } from "../../src/connectors/gst/filed-returns-post-click-blocked-state";
 import {
+  consumeSettledFiledReturnsSearchForScope,
   hasPendingFiledReturnsSearchForScope,
   hasSettledFiledReturnsSearchForScope,
+  hasUnchangedFiledReturnsSearchForScope,
   markFiledReturnsSearchPending,
 } from "../../src/connectors/gst/filed-returns-search-state";
 
@@ -4992,6 +4994,52 @@ describe("filed returns guided flow", () => {
       ]),
     );
     expect(clicked).toBe(1);
+
+    const pending = await runFiledReturnsDownloadStep(documentRef, scope);
+    expect(pending.safeSignals).toContain("filed-gstr1-result-view-navigation-pending");
+  });
+
+  it("rejects a filter-bound GSTR-1 card with a conflicting explicit period and FY", async () => {
+    const scope: FiledReturnsDownloadScope = {
+      financialYear: "2025-26",
+      period: "April",
+      returnType: "GSTR-1",
+    };
+    const documentRef = createFilterBoundGstr1Results(0, 1);
+    documentRef.querySelector("article")?.append(" Return period: May FY 2024-25");
+    markPackSubmittedSearch(documentRef, scope);
+    let clicked = 0;
+    documentRef.querySelector("button[data-card-view]")?.addEventListener("click", () => {
+      clicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, scope);
+
+    expect(result.state).toBe("candidate-not-found");
+    expect(result.safeSignals).toContain("filed-return-result-row-not-found");
+    expect(clicked).toBe(0);
+  });
+
+  it("accepts a filter-bound GSTR-1 card with matching explicit period and FY", async () => {
+    const scope: FiledReturnsDownloadScope = {
+      financialYear: "2025-26",
+      period: "April",
+      returnType: "GSTR-1",
+    };
+    const documentRef = createFilterBoundGstr1Results(0, 1);
+    documentRef
+      .querySelector("article")
+      ?.append(" Return period: Apr FY 2025-26 Filed on 15 May 2025");
+    markPackSubmittedSearch(documentRef, scope);
+    let clicked = 0;
+    documentRef.querySelector("button[data-card-view]")?.addEventListener("click", () => {
+      clicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, scope);
+
+    expect(result.state).toBe("clicked");
+    expect(clicked).toBe(1);
   });
 
   it("blocks duplicate filter-bound GSTR-1 result cards", async () => {
@@ -5752,7 +5800,7 @@ describe("filed returns guided flow", () => {
     expect(hasSettledFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(false);
   });
 
-  it("settles when the filed-return result surface enters and exits busy with the same no-record text", async () => {
+  it("does not settle when result-surface loading leaves the same no-record evidence", async () => {
     const documentRef = createDocument(`
       <main>
         <h1>View Filed Returns</h1>
@@ -5777,11 +5825,118 @@ describe("filed returns guided flow", () => {
 
     expect(hasSettledFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(false);
     expect(hasSettledFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(false);
-    expect(hasSettledFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(true);
+    expect(hasSettledFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(false);
+    expect(hasUnchangedFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(true);
     const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
-    expect(result.safeSignals).toEqual(
-      expect.arrayContaining(["filed-return-positively-not-filed"]),
-    );
+    expect(result.state).toBe("candidate-not-found");
+    expect(result.safeSignals).toContain("filed-return-search-results-unchanged");
+    expect(result.safeSignals).not.toContain("filed-return-positively-not-filed");
+    expect(hasPendingFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(false);
+  });
+
+  it("makes unchanged GSTR-2B search results explicitly retryable", async () => {
+    const scope: FiledReturnsDownloadScope = {
+      artifactType: "PDF",
+      financialYear: "2025-26",
+      period: "March",
+      returnType: "GSTR-2B",
+    };
+    const documentRef = createGstDocument(`
+      <main>
+        <form name="efiledReturns">
+          <select id="finYr"><option selected>2025-26</option></select>
+          <select id="optValue"><option selected></option></select>
+          <select id="retTyp"><option selected>GSTR-2B</option></select>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+        <section aria-label="Search results"><p>No records found</p></section>
+      </main>
+    `);
+    const resultSurface = documentRef.querySelector("section");
+
+    markFiledReturnsSearchPending(documentRef, scope);
+    resultSurface?.setAttribute("aria-busy", "true");
+    expect(hasSettledFiledReturnsSearchForScope(documentRef, scope)).toBe(false);
+    resultSurface?.removeAttribute("aria-busy");
+    expect(hasSettledFiledReturnsSearchForScope(documentRef, scope)).toBe(false);
+    expect(hasSettledFiledReturnsSearchForScope(documentRef, scope)).toBe(false);
+
+    const result = await runFiledReturnsDownloadStep(documentRef, scope);
+
+    expect(result.state).toBe("candidate-not-found");
+    expect(result.safeSignals).toContain("gstr2b-filed-return-search-results-unchanged");
+    expect(hasPendingFiledReturnsSearchForScope(documentRef, scope)).toBe(false);
+  });
+
+  it("settles an identical refresh only after the same scope previously settled", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <section aria-label="Search results"><p>No records found</p></section>
+      </main>
+    `);
+    const resultSurface = documentRef.querySelector("section");
+
+    markPackSubmittedSearch(documentRef, DEFAULT_SCOPE);
+    expect(hasSettledFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(true);
+    consumeSettledFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE);
+
+    markFiledReturnsSearchPending(documentRef, DEFAULT_SCOPE);
+    resultSurface?.setAttribute("aria-busy", "true");
+    expect(hasSettledFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(false);
+    resultSurface?.removeAttribute("aria-busy");
+
+    expect(hasSettledFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(false);
+    expect(hasSettledFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(false);
+    expect(hasSettledFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(true);
+  });
+
+  it("expires same-scope identical-refresh trust", async () => {
+    vi.useFakeTimers();
+    try {
+      const documentRef = createDocument(`
+        <main><section aria-label="Search results"><p>No records found</p></section></main>
+      `);
+      const resultSurface = documentRef.querySelector("section");
+
+      markPackSubmittedSearch(documentRef, DEFAULT_SCOPE);
+      expect(hasSettledFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(true);
+      consumeSettledFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE);
+      await vi.advanceTimersByTimeAsync(30_001);
+
+      markFiledReturnsSearchPending(documentRef, DEFAULT_SCOPE);
+      resultSurface?.setAttribute("aria-busy", "true");
+      expect(hasSettledFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(false);
+      resultSurface?.removeAttribute("aria-busy");
+      expect(hasSettledFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(false);
+      expect(hasSettledFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(false);
+      expect(hasUnchangedFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(true);
+      await vi.advanceTimersByTimeAsync(120_001);
+      expect(hasUnchangedFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("settles when a post-loading result changes text without changing its shape", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <section aria-label="Search results">
+          <table><tbody><tr><td data-period>May</td><td>Filed</td><td><button>View</button></td></tr></tbody></table>
+        </section>
+      </main>
+    `);
+    const resultSurface = documentRef.querySelector("section");
+
+    markFiledReturnsSearchPending(documentRef, DEFAULT_SCOPE);
+    resultSurface?.setAttribute("aria-busy", "true");
+    expect(hasSettledFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(false);
+    resultSurface?.removeAttribute("aria-busy");
+    const period = documentRef.querySelector("[data-period]");
+    if (period) period.textContent = "Apr";
+
+    expect(hasSettledFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(false);
+    expect(hasSettledFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(false);
+    expect(hasSettledFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(true);
   });
 
   it("settles when the filed-return result container is replaced with identical no-record content", async () => {

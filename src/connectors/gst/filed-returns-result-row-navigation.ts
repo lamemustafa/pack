@@ -12,6 +12,7 @@ import {
 } from "./filed-returns-result-rows";
 import { filedReturnDescriptor, filedReturnScopeId } from "./filed-returns-return-descriptors";
 import {
+  consumeSettledFiledReturnsSearchForScope,
   gstr1ViewActivationStateForScope,
   hasSettledFiledReturnsSearchForScope,
   markGstr1ViewActivationAttempted,
@@ -104,6 +105,10 @@ export function openFiledReturnResultRow(
     if (scope.returnType === "GSTR-1") {
       markGstr1ViewActivationAttempted(documentRef, scope);
     }
+    const isFilterBoundResult = filterBoundResults[0] === actionableResult;
+    if (searchSettled && !isFilterBoundResult) {
+      consumeSettledFiledReturnsSearchForScope(documentRef, scope);
+    }
     activateElement(actionableResult.view);
     return {
       connectorId: "gst",
@@ -116,9 +121,7 @@ export function openFiledReturnResultRow(
         ...(actionableResult.period
           ? [`filed-return-result-period:${actionableResult.period}`]
           : []),
-        ...(filterBoundResults[0] === actionableResult
-          ? ["filed-return-filter-bound-result-view-clicked"]
-          : []),
+        ...(isFilterBoundResult ? ["filed-return-filter-bound-result-view-clicked"] : []),
       ],
       safeMessage: `Pack opened the filed ${descriptor.label} result row.`,
     };
@@ -241,7 +244,7 @@ function resolveResultCandidates(
     matchingRows: findMatchingFiledReturnRows(documentRef, scope, matchOptions),
     actionableRows: findMatchingActionableFiledReturnRows(documentRef, scope, matchOptions),
     filterBoundResults: allowFilterBoundScope
-      ? findMatchingFilterBoundGstr1Results(documentRef)
+      ? findMatchingFilterBoundGstr1Results(documentRef, scope)
       : [],
   };
 }
