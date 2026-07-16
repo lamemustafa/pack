@@ -2611,6 +2611,146 @@ describe("filed returns guided flow", () => {
     expect(viewClicked).toBe(1);
   });
 
+  it("does not release a settled GSTR-2B View while the quarter control conflicts", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <form>
+            <select name="fin"><option selected>2026-27</option></select>
+            <select name="quarter">
+              <option selected>Quarter 1 (Apr - Jun)</option>
+              <option>Quarter 4 (Jan - Mar)</option>
+            </select>
+            <select name="mon"><option selected>May</option></select>
+            <button type="button">Search</button>
+          </form>
+          <article>
+            <h3>Auto-drafted ITC Statement GSTR-2B</h3>
+            <button data-gstr2b-view>VIEW</button>
+          </article>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/dashboard",
+    );
+    makeLayoutVisible(documentRef);
+    let viewClicked = 0;
+    documentRef.querySelector("[data-gstr2b-view]")?.addEventListener("click", () => {
+      viewClicked += 1;
+    });
+    const scope: FiledReturnsDownloadScope = {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-2B",
+    };
+
+    await runFiledReturnsDownloadStep(documentRef, scope);
+    replaceGstr2bDashboardView(documentRef);
+    await runFiledReturnsDownloadStep(documentRef, scope);
+    documentRef.querySelector<HTMLSelectElement>("select[name='quarter']")!.value =
+      "Quarter 4 (Jan - Mar)";
+    const result = await runFiledReturnsDownloadStep(documentRef, scope);
+
+    expect(result.safeSignals).toContain("quarter-selected");
+    expect(viewClicked).toBe(0);
+    expect(documentRef.querySelector<HTMLSelectElement>("select[name='quarter']")?.value).toContain(
+      "Quarter 1",
+    );
+  });
+
+  it("ignores an unrelated quarter control outside the active GSTR-2B dashboard", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <form>
+            <label>Financial Year <select name="fin"><option selected>2026-27</option></select></label>
+            <label>Period <select name="mon"><option selected>May</option></select></label>
+            <button type="button">Search</button>
+            <article>
+              <h3>Auto-drafted ITC Statement GSTR-2B</h3>
+              <button data-gstr2b-view>VIEW</button>
+            </article>
+          </form>
+          <aside>
+            <label>Quarter <select name="quarter"><option selected>Quarter 4</option></select></label>
+          </aside>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/dashboard",
+    );
+    makeLayoutVisible(documentRef);
+    let viewClicked = 0;
+    documentRef.querySelector("[data-gstr2b-view]")?.addEventListener("click", () => {
+      viewClicked += 1;
+    });
+    const scope: FiledReturnsDownloadScope = {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-2B",
+    };
+
+    await runFiledReturnsDownloadStep(documentRef, scope);
+    replaceGstr2bDashboardView(documentRef);
+    await runFiledReturnsDownloadStep(documentRef, scope);
+    const result = await runFiledReturnsDownloadStep(documentRef, scope);
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toContain("gstr2b-dashboard-view-clicked");
+    expect(viewClicked).toBe(1);
+  });
+
+  it("reconciles a quarter control beside the nearest filter group in the owning form", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <form>
+            <div>
+              <label>Financial Year <select name="fin"><option selected>2026-27</option></select></label>
+              <label>Period <select name="mon"><option selected>May</option></select></label>
+              <button type="button">Search</button>
+            </div>
+            <label>Quarter
+              <select name="quarter">
+                <option selected>Quarter 1 (Apr - Jun)</option>
+                <option>Quarter 4 (Jan - Mar)</option>
+              </select>
+            </label>
+            <article>
+              <h3>Auto-drafted ITC Statement GSTR-2B</h3>
+              <button data-gstr2b-view>VIEW</button>
+            </article>
+          </form>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/dashboard",
+    );
+    makeLayoutVisible(documentRef);
+    let viewClicked = 0;
+    documentRef.querySelector("[data-gstr2b-view]")?.addEventListener("click", () => {
+      viewClicked += 1;
+    });
+    const scope: FiledReturnsDownloadScope = {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-2B",
+    };
+
+    await runFiledReturnsDownloadStep(documentRef, scope);
+    replaceGstr2bDashboardView(documentRef);
+    await runFiledReturnsDownloadStep(documentRef, scope);
+    documentRef.querySelector<HTMLSelectElement>("select[name='quarter']")!.value =
+      "Quarter 4 (Jan - Mar)";
+    const result = await runFiledReturnsDownloadStep(documentRef, scope);
+
+    expect(result.safeSignals).toContain("quarter-selected");
+    expect(viewClicked).toBe(0);
+    expect(documentRef.querySelector<HTMLSelectElement>("select[name='quarter']")?.value).toContain(
+      "Quarter 1",
+    );
+  });
+
   it("waits on the GSTR-2B app route until summary download controls render", async () => {
     const documentRef = createGstDocument(
       `

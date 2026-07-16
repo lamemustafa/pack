@@ -163,6 +163,52 @@ describe("target-bound filed GSTR-1 View point", () => {
     expect(findMatchingFilterBoundGstr1Results(documentRef, SCOPE)).toHaveLength(1);
   });
 
+  it("validates an outer semantic card around a nested semantic result", () => {
+    const documentRef = createFilterBoundResultDocument();
+    const article = documentRef.querySelector("article");
+    if (!article) throw new Error("Expected result card.");
+    const listItem = documentRef.createElement("li");
+    article.replaceWith(listItem);
+    listItem.append(article, " Tax Period: May FY 2024/25");
+
+    expect(findMatchingFilterBoundGstr1Results(documentRef, SCOPE)).toEqual([]);
+  });
+
+  it("ignores hidden result identity text", () => {
+    const documentRef = createFilterBoundResultDocument();
+    const heading = documentRef.querySelector("article h2");
+    if (heading) heading.textContent = "Filed return";
+    const hiddenIdentity = documentRef.createElement("span");
+    hiddenIdentity.hidden = true;
+    hiddenIdentity.textContent = "GSTR-1 FY 2025-26 Tax Period: April";
+    documentRef.querySelector("article")?.append(hiddenIdentity);
+
+    expect(findMatchingFilterBoundGstr1Results(documentRef, SCOPE)).toEqual([]);
+  });
+
+  it("does not use accessibility metadata as result identity evidence", () => {
+    const documentRef = createFilterBoundResultDocument();
+    const heading = documentRef.querySelector("article h2");
+    if (heading) heading.textContent = "Filed return";
+    const article = documentRef.querySelector("article");
+    article?.setAttribute("aria-label", "GSTR-1 FY 2025-26 Tax Period: April");
+    article?.setAttribute("title", "GSTR-1 FY 2025-26 Tax Period: April");
+
+    expect(findMatchingFilterBoundGstr1Results(documentRef, SCOPE)).toEqual([]);
+  });
+
+  it("does not use ancillary interactive copy as result identity evidence", () => {
+    const documentRef = createFilterBoundResultDocument();
+    const heading = documentRef.querySelector("article h2");
+    if (heading) heading.textContent = "Filed return";
+    const guide = documentRef.createElement("a");
+    guide.href = "#";
+    guide.textContent = "GSTR-1 FY 2025-26 Tax Period: April guide";
+    documentRef.querySelector("article")?.append(guide);
+
+    expect(findMatchingFilterBoundGstr1Results(documentRef, SCOPE)).toEqual([]);
+  });
+
   it("evaluates identity on an unlabeled section card around an inner View wrapper", () => {
     const documentRef = createFilterBoundResultDocument();
     const section = documentRef.querySelector("section");

@@ -23,17 +23,10 @@ export function findReturnDashboardControls(documentRef: Document): ReturnDashbo
     findReturnDashboardFilterRoot(documentRef) ?? findNativeReturnDashboardRoot(documentRef);
   if (!root) return null;
 
-  const body = documentRef.body ?? root;
-  const year =
-    findDashboardControlSelect(root, FINANCIAL_YEAR_LABEL, "financial-year") ??
-    findDashboardControlSelect(body, FINANCIAL_YEAR_LABEL, "financial-year");
-  const quarter =
-    findDashboardControlSelect(root, QUARTER_LABEL, "quarter") ??
-    findDashboardControlSelect(body, QUARTER_LABEL, "quarter");
-  const period =
-    findDashboardControlSelect(root, PERIOD_LABEL, "period") ??
-    findDashboardControlSelect(body, PERIOD_LABEL, "period");
-  const search = findSearchButton(root) ?? findSearchButton(body);
+  const year = findDashboardControlSelect(root, FINANCIAL_YEAR_LABEL, "financial-year");
+  const quarter = findDashboardControlSelect(root, QUARTER_LABEL, "quarter");
+  const period = findDashboardControlSelect(root, PERIOD_LABEL, "period");
+  const search = findSearchButton(root);
   if (!year || !period || !search) return null;
   return { year, quarter, period, search };
 }
@@ -128,10 +121,19 @@ function findReturnDashboardFilterRoot(documentRef: Document): HTMLElement | nul
 
   const roots: Array<{ element: HTMLElement; score: number }> = [];
   for (const searchButton of findSearchButtons(documentRef)) {
+    const owningForm = searchButton.closest("form");
+    if (owningForm && isHtmlElement(documentRef, owningForm)) {
+      const formText = normaliseText(owningForm.innerText || owningForm.textContent || "");
+      if (/financial\s+year/.test(formText) && /\bperiod\b/.test(formText)) {
+        roots.push({ element: owningForm, score: formText.length });
+        continue;
+      }
+    }
+
     let current: HTMLElement | null = searchButton;
     for (let depth = 0; current && depth < 8; depth += 1) {
       const text = normaliseText(current.innerText || current.textContent || "");
-      if (/financial\s+year/.test(text) && /\bquarter\b/.test(text) && /\bperiod\b/.test(text)) {
+      if (/financial\s+year/.test(text) && /\bperiod\b/.test(text)) {
         roots.push({ element: current, score: text.length });
         break;
       }
@@ -148,7 +150,6 @@ function findReturnDashboardFilterRoot(documentRef: Document): HTMLElement | nul
   if (
     findSearchButtons(documentRef).length > 0 &&
     /financial\s+year/.test(bodyText) &&
-    /\bquarter\b/.test(bodyText) &&
     /\bperiod\b/.test(bodyText)
   ) {
     return documentRef.body;

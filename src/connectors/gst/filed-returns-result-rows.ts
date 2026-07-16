@@ -98,7 +98,7 @@ export function findMatchingFilterBoundGstr1Results(
       Boolean(candidate.container),
     )
     .filter(({ container }) =>
-      filterBoundResultIdentityMatchesScope(normaliseText(readElementText(container)), scope),
+      filterBoundResultIdentityMatchesScope(readVisibleResultIdentityText(container), scope),
     )
     .map(({ view, container }) => ({ view, container, filterBound: true, period: null }));
 }
@@ -116,8 +116,9 @@ function findGstr1ResultContainer(view: HTMLElement): HTMLElement | null {
           (element) => isVisibleResultControl(element) && isExactViewAction(element),
         ).length === 1
       ) {
-        result = current;
-        if (isSemanticResultCard(current)) break;
+        if (!result || !isSemanticResultCard(result) || isSemanticResultCard(current)) {
+          result = current;
+        }
       }
     }
     current = current.parentElement;
@@ -172,6 +173,24 @@ function isVisibleResultControl(element: HTMLElement): boolean {
     current = current.parentElement;
   }
   return true;
+}
+
+function readVisibleResultIdentityText(container: HTMLElement): string {
+  return [container, ...Array.from(container.querySelectorAll<HTMLElement>("*"))]
+    .filter(isResultIdentityTextElement)
+    .flatMap((element) =>
+      Array.from(element.childNodes)
+        .filter((node) => node.nodeType === node.TEXT_NODE)
+        .map((node) => node.textContent ?? ""),
+    )
+    .filter(Boolean)
+    .join(" ");
+}
+
+function isResultIdentityTextElement(element: HTMLElement): boolean {
+  if (!isVisibleResultControl(element)) return false;
+  if (["INPUT", "OPTION", "SELECT"].includes(element.tagName)) return false;
+  return !element.closest("a, button, [role='button'], [ng-click], [data-ng-click]");
 }
 
 function readResultRowText(row: HTMLTableRowElement): string {

@@ -76,8 +76,7 @@ export async function selectGstr2bReturnDashboardFiltersAndSearch(
   if (
     viewControl &&
     hasSettledDashboardSearchForScope(documentRef, scope, viewControl) &&
-    (dashboardFiltersMatch(scope, controls.year, controls.quarter, controls.period) ||
-      dashboardYearAndPeriodMatch(scope, controls.year, controls.period))
+    dashboardFiltersMatch(scope, controls.year, controls.quarter, controls.period)
   ) {
     return null;
   }
@@ -357,15 +356,31 @@ async function waitForReturnDashboardPeriodOptions(
 function acceptedQuarterOptions(period: string): string[] {
   const normalisedPeriod = normaliseText(period);
   if (["april", "may", "june"].includes(normalisedPeriod)) {
-    return ["Quarter 1", "Q1", "Apr-Jun", "Apr - Jun", "April-June", "April - June"];
+    return ["Quarter 1", "Qtr 1", "Q1", "Apr-Jun", "Apr - Jun", "April-June", "April - June"];
   }
   if (["july", "august", "september"].includes(normalisedPeriod)) {
-    return ["Quarter 2", "Q2", "Jul-Sep", "Jul - Sep", "July-September", "July - September"];
+    return [
+      "Quarter 2",
+      "Qtr 2",
+      "Q2",
+      "Jul-Sep",
+      "Jul - Sep",
+      "July-September",
+      "July - September",
+    ];
   }
   if (["october", "november", "december"].includes(normalisedPeriod)) {
-    return ["Quarter 3", "Q3", "Oct-Dec", "Oct - Dec", "October-December", "October - December"];
+    return [
+      "Quarter 3",
+      "Qtr 3",
+      "Q3",
+      "Oct-Dec",
+      "Oct - Dec",
+      "October-December",
+      "October - December",
+    ];
   }
-  return ["Quarter 4", "Q4", "Jan-Mar", "Jan - Mar", "January-March", "January - March"];
+  return ["Quarter 4", "Qtr 4", "Q4", "Jan-Mar", "Jan - Mar", "January-March", "January - March"];
 }
 
 function dashboardFiltersMatch(
@@ -377,17 +392,6 @@ function dashboardFiltersMatch(
   return (
     selectMatches(yearSelect, [scope.financialYear]) &&
     (!quarterSelect || selectMatches(quarterSelect, acceptedQuarterOptions(scope.period))) &&
-    selectMatches(periodSelect, acceptedFiledReturnsMonthTexts(scope.period))
-  );
-}
-
-function dashboardYearAndPeriodMatch(
-  scope: FiledReturnsDownloadScope,
-  yearSelect: HTMLSelectElement,
-  periodSelect: HTMLSelectElement,
-): boolean {
-  return (
-    selectMatches(yearSelect, [scope.financialYear]) &&
     selectMatches(periodSelect, acceptedFiledReturnsMonthTexts(scope.period))
   );
 }
