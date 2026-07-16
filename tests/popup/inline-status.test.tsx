@@ -143,6 +143,33 @@ describe("inline filed-return recovery status", () => {
     expect(onRestartTarget).not.toHaveBeenCalled();
   });
 
+  it("does not advertise manual completion for an incomplete selected-file ZIP", () => {
+    const targetReviewSummary: FiledReturnsFlowSummary = {
+      ...blockedSummary,
+      flowStep: {
+        ...blockedSummary.flowStep,
+        state: "download-unconfirmed",
+        safeSignals: ["filed-returns-target-review-required", "single-period-zip-incomplete"],
+      },
+    };
+
+    const markup = renderToStaticMarkup(
+      <InlineStatus
+        busy={null}
+        onOpenPortal={() => undefined}
+        onRestartTarget={() => undefined}
+        onRetryFullFiscalYearTarget={() => undefined}
+        onRetryTarget={() => undefined}
+        presentation={blockedPresentation}
+        summary={targetReviewSummary}
+      />,
+    );
+
+    expect(markup).toContain("Retry the selected files from a signed-in GST Portal tab");
+    expect(markup).toContain("cancel and reset");
+    expect(markup).not.toContain("mark it reviewed");
+  });
+
   it("routes a blocked full-year period to the revision-checked full-year retry", () => {
     const onRetryFullFiscalYearTarget = vi.fn();
     const onRestartTarget = vi.fn();

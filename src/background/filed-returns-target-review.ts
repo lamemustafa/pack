@@ -106,7 +106,10 @@ export async function resolveUnconfirmedFiledReturnsDownload(
 ): Promise<PackMessageResponse> {
   const review = await readFiledReturnsTargetReview(scope, deps);
   if (!review) return noTargetReviewResponse(scope);
-  if (hasSinglePeriodCleanupFailure(review.safeSignals)) {
+  if (
+    hasSinglePeriodCleanupFailure(review.safeSignals) ||
+    (resolution === "downloaded" && review.safeSignals.includes("single-period-zip-incomplete"))
+  ) {
     return responseForFiledReturnsTargetReview(review);
   }
 
@@ -260,7 +263,12 @@ function targetReviewStep(review: FiledReturnsTargetReview): PortalFlowStepResul
     connectorId: "gst",
     scopeId: filedReturnScopeId(review.scope.returnType),
     state: "user-action-required",
-    safeSignals: ["filed-returns-target-review-required"],
+    safeSignals: [
+      "filed-returns-target-review-required",
+      ...(review.safeSignals.includes("single-period-zip-incomplete")
+        ? ["single-period-zip-incomplete"]
+        : []),
+    ],
     safeMessage: review.safeMessage,
     userAction: {
       type: "RETRY_PORTAL_GENERATION",
@@ -294,8 +302,10 @@ export function noTargetReviewResponse(scope: FiledReturnsDownloadScope): PackMe
 
 function requiresTargetReview(step: PortalFlowStepResult): boolean {
   if (hasSinglePeriodCleanupFailure(step.safeSignals)) return true;
+  if (step.safeSignals.includes("filed-gstr1-excel-no-details-available")) return false;
   return (
     step.state === "download-unconfirmed" ||
+    step.safeSignals.some((signal) => signal.endsWith("-main-world-capture-timeout")) ||
     step.safeSignals.some((signal) =>
       [
         "browser-download-size-unknown",

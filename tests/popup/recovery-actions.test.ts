@@ -123,6 +123,50 @@ describe("popup full-year recovery actions", () => {
     );
   });
 
+  it("does not offer manual completion for an incomplete selected-file ZIP", () => {
+    const summary = targetReviewSummary();
+    summary.scope.artifactType = "PDF_AND_EXCEL";
+    summary.flowStep.safeSignals.push("single-period-zip-incomplete");
+    const markup = renderToStaticMarkup(
+      createElement(RecoveryActions, {
+        busy: null,
+        portalReady: false,
+        summary,
+        onStartFresh: () => undefined,
+        onAcknowledgeInterruptedRun: () => undefined,
+        onRetryFullFiscalYearTarget: () => undefined,
+        onRetryTarget: () => undefined,
+        onResolveFullFiscalYearTarget: () => undefined,
+        onResolveTarget: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain("Cancel and reset");
+    expect(markup).not.toContain("Mark reviewed manually");
+  });
+
+  it("keeps portal-dependent destructive restart disabled without a GST tab", () => {
+    const markup = renderToStaticMarkup(
+      createElement(RecoveryActions, {
+        busy: null,
+        portalReady: false,
+        summary: targetReviewSummary(),
+        onStartFresh: () => undefined,
+        onAcknowledgeInterruptedRun: () => undefined,
+        onRetryFullFiscalYearTarget: () => undefined,
+        onRetryTarget: () => undefined,
+        onResolveFullFiscalYearTarget: () => undefined,
+        onResolveTarget: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain(
+      '<button type="button" class="secondary" disabled="">Discard saved state and start selected download</button>',
+    );
+    expect(markup).toContain("Mark reviewed manually");
+    expect(markup).toContain("Cancel and reset");
+  });
+
   it("uses retry-first copy for a blocked full-year period", () => {
     const markup = renderToStaticMarkup(
       createElement(RecoveryActions, {

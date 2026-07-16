@@ -130,7 +130,9 @@ function getInlineStatusCopy(
     const needsFullFiscalYearRecovery = Boolean(summary.fullFiscalYearRecovery);
     return {
       body: needsTargetReview
-        ? `Resolve ${summary.currentPeriod} before choosing another period. Retry it, or open More run controls to mark it reviewed after checking Browser Downloads, or cancel and reset.`
+        ? signals.has("single-period-zip-incomplete")
+          ? `Resolve ${summary.currentPeriod} before choosing another period. Retry the selected files from a signed-in GST Portal tab, or open More run controls to cancel and reset.`
+          : `Resolve ${summary.currentPeriod} before choosing another period. Retry it, or open More run controls to mark it reviewed after checking Browser Downloads, or cancel and reset.`
         : needsFullFiscalYearRecovery
           ? getFullFiscalYearRecoveryBody(summary.currentPeriod, signals)
           : summary.flowStep.safeMessage,

@@ -29,27 +29,17 @@ function captureFailure(signal: string): PackMessageResponse {
 }
 
 describe("filed-return capture fallback", () => {
-  it("keeps one target-bound portal-click fallback for a GSTR-3B capture timeout", () => {
+  it("does not re-click after a GSTR-3B capture timeout", () => {
     const target = { ...BASE_TARGET, returnType: "GSTR-3B" as const };
     const response = captureFailure("filed-gstr3b-main-world-capture-timeout");
 
-    expect(shouldFallBackAfterCaptureFailure(response, target)).toBe(true);
-    expect(withCaptureFallbackSignal(response, target)).toMatchObject({
-      flowStep: {
-        safeSignals: expect.arrayContaining(["filed-gstr3b-capture-fallback-portal-click"]),
-      } satisfies Partial<PortalFlowStepResult>,
-    });
+    expect(shouldFallBackAfterCaptureFailure(response, target)).toBe(false);
   });
 
-  it("uses one target-bound GSTR-1 portal click after a capture timeout", () => {
+  it("does not re-click after a GSTR-1 capture timeout", () => {
     const response = captureFailure("filed-gstr1-main-world-capture-timeout");
 
-    expect(shouldFallBackAfterCaptureFailure(response, BASE_TARGET)).toBe(true);
-    expect(withCaptureFallbackSignal(response, BASE_TARGET)).toMatchObject({
-      flowStep: {
-        safeSignals: expect.arrayContaining(["filed-gstr1-capture-fallback-portal-click"]),
-      } satisfies Partial<PortalFlowStepResult>,
-    });
+    expect(shouldFallBackAfterCaptureFailure(response, BASE_TARGET)).toBe(false);
   });
 
   it("uses one target-bound GSTR-1 portal click after an Excel capture failure", () => {

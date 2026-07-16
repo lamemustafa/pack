@@ -32,13 +32,23 @@ export async function runFileSystemAccessProbe(
     };
   }
 
+  let directoryHandle: FileSystemDirectoryHandle | null = null;
+  let probeFileCreated = false;
+  let result: FileSystemAccessProbeResult;
   try {
-    const directoryHandle = await deps.showDirectoryPicker({
+    directoryHandle = await deps.showDirectoryPicker({
       id: "pack-local-download-folder-probe",
       mode: "readwrite",
       startIn: "downloads",
     });
+    if ((await clearOwnedStaleProbeFile(directoryHandle)) === "foreign") {
+      return {
+        status: "failed",
+        safeSignals: ["file-system-access-probe-file-exists"],
+      };
+    }
     const fileHandle = await directoryHandle.getFileHandle(PROBE_FILE_NAME, { create: true });
+    probeFileCreated = true;
     const writable = await fileHandle.createWritable();
     await writable.write(PROBE_TEXT);
     await writable.close();
@@ -46,9 +56,8 @@ export async function runFileSystemAccessProbe(
     const file = await fileHandle.getFile();
     const bytes = await file.arrayBuffer();
     const digest = await deps.crypto.subtle.digest("SHA-256", bytes);
-    await directoryHandle.removeEntry(PROBE_FILE_NAME).catch(() => undefined);
 
-    return {
+    result = {
       status: "supported",
       safeSignals: ["file-system-access-user-mediated", "file-system-access-readback-verified"],
       byteCount: bytes.byteLength,
@@ -56,15 +65,44 @@ export async function runFileSystemAccessProbe(
     };
   } catch (error) {
     if (isAbortError(error)) {
-      return {
+      result = {
         status: "cancelled",
         safeSignals: ["file-system-access-user-cancelled"],
       };
+    } else {
+      result = {
+        status: "failed",
+        safeSignals: ["file-system-access-probe-failed"],
+      };
     }
-    return {
-      status: "failed",
-      safeSignals: ["file-system-access-probe-failed"],
-    };
+  } finally {
+    if (directoryHandle && probeFileCreated) {
+      try {
+        await directoryHandle.removeEntry(PROBE_FILE_NAME);
+      } catch {
+        result = {
+          status: "failed",
+          safeSignals: ["file-system-access-probe-cleanup-failed"],
+        };
+      }
+    }
+  }
+  return result;
+}
+
+async function clearOwnedStaleProbeFile(
+  directoryHandle: FileSystemDirectoryHandle,
+): Promise<"cleared" | "foreign" | "missing"> {
+  try {
+    const existingHandle = await directoryHandle.getFileHandle(PROBE_FILE_NAME);
+    const existingFile = await existingHandle.getFile();
+    const existingText = new TextDecoder().decode(await existingFile.arrayBuffer());
+    if (existingText !== PROBE_TEXT) return "foreign";
+    await directoryHandle.removeEntry(PROBE_FILE_NAME);
+    return "cleared";
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "NotFoundError") return "missing";
+    throw error;
   }
 }
 

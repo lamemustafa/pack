@@ -132,6 +132,37 @@ export async function triggerAndObserveFiledReturnDownload({
       deps.stageCapturedDownloads ||
       !shouldFallBackAfterCaptureFailure(captureResponse, target)
     ) {
+      const captureTimedOut =
+        captureResponse.ok &&
+        "flowStep" in captureResponse &&
+        captureResponse.flowStep.safeSignals.some((signal) =>
+          signal.endsWith("-main-world-capture-timeout"),
+        );
+      if (
+        (!deps.stageCapturedDownloads ||
+          (deps.stageCapturedDownloads.bundleKind === "single-period" && captureTimedOut)) &&
+        deps.persistTargetReview !== false &&
+        captureResponse.ok &&
+        "flowStep" in captureResponse
+      ) {
+        const stagedSelectionTimedOut =
+          deps.stageCapturedDownloads?.bundleKind === "single-period" && captureTimedOut;
+        const reviewStep = stagedSelectionTimedOut
+          ? {
+              ...captureResponse.flowStep,
+              safeSignals: [
+                ...captureResponse.flowStep.safeSignals,
+                "single-period-zip-incomplete",
+              ],
+            }
+          : captureResponse.flowStep;
+        const flowSummary = await persistFiledReturnsTargetReview(
+          stagedSelectionTimedOut ? scope : targetReviewScope(scope, artifactType),
+          reviewStep,
+          deps,
+        );
+        if (flowSummary) return { ...captureResponse, flowSummary };
+      }
       return captureResponse;
     }
     return withCaptureFallbackSignal(

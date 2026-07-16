@@ -21,7 +21,10 @@ describe("File System Access options probe", () => {
       })),
     };
     const directoryHandle = {
-      getFileHandle: vi.fn(async () => fileHandle),
+      getFileHandle: vi.fn(async (_name: string, options?: { create?: boolean }) => {
+        if (!options?.create) throw new DOMException("missing", "NotFoundError");
+        return fileHandle;
+      }),
       removeEntry: vi.fn(async (name: string) => {
         removedEntries.push(name);
       }),
@@ -40,9 +43,11 @@ describe("File System Access options probe", () => {
       safeSignals: ["file-system-access-user-mediated", "file-system-access-readback-verified"],
     });
     expect(result.sha256Prefix).toMatch(/^[0-9a-f]{16}$/);
-    expect(directoryHandle.getFileHandle).toHaveBeenCalledWith(".complyeaze-pack-fsa-probe.txt", {
-      create: true,
-    });
+    expect(directoryHandle.getFileHandle).toHaveBeenNthCalledWith(
+      2,
+      ".complyeaze-pack-fsa-probe.txt",
+      { create: true },
+    );
     expect(writes).toEqual([
       "ComplyEaze Pack File System Access probe\nlocal-only synthetic bytes\n",
     ]);
@@ -73,5 +78,132 @@ describe("File System Access options probe", () => {
       status: "cancelled",
       safeSignals: ["file-system-access-user-cancelled"],
     });
+  });
+
+  it("removes the synthetic probe when readback fails", async () => {
+    const directoryHandle = {
+      getFileHandle: vi.fn(async (_name: string, options?: { create?: boolean }) => {
+        if (!options?.create) throw new DOMException("missing", "NotFoundError");
+        return {
+          createWritable: async () => ({
+            write: async () => undefined,
+            close: async () => undefined,
+          }),
+          getFile: async () => {
+            throw new Error("Synthetic readback failure");
+          },
+        };
+      }),
+      removeEntry: vi.fn(async () => undefined),
+    };
+
+    await expect(
+      runFileSystemAccessProbe({
+        crypto: globalThis.crypto,
+        showDirectoryPicker: vi.fn(
+          async () => directoryHandle as unknown as FileSystemDirectoryHandle,
+        ),
+      }),
+    ).resolves.toEqual({
+      status: "failed",
+      safeSignals: ["file-system-access-probe-failed"],
+    });
+    expect(directoryHandle.removeEntry).toHaveBeenCalledWith(".complyeaze-pack-fsa-probe.txt");
+  });
+
+  it("reports failed when the synthetic probe cannot be removed", async () => {
+    const bytes = new TextEncoder().encode("synthetic");
+    const directoryHandle = {
+      getFileHandle: vi.fn(async (_name: string, options?: { create?: boolean }) => {
+        if (!options?.create) throw new DOMException("missing", "NotFoundError");
+        return {
+          createWritable: async () => ({
+            write: async () => undefined,
+            close: async () => undefined,
+          }),
+          getFile: async () => ({ arrayBuffer: async () => bytes.buffer }),
+        };
+      }),
+      removeEntry: vi.fn(async () => {
+        throw new Error("Synthetic cleanup failure");
+      }),
+    };
+
+    await expect(
+      runFileSystemAccessProbe({
+        crypto: globalThis.crypto,
+        showDirectoryPicker: vi.fn(
+          async () => directoryHandle as unknown as FileSystemDirectoryHandle,
+        ),
+      }),
+    ).resolves.toEqual({
+      status: "failed",
+      safeSignals: ["file-system-access-probe-cleanup-failed"],
+    });
+  });
+
+  it("does not overwrite or delete a pre-existing probe sentinel", async () => {
+    const existingFile = {
+      createWritable: vi.fn(),
+      getFile: vi.fn(async () => ({
+        arrayBuffer: async () => new TextEncoder().encode("unrelated local file").buffer,
+      })),
+    };
+    const directoryHandle = {
+      getFileHandle: vi.fn(async () => existingFile),
+      removeEntry: vi.fn(async () => undefined),
+    };
+
+    await expect(
+      runFileSystemAccessProbe({
+        crypto: globalThis.crypto,
+        showDirectoryPicker: vi.fn(
+          async () => directoryHandle as unknown as FileSystemDirectoryHandle,
+        ),
+      }),
+    ).resolves.toEqual({
+      status: "failed",
+      safeSignals: ["file-system-access-probe-file-exists"],
+    });
+    expect(directoryHandle.getFileHandle).toHaveBeenCalledTimes(1);
+    expect(existingFile.createWritable).not.toHaveBeenCalled();
+    expect(directoryHandle.removeEntry).not.toHaveBeenCalled();
+  });
+
+  it("clears an owned stale sentinel before running a fresh probe", async () => {
+    const probeBytes = new TextEncoder().encode(
+      "ComplyEaze Pack File System Access probe\nlocal-only synthetic bytes\n",
+    );
+    const staleFile = {
+      getFile: async () => ({ arrayBuffer: async () => probeBytes.buffer }),
+    };
+    const freshFile = {
+      createWritable: async () => ({
+        write: async () => undefined,
+        close: async () => undefined,
+      }),
+      getFile: async () => ({ arrayBuffer: async () => probeBytes.buffer }),
+    };
+    const directoryHandle = {
+      getFileHandle: vi.fn().mockResolvedValueOnce(staleFile).mockResolvedValueOnce(freshFile),
+      removeEntry: vi.fn(async () => undefined),
+    };
+
+    await expect(
+      runFileSystemAccessProbe({
+        crypto: globalThis.crypto,
+        showDirectoryPicker: vi.fn(
+          async () => directoryHandle as unknown as FileSystemDirectoryHandle,
+        ),
+      }),
+    ).resolves.toMatchObject({ status: "supported" });
+    expect(directoryHandle.removeEntry).toHaveBeenNthCalledWith(
+      1,
+      ".complyeaze-pack-fsa-probe.txt",
+    );
+    expect(directoryHandle.removeEntry).toHaveBeenNthCalledWith(
+      2,
+      ".complyeaze-pack-fsa-probe.txt",
+    );
   });
 });

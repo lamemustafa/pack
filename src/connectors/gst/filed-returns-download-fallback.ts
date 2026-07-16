@@ -32,6 +32,7 @@ export function shouldFallBackAfterCaptureFailure(
   if (signals.has("filed-gstr1-excel-no-details-available")) return false;
   const signalPrefix = filedReturnScopedSignal(target.returnType, "");
   const scopedPrefix = signalPrefix.endsWith("-") ? signalPrefix.slice(0, -1) : signalPrefix;
+  if (signals.has(`${scopedPrefix}-main-world-capture-timeout`)) return false;
   return [
     "filed-return-offscreen-blob-url-rejected",
     ...(target.returnType === "GSTR-2B" ? ["gstr2b-blob-capture-failed"] : []),
@@ -40,7 +41,6 @@ export function shouldFallBackAfterCaptureFailure(
     `${scopedPrefix}-extension-download-start-rejected`,
     `${scopedPrefix}-main-world-capture-exception`,
     `${scopedPrefix}-main-world-capture-result-rejected`,
-    `${scopedPrefix}-main-world-capture-timeout`,
   ].some((signal) => signals.has(signal));
 }
 

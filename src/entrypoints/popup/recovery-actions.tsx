@@ -28,6 +28,7 @@ export function RecoveryActions({
   const { needsFullFiscalYearReview, needsRunReview, needsTargetReview, runActive, signals } =
     recoveryState;
   const canManuallyObserveFullYear = canManuallyObserveFullFiscalYearTarget(summary);
+  const canManuallyResolveTarget = !signals.has("single-period-zip-incomplete");
   const retryDisabled = busy !== null || !portalReady;
   return (
     <details className="recovery-details" open>
@@ -72,14 +73,16 @@ export function RecoveryActions({
                 ? "Starting fresh..."
                 : "Discard saved state and start selected download"}
             </button>
-            <button
-              type="button"
-              className="secondary"
-              disabled={busy !== null}
-              onClick={() => onResolveTarget("downloaded")}
-            >
-              {busy === "resolve-unconfirmed-download" ? "Saving..." : "Mark reviewed manually"}
-            </button>
+            {canManuallyResolveTarget ? (
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy !== null}
+                onClick={() => onResolveTarget("downloaded")}
+              >
+                {busy === "resolve-unconfirmed-download" ? "Saving..." : "Mark reviewed manually"}
+              </button>
+            ) : null}
             <button
               type="button"
               className="secondary"

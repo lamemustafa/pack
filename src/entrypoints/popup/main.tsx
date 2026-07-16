@@ -85,7 +85,7 @@ function App() {
         />
       )}
 
-      {showBuilder && showRecovery ? (
+      {showRecovery ? (
         <RecoveryActions
           busy={popup.effectiveBusy}
           portalReady={portalReady}
