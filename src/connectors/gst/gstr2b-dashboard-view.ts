@@ -79,14 +79,37 @@ function matchesGstr2bIntentControl(element: HTMLElement, intent: "view"): boole
 function hasLocallyScopedGstr2bText(element: HTMLElement): boolean {
   let current: HTMLElement | null = element;
   for (let depth = 0; current && depth < 5; depth += 1, current = current.parentElement) {
-    const currentText = current.textContent ?? "";
+    const currentText = visibleElementText(current);
     if (containsReturnTypeText(currentText)) return isSpecificGstr2bText(currentText);
     const previous = current.previousElementSibling;
     const next = current.nextElementSibling;
-    if (previous && isSpecificGstr2bText(previous.textContent ?? "")) return true;
-    if (next && isSpecificGstr2bText(next.textContent ?? "")) return true;
+    if (previous && isVisibleGstr2bText(previous)) return true;
+    if (next && isVisibleGstr2bText(next)) return true;
   }
   return false;
+}
+
+function isVisibleGstr2bText(element: Element): boolean {
+  const HTMLElementConstructor = element.ownerDocument.defaultView?.HTMLElement;
+  return Boolean(
+    HTMLElementConstructor &&
+    element instanceof HTMLElementConstructor &&
+    isVisible(element as HTMLElement) &&
+    isSpecificGstr2bText(visibleElementText(element as HTMLElement)),
+  );
+}
+
+function visibleElementText(element: HTMLElement): string {
+  if (!isVisible(element)) return "";
+  return Array.from(element.childNodes)
+    .map((node) => {
+      if (node.nodeType === 3) return node.textContent ?? "";
+      const HTMLElementConstructor = element.ownerDocument.defaultView?.HTMLElement;
+      return HTMLElementConstructor && node instanceof HTMLElementConstructor
+        ? visibleElementText(node as HTMLElement)
+        : "";
+    })
+    .join(" ");
 }
 
 function containsReturnTypeText(text: string): boolean {

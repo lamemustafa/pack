@@ -250,7 +250,10 @@ export async function capturePortalBlobDownloadWithDiagnostics(
     };
 
     window.open = function open(url?: string | URL) {
-      if (!controlClickActive) {
+      const urlText = url ? String(url) : "";
+      const actionBound =
+        controlClickActive || (urlText.startsWith("blob:") && capturedBlobUrls.has(urlText));
+      if (!actionBound) {
         return originalWindowOpen.call(window, url);
       }
       addSafeSignal(`${config.signalPrefix}-window-open-observed`);
@@ -475,12 +478,69 @@ export async function capturePortalBlobDownloadWithDiagnostics(
       }
       return captureAnchorDownload(anchor);
     };
+    const suppressNativeAnchorDefault = <T>(
+      anchor: HTMLAnchorElement,
+      activate: () => T,
+      preventNativeDefault: (event: Event) => void,
+    ): T => {
+      anchor.addEventListener("click", preventNativeDefault, { once: true });
+      try {
+        return activate();
+      } finally {
+        anchor.removeEventListener("click", preventNativeDefault);
+      }
+    };
+    const dispatchSuppressedAnchorClick = (anchor: HTMLAnchorElement, event?: Event) => {
+      const MouseEventConstructor = anchor.ownerDocument.defaultView?.MouseEvent;
+      const clickEvent =
+        event ??
+        (MouseEventConstructor
+          ? new MouseEventConstructor("click", {
+              bubbles: true,
+              cancelable: true,
+              view: anchor.ownerDocument.defaultView,
+            })
+          : new Event("click", { bubbles: true, cancelable: true }));
+      const originalStopPropagation = clickEvent.stopPropagation;
+      const originalStopImmediatePropagation = clickEvent.stopImmediatePropagation;
+      const originalPreventDefault = clickEvent.preventDefault;
+      let pagePreventedDefault = clickEvent.defaultPrevented;
+      clickEvent.preventDefault = function preventDefault() {
+        pagePreventedDefault = true;
+        return originalPreventDefault.call(this);
+      };
+      clickEvent.stopPropagation = function stopPropagation() {
+        if (this.eventPhase === 1) originalPreventDefault.call(this);
+        return originalStopPropagation.call(this);
+      };
+      clickEvent.stopImmediatePropagation = function stopImmediatePropagation() {
+        originalPreventDefault.call(this);
+        return originalStopImmediatePropagation.call(this);
+      };
+      try {
+        suppressNativeAnchorDefault(
+          anchor,
+          () => originalDispatchEvent.call(anchor, clickEvent),
+          (eventToCancel) => originalPreventDefault.call(eventToCancel),
+        );
+        return !pagePreventedDefault;
+      } finally {
+        clickEvent.preventDefault = originalPreventDefault;
+        clickEvent.stopPropagation = originalStopPropagation;
+        clickEvent.stopImmediatePropagation = originalStopImmediatePropagation;
+      }
+    };
     HTMLAnchorElement.prototype.click = function click() {
-      if (shouldSuppressAnchor(this)) return undefined;
+      if (shouldSuppressAnchor(this)) {
+        dispatchSuppressedAnchorClick(this);
+        return undefined;
+      }
       return originalClick.call(this);
     };
     HTMLAnchorElement.prototype.dispatchEvent = function dispatchEvent(event: Event) {
-      if (event.type === "click" && shouldSuppressAnchor(this)) return true;
+      if (event.type === "click" && shouldSuppressAnchor(this)) {
+        return dispatchSuppressedAnchorClick(this, event);
+      }
       return originalDispatchEvent.call(this, event);
     };
 

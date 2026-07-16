@@ -108,6 +108,23 @@ async function handleMessage(
     }
   }
 
+  if (message.type === "PACK_OFFSCREEN_CLEAR_ALL_FILED_RETURN_LEDGERS") {
+    try {
+      await clearAllLedgerDirectories();
+      return {
+        ok: true,
+        requestId: message.payload.requestId,
+        cleared: true,
+      };
+    } catch {
+      return {
+        ok: false,
+        requestId: message.payload.requestId,
+        errorCategory: hasStorageDirectoryApi() ? "clear-failed" : "opfs-unavailable",
+      };
+    }
+  }
+
   if (message.type === "PACK_OFFSCREEN_REVOKE_BLOB_URL") {
     for (const [requestId, blobUrl] of blobUrlsByRequest.entries()) {
       if (blobUrl !== message.payload.blobUrl) continue;
@@ -199,6 +216,16 @@ async function clearLedgerDirectory(ledgerId: string): Promise<void> {
     const root = await navigator.storage.getDirectory();
     const packs = await root.getDirectoryHandle("filed-return-packs", { create: false });
     await packs.removeEntry(safeDirectorySegment(ledgerId), { recursive: true });
+  } catch (error) {
+    if (isNotFoundError(error)) return;
+    throw error;
+  }
+}
+
+async function clearAllLedgerDirectories(): Promise<void> {
+  try {
+    const root = await navigator.storage.getDirectory();
+    await root.removeEntry("filed-return-packs", { recursive: true });
   } catch (error) {
     if (isNotFoundError(error)) return;
     throw error;

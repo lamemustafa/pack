@@ -57,12 +57,21 @@ export interface PackOffscreenClearFiledReturnLedgerMessage {
   };
 }
 
+export interface PackOffscreenClearAllFiledReturnLedgersMessage {
+  type: "PACK_OFFSCREEN_CLEAR_ALL_FILED_RETURN_LEDGERS";
+  target: typeof PACK_OFFSCREEN_BLOB_URL_TARGET;
+  payload: {
+    requestId: string;
+  };
+}
+
 export type PackOffscreenBlobUrlMessage =
   | PackOffscreenCreateBlobUrlMessage
   | PackOffscreenRevokeBlobUrlMessage
   | PackOffscreenStageFiledReturnMessage
   | PackOffscreenCreateFiledReturnZipMessage
-  | PackOffscreenClearFiledReturnLedgerMessage;
+  | PackOffscreenClearFiledReturnLedgerMessage
+  | PackOffscreenClearAllFiledReturnLedgersMessage;
 
 export type PackOffscreenBlobUrlResponse =
   | {
@@ -139,6 +148,9 @@ export function isPackOffscreenBlobUrlMessage(
   }
   if (input.type === "PACK_OFFSCREEN_CLEAR_FILED_RETURN_LEDGER") {
     return isBoundedString(input.payload.ledgerId, 1, 120);
+  }
+  if (input.type === "PACK_OFFSCREEN_CLEAR_ALL_FILED_RETURN_LEDGERS") {
+    return Object.keys(input.payload).length === 1;
   }
   if (input.type === "PACK_OFFSCREEN_REVOKE_BLOB_URL") {
     return isBoundedString(input.payload.blobUrl, 1, 4096);

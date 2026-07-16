@@ -160,10 +160,13 @@ export async function readLedger(key: string): Promise<FiledReturnsFullFiscalYea
   return isFullFiscalYearLedger(ledger) ? ledger : null;
 }
 
-export async function readRecoverableMalformedLedgerId(key: string): Promise<string | null> {
+export async function readMalformedLedgerState(
+  key: string,
+): Promise<{ recoverableLedgerId: string | null } | null> {
   const values = await browser.storage.local.get(key);
   const ledger = values[key];
-  return isFullFiscalYearLedger(ledger) ? null : recoverableFullFiscalYearLedgerId(ledger);
+  if (ledger === undefined || ledger === null || isFullFiscalYearLedger(ledger)) return null;
+  return { recoverableLedgerId: recoverableFullFiscalYearLedgerId(ledger) };
 }
 
 export async function persistLedger(

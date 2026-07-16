@@ -23,16 +23,20 @@ export function mergeRetriedArtifactSignals(
   previousSignals: readonly string[],
   flowStep: PortalFlowStepResult,
 ): PortalFlowStepResult {
-  const artifactSignals = previousSignals.filter(
-    (signal) =>
-      /^filed-return-artifact-(?:downloaded|unavailable):(?:PDF|EXCEL)$/.test(signal) ||
-      /^full-fiscal-year-opfs-staged:(?:PDF|EXCEL)$/.test(signal),
-  );
+  const artifactSignals = durableFullFiscalYearArtifactSignals(previousSignals);
   if (artifactSignals.length === 0) return flowStep;
   return {
     ...flowStep,
     safeSignals: Array.from(new Set([...artifactSignals, ...flowStep.safeSignals])),
   };
+}
+
+export function durableFullFiscalYearArtifactSignals(signals: readonly string[]): string[] {
+  return signals.filter(
+    (signal) =>
+      /^filed-return-artifact-(?:downloaded|unavailable):(?:PDF|EXCEL)$/.test(signal) ||
+      /^full-fiscal-year-opfs-staged:(?:PDF|EXCEL)$/.test(signal),
+  );
 }
 
 export function requireFullFiscalYearArtifactsStaged(

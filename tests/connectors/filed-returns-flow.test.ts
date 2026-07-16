@@ -1313,6 +1313,45 @@ describe("filed returns guided flow", () => {
     expect(viewClicked).toBe(0);
   });
 
+  it("does not scope a visible View from a hidden GSTR-2B sibling", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <form>
+            <select name="fin"><option selected>2026-27</option></select>
+            <select name="quarter"><option selected>Quarter 1 (Apr - Jun)</option></select>
+            <select name="mon"><option selected>May</option></select>
+            <button type="button" data-search>Search</button>
+          </form>
+          <article>
+            <span hidden>Auto-drafted ITC Statement GSTR-2B</span>
+            <span>Another return</span>
+            <button data-visible-view>VIEW</button>
+          </article>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/dashboard",
+    );
+    makeLayoutVisible(documentRef);
+    let viewClicked = 0;
+    documentRef.querySelector("[data-visible-view]")?.addEventListener("click", () => {
+      viewClicked += 1;
+    });
+    const scope: FiledReturnsDownloadScope = {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-2B",
+    };
+
+    await runFiledReturnsDownloadStep(documentRef, scope);
+    const result = await runFiledReturnsDownloadStep(documentRef, scope);
+
+    expect(result.safeSignals).toContain("gstr2b-return-dashboard-search-results-pending");
+    expect(result.safeSignals).not.toContain("gstr2b-dashboard-view-clicked");
+    expect(viewClicked).toBe(0);
+  });
+
   it("never releases an unchanged pre-search GSTR-2B View despite nearby mutations", async () => {
     vi.useFakeTimers();
     try {

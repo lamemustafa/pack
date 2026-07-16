@@ -106,6 +106,21 @@ export async function clearOffscreenFiledReturnLedger(
   }
 }
 
+export async function clearAllOffscreenFiledReturnLedgers(): Promise<"cleared" | "failed"> {
+  const requestId = createRequestId();
+  try {
+    await ensureOffscreenDocument();
+    const response = await browser.runtime.sendMessage({
+      type: "PACK_OFFSCREEN_CLEAR_ALL_FILED_RETURN_LEDGERS",
+      target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+      payload: { requestId },
+    });
+    return isClearedResponse(response, requestId) ? "cleared" : "failed";
+  } catch {
+    return "failed";
+  }
+}
+
 export async function revokeOffscreenBlobUrl(blobUrl: string): Promise<void> {
   const requestId = createRequestId();
   try {

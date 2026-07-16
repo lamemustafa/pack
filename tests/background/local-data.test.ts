@@ -58,6 +58,7 @@ const browserMocks = vi.hoisted(() => ({
   },
 }));
 const zipMocks = vi.hoisted(() => ({
+  discardAllFiledReturnsStaging: vi.fn(async () => "filed-returns-opfs-cleared"),
   discardFullFiscalYearFiledReturnsZip: vi.fn(async () => "full-fiscal-year-opfs-cleared"),
   discardSinglePeriodFiledReturnsZip: vi.fn(async () => "single-period-opfs-cleared"),
 }));
@@ -75,6 +76,7 @@ describe("Pack local data clearing", () => {
       "full-fiscal-year-opfs-cleared",
     );
     zipMocks.discardSinglePeriodFiledReturnsZip.mockResolvedValue("single-period-opfs-cleared");
+    zipMocks.discardAllFiledReturnsStaging.mockResolvedValue("filed-returns-opfs-cleared");
     vi.stubGlobal("defineBackground", (entrypoint: () => void) => {
       entrypoint();
       return entrypoint;
@@ -238,6 +240,7 @@ describe("Pack local data clearing", () => {
     const response = await background.clearPackLocalData();
 
     expect(response).toEqual({ ok: true, cleared: true });
+    expect(zipMocks.discardAllFiledReturnsStaging).toHaveBeenCalledTimes(1);
     expect(zipMocks.discardSinglePeriodFiledReturnsZip).not.toHaveBeenCalled();
     expect(browserMocks.storage.session.clear).toHaveBeenCalledTimes(1);
     expect(browserMocks.storage.local.remove).toHaveBeenCalledWith(
@@ -386,7 +389,7 @@ describe("Pack local data clearing", () => {
     );
   });
 
-  it("fails closed when malformed full-year metadata has no safe cleanup id", async () => {
+  it("clears all retained staging when malformed full-year metadata has no safe cleanup id", async () => {
     browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
       key === "pack:full-fiscal-year-ledger"
         ? {
@@ -401,12 +404,49 @@ describe("Pack local data clearing", () => {
 
     const response = await background.clearPackLocalData();
 
+    expect(response).toEqual({ ok: true, cleared: true });
+    expect(zipMocks.discardAllFiledReturnsStaging).toHaveBeenCalledTimes(1);
+    expect(zipMocks.discardFullFiscalYearFiledReturnsZip).not.toHaveBeenCalled();
+    expect(browserMocks.storage.session.clear).toHaveBeenCalledTimes(1);
+    expect(browserMocks.storage.local.remove).toHaveBeenCalledWith(
+      background.PACK_CLEARABLE_LOCAL_STORAGE_KEYS,
+    );
+  });
+
+  it.each(["", 0, false])(
+    "clears all retained staging for a falsy malformed full-year ledger (%j)",
+    async (malformedLedger) => {
+      browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+        key === "pack:full-fiscal-year-ledger" ? { [key]: malformedLedger } : {},
+      );
+      const background = await import("../../src/entrypoints/background");
+
+      const response = await background.clearPackLocalData();
+
+      expect(response).toEqual({ ok: true, cleared: true });
+      expect(zipMocks.discardAllFiledReturnsStaging).toHaveBeenCalledTimes(1);
+      expect(browserMocks.storage.local.remove).toHaveBeenCalledWith(
+        background.PACK_CLEARABLE_LOCAL_STORAGE_KEYS,
+      );
+    },
+  );
+
+  it("keeps local state when the explicit broad staging clear fails", async () => {
+    zipMocks.discardAllFiledReturnsStaging.mockResolvedValueOnce("filed-returns-opfs-clear-failed");
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      key === "pack:full-fiscal-year-ledger"
+        ? { [key]: { ledgerId: "unsafe/ledger", schemaVersion: "unexpected" } }
+        : {},
+    );
+    const background = await import("../../src/entrypoints/background");
+
+    const response = await background.clearPackLocalData();
+
     expect(response).toEqual({
       ok: false,
       error:
-        "Pack could not verify retained fiscal-year staging. Retry clearing local data before removing saved state.",
+        "Pack could not clear temporary filed-return staging. Retry clearing local data before removing saved state.",
     });
-    expect(zipMocks.discardFullFiscalYearFiledReturnsZip).not.toHaveBeenCalled();
     expect(browserMocks.storage.session.clear).not.toHaveBeenCalled();
     expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
   });

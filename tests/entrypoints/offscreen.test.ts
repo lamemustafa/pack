@@ -60,6 +60,23 @@ describe("offscreen Blob URL entrypoint", () => {
     ).toBe(false);
   });
 
+  it("validates the explicit clear-all-ledgers message shape", () => {
+    expect(
+      isPackOffscreenBlobUrlMessage({
+        type: "PACK_OFFSCREEN_CLEAR_ALL_FILED_RETURN_LEDGERS",
+        target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+        payload: { requestId: "clear-all-request" },
+      }),
+    ).toBe(true);
+    expect(
+      isPackOffscreenBlobUrlMessage({
+        type: "PACK_OFFSCREEN_CLEAR_ALL_FILED_RETURN_LEDGERS",
+        target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+        payload: { requestId: "clear-all-request", ledgerId: "unexpected" },
+      }),
+    ).toBe(false);
+  });
+
   it("treats an already-absent staged ledger as cleared", async () => {
     vi.stubGlobal("navigator", {
       storage: {
@@ -243,6 +260,25 @@ describe("offscreen Blob URL entrypoint", () => {
       cleared: true,
     });
     expect(opfsFiles.has("filed-return-packs/ledger-1/may.pdf")).toBe(false);
+  });
+
+  it("clears every Pack filed-return staging directory on explicit reset", async () => {
+    await loadOffscreenEntrypoint();
+    opfsFiles.set("filed-return-packs/ledger-1/april.pdf", new Blob(["one"]));
+    opfsFiles.set("filed-return-packs/ledger-2/may.pdf", new Blob(["two"]));
+
+    const response = await sendOffscreenMessage({
+      type: "PACK_OFFSCREEN_CLEAR_ALL_FILED_RETURN_LEDGERS",
+      target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+      payload: { requestId: "clear-all-request" },
+    });
+
+    expect(response).toEqual({
+      ok: true,
+      requestId: "clear-all-request",
+      cleared: true,
+    });
+    expect([...opfsFiles.keys()]).toEqual([]);
   });
 
   it("rejects non-chunked GSTR-2B bytes that do not match the requested artifact", async () => {

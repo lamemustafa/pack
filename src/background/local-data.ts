@@ -6,6 +6,7 @@ import {
   recoverableFullFiscalYearLedgerId,
 } from "./filed-returns-full-fiscal-year-ledger";
 import {
+  discardAllFiledReturnsStaging,
   discardFullFiscalYearFiledReturnsZip,
   discardSinglePeriodFiledReturnsZip,
 } from "./filed-returns-full-fiscal-year-zip";
@@ -36,6 +37,7 @@ export async function clearPackLocalDataWithRecoveryGuard(
   }
 
   let singlePeriodStaging;
+  let requiresBroadStagingClear = false;
   try {
     singlePeriodStaging = await readSinglePeriodStagingRecord();
   } catch (error) {
@@ -49,8 +51,25 @@ export async function clearPackLocalDataWithRecoveryGuard(
     singlePeriodStaging = error.recoverableLedgerId
       ? { ledgerId: error.recoverableLedgerId, schemaVersion: "1.0" as const }
       : null;
+    requiresBroadStagingClear = !error.recoverableLedgerId;
   }
-  if (singlePeriodStaging) {
+
+  const ledger = await readLocalValue<unknown>(deps.storageKeys.fullFiscalYearLedger);
+  const fullFiscalYearLedgerId = isFullFiscalYearLedger(ledger)
+    ? ledger.ledgerId
+    : recoverableFullFiscalYearLedgerId(ledger);
+  requiresBroadStagingClear ||= ledger !== null && !fullFiscalYearLedgerId;
+
+  if (requiresBroadStagingClear) {
+    const clearSignal = await discardAllFiledReturnsStaging();
+    if (clearSignal !== "filed-returns-opfs-cleared") {
+      return {
+        ok: false,
+        error:
+          "Pack could not clear temporary filed-return staging. Retry clearing local data before removing saved state.",
+      };
+    }
+  } else if (singlePeriodStaging) {
     const clearSignal = await discardSinglePeriodFiledReturnsZip(singlePeriodStaging.ledgerId);
     if (clearSignal !== "single-period-opfs-cleared") {
       return {
@@ -60,19 +79,7 @@ export async function clearPackLocalDataWithRecoveryGuard(
       };
     }
   }
-
-  const ledger = await readLocalValue<unknown>(deps.storageKeys.fullFiscalYearLedger);
-  const fullFiscalYearLedgerId = isFullFiscalYearLedger(ledger)
-    ? ledger.ledgerId
-    : recoverableFullFiscalYearLedgerId(ledger);
-  if (ledger && !fullFiscalYearLedgerId) {
-    return {
-      ok: false,
-      error:
-        "Pack could not verify retained fiscal-year staging. Retry clearing local data before removing saved state.",
-    };
-  }
-  if (fullFiscalYearLedgerId) {
+  if (!requiresBroadStagingClear && fullFiscalYearLedgerId) {
     const clearSignal = await discardFullFiscalYearFiledReturnsZip(fullFiscalYearLedgerId);
     if (clearSignal !== "full-fiscal-year-opfs-cleared") {
       return {

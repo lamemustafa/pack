@@ -108,6 +108,122 @@ describe("capturePortalBlobDownload", () => {
     expect(nativeClicks).toBe(0);
   });
 
+  it("preserves an exact HTTPS anchor handler while suppressing its native default", async () => {
+    const { documentRef } = installMainWorldDom(`
+      <a data-pack-gstr2b-capture-action="capture-1"
+         download="may.pdf"
+         href="https://gstr2b.gst.gov.in/synthetic.pdf">Download</a>
+    `);
+    let handlerCalls = 0;
+    let handlerObservedDefaultPrevented = true;
+    let handlerObservedDefaultPreventedAfterStop = false;
+    const control = documentRef.querySelector<HTMLAnchorElement>("a")!;
+    control.addEventListener("click", (event) => {
+      handlerCalls += 1;
+      handlerObservedDefaultPrevented = event.defaultPrevented;
+      event.stopImmediatePropagation();
+      handlerObservedDefaultPreventedAfterStop = event.defaultPrevented;
+      const artifact = documentRef.createElement("a");
+      artifact.href = `data:application/pdf;base64,${btoa("%PDF-1.7 synthetic")}`;
+      artifact.download = "may.pdf";
+      artifact.click();
+    });
+
+    const captured = await capturePortalBlobDownload(captureConfig());
+
+    expect(handlerCalls).toBe(1);
+    expect(handlerObservedDefaultPrevented).toBe(false);
+    expect(handlerObservedDefaultPreventedAfterStop).toBe(true);
+    expect(captured?.dataUrl).toContain("data:application/pdf;base64,");
+    expect(captured?.safeSignals).toContain("gstr2b-native-data-click-suppressed");
+  });
+
+  it("preserves ordinary stopPropagation semantics before suppressing native default", async () => {
+    const { documentRef } = installMainWorldDom(`
+      <a data-pack-gstr2b-capture-action="capture-1"
+         download="may.pdf"
+         href="https://gstr2b.gst.gov.in/synthetic.pdf">Download</a>
+    `);
+    let handlerObservedDefaultPreventedAfterStop = true;
+    let laterHandlerObservedDefaultPrevented = true;
+    const control = documentRef.querySelector<HTMLAnchorElement>("a")!;
+    control.addEventListener("click", (event) => {
+      event.stopPropagation();
+      handlerObservedDefaultPreventedAfterStop = event.defaultPrevented;
+    });
+    control.addEventListener("click", (event) => {
+      laterHandlerObservedDefaultPrevented = event.defaultPrevented;
+      const artifact = documentRef.createElement("a");
+      artifact.href = `data:application/pdf;base64,${btoa("%PDF-1.7 synthetic")}`;
+      artifact.download = "may.pdf";
+      artifact.click();
+    });
+
+    const captured = await capturePortalBlobDownload(captureConfig());
+
+    expect(handlerObservedDefaultPreventedAfterStop).toBe(false);
+    expect(laterHandlerObservedDefaultPrevented).toBe(false);
+    expect(captured?.dataUrl).toContain("data:application/pdf;base64,");
+  });
+
+  it("preserves a truthy dispatch result for a suppressed portal anchor", async () => {
+    const { documentRef } = installMainWorldDom(`
+      <button data-pack-gstr2b-capture-action="capture-1">Download</button>
+    `);
+    let dispatchResult = false;
+    documentRef.querySelector("button")?.addEventListener("click", () => {
+      const portalAnchor = documentRef.createElement("a");
+      portalAnchor.href = "https://gstr2b.gst.gov.in/synthetic.pdf";
+      portalAnchor.download = "may.pdf";
+      dispatchResult = portalAnchor.dispatchEvent(
+        new documentRef.defaultView!.MouseEvent("click", {
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+      if (!dispatchResult) return;
+      const artifact = documentRef.createElement("a");
+      artifact.href = `data:application/pdf;base64,${btoa("%PDF-1.7 synthetic")}`;
+      artifact.download = "may.pdf";
+      artifact.click();
+    });
+
+    const captured = await capturePortalBlobDownload(captureConfig());
+
+    expect(dispatchResult).toBe(true);
+    expect(captured?.dataUrl).toContain("data:application/pdf;base64,");
+  });
+
+  it("preserves a false dispatch result when the portal cancels the event", async () => {
+    const { documentRef } = installMainWorldDom(`
+      <button data-pack-gstr2b-capture-action="capture-1">Download</button>
+    `);
+    let dispatchResult = true;
+    documentRef.querySelector("button")?.addEventListener("click", () => {
+      const portalAnchor = documentRef.createElement("a");
+      portalAnchor.href = "https://gstr2b.gst.gov.in/synthetic.pdf";
+      portalAnchor.download = "may.pdf";
+      portalAnchor.addEventListener("click", (event) => {
+        event.preventDefault();
+        const artifact = documentRef.createElement("a");
+        artifact.href = `data:application/pdf;base64,${btoa("%PDF-1.7 synthetic")}`;
+        artifact.download = "may.pdf";
+        artifact.click();
+      });
+      dispatchResult = portalAnchor.dispatchEvent(
+        new documentRef.defaultView!.MouseEvent("click", {
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+
+    const captured = await capturePortalBlobDownload(captureConfig());
+
+    expect(dispatchResult).toBe(false);
+    expect(captured?.dataUrl).toContain("data:application/pdf;base64,");
+  });
+
   it("captures and suppresses pre-existing portal blob anchor downloads", async () => {
     const { documentRef, view } = installMainWorldDom(`
       <button data-pack-gstr2b-capture-action="capture-1">Download</button>
@@ -176,6 +292,23 @@ describe("capturePortalBlobDownload", () => {
       ]),
     });
     expect(nativeClicks).toBe(0);
+  });
+
+  it("captures a delayed window.open for a blob URL created by the exact action", async () => {
+    const { documentRef, view } = installMainWorldDom(`
+      <button data-pack-gstr2b-capture-action="capture-1">Download</button>
+    `);
+    documentRef.querySelector("button")?.addEventListener("click", () => {
+      const blobUrl = view.URL.createObjectURL(
+        new view.Blob(["%PDF-1.7 synthetic"], { type: "application/pdf" }),
+      );
+      view.setTimeout(() => view.open(blobUrl), 0);
+    });
+
+    const captured = await capturePortalBlobDownload(captureConfig());
+
+    expect(captured?.dataUrl).toContain("data:application/pdf;base64,");
+    expect(captured?.safeSignals).toContain("gstr2b-native-window-open-suppressed");
   });
 
   it("captures and suppresses PDFMake-style child-window blob navigation", async () => {

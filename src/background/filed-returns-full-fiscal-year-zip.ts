@@ -6,6 +6,7 @@ import {
   normaliseFiledReturnsArtifactType,
 } from "../core/filed-returns-artifacts";
 import {
+  clearAllOffscreenFiledReturnLedgers,
   clearOffscreenFiledReturnLedger,
   closeOffscreenBlobDocument,
   createOffscreenFiledReturnZipUrl,
@@ -107,6 +108,12 @@ export async function discardFullFiscalYearFiledReturnsZip(ledgerId: string): Pr
   const clearSignal = await clearStagedLedgerSignal(ledgerId, "full-fiscal-year");
   await closeOffscreenBlobDocument();
   return clearSignal;
+}
+
+export async function discardAllFiledReturnsStaging(): Promise<string> {
+  const cleared = (await clearAllOffscreenFiledReturnLedgers()) === "cleared";
+  await closeOffscreenBlobDocument();
+  return cleared ? "filed-returns-opfs-cleared" : "filed-returns-opfs-clear-failed";
 }
 
 async function exportStagedFiledReturnsZip({

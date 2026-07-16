@@ -7,6 +7,7 @@ import type { FiledReturnsFullFiscalYearLedger } from "../../src/core/contracts"
 import {
   createFullFiscalYearTargetId,
   isFullFiscalYearLedger,
+  markFullFiscalYearTargetRunning,
   nextRunnableFullFiscalYearTarget,
 } from "../../src/background/filed-returns-full-fiscal-year-ledger";
 import {
@@ -33,6 +34,33 @@ describe("full fiscal year ledger", () => {
     for (const status of ["blocked", "failed", "cancelled"] as const) {
       expect(nextRunnableFullFiscalYearTarget(createLedger([["April", status]]))).toBeNull();
     }
+  });
+
+  it("preserves durable staged-artifact signals when a target starts running", () => {
+    const ledger = createLedger([["April", "pending"]], {
+      artifactType: "PDF_AND_EXCEL",
+      returnType: "GSTR-2B",
+    });
+    ledger.targets[0] = {
+      ...ledger.targets[0]!,
+      safeSignals: [
+        "full-fiscal-year-opfs-staged:PDF",
+        "filed-return-artifact-downloaded:PDF",
+        "portal-system-error",
+      ],
+    };
+
+    const running = markFullFiscalYearTargetRunning(
+      ledger,
+      ledger.targets[0]!.targetId,
+      new Date("2026-06-24T00:01:00.000Z"),
+    );
+
+    expect(running.targets[0]?.safeSignals).toEqual([
+      "full-fiscal-year-opfs-staged:PDF",
+      "filed-return-artifact-downloaded:PDF",
+      "full-fiscal-year-target-running",
+    ]);
   });
 
   it("summarises saved pending running ledgers as explicit resume confirmation", () => {
