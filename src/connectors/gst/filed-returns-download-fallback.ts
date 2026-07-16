@@ -25,15 +25,11 @@ export function shouldFallBackAfterCaptureFailure(
   response: PackMessageResponse,
   target: FiledReturnsDownloadTarget,
 ): boolean {
-  if (
-    (target.returnType !== "GSTR-3B" && target.returnType !== "GSTR-2B") ||
-    target.forcePortalClick ||
-    !response.ok ||
-    !("flowStep" in response)
-  ) {
+  if (target.forcePortalClick || !response.ok || !("flowStep" in response)) {
     return false;
   }
   const signals = new Set(response.flowStep.safeSignals);
+  if (signals.has("filed-gstr1-excel-no-details-available")) return false;
   const signalPrefix = filedReturnScopedSignal(target.returnType, "");
   const scopedPrefix = signalPrefix.endsWith("-") ? signalPrefix.slice(0, -1) : signalPrefix;
   return [

@@ -14,6 +14,7 @@ import {
   summariseFullFiscalYearLedger,
   targetStatusFromFlowStep,
 } from "../../src/background/filed-returns-full-fiscal-year";
+import { responseForExistingLedger } from "../../src/background/filed-returns-full-fiscal-year-run-state";
 
 describe("full fiscal year ledger", () => {
   it("does not select later targets while an unconfirmed download needs acknowledgement", () => {
@@ -34,6 +35,29 @@ describe("full fiscal year ledger", () => {
     for (const status of ["blocked", "failed", "cancelled"] as const) {
       expect(nextRunnableFullFiscalYearTarget(createLedger([["April", status]]))).toBeNull();
     }
+  });
+
+  it("lets an explicitly approved target retry run while other restaging targets stay blocked", () => {
+    const ledger = createLedger([
+      ["April", "pending"],
+      ["May", "blocked"],
+    ]);
+    ledger.status = "running";
+    ledger.currentTargetId = ledger.targets[0]!.targetId;
+    ledger.targets[0] = {
+      ...ledger.targets[0]!,
+      safeSignals: ["full-fiscal-year-target-retry-approved"],
+    };
+
+    expect(
+      responseForExistingLedger(ledger, new Date("2026-06-24T00:01:00.000Z"), {
+        allowExistingLedgerResume: true,
+      }),
+    ).toBeNull();
+    expect(responseForExistingLedger(ledger, new Date("2026-06-24T00:01:00.000Z"))).toMatchObject({
+      ok: true,
+      flowStep: { state: "blocked" },
+    });
   });
 
   it("preserves durable staged-artifact signals when a target starts running", () => {

@@ -5,6 +5,8 @@ import {
   verifyFiledReturnZipBytes,
 } from "./lib/filed-return-zip-verifier.mjs";
 
+const SUPPORTED_RETURN_TYPES = new Set(["GSTR-1", "GSTR-2B", "GSTR-3B"]);
+
 try {
   const { returnType, zipPath } = parseArgs(process.argv.slice(2));
   if (!zipPath) {
@@ -38,6 +40,9 @@ function parseArgs(args) {
     const arg = args[index];
     if (arg === "--return-type") {
       returnType = args[index + 1] ?? null;
+      if (!returnType || !SUPPORTED_RETURN_TYPES.has(returnType)) {
+        throw new Error("--return-type must be one of GSTR-1, GSTR-2B, or GSTR-3B.");
+      }
       index += 1;
       continue;
     }

@@ -79,6 +79,16 @@ describe("filed return ZIP verifier", () => {
     });
   });
 
+  it("rejects an unsupported explicit return type instead of bypassing specific checks", async () => {
+    const zipPath = await writeZipFixture([{ path: "may.xlsx", bytes: syntheticXlsx() }]);
+
+    const result = runVerifier(zipPath, ["--return-type", "GSTR2B"]);
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("--return-type must be one of GSTR-1, GSTR-2B, or GSTR-3B.");
+  });
+
   it("rejects ZIP entries that embed the browser download path", async () => {
     const unsafePath = "complyeaze-pack/gst/fy/gstr-2b/may.pdf";
     const zipPath = await writeZipFixture([{ path: unsafePath, bytes: syntheticPdf() }]);
@@ -160,8 +170,11 @@ async function writeZipFixture(
   return zipPath;
 }
 
-function runVerifier(zipPath: string): { status: number | null; stdout: string; stderr: string } {
-  return spawnSync(process.execPath, [SCRIPT_PATH, zipPath], {
+function runVerifier(
+  zipPath: string,
+  args: string[] = [],
+): { status: number | null; stdout: string; stderr: string } {
+  return spawnSync(process.execPath, [SCRIPT_PATH, ...args, zipPath], {
     cwd: process.cwd(),
     encoding: "utf8",
   });

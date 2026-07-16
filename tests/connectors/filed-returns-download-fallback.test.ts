@@ -41,18 +41,34 @@ describe("filed-return capture fallback", () => {
     });
   });
 
-  it("does not add a second portal click for GSTR-1 capture failures", () => {
+  it("uses one target-bound GSTR-1 portal click after a capture timeout", () => {
     const response = captureFailure("filed-gstr1-main-world-capture-timeout");
 
-    expect(shouldFallBackAfterCaptureFailure(response, BASE_TARGET)).toBe(false);
+    expect(shouldFallBackAfterCaptureFailure(response, BASE_TARGET)).toBe(true);
+    expect(withCaptureFallbackSignal(response, BASE_TARGET)).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining(["filed-gstr1-capture-fallback-portal-click"]),
+      } satisfies Partial<PortalFlowStepResult>,
+    });
   });
 
-  it("keeps GSTR-1 capture failures out of the fallback", () => {
+  it("uses one target-bound GSTR-1 portal click after an Excel capture failure", () => {
     expect(
       shouldFallBackAfterCaptureFailure(captureFailure("filed-gstr1-blob-capture-failed"), {
         ...BASE_TARGET,
         artifactType: "EXCEL",
       }),
+    ).toBe(true);
+  });
+
+  it("does not click again when GSTR-1 reports that Excel details are unavailable", () => {
+    const response = captureFailure("filed-gstr1-main-world-capture-timeout");
+    if (response.ok && "flowStep" in response) {
+      response.flowStep.safeSignals.push("filed-gstr1-excel-no-details-available");
+    }
+
+    expect(
+      shouldFallBackAfterCaptureFailure(response, { ...BASE_TARGET, artifactType: "EXCEL" }),
     ).toBe(false);
   });
 
@@ -81,6 +97,15 @@ describe("filed-return capture fallback", () => {
         ...BASE_TARGET,
         forcePortalClick: true,
         returnType: "GSTR-2B",
+      }),
+    ).toBe(false);
+  });
+
+  it("never adds another GSTR-1 fallback after the target-bound portal click", () => {
+    expect(
+      shouldFallBackAfterCaptureFailure(captureFailure("filed-gstr1-main-world-capture-timeout"), {
+        ...BASE_TARGET,
+        forcePortalClick: true,
       }),
     ).toBe(false);
   });

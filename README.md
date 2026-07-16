@@ -179,6 +179,9 @@ Pack uses Chrome extension storage only inside the current browser profile.
 - `pack:full-fiscal-year-ledger`: local-only full fiscal year run status with
   financial year, period, return type, target status, safe messages/signals,
   attempts, and timestamps only;
+- `pack:single-period-staging`: a short-lived opaque local ledger identifier used
+  to clear locally staged combined-download artifacts without storing filenames
+  or GST Portal metadata;
 - `pack:filed-returns-target-review`: local-only single-period unresolved
   download review state with financial year, period, return type, safe
   messages/signals, and timestamps only;

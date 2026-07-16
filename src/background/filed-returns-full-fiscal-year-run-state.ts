@@ -100,7 +100,14 @@ export function responseForExistingLedger(
     };
   }
 
-  if (hasActionRequiredFullFiscalYearTarget(ledger)) {
+  const hasApprovedPendingRetry =
+    options.allowExistingLedgerResume &&
+    ledger.targets.some(
+      (target) =>
+        target.status === "pending" &&
+        target.safeSignals.includes("full-fiscal-year-target-retry-approved"),
+    );
+  if (hasActionRequiredFullFiscalYearTarget(ledger) && !hasApprovedPendingRetry) {
     const displayLedger = coerceInconsistentCompleteLedger(ledger, now);
     const summary = summariseFullFiscalYearLedger(displayLedger, now);
     return { ok: true, flowStep: summary.flowStep, flowSummary: summary };
