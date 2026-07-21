@@ -37,25 +37,22 @@ const expectedIcons = {
 };
 const expectedPackagedBrandAssets = [
   "favicon.ico",
+  "brand/pack-extension-icon.svg",
+  "brand/pack-favicon.svg",
   "icons/icon-256.png",
   "icons/icon-512.png",
   "brand/pack-icon.svg",
   "brand/pack-logo.svg",
+  "brand/pack-logo-header.svg",
   "brand/pack-logo-hero.svg",
   "brand/pack-logo-monochrome.svg",
   "brand/pack-logo-monochrome-outlined.svg",
   "brand/pack-logo-outlined.svg",
   "brand/pack-logo-reversed.svg",
   "brand/pack-logo-reversed-outlined.svg",
+  "brand/pack-mark.svg",
 ];
-const allowLocalGstr1Debugger = process.env.PACK_ALLOW_LOCAL_GSTR1_DEBUGGER === "1";
-const expectedPermissions = [
-  "downloads",
-  "offscreen",
-  "scripting",
-  "storage",
-  ...(allowLocalGstr1Debugger ? ["debugger"] : []),
-];
+const expectedPermissions = ["downloads", "offscreen", "scripting", "storage"];
 const expectedHostPermissions = [
   "https://www.gst.gov.in/*",
   "https://services.gst.gov.in/*",
@@ -115,15 +112,17 @@ for (const permission of expectedPermissions) {
 for (const permission of manifest.permissions ?? []) {
   if (!expectedPermissions.includes(permission))
     throw new Error(`Unexpected permission present: ${permission}`);
-  if (
-    forbiddenPermissions.has(permission) &&
-    !(allowLocalGstr1Debugger && permission === "debugger")
-  )
+  if (forbiddenPermissions.has(permission))
     throw new Error(`Forbidden permission present: ${permission}`);
 }
 
+assertExactStringList(manifest.permissions, expectedPermissions, "permissions");
+
 if ((manifest.optional_permissions ?? []).length > 0) {
   throw new Error("Pack must not expose optional permissions.");
+}
+if ((manifest.optional_host_permissions ?? []).length > 0) {
+  throw new Error("Pack must not expose optional host permissions.");
 }
 
 if ((manifest.host_permissions ?? []).length !== expectedHostPermissions.length) {
@@ -135,19 +134,14 @@ for (const host of manifest.host_permissions ?? []) {
     throw new Error(`Unexpected host permission: ${host}`);
   }
 }
+assertExactStringList(manifest.host_permissions, expectedHostPermissions, "host permissions");
 
 if (manifest.externally_connectable)
   throw new Error("Pack V0 must not expose externally_connectable.");
 
-const extensionPagesCsp = manifest.content_security_policy?.extension_pages ?? "";
-if (!extensionPagesCsp.includes("script-src 'self'")) {
-  throw new Error("Extension CSP must restrict scripts to 'self'.");
-}
-if (!extensionPagesCsp.includes("object-src 'self'")) {
-  throw new Error("Extension CSP must restrict objects to 'self'.");
-}
-if (extensionPagesCsp.includes("unsafe-eval")) {
-  throw new Error("Extension CSP must not allow unsafe-eval.");
+const extensionPagesCsp = manifest.content_security_policy?.extension_pages;
+if (extensionPagesCsp !== "script-src 'self'; object-src 'self'") {
+  throw new Error("Extension CSP must exactly match Pack's self-only policy.");
 }
 
 const forbiddenBuiltArtifactPatterns = [
@@ -242,7 +236,9 @@ const forbiddenRawArtifactHandoffPatterns = [
 ];
 
 for (const file of await listFiles(outputDir)) {
-  assertNoHarnessPolicyLeaks(path.relative(outputDir, file), file);
+  const relativeFile = path.relative(outputDir, file);
+  assertAllowedPackagedFile(relativeFile);
+  assertNoHarnessPolicyLeaks(relativeFile, file);
   if (!/\.(js|json|html|css|svg)$/.test(file)) continue;
   const contents = await readFile(file, "utf8");
   if (/\.(js|json|html|css)$/.test(file)) {
@@ -265,6 +261,39 @@ for (const file of await listFiles(outputDir)) {
     assertNoHarnessPolicyLeaks(contents, file);
     assertNoPathfulGstPortalUrl(contents, file);
   }
+}
+
+function assertExactStringList(actual, expected, label) {
+  if (!Array.isArray(actual) || actual.some((value) => typeof value !== "string")) {
+    throw new Error(`Pack ${label} must be a string list.`);
+  }
+  const normalizedActual = [...actual].sort();
+  const normalizedExpected = [...expected].sort();
+  if (JSON.stringify(normalizedActual) !== JSON.stringify(normalizedExpected)) {
+    throw new Error(`Pack ${label} must exactly match the approved allow-list.`);
+  }
+}
+
+function assertAllowedPackagedFile(relativeFile) {
+  const normalized = relativeFile.replaceAll(path.sep, "/");
+  const exactFiles = new Set([
+    "manifest.json",
+    "background.js",
+    "offscreen.html",
+    "options.html",
+    "popup.html",
+    "favicon.ico",
+    "content-scripts/content.js",
+    ...expectedPackagedBrandAssets,
+    ...Object.values(expectedIcons),
+  ]);
+  if (exactFiles.has(normalized)) return;
+  if (/^chunks\/[A-Za-z0-9_-]+\.js$/.test(normalized)) return;
+  if (/^assets\/[A-Za-z0-9_-]+\.js$/.test(normalized)) return;
+  if (/^assets\/[A-Za-z0-9_-]+\.css$/.test(normalized)) return;
+  if (/^icons\/(?:favicon|icon)-[0-9]+\.png$/.test(normalized)) return;
+  if (/^icons\/pack-extension-icon-light-[0-9]+\.png$/.test(normalized)) return;
+  throw new Error(`Unexpected packaged file: ${normalized}`);
 }
 
 for (const file of await listFiles(path.join(process.cwd(), "src"))) {

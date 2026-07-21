@@ -71,33 +71,7 @@ describe("extension package verifier", () => {
     expect(result.output).toContain("debugger");
   });
 
-  it("accepts debugger only for an explicitly allowed local GSTR-1 package", async () => {
-    const outputDir = await createValidPackage();
-    const manifestPath = path.join(outputDir, "manifest.json");
-    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
-      permissions: string[];
-    };
-    await writeFile(
-      manifestPath,
-      `${JSON.stringify(
-        {
-          ...manifest,
-          permissions: [...manifest.permissions, "debugger"],
-        },
-        null,
-        2,
-      )}\n`,
-    );
-
-    const result = await runVerifier(outputDir, {
-      PACK_ALLOW_LOCAL_GSTR1_DEBUGGER: "1",
-    });
-
-    expect(result.status).toBe(0);
-    expect(result.output).toContain("Pack WXT extension package verification passed.");
-  });
-
-  it("rejects optional debugger even for the local GSTR-1 package verifier", async () => {
+  it("rejects optional permissions and optional hosts", async () => {
     const outputDir = await createValidPackage();
     const manifestPath = path.join(outputDir, "manifest.json");
     const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<string, unknown>;
@@ -107,6 +81,7 @@ describe("extension package verifier", () => {
         {
           ...manifest,
           optional_permissions: ["debugger"],
+          optional_host_permissions: ["https://example.com/*"],
         },
         null,
         2,
@@ -117,6 +92,40 @@ describe("extension package verifier", () => {
 
     expect(result.status).not.toBe(0);
     expect(result.output).toContain("optional permissions");
+  });
+
+  it("rejects a CSP that merely contains Pack's directives alongside unsafe ones", async () => {
+    const outputDir = await createValidPackage();
+    const manifestPath = path.join(outputDir, "manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<string, unknown>;
+    await writeFile(
+      manifestPath,
+      `${JSON.stringify(
+        {
+          ...manifest,
+          content_security_policy: {
+            extension_pages: "script-src 'self' https://example.com; object-src 'self'",
+          },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("CSP must exactly match");
+  });
+
+  it("rejects an unreviewed packaged file", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(outputDir, "assets/unreviewed.wasm", "binary");
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("Unexpected packaged file");
   });
 
   it("rejects analytics, crash-reporting, and replay markers in packaged artifacts", async () => {
@@ -477,16 +486,20 @@ async function createValidPackage(): Promise<string> {
   }
   for (const assetPath of [
     "favicon.ico",
+    "brand/pack-extension-icon.svg",
+    "brand/pack-favicon.svg",
     "icons/icon-256.png",
     "icons/icon-512.png",
     "brand/pack-icon.svg",
     "brand/pack-logo.svg",
+    "brand/pack-logo-header.svg",
     "brand/pack-logo-hero.svg",
     "brand/pack-logo-monochrome.svg",
     "brand/pack-logo-monochrome-outlined.svg",
     "brand/pack-logo-outlined.svg",
     "brand/pack-logo-reversed.svg",
     "brand/pack-logo-reversed-outlined.svg",
+    "brand/pack-mark.svg",
   ]) {
     await writePackageFile(outputDir, assetPath, assetPath.endsWith(".svg") ? "<svg />" : "asset");
   }
