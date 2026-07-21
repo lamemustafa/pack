@@ -11,7 +11,7 @@ export function detectCadenceUnresolvedNoRecordEvidence(
   scopeId: string,
   searchSettled: boolean,
 ): PortalFlowStepResult | null {
-  if (scope.returnType !== "GSTR-3B") return null;
+  if (scope.returnType !== "GSTR-3B" && scope.returnType !== "GSTR-1") return null;
   const resultsContainer = findSettledNoRecordResultsContainer(documentRef);
   if (!resultsContainer) return null;
   if (!searchSettled) return null;
@@ -25,7 +25,7 @@ export function detectCadenceUnresolvedNoRecordEvidence(
     state: "download-unconfirmed",
     safeSignals: ["filed-return-no-record-cadence-unresolved"],
     safeMessage:
-      "The GST Portal showed no record for the selected GSTR-3B period, but Pack cannot establish the applicable filing cadence. Review the period on the portal before treating it as unavailable.",
+      `The GST Portal showed no record for the selected ${scope.returnType} period, but Pack cannot establish the applicable filing cadence. Review the period on the portal before treating it as unavailable.`,
     userAction: {
       type: "RETRY_PORTAL_GENERATION",
       message:

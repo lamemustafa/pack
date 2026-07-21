@@ -5388,6 +5388,35 @@ describe("filed returns guided flow", () => {
     expect(result.safeSignals).not.toContain("filed-return-result-row-not-found");
   });
 
+  it("routes a settled GSTR-1 no-records result to review when cadence is unresolved", async () => {
+    const scope = { ...DEFAULT_SCOPE, returnType: "GSTR-1" as const };
+    const documentRef = createDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <select id="finYr"><option selected>2025-26</option></select>
+          <select id="optValue"><option selected>Monthly</option></select>
+          <select id="month"><option selected>March</option></select>
+          <select id="retTyp"><option selected>GSTR1</option></select>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+        <section aria-label="Search results">
+          <p>No records found</p>
+        </section>
+      </main>
+    `);
+    markPackSubmittedSearch(documentRef, scope);
+
+    const result = await runFiledReturnsDownloadStep(documentRef, scope);
+
+    expect(result).toMatchObject({
+      state: "download-unconfirmed",
+      safeSignals: expect.arrayContaining(["filed-return-no-record-cadence-unresolved"]),
+      safeMessage: expect.stringContaining("GSTR-1"),
+    });
+    expect(result.safeSignals).not.toContain("filed-return-positively-not-filed");
+  });
+
   it("checks no-record evidence before reselecting an already matching filter form", async () => {
     const documentRef = createDocument(`
       <main>
