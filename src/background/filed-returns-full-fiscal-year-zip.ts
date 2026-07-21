@@ -19,6 +19,10 @@ import {
 } from "./filed-returns-download-filename";
 import { clearSinglePeriodStagingRecord } from "./filed-returns-artifact-progress";
 import {
+  createFullFiscalYearFiledReturnsReceipt,
+  createSinglePeriodFiledReturnsReceipt,
+} from "../core/filed-returns-run-receipt";
+import {
   armFiledReturnsAction,
   bindFiledReturnsActionDownload,
   settleFiledReturnsAction,
@@ -74,6 +78,7 @@ export async function exportFullFiscalYearZip(
       "Pack staged the fiscal-year files, but could not prepare the final zip export.",
     zipFilename: safeFullFiscalYearZipFilename(ledger.scope),
     expectedZipEntryCount: staging.expectedArtifactCount,
+    receipt: createFullFiscalYearFiledReturnsReceipt(ledger),
     ...(options.actionJournalKey ? { actionJournalKey: options.actionJournalKey } : {}),
     ...(options.onDownloadStarted ? { onDownloadStarted: options.onDownloadStarted } : {}),
   });
@@ -103,6 +108,7 @@ export async function exportSinglePeriodFiledReturnsZip({
     zipFailedMessage:
       "Pack staged the selected filed-return files, but could not prepare the final zip export.",
     zipFilename: safeSinglePeriodZipFilename(scope),
+    receipt: createSinglePeriodFiledReturnsReceipt(scope),
     ...(actionJournalKey ? { actionJournalKey } : {}),
   });
 }
@@ -138,6 +144,7 @@ async function exportStagedFiledReturnsZip({
   zipFilename,
   expectedZipEntryCount,
   onDownloadStarted,
+  receipt,
 }: {
   actionJournalKey?: string;
   clearSignalPrefix: "full-fiscal-year" | "single-period";
@@ -151,12 +158,14 @@ async function exportStagedFiledReturnsZip({
   zipFilename: string;
   expectedZipEntryCount?: number;
   onDownloadStarted?: () => Promise<void>;
+  receipt?: import("../core/filed-returns-run-receipt").FiledReturnsRunReceiptV1;
 }): Promise<PortalFlowStepResult> {
   const zip = await createOffscreenFiledReturnZipUrl(ledgerId, {
     returnType: scope.returnType,
     artifactTypes: concreteFiledReturnsArtifactTypes(
       normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType),
     ),
+    ...(receipt ? { receipt } : {}),
   });
   if (!zip) {
     const stagedLedgerSignal =
@@ -185,7 +194,8 @@ async function exportStagedFiledReturnsZip({
     };
   }
 
-  if (typeof expectedZipEntryCount === "number" && zip.zipEntryCount !== expectedZipEntryCount) {
+  const artifactEntryCount = zip.artifactEntryCount ?? zip.zipEntryCount;
+  if (typeof expectedZipEntryCount === "number" && artifactEntryCount !== expectedZipEntryCount) {
     await revokeOffscreenBlobUrl(zip.blobUrl);
     await closeOffscreenBlobDocument();
     return {
@@ -195,7 +205,7 @@ async function exportStagedFiledReturnsZip({
         ...completeStep.safeSignals,
         "full-fiscal-year-zip-entry-count-mismatch",
         `full-fiscal-year-zip-expected-entry-count:${expectedZipEntryCount}`,
-        `full-fiscal-year-zip-actual-entry-count:${zip.zipEntryCount}`,
+        `full-fiscal-year-zip-actual-entry-count:${artifactEntryCount}`,
         "full-fiscal-year-opfs-retained",
       ],
       safeMessage:
@@ -353,6 +363,7 @@ async function exportStagedFiledReturnsZip({
           ...completeStep.safeSignals,
           "single-period-zip-download-started",
           "single-period-zip-downloaded",
+          `single-period-zip-artifact-entry-count:${artifactEntryCount}`,
           `single-period-zip-entry-count:${zip.zipEntryCount}`,
           stagedLedgerSignal,
           "single-period-opfs-retained",
@@ -375,6 +386,7 @@ async function exportStagedFiledReturnsZip({
       ...completeStep.safeSignals,
       `${clearSignalPrefix}-zip-download-started`,
       `${clearSignalPrefix}-zip-downloaded`,
+      `${clearSignalPrefix}-zip-artifact-entry-count:${artifactEntryCount}`,
       `${clearSignalPrefix}-zip-entry-count:${zip.zipEntryCount}`,
       stagedLedgerSignal,
       ...observed.safeSignals,

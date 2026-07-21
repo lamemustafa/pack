@@ -240,6 +240,7 @@ describe("offscreen Blob URL entrypoint", () => {
       requestId: "zip-request",
       blobUrl: "blob:pack-test/1",
       zipEntryCount: 1,
+      artifactEntryCount: 1,
     });
     expect(URL.createObjectURL).toHaveBeenCalledWith(
       expect.objectContaining({ type: "application/zip" }),
@@ -260,6 +261,57 @@ describe("offscreen Blob URL entrypoint", () => {
       cleared: true,
     });
     expect(opfsFiles.has("filed-return-packs/ledger-1/may.pdf")).toBe(false);
+  });
+
+  it("adds only an allow-listed receipt to an explicit archive ZIP", async () => {
+    await loadOffscreenEntrypoint();
+
+    await sendOffscreenMessage({
+      type: "PACK_OFFSCREEN_STAGE_FILED_RETURN",
+      target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+      payload: {
+        requestId: "stage-receipt-request",
+        ledgerId: "ledger-receipt",
+        zipPath: "complyeaze-pack/gst/2025-26/gstr-3b/may.pdf",
+        returnType: "GSTR-3B",
+        artifactType: "PDF",
+        dataUrl: `data:application/pdf;base64,${btoa("%PDF-1.7 staged\\n%%EOF\\n")}`,
+      },
+    });
+
+    const zip = await sendOffscreenMessage({
+      type: "PACK_OFFSCREEN_CREATE_FILED_RETURN_ZIP",
+      target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+      payload: {
+        requestId: "zip-receipt-request",
+        ledgerId: "ledger-receipt",
+        receipt: {
+          schemaVersion: "1.0",
+          createdAt: "2026-07-21T00:00:00.000Z",
+          archiveScope: "single-period",
+          returnType: "GSTR-3B",
+          financialYear: "2025-26",
+          artifactTypes: ["PDF"],
+          targetCount: 1,
+          artifactCount: 1,
+          targets: [
+            {
+              targetId: "GSTR-3B:2025-26:May",
+              period: "May",
+              status: "prepared",
+            },
+          ],
+        },
+      },
+    });
+
+    expect(zip).toEqual({
+      ok: true,
+      requestId: "zip-receipt-request",
+      blobUrl: "blob:pack-test/1",
+      zipEntryCount: 2,
+      artifactEntryCount: 1,
+    });
   });
 
   it("clears every Pack filed-return staging directory on explicit reset", async () => {

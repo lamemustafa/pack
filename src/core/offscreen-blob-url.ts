@@ -2,6 +2,10 @@ import { isFiledReturnsConcreteArtifactType } from "./filed-returns-artifacts";
 import { isFiledReturnsReturnType } from "./filed-returns-return-types";
 import type { FiledReturnsConcreteArtifactType } from "./filed-returns-artifacts";
 import type { FiledReturnsReturnType } from "./filed-returns-return-types";
+import {
+  isFiledReturnsRunReceiptV1,
+  type FiledReturnsRunReceiptV1,
+} from "./filed-returns-run-receipt";
 
 export const PACK_OFFSCREEN_BLOB_URL_TARGET = "pack-offscreen-blob-url";
 export const PACK_OFFSCREEN_DATA_URL_MAX_LENGTH = 50 * 1024 * 1024;
@@ -45,6 +49,7 @@ export interface PackOffscreenCreateFiledReturnZipMessage {
     ledgerId: string;
     expectedReturnType?: FiledReturnsReturnType;
     expectedArtifactTypes?: FiledReturnsConcreteArtifactType[];
+    receipt?: FiledReturnsRunReceiptV1;
   };
 }
 
@@ -95,6 +100,7 @@ export type PackOffscreenBlobUrlResponse =
       requestId: string;
       blobUrl: string;
       zipEntryCount: number;
+      artifactEntryCount?: number;
     }
   | {
       ok: true;
@@ -143,7 +149,8 @@ export function isPackOffscreenBlobUrlMessage(
       (input.payload.expectedArtifactTypes === undefined ||
         (Array.isArray(input.payload.expectedArtifactTypes) &&
           input.payload.expectedArtifactTypes.length > 0 &&
-          input.payload.expectedArtifactTypes.every(isFiledReturnsConcreteArtifactType)))
+          input.payload.expectedArtifactTypes.every(isFiledReturnsConcreteArtifactType))) &&
+      (input.payload.receipt === undefined || isFiledReturnsRunReceiptV1(input.payload.receipt))
     );
   }
   if (input.type === "PACK_OFFSCREEN_CLEAR_FILED_RETURN_LEDGER") {

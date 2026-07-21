@@ -5,6 +5,7 @@ import {
 } from "../core/offscreen-blob-url";
 import type { FiledReturnsConcreteArtifactType } from "../core/filed-returns-artifacts";
 import type { FiledReturnsReturnType } from "../core/filed-returns-return-types";
+import type { FiledReturnsRunReceiptV1 } from "../core/filed-returns-run-receipt";
 
 const OFFSCREEN_DOCUMENT_PATH = "offscreen.html";
 const OFFSCREEN_JUSTIFICATION =
@@ -63,8 +64,9 @@ export async function createOffscreenFiledReturnZipUrl(
   expected?: {
     returnType: FiledReturnsReturnType;
     artifactTypes: FiledReturnsConcreteArtifactType[];
+    receipt?: FiledReturnsRunReceiptV1;
   },
-): Promise<{ blobUrl: string; zipEntryCount: number } | null> {
+): Promise<{ artifactEntryCount?: number; blobUrl: string; zipEntryCount: number } | null> {
   const requestId = createRequestId();
   await ensureOffscreenDocument();
   const response = await browser.runtime.sendMessage({
@@ -77,12 +79,19 @@ export async function createOffscreenFiledReturnZipUrl(
         ? {
             expectedReturnType: expected.returnType,
             expectedArtifactTypes: expected.artifactTypes,
+            ...(expected.receipt ? { receipt: expected.receipt } : {}),
           }
         : {}),
     },
   });
   return isZipResponse(response, requestId)
-    ? { blobUrl: response.blobUrl, zipEntryCount: response.zipEntryCount }
+    ? {
+        blobUrl: response.blobUrl,
+        zipEntryCount: response.zipEntryCount,
+        ...(typeof response.artifactEntryCount === "number"
+          ? { artifactEntryCount: response.artifactEntryCount }
+          : {}),
+      }
     : null;
 }
 
@@ -239,7 +248,13 @@ function toStageResult(response: unknown, requestId: string): OffscreenFiledRetu
 function isZipResponse(
   response: unknown,
   requestId: string,
-): response is { ok: true; requestId: string; blobUrl: string; zipEntryCount: number } {
+): response is {
+  ok: true;
+  requestId: string;
+  blobUrl: string;
+  zipEntryCount: number;
+  artifactEntryCount?: number;
+} {
   if (typeof response !== "object" || response === null) return false;
   const record = response as Record<string, unknown>;
   return (
@@ -248,7 +263,12 @@ function isZipResponse(
     typeof record.blobUrl === "string" &&
     typeof record.zipEntryCount === "number" &&
     Number.isInteger(record.zipEntryCount) &&
-    record.zipEntryCount > 0
+    record.zipEntryCount > 0 &&
+    (record.artifactEntryCount === undefined ||
+      (typeof record.artifactEntryCount === "number" &&
+        Number.isInteger(record.artifactEntryCount) &&
+        record.artifactEntryCount > 0 &&
+        record.artifactEntryCount <= record.zipEntryCount))
   );
 }
 

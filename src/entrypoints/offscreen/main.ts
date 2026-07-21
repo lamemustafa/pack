@@ -70,7 +70,13 @@ async function handleMessage(
           errorCategory: "zip-invalid-entry",
         };
       }
-      const zipBytes = createZip(entries);
+      const receiptEntry = message.payload.receipt
+        ? {
+            path: "PACK-RECEIPT.json",
+            bytes: new TextEncoder().encode(JSON.stringify(message.payload.receipt, null, 2)),
+          }
+        : null;
+      const zipBytes = createZip(receiptEntry ? [...entries, receiptEntry] : entries);
       const zipBuffer = new ArrayBuffer(zipBytes.byteLength);
       new Uint8Array(zipBuffer).set(zipBytes);
       const zipBlob = new Blob([zipBuffer], { type: "application/zip" });
@@ -80,7 +86,8 @@ async function handleMessage(
         ok: true,
         requestId: message.payload.requestId,
         blobUrl,
-        zipEntryCount: entries.length,
+        zipEntryCount: entries.length + (receiptEntry ? 1 : 0),
+        artifactEntryCount: entries.length,
       };
     } catch {
       return {
