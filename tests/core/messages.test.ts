@@ -50,6 +50,8 @@ describe("message boundary", () => {
     expect(isPackMessage({ type: "PACK_GET_FILED_RETURNS_OBSERVATION" })).toBe(true);
     expect(isPackMessage({ type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" })).toBe(true);
     expect(isPackMessage({ type: "PACK_GET_ACTIVE_FILED_RETURNS_RUN" })).toBe(true);
+    expect(isPackMessage({ type: "PACK_GET_LOCAL_PROCESSING_ACKNOWLEDGEMENT" })).toBe(true);
+    expect(isPackMessage({ type: "PACK_ACKNOWLEDGE_LOCAL_PROCESSING" })).toBe(true);
     expect(isPackMessage({ type: "PACK_ACKNOWLEDGE_INTERRUPTED_RUN" })).toBe(true);
     expect(isPackMessage({ type: "PACK_PING" })).toBe(true);
     expect(isPackMessage({ type: "PACK_CONTENT_PING_V2" })).toBe(true);

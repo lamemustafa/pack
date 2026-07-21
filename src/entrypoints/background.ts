@@ -20,6 +20,10 @@ import {
 } from "../background/filed-returns-flow-runner";
 import { resolveUnconfirmedFiledReturnsDownload } from "../background/filed-returns-target-review";
 import { clearPackLocalDataWithRecoveryGuard } from "../background/local-data";
+import {
+  acknowledgeLocalProcessing,
+  readLocalProcessingAcknowledgement,
+} from "../background/local-processing-acknowledgement";
 import { startSyntheticDemo } from "../background/synthetic-demo";
 import { runDownloadPromptProbe } from "../background/download-prompt-probe";
 import { selectFiledReturnsFiltersInMainWorldForTab } from "../background/main-world-filed-returns-filter-executor";
@@ -155,11 +159,28 @@ async function handleMessage(
           storageKeys: { activeRun: PACK_LOCAL_STORAGE_KEYS.activeFiledReturnsRun },
         }),
       };
+    case "PACK_GET_LOCAL_PROCESSING_ACKNOWLEDGEMENT":
+      return {
+        ok: true,
+        localProcessingAcknowledgement: await readLocalProcessingAcknowledgement(
+          PACK_LOCAL_STORAGE_KEYS.localProcessingAcknowledgement,
+        ),
+      };
+    case "PACK_ACKNOWLEDGE_LOCAL_PROCESSING":
+      return {
+        ok: true,
+        localProcessingAcknowledgement: await acknowledgeLocalProcessing(
+          PACK_LOCAL_STORAGE_KEYS.localProcessingAcknowledgement,
+        ),
+      };
     case "PACK_ACKNOWLEDGE_INTERRUPTED_RUN":
       return acknowledgeInterruptedFiledReturnsRun({
         storageKeys: { activeRun: PACK_LOCAL_STORAGE_KEYS.activeFiledReturnsRun },
       });
     case "PACK_RETRY_FILED_RETURNS_TARGET":
+      if (!(await hasCurrentLocalProcessingAcknowledgement())) {
+        return localProcessingAcknowledgementRequiredResponse();
+      }
       return retryFiledReturnsTargetDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
     case "PACK_RETRY_FULL_FISCAL_YEAR_TARGET":
       return pausedSavedFullFiscalYearResponse();
@@ -184,10 +205,16 @@ async function handleMessage(
         filedReturnsFlowRunnerDeps(),
       );
     case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
+      if (!(await hasCurrentLocalProcessingAcknowledgement())) {
+        return localProcessingAcknowledgementRequiredResponse();
+      }
       if (isFullFiscalYearScope(message.payload))
         return fullFiscalYearPausedResponse(message.payload);
       return startFiledReturnsDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
     case "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW":
+      if (!(await hasCurrentLocalProcessingAcknowledgement())) {
+        return localProcessingAcknowledgementRequiredResponse();
+      }
       if (isFullFiscalYearScope(message.payload.scope)) {
         return fullFiscalYearPausedResponse(message.payload.scope);
       }
@@ -214,6 +241,22 @@ async function handleMessage(
   }
 
   return { ok: false, error: "Unsupported Pack message." };
+}
+
+async function hasCurrentLocalProcessingAcknowledgement(): Promise<boolean> {
+  return (
+    (await readLocalProcessingAcknowledgement(
+      PACK_LOCAL_STORAGE_KEYS.localProcessingAcknowledgement,
+    )) !== null
+  );
+}
+
+function localProcessingAcknowledgementRequiredResponse(): PackMessageResponse {
+  return {
+    ok: false,
+    error:
+      "Review and acknowledge Pack's local-processing boundary before starting or retrying a GST download.",
+  };
 }
 
 async function pausedSavedFullFiscalYearResponse(): Promise<PackMessageResponse> {

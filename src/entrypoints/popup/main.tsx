@@ -10,6 +10,7 @@ import { hasInlinePrimaryAction, InlineStatus } from "./inline-status";
 import { PackSummary } from "./pack-summary";
 import { getPopupPresentationState, type PopupPresentationState } from "./presentation-state";
 import { RecoveryActions, hasRecoveryActions } from "./recovery-actions";
+import { LocalProcessingAcknowledgement } from "./local-processing-acknowledgement";
 import { usePackPopupController } from "./use-pack-popup-controller";
 
 function App() {
@@ -59,6 +60,11 @@ function App() {
             showPrimaryAction={false}
           />
           <PackSummary scope={popup.scope} summary={popup.scopedFlowSummary} />
+          <LocalProcessingAcknowledgement
+            acknowledged={popup.localProcessingAcknowledged}
+            busy={popup.effectiveBusy === "acknowledge-local-processing"}
+            onAcknowledge={() => void popup.acknowledgeLocalProcessing()}
+          />
           <InlineStatus
             busy={popup.effectiveBusy}
             onOpenPortal={() => void browser.tabs.create({ url: "https://www.gst.gov.in" })}
@@ -74,6 +80,7 @@ function App() {
               context={popup.context}
               flowSummary={popup.scopedFlowSummary}
               scope={popup.scope}
+              localProcessingAcknowledged={popup.localProcessingAcknowledged === true}
               onStart={() => void popup.startFiledReturnsFlow()}
             />
           ) : null}

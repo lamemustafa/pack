@@ -1,7 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getFiledReturnsFullFiscalYearPeriods } from "../../src/core/filed-returns-scope";
 import type { PackMessage, PackMessageResponse } from "../../src/core/messages";
-import { observeBrowserDownloadById } from "../../src/background/download-observer";
 
 const browserMocks = vi.hoisted(() => {
   let messageListener:
@@ -117,7 +115,16 @@ const browserMocks = vi.hoisted(() => {
     },
     storage: {
       local: {
-        get: vi.fn(async () => ({})),
+        get: vi.fn(async (key?: unknown) =>
+          key === "pack:local-processing-acknowledgement"
+            ? {
+                [key]: {
+                  version: "2026-07-21-v1",
+                  acknowledgedAt: "2026-07-21T00:00:00.000Z",
+                },
+              }
+            : {},
+        ),
         remove: vi.fn(async () => undefined),
         set: vi.fn(async () => undefined),
         setAccessLevel: vi.fn(async () => undefined),
@@ -203,6 +210,27 @@ describe("background filed returns download defaults", () => {
     });
   });
 
+  it("blocks a live start until the local-processing acknowledgement is current", async () => {
+    browserMocks.storage.local.get.mockResolvedValueOnce({});
+    await import("../../src/entrypoints/background");
+
+    const response = await sendBackgroundMessage({
+      type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",
+      payload: {
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-3B",
+      },
+    });
+
+    expect(response).toEqual({
+      ok: false,
+      error:
+        "Review and acknowledge Pack's local-processing boundary before starting or retrying a GST download.",
+    });
+    expect(browserMocks.tabs.sendMessage).not.toHaveBeenCalled();
+  });
+
   it("prefers target-bound portal capture over the unreliable direct request", async () => {
     browserMocks.tabs.sendMessage.mockImplementation(async (_tabId, message: PackMessage) => {
       message = unwrapContentRequest(message);
@@ -280,9 +308,8 @@ describe("background filed returns download defaults", () => {
     ]);
   });
 
-  it("stages full-fiscal-year monthly targets and exports one zip", async () => {
+  it("blocks full-fiscal-year execution before any portal or download action", async () => {
     const financialYear = "2026-27";
-    const periods = getFiledReturnsFullFiscalYearPeriods(financialYear);
     browserMocks.tabs.sendMessage.mockImplementation(async (_tabId, message: PackMessage) => {
       message = unwrapContentRequest(message);
       if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3") {
@@ -343,59 +370,17 @@ describe("background filed returns download defaults", () => {
     expect(response).toMatchObject({
       ok: true,
       flowStep: {
-        state: "downloaded",
-        safeSignals: expect.arrayContaining([
-          "full-fiscal-year-complete",
-          "full-fiscal-year-opfs-cleared",
-          "full-fiscal-year-zip-downloaded",
-        ]),
+        state: "blocked",
+        safeSignals: ["full-fiscal-year-temporarily-paused"],
       },
       flowSummary: {
-        completedPeriods: periods,
-        status: "complete",
-        totalPeriods: periods.length,
+        completedPeriods: [],
+        status: "blocked",
+        totalPeriods: 12,
       },
     });
-    expect(browserMocks.downloads.download).toHaveBeenCalledTimes(1);
-    expect(browserMocks.downloads.download).toHaveBeenCalledWith({
-      conflictAction: "uniquify",
-      filename: `gstr-3b-${financialYear.toLowerCase()}-full-year.zip`,
-      saveAs: false,
-      url: "blob:chrome-extension://pack/full-year.zip",
-    });
-    expect(observeBrowserDownloadById).toHaveBeenCalledWith(
-      browserMocks.downloads,
-      481,
-      expect.objectContaining({
-        expectedFileExtensions: [".zip"],
-        trustedDownloadIds: new Set([481]),
-      }),
-      45 * 1000,
-    );
-    expect(browserMocks.runtime.sendMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: "PACK_OFFSCREEN_CLEAR_FILED_RETURN_LEDGER",
-        payload: expect.objectContaining({
-          ledgerId: expect.any(String),
-        }),
-      }),
-    );
-    periods.forEach((period) => {
-      expect(browserMocks.runtime.sendMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: "PACK_OFFSCREEN_STAGE_FILED_RETURN",
-          payload: expect.objectContaining({
-            zipPath: `${period.toLowerCase()}.pdf`,
-          }),
-        }),
-      );
-    });
-    expect(sentActionMessageTypes()).toEqual([
-      ...periods.flatMap(() => [
-        "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
-        "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
-      ]),
-    ]);
+    expect(browserMocks.downloads.download).not.toHaveBeenCalled();
+    expect(browserMocks.tabs.sendMessage).not.toHaveBeenCalled();
   });
 
   it("does not use the GSTR-3B direct-download resolver for GSTR-2B", async () => {

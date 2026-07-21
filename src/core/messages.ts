@@ -52,6 +52,8 @@ export type PackMessage =
   | { type: "PACK_GET_FILED_RETURNS_OBSERVATION" }
   | { type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" }
   | { type: "PACK_GET_ACTIVE_FILED_RETURNS_RUN" }
+  | { type: "PACK_GET_LOCAL_PROCESSING_ACKNOWLEDGEMENT" }
+  | { type: "PACK_ACKNOWLEDGE_LOCAL_PROCESSING" }
   | { type: "PACK_ACKNOWLEDGE_INTERRUPTED_RUN" }
   | { type: "PACK_RETRY_FILED_RETURNS_TARGET"; payload: FiledReturnsDownloadScope }
   | {
@@ -149,6 +151,10 @@ export type PackMessageResponse =
       observation?: PortalObservation | null;
     }
   | { ok: true; flowSummary: FiledReturnsFlowSummary | null }
+  | {
+      ok: true;
+      localProcessingAcknowledgement: { version: string; acknowledgedAt: string } | null;
+    }
   | { ok: true; manifest: ArchiveManifest | null }
   | { ok: true; downloaded: number; manifest: ArchiveManifest }
   | { ok: true; downloadPromptProbe: DownloadPromptProbeResult }
@@ -192,6 +198,8 @@ export function isPackMessage(input: unknown): input is PackMessage {
     case "PACK_GET_FILED_RETURNS_OBSERVATION":
     case "PACK_GET_FILED_RETURNS_FLOW_SUMMARY":
     case "PACK_GET_ACTIVE_FILED_RETURNS_RUN":
+    case "PACK_GET_LOCAL_PROCESSING_ACKNOWLEDGEMENT":
+    case "PACK_ACKNOWLEDGE_LOCAL_PROCESSING":
     case "PACK_ACKNOWLEDGE_INTERRUPTED_RUN":
     case "PACK_REFRESH_FILED_RETURNS_OBSERVATION":
     case "PACK_NAVIGATE_FILED_RETURNS":

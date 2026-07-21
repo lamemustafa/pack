@@ -891,7 +891,10 @@ describe("Pack local data clearing", () => {
         targetStatus: "running",
       },
       flowStep: {
-        safeSignals: ["full-fiscal-year-run-interrupted"],
+        safeSignals: expect.arrayContaining([
+          "full-fiscal-year-run-interrupted",
+          "full-fiscal-year-temporarily-paused",
+        ]),
       },
     });
   });
