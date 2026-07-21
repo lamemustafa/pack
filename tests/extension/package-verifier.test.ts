@@ -429,6 +429,10 @@ describe("extension package verifier", () => {
     expect(script).toContain("isExpectedDeniedNetworkProbe");
     expect(script).toContain("recordBrowserEvent");
     expect(script).toContain("assertSyntheticRestartFaultMatrix");
+    expect(script).toContain("assertSyntheticCleanupBoundary");
+    expect(script).toContain("stageSyntheticOffscreenArtifact");
+    expect(script).toContain("synthetic-opfs-staged-then-cleared");
+    expect(script).toContain("PACK_CLEAR_LOCAL_DATA");
     expect(script).toContain("acknowledgeLocalProcessingForFaultMatrix");
     expect(script).toContain("safeResponseShape");
     expect(script).toContain("restartIsolatedBrowser");

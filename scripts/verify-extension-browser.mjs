@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* global chrome, document */
+/* global btoa, chrome, document, navigator */
 import { spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { readFile } from "node:fs/promises";
@@ -71,6 +71,9 @@ try {
   const restartFaultMatrix = runFaultMatrix
     ? await assertSyntheticRestartFaultMatrix(context, extensionId, serviceWorker)
     : null;
+  const syntheticCleanup = runFaultMatrix
+    ? await assertSyntheticCleanupBoundary(context, extensionId)
+    : null;
   assertDeniedUnexpectedNetwork();
   assertSanitizedBrowserLogs();
   assertNoBrowserRuntimeFailures();
@@ -87,6 +90,7 @@ try {
         deniedUnexpectedRequests: deniedRequests.map((request) => request.url),
         browserLogCount: browserLogs.length,
         ...(restartFaultMatrix ? { restartFaultMatrix } : {}),
+        ...(syntheticCleanup ? { syntheticCleanup } : {}),
       },
       null,
       2,
@@ -437,6 +441,150 @@ async function assertSyntheticRestartFaultMatrix(browserContext, extensionId, se
     result: "unresolved-action-blocked-without-download",
     boundaries: matrixCases.map((matrixCase) => matrixCase.boundary),
   };
+}
+
+async function assertSyntheticCleanupBoundary(browserContext, extensionId) {
+  const serviceWorker = await waitForServiceWorker(browserContext, extensionId);
+  const stagingSucceeded = await stageSyntheticOffscreenArtifact(serviceWorker);
+  if (!stagingSucceeded) {
+    throw new Error("Browser fault matrix could not stage its synthetic OPFS artifact.");
+  }
+  const stagedOpfsFileCount = await countOpfsFiles(browserContext, extensionId);
+  if (stagedOpfsFileCount === null || stagedOpfsFileCount === 0) {
+    throw new Error("Browser fault matrix could not observe its synthetic OPFS artifact.");
+  }
+
+  const popupPage = await browserContext.newPage();
+  attachPageLogging(popupPage);
+  try {
+    await popupPage.goto(`chrome-extension://${extensionId}/popup.html`, {
+      waitUntil: "domcontentloaded",
+    });
+    const response = await sendPackMessage(popupPage, { type: "PACK_CLEAR_LOCAL_DATA" });
+    if (response?.ok !== true || response.cleared !== true) {
+      throw new Error("Browser fault matrix could not clear synthetic local Pack state.");
+    }
+  } finally {
+    await popupPage.close();
+  }
+
+  const postCleanupServiceWorker = await waitForServiceWorker(browserContext, extensionId);
+  const storageInspection = await postCleanupServiceWorker.evaluate(async (definitions) => {
+    const scan = async (storageArea) => {
+      const values = await storageArea.get(null);
+      const sensitivePatternIds = new Set();
+      for (const value of Object.values(values)) {
+        let serialized = "";
+        try {
+          serialized = JSON.stringify(value);
+        } catch {
+          sensitivePatternIds.add("unserializable");
+          continue;
+        }
+        for (const { id, pattern, flags } of definitions) {
+          if (new RegExp(pattern, flags.replace("g", "")).test(serialized)) {
+            sensitivePatternIds.add(id);
+          }
+        }
+      }
+      return {
+        keyCount: Object.keys(values).length,
+        sensitivePatternIds: [...sensitivePatternIds].sort(),
+      };
+    };
+    return {
+      local: await scan(chrome.storage.local),
+      session: await scan(chrome.storage.session),
+    };
+  }, LIVE_RUN_SENSITIVE_PATTERN_DEFINITIONS);
+  if (
+    storageInspection.local.keyCount !== 0 ||
+    storageInspection.session.keyCount !== 0 ||
+    storageInspection.local.sensitivePatternIds.length !== 0 ||
+    storageInspection.session.sensitivePatternIds.length !== 0
+  ) {
+    throw new Error(
+      `Browser fault matrix retained synthetic Pack storage after cleanup: ${JSON.stringify(storageInspection)}`,
+    );
+  }
+
+  const opfsFileCount = await countOpfsFiles(browserContext, extensionId);
+  if (opfsFileCount !== null && opfsFileCount !== 0) {
+    throw new Error("Browser fault matrix retained synthetic OPFS files after cleanup.");
+  }
+  return {
+    mode: "synthetic-cleanup",
+    result: "synthetic-opfs-staged-then-cleared",
+  };
+}
+
+async function stageSyntheticOffscreenArtifact(serviceWorker) {
+  return serviceWorker.evaluate(async () => {
+    const offscreenApi = chrome.offscreen;
+    if (!offscreenApi || !chrome.runtime.getContexts) return false;
+    const offscreenUrl = chrome.runtime.getURL("offscreen.html");
+    const contexts = await chrome.runtime.getContexts({
+      contextTypes: ["OFFSCREEN_DOCUMENT"],
+      documentUrls: [offscreenUrl],
+    });
+    if (contexts.length === 0) {
+      await offscreenApi.createDocument({
+        url: "offscreen.html",
+        reasons: ["BLOBS"],
+        justification:
+          "Verify Pack-owned synthetic artifact cleanup in an isolated release profile.",
+      });
+    }
+    const dataUrl = `data:application/pdf;base64,${btoa("%PDF-1.7\\nsynthetic\\n%%EOF\\n")}`;
+    await chrome.storage.local.set({
+      "pack:single-period-staging": {
+        ledgerId: "single-period:synthetic-cleanup-ledger",
+        schemaVersion: "1.0",
+      },
+    });
+    const response = await new Promise((resolve) => {
+      chrome.runtime.sendMessage(
+        {
+          type: "PACK_OFFSCREEN_STAGE_FILED_RETURN",
+          target: "pack-offscreen-blob-url",
+          payload: {
+            requestId: "synthetic-opfs-stage-request",
+            ledgerId: "single-period:synthetic-cleanup-ledger",
+            zipPath: "synthetic.pdf",
+            returnType: "GSTR-3B",
+            artifactType: "PDF",
+            dataUrl,
+          },
+        },
+        (value) => resolve(chrome.runtime.lastError ? null : value),
+      );
+    });
+    return response?.ok === true && response.staged === true;
+  });
+}
+
+async function countOpfsFiles(browserContext, extensionId) {
+  const optionsPage = await browserContext.newPage();
+  attachPageLogging(optionsPage);
+  try {
+    await optionsPage.goto(`chrome-extension://${extensionId}/options.html`, {
+      waitUntil: "domcontentloaded",
+    });
+    return await optionsPage.evaluate(async () => {
+      if (typeof navigator.storage?.getDirectory !== "function") return null;
+      const root = await navigator.storage.getDirectory();
+      const countFiles = async (directory) => {
+        let count = 0;
+        for await (const [, handle] of directory.entries()) {
+          count += handle.kind === "file" ? 1 : await countFiles(handle);
+        }
+        return count;
+      };
+      return countFiles(root);
+    });
+  } finally {
+    await optionsPage.close();
+  }
 }
 
 async function acknowledgeLocalProcessingForFaultMatrix(page) {

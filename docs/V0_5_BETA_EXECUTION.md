@@ -41,14 +41,14 @@ Government of India.
 
 ## Current Source Position
 
-| Area | Source position | Release interpretation |
-| --- | --- | --- |
-| Store version | `v0.4.0` is maintainer-reported; no dated dashboard export or read-only status result is recorded. | Do not use it as current-release proof. |
-| Full fiscal year | Archive/recovery code is present, but the background deliberately pauses new full-FY dispatch. Retained saved-run state may only be inspected or discarded. | Do not advertise, unpause, or test it as an available feature until its dedicated gate passes. |
-| Ranges | Single period and immutable same-FY custom-range planning are implemented. | Needs exact-ZIP browser coverage before Store/beta claims. |
-| Storage/recovery | Strict local schemas, quarantine, action journal, target review, and explicit resume confirmation are implemented. | Unit/static proof does not replace service-worker and browser-restart evidence. |
-| Archive UX | Plan → Run → Results, local-processing acknowledgement, opaque archive paths, safe receipts, and requested-destination preview are implemented. | Preview is a requested relative name/path; Chrome controls the final download folder. |
-| Availability floors | The planner bounds GSTR-1/GSTR-3B from July 2017 and GSTR-2B from July 2020. | These are implementation bounds, not a claim that any period has an artifact. Record an official-source capture before making a public availability claim. |
+| Area                | Source position                                                                                                                                             | Release interpretation                                                                                                                                     |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Store version       | `v0.4.0` is maintainer-reported; no dated dashboard export or read-only status result is recorded.                                                          | Do not use it as current-release proof.                                                                                                                    |
+| Full fiscal year    | Archive/recovery code is present, but the background deliberately pauses new full-FY dispatch. Retained saved-run state may only be inspected or discarded. | Do not advertise, unpause, or test it as an available feature until its dedicated gate passes.                                                             |
+| Ranges              | Single period and immutable same-FY custom-range planning are implemented.                                                                                  | Needs exact-ZIP browser coverage before Store/beta claims.                                                                                                 |
+| Storage/recovery    | Strict local schemas, quarantine, action journal, target review, and explicit resume confirmation are implemented.                                          | Unit/static proof does not replace service-worker and browser-restart evidence.                                                                            |
+| Archive UX          | Plan → Run → Results, local-processing acknowledgement, opaque archive paths, safe receipts, and requested-destination preview are implemented.             | Preview is a requested relative name/path; Chrome controls the final download folder.                                                                      |
+| Availability floors | The planner bounds GSTR-1/GSTR-3B from July 2017 and GSTR-2B from July 2020.                                                                                | These are implementation bounds, not a claim that any period has an artifact. Record an official-source capture before making a public availability claim. |
 
 ## Implementation Tranches
 
@@ -79,9 +79,14 @@ Government of India.
 3. For that authorised run, kill the service worker and restart the browser
    under the applicable cases. Confirm no completed target is repeated and
    ambiguous actions become review-required.
-4. Inspect extension storage and OPFS after success, discard, failed cleanup,
+4. The same synthetic exact-ZIP run stages one non-sensitive Pack-owned file
+   through the real offscreen lifecycle, invokes Pack's normal local-data
+   cleanup, then checks that extension local/session storage and OPFS are
+   empty. This proves cleanup only for the synthetic verifier state; it does
+   not inspect a live GST artifact.
+5. Inspect extension storage and OPFS after live success, discard, failed cleanup,
    and expiry. Confirm the prohibited data list above is absent.
-5. Do not unpause full-FY dispatch based on unit tests, the synthetic matrix,
+6. Do not unpause full-FY dispatch based on unit tests, the synthetic matrix,
    or prior source-build
    evidence alone.
 
@@ -168,12 +173,12 @@ All conditions must be proved for the exact candidate ZIP:
 
 ## Evidence Owners
 
-| Gate | Evidence owner | Cannot be replaced by |
-| --- | --- | --- |
-| Store state and declarations | Store publisher | Workflow upload result or public-page inference |
-| Live GST download/restart matrix | Authorised operator in Chrome/Brave | DOM replay, in-app browser, or unit tests |
-| Storage and OPFS inspection | Privacy/security reviewer | Regex redaction alone |
-| QRMP/cadence outcome | Authorised operator with suitable account | Calendar/due-date inference |
-| Availability-floor public claim | Release owner with official GST source capture | Planner code or a calendar/due-date inference |
-| Design-partner validation | Product owner | Product telemetry or internal opinion |
-| Legal/DPDP wording | Qualified counsel | Engineering review |
+| Gate                             | Evidence owner                                 | Cannot be replaced by                           |
+| -------------------------------- | ---------------------------------------------- | ----------------------------------------------- |
+| Store state and declarations     | Store publisher                                | Workflow upload result or public-page inference |
+| Live GST download/restart matrix | Authorised operator in Chrome/Brave            | DOM replay, in-app browser, or unit tests       |
+| Storage and OPFS inspection      | Privacy/security reviewer                      | Regex redaction alone                           |
+| QRMP/cadence outcome             | Authorised operator with suitable account      | Calendar/due-date inference                     |
+| Availability-floor public claim  | Release owner with official GST source capture | Planner code or a calendar/due-date inference   |
+| Design-partner validation        | Product owner                                  | Product telemetry or internal opinion           |
+| Legal/DPDP wording               | Qualified counsel                              | Engineering review                              |
