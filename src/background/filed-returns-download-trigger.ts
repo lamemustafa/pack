@@ -152,13 +152,13 @@ export async function triggerAndObserveFiledReturnDownload({
         );
       }
     }
-    if (usesBrowserDownloadJournal || deps.stageCapturedDownloads) {
-      const captureTimedOut =
-        captureResponse.ok &&
-        "flowStep" in captureResponse &&
-        captureResponse.flowStep.safeSignals.some((signal) =>
-          signal.endsWith("-main-world-capture-timeout"),
-        );
+    const captureTimedOut =
+      captureResponse.ok &&
+      "flowStep" in captureResponse &&
+      captureResponse.flowStep.safeSignals.some((signal) =>
+        signal.endsWith("-main-world-capture-timeout"),
+      );
+    if (usesBrowserDownloadJournal || deps.stageCapturedDownloads || captureTimedOut) {
       if (
         (!deps.stageCapturedDownloads ||
           (deps.stageCapturedDownloads.bundleKind === "single-period" && captureTimedOut)) &&
