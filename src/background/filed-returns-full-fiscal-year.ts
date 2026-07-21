@@ -258,6 +258,7 @@ async function completeRun(
   await persistLedger(deps, readyLedger);
   let exportLedger = readyLedger;
   const zipStep = await exportFullFiscalYearZip(readyLedger, step, {
+    ...(deps.storageKeys.actionJournal ? { actionJournalKey: deps.storageKeys.actionJournal } : {}),
     onDownloadStarted: async () => {
       exportLedger = markFullFiscalYearZipPhase(
         exportLedger,

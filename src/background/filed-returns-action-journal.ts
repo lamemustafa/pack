@@ -5,12 +5,14 @@ import { PACK_LOCAL_STORAGE_KEYS } from "./storage-keys";
 
 const MAX_ACTION_JOURNAL_ENTRIES = 12;
 
+export type FiledReturnsActionArtifactType = FiledReturnsConcreteArtifactType | "ZIP";
+
 export type FiledReturnsActionJournalState =
   "armed" | "evidence-bound" | "verified" | "failed" | "review-required";
 
 interface FiledReturnsActionJournalEntry {
   actionId: string;
-  artifactType: FiledReturnsConcreteArtifactType;
+  artifactType: FiledReturnsActionArtifactType;
   attempt: number;
   revision: number;
   state: FiledReturnsActionJournalState;
@@ -243,8 +245,8 @@ function isPositiveInt(value: unknown): value is number {
 function isTimestamp(value: unknown): value is string {
   return typeof value === "string" && value.length <= 40 && Number.isFinite(Date.parse(value));
 }
-function isArtifactType(value: unknown): value is FiledReturnsConcreteArtifactType {
-  return value === "PDF" || value === "EXCEL";
+function isArtifactType(value: unknown): value is FiledReturnsActionArtifactType {
+  return value === "PDF" || value === "EXCEL" || value === "ZIP";
 }
 function isActionState(value: unknown): value is FiledReturnsActionJournalState {
   return (

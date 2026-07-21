@@ -16,9 +16,11 @@ import { readSinglePeriodStagingRecord } from "./filed-returns-artifact-progress
 import { discardSinglePeriodFiledReturnsZip } from "./filed-returns-full-fiscal-year-zip";
 import { quarantineFiledReturnsStorageState } from "./filed-returns-storage-quarantine";
 import { PACK_LOCAL_STORAGE_KEYS } from "./storage-keys";
+import { clearVerifiedFiledReturnsActions } from "./filed-returns-action-journal";
 
 export interface FiledReturnsTargetReviewDeps {
   storageKeys: {
+    actionJournal?: string;
     completion?: string;
     targetReview?: string;
   };
@@ -210,6 +212,7 @@ export async function retryCompletedSinglePeriodZipCleanup(
     flowStep,
   };
   await persistResolvedTargetReviewSummary(flowSummary, deps);
+  await clearVerifiedFiledReturnsActions(deps.storageKeys.actionJournal);
   return { ok: true, flowStep, flowSummary };
 }
 

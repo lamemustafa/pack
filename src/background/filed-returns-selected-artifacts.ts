@@ -207,6 +207,9 @@ export async function triggerSelectedArtifacts({
   }
 
   const zipFlowStep = await exportSinglePeriodFiledReturnsZip({
+    ...(artifactDeps.storageKeys.actionJournal
+      ? { actionJournalKey: artifactDeps.storageKeys.actionJournal }
+      : {}),
     completeStep: response.flowStep,
     ledgerId: singlePeriodBundleLedgerId,
     scope,

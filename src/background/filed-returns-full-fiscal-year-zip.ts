@@ -18,13 +18,18 @@ import {
   safeSinglePeriodZipFilename,
 } from "./filed-returns-download-filename";
 import { clearSinglePeriodStagingRecord } from "./filed-returns-artifact-progress";
+import {
+  armFiledReturnsAction,
+  bindFiledReturnsActionDownload,
+  settleFiledReturnsAction,
+} from "./filed-returns-action-journal";
 
 const USER_MEDIATED_ZIP_DOWNLOAD_WAIT_MS = 45 * 1000;
 
 export async function exportFullFiscalYearZip(
   ledger: FiledReturnsFullFiscalYearLedger,
   completeStep: PortalFlowStepResult,
-  options: { onDownloadStarted?: () => Promise<void> } = {},
+  options: { actionJournalKey?: string; onDownloadStarted?: () => Promise<void> } = {},
 ): Promise<PortalFlowStepResult> {
   const staging = fullFiscalYearStagingRequirement(ledger);
   if (staging.missingArtifactCount > 0) {
@@ -69,15 +74,18 @@ export async function exportFullFiscalYearZip(
       "Pack staged the fiscal-year files, but could not prepare the final zip export.",
     zipFilename: safeFullFiscalYearZipFilename(ledger.scope),
     expectedZipEntryCount: staging.expectedArtifactCount,
+    ...(options.actionJournalKey ? { actionJournalKey: options.actionJournalKey } : {}),
     ...(options.onDownloadStarted ? { onDownloadStarted: options.onDownloadStarted } : {}),
   });
 }
 
 export async function exportSinglePeriodFiledReturnsZip({
   completeStep,
+  actionJournalKey,
   ledgerId,
   scope,
 }: {
+  actionJournalKey?: string;
   completeStep: PortalFlowStepResult;
   ledgerId: string;
   scope: FiledReturnsDownloadScope;
@@ -95,6 +103,7 @@ export async function exportSinglePeriodFiledReturnsZip({
     zipFailedMessage:
       "Pack staged the selected filed-return files, but could not prepare the final zip export.",
     zipFilename: safeSinglePeriodZipFilename(scope),
+    ...(actionJournalKey ? { actionJournalKey } : {}),
   });
 }
 
@@ -117,6 +126,7 @@ export async function discardAllFiledReturnsStaging(): Promise<string> {
 }
 
 async function exportStagedFiledReturnsZip({
+  actionJournalKey,
   clearSignalPrefix,
   completeStep,
   ledgerId,
@@ -129,6 +139,7 @@ async function exportStagedFiledReturnsZip({
   expectedZipEntryCount,
   onDownloadStarted,
 }: {
+  actionJournalKey?: string;
   clearSignalPrefix: "full-fiscal-year" | "single-period";
   completeStep: PortalFlowStepResult;
   ledgerId: string;
@@ -199,6 +210,22 @@ async function exportStagedFiledReturnsZip({
 
   let downloadId: number | null = null;
   const armedAt = new Date();
+  const actionId = createZipActionId();
+  if (
+    (await armFiledReturnsAction(
+      actionJournalKey,
+      {
+        actionId,
+        artifactType: "ZIP",
+        targetId: `${clearSignalPrefix}:${ledgerId}:ZIP`,
+      },
+      armedAt,
+    )) !== "armed"
+  ) {
+    await revokeOffscreenBlobUrl(zip.blobUrl);
+    await closeOffscreenBlobDocument();
+    return actionJournalReviewStep(completeStep, clearSignalPrefix, retainedStagedLedgerSignal);
+  }
   try {
     downloadId = await browser.downloads.download({
       conflictAction: "uniquify",
@@ -207,6 +234,7 @@ async function exportStagedFiledReturnsZip({
       url: zip.blobUrl,
     });
   } catch {
+    await settleFiledReturnsAction(actionJournalKey, actionId, "failed");
     await revokeOffscreenBlobUrl(zip.blobUrl);
     const stagedLedgerSignal =
       clearSignalPrefix === "single-period"
@@ -228,6 +256,12 @@ async function exportStagedFiledReturnsZip({
         canResume: true,
       },
     };
+  }
+
+  if (!(await bindFiledReturnsActionDownload(actionJournalKey, actionId, downloadId))) {
+    await revokeOffscreenBlobUrl(zip.blobUrl);
+    await closeOffscreenBlobDocument();
+    return actionJournalReviewStep(completeStep, clearSignalPrefix, retainedStagedLedgerSignal);
   }
 
   try {
@@ -269,9 +303,24 @@ async function exportStagedFiledReturnsZip({
   );
   await revokeOffscreenBlobUrl(zip.blobUrl);
 
+  const settled = await settleFiledReturnsAction(
+    actionJournalKey,
+    actionId,
+    observed.state === "completed"
+      ? "verified"
+      : observed.state === "failed"
+        ? "failed"
+        : "review-required",
+  );
+  if (!settled) {
+    await closeOffscreenBlobDocument();
+    return actionJournalReviewStep(completeStep, clearSignalPrefix, retainedStagedLedgerSignal);
+  }
+
   if (observed.state !== "completed") {
-    const stagedLedgerSignal =
-      clearSignalPrefix === "single-period"
+    const stagedLedgerSignal = actionJournalKey
+      ? retainedStagedLedgerSignal(clearSignalPrefix)
+      : clearSignalPrefix === "single-period"
         ? await clearStagedLedgerSignal(ledgerId, clearSignalPrefix)
         : retainedStagedLedgerSignal(clearSignalPrefix);
     await closeOffscreenBlobDocument();
@@ -332,6 +381,35 @@ async function exportStagedFiledReturnsZip({
     ],
     safeMessage,
   };
+}
+
+function actionJournalReviewStep(
+  completeStep: PortalFlowStepResult,
+  clearSignalPrefix: "full-fiscal-year" | "single-period",
+  retainedStagingSignal: (prefix: "full-fiscal-year" | "single-period") => string,
+): PortalFlowStepResult {
+  return {
+    ...completeStep,
+    state: "download-unconfirmed",
+    safeSignals: [
+      ...completeStep.safeSignals,
+      `${clearSignalPrefix}-zip-action-journal-review-required`,
+      retainedStagingSignal(clearSignalPrefix),
+    ],
+    safeMessage:
+      "Pack found an unresolved local ZIP download action and will not start another archive export automatically. Review browser Downloads before retrying.",
+    userAction: {
+      type: "RETRY_PORTAL_GENERATION",
+      message: "Check browser Downloads first. Retry only if the ZIP is absent.",
+      canResume: true,
+    },
+  };
+}
+
+function createZipActionId(): string {
+  const randomId = globalThis.crypto?.randomUUID?.();
+  if (randomId) return `zip-${randomId}`;
+  return `zip-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 function fullFiscalYearStagingRequirement(ledger: FiledReturnsFullFiscalYearLedger): {
