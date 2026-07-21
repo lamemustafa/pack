@@ -33,6 +33,11 @@ export function safeFiledReturnZipEntryPath(
 }
 
 export function safeFullFiscalYearZipFilename(scope: FiledReturnsDownloadScope): string {
+  if (scope.rangeEndPeriod) {
+    return `${safeFilenameSegment(scope.returnType)}-${safeFilenameSegment(
+      scope.financialYear,
+    )}-${safeFilenameSegment(scope.period)}-to-${safeFilenameSegment(scope.rangeEndPeriod)}.zip`;
+  }
   return `${safeFilenameSegment(scope.returnType)}-${safeFilenameSegment(
     scope.financialYear,
   )}-full-year.zip`;

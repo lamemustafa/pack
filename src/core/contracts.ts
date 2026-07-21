@@ -191,6 +191,8 @@ export interface PortalDownloadTriggerResult {
 export interface FiledReturnsDownloadScope {
   financialYear: string;
   period: string;
+  /** Inclusive end of a contiguous same-FY range. Omitted for one period and full FY. */
+  rangeEndPeriod?: string;
   returnType: FiledReturnsReturnType;
   artifactType?: FiledReturnsArtifactType;
   completedPeriods?: string[];

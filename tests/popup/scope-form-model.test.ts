@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { FiledReturnsDownloadScope, FiledReturnsFlowSummary } from "../../src/core/contracts";
 import { FULL_FISCAL_YEAR_PERIOD } from "../../src/core/filed-returns-scope";
-import { getScopeFormStartAction } from "../../src/entrypoints/popup/scope-form-model";
+import {
+  createScopeFormModel,
+  getScopeFormStartAction,
+} from "../../src/entrypoints/popup/scope-form-model";
 
 describe("popup scope form model", () => {
   it("names a single GSTR-1 Excel action truthfully", () => {
@@ -21,6 +24,39 @@ describe("popup scope form model", () => {
       disabled: false,
       label: "Download June 2026-27 GSTR-1 Excel",
     });
+  });
+
+  it("names an immutable custom range as one ZIP action", () => {
+    const action = getScopeFormStartAction(
+      {
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2025-26",
+        period: "October",
+        rangeEndPeriod: "January",
+        returnType: "GSTR-1",
+      },
+      null,
+      null,
+      false,
+    );
+
+    expect(action).toEqual({
+      disabled: false,
+      label: "Download October–January 2025-26 GSTR-1 ZIP",
+    });
+  });
+
+  it("keeps a custom range start picker bounded so an end period always remains", () => {
+    const model = createScopeFormModel({
+      artifactType: "PDF_AND_EXCEL",
+      financialYear: "2025-26",
+      period: "October",
+      rangeEndPeriod: "January",
+      returnType: "GSTR-1",
+    });
+
+    expect(model.rangeStartOptions.at(-1)?.value).toBe("February");
+    expect(model.rangeStartOptions.some((option) => option.value === "March")).toBe(false);
   });
 
   it("keeps the full workbench start action available when portal context is inactive", () => {

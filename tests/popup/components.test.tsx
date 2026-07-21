@@ -56,6 +56,31 @@ describe("popup scope form", () => {
     expect(markup).not.toContain('id="scope-file-format"');
   });
 
+  it("renders a bounded custom range with explicit start and end controls", () => {
+    const markup = renderToStaticMarkup(
+      <ScopeForm
+        busy={null}
+        context={context}
+        scope={{
+          financialYear: "2025-26",
+          period: "October",
+          rangeEndPeriod: "January",
+          returnType: "GSTR-1",
+          artifactType: "PDF_AND_EXCEL",
+        }}
+        onScopeChange={vi.fn()}
+        onStart={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain("Custom range");
+    expect(markup).toContain("scope-select-row-custom-range");
+    expect(markup).toContain('for="scope-start"');
+    expect(markup).toContain('for="scope-end"');
+    expect(markup).toContain("Only the selected contiguous periods");
+    expect(markup).toContain("Download October–January 2025-26 GSTR-1 ZIP");
+  });
+
   it("keeps scope controls usable while explaining the explicit recovery choice", () => {
     const markup = renderToStaticMarkup(
       <ScopeForm

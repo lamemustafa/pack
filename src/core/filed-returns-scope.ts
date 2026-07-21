@@ -104,6 +104,31 @@ export function getFiledReturnsFullFiscalYearPeriods(
   return getFiledReturnsPeriods(financialYear, asOf);
 }
 
+export function getFiledReturnsRangePeriods(
+  scope: Pick<FiledReturnsDownloadScope, "financialYear" | "period" | "rangeEndPeriod">,
+  asOf = new Date(),
+): FiledReturnsMonth[] {
+  if (!isCustomFiledReturnsRangeScope(scope)) return [];
+  const availablePeriods = getFiledReturnsPeriodOptions(scope.financialYear, asOf).map(
+    (option) => option.value,
+  );
+  const startIndex = availablePeriods.indexOf(scope.period as FiledReturnsMonth);
+  const endIndex = availablePeriods.indexOf(scope.rangeEndPeriod as FiledReturnsMonth);
+  return startIndex >= 0 && endIndex > startIndex
+    ? availablePeriods.slice(startIndex, endIndex + 1)
+    : [];
+}
+
+export function getFiledReturnsRunPeriods(
+  scope: FiledReturnsDownloadScope,
+  asOf = new Date(),
+): FiledReturnsMonth[] {
+  if (isFullFiscalYearScope(scope))
+    return getFiledReturnsFullFiscalYearPeriods(scope.financialYear, asOf);
+  if (isCustomFiledReturnsRangeScope(scope)) return getFiledReturnsRangePeriods(scope, asOf);
+  return [];
+}
+
 export function normaliseFiledReturnsScope(
   scope: FiledReturnsDownloadScope,
   asOf = new Date(),
@@ -127,17 +152,37 @@ export function normaliseFiledReturnsScope(
         ? scope.period
         : defaultPeriodForFinancialYear(financialYear, asOf);
 
+  const rangeEndPeriod = normaliseRangeEndPeriod(scope, periodOptions, period);
   return {
     financialYear,
     period,
     returnType,
     artifactType: normaliseFiledReturnsArtifactType(returnType, scope.artifactType),
+    ...(rangeEndPeriod ? { rangeEndPeriod } : {}),
     ...(scope.completedPeriods ? { completedPeriods: scope.completedPeriods } : {}),
   };
 }
 
 export function isFullFiscalYearScope(input: Pick<FiledReturnsDownloadScope, "period">): boolean {
   return input.period === FULL_FISCAL_YEAR_PERIOD;
+}
+
+export function isCustomFiledReturnsRangeScope(
+  input: Pick<FiledReturnsDownloadScope, "period" | "rangeEndPeriod">,
+): input is Pick<FiledReturnsDownloadScope, "period" | "rangeEndPeriod"> & {
+  rangeEndPeriod: string;
+} {
+  return (
+    input.period !== FULL_FISCAL_YEAR_PERIOD &&
+    typeof input.rangeEndPeriod === "string" &&
+    input.rangeEndPeriod !== input.period
+  );
+}
+
+export function isMultiPeriodFiledReturnsScope(
+  input: Pick<FiledReturnsDownloadScope, "period" | "rangeEndPeriod">,
+): boolean {
+  return isFullFiscalYearScope(input) || isCustomFiledReturnsRangeScope(input);
 }
 
 export function isSupportedFiledReturnsScope(
@@ -147,9 +192,12 @@ export function isSupportedFiledReturnsScope(
   if (!isFiledReturnsReturnType(input.returnType)) return false;
   if (!isSupportedArtifactSelection(input)) return false;
   if (!getFiledReturnsFinancialYearOptions(asOf).includes(input.financialYear)) return false;
-  return getFiledReturnsPeriodOptions(input.financialYear, asOf).some(
-    (option) => option.value === input.period,
-  );
+  const periodOptions = getFiledReturnsPeriodOptions(input.financialYear, asOf);
+  const startIndex = periodOptions.findIndex((option) => option.value === input.period);
+  if (startIndex < 0) return false;
+  if (input.rangeEndPeriod === undefined) return true;
+  const endIndex = periodOptions.findIndex((option) => option.value === input.rangeEndPeriod);
+  return endIndex > startIndex;
 }
 
 export function isSupportedFiledReturnsStartScope(
@@ -174,6 +222,17 @@ function isSupportedArtifactSelection(input: FiledReturnsDownloadScope): boolean
     isFiledReturnsArtifactType(artifactType) &&
     supportsFiledReturnsArtifactType(input.returnType, artifactType)
   );
+}
+
+function normaliseRangeEndPeriod(
+  scope: FiledReturnsDownloadScope,
+  periodOptions: FiledReturnsPeriodOption[],
+  period: string,
+): FiledReturnsMonth | null {
+  if (period === FULL_FISCAL_YEAR_PERIOD || typeof scope.rangeEndPeriod !== "string") return null;
+  const startIndex = periodOptions.findIndex((option) => option.value === period);
+  const endIndex = periodOptions.findIndex((option) => option.value === scope.rangeEndPeriod);
+  return endIndex > startIndex ? (scope.rangeEndPeriod as FiledReturnsMonth) : null;
 }
 
 function getDefaultFiledReturnsPeriodScope(asOf = new Date()): {

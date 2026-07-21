@@ -341,6 +341,15 @@ function isFiledReturnsDownloadScope(input: unknown): input is FiledReturnsDownl
   ) {
     return false;
   }
+  if (
+    input.rangeEndPeriod !== undefined &&
+    (typeof input.rangeEndPeriod !== "string" ||
+      input.rangeEndPeriod.length === 0 ||
+      input.rangeEndPeriod.length > 20)
+  ) {
+    return false;
+  }
+  if (input.rangeEndPeriod !== undefined) return false;
 
   const artifactType = isFiledReturnsArtifactType(input.artifactType)
     ? input.artifactType
@@ -350,6 +359,7 @@ function isFiledReturnsDownloadScope(input: unknown): input is FiledReturnsDownl
     period: input.period,
     returnType: input.returnType,
     ...(artifactType ? { artifactType } : {}),
+    ...(typeof input.rangeEndPeriod === "string" ? { rangeEndPeriod: input.rangeEndPeriod } : {}),
     ...(input.completedPeriods ? { completedPeriods: input.completedPeriods } : {}),
   };
   return isSupportedFiledReturnsScope(scope);
@@ -366,6 +376,7 @@ function isFiledReturnsScopeShape(input: unknown): input is {
   returnType: FiledReturnsReturnType;
   artifactType?: FiledReturnsArtifactType;
   completedPeriods?: string[];
+  rangeEndPeriod?: string;
 } {
   if (!isRecord(input)) return false;
   if (typeof input.financialYear !== "string") return false;
@@ -391,6 +402,14 @@ function isFiledReturnsScopeShape(input: unknown): input is {
   ) {
     return false;
   }
+  if (
+    input.rangeEndPeriod !== undefined &&
+    (typeof input.rangeEndPeriod !== "string" ||
+      input.rangeEndPeriod.length === 0 ||
+      input.rangeEndPeriod.length > 20)
+  ) {
+    return false;
+  }
   return true;
 }
 
@@ -400,12 +419,14 @@ function toFiledReturnsScope(input: {
   returnType: FiledReturnsReturnType;
   artifactType?: FiledReturnsArtifactType;
   completedPeriods?: string[];
+  rangeEndPeriod?: string;
 }): FiledReturnsDownloadScope {
   return {
     financialYear: input.financialYear,
     period: input.period,
     returnType: input.returnType,
     ...(input.artifactType ? { artifactType: input.artifactType } : {}),
+    ...(typeof input.rangeEndPeriod === "string" ? { rangeEndPeriod: input.rangeEndPeriod } : {}),
     ...(input.completedPeriods ? { completedPeriods: input.completedPeriods } : {}),
   };
 }

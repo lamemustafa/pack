@@ -28,7 +28,7 @@ const RECEIPT_PERIODS = new Set([
 export interface FiledReturnsRunReceiptV1 {
   schemaVersion: "1.0";
   createdAt: string;
-  archiveScope: "single-period" | "full-fiscal-year";
+  archiveScope: "single-period" | "custom-range" | "full-fiscal-year";
   returnType: FiledReturnsReturnType;
   financialYear: string;
   artifactTypes: FiledReturnsConcreteArtifactType[];
@@ -92,7 +92,7 @@ export function createFullFiscalYearFiledReturnsReceipt(
   return {
     schemaVersion: "1.0",
     createdAt: createdAt.toISOString(),
-    archiveScope: "full-fiscal-year",
+    archiveScope: ledger.scope.rangeEndPeriod ? "custom-range" : "full-fiscal-year",
     returnType: ledger.scope.returnType,
     financialYear: ledger.scope.financialYear,
     artifactTypes,
@@ -117,21 +117,32 @@ export function isFiledReturnsRunReceiptV1(value: unknown): value is FiledReturn
     ]) ||
     value.schemaVersion !== "1.0" ||
     !isTimestamp(value.createdAt) ||
-    (value.archiveScope !== "single-period" && value.archiveScope !== "full-fiscal-year") ||
+    (value.archiveScope !== "single-period" &&
+      value.archiveScope !== "custom-range" &&
+      value.archiveScope !== "full-fiscal-year") ||
     !isFiledReturnsReturnType(value.returnType) ||
     !isFinancialYear(value.financialYear) ||
     !isUniqueConcreteArtifactTypes(value.artifactTypes) ||
     !isBoundedCount(value.targetCount, 1, 12) ||
     !isBoundedCount(value.artifactCount, 0, 24) ||
     !Array.isArray(value.targets) ||
-    value.targets.length !== value.targetCount ||
-    !value.targets.every((target) => isReceiptTarget(target, value.returnType, value.financialYear))
+    value.targets.length !== value.targetCount
   ) {
     return false;
   }
-  const preparedTargetCount = value.targets.filter((target) => target.status === "prepared").length;
+  const receipt = value as unknown as FiledReturnsRunReceiptV1;
+  if (
+    !receipt.targets.every((target) =>
+      isReceiptTarget(target, receipt.returnType, receipt.financialYear),
+    )
+  ) {
+    return false;
+  }
+  const preparedTargetCount = receipt.targets.filter(
+    (target) => target.status === "prepared",
+  ).length;
   return (
-    value.artifactCount >= preparedTargetCount && value.artifactCount <= preparedTargetCount * 2
+    receipt.artifactCount >= preparedTargetCount && receipt.artifactCount <= preparedTargetCount * 2
   );
 }
 
@@ -145,14 +156,18 @@ function isReceiptTarget(
   financialYear: string,
 ): value is FiledReturnsRunReceiptV1["targets"][number] {
   if (!isRecordWithOnlyKeys(value, ["targetId", "period", "status"])) return false;
-  if (!isBoundedString(value.period, 1, 40) || !RECEIPT_PERIODS.has(value.period)) return false;
+  if (
+    !isBoundedString(value.targetId, 1, 160) ||
+    !isBoundedString(value.period, 1, 40) ||
+    !RECEIPT_PERIODS.has(value.period)
+  ) {
+    return false;
+  }
   const targetIdPrefix = `${returnType}:${financialYear}:${value.period}`;
   return (
     (value.targetId === targetIdPrefix ||
       (value.targetId.startsWith(`${targetIdPrefix}:`) &&
-        /^(?:PDF|EXCEL|PDF_AND_EXCEL)$/.test(
-          value.targetId.slice(targetIdPrefix.length + 1),
-        ))) &&
+        /^(?:PDF|EXCEL|PDF_AND_EXCEL)$/.test(value.targetId.slice(targetIdPrefix.length + 1)))) &&
     (value.status === "prepared" || value.status === "not-filed")
   );
 }

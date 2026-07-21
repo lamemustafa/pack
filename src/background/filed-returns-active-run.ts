@@ -195,6 +195,7 @@ function parseActiveRun(input: unknown): ActiveFiledReturnsRun | null {
       "returnType",
       "artifactType",
       "completedPeriods",
+      "rangeEndPeriod",
     ])
   ) {
     return null;
@@ -213,7 +214,11 @@ function parseActiveRun(input: unknown): ActiveFiledReturnsRun | null {
       (!Array.isArray(scope.completedPeriods) ||
         !scope.completedPeriods.every(
           (period) => typeof period === "string" && period.length > 0 && period.length <= 20,
-        )))
+        ))) ||
+    (scope.rangeEndPeriod !== undefined &&
+      (typeof scope.rangeEndPeriod !== "string" ||
+        scope.rangeEndPeriod.length === 0 ||
+        scope.rangeEndPeriod.length > 20))
   ) {
     return null;
   }
@@ -226,6 +231,7 @@ function parseActiveRun(input: unknown): ActiveFiledReturnsRun | null {
       period: scope.period,
       returnType: scope.returnType,
       ...(scope.artifactType ? { artifactType: scope.artifactType } : {}),
+      ...(typeof scope.rangeEndPeriod === "string" ? { rangeEndPeriod: scope.rangeEndPeriod } : {}),
       ...(Array.isArray(scope.completedPeriods)
         ? { completedPeriods: scope.completedPeriods }
         : {}),

@@ -81,7 +81,7 @@ export function isFullFiscalYearLedger(input: unknown): input is FiledReturnsFul
   if (ledger.lastReconciledAt !== undefined && !isValidTimestamp(ledger.lastReconciledAt)) {
     return false;
   }
-  if (!isFullFiscalYearScope(ledger.scope)) return false;
+  if (!isMultiPeriodLedgerScope(ledger.scope)) return false;
   if (ledger.currentTargetId !== undefined && !isBoundedString(ledger.currentTargetId, 1, 120)) {
     return false;
   }
@@ -108,20 +108,23 @@ export function recoverableFullFiscalYearLedgerId(input: unknown): string | null
     : null;
 }
 
-function isFullFiscalYearScope(
+function isMultiPeriodLedgerScope(
   scope: Partial<FiledReturnsDownloadScope> | undefined,
 ): scope is FiledReturnsDownloadScope {
   if (!scope) return false;
   const artifactType = scope.artifactType ?? "PDF";
-  return (
+  const validCommonFields =
     typeof scope.financialYear === "string" &&
     /^20\d{2}-\d{2}$/.test(scope.financialYear) &&
-    scope.period === FULL_FISCAL_YEAR_PERIOD &&
     isFiledReturnsReturnType(scope.returnType) &&
     supportsFullFiscalYearFiledReturnsRun(scope.returnType) &&
     isFiledReturnsArtifactType(artifactType) &&
-    supportsFiledReturnsArtifactType(scope.returnType, artifactType)
-  );
+    supportsFiledReturnsArtifactType(scope.returnType, artifactType);
+  if (!validCommonFields) return false;
+  if (scope.period === FULL_FISCAL_YEAR_PERIOD) return scope.rangeEndPeriod === undefined;
+  if (!isFiledReturnsMonth(scope.period) || !isFiledReturnsMonth(scope.rangeEndPeriod))
+    return false;
+  return monthIndex(scope.rangeEndPeriod) > monthIndex(scope.period);
 }
 
 function isFullFiscalYearTarget(
@@ -131,6 +134,7 @@ function isFullFiscalYearTarget(
   if (!isBoundedString(target.targetId, 1, 120)) return false;
   if (target.financialYear !== scope.financialYear) return false;
   if (!isFiledReturnsMonth(target.period)) return false;
+  if (!isTargetPeriodInsideScope(target.period, scope)) return false;
   if (target.returnType !== scope.returnType) return false;
   const artifactType = normaliseFiledReturnsArtifactType(target.returnType, target.artifactType);
   const ledgerArtifactType = normaliseFiledReturnsArtifactType(
@@ -170,6 +174,21 @@ function isFullFiscalYearTarget(
 
 function isFiledReturnsMonth(input: unknown): input is FiledReturnsMonth {
   return typeof input === "string" && FILED_RETURNS_MONTHS.includes(input as FiledReturnsMonth);
+}
+
+function isTargetPeriodInsideScope(
+  period: FiledReturnsMonth,
+  scope: FiledReturnsDownloadScope,
+): boolean {
+  if (scope.period === FULL_FISCAL_YEAR_PERIOD) return true;
+  if (!isFiledReturnsMonth(scope.period) || !isFiledReturnsMonth(scope.rangeEndPeriod))
+    return false;
+  const periodIndex = monthIndex(period);
+  return periodIndex >= monthIndex(scope.period) && periodIndex <= monthIndex(scope.rangeEndPeriod);
+}
+
+function monthIndex(period: FiledReturnsMonth): number {
+  return FILED_RETURNS_MONTHS.indexOf(period);
 }
 
 function isBoundedString(input: unknown, minLength: number, maxLength: number): input is string {

@@ -11,6 +11,7 @@ import {
   getFiledReturnsPeriodOptions,
   getFiledReturnsScopePeriodOptions,
   FULL_FISCAL_YEAR_PERIOD,
+  isCustomFiledReturnsRangeScope,
   isFullFiscalYearScope,
 } from "../../core/filed-returns-scope";
 import { FILED_RETURNS_RETURN_TYPES } from "../../core/filed-returns-return-types";
@@ -24,6 +25,11 @@ export function createScopeFormModel(scope: FiledReturnsDownloadScope) {
     scope.returnType,
   );
   const fullFiscalYear = isFullFiscalYearScope(scope);
+  const customRange = isCustomFiledReturnsRangeScope(scope);
+  const rangeEndOptions = singlePeriodOptions.slice(
+    Math.max(singlePeriodOptions.findIndex((option) => option.value === scope.period) + 1, 0),
+  );
+  const rangeStartOptions = singlePeriodOptions.slice(0, -1);
   return {
     artifactOptions: FILED_RETURNS_ARTIFACT_TYPES.filter((artifactType) =>
       supportsFiledReturnsArtifactType(scope.returnType, artifactType),
@@ -37,6 +43,9 @@ export function createScopeFormModel(scope: FiledReturnsDownloadScope) {
       label: financialYear,
     })),
     fullFiscalYear,
+    customRange,
+    rangeEndOptions,
+    rangeStartOptions,
     selectedArtifactType: normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType),
     singlePeriodOptions,
     supportsFullFiscalYear: scopePeriodOptions.some(
@@ -84,6 +93,16 @@ export function getScopeActionCopy(
   const artifactType = normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType);
   const concreteArtifactCount = concreteFiledReturnsArtifactTypes(artifactType).length;
   if (!fullFiscalYear) {
+    if (isCustomFiledReturnsRangeScope(scope)) {
+      return {
+        summary: `Collect ${scope.period} through ${scope.rangeEndPeriod} into one local ZIP.`,
+        details: [
+          "Only the selected contiguous periods",
+          "Each file is checked before completion",
+          "No portal data leaves the device",
+        ],
+      };
+    }
     if (concreteArtifactCount > 1) {
       return {
         summary: "Collect the selected period into one local ZIP.",
@@ -162,6 +181,9 @@ function defaultStartLabel(scope: FiledReturnsDownloadScope, fullFiscalYear: boo
     const noun = multiFile ? "files" : artifactType === "EXCEL" ? "Excel files" : "PDFs";
     return `Download all ${scope.financialYear} ${scope.returnType} ${noun}`;
   }
+  if (isCustomFiledReturnsRangeScope(scope)) {
+    return `Download ${scope.period}–${scope.rangeEndPeriod} ${scope.financialYear} ${scope.returnType} ZIP`;
+  }
   const noun = multiFile ? "ZIP" : artifactType === "EXCEL" ? "Excel" : "PDF";
   return `Download ${scope.period} ${scope.financialYear} ${scope.returnType} ${noun}`;
 }
@@ -194,6 +216,7 @@ function isSameScope(left: FiledReturnsDownloadScope, right: FiledReturnsDownloa
   return (
     left.financialYear === right.financialYear &&
     left.period === right.period &&
+    left.rangeEndPeriod === right.rangeEndPeriod &&
     left.returnType === right.returnType &&
     normaliseFiledReturnsArtifactType(left.returnType, left.artifactType) ===
       normaliseFiledReturnsArtifactType(right.returnType, right.artifactType)

@@ -5,6 +5,8 @@ import {
 } from "../../core/filed-returns-artifacts";
 import {
   getFiledReturnsPeriodOptions,
+  getFiledReturnsRangePeriods,
+  isCustomFiledReturnsRangeScope,
   isFullFiscalYearScope,
 } from "../../core/filed-returns-scope";
 
@@ -16,9 +18,13 @@ export function PackSummary({
   summary: FiledReturnsFlowSummary | null;
 }) {
   const fullYear = isFullFiscalYearScope(scope);
+  const customRange = isCustomFiledReturnsRangeScope(scope);
   const artifactType = normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType);
   const totalPeriods =
-    summary?.totalPeriods ?? getFiledReturnsPeriodOptions(scope.financialYear).length;
+    summary?.totalPeriods ??
+    (customRange
+      ? getFiledReturnsRangePeriods(scope).length
+      : getFiledReturnsPeriodOptions(scope.financialYear).length);
   const completedPeriods = summary?.completedPeriods.length ?? 0;
   const needsReview =
     summary && summary.status !== "complete" ? Math.max(totalPeriods - completedPeriods, 0) : 0;
@@ -40,10 +46,15 @@ export function PackSummary({
         </div>
       </div>
       <p className="pack-summary-line">
-        {fullYear ? `${totalPeriods} periods` : `${scope.period} period`} · {fileLabel}
+        {fullYear
+          ? `${totalPeriods} periods`
+          : customRange
+            ? `${scope.period}–${scope.rangeEndPeriod} · ${totalPeriods} periods`
+            : `${scope.period} period`}{" "}
+        · {fileLabel}
       </p>
       <p className="pack-summary-meta">
-        {fullYear ? "One ZIP · saved by your browser" : "Saved by your browser"}
+        {fullYear || customRange ? "One ZIP · saved by your browser" : "Saved by your browser"}
         {needsReview > 0 ? ` · ${completedPeriods} ready · ${needsReview} needs review` : null}
       </p>
     </section>

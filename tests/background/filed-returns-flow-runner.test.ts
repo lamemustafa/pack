@@ -617,6 +617,95 @@ describe("filed returns flow runner", () => {
     );
   });
 
+  it("runs an immutable same-FY custom range through only its selected periods", async () => {
+    const sendMessageToTabWithInjection = vi.fn<
+      FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
+    >(async (_tabId, message) => {
+      if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3") {
+        return filedReturnRowOpened(message.payload.period as FiledReturnsMonth);
+      }
+      if (message.type === "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3") {
+        return {
+          ok: true,
+          mainWorldCaptureRequest: {
+            actionId: message.payload.actionId,
+            controlAttribute: "data-pack-gstr2b-capture-action",
+            controlId: `control-${message.payload.period.toLowerCase()}`,
+            maxBytes: 36 * 1024 * 1024,
+            signalPrefix: "filed-gstr3b",
+            timeoutMs: 5_000,
+          },
+          downloadTrigger: {
+            connectorId: "gst",
+            scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+            state: "clicked",
+            safeSignals: [
+              "filed-return-download-clicked",
+              "filed-gstr3b-download-clicked",
+              "filed-gstr3b-portal-blob-download-captured",
+              "filed-gstr3b-extension-download-requested",
+            ],
+            safeMessage: "Captured.",
+          },
+        } as PackMessageResponse;
+      }
+      return { ok: false, error: "Unexpected call." };
+    });
+
+    const response = await startFiledReturnsDownloadFlow(
+      {
+        financialYear: "2026-27",
+        period: "April",
+        rangeEndPeriod: "May",
+        returnType: "GSTR-3B",
+      },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+        },
+        now: () => new Date("2026-06-24T00:00:00+05:30"),
+        timings: {
+          flowStepSettleMs: 0,
+          resultRowNavigationSettleMs: 0,
+        },
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowSummary: {
+        scope: {
+          financialYear: "2026-27",
+          period: "April",
+          rangeEndPeriod: "May",
+          returnType: "GSTR-3B",
+        },
+        status: "complete",
+        completedPeriods: ["April", "May"],
+        totalPeriods: 2,
+      },
+    });
+    expect(
+      sendMessageToTabWithInjection.mock.calls.map(([, message]) => message.payload.period),
+    ).toEqual(["April", "April", "May", "May"]);
+    expect(browser.storage.local.set).toHaveBeenCalledWith({
+      "full-year-ledger": expect.objectContaining({
+        scope: expect.objectContaining({
+          period: "April",
+          rangeEndPeriod: "May",
+        }),
+        targets: [
+          expect.objectContaining({ period: "April" }),
+          expect.objectContaining({ period: "May" }),
+        ],
+      }),
+    });
+  });
+
   it("stages GSTR-1 full-year PDF and Excel artifacts for one final ZIP", async () => {
     const sendMessageToTabWithInjection = vi.fn<
       FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]

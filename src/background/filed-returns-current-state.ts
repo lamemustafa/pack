@@ -42,7 +42,8 @@ export async function readCurrentFiledReturnsFlowSummary(
     return completionSummary;
   }
   if (isFullFiscalYearLedger(ledger) && isActionableFullFiscalYearLedger(ledger)) {
-    return pauseFullFiscalYearSummary(summariseFullFiscalYearLedger(ledger, deps.now?.()));
+    const summary = summariseFullFiscalYearLedger(ledger, deps.now?.());
+    return isFullFiscalYearScope(ledger.scope) ? pauseFullFiscalYearSummary(summary) : summary;
   }
 
   if (isFullFiscalYearLedger(ledger) && isNewerSinglePeriodSummary(completionSummary, ledger)) {

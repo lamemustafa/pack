@@ -18,6 +18,9 @@ export function ScopeActionPanel({
       <p className="run-action-copy">
         {busy ? "Waiting for Chrome to save the file." : disabledReason || actionCopy.summary}
       </p>
+      {!busy && !disabledReason ? (
+        <p className="run-action-details">{actionCopy.details.join(" · ")}</p>
+      ) : null}
       <button
         className={busy ? "primary-action primary-action-busy" : "primary-action"}
         type="button"

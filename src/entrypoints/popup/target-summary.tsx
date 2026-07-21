@@ -3,7 +3,10 @@ import {
   filedReturnsArtifactLabel,
   normaliseFiledReturnsArtifactType,
 } from "../../core/filed-returns-artifacts";
-import { isFullFiscalYearScope } from "../../core/filed-returns-scope";
+import {
+  isCustomFiledReturnsRangeScope,
+  isFullFiscalYearScope,
+} from "../../core/filed-returns-scope";
 
 export function DownloadTargetSummary({
   completionStatus,
@@ -18,11 +21,12 @@ export function DownloadTargetSummary({
 }) {
   const artifactType = normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType);
   const fullFiscalYear = isFullFiscalYearScope(scope);
+  const customRange = isCustomFiledReturnsRangeScope(scope);
   const portalState = context?.supported ? "Portal ready" : "Portal needed";
   const stateClassName = context?.supported
     ? "state-pill state-pill-ready"
     : "state-pill state-pill-needed";
-  const runSteps = targetRunSteps(scope.returnType, fullFiscalYear);
+  const runSteps = targetRunSteps(scope.returnType, fullFiscalYear || customRange);
 
   return (
     <section className="target-strip" aria-label="Selected filed return download target">
@@ -40,7 +44,13 @@ export function DownloadTargetSummary({
         </div>
         <div>
           <dt>Period</dt>
-          <dd>{fullFiscalYear ? "Full year" : scope.period}</dd>
+          <dd>
+            {fullFiscalYear
+              ? "Full year"
+              : customRange
+                ? `${scope.period}–${scope.rangeEndPeriod}`
+                : scope.period}
+          </dd>
         </div>
         <div>
           <dt>Artifact</dt>
@@ -48,7 +58,7 @@ export function DownloadTargetSummary({
         </div>
         <div>
           <dt>Mode</dt>
-          <dd>{fullFiscalYear ? "ZIP handoff" : "Single period"}</dd>
+          <dd>{fullFiscalYear || customRange ? "ZIP handoff" : "Single period"}</dd>
         </div>
       </dl>
       <ol className="target-run-steps" aria-label="Run sequence">

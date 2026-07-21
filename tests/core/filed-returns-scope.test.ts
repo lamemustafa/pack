@@ -4,9 +4,13 @@ import {
   FULL_FISCAL_YEAR_PERIOD,
   getFiledReturnsFinancialYearOptions,
   getFiledReturnsFullFiscalYearPeriods,
+  getFiledReturnsRangePeriods,
+  getFiledReturnsRunPeriods,
   getFiledReturnsPeriodOptions,
   getFiledReturnsScopePeriodOptions,
   isFullFiscalYearScope,
+  isCustomFiledReturnsRangeScope,
+  isMultiPeriodFiledReturnsScope,
   isSupportedFiledReturnsScope,
   isSupportedFiledReturnsStartScope,
   normaliseFiledReturnsScope,
@@ -95,6 +99,59 @@ describe("filed returns GST scope", () => {
     expect(
       getFiledReturnsFullFiscalYearPeriods("2026-27", new Date("2026-06-24T00:00:00+05:30")),
     ).toEqual(["April", "May"]);
+  });
+
+  it("accepts an immutable contiguous custom range within one financial year", () => {
+    const scope = {
+      financialYear: "2025-26",
+      period: "October",
+      rangeEndPeriod: "January",
+      returnType: "GSTR-1" as const,
+      artifactType: "PDF_AND_EXCEL" as const,
+    };
+    const asOf = new Date("2026-06-24T00:00:00+05:30");
+
+    expect(isCustomFiledReturnsRangeScope(scope)).toBe(true);
+    expect(isMultiPeriodFiledReturnsScope(scope)).toBe(true);
+    expect(getFiledReturnsRangePeriods(scope, asOf)).toEqual([
+      "October",
+      "November",
+      "December",
+      "January",
+    ]);
+    expect(getFiledReturnsRunPeriods(scope, asOf)).toEqual([
+      "October",
+      "November",
+      "December",
+      "January",
+    ]);
+    expect(isSupportedFiledReturnsStartScope(scope, asOf)).toBe(true);
+  });
+
+  it("rejects a reversed or single-period custom range", () => {
+    const asOf = new Date("2026-06-24T00:00:00+05:30");
+    expect(
+      isSupportedFiledReturnsStartScope(
+        {
+          financialYear: "2025-26",
+          period: "January",
+          rangeEndPeriod: "October",
+          returnType: "GSTR-3B",
+        },
+        asOf,
+      ),
+    ).toBe(false);
+    expect(
+      normaliseFiledReturnsScope(
+        {
+          financialYear: "2025-26",
+          period: "October",
+          rangeEndPeriod: "October",
+          returnType: "GSTR-3B",
+        },
+        asOf,
+      ).rangeEndPeriod,
+    ).toBeUndefined();
   });
 
   it("exposes full fiscal year as a start-only user option without changing the default", () => {

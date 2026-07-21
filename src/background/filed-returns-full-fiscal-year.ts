@@ -3,7 +3,7 @@ import type {
   FiledReturnsFullFiscalYearLedger,
 } from "../core/contracts";
 import type { PackMessageResponse } from "../core/messages";
-import { getFiledReturnsFullFiscalYearPeriods } from "../core/filed-returns-scope";
+import { getFiledReturnsRunPeriods } from "../core/filed-returns-scope";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
 import {
   canCompleteFullFiscalYearLedger,
@@ -103,7 +103,7 @@ export async function startFullFiscalYearDownloadFlow(
   ) {
     return completeRun(deps, sameScopeExistingLedger);
   }
-  const plannedPeriods = getFiledReturnsFullFiscalYearPeriods(scope.financialYear, now);
+  const plannedPeriods = getFiledReturnsRunPeriods(scope, now);
 
   const replaceCompletedSameScopeLedger =
     existingLedger &&

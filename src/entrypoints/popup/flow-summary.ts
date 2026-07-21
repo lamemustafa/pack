@@ -1,6 +1,6 @@
 import type { FiledReturnsDownloadScope, FiledReturnsFlowSummary } from "../../core/contracts";
 import { normaliseFiledReturnsArtifactType } from "../../core/filed-returns-artifacts";
-import { FULL_FISCAL_YEAR_PERIOD } from "../../core/filed-returns-scope";
+import { isMultiPeriodFiledReturnsScope } from "../../core/filed-returns-scope";
 
 export function hasUnresolvedFiledReturnsTargetReview(
   summary: FiledReturnsFlowSummary | null,
@@ -20,11 +20,7 @@ export function hasUnresolvedFiledReturnsRecovery(
 export function canRetryFullFiscalYearZipWithoutPortal(
   summary: FiledReturnsFlowSummary | null | undefined,
 ): boolean {
-  if (
-    !summary ||
-    summary.scope.period !== FULL_FISCAL_YEAR_PERIOD ||
-    summary.status !== "blocked"
-  ) {
+  if (!summary || !isMultiPeriodFiledReturnsScope(summary.scope) || summary.status !== "blocked") {
     return false;
   }
   const signals = new Set(summary.flowStep.safeSignals);
@@ -92,6 +88,7 @@ function isSameScope(left: FiledReturnsDownloadScope, right: FiledReturnsDownloa
   return (
     left.financialYear === right.financialYear &&
     left.period === right.period &&
+    left.rangeEndPeriod === right.rangeEndPeriod &&
     left.returnType === right.returnType &&
     normaliseFiledReturnsArtifactType(left.returnType, left.artifactType) ===
       normaliseFiledReturnsArtifactType(right.returnType, right.artifactType)

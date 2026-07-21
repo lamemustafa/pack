@@ -5,7 +5,7 @@ import type {
   PackMessage,
   PackMessageResponse,
 } from "../core/messages";
-import { isFullFiscalYearScope } from "../core/filed-returns-scope";
+import { isMultiPeriodFiledReturnsScope } from "../core/filed-returns-scope";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import {
   acquireFiledReturnsRun,
@@ -103,7 +103,7 @@ export async function startFiledReturnsDownloadFlow(
     return unresolvedActionJournalResponse(scope);
   }
 
-  if (isFullFiscalYearScope(scope)) {
+  if (isMultiPeriodFiledReturnsScope(scope)) {
     const malformedLedger = await readMalformedLedgerState(deps.storageKeys.fullFiscalYearLedger);
     if (malformedLedger) {
       const flowStep: PortalFlowStepResult = {
@@ -159,7 +159,7 @@ export async function startFiledReturnsDownloadFlow(
 
   const stopLeaseRenewal = startFiledReturnsRunLeaseRenewal(activeRun.run, deps);
   try {
-    if (isFullFiscalYearScope(scope)) {
+    if (isMultiPeriodFiledReturnsScope(scope)) {
       return startFullFiscalYearDownloadFlow(
         scope,
         deps,
@@ -308,7 +308,7 @@ export async function startFreshFiledReturnsDownloadFlow(
       if (remainingTargetReview) return responseForFiledReturnsTargetReview(remainingTargetReview);
     }
 
-    if (isFullFiscalYearScope(payload.scope)) {
+    if (isMultiPeriodFiledReturnsScope(payload.scope)) {
       return startFullFiscalYearDownloadFlow(
         payload.scope,
         deps,

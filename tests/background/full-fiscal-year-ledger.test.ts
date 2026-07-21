@@ -322,6 +322,26 @@ describe("full fiscal year ledger", () => {
       }),
     ).toBe(false);
   });
+
+  it("validates a persisted custom range and rejects targets outside its immutable bounds", () => {
+    const ledger = createLedger([
+      ["April", "downloaded"],
+      ["May", "pending"],
+    ]);
+    ledger.scope = {
+      ...ledger.scope,
+      period: "April",
+      rangeEndPeriod: "May",
+    };
+
+    expect(isFullFiscalYearLedger(ledger)).toBe(true);
+    expect(
+      isFullFiscalYearLedger({
+        ...ledger,
+        targets: [...ledger.targets, createTarget("June", "pending")],
+      }),
+    ).toBe(false);
+  });
 });
 
 function createLedger(

@@ -95,4 +95,55 @@ describe("filed returns archive receipt", () => {
       }),
     ).toBe(false);
   });
+
+  it("identifies a bounded ledger receipt as a custom range without client metadata", () => {
+    const receipt = createFullFiscalYearFiledReturnsReceipt(
+      {
+        schemaVersion: "1.0",
+        ledgerId: "ledger-safe",
+        status: "complete",
+        scope: {
+          financialYear: "2025-26",
+          period: "October",
+          rangeEndPeriod: "November",
+          returnType: "GSTR-3B",
+          artifactType: "PDF",
+        },
+        createdAt: "2026-07-21T00:00:00.000Z",
+        updatedAt: "2026-07-21T00:00:00.000Z",
+        targets: [
+          {
+            targetId: "GSTR-3B:2025-26:October",
+            financialYear: "2025-26",
+            period: "October",
+            returnType: "GSTR-3B",
+            artifactType: "PDF",
+            status: "downloaded",
+            attempts: 1,
+            safeSignals: ["full-fiscal-year-opfs-staged:PDF"],
+            safeMessage: "Prepared.",
+            updatedAt: "2026-07-21T00:00:00.000Z",
+          },
+          {
+            targetId: "GSTR-3B:2025-26:November",
+            financialYear: "2025-26",
+            period: "November",
+            returnType: "GSTR-3B",
+            artifactType: "PDF",
+            status: "not-filed",
+            attempts: 1,
+            safeSignals: [],
+            safeMessage: "No filed record observed.",
+            updatedAt: "2026-07-21T00:00:00.000Z",
+          },
+        ],
+      },
+      new Date("2026-07-21T00:00:00.000Z"),
+    );
+
+    expect(receipt.archiveScope).toBe("custom-range");
+    expect(receipt.targets.map((target) => target.period)).toEqual(["October", "November"]);
+    expect(JSON.stringify(receipt)).not.toContain("ledger-safe");
+    expect(isFiledReturnsRunReceiptV1(receipt)).toBe(true);
+  });
 });

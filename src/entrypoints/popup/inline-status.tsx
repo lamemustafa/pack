@@ -1,5 +1,5 @@
 import type { FiledReturnsFlowSummary } from "../../core/contracts";
-import { FULL_FISCAL_YEAR_PERIOD } from "../../core/filed-returns-scope";
+import { isMultiPeriodFiledReturnsScope } from "../../core/filed-returns-scope";
 import type { PopupPresentationState } from "./presentation-state";
 import { RunProgress } from "./run-summary";
 
@@ -94,9 +94,9 @@ function getInlineStatusCopy(
   }
   if (presentation.kind === "complete") {
     const periods = summary?.completedPeriods.length ?? 0;
-    const isFullYear = summary?.scope.period === FULL_FISCAL_YEAR_PERIOD;
+    const isArchive = summary ? isMultiPeriodFiledReturnsScope(summary.scope) : false;
     return {
-      body: isFullYear
+      body: isArchive
         ? `${periods} periods saved as one ZIP.`
         : "The selected file was saved by your browser.",
       icon: "✓",

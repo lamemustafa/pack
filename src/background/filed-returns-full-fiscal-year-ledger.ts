@@ -9,7 +9,7 @@ import {
   normaliseFiledReturnsArtifactType,
   type FiledReturnsArtifactType,
 } from "../core/filed-returns-artifacts";
-import { FULL_FISCAL_YEAR_PERIOD, type FiledReturnsMonth } from "../core/filed-returns-scope";
+import type { FiledReturnsMonth } from "../core/filed-returns-scope";
 import type { FiledReturnsReturnType } from "../core/filed-returns-return-types";
 import { GST_CONNECTOR_DESCRIPTOR } from "../connectors/gst/constants";
 import { PACK_PRODUCT_VERSION } from "../extension/version";
@@ -44,9 +44,10 @@ export function createFullFiscalYearLedger(
     status: "running",
     scope: {
       financialYear: scope.financialYear,
-      period: FULL_FISCAL_YEAR_PERIOD,
+      period: scope.period,
       returnType: scope.returnType,
       artifactType,
+      ...(scope.rangeEndPeriod ? { rangeEndPeriod: scope.rangeEndPeriod } : {}),
     },
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -242,6 +243,7 @@ export function sameFiledReturnsScope(
   return (
     left.financialYear === right.financialYear &&
     left.period === right.period &&
+    left.rangeEndPeriod === right.rangeEndPeriod &&
     left.returnType === right.returnType &&
     normaliseFiledReturnsArtifactType(left.returnType, left.artifactType) ===
       normaliseFiledReturnsArtifactType(right.returnType, right.artifactType)

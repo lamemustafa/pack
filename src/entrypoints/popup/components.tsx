@@ -75,13 +75,28 @@ export function ScopeForm({
             <ScopeButtonGroup
               className="scope-group-run-mode"
               label="Range"
-              value={formModel.fullFiscalYear ? "FULL_YEAR" : "SINGLE_PERIOD"}
+              value={
+                formModel.fullFiscalYear
+                  ? "FULL_YEAR"
+                  : formModel.customRange
+                    ? "CUSTOM_RANGE"
+                    : "SINGLE_PERIOD"
+              }
               options={[
                 {
                   value: "SINGLE_PERIOD",
                   label: "Single period",
                   description: "One month",
                 },
+                ...(formModel.rangeEndOptions.length > 0
+                  ? [
+                      {
+                        value: "CUSTOM_RANGE",
+                        label: "Custom range",
+                        description: "Contiguous months",
+                      },
+                    ]
+                  : []),
                 {
                   value: "FULL_YEAR",
                   label: "Full year",
@@ -89,20 +104,24 @@ export function ScopeForm({
                 },
               ]}
               disabled={controlsDisabled}
-              onChange={(mode) =>
-                onScopeChange(
-                  normaliseFiledReturnsScope({
-                    ...scope,
-                    period:
-                      mode === "FULL_YEAR"
-                        ? FULL_FISCAL_YEAR_PERIOD
-                        : getSinglePeriodFallback(scope.period, formModel.singlePeriodOptions),
-                  }),
-                )
-              }
+              onChange={(mode) => {
+                const period =
+                  mode === "FULL_YEAR"
+                    ? FULL_FISCAL_YEAR_PERIOD
+                    : getSinglePeriodFallback(scope.period, formModel.singlePeriodOptions);
+                if (mode === "CUSTOM_RANGE") {
+                  const rangeEndPeriod = formModel.rangeEndOptions[0]?.value;
+                  if (!rangeEndPeriod) return;
+                  onScopeChange(normaliseFiledReturnsScope({ ...scope, period, rangeEndPeriod }));
+                  return;
+                }
+                onScopeChange(normaliseFiledReturnsScope(scopeWithoutCustomRange(scope, period)));
+              }}
             />
           ) : null}
-          <div className="scope-select-row">
+          <div
+            className={`scope-select-row${formModel.customRange ? " scope-select-row-custom-range" : ""}`}
+          >
             <ScopeSelect
               label="FY"
               value={scope.financialYear}
@@ -119,13 +138,53 @@ export function ScopeForm({
             />
             {formModel.fullFiscalYear ? null : (
               <ScopeSelect
-                label="Period"
+                label={formModel.customRange ? "Start" : "Period"}
                 value={scope.period}
-                options={formModel.singlePeriodOptions}
+                options={
+                  formModel.customRange
+                    ? formModel.rangeStartOptions
+                    : formModel.singlePeriodOptions
+                }
                 disabled={controlsDisabled}
-                onChange={(period) => onScopeChange({ ...scope, period })}
+                onChange={(period) => {
+                  const candidateEndPeriod = formModel.singlePeriodOptions.find(
+                    (option) => option.value === scope.rangeEndPeriod,
+                  );
+                  const periodIndex = formModel.singlePeriodOptions.findIndex(
+                    (option) => option.value === period,
+                  );
+                  const candidateEndIndex = formModel.singlePeriodOptions.findIndex(
+                    (option) => option.value === candidateEndPeriod?.value,
+                  );
+                  if (formModel.customRange) {
+                    const rangeEndPeriod =
+                      candidateEndIndex > periodIndex
+                        ? candidateEndPeriod?.value
+                        : formModel.singlePeriodOptions[periodIndex + 1]?.value;
+                    if (!rangeEndPeriod) return;
+                    onScopeChange(normaliseFiledReturnsScope({ ...scope, period, rangeEndPeriod }));
+                    return;
+                  }
+                  onScopeChange(normaliseFiledReturnsScope({ ...scope, period }));
+                }}
               />
             )}
+            {formModel.customRange ? (
+              <ScopeSelect
+                label="End"
+                value={scope.rangeEndPeriod ?? ""}
+                options={formModel.rangeEndOptions}
+                disabled={controlsDisabled}
+                onChange={(rangeEndPeriod) =>
+                  onScopeChange(
+                    normaliseFiledReturnsScope({
+                      ...scope,
+                      rangeEndPeriod,
+                    }),
+                  )
+                }
+              />
+            ) : null}
           </div>
         </div>
         {multipleArtifactChoices ? (
@@ -169,6 +228,19 @@ export function ScopeForm({
       ) : null}
     </section>
   );
+}
+
+function scopeWithoutCustomRange(
+  scope: FiledReturnsDownloadScope,
+  period: string,
+): FiledReturnsDownloadScope {
+  return {
+    financialYear: scope.financialYear,
+    period,
+    returnType: scope.returnType,
+    ...(scope.artifactType ? { artifactType: scope.artifactType } : {}),
+    ...(scope.completedPeriods ? { completedPeriods: scope.completedPeriods } : {}),
+  };
 }
 
 export function ScopeFormAction({

@@ -140,6 +140,29 @@ describe("message boundary", () => {
       isPackMessage({
         type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",
         payload: {
+          artifactType: "PDF_AND_EXCEL",
+          financialYear: "2025-26",
+          period: "October",
+          rangeEndPeriod: "January",
+          returnType: "GSTR-1",
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isPackMessage({
+        type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",
+        payload: {
+          financialYear: "2025-26",
+          period: "January",
+          rangeEndPeriod: "October",
+          returnType: "GSTR-3B",
+        },
+      }),
+    ).toBe(false);
+    expect(
+      isPackMessage({
+        type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",
+        payload: {
           financialYear: "2025-26",
           period: FULL_FISCAL_YEAR_PERIOD,
           returnType: "GSTR-3B",
