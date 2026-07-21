@@ -154,4 +154,30 @@ describe("filed returns active run recovery", () => {
       }),
     });
   });
+
+  it("quarantines an active run outside the selected return type's availability floor", async () => {
+    browserMocks.storage.local.get.mockResolvedValue({
+      "active-run": {
+        ...ACTIVE_RUN,
+        scope: {
+          financialYear: "2020-21",
+          period: "April",
+          returnType: "GSTR-2B",
+        },
+      },
+    });
+
+    const result = await acquireFiledReturnsRun(ACTIVE_RUN.scope, {
+      storageKeys: { activeRun: "active-run" },
+    });
+
+    expect(result).toMatchObject({
+      response: { flowStep: { safeSignals: ["filed-returns-active-run-invalid"] } },
+    });
+    expect(browserMocks.storage.local.set).toHaveBeenCalledWith({
+      "pack:filed-returns-storage-quarantine": expect.objectContaining({
+        entries: [expect.objectContaining({ key: "active-run", reason: "invalid-state" })],
+      }),
+    });
+  });
 });

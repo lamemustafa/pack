@@ -5,6 +5,7 @@ import type {
   PortalFlowStepResult,
 } from "../core/contracts";
 import { isFiledReturnsArtifactType } from "../core/filed-returns-artifacts";
+import { isWithinFiledReturnsAvailabilityFloor } from "../core/filed-returns-scope";
 import { isFiledReturnsReturnType } from "../core/filed-returns-return-types";
 import type { PackMessageResponse } from "../core/messages";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
@@ -219,6 +220,15 @@ function parseActiveRun(input: unknown): ActiveFiledReturnsRun | null {
       (typeof scope.rangeEndPeriod !== "string" ||
         scope.rangeEndPeriod.length === 0 ||
         scope.rangeEndPeriod.length > 20))
+  ) {
+    return null;
+  }
+  if (
+    !isWithinFiledReturnsAvailabilityFloor({
+      financialYear: scope.financialYear,
+      period: scope.period,
+      returnType: scope.returnType,
+    })
   ) {
     return null;
   }

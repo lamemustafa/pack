@@ -24,7 +24,7 @@ export function PackSummary({
     summary?.totalPeriods ??
     (customRange
       ? getFiledReturnsRangePeriods(scope).length
-      : getFiledReturnsPeriodOptions(scope.financialYear).length);
+      : getFiledReturnsPeriodOptions(scope.financialYear, new Date(), scope.returnType).length);
   const completedPeriods = summary?.completedPeriods.length ?? 0;
   const needsReview =
     summary && summary.status !== "complete" ? Math.max(totalPeriods - completedPeriods, 0) : 0;

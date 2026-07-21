@@ -17,6 +17,7 @@ import {
 import {
   FILED_RETURNS_MONTHS,
   FULL_FISCAL_YEAR_PERIOD,
+  isWithinFiledReturnsAvailabilityFloor,
   type FiledReturnsMonth,
 } from "../core/filed-returns-scope";
 
@@ -121,6 +122,7 @@ function isMultiPeriodLedgerScope(
     isFiledReturnsArtifactType(artifactType) &&
     supportsFiledReturnsArtifactType(scope.returnType, artifactType);
   if (!validCommonFields) return false;
+  if (!isWithinFiledReturnsAvailabilityFloor(scope as FiledReturnsDownloadScope)) return false;
   if (scope.period === FULL_FISCAL_YEAR_PERIOD) return scope.rangeEndPeriod === undefined;
   if (!isFiledReturnsMonth(scope.period) || !isFiledReturnsMonth(scope.rangeEndPeriod))
     return false;
@@ -136,6 +138,15 @@ function isFullFiscalYearTarget(
   if (!isFiledReturnsMonth(target.period)) return false;
   if (!isTargetPeriodInsideScope(target.period, scope)) return false;
   if (target.returnType !== scope.returnType) return false;
+  if (
+    !isWithinFiledReturnsAvailabilityFloor({
+      financialYear: target.financialYear,
+      period: target.period,
+      returnType: target.returnType,
+    })
+  ) {
+    return false;
+  }
   const artifactType = normaliseFiledReturnsArtifactType(target.returnType, target.artifactType);
   const ledgerArtifactType = normaliseFiledReturnsArtifactType(
     scope.returnType,

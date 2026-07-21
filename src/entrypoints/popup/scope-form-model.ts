@@ -23,7 +23,11 @@ import { FILED_RETURNS_RETURN_TYPES } from "../../core/filed-returns-return-type
 import { canRetryFullFiscalYearZipWithoutPortal } from "./flow-summary";
 
 export function createScopeFormModel(scope: FiledReturnsDownloadScope) {
-  const singlePeriodOptions = getFiledReturnsPeriodOptions(scope.financialYear, new Date());
+  const singlePeriodOptions = getFiledReturnsPeriodOptions(
+    scope.financialYear,
+    new Date(),
+    scope.returnType,
+  );
   const scopePeriodOptions = getFiledReturnsScopePeriodOptions(
     scope.financialYear,
     new Date(),
@@ -43,10 +47,12 @@ export function createScopeFormModel(scope: FiledReturnsDownloadScope) {
       label: artifactOptionLabel(scope.returnType, artifactType),
       description: artifactOptionDescription(scope.returnType, artifactType),
     })),
-    financialYearOptions: getFiledReturnsFinancialYearOptions().map((financialYear) => ({
+    financialYearOptions: getFiledReturnsFinancialYearOptions(new Date(), scope.returnType).map(
+      (financialYear) => ({
       value: financialYear,
       label: financialYear,
-    })),
+      }),
+    ),
     fullFiscalYear,
     customRange,
     rangeEndOptions,

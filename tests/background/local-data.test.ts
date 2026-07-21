@@ -526,6 +526,32 @@ describe("Pack local data clearing", () => {
     });
   });
 
+  it("does not display a session-only summary outside its return type's availability floor", async () => {
+    browserMocks.storage.session.get.mockResolvedValue({
+      "pack:last-filed-returns-flow-summary": {
+        scope: {
+          financialYear: "2020-21",
+          period: "April",
+          returnType: "GSTR-2B",
+        },
+        status: "complete",
+        completedPeriods: ["April"],
+        totalPeriods: 1,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr2b-pdf-private-v0",
+          state: "downloaded",
+          safeSignals: ["browser-download-non-empty"],
+          safeMessage: "Complete.",
+        },
+      } satisfies FiledReturnsFlowSummary,
+    });
+
+    await expect(
+      readCurrentFiledReturnsFlowSummary({ storageKeys: filedReturnsCurrentStateStorageKeys }),
+    ).resolves.toBeNull();
+  });
+
   it("keeps same-scope active-run recovery visible over a terminal summary", async () => {
     const sessionSummary: FiledReturnsFlowSummary = {
       scope: {

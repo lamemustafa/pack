@@ -8,6 +8,19 @@ import {
 } from "../../src/entrypoints/popup/scope-form-model";
 
 describe("popup scope form model", () => {
+  it("does not expose pre-availability GSTR-2B years or months in the planner", () => {
+    const model = createScopeFormModel({
+      artifactType: "PDF",
+      financialYear: "2020-21",
+      period: "July",
+      returnType: "GSTR-2B",
+    });
+
+    expect(model.financialYearOptions.at(-1)?.value).toBe("2020-21");
+    expect(model.singlePeriodOptions[0]?.value).toBe("July");
+    expect(model.singlePeriodOptions.some((option) => option.value === "April")).toBe(false);
+  });
+
   it("names a single GSTR-1 Excel action truthfully", () => {
     const action = getScopeFormStartAction(
       {

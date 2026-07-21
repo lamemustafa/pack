@@ -342,6 +342,28 @@ describe("full fiscal year ledger", () => {
       }),
     ).toBe(false);
   });
+
+  it("rejects a persisted GSTR-2B ledger before its availability floor", () => {
+    const ledger = createLedger([["April", "downloaded"]], {
+      artifactType: "PDF_AND_EXCEL",
+      returnType: "GSTR-2B",
+    });
+    const target = ledger.targets[0]!;
+    const earlyLedger = {
+      ...ledger,
+      currentTargetId: "GSTR-2B:2020-21:April:PDF_AND_EXCEL",
+      scope: { ...ledger.scope, financialYear: "2020-21" },
+      targets: [
+        {
+          ...target,
+          financialYear: "2020-21",
+          targetId: "GSTR-2B:2020-21:April:PDF_AND_EXCEL",
+        },
+      ],
+    };
+
+    expect(isFullFiscalYearLedger(earlyLedger)).toBe(false);
+  });
 });
 
 function createLedger(

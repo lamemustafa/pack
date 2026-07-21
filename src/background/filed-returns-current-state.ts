@@ -1,6 +1,10 @@
 import { browser } from "wxt/browser";
 import type { FiledReturnsFlowSummary, FiledReturnsFullFiscalYearLedger } from "../core/contracts";
-import { isFullFiscalYearScope } from "../core/filed-returns-scope";
+import {
+  isFullFiscalYearScope,
+  isWithinFiledReturnsAvailabilityFloor,
+} from "../core/filed-returns-scope";
+import { isFiledReturnsReturnType } from "../core/filed-returns-return-types";
 import { readActiveFiledReturnsRunSummary } from "./filed-returns-active-run";
 import { summariseFullFiscalYearLedger } from "./filed-returns-full-fiscal-year";
 import {
@@ -22,9 +26,12 @@ export interface FiledReturnsCurrentStateDeps {
 export async function readCurrentFiledReturnsFlowSummary(
   deps: FiledReturnsCurrentStateDeps,
 ): Promise<FiledReturnsFlowSummary | null> {
-  const completionSummary = await readSessionValue<FiledReturnsFlowSummary>(
+  const persistedCompletionSummary = await readSessionValue<FiledReturnsFlowSummary>(
     deps.storageKeys.completion,
   );
+  const completionSummary = isAvailabilityCompatibleFlowSummary(persistedCompletionSummary)
+    ? persistedCompletionSummary
+    : null;
   const activeRunSummary = await readActiveFiledReturnsRunSummary({
     storageKeys: { activeRun: deps.storageKeys.activeRun },
     ...(deps.now ? { now: deps.now } : {}),
@@ -77,6 +84,18 @@ export function pauseFullFiscalYearSummary(
       },
     },
   };
+}
+
+function isAvailabilityCompatibleFlowSummary(
+  summary: FiledReturnsFlowSummary | null,
+): summary is FiledReturnsFlowSummary {
+  const scope = summary?.scope;
+  return (
+    typeof scope?.financialYear === "string" &&
+    typeof scope.period === "string" &&
+    isFiledReturnsReturnType(scope.returnType) &&
+    isWithinFiledReturnsAvailabilityFloor(scope)
+  );
 }
 
 function isRetainedZipRetrySummary(

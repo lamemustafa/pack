@@ -46,6 +46,67 @@ describe("filed returns GST scope", () => {
     ]);
   });
 
+  it("keeps GSTR-2B planning within its statement availability floor", () => {
+    const asOf = new Date("2026-06-24T00:00:00+05:30");
+
+    expect(getFiledReturnsFinancialYearOptions(asOf, "GSTR-2B").at(-1)).toBe("2020-21");
+    expect(
+      getFiledReturnsPeriodOptions("2020-21", asOf, "GSTR-2B").map((option) => option.value),
+    ).toEqual([
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December",
+      "January",
+      "February",
+      "March",
+    ]);
+    expect(
+      getFiledReturnsFullFiscalYearPeriods("2020-21", asOf, "GSTR-2B"),
+    ).toEqual([
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December",
+      "January",
+      "February",
+      "March",
+    ]);
+    expect(
+      isSupportedFiledReturnsScope(
+        { financialYear: "2019-20", period: "March", returnType: "GSTR-2B" },
+        asOf,
+      ),
+    ).toBe(false);
+    expect(
+      isSupportedFiledReturnsScope(
+        { financialYear: "2020-21", period: "June", returnType: "GSTR-2B" },
+        asOf,
+      ),
+    ).toBe(false);
+  });
+
+  it("does not make the first GSTR-2B month runnable before July has elapsed", () => {
+    expect(
+      getFiledReturnsPeriodOptions(
+        "2020-21",
+        new Date("2020-07-15T00:00:00+05:30"),
+        "GSTR-2B",
+      ),
+    ).toEqual([]);
+    expect(
+      getFiledReturnsPeriodOptions(
+        "2020-21",
+        new Date("2020-08-15T00:00:00+05:30"),
+        "GSTR-2B",
+      ).map((option) => option.value),
+    ).toEqual(["July"]);
+  });
+
   it("exposes only elapsed periods for the current Indian financial year", () => {
     expect(
       getFiledReturnsPeriodOptions("2026-27", new Date("2026-06-24T00:00:00+05:30")).map(
@@ -126,6 +187,20 @@ describe("filed returns GST scope", () => {
       "January",
     ]);
     expect(isSupportedFiledReturnsStartScope(scope, asOf)).toBe(true);
+  });
+
+  it("builds first-year GSTR-2B ranges only from its available statement months", () => {
+    const scope = {
+      financialYear: "2020-21",
+      period: "July",
+      rangeEndPeriod: "August",
+      returnType: "GSTR-2B" as const,
+      artifactType: "PDF_AND_EXCEL" as const,
+    };
+    const asOf = new Date("2021-04-15T00:00:00+05:30");
+
+    expect(getFiledReturnsRangePeriods(scope, asOf)).toEqual(["July", "August"]);
+    expect(getFiledReturnsRunPeriods(scope, asOf)).toEqual(["July", "August"]);
   });
 
   it("rejects a reversed or single-period custom range", () => {
@@ -320,6 +395,24 @@ describe("filed returns GST scope", () => {
       financialYear: "2017-18",
       period: "July",
       returnType: "GSTR-3B",
+    });
+  });
+
+  it("normalises a pre-availability GSTR-2B selection to its earliest supported month", () => {
+    expect(
+      normaliseFiledReturnsScope(
+        {
+          financialYear: "2017-18",
+          period: "April",
+          returnType: "GSTR-2B",
+        },
+        new Date("2026-06-24T00:00:00+05:30"),
+      ),
+    ).toEqual({
+      artifactType: "PDF",
+      financialYear: "2020-21",
+      period: "July",
+      returnType: "GSTR-2B",
     });
   });
 
