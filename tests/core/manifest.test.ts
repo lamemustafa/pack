@@ -73,12 +73,10 @@ describe("archive manifest", () => {
     expect(isArchiveManifestLocalSummary(summary)).toBe(true);
     expect(JSON.stringify(summary)).not.toContain("documents");
     expect(JSON.stringify(summary)).not.toContain("subject");
-    expect(
-      isArchiveManifestLocalSummary({ ...summary, originalFilename: "synthetic.pdf" }),
-    ).toBe(false);
-    expect(
-      isArchiveManifestLocalSummary({ ...summary, generatedAt: "x".repeat(41) }),
-    ).toBe(false);
+    expect(isArchiveManifestLocalSummary({ ...summary, originalFilename: "synthetic.pdf" })).toBe(
+      false,
+    );
+    expect(isArchiveManifestLocalSummary({ ...summary, generatedAt: "x".repeat(41) })).toBe(false);
     expect(isArchiveManifestLocalSummary({ ...summary, completionState: "unknown" })).toBe(false);
   });
 });

@@ -24,8 +24,7 @@ export function detectCadenceUnresolvedNoRecordEvidence(
     scopeId,
     state: "download-unconfirmed",
     safeSignals: ["filed-return-no-record-cadence-unresolved"],
-    safeMessage:
-      `The GST Portal showed no record for the selected ${scope.returnType} period, but Pack cannot establish the applicable filing cadence. Review the period on the portal before treating it as unavailable.`,
+    safeMessage: `The GST Portal showed no record for the selected ${scope.returnType} period, but Pack cannot establish the applicable filing cadence. Review the period on the portal before treating it as unavailable.`,
     userAction: {
       type: "RETRY_PORTAL_GENERATION",
       message:

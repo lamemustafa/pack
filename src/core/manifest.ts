@@ -145,7 +145,9 @@ export function createArchiveManifestLocalSummary(
   };
 }
 
-export function isArchiveManifestLocalSummary(value: unknown): value is ArchiveManifestLocalSummary {
+export function isArchiveManifestLocalSummary(
+  value: unknown,
+): value is ArchiveManifestLocalSummary {
   if (!isRecord(value)) return false;
   if (
     !hasOnlyKeys(value, [

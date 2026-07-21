@@ -7,8 +7,7 @@ import {
 import { safeSinglePeriodReceiptFilename } from "../connectors/gst/filed-returns-download-path";
 
 export type SinglePeriodReceiptExportResult =
-  | { ok: true; receipt: FiledReturnsRunReceiptV1 }
-  | { ok: false; error: string };
+  { ok: true; receipt: FiledReturnsRunReceiptV1 } | { ok: false; error: string };
 
 /**
  * This is an explicit user-requested local side effect. It never changes the

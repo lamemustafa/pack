@@ -130,9 +130,9 @@ export async function startFullFiscalYearDownloadFlow(
   }
   const reuseExistingLedger = Boolean(
     existingLedger &&
-      sameFiledReturnsScope(existingLedger.scope, scope) &&
-      !replaceCompletedSameScopeLedger &&
-      !replaceUnstartedBlockedSameScopeLedger,
+    sameFiledReturnsScope(existingLedger.scope, scope) &&
+    !replaceCompletedSameScopeLedger &&
+    !replaceUnstartedBlockedSameScopeLedger,
   );
   let ledger = reuseExistingLedger
     ? existingLedger!

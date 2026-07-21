@@ -135,12 +135,7 @@ describe("filed returns archive receipt", () => {
       createdAt: "2026-07-21T01:02:03.000Z",
       targets: [{ status: "verified" }],
     });
-    expect(
-      receiptForCompletedSinglePeriod(
-        { ...scope, period: "June" },
-        summary,
-      ),
-    ).toBeNull();
+    expect(receiptForCompletedSinglePeriod({ ...scope, period: "June" }, summary)).toBeNull();
   });
 
   it("identifies a bounded ledger receipt as a custom range without client metadata", () => {

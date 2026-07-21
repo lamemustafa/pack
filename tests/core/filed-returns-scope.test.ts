@@ -63,9 +63,7 @@ describe("filed returns GST scope", () => {
       "February",
       "March",
     ]);
-    expect(
-      getFiledReturnsFullFiscalYearPeriods("2020-21", asOf, "GSTR-2B"),
-    ).toEqual([
+    expect(getFiledReturnsFullFiscalYearPeriods("2020-21", asOf, "GSTR-2B")).toEqual([
       "July",
       "August",
       "September",
@@ -92,18 +90,12 @@ describe("filed returns GST scope", () => {
 
   it("does not make the first GSTR-2B month runnable before July has elapsed", () => {
     expect(
-      getFiledReturnsPeriodOptions(
-        "2020-21",
-        new Date("2020-07-15T00:00:00+05:30"),
-        "GSTR-2B",
-      ),
+      getFiledReturnsPeriodOptions("2020-21", new Date("2020-07-15T00:00:00+05:30"), "GSTR-2B"),
     ).toEqual([]);
     expect(
-      getFiledReturnsPeriodOptions(
-        "2020-21",
-        new Date("2020-08-15T00:00:00+05:30"),
-        "GSTR-2B",
-      ).map((option) => option.value),
+      getFiledReturnsPeriodOptions("2020-21", new Date("2020-08-15T00:00:00+05:30"), "GSTR-2B").map(
+        (option) => option.value,
+      ),
     ).toEqual(["July"]);
   });
 

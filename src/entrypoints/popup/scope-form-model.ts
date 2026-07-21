@@ -49,8 +49,8 @@ export function createScopeFormModel(scope: FiledReturnsDownloadScope) {
     })),
     financialYearOptions: getFiledReturnsFinancialYearOptions(new Date(), scope.returnType).map(
       (financialYear) => ({
-      value: financialYear,
-      label: financialYear,
+        value: financialYear,
+        label: financialYear,
       }),
     ),
     fullFiscalYear,

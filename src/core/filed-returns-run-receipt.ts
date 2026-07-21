@@ -13,10 +13,7 @@ import {
   isFiledReturnsReturnType,
   type FiledReturnsReturnType,
 } from "./filed-returns-return-types";
-import {
-  isCustomFiledReturnsRangeScope,
-  isFullFiscalYearScope,
-} from "./filed-returns-scope";
+import { isCustomFiledReturnsRangeScope, isFullFiscalYearScope } from "./filed-returns-scope";
 
 const RECEIPT_PERIODS = new Set([
   "April",
@@ -82,8 +79,7 @@ export function createFullFiscalYearFiledReturnsReceipt(
   const targets = ledger.targets.map((target) => ({
     targetId: target.targetId,
     period: target.period,
-    status:
-      target.status === "not-filed" ? ("no-record-observed" as const) : ("verified" as const),
+    status: target.status === "not-filed" ? ("no-record-observed" as const) : ("verified" as const),
   }));
   const artifactTypes = concreteFiledReturnsArtifactTypes(
     normaliseFiledReturnsArtifactType(ledger.scope.returnType, ledger.scope.artifactType),

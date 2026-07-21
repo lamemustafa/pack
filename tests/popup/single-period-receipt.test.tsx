@@ -22,7 +22,12 @@ const summary: FiledReturnsFlowSummary = {
 describe("single-period receipt", () => {
   it("shows only a verified direct-download receipt and an explicit local export", () => {
     const markup = renderToStaticMarkup(
-      <SinglePeriodReceipt busy={false} downloadStatus={null} onDownload={vi.fn()} summary={summary} />,
+      <SinglePeriodReceipt
+        busy={false}
+        downloadStatus={null}
+        onDownload={vi.fn()}
+        summary={summary}
+      />,
     );
 
     expect(markup).toContain("Verified single-period download");

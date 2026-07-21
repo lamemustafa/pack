@@ -31,7 +31,11 @@ export function SinglePeriodReceipt({
         This optional receipt contains only Pack-generated scope and verification status. It does
         not contain portal content, account information, original filenames, or local paths.
       </p>
-      {downloadStatus ? <p className="status-detail" role="status">{downloadStatus}</p> : null}
+      {downloadStatus ? (
+        <p className="status-detail" role="status">
+          {downloadStatus}
+        </p>
+      ) : null}
       <button type="button" className="secondary" disabled={busy} onClick={onDownload}>
         {busy ? "Requesting local receipt..." : "Download receipt (.json)"}
       </button>
