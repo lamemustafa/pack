@@ -81,6 +81,23 @@ describe("popup scope form", () => {
     expect(markup).toContain("Download October–January 2025-26 GSTR-1 ZIP");
   });
 
+  it("does not present completed calendar months as a filing or availability guarantee", () => {
+    const markup = renderToStaticMarkup(
+      <ScopeForm
+        busy={null}
+        context={context}
+        scope={{ financialYear: "2026-27", period: "April", returnType: "GSTR-3B" }}
+        onScopeChange={vi.fn()}
+        onStart={vi.fn()}
+        showPrimaryAction={false}
+      />,
+    );
+
+    expect(markup).toContain("Pack lists completed calendar months.");
+    expect(markup).toContain("The GST Portal determines whether a record is available");
+    expect(markup).toContain("A no-record result does not mean “never filed.”");
+  });
+
   it("keeps scope controls usable while explaining the explicit recovery choice", () => {
     const markup = renderToStaticMarkup(
       <ScopeForm

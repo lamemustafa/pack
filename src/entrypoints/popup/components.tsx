@@ -211,6 +211,10 @@ export function ScopeForm({
           </div>
         ) : null}
       </div>
+      <p className="scope-note">
+        Pack lists completed calendar months. The GST Portal determines whether a record is available;
+        monthly or quarterly context can require review. A no-record result does not mean “never filed.”
+      </p>
       {scopeLockedForReview && flowSummary?.currentPeriod ? (
         <p className="scope-note scope-note-warning" role="status">
           A saved run is paused at {flowSummary.currentPeriod}. You can change this selection, then
