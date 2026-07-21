@@ -29,6 +29,11 @@ import {
 } from "./filed-returns-direct-download-review";
 import { safeFiledReturnDownloadFilename } from "./filed-returns-download-filename";
 import { persistFiledReturnsTargetReview } from "./filed-returns-target-review";
+import {
+  armFiledReturnsAction,
+  bindFiledReturnsActionDownload,
+  settleFiledReturnsAction,
+} from "./filed-returns-action-journal";
 
 const EXPECTED_FILED_RETURN_DOWNLOAD = {
   expectedFileExtensions: [],
@@ -82,12 +87,38 @@ export async function triggerDirectFiledReturnDownload({
   }
 
   const armedAt = new Date();
+  const journalState = await armFiledReturnsAction(
+    deps.storageKeys.actionJournal,
+    {
+      actionId: target.actionId,
+      artifactType: "PDF",
+      targetId: `${target.returnType}:${target.financialYear}:${target.period}:PDF`,
+    },
+    armedAt,
+  );
+  if (journalState !== "armed") {
+    return withDirectDownloadDiagnostic(directDownloadJournalReviewResponse(activePeriod), target);
+  }
   const startedDownload = await startDirectBrowserDownload(
     response.directDownloadRequest.url,
     safeFiledReturnDownloadFilename(scope, "PDF"),
   );
   if (!startedDownload.ok) {
+    await settleFiledReturnsAction(
+      deps.storageKeys.actionJournal,
+      target.actionId,
+      "review-required",
+    );
     return withDirectDownloadDiagnostic(directDownloadStartRejectedResponse(activePeriod), target);
+  }
+  if (
+    !(await bindFiledReturnsActionDownload(
+      deps.storageKeys.actionJournal,
+      target.actionId,
+      startedDownload.id,
+    ))
+  ) {
+    return withDirectDownloadDiagnostic(directDownloadJournalReviewResponse(activePeriod), target);
   }
 
   const directTriggerStep: PortalFlowStepResult = {
@@ -108,6 +139,18 @@ export async function triggerDirectFiledReturnDownload({
     expectedUrlSubstrings: targetUrlSubstrings(scope),
     trustedDownloadIds: new Set([startedDownload.id]),
   });
+  const settled = await settleFiledReturnsAction(
+    deps.storageKeys.actionJournal,
+    target.actionId,
+    observedDownload.state === "completed"
+      ? "verified"
+      : observedDownload.state === "failed"
+        ? "failed"
+        : "review-required",
+  );
+  if (!settled) {
+    return withDirectDownloadDiagnostic(directDownloadJournalReviewResponse(activePeriod), target);
+  }
   const flowStep = withFiledReturnsDownloadDiagnostic({
     attemptClass: "extension-direct",
     flowStep: explainDirectDownloadPromptIfNeeded(
@@ -125,6 +168,23 @@ export async function triggerDirectFiledReturnDownload({
     flowStep,
     ...(flowSummary ? { flowSummary } : {}),
     ...(response.observation ? { observation: response.observation } : {}),
+  };
+}
+
+function directDownloadJournalReviewResponse(activePeriod: string | null): PackMessageResponse {
+  return {
+    ok: true,
+    flowStep: {
+      connectorId: "gst",
+      scopeId: FILED_RETURNS_SCOPE_ID,
+      state: "download-unconfirmed",
+      safeSignals: [
+        "filed-returns-action-journal-review-required",
+        ...(activePeriod ? [`filed-return-detail-period:${activePeriod}`] : []),
+      ],
+      safeMessage:
+        "Pack found an unresolved local browser-download action and will not start another direct download automatically. Review browser Downloads before retrying.",
+    },
   };
 }
 
