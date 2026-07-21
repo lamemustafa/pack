@@ -5,11 +5,7 @@ import type {
   DownloadTarget,
 } from "../../core/contracts";
 import { buildRelativePath, makeTargetId, normalisePackFilename } from "../../core/naming";
-import {
-  DEFAULT_GST_DISCLOSURES,
-  GST_CONNECTOR_DESCRIPTOR,
-  PRIVATE_FILED_RETURNS_SPIKE_DISCLOSURE,
-} from "./constants";
+import { GST_CONNECTOR_DESCRIPTOR } from "./constants";
 
 export const DEFAULT_GST_RETURN_SCOPE: DownloadScope = {
   financialYears: ["FY-2023-24"],
@@ -56,16 +52,11 @@ export function createGstReturnPlan(scope: DownloadScope, now = new Date()): Dow
     executionMode: "local-browser",
     scope,
     targets,
-    disclosuresAccepted: DEFAULT_GST_DISCLOSURES,
   };
 }
 
 export function createFiledReturnsPrivateSpikePlan(now = new Date()): DownloadPlan {
-  const plan = createGstReturnPlan(FILED_RETURNS_PRIVATE_SPIKE_SCOPE, now);
-  return {
-    ...plan,
-    disclosuresAccepted: [...plan.disclosuresAccepted, PRIVATE_FILED_RETURNS_SPIKE_DISCLOSURE],
-  };
+  return createGstReturnPlan(FILED_RETURNS_PRIVATE_SPIKE_SCOPE, now);
 }
 
 export function createSyntheticGstResults(plan: DownloadPlan, now = new Date()): DownloadResult[] {

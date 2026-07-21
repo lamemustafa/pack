@@ -68,7 +68,6 @@ export interface DownloadPlan {
   executionMode: ExecutionMode;
   scope: DownloadScope;
   targets: DownloadTarget[];
-  disclosuresAccepted: string[];
 }
 
 export interface FileEvidence {

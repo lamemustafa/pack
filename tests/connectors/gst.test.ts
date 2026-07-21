@@ -124,6 +124,6 @@ describe("GST connector", () => {
     expect(plan.targets.every((target) => target.expectedSourceKind === "portal-original")).toBe(
       true,
     );
-    expect(plan.disclosuresAccepted).toContain("pack-v0-private-filed-returns-spike");
+    expect(plan).not.toHaveProperty("disclosuresAccepted");
   });
 });

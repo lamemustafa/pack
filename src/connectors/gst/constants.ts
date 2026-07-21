@@ -16,12 +16,3 @@ export const GST_CONNECTOR_DESCRIPTOR: PortalConnectorDescriptor = {
 };
 
 export const SUPPORTED_GST_ORIGINS = new Set(GST_CONNECTOR_DESCRIPTOR.supportedOrigins);
-
-export const DEFAULT_GST_DISCLOSURES = [
-  "pack-v0-local-first",
-  "pack-v0-no-credentials",
-  "pack-v0-no-upload",
-  "pack-v0-independent-tool",
-];
-
-export const PRIVATE_FILED_RETURNS_SPIKE_DISCLOSURE = "pack-v0-private-filed-returns-spike";
