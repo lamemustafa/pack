@@ -33,6 +33,7 @@ const browserMocks = vi.hoisted(() => {
     },
     storage: {
       local: {
+        get: vi.fn(async () => ({})),
         set: vi.fn(async () => undefined),
         setAccessLevel: vi.fn(async () => undefined),
       },
@@ -72,6 +73,15 @@ describe("Pack GST tab selection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
+    browserMocks.scripting.executeScript.mockReset().mockResolvedValue([]);
+    browserMocks.storage.local.get.mockReset().mockResolvedValue({});
+    browserMocks.storage.local.set.mockReset().mockResolvedValue(undefined);
+    browserMocks.storage.local.setAccessLevel.mockReset().mockResolvedValue(undefined);
+    browserMocks.storage.session.get.mockReset().mockResolvedValue({});
+    browserMocks.storage.session.set.mockReset().mockResolvedValue(undefined);
+    browserMocks.tabs.get.mockReset().mockImplementation(async (tabId: number) => ({ id: tabId }));
+    browserMocks.tabs.query.mockReset().mockResolvedValue([]);
+    browserMocks.tabs.sendMessage.mockReset().mockResolvedValue({ ok: true });
     vi.stubGlobal("defineBackground", (entrypoint: () => void) => {
       entrypoint();
       return entrypoint;

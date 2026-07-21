@@ -72,11 +72,26 @@ describe("Pack local data clearing", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
-    zipMocks.discardFullFiscalYearFiledReturnsZip.mockResolvedValue(
-      "full-fiscal-year-opfs-cleared",
-    );
-    zipMocks.discardSinglePeriodFiledReturnsZip.mockResolvedValue("single-period-opfs-cleared");
-    zipMocks.discardAllFiledReturnsStaging.mockResolvedValue("filed-returns-opfs-cleared");
+    browserMocks.downloads.download.mockReset().mockResolvedValue(1);
+    browserMocks.storage.local.get.mockReset().mockResolvedValue({});
+    browserMocks.storage.local.remove.mockReset().mockResolvedValue(undefined);
+    browserMocks.storage.local.set.mockReset().mockResolvedValue(undefined);
+    browserMocks.storage.local.setAccessLevel.mockReset().mockResolvedValue(undefined);
+    browserMocks.storage.session.clear.mockReset().mockResolvedValue(undefined);
+    browserMocks.storage.session.get.mockReset().mockResolvedValue({});
+    browserMocks.storage.session.set.mockReset().mockResolvedValue(undefined);
+    browserMocks.tabs.query.mockReset().mockResolvedValue([]);
+    browserMocks.tabs.sendMessage.mockReset().mockResolvedValue({ ok: true });
+    browserMocks.scripting.executeScript.mockReset().mockResolvedValue([]);
+    zipMocks.discardFullFiscalYearFiledReturnsZip
+      .mockReset()
+      .mockResolvedValue("full-fiscal-year-opfs-cleared");
+    zipMocks.discardSinglePeriodFiledReturnsZip
+      .mockReset()
+      .mockResolvedValue("single-period-opfs-cleared");
+    zipMocks.discardAllFiledReturnsStaging
+      .mockReset()
+      .mockResolvedValue("filed-returns-opfs-cleared");
     vi.stubGlobal("defineBackground", (entrypoint: () => void) => {
       entrypoint();
       return entrypoint;

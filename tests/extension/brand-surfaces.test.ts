@@ -74,7 +74,7 @@ describe("Pack brand surfaces", () => {
     expect(globalCss).toContain("--pack-action-popup-width: 420px;");
     expect(globalCss).toContain("--pack-action-popup-max-height: 560px;");
     expect(globalCss).toContain("cursor: not-allowed;");
-    expect(popupComponentsSource).toContain("Download GST returns");
+    expect(popupComponentsSource).toContain("Download GST records");
     expect(packSummarySource).toContain("Your pack");
     expect(popupSource).toContain("InlineStatus");
     expect(popupCss).toContain(".inline-status");
