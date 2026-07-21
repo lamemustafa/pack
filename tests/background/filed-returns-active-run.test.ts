@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   acknowledgeInterruptedFiledReturnsRun,
+  acquireFiledReturnsRun,
   type ActiveFiledReturnsRun,
   readActiveFiledReturnsRunSummary,
   renewFiledReturnsRunLease,
@@ -123,5 +124,29 @@ describe("filed returns active run recovery", () => {
         leaseUpdatedAt: "2026-06-24T00:00:20.000Z",
       },
     });
+  });
+
+  it("fails closed on an expanded persisted active-run record", async () => {
+    browserMocks.storage.local.get.mockResolvedValue({
+      "active-run": {
+        ...ACTIVE_RUN,
+        unexpected: "forbidden-metadata",
+      },
+    });
+
+    const result = await acquireFiledReturnsRun(ACTIVE_RUN.scope, {
+      storageKeys: { activeRun: "active-run" },
+    });
+
+    expect(result).toMatchObject({
+      response: {
+        ok: true,
+        flowStep: {
+          state: "blocked",
+          safeSignals: ["filed-returns-active-run-invalid"],
+        },
+      },
+    });
+    expect(browserMocks.storage.local.set).not.toHaveBeenCalled();
   });
 });

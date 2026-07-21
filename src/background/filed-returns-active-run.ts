@@ -4,6 +4,7 @@ import type {
   FiledReturnsFlowSummary,
   PortalFlowStepResult,
 } from "../core/contracts";
+import { isFiledReturnsArtifactType } from "../core/filed-returns-artifacts";
 import { isFiledReturnsReturnType } from "../core/filed-returns-return-types";
 import type { PackMessageResponse } from "../core/messages";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
@@ -42,6 +43,9 @@ export async function acquireFiledReturnsRun(
     const values = await browser.storage.local.get(key);
     const existingRun = parseActiveRun(values[key]);
     if (existingRun) return { response: activeRunResponse(existingRun, now) };
+    if (values[key] !== undefined && values[key] !== null) {
+      return { response: malformedActiveRunResponse(scope) };
+    }
 
     const run = createActiveRun(scope, now);
     await browser.storage.local.set({ [key]: run });
@@ -154,7 +158,18 @@ function createActiveRun(scope: FiledReturnsDownloadScope, now: Date): ActiveFil
 }
 
 function parseActiveRun(input: unknown): ActiveFiledReturnsRun | null {
-  if (!input || typeof input !== "object") return null;
+  if (
+    !isRecordWithOnlyKeys(input, [
+      "schemaVersion",
+      "runId",
+      "revision",
+      "scope",
+      "status",
+      "leaseUpdatedAt",
+    ])
+  ) {
+    return null;
+  }
   const run = input as Partial<ActiveFiledReturnsRun>;
   if (run.schemaVersion !== "1.0") return null;
   if (typeof run.runId !== "string" || run.runId.length === 0 || run.runId.length > 120) {
@@ -166,7 +181,17 @@ function parseActiveRun(input: unknown): ActiveFiledReturnsRun | null {
   if (typeof run.leaseUpdatedAt !== "string" || !Number.isFinite(Date.parse(run.leaseUpdatedAt))) {
     return null;
   }
-  if (!run.scope || typeof run.scope !== "object") return null;
+  if (
+    !isRecordWithOnlyKeys(run.scope, [
+      "financialYear",
+      "period",
+      "returnType",
+      "artifactType",
+      "completedPeriods",
+    ])
+  ) {
+    return null;
+  }
   const scope = run.scope as Partial<FiledReturnsDownloadScope>;
   if (
     typeof scope.financialYear !== "string" ||
@@ -175,7 +200,70 @@ function parseActiveRun(input: unknown): ActiveFiledReturnsRun | null {
   ) {
     return null;
   }
-  return run as ActiveFiledReturnsRun;
+  if (
+    (scope.artifactType !== undefined && !isFiledReturnsArtifactType(scope.artifactType)) ||
+    (scope.completedPeriods !== undefined &&
+      (!Array.isArray(scope.completedPeriods) ||
+        !scope.completedPeriods.every(
+          (period) => typeof period === "string" && period.length > 0 && period.length <= 20,
+        )))
+  ) {
+    return null;
+  }
+  return {
+    schemaVersion: "1.0",
+    runId: run.runId,
+    revision,
+    scope: {
+      financialYear: scope.financialYear,
+      period: scope.period,
+      returnType: scope.returnType,
+      ...(scope.artifactType ? { artifactType: scope.artifactType } : {}),
+      ...(Array.isArray(scope.completedPeriods)
+        ? { completedPeriods: scope.completedPeriods }
+        : {}),
+    },
+    status: "running",
+    leaseUpdatedAt: run.leaseUpdatedAt,
+  };
+}
+
+function isRecordWithOnlyKeys(
+  input: unknown,
+  allowedKeys: readonly string[],
+): input is Record<string, unknown> {
+  return (
+    input !== null &&
+    typeof input === "object" &&
+    !Array.isArray(input) &&
+    Object.keys(input).every((key) => allowedKeys.includes(key))
+  );
+}
+
+function malformedActiveRunResponse(scope: FiledReturnsDownloadScope): PackMessageResponse {
+  const flowStep: PortalFlowStepResult = {
+    connectorId: "gst",
+    scopeId: filedReturnScopeId(scope.returnType),
+    state: "blocked",
+    safeSignals: ["filed-returns-active-run-invalid"],
+    safeMessage:
+      "Pack found an invalid saved run marker and will not start a new portal action. Check browser Downloads, then clear local Pack data before starting fresh.",
+    userAction: {
+      type: "RETRY_PORTAL_GENERATION",
+      message: "Clear the invalid saved run marker only after checking browser Downloads.",
+      canResume: false,
+    },
+  };
+  return {
+    ok: true,
+    flowStep,
+    flowSummary: {
+      scope,
+      status: "blocked",
+      completedPeriods: [],
+      flowStep,
+    },
+  };
 }
 
 function activeRunResponse(run: ActiveFiledReturnsRun, now: Date): PackMessageResponse {
