@@ -40,7 +40,7 @@ describe("popup full-year recovery actions", () => {
     expect(markup).toContain("Saved run options");
   });
 
-  it("shows the same-account warning only for resume confirmation", () => {
+  it("requires same-account confirmation only for resume confirmation", () => {
     const resumeMarkup = renderToStaticMarkup(
       createElement(RecoveryActions, {
         busy: null,
@@ -54,9 +54,10 @@ describe("popup full-year recovery actions", () => {
         onResolveTarget: () => undefined,
       }),
     );
-    expect(resumeMarkup).toContain(
-      "This saved run is not bound to a GST account. Continue only if the same GST account is currently open.",
-    );
+    expect(resumeMarkup).toContain("I confirm the intended GST account is open");
+    expect(resumeMarkup).toContain("Pack does not retain or verify account identity.");
+    expect(resumeMarkup).toContain('type="checkbox"');
+    expect(resumeMarkup).toContain('disabled=""');
 
     for (const targetStatus of ["blocked", "failed", "cancelled"] as const) {
       const markup = renderToStaticMarkup(
@@ -73,9 +74,7 @@ describe("popup full-year recovery actions", () => {
         }),
       );
 
-      expect(markup).not.toContain(
-        "This saved run is not bound to a GST account. Continue only if the same GST account is currently open.",
-      );
+      expect(markup).not.toContain("I confirm the intended GST account is open");
     }
   });
 

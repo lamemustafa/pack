@@ -62,6 +62,50 @@ describe("full fiscal-year recovery", () => {
     expect(browser.storage.local.set).not.toHaveBeenCalled();
   });
 
+  it("requires explicit current-account confirmation before resuming an all-pending archive", async () => {
+    mockLocalStorageGet({
+      "full-year-ledger": createRecoveryLedger({
+        revision: 2,
+        targetStatus: "pending",
+        safeSignals: [],
+      }),
+    });
+
+    const withoutConfirmation = await prepareFullFiscalYearTargetRetry(
+      {
+        ledgerId: "ledger-existing",
+        targetId: "GSTR-3B:2026-27:April",
+        expectedRevision: 2,
+      },
+      recoveryDeps(),
+    );
+
+    expect(withoutConfirmation).toMatchObject({
+      ok: false,
+      response: {
+        flowStep: {
+          safeSignals: expect.arrayContaining([
+            "full-fiscal-year-resume-confirmation-required",
+            "full-fiscal-year-current-account-confirmation-required",
+          ]),
+        },
+      },
+    });
+    expect(browser.storage.local.set).not.toHaveBeenCalled();
+
+    const withConfirmation = await prepareFullFiscalYearTargetRetry(
+      {
+        confirmCurrentPortalAccount: true,
+        ledgerId: "ledger-existing",
+        targetId: "GSTR-3B:2026-27:April",
+        expectedRevision: 2,
+      },
+      recoveryDeps(),
+    );
+
+    expect(withConfirmation).toMatchObject({ ok: true });
+  });
+
   it("resets one recoverable target for retry and clears legacy single-period review state", async () => {
     mockLocalStorageGet({
       "full-year-ledger": createRecoveryLedger({ revision: 2 }),

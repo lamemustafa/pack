@@ -12,7 +12,10 @@ import {
   isFullFiscalYearLedger,
   markFullFiscalYearTargetTerminal,
 } from "./filed-returns-full-fiscal-year-ledger";
-import { toFullFiscalYearSummary } from "./filed-returns-full-fiscal-year-summary";
+import {
+  needsResumeConfirmation,
+  toFullFiscalYearSummary,
+} from "./filed-returns-full-fiscal-year-summary";
 import { clearFiledReturnsTargetReview } from "./filed-returns-target-review";
 import { normaliseFiledReturnsArtifactType } from "../core/filed-returns-artifacts";
 import { filedReturnsScopeId } from "../core/filed-returns-return-types";
@@ -70,6 +73,9 @@ export async function prepareFullFiscalYearTargetRetry(
   return runRecoveryCriticalSection(async () => {
     const checked = await readRecoverableFullFiscalYearTarget(payload, deps);
     if ("response" in checked) return { ok: false, response: checked.response };
+    if (needsResumeConfirmation(checked.ledger) && payload.confirmCurrentPortalAccount !== true) {
+      return { ok: false, response: currentPortalAccountConfirmationRequired(checked.ledger) };
+    }
 
     const now = deps.now?.() ?? new Date();
     const updatedLedger = resetFullFiscalYearTargetForRetry(checked.ledger, checked.target, now);
@@ -77,6 +83,28 @@ export async function prepareFullFiscalYearTargetRetry(
     await clearLegacyTargetReview(checked.target, deps);
     return { ok: true, ledger: updatedLedger };
   });
+}
+
+function currentPortalAccountConfirmationRequired(
+  ledger: FiledReturnsFullFiscalYearLedger,
+): PackMessageResponse {
+  const flowStep: PortalFlowStepResult = {
+    connectorId: "gst",
+    scopeId: filedReturnsScopeId(ledger.scope.returnType),
+    state: "blocked",
+    safeSignals: [
+      "full-fiscal-year-resume-confirmation-required",
+      "full-fiscal-year-current-account-confirmation-required",
+    ],
+    safeMessage:
+      "Pack cannot verify which GST account owns this saved archive. Confirm the intended GST account is open before resuming.",
+    userAction: {
+      type: "RETRY_PORTAL_GENERATION",
+      message: "Confirm the intended GST account in the current GST Portal tab, then resume.",
+      canResume: true,
+    },
+  };
+  return { ok: true, flowStep, flowSummary: toFullFiscalYearSummary(ledger, flowStep) };
 }
 
 export async function resolveFullFiscalYearTarget(

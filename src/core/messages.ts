@@ -162,6 +162,7 @@ export type PackMessageResponse =
   | { ok: false; error: string };
 
 export interface FullFiscalYearTargetRecoveryPayload {
+  confirmCurrentPortalAccount?: boolean;
   ledgerId: string;
   targetId: string;
   expectedRevision: number;
@@ -252,6 +253,8 @@ function isFullFiscalYearTargetRecoveryPayload(
   return (
     isBoundedString(input.ledgerId, 1, 120) &&
     isBoundedString(input.targetId, 1, 120) &&
+    (input.confirmCurrentPortalAccount === undefined ||
+      typeof input.confirmCurrentPortalAccount === "boolean") &&
     typeof expectedRevision === "number" &&
     Number.isInteger(expectedRevision) &&
     expectedRevision >= 1

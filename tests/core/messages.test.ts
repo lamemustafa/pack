@@ -242,12 +242,24 @@ describe("message boundary", () => {
       isPackMessage({
         type: "PACK_RETRY_FULL_FISCAL_YEAR_TARGET",
         payload: {
+          confirmCurrentPortalAccount: true,
           ledgerId: "ledger-existing",
           targetId: "GSTR-3B:2026-27:April",
           expectedRevision: 2,
         },
       }),
     ).toBe(true);
+    expect(
+      isPackMessage({
+        type: "PACK_RETRY_FULL_FISCAL_YEAR_TARGET",
+        payload: {
+          confirmCurrentPortalAccount: "yes",
+          ledgerId: "ledger-existing",
+          targetId: "GSTR-3B:2026-27:April",
+          expectedRevision: 2,
+        },
+      }),
+    ).toBe(false);
     expect(
       isPackMessage({
         type: "PACK_RESOLVE_FULL_FISCAL_YEAR_TARGET",

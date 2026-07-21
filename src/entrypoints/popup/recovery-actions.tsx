@@ -1,3 +1,4 @@
+import * as React from "react";
 import type { FiledReturnsFlowSummary } from "../../core/contracts";
 
 export interface RecoveryActionsProps {
@@ -5,7 +6,7 @@ export interface RecoveryActionsProps {
   portalReady: boolean;
   summary: FiledReturnsFlowSummary | null;
   onAcknowledgeInterruptedRun: () => void;
-  onRetryFullFiscalYearTarget: () => void;
+  onRetryFullFiscalYearTarget: (confirmCurrentPortalAccount?: boolean) => void;
   onRetryTarget: () => void;
   onResolveFullFiscalYearTarget: (resolution: "manually-observed" | "cancelled") => void;
   onResolveTarget: (resolution: "manually-observed" | "cancelled") => void;
@@ -23,6 +24,7 @@ export function RecoveryActions({
   onResolveTarget,
   onStartFresh,
 }: RecoveryActionsProps) {
+  const [currentPortalAccountConfirmed, setCurrentPortalAccountConfirmed] = React.useState(false);
   const recoveryState = getRecoveryActionState(summary);
   if (!summary || !recoveryState.visible) return null;
   const { needsFullFiscalYearReview, needsRunReview, needsTargetReview, runActive, signals } =
@@ -33,6 +35,7 @@ export function RecoveryActions({
     !signals.has("filed-returns-target-manually-observed");
   const retryDisabled = busy !== null || !portalReady;
   const fullFiscalYearPaused = signals.has("full-fiscal-year-temporarily-paused");
+  const needsResumeConfirmation = signals.has("full-fiscal-year-resume-confirmation-required");
   return (
     <details className="recovery-details" open>
       <summary>Saved run options</summary>
@@ -112,17 +115,33 @@ export function RecoveryActions({
                 export, or manually complete it in this version.
               </p>
             ) : null}
-            {signals.has("full-fiscal-year-resume-confirmation-required") ? (
-              <p className="muted">
-                This saved run is not bound to a GST account. Continue only if the same GST account
-                is currently open.
-              </p>
+            {needsResumeConfirmation ? (
+              <label className="recovery-confirmation">
+                <input
+                  type="checkbox"
+                  checked={currentPortalAccountConfirmed}
+                  disabled={busy !== null || fullFiscalYearPaused}
+                  onChange={(event) =>
+                    setCurrentPortalAccountConfirmed(event.currentTarget.checked)
+                  }
+                />
+                <span>
+                  I confirm the intended GST account is open in this GST Portal tab. Pack does not
+                  retain or verify account identity.
+                </span>
+              </label>
             ) : null}
             {!portalReady && !fullFiscalYearPaused ? (
               <p className="muted">Open a signed-in GST Portal tab before retrying this period.</p>
             ) : null}
             {!fullFiscalYearPaused ? (
-              <button type="button" disabled={retryDisabled} onClick={onRetryFullFiscalYearTarget}>
+              <button
+                type="button"
+                disabled={
+                  retryDisabled || (needsResumeConfirmation && !currentPortalAccountConfirmed)
+                }
+                onClick={() => onRetryFullFiscalYearTarget(currentPortalAccountConfirmed)}
+              >
                 {busy === "retry-full-fiscal-year-target"
                   ? "Retrying..."
                   : retryFullYearLabel(summary)}

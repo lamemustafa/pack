@@ -269,6 +269,20 @@
   padding-top: 8px;
 }
 
+.recovery-confirmation {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: #526477;
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.recovery-confirmation input {
+  flex: 0 0 auto;
+  margin: 2px 0 0;
+}
+
 .recovery-details summary {
   min-height: 28px;
   color: #5e6b80;

@@ -208,18 +208,21 @@ export function usePackPopupController() {
     scope,
     withBusy,
   ]);
-  const retryFullFiscalYearTarget = React.useCallback(async () => {
-    const payload = getFullFiscalYearRecoveryPayload();
-    if (!payload) return;
+  const retryFullFiscalYearTarget = React.useCallback(
+    async (confirmCurrentPortalAccount = false) => {
+      const payload = getFullFiscalYearRecoveryPayload();
+      if (!payload) return;
 
-    await withBusy("retry-full-fiscal-year-target", async () => {
-      const response = await sendPackMessage({
-        type: "PACK_RETRY_FULL_FISCAL_YEAR_TARGET",
-        payload,
+      await withBusy("retry-full-fiscal-year-target", async () => {
+        const response = await sendPackMessage({
+          type: "PACK_RETRY_FULL_FISCAL_YEAR_TARGET",
+          payload: { ...payload, confirmCurrentPortalAccount },
+        });
+        applyFlowResponse(response);
       });
-      applyFlowResponse(response);
-    });
-  }, [applyFlowResponse, getFullFiscalYearRecoveryPayload, withBusy]);
+    },
+    [applyFlowResponse, getFullFiscalYearRecoveryPayload, withBusy],
+  );
 
   const resolveFullFiscalYearTarget = React.useCallback(
     async (resolution: "manually-observed" | "cancelled") => {
