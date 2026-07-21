@@ -60,8 +60,11 @@ export {
 
 const OFFICIAL_URL = "https://pack.complyeaze.com";
 
+let trustedLocalStorageInitialization: Promise<void> | null = null;
+
 export default defineBackground(() => {
-  void restrictLocalStorageToTrustedContexts().catch(() => undefined);
+  trustedLocalStorageInitialization = restrictLocalStorageToTrustedContexts();
+  void trustedLocalStorageInitialization.catch(() => undefined);
 
   browser.tabs.onActivated.addListener(({ tabId }) => {
     void rememberActiveGstTabById(tabId).catch(() => undefined);
@@ -72,17 +75,19 @@ export default defineBackground(() => {
   });
 
   browser.runtime.onInstalled.addListener(() => {
-    void browser.storage.local.set({
-      [PACK_LOCAL_STORAGE_KEYS.install]: {
-        version: packRuntimeVersion(),
-        installedAt: new Date().toISOString(),
-        localOnly: true,
-      },
-    });
+    void withTrustedLocalStorage(() =>
+      browser.storage.local.set({
+        [PACK_LOCAL_STORAGE_KEYS.install]: {
+          version: packRuntimeVersion(),
+          installedAt: new Date().toISOString(),
+          localOnly: true,
+        },
+      }),
+    ).catch(() => undefined);
   });
 
   browser.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
-    void handleMessage(message, sender)
+    void handleMessageAfterTrustedStorageInitialization(message, sender)
       .then((response) => sendResponse(response))
       .catch((error: unknown) =>
         sendResponse({
@@ -98,7 +103,34 @@ export async function restrictLocalStorageToTrustedContexts(): Promise<void> {
   const storageArea = browser.storage.local as typeof browser.storage.local & {
     setAccessLevel?: (options: { accessLevel: "TRUSTED_CONTEXTS" }) => Promise<void> | void;
   };
-  await storageArea.setAccessLevel?.({ accessLevel: "TRUSTED_CONTEXTS" });
+  if (!storageArea.setAccessLevel) {
+    throw new Error("Pack could not restrict local storage to trusted extension contexts.");
+  }
+  await storageArea.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });
+}
+
+async function handleMessageAfterTrustedStorageInitialization(
+  message: unknown,
+  sender: Browser.runtime.MessageSender,
+): Promise<PackMessageResponse> {
+  try {
+    await withTrustedLocalStorage(() => Promise.resolve());
+  } catch {
+    return {
+      ok: false,
+      error:
+        "Pack could not initialize private local storage. Reload the extension before starting a GST download.",
+    };
+  }
+  return handleMessage(message, sender);
+}
+
+async function withTrustedLocalStorage<T>(action: () => Promise<T>): Promise<T> {
+  if (!trustedLocalStorageInitialization) {
+    throw new Error("Pack local storage is not initialized.");
+  }
+  await trustedLocalStorageInitialization;
+  return action();
 }
 
 async function handleMessage(

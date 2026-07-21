@@ -459,6 +459,17 @@ describe("Pack local data clearing", () => {
     });
   });
 
+  it("fails closed when trusted local-storage initialization is rejected", async () => {
+    const background = await import("../../src/entrypoints/background");
+    browserMocks.storage.local.setAccessLevel.mockRejectedValueOnce(
+      new Error("storage access level rejected"),
+    );
+
+    await expect(background.restrictLocalStorageToTrustedContexts()).rejects.toThrow(
+      "storage access level rejected",
+    );
+  });
+
   it("prefers an interrupted active run over an older session summary", async () => {
     const sessionSummary: FiledReturnsFlowSummary = {
       scope: {

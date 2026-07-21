@@ -2,6 +2,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PackMessage, PackMessageResponse } from "../../src/core/messages";
 
 const browserMocks = vi.hoisted(() => {
+  const localValues: Record<string, unknown> = {};
+  const resetLocalStorage = () => {
+    for (const key of Object.keys(localValues)) delete localValues[key];
+    localValues["pack:local-processing-acknowledgement"] = {
+      version: "2026-07-21-v1",
+      acknowledgedAt: "2026-07-21T00:00:00.000Z",
+    };
+  };
+  resetLocalStorage();
   let messageListener:
     | ((
         message: unknown,
@@ -11,6 +20,7 @@ const browserMocks = vi.hoisted(() => {
     | null = null;
 
   return {
+    resetLocalStorage,
     getMessageListener: () => messageListener,
     downloads: {
       download: vi.fn(async () => 481),
@@ -115,18 +125,27 @@ const browserMocks = vi.hoisted(() => {
     },
     storage: {
       local: {
-        get: vi.fn(async (key?: unknown) =>
-          key === "pack:local-processing-acknowledgement"
-            ? {
-                [key]: {
-                  version: "2026-07-21-v1",
-                  acknowledgedAt: "2026-07-21T00:00:00.000Z",
-                },
-              }
-            : {},
-        ),
-        remove: vi.fn(async () => undefined),
-        set: vi.fn(async () => undefined),
+        get: vi.fn(async (key?: unknown) => {
+          if (typeof key === "string") {
+            return key in localValues ? { [key]: localValues[key] } : {};
+          }
+          if (Array.isArray(key)) {
+            return Object.fromEntries(
+              key
+                .filter(
+                  (entry): entry is string => typeof entry === "string" && entry in localValues,
+                )
+                .map((entry) => [entry, localValues[entry]]),
+            );
+          }
+          return { ...localValues };
+        }),
+        remove: vi.fn(async (keys: string | string[]) => {
+          for (const key of Array.isArray(keys) ? keys : [keys]) delete localValues[key];
+        }),
+        set: vi.fn(async (values: Record<string, unknown>) => {
+          Object.assign(localValues, values);
+        }),
         setAccessLevel: vi.fn(async () => undefined),
       },
       session: {
@@ -202,6 +221,7 @@ vi.mock("../../src/background/download-filename-suggester", () => ({
 describe("background filed returns download defaults", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    browserMocks.resetLocalStorage();
     vi.resetModules();
     vi.useRealTimers();
     vi.stubGlobal("defineBackground", (entrypoint: () => void) => {
@@ -227,6 +247,29 @@ describe("background filed returns download defaults", () => {
       ok: false,
       error:
         "Review and acknowledge Pack's local-processing boundary before starting or retrying a GST download.",
+    });
+    expect(browserMocks.tabs.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when trusted local-storage initialization cannot complete", async () => {
+    browserMocks.storage.local.setAccessLevel.mockRejectedValueOnce(
+      new Error("storage access level rejected"),
+    );
+    await import("../../src/entrypoints/background");
+
+    const response = await sendBackgroundMessage({
+      type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",
+      payload: {
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-3B",
+      },
+    });
+
+    expect(response).toEqual({
+      ok: false,
+      error:
+        "Pack could not initialize private local storage. Reload the extension before starting a GST download.",
     });
     expect(browserMocks.tabs.sendMessage).not.toHaveBeenCalled();
   });
