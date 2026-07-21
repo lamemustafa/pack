@@ -33,7 +33,7 @@
     "test": "vitest run",
     "audit:high": "node scripts/run-dependency-audit.mjs",
     "verify:package": "node scripts/verify-extension-package.mjs .output/chrome-mv3",
-    "verify:browser": "node scripts/verify-extension-browser.mjs .output/chrome-mv3",
+    "verify:browser": "node scripts/verify-extension-browser.mjs .output/chrome-mv3 --fault-matrix",
     "verify:zip": "node scripts/verify-extension-zip.mjs",
     "release:provenance": "node scripts/write-release-provenance.mjs",
     "release:verify-assets": "node scripts/verify-github-release-assets.mjs",

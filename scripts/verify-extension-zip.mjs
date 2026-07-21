@@ -14,7 +14,7 @@ try {
   await run("unzip", ["-q", zipPath, "-d", extractionDir]);
   await run("node", ["scripts/verify-extension-package.mjs", extractionDir]);
   await run("shasum", ["-a", "256", zipPath]);
-  await run("node", ["scripts/verify-extension-browser.mjs", extractionDir]);
+  await run("node", ["scripts/verify-extension-browser.mjs", extractionDir, "--fault-matrix"]);
 
   console.log(`Pack exact ZIP verification passed: ${path.relative(process.cwd(), zipPath)}`);
 } catch (error) {

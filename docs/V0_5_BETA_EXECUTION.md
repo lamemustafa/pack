@@ -48,6 +48,7 @@ Government of India.
 | Ranges | Single period and immutable same-FY custom-range planning are implemented. | Needs exact-ZIP browser coverage before Store/beta claims. |
 | Storage/recovery | Strict local schemas, quarantine, action journal, target review, and explicit resume confirmation are implemented. | Unit/static proof does not replace service-worker and browser-restart evidence. |
 | Archive UX | Plan → Run → Results, local-processing acknowledgement, opaque archive paths, safe receipts, and requested-destination preview are implemented. | Preview is a requested relative name/path; Chrome controls the final download folder. |
+| Availability floors | The planner bounds GSTR-1/GSTR-3B from July 2017 and GSTR-2B from July 2020. | These are implementation bounds, not a claim that any period has an artifact. Record an official-source capture before making a public availability claim. |
 
 ## Implementation Tranches
 
@@ -65,15 +66,23 @@ Government of India.
 
 ### v0.4.2 — Durability Evidence
 
-1. Exercise the action journal at each externally visible action boundary:
-   before dispatch, after dispatch/before evidence binding, after completion
-   and before target persistence, and around final ZIP dispatch.
-2. Kill the service worker and restart the browser under those cases. Confirm
-   no completed target is repeated and ambiguous actions become
-   review-required.
-3. Inspect extension storage and OPFS after success, discard, failed cleanup,
+1. The exact-artifact browser verifier exercises synthetic `armed-unbound` and
+   `evidence-bound-before-target-completion` action-journal records across an
+   isolated browser restart. Each must remain unchanged, block the new flow,
+   and create no browser download. Run `pnpm verify:browser`; exact-ZIP
+   verification invokes the same matrix.
+2. This synthetic matrix does not kill a service worker during a live portal
+   action and does not prove a GST artifact outcome. An authorised operator
+   must still exercise the remaining externally visible boundaries: before
+   dispatch, after dispatch/before evidence binding, after artifact completion
+   and before target persistence, and before/after final ZIP dispatch.
+3. For that authorised run, kill the service worker and restart the browser
+   under the applicable cases. Confirm no completed target is repeated and
+   ambiguous actions become review-required.
+4. Inspect extension storage and OPFS after success, discard, failed cleanup,
    and expiry. Confirm the prohibited data list above is absent.
-4. Do not unpause full-FY dispatch based on unit tests or prior source-build
+5. Do not unpause full-FY dispatch based on unit tests, the synthetic matrix,
+   or prior source-build
    evidence alone.
 
 ### v0.4.3 — Focused Archive Validation
@@ -165,5 +174,6 @@ All conditions must be proved for the exact candidate ZIP:
 | Live GST download/restart matrix | Authorised operator in Chrome/Brave | DOM replay, in-app browser, or unit tests |
 | Storage and OPFS inspection | Privacy/security reviewer | Regex redaction alone |
 | QRMP/cadence outcome | Authorised operator with suitable account | Calendar/due-date inference |
+| Availability-floor public claim | Release owner with official GST source capture | Planner code or a calendar/due-date inference |
 | Design-partner validation | Product owner | Product telemetry or internal opinion |
 | Legal/DPDP wording | Qualified counsel | Engineering review |

@@ -12,8 +12,11 @@ import { LIVE_RUN_SENSITIVE_PATTERN_DEFINITIONS } from "./lib/live-run-evidence-
 
 ensureHeadedChromiumDisplay();
 
-const extensionDir = process.argv[2]
-  ? path.resolve(process.argv[2])
+const browserVerifierArgs = process.argv.slice(2);
+const extensionDirArg = browserVerifierArgs.find((arg) => !arg.startsWith("--"));
+const runFaultMatrix = browserVerifierArgs.includes("--fault-matrix");
+const extensionDir = extensionDirArg
+  ? path.resolve(extensionDirArg)
   : path.join(process.cwd(), ".output", "chrome-mv3");
 const chromiumExecutablePath = process.env.PACK_CHROMIUM_EXECUTABLE
   ? path.resolve(process.env.PACK_CHROMIUM_EXECUTABLE)
@@ -56,36 +59,7 @@ try {
   assertStaticReleaseBrowserPolicy(manifest);
   approvedOrigins = buildApprovedOrigins(manifest);
   context = await launchExtensionContext();
-  context.on("page", attachPageLogging);
-  await context.route("**/*", async (route) => {
-    const url = route.request().url();
-    if (!/^https?:\/\//i.test(url)) {
-      await route.continue();
-      return;
-    }
-    const origin = new URL(url).origin;
-    if (origin === hostileOrigin) {
-      await route.fulfill({
-        status: 200,
-        contentType: "text/html",
-        body: hostilePageHtml(),
-      });
-      return;
-    }
-    if (!approvedOrigins.has(origin)) {
-      deniedRequests.push({
-        expected: isExpectedDeniedNetworkProbe(url),
-        url: sanitize(url),
-      });
-      await route.abort("blockedbyclient");
-      return;
-    }
-    await route.fulfill({
-      status: 200,
-      contentType: "text/html",
-      body: syntheticGstPage(url),
-    });
-  });
+  await configureExtensionContext(context);
 
   const extensionId = await resolveExtensionId(context);
   const serviceWorker = await waitForServiceWorker(context, extensionId);
@@ -94,6 +68,9 @@ try {
   await assertPopupPageLoads(context, extensionId);
   await assertApprovedContentScript(context, serviceWorker);
   await assertHostilePageCannotMessageExtension(context);
+  const restartFaultMatrix = runFaultMatrix
+    ? await assertSyntheticRestartFaultMatrix(context, extensionId, serviceWorker)
+    : null;
   assertDeniedUnexpectedNetwork();
   assertSanitizedBrowserLogs();
   assertNoBrowserRuntimeFailures();
@@ -109,6 +86,7 @@ try {
         approvedOrigins: [...approvedOrigins].sort(),
         deniedUnexpectedRequests: deniedRequests.map((request) => request.url),
         browserLogCount: browserLogs.length,
+        ...(restartFaultMatrix ? { restartFaultMatrix } : {}),
       },
       null,
       2,
@@ -221,6 +199,39 @@ async function launchExtensionContext() {
   });
 }
 
+async function configureExtensionContext(browserContext) {
+  browserContext.on("page", attachPageLogging);
+  await browserContext.route("**/*", async (route) => {
+    const url = route.request().url();
+    if (!/^https?:\/\//i.test(url)) {
+      await route.continue();
+      return;
+    }
+    const origin = new URL(url).origin;
+    if (origin === hostileOrigin) {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: hostilePageHtml(),
+      });
+      return;
+    }
+    if (!approvedOrigins.has(origin)) {
+      deniedRequests.push({
+        expected: isExpectedDeniedNetworkProbe(url),
+        url: sanitize(url),
+      });
+      await route.abort("blockedbyclient");
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "text/html",
+      body: syntheticGstPage(url),
+    });
+  });
+}
+
 async function resolveExtensionId(browserContext) {
   const existingServiceWorker = findExtensionServiceWorker(browserContext);
   if (existingServiceWorker) return new URL(existingServiceWorker.url()).host;
@@ -321,6 +332,174 @@ async function assertServiceWorkerStarted(serviceWorker) {
   if (!serviceWorkerState.storageWritable) {
     throw new Error("Extension service worker could not use local storage.");
   }
+}
+
+async function assertSyntheticRestartFaultMatrix(browserContext, extensionId, serviceWorker) {
+  const journalKey = "pack:filed-returns-action-journal";
+  const matrixCases = [
+    {
+      boundary: "armed-unbound",
+      entry: {
+        actionId: "synthetic-armed-action",
+        artifactType: "PDF",
+        attempt: 1,
+        revision: 1,
+        state: "armed",
+        targetId: "GSTR-3B:2025-26:May:PDF",
+        armedAt: "2026-07-21T00:00:00.000Z",
+      },
+    },
+    {
+      boundary: "evidence-bound-before-target-completion",
+      entry: {
+        actionId: "synthetic-evidence-bound-action",
+        artifactType: "PDF",
+        attempt: 1,
+        revision: 2,
+        state: "evidence-bound",
+        targetId: "GSTR-3B:2025-26:May:PDF",
+        armedAt: "2026-07-21T00:00:00.000Z",
+        downloadId: 700001,
+        settledAt: "2026-07-21T00:00:01.000Z",
+      },
+    },
+  ];
+  let activeContext = browserContext;
+  let activeServiceWorker = serviceWorker;
+  for (const matrixCase of matrixCases) {
+    const syntheticJournal = { schemaVersion: "1.0", entries: [matrixCase.entry] };
+    const before = await activeServiceWorker.evaluate(
+      async ({ key, journal }) => {
+        await chrome.storage.local.set({ [key]: journal });
+        return {
+          downloads: await chrome.downloads.search({}),
+          journal: (await chrome.storage.local.get(key))[key] ?? null,
+        };
+      },
+      { key: journalKey, journal: syntheticJournal },
+    );
+    if (!isStructurallyEqual(before.journal, syntheticJournal)) {
+      throw new Error("Browser fault matrix could not persist its synthetic action journal.");
+    }
+
+    const restarted = await restartIsolatedBrowser(activeContext, extensionId);
+    const popupPage = await restarted.browserContext.newPage();
+    attachPageLogging(popupPage);
+    try {
+      await popupPage.goto(`chrome-extension://${extensionId}/popup.html`, {
+        waitUntil: "domcontentloaded",
+      });
+      await acknowledgeLocalProcessingForFaultMatrix(popupPage);
+      const startResponse = await sendPackMessage(popupPage, {
+        type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",
+        payload: {
+          financialYear: "2025-26",
+          period: "May",
+          returnType: "GSTR-3B",
+        },
+      });
+      if (
+        startResponse?.ok !== true ||
+        startResponse.flowStep?.state !== "blocked" ||
+        !startResponse.flowStep.safeSignals?.includes(
+          "filed-returns-action-journal-review-required",
+        )
+      ) {
+        throw new Error(
+          `Browser fault matrix did not block the ${matrixCase.boundary} action after browser restart.`,
+        );
+      }
+    } finally {
+      await popupPage.close();
+    }
+
+    const after = await restarted.serviceWorker.evaluate(
+      async (key) => ({
+        downloads: await chrome.downloads.search({}),
+        journal: (await chrome.storage.local.get(key))[key] ?? null,
+      }),
+      journalKey,
+    );
+    if (!isStructurallyEqual(after.journal, syntheticJournal)) {
+      throw new Error("Browser fault matrix changed an unresolved action journal after restart.");
+    }
+    if (!isStructurallyEqual(after.downloads, before.downloads)) {
+      throw new Error("Browser fault matrix started a download for an unresolved action.");
+    }
+    await restarted.serviceWorker.evaluate(async (key) => {
+      await chrome.storage.local.remove(key);
+    }, journalKey);
+    activeContext = restarted.browserContext;
+    activeServiceWorker = restarted.serviceWorker;
+  }
+  return {
+    mode: "synthetic-browser-restart",
+    result: "unresolved-action-blocked-without-download",
+    boundaries: matrixCases.map((matrixCase) => matrixCase.boundary),
+  };
+}
+
+async function acknowledgeLocalProcessingForFaultMatrix(page) {
+  const deadline = Date.now() + 10_000;
+  let response = null;
+  while (Date.now() < deadline) {
+    response = await sendPackMessage(page, { type: "PACK_ACKNOWLEDGE_LOCAL_PROCESSING" });
+    if (response?.ok === true && response.localProcessingAcknowledgement) return;
+    await delay(150);
+  }
+  throw new Error(
+    `Browser fault matrix could not acknowledge Pack local processing: ${safeResponseShape(response)}`,
+  );
+}
+
+function safeResponseShape(response) {
+  return JSON.stringify({
+    hasAcknowledgement: Boolean(response?.localProcessingAcknowledgement),
+    hasError: typeof response?.error === "string",
+    ok: response?.ok === true,
+  });
+}
+
+function isStructurallyEqual(left, right) {
+  return JSON.stringify(normalizeStructure(left)) === JSON.stringify(normalizeStructure(right));
+}
+
+function normalizeStructure(value) {
+  if (Array.isArray(value)) return value.map(normalizeStructure);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+      .map(([key, entry]) => [key, normalizeStructure(entry)]),
+  );
+}
+
+async function restartIsolatedBrowser(browserContext, expectedExtensionId) {
+  await browserContext.close();
+  context = await launchExtensionContext();
+  await configureExtensionContext(context);
+  const extensionId = await resolveExtensionId(context);
+  if (extensionId !== expectedExtensionId) {
+    throw new Error(
+      "Browser fault matrix loaded Pack with a different extension identity after restart.",
+    );
+  }
+  const serviceWorker = await waitForServiceWorker(context, extensionId);
+  await assertServiceWorkerStarted(serviceWorker);
+  return { browserContext: context, serviceWorker };
+}
+
+async function sendPackMessage(page, message) {
+  return page.evaluate(
+    (payload) =>
+      new Promise((resolve) => {
+        chrome.runtime.sendMessage(payload, (response) => {
+          const lastError = chrome.runtime.lastError;
+          resolve(lastError ? { ok: false, error: lastError.message } : (response ?? null));
+        });
+      }),
+    message,
+  );
 }
 
 async function assertOptionsPageLoads(browserContext, extensionId) {

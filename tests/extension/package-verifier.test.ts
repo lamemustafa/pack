@@ -387,7 +387,7 @@ describe("extension package verifier", () => {
 
     expect(script).toContain("scripts/verify-extension-browser.mjs");
     expect(packageJson.scripts["verify:browser"]).toBe(
-      "node scripts/verify-extension-browser.mjs .output/chrome-mv3",
+      "node scripts/verify-extension-browser.mjs .output/chrome-mv3 --fault-matrix",
     );
     expect(packageJson.devDependencies["@playwright/test"]).toBe("1.61.1");
   });
@@ -428,6 +428,13 @@ describe("extension package verifier", () => {
     expect(script).toContain("unexpectedDeniedRequests.length > 0");
     expect(script).toContain("isExpectedDeniedNetworkProbe");
     expect(script).toContain("recordBrowserEvent");
+    expect(script).toContain("assertSyntheticRestartFaultMatrix");
+    expect(script).toContain("acknowledgeLocalProcessingForFaultMatrix");
+    expect(script).toContain("safeResponseShape");
+    expect(script).toContain("restartIsolatedBrowser");
+    expect(script).toContain("await browserContext.close()");
+    expect(script).toContain("filed-returns-action-journal-review-required");
+    expect(script).toContain("unresolved-action-blocked-without-download");
     expect(script).toContain("pattern.test(entry.raw)");
     expect(script).toContain("PACK_BROWSER_XVFB");
     expect(script).toContain("xvfb-run");
