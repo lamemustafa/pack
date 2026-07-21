@@ -5,7 +5,7 @@ import {
   createGstReturnPlan,
   createSyntheticGstResults,
 } from "../connectors/gst/planner";
-import { createArchiveManifest } from "../core/manifest";
+import { createArchiveManifest, createArchiveManifestLocalSummary } from "../core/manifest";
 import type { PackMessageResponse } from "../core/messages";
 
 export interface SyntheticDemoDeps {
@@ -45,7 +45,9 @@ export async function startSyntheticDemo(deps: SyntheticDemoDeps): Promise<PackM
     }
   }
 
-  await browser.storage.local.set({ [deps.storageKeys.lastManifest]: manifest });
+  await browser.storage.local.set({
+    [deps.storageKeys.lastManifest]: createArchiveManifestLocalSummary(manifest),
+  });
   return { ok: true, downloaded, manifest };
 }
 

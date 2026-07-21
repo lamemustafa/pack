@@ -466,3 +466,19 @@ export interface ArchiveManifest {
     uploaded_to_complyeaze: false;
   };
 }
+
+/**
+ * The only archive-manifest shape allowed in extension-local persistent storage.
+ * It deliberately excludes subject details, document rows, portal metadata, and
+ * artifact filenames or paths.
+ */
+export interface ArchiveManifestLocalSummary {
+  schemaVersion: "1.0";
+  generatedAt: string;
+  completionState: ArchiveManifest["execution"]["completion_state"];
+  totalPlanned: number;
+  downloaded: number;
+  exceptionCount: number;
+  localOnly: true;
+  uploadedToComplyEaze: false;
+}

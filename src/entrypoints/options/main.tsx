@@ -1,7 +1,7 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { browser } from "wxt/browser";
-import type { ArchiveManifest } from "../../core/contracts";
+import type { ArchiveManifest, ArchiveManifestLocalSummary } from "../../core/contracts";
 import type { PackMessageResponse } from "../../core/messages";
 import "../../styles/global.css";
 import { runFileSystemAccessProbe } from "./file-system-access-probe";
@@ -57,7 +57,7 @@ function OptionsPage() {
         payload: { downloadArtifacts },
       })) as PackMessageResponse;
       if (response.ok && "downloaded" in response) {
-        setManifestSummary(formatManifestSummary(response.manifest));
+        setManifestSummary(formatSyntheticManifestSummary(response.manifest));
         setStatus(
           response.downloaded > 0
             ? `Pack started ${response.downloaded} synthetic demo downloads. Confirm their completion in browser Downloads.`
@@ -83,8 +83,10 @@ function OptionsPage() {
       const response = (await browser.runtime.sendMessage({
         type: "PACK_GET_LAST_MANIFEST",
       })) as PackMessageResponse;
-      if (response.ok && "manifest" in response) {
-        setManifestSummary(response.manifest ? formatManifestSummary(response.manifest) : "");
+      if (response.ok && "manifest" in response && !("downloaded" in response)) {
+        setManifestSummary(
+          response.manifest ? formatPersistedManifestSummary(response.manifest) : "",
+        );
         setStatus(
           response.manifest
             ? "Loaded the last synthetic demo manifest summary."
@@ -187,7 +189,7 @@ function OptionsPage() {
   );
 }
 
-function formatManifestSummary(manifest: ArchiveManifest): string {
+function formatSyntheticManifestSummary(manifest: ArchiveManifest): string {
   return JSON.stringify(
     {
       manifest_id: manifest.manifest_id,
@@ -197,6 +199,22 @@ function formatManifestSummary(manifest: ArchiveManifest): string {
       exceptions: manifest.exceptions.length,
       local_only: manifest.privacy.local_only,
       uploaded_to_complyeaze: manifest.privacy.uploaded_to_complyeaze,
+    },
+    null,
+    2,
+  );
+}
+
+function formatPersistedManifestSummary(manifest: ArchiveManifestLocalSummary): string {
+  return JSON.stringify(
+    {
+      generated_at: manifest.generatedAt,
+      completion_state: manifest.completionState,
+      total_planned: manifest.totalPlanned,
+      downloaded: manifest.downloaded,
+      exceptions: manifest.exceptionCount,
+      local_only: manifest.localOnly,
+      uploaded_to_complyeaze: manifest.uploadedToComplyEaze,
     },
     null,
     2,

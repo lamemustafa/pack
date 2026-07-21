@@ -1,5 +1,6 @@
 import type {
   ArchiveManifest,
+  ArchiveManifestLocalSummary,
   FiledReturnsCapturedDownloadRequest,
   FiledReturnsMainWorldCaptureRequest,
   FiledReturnsFlowSummary,
@@ -155,7 +156,7 @@ export type PackMessageResponse =
       ok: true;
       localProcessingAcknowledgement: { version: string; acknowledgedAt: string } | null;
     }
-  | { ok: true; manifest: ArchiveManifest | null }
+  | { ok: true; manifest: ArchiveManifestLocalSummary | null }
   | { ok: true; downloaded: number; manifest: ArchiveManifest }
   | { ok: true; downloadPromptProbe: DownloadPromptProbeResult }
   | { ok: true; cleared: true }

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createArchiveManifest, assertAllTargetsTerminal } from "../../src/core/manifest";
+import {
+  assertAllTargetsTerminal,
+  createArchiveManifest,
+  createArchiveManifestLocalSummary,
+  isArchiveManifestLocalSummary,
+} from "../../src/core/manifest";
 import {
   DEFAULT_GST_RETURN_SCOPE,
   createGstReturnPlan,
@@ -36,5 +41,44 @@ describe("archive manifest", () => {
       new Date("2026-06-19T00:00:00.000Z"),
     );
     expect(() => assertAllTargetsTerminal(plan, [])).toThrow(/Missing terminal result/);
+  });
+
+  it("creates an allow-listed local summary without manifest document or subject data", () => {
+    const startedAt = new Date("2026-06-19T00:00:00.000Z");
+    const plan = createGstReturnPlan(DEFAULT_GST_RETURN_SCOPE, startedAt);
+    const manifest = createArchiveManifest(
+      plan,
+      createSyntheticGstResults(plan, new Date("2026-06-19T00:00:01.000Z")),
+      {
+        productVersion: "0.1.0",
+        build: "test",
+        officialUrl: "https://pack.complyeaze.com",
+        startedAt: startedAt.toISOString(),
+        completedAt: "2026-06-19T00:00:01.000Z",
+      },
+    );
+
+    const summary = createArchiveManifestLocalSummary(manifest);
+
+    expect(summary).toEqual({
+      schemaVersion: "1.0",
+      generatedAt: "2026-06-19T00:00:01.000Z",
+      completionState: manifest.execution.completion_state,
+      totalPlanned: manifest.summary.total_planned,
+      downloaded: manifest.summary.downloaded,
+      exceptionCount: manifest.exceptions.length,
+      localOnly: true,
+      uploadedToComplyEaze: false,
+    });
+    expect(isArchiveManifestLocalSummary(summary)).toBe(true);
+    expect(JSON.stringify(summary)).not.toContain("documents");
+    expect(JSON.stringify(summary)).not.toContain("subject");
+    expect(
+      isArchiveManifestLocalSummary({ ...summary, originalFilename: "synthetic.pdf" }),
+    ).toBe(false);
+    expect(
+      isArchiveManifestLocalSummary({ ...summary, generatedAt: "x".repeat(41) }),
+    ).toBe(false);
+    expect(isArchiveManifestLocalSummary({ ...summary, completionState: "unknown" })).toBe(false);
   });
 });

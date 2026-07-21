@@ -543,13 +543,56 @@ describe("background filed returns download defaults", () => {
     expect(browserMocks.storage.local.set).toHaveBeenCalledWith(
       expect.objectContaining({
         "pack:last-manifest": expect.objectContaining({
-          privacy: expect.objectContaining({
-            local_only: true,
-            uploaded_to_complyeaze: false,
-          }),
+          schemaVersion: "1.0",
+          localOnly: true,
+          uploadedToComplyEaze: false,
         }),
       }),
     );
+    const persistedManifest = browserMocks.storage.local.set.mock.calls
+      .map((call) => call[0]["pack:last-manifest"])
+      .find((value) => value !== undefined);
+    expect(JSON.stringify(persistedManifest)).not.toContain("documents");
+    expect(JSON.stringify(persistedManifest)).not.toContain("subject");
+
+    const storedResponse = await sendBackgroundMessage({ type: "PACK_GET_LAST_MANIFEST" });
+    expect(storedResponse).toMatchObject({
+      ok: true,
+      manifest: {
+        schemaVersion: "1.0",
+        localOnly: true,
+        uploadedToComplyEaze: false,
+      },
+    });
+    if (!storedResponse.ok || !("manifest" in storedResponse) || !storedResponse.manifest) {
+      throw new Error("Expected a persisted manifest summary.");
+    }
+    expect(Object.keys(storedResponse.manifest).sort()).toEqual([
+      "completionState",
+      "downloaded",
+      "exceptionCount",
+      "generatedAt",
+      "localOnly",
+      "schemaVersion",
+      "totalPlanned",
+      "uploadedToComplyEaze",
+    ]);
+  });
+
+  it("drops a legacy full manifest instead of exposing it as a local summary", async () => {
+    await browserMocks.storage.local.set({
+      "pack:last-manifest": {
+        schema_version: "1.0",
+        subject: { display_label: "synthetic-subject" },
+        documents: [{ originalFilename: "synthetic.pdf" }],
+      },
+    });
+    await import("../../src/entrypoints/background");
+
+    const response = await sendBackgroundMessage({ type: "PACK_GET_LAST_MANIFEST" });
+
+    expect(response).toEqual({ ok: true, manifest: null });
+    expect(browserMocks.storage.local.remove).toHaveBeenCalledWith("pack:last-manifest");
   });
 
   it("runs the one-file download prompt probe with saveAs false", async () => {

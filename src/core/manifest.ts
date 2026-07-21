@@ -2,6 +2,7 @@ import type {
   ArchiveManifest,
   ArchiveManifestDocument,
   ArchiveManifestException,
+  ArchiveManifestLocalSummary,
   DownloadPlan,
   DownloadResult,
   TerminalStatus,
@@ -129,6 +130,51 @@ export function createArchiveManifest(
   };
 }
 
+export function createArchiveManifestLocalSummary(
+  manifest: ArchiveManifest,
+): ArchiveManifestLocalSummary {
+  return {
+    schemaVersion: "1.0",
+    generatedAt: manifest.created_at,
+    completionState: manifest.execution.completion_state,
+    totalPlanned: manifest.summary.total_planned,
+    downloaded: manifest.summary.downloaded,
+    exceptionCount: manifest.exceptions.length,
+    localOnly: true,
+    uploadedToComplyEaze: false,
+  };
+}
+
+export function isArchiveManifestLocalSummary(value: unknown): value is ArchiveManifestLocalSummary {
+  if (!isRecord(value)) return false;
+  if (
+    !hasOnlyKeys(value, [
+      "schemaVersion",
+      "generatedAt",
+      "completionState",
+      "totalPlanned",
+      "downloaded",
+      "exceptionCount",
+      "localOnly",
+      "uploadedToComplyEaze",
+    ])
+  ) {
+    return false;
+  }
+  return (
+    value.schemaVersion === "1.0" &&
+    isTimestamp(value.generatedAt) &&
+    isCompletionState(value.completionState) &&
+    isCount(value.totalPlanned) &&
+    isCount(value.downloaded) &&
+    isCount(value.exceptionCount) &&
+    value.downloaded <= value.totalPlanned &&
+    value.exceptionCount <= value.totalPlanned &&
+    value.localOnly === true &&
+    value.uploadedToComplyEaze === false
+  );
+}
+
 export function assertAllTargetsTerminal(
   plan: DownloadPlan,
   results: readonly DownloadResult[],
@@ -205,4 +251,26 @@ function statusSafeMessage(status: TerminalStatus): string {
     case "unknown":
       return "Pack could not safely classify this target.";
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function hasOnlyKeys(value: Record<string, unknown>, allowedKeys: readonly string[]): boolean {
+  return Object.keys(value).every((key) => allowedKeys.includes(key));
+}
+
+function isCount(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 10_000;
+}
+
+function isTimestamp(value: unknown): value is string {
+  return typeof value === "string" && value.length <= 40 && Number.isFinite(Date.parse(value));
+}
+
+function isCompletionState(
+  value: unknown,
+): value is ArchiveManifest["execution"]["completion_state"] {
+  return value === "complete" || value === "partial" || value === "failed" || value === "cancelled";
 }

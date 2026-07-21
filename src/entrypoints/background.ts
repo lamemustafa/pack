@@ -1,5 +1,6 @@
 import { browser } from "wxt/browser";
-import type { ArchiveManifest, PortalObservation } from "../core/contracts";
+import type { PortalObservation } from "../core/contracts";
+import { isArchiveManifestLocalSummary } from "../core/manifest";
 import { isFullFiscalYearScope } from "../core/filed-returns-scope";
 import { PACK_PRODUCT_VERSION } from "../extension/version";
 import { isPackMessage, type PackMessageResponse } from "../core/messages";
@@ -282,7 +283,7 @@ async function handleMessage(
     case "PACK_GET_LAST_MANIFEST":
       return {
         ok: true,
-        manifest: await readLocalValue<ArchiveManifest>(PACK_LOCAL_STORAGE_KEYS.lastManifest),
+        manifest: await readArchiveManifestLocalSummary(),
       };
   }
 
@@ -337,6 +338,18 @@ async function initializeTrustedLocalStorage(): Promise<void> {
       targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview,
     },
   });
+  await removeLegacyArchiveManifest();
+}
+
+async function readArchiveManifestLocalSummary() {
+  const manifest = await readLocalValue<unknown>(PACK_LOCAL_STORAGE_KEYS.lastManifest);
+  if (manifest === null || isArchiveManifestLocalSummary(manifest)) return manifest;
+  await browser.storage.local.remove(PACK_LOCAL_STORAGE_KEYS.lastManifest);
+  return null;
+}
+
+async function removeLegacyArchiveManifest(): Promise<void> {
+  await readArchiveManifestLocalSummary();
 }
 
 function readInstalledPackVersion(value: unknown): string | null {
