@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
+import type { FiledReturnsFlowSummary } from "../../src/core/contracts";
 import {
   createFullFiscalYearFiledReturnsReceipt,
   createSinglePeriodFiledReturnsReceipt,
   isFiledReturnsRunReceiptV1,
+  receiptForCompletedSinglePeriod,
 } from "../../src/core/filed-returns-run-receipt";
 
 describe("filed returns archive receipt", () => {
@@ -30,7 +32,7 @@ describe("filed returns archive receipt", () => {
         {
           targetId: "GSTR-1:2025-26:May",
           period: "May",
-          status: "prepared",
+          status: "verified",
         },
       ],
     });
@@ -87,7 +89,7 @@ describe("filed returns archive receipt", () => {
 
     expect(receipt.artifactCount).toBe(1);
     expect(receipt.targets.map((target) => target.status)).toEqual([
-      "prepared",
+      "verified",
       "no-record-observed",
     ]);
     expect(JSON.stringify(receipt)).not.toContain('"not-filed"');
@@ -104,6 +106,41 @@ describe("filed returns archive receipt", () => {
         targets: [{ ...receipt.targets[0], status: "not-filed" }, receipt.targets[1]],
       }),
     ).toBe(false);
+  });
+
+  it("derives a direct-download receipt only from a matching verified result", () => {
+    const scope = {
+      artifactType: "PDF" as const,
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-3B" as const,
+    };
+    const summary: FiledReturnsFlowSummary = {
+      scope,
+      status: "complete",
+      completedAt: "2026-07-21T01:02:03.000Z",
+      completedPeriods: ["May"],
+      totalPeriods: 1,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "downloaded",
+        safeSignals: ["browser-download-non-empty"],
+        safeMessage: "Verified.",
+      },
+    };
+
+    expect(receiptForCompletedSinglePeriod(scope, summary)).toMatchObject({
+      archiveScope: "single-period",
+      createdAt: "2026-07-21T01:02:03.000Z",
+      targets: [{ status: "verified" }],
+    });
+    expect(
+      receiptForCompletedSinglePeriod(
+        { ...scope, period: "June" },
+        summary,
+      ),
+    ).toBeNull();
   });
 
   it("identifies a bounded ledger receipt as a custom range without client metadata", () => {

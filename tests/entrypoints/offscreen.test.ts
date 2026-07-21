@@ -298,7 +298,7 @@ describe("offscreen Blob URL entrypoint", () => {
             {
               targetId: "GSTR-3B:2025-26:May",
               period: "May",
-              status: "prepared",
+              status: "verified",
             },
           ],
         },

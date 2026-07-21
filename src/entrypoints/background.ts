@@ -31,6 +31,7 @@ import {
 } from "../background/local-processing-acknowledgement";
 import { startSyntheticDemo } from "../background/synthetic-demo";
 import { runDownloadPromptProbe } from "../background/download-prompt-probe";
+import { exportCompletedSinglePeriodReceipt } from "../background/filed-returns-receipt-download";
 import { selectFiledReturnsFiltersInMainWorldForTab } from "../background/main-world-filed-returns-filter-executor";
 import {
   PACK_CLEARABLE_LOCAL_STORAGE_KEYS,
@@ -258,6 +259,13 @@ async function handleMessage(
       if (isFullFiscalYearScope(message.payload))
         return fullFiscalYearPausedResponse(message.payload);
       return startFiledReturnsDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
+    case "PACK_EXPORT_FILED_RETURNS_RECEIPT": {
+      const summary = await readCurrentFiledReturnsFlowSummary({
+        storageKeys: filedReturnsStorageKeys(),
+      });
+      const result = await exportCompletedSinglePeriodReceipt(message.payload, summary);
+      return result.ok ? { ok: true, receiptDownload: "requested" } : result;
+    }
     case "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW":
       if (!(await hasCurrentLocalProcessingAcknowledgement())) {
         return localProcessingAcknowledgementRequiredResponse();
@@ -367,6 +375,7 @@ function isFiledReturnsSideEffectMessage(type: string): boolean {
     "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD",
     "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",
     "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW",
+    "PACK_EXPORT_FILED_RETURNS_RECEIPT",
   ].includes(type);
 }
 

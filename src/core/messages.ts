@@ -78,6 +78,7 @@ export type PackMessage =
   | { type: "PACK_NAVIGATE_FILED_RETURNS" }
   | { type: "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD"; payload: FiledReturnsDownloadTarget }
   | { type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW"; payload: FiledReturnsDownloadScope }
+  | { type: "PACK_EXPORT_FILED_RETURNS_RECEIPT"; payload: FiledReturnsDownloadScope }
   | {
       type: "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW";
       payload: FiledReturnsFreshStartPayload;
@@ -152,6 +153,7 @@ export type PackMessageResponse =
       observation?: PortalObservation | null;
     }
   | { ok: true; flowSummary: FiledReturnsFlowSummary | null }
+  | { ok: true; receiptDownload: "requested" }
   | {
       ok: true;
       localProcessingAcknowledgement: { version: string; acknowledgedAt: string } | null;
@@ -212,6 +214,12 @@ export function isPackMessage(input: unknown): input is PackMessage {
     case "PACK_RETRY_FILED_RETURNS_TARGET":
       return (
         isFiledReturnsStartScope(input.payload) && input.payload.period !== FULL_FISCAL_YEAR_PERIOD
+      );
+    case "PACK_EXPORT_FILED_RETURNS_RECEIPT":
+      return (
+        isFiledReturnsStartScope(input.payload) &&
+        input.payload.period !== FULL_FISCAL_YEAR_PERIOD &&
+        input.payload.rangeEndPeriod === undefined
       );
     case "PACK_RETRY_FULL_FISCAL_YEAR_TARGET":
       return isFullFiscalYearTargetRecoveryPayload(input.payload);

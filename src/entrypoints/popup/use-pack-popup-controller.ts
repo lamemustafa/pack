@@ -36,6 +36,7 @@ export function usePackPopupController() {
   const [localProcessingAcknowledged, setLocalProcessingAcknowledged] = React.useState<
     boolean | null
   >(null);
+  const [receiptDownloadStatus, setReceiptDownloadStatus] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     void Promise.all([
@@ -113,6 +114,7 @@ export function usePackPopupController() {
   }, [withBusy]);
 
   const startFiledReturnsFlow = React.useCallback(async () => {
+    setReceiptDownloadStatus(null);
     await withBusy("start-filed-returns-flow", async () => {
       const response = await sendPackMessage({
         type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",
@@ -191,6 +193,7 @@ export function usePackPopupController() {
       ? { kind: "full-fiscal-year" as const, ...fullFiscalYearRecovery }
       : { kind: "target-review" as const, scope: filedReturnsFlowSummary.scope };
 
+    setReceiptDownloadStatus(null);
     await withBusy("start-fresh-filed-returns-flow", async () => {
       const response = await sendPackMessage({
         type: "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW",
@@ -254,6 +257,7 @@ export function usePackPopupController() {
     : null;
   const scopeLockedForReview = recoverySummary !== null;
   const setScope = React.useCallback((nextScope: FiledReturnsDownloadScope) => {
+    setReceiptDownloadStatus(null);
     setScopeState(nextScope);
   }, []);
   const scopedFlowSummary = getScopeMatchedFiledReturnsSummary(scope, filedReturnsFlowSummary);
@@ -261,16 +265,37 @@ export function usePackPopupController() {
     ? getFiledReturnsSummaryHeading(scope, scopedFlowSummary)
     : null;
   const effectiveBusy = scopedFlowSummary?.status === "complete" ? null : busy;
+  const downloadSinglePeriodReceipt = React.useCallback(async () => {
+    const receiptScope = scopedFlowSummary?.scope;
+    if (!receiptScope) return;
+
+    await withBusy("download-filed-returns-receipt", async () => {
+      const response = await sendPackMessage({
+        type: "PACK_EXPORT_FILED_RETURNS_RECEIPT",
+        payload: receiptScope,
+      });
+      if (response.ok && "receiptDownload" in response) {
+        setReceiptDownloadStatus(
+          "Pack asked Chrome to save the optional receipt. Check Chrome Downloads for completion.",
+        );
+      } else {
+        setReceiptDownloadStatus(response.ok ? "Unexpected Pack response." : response.error);
+      }
+    });
+  }, [scopedFlowSummary?.scope, withBusy]);
 
   return {
     acknowledgeInterruptedRun,
     acknowledgeLocalProcessing,
     completionStatus,
     context,
+    downloadSinglePeriodReceipt,
     effectiveBusy,
     localProcessingAcknowledged,
     filedReturnsObservation,
     recoverySummary,
+    receiptDownloadBusy: busy === "download-filed-returns-receipt",
+    receiptDownloadStatus,
     resolveFullFiscalYearTarget,
     resolveUnconfirmedDownload,
     retryFiledReturnsTarget,

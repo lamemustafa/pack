@@ -1,4 +1,8 @@
-import type { FiledReturnsFullFiscalYearLedger, FiledReturnsDownloadScope } from "./contracts";
+import type {
+  FiledReturnsFlowSummary,
+  FiledReturnsFullFiscalYearLedger,
+  FiledReturnsDownloadScope,
+} from "./contracts";
 import {
   isFiledReturnsConcreteArtifactType,
   normaliseFiledReturnsArtifactType,
@@ -9,6 +13,10 @@ import {
   isFiledReturnsReturnType,
   type FiledReturnsReturnType,
 } from "./filed-returns-return-types";
+import {
+  isCustomFiledReturnsRangeScope,
+  isFullFiscalYearScope,
+} from "./filed-returns-scope";
 
 const RECEIPT_PERIODS = new Set([
   "April",
@@ -37,7 +45,7 @@ export interface FiledReturnsRunReceiptV1 {
   targets: Array<{
     targetId: string;
     period: string;
-    status: "prepared" | "no-record-observed";
+    status: "verified" | "no-record-observed";
   }>;
 }
 
@@ -61,7 +69,7 @@ export function createSinglePeriodFiledReturnsReceipt(
       {
         targetId: receiptTargetId(scope.returnType, scope.financialYear, scope.period),
         period: scope.period,
-        status: "prepared",
+        status: "verified",
       },
     ],
   };
@@ -75,7 +83,7 @@ export function createFullFiscalYearFiledReturnsReceipt(
     targetId: target.targetId,
     period: target.period,
     status:
-      target.status === "not-filed" ? ("no-record-observed" as const) : ("prepared" as const),
+      target.status === "not-filed" ? ("no-record-observed" as const) : ("verified" as const),
   }));
   const artifactTypes = concreteFiledReturnsArtifactTypes(
     normaliseFiledReturnsArtifactType(ledger.scope.returnType, ledger.scope.artifactType),
@@ -101,6 +109,16 @@ export function createFullFiscalYearFiledReturnsReceipt(
     artifactCount,
     targets,
   };
+}
+
+export function receiptForCompletedSinglePeriod(
+  scope: FiledReturnsDownloadScope,
+  summary: FiledReturnsFlowSummary | null,
+): FiledReturnsRunReceiptV1 | null {
+  if (!summary || !isSameCompletedSinglePeriod(scope, summary)) return null;
+  const completedAt = summary.completedAt;
+  if (!completedAt || !Number.isFinite(Date.parse(completedAt))) return null;
+  return createSinglePeriodFiledReturnsReceipt(scope, new Date(completedAt));
 }
 
 export function isFiledReturnsRunReceiptV1(value: unknown): value is FiledReturnsRunReceiptV1 {
@@ -139,16 +157,39 @@ export function isFiledReturnsRunReceiptV1(value: unknown): value is FiledReturn
   ) {
     return false;
   }
-  const preparedTargetCount = receipt.targets.filter(
-    (target) => target.status === "prepared",
+  const verifiedTargetCount = receipt.targets.filter(
+    (target) => target.status === "verified",
   ).length;
   return (
-    receipt.artifactCount >= preparedTargetCount && receipt.artifactCount <= preparedTargetCount * 2
+    receipt.artifactCount >= verifiedTargetCount && receipt.artifactCount <= verifiedTargetCount * 2
   );
 }
 
 function receiptTargetId(returnType: string, financialYear: string, period: string): string {
   return `${returnType}:${financialYear}:${period}`;
+}
+
+function isSameCompletedSinglePeriod(
+  scope: FiledReturnsDownloadScope,
+  summary: FiledReturnsFlowSummary,
+): boolean {
+  const summaryScope = summary.scope;
+  return (
+    summary.status === "complete" &&
+    summary.flowStep.state === "downloaded" &&
+    summary.completedPeriods.length === 1 &&
+    summary.completedPeriods[0] === scope.period &&
+    !isFullFiscalYearScope(scope) &&
+    !isCustomFiledReturnsRangeScope(scope) &&
+    !isFullFiscalYearScope(summaryScope) &&
+    !isCustomFiledReturnsRangeScope(summaryScope) &&
+    summaryScope.financialYear === scope.financialYear &&
+    summaryScope.period === scope.period &&
+    summaryScope.returnType === scope.returnType &&
+    summaryScope.artifactType === scope.artifactType &&
+    normaliseFiledReturnsArtifactType(summaryScope.returnType, summaryScope.artifactType) ===
+      normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType)
+  );
 }
 
 function isReceiptTarget(
@@ -169,7 +210,7 @@ function isReceiptTarget(
     (value.targetId === targetIdPrefix ||
       (value.targetId.startsWith(`${targetIdPrefix}:`) &&
         /^(?:PDF|EXCEL|PDF_AND_EXCEL)$/.test(value.targetId.slice(targetIdPrefix.length + 1)))) &&
-    (value.status === "prepared" || value.status === "no-record-observed")
+    (value.status === "verified" || value.status === "no-record-observed")
   );
 }
 

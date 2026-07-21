@@ -138,6 +138,27 @@ describe("message boundary", () => {
     ).toBe(true);
     expect(
       isPackMessage({
+        type: "PACK_EXPORT_FILED_RETURNS_RECEIPT",
+        payload: {
+          financialYear: "2025-26",
+          period: "May",
+          returnType: "GSTR-3B",
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isPackMessage({
+        type: "PACK_EXPORT_FILED_RETURNS_RECEIPT",
+        payload: {
+          financialYear: "2025-26",
+          period: "May",
+          rangeEndPeriod: "June",
+          returnType: "GSTR-1",
+        },
+      }),
+    ).toBe(false);
+    expect(
+      isPackMessage({
         type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",
         payload: {
           artifactType: "PDF_AND_EXCEL",
@@ -438,7 +459,7 @@ describe("message boundary", () => {
     expect(
       isPackMessage({
         type: "PACK_FILED_RETURNS_REQUEST_SHAPES",
-        payload: [{ url: "https://services.gst.gov.in/raw?token=secret" }],
+        payload: [{ url: "https://invalid.example.test/rejected" }],
       }),
     ).toBe(false);
     expect(isPackMessage(null)).toBe(false);

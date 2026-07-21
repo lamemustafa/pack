@@ -12,6 +12,7 @@ import { getPopupPresentationState, type PopupPresentationState } from "./presen
 import { RecoveryActions, hasRecoveryActions } from "./recovery-actions";
 import { LocalProcessingAcknowledgement } from "./local-processing-acknowledgement";
 import { RunEvidencePanel } from "./run-evidence-panel";
+import { SinglePeriodReceipt } from "./single-period-receipt";
 import { usePackPopupController } from "./use-pack-popup-controller";
 import { WorkflowPhaseRail } from "./workflow-phase-rail";
 import { getPopupWorkflowPhase } from "./workflow-phase";
@@ -105,10 +106,18 @@ function App() {
                 summary={displaySummary}
               />
               {phase === "results" ? (
-                <RunEvidencePanel
-                  scopedFlowSummary={popup.scopedFlowSummary}
-                  summaryHeading={popup.summaryHeading}
-                />
+                <>
+                  <RunEvidencePanel
+                    scopedFlowSummary={popup.scopedFlowSummary}
+                    summaryHeading={popup.summaryHeading}
+                  />
+                  <SinglePeriodReceipt
+                    busy={popup.receiptDownloadBusy}
+                    downloadStatus={popup.receiptDownloadStatus}
+                    onDownload={() => void popup.downloadSinglePeriodReceipt()}
+                    summary={popup.scopedFlowSummary}
+                  />
+                </>
               ) : null}
               {phase === "results" && !popup.recoverySummary ? (
                 <button

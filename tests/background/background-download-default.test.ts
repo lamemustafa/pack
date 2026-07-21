@@ -3,12 +3,16 @@ import type { PackMessage, PackMessageResponse } from "../../src/core/messages";
 
 const browserMocks = vi.hoisted(() => {
   const localValues: Record<string, unknown> = {};
+  const sessionValues: Record<string, unknown> = {};
   const resetLocalStorage = () => {
     for (const key of Object.keys(localValues)) delete localValues[key];
     localValues["pack:local-processing-acknowledgement"] = {
       version: "2026-07-21-v1",
       acknowledgedAt: "2026-07-21T00:00:00.000Z",
     };
+  };
+  const resetSessionStorage = () => {
+    for (const key of Object.keys(sessionValues)) delete sessionValues[key];
   };
   resetLocalStorage();
   let messageListener:
@@ -21,6 +25,7 @@ const browserMocks = vi.hoisted(() => {
 
   return {
     resetLocalStorage,
+    resetSessionStorage,
     getMessageListener: () => messageListener,
     downloads: {
       download: vi.fn(async () => 481),
@@ -149,8 +154,15 @@ const browserMocks = vi.hoisted(() => {
         setAccessLevel: vi.fn(async () => undefined),
       },
       session: {
-        get: vi.fn(async () => ({})),
-        set: vi.fn(async () => undefined),
+        get: vi.fn(async (key?: unknown) => {
+          if (typeof key === "string") {
+            return key in sessionValues ? { [key]: sessionValues[key] } : {};
+          }
+          return { ...sessionValues };
+        }),
+        set: vi.fn(async (values: Record<string, unknown>) => {
+          Object.assign(sessionValues, values);
+        }),
       },
     },
     tabs: {
@@ -222,6 +234,7 @@ describe("background filed returns download defaults", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     browserMocks.resetLocalStorage();
+    browserMocks.resetSessionStorage();
     vi.resetModules();
     vi.useRealTimers();
     vi.stubGlobal("defineBackground", (entrypoint: () => void) => {
@@ -249,6 +262,51 @@ describe("background filed returns download defaults", () => {
         "Review and acknowledge Pack's local-processing boundary before starting or retrying a GST download.",
     });
     expect(browserMocks.tabs.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("exports an optional receipt only for the current verified single-period summary", async () => {
+    await import("../../src/entrypoints/background");
+    await browserMocks.storage.session.set({
+      "pack:last-filed-returns-flow-summary": {
+        scope: {
+          artifactType: "PDF",
+          financialYear: "2025-26",
+          period: "May",
+          returnType: "GSTR-3B",
+        },
+        status: "complete",
+        completedAt: "2026-07-21T01:02:03.000Z",
+        completedPeriods: ["May"],
+        totalPeriods: 1,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+          state: "downloaded",
+          safeSignals: ["browser-download-non-empty"],
+          safeMessage: "Verified.",
+        },
+      },
+    });
+
+    const response = await sendBackgroundMessage({
+      type: "PACK_EXPORT_FILED_RETURNS_RECEIPT",
+      payload: {
+        artifactType: "PDF",
+        financialYear: "2025-26",
+        period: "May",
+        returnType: "GSTR-3B",
+      },
+    });
+
+    expect(response).toEqual({ ok: true, receiptDownload: "requested" });
+    expect(browserMocks.downloads.download).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conflictAction: "uniquify",
+        filename: "ComplyEaze-Pack/Receipts/gstr-3b-2025-26-may-receipt.json",
+        saveAs: false,
+        url: expect.stringMatching(/^data:application\/json;charset=utf-8,/),
+      }),
+    );
   });
 
   it("fails closed when trusted local-storage initialization cannot complete", async () => {

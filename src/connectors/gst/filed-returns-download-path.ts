@@ -57,6 +57,16 @@ export function safeSinglePeriodZipFilename(scope: FiledReturnsDownloadScope): s
   )}-${safeFilenameSegment(scope.period)}.zip`;
 }
 
+export function safeSinglePeriodReceiptFilename(scope: FiledReturnsDownloadScope): string {
+  return [
+    "ComplyEaze-Pack",
+    "Receipts",
+    `${safeFilenameSegment(scope.returnType)}-${safeFilenameSegment(
+      scope.financialYear,
+    )}-${safeFilenameSegment(scope.period)}-receipt.json`,
+  ].join("/");
+}
+
 function safeArchivePeriodName(scope: FiledReturnsDownloadScope): string {
   return scope.rangeEndPeriod
     ? `${safeFilenameSegment(scope.period)}-to-${safeFilenameSegment(scope.rangeEndPeriod)}`
