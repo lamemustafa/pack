@@ -1,5 +1,5 @@
 import { JSDOM } from "jsdom";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FiledReturnsDownloadScope } from "../../src/core/contracts";
 import { runFiledReturnsDownloadStep } from "../../src/connectors/gst/filed-returns-flow";
 import { findGstr2bDashboardControl } from "../../src/connectors/gst/gstr2b-dashboard-view";
@@ -24,6 +24,14 @@ const DEFAULT_SCOPE: FiledReturnsDownloadScope = {
   period: "March",
   returnType: "GSTR-3B",
 };
+
+const testWindows = new Set<Window>();
+
+afterEach(() => {
+  vi.useRealTimers();
+  for (const windowRef of testWindows) windowRef.close();
+  testWindows.clear();
+});
 
 describe("filed returns guided flow", () => {
   it("blocks cleanly during GST scheduled downtime", async () => {
@@ -8306,9 +8314,11 @@ describe("filed returns guided flow", () => {
 });
 
 function createDocument(body: string): Document {
-  return new JSDOM(`<!doctype html><html><body>${body}</body></html>`, {
+  const windowRef = new JSDOM(`<!doctype html><html><body>${body}</body></html>`, {
     pretendToBeVisual: true,
-  }).window.document;
+  }).window;
+  testWindows.add(windowRef);
+  return windowRef.document;
 }
 
 function createGstDocument(
@@ -8319,7 +8329,9 @@ function createGstDocument(
     pretendToBeVisual: true,
     url,
   };
-  return new JSDOM(`<!doctype html><html><body>${body}</body></html>`, options).window.document;
+  const windowRef = new JSDOM(`<!doctype html><html><body>${body}</body></html>`, options).window;
+  testWindows.add(windowRef);
+  return windowRef.document;
 }
 
 function createGstr2bSummaryDocument(extraBody = ""): Document {
