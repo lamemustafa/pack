@@ -68,56 +68,6 @@ export function createFullFiscalYearLedger(
   };
 }
 
-export function reconcileFullFiscalYearLedgerTargets(
-  ledger: FiledReturnsFullFiscalYearLedger,
-  now: Date,
-  periods: readonly FiledReturnsMonth[],
-): FiledReturnsFullFiscalYearLedger {
-  const timestamp = now.toISOString();
-  const eligibleThrough = periods.at(-1);
-  const artifactType = normaliseFiledReturnsArtifactType(
-    ledger.scope.returnType,
-    ledger.scope.artifactType,
-  );
-  const existingTargetIds = new Set(ledger.targets.map((target) => target.targetId));
-  const missingTargets = periods
-    .map((period) => ({
-      targetId: createTargetId(
-        ledger.scope.financialYear,
-        period,
-        ledger.scope.returnType,
-        artifactType,
-      ),
-      financialYear: ledger.scope.financialYear,
-      period,
-      returnType: ledger.scope.returnType,
-      artifactType,
-      status: "pending" as const,
-      attempts: 0,
-      safeSignals: [],
-      safeMessage: "Not checked yet.",
-      updatedAt: timestamp,
-    }))
-    .filter((target) => !existingTargetIds.has(target.targetId));
-  const targets = [...ledger.targets, ...missingTargets];
-
-  const reconciledLedger: FiledReturnsFullFiscalYearLedger = {
-    ...ledger,
-    revision: missingTargets.length > 0 ? nextRevision(ledger) : (ledger.revision ?? 1),
-    planVersion: FULL_FISCAL_YEAR_PLAN_VERSION,
-    connectorVersion: GST_CONNECTOR_DESCRIPTOR.version,
-    createdWithExtensionVersion: ledger.createdWithExtensionVersion ?? PACK_PRODUCT_VERSION,
-    status: ledger.status === "complete" && missingTargets.length > 0 ? "running" : ledger.status,
-    updatedAt:
-      missingTargets.length > 0 && ledger.status !== "running" ? timestamp : ledger.updatedAt,
-    ...(eligibleThrough ? { eligibleThrough } : {}),
-    lastReconciledAt: timestamp,
-    targets,
-  };
-  if (missingTargets.length > 0) delete reconciledLedger.zipPhase;
-  return reconciledLedger;
-}
-
 export function resumeFullFiscalYearLedger(
   ledger: FiledReturnsFullFiscalYearLedger,
   now: Date,

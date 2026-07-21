@@ -149,18 +149,6 @@ function retainedStagingScopeConflictStep(
   };
 }
 
-export function shouldPersistReconciledLedger(
-  previous: FiledReturnsFullFiscalYearLedger,
-  reconciled: FiledReturnsFullFiscalYearLedger,
-): boolean {
-  return (
-    (previous.revision ?? 1) !== (reconciled.revision ?? 1) ||
-    previous.status !== reconciled.status ||
-    previous.targets.length !== reconciled.targets.length ||
-    previous.eligibleThrough !== reconciled.eligibleThrough
-  );
-}
-
 export async function readLedger(key: string): Promise<FiledReturnsFullFiscalYearLedger | null> {
   const values = await browser.storage.local.get(key);
   const ledger = values[key];

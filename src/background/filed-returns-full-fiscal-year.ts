@@ -11,7 +11,6 @@ import {
   markFullFiscalYearTargetRunning,
   markFullFiscalYearTargetTerminal,
   nextRunnableFullFiscalYearTarget,
-  reconcileFullFiscalYearLedgerTargets,
   resumeFullFiscalYearLedger,
   sameFiledReturnsScope,
 } from "./filed-returns-full-fiscal-year-ledger";
@@ -33,7 +32,6 @@ import {
   persistSummary,
   readLedger,
   responseForExistingLedger,
-  shouldPersistReconciledLedger,
 } from "./filed-returns-full-fiscal-year-run-state";
 import {
   mergeRetriedArtifactSignals,
@@ -130,34 +128,22 @@ export async function startFullFiscalYearDownloadFlow(
       return { ok: true, flowStep: step, flowSummary: summary };
     }
   }
-  let ledger =
+  const reuseExistingLedger = Boolean(
     existingLedger &&
-    sameFiledReturnsScope(existingLedger.scope, scope) &&
-    !replaceCompletedSameScopeLedger &&
-    !replaceUnstartedBlockedSameScopeLedger
-      ? reconcileFullFiscalYearLedgerTargets(existingLedger, now, plannedPeriods)
-      : createFullFiscalYearLedger(scope, now, plannedPeriods);
+      sameFiledReturnsScope(existingLedger.scope, scope) &&
+      !replaceCompletedSameScopeLedger &&
+      !replaceUnstartedBlockedSameScopeLedger,
+  );
+  let ledger = reuseExistingLedger
+    ? existingLedger!
+    : createFullFiscalYearLedger(scope, now, plannedPeriods);
 
-  if (
-    existingLedger &&
-    sameFiledReturnsScope(existingLedger.scope, scope) &&
-    !replaceCompletedSameScopeLedger &&
-    !replaceUnstartedBlockedSameScopeLedger
-  ) {
-    if (shouldPersistReconciledLedger(existingLedger, ledger)) {
-      await persistLedger(deps, ledger);
-    }
+  if (reuseExistingLedger) {
     const duplicateResponse = responseForExistingLedger(ledger, now, options);
     if (duplicateResponse) return duplicateResponse;
   }
 
-  ledger =
-    existingLedger &&
-    sameFiledReturnsScope(existingLedger.scope, scope) &&
-    !replaceCompletedSameScopeLedger &&
-    !replaceUnstartedBlockedSameScopeLedger
-      ? resumeFullFiscalYearLedger(ledger, now)
-      : ledger;
+  ledger = reuseExistingLedger ? resumeFullFiscalYearLedger(ledger, now) : ledger;
 
   if (ledger.targets.length === 0) {
     ledger = { ...ledger, status: "blocked", updatedAt: now.toISOString() };
