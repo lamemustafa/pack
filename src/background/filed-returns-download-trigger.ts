@@ -184,16 +184,8 @@ export async function triggerAndObserveFiledReturnDownload({
         );
         if (flowSummary) return { ...captureResponse, flowSummary };
       }
-      return captureResponse;
     }
-    return triggerAndObserveFiledReturnDownload({
-      activePeriod,
-      artifactType,
-      deps,
-      scope,
-      tabId,
-      targetOverride: { ...target, forcePortalClick: true },
-    });
+    return captureResponse;
   }
 
   const triggerFlowResponse = toTriggerFlowResponse(triggerResponse, activePeriod);

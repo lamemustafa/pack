@@ -3275,7 +3275,7 @@ describe("filed returns flow runner", () => {
     ]);
   });
 
-  it("falls back once after a captured GSTR-2B payload does not match the requested artifact", async () => {
+  it("blocks a captured GSTR-2B payload that does not match the requested artifact", async () => {
     vi.mocked(browser.scripting.executeScript).mockImplementationOnce(async (details) => [
       {
         result: {
@@ -3350,8 +3350,8 @@ describe("filed returns flow runner", () => {
     expect(response).toMatchObject({
       ok: true,
       flowStep: {
-        state: "downloaded",
-        safeSignals: expect.arrayContaining(["filed-gstr2b-capture-fallback-portal-click"]),
+        state: "blocked",
+        safeSignals: expect.arrayContaining(["filed-gstr2b-captured-download-data-url-rejected"]),
         downloadDiagnostic: {
           schemaVersion: "1.0",
           eventType: "filed-return-download-path",
@@ -3361,19 +3361,16 @@ describe("filed returns flow runner", () => {
           period: "May",
           endpointClass: "gstr2b-portal-blob-captured-download",
           artifactType: "PDF",
-          downloadPathClass: "captured-portal-request-https",
-          status: "downloaded",
+          downloadPathClass: "captured-portal-request-unknown",
+          status: "blocked",
         },
       },
     });
     expect(sendMessageToTabWithInjection.mock.calls.map(([, message]) => message.type)).toEqual([
       "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
       "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
-      "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
     ]);
-    expect(sendMessageToTabWithInjection.mock.calls.at(-1)?.[1].payload).toMatchObject({
-      forcePortalClick: true,
-    });
+    expect(browser.downloads.download).not.toHaveBeenCalled();
   });
 
   it("does not issue a second portal click after an ambiguous capture when the action journal is active", async () => {
@@ -3593,7 +3590,7 @@ describe("filed returns flow runner", () => {
   });
 
   it.each(["PDF", "EXCEL"] as const)(
-    "falls back to one target-bound GSTR-2B %s portal click when capture cannot stay dialog-free",
+    "does not issue a second GSTR-2B %s portal click when capture cannot stay dialog-free",
     async (artifactType) => {
       vi.mocked(browser.scripting.executeScript).mockImplementationOnce(async () => [
         { result: null },
@@ -3683,17 +3680,17 @@ describe("filed returns flow runner", () => {
       expect(response).toMatchObject({
         ok: true,
         flowStep: {
-          state: "downloaded",
+          state: "unsupported-page",
           safeSignals: expect.arrayContaining([
-            "filed-gstr2b-capture-fallback-portal-click",
-            "browser-download-completed",
+            "gstr2b-dialog-free-capture-unsupported",
+            "gstr2b-blob-capture-failed",
           ]),
           downloadDiagnostic: {
             returnType: "GSTR-2B",
             period: "May",
             artifactType,
-            downloadPathClass: "portal-click-blob",
-            status: "downloaded",
+            downloadPathClass: "captured-portal-request-unknown",
+            status: "unsupported-page",
           },
         },
       });
@@ -3702,19 +3699,7 @@ describe("filed returns flow runner", () => {
       expect(sendMessageToTabWithInjection.mock.calls.map(([, message]) => message.type)).toEqual([
         "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
         "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
-        "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
       ]);
-      expect(sendMessageToTabWithInjection.mock.calls.at(-1)?.[1].payload).toMatchObject({
-        artifactType,
-        financialYear: "2026-27",
-        forcePortalClick: true,
-        period: "May",
-        returnType: "GSTR-2B",
-      });
-      expect(vi.mocked(observeNextBrowserDownload).mock.calls.at(-1)?.[1]).not.toHaveProperty(
-        "allowTargetBoundBlobOrData",
-      );
-      expect(vi.mocked(observeNextBrowserDownload).mock.calls.at(-1)?.[2]).toBe(120_000);
     },
   );
 
