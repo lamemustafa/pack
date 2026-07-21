@@ -2,7 +2,12 @@ import { browser } from "wxt/browser";
 
 const MAX_QUARANTINE_ENTRIES = 12;
 
-export type FiledReturnsStorageQuarantineKey = "active-run" | "action-journal" | "target-review";
+export type FiledReturnsStorageQuarantineKey =
+  | "active-run"
+  | "action-journal"
+  | "full-fiscal-year-ledger"
+  | "single-period-staging"
+  | "target-review";
 
 interface FiledReturnsStorageQuarantineEntry {
   key: FiledReturnsStorageQuarantineKey;
@@ -84,7 +89,13 @@ function isRecordWithOnlyKeys(
 }
 
 function isQuarantineKey(value: unknown): value is FiledReturnsStorageQuarantineKey {
-  return value === "active-run" || value === "action-journal" || value === "target-review";
+  return [
+    "active-run",
+    "action-journal",
+    "full-fiscal-year-ledger",
+    "single-period-staging",
+    "target-review",
+  ].includes(value as FiledReturnsStorageQuarantineKey);
 }
 
 function isTimestamp(value: unknown): value is string {

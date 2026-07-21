@@ -231,7 +231,7 @@ describe("background filed returns download defaults", () => {
   });
 
   it("blocks a live start until the local-processing acknowledgement is current", async () => {
-    browserMocks.storage.local.get.mockResolvedValueOnce({});
+    await browserMocks.storage.local.remove("pack:local-processing-acknowledgement");
     await import("../../src/entrypoints/background");
 
     const response = await sendBackgroundMessage({
@@ -270,6 +270,35 @@ describe("background filed returns download defaults", () => {
       ok: false,
       error:
         "Pack could not initialize private local storage. Reload the extension before starting a GST download.",
+    });
+    expect(browserMocks.tabs.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("requires an explicit local-data reset after legacy state is quarantined", async () => {
+    await import("../../src/entrypoints/background");
+    await browserMocks.storage.local.set({
+      "pack:filed-returns-state-migration": {
+        schemaVersion: "1.0",
+        source: "v0.4.x",
+        state: "quarantined",
+        updatedAt: "2026-07-21T00:00:00.000Z",
+        quarantinedKeys: ["active-run"],
+      },
+    });
+
+    const response = await sendBackgroundMessage({
+      type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",
+      payload: {
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-3B",
+      },
+    });
+
+    expect(response).toEqual({
+      ok: false,
+      error:
+        "Pack isolated legacy local state whose outcome cannot be verified. Check browser Downloads, then open Pack Options and clear local Pack data before starting a new download.",
     });
     expect(browserMocks.tabs.sendMessage).not.toHaveBeenCalled();
   });

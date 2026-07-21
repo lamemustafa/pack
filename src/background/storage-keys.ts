@@ -6,6 +6,7 @@ export const PACK_LOCAL_STORAGE_KEYS = {
   lastManifest: "pack:last-manifest",
   localProcessingAcknowledgement: "pack:local-processing-acknowledgement",
   singlePeriodStaging: "pack:single-period-staging",
+  stateMigration: "pack:filed-returns-state-migration",
   storageQuarantine: "pack:filed-returns-storage-quarantine",
   targetReview: "pack:filed-returns-target-review",
 } as const;

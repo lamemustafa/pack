@@ -21,6 +21,10 @@ import {
 import { resolveUnconfirmedFiledReturnsDownload } from "../background/filed-returns-target-review";
 import { clearPackLocalDataWithRecoveryGuard } from "../background/local-data";
 import {
+  hasLegacyFiledReturnsStateRequiringReview,
+  migrateV040FiledReturnsState,
+} from "../background/filed-returns-v040-state-migration";
+import {
   acknowledgeLocalProcessing,
   readLocalProcessingAcknowledgement,
 } from "../background/local-processing-acknowledgement";
@@ -63,7 +67,7 @@ const OFFICIAL_URL = "https://pack.complyeaze.com";
 let trustedLocalStorageInitialization: Promise<void> | null = null;
 
 export default defineBackground(() => {
-  trustedLocalStorageInitialization = restrictLocalStorageToTrustedContexts();
+  trustedLocalStorageInitialization = initializeTrustedLocalStorage();
   void trustedLocalStorageInitialization.catch(() => undefined);
 
   browser.tabs.onActivated.addListener(({ tabId }) => {
@@ -138,6 +142,16 @@ async function handleMessage(
   sender: Browser.runtime.MessageSender,
 ): Promise<PackMessageResponse> {
   if (!isPackMessage(message)) return { ok: false, error: "Unsupported Pack message." };
+  if (
+    isFiledReturnsSideEffectMessage(message.type) &&
+    (await hasLegacyFiledReturnsStateRequiringReview(PACK_LOCAL_STORAGE_KEYS.stateMigration))
+  ) {
+    return {
+      ok: false,
+      error:
+        "Pack isolated legacy local state whose outcome cannot be verified. Check browser Downloads, then open Pack Options and clear local Pack data before starting a new download.",
+    };
+  }
 
   switch (message.type) {
     case "PACK_CONTENT_CONTEXT": {
@@ -307,6 +321,40 @@ async function pausedSavedFullFiscalYearResponse(): Promise<PackMessageResponse>
 
 function packRuntimeVersion() {
   return browser.runtime.getManifest().version ?? PACK_PRODUCT_VERSION;
+}
+
+async function initializeTrustedLocalStorage(): Promise<void> {
+  await restrictLocalStorageToTrustedContexts();
+  const installValues = await browser.storage.local.get(PACK_LOCAL_STORAGE_KEYS.install);
+  await migrateV040FiledReturnsState({
+    installedVersion: readInstalledPackVersion(installValues[PACK_LOCAL_STORAGE_KEYS.install]),
+    storageKeys: {
+      activeRun: PACK_LOCAL_STORAGE_KEYS.activeFiledReturnsRun,
+      fullFiscalYearLedger: PACK_LOCAL_STORAGE_KEYS.fullFiscalYearLedger,
+      singlePeriodStaging: PACK_LOCAL_STORAGE_KEYS.singlePeriodStaging,
+      stateMigration: PACK_LOCAL_STORAGE_KEYS.stateMigration,
+      storageQuarantine: PACK_LOCAL_STORAGE_KEYS.storageQuarantine,
+      targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview,
+    },
+  });
+}
+
+function readInstalledPackVersion(value: unknown): string | null {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+  const version = (value as { version?: unknown }).version;
+  return typeof version === "string" && version.length <= 80 ? version : null;
+}
+
+function isFiledReturnsSideEffectMessage(type: string): boolean {
+  return [
+    "PACK_RETRY_FILED_RETURNS_TARGET",
+    "PACK_RETRY_FULL_FISCAL_YEAR_TARGET",
+    "PACK_RESOLVE_UNCONFIRMED_DOWNLOAD",
+    "PACK_RESOLVE_FULL_FISCAL_YEAR_TARGET",
+    "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD",
+    "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",
+    "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW",
+  ].includes(type);
 }
 
 function filedReturnsFlowRunnerDeps() {
