@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  hasMalformedFiledReturnsTargetReview,
   persistFiledReturnsTargetReview,
   resolveUnconfirmedFiledReturnsDownload,
 } from "../../src/background/filed-returns-target-review";
@@ -27,6 +28,29 @@ vi.mock("wxt/browser", () => ({
 describe("filed returns target review", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("treats expanded target-review storage as malformed", async () => {
+    browserMocks.storage.local.get.mockResolvedValue({
+      "target-review": {
+        schemaVersion: "1.0",
+        targetId: "GSTR-3B:2025-26:March",
+        status: "download-unconfirmed",
+        scope: {
+          financialYear: "2025-26",
+          period: "March",
+          returnType: "GSTR-3B",
+        },
+        safeSignals: ["browser-download-not-observed"],
+        safeMessage: "No browser completion.",
+        updatedAt: "2026-06-24T00:00:00.000Z",
+        unexpected: "forbidden-metadata",
+      },
+    });
+
+    await expect(
+      hasMalformedFiledReturnsTargetReview({ storageKeys: { targetReview: "target-review" } }),
+    ).resolves.toBe(true);
   });
 
   it("records a manual observation without completing or clearing the unresolved target", async () => {

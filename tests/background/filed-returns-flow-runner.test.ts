@@ -357,6 +357,44 @@ describe("filed returns flow runner", () => {
     mockSessionStorageGet({});
   });
 
+  it("blocks a new portal action when saved target-review metadata is malformed", async () => {
+    mockLocalStorageGet({
+      "target-review": {
+        schemaVersion: "1.0",
+        targetId: "GSTR-3B:2026-27:May",
+        status: "download-unconfirmed",
+        scope: {
+          financialYear: "2026-27",
+          period: "May",
+          returnType: "GSTR-3B",
+        },
+        safeSignals: ["browser-download-not-observed"],
+        safeMessage: "No browser completion.",
+        updatedAt: "2026-06-24T00:00:00.000Z",
+        unexpected: "forbidden-metadata",
+      },
+    });
+
+    const response = await startFiledReturnsDownloadFlow(
+      { financialYear: "2026-27", period: "May", returnType: "GSTR-3B" },
+      {
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          targetReview: "target-review",
+        },
+      } as FiledReturnsFlowRunnerDeps,
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "blocked",
+        safeSignals: ["filed-returns-target-review-invalid"],
+      },
+    });
+  });
+
   it("runs a full fiscal year through concrete monthly targets without sending a full-year sentinel to content", async () => {
     const sendMessageToTabWithInjection = vi.fn<
       FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]

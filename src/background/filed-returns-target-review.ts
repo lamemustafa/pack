@@ -46,6 +46,17 @@ export async function readCurrentFiledReturnsTargetReview(
   return parseFiledReturnsTargetReview(values[key]);
 }
 
+export async function hasMalformedFiledReturnsTargetReview(
+  deps: FiledReturnsTargetReviewDeps,
+): Promise<boolean> {
+  const key = deps.storageKeys.targetReview;
+  if (!key) return false;
+
+  const values = await browser.storage.local.get(key);
+  const value = values[key];
+  return value !== undefined && value !== null && parseFiledReturnsTargetReview(value) === null;
+}
+
 export async function readCurrentFiledReturnsTargetReviewSummary(
   deps: FiledReturnsTargetReviewDeps,
 ): Promise<FiledReturnsFlowSummary | null> {
@@ -202,12 +213,34 @@ async function persistResolvedTargetReviewSummary(
 }
 
 function parseFiledReturnsTargetReview(input: unknown): FiledReturnsTargetReview | null {
-  if (!input || typeof input !== "object") return null;
+  if (
+    !isRecordWithOnlyKeys(input, [
+      "schemaVersion",
+      "targetId",
+      "status",
+      "scope",
+      "safeSignals",
+      "safeMessage",
+      "updatedAt",
+    ])
+  ) {
+    return null;
+  }
   const review = input as Partial<FiledReturnsTargetReview>;
   if (review.schemaVersion !== "1.0") return null;
   if (!isBoundedString(review.targetId, 1, 120)) return null;
   if (review.status !== "download-unconfirmed") return null;
-  if (!review.scope || typeof review.scope !== "object") return null;
+  if (
+    !isRecordWithOnlyKeys(review.scope, [
+      "financialYear",
+      "period",
+      "returnType",
+      "artifactType",
+      "completedPeriods",
+    ])
+  ) {
+    return null;
+  }
   if (review.targetId !== createTargetId(review.scope as FiledReturnsDownloadScope)) return null;
   if (
     typeof review.scope.financialYear !== "string" ||
@@ -228,7 +261,35 @@ function parseFiledReturnsTargetReview(input: unknown): FiledReturnsTargetReview
   if (typeof review.updatedAt !== "string" || !Number.isFinite(Date.parse(review.updatedAt))) {
     return null;
   }
-  return review as FiledReturnsTargetReview;
+  return {
+    schemaVersion: "1.0",
+    targetId: review.targetId,
+    status: "download-unconfirmed",
+    scope: {
+      financialYear: review.scope.financialYear,
+      period: review.scope.period,
+      returnType: review.scope.returnType,
+      ...(review.scope.artifactType ? { artifactType: review.scope.artifactType } : {}),
+      ...(Array.isArray(review.scope.completedPeriods)
+        ? { completedPeriods: review.scope.completedPeriods }
+        : {}),
+    },
+    safeSignals: [...review.safeSignals],
+    safeMessage: review.safeMessage,
+    updatedAt: review.updatedAt,
+  };
+}
+
+function isRecordWithOnlyKeys(
+  input: unknown,
+  allowedKeys: readonly string[],
+): input is Record<string, unknown> {
+  return (
+    input !== null &&
+    typeof input === "object" &&
+    !Array.isArray(input) &&
+    Object.keys(input).every((key) => allowedKeys.includes(key))
+  );
 }
 
 function toTargetReviewSummary(

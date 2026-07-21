@@ -6,6 +6,7 @@ import type {
   PackMessageResponse,
 } from "../core/messages";
 import { isFullFiscalYearScope } from "../core/filed-returns-scope";
+import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import {
   acquireFiledReturnsRun,
   releaseFiledReturnsRun,
@@ -31,6 +32,7 @@ import {
 } from "./filed-returns-full-fiscal-year-run-state";
 import {
   clearFiledReturnsTargetReview,
+  hasMalformedFiledReturnsTargetReview,
   noTargetReviewResponse,
   readFiledReturnsTargetReview,
   readCurrentFiledReturnsTargetReview,
@@ -92,6 +94,9 @@ export async function startFiledReturnsDownloadFlow(
 ): Promise<PackMessageResponse> {
   const targetReview = await readCurrentFiledReturnsTargetReview(deps);
   if (targetReview) return responseForFiledReturnsTargetReview(targetReview);
+  if (await hasMalformedFiledReturnsTargetReview(deps)) {
+    return malformedTargetReviewResponse(scope);
+  }
 
   if (isFullFiscalYearScope(scope)) {
     const malformedLedger = await readMalformedLedgerState(deps.storageKeys.fullFiscalYearLedger);
@@ -161,6 +166,34 @@ export async function startFiledReturnsDownloadFlow(
     stopLeaseRenewal();
     await releaseFiledReturnsRun(activeRun.run, deps);
   }
+}
+
+function malformedTargetReviewResponse(scope: FiledReturnsDownloadScope): PackMessageResponse {
+  const flowStep: PortalFlowStepResult = {
+    connectorId: "gst",
+    scopeId: filedReturnScopeId(scope.returnType),
+    state: "blocked",
+    safeSignals: ["filed-returns-target-review-invalid"],
+    safeMessage:
+      "Pack found invalid saved target-review metadata and will not start a new portal action. Check browser Downloads, then clear local Pack data before starting fresh.",
+    userAction: {
+      type: "RETRY_PORTAL_GENERATION",
+      message:
+        "Clear the invalid saved target-review marker only after checking browser Downloads.",
+      canResume: false,
+    },
+  };
+  return {
+    ok: true,
+    flowStep,
+    flowSummary: {
+      scope,
+      status: "blocked",
+      completedPeriods: [],
+      totalPeriods: 1,
+      flowStep,
+    },
+  };
 }
 
 export async function retryFullFiscalYearTargetDownloadFlow(
