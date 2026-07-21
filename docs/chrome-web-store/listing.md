@@ -9,19 +9,23 @@ Use [`dashboard-closeout.md`](dashboard-closeout.md) for the action sequence.
 
 ## Current Store State
 
-- Published package: `v0.3.2`.
-- Pending package: `v0.4.0`, source commit
-  `eb21404d274917876fcba20abce09216ce6348f4`.
+- Maintainer-reported public package: `v0.4.0`. Treat this as a current-status
+  report until a dated Chrome Web Store dashboard export is recorded in source
+  control.
+- Exact package source commit: `eb21404d274917876fcba20abce09216ce6348f4`.
 - Release asset: `complyeazepack-0.4.0-chrome.zip`.
 - Release asset SHA-256:
   `6ee4be24cafbe15db69275cac4da6b212f3de49b0f747eb9909eed7d293347c6`.
 - GitHub release: <https://github.com/lamemustafa/pack/releases/tag/v0.4.0>.
 - Workflow run `29507382500` built, tested, verified, zipped, published the
-  prerelease assets, and uploaded the exact ZIP to Chrome Web Store. The Store
-  upload state was `SUCCEEDED`; publish returned HTTP 400 because dashboard
-  requirements were incomplete.
-- The dashboard screenshots supplied on 2026-07-16 show stale GSTR-3B-only
-  copy/assets and a blank required `offscreen` permission justification.
+  prerelease assets, and uploaded the exact ZIP to Chrome Web Store. Its
+  recorded upload state was `SUCCEEDED`; the workflow's direct publish request
+  returned HTTP 400. That historical result is not proof of the current public
+  Store status.
+- The dashboard screenshots supplied on 2026-07-16 are historical evidence of
+  stale GSTR-3B-only copy/assets and a blank required `offscreen` permission
+  justification. Record a fresh dashboard export before relying on the listing
+  or disclosure state for a future release.
 
 The Store-supported alpha claims remain GSTR-1 and GSTR-3B single-period
 downloads. Private GSTR-2B and full-fiscal-year workflows are source-build

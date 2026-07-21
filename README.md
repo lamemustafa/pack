@@ -28,25 +28,20 @@ endorsed by, or operated by GSTN, CBIC, or the Government of India.
 
 ## Status
 
-This public repository and the Chrome Web Store V0 listing are open-source
-alpha surfaces. The Store-published `v0.3.2` source has live local download
-support for filed GSTR-3B PDFs, filed GSTR-1 summary PDFs, and optional GSTR-1
-e-invoice details Excel files where the GST Portal provides them. The verified
-GitHub pre-release for the Store-published package is
-[`v0.3.2`](https://github.com/lamemustafa/pack/releases/tag/v0.3.2), with
+This public repository and Chrome Web Store listing are open-source alpha
+surfaces. The maintainer reports that the public Store item now serves `v0.4.0`.
+The reviewed GitHub pre-release for that version is
+[`v0.4.0`](https://github.com/lamemustafa/pack/releases/tag/v0.4.0), with
 Chrome ZIP SHA-256
-`6bd41a364a2466f0f255bef1b44e93694cc8d95431e7661fea5be3d52c9cdddb`.
+`6ee4be24cafbe15db69275cac4da6b212f3de49b0f747eb9909eed7d293347c6`.
 
-The Chrome Web Store package update for this GSTR-1 source release was
-submitted through the protected workflow on 2026-07-04. Run `28704776806`
-uploaded `v0.3.2` with upload state `SUCCEEDED`, publish state
-`PENDING_REVIEW`, and no warnings. A maintainer-provided Chrome Web Store
-publication email on 2026-07-06 records item ID
-`nfnbhekccajjfgkppolomflaeledoccb`, item name
-`ComplyEaze Pack: GSTR-1/GSTR-3B Downloader`, version `0.3.2`, and visibility
-`Public`. The repository source has since advanced to `v0.4.0`; do not treat
-that newer source release as Store-published until its own Store evidence is
-recorded.
+The recorded workflow evidence for `v0.4.0` is upload state `SUCCEEDED` in run
+`29507382500`; that workflow's direct publish request returned HTTP 400. No
+dated Store dashboard export is recorded in source control, so the reported
+current Store status is not a substitute for dashboard, exact-ZIP, and live
+evidence gates. Store-supported alpha scope remains filed GSTR-3B PDFs, filed
+GSTR-1 summary PDFs, and optional GSTR-1 e-invoice details Excel files where
+the GST Portal provides them.
 Live manifest/index/exception-file generation is outside the current alpha.
 Future store updates require the release gates in
 [docs/PUBLICATION_READINESS.md](docs/PUBLICATION_READINESS.md) and

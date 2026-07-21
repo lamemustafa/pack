@@ -5,12 +5,13 @@ not replace the protected package submit workflow. It records the manual Chrome
 Web Store Developer Dashboard steps that cannot be proved from source control
 alone.
 
-The public item remains on `v0.3.2`. The exact `v0.4.0` package upload
-succeeded in workflow run `29507382500`, but publication is blocked by
-incomplete dashboard requirements. The 2026-07-16 dashboard snapshots show a
-blank required `offscreen` justification, stale GSTR-3B-only text, stale
-promotional assets, and data-usage selections that do not disclose local
-handling.
+The maintainer reports that the public item now serves `v0.4.0`. Source control
+contains workflow evidence that the exact `v0.4.0` package upload succeeded in
+run `29507382500`, while that workflow's direct publish request returned HTTP 400. Neither result replaces a dated Developer Dashboard export confirming the
+currently published listing, assets, permission rationale, and disclosures.
+The 2026-07-16 dashboard snapshots are historical evidence of a blank required
+`offscreen` justification, stale GSTR-3B-only text, stale promotional assets,
+and data-usage selections that did not disclose local handling.
 
 ## Source Inputs
 
@@ -35,8 +36,9 @@ Official Chrome references to re-check before editing the dashboard:
 
 1. Open the Chrome Web Store Developer Dashboard for the existing Pack item:
    `nfnbhekccajjfgkppolomflaeledoccb`.
-2. Confirm the dashboard package under review is version `0.4.0`, source commit
-   `eb21404d274917876fcba20abce09216ce6348f4`, and release asset SHA-256
+2. Export and record the dashboard's dated state for `v0.4.0`: public, under
+   review, rejected, or absent. If it shows `v0.4.0`, confirm source commit
+   `eb21404d274917876fcba20abce09216ce6348f4` and release asset SHA-256
    `6ee4be24cafbe15db69275cac4da6b212f3de49b0f747eb9909eed7d293347c6`.
 3. Copy every Store listing and Privacy practices field from
    [`listing.md`](listing.md). Do not keep the previous GSTR-3B-only

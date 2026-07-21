@@ -9,28 +9,16 @@ stable-release claims.
 - Canonical product name: **ComplyEaze Pack**.
 - Current package title: **ComplyEaze Pack: GST Return Downloader**.
 - V0 Chrome Web Store listing:
-  `https://chromewebstore.google.com/detail/complyeaze-pack-gst-gstr/nfnbhekccajjfgkppolomflaeledoccb`.
-- Store-published GitHub release for GSTR-1 support:
-  [`v0.3.2`](https://github.com/lamemustafa/pack/releases/tag/v0.3.2),
-  published as a pre-release from commit
-  `7bc2c2604f045c1d5547f6ab63a84dbb91de161e`.
-- `v0.3.2` Chrome ZIP asset:
-  `https://github.com/lamemustafa/pack/releases/download/v0.3.2/complyeazepack-0.3.2-chrome.zip`
-  with SHA-256
-  `6bd41a364a2466f0f255bef1b44e93694cc8d95431e7661fea5be3d52c9cdddb`.
-- Chrome Web Store package update for `v0.3.2` was submitted through protected
-  workflow dispatch on 2026-07-04. Run `28704776806` verified the GitHub release
-  assets, uploaded `complyeazepack-0.3.2-chrome.zip`, reported upload state
-  `SUCCEEDED`, reported publish state `PENDING_REVIEW`, and returned no
-  warnings. A maintainer-provided Chrome Web Store publication email on
-  2026-07-06 records item ID `nfnbhekccajjfgkppolomflaeledoccb`, item name
-  `ComplyEaze Pack: GSTR-1/GSTR-3B Downloader`, version `0.3.2`, and visibility
-  `Public`.
-- Repository source has since advanced to `v0.4.0`; the current Store-published
-  package evidence is for `v0.3.2` only. Workflow run `29507382500` built and
-  verified the exact `v0.4.0` package and uploaded it with Store state
-  `SUCCEEDED`, but publish returned HTTP 400 because dashboard requirements
-  were incomplete. The pending ZIP SHA-256 is
+  `https://chromewebstore.google.com/detail/complyeaze-pack-gst-retur/nfnbhekccajjfgkppolomflaeledoccb`.
+- The maintainer reports that the public Store item now serves `v0.4.0`. No
+  dated Store dashboard export is recorded in source control, so this is a
+  reported current status, not a substitute for that export or exact-ZIP
+  verification.
+- The reviewed `v0.4.0` GitHub pre-release was built from
+  `eb21404d274917876fcba20abce09216ce6348f4`. Workflow run `29507382500`
+  verified and uploaded its exact ZIP with Store upload state `SUCCEEDED`.
+  That workflow's direct publish request returned HTTP 400; it is historical
+  workflow evidence and does not establish current Store status. The ZIP SHA-256 is
   `6ee4be24cafbe15db69275cac4da6b212f3de49b0f747eb9909eed7d293347c6`.
 - V0 purpose: download filed GSTR-3B PDFs, GSTR-1 summary PDFs, and optional
   GSTR-1 e-invoice details Excel files locally from the user's active,
@@ -225,15 +213,17 @@ stable-release claims.
       `ComplyEaze Pack: GSTR-1/GSTR-3B Downloader`, item type `extension`,
       version `0.3.2`, and visibility `Public`.
 - [x] Upload the exact `v0.4.0` package. Workflow run `29507382500` reported
-      upload state `SUCCEEDED`; publication remains blocked on dashboard
-      closeout and is not claimed complete.
+      upload state `SUCCEEDED`. The maintainer reports the public item now
+      serves `v0.4.0`; a dated dashboard export and read-only status result are
+      still required to record that state as release evidence.
 - [x] Add a read-only Chrome Web Store status monitor for submitted packages.
       Scheduled runs use the dedicated `chrome-web-store-status` environment so
       publication/rejection monitoring is not blocked by the protected publishing
       approval gate.
-- [ ] Record a read-only Chrome Web Store Status run with
-      `expected_version=0.4.0` and `require_published=false` after dashboard
-      submission, then `require_published=true` after publication. Use
+- [ ] Record read-only Chrome Web Store Status runs with
+      `expected_version=0.4.0`, first with `require_published=false` and then
+      with `require_published=true`; record the dated response rather than
+      inferring its state from a prior upload. Use
       [`docs/chrome-web-store/dashboard-closeout.md`](chrome-web-store/dashboard-closeout.md)
       for the dashboard and read-only status-monitor closeout checklist.
 
@@ -247,10 +237,10 @@ version here.
 
 ## Not Yet Stable Or Broad-Claim Ready Until
 
-The V0 listing exists for Store-published `v0.3.2`, `v0.4.0` is uploaded but not
-yet published, and the source-build alpha
-full-year workflow has maintainer evidence for automatic local downloads after
-user initiation. Pack must not claim stable Chrome Web Store maturity,
+The maintainer reports that the V0 listing serves `v0.4.0`; a dated dashboard
+export and read-only status result are not yet recorded in source control. The
+source-build alpha full-year workflow has maintainer evidence for automatic
+local downloads after user initiation. Pack must not claim stable Chrome Web Store maturity,
 store-facing full-year availability, durable restart-safe full-year support,
 legal approval, live manifest/index/exception output, or broad GST coverage
 until legal review, live public policy URL confirmation, exact-ZIP manual QA,
