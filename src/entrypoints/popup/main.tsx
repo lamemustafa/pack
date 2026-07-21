@@ -11,10 +11,14 @@ import { PackSummary } from "./pack-summary";
 import { getPopupPresentationState, type PopupPresentationState } from "./presentation-state";
 import { RecoveryActions, hasRecoveryActions } from "./recovery-actions";
 import { LocalProcessingAcknowledgement } from "./local-processing-acknowledgement";
+import { RunEvidencePanel } from "./run-evidence-panel";
 import { usePackPopupController } from "./use-pack-popup-controller";
+import { WorkflowPhaseRail } from "./workflow-phase-rail";
+import { getPopupWorkflowPhase } from "./workflow-phase";
 
 function App() {
   const popup = usePackPopupController();
+  const [planningAnotherArchive, setPlanningAnotherArchive] = React.useState(false);
   const displaySummary = popup.recoverySummary ?? popup.scopedFlowSummary;
   const showRecovery = hasRecoveryActions(displaySummary ?? null);
   const portalReady = popup.context?.supported === true;
@@ -24,6 +28,8 @@ function App() {
     popup.effectiveBusy,
   );
   const portalIndependentZipRetry = canRetryFullFiscalYearZipWithoutPortal(displaySummary);
+  const derivedPhase = getPopupWorkflowPhase(presentation, displaySummary);
+  const phase = planningAnotherArchive && derivedPhase === "results" ? "plan" : derivedPhase;
   const showBuilder =
     (popup.context?.supported === true || portalIndependentZipRetry) &&
     !["loading", "unsupported", "session-expired"].includes(presentation.kind);
@@ -49,40 +55,71 @@ function App() {
               ? "Local ZIP recovery available"
               : "GST Portal page detected"}
           </p>
-          <ScopeForm
-            busy={popup.effectiveBusy}
-            context={popup.context}
-            flowSummary={displaySummary}
-            scope={popup.scope}
-            scopeLockedForReview={popup.scopeLockedForReview}
-            onScopeChange={popup.setScope}
-            onStart={() => void popup.startFiledReturnsFlow()}
-            showPrimaryAction={false}
-          />
-          <PackSummary scope={popup.scope} summary={popup.scopedFlowSummary} />
-          <LocalProcessingAcknowledgement
-            acknowledged={popup.localProcessingAcknowledged}
-            busy={popup.effectiveBusy === "acknowledge-local-processing"}
-            onAcknowledge={() => void popup.acknowledgeLocalProcessing()}
-          />
-          <InlineStatus
-            busy={popup.effectiveBusy}
-            onOpenPortal={() => void browser.tabs.create({ url: "https://www.gst.gov.in" })}
-            onRestartTarget={() => void popup.startFiledReturnsFlow()}
-            onRetryFullFiscalYearTarget={() => void popup.retryFullFiscalYearTarget()}
-            onRetryTarget={() => void popup.retryFiledReturnsTarget()}
-            presentation={presentation}
-            summary={displaySummary}
-          />
-          {!statusOwnsPrimaryAction && !popup.recoverySummary ? (
-            <ScopeFormAction
-              busy={popup.effectiveBusy}
-              context={popup.context}
-              flowSummary={popup.scopedFlowSummary}
-              scope={popup.scope}
-              localProcessingAcknowledged={popup.localProcessingAcknowledged === true}
-              onStart={() => void popup.startFiledReturnsFlow()}
-            />
+          <WorkflowPhaseRail phase={phase} />
+          {phase === "plan" ? (
+            <>
+              <ScopeForm
+                busy={popup.effectiveBusy}
+                context={popup.context}
+                flowSummary={displaySummary}
+                scope={popup.scope}
+                scopeLockedForReview={popup.scopeLockedForReview}
+                onScopeChange={popup.setScope}
+                onStart={() => {
+                  setPlanningAnotherArchive(false);
+                  void popup.startFiledReturnsFlow();
+                }}
+                showPrimaryAction={false}
+              />
+              <PackSummary scope={popup.scope} summary={popup.scopedFlowSummary} />
+              <LocalProcessingAcknowledgement
+                acknowledged={popup.localProcessingAcknowledged}
+                busy={popup.effectiveBusy === "acknowledge-local-processing"}
+                onAcknowledge={() => void popup.acknowledgeLocalProcessing()}
+              />
+              {!statusOwnsPrimaryAction && !popup.recoverySummary ? (
+                <ScopeFormAction
+                  busy={popup.effectiveBusy}
+                  context={popup.context}
+                  flowSummary={popup.scopedFlowSummary}
+                  scope={popup.scope}
+                  localProcessingAcknowledged={popup.localProcessingAcknowledged === true}
+                  onStart={() => {
+                    setPlanningAnotherArchive(false);
+                    void popup.startFiledReturnsFlow();
+                  }}
+                />
+              ) : null}
+            </>
+          ) : null}
+          {phase === "run" || phase === "results" ? (
+            <>
+              <PackSummary scope={popup.scope} summary={popup.scopedFlowSummary} />
+              <InlineStatus
+                busy={popup.effectiveBusy}
+                onOpenPortal={() => void browser.tabs.create({ url: "https://www.gst.gov.in" })}
+                onRestartTarget={() => void popup.startFiledReturnsFlow()}
+                onRetryFullFiscalYearTarget={() => void popup.retryFullFiscalYearTarget()}
+                onRetryTarget={() => void popup.retryFiledReturnsTarget()}
+                presentation={presentation}
+                summary={displaySummary}
+              />
+              {phase === "results" ? (
+                <RunEvidencePanel
+                  scopedFlowSummary={popup.scopedFlowSummary}
+                  summaryHeading={popup.summaryHeading}
+                />
+              ) : null}
+              {phase === "results" && !popup.recoverySummary ? (
+                <button
+                  type="button"
+                  className="secondary workflow-plan-another"
+                  onClick={() => setPlanningAnotherArchive(true)}
+                >
+                  Plan another archive
+                </button>
+              ) : null}
+            </>
           ) : null}
         </>
       ) : (

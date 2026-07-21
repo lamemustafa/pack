@@ -230,6 +230,62 @@
   padding: 10px 0 2px;
 }
 
+.workflow-phase-rail {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.workflow-phase-rail li {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  color: #67778a;
+  font-size: 0.6875rem;
+  font-weight: 750;
+  line-height: 1.2;
+}
+
+.workflow-phase-rail span {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #c6d2df;
+  border-radius: 50%;
+  background: #f8fafc;
+  color: #607287;
+  font-size: 0.625rem;
+  font-weight: 850;
+}
+
+.workflow-phase-rail .workflow-phase-current {
+  color: #244d7c;
+}
+
+.workflow-phase-rail .workflow-phase-current span {
+  border-color: #5d86af;
+  background: #edf3fa;
+  color: #244d7c;
+}
+
+.workflow-phase-rail .workflow-phase-complete span {
+  border-color: #8cc9af;
+  background: #eaf7f2;
+  color: #176b57;
+}
+
+.workflow-plan-another {
+  min-height: 40px;
+  width: 100%;
+}
+
 .run-action-copy {
   margin: 0;
   color: #526477;
