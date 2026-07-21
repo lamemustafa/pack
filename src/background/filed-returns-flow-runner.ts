@@ -12,6 +12,7 @@ import {
   releaseFiledReturnsRun,
   startFiledReturnsRunLeaseRenewal,
 } from "./filed-returns-active-run";
+import { hasUnresolvedFiledReturnsAction } from "./filed-returns-action-journal";
 import type { ActiveGstTab } from "./filed-returns-active-tab";
 import type { MainWorldFiledReturnsFilterSelectionOutcome } from "./main-world-filed-returns-filter-selection";
 import { startFullFiscalYearDownloadFlow } from "./filed-returns-full-fiscal-year";
@@ -63,6 +64,7 @@ export interface FiledReturnsFlowRunnerDeps {
   ) => Promise<PackMessageResponse>;
   storageKeys: {
     activeRun?: string;
+    actionJournal?: string;
     completion: string;
     fullFiscalYearLedger: string;
     observation: string;
@@ -96,6 +98,9 @@ export async function startFiledReturnsDownloadFlow(
   if (targetReview) return responseForFiledReturnsTargetReview(targetReview);
   if (await hasMalformedFiledReturnsTargetReview(deps)) {
     return malformedTargetReviewResponse(scope);
+  }
+  if (await hasUnresolvedFiledReturnsAction(deps.storageKeys.actionJournal)) {
+    return unresolvedActionJournalResponse(scope);
   }
 
   if (isFullFiscalYearScope(scope)) {
@@ -180,6 +185,33 @@ function malformedTargetReviewResponse(scope: FiledReturnsDownloadScope): PackMe
       type: "RETRY_PORTAL_GENERATION",
       message:
         "Clear the invalid saved target-review marker only after checking browser Downloads.",
+      canResume: false,
+    },
+  };
+  return {
+    ok: true,
+    flowStep,
+    flowSummary: {
+      scope,
+      status: "blocked",
+      completedPeriods: [],
+      totalPeriods: 1,
+      flowStep,
+    },
+  };
+}
+
+function unresolvedActionJournalResponse(scope: FiledReturnsDownloadScope): PackMessageResponse {
+  const flowStep: PortalFlowStepResult = {
+    connectorId: "gst",
+    scopeId: filedReturnScopeId(scope.returnType),
+    state: "blocked",
+    safeSignals: ["filed-returns-action-journal-review-required"],
+    safeMessage:
+      "Pack found an unresolved local browser-download action and will not retry it automatically. Review browser Downloads before starting again.",
+    userAction: {
+      type: "RETRY_PORTAL_GENERATION",
+      message: "After reviewing browser Downloads, clear local Pack data before starting fresh.",
       canResume: false,
     },
   };

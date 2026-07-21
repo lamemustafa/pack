@@ -1,5 +1,6 @@
 export const PACK_LOCAL_STORAGE_KEYS = {
   activeFiledReturnsRun: "pack:active-filed-returns-run",
+  actionJournal: "pack:filed-returns-action-journal",
   fullFiscalYearLedger: "pack:full-fiscal-year-ledger",
   install: "pack:install",
   lastManifest: "pack:last-manifest",
@@ -20,6 +21,7 @@ export const PACK_CLEARABLE_LOCAL_STORAGE_KEYS = Object.values(PACK_LOCAL_STORAG
 export function filedReturnsStorageKeys() {
   return {
     activeRun: PACK_LOCAL_STORAGE_KEYS.activeFiledReturnsRun,
+    actionJournal: PACK_LOCAL_STORAGE_KEYS.actionJournal,
     completion: PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary,
     fullFiscalYearLedger: PACK_LOCAL_STORAGE_KEYS.fullFiscalYearLedger,
     observation: PACK_SESSION_STORAGE_KEYS.lastFiledReturnsObservation,

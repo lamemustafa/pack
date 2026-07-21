@@ -6,6 +6,7 @@ import type {
 } from "../core/contracts";
 import type { PackMessageResponse } from "../core/messages";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
+import { clearVerifiedFiledReturnsActions } from "./filed-returns-action-journal";
 import { persistFiledReturnsTargetReview } from "./filed-returns-target-review";
 
 export async function withPersistedSinglePeriodSummary(
@@ -29,6 +30,9 @@ export async function withPersistedSinglePeriodSummary(
     return { ...response, flowSummary: targetReview };
   }
   const flowSummary = await persistSinglePeriodSummary(scope, response.flowStep, deps);
+  if (flowSummary.status === "complete") {
+    await clearVerifiedFiledReturnsActions(deps.storageKeys.actionJournal);
+  }
   return { ...response, flowSummary };
 }
 

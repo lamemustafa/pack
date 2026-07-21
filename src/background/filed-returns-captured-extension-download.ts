@@ -25,6 +25,11 @@ import {
 import type { FiledReturnsFlowMessagingDeps } from "./filed-returns-flow-messaging";
 import { persistFiledReturnsTargetReview } from "./filed-returns-target-review";
 import {
+  armFiledReturnsAction,
+  bindFiledReturnsActionDownload,
+  settleFiledReturnsAction,
+} from "./filed-returns-action-journal";
+import {
   closeOffscreenBlobDocument,
   createOffscreenBlobUrl,
   revokeOffscreenBlobUrl,
@@ -77,6 +82,22 @@ export async function downloadCapturedFiledReturnThroughExtension({
     };
   }
 
+  const journalTargetId = `${target.returnType}:${target.financialYear}:${target.period}:${artifactType}`;
+  const journalState = await armFiledReturnsAction(
+    deps.storageKeys.actionJournal,
+    {
+      actionId: capturedDownloadRequest.actionId,
+      artifactType,
+      targetId: journalTargetId,
+    },
+    armedAt,
+  );
+  if (journalState !== "armed") {
+    await revokeOffscreenBlobUrl(blobUrl);
+    await closeOffscreenBlobDocument();
+    return reviewRequiredJournalResponse(scope, target, artifactType, triggerStep, deps);
+  }
+
   const startedDownload = await startExtensionBrowserDownload(
     blobUrl,
     safeFiledReturnDownloadFilename(
@@ -86,6 +107,11 @@ export async function downloadCapturedFiledReturnThroughExtension({
     ),
   );
   if (!startedDownload.ok) {
+    await settleFiledReturnsAction(
+      deps.storageKeys.actionJournal,
+      capturedDownloadRequest.actionId,
+      "review-required",
+    );
     await revokeOffscreenBlobUrl(blobUrl);
     await closeOffscreenBlobDocument();
     return {
@@ -114,6 +140,17 @@ export async function downloadCapturedFiledReturnThroughExtension({
     };
   }
 
+  const bound = await bindFiledReturnsActionDownload(
+    deps.storageKeys.actionJournal,
+    capturedDownloadRequest.actionId,
+    startedDownload.id,
+  );
+  if (!bound) {
+    await revokeOffscreenBlobUrl(blobUrl);
+    await closeOffscreenBlobDocument();
+    return reviewRequiredJournalResponse(scope, target, artifactType, triggerStep, deps);
+  }
+
   const observedDownload = await observeBrowserDownloadById(browser.downloads, startedDownload.id, {
     ...expectedDownloadForScope(scope, artifactType),
     armedAt,
@@ -122,6 +159,18 @@ export async function downloadCapturedFiledReturnThroughExtension({
   });
   await revokeOffscreenBlobUrl(blobUrl);
   await closeOffscreenBlobDocument();
+  const settled = await settleFiledReturnsAction(
+    deps.storageKeys.actionJournal,
+    capturedDownloadRequest.actionId,
+    observedDownload.state === "completed"
+      ? "verified"
+      : observedDownload.state === "failed"
+        ? "failed"
+        : "review-required",
+  );
+  if (!settled) {
+    return reviewRequiredJournalResponse(scope, target, artifactType, triggerStep, deps);
+  }
 
   const flowStep = withFiledReturnsDownloadDiagnostic({
     attemptClass: "captured-portal-request",
@@ -162,6 +211,35 @@ export async function downloadCapturedFiledReturnThroughExtension({
     flowStep,
     ...(flowSummary ? { flowSummary } : {}),
   };
+}
+
+async function reviewRequiredJournalResponse(
+  scope: FiledReturnsDownloadScope,
+  target: FiledReturnsDownloadTarget,
+  artifactType: FiledReturnsConcreteArtifactType,
+  triggerStep: PortalFlowStepResult,
+  deps: FiledReturnsFlowMessagingDeps,
+): Promise<PackMessageResponse> {
+  const flowStep = withFiledReturnsDownloadDiagnostic({
+    attemptClass: "captured-portal-request",
+    flowStep: {
+      ...triggerStep,
+      state: "download-unconfirmed",
+      safeSignals: [...triggerStep.safeSignals, "filed-returns-action-journal-review-required"],
+      safeMessage:
+        "Pack found an unresolved local download action and will not start another browser download automatically. Review browser Downloads before retrying.",
+    },
+    target,
+  });
+  const flowSummary =
+    deps.persistTargetReview === false
+      ? null
+      : await persistFiledReturnsTargetReview(
+          targetReviewScope(scope, artifactType),
+          flowStep,
+          deps,
+        );
+  return { ok: true, flowStep, ...(flowSummary ? { flowSummary } : {}) };
 }
 
 async function startExtensionBrowserDownload(

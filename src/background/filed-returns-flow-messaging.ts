@@ -21,6 +21,7 @@ export interface FiledReturnsFlowMessagingDeps {
     >,
   ) => Promise<PackMessageResponse>;
   storageKeys: {
+    actionJournal?: string;
     targetReview?: string;
   };
   now?: () => Date;
