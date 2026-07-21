@@ -4,6 +4,19 @@ All notable changes to ComplyEaze Pack are documented here.
 
 ## Unreleased
 
+## [0.4.1](https://github.com/lamemustafa/pack/compare/v0.4.0...v0.4.1) (2026-07-21)
+
+
+### Documentation
+
+* **agent:** align reviewed manifest boundaries ([#82](https://github.com/lamemustafa/pack/issues/82)) ([818ebf7](https://github.com/lamemustafa/pack/commit/818ebf7f4ca6b13ebf92dad9d166fe6fb63be804))
+* **store:** refresh v0.4.0 listing assets ([#83](https://github.com/lamemustafa/pack/issues/83)) ([c7d306e](https://github.com/lamemustafa/pack/commit/c7d306ed1acb0920a1d00c785755238c8b78a668))
+
+
+### Maintenance
+
+* **deps:** remediate high severity audit findings ([#94](https://github.com/lamemustafa/pack/issues/94)) ([ae38ce8](https://github.com/lamemustafa/pack/commit/ae38ce8f67a52ad390b923c94323f2eab24694ed))
+
 ## [0.4.0](https://github.com/lamemustafa/pack/compare/v0.3.3...v0.4.0) (2026-07-16)
 
 
