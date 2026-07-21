@@ -32,15 +32,20 @@ export function safeFiledReturnZipEntryPath(
   return `${safeFilenameSegment(scope.period)}${extension}`;
 }
 
-export function safeFullFiscalYearZipFilename(scope: FiledReturnsDownloadScope): string {
-  if (scope.rangeEndPeriod) {
-    return `${safeFilenameSegment(scope.returnType)}-${safeFilenameSegment(
-      scope.financialYear,
-    )}-${safeFilenameSegment(scope.period)}-to-${safeFilenameSegment(scope.rangeEndPeriod)}.zip`;
-  }
-  return `${safeFilenameSegment(scope.returnType)}-${safeFilenameSegment(
-    scope.financialYear,
-  )}-full-year.zip`;
+export function safeFullFiscalYearZipFilename(
+  scope: FiledReturnsDownloadScope,
+  ledgerId: string,
+): string {
+  const periodName = scope.rangeEndPeriod
+    ? `${safeFilenameSegment(scope.period)}-to-${safeFilenameSegment(scope.rangeEndPeriod)}`
+    : "full-year";
+  return [
+    "ComplyEaze-Pack",
+    `Archive-${safeArchiveCode(ledgerId)}`,
+    `FY-${safeFilenameSegment(scope.financialYear)}`,
+    scope.returnType,
+    `${periodName}.zip`,
+  ].join("/");
 }
 
 export function safeSinglePeriodZipFilename(scope: FiledReturnsDownloadScope): string {
@@ -55,4 +60,12 @@ function safeFilenameSegment(value: string): string {
     .replace(/[^A-Za-z0-9._-]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 80);
+}
+
+function safeArchiveCode(ledgerId: string): string {
+  const code = ledgerId
+    .replace(/[^A-Za-z0-9]/g, "")
+    .slice(0, 12)
+    .toUpperCase();
+  return code.length >= 6 ? code : "LOCALRUN";
 }

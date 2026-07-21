@@ -692,6 +692,13 @@ describe("filed returns flow runner", () => {
     expect(
       sendMessageToTabWithInjection.mock.calls.map(([, message]) => message.payload.period),
     ).toEqual(["April", "April", "May", "May"]);
+    expect(browser.downloads.download).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filename: expect.stringMatching(
+          /^ComplyEaze-Pack\/Archive-[A-Z0-9]+\/FY-2026-27\/GSTR-3B\/april-to-may\.zip$/,
+        ),
+      }),
+    );
     expect(browser.storage.local.set).toHaveBeenCalledWith({
       "full-year-ledger": expect.objectContaining({
         scope: expect.objectContaining({
@@ -855,7 +862,9 @@ describe("filed returns flow runner", () => {
     expect(browser.downloads.download).toHaveBeenCalledWith(
       expect.objectContaining({
         conflictAction: "uniquify",
-        filename: "gstr-1-2026-27-full-year.zip",
+        filename: expect.stringMatching(
+          /^ComplyEaze-Pack\/Archive-[A-Z0-9]+\/FY-2026-27\/GSTR-1\/full-year\.zip$/,
+        ),
         saveAs: false,
         url: "blob:chrome-extension://pack/full-year.zip",
       }),
@@ -1091,7 +1100,9 @@ describe("filed returns flow runner", () => {
     expect(browser.downloads.download).toHaveBeenCalledWith(
       expect.objectContaining({
         conflictAction: "uniquify",
-        filename: "gstr-2b-2026-27-full-year.zip",
+        filename: expect.stringMatching(
+          /^ComplyEaze-Pack\/Archive-[A-Z0-9]+\/FY-2026-27\/GSTR-2B\/full-year\.zip$/,
+        ),
         saveAs: false,
         url: "blob:chrome-extension://pack/full-year.zip",
       }),

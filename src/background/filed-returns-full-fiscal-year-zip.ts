@@ -21,6 +21,7 @@ import { clearSinglePeriodStagingRecord } from "./filed-returns-artifact-progres
 import {
   createFullFiscalYearFiledReturnsReceipt,
   createSinglePeriodFiledReturnsReceipt,
+  type FiledReturnsRunReceiptV1,
 } from "../core/filed-returns-run-receipt";
 import {
   armFiledReturnsAction,
@@ -76,7 +77,7 @@ export async function exportFullFiscalYearZip(
       "Pack prepared the fiscal-year zip, but the final browser download did not complete.",
     zipFailedMessage:
       "Pack staged the fiscal-year files, but could not prepare the final zip export.",
-    zipFilename: safeFullFiscalYearZipFilename(ledger.scope),
+    zipFilename: safeFullFiscalYearZipFilename(ledger.scope, ledger.ledgerId),
     expectedZipEntryCount: staging.expectedArtifactCount,
     receipt: createFullFiscalYearFiledReturnsReceipt(ledger),
     ...(options.actionJournalKey ? { actionJournalKey: options.actionJournalKey } : {}),
@@ -158,7 +159,7 @@ async function exportStagedFiledReturnsZip({
   zipFilename: string;
   expectedZipEntryCount?: number;
   onDownloadStarted?: () => Promise<void>;
-  receipt?: import("../core/filed-returns-run-receipt").FiledReturnsRunReceiptV1;
+  receipt?: FiledReturnsRunReceiptV1;
 }): Promise<PortalFlowStepResult> {
   const zip = await createOffscreenFiledReturnZipUrl(ledgerId, {
     returnType: scope.returnType,
