@@ -8,6 +8,8 @@ import { isFiledReturnsArtifactType } from "../core/filed-returns-artifacts";
 import { isFiledReturnsReturnType } from "../core/filed-returns-return-types";
 import type { PackMessageResponse } from "../core/messages";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
+import { quarantineFiledReturnsStorageState } from "./filed-returns-storage-quarantine";
+import { PACK_LOCAL_STORAGE_KEYS } from "./storage-keys";
 
 const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
 const ACTIVE_RUN_REVIEW_MS = 30_000;
@@ -44,6 +46,11 @@ export async function acquireFiledReturnsRun(
     const existingRun = parseActiveRun(values[key]);
     if (existingRun) return { response: activeRunResponse(existingRun, now) };
     if (values[key] !== undefined && values[key] !== null) {
+      await quarantineFiledReturnsStorageState(
+        PACK_LOCAL_STORAGE_KEYS.storageQuarantine,
+        "active-run",
+        now,
+      );
       return { response: malformedActiveRunResponse(scope) };
     }
 

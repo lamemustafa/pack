@@ -14,6 +14,8 @@ import type { PackMessageResponse } from "../core/messages";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import { readSinglePeriodStagingRecord } from "./filed-returns-artifact-progress";
 import { discardSinglePeriodFiledReturnsZip } from "./filed-returns-full-fiscal-year-zip";
+import { quarantineFiledReturnsStorageState } from "./filed-returns-storage-quarantine";
+import { PACK_LOCAL_STORAGE_KEYS } from "./storage-keys";
 
 export interface FiledReturnsTargetReviewDeps {
   storageKeys: {
@@ -54,7 +56,15 @@ export async function hasMalformedFiledReturnsTargetReview(
 
   const values = await browser.storage.local.get(key);
   const value = values[key];
-  return value !== undefined && value !== null && parseFiledReturnsTargetReview(value) === null;
+  const malformed =
+    value !== undefined && value !== null && parseFiledReturnsTargetReview(value) === null;
+  if (malformed) {
+    await quarantineFiledReturnsStorageState(
+      PACK_LOCAL_STORAGE_KEYS.storageQuarantine,
+      "target-review",
+    );
+  }
+  return malformed;
 }
 
 export async function readCurrentFiledReturnsTargetReviewSummary(

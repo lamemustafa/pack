@@ -156,6 +156,12 @@ describe("filed returns action journal", () => {
     });
 
     await expect(hasUnresolvedFiledReturnsAction(KEY)).resolves.toBe(true);
+    expect(browserMocks.storage.local.set).toHaveBeenCalledWith({
+      "pack:filed-returns-storage-quarantine": expect.objectContaining({
+        schemaVersion: "1.0",
+        entries: [expect.objectContaining({ key: "action-journal", reason: "invalid-state" })],
+      }),
+    });
   });
 
   it("keeps a verified action blocking until its persisted summary clears it", async () => {

@@ -1,5 +1,7 @@
 import { browser } from "wxt/browser";
 import type { FiledReturnsConcreteArtifactType } from "../core/filed-returns-artifacts";
+import { quarantineFiledReturnsStorageState } from "./filed-returns-storage-quarantine";
+import { PACK_LOCAL_STORAGE_KEYS } from "./storage-keys";
 
 const MAX_ACTION_JOURNAL_ENTRIES = 12;
 
@@ -136,7 +138,14 @@ async function readJournal(key: string): Promise<FiledReturnsActionJournal | nul
   const values = await browser.storage.local.get(key);
   const value = values[key];
   if (value === undefined || value === null) return { schemaVersion: "1.0", entries: [] };
-  return parseJournal(value);
+  const journal = parseJournal(value);
+  if (!journal) {
+    await quarantineFiledReturnsStorageState(
+      PACK_LOCAL_STORAGE_KEYS.storageQuarantine,
+      "action-journal",
+    );
+  }
+  return journal;
 }
 
 function parseJournal(value: unknown): FiledReturnsActionJournal | null {

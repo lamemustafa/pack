@@ -147,6 +147,11 @@ describe("filed returns active run recovery", () => {
         },
       },
     });
-    expect(browserMocks.storage.local.set).not.toHaveBeenCalled();
+    expect(browserMocks.storage.local.set).toHaveBeenCalledWith({
+      "pack:filed-returns-storage-quarantine": expect.objectContaining({
+        schemaVersion: "1.0",
+        entries: [expect.objectContaining({ key: "active-run", reason: "invalid-state" })],
+      }),
+    });
   });
 });
