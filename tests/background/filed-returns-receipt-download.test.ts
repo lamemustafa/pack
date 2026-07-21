@@ -52,7 +52,8 @@ describe("single-period receipt export", () => {
       saveAs: false,
       url: expect.stringMatching(/^data:application\/json;charset=utf-8,/),
     });
-    const url = browserMocks.download.mock.calls[0]?.[0].url as string;
+    const [downloadRequest] = browserMocks.download.mock.calls[0] as unknown as [{ url: string }];
+    const url = downloadRequest.url;
     const receipt = JSON.parse(decodeURIComponent(url.slice(url.indexOf(",") + 1)));
     expect(Object.keys(receipt)).toEqual([
       "schemaVersion",
@@ -82,24 +83,33 @@ describe("single-period receipt export", () => {
     expect(browserMocks.download).not.toHaveBeenCalled();
   });
 
-  it.each([
-    ["missing completion time", { ...completeSummary, completedAt: undefined }],
+  const invalidSummaries: Array<[string, () => FiledReturnsFlowSummary]> = [
+    [
+      "missing completion time",
+      () => {
+        const { completedAt, ...summary } = completeSummary;
+        void completedAt;
+        return summary;
+      },
+    ],
     [
       "unverified flow step",
-      {
+      () => ({
         ...completeSummary,
         flowStep: { ...completeSummary.flowStep, state: "download-unconfirmed" as const },
-      },
+      }),
     ],
     [
       "different artifact selection",
-      {
+      () => ({
         ...completeSummary,
         scope: { ...scope, artifactType: "PDF_AND_EXCEL" as const },
-      },
+      }),
     ],
-  ])("rejects %s", async (_reason, summary) => {
-    const result = await exportCompletedSinglePeriodReceipt(scope, summary);
+  ];
+
+  it.each(invalidSummaries)("rejects %s", async (_reason, summaryFactory) => {
+    const result = await exportCompletedSinglePeriodReceipt(scope, summaryFactory());
 
     expect(result.ok).toBe(false);
     expect(browserMocks.download).not.toHaveBeenCalled();
