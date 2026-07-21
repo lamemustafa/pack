@@ -37,7 +37,7 @@ export interface FiledReturnsRunReceiptV1 {
   targets: Array<{
     targetId: string;
     period: string;
-    status: "prepared" | "not-filed";
+    status: "prepared" | "no-record-observed";
   }>;
 }
 
@@ -74,7 +74,8 @@ export function createFullFiscalYearFiledReturnsReceipt(
   const targets = ledger.targets.map((target) => ({
     targetId: target.targetId,
     period: target.period,
-    status: target.status === "not-filed" ? ("not-filed" as const) : ("prepared" as const),
+    status:
+      target.status === "not-filed" ? ("no-record-observed" as const) : ("prepared" as const),
   }));
   const artifactTypes = concreteFiledReturnsArtifactTypes(
     normaliseFiledReturnsArtifactType(ledger.scope.returnType, ledger.scope.artifactType),
@@ -168,7 +169,7 @@ function isReceiptTarget(
     (value.targetId === targetIdPrefix ||
       (value.targetId.startsWith(`${targetIdPrefix}:`) &&
         /^(?:PDF|EXCEL|PDF_AND_EXCEL)$/.test(value.targetId.slice(targetIdPrefix.length + 1)))) &&
-    (value.status === "prepared" || value.status === "not-filed")
+    (value.status === "prepared" || value.status === "no-record-observed")
   );
 }
 

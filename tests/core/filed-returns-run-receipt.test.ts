@@ -86,12 +86,22 @@ describe("filed returns archive receipt", () => {
     );
 
     expect(receipt.artifactCount).toBe(1);
-    expect(receipt.targets.map((target) => target.status)).toEqual(["prepared", "not-filed"]);
+    expect(receipt.targets.map((target) => target.status)).toEqual([
+      "prepared",
+      "no-record-observed",
+    ]);
+    expect(JSON.stringify(receipt)).not.toContain('"not-filed"');
     expect(isFiledReturnsRunReceiptV1({ ...receipt, unsafe: "forbidden-metadata" })).toBe(false);
     expect(
       isFiledReturnsRunReceiptV1({
         ...receipt,
         targets: [{ ...receipt.targets[0], targetId: "arbitrary-user-label" }, receipt.targets[1]],
+      }),
+    ).toBe(false);
+    expect(
+      isFiledReturnsRunReceiptV1({
+        ...receipt,
+        targets: [{ ...receipt.targets[0], status: "not-filed" }, receipt.targets[1]],
       }),
     ).toBe(false);
   });
