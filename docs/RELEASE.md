@@ -3,6 +3,11 @@
 Pack releases are produced from the standalone extension repository, not from the
 parent ComplyEaze app repository.
 
+For a published-build defect, follow the
+[hotfix and rollback playbook](HOTFIX_ROLLBACK_PLAYBOOK.md). Pack has no remote
+kill switch; a corrective Store update is a new, verified version rather than a
+way to alter an installed build remotely.
+
 ## Release cadence
 
 Release Please opens a reviewed release PR whenever merged conventional commits

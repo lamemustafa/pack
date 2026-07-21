@@ -171,7 +171,9 @@ All conditions must be proved for the exact candidate ZIP:
   instructions, and runtime behavior agree.
 - Government non-affiliation remains visible. Counsel has reviewed any legal or
   DPDP wording.
-- A hotfix/rollback playbook exists without a remote kill switch.
+- The source-controlled [hotfix/rollback playbook](HOTFIX_ROLLBACK_PLAYBOOK.md)
+  exists without a remote kill switch, and the publisher has confirmed its
+  Store-side procedure before promotion.
 
 ## Evidence Owners
 
