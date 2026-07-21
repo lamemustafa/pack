@@ -104,6 +104,28 @@ Government of India.
 4. Build, test, checksum, and clean-profile verify one source-tagged candidate
    ZIP; submit that unchanged ZIP only after every gate is satisfied.
 
+## Review Lanes
+
+Do not turn the whole beta programme into one pull request. It spans runtime,
+privacy, storage, UX, and release-copy surfaces that need independent review.
+Create task-owned worktrees from the protected base and preserve the dependency
+order below.
+
+1. **Durability foundation:** target-bound completion, package-boundary checks,
+   acknowledgement, strict local-state quarantine, and action-journal changes.
+   Required reviewers: MV3 reliability, download/security, and privacy.
+2. **Archive workflow:** safe run receipts, immutable same-FY targets, opaque
+   archive paths, explicit resume confirmation, return-versus-statement wording,
+   Plan → Run → Results, no-record review, and destination preview. Required
+   reviewers: GST workflow, UX, MV3 reliability, and privacy.
+3. **Release truth and beta register:** Store/dashboard wording, paused full-FY
+   dispatch wording, publication checklist, and this execution register.
+   Required reviewers: privacy/legal-claim, release, and product.
+
+Each lane needs its own exact-head review and verification. A later lane must
+not be represented as evidence that an earlier lane's browser or Store gate has
+passed.
+
 ## Deferred Until Validation
 
 - Cross-FY/full-history orchestration. Consider it only if at least three of
