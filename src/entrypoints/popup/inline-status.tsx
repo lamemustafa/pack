@@ -70,14 +70,14 @@ export function hasInlinePrimaryAction(
   if (!summary) return false;
 
   const signals = new Set(summary.flowStep.safeSignals);
+  if (signals.has("full-fiscal-year-resume-confirmation-required")) return false;
   return Boolean(
     (presentation.kind === "blocked" && summary.currentPeriod) ||
     (signals.has("filed-returns-target-review-required") && summary.currentPeriod) ||
     (summary.fullFiscalYearRecovery &&
       (signals.has("full-fiscal-year-download-unconfirmed") ||
         signals.has("full-fiscal-year-run-interrupted") ||
-        signals.has("full-fiscal-year-run-needs-action") ||
-        signals.has("full-fiscal-year-resume-confirmation-required"))),
+        signals.has("full-fiscal-year-run-needs-action"))),
   );
 }
 
@@ -183,6 +183,7 @@ export function getInlinePrimaryAction(
   if (!summary) return null;
 
   const signals = new Set(summary.flowStep.safeSignals);
+  if (signals.has("full-fiscal-year-resume-confirmation-required")) return null;
   if (signals.has("full-fiscal-year-temporarily-paused")) return null;
   if (presentation.kind === "blocked" && summary.fullFiscalYearRecovery) {
     return {

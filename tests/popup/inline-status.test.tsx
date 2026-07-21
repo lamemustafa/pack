@@ -246,6 +246,33 @@ describe("inline filed-return recovery status", () => {
     expect(markup).toContain("summary overlay opened before Pack found a recognized Close control");
   });
 
+  it("leaves resume to the account-confirmation control", () => {
+    const resumeConfirmationSummary: FiledReturnsFlowSummary = {
+      ...blockedSummary,
+      scope: { ...blockedSummary.scope, period: "ALL" },
+      fullFiscalYearRecovery: {
+        ledgerId: "ledger-safe",
+        targetId: "target-safe",
+        expectedRevision: 2,
+        targetStatus: "pending",
+      },
+      flowStep: {
+        ...blockedSummary.flowStep,
+        safeSignals: ["full-fiscal-year-resume-confirmation-required"],
+      },
+    };
+
+    expect(hasInlinePrimaryAction(blockedPresentation, resumeConfirmationSummary)).toBe(false);
+    expect(
+      getInlinePrimaryAction(blockedPresentation, resumeConfirmationSummary, {
+        onOpenPortal: vi.fn(),
+        onRestartTarget: vi.fn(),
+        onRetryFullFiscalYearTarget: vi.fn(),
+        onRetryTarget: vi.fn(),
+      }),
+    ).toBeNull();
+  });
+
   it("explains when the portal keeps its overlay open after the recognized Close click", () => {
     const fullYearSummary: FiledReturnsFlowSummary = {
       ...blockedSummary,
