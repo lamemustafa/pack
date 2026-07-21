@@ -5703,6 +5703,7 @@ describe("filed returns flow runner", () => {
         ledgerId: "ledger-existing",
         targetId: "GSTR-3B:2026-27:May",
         expectedRevision: 1,
+        confirmCurrentPortalAccount: true,
       },
       {
         getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
@@ -5936,7 +5937,7 @@ describe("filed returns flow runner", () => {
       flowSummary: {
         status: "blocked",
         currentPeriod: "April",
-        totalPeriods: 2,
+        totalPeriods: 1,
       },
     });
     expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
