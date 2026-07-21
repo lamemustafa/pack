@@ -10,10 +10,8 @@ import { FULL_FISCAL_YEAR_PERIOD } from "../core/filed-returns-scope";
 import { type FiledReturnsConcreteArtifactType } from "../core/filed-returns-artifacts";
 import { filedReturnDescriptor } from "../connectors/gst/filed-returns-return-descriptors";
 import {
-  shouldFallBackAfterCaptureFailure,
   shouldFallBackToPortalClick,
   targetBoundPortalClickObservationTimeoutMs,
-  withCaptureFallbackSignal,
 } from "../connectors/gst/filed-returns-download-fallback";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import {
@@ -34,6 +32,7 @@ import {
   withArtifactDownloadMessage,
   withDownloadedArtifactSignal,
 } from "./filed-returns-download-result";
+import { armFiledReturnsAction, settleFiledReturnsAction } from "./filed-returns-action-journal";
 import {
   runDownloadTriggerOnce,
   type FiledReturnsFlowMessagingDeps,
@@ -57,8 +56,9 @@ export async function triggerAndObserveFiledReturnDownload({
   tabId: number;
   targetOverride?: FiledReturnsDownloadTarget;
 }): Promise<PackMessageResponse> {
-  const target = targetOverride ?? createDownloadTarget(scope, artifactType);
-  if (!target) return unverifiedPeriodResponse(scope);
+  const initialTarget = targetOverride ?? createDownloadTarget(scope, artifactType);
+  if (!initialTarget) return unverifiedPeriodResponse(scope);
+  let target = initialTarget;
   const shouldAttemptDirectDownload =
     artifactType === "PDF" &&
     !target.forcePortalClick &&
@@ -76,9 +76,24 @@ export async function triggerAndObserveFiledReturnDownload({
     if (directDownloadResponse && !shouldFallBackToPortalClick(directDownloadResponse)) {
       return directDownloadResponse;
     }
+    if (directDownloadResponse) target = { ...target, actionId: createActionId() };
   }
 
   const armedAt = new Date();
+  const usesBrowserDownloadJournal =
+    deps.storageKeys.actionJournal !== undefined && deps.stageCapturedDownloads === undefined;
+  if (usesBrowserDownloadJournal) {
+    const journalState = await armFiledReturnsAction(
+      deps.storageKeys.actionJournal,
+      {
+        actionId: target.actionId,
+        artifactType,
+        targetId: journalTargetId(target, artifactType),
+      },
+      armedAt,
+    );
+    if (journalState !== "armed") return actionJournalReviewResponse(scope, target);
+  }
   const filename = safeFiledReturnDownloadFilename(scope, artifactType);
   const trustedDownloadIds = new Set<number>();
   const observationContext = {
@@ -128,10 +143,16 @@ export async function triggerAndObserveFiledReturnDownload({
       target,
       triggerStep: triggerResponse.downloadTrigger,
     });
-    if (
-      deps.stageCapturedDownloads ||
-      !shouldFallBackAfterCaptureFailure(captureResponse, target)
-    ) {
+    if (usesBrowserDownloadJournal && captureResponse.ok && "flowStep" in captureResponse) {
+      if (captureResponse.flowStep.state !== "downloaded") {
+        await settleFiledReturnsAction(
+          deps.storageKeys.actionJournal,
+          target.actionId,
+          "review-required",
+        );
+      }
+    }
+    if (usesBrowserDownloadJournal || deps.stageCapturedDownloads) {
       const captureTimedOut =
         captureResponse.ok &&
         "flowStep" in captureResponse &&
@@ -165,27 +186,34 @@ export async function triggerAndObserveFiledReturnDownload({
       }
       return captureResponse;
     }
-    return withCaptureFallbackSignal(
-      await triggerAndObserveFiledReturnDownload({
-        activePeriod,
-        artifactType,
-        deps,
-        scope,
-        tabId,
-        targetOverride: { ...target, forcePortalClick: true },
-      }),
-      target,
-    );
+    return triggerAndObserveFiledReturnDownload({
+      activePeriod,
+      artifactType,
+      deps,
+      scope,
+      tabId,
+      targetOverride: { ...target, forcePortalClick: true },
+    });
   }
 
   const triggerFlowResponse = toTriggerFlowResponse(triggerResponse, activePeriod);
   if (!triggerFlowResponse.ok || !("flowStep" in triggerFlowResponse)) {
+    if (usesBrowserDownloadJournal) {
+      await settleFiledReturnsAction(
+        deps.storageKeys.actionJournal,
+        target.actionId,
+        "review-required",
+      );
+    }
     detailDownloadObservation.stop();
     detailDownloadFilenameSuggestion.stop();
     return triggerFlowResponse;
   }
 
   if (!shouldAwaitDownloadObservation(triggerFlowResponse.flowStep)) {
+    if (usesBrowserDownloadJournal) {
+      await settleFiledReturnsAction(deps.storageKeys.actionJournal, target.actionId, "failed");
+    }
     detailDownloadObservation.stop();
     detailDownloadFilenameSuggestion.stop();
     return {
@@ -201,6 +229,16 @@ export async function triggerAndObserveFiledReturnDownload({
   }
 
   const observedDownload = await observedDownloadPromise;
+  if (
+    usesBrowserDownloadJournal &&
+    !(await settleFiledReturnsAction(
+      deps.storageKeys.actionJournal,
+      target.actionId,
+      "review-required",
+    ))
+  ) {
+    return actionJournalReviewResponse(scope, target);
+  }
   const flowStep = withFiledReturnsDownloadDiagnostic({
     attemptClass: shouldAttemptDirectDownload
       ? "portal-click-after-direct-fallback"
@@ -231,6 +269,34 @@ export async function triggerAndObserveFiledReturnDownload({
     ...triggerFlowResponse,
     flowStep,
     ...(flowSummary ? { flowSummary } : {}),
+  };
+}
+
+function journalTargetId(
+  target: FiledReturnsDownloadTarget,
+  artifactType: FiledReturnsConcreteArtifactType,
+): string {
+  return `${target.returnType}:${target.financialYear}:${target.period}:${artifactType}`;
+}
+
+function actionJournalReviewResponse(
+  scope: FiledReturnsDownloadScope,
+  target: FiledReturnsDownloadTarget,
+): FlowStepResponse {
+  return {
+    ok: true,
+    flowStep: withFiledReturnsDownloadDiagnostic({
+      attemptClass: "portal-click",
+      flowStep: {
+        connectorId: "gst",
+        scopeId: filedReturnScopeId(scope.returnType),
+        state: "download-unconfirmed",
+        safeSignals: ["filed-returns-action-journal-review-required"],
+        safeMessage:
+          "Pack found an unresolved local portal-download action and will not click again automatically. Review browser Downloads before starting a new attempt.",
+      },
+      target,
+    }),
   };
 }
 

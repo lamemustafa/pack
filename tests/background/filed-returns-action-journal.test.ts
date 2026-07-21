@@ -75,6 +75,33 @@ describe("filed returns action journal", () => {
     ).resolves.toBe("blocked");
   });
 
+  it("reuses the same pre-dispatch action arm without creating a second action", async () => {
+    const journal = {
+      schemaVersion: "1.0" as const,
+      entries: [
+        {
+          actionId: "action-1",
+          artifactType: "PDF" as const,
+          attempt: 1,
+          revision: 1,
+          state: "armed" as const,
+          targetId: "target-1",
+          armedAt: "2026-07-21T00:00:00.000Z",
+        },
+      ],
+    };
+    browserMocks.storage.local.get.mockResolvedValue({ [KEY]: journal });
+
+    await expect(
+      armFiledReturnsAction(KEY, {
+        actionId: "action-1",
+        artifactType: "PDF",
+        targetId: "target-1",
+      }),
+    ).resolves.toBe("armed");
+    expect(browserMocks.storage.local.set).not.toHaveBeenCalled();
+  });
+
   it("turns an unbound failed dispatch into review-required instead of retrying", async () => {
     const journal = {
       schemaVersion: "1.0" as const,
@@ -98,6 +125,29 @@ describe("filed returns action journal", () => {
     expect(settled.entries[0]).toMatchObject({ state: "review-required" });
     browserMocks.storage.local.get.mockResolvedValue({ [KEY]: settled });
     await expect(hasUnresolvedFiledReturnsAction(KEY)).resolves.toBe(false);
+  });
+
+  it("records a confirmed pre-dispatch failure without fabricating a download ID", async () => {
+    const journal = {
+      schemaVersion: "1.0" as const,
+      entries: [
+        {
+          actionId: "action-1",
+          artifactType: "PDF" as const,
+          attempt: 1,
+          revision: 1,
+          state: "armed" as const,
+          targetId: "target-1",
+          armedAt: "2026-07-21T00:00:00.000Z",
+        },
+      ],
+    };
+    browserMocks.storage.local.get.mockResolvedValue({ [KEY]: journal });
+
+    await expect(settleFiledReturnsAction(KEY, "action-1", "failed")).resolves.toBe(true);
+    const settled = storedJournalAt(0);
+    expect(settled.entries[0]).toMatchObject({ state: "failed" });
+    expect(settled.entries[0]).not.toHaveProperty("downloadId");
   });
 
   it("fails closed when storage includes an unknown field", async () => {

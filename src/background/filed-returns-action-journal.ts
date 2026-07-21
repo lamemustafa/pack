@@ -30,7 +30,24 @@ export async function armFiledReturnsAction(
 ): Promise<"armed" | "blocked"> {
   if (!key) return "armed";
   const journal = await readJournal(key);
-  if (!journal || hasUnresolvedAction(journal)) return "blocked";
+  if (!journal) return "blocked";
+  if (
+    journal.entries.some(
+      (entry) =>
+        entry.actionId === input.actionId &&
+        entry.artifactType === input.artifactType &&
+        entry.targetId === input.targetId &&
+        entry.state === "armed",
+    )
+  ) {
+    return "armed";
+  }
+  if (
+    hasUnresolvedAction(journal) ||
+    journal.entries.some((entry) => entry.actionId === input.actionId)
+  ) {
+    return "blocked";
+  }
 
   const entry: FiledReturnsActionJournalEntry = {
     ...input,
@@ -54,22 +71,19 @@ export async function bindFiledReturnsActionDownload(
   if (!key) return true;
   const journal = await readJournal(key);
   if (!journal) return false;
-  const next = journal.entries.map((entry) =>
-    entry.actionId === actionId && entry.state === "armed"
-      ? {
-          ...entry,
-          downloadId,
-          revision: entry.revision + 1,
-          state: "evidence-bound" as const,
-          settledAt: now.toISOString(),
-        }
-      : entry,
-  );
-  if (
-    next === journal.entries ||
-    !next.some((entry) => entry.actionId === actionId && entry.downloadId === downloadId)
-  )
-    return false;
+  let bound = false;
+  const next = journal.entries.map((entry) => {
+    if (entry.actionId !== actionId || entry.state !== "armed") return entry;
+    bound = true;
+    return {
+      ...entry,
+      downloadId,
+      revision: entry.revision + 1,
+      state: "evidence-bound" as const,
+      settledAt: now.toISOString(),
+    };
+  });
+  if (!bound) return false;
   await browser.storage.local.set({ [key]: { schemaVersion: "1.0", entries: next } });
   return true;
 }
@@ -86,7 +100,8 @@ export async function settleFiledReturnsAction(
   let updated = false;
   const entries = journal.entries.map((entry) =>
     entry.actionId === actionId &&
-    (entry.state === "evidence-bound" || (entry.state === "armed" && state === "review-required"))
+    (entry.state === "evidence-bound" ||
+      (entry.state === "armed" && (state === "review-required" || state === "failed")))
       ? ((updated = true),
         { ...entry, revision: entry.revision + 1, state, settledAt: now.toISOString() })
       : entry,
@@ -164,7 +179,7 @@ function parseJournal(value: unknown): FiledReturnsActionJournal | null {
       return null;
     if (candidate.state === "armed" && candidate.downloadId !== undefined) return null;
     if (
-      ["evidence-bound", "verified", "failed"].includes(candidate.state) &&
+      ["evidence-bound", "verified"].includes(candidate.state) &&
       candidate.downloadId === undefined
     ) {
       return null;

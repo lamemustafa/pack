@@ -395,6 +395,50 @@ describe("filed returns flow runner", () => {
     });
   });
 
+  it("blocks a new portal action when an earlier action was armed before a restart", async () => {
+    mockLocalStorageGet({
+      "action-journal": {
+        schemaVersion: "1.0",
+        entries: [
+          {
+            actionId: "action-before-restart",
+            artifactType: "PDF",
+            attempt: 1,
+            revision: 1,
+            state: "armed",
+            targetId: "GSTR-3B:2026-27:May:PDF",
+            armedAt: "2026-07-21T00:00:00.000Z",
+          },
+        ],
+      },
+    });
+    const sendMessageToTabWithInjection =
+      vi.fn<FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]>();
+
+    const response = await startFiledReturnsDownloadFlow(
+      { financialYear: "2026-27", period: "May", returnType: "GSTR-3B" },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          actionJournal: "action-journal",
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+        },
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "blocked",
+        safeSignals: ["filed-returns-action-journal-review-required"],
+      },
+    });
+    expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
+  });
+
   it("runs a full fiscal year through concrete monthly targets without sending a full-year sentinel to content", async () => {
     const sendMessageToTabWithInjection = vi.fn<
       FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
@@ -3230,6 +3274,79 @@ describe("filed returns flow runner", () => {
     expect(sendMessageToTabWithInjection.mock.calls.at(-1)?.[1].payload).toMatchObject({
       forcePortalClick: true,
     });
+  });
+
+  it("does not issue a second portal click after an ambiguous capture when the action journal is active", async () => {
+    vi.mocked(browser.scripting.executeScript).mockImplementationOnce(async (details) => [
+      {
+        result: {
+          actionId: actionIdFromScriptingDetails(details),
+          dataUrl: dataUrl("text/plain", "not a pdf"),
+          safeSignals: ["gstr2b-portal-blob-captured"],
+        },
+      },
+    ]);
+    const responses: PackMessageResponse[] = [
+      {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-gstr2b-private-v0",
+          state: "ready",
+          safeSignals: [
+            "gstr2b-summary-route",
+            "gstr2b-download-ready",
+            "filed-return-download-ready",
+          ],
+          safeMessage: "Ready.",
+        },
+      },
+    ];
+    const sendMessageToTabWithInjection = vi.fn<
+      FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
+    >(async (_tabId, message) => {
+      if (message.type === "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3") {
+        return {
+          ok: true,
+          mainWorldCaptureRequest: {
+            actionId: message.payload.actionId,
+            controlAttribute: "data-pack-gstr2b-capture-action",
+            controlId: "control-pdf",
+            maxBytes: 36 * 1024 * 1024,
+            signalPrefix: "gstr2b",
+          },
+          downloadTrigger: {
+            connectorId: "gst",
+            scopeId: "gst-gstr2b-private-v0",
+            state: "clicked",
+            safeSignals: ["gstr2b-download-clicked"],
+            safeMessage: "Captured.",
+          },
+        } as PackMessageResponse;
+      }
+      return responses.shift() ?? { ok: false, error: "Unexpected call." };
+    });
+
+    const response = await startFiledReturnsDownloadFlow(
+      { financialYear: "2026-27", period: "May", returnType: "GSTR-2B" },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          actionJournal: "action-journal",
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+        },
+        timings: { flowStepSettleMs: 0, resultRowNavigationSettleMs: 0 },
+      },
+    );
+
+    expect(response).toMatchObject({ ok: true, flowStep: { state: "blocked" } });
+    expect(sendMessageToTabWithInjection.mock.calls.map(([, message]) => message.type)).toEqual([
+      "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
+      "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
+    ]);
   });
 
   it("attributes rejected captured payloads to the target return type", async () => {
