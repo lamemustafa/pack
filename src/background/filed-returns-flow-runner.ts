@@ -53,17 +53,12 @@ export interface FiledReturnsFlowRunnerDeps {
           | "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3"
           | "PACK_CONTENT_MARK_FILED_RETURNS_SEARCH_PENDING_V3"
           | "PACK_CONTENT_CLEAR_FILED_RETURNS_SEARCH_PENDING_V3"
-          | "PACK_CONTENT_RESOLVE_GSTR1_VIEW_POINT_V3"
           | "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3"
           | "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3"
           | "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V3";
       }
     >,
   ) => Promise<PackMessageResponse>;
-  clickGstr1ResultViewWithDebugger?: (
-    tabId: number,
-    scope: FiledReturnsDownloadScope,
-  ) => Promise<PortalFlowStepResult>;
   storageKeys: {
     activeRun?: string;
     completion: string;
@@ -260,6 +255,35 @@ export async function startFreshFiledReturnsDownloadFlow(
     stopLeaseRenewal();
     await releaseFiledReturnsRun(activeRun.run, deps);
   }
+}
+
+export function fullFiscalYearPausedResponse(
+  scope: FiledReturnsDownloadScope,
+): PackMessageResponse {
+  const flowStep: PortalFlowStepResult = {
+    connectorId: "gst",
+    scopeId: "gst-filed-returns-private-v0",
+    state: "blocked",
+    safeSignals: ["full-fiscal-year-temporarily-paused"],
+    safeMessage:
+      "Full fiscal-year downloads are temporarily paused while Pack strengthens restart and download-evidence safety. Existing saved runs can be inspected or discarded locally.",
+    userAction: {
+      type: "RETRY_PORTAL_GENERATION",
+      message: "Choose a single period, or inspect and discard any saved full-year run.",
+      canResume: false,
+    },
+  };
+  return {
+    ok: true,
+    flowStep,
+    flowSummary: {
+      scope,
+      status: "blocked",
+      completedPeriods: [],
+      totalPeriods: 12,
+      flowStep,
+    },
+  };
 }
 
 function isRecoveryDiscarded(response: PackMessageResponse): boolean {

@@ -16,8 +16,6 @@ import {
 const pkg = JSON.parse(readFileSync(resolve(import.meta.dirname, "package.json"), "utf-8")) as {
   version: string;
 };
-const enableLocalGstr1Debugger = process.env.PACK_ENABLE_LOCAL_GSTR1_DEBUGGER === "1";
-
 export default defineConfig({
   srcDir: "src",
   modules: ["@wxt-dev/module-react"],
@@ -29,10 +27,7 @@ export default defineConfig({
     homepage_url: PACK_EXTENSION_HOMEPAGE_URL,
     icons: PACK_EXTENSION_ICONS,
     minimum_chrome_version: "116",
-    permissions: [
-      ...PACK_EXTENSION_PERMISSIONS,
-      ...(enableLocalGstr1Debugger ? (["debugger"] as const) : []),
-    ],
+    permissions: [...PACK_EXTENSION_PERMISSIONS],
     host_permissions: [...PACK_GST_HOST_PERMISSIONS],
     content_security_policy: {
       extension_pages: PACK_EXTENSION_CSP,

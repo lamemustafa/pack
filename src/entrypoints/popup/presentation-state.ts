@@ -112,16 +112,6 @@ export function getPopupPresentationState(
   }
 
   if (summary?.status === "blocked") {
-    if (summary.flowStep.safeSignals.includes("filed-return-positively-not-filed")) {
-      return {
-        badge: "Unavailable",
-        body: "The GST Portal reports that this return was not filed for the selected period.",
-        icon: "–",
-        kind: "unavailable",
-        title: "No filed return for this period",
-        tone: "neutral",
-      };
-    }
     if (summary.currentPeriod) {
       return {
         badge: "Needs review",

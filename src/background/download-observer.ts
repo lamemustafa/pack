@@ -34,6 +34,7 @@ export interface DownloadCreatedItem {
   state?: string | undefined;
   error?: string | undefined;
   bytesReceived?: number | undefined;
+  danger?: string | undefined;
   fileSize?: number | undefined;
   totalBytes?: number | undefined;
   filename?: string | undefined;
@@ -46,6 +47,7 @@ export interface DownloadCreatedItem {
 
 export interface DownloadDelta {
   id: number;
+  danger?: { current?: string | undefined } | undefined;
   state?: { current?: string | undefined } | undefined;
   error?: { current?: string | undefined } | undefined;
 }

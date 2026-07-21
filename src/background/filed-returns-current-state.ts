@@ -42,7 +42,7 @@ export async function readCurrentFiledReturnsFlowSummary(
     return completionSummary;
   }
   if (isFullFiscalYearLedger(ledger) && isActionableFullFiscalYearLedger(ledger)) {
-    return summariseFullFiscalYearLedger(ledger, deps.now?.());
+    return pauseFullFiscalYearSummary(summariseFullFiscalYearLedger(ledger, deps.now?.()));
   }
 
   if (isFullFiscalYearLedger(ledger) && isNewerSinglePeriodSummary(completionSummary, ledger)) {
@@ -52,6 +52,30 @@ export async function readCurrentFiledReturnsFlowSummary(
   if (isFullFiscalYearLedger(ledger)) return summariseFullFiscalYearLedger(ledger, deps.now?.());
 
   return completionSummary;
+}
+
+export function pauseFullFiscalYearSummary(
+  summary: FiledReturnsFlowSummary,
+): FiledReturnsFlowSummary {
+  return {
+    ...summary,
+    status: "blocked",
+    flowStep: {
+      ...summary.flowStep,
+      state: "blocked",
+      safeSignals: [
+        ...new Set([...summary.flowStep.safeSignals, "full-fiscal-year-temporarily-paused"]),
+      ],
+      safeMessage:
+        "This saved full fiscal-year run is paused while Pack strengthens restart and download-evidence safety. You can inspect or discard the saved local state, but Pack will not retry it.",
+      userAction: {
+        type: "RETRY_PORTAL_GENERATION",
+        message:
+          "Inspect the saved run or discard it before continuing with a single-period download.",
+        canResume: false,
+      },
+    },
+  };
 }
 
 function isRetainedZipRetrySummary(

@@ -40,7 +40,8 @@ export function matchesExpectedUrlSubstrings(
   item: DownloadCreatedItem,
   expectedUrlSubstrings: readonly string[] | undefined,
 ): boolean {
-  if (!expectedUrlSubstrings?.length) return true;
+  if (expectedUrlSubstrings === undefined) return true;
+  if (expectedUrlSubstrings.length === 0) return false;
   const expectedMarkers = expectedUrlSubstrings.map((marker) => marker.toLowerCase());
   const urls = [item.url, item.finalUrl, item.referrer]
     .filter(isNonNullableString)

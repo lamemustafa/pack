@@ -28,6 +28,11 @@ export async function completedObservation(
   if (context && !isExpectedDownloadCandidate(item, context)) {
     return unconfirmedObservation("browser-download-correlation-rejected");
   }
+  if (item.danger !== "safe") {
+    return unconfirmedObservation(
+      item.danger ? "browser-download-danger-not-safe" : "browser-download-danger-unknown",
+    );
+  }
   const knownSize = firstKnownSize(item);
 
   if (knownSize === null) return unconfirmedObservation("browser-download-size-unknown");

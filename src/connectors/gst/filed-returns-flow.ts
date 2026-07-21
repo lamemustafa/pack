@@ -8,7 +8,7 @@ import {
 import { navigateToFiledReturnsPage } from "./filed-returns-navigator";
 import { openFiledReturnFromApiSearch } from "./filed-returns-api-search";
 import { selectFiledReturnsFiltersAndSearch } from "./filed-returns-filter-form";
-import { detectPositiveNotFiledEvidence } from "./filed-returns-not-filed-evidence";
+import { detectCadenceUnresolvedNoRecordEvidence } from "./filed-returns-not-filed-evidence";
 import { observeFiledReturnsPageText } from "./filed-returns-observer";
 import {
   clickFiledGstr1SummaryForPdf,
@@ -167,14 +167,14 @@ export async function runFiledReturnsDownloadStep(
   }
 
   if (isFiledReturnsSearchSurface(observation.safeSignals)) {
-    const notFiledEvidence = detectPositiveNotFiledEvidence(
+    const noRecordEvidence = detectCadenceUnresolvedNoRecordEvidence(
       documentRef,
       scope,
       scopeId,
       searchSettled,
     );
-    if (notFiledEvidence) {
-      return notFiledEvidence;
+    if (noRecordEvidence) {
+      return noRecordEvidence;
     }
   }
 

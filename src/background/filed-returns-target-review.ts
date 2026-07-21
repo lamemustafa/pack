@@ -101,47 +101,50 @@ export async function clearFiledReturnsTargetReview(
 
 export async function resolveUnconfirmedFiledReturnsDownload(
   scope: FiledReturnsDownloadScope,
-  resolution: "downloaded" | "cancelled",
+  resolution: "manually-observed" | "cancelled",
   deps: FiledReturnsTargetReviewDeps,
 ): Promise<PackMessageResponse> {
   const review = await readFiledReturnsTargetReview(scope, deps);
   if (!review) return noTargetReviewResponse(scope);
-  if (
-    hasSinglePeriodCleanupFailure(review.safeSignals) ||
-    (resolution === "downloaded" && review.safeSignals.includes("single-period-zip-incomplete"))
-  ) {
+  if (hasSinglePeriodCleanupFailure(review.safeSignals)) {
     return responseForFiledReturnsTargetReview(review);
+  }
+
+  if (resolution === "manually-observed") {
+    const updatedReview: FiledReturnsTargetReview = {
+      ...review,
+      safeSignals: uniqueSafeSignals([
+        ...review.safeSignals,
+        "filed-returns-target-manually-observed",
+      ]),
+      safeMessage:
+        "Pack recorded a manual observation, but it cannot verify this download. Retry or cancel the target before treating it as complete.",
+      updatedAt: (deps.now?.() ?? new Date()).toISOString(),
+    };
+    if (deps.storageKeys.targetReview) {
+      await browser.storage.local.set({ [deps.storageKeys.targetReview]: updatedReview });
+    }
+    return responseForFiledReturnsTargetReview(updatedReview);
   }
 
   await clearFiledReturnsTargetReview(scope, deps);
   const flowStep: PortalFlowStepResult = {
     connectorId: "gst",
     scopeId: filedReturnScopeId(scope.returnType),
-    state: resolution === "downloaded" ? "downloaded" : "user-action-required",
-    safeSignals: [
-      resolution === "downloaded"
-        ? "filed-returns-target-manually-confirmed"
-        : "filed-returns-target-cancelled",
-    ],
-    safeMessage:
-      resolution === "downloaded"
-        ? "Pack marked the unresolved filed-return download as manually reviewed."
-        : "Pack cancelled the unresolved filed-return target. No portal click was retried.",
+    state: "user-action-required",
+    safeSignals: ["filed-returns-target-cancelled"],
+    safeMessage: "Pack cancelled the unresolved filed-return target. No portal click was retried.",
   };
   const flowSummary: FiledReturnsFlowSummary = {
     scope,
-    status: resolution === "downloaded" ? "complete" : "cancelled",
-    completedPeriods: resolution === "downloaded" ? [scope.period] : [],
+    status: "cancelled",
+    completedPeriods: [],
     totalPeriods: 1,
     updatedAt: (deps.now?.() ?? new Date()).toISOString(),
     flowStep,
   };
   await persistResolvedTargetReviewSummary(flowSummary, deps);
-  return {
-    ok: true,
-    flowStep,
-    flowSummary,
-  };
+  return { ok: true, flowStep, flowSummary };
 }
 
 export async function retryCompletedSinglePeriodZipCleanup(
@@ -265,6 +268,9 @@ function targetReviewStep(review: FiledReturnsTargetReview): PortalFlowStepResul
     state: "user-action-required",
     safeSignals: [
       "filed-returns-target-review-required",
+      ...(review.safeSignals.includes("filed-returns-target-manually-observed")
+        ? ["filed-returns-target-manually-observed"]
+        : []),
       ...(review.safeSignals.includes("single-period-zip-incomplete")
         ? ["single-period-zip-incomplete"]
         : []),
@@ -319,6 +325,10 @@ function requiresTargetReview(step: PortalFlowStepResult): boolean {
 
 function hasSinglePeriodCleanupFailure(safeSignals: readonly string[]): boolean {
   return safeSignals.includes("single-period-opfs-clear-failed");
+}
+
+function uniqueSafeSignals(safeSignals: readonly string[]): string[] {
+  return [...new Set(safeSignals)];
 }
 
 function sameFiledReturnsScope(

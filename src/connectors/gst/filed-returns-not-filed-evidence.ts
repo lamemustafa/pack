@@ -5,12 +5,13 @@ import { findMatchingFiledReturnRows } from "./filed-returns-result-rows";
 import { filedReturnsFilterFieldMatches } from "./filed-returns-filter-fields";
 import { consumeSettledFiledReturnsSearchForScope } from "./filed-returns-search-state";
 
-export function detectPositiveNotFiledEvidence(
+export function detectCadenceUnresolvedNoRecordEvidence(
   documentRef: Document,
   scope: FiledReturnsDownloadScope,
   scopeId: string,
   searchSettled: boolean,
 ): PortalFlowStepResult | null {
+  if (scope.returnType !== "GSTR-3B") return null;
   const resultsContainer = findSettledNoRecordResultsContainer(documentRef);
   if (!resultsContainer) return null;
   if (!searchSettled) return null;
@@ -21,10 +22,16 @@ export function detectPositiveNotFiledEvidence(
   return {
     connectorId: "gst",
     scopeId,
-    state: "candidate-not-found",
-    safeSignals: ["filed-return-positively-not-filed"],
+    state: "download-unconfirmed",
+    safeSignals: ["filed-return-no-record-cadence-unresolved"],
     safeMessage:
-      "Pack found a settled GST Portal no-records result for the selected GSTR-3B period.",
+      "The GST Portal showed no record for the selected GSTR-3B period, but Pack cannot establish the applicable filing cadence. Review the period on the portal before treating it as unavailable.",
+    userAction: {
+      type: "RETRY_PORTAL_GENERATION",
+      message:
+        "Review the selected period and its filing cadence on the GST Portal, then retry or cancel.",
+      canResume: true,
+    },
   };
 }
 

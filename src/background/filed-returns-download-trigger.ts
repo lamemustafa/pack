@@ -319,7 +319,11 @@ function unverifiedPeriodResponse(scope: FiledReturnsDownloadScope): FlowStepRes
 }
 
 export function observeFiledReturnDownload(
-  context = { ...expectedDownloadForScope({ returnType: "GSTR-3B" }, "PDF"), armedAt: new Date() },
+  context = {
+    ...expectedDownloadForScope({ returnType: "GSTR-3B" }, "PDF"),
+    armedAt: new Date(),
+    expectedUrlSubstrings: [],
+  },
   timeoutMs?: number,
 ) {
   return timeoutMs === undefined

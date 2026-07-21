@@ -318,6 +318,68 @@ describe("download observer", () => {
     });
   });
 
+  it("fails closed when a portal-click observer has no target-bound URL marker", async () => {
+    const downloads = createDownloadsApi([
+      {
+        id: 831,
+        mime: "application/pdf",
+        state: "complete",
+        fileSize: 2048,
+        startTime: "2026-06-24T10:00:02.000Z",
+        url: "https://return.gst.gov.in/returns/auth/gstr3b/download",
+      },
+    ]);
+    const observation = observeNextBrowserDownload(downloads, {
+      armedAt: new Date("2026-06-24T10:00:00.000Z"),
+      expectedFileExtensions: [".pdf"],
+      expectedMimeTypes: ["application/pdf"],
+      expectedOrigins: ["https://return.gst.gov.in"],
+      expectedUrlSubstrings: [],
+    });
+
+    downloads.created.emit({
+      id: 831,
+      mime: "application/pdf",
+      startTime: "2026-06-24T10:00:02.000Z",
+      state: "complete",
+      url: "https://return.gst.gov.in/returns/auth/gstr3b/download",
+    });
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    await expect(observation.promise).resolves.toMatchObject({
+      state: "not-observed",
+      safeSignals: expect.arrayContaining(["browser-download-correlation-rejected"]),
+    });
+  });
+
+  it("does not complete an otherwise correlated download without a safe browser verdict", async () => {
+    const downloads = createDownloadsApi([
+      {
+        danger: "dangerous",
+        id: 832,
+        mime: "application/pdf",
+        state: "complete",
+        fileSize: 2048,
+        startTime: "2026-06-24T10:00:02.000Z",
+        url: "https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=052026",
+      },
+    ]);
+
+    await expect(
+      observeBrowserDownloadById(downloads, 832, {
+        armedAt: new Date("2026-06-24T10:00:00.000Z"),
+        expectedFileExtensions: [".pdf"],
+        expectedMimeTypes: ["application/pdf"],
+        expectedOrigins: ["https://return.gst.gov.in"],
+        expectedUrlSubstrings: ["/returns/auth/api/gstr3b/getgenpdf", "rtn_prd=052026"],
+        trustedDownloadIds: new Set([832]),
+      }),
+    ).resolves.toMatchObject({
+      state: "not-observed",
+      safeSignals: expect.arrayContaining(["browser-download-danger-not-safe"]),
+    });
+  });
+
   it("rejects same-period GST PDFs outside the reviewed filed return endpoint", async () => {
     const downloads = createDownloadsApi([
       {
@@ -437,6 +499,7 @@ describe("download observer", () => {
       .mockResolvedValueOnce([{ id: 82, state: "in_progress" }])
       .mockResolvedValueOnce([
         {
+          danger: "safe",
           filename: "May-GSTR-3B.pdf",
           id: 82,
           mime: "application/pdf",
@@ -483,6 +546,7 @@ describe("download observer", () => {
     const created = createEvent<DownloadCreatedItem>();
     const changed = createEvent<DownloadDelta>();
     const completedWithoutSize = {
+      danger: "safe",
       id: 83,
       mime: "application/zip",
       startTime: "2026-06-24T10:00:02.000Z",
@@ -1324,13 +1388,14 @@ describe("download observer", () => {
 function createDownloadsApi(items: DownloadCreatedItem[]) {
   const created = createEvent<DownloadCreatedItem>();
   const changed = createEvent<DownloadDelta>();
+  const safeItems = items.map((item) => ({ danger: "safe", ...item }));
 
   return {
     created,
     changed,
     onCreated: created.api,
     onChanged: changed.api,
-    search: vi.fn(async ({ id }: { id: number }) => items.filter((item) => item.id === id)),
+    search: vi.fn(async ({ id }: { id: number }) => safeItems.filter((item) => item.id === id)),
   };
 }
 

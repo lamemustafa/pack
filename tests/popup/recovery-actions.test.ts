@@ -163,7 +163,7 @@ describe("popup full-year recovery actions", () => {
     expect(markup).toContain(
       '<button type="button" class="secondary" disabled="">Discard saved state and start selected download</button>',
     );
-    expect(markup).toContain("Mark reviewed manually");
+    expect(markup).toContain("Record manual observation");
     expect(markup).toContain("Cancel and reset");
   });
 
@@ -357,7 +357,7 @@ describe("popup full-year recovery actions", () => {
       }),
     );
 
-    expect(markup).toContain("Download all 2025-26 GSTR-2B files");
+    expect(markup).toContain("Full fiscal year temporarily paused");
     expect(markup).toContain("PDF + Excel ZIP");
   });
 

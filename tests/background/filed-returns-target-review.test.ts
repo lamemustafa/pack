@@ -29,7 +29,7 @@ describe("filed returns target review", () => {
     vi.clearAllMocks();
   });
 
-  it("persists a manual target-review resolution over the previous blocked summary", async () => {
+  it("records a manual observation without completing or clearing the unresolved target", async () => {
     browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
       key === "target-review"
         ? {
@@ -56,7 +56,7 @@ describe("filed returns target review", () => {
         period: "March",
         returnType: "GSTR-3B",
       },
-      "downloaded",
+      "manually-observed",
       {
         storageKeys: {
           completion: "completion",
@@ -69,23 +69,25 @@ describe("filed returns target review", () => {
     expect(response).toMatchObject({
       ok: true,
       flowSummary: {
-        status: "complete",
-        completedPeriods: ["March"],
+        status: "blocked",
+        completedPeriods: [],
         totalPeriods: 1,
         updatedAt: "2026-06-24T00:00:05.000Z",
       },
     });
-    expect(browserMocks.storage.local.remove).toHaveBeenCalledWith("target-review");
-    expect(browserMocks.storage.session.set).toHaveBeenCalledWith({
-      completion: expect.objectContaining({
-        status: "complete",
-        completedPeriods: ["March"],
-        totalPeriods: 1,
-        flowStep: expect.objectContaining({
-          safeSignals: ["filed-returns-target-manually-confirmed"],
-        }),
+    expect(response).toMatchObject({
+      flowStep: {
+        state: "user-action-required",
+        safeSignals: expect.arrayContaining(["filed-returns-target-manually-observed"]),
+      },
+    });
+    expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
+    expect(browserMocks.storage.local.set).toHaveBeenCalledWith({
+      "target-review": expect.objectContaining({
+        safeSignals: expect.arrayContaining(["filed-returns-target-manually-observed"]),
       }),
     });
+    expect(browserMocks.storage.session.set).not.toHaveBeenCalled();
   });
 
   it("does not persist optional GSTR-1 Excel no-details as a timeout review", async () => {
@@ -131,7 +133,7 @@ describe("filed returns target review", () => {
     };
     browserMocks.storage.local.get.mockResolvedValue({ "target-review": review });
 
-    const response = await resolveUnconfirmedFiledReturnsDownload(scope, "downloaded", {
+    const response = await resolveUnconfirmedFiledReturnsDownload(scope, "manually-observed", {
       storageKeys: { completion: "completion", targetReview: "target-review" },
     });
 
@@ -166,14 +168,18 @@ describe("filed returns target review", () => {
       },
     });
 
-    const response = await resolveUnconfirmedFiledReturnsDownload(scope, "downloaded", {
+    const response = await resolveUnconfirmedFiledReturnsDownload(scope, "manually-observed", {
       storageKeys: { completion: "completion", targetReview: "target-review" },
     });
 
     expect(response).toMatchObject({
       ok: true,
       flowStep: {
-        safeSignals: ["filed-returns-target-review-required", "single-period-zip-incomplete"],
+        safeSignals: [
+          "filed-returns-target-review-required",
+          "filed-returns-target-manually-observed",
+          "single-period-zip-incomplete",
+        ],
         state: "user-action-required",
       },
       flowSummary: { status: "blocked" },

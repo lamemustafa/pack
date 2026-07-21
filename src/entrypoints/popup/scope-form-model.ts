@@ -120,6 +120,9 @@ export function getScopeFormStartAction(
   busy: string | null,
   fullFiscalYear: boolean,
 ): { disabled: boolean; label: string } {
+  if (fullFiscalYear) {
+    return { disabled: true, label: "Full fiscal year temporarily paused" };
+  }
   if (busy === "start-filed-returns-flow") return { disabled: true, label: "Downloading..." };
   if (busy !== null) return { disabled: true, label: defaultStartLabel(scope, fullFiscalYear) };
   if (

@@ -80,38 +80,6 @@ describe("message boundary", () => {
     ).toBe(true);
     expect(
       isPackMessage({
-        type: "PACK_CONTENT_RESOLVE_GSTR1_VIEW_POINT_V3",
-        payload: {
-          artifactType: "PDF",
-          financialYear: "2025-26",
-          period: "March",
-          returnType: "GSTR-1",
-        },
-      }),
-    ).toBe(true);
-    expect(
-      isPackMessage({
-        type: "PACK_CONTENT_MARK_GSTR1_VIEW_ACTIVATION_V3",
-        payload: {
-          artifactType: "PDF",
-          financialYear: "2025-26",
-          period: "March",
-          returnType: "GSTR-1",
-        },
-      }),
-    ).toBe(true);
-    expect(
-      isPackMessage({
-        type: "PACK_CONTENT_MARK_GSTR1_VIEW_ACTIVATION_V3",
-        payload: {
-          financialYear: "2025-26",
-          period: "March",
-          returnType: "GSTR-3B",
-        },
-      }),
-    ).toBe(false);
-    expect(
-      isPackMessage({
         type: "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD",
         payload: {
           actionId: "action-1",
@@ -210,7 +178,7 @@ describe("message boundary", () => {
       isPackMessage({
         type: "PACK_RESOLVE_UNCONFIRMED_DOWNLOAD",
         payload: {
-          resolution: "downloaded",
+          resolution: "manually-observed",
           scope: {
             financialYear: "2025-26",
             period: "March",
@@ -219,6 +187,19 @@ describe("message boundary", () => {
         },
       }),
     ).toBe(true);
+    expect(
+      isPackMessage({
+        type: "PACK_RESOLVE_UNCONFIRMED_DOWNLOAD",
+        payload: {
+          resolution: "downloaded",
+          scope: {
+            financialYear: "2025-26",
+            period: "March",
+            returnType: "GSTR-3B",
+          },
+        },
+      }),
+    ).toBe(false);
     expect(
       isPackMessage({
         type: "PACK_RESOLVE_UNCONFIRMED_DOWNLOAD",

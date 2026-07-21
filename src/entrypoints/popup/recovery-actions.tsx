@@ -8,7 +8,7 @@ export interface RecoveryActionsProps {
   onRetryFullFiscalYearTarget: () => void;
   onRetryTarget: () => void;
   onResolveFullFiscalYearTarget: (resolution: "manually-observed" | "cancelled") => void;
-  onResolveTarget: (resolution: "downloaded" | "cancelled") => void;
+  onResolveTarget: (resolution: "manually-observed" | "cancelled") => void;
   onStartFresh: () => void;
 }
 
@@ -28,8 +28,11 @@ export function RecoveryActions({
   const { needsFullFiscalYearReview, needsRunReview, needsTargetReview, runActive, signals } =
     recoveryState;
   const canManuallyObserveFullYear = canManuallyObserveFullFiscalYearTarget(summary);
-  const canManuallyResolveTarget = !signals.has("single-period-zip-incomplete");
+  const canManuallyResolveTarget =
+    !signals.has("single-period-zip-incomplete") &&
+    !signals.has("filed-returns-target-manually-observed");
   const retryDisabled = busy !== null || !portalReady;
+  const fullFiscalYearPaused = signals.has("full-fiscal-year-temporarily-paused");
   return (
     <details className="recovery-details" open>
       <summary>Saved run options</summary>
@@ -78,10 +81,17 @@ export function RecoveryActions({
                 type="button"
                 className="secondary"
                 disabled={busy !== null}
-                onClick={() => onResolveTarget("downloaded")}
+                onClick={() => onResolveTarget("manually-observed")}
               >
-                {busy === "resolve-unconfirmed-download" ? "Saving..." : "Mark reviewed manually"}
+                {busy === "resolve-unconfirmed-download"
+                  ? "Saving..."
+                  : "Record manual observation"}
               </button>
+            ) : null}
+            {signals.has("filed-returns-target-manually-observed") ? (
+              <p className="muted">
+                Manual observation recorded. It does not complete this target.
+              </p>
             ) : null}
             <button
               type="button"
@@ -96,31 +106,41 @@ export function RecoveryActions({
         {needsFullFiscalYearReview ? (
           <>
             <p className="muted">Why Pack paused: {summary.flowStep.safeMessage}</p>
+            {fullFiscalYearPaused ? (
+              <p className="muted">
+                This saved run is retained locally for inspection or discard. Pack will not retry,
+                export, or manually complete it in this version.
+              </p>
+            ) : null}
             {signals.has("full-fiscal-year-resume-confirmation-required") ? (
               <p className="muted">
                 This saved run is not bound to a GST account. Continue only if the same GST account
                 is currently open.
               </p>
             ) : null}
-            {!portalReady ? (
+            {!portalReady && !fullFiscalYearPaused ? (
               <p className="muted">Open a signed-in GST Portal tab before retrying this period.</p>
             ) : null}
-            <button type="button" disabled={retryDisabled} onClick={onRetryFullFiscalYearTarget}>
-              {busy === "retry-full-fiscal-year-target"
-                ? "Retrying..."
-                : retryFullYearLabel(summary)}
-            </button>
-            <button
-              type="button"
-              className="secondary"
-              disabled={retryDisabled}
-              onClick={onStartFresh}
-            >
-              {busy === "start-fresh-filed-returns-flow"
-                ? "Starting fresh..."
-                : "Discard saved run and start selected download"}
-            </button>
-            {canManuallyObserveFullYear ? (
+            {!fullFiscalYearPaused ? (
+              <button type="button" disabled={retryDisabled} onClick={onRetryFullFiscalYearTarget}>
+                {busy === "retry-full-fiscal-year-target"
+                  ? "Retrying..."
+                  : retryFullYearLabel(summary)}
+              </button>
+            ) : null}
+            {!fullFiscalYearPaused ? (
+              <button
+                type="button"
+                className="secondary"
+                disabled={retryDisabled}
+                onClick={onStartFresh}
+              >
+                {busy === "start-fresh-filed-returns-flow"
+                  ? "Starting fresh..."
+                  : "Discard saved run and start selected download"}
+              </button>
+            ) : null}
+            {canManuallyObserveFullYear && !fullFiscalYearPaused ? (
               <button
                 type="button"
                 className="secondary"

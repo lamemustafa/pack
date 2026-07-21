@@ -1,16 +1,20 @@
 import { browser } from "wxt/browser";
 import type { ArchiveManifest, PortalObservation } from "../core/contracts";
+import { isFullFiscalYearScope } from "../core/filed-returns-scope";
 import { PACK_PRODUCT_VERSION } from "../extension/version";
 import { isPackMessage, type PackMessageResponse } from "../core/messages";
 import {
   acknowledgeInterruptedFiledReturnsRun,
   readActiveFiledReturnsRunSummary,
 } from "../background/filed-returns-active-run";
-import { readCurrentFiledReturnsFlowSummary } from "../background/filed-returns-current-state";
+import {
+  pauseFullFiscalYearSummary,
+  readCurrentFiledReturnsFlowSummary,
+} from "../background/filed-returns-current-state";
 import { resolveFullFiscalYearTarget } from "../background/filed-returns-full-fiscal-year-recovery";
 import {
-  retryFullFiscalYearTargetDownloadFlow,
   retryFiledReturnsTargetDownloadFlow,
+  fullFiscalYearPausedResponse,
   startFreshFiledReturnsDownloadFlow,
   startFiledReturnsDownloadFlow,
 } from "../background/filed-returns-flow-runner";
@@ -19,7 +23,6 @@ import { clearPackLocalDataWithRecoveryGuard } from "../background/local-data";
 import { startSyntheticDemo } from "../background/synthetic-demo";
 import { runDownloadPromptProbe } from "../background/download-prompt-probe";
 import { selectFiledReturnsFiltersInMainWorldForTab } from "../background/main-world-filed-returns-filter-executor";
-import { clickGstr1ResultViewWithDebugger } from "../background/gstr1-debugger-view";
 import {
   PACK_CLEARABLE_LOCAL_STORAGE_KEYS,
   PACK_LOCAL_STORAGE_KEYS,
@@ -159,7 +162,7 @@ async function handleMessage(
     case "PACK_RETRY_FILED_RETURNS_TARGET":
       return retryFiledReturnsTargetDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
     case "PACK_RETRY_FULL_FISCAL_YEAR_TARGET":
-      return retryFullFiscalYearTargetDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
+      return pausedSavedFullFiscalYearResponse();
     case "PACK_RESOLVE_UNCONFIRMED_DOWNLOAD":
       return resolveUnconfirmedFiledReturnsDownload(
         message.payload.scope,
@@ -172,14 +175,22 @@ async function handleMessage(
         },
       );
     case "PACK_RESOLVE_FULL_FISCAL_YEAR_TARGET":
+      if (message.payload.resolution === "manually-observed") {
+        return pausedSavedFullFiscalYearResponse();
+      }
       return resolveFullFiscalYearTarget(
         message.payload,
         message.payload.resolution,
         filedReturnsFlowRunnerDeps(),
       );
     case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
+      if (isFullFiscalYearScope(message.payload))
+        return fullFiscalYearPausedResponse(message.payload);
       return startFiledReturnsDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
     case "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW":
+      if (isFullFiscalYearScope(message.payload.scope)) {
+        return fullFiscalYearPausedResponse(message.payload.scope);
+      }
       return startFreshFiledReturnsDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
     case "PACK_START_SYNTHETIC_DEMO":
       return startSyntheticDemo({
@@ -205,13 +216,26 @@ async function handleMessage(
   return { ok: false, error: "Unsupported Pack message." };
 }
 
+async function pausedSavedFullFiscalYearResponse(): Promise<PackMessageResponse> {
+  const summary = await readCurrentFiledReturnsFlowSummary({
+    storageKeys: filedReturnsStorageKeys(),
+  });
+  if (summary && isFullFiscalYearScope(summary.scope)) {
+    const pausedSummary = pauseFullFiscalYearSummary(summary);
+    return { ok: true, flowStep: pausedSummary.flowStep, flowSummary: pausedSummary };
+  }
+  return {
+    ok: false,
+    error: "Pack did not find a saved full fiscal-year run to inspect or discard.",
+  };
+}
+
 function packRuntimeVersion() {
   return browser.runtime.getManifest().version ?? PACK_PRODUCT_VERSION;
 }
 
 function filedReturnsFlowRunnerDeps() {
   return {
-    clickGstr1ResultViewWithDebugger,
     getActiveGstTab,
     // The authenticated portal click/capture remains the default. Browser-initiated
     // direct endpoint downloads are retained for targeted tests only: Brave can

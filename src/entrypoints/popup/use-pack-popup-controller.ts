@@ -122,12 +122,12 @@ export function usePackPopupController() {
   }, [applyFlowResponse, filedReturnsFlowSummary?.scope, withBusy]);
 
   const resolveUnconfirmedDownload = React.useCallback(
-    async (resolution: "downloaded" | "cancelled") => {
+    async (resolution: "manually-observed" | "cancelled") => {
       const recoveryScope = filedReturnsFlowSummary?.scope;
       if (!recoveryScope) return;
 
       await withBusy(
-        resolution === "downloaded"
+        resolution === "manually-observed"
           ? "resolve-unconfirmed-download"
           : "cancel-unconfirmed-download",
         async () => {

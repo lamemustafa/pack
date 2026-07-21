@@ -6,6 +6,7 @@ import type {
 } from "../core/contracts";
 import type { PackMessageResponse } from "../core/messages";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
+import { persistFiledReturnsTargetReview } from "./filed-returns-target-review";
 
 export async function withPersistedSinglePeriodSummary(
   scope: FiledReturnsDownloadScope,
@@ -17,6 +18,15 @@ export async function withPersistedSinglePeriodSummary(
   if (response.flowSummary) {
     await persistProvidedSinglePeriodSummary(response.flowSummary, deps);
     return response;
+  }
+  const targetReview = response.flowStep.safeSignals.includes(
+    "filed-return-no-record-cadence-unresolved",
+  )
+    ? await persistFiledReturnsTargetReview(scope, response.flowStep, deps)
+    : null;
+  if (targetReview) {
+    await persistProvidedSinglePeriodSummary(targetReview, deps);
+    return { ...response, flowSummary: targetReview };
   }
   const flowSummary = await persistSinglePeriodSummary(scope, response.flowStep, deps);
   return { ...response, flowSummary };
@@ -44,9 +54,7 @@ function toSinglePeriodSummary(
   flowStep: PortalFlowStepResult,
   now: Date,
 ): FiledReturnsFlowSummary {
-  const isReconciled =
-    flowStep.state === "downloaded" ||
-    flowStep.safeSignals.includes("filed-return-positively-not-filed");
+  const isReconciled = flowStep.state === "downloaded";
   return {
     scope,
     status: isReconciled ? "complete" : "blocked",

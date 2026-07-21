@@ -180,6 +180,7 @@ export function getInlinePrimaryAction(
   if (!summary) return null;
 
   const signals = new Set(summary.flowStep.safeSignals);
+  if (signals.has("full-fiscal-year-temporarily-paused")) return null;
   if (presentation.kind === "blocked" && summary.fullFiscalYearRecovery) {
     return {
       label: summary.currentPeriod ? `Retry ${summary.currentPeriod}` : "Resume saved period",

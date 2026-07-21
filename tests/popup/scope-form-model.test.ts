@@ -27,8 +27,8 @@ describe("popup scope form model", () => {
     const action = getScopeFormStartAction(fullYearGstr2bScope(), null, null, true);
 
     expect(action).toEqual({
-      disabled: false,
-      label: "Download all 2025-26 GSTR-2B files",
+      disabled: true,
+      label: "Full fiscal year temporarily paused",
     });
   });
 
@@ -62,8 +62,8 @@ describe("popup scope form model", () => {
     );
 
     expect(action).toEqual({
-      disabled: false,
-      label: "Download all 2025-26 GSTR-2B files",
+      disabled: true,
+      label: "Full fiscal year temporarily paused",
     });
   });
 
@@ -88,7 +88,7 @@ describe("popup scope form model", () => {
       true,
     );
 
-    expect(action).toEqual({ disabled: false, label: "Retry final ZIP" });
+    expect(action).toEqual({ disabled: true, label: "Full fiscal year temporarily paused" });
   });
 });
 

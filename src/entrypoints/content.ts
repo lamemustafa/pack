@@ -9,10 +9,8 @@ import { detectPostClickBlockedState } from "../connectors/gst/filed-returns-pos
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import {
   clearFiledReturnsSearchAttemptForScope,
-  markGstr1ViewActivationAttempted,
   markFiledReturnsSearchPending,
 } from "../connectors/gst/filed-returns-search-state";
-import { resolveGstr1FiledReturnViewPoint } from "../connectors/gst/filed-returns-result-row-navigation";
 import {
   PACK_CONTENT_REQUEST_ENVELOPE_TYPE,
   PACK_CONTENT_SCRIPT_PROTOCOL_VERSION,
@@ -249,45 +247,6 @@ export default defineContentScript({
             state: "clicked",
             safeSignals: ["filed-return-search-pending-cleared"],
             safeMessage: "Pack cleared an unsubmitted filed-return search attempt.",
-          },
-        } satisfies PackMessageResponse);
-        return false;
-      }
-
-      if (contentMessage.type === "PACK_CONTENT_RESOLVE_GSTR1_VIEW_POINT_V3") {
-        void resolveGstr1FiledReturnViewPoint(document, contentMessage.payload)
-          .then((resolution) => {
-            if (!resolution.ok) {
-              sendResponse({
-                ok: true,
-                flowStep: resolution.flowStep,
-              } satisfies PackMessageResponse);
-              return;
-            }
-            sendResponse({
-              ok: true,
-              gstr1ViewPoint: resolution.point,
-            } satisfies PackMessageResponse);
-          })
-          .catch(() =>
-            sendResponse({
-              ok: false,
-              error: "GSTR-1_VIEW_POINT_UNAVAILABLE",
-            } satisfies PackMessageResponse),
-          );
-        return true;
-      }
-
-      if (contentMessage.type === "PACK_CONTENT_MARK_GSTR1_VIEW_ACTIVATION_V3") {
-        markGstr1ViewActivationAttempted(document, contentMessage.payload);
-        sendResponse({
-          ok: true,
-          flowStep: {
-            connectorId: "gst",
-            scopeId: filedReturnScopeId("GSTR-1"),
-            state: "clicked",
-            safeSignals: ["filed-gstr1-result-view-navigation-pending"],
-            safeMessage: "Pack marked the exact GSTR-1 View action as navigation-pending.",
           },
         } satisfies PackMessageResponse);
         return false;

@@ -5,7 +5,6 @@ import type {
   FiledReturnsFlowSummary,
   FiledReturnsDirectDownloadRequest,
   FiledReturnsDownloadScope,
-  FiledReturnsTargetBoundViewPoint,
   FiledReturnsDownloadTarget,
   PortalDownloadTriggerResult,
   PortalContext,
@@ -63,7 +62,7 @@ export type PackMessage =
       type: "PACK_RESOLVE_UNCONFIRMED_DOWNLOAD";
       payload: {
         scope: FiledReturnsDownloadScope;
-        resolution: "downloaded" | "cancelled";
+        resolution: "manually-observed" | "cancelled";
       };
     }
   | {
@@ -75,7 +74,6 @@ export type PackMessage =
   | { type: "PACK_REFRESH_FILED_RETURNS_OBSERVATION" }
   | { type: "PACK_NAVIGATE_FILED_RETURNS" }
   | { type: "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD"; payload: FiledReturnsDownloadTarget }
-  | { type: "PACK_RUN_FILED_RETURNS_DOWNLOAD_STEP"; payload: FiledReturnsDownloadScope }
   | { type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW"; payload: FiledReturnsDownloadScope }
   | {
       type: "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW";
@@ -112,14 +110,6 @@ export type PackMessage =
     }
   | {
       type: "PACK_CONTENT_CLEAR_FILED_RETURNS_SEARCH_PENDING_V3";
-      payload: FiledReturnsDownloadScope;
-    }
-  | {
-      type: "PACK_CONTENT_RESOLVE_GSTR1_VIEW_POINT_V3";
-      payload: FiledReturnsDownloadScope;
-    }
-  | {
-      type: "PACK_CONTENT_MARK_GSTR1_VIEW_ACTIVATION_V3";
       payload: FiledReturnsDownloadScope;
     };
 
@@ -162,7 +152,6 @@ export type PackMessageResponse =
   | { ok: true; manifest: ArchiveManifest | null }
   | { ok: true; downloaded: number; manifest: ArchiveManifest }
   | { ok: true; downloadPromptProbe: DownloadPromptProbeResult }
-  | { ok: true; gstr1ViewPoint: FiledReturnsTargetBoundViewPoint }
   | { ok: true; cleared: true }
   | { ok: false; error: string };
 
@@ -225,14 +214,9 @@ export function isPackMessage(input: unknown): input is PackMessage {
     case "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3":
     case "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V3":
       return isFiledReturnsDownloadTarget(input.payload);
-    case "PACK_RUN_FILED_RETURNS_DOWNLOAD_STEP":
     case "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3":
     case "PACK_CONTENT_MARK_FILED_RETURNS_SEARCH_PENDING_V3":
     case "PACK_CONTENT_CLEAR_FILED_RETURNS_SEARCH_PENDING_V3":
-    case "PACK_CONTENT_RESOLVE_GSTR1_VIEW_POINT_V3":
-      return isFiledReturnsDownloadScope(input.payload);
-    case "PACK_CONTENT_MARK_GSTR1_VIEW_ACTIVATION_V3":
-      return isFiledReturnsDownloadScope(input.payload) && input.payload.returnType === "GSTR-1";
     case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
       return isFiledReturnsStartScope(input.payload);
     case "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW":
@@ -278,10 +262,10 @@ function isFullFiscalYearTargetResolution(
 
 function isUnconfirmedDownloadResolution(input: unknown): input is {
   scope: FiledReturnsDownloadScope;
-  resolution: "downloaded" | "cancelled";
+  resolution: "manually-observed" | "cancelled";
 } {
   if (!isRecord(input)) return false;
-  if (input.resolution !== "downloaded" && input.resolution !== "cancelled") return false;
+  if (input.resolution !== "manually-observed" && input.resolution !== "cancelled") return false;
   return isFiledReturnsStartScope(input.scope) && input.scope.period !== FULL_FISCAL_YEAR_PERIOD;
 }
 function isFiledReturnsFreshStartPayload(input: unknown): input is FiledReturnsFreshStartPayload {

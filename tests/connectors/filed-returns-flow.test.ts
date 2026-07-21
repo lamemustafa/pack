@@ -5361,7 +5361,7 @@ describe("filed returns guided flow", () => {
     expect(clicked).toBe(0);
   });
 
-  it("treats a settled no-records result as positive not-filed evidence", async () => {
+  it("routes a settled GSTR-3B no-records result to review when cadence is unresolved", async () => {
     const documentRef = createDocument(`
       <main>
         <h1>View Filed Returns</h1>
@@ -5382,8 +5382,8 @@ describe("filed returns guided flow", () => {
     const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
 
     expect(result).toMatchObject({
-      state: "candidate-not-found",
-      safeSignals: expect.arrayContaining(["filed-return-positively-not-filed"]),
+      state: "download-unconfirmed",
+      safeSignals: expect.arrayContaining(["filed-return-no-record-cadence-unresolved"]),
     });
     expect(result.safeSignals).not.toContain("filed-return-result-row-not-found");
   });
@@ -5416,9 +5416,9 @@ describe("filed returns guided flow", () => {
 
     const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
 
-    expect(result.state).toBe("candidate-not-found");
+    expect(result.state).toBe("download-unconfirmed");
     expect(result.safeSignals).toEqual(
-      expect.arrayContaining(["filed-return-positively-not-filed"]),
+      expect.arrayContaining(["filed-return-no-record-cadence-unresolved"]),
     );
     expect(searchClicked).toBe(0);
   });
@@ -5750,7 +5750,7 @@ describe("filed returns guided flow", () => {
     const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
 
     expect(result.safeSignals).toEqual(
-      expect.arrayContaining(["filed-return-positively-not-filed"]),
+      expect.arrayContaining(["filed-return-no-record-cadence-unresolved"]),
     );
   });
 
@@ -5775,7 +5775,7 @@ describe("filed returns guided flow", () => {
     const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
 
     expect(result.safeSignals).toEqual(
-      expect.arrayContaining(["filed-return-positively-not-filed"]),
+      expect.arrayContaining(["filed-return-no-record-cadence-unresolved"]),
     );
   });
 
@@ -5806,7 +5806,7 @@ describe("filed returns guided flow", () => {
     });
 
     expect(result.safeSignals).toEqual(
-      expect.arrayContaining(["filed-return-positively-not-filed"]),
+      expect.arrayContaining(["filed-return-no-record-cadence-unresolved"]),
     );
   });
 
@@ -6197,7 +6197,7 @@ describe("filed returns guided flow", () => {
     const secondResult = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
 
     expect(firstResult.safeSignals).toEqual(
-      expect.arrayContaining(["filed-return-positively-not-filed"]),
+      expect.arrayContaining(["filed-return-no-record-cadence-unresolved"]),
     );
     expect(secondResult.safeSignals).not.toContain("filed-return-positively-not-filed");
   });
@@ -6275,7 +6275,7 @@ describe("filed returns guided flow", () => {
     const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
 
     expect(result.safeSignals).toEqual(
-      expect.arrayContaining(["filed-return-positively-not-filed"]),
+      expect.arrayContaining(["filed-return-no-record-cadence-unresolved"]),
     );
   });
 
@@ -6327,7 +6327,7 @@ describe("filed returns guided flow", () => {
     const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
 
     expect(result.safeSignals).toEqual(
-      expect.arrayContaining(["filed-return-positively-not-filed"]),
+      expect.arrayContaining(["filed-return-no-record-cadence-unresolved"]),
     );
   });
 

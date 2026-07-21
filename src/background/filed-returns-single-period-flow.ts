@@ -79,26 +79,6 @@ async function runSinglePeriodSteps(
     lastStep = response.flowStep;
     activePeriod = extractActivePeriod(lastStep) ?? activePeriod;
 
-    if (
-      lastStep.safeSignals.includes("filed-gstr1-result-view-user-action-required") &&
-      deps.clickGstr1ResultViewWithDebugger
-    ) {
-      const debuggerStep = await deps.clickGstr1ResultViewWithDebugger(tabId, scope);
-      const debuggerResponse = { ok: true as const, flowStep: debuggerStep };
-      await persistFlowResponse(debuggerResponse, deps);
-      lastStep = debuggerStep;
-      if (!shouldContinueFlow(debuggerStep)) {
-        return withPersistedSinglePeriodSummary(
-          scope,
-          debuggerResponse,
-          deps,
-          shouldPersistSinglePeriodSummary,
-        );
-      }
-      await delay(getFlowStepSettleMs(debuggerStep, deps));
-      continue;
-    }
-
     if (lastStep.safeSignals.includes("filed-return-api-result-posted")) {
       return waitForDetailReadyThenTrigger({
         activePeriod,
