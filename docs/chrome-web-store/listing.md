@@ -28,8 +28,9 @@ Use [`dashboard-closeout.md`](dashboard-closeout.md) for the action sequence.
   or disclosure state for a future release.
 
 The Store-supported alpha claims remain GSTR-1 and GSTR-3B single-period
-downloads. Private GSTR-2B and full-fiscal-year workflows are source-build
-experiments and must not be advertised as Store-supported features.
+downloads. Private GSTR-2B workflows are source-build experiments. Full
+fiscal-year code is present for research and recovery validation, but dispatch
+is currently paused in the runtime; neither is a Store-supported feature.
 
 ## Store Listing Fields
 
@@ -57,7 +58,9 @@ ComplyEaze Pack helps authorised users download their own filed GST returns usin
 
 Files are saved by Chrome to the user's device. Pack does not require a Pack or ComplyEaze account. It does not ask for or store GST Portal credentials, OTPs, CAPTCHA responses, cookies, or session tokens, and it does not upload GST documents or return contents to ComplyEaze.
 
-The package also contains private source-build experiments for GSTR-2B and full-fiscal-year ZIP workflows. These are not Store-supported claims for this alpha release.
+The package also contains private source-build GSTR-2B research and
+full-fiscal-year archive code. Full-fiscal-year dispatch is currently paused;
+neither is a Store-supported claim for this alpha release.
 
 Pack's content script runs only on the four declared GST Portal hosts. When a supported page loads, it reads page context locally so Pack can identify eligible workflows; artifact capture and downloads start only after an explicit user action. Pack keeps limited redacted recovery state locally so interrupted work does not retry blindly. Temporary artifact bytes may be staged in browser-local OPFS for explicit capture or ZIP operations. Pack normally removes those bytes after confirmed export or explicit discard; if local cleanup fails, it retains them with a cleanup-pending status until a later cleanup attempt succeeds.
 

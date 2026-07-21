@@ -24,11 +24,12 @@ stable-release claims.
   GSTR-1 e-invoice details Excel files locally from the user's active,
   manually authenticated GST Portal session when the GST Portal exposes those
   artifacts.
-- Full fiscal year download exists as a source-build alpha local per-period
-  ledger that runs eligible GSTR-3B or GSTR-1 periods through the
-  single-period path after user initiation. Store-facing V0 must not advertise
-  it until exact-ZIP clean-profile, real-browser restart/resume,
-  reconciliation, and privacy-review evidence are recorded for the release.
+- Full fiscal-year archive code remains in the source build, but the current
+  background deliberately pauses download dispatch. It is not an available
+  runtime download or Store-facing feature; retained saved-run state may only
+  be inspected or discarded locally. Do not lift that safety hold until
+  exact-ZIP clean-profile, real-browser restart/resume, reconciliation, and
+  privacy evidence are recorded for the candidate release.
 - V0 does not collect GST Portal credentials, OTPs, CAPTCHA responses, cookies,
   or session tokens, and does not log or upload GST document contents. The
   source-build capture path may use temporary local OPFS staging for an explicit
@@ -136,8 +137,10 @@ stable-release claims.
 - [ ] Full fiscal year ledger resumes after browser restart without retaining
       raw URLs, filenames, local paths, portal HTML, GSTIN/PAN, taxpayer names,
       cookies, credentials, OTP, or CAPTCHA data.
-- [ ] Authorised live full fiscal year run reconciles every eligible target as
-      downloaded, positively not filed, blocked, or failed in the local ledger.
+- [ ] After the explicit full-fiscal-year safety hold is lifted, an authorised
+      live run reconciles every target as verified, unavailable with
+      target-bound evidence, blocked, failed, or review-required. Historical
+      no-record signals must not assert that a return was never filed.
 - [ ] Direct browser-download default is tested in clean Chrome and Brave
       profiles plus the real profile where the native Save dialog appeared,
       with "Ask where to save each file" on and off, existing filename
@@ -238,9 +241,10 @@ version here.
 ## Not Yet Stable Or Broad-Claim Ready Until
 
 The maintainer reports that the V0 listing serves `v0.4.0`; a dated dashboard
-export and read-only status result are not yet recorded in source control. The
-source-build alpha full-year workflow has maintainer evidence for automatic
-local downloads after user initiation. Pack must not claim stable Chrome Web Store maturity,
+export and read-only status result are not yet recorded in source control.
+Historical source-build full-year evidence does not establish the current
+runtime: full-fiscal-year dispatch is deliberately paused pending a new
+exact-artifact evidence programme. Pack must not claim stable Chrome Web Store maturity,
 store-facing full-year availability, durable restart-safe full-year support,
 legal approval, live manifest/index/exception output, or broad GST coverage
 until legal review, live public policy URL confirmation, exact-ZIP manual QA,
