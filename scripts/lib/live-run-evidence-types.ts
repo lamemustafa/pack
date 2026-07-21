@@ -1,7 +1,20 @@
-export type LiveRunScenario = "single-period" | "full-year";
+export type LiveRunScenario = "single-period" | "custom-range" | "full-year";
 export type LiveRunOutcome = "pass" | "blocked" | "failed";
 export type LiveRunReturnType = "GSTR-3B" | "GSTR-1" | "GSTR-2B";
 export type LiveRunArtifactType = "PDF" | "EXCEL" | "PDF_AND_EXCEL";
+export type LiveRunMonth =
+  | "April"
+  | "May"
+  | "June"
+  | "July"
+  | "August"
+  | "September"
+  | "October"
+  | "November"
+  | "December"
+  | "January"
+  | "February"
+  | "March";
 export type LiveRunDownloadPathClass =
   | "extension-direct-https"
   | "extension-direct-blob"
@@ -41,7 +54,7 @@ export type LiveRunEvidenceLimitation =
   | "browser-state-not-captured";
 
 export interface LiveRunEvidence {
-  schemaVersion: 1;
+  schemaVersion: 2;
   evidenceId: string;
   sourceCommit: string;
   gitTag: string;
@@ -56,8 +69,10 @@ export interface LiveRunEvidence {
   returnType: LiveRunReturnType;
   artifactType: LiveRunArtifactType;
   financialYear: string;
-  period: string;
+  period: LiveRunMonth | "FULL_FISCAL_YEAR" | "CUSTOM_SAME_FY_RANGE";
   scenario: LiveRunScenario;
+  /** Exact immutable targets for a custom same-FY range; month names only. */
+  selectedPeriods?: LiveRunMonth[];
   startedAt: string;
   completedAt: string;
   outcome: LiveRunOutcome;
@@ -72,14 +87,14 @@ export interface LiveRunEvidence {
 export interface LiveRunDownloadEvidence {
   actionId: string;
   returnType: LiveRunReturnType;
-  artifactType: "PDF" | "EXCEL";
+  artifactType: "PDF" | "EXCEL" | "NONE";
   financialYear: string;
   period: string;
   endpointClass: LiveRunEndpointClass;
   downloadPathClass: LiveRunDownloadPathClass;
   status:
     | "downloaded"
-    | "not-filed"
+    | "no-filed-record-observed"
     | "unavailable-on-portal"
     | "user-action-required"
     | "unsupported"
@@ -94,7 +109,7 @@ export interface LiveRunDownloadEvidence {
 export interface LiveRunEvidenceCounts {
   eligibleTargets: number;
   downloaded: number;
-  notFiled: number;
+  noFiledRecordObserved: number;
   manuallyObserved: number;
   blocked: number;
   failed: number;

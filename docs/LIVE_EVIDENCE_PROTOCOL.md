@@ -68,14 +68,14 @@ data and clearly labelled as synthetic.
 
 ## Brave Exploratory Run Summary
 
-For a one-month or full-year exploratory run, record:
+For a single-period, custom-range, or full-year exploratory run, record:
 
 - exact source commit and ZIP SHA-256;
 - browser name/version and clean-profile confirmation;
 - subject alias such as `SUBJECT-A`, never GSTIN/PAN/name;
 - return type, artifact type, financial year, and period scope;
-- scenario: `single-period` or `full-year`;
-- outcome counts: eligible targets, downloaded, not filed, manually observed,
+- scenario: `single-period`, `custom-range`, or `full-year`;
+- outcome counts: eligible targets, downloaded, no filed record observed, manually observed,
   blocked, failed, duplicates;
 - human verification checks;
 - service-worker and browser-restart checks for full-year runs;
@@ -107,6 +107,28 @@ pnpm run evidence:template -- \
   --browser Brave \
   --browser-version <version> \
   --browser-summary-captured \
+  --output .output/redacted-live-run.json
+```
+
+The validator accepts schema version 2 only. Version 2 records immutable custom
+same-FY targets and requires a redacted, target-bound result for every passing
+target, including a portal no-record observation. Do not reuse an older summary
+as beta evidence; generate a fresh v2 template from the exact candidate ZIP.
+
+For a custom same-FY range, use the range marker and both inclusive endpoints.
+The generator records the selected contiguous month names, not portal content:
+
+```sh
+pnpm run evidence:template -- \
+  --return-type GSTR-2B \
+  --artifact-type PDF_AND_EXCEL \
+  --financial-year 2025-26 \
+  --period CUSTOM_SAME_FY_RANGE \
+  --range-start July \
+  --range-end September \
+  --subject-alias SUBJECT-A \
+  --browser Chrome \
+  --browser-version <version> \
   --output .output/redacted-live-run.json
 ```
 

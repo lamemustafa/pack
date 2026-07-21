@@ -7,6 +7,7 @@ import type {
   LiveRunEvidenceCounts,
   LiveRunDownloadEvidence,
   LiveRunEvidenceLimitation,
+  LiveRunMonth,
   LiveRunEvidenceRedaction,
   LiveRunEvidenceValidationResult,
 } from "./live-run-evidence-types";
@@ -21,6 +22,7 @@ export type {
   LiveRunEvidenceRedaction,
   LiveRunEvidenceValidationResult,
   LiveRunOutcome,
+  LiveRunMonth,
   LiveRunReturnType,
   LiveRunScenario,
 } from "./live-run-evidence-types";
@@ -32,6 +34,7 @@ const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 const SUBJECT_ALIAS = /^SUBJECT-[A-Z0-9]{1,12}$/;
 const PERIODS = [
   "FULL_FISCAL_YEAR",
+  "CUSTOM_SAME_FY_RANGE",
   "April",
   "May",
   "June",
@@ -44,7 +47,11 @@ const PERIODS = [
   "January",
   "February",
   "March",
-];
+] as const;
+const MONTHS = PERIODS.filter(
+  (period): period is LiveRunMonth =>
+    period !== "FULL_FISCAL_YEAR" && period !== "CUSTOM_SAME_FY_RANGE",
+);
 const LIVE_RUN_EVIDENCE_KEYS = [
   "schemaVersion",
   "evidenceId",
@@ -60,6 +67,7 @@ const LIVE_RUN_EVIDENCE_KEYS = [
   "financialYear",
   "period",
   "scenario",
+  "selectedPeriods",
   "startedAt",
   "completedAt",
   "outcome",
@@ -74,7 +82,7 @@ const BROWSER_KEYS = ["name", "version"];
 const COUNT_KEYS = [
   "eligibleTargets",
   "downloaded",
-  "notFiled",
+  "noFiledRecordObserved",
   "manuallyObserved",
   "blocked",
   "failed",
@@ -137,7 +145,7 @@ const DOWNLOAD_PATH_CLASSES = [
 ] as const;
 const DOWNLOAD_STATUSES = [
   "downloaded",
-  "not-filed",
+  "no-filed-record-observed",
   "unavailable-on-portal",
   "user-action-required",
   "unsupported",
@@ -184,7 +192,7 @@ export function validateLiveRunEvidence(input: unknown): LiveRunEvidenceValidati
   if (!isRecord(input)) return { ok: false, errors: ["evidence must be an object"] };
 
   requireOnlyKeys(input, LIVE_RUN_EVIDENCE_KEYS, "evidence", errors);
-  requireExact(input.schemaVersion, 1, "schemaVersion", errors);
+  requireExact(input.schemaVersion, 2, "schemaVersion", errors);
   requireBoundedString(input.evidenceId, "evidenceId", errors, 8, 120);
   requirePattern(input.sourceCommit, HEX_40, "sourceCommit", errors);
   requireBoundedString(input.gitTag, "gitTag", errors, 2, 40);
@@ -199,8 +207,9 @@ export function validateLiveRunEvidence(input: unknown): LiveRunEvidenceValidati
   requireOneOf(input.artifactType, ["PDF", "EXCEL", "PDF_AND_EXCEL"], "artifactType", errors);
   requirePattern(input.financialYear, FINANCIAL_YEAR, "financialYear", errors);
   requireOneOf(input.period, PERIODS, "period", errors);
-  requireOneOf(input.scenario, ["single-period", "full-year"], "scenario", errors);
+  requireOneOf(input.scenario, ["single-period", "custom-range", "full-year"], "scenario", errors);
   validateScopeConsistency(input, errors);
+  validateSelectedPeriods(input, errors);
   requireIsoTimestamp(input.startedAt, "startedAt", errors);
   requireIsoTimestamp(input.completedAt, "completedAt", errors);
   validateTimeRange(input.startedAt, input.completedAt, errors);
@@ -252,7 +261,7 @@ function validateDownloadEvidence(
     );
     requireOneOf(
       entry.artifactType,
-      ["PDF", "EXCEL"],
+      ["PDF", "EXCEL", "NONE"],
       `downloadEvidence[${index}].artifactType`,
       errors,
     );
@@ -275,8 +284,17 @@ function validateDownloadEvidence(
       `downloadEvidence[${index}].downloadPathClass`,
       errors,
     );
-    validateDownloadEndpointPathConsistency(entry, evidence, index, errors);
+    validateDownloadEndpointPathConsistency(entry, index, errors);
     requireOneOf(entry.status, DOWNLOAD_STATUSES, `downloadEvidence[${index}].status`, errors);
+    if (entry.status === "downloaded" && entry.artifactType === "NONE") {
+      errors.push(`downloadEvidence[${index}].artifactType cannot be NONE for a downloaded target`);
+    }
+    if (
+      ["no-filed-record-observed", "unavailable-on-portal"].includes(String(entry.status)) &&
+      entry.artifactType !== "NONE"
+    ) {
+      errors.push(`downloadEvidence[${index}].artifactType must be NONE without an artifact`);
+    }
     requireOneOf(
       entry.askWhereToSave,
       ["on", "off", "unknown"],
@@ -325,6 +343,53 @@ function validatePassDownloadEvidenceReconciliation(
   ) {
     errors.push("pass evidence must include one unique period per downloaded target");
   }
+  const noFiledRecordPeriods = resolvedTargetPeriods(entries, "no-filed-record-observed");
+  if (
+    typeof evidence.counts.noFiledRecordObserved === "number" &&
+    noFiledRecordPeriods.size !== evidence.counts.noFiledRecordObserved
+  ) {
+    errors.push("pass evidence must include target-bound no-record observations");
+  }
+  const resolvedPeriods = new Set([...downloadedTargetPeriods, ...noFiledRecordPeriods]);
+  if (
+    typeof evidence.counts.eligibleTargets === "number" &&
+    resolvedPeriods.size !== evidence.counts.eligibleTargets
+  ) {
+    errors.push("pass evidence must include one target-bound result per eligible target");
+  }
+  if (evidence.scenario === "custom-range" && Array.isArray(evidence.selectedPeriods)) {
+    const selectedPeriods = new Set(
+      evidence.selectedPeriods.filter((period): period is string => typeof period === "string"),
+    );
+    if (evidence.counts.eligibleTargets !== selectedPeriods.size) {
+      errors.push("custom-range eligibleTargets must match selectedPeriods");
+    }
+    if (
+      resolvedPeriods.size !== selectedPeriods.size ||
+      [...selectedPeriods].some((period) => !resolvedPeriods.has(period)) ||
+      [...resolvedPeriods].some((period) => !selectedPeriods.has(period))
+    ) {
+      errors.push("pass custom-range evidence must include every selected target exactly once");
+    }
+  }
+  const statusByPeriod = new Map<string, Set<string>>();
+  entries.forEach((entry) => {
+    if (!isRecord(entry) || typeof entry.period !== "string" || typeof entry.status !== "string") {
+      return;
+    }
+    const statuses = statusByPeriod.get(entry.period) ?? new Set<string>();
+    statuses.add(entry.status);
+    statusByPeriod.set(entry.period, statuses);
+  });
+  if (
+    [...statusByPeriod.values()].some(
+      (statuses) =>
+        statuses.has("downloaded") &&
+        (statuses.has("no-filed-record-observed") || statuses.has("unavailable-on-portal")),
+    )
+  ) {
+    errors.push("pass evidence cannot assign conflicting results to one target period");
+  }
   const targetIdentities = new Set(
     downloadedEntries.map((entry) => `${String(entry.period)}:${String(entry.artifactType)}`),
   );
@@ -362,9 +427,19 @@ function validatePassDownloadEvidenceReconciliation(
   }
 }
 
+function resolvedTargetPeriods(entries: unknown[], status: string): Set<string> {
+  return new Set(
+    entries
+      .filter(
+        (entry): entry is Record<string, unknown> => isRecord(entry) && entry.status === status,
+      )
+      .map((entry) => entry.period)
+      .filter((period): period is string => typeof period === "string"),
+  );
+}
+
 function validateDownloadEndpointPathConsistency(
   entry: Record<string, unknown>,
-  evidence: Record<string, unknown>,
   index: number,
   errors: string[],
 ): void {
@@ -374,7 +449,7 @@ function validateDownloadEndpointPathConsistency(
   const endpoint = entry.endpointClass;
   const path = entry.downloadPathClass;
   if (endpoint === "unknown") {
-    if (evidence.outcome === "pass" || entry.status === "downloaded") {
+    if (entry.status === "downloaded") {
       errors.push(
         `downloadEvidence[${index}].endpointClass cannot be unknown for passed downloads`,
       );
@@ -406,10 +481,24 @@ function validateDownloadScopeConsistency(
   if (evidence.scenario === "single-period" && entry.period !== evidence.period) {
     errors.push(`downloadEvidence[${index}].period must match single-period evidence period`);
   }
-  if (evidence.artifactType === "PDF" && entry.artifactType !== "PDF") {
+  if (evidence.scenario === "custom-range") {
+    const selectedPeriods = evidence.selectedPeriods;
+    if (!Array.isArray(selectedPeriods) || !selectedPeriods.includes(entry.period as string)) {
+      errors.push(`downloadEvidence[${index}].period must be within custom-range selectedPeriods`);
+    }
+  }
+  if (
+    entry.status === "downloaded" &&
+    evidence.artifactType === "PDF" &&
+    entry.artifactType !== "PDF"
+  ) {
     errors.push(`downloadEvidence[${index}].artifactType must match PDF evidence`);
   }
-  if (evidence.artifactType === "EXCEL" && entry.artifactType !== "EXCEL") {
+  if (
+    entry.status === "downloaded" &&
+    evidence.artifactType === "EXCEL" &&
+    entry.artifactType !== "EXCEL"
+  ) {
     errors.push(`downloadEvidence[${index}].artifactType must match EXCEL evidence`);
   }
 }
@@ -450,6 +539,46 @@ function validateScopeConsistency(input: Record<string, unknown>, errors: string
   if (input.scenario === "single-period" && input.period === "FULL_FISCAL_YEAR") {
     errors.push("single-period evidence must use a month period");
   }
+  if (input.scenario === "single-period" && input.period === "CUSTOM_SAME_FY_RANGE") {
+    errors.push("single-period evidence must use a month period");
+  }
+  if (input.scenario === "custom-range" && input.period !== "CUSTOM_SAME_FY_RANGE") {
+    errors.push("custom-range evidence must use period CUSTOM_SAME_FY_RANGE");
+  }
+  if (input.scenario === "full-year" && input.period === "CUSTOM_SAME_FY_RANGE") {
+    errors.push("full-year evidence must use period FULL_FISCAL_YEAR");
+  }
+}
+
+function validateSelectedPeriods(input: Record<string, unknown>, errors: string[]): void {
+  const selected = input.selectedPeriods;
+  if (input.scenario !== "custom-range") {
+    if (selected !== undefined)
+      errors.push("selectedPeriods is only allowed for custom-range evidence");
+    return;
+  }
+  if (!Array.isArray(selected)) {
+    errors.push("custom-range evidence must include selectedPeriods");
+    return;
+  }
+  if (selected.length < 2)
+    errors.push("custom-range selectedPeriods must include at least two months");
+  if (selected.length >= MONTHS.length) {
+    errors.push("custom-range selectedPeriods must be shorter than a full fiscal year");
+  }
+  const indices = selected.map((month, index) => {
+    if (typeof month !== "string" || !MONTHS.includes(month as LiveRunMonth)) {
+      errors.push(`selectedPeriods[${index}] must be a financial-year month`);
+      return -1;
+    }
+    return MONTHS.indexOf(month as LiveRunMonth);
+  });
+  if (new Set(indices).size !== indices.length) {
+    errors.push("custom-range selectedPeriods cannot contain duplicate months");
+  }
+  if (indices.some((index, position) => position > 0 && index !== indices[position - 1]! + 1)) {
+    errors.push("custom-range selectedPeriods must be contiguous in financial-year order");
+  }
 }
 
 function validateCounts(input: unknown, outcome: unknown, errors: string[]): void {
@@ -462,8 +591,8 @@ function validateCounts(input: unknown, outcome: unknown, errors: string[]): voi
     requireNonNegativeInteger(input[field], `counts.${field}`, errors);
   }
   if (!hasOnlyNumberCounts(input)) return;
-  const reconciled = input.downloaded + input.notFiled + input.manuallyObserved;
-  const observed = reconciled + input.blocked + input.failed;
+  const reconciled = input.downloaded + input.noFiledRecordObserved;
+  const observed = reconciled + input.manuallyObserved + input.blocked + input.failed;
   if (outcome === "pass" && reconciled === 0) {
     errors.push("counts must include at least one reconciled target");
   } else if (observed === 0) {
@@ -476,6 +605,9 @@ function validateCounts(input: unknown, outcome: unknown, errors: string[]): voi
     if (input.blocked > 0) errors.push("pass evidence cannot include blocked targets");
     if (input.failed > 0) errors.push("pass evidence cannot include failed targets");
     if (input.duplicates > 0) errors.push("pass evidence cannot include duplicate targets");
+    if (input.manuallyObserved > 0) {
+      errors.push("pass evidence cannot treat manually observed targets as reconciled");
+    }
     if (input.eligibleTargets !== reconciled) {
       errors.push("pass evidence must reconcile every eligible target");
     }
@@ -709,7 +841,7 @@ function hasOnlyNumberCounts(
   return (
     typeof input.downloaded === "number" &&
     typeof input.eligibleTargets === "number" &&
-    typeof input.notFiled === "number" &&
+    typeof input.noFiledRecordObserved === "number" &&
     typeof input.manuallyObserved === "number" &&
     typeof input.blocked === "number" &&
     typeof input.failed === "number" &&

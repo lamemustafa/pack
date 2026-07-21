@@ -94,6 +94,7 @@ describe("live run evidence", () => {
     });
     const validGstr1Combined = validateLiveRunEvidence({
       ...createValidEvidence(),
+      ...singlePeriodPatch(),
       returnType: "GSTR-1",
       artifactType: "PDF_AND_EXCEL",
       financialYear: "2025-26",
@@ -138,6 +139,7 @@ describe("live run evidence", () => {
     const pdfOnly = createValidEvidence().downloadEvidence[0];
     const result = validateLiveRunEvidence({
       ...createValidEvidence(),
+      ...singlePeriodPatch(),
       returnType: "GSTR-1",
       artifactType: "PDF_AND_EXCEL",
       financialYear: "2025-26",
@@ -161,10 +163,76 @@ describe("live run evidence", () => {
     }
   });
 
+  it("accepts only contiguous custom-range targets and binds every passing result", () => {
+    const valid = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      ...singlePeriodPatch(),
+      period: "CUSTOM_SAME_FY_RANGE",
+      scenario: "custom-range",
+      selectedPeriods: ["April", "May", "June"],
+      counts: {
+        ...createValidEvidence().counts,
+        eligibleTargets: 3,
+        downloaded: 1,
+        noFiledRecordObserved: 2,
+      },
+      downloadEvidence: [
+        createValidEvidence().downloadEvidence[0],
+        ...(["May", "June"] as const).map((period) => noRecordEvidence(period)),
+      ],
+    });
+    const nonContiguous = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      ...singlePeriodPatch(),
+      period: "CUSTOM_SAME_FY_RANGE",
+      scenario: "custom-range",
+      selectedPeriods: ["April", "June"],
+      counts: {
+        ...createValidEvidence().counts,
+        eligibleTargets: 2,
+        downloaded: 1,
+        noFiledRecordObserved: 1,
+      },
+      downloadEvidence: [createValidEvidence().downloadEvidence[0], noRecordEvidence("June")],
+    });
+    const omittedTarget = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      ...singlePeriodPatch(),
+      period: "CUSTOM_SAME_FY_RANGE",
+      scenario: "custom-range",
+      selectedPeriods: ["April", "May", "June"],
+      counts: {
+        ...createValidEvidence().counts,
+        eligibleTargets: 2,
+        downloaded: 1,
+        noFiledRecordObserved: 1,
+      },
+      downloadEvidence: [createValidEvidence().downloadEvidence[0], noRecordEvidence("May")],
+    });
+
+    expect(valid).toMatchObject({ ok: true });
+    expect(nonContiguous.ok).toBe(false);
+    if (!nonContiguous.ok) {
+      expect(nonContiguous.errors).toContain(
+        "custom-range selectedPeriods must be contiguous in financial-year order",
+      );
+    }
+    expect(omittedTarget.ok).toBe(false);
+    if (!omittedTarget.ok) {
+      expect(omittedTarget.errors).toEqual(
+        expect.arrayContaining([
+          "custom-range eligibleTargets must match selectedPeriods",
+          "pass custom-range evidence must include every selected target exactly once",
+        ]),
+      );
+    }
+  });
+
   it("accepts redacted GSTR-2B PDF and Excel evidence metadata", () => {
     expect(
       validateLiveRunEvidence({
         ...createValidEvidence(),
+        ...singlePeriodPatch(),
         returnType: "GSTR-2B",
         artifactType: "PDF_AND_EXCEL",
         downloadEvidence: [
@@ -192,6 +260,7 @@ describe("live run evidence", () => {
     expect(
       validateLiveRunEvidence({
         ...createValidEvidence(),
+        ...singlePeriodPatch(),
         downloadEvidence: [
           {
             ...createValidEvidence().downloadEvidence[0],
@@ -229,7 +298,7 @@ describe("live run evidence", () => {
       counts: {
         ...createValidEvidence().counts,
         downloaded: 10,
-        notFiled: 2,
+        noFiledRecordObserved: 2,
       },
     });
 
@@ -241,25 +310,30 @@ describe("live run evidence", () => {
     }
   });
 
-  it("allows an all-not-filed pass without fabricated download evidence", () => {
+  it("requires target-bound evidence for every no-record observation", () => {
     const result = validateLiveRunEvidence({
       ...createValidEvidence(),
       counts: {
         ...createValidEvidence().counts,
         downloaded: 0,
-        notFiled: 12,
+        noFiledRecordObserved: 12,
       },
       downloadEvidence: [],
     });
 
-    expect(result).toMatchObject({ ok: true });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors).toContain(
+        "pass evidence must include target-bound no-record observations",
+      );
+    }
   });
 
   it("rejects duplicate downloaded target and action identities", () => {
     const first = createValidEvidence().downloadEvidence[0];
     const result = validateLiveRunEvidence({
       ...createValidEvidence(),
-      counts: { ...createValidEvidence().counts, downloaded: 2, notFiled: 10 },
+      counts: { ...createValidEvidence().counts, downloaded: 2, noFiledRecordObserved: 10 },
       downloadEvidence: [first, { ...first }],
     });
 
@@ -374,7 +448,7 @@ describe("live run evidence", () => {
       counts: {
         eligibleTargets: 0,
         downloaded: 0,
-        notFiled: 0,
+        noFiledRecordObserved: 0,
         manuallyObserved: 0,
         blocked: 0,
         failed: 0,
@@ -404,7 +478,7 @@ describe("live run evidence", () => {
         ...createValidEvidence().counts,
         eligibleTargets: 12,
         downloaded: 10,
-        notFiled: 1,
+        noFiledRecordObserved: 1,
       },
     });
     const singlePeriod = validateLiveRunEvidence({
@@ -419,7 +493,7 @@ describe("live run evidence", () => {
         ...createValidEvidence().counts,
         eligibleTargets: 3,
         downloaded: 1,
-        notFiled: 0,
+        noFiledRecordObserved: 0,
       },
     });
     const blocked = validateLiveRunEvidence({
@@ -428,7 +502,7 @@ describe("live run evidence", () => {
       counts: {
         eligibleTargets: 12,
         downloaded: 0,
-        notFiled: 0,
+        noFiledRecordObserved: 0,
         manuallyObserved: 0,
         blocked: 1,
         failed: 0,
@@ -466,7 +540,7 @@ describe("live run evidence", () => {
       counts: {
         eligibleTargets: 12,
         downloaded: 2,
-        notFiled: 0,
+        noFiledRecordObserved: 0,
         manuallyObserved: 0,
         blocked: 1,
         failed: 0,
@@ -495,7 +569,7 @@ describe("live run evidence", () => {
       counts: {
         eligibleTargets: 2,
         downloaded: 2,
-        notFiled: 0,
+        noFiledRecordObserved: 0,
         manuallyObserved: 0,
         blocked: 1,
         failed: 0,
@@ -524,7 +598,7 @@ describe("live run evidence", () => {
       counts: {
         eligibleTargets: 1,
         downloaded: 0,
-        notFiled: 0,
+        noFiledRecordObserved: 0,
         manuallyObserved: 0,
         blocked: 1,
         failed: 0,
@@ -552,7 +626,7 @@ describe("live run evidence", () => {
       counts: {
         eligibleTargets: 1,
         downloaded: 0,
-        notFiled: 0,
+        noFiledRecordObserved: 0,
         manuallyObserved: 0,
         blocked: 1,
         failed: 0,
@@ -691,7 +765,7 @@ describe("live run evidence", () => {
         failed: 0,
         blocked: 0,
         manuallyObserved: 0,
-        notFiled: 11,
+        noFiledRecordObserved: 11,
         downloaded: 1,
       },
     };
@@ -704,9 +778,45 @@ function withEvidenceText(text: string): Partial<LiveRunEvidence> {
   return { evidenceId: text };
 }
 
+function singlePeriodPatch(): Pick<LiveRunEvidence, "period" | "scenario" | "counts" | "checks"> {
+  const valid = createValidEvidence();
+  return {
+    period: "April",
+    scenario: "single-period",
+    counts: {
+      ...valid.counts,
+      eligibleTargets: 1,
+      downloaded: 1,
+      noFiledRecordObserved: 0,
+    },
+    checks: {
+      ...valid.checks,
+      serviceWorkerRestartResumeChecked: false,
+      browserRestartResumeChecked: false,
+    },
+  };
+}
+
+function noRecordEvidence(period: "May" | "June") {
+  return {
+    actionId: `no-record-${period.toLowerCase()}`,
+    returnType: "GSTR-3B" as const,
+    artifactType: "NONE" as const,
+    financialYear: "2026-27",
+    period,
+    endpointClass: "unknown" as const,
+    downloadPathClass: "captured-portal-request-unknown" as const,
+    status: "no-filed-record-observed" as const,
+    askWhereToSave: "unknown" as const,
+    filenameCollision: "unknown" as const,
+    multipleDownloadPrompt: "unknown" as const,
+    exactZipBuild: "b".repeat(64),
+  };
+}
+
 function createValidEvidence(): LiveRunEvidence {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     evidenceId: "pack-live-run-2026-06-26-subject-a-full-year",
     sourceCommit: "0123456789abcdef0123456789abcdef01234567",
     gitTag: "v0.1.1",
@@ -729,7 +839,7 @@ function createValidEvidence(): LiveRunEvidence {
     counts: {
       eligibleTargets: 12,
       downloaded: 1,
-      notFiled: 11,
+      noFiledRecordObserved: 11,
       manuallyObserved: 0,
       blocked: 0,
       failed: 0,
@@ -760,6 +870,32 @@ function createValidEvidence(): LiveRunEvidence {
         multipleDownloadPrompt: "not-shown",
         exactZipBuild: "b".repeat(64),
       },
+      ...[
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+        "January",
+        "February",
+        "March",
+      ].map((period) => ({
+        actionId: `no-record-${period.toLowerCase()}`,
+        returnType: "GSTR-3B" as const,
+        artifactType: "NONE" as const,
+        financialYear: "2026-27",
+        period,
+        endpointClass: "unknown" as const,
+        downloadPathClass: "captured-portal-request-unknown" as const,
+        status: "no-filed-record-observed" as const,
+        askWhereToSave: "unknown" as const,
+        filenameCollision: "unknown" as const,
+        multipleDownloadPrompt: "unknown" as const,
+        exactZipBuild: "b".repeat(64),
+      })),
     ],
     redaction: {
       containsGstin: false,

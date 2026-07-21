@@ -132,7 +132,7 @@ describe("live evidence template generator", () => {
     ).toBe(24);
   });
 
-  it("does not fabricate download rows when every passing target was not filed", () => {
+  it("writes target-bound no-record rows when a passing run has no artifact", () => {
     const evidence = runTemplate([
       "--return-type",
       "GSTR-1",
@@ -146,7 +146,7 @@ describe("live evidence template generator", () => {
       "pass",
       "--downloaded",
       "0",
-      "--not-filed",
+      "--no-filed-record-observed",
       "12",
       "--clean-test-profile",
       "--human-verified-account",
@@ -160,8 +160,16 @@ describe("live evidence template generator", () => {
     ]);
 
     expect(validateLiveRunEvidence(evidence)).toMatchObject({ ok: true });
-    expect(evidence.counts).toMatchObject({ downloaded: 0, notFiled: 12 });
-    expect(evidence.downloadEvidence).toEqual([]);
+    expect(evidence.counts).toMatchObject({ downloaded: 0, noFiledRecordObserved: 12 });
+    expect(evidence.downloadEvidence).toHaveLength(12);
+    expect(evidence.downloadEvidence).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          artifactType: "NONE",
+          status: "no-filed-record-observed",
+        }),
+      ]),
+    );
   });
 
   it("defaults GSTR-3B evidence to the capture-first runtime path", () => {
@@ -193,6 +201,82 @@ describe("live evidence template generator", () => {
         status: "downloaded",
       }),
     ]);
+  });
+
+  it("creates an immutable contiguous same-FY range template", () => {
+    const evidence = runTemplate([
+      "--return-type",
+      "GSTR-2B",
+      "--artifact-type",
+      "PDF_AND_EXCEL",
+      "--financial-year",
+      "2025-26",
+      "--period",
+      "CUSTOM_SAME_FY_RANGE",
+      "--range-start",
+      "July",
+      "--range-end",
+      "September",
+      "--subject-alias",
+      "SUBJECT-A",
+      ...stableArgs,
+    ]);
+
+    expect(validateLiveRunEvidence(evidence)).toMatchObject({ ok: true });
+    expect(evidence).toMatchObject({
+      period: "CUSTOM_SAME_FY_RANGE",
+      scenario: "custom-range",
+      selectedPeriods: ["July", "August", "September"],
+      counts: { eligibleTargets: 3, blocked: 3 },
+    });
+  });
+
+  it("rejects a non-contiguous or full-year custom range request", () => {
+    const reversed = spawnSync(
+      process.execPath,
+      [
+        scriptPath,
+        "--return-type",
+        "GSTR-1",
+        "--artifact-type",
+        "PDF",
+        "--financial-year",
+        "2025-26",
+        "--period",
+        "CUSTOM_SAME_FY_RANGE",
+        "--range-start",
+        "September",
+        "--range-end",
+        "July",
+        ...stableArgs,
+      ],
+      { cwd: rootDir, encoding: "utf8" },
+    );
+    const fullYear = spawnSync(
+      process.execPath,
+      [
+        scriptPath,
+        "--return-type",
+        "GSTR-1",
+        "--artifact-type",
+        "PDF",
+        "--financial-year",
+        "2025-26",
+        "--period",
+        "CUSTOM_SAME_FY_RANGE",
+        "--range-start",
+        "April",
+        "--range-end",
+        "March",
+        ...stableArgs,
+      ],
+      { cwd: rootDir, encoding: "utf8" },
+    );
+
+    expect(reversed.status).toBe(1);
+    expect(reversed.stderr).toContain("--range-end must be after --range-start");
+    expect(fullYear.status).toBe(1);
+    expect(fullYear.stderr).toContain("A full financial year must use --period FULL_FISCAL_YEAR.");
   });
 
   it("accepts explicit limitation codes for blocked evidence only", () => {

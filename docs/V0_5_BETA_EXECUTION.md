@@ -95,7 +95,9 @@ Government of India.
 1. Verify GSTR-1 PDF/Excel/combined, GSTR-3B PDF, and GSTR-2B PDF/Excel/
    combined for every scope exposed by the UI.
 2. Verify single period and custom same-FY range in clean Chrome and Brave
-   profiles from the exact ZIP.
+   profiles from the exact ZIP. Record the range using a fresh version-2
+   redacted evidence summary: every passing selected target, including a
+   no-record observation, needs a target-bound result row.
 3. Use an authorised QRMP/cadence case where available. Otherwise retain
    review-required handling and narrow the release claim.
 4. Test the archive destination preview against Chrome's actual requested

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "evidenceId": "pack-live-run-2026-06-26-subject-a-full-year",
   "sourceCommit": "0123456789abcdef0123456789abcdef01234567",
   "gitTag": "v0.1.1",
@@ -18,13 +18,13 @@
   "scenario": "full-year",
   "startedAt": "2026-06-26T08:00:00.000Z",
   "completedAt": "2026-06-26T08:30:00.000Z",
-  "outcome": "pass",
+  "outcome": "blocked",
   "counts": {
     "eligibleTargets": 12,
-    "downloaded": 10,
-    "notFiled": 2,
+    "downloaded": 0,
+    "noFiledRecordObserved": 0,
     "manuallyObserved": 0,
-    "blocked": 0,
+    "blocked": 1,
     "failed": 0,
     "duplicates": 0
   },
@@ -38,6 +38,22 @@
     "browserSummaryCaptured": true,
     "unexpectedNetworkDestinations": 0
   },
+  "downloadEvidence": [
+    {
+      "actionId": "manual-entry-required-1",
+      "returnType": "GSTR-3B",
+      "artifactType": "NONE",
+      "financialYear": "2026-27",
+      "period": "April",
+      "endpointClass": "unknown",
+      "downloadPathClass": "captured-portal-request-unknown",
+      "status": "user-action-required",
+      "askWhereToSave": "unknown",
+      "filenameCollision": "unknown",
+      "multipleDownloadPrompt": "unknown",
+      "exactZipBuild": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  ],
   "redaction": {
     "containsGstin": false,
     "containsPan": false,

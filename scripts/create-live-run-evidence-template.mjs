@@ -20,7 +20,8 @@ const MONTHS = [
   "February",
   "March",
 ];
-const PERIODS = ["FULL_FISCAL_YEAR", ...MONTHS];
+const CUSTOM_RANGE_PERIOD = "CUSTOM_SAME_FY_RANGE";
+const PERIODS = ["FULL_FISCAL_YEAR", CUSTOM_RANGE_PERIOD, ...MONTHS];
 const OUTCOMES = ["pass", "blocked", "failed"];
 const LIMITATIONS = [
   "clean-profile-not-verified",
@@ -51,8 +52,13 @@ try {
   const financialYear = requiredPattern(options, "financial-year", /^20\d{2}-\d{2}$/);
   const period = requiredOneOf(options, "period", PERIODS);
   const scenario =
-    options.scenario ?? (period === "FULL_FISCAL_YEAR" ? "full-year" : "single-period");
-  requireOneOfValue(scenario, ["single-period", "full-year"], "scenario");
+    options.scenario ??
+    (period === "FULL_FISCAL_YEAR"
+      ? "full-year"
+      : period === CUSTOM_RANGE_PERIOD
+        ? "custom-range"
+        : "single-period");
+  requireOneOfValue(scenario, ["single-period", "custom-range", "full-year"], "scenario");
   const outcome = options.outcome ?? "blocked";
   requireOneOfValue(outcome, OUTCOMES, "outcome");
 
@@ -65,16 +71,23 @@ try {
   if (scenario === "single-period" && period === "FULL_FISCAL_YEAR") {
     throw new Error("Single-period evidence must use a month period.");
   }
+  if (scenario === "single-period" && period === CUSTOM_RANGE_PERIOD) {
+    throw new Error("Single-period evidence must use a month period.");
+  }
+  if (scenario === "custom-range" && period !== CUSTOM_RANGE_PERIOD) {
+    throw new Error("Custom-range evidence must use --period CUSTOM_SAME_FY_RANGE.");
+  }
+  const selectedPeriods = selectedPeriodsFor({ options, scenario });
 
   const eligibleTargets = numberOption(
     options,
     "eligible-targets",
-    scenario === "full-year" ? 12 : 1,
+    scenario === "full-year" ? 12 : (selectedPeriods?.length ?? 1),
   );
   const counts = defaultCounts(outcome, eligibleTargets);
   for (const field of [
     "downloaded",
-    "not-filed",
+    "no-filed-record-observed",
     "manually-observed",
     "blocked",
     "failed",
@@ -124,7 +137,7 @@ try {
   const zipSha256 = options["zip-sha256"] ?? readChromeZipSha256(packageJson.version);
 
   const evidence = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     evidenceId:
       options["evidence-id"] ??
       `pack-live-run-${new Date(startedAt).toISOString().slice(0, 10)}-${String(
@@ -146,6 +159,7 @@ try {
     financialYear,
     period,
     scenario,
+    ...(selectedPeriods ? { selectedPeriods } : {}),
     startedAt,
     completedAt,
     outcome,
@@ -161,6 +175,7 @@ try {
       options,
       outcome,
       period,
+      selectedPeriods,
       returnType,
       zipSha256,
     }),
@@ -246,7 +261,7 @@ function defaultCounts(outcome, eligibleTargets) {
   if (outcome === "pass") {
     return {
       downloaded: eligibleTargets,
-      notFiled: 0,
+      noFiledRecordObserved: 0,
       manuallyObserved: 0,
       blocked: 0,
       failed: 0,
@@ -255,7 +270,7 @@ function defaultCounts(outcome, eligibleTargets) {
   }
   return {
     downloaded: 0,
-    notFiled: 0,
+    noFiledRecordObserved: 0,
     manuallyObserved: 0,
     blocked: outcome === "blocked" ? eligibleTargets : 0,
     failed: outcome === "failed" ? eligibleTargets : 0,
@@ -325,34 +340,127 @@ function createDownloadEvidenceRows({
   options,
   outcome,
   period,
+  selectedPeriods,
   returnType,
   zipSha256,
 }) {
-  const targetCount = outcome === "pass" ? counts.downloaded : 1;
+  const targetPeriods = scenarioPeriods({
+    period,
+    selectedPeriods,
+    targetCount: outcome === "pass" ? counts.eligibleTargets : 1,
+  });
+  if (outcome !== "pass") {
+    return targetPeriods.map((targetPeriod, targetIndex) =>
+      unresolvedTemplateRow({
+        financialYear,
+        options,
+        period: targetPeriod,
+        returnType,
+        targetIndex,
+        zipSha256,
+      }),
+    );
+  }
+  const targetStatuses = [
+    ...Array.from({ length: counts.downloaded }, () => "downloaded"),
+    ...Array.from({ length: counts.noFiledRecordObserved }, () => "no-filed-record-observed"),
+  ];
   const concreteArtifacts =
-    outcome === "pass" && artifactType === "PDF_AND_EXCEL"
+    artifactType === "PDF_AND_EXCEL"
       ? ["PDF", "EXCEL"]
       : [artifactType === "PDF_AND_EXCEL" ? "PDF" : artifactType];
-  return Array.from({ length: targetCount }, (_, targetIndex) =>
-    concreteArtifacts.map((concreteArtifact, artifactIndex) => ({
+  return targetPeriods.flatMap((targetPeriod, targetIndex) => {
+    const status = targetStatuses[targetIndex];
+    if (status !== "downloaded") {
+      return [
+        {
+          actionId: `manual-entry-required-${targetIndex + 1}`,
+          returnType,
+          artifactType: "NONE",
+          financialYear,
+          period: targetPeriod,
+          endpointClass: "unknown",
+          downloadPathClass: "captured-portal-request-unknown",
+          status,
+          askWhereToSave: "unknown",
+          filenameCollision: "unknown",
+          multipleDownloadPrompt: "unknown",
+          exactZipBuild: zipSha256,
+        },
+      ];
+    }
+    return concreteArtifacts.map((concreteArtifact, artifactIndex) => ({
       actionId: `manual-entry-required-${targetIndex * concreteArtifacts.length + artifactIndex + 1}`,
       returnType,
       artifactType: concreteArtifact,
       financialYear,
-      period: period === "FULL_FISCAL_YEAR" ? MONTHS[targetIndex % MONTHS.length] : period,
+      period: targetPeriod,
       endpointClass: defaultEndpointClass(returnType, concreteArtifact),
       downloadPathClass: "captured-portal-request-unknown",
-      status: outcome === "pass" ? "downloaded" : "user-action-required",
+      status: "downloaded",
       askWhereToSave: options["ask-where-to-save"] ?? "unknown",
       filenameCollision: options["filename-collision"] ?? "unknown",
       multipleDownloadPrompt: options["multiple-download-prompt"] ?? "unknown",
       exactZipBuild: zipSha256,
-    })),
-  ).flat();
+    }));
+  });
+}
+
+function unresolvedTemplateRow({
+  financialYear,
+  options,
+  period,
+  returnType,
+  targetIndex,
+  zipSha256,
+}) {
+  return {
+    actionId: `manual-entry-required-${targetIndex + 1}`,
+    returnType,
+    artifactType: "NONE",
+    financialYear,
+    period,
+    endpointClass: "unknown",
+    downloadPathClass: "captured-portal-request-unknown",
+    status: "user-action-required",
+    askWhereToSave: options["ask-where-to-save"] ?? "unknown",
+    filenameCollision: options["filename-collision"] ?? "unknown",
+    multipleDownloadPrompt: options["multiple-download-prompt"] ?? "unknown",
+    exactZipBuild: zipSha256,
+  };
+}
+
+function selectedPeriodsFor({ options, scenario }) {
+  const hasRangeOptions =
+    options["range-start"] !== undefined || options["range-end"] !== undefined;
+  if (scenario !== "custom-range") {
+    if (hasRangeOptions) {
+      throw new Error("--range-start and --range-end are only allowed for custom-range evidence.");
+    }
+    return undefined;
+  }
+  const rangeStart = requiredOneOf(options, "range-start", MONTHS);
+  const rangeEnd = requiredOneOf(options, "range-end", MONTHS);
+  const startIndex = MONTHS.indexOf(rangeStart);
+  const endIndex = MONTHS.indexOf(rangeEnd);
+  if (endIndex <= startIndex) {
+    throw new Error("--range-end must be after --range-start in financial-year order.");
+  }
+  const selectedPeriods = MONTHS.slice(startIndex, endIndex + 1);
+  if (selectedPeriods.length >= MONTHS.length) {
+    throw new Error("A full financial year must use --period FULL_FISCAL_YEAR.");
+  }
+  return selectedPeriods;
+}
+
+function scenarioPeriods({ period, selectedPeriods, targetCount }) {
+  if (selectedPeriods) return selectedPeriods;
+  if (period === "FULL_FISCAL_YEAR") return MONTHS.slice(0, targetCount);
+  return [period];
 }
 
 function toCamelCountKey(key) {
-  if (key === "not-filed") return "notFiled";
+  if (key === "no-filed-record-observed") return "noFiledRecordObserved";
   if (key === "manually-observed") return "manuallyObserved";
   return key;
 }
