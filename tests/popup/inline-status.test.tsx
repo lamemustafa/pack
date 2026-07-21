@@ -72,6 +72,36 @@ describe("inline filed-return recovery status", () => {
     expect(markup).not.toContain("The selected file was saved by your browser.");
   });
 
+  it("describes unavailable GSTR-2B as an observed statement result, not a filing claim", () => {
+    const summary: FiledReturnsFlowSummary = {
+      ...blockedSummary,
+      scope: { financialYear: "2026-27", period: "May", returnType: "GSTR-2B" },
+      status: "complete",
+      updatedAt: "2026-07-21T00:00:00.000Z",
+    };
+    const markup = renderToStaticMarkup(
+      <InlineStatus
+        busy={null}
+        onOpenPortal={vi.fn()}
+        onRestartTarget={vi.fn()}
+        onRetryFullFiscalYearTarget={vi.fn()}
+        onRetryTarget={vi.fn()}
+        presentation={{
+          badge: "Unavailable",
+          body: "Unavailable.",
+          icon: "–",
+          kind: "unavailable",
+          title: "Unavailable",
+          tone: "neutral",
+        }}
+        summary={summary}
+      />,
+    );
+
+    expect(markup).toContain("No statement record observed as of 2026-07-21");
+    expect(markup).not.toContain("never filed");
+  });
+
   it("offers an explicit retry for a blocked period", () => {
     expect(hasInlinePrimaryAction(blockedPresentation, blockedSummary)).toBe(true);
     const onRestartTarget = vi.fn();

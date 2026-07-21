@@ -29,7 +29,7 @@ export function toStepLimitReachedFlowStep(
 
 export function searchStepLimitReachedMessage(scope: FiledReturnsDownloadScope): string {
   const descriptor = filedReturnDescriptor(scope.returnType);
-  return `Pack selected the filed-return filters, but the GST Portal did not show a filed ${descriptor.label} row or download control before Pack's retry limit. If this period is not filed, no filed-return download is available. Otherwise wait for the portal results to finish loading, then start Pack again.`;
+  return `Pack selected the filed-return filters, but the GST Portal did not show a filed ${descriptor.label} row or download control before Pack's retry limit. If the portal has no filed record for this period, no download is available. Otherwise wait for the portal results to finish loading, then start Pack again.`;
 }
 
 export function detailStepLimitReachedMessage(scope: FiledReturnsDownloadScope): string {

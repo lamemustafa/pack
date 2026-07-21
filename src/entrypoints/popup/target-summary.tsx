@@ -7,6 +7,7 @@ import {
   isCustomFiledReturnsRangeScope,
   isFullFiscalYearScope,
 } from "../../core/filed-returns-scope";
+import { filedReturnsRecordNoun } from "../../core/filed-returns-return-types";
 
 export function DownloadTargetSummary({
   completionStatus,
@@ -29,11 +30,13 @@ export function DownloadTargetSummary({
   const runSteps = targetRunSteps(scope.returnType, fullFiscalYear || customRange);
 
   return (
-    <section className="target-strip" aria-label="Selected filed return download target">
+    <section className="target-strip" aria-label="Selected GST record download target">
       <div className="target-strip-header">
         <div>
           <p className="section-label">Ready to run</p>
-          <h2>{scope.returnType} local download</h2>
+          <h2>
+            {scope.returnType} {filedReturnsRecordNoun(scope.returnType)} download
+          </h2>
         </div>
         <span className={stateClassName}>{portalState}</span>
       </div>
@@ -83,8 +86,8 @@ function targetRunSteps(
 ): string[] {
   if (returnType === "GSTR-2B") {
     return fullFiscalYear
-      ? ["Open each period", "Capture portal files", "Save one ZIP"]
-      : ["Use visible page", "Capture portal files", "Save local ZIP"];
+      ? ["Open each statement period", "Capture portal files", "Save one ZIP"]
+      : ["Use visible statement", "Capture portal files", "Save local ZIP"];
   }
   if (fullFiscalYear) return ["Open each period", "Confirm filed page", "Save one ZIP"];
   return ["Use visible page", "Confirm target", "Save locally"];

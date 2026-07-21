@@ -13,6 +13,12 @@ export function supportsFullFiscalYearFiledReturnsRun(returnType: FiledReturnsRe
   return returnType === "GSTR-3B" || returnType === "GSTR-1" || returnType === "GSTR-2B";
 }
 
+export function filedReturnsRecordNoun(
+  returnType: FiledReturnsReturnType,
+): "filed return" | "statement" {
+  return returnType === "GSTR-2B" ? "statement" : "filed return";
+}
+
 export function filedReturnsScopeId(returnType: FiledReturnsReturnType): string {
   if (returnType === "GSTR-3B") return "gst-filed-returns-gstr3b-pdf-private-v0";
   if (returnType === "GSTR-1") return "gst-filed-returns-gstr1-pdf-private-v0";

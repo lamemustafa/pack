@@ -1,5 +1,6 @@
 import type { FiledReturnsFlowSummary } from "../../core/contracts";
 import { isMultiPeriodFiledReturnsScope } from "../../core/filed-returns-scope";
+import { filedReturnsRecordNoun } from "../../core/filed-returns-return-types";
 import type { PopupPresentationState } from "./presentation-state";
 import { RunProgress } from "./run-summary";
 
@@ -105,10 +106,12 @@ function getInlineStatusCopy(
     };
   }
   if (presentation.kind === "unavailable") {
+    const recordNoun = summary ? filedReturnsRecordNoun(summary.scope.returnType) : "filed return";
+    const observedAt = summary?.updatedAt?.slice(0, 10);
     return {
-      body: "The GST Portal did not report a filed return for this selection.",
+      body: `No ${recordNoun} record observed${observedAt ? ` as of ${observedAt}` : ""} for this selection.`,
       icon: "–",
-      title: "No filed return found",
+      title: `No ${recordNoun} record observed`,
       tone: "neutral",
     };
   }

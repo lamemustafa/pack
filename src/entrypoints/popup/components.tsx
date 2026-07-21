@@ -49,8 +49,8 @@ export function ScopeForm({
   return (
     <section id="download-details" className="flow-panel" aria-label="Download details">
       <div className="flow-panel-heading">
-        <h2>Download GST returns</h2>
-        <p>Choose a return and period to save through this browser.</p>
+        <h2>Download GST records</h2>
+        <p>Choose a return or statement and period to save through this browser.</p>
       </div>
       <div className="scope-form-grid">
         <div className="scope-row">

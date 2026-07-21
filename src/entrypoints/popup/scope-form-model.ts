@@ -73,7 +73,7 @@ export function returnTypeOptions() {
     return {
       value: returnType,
       label: returnType,
-      description: "ITC PDF + Excel",
+      description: "ITC statement PDF + Excel",
     };
   });
 }
