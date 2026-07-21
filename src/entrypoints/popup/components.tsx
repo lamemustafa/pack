@@ -13,6 +13,7 @@ import { canRetryFullFiscalYearZipWithoutPortal } from "./flow-summary";
 import {
   createScopeFormModel,
   getScopeActionCopy,
+  getScopeDestinationPreview,
   getScopeFormStartAction,
   getSinglePeriodFallback,
   returnTypeOptions,
@@ -40,6 +41,7 @@ export function ScopeForm({
   showPrimaryAction = true,
 }: ScopeFormProps) {
   const formModel = createScopeFormModel(scope);
+  const destinationPreview = getScopeDestinationPreview(scope);
   const multipleArtifactChoices = formModel.artifactOptions.length > 1;
   const controlsDisabled =
     busy !== null ||
@@ -214,6 +216,9 @@ export function ScopeForm({
       <p className="scope-note">
         Pack lists completed calendar months. The GST Portal determines whether a record is available;
         monthly or quarterly context can require review. A no-record result does not mean “never filed.”
+      </p>
+      <p className="scope-note">
+        {destinationPreview.label}: <code>{destinationPreview.value}</code>. {destinationPreview.detail}
       </p>
       {scopeLockedForReview && flowSummary?.currentPeriod ? (
         <p className="scope-note scope-note-warning" role="status">

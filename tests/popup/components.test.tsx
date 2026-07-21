@@ -98,6 +98,23 @@ describe("popup scope form", () => {
     expect(markup).toContain("A no-record result does not mean “never filed.”");
   });
 
+  it("previews Pack's requested download location without claiming Chrome's final folder", () => {
+    const markup = renderToStaticMarkup(
+      <ScopeForm
+        busy={null}
+        context={context}
+        scope={{ financialYear: "2026-27", period: "April", returnType: "GSTR-3B" }}
+        onScopeChange={vi.fn()}
+        onStart={vi.fn()}
+        showPrimaryAction={false}
+      />,
+    );
+
+    expect(markup).toContain("Requested relative path:");
+    expect(markup).toContain("complyeaze-pack/gst/2026-27/gstr-3b/april.pdf");
+    expect(markup).toContain("Chrome&#x27;s configured download location controls the final folder.");
+  });
+
   it("keeps scope controls usable while explaining the explicit recovery choice", () => {
     const markup = renderToStaticMarkup(
       <ScopeForm

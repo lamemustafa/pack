@@ -1,5 +1,10 @@
 import type { FiledReturnsDownloadScope, FiledReturnsFlowSummary } from "../../core/contracts";
 import {
+  safeArchiveDirectoryPreview,
+  safeFiledReturnDownloadFilename,
+  safeSinglePeriodZipFilename,
+} from "../../connectors/gst/filed-returns-download-path";
+import {
   FILED_RETURNS_ARTIFACT_TYPES,
   concreteFiledReturnsArtifactTypes,
   normaliseFiledReturnsArtifactType,
@@ -130,6 +135,38 @@ export function getScopeActionCopy(
   return {
     summary: "Create one ZIP for all eligible periods.",
     details,
+  };
+}
+
+export function getScopeDestinationPreview(scope: FiledReturnsDownloadScope): {
+  label: "Requested relative path" | "Requested ZIP filename";
+  value: string;
+  detail: string;
+} {
+  const artifactType = normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType);
+  const artifactTypes = concreteFiledReturnsArtifactTypes(artifactType);
+  if (isCustomFiledReturnsRangeScope(scope) || isFullFiscalYearScope(scope)) {
+    const archiveName = scope.rangeEndPeriod
+      ? `${scope.period.toLowerCase()}-to-${scope.rangeEndPeriod.toLowerCase()}.zip`
+      : "full-year.zip";
+    return {
+      label: "Requested relative path",
+      value: `${safeArchiveDirectoryPreview(scope)}/${archiveName}`,
+      detail:
+        "Pack creates the local archive code when the run starts; Chrome's configured download location controls the final folder.",
+    };
+  }
+  if (artifactTypes.length > 1) {
+    return {
+      label: "Requested ZIP filename",
+      value: safeSinglePeriodZipFilename(scope),
+      detail: "Chrome's configured download location controls the final folder.",
+    };
+  }
+  return {
+    label: "Requested relative path",
+    value: safeFiledReturnDownloadFilename(scope, artifactTypes[0] ?? "PDF"),
+    detail: "Chrome's configured download location controls the final folder.",
   };
 }
 

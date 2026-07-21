@@ -3,6 +3,7 @@ import type { FiledReturnsDownloadScope, FiledReturnsFlowSummary } from "../../s
 import { FULL_FISCAL_YEAR_PERIOD } from "../../src/core/filed-returns-scope";
 import {
   createScopeFormModel,
+  getScopeDestinationPreview,
   getScopeFormStartAction,
 } from "../../src/entrypoints/popup/scope-form-model";
 
@@ -57,6 +58,38 @@ describe("popup scope form model", () => {
 
     expect(model.rangeStartOptions.at(-1)?.value).toBe("February");
     expect(model.rangeStartOptions.some((option) => option.value === "March")).toBe(false);
+  });
+
+  it("previews the exact relative path requested for one artifact", () => {
+    expect(
+      getScopeDestinationPreview({
+        artifactType: "PDF",
+        financialYear: "2026-27",
+        period: "June",
+        returnType: "GSTR-3B",
+      }),
+    ).toEqual({
+      label: "Requested relative path",
+      value: "complyeaze-pack/gst/2026-27/gstr-3b/june.pdf",
+      detail: "Chrome's configured download location controls the final folder.",
+    });
+  });
+
+  it("previews a generated local archive code without inventing the final code", () => {
+    expect(
+      getScopeDestinationPreview({
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2025-26",
+        period: "October",
+        rangeEndPeriod: "January",
+        returnType: "GSTR-1",
+      }),
+    ).toEqual({
+      label: "Requested relative path",
+      value: "ComplyEaze-Pack/Archive-<local-code>/FY-2025-26/GSTR-1/october-to-january.zip",
+      detail:
+        "Pack creates the local archive code when the run starts; Chrome's configured download location controls the final folder.",
+    });
   });
 
   it("keeps the full workbench start action available when portal context is inactive", () => {
