@@ -586,6 +586,15 @@ describe("Pack local data clearing", () => {
                   downloadId: 41,
                   settledAt: "2026-07-21T00:00:01.000Z",
                 },
+                {
+                  actionId: "action-for-another-period",
+                  artifactType: "PDF",
+                  attempt: 1,
+                  revision: 1,
+                  state: "armed",
+                  targetId: "GSTR-3B:2026-27:June:PDF",
+                  armedAt: "2026-07-21T00:00:00.000Z",
+                },
               ],
             },
           }
@@ -620,6 +629,66 @@ describe("Pack local data clearing", () => {
         targetId: "GSTR-3B:2026-27:May:PDF",
       },
     });
+  });
+
+  it.each([
+    [
+      "a full fiscal-year scope",
+      {
+        financialYear: "2026-27",
+        period: FULL_FISCAL_YEAR_PERIOD,
+        returnType: "GSTR-3B",
+      } satisfies FiledReturnsFlowSummary["scope"],
+    ],
+    [
+      "a combined-artifact scope",
+      {
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-1",
+        artifactType: "PDF_AND_EXCEL",
+      } satisfies FiledReturnsFlowSummary["scope"],
+    ],
+  ])("does not expose an unrelated paused action for %s", async (_label, scope) => {
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      key === "pack:filed-returns-action-journal"
+        ? {
+            [key]: {
+              schemaVersion: "1.0",
+              entries: [
+                {
+                  actionId: "unrelated-action",
+                  artifactType: "PDF",
+                  attempt: 1,
+                  revision: 1,
+                  state: "armed",
+                  targetId: "GSTR-3B:2026-27:April:PDF",
+                  armedAt: "2026-07-21T00:00:00.000Z",
+                },
+              ],
+            },
+          }
+        : {},
+    );
+    browserMocks.storage.session.get.mockResolvedValue({
+      "pack:last-filed-returns-flow-summary": {
+        scope,
+        status: "blocked",
+        completedPeriods: [],
+        totalPeriods: 1,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-private-v0",
+          state: "blocked",
+          safeSignals: ["filed-returns-action-journal-review-required"],
+          safeMessage: "Paused.",
+        },
+      } satisfies FiledReturnsFlowSummary,
+    });
+
+    await expect(
+      readCurrentFiledReturnsFlowSummary({ storageKeys: filedReturnsCurrentStateStorageKeys }),
+    ).resolves.not.toHaveProperty("actionJournalRecovery");
   });
 
   it("keeps same-scope active-run recovery visible over a terminal summary", async () => {

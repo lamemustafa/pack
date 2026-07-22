@@ -2454,7 +2454,7 @@ describe("filed returns flow runner", () => {
             "filed-gstr3b-direct-download-path-built",
             "filed-gstr3b-direct-download-probe-accepted",
           ],
-          url: directUrl,
+          url: directUrl.toString(),
         },
       },
     ];
@@ -2521,7 +2521,7 @@ describe("filed returns flow runner", () => {
       conflictAction: "uniquify",
       filename: "complyeaze-pack/gst/2026-27/gstr-3b/may.pdf",
       saveAs: false,
-      url: directUrl,
+      url: directUrl.toString(),
     });
     const directObservationContext = vi.mocked(observeBrowserDownloadById).mock.calls.at(-1)?.[2];
     expect(directObservationContext?.trustedDownloadIds?.has(81)).toBe(true);
@@ -8113,7 +8113,7 @@ describe("filed returns flow runner", () => {
           directDownloadRequest: {
             actionId: message.payload.actionId,
             safeSignals: ["filed-gstr3b-direct-download-probe-accepted"],
-            url: directUrl,
+            url: directUrl.toString(),
           },
         };
       }
@@ -8140,7 +8140,7 @@ describe("filed returns flow runner", () => {
       conflictAction: "uniquify",
       filename: "complyeaze-pack/gst/2025-26/gstr-3b/march.pdf",
       saveAs: false,
-      url: directUrl,
+      url: directUrl.toString(),
     });
     expect(sendMessageToTabWithInjection.mock.calls.map(([, message]) => message.type)).toEqual([
       "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",

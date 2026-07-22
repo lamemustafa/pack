@@ -1,5 +1,10 @@
 import { browser } from "wxt/browser";
-import type { FiledReturnsFlowSummary, FiledReturnsFullFiscalYearLedger } from "../core/contracts";
+import type {
+  FiledReturnsDownloadScope,
+  FiledReturnsFlowSummary,
+  FiledReturnsFullFiscalYearLedger,
+} from "../core/contracts";
+import { normaliseFiledReturnsArtifactType } from "../core/filed-returns-artifacts";
 import {
   isFullFiscalYearScope,
   isWithinFiledReturnsAvailabilityFloor,
@@ -42,6 +47,7 @@ export async function readCurrentFiledReturnsFlowSummary(
   ) {
     const actionJournalRecovery = await readUnresolvedFiledReturnsActionRecovery(
       deps.storageKeys.actionJournal,
+      concreteActionTargetId(completionSummary.scope),
     );
     if (actionJournalRecovery) completionSummary = { ...completionSummary, actionJournalRecovery };
   }
@@ -73,6 +79,13 @@ export async function readCurrentFiledReturnsFlowSummary(
   if (isFullFiscalYearLedger(ledger)) return summariseFullFiscalYearLedger(ledger, deps.now?.());
 
   return completionSummary;
+}
+
+function concreteActionTargetId(scope: FiledReturnsDownloadScope): string | undefined {
+  if (isFullFiscalYearScope(scope)) return undefined;
+  const artifactType = normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType);
+  if (artifactType !== "PDF" && artifactType !== "EXCEL") return undefined;
+  return `${scope.returnType}:${scope.financialYear}:${scope.period}:${artifactType}`;
 }
 
 export function pauseFullFiscalYearSummary(

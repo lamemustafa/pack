@@ -70,7 +70,7 @@ describe("filed returns action journal", () => {
     expect(browserMocks.storage.local.set).not.toHaveBeenCalled();
   });
 
-  it("keeps an armed action blocking after a restart-like read", async () => {
+  it("keeps an armed action blocking only for its exact target after a restart-like read", async () => {
     browserMocks.storage.local.get.mockResolvedValue({
       [KEY]: {
         schemaVersion: "1.0",
@@ -89,13 +89,19 @@ describe("filed returns action journal", () => {
     });
 
     await expect(hasUnresolvedFiledReturnsAction(KEY)).resolves.toBe(true);
+    await expect(hasUnresolvedFiledReturnsAction(KEY, "target-1")).resolves.toBe(true);
+    await expect(hasUnresolvedFiledReturnsAction(KEY, "target-2")).resolves.toBe(false);
     await expect(
       armFiledReturnsAction(KEY, {
         actionId: "action-2",
         artifactType: "PDF",
         targetId: "target-2",
       }),
-    ).resolves.toBe("blocked");
+    ).resolves.toBe("armed");
+    expect(storedJournalAt(0).entries).toMatchObject([
+      { actionId: "action-1", state: "armed", targetId: "target-1" },
+      { actionId: "action-2", state: "armed", targetId: "target-2" },
+    ]);
   });
 
   it("reuses the same pre-dispatch action arm without creating a second action", async () => {
@@ -369,7 +375,7 @@ describe("filed returns action journal", () => {
     expect(browserMocks.storage.local.set).not.toHaveBeenCalled();
   });
 
-  it("offers recovery metadata only when one unresolved action is present", async () => {
+  it("offers recovery metadata only for an explicitly requested target", async () => {
     browserMocks.storage.local.get.mockResolvedValue({
       [KEY]: {
         schemaVersion: "1.0",
@@ -387,10 +393,51 @@ describe("filed returns action journal", () => {
       },
     });
 
-    await expect(readUnresolvedFiledReturnsActionRecovery(KEY)).resolves.toEqual({
+    await expect(readUnresolvedFiledReturnsActionRecovery(KEY)).resolves.toBeNull();
+    await expect(
+      readUnresolvedFiledReturnsActionRecovery(KEY, "GSTR-3B:2026-27:May:PDF"),
+    ).resolves.toEqual({
       actionId: "action-armed",
       expectedRevision: 1,
       targetId: "GSTR-3B:2026-27:May:PDF",
+    });
+  });
+
+  it("offers the exact target recovery when other paused actions exist", async () => {
+    browserMocks.storage.local.get.mockResolvedValue({
+      [KEY]: {
+        schemaVersion: "1.0",
+        entries: [
+          {
+            actionId: "action-may",
+            artifactType: "PDF",
+            attempt: 1,
+            revision: 1,
+            state: "armed",
+            targetId: "GSTR-3B:2026-27:May:PDF",
+            armedAt: "2026-07-21T00:00:00.000Z",
+          },
+          {
+            actionId: "action-june",
+            artifactType: "PDF",
+            attempt: 1,
+            revision: 2,
+            state: "evidence-bound",
+            targetId: "GSTR-3B:2026-27:June:PDF",
+            armedAt: "2026-07-21T00:00:00.000Z",
+            downloadId: 42,
+            settledAt: "2026-07-21T00:00:01.000Z",
+          },
+        ],
+      },
+    });
+
+    await expect(
+      readUnresolvedFiledReturnsActionRecovery(KEY, "GSTR-3B:2026-27:June:PDF"),
+    ).resolves.toEqual({
+      actionId: "action-june",
+      expectedRevision: 2,
+      targetId: "GSTR-3B:2026-27:June:PDF",
     });
   });
 });

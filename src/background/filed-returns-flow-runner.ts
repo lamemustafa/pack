@@ -115,7 +115,10 @@ export async function startFiledReturnsDownloadFlow(
   if (await hasUnresolvedFiledReturnsAction(deps.storageKeys.actionJournal, requestedTargetId)) {
     return unresolvedActionJournalResponse(
       scope,
-      await readUnresolvedFiledReturnsActionRecovery(deps.storageKeys.actionJournal),
+      await readUnresolvedFiledReturnsActionRecovery(
+        deps.storageKeys.actionJournal,
+        requestedTargetId,
+      ),
     );
   }
 

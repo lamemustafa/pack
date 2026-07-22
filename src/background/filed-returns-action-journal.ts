@@ -147,12 +147,15 @@ export async function clearVerifiedFiledReturnsActions(
 
 export async function readUnresolvedFiledReturnsActionRecovery(
   key: string | undefined,
+  requestedTargetId?: string,
 ): Promise<FiledReturnsActionJournalRecovery | null> {
-  if (!key) return null;
+  if (!key || !requestedTargetId) return null;
   const journal = await readJournal(key);
   if (!journal) return null;
   const unresolved = journal.entries.filter(
-    (entry) => entry.state === "armed" || entry.state === "evidence-bound",
+    (entry) =>
+      (entry.state === "armed" || entry.state === "evidence-bound") &&
+      entry.targetId === requestedTargetId,
   );
   if (unresolved.length !== 1) return null;
   const [entry] = unresolved;
@@ -190,10 +193,8 @@ function hasUnresolvedAction(
 ): boolean {
   return journal.entries.some(
     (entry) =>
-      entry.state === "armed" ||
-      entry.state === "evidence-bound" ||
-      (entry.state === "verified" &&
-        (requestedTargetId === undefined || entry.targetId === requestedTargetId)),
+      (requestedTargetId === undefined || entry.targetId === requestedTargetId) &&
+      (entry.state === "armed" || entry.state === "evidence-bound" || entry.state === "verified"),
   );
 }
 
