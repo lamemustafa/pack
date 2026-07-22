@@ -47,7 +47,7 @@ Government of India.
 | Full fiscal year    | Archive/recovery code is present, but the background deliberately pauses new full-FY dispatch. Retained saved-run state may only be inspected or discarded. | Do not advertise, unpause, or test it as an available feature until its dedicated gate passes.                                                             |
 | Ranges              | Single period and immutable same-FY custom-range planning are implemented.                                                                                  | Needs exact-ZIP browser coverage before Store/beta claims.                                                                                                 |
 | Storage/recovery    | Strict local schemas, quarantine, action journal, target review, and explicit resume confirmation are implemented.                                          | Unit/static proof does not replace service-worker and browser-restart evidence.                                                                            |
-| Archive UX          | Plan → Run → Results, local-processing acknowledgement, opaque archive paths, safe receipts, and requested-destination preview are implemented.             | Preview is a requested relative name/path; Chrome controls the final download folder.                                                                      |
+| Archive UX          | Plan → Run → Results, a non-blocking local-processing notice, opaque archive paths, safe receipts, and requested-destination preview are implemented.       | Preview is a requested relative name/path; the browser controls the final download folder.                                                                 |
 | Availability floors | The planner bounds GSTR-1/GSTR-3B from July 2017 and GSTR-2B from July 2020.                                                                                | These are implementation bounds, not a claim that any period has an artifact. Record an official-source capture before making a public availability claim. |
 
 ## Implementation Tranches
@@ -128,7 +128,7 @@ Create task-owned worktrees from the protected base and preserve the dependency
 order below.
 
 1. **Durability foundation:** target-bound completion, package-boundary checks,
-   acknowledgement, strict local-state quarantine, and action-journal changes.
+   non-blocking local-processing notice, strict local-state quarantine, and action-journal changes.
    Required reviewers: MV3 reliability, download/security, and privacy.
 2. **Archive workflow:** safe run receipts, immutable same-FY targets, opaque
    archive paths, explicit resume confirmation, return-versus-statement wording,

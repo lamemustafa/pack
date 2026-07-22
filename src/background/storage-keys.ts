@@ -4,7 +4,6 @@ export const PACK_LOCAL_STORAGE_KEYS = {
   fullFiscalYearLedger: "pack:full-fiscal-year-ledger",
   install: "pack:install",
   lastManifest: "pack:last-manifest",
-  localProcessingAcknowledgement: "pack:local-processing-acknowledgement",
   singlePeriodStaging: "pack:single-period-staging",
   stateMigration: "pack:filed-returns-state-migration",
   storageQuarantine: "pack:filed-returns-storage-quarantine",

@@ -258,14 +258,12 @@ export function ScopeFormAction({
   busy,
   context,
   flowSummary,
-  localProcessingAcknowledged = true,
   scope,
   onStart,
 }: {
   busy: string | null;
   context: PortalContext | null;
   flowSummary?: FiledReturnsFlowSummary | null;
-  localProcessingAcknowledged?: boolean;
   scope: FiledReturnsDownloadScope;
   onStart: () => void;
 }) {
@@ -275,17 +273,13 @@ export function ScopeFormAction({
   const portalSupported = context?.supported === true;
   const portalIndependentRetry = canRetryFullFiscalYearZipWithoutPortal(flowSummary);
   const portalReady = portalSupported || portalIndependentRetry;
-  const disabledReason = !localProcessingAcknowledged
-    ? "Acknowledge local processing before starting a live GST download."
-    : portalReady
-      ? null
-      : getPortalDisabledReason(context);
+  const disabledReason = portalReady ? null : getPortalDisabledReason(context);
 
   return (
     <ScopeActionPanel
       actionCopy={actionCopy}
       busy={busy === "start-filed-returns-flow"}
-      disabled={startAction.disabled || !portalReady || !localProcessingAcknowledged}
+      disabled={startAction.disabled || !portalReady}
       disabledReason={disabledReason}
       label={startAction.label}
       onStart={onStart}

@@ -72,7 +72,22 @@ export async function triggerDirectFiledReturnDownload({
   }
 
   const response = await resolveDirectDownloadRequestOnce(deps, tabId, target);
-  if (!response.ok) return response;
+  if (!response.ok) {
+    return withDirectDownloadDiagnostic(
+      {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: FILED_RETURNS_SCOPE_ID,
+          state: "blocked",
+          safeSignals: ["filed-gstr3b-direct-download-request-unavailable"],
+          safeMessage:
+            "Pack could not obtain the reviewed GSTR-3B download request. It did not start a portal download.",
+        },
+      },
+      target,
+    );
+  }
   if ("flowStep" in response) return withDirectDownloadDiagnostic(response, target);
   if ("downloadTrigger" in response) return directDownloadTriggerResponse(response, activePeriod);
   if (!("directDownloadRequest" in response)) return null;

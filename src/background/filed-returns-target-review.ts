@@ -236,6 +236,17 @@ export function canRetryFiledReturnsTargetThroughPortalClick(
   );
 }
 
+export function canRetryFiledReturnsTargetThroughDirectDownload(
+  review: FiledReturnsTargetReview,
+): boolean {
+  return (
+    review.scope.returnType === "GSTR-3B" &&
+    normaliseFiledReturnsArtifactType(review.scope.returnType, review.scope.artifactType) ===
+      "PDF" &&
+    canRetryFiledReturnsTargetThroughPortalClick(review)
+  );
+}
+
 async function persistResolvedTargetReviewSummary(
   flowSummary: FiledReturnsFlowSummary,
   deps: FiledReturnsTargetReviewDeps,
@@ -368,6 +379,9 @@ function targetReviewStep(review: FiledReturnsTargetReview): PortalFlowStepResul
       ...(canRetryFiledReturnsTargetThroughPortalClick(review)
         ? ["filed-returns-target-review-portal-click-available"]
         : []),
+      ...(canRetryFiledReturnsTargetThroughDirectDownload(review)
+        ? ["filed-returns-target-review-direct-download-available"]
+        : []),
       ...(review.safeSignals.includes("filed-returns-target-manually-observed")
         ? ["filed-returns-target-manually-observed"]
         : []),
@@ -410,6 +424,12 @@ function requiresTargetReview(step: PortalFlowStepResult): boolean {
   if (hasSinglePeriodCleanupFailure(step.safeSignals)) return true;
   if (hasExplicitPortalClickFallbackSignal(step.safeSignals)) return true;
   if (step.safeSignals.includes("filed-gstr1-excel-no-details-available")) return false;
+  if (
+    step.state !== "downloaded" &&
+    step.safeSignals.some((signal) => signal.startsWith("filed-gstr3b-direct-download-"))
+  ) {
+    return true;
+  }
   return (
     step.state === "download-unconfirmed" ||
     step.safeSignals.some((signal) => signal.endsWith("-main-world-capture-timeout")) ||

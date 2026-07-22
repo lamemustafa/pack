@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { FiledReturnsFlowSummary, PortalContext } from "../../src/core/contracts";
 import { FULL_FISCAL_YEAR_PERIOD } from "../../src/core/filed-returns-scope";
 import { ScopeForm, ScopeFormAction } from "../../src/entrypoints/popup/components";
-import { LocalProcessingAcknowledgement } from "../../src/entrypoints/popup/local-processing-acknowledgement";
+import { LocalProcessingNotice } from "../../src/entrypoints/popup/local-processing-notice";
 
 const context: PortalContext = {
   connectorId: "gst",
@@ -29,6 +29,16 @@ const targetReviewSummary: FiledReturnsFlowSummary = {
 };
 
 describe("popup scope form", () => {
+  it("states the local-processing boundary without requiring acknowledgement", () => {
+    const markup = renderToStaticMarkup(<LocalProcessingNotice />);
+
+    expect(markup).toContain("Selected GST files are processed locally.");
+    expect(markup).toContain("temporary browser-local staging");
+    expect(markup).toContain("does not transmit selected files");
+    expect(markup).toContain("Your browser controls the final Downloads folder.");
+    expect(markup).not.toContain("button");
+  });
+
   it("renders exposed GST artifact formats as an accessible radio group", () => {
     const markup = renderToStaticMarkup(
       <ScopeForm
@@ -184,29 +194,4 @@ describe("popup scope form", () => {
     expect(formMarkup).toMatch(/<input[^>]*disabled=""/);
   });
 
-  it("requires the local-processing acknowledgement before a live start", () => {
-    const markup = renderToStaticMarkup(
-      <ScopeFormAction
-        busy={null}
-        context={context}
-        localProcessingAcknowledged={false}
-        scope={{ financialYear: "2026-27", period: "April", returnType: "GSTR-3B" }}
-        onStart={vi.fn()}
-      />,
-    );
-
-    expect(markup).toContain('disabled=""');
-    expect(markup).toContain("Acknowledge local processing before starting a live GST download.");
-  });
-
-  it("shows the custody boundary before acknowledgement", () => {
-    const markup = renderToStaticMarkup(
-      <LocalProcessingAcknowledgement acknowledged={false} busy={false} onAcknowledge={vi.fn()} />,
-    );
-
-    expect(markup).toContain("Before the first live action");
-    expect(markup).toContain("Temporary bytes may be staged in this browser");
-    expect(markup).toContain("Chrome saves downloads separately");
-    expect(markup).toContain("I understand — continue");
-  });
 });

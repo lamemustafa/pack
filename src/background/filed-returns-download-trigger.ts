@@ -45,6 +45,7 @@ export async function triggerAndObserveFiledReturnDownload({
   activePeriod,
   artifactType = "PDF",
   deps,
+  forceDirectDownload = false,
   forcePortalClick = false,
   scope,
   tabId,
@@ -53,6 +54,7 @@ export async function triggerAndObserveFiledReturnDownload({
   activePeriod: string | null;
   artifactType?: FiledReturnsConcreteArtifactType;
   deps: FiledReturnsFlowMessagingDeps;
+  forceDirectDownload?: boolean;
   forcePortalClick?: boolean;
   scope: FiledReturnsDownloadScope;
   tabId: number;
@@ -64,7 +66,7 @@ export async function triggerAndObserveFiledReturnDownload({
   const shouldAttemptDirectDownload =
     artifactType === "PDF" &&
     !target.forcePortalClick &&
-    deps.preferDirectDownload &&
+    (forceDirectDownload || deps.preferDirectDownload) &&
     filedReturnDescriptor(scope.returnType).supportsDirectDownload;
 
   if (shouldAttemptDirectDownload) {
@@ -75,8 +77,36 @@ export async function triggerAndObserveFiledReturnDownload({
       tabId,
       target,
     });
-    if (directDownloadResponse && !shouldFallBackToPortalClick(directDownloadResponse)) {
+    if (
+      directDownloadResponse &&
+      (forceDirectDownload || !shouldFallBackToPortalClick(directDownloadResponse))
+    ) {
+      if (
+        forceDirectDownload &&
+        deps.persistTargetReview !== false &&
+        directDownloadResponse.ok &&
+        "flowStep" in directDownloadResponse
+      ) {
+        const flowSummary = await persistFiledReturnsTargetReview(
+          targetReviewScope(scope, artifactType),
+          directDownloadResponse.flowStep,
+          deps,
+        );
+        if (flowSummary) return { ...directDownloadResponse, flowSummary };
+      }
       return directDownloadResponse;
+    }
+    if (forceDirectDownload) {
+      const unavailableResponse = directDownloadUnavailableResponse(activePeriod, scope, target);
+      if (deps.persistTargetReview !== false) {
+        const flowSummary = await persistFiledReturnsTargetReview(
+          targetReviewScope(scope, artifactType),
+          unavailableResponse.flowStep,
+          deps,
+        );
+        if (flowSummary) return { ...unavailableResponse, flowSummary };
+      }
+      return unavailableResponse;
     }
     if (directDownloadResponse) target = { ...target, actionId: createActionId() };
   }
@@ -375,6 +405,31 @@ function unverifiedPeriodResponse(scope: FiledReturnsDownloadScope): FlowStepRes
         canResume: true,
       },
     },
+  };
+}
+
+function directDownloadUnavailableResponse(
+  activePeriod: string | null,
+  scope: FiledReturnsDownloadScope,
+  target: FiledReturnsDownloadTarget,
+): FlowStepResponse {
+  return {
+    ok: true,
+    flowStep: withFiledReturnsDownloadDiagnostic({
+      attemptClass: "extension-direct",
+      flowStep: {
+        connectorId: "gst",
+        scopeId: filedReturnScopeId(scope.returnType),
+        state: "blocked",
+        safeSignals: [
+          "filed-gstr3b-direct-download-unavailable",
+          ...(activePeriod ? [`filed-return-detail-period:${activePeriod}`] : []),
+        ],
+        safeMessage:
+          "Pack could not obtain a reviewed GSTR-3B download request. It did not start a portal download.",
+      },
+      target,
+    }),
   };
 }
 

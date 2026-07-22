@@ -33,9 +33,6 @@ export function usePackPopupController() {
   const [filedReturnsFlowSummary, setFiledReturnsFlowSummary] =
     React.useState<FiledReturnsFlowSummary | null>(null);
   const [busy, setBusy] = React.useState<string | null>(null);
-  const [localProcessingAcknowledged, setLocalProcessingAcknowledged] = React.useState<
-    boolean | null
-  >(null);
   const [receiptDownloadStatus, setReceiptDownloadStatus] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -43,8 +40,7 @@ export function usePackPopupController() {
       sendPackMessage({ type: "PACK_GET_CONTEXT" }),
       sendPackMessage({ type: "PACK_GET_FILED_RETURNS_OBSERVATION" }),
       sendPackMessage({ type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" }),
-      sendPackMessage({ type: "PACK_GET_LOCAL_PROCESSING_ACKNOWLEDGEMENT" }),
-    ]).then(([contextResponse, observationResponse, summaryResponse, acknowledgementResponse]) => {
+    ]).then(([contextResponse, observationResponse, summaryResponse]) => {
       if (observationResponse.ok && "observation" in observationResponse) {
         setFiledReturnsObservation(observationResponse.observation);
       }
@@ -63,16 +59,6 @@ export function usePackPopupController() {
         );
       } else {
         setStatus(contextResponse.ok ? "Unexpected Pack response." : contextResponse.error);
-      }
-      if (
-        acknowledgementResponse.ok &&
-        "localProcessingAcknowledgement" in acknowledgementResponse
-      ) {
-        setLocalProcessingAcknowledged(
-          acknowledgementResponse.localProcessingAcknowledgement !== null,
-        );
-      } else {
-        setLocalProcessingAcknowledged(false);
       }
     });
   }, []);
@@ -101,18 +87,6 @@ export function usePackPopupController() {
     }
   }, []);
 
-  const acknowledgeLocalProcessing = React.useCallback(async () => {
-    await withBusy("acknowledge-local-processing", async () => {
-      const response = await sendPackMessage({ type: "PACK_ACKNOWLEDGE_LOCAL_PROCESSING" });
-      if (response.ok && "localProcessingAcknowledgement" in response) {
-        setLocalProcessingAcknowledged(response.localProcessingAcknowledgement !== null);
-        setStatus("Local-processing boundary acknowledged.");
-      } else {
-        setStatus(response.ok ? "Unexpected Pack response." : response.error);
-      }
-    });
-  }, [withBusy]);
-
   const startFiledReturnsFlow = React.useCallback(async () => {
     setReceiptDownloadStatus(null);
     await withBusy("start-filed-returns-flow", async () => {
@@ -137,15 +111,18 @@ export function usePackPopupController() {
   }, [withBusy]);
 
   const retryFiledReturnsTarget = React.useCallback(
-    async (forcePortalClick = false) => {
+    async (mode: "direct-download" | "portal-click" | undefined = undefined) => {
       const recoveryScope = filedReturnsFlowSummary?.scope;
       if (!recoveryScope) return;
 
       await withBusy("retry-filed-returns-target", async () => {
         const response = await sendPackMessage({
-          type: forcePortalClick
-            ? "PACK_RETRY_FILED_RETURNS_PORTAL_CLICK"
-            : "PACK_RETRY_FILED_RETURNS_TARGET",
+          type:
+            mode === "direct-download"
+              ? "PACK_RETRY_FILED_RETURNS_DIRECT_DOWNLOAD"
+              : mode === "portal-click"
+                ? "PACK_RETRY_FILED_RETURNS_PORTAL_CLICK"
+                : "PACK_RETRY_FILED_RETURNS_TARGET",
           payload: recoveryScope,
         });
         applyFlowResponse(response);
@@ -291,12 +268,10 @@ export function usePackPopupController() {
 
   return {
     acknowledgeInterruptedRun,
-    acknowledgeLocalProcessing,
     completionStatus,
     context,
     downloadSinglePeriodReceipt,
     effectiveBusy,
-    localProcessingAcknowledged,
     filedReturnsObservation,
     recoverySummary,
     receiptDownloadBusy: busy === "download-filed-returns-receipt",

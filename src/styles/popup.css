@@ -98,39 +98,11 @@ html[data-pack-surface="popup"] #root {
   box-shadow: 0 0 0 3px #e3f3ec;
 }
 
-.local-processing-acknowledgement {
-  display: grid;
-  gap: 8px;
-  border: 1px solid #b8cbe0;
-  border-radius: 10px;
-  background: #f8fbff;
-  padding: 12px;
-}
-
-.local-processing-acknowledgement-kicker {
-  margin: 0;
-  color: #345b86;
-  font-size: 0.6875rem;
-  font-weight: 800;
-}
-
-.local-processing-acknowledgement h2 {
-  margin: 0;
-  color: #172033;
-  font-size: 0.9375rem;
-  line-height: 1.25;
-}
-
-.local-processing-acknowledgement p:not(.local-processing-acknowledgement-kicker) {
+.local-processing-notice {
   margin: 0;
   color: #41536b;
   font-size: 0.75rem;
   line-height: 1.42;
-}
-
-.local-processing-acknowledgement button {
-  justify-self: start;
-  margin-top: 2px;
 }
 
 .context-state {

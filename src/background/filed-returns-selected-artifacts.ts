@@ -36,12 +36,14 @@ import { toStepLimitReachedFlowStep } from "./filed-returns-step-limit";
 export async function triggerSelectedArtifacts({
   activePeriod,
   deps,
+  forceDirectDownload = false,
   forcePortalClick = false,
   scope,
   tabId,
 }: {
   activePeriod: string | null;
   deps: FiledReturnsFlowRunnerDeps;
+  forceDirectDownload?: boolean;
   forcePortalClick?: boolean;
   scope: FiledReturnsDownloadScope;
   tabId: number;
@@ -113,6 +115,7 @@ export async function triggerSelectedArtifacts({
       activePeriod,
       artifactType,
       deps: artifactDeps,
+      forceDirectDownload,
       forcePortalClick,
       scope,
       tabId,

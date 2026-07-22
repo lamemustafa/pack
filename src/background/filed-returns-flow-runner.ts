@@ -33,6 +33,7 @@ import {
 } from "./filed-returns-full-fiscal-year-run-state";
 import {
   clearFiledReturnsTargetReview,
+  canRetryFiledReturnsTargetThroughDirectDownload,
   canRetryFiledReturnsTargetThroughPortalClick,
   hasMalformedFiledReturnsTargetReview,
   noTargetReviewResponse,
@@ -263,11 +264,14 @@ export async function retryFullFiscalYearTargetDownloadFlow(
 export async function retryFiledReturnsTargetDownloadFlow(
   scope: FiledReturnsDownloadScope,
   deps: FiledReturnsFlowRunnerDeps,
-  options: { forcePortalClick?: boolean } = {},
+  options: { forceDirectDownload?: boolean; forcePortalClick?: boolean } = {},
 ): Promise<PackMessageResponse> {
   const targetReview = await readFiledReturnsTargetReview(scope, deps);
   if (!targetReview) return noTargetReviewResponse(scope);
   if (options.forcePortalClick && !canRetryFiledReturnsTargetThroughPortalClick(targetReview)) {
+    return responseForFiledReturnsTargetReview(targetReview);
+  }
+  if (options.forceDirectDownload && !canRetryFiledReturnsTargetThroughDirectDownload(targetReview)) {
     return responseForFiledReturnsTargetReview(targetReview);
   }
 
@@ -282,7 +286,10 @@ export async function retryFiledReturnsTargetDownloadFlow(
     return startSinglePeriodFiledReturnsDownloadFlow(
       scope,
       deps,
-      options.forcePortalClick ? { forcePortalClick: true } : {},
+      {
+        ...(options.forceDirectDownload ? { forceDirectDownload: true } : {}),
+        ...(options.forcePortalClick ? { forcePortalClick: true } : {}),
+      },
     );
   } finally {
     stopLeaseRenewal();

@@ -8,9 +8,9 @@ import { ScopeForm, ScopeFormAction } from "./components";
 import { canRetryFullFiscalYearZipWithoutPortal } from "./flow-summary";
 import { hasInlinePrimaryAction, InlineStatus } from "./inline-status";
 import { PackSummary } from "./pack-summary";
+import { LocalProcessingNotice } from "./local-processing-notice";
 import { getPopupPresentationState, type PopupPresentationState } from "./presentation-state";
 import { RecoveryActions, hasRecoveryActions } from "./recovery-actions";
-import { LocalProcessingAcknowledgement } from "./local-processing-acknowledgement";
 import { RunEvidencePanel } from "./run-evidence-panel";
 import { SinglePeriodReceipt } from "./single-period-receipt";
 import { usePackPopupController } from "./use-pack-popup-controller";
@@ -47,6 +47,7 @@ function App() {
           />
         </div>
       </header>
+      <LocalProcessingNotice />
 
       {showBuilder ? (
         <>
@@ -73,18 +74,12 @@ function App() {
                 showPrimaryAction={false}
               />
               <PackSummary scope={popup.scope} summary={popup.scopedFlowSummary} />
-              <LocalProcessingAcknowledgement
-                acknowledged={popup.localProcessingAcknowledged}
-                busy={popup.effectiveBusy === "acknowledge-local-processing"}
-                onAcknowledge={() => void popup.acknowledgeLocalProcessing()}
-              />
               {!statusOwnsPrimaryAction && !popup.recoverySummary ? (
                 <ScopeFormAction
                   busy={popup.effectiveBusy}
                   context={popup.context}
                   flowSummary={popup.scopedFlowSummary}
                   scope={popup.scope}
-                  localProcessingAcknowledged={popup.localProcessingAcknowledged === true}
                   onStart={() => {
                     setPlanningAnotherArchive(false);
                     void popup.startFiledReturnsFlow();
@@ -146,7 +141,7 @@ function App() {
           onStartFresh={() => void popup.startFreshFiledReturnsFlow()}
           onAcknowledgeInterruptedRun={() => void popup.acknowledgeInterruptedRun()}
           onRetryFullFiscalYearTarget={() => void popup.retryFullFiscalYearTarget()}
-          onRetryTarget={(forcePortalClick) => void popup.retryFiledReturnsTarget(forcePortalClick)}
+          onRetryTarget={(mode) => void popup.retryFiledReturnsTarget(mode)}
           onResolveFullFiscalYearTarget={(resolution) =>
             void popup.resolveFullFiscalYearTarget(resolution)
           }

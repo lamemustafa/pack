@@ -122,7 +122,7 @@ describe("popup full-year recovery actions", () => {
     );
   });
 
-  it("offers one explicit portal-download fallback after a capture failure", () => {
+  it("offers explicit Pack and portal download choices after a GSTR-3B capture failure", () => {
     const markup = renderToStaticMarkup(
       createElement(RecoveryActions, {
         busy: null,
@@ -135,6 +135,7 @@ describe("popup full-year recovery actions", () => {
             safeSignals: [
               "filed-returns-target-review-required",
               "filed-returns-target-review-portal-click-available",
+              "filed-returns-target-review-direct-download-available",
             ],
           },
         },
@@ -146,9 +147,10 @@ describe("popup full-year recovery actions", () => {
       }),
     );
 
+    expect(markup).toContain("Try Pack download");
     expect(markup).toContain("Download through GST Portal");
-    expect(markup).toContain("one new, target-bound GST Portal download");
-    expect(markup).toContain("browser Save dialog");
+    expect(markup).toContain("browser&#x27;s own filename and location");
+    expect(markup).toContain("cannot safely rename an uncorrelated portal file");
   });
 
   it("does not offer manual completion for an incomplete selected-file ZIP", () => {

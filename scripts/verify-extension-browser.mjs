@@ -393,7 +393,6 @@ async function assertSyntheticRestartFaultMatrix(browserContext, extensionId, se
       await popupPage.goto(`chrome-extension://${extensionId}/popup.html`, {
         waitUntil: "domcontentloaded",
       });
-      await acknowledgeLocalProcessingForFaultMatrix(popupPage);
       const startResponse = await sendPackMessage(popupPage, {
         type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",
         payload: {
@@ -585,27 +584,6 @@ async function countOpfsFiles(browserContext, extensionId) {
   } finally {
     await optionsPage.close();
   }
-}
-
-async function acknowledgeLocalProcessingForFaultMatrix(page) {
-  const deadline = Date.now() + 10_000;
-  let response = null;
-  while (Date.now() < deadline) {
-    response = await sendPackMessage(page, { type: "PACK_ACKNOWLEDGE_LOCAL_PROCESSING" });
-    if (response?.ok === true && response.localProcessingAcknowledgement) return;
-    await delay(150);
-  }
-  throw new Error(
-    `Browser fault matrix could not acknowledge Pack local processing: ${safeResponseShape(response)}`,
-  );
-}
-
-function safeResponseShape(response) {
-  return JSON.stringify({
-    hasAcknowledgement: Boolean(response?.localProcessingAcknowledgement),
-    hasError: typeof response?.error === "string",
-    ok: response?.ok === true,
-  });
 }
 
 function isStructurallyEqual(left, right) {

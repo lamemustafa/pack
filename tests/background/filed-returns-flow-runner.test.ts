@@ -2520,6 +2520,7 @@ describe("filed returns flow runner", () => {
           safeSignals: [
             "filed-returns-target-review-required",
             "filed-returns-target-review-portal-click-available",
+            "filed-returns-target-review-direct-download-available",
           ],
         },
         status: "blocked",
@@ -7986,6 +7987,135 @@ describe("filed returns flow runner", () => {
     expect(sendMessageToTabWithInjection).toHaveBeenCalledTimes(2);
     expect(browser.scripting.executeScript).not.toHaveBeenCalled();
     expect(browser.storage.local.remove).toHaveBeenCalledWith("target-review");
+  });
+
+  it("starts one Pack-controlled GSTR-3B download only after the explicit direct retry", async () => {
+    const scope = { financialYear: "2025-26", period: "March", returnType: "GSTR-3B" } as const;
+    const directUrl =
+      "https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=032026";
+    mockLocalStorageGet({
+      "target-review": {
+        schemaVersion: "1.0",
+        targetId: "GSTR-3B:2025-26:March",
+        status: "download-unconfirmed",
+        scope,
+        safeSignals: ["filed-gstr3b-blob-capture-failed"],
+        safeMessage: "Pack could not capture the portal-generated file.",
+        updatedAt: "2026-06-24T00:00:00.000Z",
+      },
+    });
+    const sendMessageToTabWithInjection = vi.fn<
+      FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
+    >(async (_tabId, message) => {
+      if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3") {
+        return filedReturnDownloadReady("March");
+      }
+      if (message.type === "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V3") {
+        return {
+          ok: true,
+          directDownloadRequest: {
+            actionId: message.payload.actionId,
+            safeSignals: ["filed-gstr3b-direct-download-probe-accepted"],
+            url: directUrl,
+          },
+        };
+      }
+      throw new Error(`Unexpected message: ${message.type}`);
+    });
+
+    const response = await retryFiledReturnsTargetDownloadFlow(
+      scope,
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+          targetReview: "target-review",
+        },
+      },
+      { forceDirectDownload: true },
+    );
+
+    expect(response).toMatchObject({ ok: true, flowStep: { state: "downloaded" } });
+    expect(browser.downloads.download).toHaveBeenCalledWith({
+      conflictAction: "uniquify",
+      filename: "complyeaze-pack/gst/2025-26/gstr-3b/march.pdf",
+      saveAs: false,
+      url: directUrl,
+    });
+    expect(sendMessageToTabWithInjection.mock.calls.map(([, message]) => message.type)).toEqual([
+      "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
+      "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V3",
+    ]);
+    expect(browser.storage.local.remove).toHaveBeenCalledWith("target-review");
+  });
+
+  it("keeps a direct retry failure in target review without clicking the portal fallback", async () => {
+    const scope = { financialYear: "2025-26", period: "March", returnType: "GSTR-3B" } as const;
+    mockLocalStorageGet({
+      "target-review": {
+        schemaVersion: "1.0",
+        targetId: "GSTR-3B:2025-26:March",
+        status: "download-unconfirmed",
+        scope,
+        safeSignals: ["filed-gstr3b-blob-capture-failed"],
+        safeMessage: "Pack could not capture the portal-generated file.",
+        updatedAt: "2026-06-24T00:00:00.000Z",
+      },
+    });
+    const sendMessageToTabWithInjection = vi.fn<
+      FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
+    >(async (_tabId, message) => {
+      if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3") {
+        return filedReturnDownloadReady("March");
+      }
+      if (message.type === "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V3") {
+        return {
+          ok: true,
+          flowStep: {
+            connectorId: "gst",
+            scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+            state: "blocked",
+            safeSignals: ["filed-gstr3b-direct-download-url-rejected"],
+            safeMessage: "Pack rejected the direct download request.",
+          },
+        };
+      }
+      throw new Error(`Unexpected message: ${message.type}`);
+    });
+
+    const response = await retryFiledReturnsTargetDownloadFlow(
+      scope,
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+          targetReview: "target-review",
+        },
+      },
+      { forceDirectDownload: true },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: { state: "blocked" },
+      flowSummary: { status: "blocked" },
+    });
+    expect(browser.downloads.download).not.toHaveBeenCalled();
+    expect(sendMessageToTabWithInjection.mock.calls.map(([, message]) => message.type)).toEqual([
+      "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
+      "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V3",
+    ]);
+    expect(browser.storage.local.set).toHaveBeenCalledWith({
+      "target-review": expect.objectContaining({
+        safeSignals: ["filed-gstr3b-direct-download-url-rejected"],
+      }),
+    });
   });
 
   it("does not turn unrelated ambiguous download evidence into a portal-click retry", async () => {

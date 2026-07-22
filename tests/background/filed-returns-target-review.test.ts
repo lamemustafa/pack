@@ -166,7 +166,7 @@ describe("filed returns target review", () => {
     expect(browserMocks.storage.local.set).not.toHaveBeenCalled();
   });
 
-  it("persists a capture failure and exposes only the explicit portal-click capability", async () => {
+  it("persists a GSTR-3B capture failure and exposes explicit Pack and portal retry choices", async () => {
     const summary = await persistFiledReturnsTargetReview(
       {
         financialYear: "2025-26",
@@ -189,6 +189,7 @@ describe("filed returns target review", () => {
         safeSignals: [
           "filed-returns-target-review-required",
           "filed-returns-target-review-portal-click-available",
+          "filed-returns-target-review-direct-download-available",
         ],
       },
     });

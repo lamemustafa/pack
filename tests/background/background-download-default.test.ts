@@ -6,10 +6,6 @@ const browserMocks = vi.hoisted(() => {
   const sessionValues: Record<string, unknown> = {};
   const resetLocalStorage = () => {
     for (const key of Object.keys(localValues)) delete localValues[key];
-    localValues["pack:local-processing-acknowledgement"] = {
-      version: "2026-07-21-v1",
-      acknowledgedAt: "2026-07-21T00:00:00.000Z",
-    };
   };
   const resetSessionStorage = () => {
     for (const key of Object.keys(sessionValues)) delete sessionValues[key];
@@ -243,25 +239,24 @@ describe("background filed returns download defaults", () => {
     });
   });
 
-  it("blocks a live start until the local-processing acknowledgement is current", async () => {
-    await browserMocks.storage.local.remove("pack:local-processing-acknowledgement");
-    await import("../../src/entrypoints/background");
-
-    const response = await sendBackgroundMessage({
-      type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",
-      payload: {
-        financialYear: "2026-27",
-        period: "May",
-        returnType: "GSTR-3B",
+  it("removes the obsolete local-processing acknowledgement during trusted storage startup", async () => {
+    await browserMocks.storage.local.set({
+      "pack:local-processing-acknowledgement": {
+        acknowledgedAt: "2026-07-21T00:00:00.000Z",
+        version: "1.0",
       },
     });
+    vi.clearAllMocks();
 
-    expect(response).toEqual({
-      ok: false,
-      error:
-        "Review and acknowledge Pack's local-processing boundary before starting or retrying a GST download.",
-    });
-    expect(browserMocks.tabs.sendMessage).not.toHaveBeenCalled();
+    await import("../../src/entrypoints/background");
+    await sendBackgroundMessage({ type: "PACK_PING" });
+
+    expect(browserMocks.storage.local.remove).toHaveBeenCalledWith(
+      "pack:local-processing-acknowledgement",
+    );
+    await expect(
+      browserMocks.storage.local.get("pack:local-processing-acknowledgement"),
+    ).resolves.toEqual({});
   });
 
   it("rejects a portal-click fallback that did not originate from the Pack popup", async () => {
@@ -299,6 +294,41 @@ describe("background filed returns download defaults", () => {
     );
 
     expect(response).toMatchObject({
+      ok: true,
+      flowStep: { safeSignals: ["filed-returns-target-review-not-found"] },
+    });
+    expect(browserMocks.tabs.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("accepts the Pack-controlled retry only from the Pack popup", async () => {
+    await import("../../src/entrypoints/background");
+
+    const rejected = await sendBackgroundMessage({
+      type: "PACK_RETRY_FILED_RETURNS_DIRECT_DOWNLOAD",
+      payload: {
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-3B",
+      },
+    });
+    expect(rejected).toEqual({ ok: false, error: "Invalid Pack sender." });
+
+    const popupResponse = await sendBackgroundMessage(
+      {
+        type: "PACK_RETRY_FILED_RETURNS_DIRECT_DOWNLOAD",
+        payload: {
+          financialYear: "2026-27",
+          period: "May",
+          returnType: "GSTR-3B",
+        },
+      },
+      {
+        id: browserMocks.runtime.id,
+        url: browserMocks.runtime.getURL("/popup.html"),
+      } satisfies Browser.runtime.MessageSender,
+    );
+
+    expect(popupResponse).toMatchObject({
       ok: true,
       flowStep: { safeSignals: ["filed-returns-target-review-not-found"] },
     });

@@ -7,7 +7,7 @@ export interface RecoveryActionsProps {
   summary: FiledReturnsFlowSummary | null;
   onAcknowledgeInterruptedRun: () => void;
   onRetryFullFiscalYearTarget: (confirmCurrentPortalAccount?: boolean) => void;
-  onRetryTarget: (forcePortalClick?: boolean) => void;
+  onRetryTarget: (mode?: "direct-download" | "portal-click") => void;
   onResolveFullFiscalYearTarget: (resolution: "manually-observed" | "cancelled") => void;
   onResolveTarget: (resolution: "manually-observed" | "cancelled") => void;
   onStartFresh: () => void;
@@ -38,6 +38,9 @@ export function RecoveryActions({
   const needsResumeConfirmation = signals.has("full-fiscal-year-resume-confirmation-required");
   const supportsPortalClickFallback = signals.has(
     "filed-returns-target-review-portal-click-available",
+  );
+  const supportsDirectDownloadFallback = signals.has(
+    "filed-returns-target-review-direct-download-available",
   );
   return (
     <details className="recovery-details" open>
@@ -71,14 +74,25 @@ export function RecoveryActions({
             ) : null}
             {supportsPortalClickFallback ? (
               <p className="muted">
-                Pack could not capture the portal-generated file automatically. This starts one new,
-                target-bound GST Portal download and may show the browser Save dialog.
+                Pack could not capture the portal-generated file automatically. A native portal
+                download may use the browser's own filename and location because Pack cannot safely
+                rename an uncorrelated portal file.
               </p>
+            ) : null}
+            {supportsDirectDownloadFallback ? (
+              <button
+                type="button"
+                disabled={retryDisabled}
+                onClick={() => onRetryTarget("direct-download")}
+              >
+                {busy === "retry-filed-returns-target" ? "Retrying..." : "Try Pack download"}
+              </button>
             ) : null}
             <button
               type="button"
+              className={supportsDirectDownloadFallback ? "secondary" : undefined}
               disabled={retryDisabled}
-              onClick={() => onRetryTarget(supportsPortalClickFallback)}
+              onClick={() => onRetryTarget(supportsPortalClickFallback ? "portal-click" : undefined)}
             >
               {busy === "retry-filed-returns-target"
                 ? "Retrying..."
