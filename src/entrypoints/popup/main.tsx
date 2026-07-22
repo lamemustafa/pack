@@ -8,6 +8,7 @@ import { ScopeForm, ScopeFormAction } from "./components";
 import { canRetryFullFiscalYearZipWithoutPortal } from "./flow-summary";
 import { hasInlinePrimaryAction, InlineStatus } from "./inline-status";
 import { PackSummary } from "./pack-summary";
+import { PopupActionStatus } from "./popup-action-status";
 import { LocalProcessingNotice } from "./local-processing-notice";
 import { getPopupPresentationState, type PopupPresentationState } from "./presentation-state";
 import { RecoveryActions, hasRecoveryActions } from "./recovery-actions";
@@ -86,6 +87,7 @@ function App() {
                   }}
                 />
               ) : null}
+              <PopupActionStatus message={popup.status} />
             </>
           ) : null}
           {phase === "run" || phase === "results" ? (

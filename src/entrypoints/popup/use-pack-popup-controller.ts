@@ -82,6 +82,10 @@ export function usePackPopupController() {
     setBusy(name);
     try {
       await action();
+    } catch {
+      setStatus(
+        "Pack could not complete this local browser action. Reload the extension and the GST Portal tab, then try again.",
+      );
     } finally {
       setBusy(null);
     }

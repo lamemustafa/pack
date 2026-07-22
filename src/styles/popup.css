@@ -105,6 +105,18 @@ html[data-pack-surface="popup"] #root {
   line-height: 1.42;
 }
 
+.popup-action-status {
+  margin: 0;
+  border: 1px solid #d8e1ec;
+  border-radius: 9px;
+  background: #f7f9fb;
+  color: #334b65;
+  font-size: 0.75rem;
+  font-weight: 650;
+  line-height: 1.35;
+  padding: 9px 10px;
+}
+
 .context-state {
   display: grid;
   grid-template-columns: 30px minmax(0, 1fr);
