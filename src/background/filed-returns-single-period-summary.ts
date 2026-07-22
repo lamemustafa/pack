@@ -18,6 +18,9 @@ export async function withPersistedSinglePeriodSummary(
   if (!shouldPersistSinglePeriodSummary) return response;
   if (response.flowSummary) {
     await persistProvidedSinglePeriodSummary(response.flowSummary, deps);
+    if (response.flowSummary.status === "complete") {
+      await clearVerifiedFiledReturnsActions(deps.storageKeys.actionJournal);
+    }
     return response;
   }
   const targetReview = response.flowStep.safeSignals.includes(

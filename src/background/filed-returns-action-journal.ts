@@ -73,6 +73,7 @@ export async function bindFiledReturnsActionDownload(
   now = new Date(),
 ): Promise<boolean> {
   if (!key) return true;
+  if (!isPositiveInt(downloadId)) return false;
   const journal = await readJournal(key);
   if (!journal) return false;
   let bound = false;

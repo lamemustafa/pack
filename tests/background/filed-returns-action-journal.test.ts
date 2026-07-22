@@ -47,6 +47,27 @@ describe("filed returns action journal", () => {
     });
   });
 
+  it("rejects an out-of-range browser download ID without changing the journal", async () => {
+    const journal = {
+      schemaVersion: "1.0" as const,
+      entries: [
+        {
+          actionId: "action-1",
+          artifactType: "PDF" as const,
+          attempt: 1,
+          revision: 1,
+          state: "armed" as const,
+          targetId: "target-1",
+          armedAt: "2026-07-21T00:00:00.000Z",
+        },
+      ],
+    };
+    browserMocks.storage.local.get.mockResolvedValue({ [KEY]: journal });
+
+    await expect(bindFiledReturnsActionDownload(KEY, "action-1", 1_000_001)).resolves.toBe(false);
+    expect(browserMocks.storage.local.set).not.toHaveBeenCalled();
+  });
+
   it("keeps an armed action blocking after a restart-like read", async () => {
     browserMocks.storage.local.get.mockResolvedValue({
       [KEY]: {

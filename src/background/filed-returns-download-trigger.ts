@@ -282,10 +282,11 @@ export async function triggerAndObserveFiledReturnDownload({
   const observedDownload = await observedDownloadPromise;
   if (
     usesBrowserDownloadJournal &&
-    !(await settleFiledReturnsAction(
+    !(await settleObservedPortalAction(
       deps.storageKeys.actionJournal,
       target.actionId,
-      "review-required",
+      observedDownload,
+      canObserveNativeSaveCompletion(target, expectedUrlSubstrings),
     ))
   ) {
     return actionJournalReviewResponse(scope, target);
@@ -371,7 +372,7 @@ async function reconcileNativeSaveCompletion({
 }): Promise<PackMessageResponse> {
   if (
     usesBrowserDownloadJournal &&
-    !(await settleObservedNativeSaveAction(
+    !(await settleVerifiedObservedPortalAction(
       deps.storageKeys.actionJournal,
       target.actionId,
       observedDownload,
@@ -420,7 +421,7 @@ async function reconcileNativeSaveCompletion({
   return { ok: true, flowStep, ...(flowSummary ? { flowSummary } : {}) };
 }
 
-async function settleObservedNativeSaveAction(
+async function settleVerifiedObservedPortalAction(
   actionJournalKey: string | undefined,
   actionId: string,
   observedDownload: Awaited<ReturnType<typeof observeFiledReturnDownload>["promise"]>,
@@ -434,11 +435,27 @@ async function settleObservedNativeSaveAction(
   }
 
   const downloadId = observedDownload.safeEvidence?.downloadId;
-  if (!Number.isInteger(downloadId)) {
+  if (!isPersistableBrowserDownloadId(downloadId)) {
     return settleFiledReturnsAction(actionJournalKey, actionId, "review-required");
   }
   if (!(await bindFiledReturnsActionDownload(actionJournalKey, actionId, downloadId))) return false;
   return settleFiledReturnsAction(actionJournalKey, actionId, "verified");
+}
+
+function isPersistableBrowserDownloadId(downloadId: unknown): downloadId is number {
+  return Number.isInteger(downloadId) && downloadId > 0 && downloadId <= 1_000_000;
+}
+
+async function settleObservedPortalAction(
+  actionJournalKey: string | undefined,
+  actionId: string,
+  observedDownload: Awaited<ReturnType<typeof observeFiledReturnDownload>["promise"]>,
+  canVerifyTargetBoundDownload: boolean,
+): Promise<boolean> {
+  if (!canVerifyTargetBoundDownload) {
+    return settleFiledReturnsAction(actionJournalKey, actionId, "review-required");
+  }
+  return settleVerifiedObservedPortalAction(actionJournalKey, actionId, observedDownload);
 }
 
 function journalTargetId(
