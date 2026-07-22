@@ -413,7 +413,7 @@ describe("popup full-year recovery actions", () => {
     expect(markup).not.toContain(">Download selected period<");
   });
 
-  it("explains single-period runs as active-tab downloads", () => {
+  it("explains single-period runs as selected-return downloads from the active tab", () => {
     const markup = renderToStaticMarkup(
       createElement(ScopeForm, {
         busy: null,
@@ -430,7 +430,8 @@ describe("popup full-year recovery actions", () => {
       }),
     );
 
-    expect(markup).toContain("Download one period from the active GST tab.");
+    expect(markup).toContain("Find and download the selected filed return in the GST Portal.");
+    expect(markup).toContain("Visible portal navigation when needed");
     expect(markup).toContain("Download May 2026-27 GSTR-3B PDF");
   });
 

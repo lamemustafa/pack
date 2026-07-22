@@ -73,6 +73,34 @@ describe("GST connector", () => {
     });
   });
 
+  it("recognizes a likely signed-in GST portal shell on a non-return page", () => {
+    const url = new URL("https://services.gst.gov.in/services/auth/help/faq");
+    const context = detectGstPortalContext(
+      url as unknown as Location,
+      "GST Help",
+      "Dashboard Services Returns Help and support Logout",
+    );
+
+    expect(context).toMatchObject({
+      connectorId: "gst",
+      supported: true,
+      origin: "https://services.gst.gov.in",
+      pageKind: "gst-portal",
+    });
+  });
+
+  it("does not treat a GST credential form as a signed-in portal shell", () => {
+    const url = new URL("https://services.gst.gov.in/services/login");
+    const context = detectGstPortalContext(
+      url as unknown as Location,
+      "GST Login",
+      "Dashboard Services Returns Login Username Password CAPTCHA",
+    );
+
+    expect(context.supported).toBe(false);
+    expect(context.requiredAction?.type).toBe("NAVIGATE_TO_SUPPORTED_PAGE");
+  });
+
   it("detects the filed GSTR-3B detail page as part of the private live scope", () => {
     const url = new URL("https://return.gst.gov.in/returns/auth/gstr3b");
     const context = detectGstPortalContext(url as unknown as Location, "GSTR-3B - Monthly Return");

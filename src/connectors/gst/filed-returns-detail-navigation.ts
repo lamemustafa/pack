@@ -29,23 +29,22 @@ export function filedReturnDetailIdentityMatchesScope(
   );
 }
 
-export async function returnFromMismatchedFiledGstr1Page(
+export async function returnFromMismatchedFiledReturnPage(
   documentRef: Document,
   scope: FiledReturnsDownloadScope,
   detailIdentity: ReturnType<typeof extractFiledReturnsDetailIdentity>,
 ): Promise<PortalFlowStepResult | null> {
-  if (scope.returnType !== "GSTR-1") return null;
   if (!shouldReturnFromMismatchedDetail(detailIdentity, scope)) return null;
 
   const navigation = await navigateToFiledReturnsPage(documentRef);
   if (navigation.state !== "candidate-not-found") {
     return {
       ...navigation,
-      scopeId: filedReturnScopeId("GSTR-1"),
-      safeSignals: ["filed-gstr1-scope-switch-navigation", ...navigation.safeSignals],
+      scopeId: filedReturnScopeId(scope.returnType),
+      safeSignals: ["filed-return-scope-switch-navigation", ...navigation.safeSignals],
       safeMessage:
         navigation.state === "clicked"
-          ? "Pack used the GST Portal navigation to leave the prior filed GSTR-1 period before selecting the requested period."
+          ? `Pack used the GST Portal navigation to leave the prior filed ${filedReturnDescriptor(scope.returnType).label} period before selecting the requested period.`
           : navigation.safeMessage,
     };
   }
@@ -54,6 +53,15 @@ export async function returnFromMismatchedFiledGstr1Page(
     returnFromMismatchedFiledGstr1Summary(documentRef, scope, detailIdentity) ??
     clickFiledReturnDetailBack(documentRef, scope)
   );
+}
+
+export async function returnFromMismatchedFiledGstr1Page(
+  documentRef: Document,
+  scope: FiledReturnsDownloadScope,
+  detailIdentity: ReturnType<typeof extractFiledReturnsDetailIdentity>,
+): Promise<PortalFlowStepResult | null> {
+  if (scope.returnType !== "GSTR-1") return null;
+  return returnFromMismatchedFiledReturnPage(documentRef, scope, detailIdentity);
 }
 
 export function clickFiledReturnDetailBack(
@@ -73,7 +81,7 @@ export function clickFiledReturnDetailBack(
       scopeId,
       state: "user-action-required",
       safeSignals: ["filed-return-detail-back-not-found"],
-      safeMessage: `Pack downloaded this filed ${descriptor.label}, but could not find the portal Back button to continue the run.`,
+      safeMessage: `Pack found a different filed ${descriptor.label} period, but could not find a safe portal navigation control to continue the run.`,
     };
   }
 

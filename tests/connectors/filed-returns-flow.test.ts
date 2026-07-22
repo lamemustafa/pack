@@ -7467,6 +7467,85 @@ describe("filed returns guided flow", () => {
     expect(downloadClicked).toBe(0);
   });
 
+  it("leaves an open GSTR-3B workspace through View Filed Returns before selecting another period", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <h1>GSTR-3B - Monthly Return</h1>
+          <p>Financial Year - 2025-26</p>
+          <p>Return Period - March</p>
+          <a data-filed-returns href="https://return.gst.gov.in/returns/auth/efiledReturns">View Filed Returns</a>
+          <button data-generic-download>DOWNLOAD</button>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/gstr3b",
+    );
+    makeLayoutVisible(documentRef);
+    let filedReturnsClicked = 0;
+    let genericDownloadClicked = 0;
+    documentRef.querySelector("[data-filed-returns]")?.addEventListener("click", () => {
+      filedReturnsClicked += 1;
+    });
+    documentRef.querySelector("[data-generic-download]")?.addEventListener("click", () => {
+      genericDownloadClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      ...DEFAULT_SCOPE,
+      period: "February",
+    });
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining([
+        "filed-return-scope-switch-navigation",
+        "filed-returns-candidate-clicked",
+      ]),
+    );
+    expect(filedReturnsClicked).toBe(1);
+    expect(genericDownloadClicked).toBe(0);
+  });
+
+  it("uses Filed Returns before a cross-type download from an open GSTR-3B workspace", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <h1>GSTR-3B - Monthly Return</h1>
+          <p>Financial Year - 2025-26</p>
+          <p>Return Period - March</p>
+          <a data-filed-returns href="https://return.gst.gov.in/returns/auth/efiledReturns">View Filed Returns</a>
+          <button data-generic-download>DOWNLOAD</button>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/gstr3b",
+    );
+    makeLayoutVisible(documentRef);
+    let filedReturnsClicked = 0;
+    let genericDownloadClicked = 0;
+    documentRef.querySelector("[data-filed-returns]")?.addEventListener("click", () => {
+      filedReturnsClicked += 1;
+    });
+    documentRef.querySelector("[data-generic-download]")?.addEventListener("click", () => {
+      genericDownloadClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      ...DEFAULT_SCOPE,
+      returnType: "GSTR-1",
+      period: "February",
+    });
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining([
+        "filed-return-scope-switch-navigation",
+        "filed-returns-candidate-clicked",
+      ]),
+    );
+    expect(filedReturnsClicked).toBe(1);
+    expect(genericDownloadClicked).toBe(0);
+  });
+
   it("handles scoped custom dropdown controls without leaving the filter form", async () => {
     const documentRef = createDocument(`
       <main>

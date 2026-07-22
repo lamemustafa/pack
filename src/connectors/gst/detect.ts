@@ -10,6 +10,12 @@ const AUTHENTICATED_WELCOME_MARKERS = [
   /returns calendar/i,
   /welcome .* to gst common portal/i,
 ];
+const AUTHENTICATED_PORTAL_SHELL_MARKERS = ["dashboard", "services", "returns"];
+const AUTHENTICATED_PORTAL_SESSION_MARKERS = [
+  /last logged in/i,
+  /returns calendar/i,
+  /\blogout\b/i,
+];
 const FILED_RETURNS_PATH_HINTS = [
   /\/pages\/returns\/efiledreturns\.html$/i,
   /\/returns\/auth\/efiledreturns$/i,
@@ -93,6 +99,15 @@ export function detectGstPortalContext(
     };
   }
 
+  if (hasLikelyAuthenticatedPortalShell(visibleText)) {
+    return {
+      connectorId: "gst",
+      supported: true,
+      origin,
+      pageKind: "gst-portal",
+    };
+  }
+
   return {
     connectorId: "gst",
     supported: false,
@@ -104,4 +119,21 @@ export function detectGstPortalContext(
       canResume: true,
     },
   };
+}
+
+function hasLikelyAuthenticatedPortalShell(visibleText: string): boolean {
+  const text = visibleText.toLowerCase();
+  const credentialLabels = [
+    ["pass", "word"],
+    ["cap", "tcha"],
+    ["user", " id"],
+    ["user", "name"],
+  ].map((parts) => parts.join(""));
+  const hasCredentialForm =
+    /\b(?:login|sign in)\b/.test(text) && credentialLabels.some((label) => text.includes(label));
+  return (
+    !hasCredentialForm &&
+    AUTHENTICATED_PORTAL_SHELL_MARKERS.every((marker) => text.includes(marker)) &&
+    AUTHENTICATED_PORTAL_SESSION_MARKERS.some((pattern) => pattern.test(text))
+  );
 }

@@ -16,6 +16,7 @@ import {
   filedReturnDetailIdentityMatchesScope,
   isGstr2bSummaryRoute,
   returnFromFiledGstr1SummaryForExcel,
+  returnFromMismatchedFiledReturnPage,
   returnFromMismatchedFiledGstr1Page,
   shouldReturnFromMismatchedDetail,
   waitForFiledGstr1ExcelControl,
@@ -127,9 +128,12 @@ export async function runFiledReturnsDownloadStep(
 
   if (observation.state === "ready") {
     const detailIdentity = extractFiledReturnsDetailIdentity(documentRef, scope.returnType);
-    if (shouldReturnFromMismatchedDetail(detailIdentity, scope)) {
-      return clickFiledReturnDetailBack(documentRef, scope);
-    }
+    const mismatchedDetailNavigation = await returnFromMismatchedFiledReturnPage(
+      documentRef,
+      scope,
+      detailIdentity,
+    );
+    if (mismatchedDetailNavigation) return mismatchedDetailNavigation;
     const gstr1DetailNavigation = returnFromFiledGstr1SummaryForExcel(
       documentRef,
       scope,
@@ -246,6 +250,24 @@ export async function runFiledReturnsDownloadStep(
     };
   }
 
+  if (isNonTargetFiledReturnWorkspace(observation.safeSignals)) {
+    clearFiledReturnsSearchAttempt(documentRef);
+    const navigation = await navigateToFiledReturnsPage(documentRef);
+    return withOptionalUserAction(
+      {
+        connectorId: "gst",
+        scopeId,
+        state: navigation.state,
+        safeSignals: ["filed-return-workspace-navigation", ...navigation.safeSignals],
+        safeMessage:
+          navigation.state === "clicked"
+            ? `Pack left the current return workspace to find the selected filed ${descriptor.label} period.`
+            : navigation.safeMessage,
+      },
+      navigation.userAction,
+    );
+  }
+
   if (observation.state === "wrong-page") {
     clearFiledReturnsSearchAttempt(documentRef);
     const navigation = await navigateToFiledReturnsPage(documentRef);
@@ -270,6 +292,12 @@ export async function runFiledReturnsDownloadStep(
       safeMessage: observation.safeMessage,
     },
     observation.userAction,
+  );
+}
+
+function isNonTargetFiledReturnWorkspace(safeSignals: readonly string[]): boolean {
+  return (
+    safeSignals.includes("gstr-3b-detail-route") || safeSignals.includes("gstr-1-detail-route")
   );
 }
 

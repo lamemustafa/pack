@@ -125,8 +125,12 @@ export function getScopeActionCopy(
       };
     }
     return {
-      summary: "Download one period from the active GST tab.",
-      details: ["Target-bound click", "Local browser download", "No portal data leaves the device"],
+      summary: "Find and download the selected filed return in the GST Portal.",
+      details: [
+        "Visible portal navigation when needed",
+        "Target-bound click",
+        "Local browser download",
+      ],
     };
   }
 
