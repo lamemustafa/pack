@@ -24,6 +24,7 @@ import {
   startMainWorldCapturedFiledReturnDownload,
 } from "./filed-returns-captured-download";
 import { triggerDirectFiledReturnDownload } from "./filed-returns-direct-download-trigger";
+import { targetUrlSubstrings } from "./filed-returns-direct-download-review";
 import { expectedDownloadForScope } from "./filed-returns-download-expectations";
 import { withFiledReturnsDownloadDiagnostic } from "./filed-returns-download-diagnostics";
 import { safeFiledReturnDownloadFilename } from "./filed-returns-download-filename";
@@ -32,7 +33,11 @@ import {
   withArtifactDownloadMessage,
   withDownloadedArtifactSignal,
 } from "./filed-returns-download-result";
-import { armFiledReturnsAction, settleFiledReturnsAction } from "./filed-returns-action-journal";
+import {
+  armFiledReturnsAction,
+  bindFiledReturnsActionDownload,
+  settleFiledReturnsAction,
+} from "./filed-returns-action-journal";
 import {
   runDownloadTriggerOnce,
   type FiledReturnsFlowMessagingDeps,
@@ -128,10 +133,15 @@ export async function triggerAndObserveFiledReturnDownload({
   }
   const filename = safeFiledReturnDownloadFilename(scope, artifactType);
   const trustedDownloadIds = new Set<number>();
+  // Portal-click downloads receive no extension-owned download ID. Only the
+  // reviewed GSTR-3B endpoint and its selected return-period marker can bind
+  // a native Save completion to this armed action. These values remain in
+  // memory and are never persisted with the target-review record.
+  const expectedUrlSubstrings = targetUrlSubstrings(scope);
   const observationContext = {
     ...expectedDownloadForScope(scope, artifactType),
     armedAt,
-    expectedUrlSubstrings: [],
+    expectedUrlSubstrings,
     ignoredFilenames: [filename],
     trustedDownloadIds,
   };
@@ -140,7 +150,10 @@ export async function triggerAndObserveFiledReturnDownload({
     observationContext,
     filename,
   );
-  const detailDownloadObservation = target.forcePortalClick
+  const detailDownloadObservation = canObserveNativeSaveCompletion(
+    target,
+    expectedUrlSubstrings,
+  )
     ? observeFiledReturnDownload(observationContext, targetBoundPortalClickObservationTimeoutMs())
     : observeFiledReturnDownload(observationContext);
   const observedDownloadPromise = detailDownloadObservation.promise.finally(() => {
@@ -162,8 +175,6 @@ export async function triggerAndObserveFiledReturnDownload({
     });
   }
   if (triggerResponse.ok && "mainWorldCaptureRequest" in triggerResponse) {
-    detailDownloadObservation.stop();
-    detailDownloadFilenameSuggestion.stop();
     const captureResponse = await startMainWorldCapturedFiledReturnDownload({
       activePeriod,
       armedAt,
@@ -175,6 +186,22 @@ export async function triggerAndObserveFiledReturnDownload({
       target,
       triggerStep: triggerResponse.downloadTrigger,
     });
+    if (canReconcileNativeSaveCompletion(captureResponse, deps, expectedUrlSubstrings)) {
+      const observedDownload = await observedDownloadPromise;
+      return reconcileNativeSaveCompletion({
+        activePeriod,
+        artifactType,
+        captureResponse,
+        deps,
+        observedDownload,
+        scope,
+        target,
+        triggerStep: triggerResponse.downloadTrigger,
+        usesBrowserDownloadJournal,
+      });
+    }
+    detailDownloadObservation.stop();
+    detailDownloadFilenameSuggestion.stop();
     if (usesBrowserDownloadJournal && captureResponse.ok && "flowStep" in captureResponse) {
       if (captureResponse.flowStep.state !== "downloaded") {
         await settleFiledReturnsAction(
@@ -294,6 +321,124 @@ export async function triggerAndObserveFiledReturnDownload({
     flowStep,
     ...(flowSummary ? { flowSummary } : {}),
   };
+}
+
+function canObserveNativeSaveCompletion(
+  target: FiledReturnsDownloadTarget,
+  expectedUrlSubstrings: readonly string[],
+): boolean {
+  return (
+    target.returnType === "GSTR-3B" &&
+    target.artifactType === "PDF" &&
+    expectedUrlSubstrings.length > 0
+  );
+}
+
+function canReconcileNativeSaveCompletion(
+  response: PackMessageResponse,
+  deps: FiledReturnsFlowMessagingDeps,
+  expectedUrlSubstrings: readonly string[],
+): response is Extract<PackMessageResponse, { ok: true; flowStep: PortalFlowStepResult }> {
+  return Boolean(
+    !deps.stageCapturedDownloads &&
+      expectedUrlSubstrings.length > 0 &&
+      response.ok &&
+      "flowStep" in response &&
+      response.flowStep.safeSignals.some((signal) => signal.endsWith("-main-world-capture-timeout")),
+  );
+}
+
+async function reconcileNativeSaveCompletion({
+  activePeriod,
+  artifactType,
+  captureResponse,
+  deps,
+  observedDownload,
+  scope,
+  target,
+  triggerStep,
+  usesBrowserDownloadJournal,
+}: {
+  activePeriod: string | null;
+  artifactType: FiledReturnsConcreteArtifactType;
+  captureResponse: Extract<PackMessageResponse, { ok: true; flowStep: PortalFlowStepResult }>;
+  deps: FiledReturnsFlowMessagingDeps;
+  observedDownload: Awaited<ReturnType<typeof observeFiledReturnDownload>["promise"]>;
+  scope: FiledReturnsDownloadScope;
+  target: FiledReturnsDownloadTarget;
+  triggerStep: PortalFlowStepResult;
+  usesBrowserDownloadJournal: boolean;
+}): Promise<PackMessageResponse> {
+  if (
+    usesBrowserDownloadJournal &&
+    !(await settleObservedNativeSaveAction(
+      deps.storageKeys.actionJournal,
+      target.actionId,
+      observedDownload,
+    ))
+  ) {
+    return actionJournalReviewResponse(scope, target);
+  }
+
+  const flowStep = withFiledReturnsDownloadDiagnostic({
+    attemptClass: "portal-click",
+    flowStep: withArtifactDownloadMessage(
+      withDownloadedArtifactSignal(
+        mergeFlowStepWithDownloadObservation(
+          {
+            ...triggerStep,
+            safeSignals: Array.from(
+              new Set([
+                ...triggerStep.safeSignals,
+                ...captureResponse.flowStep.safeSignals.filter(
+                  (signal) =>
+                    !signal.endsWith("-main-world-capture-timeout") &&
+                    !signal.endsWith("-blob-capture-failed"),
+                ),
+                "filed-return-native-save-capture-fallback",
+                "filed-return-native-save-completion-observed",
+                ...(activePeriod ? [`filed-return-detail-period:${activePeriod}`] : []),
+              ]),
+            ),
+            safeMessage:
+              "Pack could not capture the portal-generated file locally, so it waited for the browser to complete the target-bound portal download.",
+          },
+          observedDownload,
+        ),
+        artifactType,
+      ),
+      scope,
+      artifactType,
+    ),
+    safeEvidence: observedDownload.safeEvidence,
+    target,
+  });
+  const flowSummary =
+    deps.persistTargetReview === false
+      ? null
+      : await persistFiledReturnsTargetReview(targetReviewScope(scope, artifactType), flowStep, deps);
+  return { ok: true, flowStep, ...(flowSummary ? { flowSummary } : {}) };
+}
+
+async function settleObservedNativeSaveAction(
+  actionJournalKey: string | undefined,
+  actionId: string,
+  observedDownload: Awaited<ReturnType<typeof observeFiledReturnDownload>["promise"]>,
+): Promise<boolean> {
+  if (observedDownload.state !== "completed") {
+    return settleFiledReturnsAction(
+      actionJournalKey,
+      actionId,
+      observedDownload.state === "failed" ? "failed" : "review-required",
+    );
+  }
+
+  const downloadId = observedDownload.safeEvidence?.downloadId;
+  if (!Number.isInteger(downloadId)) {
+    return settleFiledReturnsAction(actionJournalKey, actionId, "review-required");
+  }
+  if (!(await bindFiledReturnsActionDownload(actionJournalKey, actionId, downloadId))) return false;
+  return settleFiledReturnsAction(actionJournalKey, actionId, "verified");
 }
 
 function journalTargetId(

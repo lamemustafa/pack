@@ -2379,7 +2379,6 @@ describe("filed returns flow runner", () => {
       }
       return response;
     });
-
     const response = await startFiledReturnsDownloadFlow(
       {
         financialYear: "2026-27",
@@ -2445,7 +2444,7 @@ describe("filed returns flow runner", () => {
     ]);
   });
 
-  it("does not re-click GSTR-3B after main-world capture times out", async () => {
+  it("reconciles a target-bound native GSTR-3B Save completion after capture times out", async () => {
     vi.mocked(browser.scripting.executeScript).mockResolvedValueOnce([
       {
         result: {
@@ -2512,20 +2511,22 @@ describe("filed returns flow runner", () => {
     expect(response).toMatchObject({
       ok: true,
       flowStep: {
-        state: "blocked",
-        safeSignals: expect.arrayContaining(["filed-gstr3b-main-world-capture-timeout"]),
+        state: "downloaded",
+        safeSignals: expect.arrayContaining([
+          "filed-return-native-save-capture-fallback",
+          "filed-return-native-save-completion-observed",
+          "browser-download-completed",
+        ]),
       },
-      flowSummary: {
-        flowStep: {
-          safeSignals: [
-            "filed-returns-target-review-required",
-            "filed-returns-target-review-portal-click-available",
-            "filed-returns-target-review-direct-download-available",
-          ],
-        },
-        status: "blocked",
-      },
+      flowSummary: { status: "complete" },
     });
+    expect(observeNextBrowserDownload).toHaveBeenCalledWith(
+      browser.downloads,
+      expect.objectContaining({
+        expectedUrlSubstrings: ["/returns/auth/api/gstr3b/getgenpdf", "rtn_prd=052026"],
+      }),
+      120_000,
+    );
     expect(sendMessageToTabWithInjection.mock.calls.map(([, message]) => message.type)).toEqual([
       "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
       "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
@@ -5298,8 +5299,9 @@ describe("filed returns flow runner", () => {
     expect(observeNextBrowserDownload).toHaveBeenCalledWith(
       browser.downloads,
       expect.objectContaining({
-        expectedUrlSubstrings: [],
+        expectedUrlSubstrings: ["/returns/auth/api/gstr3b/getgenpdf", "rtn_prd=052026"],
       }),
+      120_000,
     );
   });
 
