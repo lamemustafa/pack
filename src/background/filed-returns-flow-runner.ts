@@ -44,6 +44,7 @@ import {
   responseForFiledReturnsTargetReview,
 } from "./filed-returns-target-review";
 import { startSinglePeriodFiledReturnsDownloadFlow } from "./filed-returns-single-period-flow";
+import { clearVerifiedActionsForPersistedCompleteSummary } from "./filed-returns-single-period-summary";
 
 export type { ActiveGstTab } from "./filed-returns-active-tab";
 
@@ -100,6 +101,9 @@ export async function startFiledReturnsDownloadFlow(
   if (targetReview) return responseForFiledReturnsTargetReview(targetReview);
   if (await hasMalformedFiledReturnsTargetReview(deps)) {
     return malformedTargetReviewResponse(scope);
+  }
+  if (!isMultiPeriodFiledReturnsScope(scope)) {
+    await clearVerifiedActionsForPersistedCompleteSummary(scope, deps);
   }
   if (await hasUnresolvedFiledReturnsAction(deps.storageKeys.actionJournal)) {
     return unresolvedActionJournalResponse(scope);

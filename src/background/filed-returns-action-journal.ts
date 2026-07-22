@@ -122,11 +122,16 @@ export async function hasUnresolvedFiledReturnsAction(key: string | undefined): 
   return journal === null || hasUnresolvedAction(journal);
 }
 
-export async function clearVerifiedFiledReturnsActions(key: string | undefined): Promise<void> {
+export async function clearVerifiedFiledReturnsActions(
+  key: string | undefined,
+  targetId?: string,
+): Promise<void> {
   if (!key) return;
   const journal = await readJournal(key);
   if (!journal) return;
-  const entries = journal.entries.filter((entry) => entry.state !== "verified");
+  const entries = journal.entries.filter(
+    (entry) => entry.state !== "verified" || (targetId !== undefined && entry.targetId !== targetId),
+  );
   await browser.storage.local.set({ [key]: { schemaVersion: "1.0", entries } });
 }
 

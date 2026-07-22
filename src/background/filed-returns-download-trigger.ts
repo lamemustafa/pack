@@ -18,6 +18,7 @@ import {
   mergeFlowStepWithDownloadObservation,
   observeNextBrowserDownload,
 } from "./download-observer";
+import type { DownloadObservationContext } from "./download-correlation";
 import { suggestNextBrowserDownloadFilename } from "./download-filename-suggester";
 import {
   startCapturedFiledReturnDownload,
@@ -44,7 +45,11 @@ import {
 } from "./filed-returns-flow-messaging";
 import { persistFiledReturnsTargetReview } from "./filed-returns-target-review";
 
-type FlowStepResponse = Extract<PackMessageResponse, { ok: true; flowStep: PortalFlowStepResult }>;
+type FlowStepResponse = {
+  ok: true;
+  flowStep: PortalFlowStepResult;
+  flowSummary?: FiledReturnsFlowSummary;
+};
 
 export async function triggerAndObserveFiledReturnDownload({
   activePeriod,
@@ -138,7 +143,7 @@ export async function triggerAndObserveFiledReturnDownload({
   // a native Save completion to this armed action. These values remain in
   // memory and are never persisted with the target-review record.
   const expectedUrlSubstrings = targetUrlSubstrings(scope);
-  const observationContext = {
+  const observationContext: DownloadObservationContext = {
     ...expectedDownloadForScope(scope, artifactType),
     armedAt,
     expectedUrlSubstrings,
@@ -202,7 +207,7 @@ export async function triggerAndObserveFiledReturnDownload({
     }
     detailDownloadObservation.stop();
     detailDownloadFilenameSuggestion.stop();
-    if (usesBrowserDownloadJournal && captureResponse.ok && "flowStep" in captureResponse) {
+    if (usesBrowserDownloadJournal && isFlowStepResponse(captureResponse)) {
       if (captureResponse.flowStep.state !== "downloaded") {
         await settleFiledReturnsAction(
           deps.storageKeys.actionJournal,
@@ -212,8 +217,7 @@ export async function triggerAndObserveFiledReturnDownload({
       }
     }
     const captureTimedOut =
-      captureResponse.ok &&
-      "flowStep" in captureResponse &&
+      isFlowStepResponse(captureResponse) &&
       captureResponse.flowStep.safeSignals.some((signal) =>
         signal.endsWith("-main-world-capture-timeout"),
       );
@@ -222,8 +226,7 @@ export async function triggerAndObserveFiledReturnDownload({
         (!deps.stageCapturedDownloads ||
           (deps.stageCapturedDownloads.bundleKind === "single-period" && captureTimedOut)) &&
         deps.persistTargetReview !== false &&
-        captureResponse.ok &&
-        "flowStep" in captureResponse
+        isFlowStepResponse(captureResponse)
       ) {
         const stagedSelectionTimedOut =
           deps.stageCapturedDownloads?.bundleKind === "single-period" && captureTimedOut;
@@ -339,14 +342,17 @@ function canReconcileNativeSaveCompletion(
   response: PackMessageResponse,
   deps: FiledReturnsFlowMessagingDeps,
   expectedUrlSubstrings: readonly string[],
-): response is Extract<PackMessageResponse, { ok: true; flowStep: PortalFlowStepResult }> {
+): response is FlowStepResponse {
   return Boolean(
     !deps.stageCapturedDownloads &&
       expectedUrlSubstrings.length > 0 &&
-      response.ok &&
-      "flowStep" in response &&
+      isFlowStepResponse(response) &&
       response.flowStep.safeSignals.some((signal) => signal.endsWith("-main-world-capture-timeout")),
   );
+}
+
+function isFlowStepResponse(response: PackMessageResponse): response is FlowStepResponse {
+  return response.ok && "flowStep" in response;
 }
 
 async function reconcileNativeSaveCompletion({
@@ -362,7 +368,7 @@ async function reconcileNativeSaveCompletion({
 }: {
   activePeriod: string | null;
   artifactType: FiledReturnsConcreteArtifactType;
-  captureResponse: Extract<PackMessageResponse, { ok: true; flowStep: PortalFlowStepResult }>;
+  captureResponse: FlowStepResponse;
   deps: FiledReturnsFlowMessagingDeps;
   observedDownload: Awaited<ReturnType<typeof observeFiledReturnDownload>["promise"]>;
   scope: FiledReturnsDownloadScope;
@@ -443,7 +449,12 @@ async function settleVerifiedObservedPortalAction(
 }
 
 function isPersistableBrowserDownloadId(downloadId: unknown): downloadId is number {
-  return Number.isInteger(downloadId) && downloadId > 0 && downloadId <= 1_000_000;
+  return (
+    typeof downloadId === "number" &&
+    Number.isInteger(downloadId) &&
+    downloadId > 0 &&
+    downloadId <= 1_000_000
+  );
 }
 
 async function settleObservedPortalAction(
@@ -596,7 +607,7 @@ function directDownloadUnavailableResponse(
 }
 
 export function observeFiledReturnDownload(
-  context = {
+  context: DownloadObservationContext = {
     ...expectedDownloadForScope({ returnType: "GSTR-3B" }, "PDF"),
     armedAt: new Date(),
     expectedUrlSubstrings: [],

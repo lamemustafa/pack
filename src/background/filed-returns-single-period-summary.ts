@@ -5,6 +5,7 @@ import type {
   PortalFlowStepResult,
 } from "../core/contracts";
 import type { PackMessageResponse } from "../core/messages";
+import { normaliseFiledReturnsArtifactType } from "../core/filed-returns-artifacts";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
 import { clearVerifiedFiledReturnsActions } from "./filed-returns-action-journal";
 import { persistFiledReturnsTargetReview } from "./filed-returns-target-review";
@@ -39,6 +40,20 @@ export async function withPersistedSinglePeriodSummary(
   return { ...response, flowSummary };
 }
 
+export async function clearVerifiedActionsForPersistedCompleteSummary(
+  scope: FiledReturnsDownloadScope,
+  deps: Pick<FiledReturnsFlowRunnerDeps, "storageKeys">,
+): Promise<void> {
+  try {
+    const values = await browser.storage.session.get(deps.storageKeys.completion);
+    const targetId = persistedCompleteSummaryTargetId(values[deps.storageKeys.completion], scope);
+    if (!targetId) return;
+    await clearVerifiedFiledReturnsActions(deps.storageKeys.actionJournal, targetId);
+  } catch {
+    // Preserve the verified action for explicit review when session state cannot be read.
+  }
+}
+
 async function persistSinglePeriodSummary(
   scope: FiledReturnsDownloadScope,
   flowStep: PortalFlowStepResult,
@@ -54,6 +69,35 @@ async function persistProvidedSinglePeriodSummary(
   deps: FiledReturnsFlowRunnerDeps,
 ): Promise<void> {
   await browser.storage.session.set({ [deps.storageKeys.completion]: flowSummary });
+}
+
+function persistedCompleteSummaryTargetId(
+  value: unknown,
+  requestedScope: FiledReturnsDownloadScope,
+): string | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const summary = value as Partial<FiledReturnsFlowSummary>;
+  const scope = summary.scope;
+  const artifactType = normaliseFiledReturnsArtifactType(
+    requestedScope.returnType,
+    requestedScope.artifactType,
+  );
+  if (
+    summary.status !== "complete" ||
+    summary.flowStep?.state !== "downloaded" ||
+    (artifactType !== "PDF" && artifactType !== "EXCEL") ||
+    !scope ||
+    typeof scope.financialYear !== "string" ||
+    typeof scope.period !== "string" ||
+    scope.financialYear !== requestedScope.financialYear ||
+    scope.period !== requestedScope.period ||
+    scope.rangeEndPeriod !== requestedScope.rangeEndPeriod ||
+    scope.returnType !== requestedScope.returnType ||
+    normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType) !== artifactType
+  ) {
+    return null;
+  }
+  return `${scope.returnType}:${scope.financialYear}:${scope.period}:${artifactType}`;
 }
 
 function toSinglePeriodSummary(

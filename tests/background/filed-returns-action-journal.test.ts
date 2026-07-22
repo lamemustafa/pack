@@ -209,6 +209,43 @@ describe("filed returns action journal", () => {
     const cleared = storedJournalAt(0);
     expect(cleared.entries).toEqual([]);
   });
+
+  it("clears only the completed target when a target ID is supplied", async () => {
+    const journal = {
+      schemaVersion: "1.0" as const,
+      entries: [
+        {
+          actionId: "action-1",
+          artifactType: "PDF" as const,
+          attempt: 1,
+          revision: 3,
+          state: "verified" as const,
+          targetId: "GSTR-3B:2026-27:May:PDF",
+          armedAt: "2026-07-21T00:00:00.000Z",
+          downloadId: 41,
+          settledAt: "2026-07-21T00:01:00.000Z",
+        },
+        {
+          actionId: "action-2",
+          artifactType: "PDF" as const,
+          attempt: 1,
+          revision: 3,
+          state: "verified" as const,
+          targetId: "GSTR-3B:2026-27:June:PDF",
+          armedAt: "2026-07-21T00:00:00.000Z",
+          downloadId: 42,
+          settledAt: "2026-07-21T00:01:00.000Z",
+        },
+      ],
+    };
+    browserMocks.storage.local.get.mockResolvedValue({ [KEY]: journal });
+
+    await clearVerifiedFiledReturnsActions(KEY, "GSTR-3B:2026-27:May:PDF");
+
+    expect(storedJournalAt(0).entries).toMatchObject([
+      { actionId: "action-2", targetId: "GSTR-3B:2026-27:June:PDF" },
+    ]);
+  });
 });
 
 function storedJournalAt(index: number): { entries: Array<Record<string, unknown>> } {

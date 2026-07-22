@@ -1,9 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { withPersistedSinglePeriodSummary } from "../../src/background/filed-returns-single-period-summary";
+import {
+  clearVerifiedActionsForPersistedCompleteSummary,
+  withPersistedSinglePeriodSummary,
+} from "../../src/background/filed-returns-single-period-summary";
 
 const browserMocks = vi.hoisted(() => ({
   storage: {
     session: {
+      get: vi.fn(async () => ({})),
       set: vi.fn(async () => undefined),
     },
   },
@@ -107,6 +111,45 @@ describe("single-period filed returns summary", () => {
         true,
       ),
     ).rejects.toThrow("storage unavailable");
+
+    expect(actionJournalMocks.clearVerifiedFiledReturnsActions).not.toHaveBeenCalled();
+  });
+
+  it("clears an already-verified action when a prior complete summary is still in session", async () => {
+    browserMocks.storage.session.get.mockResolvedValue({
+      completion: {
+        status: "complete",
+        scope,
+        flowStep: { state: "downloaded" },
+      },
+    });
+
+    await clearVerifiedActionsForPersistedCompleteSummary(scope, deps);
+
+    expect(actionJournalMocks.clearVerifiedFiledReturnsActions).toHaveBeenCalledWith(
+      "action-journal",
+      "GSTR-3B:2026-27:May:PDF",
+    );
+  });
+
+  it("keeps a verified action protected when the session summary cannot be read", async () => {
+    browserMocks.storage.session.get.mockRejectedValueOnce(new Error("storage unavailable"));
+
+    await clearVerifiedActionsForPersistedCompleteSummary(scope, deps);
+
+    expect(actionJournalMocks.clearVerifiedFiledReturnsActions).not.toHaveBeenCalled();
+  });
+
+  it("retains verified state when the persisted completion belongs to another target", async () => {
+    browserMocks.storage.session.get.mockResolvedValue({
+      completion: {
+        status: "complete",
+        scope: { ...scope, period: "June" },
+        flowStep: { state: "downloaded" },
+      },
+    });
+
+    await clearVerifiedActionsForPersistedCompleteSummary(scope, deps);
 
     expect(actionJournalMocks.clearVerifiedFiledReturnsActions).not.toHaveBeenCalled();
   });
