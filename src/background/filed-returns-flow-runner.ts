@@ -1,3 +1,4 @@
+import { browser } from "wxt/browser";
 import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "../core/contracts";
 import type {
   FullFiscalYearTargetRecoveryPayload,
@@ -13,7 +14,11 @@ import {
   releaseFiledReturnsRun,
   startFiledReturnsRunLeaseRenewal,
 } from "./filed-returns-active-run";
-import { hasUnresolvedFiledReturnsAction } from "./filed-returns-action-journal";
+import {
+  discardUnresolvedFiledReturnsAction,
+  hasUnresolvedFiledReturnsAction,
+  readUnresolvedFiledReturnsActionRecovery,
+} from "./filed-returns-action-journal";
 import type { ActiveGstTab } from "./filed-returns-active-tab";
 import type { MainWorldFiledReturnsFilterSelectionOutcome } from "./main-world-filed-returns-filter-selection";
 import { startFullFiscalYearDownloadFlow } from "./filed-returns-full-fiscal-year";
@@ -106,13 +111,12 @@ export async function startFiledReturnsDownloadFlow(
   if (!isMultiPeriodFiledReturnsScope(scope)) {
     await clearVerifiedActionsForPersistedCompleteSummary(scope, deps);
   }
-  if (
-    await hasUnresolvedFiledReturnsAction(
-      deps.storageKeys.actionJournal,
-      requestedConcreteActionTargetId(scope),
-    )
-  ) {
-    return unresolvedActionJournalResponse(scope);
+  const requestedTargetId = requestedConcreteActionTargetId(scope);
+  if (await hasUnresolvedFiledReturnsAction(deps.storageKeys.actionJournal, requestedTargetId)) {
+    return unresolvedActionJournalResponse(
+      scope,
+      await readUnresolvedFiledReturnsActionRecovery(deps.storageKeys.actionJournal),
+    );
   }
 
   if (isMultiPeriodFiledReturnsScope(scope)) {
@@ -220,7 +224,14 @@ function malformedTargetReviewResponse(scope: FiledReturnsDownloadScope): PackMe
   };
 }
 
-function unresolvedActionJournalResponse(scope: FiledReturnsDownloadScope): PackMessageResponse {
+function unresolvedActionJournalResponse(
+  scope: FiledReturnsDownloadScope,
+  actionJournalRecovery?: {
+    actionId: string;
+    expectedRevision: number;
+    targetId: string;
+  } | null,
+): PackMessageResponse {
   const flowStep: PortalFlowStepResult = {
     connectorId: "gst",
     scopeId: filedReturnScopeId(scope.returnType),
@@ -230,7 +241,8 @@ function unresolvedActionJournalResponse(scope: FiledReturnsDownloadScope): Pack
       "Pack found an unresolved local browser-download action and will not retry it automatically. Review browser Downloads before starting again.",
     userAction: {
       type: "RETRY_PORTAL_GENERATION",
-      message: "After reviewing browser Downloads, clear local Pack data before starting fresh.",
+      message:
+        "After reviewing browser Downloads, explicitly discard the paused action before starting fresh.",
       canResume: false,
     },
   };
@@ -238,6 +250,7 @@ function unresolvedActionJournalResponse(scope: FiledReturnsDownloadScope): Pack
     ok: true,
     flowStep,
     flowSummary: {
+      ...(actionJournalRecovery ? { actionJournalRecovery } : {}),
       scope,
       status: "blocked",
       completedPeriods: [],
@@ -288,7 +301,10 @@ export async function retryFiledReturnsTargetDownloadFlow(
   if (options.forcePortalClick && !canRetryFiledReturnsTargetThroughPortalClick(targetReview)) {
     return responseForFiledReturnsTargetReview(targetReview);
   }
-  if (options.forceDirectDownload && !canRetryFiledReturnsTargetThroughDirectDownload(targetReview)) {
+  if (
+    options.forceDirectDownload &&
+    !canRetryFiledReturnsTargetThroughDirectDownload(targetReview)
+  ) {
     return responseForFiledReturnsTargetReview(targetReview);
   }
 
@@ -300,14 +316,10 @@ export async function retryFiledReturnsTargetDownloadFlow(
     const cleanupResponse = await retryCompletedSinglePeriodZipCleanup(scope, deps);
     if (cleanupResponse) return cleanupResponse;
     await clearFiledReturnsTargetReview(scope, deps);
-    return startSinglePeriodFiledReturnsDownloadFlow(
-      scope,
-      deps,
-      {
-        ...(options.forceDirectDownload ? { forceDirectDownload: true } : {}),
-        ...(options.forcePortalClick ? { forcePortalClick: true } : {}),
-      },
-    );
+    return startSinglePeriodFiledReturnsDownloadFlow(scope, deps, {
+      ...(options.forceDirectDownload ? { forceDirectDownload: true } : {}),
+      ...(options.forcePortalClick ? { forcePortalClick: true } : {}),
+    });
   } finally {
     stopLeaseRenewal();
     await releaseFiledReturnsRun(activeRun.run, deps);
@@ -321,7 +333,7 @@ export async function startFreshFiledReturnsDownloadFlow(
   if (payload.recovery.kind === "target-review") {
     const targetReview = await readFiledReturnsTargetReview(payload.recovery.scope, deps);
     if (!targetReview) return noTargetReviewResponse(payload.recovery.scope);
-  } else {
+  } else if (payload.recovery.kind === "full-fiscal-year") {
     const recoveryScope = await readFullFiscalYearTargetRecoveryScope(payload.recovery, deps);
     if ("response" in recoveryScope) return recoveryScope.response;
   }
@@ -334,13 +346,16 @@ export async function startFreshFiledReturnsDownloadFlow(
     const discarded =
       payload.recovery.kind === "target-review"
         ? await resolveUnconfirmedFiledReturnsDownload(payload.recovery.scope, "cancelled", deps)
-        : await resolveFullFiscalYearTarget(payload.recovery, "cancelled", deps);
+        : payload.recovery.kind === "action-journal"
+          ? await discardActionJournalForFreshStart(payload.scope, payload.recovery, deps)
+          : await resolveFullFiscalYearTarget(payload.recovery, "cancelled", deps);
     if (!isRecoveryDiscarded(discarded)) return discarded;
     if (payload.recovery.kind === "full-fiscal-year") {
       const remainingTargetReview = await readCurrentFiledReturnsTargetReview(deps);
       if (remainingTargetReview) return responseForFiledReturnsTargetReview(remainingTargetReview);
     }
 
+    if (payload.recovery.kind === "action-journal") return discarded;
     if (isMultiPeriodFiledReturnsScope(payload.scope)) {
       return startFullFiscalYearDownloadFlow(
         payload.scope,
@@ -387,6 +402,48 @@ export function fullFiscalYearPausedResponse(
 function isRecoveryDiscarded(response: PackMessageResponse): boolean {
   if (!response.ok || !("flowStep" in response)) return false;
   return response.flowStep.safeSignals.some((signal) =>
-    ["filed-returns-target-cancelled", "full-fiscal-year-run-discarded"].includes(signal),
+    [
+      "filed-returns-action-journal-discarded",
+      "filed-returns-target-cancelled",
+      "full-fiscal-year-run-discarded",
+    ].includes(signal),
   );
+}
+
+async function discardActionJournalForFreshStart(
+  scope: FiledReturnsDownloadScope,
+  recovery: Extract<FiledReturnsFreshStartPayload["recovery"], { kind: "action-journal" }>,
+  deps: FiledReturnsFlowRunnerDeps,
+): Promise<PackMessageResponse> {
+  const flowStep: PortalFlowStepResult = {
+    connectorId: "gst",
+    scopeId: filedReturnScopeId(scope.returnType),
+    state: "user-action-required",
+    safeSignals: ["filed-returns-action-journal-discarded"],
+    safeMessage:
+      "Pack discarded the paused local browser action. It did not retry that action automatically.",
+  };
+  const flowSummary = {
+    scope,
+    status: "cancelled" as const,
+    completedPeriods: [],
+    totalPeriods: 1,
+    updatedAt: (deps.now?.() ?? new Date()).toISOString(),
+    flowStep,
+  };
+  await browser.storage.session.set({ [deps.storageKeys.completion]: flowSummary });
+  if (
+    !(await discardUnresolvedFiledReturnsAction(deps.storageKeys.actionJournal, {
+      actionId: recovery.actionId,
+      expectedRevision: recovery.expectedRevision,
+      targetId: recovery.targetId,
+    }))
+  ) {
+    return unresolvedActionJournalResponse(scope);
+  }
+  return {
+    ok: true,
+    flowStep,
+    flowSummary,
+  };
 }

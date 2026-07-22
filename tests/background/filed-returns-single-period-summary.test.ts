@@ -56,6 +56,7 @@ describe("single-period filed returns summary", () => {
     expect(browserMocks.storage.session.set).toHaveBeenCalledWith({ completion: flowSummary });
     expect(actionJournalMocks.clearVerifiedFiledReturnsActions).toHaveBeenCalledWith(
       "action-journal",
+      "GSTR-3B:2026-27:May:PDF",
     );
     expect(browserMocks.storage.session.set.mock.invocationCallOrder[0]).toBeLessThan(
       actionJournalMocks.clearVerifiedFiledReturnsActions.mock.invocationCallOrder[0] ?? Infinity,
@@ -85,6 +86,37 @@ describe("single-period filed returns summary", () => {
     );
 
     expect(actionJournalMocks.clearVerifiedFiledReturnsActions).not.toHaveBeenCalled();
+  });
+
+  it("retains unrelated verified actions after a completed summary", async () => {
+    const flowSummary = {
+      scope,
+      status: "complete" as const,
+      completedPeriods: ["May"],
+      totalPeriods: 1,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "downloaded" as const,
+        safeSignals: ["browser-download-completed"],
+        safeMessage: "Downloaded.",
+      },
+    };
+
+    await withPersistedSinglePeriodSummary(
+      scope,
+      { ok: true, flowStep: flowSummary.flowStep, flowSummary },
+      deps,
+      true,
+    );
+
+    expect(actionJournalMocks.clearVerifiedFiledReturnsActions).toHaveBeenCalledWith(
+      "action-journal",
+      "GSTR-3B:2026-27:May:PDF",
+    );
+    expect(actionJournalMocks.clearVerifiedFiledReturnsActions).not.toHaveBeenCalledWith(
+      "action-journal",
+    );
   });
 
   it("does not clear a verified action when completion-summary persistence fails", async () => {

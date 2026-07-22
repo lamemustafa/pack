@@ -8,6 +8,7 @@ import { readCurrentFiledReturnsFlowSummary } from "../../src/background/filed-r
 
 const filedReturnsCurrentStateStorageKeys = {
   activeRun: "pack:active-filed-returns-run",
+  actionJournal: "pack:filed-returns-action-journal",
   completion: "pack:last-filed-returns-flow-summary",
   fullFiscalYearLedger: "pack:full-fiscal-year-ledger",
   targetReview: "pack:filed-returns-target-review",
@@ -565,6 +566,60 @@ describe("Pack local data clearing", () => {
     await expect(
       readCurrentFiledReturnsFlowSummary({ storageKeys: filedReturnsCurrentStateStorageKeys }),
     ).resolves.toBeNull();
+  });
+
+  it("restores exact action-journal recovery metadata for a paused session summary", async () => {
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      key === "pack:filed-returns-action-journal"
+        ? {
+            [key]: {
+              schemaVersion: "1.0",
+              entries: [
+                {
+                  actionId: "action-before-restart",
+                  artifactType: "PDF",
+                  attempt: 1,
+                  revision: 2,
+                  state: "evidence-bound",
+                  targetId: "GSTR-3B:2026-27:May:PDF",
+                  armedAt: "2026-07-21T00:00:00.000Z",
+                  downloadId: 41,
+                  settledAt: "2026-07-21T00:00:01.000Z",
+                },
+              ],
+            },
+          }
+        : {},
+    );
+    browserMocks.storage.session.get.mockResolvedValue({
+      "pack:last-filed-returns-flow-summary": {
+        scope: {
+          financialYear: "2026-27",
+          period: "May",
+          returnType: "GSTR-3B",
+        },
+        status: "blocked",
+        completedPeriods: [],
+        totalPeriods: 1,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+          state: "blocked",
+          safeSignals: ["filed-returns-action-journal-review-required"],
+          safeMessage: "Paused.",
+        },
+      } satisfies FiledReturnsFlowSummary,
+    });
+
+    await expect(
+      readCurrentFiledReturnsFlowSummary({ storageKeys: filedReturnsCurrentStateStorageKeys }),
+    ).resolves.toMatchObject({
+      actionJournalRecovery: {
+        actionId: "action-before-restart",
+        expectedRevision: 2,
+        targetId: "GSTR-3B:2026-27:May:PDF",
+      },
+    });
   });
 
   it("keeps same-scope active-run recovery visible over a terminal summary", async () => {

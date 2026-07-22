@@ -260,6 +260,24 @@ describe("message boundary", () => {
     ).toBe(false);
     expect(
       isPackMessage({
+        type: "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW",
+        payload: {
+          scope: {
+            financialYear: "2025-26",
+            period: "March",
+            returnType: "GSTR-3B",
+          },
+          recovery: {
+            actionId: "action-safe",
+            expectedRevision: 1,
+            kind: "action-journal",
+            targetId: "GSTR-3B:2025-26:March:PDF",
+          },
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isPackMessage({
         type: "PACK_RESOLVE_UNCONFIRMED_DOWNLOAD",
         payload: {
           resolution: "manually-observed",

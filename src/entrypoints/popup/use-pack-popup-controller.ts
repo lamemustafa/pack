@@ -175,9 +175,12 @@ export function usePackPopupController() {
       return;
     }
     const fullFiscalYearRecovery = getFullFiscalYearRecoveryPayload();
+    const actionJournalRecovery = filedReturnsFlowSummary.actionJournalRecovery;
     const recovery = fullFiscalYearRecovery
       ? { kind: "full-fiscal-year" as const, ...fullFiscalYearRecovery }
-      : { kind: "target-review" as const, scope: filedReturnsFlowSummary.scope };
+      : actionJournalRecovery
+        ? { kind: "action-journal" as const, ...actionJournalRecovery }
+        : { kind: "target-review" as const, scope: filedReturnsFlowSummary.scope };
 
     setReceiptDownloadStatus(null);
     await withBusy("start-fresh-filed-returns-flow", async () => {

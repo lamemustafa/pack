@@ -6,6 +6,7 @@ import {
 } from "../core/filed-returns-scope";
 import { isFiledReturnsReturnType } from "../core/filed-returns-return-types";
 import { readActiveFiledReturnsRunSummary } from "./filed-returns-active-run";
+import { readUnresolvedFiledReturnsActionRecovery } from "./filed-returns-action-journal";
 import { summariseFullFiscalYearLedger } from "./filed-returns-full-fiscal-year";
 import {
   isFullFiscalYearLedger,
@@ -16,6 +17,7 @@ import { readCurrentFiledReturnsTargetReviewSummary } from "./filed-returns-targ
 export interface FiledReturnsCurrentStateDeps {
   storageKeys: {
     activeRun: string;
+    actionJournal?: string;
     completion: string;
     fullFiscalYearLedger: string;
     targetReview: string;
@@ -29,9 +31,20 @@ export async function readCurrentFiledReturnsFlowSummary(
   const persistedCompletionSummary = await readSessionValue<FiledReturnsFlowSummary>(
     deps.storageKeys.completion,
   );
-  const completionSummary = isAvailabilityCompatibleFlowSummary(persistedCompletionSummary)
+  let completionSummary = isAvailabilityCompatibleFlowSummary(persistedCompletionSummary)
     ? persistedCompletionSummary
     : null;
+  if (
+    completionSummary?.flowStep.safeSignals.includes(
+      "filed-returns-action-journal-review-required",
+    ) &&
+    !completionSummary.actionJournalRecovery
+  ) {
+    const actionJournalRecovery = await readUnresolvedFiledReturnsActionRecovery(
+      deps.storageKeys.actionJournal,
+    );
+    if (actionJournalRecovery) completionSummary = { ...completionSummary, actionJournalRecovery };
+  }
   const activeRunSummary = await readActiveFiledReturnsRunSummary({
     storageKeys: { activeRun: deps.storageKeys.activeRun },
     ...(deps.now ? { now: deps.now } : {}),

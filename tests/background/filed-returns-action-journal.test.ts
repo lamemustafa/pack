@@ -3,7 +3,9 @@ import {
   armFiledReturnsAction,
   bindFiledReturnsActionDownload,
   clearVerifiedFiledReturnsActions,
+  discardUnresolvedFiledReturnsAction,
   hasUnresolvedFiledReturnsAction,
+  readUnresolvedFiledReturnsActionRecovery,
   settleFiledReturnsAction,
 } from "../../src/background/filed-returns-action-journal";
 
@@ -205,12 +207,12 @@ describe("filed returns action journal", () => {
     browserMocks.storage.local.get.mockResolvedValue({ [KEY]: journal });
 
     await expect(hasUnresolvedFiledReturnsAction(KEY)).resolves.toBe(true);
-    await expect(
-      hasUnresolvedFiledReturnsAction(KEY, "GSTR-3B:2026-27:June:PDF"),
-    ).resolves.toBe(false);
-    await expect(
-      hasUnresolvedFiledReturnsAction(KEY, "GSTR-3B:2026-27:May:PDF"),
-    ).resolves.toBe(true);
+    await expect(hasUnresolvedFiledReturnsAction(KEY, "GSTR-3B:2026-27:June:PDF")).resolves.toBe(
+      false,
+    );
+    await expect(hasUnresolvedFiledReturnsAction(KEY, "GSTR-3B:2026-27:May:PDF")).resolves.toBe(
+      true,
+    );
     await clearVerifiedFiledReturnsActions(KEY);
     const cleared = storedJournalAt(0);
     expect(cleared.entries).toEqual([]);
@@ -284,6 +286,112 @@ describe("filed returns action journal", () => {
     expect(storedJournalAt(0).entries).toMatchObject([
       { actionId: "action-2", targetId: "GSTR-3B:2026-27:June:PDF" },
     ]);
+  });
+
+  it("discards only the exact explicitly reset unresolved action", async () => {
+    browserMocks.storage.local.get.mockResolvedValue({
+      [KEY]: {
+        schemaVersion: "1.0",
+        entries: [
+          {
+            actionId: "action-armed",
+            artifactType: "PDF",
+            attempt: 1,
+            revision: 1,
+            state: "armed",
+            targetId: "GSTR-3B:2026-27:May:PDF",
+            armedAt: "2026-07-21T00:00:00.000Z",
+          },
+          {
+            actionId: "action-bound",
+            artifactType: "PDF",
+            attempt: 1,
+            revision: 2,
+            state: "evidence-bound",
+            targetId: "GSTR-3B:2026-27:June:PDF",
+            armedAt: "2026-07-21T00:00:00.000Z",
+            downloadId: 42,
+            settledAt: "2026-07-21T00:00:01.000Z",
+          },
+          {
+            actionId: "action-verified",
+            artifactType: "PDF",
+            attempt: 1,
+            revision: 3,
+            state: "verified",
+            targetId: "GSTR-3B:2026-27:April:PDF",
+            armedAt: "2026-07-21T00:00:00.000Z",
+            downloadId: 41,
+            settledAt: "2026-07-21T00:00:02.000Z",
+          },
+        ],
+      },
+    });
+
+    await expect(
+      discardUnresolvedFiledReturnsAction(KEY, {
+        actionId: "action-armed",
+        expectedRevision: 1,
+        targetId: "GSTR-3B:2026-27:May:PDF",
+      }),
+    ).resolves.toBe(true);
+    expect(storedJournalAt(0).entries).toEqual([
+      expect.objectContaining({ actionId: "action-bound", state: "evidence-bound" }),
+      expect.objectContaining({ actionId: "action-verified", state: "verified" }),
+    ]);
+  });
+
+  it("refuses a stale recovery request without mutating the journal", async () => {
+    browserMocks.storage.local.get.mockResolvedValue({
+      [KEY]: {
+        schemaVersion: "1.0",
+        entries: [
+          {
+            actionId: "action-armed",
+            artifactType: "PDF",
+            attempt: 1,
+            revision: 2,
+            state: "armed",
+            targetId: "GSTR-3B:2026-27:May:PDF",
+            armedAt: "2026-07-21T00:00:00.000Z",
+          },
+        ],
+      },
+    });
+
+    await expect(
+      discardUnresolvedFiledReturnsAction(KEY, {
+        actionId: "action-armed",
+        expectedRevision: 1,
+        targetId: "GSTR-3B:2026-27:May:PDF",
+      }),
+    ).resolves.toBe(false);
+    expect(browserMocks.storage.local.set).not.toHaveBeenCalled();
+  });
+
+  it("offers recovery metadata only when one unresolved action is present", async () => {
+    browserMocks.storage.local.get.mockResolvedValue({
+      [KEY]: {
+        schemaVersion: "1.0",
+        entries: [
+          {
+            actionId: "action-armed",
+            artifactType: "PDF",
+            attempt: 1,
+            revision: 1,
+            state: "armed",
+            targetId: "GSTR-3B:2026-27:May:PDF",
+            armedAt: "2026-07-21T00:00:00.000Z",
+          },
+        ],
+      },
+    });
+
+    await expect(readUnresolvedFiledReturnsActionRecovery(KEY)).resolves.toEqual({
+      actionId: "action-armed",
+      expectedRevision: 1,
+      targetId: "GSTR-3B:2026-27:May:PDF",
+    });
   });
 });
 

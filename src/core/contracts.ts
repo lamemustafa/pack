@@ -365,6 +365,11 @@ export interface FiledReturnsFullFiscalYearLedger {
 }
 
 export interface FiledReturnsFlowSummary {
+  actionJournalRecovery?: {
+    actionId: string;
+    expectedRevision: number;
+    targetId: string;
+  };
   scope: FiledReturnsDownloadScope;
   status: "complete" | "running" | "partial" | "blocked" | "cancelled";
   completedAt?: string;

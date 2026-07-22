@@ -267,6 +267,25 @@ describe("popup filed returns flow summary", () => {
     expect(hasUnresolvedFiledReturnsRecovery({ ...summary, status: "partial" })).toBe(true);
   });
 
+  it("recognises an action-journal pause as explicit recovery", () => {
+    expect(
+      hasUnresolvedFiledReturnsRecovery({
+        ...COMPLETE_SUMMARY,
+        status: "blocked",
+        flowStep: {
+          ...COMPLETE_SUMMARY.flowStep,
+          state: "blocked",
+          safeSignals: ["filed-returns-action-journal-review-required"],
+        },
+        actionJournalRecovery: {
+          actionId: "action-safe",
+          expectedRevision: 1,
+          targetId: "GSTR-3B:2026-27:May:PDF",
+        },
+      }),
+    ).toBe(true);
+  });
+
   it("allows only retained final-ZIP work to retry without a portal tab", () => {
     const finalZipRetry: FiledReturnsFlowSummary = {
       ...COMPLETE_SUMMARY,

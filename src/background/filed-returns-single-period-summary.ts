@@ -19,9 +19,7 @@ export async function withPersistedSinglePeriodSummary(
   if (!shouldPersistSinglePeriodSummary) return response;
   if (response.flowSummary) {
     await persistProvidedSinglePeriodSummary(response.flowSummary, deps);
-    if (response.flowSummary.status === "complete") {
-      await clearVerifiedFiledReturnsActions(deps.storageKeys.actionJournal);
-    }
+    await clearVerifiedActionForCompletedSummary(response.flowSummary, scope, deps);
     return response;
   }
   const targetReview = response.flowStep.safeSignals.includes(
@@ -34,10 +32,18 @@ export async function withPersistedSinglePeriodSummary(
     return { ...response, flowSummary: targetReview };
   }
   const flowSummary = await persistSinglePeriodSummary(scope, response.flowStep, deps);
-  if (flowSummary.status === "complete") {
-    await clearVerifiedFiledReturnsActions(deps.storageKeys.actionJournal);
-  }
+  await clearVerifiedActionForCompletedSummary(flowSummary, scope, deps);
   return { ...response, flowSummary };
+}
+
+async function clearVerifiedActionForCompletedSummary(
+  summary: FiledReturnsFlowSummary,
+  requestedScope: FiledReturnsDownloadScope,
+  deps: Pick<FiledReturnsFlowRunnerDeps, "storageKeys">,
+): Promise<void> {
+  const targetId = persistedCompleteSummaryTargetId(summary, requestedScope);
+  if (!targetId) return;
+  await clearVerifiedFiledReturnsActions(deps.storageKeys.actionJournal, targetId);
 }
 
 export async function clearVerifiedActionsForPersistedCompleteSummary(

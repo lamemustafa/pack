@@ -22,6 +22,12 @@ interface FiledReturnsActionJournalEntry {
   settledAt?: string;
 }
 
+export interface FiledReturnsActionJournalRecovery {
+  actionId: string;
+  expectedRevision: number;
+  targetId: string;
+}
+
 interface FiledReturnsActionJournal {
   schemaVersion: "1.0";
   entries: FiledReturnsActionJournalEntry[];
@@ -133,9 +139,49 @@ export async function clearVerifiedFiledReturnsActions(
   const journal = await readJournal(key);
   if (!journal) return;
   const entries = journal.entries.filter(
-    (entry) => entry.state !== "verified" || (targetId !== undefined && entry.targetId !== targetId),
+    (entry) =>
+      entry.state !== "verified" || (targetId !== undefined && entry.targetId !== targetId),
   );
   await browser.storage.local.set({ [key]: { schemaVersion: "1.0", entries } });
+}
+
+export async function readUnresolvedFiledReturnsActionRecovery(
+  key: string | undefined,
+): Promise<FiledReturnsActionJournalRecovery | null> {
+  if (!key) return null;
+  const journal = await readJournal(key);
+  if (!journal) return null;
+  const unresolved = journal.entries.filter(
+    (entry) => entry.state === "armed" || entry.state === "evidence-bound",
+  );
+  if (unresolved.length !== 1) return null;
+  const [entry] = unresolved;
+  if (!entry) return null;
+  return {
+    actionId: entry.actionId,
+    expectedRevision: entry.revision,
+    targetId: entry.targetId,
+  };
+}
+
+export async function discardUnresolvedFiledReturnsAction(
+  key: string | undefined,
+  recovery: FiledReturnsActionJournalRecovery,
+): Promise<boolean> {
+  if (!key) return false;
+  const journal = await readJournal(key);
+  if (!journal) return false;
+  const entry = journal.entries.find(
+    (candidate) =>
+      candidate.actionId === recovery.actionId &&
+      candidate.targetId === recovery.targetId &&
+      candidate.revision === recovery.expectedRevision &&
+      (candidate.state === "armed" || candidate.state === "evidence-bound"),
+  );
+  if (!entry) return false;
+  const entries = journal.entries.filter((candidate) => candidate.actionId !== entry.actionId);
+  await browser.storage.local.set({ [key]: { schemaVersion: "1.0", entries } });
+  return true;
 }
 
 function hasUnresolvedAction(

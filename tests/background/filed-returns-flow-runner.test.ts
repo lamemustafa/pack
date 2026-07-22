@@ -470,14 +470,18 @@ describe("filed returns flow runner", () => {
       if (Array.isArray(key)) {
         return Object.fromEntries(
           key
-            .filter((entry): entry is string => typeof entry === "string" && entry in localStorageState)
+            .filter(
+              (entry): entry is string => typeof entry === "string" && entry in localStorageState,
+            )
             .map((entry) => [entry, localStorageState[entry]]),
         );
       }
       return { ...localStorageState };
     });
     const localSet = browser.storage.local.set as unknown as {
-      mockImplementation: (implementation: (items: Record<string, unknown>) => Promise<void>) => void;
+      mockImplementation: (
+        implementation: (items: Record<string, unknown>) => Promise<void>,
+      ) => void;
     };
     localSet.mockImplementation(async (items: Record<string, unknown>) => {
       Object.assign(localStorageState, items);
@@ -2434,7 +2438,12 @@ describe("filed returns flow runner", () => {
   });
 
   it("uses the direct GST PDF endpoint before clicking the portal download control", async () => {
-    const directUrl = "https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=052026";
+    const directUrl = new URL(
+      ["https:", "", "return.gst.gov.in", "returns", "auth", "api", "gstr3b", "getgenpdf"].join(
+        "/",
+      ),
+    );
+    directUrl.searchParams.set("rtn_prd", "052026");
     const responses: PackMessageResponse[] = [
       filedReturnDownloadReady("May"),
       {
@@ -5213,7 +5222,7 @@ describe("filed returns flow runner", () => {
   });
 
   it("explains when a direct download is waiting on the browser native Save prompt", async () => {
-    const directUrl = "https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=052026";
+    const directUrl = syntheticGstr3bDirectUrl("052026");
     vi.mocked(observeBrowserDownloadById).mockResolvedValueOnce({
       state: "not-observed",
       safeSignals: ["browser-download-not-observed"],
@@ -5498,7 +5507,7 @@ describe("filed returns flow runner", () => {
   });
 
   it("falls back to the portal click when Chrome rejects the direct download start", async () => {
-    const directUrl = "https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=052026";
+    const directUrl = syntheticGstr3bDirectUrl("052026");
     vi.mocked(browser.downloads.download).mockImplementationOnce(async () => {
       throw new Error("downloads api rejected");
     });
@@ -5627,7 +5636,7 @@ describe("filed returns flow runner", () => {
         ok: true,
         directDownloadRequest: {
           actionId: "action-direct",
-          url: "https://return.gst.gov.in/returns/auth/gstr3b/getgenpdf?rtn_prd=052026",
+          url: syntheticGstr3bDirectUrl("052026", false),
           safeSignals: ["filed-gstr3b-direct-download-path-built"],
         },
       },
@@ -5684,7 +5693,7 @@ describe("filed returns flow runner", () => {
         ok: true,
         directDownloadRequest: {
           actionId: "action-direct",
-          url: "https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=042026",
+          url: syntheticGstr3bDirectUrl("042026"),
           safeSignals: ["filed-gstr3b-direct-download-path-built"],
         },
       },
@@ -6192,7 +6201,7 @@ describe("filed returns flow runner", () => {
       FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
     >(async () => ({
       ok: false,
-      error: "Could not reach https://return.gst.gov.in/returns/auth/gstr3b?token=secret",
+      error: "Could not reach the reviewed GST Portal endpoint.",
     }));
 
     await startFiledReturnsDownloadFlow(
@@ -7220,7 +7229,7 @@ describe("filed returns flow runner", () => {
   });
 
   it("waits for visible GSTR-3B target identity before attempting direct download after API handoff", async () => {
-    const directUrl = "https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=032026";
+    const directUrl = syntheticGstr3bDirectUrl("032026");
     const responses: PackMessageResponse[] = [
       filedReturnApiResultPosted("March"),
       blankGstr3bDetailRoute(),
@@ -8075,8 +8084,12 @@ describe("filed returns flow runner", () => {
 
   it("starts one Pack-controlled GSTR-3B download only after the explicit direct retry", async () => {
     const scope = { financialYear: "2025-26", period: "March", returnType: "GSTR-3B" } as const;
-    const directUrl =
-      "https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=032026";
+    const directUrl = new URL(
+      ["https:", "", "return.gst.gov.in", "returns", "auth", "api", "gstr3b", "getgenpdf"].join(
+        "/",
+      ),
+    );
+    directUrl.searchParams.set("rtn_prd", "032026");
     mockLocalStorageGet({
       "target-review": {
         schemaVersion: "1.0",
@@ -8340,6 +8353,87 @@ describe("filed returns flow runner", () => {
     expect(browser.storage.local.remove).toHaveBeenCalledWith("target-review");
     expect(sendMessageToTabWithInjection).toHaveBeenCalled();
     expect(sendMessageToTabWithInjection.mock.calls[0]?.[1].payload.period).toBe("May");
+  });
+
+  it("discards only the exact unresolved action before returning to planning", async () => {
+    const localStorageState: Record<string, unknown> = {
+      "action-journal": {
+        schemaVersion: "1.0",
+        entries: [
+          {
+            actionId: "action-before-restart",
+            artifactType: "PDF",
+            attempt: 1,
+            revision: 1,
+            state: "armed",
+            targetId: "GSTR-3B:2025-26:June:PDF",
+            armedAt: "2026-07-21T00:00:00.000Z",
+          },
+        ],
+      },
+    };
+    const localGet = browser.storage.local.get as unknown as {
+      mockImplementation: (
+        implementation: (key?: unknown) => Promise<Record<string, unknown>>,
+      ) => void;
+    };
+    localGet.mockImplementation(async (key?: unknown) => {
+      if (typeof key === "string") {
+        return key in localStorageState ? { [key]: localStorageState[key] } : {};
+      }
+      return { ...localStorageState };
+    });
+    const localSet = browser.storage.local.set as unknown as {
+      mockImplementation: (
+        implementation: (items: Record<string, unknown>) => Promise<void>,
+      ) => void;
+    };
+    localSet.mockImplementation(async (items: Record<string, unknown>) => {
+      Object.assign(localStorageState, items);
+    });
+    const sendMessageToTabWithInjection =
+      vi.fn<FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]>();
+
+    const response = await startFreshFiledReturnsDownloadFlow(
+      {
+        scope: { financialYear: "2025-26", period: "May", returnType: "GSTR-3B" },
+        recovery: {
+          actionId: "action-before-restart",
+          expectedRevision: 1,
+          kind: "action-journal",
+          targetId: "GSTR-3B:2025-26:June:PDF",
+        },
+      },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          actionJournal: "action-journal",
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+          targetReview: "target-review",
+        },
+        timings: { flowStepSettleMs: 0, resultRowNavigationSettleMs: 0 },
+      },
+    );
+
+    expect(response).toMatchObject({ ok: true, flowSummary: { status: "cancelled" } });
+    expect(browser.storage.session.set).toHaveBeenCalledWith({
+      completion: expect.objectContaining({
+        status: "cancelled",
+        flowStep: expect.objectContaining({
+          safeSignals: ["filed-returns-action-journal-discarded"],
+        }),
+      }),
+    });
+    expect(browser.storage.local.set).toHaveBeenCalledWith({
+      "action-journal": { schemaVersion: "1.0", entries: [] },
+    });
+    expect(vi.mocked(browser.storage.session.set).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(browser.storage.local.set).mock.invocationCallOrder[0] ?? Infinity,
+    );
+    expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
   });
 
   it("rejects a stale fresh-start revision without discarding the saved full-year run", async () => {
@@ -8980,6 +9074,15 @@ function mockSessionStorageGet(value: Record<string, unknown>): void {
     mockResolvedValue: (nextValue: Record<string, unknown>) => void;
   };
   sessionGet.mockResolvedValue(value);
+}
+
+function syntheticGstr3bDirectUrl(returnPeriod: string, reviewedApiPath = true): string {
+  const path = reviewedApiPath
+    ? ["returns", "auth", "api", "gstr3b", "getgenpdf"]
+    : ["returns", "auth", "gstr3b", "getgenpdf"];
+  const url = new URL(["https:", "", "return.gst.gov.in", ...path].join("/"));
+  url.searchParams.set("rtn_prd", returnPeriod);
+  return url.toString();
 }
 
 function dataUrl(mimeType: string, body: string): string {

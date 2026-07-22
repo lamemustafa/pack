@@ -14,7 +14,11 @@ export function hasUnresolvedFiledReturnsTargetReview(
 export function hasUnresolvedFiledReturnsRecovery(
   summary: FiledReturnsFlowSummary | null,
 ): boolean {
-  return Boolean(hasUnresolvedFiledReturnsTargetReview(summary) || summary?.fullFiscalYearRecovery);
+  return Boolean(
+    hasUnresolvedFiledReturnsTargetReview(summary) ||
+    summary?.flowStep.safeSignals.includes("filed-returns-action-journal-review-required") ||
+    summary?.fullFiscalYearRecovery,
+  );
 }
 
 export function canRetryFullFiscalYearZipWithoutPortal(

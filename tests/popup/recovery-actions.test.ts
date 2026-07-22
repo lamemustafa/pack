@@ -122,6 +122,38 @@ describe("popup full-year recovery actions", () => {
     );
   });
 
+  it("offers explicit discard-and-retry for an unresolved action journal", () => {
+    const markup = renderToStaticMarkup(
+      createElement(RecoveryActions, {
+        busy: null,
+        portalReady: true,
+        onStartFresh: () => undefined,
+        summary: {
+          ...targetReviewSummary(),
+          flowStep: {
+            ...targetReviewSummary().flowStep,
+            state: "blocked",
+            safeSignals: ["filed-returns-action-journal-review-required"],
+          },
+          actionJournalRecovery: {
+            actionId: "action-safe",
+            expectedRevision: 1,
+            targetId: "GSTR-3B:2026-27:May:PDF",
+          },
+        },
+        onAcknowledgeInterruptedRun: () => undefined,
+        onRetryFullFiscalYearTarget: () => undefined,
+        onRetryTarget: () => undefined,
+        onResolveFullFiscalYearTarget: () => undefined,
+        onResolveTarget: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain("Discard paused action");
+    expect(markup).toContain("Discarding does not mark the return as downloaded.");
+    expect(markup).not.toContain("Record manual observation");
+  });
+
   it("offers explicit Pack and portal download choices after a GSTR-3B capture failure", () => {
     const markup = renderToStaticMarkup(
       createElement(RecoveryActions, {

@@ -27,8 +27,14 @@ export function RecoveryActions({
   const [currentPortalAccountConfirmed, setCurrentPortalAccountConfirmed] = React.useState(false);
   const recoveryState = getRecoveryActionState(summary);
   if (!summary || !recoveryState.visible) return null;
-  const { needsFullFiscalYearReview, needsRunReview, needsTargetReview, runActive, signals } =
-    recoveryState;
+  const {
+    needsActionJournalReview,
+    needsFullFiscalYearReview,
+    needsRunReview,
+    needsTargetReview,
+    runActive,
+    signals,
+  } = recoveryState;
   const canManuallyObserveFullYear = canManuallyObserveFullFiscalYearTarget(summary);
   const canManuallyResolveTarget =
     !signals.has("single-period-zip-incomplete") &&
@@ -92,7 +98,9 @@ export function RecoveryActions({
               type="button"
               className={supportsDirectDownloadFallback ? "secondary" : undefined}
               disabled={retryDisabled}
-              onClick={() => onRetryTarget(supportsPortalClickFallback ? "portal-click" : undefined)}
+              onClick={() =>
+                onRetryTarget(supportsPortalClickFallback ? "portal-click" : undefined)
+              }
             >
               {busy === "retry-filed-returns-target"
                 ? "Retrying..."
@@ -134,6 +142,24 @@ export function RecoveryActions({
               onClick={() => onResolveTarget("cancelled")}
             >
               {busy === "cancel-unconfirmed-download" ? "Cancelling..." : "Cancel and reset"}
+            </button>
+          </>
+        ) : null}
+        {needsActionJournalReview ? (
+          <>
+            <p className="muted">
+              Pack could not confirm the previous browser action. Review browser Downloads before
+              discarding it. Discarding does not mark the return as downloaded.
+            </p>
+            <button
+              type="button"
+              className="secondary"
+              disabled={retryDisabled}
+              onClick={onStartFresh}
+            >
+              {busy === "start-fresh-filed-returns-flow"
+                ? "Discarding paused action..."
+                : "Discard paused action"}
             </button>
           </>
         ) : null}
@@ -249,6 +275,7 @@ function cancelFullYearLabel(summary: FiledReturnsFlowSummary): string {
 }
 
 function getRecoveryActionState(summary: FiledReturnsFlowSummary | null): {
+  needsActionJournalReview: boolean;
   needsFullFiscalYearReview: boolean;
   needsRunReview: boolean;
   needsTargetReview: boolean;
@@ -258,6 +285,9 @@ function getRecoveryActionState(summary: FiledReturnsFlowSummary | null): {
 } {
   const signals = new Set(summary?.flowStep.safeSignals ?? []);
   const needsRunReview = signals.has("filed-returns-run-needs-review");
+  const needsActionJournalReview =
+    signals.has("filed-returns-action-journal-review-required") &&
+    summary?.actionJournalRecovery !== undefined;
   const needsTargetReview = signals.has("filed-returns-target-review-required");
   const runActive =
     signals.has("filed-returns-run-active") || signals.has("full-fiscal-year-run-active");
@@ -268,10 +298,16 @@ function getRecoveryActionState(summary: FiledReturnsFlowSummary | null): {
     !runActive;
   return {
     needsFullFiscalYearReview,
+    needsActionJournalReview,
     needsRunReview,
     needsTargetReview,
     runActive,
     signals,
-    visible: needsRunReview || needsTargetReview || needsFullFiscalYearReview || runActive,
+    visible:
+      needsRunReview ||
+      needsActionJournalReview ||
+      needsTargetReview ||
+      needsFullFiscalYearReview ||
+      runActive,
   };
 }

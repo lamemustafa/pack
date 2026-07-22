@@ -170,6 +170,12 @@ export interface FullFiscalYearTargetRecoveryPayload {
 export interface FiledReturnsFreshStartPayload {
   scope: FiledReturnsDownloadScope;
   recovery:
+    | {
+        kind: "action-journal";
+        actionId: string;
+        expectedRevision: number;
+        targetId: string;
+      }
     | { kind: "target-review"; scope: FiledReturnsDownloadScope }
     | ({
         kind: "full-fiscal-year";
@@ -294,9 +300,28 @@ function isFiledReturnsFreshStartPayload(input: unknown): input is FiledReturnsF
       input.recovery.scope.period !== FULL_FISCAL_YEAR_PERIOD
     );
   }
+  if (input.recovery.kind === "action-journal") {
+    return isActionJournalRecoveryPayload(input.recovery);
+  }
   return (
     input.recovery.kind === "full-fiscal-year" &&
     isFullFiscalYearTargetRecoveryPayload(input.recovery)
+  );
+}
+
+function isActionJournalRecoveryPayload(input: unknown): input is {
+  actionId: string;
+  expectedRevision: number;
+  kind: "action-journal";
+  targetId: string;
+} {
+  if (!isRecord(input)) return false;
+  return (
+    isBoundedString(input.actionId, 1, 80) &&
+    isBoundedString(input.targetId, 1, 120) &&
+    typeof input.expectedRevision === "number" &&
+    Number.isInteger(input.expectedRevision) &&
+    input.expectedRevision >= 1
   );
 }
 
