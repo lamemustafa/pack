@@ -28,7 +28,7 @@ const MAIN_WORLD_FILTER_SEARCH_SETTLE_MS = 1_000;
 export async function startSinglePeriodFiledReturnsDownloadFlow(
   scope: FiledReturnsDownloadScope,
   deps: FiledReturnsFlowRunnerDeps,
-  options: { persistSinglePeriodSummary?: boolean } = {},
+  options: { forcePortalClick?: boolean; persistSinglePeriodSummary?: boolean } = {},
 ): Promise<PackMessageResponse> {
   const shouldPersistSinglePeriodSummary = options.persistSinglePeriodSummary !== false;
   const activeTab = await getRequiredGstTab(deps.getActiveGstTab);
@@ -57,7 +57,13 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
     );
   }
 
-  return runSinglePeriodSteps(scope, deps, activeTab.tab.id, shouldPersistSinglePeriodSummary);
+  return runSinglePeriodSteps(
+    scope,
+    deps,
+    activeTab.tab.id,
+    shouldPersistSinglePeriodSummary,
+    options.forcePortalClick === true,
+  );
 }
 
 async function runSinglePeriodSteps(
@@ -65,6 +71,7 @@ async function runSinglePeriodSteps(
   deps: FiledReturnsFlowRunnerDeps,
   tabId: number,
   shouldPersistSinglePeriodSummary: boolean,
+  forcePortalClick: boolean,
 ): Promise<PackMessageResponse> {
   let lastStep: PortalFlowStepResult | null = null;
   let activePeriod: string | null = null;
@@ -84,6 +91,7 @@ async function runSinglePeriodSteps(
         activePeriod,
         deps,
         shouldPersistSinglePeriodSummary,
+        forcePortalClick,
         scope,
         tabId,
       });
@@ -98,6 +106,7 @@ async function runSinglePeriodSteps(
           activePeriod,
           deps,
           shouldPersistSinglePeriodSummary,
+          forcePortalClick,
           scope,
           tabId,
         });
@@ -109,6 +118,7 @@ async function runSinglePeriodSteps(
         activePeriod,
         deps,
         shouldPersistSinglePeriodSummary,
+        forcePortalClick,
         scope,
         tabId,
       });
@@ -119,6 +129,7 @@ async function runSinglePeriodSteps(
         activePeriod,
         deps,
         shouldPersistSinglePeriodSummary,
+        forcePortalClick,
         scope,
         tabId,
       });
@@ -201,12 +212,14 @@ async function waitForDetailReadyThenTrigger({
   activePeriod,
   deps,
   shouldPersistSinglePeriodSummary,
+  forcePortalClick,
   scope,
   tabId,
 }: {
   activePeriod: string | null;
   deps: FiledReturnsFlowRunnerDeps;
   shouldPersistSinglePeriodSummary: boolean;
+  forcePortalClick: boolean;
   scope: FiledReturnsDownloadScope;
   tabId: number;
 }): Promise<PackMessageResponse> {
@@ -227,6 +240,7 @@ async function waitForDetailReadyThenTrigger({
         activePeriod,
         deps,
         shouldPersistSinglePeriodSummary,
+        forcePortalClick,
         scope,
         tabId,
       });
@@ -237,6 +251,7 @@ async function waitForDetailReadyThenTrigger({
         activePeriod,
         deps,
         shouldPersistSinglePeriodSummary,
+        forcePortalClick,
         scope,
         tabId,
       });
@@ -284,18 +299,21 @@ async function triggerSinglePeriodDownloadAndPersistSummary({
   activePeriod,
   deps,
   shouldPersistSinglePeriodSummary,
+  forcePortalClick,
   scope,
   tabId,
 }: {
   activePeriod: string | null;
   deps: FiledReturnsFlowRunnerDeps;
   shouldPersistSinglePeriodSummary: boolean;
+  forcePortalClick: boolean;
   scope: FiledReturnsDownloadScope;
   tabId: number;
 }): Promise<PackMessageResponse> {
   const response = await triggerSelectedArtifacts({
     activePeriod,
     deps,
+    forcePortalClick,
     scope,
     tabId,
   });

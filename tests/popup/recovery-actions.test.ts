@@ -122,6 +122,35 @@ describe("popup full-year recovery actions", () => {
     );
   });
 
+  it("offers one explicit portal-download fallback after a capture failure", () => {
+    const markup = renderToStaticMarkup(
+      createElement(RecoveryActions, {
+        busy: null,
+        portalReady: true,
+        onStartFresh: () => undefined,
+        summary: {
+          ...targetReviewSummary(),
+          flowStep: {
+            ...targetReviewSummary().flowStep,
+            safeSignals: [
+              "filed-returns-target-review-required",
+              "filed-returns-target-review-portal-click-available",
+            ],
+          },
+        },
+        onAcknowledgeInterruptedRun: () => undefined,
+        onRetryFullFiscalYearTarget: () => undefined,
+        onRetryTarget: () => undefined,
+        onResolveFullFiscalYearTarget: () => undefined,
+        onResolveTarget: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain("Download through GST Portal");
+    expect(markup).toContain("one new, target-bound GST Portal download");
+    expect(markup).toContain("browser Save dialog");
+  });
+
   it("does not offer manual completion for an incomplete selected-file ZIP", () => {
     const summary = targetReviewSummary();
     summary.scope.artifactType = "PDF_AND_EXCEL";

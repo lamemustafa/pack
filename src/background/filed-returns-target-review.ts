@@ -217,6 +217,25 @@ export async function retryCompletedSinglePeriodZipCleanup(
   return { ok: true, flowStep, flowSummary };
 }
 
+const EXPLICIT_PORTAL_CLICK_FALLBACK_SIGNALS = new Set([
+  "filed-gstr1-blob-capture-failed",
+  "filed-gstr1-captured-download-data-url-rejected",
+  "filed-gstr3b-blob-capture-failed",
+  "filed-gstr3b-captured-download-data-url-rejected",
+  "gstr2b-blob-capture-failed",
+  "gstr2b-captured-download-data-url-rejected",
+]);
+
+export function canRetryFiledReturnsTargetThroughPortalClick(
+  review: FiledReturnsTargetReview,
+): boolean {
+  return (
+    concreteFiledReturnsArtifactTypes(
+      normaliseFiledReturnsArtifactType(review.scope.returnType, review.scope.artifactType),
+    ).length === 1 && hasExplicitPortalClickFallbackSignal(review.safeSignals)
+  );
+}
+
 async function persistResolvedTargetReviewSummary(
   flowSummary: FiledReturnsFlowSummary,
   deps: FiledReturnsTargetReviewDeps,
@@ -346,6 +365,9 @@ function targetReviewStep(review: FiledReturnsTargetReview): PortalFlowStepResul
     state: "user-action-required",
     safeSignals: [
       "filed-returns-target-review-required",
+      ...(canRetryFiledReturnsTargetThroughPortalClick(review)
+        ? ["filed-returns-target-review-portal-click-available"]
+        : []),
       ...(review.safeSignals.includes("filed-returns-target-manually-observed")
         ? ["filed-returns-target-manually-observed"]
         : []),
@@ -386,6 +408,7 @@ export function noTargetReviewResponse(scope: FiledReturnsDownloadScope): PackMe
 
 function requiresTargetReview(step: PortalFlowStepResult): boolean {
   if (hasSinglePeriodCleanupFailure(step.safeSignals)) return true;
+  if (hasExplicitPortalClickFallbackSignal(step.safeSignals)) return true;
   if (step.safeSignals.includes("filed-gstr1-excel-no-details-available")) return false;
   return (
     step.state === "download-unconfirmed" ||
@@ -399,6 +422,10 @@ function requiresTargetReview(step: PortalFlowStepResult): boolean {
       ].includes(signal),
     )
   );
+}
+
+function hasExplicitPortalClickFallbackSignal(safeSignals: readonly string[]): boolean {
+  return safeSignals.some((signal) => EXPLICIT_PORTAL_CLICK_FALLBACK_SIGNALS.has(signal));
 }
 
 function hasSinglePeriodCleanupFailure(safeSignals: readonly string[]): boolean {

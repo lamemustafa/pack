@@ -7,7 +7,7 @@ export interface RecoveryActionsProps {
   summary: FiledReturnsFlowSummary | null;
   onAcknowledgeInterruptedRun: () => void;
   onRetryFullFiscalYearTarget: (confirmCurrentPortalAccount?: boolean) => void;
-  onRetryTarget: () => void;
+  onRetryTarget: (forcePortalClick?: boolean) => void;
   onResolveFullFiscalYearTarget: (resolution: "manually-observed" | "cancelled") => void;
   onResolveTarget: (resolution: "manually-observed" | "cancelled") => void;
   onStartFresh: () => void;
@@ -36,6 +36,9 @@ export function RecoveryActions({
   const retryDisabled = busy !== null || !portalReady;
   const fullFiscalYearPaused = signals.has("full-fiscal-year-temporarily-paused");
   const needsResumeConfirmation = signals.has("full-fiscal-year-resume-confirmation-required");
+  const supportsPortalClickFallback = signals.has(
+    "filed-returns-target-review-portal-click-available",
+  );
   return (
     <details className="recovery-details" open>
       <summary>Saved run options</summary>
@@ -66,8 +69,22 @@ export function RecoveryActions({
             {!portalReady ? (
               <p className="muted">Open a signed-in GST Portal tab before retrying this period.</p>
             ) : null}
-            <button type="button" disabled={retryDisabled} onClick={onRetryTarget}>
-              {busy === "retry-filed-returns-target" ? "Retrying..." : "Retry this period"}
+            {supportsPortalClickFallback ? (
+              <p className="muted">
+                Pack could not capture the portal-generated file automatically. This starts one new,
+                target-bound GST Portal download and may show the browser Save dialog.
+              </p>
+            ) : null}
+            <button
+              type="button"
+              disabled={retryDisabled}
+              onClick={() => onRetryTarget(supportsPortalClickFallback)}
+            >
+              {busy === "retry-filed-returns-target"
+                ? "Retrying..."
+                : supportsPortalClickFallback
+                  ? "Download through GST Portal"
+                  : "Retry this period"}
             </button>
             <button
               type="button"

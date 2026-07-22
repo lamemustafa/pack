@@ -136,18 +136,23 @@ export function usePackPopupController() {
     });
   }, [withBusy]);
 
-  const retryFiledReturnsTarget = React.useCallback(async () => {
-    const recoveryScope = filedReturnsFlowSummary?.scope;
-    if (!recoveryScope) return;
+  const retryFiledReturnsTarget = React.useCallback(
+    async (forcePortalClick = false) => {
+      const recoveryScope = filedReturnsFlowSummary?.scope;
+      if (!recoveryScope) return;
 
-    await withBusy("retry-filed-returns-target", async () => {
-      const response = await sendPackMessage({
-        type: "PACK_RETRY_FILED_RETURNS_TARGET",
-        payload: recoveryScope,
+      await withBusy("retry-filed-returns-target", async () => {
+        const response = await sendPackMessage({
+          type: forcePortalClick
+            ? "PACK_RETRY_FILED_RETURNS_PORTAL_CLICK"
+            : "PACK_RETRY_FILED_RETURNS_TARGET",
+          payload: recoveryScope,
+        });
+        applyFlowResponse(response);
       });
-      applyFlowResponse(response);
-    });
-  }, [applyFlowResponse, filedReturnsFlowSummary?.scope, withBusy]);
+    },
+    [applyFlowResponse, filedReturnsFlowSummary?.scope, withBusy],
+  );
 
   const resolveUnconfirmedDownload = React.useCallback(
     async (resolution: "manually-observed" | "cancelled") => {

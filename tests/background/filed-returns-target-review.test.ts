@@ -166,6 +166,65 @@ describe("filed returns target review", () => {
     expect(browserMocks.storage.local.set).not.toHaveBeenCalled();
   });
 
+  it("persists a capture failure and exposes only the explicit portal-click capability", async () => {
+    const summary = await persistFiledReturnsTargetReview(
+      {
+        financialYear: "2025-26",
+        period: "March",
+        returnType: "GSTR-3B",
+      },
+      {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "blocked",
+        safeSignals: ["filed-gstr3b-blob-capture-failed"],
+        safeMessage: "Pack could not capture the portal-generated file.",
+      },
+      { storageKeys: { targetReview: "target-review" } },
+    );
+
+    expect(summary).toMatchObject({
+      status: "blocked",
+      flowStep: {
+        safeSignals: [
+          "filed-returns-target-review-required",
+          "filed-returns-target-review-portal-click-available",
+        ],
+      },
+    });
+    expect(browserMocks.storage.local.set).toHaveBeenCalledWith({
+      "target-review": expect.objectContaining({
+        safeSignals: ["filed-gstr3b-blob-capture-failed"],
+      }),
+    });
+  });
+
+  it("does not offer a single portal-click fallback for a multi-artifact selection", async () => {
+    const summary = await persistFiledReturnsTargetReview(
+      {
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2025-26",
+        period: "March",
+        returnType: "GSTR-2B",
+      },
+      {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr2b-pdf-private-v0",
+        state: "blocked",
+        safeSignals: ["gstr2b-blob-capture-failed"],
+        safeMessage: "Pack could not capture the selected portal file.",
+      },
+      { storageKeys: { targetReview: "target-review" } },
+    );
+
+    expect(summary).toMatchObject({
+      flowStep: { safeSignals: ["filed-returns-target-review-required"] },
+    });
+    expect(summary?.flowStep.safeSignals).not.toContain(
+      "filed-returns-target-review-portal-click-available",
+    );
+  });
+
   it("does not let manual review hide retained single-period staging", async () => {
     const scope = {
       artifactType: "PDF_AND_EXCEL" as const,

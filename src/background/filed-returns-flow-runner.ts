@@ -33,6 +33,7 @@ import {
 } from "./filed-returns-full-fiscal-year-run-state";
 import {
   clearFiledReturnsTargetReview,
+  canRetryFiledReturnsTargetThroughPortalClick,
   hasMalformedFiledReturnsTargetReview,
   noTargetReviewResponse,
   readFiledReturnsTargetReview,
@@ -262,9 +263,13 @@ export async function retryFullFiscalYearTargetDownloadFlow(
 export async function retryFiledReturnsTargetDownloadFlow(
   scope: FiledReturnsDownloadScope,
   deps: FiledReturnsFlowRunnerDeps,
+  options: { forcePortalClick?: boolean } = {},
 ): Promise<PackMessageResponse> {
   const targetReview = await readFiledReturnsTargetReview(scope, deps);
   if (!targetReview) return noTargetReviewResponse(scope);
+  if (options.forcePortalClick && !canRetryFiledReturnsTargetThroughPortalClick(targetReview)) {
+    return responseForFiledReturnsTargetReview(targetReview);
+  }
 
   const activeRun = await acquireFiledReturnsRun(scope, deps);
   if ("response" in activeRun) return activeRun.response;
@@ -274,7 +279,11 @@ export async function retryFiledReturnsTargetDownloadFlow(
     const cleanupResponse = await retryCompletedSinglePeriodZipCleanup(scope, deps);
     if (cleanupResponse) return cleanupResponse;
     await clearFiledReturnsTargetReview(scope, deps);
-    return startSinglePeriodFiledReturnsDownloadFlow(scope, deps);
+    return startSinglePeriodFiledReturnsDownloadFlow(
+      scope,
+      deps,
+      options.forcePortalClick ? { forcePortalClick: true } : {},
+    );
   } finally {
     stopLeaseRenewal();
     await releaseFiledReturnsRun(activeRun.run, deps);

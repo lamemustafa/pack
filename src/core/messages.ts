@@ -57,6 +57,7 @@ export type PackMessage =
   | { type: "PACK_ACKNOWLEDGE_LOCAL_PROCESSING" }
   | { type: "PACK_ACKNOWLEDGE_INTERRUPTED_RUN" }
   | { type: "PACK_RETRY_FILED_RETURNS_TARGET"; payload: FiledReturnsDownloadScope }
+  | { type: "PACK_RETRY_FILED_RETURNS_PORTAL_CLICK"; payload: FiledReturnsDownloadScope }
   | {
       type: "PACK_RETRY_FULL_FISCAL_YEAR_TARGET";
       payload: FullFiscalYearTargetRecoveryPayload;
@@ -212,6 +213,7 @@ export function isPackMessage(input: unknown): input is PackMessage {
     case "PACK_CONTENT_NAVIGATE_FILED_RETURNS_V3":
       return true;
     case "PACK_RETRY_FILED_RETURNS_TARGET":
+    case "PACK_RETRY_FILED_RETURNS_PORTAL_CLICK":
       return (
         isFiledReturnsStartScope(input.payload) && input.payload.period !== FULL_FISCAL_YEAR_PERIOD
       );

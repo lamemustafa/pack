@@ -45,6 +45,7 @@ export async function triggerAndObserveFiledReturnDownload({
   activePeriod,
   artifactType = "PDF",
   deps,
+  forcePortalClick = false,
   scope,
   tabId,
   targetOverride,
@@ -52,13 +53,14 @@ export async function triggerAndObserveFiledReturnDownload({
   activePeriod: string | null;
   artifactType?: FiledReturnsConcreteArtifactType;
   deps: FiledReturnsFlowMessagingDeps;
+  forcePortalClick?: boolean;
   scope: FiledReturnsDownloadScope;
   tabId: number;
   targetOverride?: FiledReturnsDownloadTarget;
 }): Promise<PackMessageResponse> {
   const initialTarget = targetOverride ?? createDownloadTarget(scope, artifactType);
   if (!initialTarget) return unverifiedPeriodResponse(scope);
-  let target = initialTarget;
+  let target = forcePortalClick ? { ...initialTarget, forcePortalClick: true } : initialTarget;
   const shouldAttemptDirectDownload =
     artifactType === "PDF" &&
     !target.forcePortalClick &&

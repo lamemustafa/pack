@@ -230,6 +230,14 @@ async function handleMessage(
         return localProcessingAcknowledgementRequiredResponse();
       }
       return retryFiledReturnsTargetDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
+    case "PACK_RETRY_FILED_RETURNS_PORTAL_CLICK":
+      if (!isPackPopupSender(sender)) return { ok: false, error: "Invalid Pack sender." };
+      if (!(await hasCurrentLocalProcessingAcknowledgement())) {
+        return localProcessingAcknowledgementRequiredResponse();
+      }
+      return retryFiledReturnsTargetDownloadFlow(message.payload, filedReturnsFlowRunnerDeps(), {
+        forcePortalClick: true,
+      });
     case "PACK_RETRY_FULL_FISCAL_YEAR_TARGET":
       return pausedSavedFullFiscalYearResponse();
     case "PACK_RESOLVE_UNCONFIRMED_DOWNLOAD":
@@ -369,6 +377,7 @@ function readInstalledPackVersion(value: unknown): string | null {
 function isFiledReturnsSideEffectMessage(type: string): boolean {
   return [
     "PACK_RETRY_FILED_RETURNS_TARGET",
+    "PACK_RETRY_FILED_RETURNS_PORTAL_CLICK",
     "PACK_RETRY_FULL_FISCAL_YEAR_TARGET",
     "PACK_RESOLVE_UNCONFIRMED_DOWNLOAD",
     "PACK_RESOLVE_FULL_FISCAL_YEAR_TARGET",
@@ -377,6 +386,10 @@ function isFiledReturnsSideEffectMessage(type: string): boolean {
     "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW",
     "PACK_EXPORT_FILED_RETURNS_RECEIPT",
   ].includes(type);
+}
+
+function isPackPopupSender(sender: Browser.runtime.MessageSender): boolean {
+  return sender.id === browser.runtime.id && sender.url === browser.runtime.getURL("/popup.html");
 }
 
 function filedReturnsFlowRunnerDeps() {

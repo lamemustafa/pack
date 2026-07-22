@@ -36,17 +36,32 @@ import { toStepLimitReachedFlowStep } from "./filed-returns-step-limit";
 export async function triggerSelectedArtifacts({
   activePeriod,
   deps,
+  forcePortalClick = false,
   scope,
   tabId,
 }: {
   activePeriod: string | null;
   deps: FiledReturnsFlowRunnerDeps;
+  forcePortalClick?: boolean;
   scope: FiledReturnsDownloadScope;
   tabId: number;
 }): Promise<PackMessageResponse> {
   const artifactTypes = concreteFiledReturnsArtifactTypes(
     normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType),
   );
+  if (forcePortalClick && artifactTypes.length !== 1) {
+    return {
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-private-v0",
+        state: "blocked",
+        safeSignals: ["filed-returns-portal-click-fallback-ambiguous-artifact-selection"],
+        safeMessage:
+          "Pack will not repeat multiple selected portal downloads from one explicit fallback. Review browser Downloads, then start the needed artifact separately.",
+      },
+    };
+  }
   const singlePeriodBundleLedgerId =
     artifactTypes.length > 1 && !deps.stageCapturedDownloads
       ? await reserveSinglePeriodBundleLedger()
@@ -98,6 +113,7 @@ export async function triggerSelectedArtifacts({
       activePeriod,
       artifactType,
       deps: artifactDeps,
+      forcePortalClick,
       scope,
       tabId,
     });

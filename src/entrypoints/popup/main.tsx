@@ -146,7 +146,7 @@ function App() {
           onStartFresh={() => void popup.startFreshFiledReturnsFlow()}
           onAcknowledgeInterruptedRun={() => void popup.acknowledgeInterruptedRun()}
           onRetryFullFiscalYearTarget={() => void popup.retryFullFiscalYearTarget()}
-          onRetryTarget={() => void popup.retryFiledReturnsTarget()}
+          onRetryTarget={(forcePortalClick) => void popup.retryFiledReturnsTarget(forcePortalClick)}
           onResolveFullFiscalYearTarget={(resolution) =>
             void popup.resolveFullFiscalYearTarget(resolution)
           }

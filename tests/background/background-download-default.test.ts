@@ -264,6 +264,47 @@ describe("background filed returns download defaults", () => {
     expect(browserMocks.tabs.sendMessage).not.toHaveBeenCalled();
   });
 
+  it("rejects a portal-click fallback that did not originate from the Pack popup", async () => {
+    await import("../../src/entrypoints/background");
+
+    const response = await sendBackgroundMessage({
+      type: "PACK_RETRY_FILED_RETURNS_PORTAL_CLICK",
+      payload: {
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-3B",
+      },
+    });
+
+    expect(response).toEqual({ ok: false, error: "Invalid Pack sender." });
+    expect(browserMocks.tabs.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("accepts the portal-click fallback only from the Pack popup", async () => {
+    await import("../../src/entrypoints/background");
+
+    const response = await sendBackgroundMessage(
+      {
+        type: "PACK_RETRY_FILED_RETURNS_PORTAL_CLICK",
+        payload: {
+          financialYear: "2026-27",
+          period: "May",
+          returnType: "GSTR-3B",
+        },
+      },
+      {
+        id: browserMocks.runtime.id,
+        url: browserMocks.runtime.getURL("/popup.html"),
+      } satisfies Browser.runtime.MessageSender,
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: { safeSignals: ["filed-returns-target-review-not-found"] },
+    });
+    expect(browserMocks.tabs.sendMessage).not.toHaveBeenCalled();
+  });
+
   it("exports an optional receipt only for the current verified single-period summary", async () => {
     await import("../../src/entrypoints/background");
     await browserMocks.storage.session.set({
@@ -767,16 +808,15 @@ describe("background filed returns download defaults", () => {
   });
 });
 
-async function sendBackgroundMessage(message: PackMessage): Promise<PackMessageResponse> {
+async function sendBackgroundMessage(
+  message: PackMessage,
+  sender: Browser.runtime.MessageSender = { id: browserMocks.runtime.id },
+): Promise<PackMessageResponse> {
   const listener = browserMocks.getMessageListener();
   if (!listener) throw new Error("background listener was not registered");
 
   return new Promise((resolve) => {
-    listener(
-      message,
-      { id: browserMocks.runtime.id } satisfies Browser.runtime.MessageSender,
-      resolve,
-    );
+    listener(message, sender, resolve);
   });
 }
 
