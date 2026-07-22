@@ -439,6 +439,88 @@ describe("filed returns flow runner", () => {
     expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
   });
 
+  it("starts a distinct period after a prior target was verified", async () => {
+    const localStorageState: Record<string, unknown> = {
+      "action-journal": {
+        schemaVersion: "1.0",
+        entries: [
+          {
+            actionId: "action-may",
+            artifactType: "PDF",
+            attempt: 1,
+            revision: 3,
+            state: "verified",
+            targetId: "GSTR-3B:2026-27:May:PDF",
+            armedAt: "2026-07-21T00:00:00.000Z",
+            downloadId: 41,
+            settledAt: "2026-07-21T00:01:00.000Z",
+          },
+        ],
+      },
+    };
+    const localGet = browser.storage.local.get as unknown as {
+      mockImplementation: (
+        implementation: (key?: unknown) => Promise<Record<string, unknown>>,
+      ) => void;
+    };
+    localGet.mockImplementation(async (key?: unknown) => {
+      if (typeof key === "string") {
+        return key in localStorageState ? { [key]: localStorageState[key] } : {};
+      }
+      if (Array.isArray(key)) {
+        return Object.fromEntries(
+          key
+            .filter((entry): entry is string => typeof entry === "string" && entry in localStorageState)
+            .map((entry) => [entry, localStorageState[entry]]),
+        );
+      }
+      return { ...localStorageState };
+    });
+    const localSet = browser.storage.local.set as unknown as {
+      mockImplementation: (implementation: (items: Record<string, unknown>) => Promise<void>) => void;
+    };
+    localSet.mockImplementation(async (items: Record<string, unknown>) => {
+      Object.assign(localStorageState, items);
+    });
+
+    const responses: PackMessageResponse[] = [
+      filedReturnDownloadReady("June"),
+      filedReturnDownloadClicked(),
+    ];
+    const sendMessageToTabWithInjection = vi.fn<
+      FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
+    >(async () => responses.shift() ?? { ok: false, error: "Unexpected call." });
+
+    const response = await startFiledReturnsDownloadFlow(
+      { financialYear: "2026-27", period: "June", returnType: "GSTR-3B" },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          actionJournal: "action-journal",
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+        },
+        timings: {
+          flowStepSettleMs: 0,
+          resultRowNavigationSettleMs: 0,
+        },
+      },
+    );
+
+    expect(response).toMatchObject({ ok: true, flowStep: { state: "downloaded" } });
+    expect(sendMessageToTabWithInjection).toHaveBeenCalledTimes(2);
+    expect(browser.storage.local.set).toHaveBeenCalledWith({
+      "action-journal": expect.objectContaining({
+        entries: expect.arrayContaining([
+          expect.objectContaining({ actionId: "action-may", state: "verified" }),
+          expect.objectContaining({ targetId: "GSTR-3B:2026-27:June:PDF", state: "armed" }),
+        ]),
+      }),
+    });
+  });
+
   it("runs a full fiscal year through concrete monthly targets without sending a full-year sentinel to content", async () => {
     const sendMessageToTabWithInjection = vi.fn<
       FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]

@@ -6,6 +6,7 @@ import type {
   PackMessageResponse,
 } from "../core/messages";
 import { isMultiPeriodFiledReturnsScope } from "../core/filed-returns-scope";
+import { normaliseFiledReturnsArtifactType } from "../core/filed-returns-artifacts";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import {
   acquireFiledReturnsRun,
@@ -105,7 +106,12 @@ export async function startFiledReturnsDownloadFlow(
   if (!isMultiPeriodFiledReturnsScope(scope)) {
     await clearVerifiedActionsForPersistedCompleteSummary(scope, deps);
   }
-  if (await hasUnresolvedFiledReturnsAction(deps.storageKeys.actionJournal)) {
+  if (
+    await hasUnresolvedFiledReturnsAction(
+      deps.storageKeys.actionJournal,
+      requestedConcreteActionTargetId(scope),
+    )
+  ) {
     return unresolvedActionJournalResponse(scope);
   }
 
@@ -177,6 +183,13 @@ export async function startFiledReturnsDownloadFlow(
     stopLeaseRenewal();
     await releaseFiledReturnsRun(activeRun.run, deps);
   }
+}
+
+function requestedConcreteActionTargetId(scope: FiledReturnsDownloadScope): string | undefined {
+  if (isMultiPeriodFiledReturnsScope(scope)) return undefined;
+  const artifactType = normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType);
+  if (artifactType !== "PDF" && artifactType !== "EXCEL") return undefined;
+  return `${scope.returnType}:${scope.financialYear}:${scope.period}:${artifactType}`;
 }
 
 function malformedTargetReviewResponse(scope: FiledReturnsDownloadScope): PackMessageResponse {

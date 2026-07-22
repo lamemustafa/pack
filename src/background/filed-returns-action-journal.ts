@@ -47,7 +47,7 @@ export async function armFiledReturnsAction(
     return "armed";
   }
   if (
-    hasUnresolvedAction(journal) ||
+    hasUnresolvedAction(journal, input.targetId) ||
     journal.entries.some((entry) => entry.actionId === input.actionId)
   ) {
     return "blocked";
@@ -116,10 +116,13 @@ export async function settleFiledReturnsAction(
   return true;
 }
 
-export async function hasUnresolvedFiledReturnsAction(key: string | undefined): Promise<boolean> {
+export async function hasUnresolvedFiledReturnsAction(
+  key: string | undefined,
+  requestedTargetId?: string,
+): Promise<boolean> {
   if (!key) return false;
   const journal = await readJournal(key);
-  return journal === null || hasUnresolvedAction(journal);
+  return journal === null || hasUnresolvedAction(journal, requestedTargetId);
 }
 
 export async function clearVerifiedFiledReturnsActions(
@@ -135,10 +138,16 @@ export async function clearVerifiedFiledReturnsActions(
   await browser.storage.local.set({ [key]: { schemaVersion: "1.0", entries } });
 }
 
-function hasUnresolvedAction(journal: FiledReturnsActionJournal): boolean {
+function hasUnresolvedAction(
+  journal: FiledReturnsActionJournal,
+  requestedTargetId?: string,
+): boolean {
   return journal.entries.some(
     (entry) =>
-      entry.state === "armed" || entry.state === "evidence-bound" || entry.state === "verified",
+      entry.state === "armed" ||
+      entry.state === "evidence-bound" ||
+      (entry.state === "verified" &&
+        (requestedTargetId === undefined || entry.targetId === requestedTargetId)),
   );
 }
 

@@ -57,7 +57,7 @@ describe("filed returns action journal", () => {
           attempt: 1,
           revision: 1,
           state: "armed" as const,
-          targetId: "target-1",
+          targetId: "GSTR-3B:2026-27:May:PDF",
           armedAt: "2026-07-21T00:00:00.000Z",
         },
       ],
@@ -195,7 +195,7 @@ describe("filed returns action journal", () => {
           attempt: 1,
           revision: 3,
           state: "verified" as const,
-          targetId: "target-1",
+          targetId: "GSTR-3B:2026-27:May:PDF",
           armedAt: "2026-07-21T00:00:00.000Z",
           downloadId: 41,
           settledAt: "2026-07-21T00:01:00.000Z",
@@ -205,9 +205,48 @@ describe("filed returns action journal", () => {
     browserMocks.storage.local.get.mockResolvedValue({ [KEY]: journal });
 
     await expect(hasUnresolvedFiledReturnsAction(KEY)).resolves.toBe(true);
+    await expect(
+      hasUnresolvedFiledReturnsAction(KEY, "GSTR-3B:2026-27:June:PDF"),
+    ).resolves.toBe(false);
+    await expect(
+      hasUnresolvedFiledReturnsAction(KEY, "GSTR-3B:2026-27:May:PDF"),
+    ).resolves.toBe(true);
     await clearVerifiedFiledReturnsActions(KEY);
     const cleared = storedJournalAt(0);
     expect(cleared.entries).toEqual([]);
+  });
+
+  it("arms a distinct period without re-arming a verified prior target", async () => {
+    const journal = {
+      schemaVersion: "1.0" as const,
+      entries: [
+        {
+          actionId: "action-may",
+          artifactType: "PDF" as const,
+          attempt: 1,
+          revision: 3,
+          state: "verified" as const,
+          targetId: "GSTR-3B:2026-27:May:PDF",
+          armedAt: "2026-07-21T00:00:00.000Z",
+          downloadId: 41,
+          settledAt: "2026-07-21T00:01:00.000Z",
+        },
+      ],
+    };
+    browserMocks.storage.local.get.mockResolvedValue({ [KEY]: journal });
+
+    await expect(
+      armFiledReturnsAction(KEY, {
+        actionId: "action-june",
+        artifactType: "PDF",
+        targetId: "GSTR-3B:2026-27:June:PDF",
+      }),
+    ).resolves.toBe("armed");
+
+    expect(storedJournalAt(0).entries).toMatchObject([
+      { actionId: "action-may", state: "verified" },
+      { actionId: "action-june", state: "armed" },
+    ]);
   });
 
   it("clears only the completed target when a target ID is supplied", async () => {
