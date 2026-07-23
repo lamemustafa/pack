@@ -432,7 +432,7 @@ describe("background filed returns download defaults", () => {
     expect(browserMocks.tabs.sendMessage).not.toHaveBeenCalled();
   });
 
-  it("prefers target-bound portal capture over the unreliable direct request", async () => {
+  it("prefers the target-bound direct GSTR-3B endpoint for a browser-owned filename", async () => {
     browserMocks.tabs.sendMessage.mockImplementation(async (_tabId, message: PackMessage) => {
       message = unwrapContentRequest(message);
       if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3") {
@@ -448,26 +448,13 @@ describe("background filed returns download defaults", () => {
         } satisfies PackMessageResponse;
       }
 
-      if (message.type === "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3") {
+      if (message.type === "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V3") {
         return {
           ok: true,
-          mainWorldCaptureRequest: {
+          directDownloadRequest: {
             actionId: message.payload.actionId,
-            controlAttribute: "data-pack-download-action-id",
-            controlId: message.payload.actionId,
-            maxBytes: 10_000_000,
-            signalPrefix: "filed-gstr3b",
-          },
-          downloadTrigger: {
-            connectorId: "gst",
-            scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
-            state: "clicked",
-            safeSignals: [
-              "filed-return-download-clicked",
-              "filed-gstr3b-download-clicked",
-              "filed-gstr3b-portal-blob-download-captured",
-            ],
-            safeMessage: "Captured.",
+            safeSignals: ["filed-gstr3b-direct-download-probe-accepted"],
+            url: "https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=052026",
           },
         } satisfies PackMessageResponse;
       }
@@ -491,7 +478,7 @@ describe("background filed returns download defaults", () => {
       flowStep: {
         state: "downloaded",
         safeSignals: expect.arrayContaining([
-          "filed-gstr3b-extension-download-started",
+          "filed-gstr3b-direct-download-started",
           "browser-download-completed",
         ]),
       },
@@ -505,7 +492,7 @@ describe("background filed returns download defaults", () => {
     );
     expect(sentActionMessageTypes()).toEqual([
       "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
-      "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
+      "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V3",
     ]);
   });
 

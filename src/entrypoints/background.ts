@@ -362,10 +362,11 @@ function isPackPopupSender(sender: Browser.runtime.MessageSender): boolean {
 function filedReturnsFlowRunnerDeps() {
   return {
     getActiveGstTab,
-    // The authenticated portal click/capture remains the default. Browser-initiated
-    // direct endpoint downloads are retained for targeted tests only: Brave can
-    // reject their initiator context even when the active portal session is valid.
-    preferDirectDownload: false,
+    // GSTR-3B uses its reviewed, target-bound PDF endpoint first so Pack owns the
+    // browser download filename and relative Downloads path. If the endpoint is
+    // unavailable before a download starts, the runner can still use the
+    // target-bound portal-control fallback.
+    preferDirectDownload: true,
     selectFiltersInMainWorld: selectFiledReturnsFiltersInMainWorldForTab,
     sendMessageToTabWithInjection,
     storageKeys: filedReturnsStorageKeys(),
