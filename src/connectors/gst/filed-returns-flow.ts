@@ -148,6 +148,31 @@ export async function runFiledReturnsDownloadStep(
     };
   }
 
+  if (scope.returnType === "GSTR-3B" && observation.safeSignals.includes("gstr-3b-detail-route")) {
+    const detailIdentity = extractFiledReturnsDetailIdentity(documentRef, scope.returnType);
+    const mismatchedDetailNavigation = await returnFromMismatchedFiledReturnPage(
+      documentRef,
+      scope,
+      detailIdentity,
+    );
+    if (mismatchedDetailNavigation) return mismatchedDetailNavigation;
+
+    return {
+      connectorId: "gst",
+      scopeId,
+      state: "clicked",
+      safeSignals: [
+        ...observation.safeSignals,
+        ...summaryModalSignals,
+        ...detailIdentity.safeSignals,
+        "filed-gstr3b-controls-pending",
+      ],
+      safeMessage: filedReturnDetailIdentityMatchesScope(detailIdentity, scope)
+        ? "Pack verified the filed GSTR-3B detail page and is waiting for its PDF control to finish loading."
+        : "Pack is waiting for the GST Portal to expose the selected GSTR-3B detail identity and PDF control.",
+    };
+  }
+
   if (hasUnchangedFiledReturnsSearchForScope(documentRef, scope)) {
     clearFiledReturnsSearchAttemptForScope(documentRef, scope);
     return {

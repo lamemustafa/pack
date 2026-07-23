@@ -6490,6 +6490,46 @@ describe("filed returns guided flow", () => {
     expect(downloadClicked).toBe(0);
   });
 
+  it("waits on a matching GSTR-3B detail page while its PDF control is still rendering", async () => {
+    const scope: FiledReturnsDownloadScope = {
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-3B",
+    };
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <nav>Returns / Filed Returns</nav>
+          <h1>GSTR-3B - Monthly Return</h1>
+          <div>Status - Filed</div>
+          <div>Financial Year - 2025-26</div>
+          <div>Return Period - May</div>
+          <button data-back>Back</button>
+          <p>The return page is still loading.</p>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/gstr3b",
+    );
+    makeLayoutVisible(documentRef);
+    let backClicked = 0;
+    documentRef.querySelector("[data-back]")?.addEventListener("click", () => {
+      backClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, scope);
+
+    expect(result).toMatchObject({
+      state: "clicked",
+      safeSignals: expect.arrayContaining([
+        "gstr-3b-detail-route",
+        "filed-return-detail-period:May",
+        "filed-return-detail-financial-year:2025-26",
+        "filed-gstr3b-controls-pending",
+      ]),
+    });
+    expect(backClicked).toBe(0);
+  });
+
   it("dismisses the GST summary overlay even when it is not marked as a modal", async () => {
     const documentRef = createDocument(`
       <main>
