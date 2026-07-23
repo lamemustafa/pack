@@ -244,7 +244,8 @@ export function usePackPopupController() {
   const recoverySummary = hasUnresolvedFiledReturnsRecovery(filedReturnsFlowSummary)
     ? filedReturnsFlowSummary
     : null;
-  const scopeLockedForReview = recoverySummary !== null;
+  const scopeLockedForReview =
+    recoverySummary !== null && !requiresConcreteActionSelection(recoverySummary);
   const setScope = React.useCallback((nextScope: FiledReturnsDownloadScope) => {
     setReceiptDownloadStatus(null);
     setScopeState(nextScope);
@@ -296,6 +297,13 @@ export function usePackPopupController() {
     status,
     summaryHeading,
   };
+}
+
+function requiresConcreteActionSelection(summary: FiledReturnsFlowSummary): boolean {
+  return (
+    summary.flowStep.safeSignals.includes("filed-returns-action-journal-review-required") &&
+    !summary.actionJournalRecovery
+  );
 }
 
 async function sendPackMessage(message: PackMessage): Promise<PackMessageResponse> {

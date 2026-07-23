@@ -66,10 +66,11 @@ export function hasInlinePrimaryAction(
   presentation: PopupPresentationState,
   summary: FiledReturnsFlowSummary | null,
 ): boolean {
-  if (presentation.kind === "error") return true;
   if (!summary) return false;
 
   const signals = new Set(summary.flowStep.safeSignals);
+  if (signals.has("filed-returns-action-journal-review-required")) return false;
+  if (presentation.kind === "error") return true;
   if (signals.has("full-fiscal-year-resume-confirmation-required")) return false;
   return Boolean(
     (presentation.kind === "blocked" && summary.currentPeriod) ||
@@ -129,10 +130,15 @@ function getInlineStatusCopy(
   }
   if (presentation.kind === "blocked" && summary?.currentPeriod) {
     const signals = new Set(summary.flowStep.safeSignals);
+    const needsActionJournalReview = signals.has("filed-returns-action-journal-review-required");
     const needsTargetReview = signals.has("filed-returns-target-review-required");
     const needsFullFiscalYearRecovery = Boolean(summary.fullFiscalYearRecovery);
     return {
-      body: needsTargetReview
+      body: needsActionJournalReview
+        ? summary.actionJournalRecovery
+          ? `Pack could not confirm the prior ${summary.currentPeriod} browser action. Review Browser Downloads, then use Saved run options to discard it before starting another download.`
+          : "Pack found more than one paused browser action and cannot safely choose one to discard. Review Browser Downloads, then choose Plan another archive and select the exact single-period PDF or Excel download to expose its recovery control."
+        : needsTargetReview
         ? signals.has("single-period-zip-incomplete")
           ? `Resolve ${summary.currentPeriod} before choosing another period. Retry the selected files from a signed-in GST Portal tab, or open More run controls to cancel and reset.`
           : `Resolve ${summary.currentPeriod} before choosing another period. Retry it, or open More run controls to mark it reviewed after checking Browser Downloads, or cancel and reset.`
@@ -140,7 +146,11 @@ function getInlineStatusCopy(
           ? getFullFiscalYearRecoveryBody(summary.currentPeriod, signals)
           : summary.flowStep.safeMessage,
       icon: "!",
-      title: needsTargetReview
+      title: needsActionJournalReview
+        ? summary.actionJournalRecovery
+          ? `${summary.currentPeriod} browser action needs review`
+          : "Saved browser actions need review"
+        : needsTargetReview
         ? `${summary.currentPeriod} needs review`
         : needsFullFiscalYearRecovery
           ? `Full-year run paused at ${summary.currentPeriod}`
@@ -177,12 +187,13 @@ export function getInlinePrimaryAction(
     "onOpenPortal" | "onRestartTarget" | "onRetryFullFiscalYearTarget" | "onRetryTarget"
   >,
 ): { label: string; onClick: () => void } | null {
-  if (presentation.kind === "error") {
-    return { label: "Open GST Portal", onClick: actions.onOpenPortal };
-  }
   if (!summary) return null;
 
   const signals = new Set(summary.flowStep.safeSignals);
+  if (signals.has("filed-returns-action-journal-review-required")) return null;
+  if (presentation.kind === "error") {
+    return { label: "Open GST Portal", onClick: actions.onOpenPortal };
+  }
   if (signals.has("full-fiscal-year-resume-confirmation-required")) return null;
   if (signals.has("full-fiscal-year-temporarily-paused")) return null;
   if (presentation.kind === "blocked" && summary.fullFiscalYearRecovery) {

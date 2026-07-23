@@ -23,6 +23,10 @@ function App() {
   const [planningAnotherArchive, setPlanningAnotherArchive] = React.useState(false);
   const displaySummary = popup.recoverySummary ?? popup.scopedFlowSummary;
   const showRecovery = hasRecoveryActions(displaySummary ?? null);
+  const canPlanExactActionRecovery = Boolean(
+    displaySummary?.flowStep.safeSignals.includes("filed-returns-action-journal-review-required") &&
+      !displaySummary.actionJournalRecovery,
+  );
   const portalReady = popup.context?.supported === true;
   const presentation = getPopupPresentationState(
     popup.context,
@@ -75,7 +79,8 @@ function App() {
                 showPrimaryAction={false}
               />
               <PackSummary scope={popup.scope} summary={popup.scopedFlowSummary} />
-              {!statusOwnsPrimaryAction && !popup.recoverySummary ? (
+              {!statusOwnsPrimaryAction &&
+              (!popup.recoverySummary || canPlanExactActionRecovery) ? (
                 <ScopeFormAction
                   busy={popup.effectiveBusy}
                   context={popup.context}
@@ -102,6 +107,23 @@ function App() {
                 presentation={presentation}
                 summary={displaySummary}
               />
+              {showRecovery ? (
+                <RecoveryActions
+                  busy={popup.effectiveBusy}
+                  portalReady={portalReady}
+                  summary={displaySummary}
+                  onStartFresh={() => void popup.startFreshFiledReturnsFlow()}
+                  onAcknowledgeInterruptedRun={() => void popup.acknowledgeInterruptedRun()}
+                  onRetryFullFiscalYearTarget={() => void popup.retryFullFiscalYearTarget()}
+                  onRetryTarget={(mode) => void popup.retryFiledReturnsTarget(mode)}
+                  onResolveFullFiscalYearTarget={(resolution) =>
+                    void popup.resolveFullFiscalYearTarget(resolution)
+                  }
+                  onResolveTarget={(resolution) =>
+                    void popup.resolveUnconfirmedDownload(resolution)
+                  }
+                />
+              ) : null}
               {phase === "results" ? (
                 <>
                   <RunEvidencePanel
@@ -116,7 +138,7 @@ function App() {
                   />
                 </>
               ) : null}
-              {phase === "results" && !popup.recoverySummary ? (
+              {phase === "results" && (!popup.recoverySummary || canPlanExactActionRecovery) ? (
                 <button
                   type="button"
                   className="secondary workflow-plan-another"
@@ -134,22 +156,6 @@ function App() {
           onOpenPortal={() => void browser.tabs.create({ url: "https://www.gst.gov.in" })}
         />
       )}
-
-      {showRecovery ? (
-        <RecoveryActions
-          busy={popup.effectiveBusy}
-          portalReady={portalReady}
-          summary={displaySummary}
-          onStartFresh={() => void popup.startFreshFiledReturnsFlow()}
-          onAcknowledgeInterruptedRun={() => void popup.acknowledgeInterruptedRun()}
-          onRetryFullFiscalYearTarget={() => void popup.retryFullFiscalYearTarget()}
-          onRetryTarget={(mode) => void popup.retryFiledReturnsTarget(mode)}
-          onResolveFullFiscalYearTarget={(resolution) =>
-            void popup.resolveFullFiscalYearTarget(resolution)
-          }
-          onResolveTarget={(resolution) => void popup.resolveUnconfirmedDownload(resolution)}
-        />
-      ) : null}
 
       <footer className="fineprint" aria-label="Pack privacy boundary">
         <span>Local only · GST login and PDFs stay on your device.</span>

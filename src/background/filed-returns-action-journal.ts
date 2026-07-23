@@ -8,7 +8,7 @@ const MAX_ACTION_JOURNAL_ENTRIES = 12;
 export type FiledReturnsActionArtifactType = FiledReturnsConcreteArtifactType | "ZIP";
 
 export type FiledReturnsActionJournalState =
-  "armed" | "evidence-bound" | "verified" | "failed" | "review-required";
+  "armed" | "evidence-bound" | "verified" | "failed" | "review-required" | "discarded";
 
 interface FiledReturnsActionJournalEntry {
   actionId: string;
@@ -149,13 +149,13 @@ export async function readUnresolvedFiledReturnsActionRecovery(
   key: string | undefined,
   requestedTargetId?: string,
 ): Promise<FiledReturnsActionJournalRecovery | null> {
-  if (!key || !requestedTargetId) return null;
+  if (!key) return null;
   const journal = await readJournal(key);
   if (!journal) return null;
   const unresolved = journal.entries.filter(
     (entry) =>
       (entry.state === "armed" || entry.state === "evidence-bound") &&
-      entry.targetId === requestedTargetId,
+      (requestedTargetId === undefined || entry.targetId === requestedTargetId),
   );
   if (unresolved.length !== 1) return null;
   const [entry] = unresolved;
@@ -182,7 +182,12 @@ export async function discardUnresolvedFiledReturnsAction(
       (candidate.state === "armed" || candidate.state === "evidence-bound"),
   );
   if (!entry) return false;
-  const entries = journal.entries.filter((candidate) => candidate.actionId !== entry.actionId);
+  const now = new Date().toISOString();
+  const entries = journal.entries.map((candidate) =>
+    candidate.actionId === entry.actionId
+      ? { ...candidate, revision: candidate.revision + 1, settledAt: now, state: "discarded" as const }
+      : candidate,
+  );
   await browser.storage.local.set({ [key]: { schemaVersion: "1.0", entries } });
   return true;
 }
@@ -194,7 +199,7 @@ function hasUnresolvedAction(
   return journal.entries.some(
     (entry) =>
       (requestedTargetId === undefined || entry.targetId === requestedTargetId) &&
-      (entry.state === "armed" || entry.state === "evidence-bound" || entry.state === "verified"),
+      (entry.state === "armed" || entry.state === "evidence-bound"),
   );
 }
 
@@ -316,6 +321,7 @@ function isActionState(value: unknown): value is FiledReturnsActionJournalState 
     value === "evidence-bound" ||
     value === "verified" ||
     value === "failed" ||
-    value === "review-required"
+    value === "review-required" ||
+    value === "discarded"
   );
 }

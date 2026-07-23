@@ -134,6 +134,72 @@ describe("inline filed-return recovery status", () => {
     expect(onRetryTarget).not.toHaveBeenCalled();
   });
 
+  it("surfaces action-journal recovery without offering an automatic retry", () => {
+    const actionJournalSummary: FiledReturnsFlowSummary = {
+      ...blockedSummary,
+      flowStep: {
+        ...blockedSummary.flowStep,
+        state: "blocked",
+        safeSignals: ["filed-returns-action-journal-review-required"],
+      },
+      actionJournalRecovery: {
+        actionId: "action-safe",
+        expectedRevision: 1,
+        targetId: "GSTR-3B:2026-27:May:PDF",
+      },
+    };
+    const actions = {
+      onOpenPortal: vi.fn(),
+      onRestartTarget: vi.fn(),
+      onRetryFullFiscalYearTarget: vi.fn(),
+      onRetryTarget: vi.fn(),
+    };
+
+    expect(hasInlinePrimaryAction(blockedPresentation, actionJournalSummary)).toBe(false);
+    expect(getInlinePrimaryAction(blockedPresentation, actionJournalSummary, actions)).toBeNull();
+
+    const markup = renderToStaticMarkup(
+      <InlineStatus
+        busy={null}
+        {...actions}
+        presentation={blockedPresentation}
+        summary={actionJournalSummary}
+      />,
+    );
+
+    expect(markup).toContain("May browser action needs review");
+    expect(markup).toContain("Review Browser Downloads");
+    expect(markup).not.toContain("Retry May");
+  });
+
+  it("explains why multiple paused browser actions cannot be discarded generically", () => {
+    const summary: FiledReturnsFlowSummary = {
+      ...blockedSummary,
+      flowStep: {
+        ...blockedSummary.flowStep,
+        state: "blocked",
+        safeSignals: ["filed-returns-action-journal-review-required"],
+      },
+    };
+
+    const markup = renderToStaticMarkup(
+      <InlineStatus
+        busy={null}
+        onOpenPortal={vi.fn()}
+        onRestartTarget={vi.fn()}
+        onRetryFullFiscalYearTarget={vi.fn()}
+        onRetryTarget={vi.fn()}
+        presentation={blockedPresentation}
+        summary={summary}
+      />,
+    );
+
+    expect(markup).toContain("Saved browser actions need review");
+    expect(markup).toContain("cannot safely choose one to discard");
+    expect(markup).toContain("Plan another archive");
+    expect(markup).not.toContain("Retry May");
+  });
+
   it("explains that an unresolved target review blocks choosing another period", () => {
     const targetReviewSummary: FiledReturnsFlowSummary = {
       ...blockedSummary,

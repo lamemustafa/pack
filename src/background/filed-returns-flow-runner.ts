@@ -257,6 +257,7 @@ function unresolvedActionJournalResponse(
       scope,
       status: "blocked",
       completedPeriods: [],
+      currentPeriod: scope.period,
       totalPeriods: 1,
       flowStep,
     },
@@ -434,7 +435,6 @@ async function discardActionJournalForFreshStart(
     updatedAt: (deps.now?.() ?? new Date()).toISOString(),
     flowStep,
   };
-  await browser.storage.session.set({ [deps.storageKeys.completion]: flowSummary });
   if (
     !(await discardUnresolvedFiledReturnsAction(deps.storageKeys.actionJournal, {
       actionId: recovery.actionId,
@@ -442,8 +442,15 @@ async function discardActionJournalForFreshStart(
       targetId: recovery.targetId,
     }))
   ) {
-    return unresolvedActionJournalResponse(scope);
+    return unresolvedActionJournalResponse(
+      scope,
+      await readUnresolvedFiledReturnsActionRecovery(
+        deps.storageKeys.actionJournal,
+        requestedConcreteActionTargetId(scope),
+      ),
+    );
   }
+  await browser.storage.session.set({ [deps.storageKeys.completion]: flowSummary });
   return {
     ok: true,
     flowStep,

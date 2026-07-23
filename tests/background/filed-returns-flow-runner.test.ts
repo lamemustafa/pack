@@ -431,6 +431,9 @@ describe("filed returns flow runner", () => {
 
     expect(response).toMatchObject({
       ok: true,
+      flowSummary: {
+        currentPeriod: "May",
+      },
       flowStep: {
         state: "blocked",
         safeSignals: ["filed-returns-action-journal-review-required"],
@@ -439,7 +442,60 @@ describe("filed returns flow runner", () => {
     expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
   });
 
-  it("starts a distinct period after a prior target was verified", async () => {
+  it("offers exact recovery when an unscoped combined-artifact selection finds one paused action", async () => {
+    mockLocalStorageGet({
+      "action-journal": {
+        schemaVersion: "1.0",
+        entries: [
+          {
+            actionId: "action-before-restart",
+            artifactType: "PDF",
+            attempt: 1,
+            revision: 1,
+            state: "armed",
+            targetId: "GSTR-1:2026-27:May:PDF",
+            armedAt: "2026-07-21T00:00:00.000Z",
+          },
+        ],
+      },
+    });
+    const sendMessageToTabWithInjection =
+      vi.fn<FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]>();
+
+    const response = await startFiledReturnsDownloadFlow(
+      {
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-1",
+      },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          actionJournal: "action-journal",
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+        },
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowSummary: {
+        actionJournalRecovery: {
+          actionId: "action-before-restart",
+          expectedRevision: 1,
+          targetId: "GSTR-1:2026-27:May:PDF",
+        },
+        status: "blocked",
+      },
+    });
+    expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
+  });
+
+  it("starts an explicitly requested target after a prior verified action survives reload", async () => {
     const localStorageState: Record<string, unknown> = {
       "action-journal": {
         schemaVersion: "1.0",
@@ -488,7 +544,7 @@ describe("filed returns flow runner", () => {
     });
 
     const responses: PackMessageResponse[] = [
-      filedReturnDownloadReady("June"),
+      filedReturnDownloadReady("May"),
       filedReturnDownloadClicked(),
     ];
     const sendMessageToTabWithInjection = vi.fn<
@@ -496,7 +552,7 @@ describe("filed returns flow runner", () => {
     >(async () => responses.shift() ?? { ok: false, error: "Unexpected call." });
 
     const response = await startFiledReturnsDownloadFlow(
-      { financialYear: "2026-27", period: "June", returnType: "GSTR-3B" },
+      { financialYear: "2026-27", period: "May", returnType: "GSTR-3B" },
       {
         getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
         sendMessageToTabWithInjection,
@@ -519,7 +575,7 @@ describe("filed returns flow runner", () => {
       "action-journal": expect.objectContaining({
         entries: expect.arrayContaining([
           expect.objectContaining({ actionId: "action-may", state: "verified" }),
-          expect.objectContaining({ targetId: "GSTR-3B:2026-27:June:PDF", state: "armed" }),
+          expect.objectContaining({ targetId: "GSTR-3B:2026-27:May:PDF", state: "armed" }),
         ]),
       }),
     });
@@ -8508,11 +8564,81 @@ describe("filed returns flow runner", () => {
       }),
     });
     expect(browser.storage.local.set).toHaveBeenCalledWith({
-      "action-journal": { schemaVersion: "1.0", entries: [] },
+      "action-journal": {
+        schemaVersion: "1.0",
+        entries: [
+          expect.objectContaining({
+            actionId: "action-before-restart",
+            revision: 2,
+            state: "discarded",
+          }),
+        ],
+      },
     });
-    expect(vi.mocked(browser.storage.session.set).mock.invocationCallOrder[0]).toBeLessThan(
-      vi.mocked(browser.storage.local.set).mock.invocationCallOrder[0] ?? Infinity,
+    expect(vi.mocked(browser.storage.local.set).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(browser.storage.session.set).mock.invocationCallOrder[0] ?? Infinity,
     );
+    expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
+  });
+
+  it("keeps a stale action-journal discard visibly blocked without saving cancellation", async () => {
+    mockLocalStorageGet({
+      "action-journal": {
+        schemaVersion: "1.0",
+        entries: [
+          {
+            actionId: "action-before-restart",
+            artifactType: "PDF",
+            attempt: 1,
+            revision: 2,
+            state: "armed",
+            targetId: "GSTR-3B:2025-26:May:PDF",
+            armedAt: "2026-07-21T00:00:00.000Z",
+          },
+        ],
+      },
+    });
+    const sendMessageToTabWithInjection =
+      vi.fn<FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]>();
+
+    const response = await startFreshFiledReturnsDownloadFlow(
+      {
+        scope: { financialYear: "2025-26", period: "May", returnType: "GSTR-3B" },
+        recovery: {
+          actionId: "action-before-restart",
+          expectedRevision: 1,
+          kind: "action-journal",
+          targetId: "GSTR-3B:2025-26:May:PDF",
+        },
+      },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          actionJournal: "action-journal",
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+          targetReview: "target-review",
+        },
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowSummary: {
+        actionJournalRecovery: {
+          actionId: "action-before-restart",
+          expectedRevision: 2,
+          targetId: "GSTR-3B:2025-26:May:PDF",
+        },
+        currentPeriod: "May",
+        status: "blocked",
+      },
+    });
+    expect(browser.storage.session.set).not.toHaveBeenCalledWith({
+      completion: expect.objectContaining({ status: "cancelled" }),
+    });
     expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
   });
 

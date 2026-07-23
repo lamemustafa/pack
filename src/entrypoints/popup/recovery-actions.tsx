@@ -146,22 +146,30 @@ export function RecoveryActions({
           </>
         ) : null}
         {needsActionJournalReview ? (
-          <>
+          summary.actionJournalRecovery ? (
+            <>
+              <p className="muted">
+                Pack could not confirm the previous browser action. Review browser Downloads before
+                discarding it. Discarding does not mark the return as downloaded.
+              </p>
+              <button
+                type="button"
+                className="secondary"
+                disabled={retryDisabled}
+                onClick={onStartFresh}
+              >
+                {busy === "start-fresh-filed-returns-flow"
+                  ? "Discarding paused action..."
+                  : "Discard paused action"}
+              </button>
+            </>
+          ) : (
             <p className="muted">
-              Pack could not confirm the previous browser action. Review browser Downloads before
-              discarding it. Discarding does not mark the return as downloaded.
+              Pack found more than one paused browser action and cannot safely choose one to
+              discard. Choose Plan another archive, then select the exact single-period PDF or
+              Excel download to expose its recovery control.
             </p>
-            <button
-              type="button"
-              className="secondary"
-              disabled={retryDisabled}
-              onClick={onStartFresh}
-            >
-              {busy === "start-fresh-filed-returns-flow"
-                ? "Discarding paused action..."
-                : "Discard paused action"}
-            </button>
-          </>
+          )
         ) : null}
         {needsFullFiscalYearReview ? (
           <>
@@ -285,9 +293,7 @@ function getRecoveryActionState(summary: FiledReturnsFlowSummary | null): {
 } {
   const signals = new Set(summary?.flowStep.safeSignals ?? []);
   const needsRunReview = signals.has("filed-returns-run-needs-review");
-  const needsActionJournalReview =
-    signals.has("filed-returns-action-journal-review-required") &&
-    summary?.actionJournalRecovery !== undefined;
+  const needsActionJournalReview = signals.has("filed-returns-action-journal-review-required");
   const needsTargetReview = signals.has("filed-returns-target-review-required");
   const runActive =
     signals.has("filed-returns-run-active") || signals.has("full-fiscal-year-run-active");
