@@ -31,7 +31,9 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
   options: {
     forceDirectDownload?: boolean;
     forcePortalClick?: boolean;
+    persistContentStepFailure?: boolean;
     persistSinglePeriodSummary?: boolean;
+    waitForGstr3bDetailReadyAfterResultNavigation?: boolean;
   } = {},
 ): Promise<PackMessageResponse> {
   const shouldPersistSinglePeriodSummary = options.persistSinglePeriodSummary !== false;
@@ -68,6 +70,8 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
     shouldPersistSinglePeriodSummary,
     options.forceDirectDownload === true,
     options.forcePortalClick === true,
+    options.persistContentStepFailure !== false,
+    options.waitForGstr3bDetailReadyAfterResultNavigation !== false,
   );
 }
 
@@ -78,6 +82,8 @@ async function runSinglePeriodSteps(
   shouldPersistSinglePeriodSummary: boolean,
   forceDirectDownload: boolean,
   forcePortalClick: boolean,
+  persistContentStepFailure: boolean,
+  waitForGstr3bDetailReadyAfterResultNavigation: boolean,
 ): Promise<PackMessageResponse> {
   let lastStep: PortalFlowStepResult | null = null;
   let activePeriod: string | null = null;
@@ -85,7 +91,13 @@ async function runSinglePeriodSteps(
   for (let attempt = 0; attempt < maxFlowStepsFor(scope); attempt += 1) {
     const response = await runScopedDownloadStepWithRetry(deps, tabId, scope);
     if (!response.ok || !("flowStep" in response)) {
-      return response;
+      if (!persistContentStepFailure) return response;
+      return withPersistedSinglePeriodSummary(
+        scope,
+        contentStepUnavailableResponse(scope),
+        deps,
+        shouldPersistSinglePeriodSummary,
+      );
     }
 
     await persistFlowResponse(response, deps);
@@ -99,6 +111,7 @@ async function runSinglePeriodSteps(
         shouldPersistSinglePeriodSummary,
         forceDirectDownload,
         forcePortalClick,
+        persistContentStepFailure,
         scope,
         tabId,
       });
@@ -108,13 +121,19 @@ async function runSinglePeriodSteps(
       lastStep.safeSignals.includes("filed-return-result-view-clicked") ||
       lastStep.safeSignals.includes("gstr2b-dashboard-view-clicked")
     ) {
-      if (shouldWaitForDetailReadyAfterResultNavigation(scope)) {
+      if (
+        shouldWaitForDetailReadyAfterResultNavigation(
+          scope,
+          waitForGstr3bDetailReadyAfterResultNavigation,
+        )
+      ) {
         return waitForDetailReadyThenTrigger({
           activePeriod,
           deps,
           shouldPersistSinglePeriodSummary,
           forceDirectDownload,
           forcePortalClick,
+          persistContentStepFailure,
           scope,
           tabId,
         });
@@ -230,6 +249,28 @@ function mainWorldFilterSelectionFailedResponse(
   };
 }
 
+function contentStepUnavailableResponse(
+  scope: FiledReturnsDownloadScope,
+): Extract<PackMessageResponse, { ok: true; flowStep: PortalFlowStepResult }> {
+  return {
+    ok: true,
+    flowStep: {
+      connectorId: "gst",
+      scopeId: filedReturnScopeId(scope.returnType),
+      state: "blocked",
+      safeSignals: ["filed-return-content-step-unavailable"],
+      safeMessage:
+        "Pack lost contact with the GST Portal while waiting for the selected return page. It did not start a browser download.",
+      userAction: {
+        type: "RETRY_PORTAL_GENERATION",
+        message:
+          "Wait for the selected GST return page to finish loading, then retry this same download.",
+        canResume: true,
+      },
+    },
+  };
+}
+
 async function clearUnsubmittedMainWorldSearch(
   deps: FiledReturnsFlowRunnerDeps,
   tabId: number,
@@ -251,6 +292,7 @@ async function waitForDetailReadyThenTrigger({
   shouldPersistSinglePeriodSummary,
   forceDirectDownload,
   forcePortalClick,
+  persistContentStepFailure,
   scope,
   tabId,
 }: {
@@ -259,6 +301,7 @@ async function waitForDetailReadyThenTrigger({
   shouldPersistSinglePeriodSummary: boolean;
   forceDirectDownload: boolean;
   forcePortalClick: boolean;
+  persistContentStepFailure: boolean;
   scope: FiledReturnsDownloadScope;
   tabId: number;
 }): Promise<PackMessageResponse> {
@@ -267,7 +310,13 @@ async function waitForDetailReadyThenTrigger({
   for (let attempt = 0; attempt < maxFlowStepsFor(scope); attempt += 1) {
     const response = await runScopedDownloadStepWithRetry(deps, tabId, scope);
     if (!response.ok || !("flowStep" in response)) {
-      return response;
+      if (!persistContentStepFailure) return response;
+      return withPersistedSinglePeriodSummary(
+        scope,
+        contentStepUnavailableResponse(scope),
+        deps,
+        shouldPersistSinglePeriodSummary,
+      );
     }
 
     await persistFlowResponse(response, deps);
@@ -372,8 +421,12 @@ async function triggerSinglePeriodDownloadAndPersistSummary({
   return response;
 }
 
-function shouldWaitForDetailReadyAfterResultNavigation(scope: FiledReturnsDownloadScope): boolean {
+function shouldWaitForDetailReadyAfterResultNavigation(
+  scope: FiledReturnsDownloadScope,
+  waitForGstr3bDetailReadyAfterResultNavigation: boolean,
+): boolean {
   return (
+    (scope.returnType === "GSTR-3B" && waitForGstr3bDetailReadyAfterResultNavigation) ||
     scope.returnType === "GSTR-1" ||
     scope.returnType === "GSTR-2B" ||
     scope.artifactType === "PDF_AND_EXCEL" ||

@@ -58,7 +58,11 @@ import {
 export type SinglePeriodRunner = (
   scope: FiledReturnsDownloadScope,
   deps: FiledReturnsFlowRunnerDeps,
-  options?: { persistSinglePeriodSummary?: boolean },
+  options?: {
+    persistContentStepFailure?: boolean;
+    persistSinglePeriodSummary?: boolean;
+    waitForGstr3bDetailReadyAfterResultNavigation?: boolean;
+  },
 ) => Promise<PackMessageResponse>;
 
 export { summariseFullFiscalYearLedger, targetStatusFromFlowStep };
@@ -175,7 +179,11 @@ export async function startFullFiscalYearDownloadFlow(
         preferDirectDownload: false,
         stageCapturedDownloads: { bundleKind: "full-fiscal-year", ledgerId: ledger.ledgerId },
       },
-      { persistSinglePeriodSummary: false },
+      {
+        persistContentStepFailure: false,
+        persistSinglePeriodSummary: false,
+        waitForGstr3bDetailReadyAfterResultNavigation: false,
+      },
     );
 
     if (!response.ok || !("flowStep" in response)) {

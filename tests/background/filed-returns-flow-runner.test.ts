@@ -581,6 +581,76 @@ describe("filed returns flow runner", () => {
     });
   });
 
+  it("waits for a single GSTR-3B detail page to become target-bound before triggering download", async () => {
+    const responses: PackMessageResponse[] = [
+      filedReturnRowOpened("June"),
+      filedReturnDownloadReady("June"),
+      filedReturnDownloadClicked(),
+    ];
+    const sendMessageToTabWithInjection = vi.fn<
+      FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
+    >(async () => responses.shift() ?? { ok: false, error: "Unexpected call." });
+
+    const response = await startFiledReturnsDownloadFlow(
+      { financialYear: "2026-27", period: "June", returnType: "GSTR-3B" },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+        },
+        timings: { flowStepSettleMs: 0, resultRowNavigationSettleMs: 0 },
+      },
+    );
+
+    expect(response).toMatchObject({ ok: true, flowSummary: { status: "complete" } });
+    expect(sendMessageToTabWithInjection.mock.calls.map(([, message]) => message.type)).toEqual([
+      "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
+      "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
+      "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
+    ]);
+  });
+
+  it("persists a safe blocked result when the GST content step disappears after GSTR-3B navigation", async () => {
+    const responses: PackMessageResponse[] = [
+      filedReturnRowOpened("June"),
+      { ok: false, error: "Could not establish connection. Receiving end does not exist." },
+    ];
+    const sendMessageToTabWithInjection = vi.fn<
+      FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
+    >(async () => responses.shift() ?? { ok: false, error: "Unexpected call." });
+
+    const response = await startFiledReturnsDownloadFlow(
+      { financialYear: "2026-27", period: "June", returnType: "GSTR-3B" },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+        },
+        timings: { flowStepSettleMs: 0, resultRowNavigationSettleMs: 0 },
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "blocked",
+        safeSignals: ["filed-return-content-step-unavailable"],
+      },
+      flowSummary: { currentPeriod: "June", status: "blocked" },
+    });
+    expect(JSON.stringify(response)).not.toContain("Receiving end does not exist");
+    expect(sendMessageToTabWithInjection.mock.calls.map(([, message]) => message.type)).toEqual([
+      "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
+      "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
+    ]);
+  });
+
   it("runs a full fiscal year through concrete monthly targets without sending a full-year sentinel to content", async () => {
     const sendMessageToTabWithInjection = vi.fn<
       FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
@@ -7099,6 +7169,7 @@ describe("filed returns flow runner", () => {
           safeMessage: "Opened.",
         },
       },
+      filedReturnDownloadReady("March"),
       new Error("Could not establish connection. Receiving end does not exist."),
     ];
     const sendMessageToTabWithInjection = vi.fn<
@@ -7136,7 +7207,7 @@ describe("filed returns flow runner", () => {
         ]),
       },
     });
-    expect(sendMessageToTabWithInjection).toHaveBeenCalledTimes(2);
+    expect(sendMessageToTabWithInjection).toHaveBeenCalledTimes(3);
     expect(sendMessageToTabWithInjection).toHaveBeenLastCalledWith(17, {
       type: "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
       payload: expect.objectContaining({
@@ -7456,6 +7527,7 @@ describe("filed returns flow runner", () => {
           safeMessage: "Opened.",
         },
       },
+      filedReturnDownloadReady("March"),
       {
         ok: true,
         downloadTrigger: {
@@ -8458,6 +8530,7 @@ describe("filed returns flow runner", () => {
     });
     const responses: PackMessageResponse[] = [
       filedReturnRowOpened("May"),
+      filedReturnDownloadReady("May"),
       filedReturnDownloadClicked(),
     ];
     const sendMessageToTabWithInjection = vi.fn<
