@@ -7781,6 +7781,86 @@ describe("filed returns flow runner", () => {
     ]);
   });
 
+  it("persists a scoped blocked result when main-world filter selection throws", async () => {
+    const responses: PackMessageResponse[] = [
+      {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+          state: "candidate-not-found",
+          safeSignals: ["filed-return-filter-candidate-not-found"],
+          safeMessage: "Filed-return filters are not ready.",
+        },
+      },
+      {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+          state: "clicked",
+          safeSignals: ["filed-return-search-pending-marked"],
+          safeMessage: "Search tracking prepared.",
+        },
+      },
+      {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+          state: "clicked",
+          safeSignals: ["filed-return-search-pending-cleared"],
+          safeMessage: "Search tracking cleared.",
+        },
+      },
+    ];
+    const sendMessageToTabWithInjection = vi.fn<
+      FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
+    >(async () => responses.shift() ?? { ok: false, error: "Unexpected call." });
+    const selectFiltersInMainWorld = vi.fn<
+      NonNullable<FiledReturnsFlowRunnerDeps["selectFiltersInMainWorld"]>
+    >(async () => {
+      throw new Error("isolated-world selection failed");
+    });
+
+    const response = await startFiledReturnsDownloadFlow(
+      {
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-3B",
+      },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        selectFiltersInMainWorld,
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+        },
+        timings: { flowStepSettleMs: 0, resultRowNavigationSettleMs: 0 },
+      },
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "blocked",
+        safeSignals: expect.arrayContaining(["filed-return-main-world-filter-selection-failed"]),
+      },
+      flowSummary: {
+        scope: { financialYear: "2026-27", period: "May", returnType: "GSTR-3B" },
+        status: "blocked",
+        currentPeriod: "May",
+      },
+    });
+    expect(sendMessageToTabWithInjection.mock.calls.map(([, message]) => message.type)).toEqual([
+      "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
+      "PACK_CONTENT_MARK_FILED_RETURNS_SEARCH_PENDING_V3",
+      "PACK_CONTENT_CLEAR_FILED_RETURNS_SEARCH_PENDING_V3",
+    ]);
+  });
+
   it("keeps legacy positive not-filed evidence blocked for operator review", async () => {
     const responses: PackMessageResponse[] = [
       {

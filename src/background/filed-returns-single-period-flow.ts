@@ -165,9 +165,14 @@ async function runSinglePeriodSteps(
       >;
       try {
         mainWorldSelection = await deps.selectFiltersInMainWorld(tabId, scope);
-      } catch (error) {
+      } catch {
         await clearUnsubmittedMainWorldSearch(deps, tabId, scope);
-        throw error;
+        return withPersistedSinglePeriodSummary(
+          scope,
+          mainWorldFilterSelectionFailedResponse(scope),
+          deps,
+          shouldPersistSinglePeriodSummary,
+        );
       }
       if (mainWorldSelection.state === "searched") {
         await delay(MAIN_WORLD_FILTER_SEARCH_SETTLE_MS);
@@ -201,6 +206,28 @@ async function runSinglePeriodSteps(
     deps,
     shouldPersistSinglePeriodSummary,
   );
+}
+
+function mainWorldFilterSelectionFailedResponse(
+  scope: FiledReturnsDownloadScope,
+): Extract<PackMessageResponse, { ok: true; flowStep: PortalFlowStepResult }> {
+  return {
+    ok: true,
+    flowStep: {
+      connectorId: "gst",
+      scopeId: filedReturnScopeId(scope.returnType),
+      state: "blocked",
+      safeSignals: ["filed-return-main-world-filter-selection-failed"],
+      safeMessage:
+        "Pack could not finish selecting the requested filed-return filters. Check the selected period on the GST Portal, then retry.",
+      userAction: {
+        type: "RETRY_PORTAL_GENERATION",
+        message:
+          "Verify the selected financial year and period on the GST Portal before retrying this same download.",
+        canResume: true,
+      },
+    },
+  };
 }
 
 async function clearUnsubmittedMainWorldSearch(
