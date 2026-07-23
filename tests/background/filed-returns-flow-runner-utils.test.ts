@@ -76,6 +76,16 @@ describe("filed returns flow runner wait policy", () => {
     ).toBe(false);
   });
 
+  it("does not continue a blocked detail-page step without a specialized signal", () => {
+    expect(
+      shouldContinueFlow({
+        ...BASE_STEP,
+        state: "blocked",
+        safeSignals: ["gstr-3b-detail-route", "filed-returns-heading", "detail-summary-modal"],
+      }),
+    ).toBe(false);
+  });
+
   it("waits for top-level GST navigation to settle before probing again", () => {
     expect(
       getFlowStepSettleMs(

@@ -6529,6 +6529,116 @@ describe("filed returns guided flow", () => {
     expect(downloadClicked).toBe(0);
   });
 
+  it("dismisses a GST summary overlay through its icon-only close control", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <nav>Returns / Filed Returns / GSTR-3B</nav>
+        <h1>GSTR-3B - Monthly Return</h1>
+        <div>Status - Filed</div>
+        <div>Financial Year - 2025-26</div>
+        <div>Return Period - March</div>
+        <button data-download>DOWNLOAD FILED GSTR-3B</button>
+        <section data-summary-overlay>
+          <h2>System generated summary for GSTR-3B:</h2>
+          <span class="close" title="Close">×</span>
+        </section>
+      </main>
+    `);
+    makeLayoutVisible(documentRef);
+    let closeClicked = 0;
+    documentRef.querySelector(".close")?.addEventListener("click", () => {
+      closeClicked += 1;
+      documentRef.querySelector("[data-summary-overlay]")?.remove();
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.state).toBe("ready");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining(["filed-gstr3b-download-ready", "detail-summary-modal-dismissed"]),
+    );
+    expect(closeClicked).toBe(1);
+  });
+
+  it("blocks instead of re-navigating when a visible GST summary has no verified close control", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <nav>Returns / Filed Returns / GSTR-3B</nav>
+        <h1>GSTR-3B - Monthly Return</h1>
+        <div>Status - Filed</div>
+        <div>Financial Year - 2025-26</div>
+        <div>Return Period - March</div>
+        <button data-download>DOWNLOAD FILED GSTR-3B</button>
+        <section data-summary-overlay>
+          <h2>System generated summary for GSTR-3B:</h2>
+          <p>Summary status available.</p>
+        </section>
+      </main>
+    `);
+    makeLayoutVisible(documentRef);
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result).toMatchObject({
+      state: "blocked",
+      safeSignals: expect.arrayContaining(["detail-summary-modal"]),
+      userAction: { type: "WAIT_FOR_PORTAL_AVAILABILITY", canResume: true },
+    });
+  });
+
+  it("does not click an unrelated Close control outside a visible GST summary", async () => {
+    const documentRef = createDocument(`
+      <main>
+        <nav>Returns / Filed Returns / GSTR-3B</nav>
+        <h1>GSTR-3B - Monthly Return</h1>
+        <div>Status - Filed</div>
+        <div>Financial Year - 2025-26</div>
+        <div>Return Period - March</div>
+        <button data-download>DOWNLOAD FILED GSTR-3B</button>
+        <section data-summary-overlay>
+          <h2>System generated summary for GSTR-3B:</h2>
+          <p>Summary status available.</p>
+        </section>
+        <button data-unrelated-close aria-label="Close">×</button>
+      </main>
+    `);
+    makeLayoutVisible(documentRef);
+    let unrelatedCloseClicked = 0;
+    documentRef.querySelector("[data-unrelated-close]")?.addEventListener("click", () => {
+      unrelatedCloseClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.state).toBe("blocked");
+    expect(unrelatedCloseClicked).toBe(0);
+  });
+
+  it("does not treat a broad portal modal container as the GST summary overlay", async () => {
+    const documentRef = createDocument(`
+      <main class="portal-modal-container">
+        <nav>Returns / Filed Returns / GSTR-3B</nav>
+        <h1>GSTR-3B - Monthly Return</h1>
+        <div>Status - Filed</div>
+        <div>Financial Year - 2025-26</div>
+        <div>Return Period - March</div>
+        <button data-download>DOWNLOAD FILED GSTR-3B</button>
+        <div>System generated summary for GSTR-3B:</div>
+        <button data-unrelated-close aria-label="Close">×</button>
+      </main>
+    `);
+    makeLayoutVisible(documentRef);
+    let unrelatedCloseClicked = 0;
+    documentRef.querySelector("[data-unrelated-close]")?.addEventListener("click", () => {
+      unrelatedCloseClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+    expect(result.state).toBe("blocked");
+    expect(unrelatedCloseClicked).toBe(0);
+  });
+
   it("returns a retryable block without mutating a portal-owned summary overlay", async () => {
     const documentRef = createDocument(`
       <main>

@@ -1,10 +1,7 @@
 import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "../../core/contracts";
 import { runGstr2bDownloadStep } from "./gstr2b-flow";
 import { extractFiledReturnsDetailIdentity } from "./filed-returns-detail-identity";
-import {
-  dismissKnownFiledReturnsSummaryModal,
-  isFiledReturnsSummaryModalDismissalBlocked,
-} from "./filed-returns-dialogs";
+import { dismissKnownFiledReturnsSummaryModal } from "./filed-returns-dialogs";
 import { navigateToFiledReturnsPage } from "./filed-returns-navigator";
 import { openFiledReturnFromApiSearch } from "./filed-returns-api-search";
 import { selectFiledReturnsFiltersAndSearch } from "./filed-returns-filter-form";
@@ -77,10 +74,7 @@ export async function runFiledReturnsDownloadStep(
   });
   const searchSettled = hasSettledFiledReturnsSearchForScope(documentRef, scope);
 
-  if (
-    observation.state === "detail-summary-modal-open" &&
-    isFiledReturnsSummaryModalDismissalBlocked(summaryModalSignals)
-  ) {
+  if (observation.state === "detail-summary-modal-open") {
     return summaryModalBlockedResult(scopeId, [...summaryModalSignals, ...observation.safeSignals]);
   }
 
@@ -147,6 +141,7 @@ export async function runFiledReturnsDownloadStep(
       safeSignals: [
         "filed-return-download-ready",
         filedReturnScopedSignal(scope.returnType, "download-ready"),
+        ...summaryModalSignals,
         ...detailIdentity.safeSignals,
       ],
       safeMessage: `Pack found the filed ${descriptor.label} detail page and is ready to start the browser download.`,

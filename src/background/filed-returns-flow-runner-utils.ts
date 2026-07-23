@@ -17,6 +17,7 @@ export const MAX_GSTR1_FLOW_STEPS = 30;
 export const MAX_GSTR2B_FLOW_STEPS = 12;
 
 export function shouldContinueFlow(step: PortalFlowStepResult): boolean {
+  if (step.state === "blocked") return false;
   if (step.safeSignals.includes("filed-return-download-clicked")) return false;
   if (step.safeSignals.includes("filed-gstr3b-download-clicked")) return false;
   if (

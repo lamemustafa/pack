@@ -9,14 +9,30 @@ const SUMMARY_DIALOG_SETTLE_DELAY_MS = 1_000;
 const SUMMARY_DIALOG_CONTROL_WAIT_MS = 1_000;
 const SUMMARY_DIALOG_POLL_MS = 15;
 const SUMMARY_MODAL_PATTERN = /system generated summary for gstr[\s-]?3b/i;
-const MODAL_SELECTOR = ".modal.in, .modal.show, .modal-open .modal, [role='dialog']";
+const MODAL_SELECTOR = [
+  ".modal.in",
+  ".modal.show",
+  ".modal-open .modal",
+  "[role='dialog']",
+  "[data-summary-overlay]",
+  "[data-modal]",
+  "[data-dialog]",
+  ".summary",
+  ".modal",
+  ".dialog",
+  ".popup",
+  ".overlay",
+].join(",");
 const CLICKABLE_SELECTOR = [
   "a",
   "button",
+  ".close",
   "[role='button']",
   "[ng-click]",
   "[data-ng-click]",
   "[data-dismiss='modal']",
+  "[aria-label]",
+  "[title]",
 ].join(",");
 
 export async function dismissKnownFiledReturnsSummaryModal(
@@ -70,7 +86,10 @@ async function waitForDismissalCandidate(
 
 function findVisibleSummaryModal(documentRef: Document): HTMLElement | null {
   const roots = Array.from(documentRef.querySelectorAll(MODAL_SELECTOR)).filter(
-    (element): element is HTMLElement => isHtmlElement(documentRef, element) && isVisible(element),
+    (element): element is HTMLElement =>
+      isHtmlElement(documentRef, element) &&
+      isVisible(element) &&
+      isBoundedInferredSummaryRoot(element),
   );
   for (const element of getClickableElements(documentRef)) {
     const score = scoreFiledReturnsSummaryModalDismissalCandidate(toCandidateInput(element));
@@ -78,7 +97,7 @@ function findVisibleSummaryModal(documentRef: Document): HTMLElement | null {
     let current: HTMLElement | null = element;
     for (let depth = 0; current && depth < 8; depth += 1) {
       if (SUMMARY_MODAL_PATTERN.test(current.innerText || current.textContent || "")) {
-        roots.push(current);
+        if (isBoundedInferredSummaryRoot(current)) roots.push(current);
         break;
       }
       current = current.parentElement;
@@ -88,6 +107,16 @@ function findVisibleSummaryModal(documentRef: Document): HTMLElement | null {
     [...new Set(roots)].find((root) =>
       SUMMARY_MODAL_PATTERN.test(root.innerText || root.textContent || ""),
     ) ?? null
+  );
+}
+
+function isBoundedInferredSummaryRoot(element: HTMLElement): boolean {
+  if (["BODY", "HTML", "MAIN"].includes(element.tagName)) return false;
+  if (element.matches("[role='dialog'], [data-summary-overlay], [data-modal], [data-dialog]")) {
+    return true;
+  }
+  return ["summary", "modal", "dialog", "popup", "overlay"].some((className) =>
+    element.classList.contains(className),
   );
 }
 
