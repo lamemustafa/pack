@@ -36,11 +36,6 @@ const GSTR2B_CAPTURE_TIMEOUT_MS = 15_000;
 const GSTR1_CAPTURE_TIMEOUT_MS = 15_000;
 
 const DIALOG_SETTLE_DELAY_MS = 60;
-// GSTR-3B generation can outlive the initial portal click by several async turns.
-// Keep the portal-native capture bounded, but do not abandon it before the portal
-// has a realistic chance to create its PDF artifact.
-const GSTR3B_CAPTURE_TIMEOUT_MS = 30_000;
-
 export interface FiledReturnDownloadTriggerResult {
   downloadTrigger: PortalDownloadTriggerResult;
   mainWorldCaptureRequest?: FiledReturnsMainWorldCaptureRequest;
@@ -128,6 +123,19 @@ export async function triggerFiledReturnDownload(
 
   const targetGuard = verifyFiledReturnsDownloadTarget(documentRef, target, detailSignals);
   if (targetGuard) return { downloadTrigger: targetGuard };
+
+  if (target.returnType === "GSTR-3B") {
+    return {
+      downloadTrigger: {
+        connectorId: "gst",
+        scopeId,
+        state: "blocked",
+        safeSignals: [...detailSignals, "gstr3b-legacy-acquisition-retired"],
+        safeMessage:
+          "Pack acquires filed GSTR-3B artifacts through its verified artifact path, not the legacy portal-click path.",
+      },
+    };
+  }
 
   const viableCandidates = resolveVisibleFiledReturnDownloadCandidates(
     documentRef,
@@ -241,12 +249,8 @@ function tryCaptureFiledReturnBlobDownload(
     context.control,
     target,
     {
-      ...(target.returnType === "GSTR-3B" && (target.artifactType ?? "PDF") === "PDF"
-        ? { asyncBlobBinding: "action-xhr-non-artifact-to-pdf" as const }
-        : {}),
       signalPrefix: signalPrefix.endsWith("-") ? signalPrefix.slice(0, -1) : signalPrefix,
       ...(target.returnType === "GSTR-1" ? { timeoutMs: GSTR1_CAPTURE_TIMEOUT_MS } : {}),
-      ...(target.returnType === "GSTR-3B" ? { timeoutMs: GSTR3B_CAPTURE_TIMEOUT_MS } : {}),
       ...(target.returnType === "GSTR-2B" ? { timeoutMs: GSTR2B_CAPTURE_TIMEOUT_MS } : {}),
     },
   );
@@ -256,7 +260,6 @@ function tryCaptureFiledReturnBlobDownload(
 }
 
 function supportsFiledReturnBlobCapture(target: FiledReturnsDownloadTarget): boolean {
-  if (target.returnType === "GSTR-3B") return (target.artifactType ?? "PDF") === "PDF";
   return target.returnType === "GSTR-1" || target.returnType === "GSTR-2B";
 }
 

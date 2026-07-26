@@ -468,7 +468,7 @@ describe("filed returns navigation matcher", () => {
     expect(scoreFiledGstr3bDownloadCandidate({ text: "SUBMIT" }).score).toBeLessThan(0);
   });
 
-  it("arms only the selected filed GSTR-3B PDF download control for capture", async () => {
+  it("does not arm legacy capture for the selected filed GSTR-3B PDF control", async () => {
     const documentRef = createDocument(`
       <main>
         <h1>GSTR-3B - Monthly Return</h1>
@@ -496,16 +496,15 @@ describe("filed returns navigation matcher", () => {
       returnType: "GSTR-3B",
     });
 
-    expect(result.downloadTrigger.state).toBe("clicked");
+    expect(result.downloadTrigger).toMatchObject({
+      state: "blocked",
+      safeSignals: expect.arrayContaining(["gstr3b-legacy-acquisition-retired"]),
+    });
     expect(result.downloadTrigger.safeSignals).toEqual(
-      expect.arrayContaining([
-        "filed-gstr3b-download-clicked",
-        "text-download-filed-gstr3b",
-        "filed-gstr3b-portal-blob-download-captured",
-      ]),
+      expect.arrayContaining(["gstr3b-legacy-acquisition-retired"]),
     );
-    expect("mainWorldCaptureRequest" in result).toBe(true);
-    expect(filedButton?.hasAttribute("data-pack-gstr2b-capture-action")).toBe(true);
+    expect("mainWorldCaptureRequest" in result).toBe(false);
+    expect(filedButton?.hasAttribute("data-pack-gstr2b-capture-action")).toBe(false);
     expect(systemLink?.hasAttribute("data-pack-gstr2b-capture-action")).toBe(false);
     expect(filedClicked).toBe(0);
     expect(systemClicked).toBe(0);

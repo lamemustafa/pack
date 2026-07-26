@@ -244,7 +244,7 @@ describe("background filed returns download defaults", () => {
     });
   });
 
-  it("captures single-period GSTR-3B bytes in the authenticated page before downloading", async () => {
+  it("uses the authenticated-page GSTR-3B acquisition request instead of legacy capture", async () => {
     browserMocks.tabs.sendMessage.mockImplementation(async (_tabId, message: PackMessage) => {
       message = unwrapContentRequest(message);
       if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3") {
@@ -260,26 +260,10 @@ describe("background filed returns download defaults", () => {
         } satisfies PackMessageResponse;
       }
 
-      if (message.type === "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3") {
+      if (message.type === "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34") {
         return {
-          ok: true,
-          downloadTrigger: {
-            connectorId: "gst",
-            scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
-            state: "clicked",
-            safeSignals: ["filed-gstr3b-download-clicked"],
-            safeMessage: "Clicked.",
-          },
-          mainWorldCaptureRequest: {
-            actionId: message.payload.actionId,
-            asyncBlobBinding: "action-xhr-non-artifact-to-pdf",
-            controlAttribute: "data-pack-gstr2b-capture-action",
-            controlId: "capture-single-period",
-            maxBytes: 36 * 1024 * 1024,
-            signalPrefix: "filed-gstr3b",
-            targetBinding: testCaptureBinding(message.payload, "PDF"),
-            timeoutMs: 30_000,
-          },
+          ok: false,
+          error: "CONTENT_SCRIPT_UNAVAILABLE",
         } satisfies PackMessageResponse;
       }
 
@@ -297,38 +281,15 @@ describe("background filed returns download defaults", () => {
       },
     });
 
-    expect(response).toMatchObject({
-      ok: true,
-      flowStep: {
-        state: "downloaded",
-        safeSignals: expect.arrayContaining([
-          "filed-gstr3b-main-world-capture",
-          "browser-download-completed",
-          "browser-download-non-empty",
-        ]),
-      },
-    });
-    expect(browserMocks.downloads.download).toHaveBeenCalledWith({
-      conflictAction: "uniquify",
-      filename: "complyeaze-pack/gst/2026-27/gstr-3b/may.pdf",
-      saveAs: false,
-      url: "blob:chrome-extension://pack/download-prompt-probe",
-    });
-    expect(observeBrowserDownloadById).toHaveBeenCalledWith(
-      browserMocks.downloads,
-      481,
-      expect.objectContaining({
-        expectedMimeTypes: ["application/pdf"],
-        trustedDownloadIds: new Set([481]),
-      }),
-    );
+    expect(response).toEqual({ ok: false, error: "CONTENT_SCRIPT_UNAVAILABLE" });
+    expect(browserMocks.downloads.download).not.toHaveBeenCalled();
     expect(sentActionMessageTypes()).toEqual([
       "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
-      "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
+      "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34",
     ]);
   });
 
-  it("stages full-fiscal-year monthly targets and exports one zip", async () => {
+  it("blocks a full-fiscal-year GSTR-3B request before it can start legacy targets", async () => {
     const financialYear = "2026-27";
     const periods = getFiledReturnsFullFiscalYearPeriods(financialYear);
     browserMocks.tabs.sendMessage.mockImplementation(async (_tabId, message: PackMessage) => {
@@ -390,59 +351,12 @@ describe("background filed returns download defaults", () => {
     expect(response).toMatchObject({
       ok: true,
       flowStep: {
-        state: "downloaded",
-        safeSignals: expect.arrayContaining([
-          "full-fiscal-year-complete",
-          "full-fiscal-year-opfs-cleared",
-          "full-fiscal-year-zip-downloaded",
-        ]),
-      },
-      flowSummary: {
-        completedPeriods: periods,
-        status: "complete",
-        totalPeriods: periods.length,
+        state: "blocked",
+        safeSignals: ["gstr3b-full-fiscal-year-acquisition-not-wired"],
       },
     });
-    expect(browserMocks.downloads.download).toHaveBeenCalledTimes(1);
-    expect(browserMocks.downloads.download).toHaveBeenCalledWith({
-      conflictAction: "uniquify",
-      filename: `gstr-3b-${financialYear.toLowerCase()}-full-year.zip`,
-      saveAs: false,
-      url: "blob:chrome-extension://pack/full-year.zip",
-    });
-    expect(observeBrowserDownloadById).toHaveBeenCalledWith(
-      browserMocks.downloads,
-      481,
-      expect.objectContaining({
-        expectedFileExtensions: [".zip"],
-        trustedDownloadIds: new Set([481]),
-      }),
-      45 * 1000,
-    );
-    expect(browserMocks.runtime.sendMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: "PACK_OFFSCREEN_CLEAR_FILED_RETURN_LEDGER",
-        payload: expect.objectContaining({
-          ledgerId: expect.any(String),
-        }),
-      }),
-    );
-    periods.forEach((period) => {
-      expect(browserMocks.runtime.sendMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: "PACK_OFFSCREEN_STAGE_FILED_RETURN",
-          payload: expect.objectContaining({
-            zipPath: `${period.toLowerCase()}.pdf`,
-          }),
-        }),
-      );
-    });
-    expect(sentActionMessageTypes()).toEqual([
-      ...periods.flatMap(() => [
-        "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
-        "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
-      ]),
-    ]);
+    expect(browserMocks.downloads.download).not.toHaveBeenCalled();
+    expect(sentActionMessageTypes()).toEqual([]);
   });
 
   it("fails closed when a GSTR-2B portal click has no action-bound bytes", async () => {

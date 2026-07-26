@@ -6588,8 +6588,10 @@ describe("filed returns guided flow", () => {
     );
   });
 
-  it("captures an explicit filed GSTR-3B PDF download when the detail period is abbreviated", async () => {
-    const documentRef = createDocument(`
+  it.each(["PDF", "JSON"] as const)(
+    "blocks the legacy GSTR-3B %s route before it can arm capture",
+    async (artifactType) => {
+      const documentRef = createDocument(`
       <main>
         <nav>Returns / Filed Returns</nav>
         <h1>GSTR-3B - Monthly Return</h1>
@@ -6599,45 +6601,28 @@ describe("filed returns guided flow", () => {
         <button>DOWNLOAD FILED GSTR-3B</button>
       </main>
     `);
-    makeLayoutVisible(documentRef);
-    let downloadClicked = 0;
-    documentRef.querySelector("button")?.addEventListener("click", () => {
-      downloadClicked += 1;
-    });
+      makeLayoutVisible(documentRef);
+      let downloadClicked = 0;
+      documentRef.querySelector("button")?.addEventListener("click", () => {
+        downloadClicked += 1;
+      });
 
-    const result = await triggerFiledReturnDownload(documentRef, {
-      actionId: "test-action",
-      financialYear: "2025-26",
-      period: "March",
-      returnType: "GSTR-3B",
-    });
-
-    expect(result.downloadTrigger.state).toBe("clicked");
-    expect(result.downloadTrigger.safeSignals).toEqual(
-      expect.arrayContaining([
-        "filed-return-download-clicked",
-        "filed-gstr3b-download-clicked",
-        "filed-gstr3b-portal-blob-download-captured",
-        "filed-gstr3b-extension-download-requested",
-        "filed-return-artifact-clicked:PDF",
-      ]),
-    );
-    expect(result.mainWorldCaptureRequest).toMatchObject({
-      actionId: "test-action",
-      asyncBlobBinding: "action-xhr-non-artifact-to-pdf",
-      signalPrefix: "filed-gstr3b",
-      targetBinding: {
-        artifactType: "PDF",
-        controlTextDigest: expect.stringMatching(/^[a-f0-9]{8}$/),
+      const result = await triggerFiledReturnDownload(documentRef, {
+        actionId: "test-action",
+        artifactType,
         financialYear: "2025-26",
-        pathnameDigest: expect.stringMatching(/^[a-f0-9]{8}$/),
         period: "March",
         returnType: "GSTR-3B",
-      },
-      timeoutMs: 30_000,
-    });
-    expect(downloadClicked).toBe(0);
-  });
+      });
+
+      expect(result.downloadTrigger).toMatchObject({
+        state: "blocked",
+        safeSignals: expect.arrayContaining(["gstr3b-legacy-acquisition-retired"]),
+      });
+      expect(result.mainWorldCaptureRequest).toBeUndefined();
+      expect(downloadClicked).toBe(0);
+    },
+  );
 
   it("does not trigger a GSTR-3B download while the portal summary overlay remains open", async () => {
     const documentRef = createDocument(`
