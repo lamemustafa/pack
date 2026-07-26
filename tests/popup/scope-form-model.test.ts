@@ -4,7 +4,7 @@ import type {
   FiledReturnsFlowSummary,
 } from "../../src/connectors/gst/filed-returns-contracts";
 import { FULL_FISCAL_YEAR_PERIOD } from "../../src/connectors/gst/filed-returns-scope";
-import { getScopeFormStartAction } from "../../src/entrypoints/popup/scope-form-model";
+import { createScopeFormModel, getScopeFormStartAction } from "../../src/entrypoints/popup/scope-form-model";
 
 describe("popup scope form model", () => {
   it("names a single GSTR-1 Excel action truthfully", () => {
@@ -24,6 +24,12 @@ describe("popup scope form model", () => {
       disabled: false,
       label: "Download June 2026-27 GSTR-1 Excel",
     });
+  });
+
+  it("offers GSTR-3B portal data as JSON without calling it a filed return", () => {
+    const model = createScopeFormModel({ artifactType: "JSON", financialYear: "2024-25", period: "April", returnType: "GSTR-3B" });
+    expect(model.artifactOptions).toContainEqual({ value: "JSON", label: "portal data (JSON)", description: "Saved verbatim from the portal; not a filed return" });
+    expect(getScopeFormStartAction({ artifactType: "JSON", financialYear: "2024-25", period: "April", returnType: "GSTR-3B" }, null, null, false)).toEqual({ disabled: false, label: "Download April 2024-25 GSTR-3B portal data (JSON)" });
   });
 
   it("keeps the full workbench start action available when portal context is inactive", () => {

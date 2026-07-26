@@ -2343,7 +2343,7 @@ describe("filed returns flow runner", () => {
         const response = filedGstr2bCapturedDownload(
           "May",
           "2026-27",
-          message.payload.artifactType ?? "PDF",
+          message.payload.artifactType === "JSON" ? "PDF" : (message.payload.artifactType ?? "PDF"),
         );
         if (response.ok && "mainWorldCaptureRequest" in response) {
           bindTestCaptureRequest(response.mainWorldCaptureRequest, message.payload);
@@ -8810,7 +8810,7 @@ function filedReturnDownloadReady(period: FiledReturnsMonth): PackMessageRespons
 
 function filedGstr1DownloadReady(
   period: FiledReturnsMonth,
-  artifactType: "PDF" | "EXCEL",
+  artifactType: "PDF" | "JSON" | "EXCEL",
 ): PackMessageResponse {
   return {
     ok: true,
@@ -9010,7 +9010,7 @@ function testCaptureBindingFromTarget(target: FiledReturnsDownloadTarget) {
     target.returnType,
     target.financialYear,
     target.period as FiledReturnsMonth,
-    target.artifactType ?? "PDF",
+    target.artifactType === "JSON" ? "PDF" : (target.artifactType ?? "PDF"),
   );
 }
 

@@ -1,12 +1,12 @@
 import type { FiledReturnsReturnType } from "./filed-returns-return-types";
 
-export const FILED_RETURNS_ARTIFACT_TYPES = ["PDF", "EXCEL", "PDF_AND_EXCEL"] as const;
-export const FILED_RETURNS_CONCRETE_ARTIFACT_TYPES = ["PDF", "EXCEL"] as const;
+export const FILED_RETURNS_ARTIFACT_TYPES = ["PDF", "JSON", "EXCEL", "PDF_AND_EXCEL"] as const;
+export const FILED_RETURNS_CONCRETE_ARTIFACT_TYPES = ["PDF", "JSON", "EXCEL"] as const;
 
 export type FiledReturnsArtifactType = (typeof FILED_RETURNS_ARTIFACT_TYPES)[number];
 export type FiledReturnsConcreteArtifactType =
   (typeof FILED_RETURNS_CONCRETE_ARTIFACT_TYPES)[number];
-export type FiledReturnsArtifactExtension = ".pdf" | ".xls" | ".xlsx";
+export type FiledReturnsArtifactExtension = ".pdf" | ".json" | ".xls" | ".xlsx";
 
 export function isFiledReturnsArtifactType(input: unknown): input is FiledReturnsArtifactType {
   return (
@@ -28,7 +28,7 @@ export function supportsFiledReturnsArtifactType(
   returnType: FiledReturnsReturnType,
   artifactType: FiledReturnsArtifactType,
 ): boolean {
-  if (returnType === "GSTR-3B") return artifactType === "PDF";
+  if (returnType === "GSTR-3B") return artifactType === "PDF" || artifactType === "JSON";
   return true;
 }
 
@@ -45,6 +45,7 @@ export function concreteFiledReturnsArtifactTypes(
 ): FiledReturnsConcreteArtifactType[] {
   if (artifactType === "PDF_AND_EXCEL") return ["PDF", "EXCEL"];
   if (artifactType === "EXCEL") return ["EXCEL"];
+  if (artifactType === "JSON") return ["JSON"];
   return ["PDF"];
 }
 
@@ -62,6 +63,8 @@ export function filedReturnsArtifactLabel(
     case "PDF":
       if (returnType === "GSTR-1" || returnType === "GSTR-2B") return "Summary PDF";
       return "PDF";
+    case "JSON":
+      return returnType === "GSTR-3B" ? "portal data (JSON)" : "JSON";
   }
 }
 
@@ -70,6 +73,7 @@ export function filedReturnsConcreteArtifactLabel(
   returnType?: FiledReturnsReturnType,
 ): string {
   if (artifactType === "PDF") return "PDF";
+  if (artifactType === "JSON") return "portal data (JSON)";
   if (returnType === "GSTR-2B") return "details Excel";
   if (returnType === "GSTR-1") return "e-invoice details Excel";
   return "Excel";
@@ -78,6 +82,7 @@ export function filedReturnsConcreteArtifactLabel(
 export function filedReturnsArtifactExtension(
   artifactType: FiledReturnsConcreteArtifactType,
 ): FiledReturnsArtifactExtension {
+  if (artifactType === "JSON") return ".json";
   return artifactType === "EXCEL" ? ".xlsx" : ".pdf";
 }
 
@@ -85,6 +90,7 @@ export function filedReturnsArtifactMimeTypes(
   artifactType: FiledReturnsConcreteArtifactType,
 ): string[] {
   if (artifactType === "PDF") return ["application/pdf"];
+  if (artifactType === "JSON") return ["application/json"];
   return [
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "application/vnd.ms-excel",

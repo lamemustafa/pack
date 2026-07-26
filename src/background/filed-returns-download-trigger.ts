@@ -19,6 +19,7 @@ import {
 import { persistFiledReturnsTargetReview } from "./filed-returns-target-review";
 import { acquireGstr3bPdfAfterPreflight } from "./gstr3b-artifact-acquisition";
 import { toPortalReturnPeriod } from "../connectors/gst/filed-returns-return-period";
+import { downloadAcquiredArtifact } from "./artifact-download";
 
 type FlowStepResponse = Extract<PackMessageResponse, { ok: true; flowStep: PortalFlowStepResult }>;
 
@@ -35,7 +36,7 @@ export async function triggerAndObserveFiledReturnDownload({
   scope: FiledReturnsDownloadScope;
   tabId: number;
 }): Promise<PackMessageResponse> {
-  if (scope.returnType === "GSTR-3B" && artifactType === "PDF" && scope.period !== "ALL") {
+  if (scope.returnType === "GSTR-3B" && (artifactType === "PDF" || artifactType === "JSON") && scope.period !== "ALL") {
     const returnPeriod = toPortalReturnPeriod(scope.period, scope.financialYear);
     if (returnPeriod) {
       const requestId = createActionId();
@@ -43,7 +44,13 @@ export async function triggerAndObserveFiledReturnDownload({
         type: "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34",
         payload: { artifactType: "PDF", financialYear: scope.financialYear, period: scope.period, requestId, returnPeriod, returnType: "GSTR-3B" },
       });
-      if (response.ok && "artifact" in response && !response.artifact.ok && response.artifact.safeSignals.includes("page-generated-pdf-ready")) {
+      if (artifactType === "JSON" && response.ok && "artifact" in response && response.artifact.ok) {
+        const delivery = await downloadAcquiredArtifact({ base64: response.artifact.base64, filename: `Pack/${scope.financialYear}/${scope.period}/GSTR-3B-data.json`, mimeType: response.artifact.mimeType, requestId });
+        return delivery.ok
+          ? { ok: true, flowStep: { connectorId: "gst", scopeId: filedReturnScopeId("GSTR-3B"), state: "downloaded", safeSignals: [...response.artifact.safeSignals, "extension-download-complete"], safeMessage: "Pack saved the portal-produced GSTR-3B data JSON." } }
+          : { ok: true, flowStep: { connectorId: "gst", scopeId: filedReturnScopeId("GSTR-3B"), state: "blocked", safeSignals: ["artifact-acquisition-failed", `artifact-${delivery.reason}`], safeMessage: "Pack did not save an unverified filed-return artifact." } };
+      }
+      if (artifactType === "PDF" && response.ok && "artifact" in response && !response.artifact.ok && response.artifact.safeSignals.includes("page-generated-pdf-ready")) {
         const acquired = await acquireGstr3bPdfAfterPreflight({ filename: `Pack/${scope.financialYear}/${scope.period}/GSTR-3B.pdf`, requestId, returnPeriod, tabId });
         return acquired.ok
           ? { ok: true, flowStep: { connectorId: "gst", scopeId: filedReturnScopeId("GSTR-3B"), state: "downloaded", safeSignals: acquired.safeSignals, safeMessage: "Pack saved the portal-produced filed GSTR-3B PDF." } }

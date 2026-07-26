@@ -872,7 +872,7 @@ function positiveTargetEvidence(
   returnType: FiledReturnsFullFiscalYearLedger["scope"]["returnType"],
   artifactType: NonNullable<FiledReturnsFullFiscalYearLedger["scope"]["artifactType"]>,
 ) {
-  const artifactTypes: Array<"PDF" | "EXCEL"> =
+  const artifactTypes: Array<"PDF" | "JSON" | "EXCEL"> =
     artifactType === "PDF_AND_EXCEL" ? (["PDF", "EXCEL"] as const) : [artifactType];
   const diagnostics = artifactTypes.map((concreteArtifactType, index) => {
     const periodIndex = FILED_RETURNS_MONTHS.indexOf(period);

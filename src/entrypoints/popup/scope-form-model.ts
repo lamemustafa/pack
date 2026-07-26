@@ -58,7 +58,7 @@ export function returnTypeOptions() {
       return {
         value: returnType,
         label: returnType,
-        description: "Filed PDF",
+        description: "Filed PDF or portal data (JSON)",
       };
     }
     if (returnType === "GSTR-1") {
@@ -170,10 +170,10 @@ function defaultStartLabel(scope: FiledReturnsDownloadScope, fullFiscalYear: boo
   const artifactType = normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType);
   const multiFile = concreteFiledReturnsArtifactTypes(artifactType).length > 1;
   if (fullFiscalYear) {
-    const noun = multiFile ? "files" : artifactType === "EXCEL" ? "Excel files" : "PDFs";
+    const noun = multiFile ? "files" : artifactType === "EXCEL" ? "Excel files" : artifactType === "JSON" ? "JSON files" : "PDFs";
     return `Download all ${scope.financialYear} ${scope.returnType} ${noun}`;
   }
-  const noun = multiFile ? "ZIP" : artifactType === "EXCEL" ? "Excel" : "PDF";
+  const noun = multiFile ? "ZIP" : artifactType === "EXCEL" ? "Excel" : artifactType === "JSON" ? "portal data (JSON)" : "PDF";
   return `Download ${scope.period} ${scope.financialYear} ${scope.returnType} ${noun}`;
 }
 
@@ -185,6 +185,7 @@ function artifactOptionDescription(
   if (artifactType === "EXCEL") {
     return returnType === "GSTR-2B" ? "Details workbook" : "E-invoice workbook";
   }
+  if (artifactType === "JSON") return "Saved verbatim from the portal; not a filed return";
   if (returnType === "GSTR-3B") return "Filed copy";
   if (returnType === "GSTR-2B") return "Summary file";
   return "Summary copy";
@@ -198,6 +199,7 @@ function artifactOptionLabel(
   if (artifactType === "EXCEL") {
     return returnType === "GSTR-1" ? "E-invoice Excel" : "Details Excel";
   }
+  if (artifactType === "JSON") return "portal data (JSON)";
   return returnType === "GSTR-3B" ? "PDF" : "Summary PDF";
 }
 
