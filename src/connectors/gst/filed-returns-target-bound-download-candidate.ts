@@ -173,9 +173,9 @@ function hasExactGstr3bPdfFilename(
   // GSTR-3B shape for the selected period; it is still combined with the
   // exact click window, portal blob origin, MIME, incognito mode, and a single
   // candidate requirement.  The filename is never persisted or surfaced.
-  return new RegExp(
-    `^GSTR3B_[A-Z0-9]{15}_${periodToken}(?: \\(\\d+\\))?(?:\\.pdf)?$`,
-  ).test(basename);
+  return new RegExp(`^GSTR3B_[A-Z0-9]{15}_${periodToken}(?: \\(\\d+\\))?(?:\\.pdf)?$`).test(
+    basename,
+  );
 }
 
 const PERIOD_MONTH_NUMBERS: Readonly<Record<string, number>> = {

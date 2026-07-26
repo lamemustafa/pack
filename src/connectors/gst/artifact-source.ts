@@ -48,23 +48,40 @@ export async function acquireFiledReturnArtifact(
   if (!fetch) return failed(request, "endpoint-unavailable");
   let response: Response;
   try {
-    response = await fetch(`${GSTR3B_GET_GEN_PDF_PATH}?rtn_prd=${encodeURIComponent(request.returnPeriod)}`, {
-      credentials: "same-origin",
-    });
+    response = await fetch(
+      `${GSTR3B_GET_GEN_PDF_PATH}?rtn_prd=${encodeURIComponent(request.returnPeriod)}`,
+      {
+        credentials: "same-origin",
+      },
+    );
   } catch {
     return failed(request, "endpoint-unavailable");
   }
-  if (!response.ok) return failed(request, response.status === 401 || response.status === 403 ? "not-authenticated" : "preflight-failed");
+  if (!response.ok)
+    return failed(
+      request,
+      response.status === 401 || response.status === 403 ? "not-authenticated" : "preflight-failed",
+    );
   const bytes = new Uint8Array(await response.arrayBuffer());
   const preflight = validateArtifactBytes(bytes, "JSON", request.returnPeriod);
   if (!preflight.ok) return failed(request, preflight.reason);
   if (request.artifactType === "JSON") {
-    return { ok: true, requestId: request.requestId, bytes, mimeType: preflight.mimeType, safeSignals: ["target-period-verified"] };
+    return {
+      ok: true,
+      requestId: request.requestId,
+      bytes,
+      mimeType: preflight.mimeType,
+      safeSignals: ["target-period-verified"],
+    };
   }
   const candidates = resolveVisibleFiledReturnDownloadCandidates(documentRef, "GSTR-3B", "PDF");
-  if (candidates.length !== 1 || !candidates[0]) return failed(request, "control-not-found", ["target-period-verified"]);
+  if (candidates.length !== 1 || !candidates[0])
+    return failed(request, "control-not-found", ["target-period-verified"]);
   candidates[0].element.setAttribute("data-pack-artifact-request", request.requestId);
-  return failed(request, "control-not-found", ["target-period-verified", "page-generated-pdf-ready"]);
+  return failed(request, "control-not-found", [
+    "target-period-verified",
+    "page-generated-pdf-ready",
+  ]);
 }
 
 function failed(

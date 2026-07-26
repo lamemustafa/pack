@@ -494,9 +494,10 @@ function reconciledCompletionStep(
     isTargetBoundPortalClickDownloadPath(review.downloadDiagnostic.downloadPathClass),
   );
   const directDownload = attempt.directDownload === true;
-  const safeEvidence = targetBoundPortalClick || directDownload
-    ? observation.safeEvidence
-    : withValidatedCapturedArtifactMime(observation.safeEvidence, attempt.artifactType);
+  const safeEvidence =
+    targetBoundPortalClick || directDownload
+      ? observation.safeEvidence
+      : withValidatedCapturedArtifactMime(observation.safeEvidence, attempt.artifactType);
   if (safeEvidence?.downloadId !== attempt.downloadId) return null;
   if (
     targetBoundPortalClick &&

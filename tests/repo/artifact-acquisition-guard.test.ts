@@ -11,7 +11,9 @@ describe("artifact acquisition guard", () => {
     const text = await Promise.all(sources.map((file) => readFile(file, "utf8")));
     const packageJson = await readFile("package.json", "utf8");
     for (const dependency of FORBIDDEN_PDF_LIBRARIES) {
-      expect(`${packageJson}\n${text.join("\n")}`).not.toMatch(new RegExp(`(?:from\\s+["']${dependency}["']|["']${dependency}["']\\s*:)`));
+      expect(`${packageJson}\n${text.join("\n")}`).not.toMatch(
+        new RegExp(`(?:from\\s+["']${dependency}["']|["']${dependency}["']\\s*:)`),
+      );
     }
   });
 });

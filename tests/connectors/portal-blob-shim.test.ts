@@ -5,13 +5,21 @@ import { capturePortalPdfBlob } from "../../src/connectors/gst/portal-blob-shim"
 describe("capturePortalPdfBlob", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it.each(["dispatchEvent", "click"] as const)("captures and suppresses only its exact blob URL via %s", async (method) => {
-    const { documentRef, view, url } = environment();
-    install(view, url);
-    documentRef.querySelector("button")?.addEventListener("click", () => savePdf(documentRef, view, method));
-    const result = await capturePortalPdfBlob({ controlSelector: "button" });
-    expect(result).toMatchObject({ ok: true, safeSignals: [`portal-blob-shim-suppressed-via-${method}`] });
-  });
+  it.each(["dispatchEvent", "click"] as const)(
+    "captures and suppresses only its exact blob URL via %s",
+    async (method) => {
+      const { documentRef, view, url } = environment();
+      install(view, url);
+      documentRef
+        .querySelector("button")
+        ?.addEventListener("click", () => savePdf(documentRef, view, method));
+      const result = await capturePortalPdfBlob({ controlSelector: "button" });
+      expect(result).toMatchObject({
+        ok: true,
+        safeSignals: [`portal-blob-shim-suppressed-via-${method}`],
+      });
+    },
+  );
 
   it("does not suppress an unrelated anchor and ignores non-PDF blobs", async () => {
     const { documentRef, view, url } = environment();
@@ -53,16 +61,28 @@ describe("capturePortalPdfBlob", () => {
   });
 
   it("keeps the shim under its hard 120-line limit", async () => {
-    const source = await import("node:fs/promises").then((fs) => fs.readFile("src/connectors/gst/portal-blob-shim.ts", "utf8"));
+    const source = await import("node:fs/promises").then((fs) =>
+      fs.readFile("src/connectors/gst/portal-blob-shim.ts", "utf8"),
+    );
     expect(source.split("\n").length).toBeLessThanOrEqual(120);
   });
 });
 
 type TestWindow = Window & typeof globalThis;
 
-function environment(): { documentRef: Document; view: TestWindow; url: { createObjectURL: (value: Blob) => string } } {
-  const dom = new JSDOM('<body><button>Download</button></body>', { url: "https://return.gst.gov.in/returns/auth/gstr3b" });
-  return { documentRef: dom.window.document, view: dom.window as unknown as TestWindow, url: { createObjectURL: vi.fn(() => "blob:synthetic-pdf") } };
+function environment(): {
+  documentRef: Document;
+  view: TestWindow;
+  url: { createObjectURL: (value: Blob) => string };
+} {
+  const dom = new JSDOM("<body><button>Download</button></body>", {
+    url: "https://return.gst.gov.in/returns/auth/gstr3b",
+  });
+  return {
+    documentRef: dom.window.document,
+    view: dom.window as unknown as TestWindow,
+    url: { createObjectURL: vi.fn(() => "blob:synthetic-pdf") },
+  };
 }
 
 function install(view: TestWindow, url: { createObjectURL: (value: Blob) => string }) {

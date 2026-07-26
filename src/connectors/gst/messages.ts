@@ -140,7 +140,12 @@ export type PackMessageResponse =
       directDownloadReady: FiledGstr3bDirectDownloadReady;
       observation?: PortalObservation | null;
     }
-  | { ok: true; artifact: { ok: true; requestId: string; base64: string; mimeType: string; safeSignals: string[] } | { ok: false; requestId: string; reason: ArtifactFailureReason; safeSignals: string[] } }
+  | {
+      ok: true;
+      artifact:
+        | { ok: true; requestId: string; base64: string; mimeType: string; safeSignals: string[] }
+        | { ok: false; requestId: string; reason: ArtifactFailureReason; safeSignals: string[] };
+    }
   | {
       ok: true;
       flowStep: PortalFlowStepResult;
@@ -251,7 +256,23 @@ export function isPackMessage(
 }
 
 function isArtifactRequest(input: unknown): input is ArtifactRequest {
-  return isRecord(input) && hasOnlyKeys(input, ["returnType", "artifactType", "financialYear", "period", "returnPeriod", "requestId"]) && input.returnType === "GSTR-3B" && (input.artifactType === "PDF" || input.artifactType === "JSON") && isBoundedString(input.financialYear, 1, 20) && isBoundedString(input.period, 1, 20) && /^\d{6}$/.test(String(input.returnPeriod)) && isBoundedString(input.requestId, 1, 120);
+  return (
+    isRecord(input) &&
+    hasOnlyKeys(input, [
+      "returnType",
+      "artifactType",
+      "financialYear",
+      "period",
+      "returnPeriod",
+      "requestId",
+    ]) &&
+    input.returnType === "GSTR-3B" &&
+    (input.artifactType === "PDF" || input.artifactType === "JSON") &&
+    isBoundedString(input.financialYear, 1, 20) &&
+    isBoundedString(input.period, 1, 20) &&
+    /^\d{6}$/.test(String(input.returnPeriod)) &&
+    isBoundedString(input.requestId, 1, 120)
+  );
 }
 
 function isFullFiscalYearTargetRecoveryPayload(

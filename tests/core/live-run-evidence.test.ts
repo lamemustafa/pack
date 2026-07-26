@@ -528,7 +528,7 @@ describe("live run evidence", () => {
     expect(invalidPath.ok).toBe(false);
     if (!invalidPath.ok) {
       expect(invalidPath.errors).toContain(
-          "downloadEvidence[0].downloadPathClass must be one of portal-click-https, portal-click-blob, portal-click-data, portal-click-unknown, target-bound-portal-click-blob, captured-portal-request-https, captured-portal-request-blob, captured-portal-request-data, captured-portal-request-unknown",
+        "downloadEvidence[0].downloadPathClass must be one of portal-click-https, portal-click-blob, portal-click-data, portal-click-unknown, target-bound-portal-click-blob, captured-portal-request-https, captured-portal-request-blob, captured-portal-request-data, captured-portal-request-unknown",
       );
     }
   });

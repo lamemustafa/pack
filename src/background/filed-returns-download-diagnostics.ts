@@ -9,10 +9,7 @@ import type {
 import { isValidFiledReturnsDownloadErrorCategory } from "./filed-returns-download-diagnostic-state";
 
 export type DownloadAttemptClass =
-  | "captured-portal-request"
-  | "extension-direct"
-  | "portal-click"
-  | "target-bound-portal-click";
+  "captured-portal-request" | "extension-direct" | "portal-click" | "target-bound-portal-click";
 
 export function withFiledReturnsDownloadDiagnostic({
   attemptClass,

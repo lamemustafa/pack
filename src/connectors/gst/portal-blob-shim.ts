@@ -1,7 +1,11 @@
 export type PortalBlobShimInput = { controlSelector: string; timeoutMs?: number };
 export type PortalBlobShimResult =
   | { ok: true; base64: string; safeSignals: string[] }
-  | { ok: false; reason: "control-not-found" | "generation-timeout" | "unexpected-content"; safeSignals: string[] };
+  | {
+      ok: false;
+      reason: "control-not-found" | "generation-timeout" | "unexpected-content";
+      safeSignals: string[];
+    };
 
 /** Runs in the MAIN world. It observes one portal PDF Blob and suppresses only its exact save click. */
 export function capturePortalPdfBlob(input: PortalBlobShimInput): Promise<PortalBlobShimResult> {
@@ -31,7 +35,12 @@ export function capturePortalPdfBlob(input: PortalBlobShimInput): Promise<Portal
     const signal = (method: "dispatchEvent" | "click") => {
       if (!blob) return;
       void blob.arrayBuffer().then(
-        (buffer) => finish({ ok: true, base64: toBase64(new Uint8Array(buffer)), safeSignals: [`portal-blob-shim-suppressed-via-${method}`] }),
+        (buffer) =>
+          finish({
+            ok: true,
+            base64: toBase64(new Uint8Array(buffer)),
+            safeSignals: [`portal-blob-shim-suppressed-via-${method}`],
+          }),
         () => finish({ ok: false, reason: "unexpected-content", safeSignals: [] }),
       );
     };
@@ -59,7 +68,10 @@ export function capturePortalPdfBlob(input: PortalBlobShimInput): Promise<Portal
     };
     const control = document.querySelector<HTMLElement>(input.controlSelector);
     if (!control) return finish({ ok: false, reason: "control-not-found", safeSignals: [] });
-    globalThis.setTimeout(() => finish({ ok: false, reason: "generation-timeout", safeSignals: [] }), input.timeoutMs ?? 20_000);
+    globalThis.setTimeout(
+      () => finish({ ok: false, reason: "generation-timeout", safeSignals: [] }),
+      input.timeoutMs ?? 20_000,
+    );
     try {
       control.click();
     } catch {

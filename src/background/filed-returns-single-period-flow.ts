@@ -47,8 +47,13 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
           scopeId: filedReturnScopeId("GSTR-3B"),
           state: "blocked",
           safeSignals: acquisitionRecovery.safeSignals,
-          safeMessage: "Pack found an interrupted artifact download and will not repeat the target automatically.",
-          userAction: { type: "RETRY_PORTAL_GENERATION", message: "Check the exact browser download before starting again.", canResume: true },
+          safeMessage:
+            "Pack found an interrupted artifact download and will not repeat the target automatically.",
+          userAction: {
+            type: "RETRY_PORTAL_GENERATION",
+            message: "Check the exact browser download before starting again.",
+            canResume: true,
+          },
         },
       };
     }

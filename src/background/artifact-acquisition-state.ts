@@ -8,17 +8,26 @@ export type ArtifactAcquisitionCheckpoint = {
   downloadId?: number;
 };
 
-export async function persistArtifactAcquisitionIntent(input: Omit<ArtifactAcquisitionCheckpoint, "state" | "downloadId">): Promise<void> {
-  await browser.storage.session.set({ [KEY]: { ...input, state: "intent" } satisfies ArtifactAcquisitionCheckpoint });
+export async function persistArtifactAcquisitionIntent(
+  input: Omit<ArtifactAcquisitionCheckpoint, "state" | "downloadId">,
+): Promise<void> {
+  await browser.storage.session.set({
+    [KEY]: { ...input, state: "intent" } satisfies ArtifactAcquisitionCheckpoint,
+  });
 }
 
-export async function persistArtifactAcquisitionDownloadId(input: ArtifactAcquisitionCheckpoint): Promise<void> {
-  await browser.storage.session.set({ [KEY]: { ...input, state: "download-observing" } satisfies ArtifactAcquisitionCheckpoint });
+export async function persistArtifactAcquisitionDownloadId(
+  input: ArtifactAcquisitionCheckpoint,
+): Promise<void> {
+  await browser.storage.session.set({
+    [KEY]: { ...input, state: "download-observing" } satisfies ArtifactAcquisitionCheckpoint,
+  });
 }
 
 export async function clearArtifactAcquisitionCheckpoint(requestId: string): Promise<void> {
   const stored = await browser.storage.session.get(KEY);
-  if ((stored[KEY] as { requestId?: unknown } | undefined)?.requestId === requestId) await browser.storage.session.remove(KEY);
+  if ((stored[KEY] as { requestId?: unknown } | undefined)?.requestId === requestId)
+    await browser.storage.session.remove(KEY);
 }
 
 export async function clearCompletedArtifactAcquisitionCheckpoint(): Promise<void> {
@@ -26,8 +35,7 @@ export async function clearCompletedArtifactAcquisitionCheckpoint(): Promise<voi
 }
 
 export async function reconcileArtifactAcquisitionCheckpoint(): Promise<
-  | { state: "retry-safe" }
-  | { state: "needs-review"; safeSignals: string[] }
+  { state: "retry-safe" } | { state: "needs-review"; safeSignals: string[] }
 > {
   const stored = await browser.storage.session.get(KEY);
   const checkpoint = stored[KEY] as ArtifactAcquisitionCheckpoint | undefined;
@@ -37,11 +45,20 @@ export async function reconcileArtifactAcquisitionCheckpoint(): Promise<
   }
   try {
     const [item] = await browser.downloads.search({ id: checkpoint.downloadId });
-    if (item?.state === "complete" && Math.max(item.bytesReceived ?? 0, item.fileSize ?? 0, item.totalBytes ?? 0) > 0) {
-      return { state: "needs-review", safeSignals: ["artifact-acquisition-download-complete-unreconciled"] };
+    if (
+      item?.state === "complete" &&
+      Math.max(item.bytesReceived ?? 0, item.fileSize ?? 0, item.totalBytes ?? 0) > 0
+    ) {
+      return {
+        state: "needs-review",
+        safeSignals: ["artifact-acquisition-download-complete-unreconciled"],
+      };
     }
     return { state: "needs-review", safeSignals: ["artifact-acquisition-download-unreconciled"] };
   } catch {
-    return { state: "needs-review", safeSignals: ["artifact-acquisition-download-search-unavailable"] };
+    return {
+      state: "needs-review",
+      safeSignals: ["artifact-acquisition-download-search-unavailable"],
+    };
   }
 }

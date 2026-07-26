@@ -15,7 +15,10 @@ export function validateArtifactBytes(
   if (bytes.byteLength === 0) return { ok: false, reason: "empty" };
   if (bytes.byteLength > MAX_ARTIFACT_BYTES) return { ok: false, reason: "too-large" };
   if (artifactType === "PDF") {
-    if (bytes.byteLength < MIN_PDF_BYTES || !PDF_MAGIC.every((value, index) => bytes[index] === value)) {
+    if (
+      bytes.byteLength < MIN_PDF_BYTES ||
+      !PDF_MAGIC.every((value, index) => bytes[index] === value)
+    ) {
       return { ok: false, reason: "unexpected-content" };
     }
     return { ok: true, mimeType: "application/pdf" };

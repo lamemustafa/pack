@@ -170,10 +170,22 @@ function defaultStartLabel(scope: FiledReturnsDownloadScope, fullFiscalYear: boo
   const artifactType = normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType);
   const multiFile = concreteFiledReturnsArtifactTypes(artifactType).length > 1;
   if (fullFiscalYear) {
-    const noun = multiFile ? "files" : artifactType === "EXCEL" ? "Excel files" : artifactType === "JSON" ? "JSON files" : "PDFs";
+    const noun = multiFile
+      ? "files"
+      : artifactType === "EXCEL"
+        ? "Excel files"
+        : artifactType === "JSON"
+          ? "JSON files"
+          : "PDFs";
     return `Download all ${scope.financialYear} ${scope.returnType} ${noun}`;
   }
-  const noun = multiFile ? "ZIP" : artifactType === "EXCEL" ? "Excel" : artifactType === "JSON" ? "portal data (JSON)" : "PDF";
+  const noun = multiFile
+    ? "ZIP"
+    : artifactType === "EXCEL"
+      ? "Excel"
+      : artifactType === "JSON"
+        ? "portal data (JSON)"
+        : "PDF";
   return `Download ${scope.period} ${scope.financialYear} ${scope.returnType} ${noun}`;
 }
 

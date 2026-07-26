@@ -154,13 +154,26 @@ export default defineContentScript({
 
       if (contentMessage.type === "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34") {
         void acquireFiledReturnArtifact(document, contentMessage.payload)
-          .then((artifact) => sendResponse({
-            ok: true,
-            artifact: artifact.ok
-              ? { requestId: artifact.requestId, base64: bytesToBase64(artifact.bytes), mimeType: artifact.mimeType, safeSignals: artifact.safeSignals, ok: true }
-              : artifact,
-          } satisfies PackMessageResponse))
-          .catch(() => sendResponse({ ok: false, error: "Filed return artifact acquisition failed." } satisfies PackMessageResponse));
+          .then((artifact) =>
+            sendResponse({
+              ok: true,
+              artifact: artifact.ok
+                ? {
+                    requestId: artifact.requestId,
+                    base64: bytesToBase64(artifact.bytes),
+                    mimeType: artifact.mimeType,
+                    safeSignals: artifact.safeSignals,
+                    ok: true,
+                  }
+                : artifact,
+            } satisfies PackMessageResponse),
+          )
+          .catch(() =>
+            sendResponse({
+              ok: false,
+              error: "Filed return artifact acquisition failed.",
+            } satisfies PackMessageResponse),
+          );
         return true;
       }
 

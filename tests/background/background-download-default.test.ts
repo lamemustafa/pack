@@ -1,9 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PACK_CONTENT_REQUEST_ENVELOPE_TYPE } from "../../src/connectors/gst/messages";
-import {
-  getFiledReturnsFullFiscalYearPeriods,
-  type FiledReturnsMonth,
-} from "../../src/connectors/gst/filed-returns-scope";
+import { type FiledReturnsMonth } from "../../src/connectors/gst/filed-returns-scope";
 import type { PackMessage, PackMessageResponse } from "../../src/connectors/gst/messages";
 import { observeBrowserDownloadById } from "../../src/background/download-observer";
 
@@ -291,7 +288,6 @@ describe("background filed returns download defaults", () => {
 
   it("blocks a full-fiscal-year GSTR-3B request before it can start legacy targets", async () => {
     const financialYear = "2026-27";
-    const periods = getFiledReturnsFullFiscalYearPeriods(financialYear);
     browserMocks.tabs.sendMessage.mockImplementation(async (_tabId, message: PackMessage) => {
       message = unwrapContentRequest(message);
       if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3") {
