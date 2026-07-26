@@ -1,5 +1,6 @@
 import { browser } from "wxt/browser";
 import { detectGstPortalContext } from "../connectors/gst/detect";
+import { acquireFiledReturnArtifact } from "../connectors/gst/artifact-source";
 import { runFiledReturnsDownloadStep } from "../connectors/gst/filed-returns-flow";
 import { triggerFiledReturnDownload } from "../connectors/gst/filed-returns-download";
 import { navigateToFiledReturnsPage } from "../connectors/gst/filed-returns-navigator";
@@ -151,6 +152,18 @@ export default defineContentScript({
         return true;
       }
 
+      if (contentMessage.type === "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34") {
+        void acquireFiledReturnArtifact(document, contentMessage.payload)
+          .then((artifact) => sendResponse({
+            ok: true,
+            artifact: artifact.ok
+              ? { requestId: artifact.requestId, base64: bytesToBase64(artifact.bytes), mimeType: artifact.mimeType, safeSignals: artifact.safeSignals, ok: true }
+              : artifact,
+          } satisfies PackMessageResponse))
+          .catch(() => sendResponse({ ok: false, error: "Filed return artifact acquisition failed." } satisfies PackMessageResponse));
+        return true;
+      }
+
       if (contentMessage.type === "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3") {
         const flowStep = detectPostClickBlockedState(document, contentMessage.payload, []);
         sendResponse({
@@ -235,6 +248,12 @@ function sendFiledReturnsObservation() {
       // Service workers can be unavailable during extension reload.
     });
   return observation;
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
 }
 
 function unwrapContentRequest(message: unknown): unknown {

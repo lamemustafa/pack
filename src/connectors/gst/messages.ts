@@ -12,6 +12,7 @@ import type {
   FiledReturnsDownloadTarget,
   PortalFlowStepResult,
 } from "./filed-returns-contracts";
+import type { ArtifactRequest, ArtifactFailureReason } from "./artifact-source";
 import {
   FULL_FISCAL_YEAR_PERIOD,
   isSupportedFiledReturnsScope,
@@ -28,7 +29,7 @@ import {
   type FiledReturnsReturnType,
 } from "./filed-returns-return-types";
 
-export const PACK_CONTENT_SCRIPT_PROTOCOL_VERSION = 33;
+export const PACK_CONTENT_SCRIPT_PROTOCOL_VERSION = 34;
 export const PACK_CONTENT_REQUEST_ENVELOPE_TYPE =
   `PACK_CONTENT_REQUEST_V${PACK_CONTENT_SCRIPT_PROTOCOL_VERSION}` as const;
 
@@ -98,6 +99,7 @@ export type PackMessage =
       type: "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3";
       payload: FiledReturnsDownloadTarget;
     }
+  | { type: "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34"; payload: ArtifactRequest }
   | {
       type: "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3";
       payload: FiledReturnsDownloadTarget;
@@ -138,6 +140,7 @@ export type PackMessageResponse =
       directDownloadReady: FiledGstr3bDirectDownloadReady;
       observation?: PortalObservation | null;
     }
+  | { ok: true; artifact: { ok: true; requestId: string; base64: string; mimeType: string; safeSignals: string[] } | { ok: false; requestId: string; reason: ArtifactFailureReason; safeSignals: string[] } }
   | {
       ok: true;
       flowStep: PortalFlowStepResult;
@@ -220,6 +223,8 @@ export function isPackMessage(
     case "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3":
     case "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3":
       return isFiledReturnsDownloadTarget(input.payload);
+    case "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34":
+      return isArtifactRequest(input.payload);
     case "PACK_RUN_FILED_RETURNS_DOWNLOAD_STEP":
     case "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3":
     case "PACK_CONTENT_MARK_FILED_RETURNS_SEARCH_PENDING_V3":
@@ -243,6 +248,10 @@ export function isPackMessage(
     default:
       return false;
   }
+}
+
+function isArtifactRequest(input: unknown): input is ArtifactRequest {
+  return isRecord(input) && hasOnlyKeys(input, ["returnType", "artifactType", "financialYear", "period", "returnPeriod", "requestId"]) && input.returnType === "GSTR-3B" && (input.artifactType === "PDF" || input.artifactType === "JSON") && isBoundedString(input.financialYear, 1, 20) && isBoundedString(input.period, 1, 20) && /^\d{6}$/.test(String(input.returnPeriod)) && isBoundedString(input.requestId, 1, 120);
 }
 
 function isFullFiscalYearTargetRecoveryPayload(
