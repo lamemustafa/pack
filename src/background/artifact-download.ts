@@ -19,7 +19,7 @@ type DeliveryDeps = {
 };
 
 export async function downloadAcquiredArtifact(
-  input: { requestId: string; base64: string; mimeType: string; filename: string },
+  input: { requestId: string; base64: string; mimeType: string; filename: string; onStarted?: (downloadId: number) => Promise<void> },
   overrides: Partial<DeliveryDeps> = {},
 ): Promise<ArtifactDownloadResult> {
   const deps: DeliveryDeps = {
@@ -38,6 +38,7 @@ export async function downloadAcquiredArtifact(
     let downloadId: number;
     try {
       downloadId = await deps.downloads.download({ conflictAction: "uniquify", filename: input.filename, saveAs: false, url });
+      await input.onStarted?.(downloadId);
     } catch {
       return { ok: false, reason: "start-rejected", safeSignals: [] };
     }
