@@ -21,6 +21,10 @@ export async function clearArtifactAcquisitionCheckpoint(requestId: string): Pro
   if ((stored[KEY] as { requestId?: unknown } | undefined)?.requestId === requestId) await browser.storage.session.remove(KEY);
 }
 
+export async function clearCompletedArtifactAcquisitionCheckpoint(): Promise<void> {
+  await browser.storage.session.remove(KEY);
+}
+
 export async function reconcileArtifactAcquisitionCheckpoint(): Promise<
   | { state: "retry-safe" }
   | { state: "needs-review"; safeSignals: string[] }
