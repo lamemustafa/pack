@@ -1,6 +1,10 @@
 import { browser } from "wxt/browser";
-import type { PackMessageResponse } from "../core/messages";
-import { readActiveFiledReturnsRunSummary } from "./filed-returns-active-run";
+import type { FiledReturnsFullFiscalYearLedger } from "../connectors/gst/filed-returns-contracts";
+import type { PackMessageResponse } from "../connectors/gst/messages";
+import {
+  readActiveFiledReturnsRunStorageState,
+  runFiledReturnsOperationCriticalSection,
+} from "./filed-returns-active-run";
 import {
   isFullFiscalYearLedger,
   recoverableFullFiscalYearLedgerId,
@@ -26,6 +30,12 @@ export interface PackLocalDataDeps {
 }
 
 export async function clearPackLocalDataWithRecoveryGuard(
+  deps: PackLocalDataDeps,
+): Promise<PackMessageResponse> {
+  return runFiledReturnsOperationCriticalSection(() => clearPackLocalDataWithinOperation(deps));
+}
+
+async function clearPackLocalDataWithinOperation(
   deps: PackLocalDataDeps,
 ): Promise<PackMessageResponse> {
   if (await hasUnresolvedFiledReturnsRecoveryState(deps)) {
@@ -96,10 +106,12 @@ export async function clearPackLocalDataWithRecoveryGuard(
 }
 
 async function hasUnresolvedFiledReturnsRecoveryState(deps: PackLocalDataDeps): Promise<boolean> {
-  const activeRunSummary = await readActiveFiledReturnsRunSummary({
+  const activeRunState = await readActiveFiledReturnsRunStorageState({
     storageKeys: { activeRun: deps.storageKeys.activeRun },
   });
-  if (activeRunSummary) return true;
+  // A malformed marker cannot be acknowledged safely, so Clear local Pack data is
+  // its explicit recovery path. Only a valid active lease blocks local-data removal.
+  if (activeRunState.state === "valid") return true;
 
   const targetReviewSummary = await readCurrentFiledReturnsTargetReviewSummary({
     storageKeys: { targetReview: deps.storageKeys.targetReview },
@@ -107,11 +119,16 @@ async function hasUnresolvedFiledReturnsRecoveryState(deps: PackLocalDataDeps): 
   if (targetReviewSummary) return true;
 
   const ledger = await readLocalValue<unknown>(deps.storageKeys.fullFiscalYearLedger);
-  return isFullFiscalYearLedger(ledger) && isUnresolvedFullFiscalYearLedger(ledger);
+  if (!isFullFiscalYearLedger(ledger)) return false;
+  return hasUnresolvedZipState(ledger) || isUnresolvedFullFiscalYearLedger(ledger);
 }
 
-function isUnresolvedFullFiscalYearLedger(ledger: unknown): boolean {
-  if (!isFullFiscalYearLedger(ledger)) return false;
+function hasUnresolvedZipState(ledger: FiledReturnsFullFiscalYearLedger): boolean {
+  if (ledger.zipDownloadAttempt !== undefined) return true;
+  return ledger.zipPhase !== undefined && ledger.zipPhase !== "cleaned";
+}
+
+function isUnresolvedFullFiscalYearLedger(ledger: FiledReturnsFullFiscalYearLedger): boolean {
   if (ledger.status === "complete" || ledger.status === "cancelled") return false;
   return ledger.targets.some((target) =>
     ["pending", "running", "download-unconfirmed", "blocked", "failed"].includes(target.status),

@@ -3,12 +3,19 @@ import { createSafeRequestShapes } from "../../src/connectors/gst/request-shape-
 
 describe("GST request-shape observer", () => {
   it("keeps only redacted same-origin request shapes", () => {
+    const supportedOrigin = "https://services.gst.gov.in";
+    const opaqueSegment = "synthetic-opaque-segment-0001";
     const shapes = createSafeRequestShapes(
       [
         {
-          name: "https://services.gst.gov.in/services/api/returns/29ABCDE1234F1Z5/filed?token=secret#hash",
+          name: `${supportedOrigin}/services/api/returns/${opaqueSegment}/filed`,
           initiatorType: "fetch",
           startTime: 10,
+        },
+        {
+          name: `${supportedOrigin}/services/api/returns/${opaqueSegment}/filed`,
+          initiatorType: "fetch",
+          startTime: 11,
         },
         {
           name: "https://example.com/tracker.js",
@@ -16,7 +23,7 @@ describe("GST request-shape observer", () => {
           startTime: 20,
         },
       ],
-      "https://services.gst.gov.in",
+      supportedOrigin,
     );
 
     expect(shapes).toEqual([
@@ -27,22 +34,25 @@ describe("GST request-shape observer", () => {
         initiatorType: "fetch",
       },
     ]);
-    expect(JSON.stringify(shapes)).not.toMatch(/token|29ABCDE1234F1Z5|secret/);
+    expect(JSON.stringify(shapes)).not.toContain(opaqueSegment);
   });
 
   it("redacts long opaque path tokens", () => {
+    const supportedOrigin = "https://return.gst.gov.in";
+    const syntheticDocumentSegment = "synthetic-document-segment-0002";
     const shapes = createSafeRequestShapes(
       [
         {
-          name: "https://return.gst.gov.in/returns/auth/api/download/a1b2c3d4e5f6g7h8i9j0",
+          name: `${supportedOrigin}/returns/auth/api/download/${syntheticDocumentSegment}`,
           initiatorType: "xmlhttprequest",
           startTime: 5,
         },
       ],
-      "https://return.gst.gov.in",
+      supportedOrigin,
     );
 
     expect(shapes[0]?.pathShape).toBe("/returns/auth/api/download/[opaque]");
+    expect(JSON.stringify(shapes)).not.toContain(syntheticDocumentSegment);
   });
 
   it("deduplicates stable request shapes", () => {

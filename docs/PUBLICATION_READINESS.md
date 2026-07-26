@@ -45,10 +45,14 @@ stable-release claims.
   or session tokens, and does not log or upload GST document contents. The
   source-build capture path may use temporary local OPFS staging for an explicit
   target-bound ZIP export and its saved recovery/cleanup lifecycle, as described
-  in the README and privacy QA checklist. The direct-download compatibility path
-  is URL-only: it reviews GST endpoint metadata in the authenticated page context
-  and hands only the reviewed GST URL to the browser download manager, without
-  reading or retaining PDF bytes.
+  in the README and privacy QA checklist. Single-period capture remains bound to
+  the user-started action and selected target; protected endpoint replay and
+  probing are not production paths.
+- The source build contains one additional fail-closed evidence class for a
+  portal-created Blob download. `target-bound-portal-click-blob` is limited to a
+  single-period GSTR-3B PDF with an exact action and browser-download match. It
+  is disabled for GSTR-1, GSTR-2B, selected-file ZIP/OPFS staging and every
+  full-year flow, and it is not a Store-facing success claim.
 - ComplyEaze Pack is not affiliated with, endorsed by, or operated by GSTN, CBIC,
   or the Government of India.
 
@@ -101,9 +105,7 @@ stable-release claims.
 - [x] Manifest V3.
 - [x] Exact GST host permission allow-list only.
 - [x] No `<all_urls>`, cookies, history, webRequest, debugger/CDP,
-      nativeMessaging, tabs, identity, or externally_connectable in the default release manifest.
-      An explicitly enabled local-only GSTR-1 experiment adds debugger permission to dispatch one
-      target-bound View click; that build is not release-eligible.
+      nativeMessaging, tabs, identity, or externally_connectable in any Pack build.
 - [x] Restrictive extension CSP.
 - [x] No remote executable code allowed by package verifier.
 - [x] No extension analytics SDK.
@@ -150,15 +152,19 @@ stable-release claims.
       cookies, credentials, OTP, or CAPTCHA data.
 - [ ] Authorised live full fiscal year run reconciles every eligible target as
       downloaded, positively not filed, blocked, or failed in the local ledger.
-- [ ] Direct browser-download default is tested in clean Chrome and Brave
-      profiles plus the real profile where the native Save dialog appeared,
-      with "Ask where to save each file" on and off, existing filename
-      collisions, and multiple-download prompt conditions. Each run must record
-      sanitized path-taken evidence that distinguishes the extension-owned
-      direct path from portal-click and portal-click-after-direct-fallback
-      paths. If this gate passes for GSTR-3B only, record the product decision
-      to stop at GSTR-3B or proceed to GSTR-1 PDF/Excel endpoint discovery
-      before making full-year dialog-free claims.
+- [ ] Action-bound capture is tested in clean Chrome and Brave profiles plus the
+      real profile where the native Save dialog appeared, with "Ask where to
+      save each file" on and off, existing filename collisions, and
+      multiple-download prompt conditions. Each run must record sanitized
+      path-taken evidence that distinguishes confirmed main-world capture, the
+      narrowly scoped `target-bound-portal-click-blob` class, and an unconfirmed
+      or ambiguous portal click. The target-bound portal-created class must be
+      rejected outside single-period GSTR-3B PDF evidence and must not represent
+      full-year or staged ZIP work. Plain portal-click evidence must remain
+      fail-closed and must not cause a second click or protected endpoint replay.
+      If this gate passes for GSTR-3B only, record the product decision to stop at
+      GSTR-3B or proceed to GSTR-1 PDF/Excel capture verification before making
+      full-year dialog-free claims.
 - [ ] Transient artifact-byte handling is limited to explicit user-started,
       target-bound local downloads. The service worker owns main-world capture,
       MIME/size/magic validation, offscreen temporary Blob URL creation,
@@ -195,7 +201,14 @@ stable-release claims.
       full-year
       claims.
 - [ ] Network/storage audit confirms no unexpected destinations or sensitive
-      persistence.
+      persistence. Any `pack:filed-returns-target-review` record is limited to
+      canonical target identifier/scope, safe signals/messages, recovery attempt
+      kind/phase, request and bounded candidate-window timestamps, opaque
+      action/staging/checkpoint identifiers, the exact numeric browser download
+      ID, sanitized diagnostic classes, revisions and timestamps; it contains no
+      raw filename, local path, URL/referrer, taxpayer identifier, portal HTML,
+      credential, session data or artifact bytes. Shareable evidence uses only a
+      neutral `ACTION-*` alias and omits the browser download ID.
 - [ ] SBOM, dependency vulnerability review, license scan, and secret scan are
       complete.
       `pnpm audit --audit-level high` hung without output in the sandbox on

@@ -1,174 +1,201 @@
 import { browser } from "wxt/browser";
-import { GST_CONNECTOR_DESCRIPTOR } from "../connectors/gst/constants";
 import type {
   FiledReturnsDownloadScope,
   FiledReturnsDownloadTarget,
   FiledReturnsFlowSummary,
   PortalFlowStepResult,
-} from "../core/contracts";
-import type { PackMessageResponse } from "../core/messages";
-import {
-  mergeFlowStepWithDownloadObservation,
-  observeBrowserDownloadById,
-} from "./download-observer";
-import {
-  type FiledReturnsFlowMessagingDeps,
-  resolveDirectDownloadRequestOnce,
-} from "./filed-returns-flow-messaging";
+} from "../connectors/gst/filed-returns-contracts";
+import type { FiledReturnsConcreteArtifactType } from "../connectors/gst/filed-returns-artifacts";
+import { buildAuthorizedFiledGstr3bDirectDownloadUrl } from "../connectors/gst/filed-returns-direct-download-authorization";
+import type { FiledGstr3bDirectDownloadReady, PackMessageResponse } from "../connectors/gst/messages";
+import { observeBrowserDownloadById } from "./download-observer";
 import { withFiledReturnsDownloadDiagnostic } from "./filed-returns-download-diagnostics";
+import { expectedDownloadForArtifact } from "./filed-returns-download-expectations";
+import { targetReviewScope } from "./filed-returns-download-result";
+import type { FiledReturnsFlowMessagingDeps } from "./filed-returns-flow-messaging";
+import { finalizeObservedSingleArtifactDownload } from "./filed-returns-single-artifact-download-completion";
 import {
-  FILED_RETURNS_SCOPE_ID,
-  directDownloadActionMismatchResponse,
-  directDownloadOriginRejectedResponse,
-  directDownloadStartRejectedResponse,
-  directDownloadUrlMismatchResponse,
-  explainDirectDownloadPromptIfNeeded,
-  isExpectedFiledReturnDirectDownloadUrl,
-  isReviewedGstDownloadUrl,
-  targetUrlSubstrings,
-} from "./filed-returns-direct-download-review";
-import { safeFiledReturnDownloadFilename } from "./filed-returns-download-filename";
+  clearFiledReturnsTargetDownloadAttempt,
+  persistFiledReturnsTargetDownloadId,
+  persistFiledReturnsTargetDownloadIntent,
+} from "./filed-returns-target-download-attempt";
 import { persistFiledReturnsTargetReview } from "./filed-returns-target-review";
+import { beginLiveFiledReturnsDownloadObservation } from "./filed-returns-durable-download-reconciler";
+import { PACK_LOCAL_STORAGE_KEYS } from "./storage-keys";
 
-const EXPECTED_FILED_RETURN_DOWNLOAD = {
-  expectedFileExtensions: [],
-  expectedMimeTypes: ["application/pdf"],
-  expectedOrigins: GST_CONNECTOR_DESCRIPTOR.supportedOrigins,
-};
-
-export async function triggerDirectFiledReturnDownload({
+/**
+ * Performs one browser-managed request after the content script has proved the
+ * visible page matches the target. This deliberately does not probe/fetch the
+ * endpoint first and does not assign a Pack filename.
+ */
+export async function startAuthorizedFiledGstr3bDirectDownload({
   activePeriod,
+  artifactType,
+  authorization,
   deps,
   scope,
-  tabId,
   target,
 }: {
   activePeriod: string | null;
+  artifactType: FiledReturnsConcreteArtifactType;
+  authorization: FiledGstr3bDirectDownloadReady;
   deps: FiledReturnsFlowMessagingDeps;
   scope: FiledReturnsDownloadScope;
-  tabId: number;
   target: FiledReturnsDownloadTarget;
-}): Promise<PackMessageResponse | null> {
-  if (target.artifactType && target.artifactType !== "PDF") {
-    return withDirectDownloadDiagnostic(
-      {
-        ok: true,
-        flowStep: {
-          connectorId: "gst",
-          scopeId: FILED_RETURNS_SCOPE_ID,
-          state: "blocked",
-          safeSignals: ["filed-gstr3b-direct-download-artifact-rejected"],
-          safeMessage:
-            "Pack will not use the reviewed filed GSTR-3B direct PDF endpoint for a non-PDF artifact.",
-        },
-      },
+}): Promise<PackMessageResponse> {
+  if (
+    authorization.actionId !== target.actionId ||
+    target.returnType !== "GSTR-3B" ||
+    artifactType !== "PDF" ||
+    target.artifactType !== "PDF"
+  ) {
+    return responseWithDiagnostic(
+      directBlockedStep(
+        ["filed-gstr3b-direct-download-action-mismatch"],
+        "Pack rejected the direct download authorization because it did not match the active GSTR-3B PDF target.",
+      ),
       target,
     );
   }
 
-  const response = await resolveDirectDownloadRequestOnce(deps, tabId, target);
-  if (!response.ok) return response;
-  if ("flowStep" in response) return withDirectDownloadDiagnostic(response, target);
-  if ("downloadTrigger" in response) return directDownloadTriggerResponse(response, activePeriod);
-  if (!("directDownloadRequest" in response)) return null;
-  if (response.directDownloadRequest.actionId !== target.actionId) {
-    return withDirectDownloadDiagnostic(directDownloadActionMismatchResponse(activePeriod), target);
-  }
-  if (!isReviewedGstDownloadUrl(response.directDownloadRequest.url)) {
-    return withDirectDownloadDiagnostic(directDownloadOriginRejectedResponse(activePeriod), target);
-  }
-  if (!isExpectedFiledReturnDirectDownloadUrl(response.directDownloadRequest.url, scope)) {
-    return withDirectDownloadDiagnostic(directDownloadUrlMismatchResponse(activePeriod), target);
-  }
-
-  const armedAt = new Date();
-  const startedDownload = await startDirectBrowserDownload(
-    response.directDownloadRequest.url,
-    safeFiledReturnDownloadFilename(scope, "PDF"),
+  const downloadUrl = buildAuthorizedFiledGstr3bDirectDownloadUrl(
+    scope.financialYear,
+    scope.period,
   );
-  if (!startedDownload.ok) {
-    return withDirectDownloadDiagnostic(directDownloadStartRejectedResponse(activePeriod), target);
+  if (!downloadUrl) {
+    return responseWithDiagnostic(
+      directBlockedStep(
+        ["filed-gstr3b-return-period-invalid"],
+        "Pack could not derive the selected GSTR-3B return period, so it did not start a browser download.",
+      ),
+      target,
+    );
   }
 
-  const directTriggerStep: PortalFlowStepResult = {
-    connectorId: "gst",
-    scopeId: FILED_RETURNS_SCOPE_ID,
-    state: "clicked",
-    safeSignals: [
-      "filed-gstr3b-direct-download-started",
-      ...response.directDownloadRequest.safeSignals,
-      ...(activePeriod ? [`filed-return-detail-period:${activePeriod}`] : []),
-    ],
-    safeMessage: "Pack started the filed GSTR-3B PDF download through the browser downloads API.",
+  const reviewScope = targetReviewScope(scope, artifactType);
+  const checkpointEnabled = deps.persistTargetReview !== false;
+  const checkpointDeps = {
+    ...deps,
+    storageKeys: {
+      ...deps.storageKeys,
+      targetReview: deps.storageKeys.targetReview ?? PACK_LOCAL_STORAGE_KEYS.targetReview,
+    },
   };
+  const requestedAt = deps.now?.() ?? new Date();
+  const triggerStep = directTriggerStep(authorization, activePeriod);
+
+  if (checkpointEnabled) {
+    let intentPersisted = false;
+    try {
+      intentPersisted = await persistFiledReturnsTargetDownloadIntent(
+        reviewScope,
+        {
+          actionId: target.actionId,
+          artifactType,
+          directDownload: true,
+          kind: "single-artifact",
+          phase: "download-intent-persisted",
+          requestedAt: requestedAt.toISOString(),
+        },
+        checkpointDeps,
+        triggerStep,
+      );
+    } catch {
+      intentPersisted = false;
+    }
+    if (!intentPersisted) {
+      return responseWithDiagnostic(
+        directBlockedStep(
+          [...triggerStep.safeSignals, "filed-return-download-state-persist-failed"],
+          "Pack did not start the GSTR-3B browser download because it could not save a local recovery checkpoint.",
+        ),
+        target,
+      );
+    }
+  }
+
+  const startedDownload = await startBrowserDownload(downloadUrl);
+  if (!startedDownload.ok) {
+    if (checkpointEnabled) {
+      try {
+        await clearFiledReturnsTargetDownloadAttempt(reviewScope, checkpointDeps);
+      } catch {
+        // Retaining the intent-only checkpoint is safer than hiding uncertainty.
+      }
+    }
+    return responseWithDiagnostic(
+      directBlockedStep(
+        [...triggerStep.safeSignals, "filed-gstr3b-direct-download-start-rejected"],
+        "The browser rejected Pack's reviewed GSTR-3B download request. Allow downloads for Pack, then retry.",
+      ),
+      target,
+    );
+  }
+
+  const endLiveObservation = beginLiveFiledReturnsDownloadObservation(startedDownload.id);
+  if (checkpointEnabled) {
+    let downloadIdPersisted = false;
+    try {
+      downloadIdPersisted = await persistFiledReturnsTargetDownloadId(
+        reviewScope,
+        startedDownload.id,
+        checkpointDeps,
+        triggerStep,
+      );
+    } catch {
+      downloadIdPersisted = false;
+    }
+    if (!downloadIdPersisted) {
+      endLiveObservation();
+      const flowStep = withFiledReturnsDownloadDiagnostic({
+        attemptClass: "extension-direct",
+        flowStep: {
+          ...triggerStep,
+          state: "download-unconfirmed",
+          safeSignals: [...triggerStep.safeSignals, "filed-return-download-id-persist-failed"],
+          safeMessage:
+            "Pack may have started the GSTR-3B browser download but could not save its exact browser download ID. Check browser Downloads before taking another action.",
+          userAction: {
+            type: "RETRY_PORTAL_GENERATION",
+            message: "Check browser Downloads, then cancel this target before starting another download.",
+            canResume: true,
+          },
+        },
+        target,
+      });
+      let flowSummary: FiledReturnsFlowSummary | null = null;
+      try {
+        flowSummary = await persistFiledReturnsTargetReview(reviewScope, flowStep, checkpointDeps);
+      } catch {
+        // The intent checkpoint remains the fail-closed recovery source.
+      }
+      return { ok: true, flowStep, ...(flowSummary ? { flowSummary } : {}) };
+    }
+  }
 
   const observedDownload = await observeBrowserDownloadById(browser.downloads, startedDownload.id, {
-    ...EXPECTED_FILED_RETURN_DOWNLOAD,
-    armedAt,
-    expectedUrlSubstrings: targetUrlSubstrings(scope),
+    ...expectedDownloadForArtifact(artifactType),
+    armedAt: requestedAt,
+    requireExpectedMime: true,
     trustedDownloadIds: new Set([startedDownload.id]),
-  });
-  const flowStep = withFiledReturnsDownloadDiagnostic({
+  }).finally(endLiveObservation);
+
+  return finalizeObservedSingleArtifactDownload({
+    activePeriod,
+    artifactType,
     attemptClass: "extension-direct",
-    flowStep: explainDirectDownloadPromptIfNeeded(
-      mergeFlowStepWithDownloadObservation(directTriggerStep, observedDownload),
-    ),
-    safeEvidence: observedDownload.safeEvidence,
+    deps,
+    observedDownload,
+    scope,
     target,
+    triggerStep,
   });
-  let flowSummary: FiledReturnsFlowSummary | null = null;
-  if (deps.persistTargetReview !== false) {
-    flowSummary = await persistFiledReturnsTargetReview(scope, flowStep, deps);
-  }
-  return {
-    ok: true,
-    flowStep,
-    ...(flowSummary ? { flowSummary } : {}),
-    ...(response.observation ? { observation: response.observation } : {}),
-  };
 }
 
-function withDirectDownloadDiagnostic(
-  response: PackMessageResponse,
-  target: FiledReturnsDownloadTarget,
-): PackMessageResponse {
-  if (!response.ok || !("flowStep" in response)) return response;
-  return {
-    ...response,
-    flowStep: withFiledReturnsDownloadDiagnostic({
-      attemptClass: "extension-direct",
-      flowStep: response.flowStep,
-      target,
-    }),
-  };
-}
-
-function directDownloadTriggerResponse(
-  response: Extract<PackMessageResponse, { ok: true; downloadTrigger: PortalFlowStepResult }>,
-  activePeriod: string | null,
-): PackMessageResponse | null {
-  if (response.downloadTrigger.state === "candidate-not-found") return null;
-  return {
-    ok: true,
-    flowStep: {
-      ...response.downloadTrigger,
-      safeSignals: [
-        ...response.downloadTrigger.safeSignals,
-        ...(activePeriod ? [`filed-return-detail-period:${activePeriod}`] : []),
-      ],
-    },
-    ...(response.observation ? { observation: response.observation } : {}),
-  };
-}
-
-async function startDirectBrowserDownload(
-  url: string,
-  filename: string,
-): Promise<{ ok: true; id: number } | { ok: false }> {
+async function startBrowserDownload(url: string): Promise<{ ok: true; id: number } | { ok: false }> {
   try {
     const id = await browser.downloads.download({
       conflictAction: "uniquify",
-      filename,
       saveAs: false,
       url,
     });
@@ -176,4 +203,50 @@ async function startDirectBrowserDownload(
   } catch {
     return { ok: false };
   }
+}
+
+function directTriggerStep(
+  authorization: FiledGstr3bDirectDownloadReady,
+  activePeriod: string | null,
+): PortalFlowStepResult {
+  return {
+    connectorId: "gst",
+    scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+    state: "clicked",
+    safeSignals: [
+      ...authorization.safeSignals,
+      "filed-gstr3b-direct-download-started",
+      ...(activePeriod ? [`filed-return-detail-period:${activePeriod}`] : []),
+    ],
+    safeMessage: "Pack started one browser-managed GSTR-3B PDF download for the verified target.",
+  };
+}
+
+function directBlockedStep(safeSignals: string[], safeMessage: string): PortalFlowStepResult {
+  return {
+    connectorId: "gst",
+    scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+    state: "blocked",
+    safeSignals,
+    safeMessage,
+    userAction: {
+      type: "RETRY_PORTAL_GENERATION",
+      message: "Retry after checking the browser download permission and selected return page.",
+      canResume: true,
+    },
+  };
+}
+
+function responseWithDiagnostic(
+  flowStep: PortalFlowStepResult,
+  target: FiledReturnsDownloadTarget,
+): PackMessageResponse {
+  return {
+    ok: true,
+    flowStep: withFiledReturnsDownloadDiagnostic({
+      attemptClass: "extension-direct",
+      flowStep,
+      target,
+    }),
+  };
 }

@@ -4,9 +4,9 @@ import type {
   FiledReturnsDownloadTarget,
   FiledReturnsMainWorldCaptureRequest,
   PortalFlowStepResult,
-} from "../core/contracts";
-import type { FiledReturnsConcreteArtifactType } from "../core/filed-returns-artifacts";
-import type { PackMessageResponse } from "../core/messages";
+} from "../connectors/gst/filed-returns-contracts";
+import type { FiledReturnsConcreteArtifactType } from "../connectors/gst/filed-returns-artifacts";
+import type { PackMessageResponse } from "../connectors/gst/messages";
 import { filedReturnScopedSignal } from "../connectors/gst/filed-returns-return-descriptors";
 import { isExpectedCapturedDataUrlForTarget } from "./captured-download-data-url";
 import { downloadCapturedFiledReturnThroughExtension } from "./filed-returns-captured-extension-download";
@@ -16,6 +16,13 @@ import { stageCapturedFiledReturnDownload } from "./filed-returns-captured-stagi
 import { withFiledReturnsDownloadDiagnostic } from "./filed-returns-download-diagnostics";
 import type { FiledReturnsFlowMessagingDeps } from "./filed-returns-flow-messaging";
 import { capturePortalBlobDownloadInMainWorld } from "./main-world-capture-executor";
+import {
+  cancelPreparedTargetBoundGstr3bPortalDownload,
+  prepareTargetBoundGstr3bPortalDownload,
+  resolveTargetBoundGstr3bPortalDownload,
+  trustedTargetBoundNativeBlobDelegatedAt,
+  withoutUnverifiedCaptureSuccessSignals,
+} from "./filed-returns-target-bound-portal-download";
 
 export async function startMainWorldCapturedFiledReturnDownload({
   activePeriod,
@@ -38,19 +45,70 @@ export async function startMainWorldCapturedFiledReturnDownload({
   target: FiledReturnsDownloadTarget;
   triggerStep: PortalFlowStepResult;
 }): Promise<PackMessageResponse> {
-  if (mainWorldCaptureRequest.actionId !== target.actionId) {
+  if (
+    !mainWorldCaptureMatchesTarget({
+      artifactType,
+      request: mainWorldCaptureRequest,
+      target,
+    })
+  ) {
     return capturedDownloadRejected(
       scope,
       target,
-      filedReturnScopedSignal(target.returnType, "captured-download-action-mismatch"),
-      "Pack rejected the filed-return capture request because it did not match the active download action.",
+      filedReturnScopedSignal(target.returnType, "captured-download-target-mismatch"),
+      "Pack rejected the filed-return capture request because it did not exactly match the active download target.",
     );
   }
 
-  const captureOutcome = await capturePortalBlobDownloadInMainWorld(tabId, mainWorldCaptureRequest);
+  const targetBoundPreparation = await prepareTargetBoundGstr3bPortalDownload({
+    armedAt,
+    artifactType,
+    deps,
+    scope,
+    target,
+    triggerStep,
+  });
+  if (targetBoundPreparation.state === "blocked") return targetBoundPreparation.response;
+
+  const captureRequest =
+    targetBoundPreparation.state === "armed"
+      ? {
+          ...mainWorldCaptureRequest,
+          targetBoundNativeFilenameNonce: targetBoundPreparation.filenameNonce,
+        }
+      : mainWorldCaptureRequest;
+  const captureOutcome = await capturePortalBlobDownloadInMainWorld(tabId, captureRequest);
   const capturedDownloadRequest = captureOutcome.capturedDownloadRequest;
-  const safeFailureSignals = captureOutcome.safeFailureSignals;
+  if (capturedDownloadRequest && targetBoundPreparation.state === "armed") {
+    await cancelPreparedTargetBoundGstr3bPortalDownload(targetBoundPreparation);
+  }
+  let safeFailureSignals = captureOutcome.safeFailureSignals;
   if (!capturedDownloadRequest) {
+    if (targetBoundPreparation.state === "armed") {
+      const delegatedAt = trustedTargetBoundNativeBlobDelegatedAt(
+        safeFailureSignals,
+        mainWorldCaptureRequest.signalPrefix,
+        captureOutcome.targetBoundNativeDelegatedAt,
+      );
+      if (delegatedAt) {
+        const targetBoundResult = await resolveTargetBoundGstr3bPortalDownload({
+          activePeriod,
+          artifactType,
+          captureFailureSignals: safeFailureSignals,
+          delegatedAt,
+          deps,
+          preparation: targetBoundPreparation,
+          scope,
+          target,
+          triggerStep,
+        });
+        if (targetBoundResult.response) return targetBoundResult.response;
+        safeFailureSignals = [...safeFailureSignals, ...targetBoundResult.additionalFailureSignals];
+      } else {
+        await cancelPreparedTargetBoundGstr3bPortalDownload(targetBoundPreparation);
+      }
+    }
+    const captureFailureTriggerStep = withoutUnverifiedCaptureSuccessSignals(triggerStep, target);
     const postClickBlockedState = await inspectPostCaptureBlockedState(deps, tabId, target);
     if (postClickBlockedState) {
       return {
@@ -61,7 +119,7 @@ export async function startMainWorldCapturedFiledReturnDownload({
             ...postClickBlockedState,
             safeSignals: Array.from(
               new Set([
-                ...triggerStep.safeSignals,
+                ...captureFailureTriggerStep.safeSignals,
                 ...safeFailureSignals,
                 ...postClickBlockedState.safeSignals,
                 ...(activePeriod ? [`filed-return-detail-period:${activePeriod}`] : []),
@@ -77,7 +135,7 @@ export async function startMainWorldCapturedFiledReturnDownload({
       safeFailureSignals,
       scope,
       target,
-      triggerStep,
+      triggerStep: captureFailureTriggerStep,
     });
     if (unsupportedStep) return unsupportedStep;
 
@@ -86,10 +144,10 @@ export async function startMainWorldCapturedFiledReturnDownload({
       flowStep: withFiledReturnsDownloadDiagnostic({
         attemptClass: "captured-portal-request",
         flowStep: {
-          ...triggerStep,
+          ...captureFailureTriggerStep,
           state: "blocked",
           safeSignals: [
-            ...triggerStep.safeSignals,
+            ...captureFailureTriggerStep.safeSignals,
             `${mainWorldCaptureRequest.signalPrefix}-blob-capture-failed`,
             ...safeFailureSignals,
             ...(activePeriod ? [`filed-return-detail-period:${activePeriod}`] : []),
@@ -117,6 +175,28 @@ export async function startMainWorldCapturedFiledReturnDownload({
     target,
     triggerStep,
   });
+}
+
+function mainWorldCaptureMatchesTarget({
+  artifactType,
+  request,
+  target,
+}: {
+  artifactType: FiledReturnsConcreteArtifactType;
+  request: FiledReturnsMainWorldCaptureRequest;
+  target: FiledReturnsDownloadTarget;
+}): boolean {
+  const targetArtifactType = target.artifactType ?? "PDF";
+  const binding = request.targetBinding;
+  if (!binding) return false;
+  return (
+    request.actionId === target.actionId &&
+    binding.artifactType === artifactType &&
+    binding.artifactType === targetArtifactType &&
+    binding.financialYear === target.financialYear &&
+    binding.period === target.period &&
+    binding.returnType === target.returnType
+  );
 }
 
 async function inspectPostCaptureBlockedState(

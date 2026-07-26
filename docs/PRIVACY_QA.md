@@ -29,7 +29,9 @@ For each release candidate:
 - Confirm no source file handles passwords, OTPs, CAPTCHA responses, cookies, or
   session tokens.
 - Confirm the production content script does not sample resource timing entries,
-  send request-shape telemetry, or probe authenticated GST endpoints.
+  send request-shape telemetry, or probe/replay authenticated GST download
+  endpoints. Reviewed same-origin filed-return search, role-status, and navigation
+  requests remain allowed only inside the explicit user-started flow.
 - Confirm live download observation remains bounded to a user-initiated run and
   does not persist or transmit raw download URLs, referrers, absolute local
   paths, filenames, portal HTML, or taxpayer identifiers.
@@ -41,13 +43,26 @@ For each release candidate:
   recovery attempts until confirmed cleanup or a successful explicit discard.
   Artifact bytes must not be written to extension storage, IndexedDB, Cache
   Storage, diagnostics, logs, telemetry, support bundles, or ComplyEaze systems.
+- Confirm the source-build `target-bound-portal-click-blob` path is enabled only
+  for a single-period GSTR-3B PDF after the exact target action and one matching
+  browser download candidate. It must remain disabled for GSTR-1, GSTR-2B,
+  selected-file ZIP/OPFS staging and every full-year flow. Shareable evidence
+  must reject this class outside that exact scope.
 - Confirm `pack:active-filed-returns-run`, when present, contains only the
   selected financial year, period, return type, artifact type, run ID,
   revision, status, and lease timestamp needed to prevent overlapping local
   runs.
 - Confirm `pack:filed-returns-target-review`, when present, contains only the
-  selected financial year, period, return type, unresolved target status, safe
-  signals/messages, and timestamps needed to block implicit retry.
+  canonical target identifier/scope, unresolved status, safe signals/messages,
+  revision and timestamps needed to block implicit retry. Recovery may
+  additionally retain the attempt kind/phase, request and bounded
+  candidate-window timestamps, an opaque `actionId`, an opaque staging-ledger
+  or selected-file checkpoint identifier/revision, the exact numeric browser
+  `downloadId`, and sanitized endpoint/path, MIME, byte-count, status and error
+  classes. It must never retain a raw filename, local path, URL/referrer,
+  GSTIN/PAN, taxpayer name, portal HTML, credential, cookie, token or artifact
+  bytes. Shareable evidence must replace the runtime action id with a neutral
+  `ACTION-*` alias and omit the browser download id.
 - Confirm `pack:full-fiscal-year-ledger`, when present, contains only financial
   year, period, return type, artifact type, target status, attempts, safe
   signals/messages, and timestamps. It must not contain raw URLs/referrers,

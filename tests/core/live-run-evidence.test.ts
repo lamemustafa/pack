@@ -19,9 +19,9 @@ describe("live run evidence", () => {
 
   it("rejects taxpayer, portal, path, file, and credential markers anywhere in the evidence", () => {
     const cases: Array<[string, Partial<LiveRunEvidence>]> = [
-      ["gstin", withEvidenceText("Observed 27ABCDE1234F1Z5 in the portal.")],
-      ["pan", withEvidenceText("Observed ABCDE1234F in the portal.")],
-      ["arn", withEvidenceText("Portal displayed ARN AA2901234567890.")],
+      ["gstin", withEvidenceText("Observed 00XXXXX0000X0Z0 in the portal.")],
+      ["pan", withEvidenceText("Observed XXXXX0000X in the portal.")],
+      ["arn", withEvidenceText("Portal displayed ARN AA0000000000000.")],
       ["portal-url", withEvidenceText("https://services.gst.gov.in/services/auth/efiledreturns")],
       ["local-path", withEvidenceText("/Users/example/Downloads/gstr3b.pdf")],
       ["local-path", withEvidenceText("/home/alice/Downloads/download.pdf")],
@@ -100,7 +100,7 @@ describe("live run evidence", () => {
       downloadEvidence: [
         {
           ...createValidEvidence().downloadEvidence[0],
-          actionId: "action-gstr1-pdf",
+          actionId: "ACTION-1",
           returnType: "GSTR-1",
           financialYear: "2025-26",
           endpointClass: "gstr1-pdf-portal-blob-captured-download",
@@ -108,7 +108,7 @@ describe("live run evidence", () => {
         },
         {
           ...createValidEvidence().downloadEvidence[0],
-          actionId: "action-gstr1-excel",
+          actionId: "ACTION-2",
           artifactType: "EXCEL",
           returnType: "GSTR-1",
           financialYear: "2025-26",
@@ -144,7 +144,7 @@ describe("live run evidence", () => {
       downloadEvidence: [
         {
           ...pdfOnly,
-          actionId: "action-gstr1-pdf",
+          actionId: "ACTION-1",
           returnType: "GSTR-1",
           financialYear: "2025-26",
           endpointClass: "gstr1-pdf-portal-blob-captured-download",
@@ -170,14 +170,14 @@ describe("live run evidence", () => {
         downloadEvidence: [
           {
             ...createValidEvidence().downloadEvidence[0],
-            actionId: "action-gstr2b-pdf",
+            actionId: "ACTION-1",
             returnType: "GSTR-2B",
             endpointClass: "gstr2b-portal-blob-captured-download",
             downloadPathClass: "captured-portal-request-data",
           },
           {
             ...createValidEvidence().downloadEvidence[0],
-            actionId: "action-gstr2b-excel",
+            actionId: "ACTION-2",
             artifactType: "EXCEL",
             returnType: "GSTR-2B",
             endpointClass: "gstr2b-portal-blob-captured-download",
@@ -209,7 +209,7 @@ describe("live run evidence", () => {
       downloadEvidence: [
         {
           ...createValidEvidence().downloadEvidence[0],
-          endpointClass: "gstr3b-getgenpdf",
+          endpointClass: "gstr3b-portal-rendered-download",
           downloadPathClass: "captured-portal-request-data",
         },
       ],
@@ -221,6 +221,171 @@ describe("live run evidence", () => {
         "downloadEvidence[0].endpointClass is inconsistent with downloadPathClass",
       );
     }
+  });
+
+  it("rejects portal-click-only rows as confirmed downloads", () => {
+    const result = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      downloadEvidence: [
+        {
+          ...createValidEvidence().downloadEvidence[0],
+          endpointClass: "gstr3b-portal-rendered-download",
+          downloadPathClass: "portal-click-https",
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors).toContain(
+        "downloadEvidence[0] plain portal-click evidence cannot confirm a download",
+      );
+    }
+  });
+
+  it("accepts target-bound portal-created evidence only for single-period GSTR-3B PDF", () => {
+    const singlePeriodEvidence: LiveRunEvidence = {
+      ...createValidEvidence(),
+      evidenceId: "pack-live-run-2026-06-26-subject-a-single-period",
+      period: "April",
+      scenario: "single-period",
+      counts: {
+        eligibleTargets: 1,
+        downloaded: 1,
+        notFiled: 0,
+        manuallyObserved: 0,
+        blocked: 0,
+        failed: 0,
+        duplicates: 0,
+      },
+      downloadEvidence: [
+        {
+          ...createValidEvidence().downloadEvidence[0]!,
+          endpointClass: "gstr3b-portal-rendered-download",
+          downloadPathClass: "target-bound-portal-click-blob",
+        },
+      ],
+    };
+
+    const accepted = validateLiveRunEvidence(singlePeriodEvidence);
+    const fullYear = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      downloadEvidence: [
+        {
+          ...createValidEvidence().downloadEvidence[0],
+          endpointClass: "gstr3b-portal-rendered-download",
+          downloadPathClass: "target-bound-portal-click-blob",
+        },
+      ],
+    });
+    const otherReturnType = validateLiveRunEvidence({
+      ...singlePeriodEvidence,
+      returnType: "GSTR-1",
+      downloadEvidence: [
+        {
+          ...singlePeriodEvidence.downloadEvidence[0],
+          returnType: "GSTR-1",
+          endpointClass: "gstr1-pdf-portal-rendered-download",
+        },
+      ],
+    });
+    const unknownEndpointOutsideScope = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      outcome: "blocked",
+      counts: {
+        eligibleTargets: 12,
+        downloaded: 0,
+        notFiled: 0,
+        manuallyObserved: 0,
+        blocked: 1,
+        failed: 0,
+        duplicates: 0,
+      },
+      downloadEvidence: [
+        {
+          ...createValidEvidence().downloadEvidence[0],
+          endpointClass: "unknown",
+          downloadPathClass: "target-bound-portal-click-blob",
+          status: "blocked",
+        },
+      ],
+    });
+
+    expect(accepted).toMatchObject({ ok: true });
+    for (const rejected of [fullYear, otherReturnType, unknownEndpointOutsideScope]) {
+      expect(rejected.ok).toBe(false);
+      if (!rejected.ok) {
+        expect(rejected.errors).toContain(
+          "downloadEvidence[0].downloadPathClass target-bound-portal-click-blob is only valid for single-period GSTR-3B PDF evidence and cannot represent full-year or staged ZIP work",
+        );
+      }
+    }
+  });
+
+  it("binds endpoint classes and exact ZIP hashes to each evidence row", () => {
+    const wrongEndpoint = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      downloadEvidence: [
+        {
+          ...createValidEvidence().downloadEvidence[0],
+          endpointClass: "gstr1-pdf-portal-blob-captured-download",
+        },
+      ],
+    });
+    const wrongZip = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      downloadEvidence: [
+        {
+          ...createValidEvidence().downloadEvidence[0],
+          exactZipBuild: "d".repeat(64),
+        },
+      ],
+    });
+
+    expect(wrongEndpoint.ok).toBe(false);
+    if (!wrongEndpoint.ok) {
+      expect(wrongEndpoint.errors).toContain(
+        "downloadEvidence[0].endpointClass does not match returnType and artifactType",
+      );
+    }
+    expect(wrongZip.ok).toBe(false);
+    if (!wrongZip.ok) {
+      expect(wrongZip.errors).toContain("downloadEvidence[0].exactZipBuild must match zipSha256");
+    }
+  });
+
+  it("allows only canonical identifiers and controlled shareable labels", () => {
+    const cases: unknown[] = [
+      { ...createValidEvidence(), evidenceId: "custom-run-label" },
+      { ...createValidEvidence(), gitTag: "v0.1.1-custom" },
+      { ...createValidEvidence(), extensionVersion: "0.1.1-custom" },
+      { ...createValidEvidence(), profile: "custom-profile" },
+      {
+        ...createValidEvidence(),
+        browser: { ...createValidEvidence().browser, name: "Custom Browser" },
+      },
+      {
+        ...createValidEvidence(),
+        browser: { ...createValidEvidence().browser, version: "custom-version" },
+      },
+      {
+        ...createValidEvidence(),
+        downloadEvidence: [
+          { ...createValidEvidence().downloadEvidence[0], actionId: "custom-action" },
+        ],
+      },
+      {
+        ...createValidEvidence(),
+        mediaArtifacts: [
+          {
+            ...createValidEvidence().mediaArtifacts![0],
+            redactionMethod: "custom-method",
+          },
+        ],
+      },
+    ];
+
+    for (const input of cases) expect(validateLiveRunEvidence(input).ok).toBe(false);
   });
 
   it("requires one downloaded evidence entry per downloaded target", () => {
@@ -285,7 +450,7 @@ describe("live run evidence", () => {
       ...createValidEvidence(),
       downloadEvidence: [
         first,
-        { ...first, actionId: "action-failed", period: "May", status: "failed" },
+        { ...first, actionId: "ACTION-2", period: "May", status: "failed" },
       ],
     });
 
@@ -363,7 +528,7 @@ describe("live run evidence", () => {
     expect(invalidPath.ok).toBe(false);
     if (!invalidPath.ok) {
       expect(invalidPath.errors).toContain(
-        "downloadEvidence[0].downloadPathClass must be one of extension-direct-https, extension-direct-blob, extension-direct-data, extension-direct-unknown, portal-click-https, portal-click-blob, portal-click-data, portal-click-unknown, portal-click-after-direct-fallback-https, portal-click-after-direct-fallback-blob, portal-click-after-direct-fallback-data, portal-click-after-direct-fallback-unknown, captured-portal-request-https, captured-portal-request-blob, captured-portal-request-data, captured-portal-request-unknown",
+          "downloadEvidence[0].downloadPathClass must be one of portal-click-https, portal-click-blob, portal-click-data, portal-click-unknown, target-bound-portal-click-blob, captured-portal-request-https, captured-portal-request-blob, captured-portal-request-data, captured-portal-request-unknown",
       );
     }
   });
@@ -747,13 +912,13 @@ function createValidEvidence(): LiveRunEvidence {
     },
     downloadEvidence: [
       {
-        actionId: "action-april",
+        actionId: "ACTION-1",
         returnType: "GSTR-3B",
         artifactType: "PDF",
         financialYear: "2026-27",
         period: "April",
-        endpointClass: "gstr3b-getgenpdf",
-        downloadPathClass: "extension-direct-https",
+        endpointClass: "gstr3b-portal-blob-captured-download",
+        downloadPathClass: "captured-portal-request-data",
         status: "downloaded",
         askWhereToSave: "off",
         filenameCollision: "absent",

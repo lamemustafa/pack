@@ -1,4 +1,4 @@
-import type { FiledReturnsDownloadScope } from "../../core/contracts";
+import type { FiledReturnsDownloadScope } from "./filed-returns-contracts";
 import { getClickableElements, normaliseText } from "./filed-returns-dom";
 import { extractTaxPeriodFromRow } from "./filed-returns-detail-identity";
 import {

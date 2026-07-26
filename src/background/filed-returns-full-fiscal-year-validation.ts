@@ -3,25 +3,35 @@ import type {
   FiledReturnsFullFiscalYearLedger,
   FiledReturnsFullFiscalYearTarget,
   FiledReturnsFullFiscalYearTargetStatus,
-} from "../core/contracts";
+} from "../connectors/gst/filed-returns-contracts";
 import {
   isFiledReturnsArtifactType,
   normaliseFiledReturnsArtifactType,
   supportsFiledReturnsArtifactType,
-} from "../core/filed-returns-artifacts";
+} from "../connectors/gst/filed-returns-artifacts";
 import {
   isFiledReturnsReturnType,
   type FiledReturnsReturnType,
   supportsFullFiscalYearFiledReturnsRun,
-} from "../core/filed-returns-return-types";
+} from "../connectors/gst/filed-returns-return-types";
 import {
   FILED_RETURNS_MONTHS,
   FULL_FISCAL_YEAR_PERIOD,
   type FiledReturnsMonth,
-} from "../core/filed-returns-scope";
+} from "../connectors/gst/filed-returns-scope";
+import { parseDurableTargetStatus } from "../connectors/gst/filed-returns-durable-status";
+import { isCanonicalFullFiscalYearLedgerId } from "../connectors/gst/filed-returns-ledger-id";
+import {
+  hasPositiveFiledReturnsDownloadEvidence,
+  isValidFiledReturnsDownloadDiagnosticState,
+} from "./filed-returns-download-diagnostic-state";
+import {
+  FULL_FISCAL_YEAR_PLAN_VERSION,
+  hasCanonicalFullFiscalYearTargetPlan,
+  hasLegacyCanonicalFullFiscalYearTargetPrefix,
+} from "./filed-returns-full-fiscal-year-plan";
 
 const MAX_SAFE_MESSAGE_LENGTH = 500;
-const MAX_SAFE_SIGNAL_LENGTH = 160;
 const VALID_LEDGER_STATUSES = new Set<FiledReturnsFullFiscalYearLedger["status"]>([
   "running",
   "complete",
@@ -43,6 +53,8 @@ const VALID_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
 const VALID_ZIP_PHASES = new Set<NonNullable<FiledReturnsFullFiscalYearLedger["zipPhase"]>>([
   "export-pending",
   "export-retry-pending",
+  "download-intent-persisted",
+  "download-observing",
   "download-started",
   "restaging-required",
   "downloaded-cleanup-pending",
@@ -50,12 +62,73 @@ const VALID_ZIP_PHASES = new Set<NonNullable<FiledReturnsFullFiscalYearLedger["z
   "legacy-cleanup-pending",
   "cleaned",
 ]);
-
+const ZIP_PHASES_REQUIRING_COMPLETED_TARGETS = new Set<
+  NonNullable<FiledReturnsFullFiscalYearLedger["zipPhase"]>
+>([
+  "export-pending",
+  "export-retry-pending",
+  "download-intent-persisted",
+  "download-observing",
+  "download-started",
+  "downloaded-cleanup-pending",
+  "no-artifacts-cleanup-pending",
+  "legacy-cleanup-pending",
+  "cleaned",
+]);
+const COMPLETED_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
+  "downloaded",
+  "not-filed",
+]);
+const LEDGER_KEYS = [
+  "connectorVersion",
+  "createdAt",
+  "createdWithExtensionVersion",
+  "currentTargetId",
+  "eligibleThrough",
+  "lastReconciledAt",
+  "ledgerId",
+  "planVersion",
+  "revision",
+  "schemaVersion",
+  "scope",
+  "status",
+  "targets",
+  "updatedAt",
+  "zipDownloadAttempt",
+  "zipPhase",
+] as const;
+const TARGET_KEYS = [
+  "artifactType",
+  "attempts",
+  "completedAt",
+  "downloadDiagnostic",
+  "downloadDiagnostics",
+  "financialYear",
+  "period",
+  "returnType",
+  "safeMessage",
+  "safeSignals",
+  "startedAt",
+  "status",
+  "targetId",
+  "updatedAt",
+] as const;
+const SCOPE_KEYS = [
+  "artifactType",
+  "completedPeriods",
+  "financialYear",
+  "period",
+  "returnType",
+] as const;
 export function isFullFiscalYearLedger(input: unknown): input is FiledReturnsFullFiscalYearLedger {
   if (!input || typeof input !== "object") return false;
-  const ledger = input as Partial<FiledReturnsFullFiscalYearLedger>;
+  const ledger = input as Partial<FiledReturnsFullFiscalYearLedger> & Record<string, unknown>;
+  if (!hasOnlyKeys(ledger, LEDGER_KEYS)) return false;
   if (ledger.schemaVersion !== "1.0") return false;
-  if (!isBoundedString(ledger.ledgerId, 1, 120)) return false;
+  if (!isCanonicalFullFiscalYearLedgerId(ledger.ledgerId)) return false;
+  if (!isOptionalBoundedString(ledger.planVersion, 120)) return false;
+  if (!isOptionalSemanticVersion(ledger.connectorVersion)) return false;
+  if (!isOptionalSemanticVersion(ledger.createdWithExtensionVersion)) return false;
   if (
     ledger.revision !== undefined &&
     (typeof ledger.revision !== "number" ||
@@ -69,6 +142,7 @@ export function isFullFiscalYearLedger(input: unknown): input is FiledReturnsFul
   if (ledger.zipPhase !== undefined && !VALID_ZIP_PHASES.has(ledger.zipPhase)) {
     return false;
   }
+  if (!isValidZipDownloadAttempt(ledger)) return false;
   if (ledger.zipPhase === "cleaned" && ledger.status !== "complete") return false;
   if (
     ledger.zipPhase !== undefined &&
@@ -95,32 +169,95 @@ export function isFullFiscalYearLedger(input: unknown): input is FiledReturnsFul
   }
 
   if (ledger.currentTargetId !== undefined && !targetIds.has(ledger.currentTargetId)) return false;
+  if (
+    ledger.zipPhase &&
+    ZIP_PHASES_REQUIRING_COMPLETED_TARGETS.has(ledger.zipPhase) &&
+    (ledger.targets.length === 0 ||
+      !ledger.targets.every((target) => COMPLETED_TARGET_STATUSES.has(target.status)))
+  ) {
+    return false;
+  }
+  const hasPlanVersion = ledger.planVersion !== undefined;
+  const hasEligibleThrough = ledger.eligibleThrough !== undefined;
+  if (hasPlanVersion !== hasEligibleThrough) return false;
+  if (hasPlanVersion) {
+    if (
+      ledger.planVersion !== FULL_FISCAL_YEAR_PLAN_VERSION ||
+      !hasCanonicalFullFiscalYearTargetPlan(ledger as FiledReturnsFullFiscalYearLedger)
+    ) {
+      return false;
+    }
+  } else if (
+    ledger.status === "complete" ||
+    ledger.zipPhase !== undefined ||
+    ledger.zipDownloadAttempt !== undefined ||
+    !hasLegacyCanonicalFullFiscalYearTargetPrefix(ledger as FiledReturnsFullFiscalYearLedger)
+  ) {
+    return false;
+  }
   return true;
+}
+
+function isValidZipDownloadAttempt(ledger: Partial<FiledReturnsFullFiscalYearLedger>): boolean {
+  const attempt = ledger.zipDownloadAttempt;
+  if (attempt === undefined) {
+    return !["download-intent-persisted", "download-observing"].includes(ledger.zipPhase ?? "");
+  }
+  if (
+    !attempt ||
+    typeof attempt !== "object" ||
+    Object.keys(attempt).some((key) => !["requestedAt", "downloadId"].includes(key)) ||
+    !isCanonicalTimestamp(attempt.requestedAt)
+  ) {
+    return false;
+  }
+  if (
+    attempt.downloadId !== undefined &&
+    (typeof attempt.downloadId !== "number" ||
+      !Number.isSafeInteger(attempt.downloadId) ||
+      attempt.downloadId < 0)
+  ) {
+    return false;
+  }
+  if (ledger.zipPhase === "download-intent-persisted") {
+    return attempt.downloadId === undefined;
+  }
+  if (ledger.zipPhase === "download-observing") {
+    return attempt.downloadId !== undefined;
+  }
+  return false;
+}
+
+function isCanonicalTimestamp(input: unknown): input is string {
+  if (!isValidTimestamp(input) || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(input)) {
+    return false;
+  }
+  return new Date(input).toISOString() === input;
 }
 
 export function recoverableFullFiscalYearLedgerId(input: unknown): string | null {
   if (!input || typeof input !== "object") return null;
   const ledgerId = (input as { ledgerId?: unknown }).ledgerId;
-  return typeof ledgerId === "string" &&
-    ledgerId.length <= 120 &&
-    /^[a-zA-Z0-9._-]+$/.test(ledgerId)
-    ? ledgerId
-    : null;
+  return isCanonicalFullFiscalYearLedgerId(ledgerId) ? ledgerId : null;
 }
 
 function isFullFiscalYearScope(
   scope: Partial<FiledReturnsDownloadScope> | undefined,
 ): scope is FiledReturnsDownloadScope {
   if (!scope) return false;
+  if (!hasOnlyKeys(scope as Record<string, unknown>, SCOPE_KEYS)) return false;
   const artifactType = scope.artifactType ?? "PDF";
   return (
-    typeof scope.financialYear === "string" &&
-    /^20\d{2}-\d{2}$/.test(scope.financialYear) &&
+    isConsecutiveFinancialYear(scope.financialYear) &&
     scope.period === FULL_FISCAL_YEAR_PERIOD &&
     isFiledReturnsReturnType(scope.returnType) &&
     supportsFullFiscalYearFiledReturnsRun(scope.returnType) &&
     isFiledReturnsArtifactType(artifactType) &&
-    supportsFiledReturnsArtifactType(scope.returnType, artifactType)
+    supportsFiledReturnsArtifactType(scope.returnType, artifactType) &&
+    (scope.completedPeriods === undefined ||
+      (Array.isArray(scope.completedPeriods) &&
+        scope.completedPeriods.every((period) => isFiledReturnsMonth(period)) &&
+        new Set(scope.completedPeriods).size === scope.completedPeriods.length))
   );
 }
 
@@ -128,6 +265,7 @@ function isFullFiscalYearTarget(
   target: Partial<FiledReturnsFullFiscalYearTarget>,
   scope: FiledReturnsDownloadScope,
 ): target is FiledReturnsFullFiscalYearTarget {
+  if (!hasOnlyKeys(target as Record<string, unknown>, TARGET_KEYS)) return false;
   if (!isBoundedString(target.targetId, 1, 120)) return false;
   if (target.financialYear !== scope.financialYear) return false;
   if (!isFiledReturnsMonth(target.period)) return false;
@@ -155,16 +293,54 @@ function isFullFiscalYearTarget(
   ) {
     return false;
   }
-  if (
-    !Array.isArray(target.safeSignals) ||
-    !target.safeSignals.every((signal) => isBoundedString(signal, 1, MAX_SAFE_SIGNAL_LENGTH))
-  ) {
-    return false;
-  }
   if (!isBoundedString(target.safeMessage, 1, MAX_SAFE_MESSAGE_LENGTH)) return false;
+  const durableStatus = parseDurableTargetStatus(
+    {
+      artifactType,
+      financialYear: target.financialYear,
+      period: target.period,
+      returnType: target.returnType,
+    },
+    target.status,
+    target.safeSignals,
+  );
+  if (!durableStatus) return false;
+  if (target.safeMessage !== durableStatus.safeMessage) return false;
   if (!isValidTimestamp(target.updatedAt)) return false;
   if (target.startedAt !== undefined && !isValidTimestamp(target.startedAt)) return false;
   if (target.completedAt !== undefined && !isValidTimestamp(target.completedAt)) return false;
+  if (
+    !isValidFiledReturnsDownloadDiagnosticState(target, {
+      artifactType: target.artifactType,
+      financialYear: target.financialYear,
+      period: target.period,
+      returnType: target.returnType,
+    })
+  ) {
+    return false;
+  }
+  if (
+    target.status === "downloaded" &&
+    !hasPositiveFiledReturnsDownloadEvidence(
+      target,
+      {
+        artifactType: target.artifactType,
+        financialYear: target.financialYear,
+        period: target.period,
+        returnType: target.returnType,
+      },
+      target.safeSignals ?? [],
+      "full-fiscal-year",
+    )
+  ) {
+    return false;
+  }
+  if (
+    target.status === "not-filed" &&
+    !target.safeSignals?.includes("filed-return-positively-not-filed")
+  ) {
+    return false;
+  }
   return true;
 }
 
@@ -176,8 +352,37 @@ function isBoundedString(input: unknown, minLength: number, maxLength: number): 
   return typeof input === "string" && input.length >= minLength && input.length <= maxLength;
 }
 
+function isOptionalBoundedString(input: unknown, maxLength: number): boolean {
+  return input === undefined || isBoundedString(input, 1, maxLength);
+}
+
+function isOptionalSemanticVersion(input: unknown): boolean {
+  return (
+    input === undefined ||
+    (typeof input === "string" &&
+      input.length <= 120 &&
+      /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:alpha|beta|rc)\.(0|[1-9]\d*))?$/.test(input))
+  );
+}
+
+function isConsecutiveFinancialYear(input: unknown): input is string {
+  if (typeof input !== "string") return false;
+  const match = /^20(\d{2})-(\d{2})$/.exec(input);
+  if (!match) return false;
+  const start = Number(match[1]);
+  const end = Number(match[2]);
+  return end === (start + 1) % 100;
+}
+
+function hasOnlyKeys(input: Record<string, unknown>, allowedKeys: readonly string[]): boolean {
+  const allowed = new Set(allowedKeys);
+  return Object.keys(input).every((key) => allowed.has(key));
+}
+
 function isValidTimestamp(input: unknown): input is string {
-  return typeof input === "string" && input.length <= 40 && Number.isFinite(Date.parse(input));
+  if (typeof input !== "string" || input.length > 40) return false;
+  const parsed = Date.parse(input);
+  return Number.isFinite(parsed) && new Date(parsed).toISOString() === input;
 }
 
 function createTargetId(

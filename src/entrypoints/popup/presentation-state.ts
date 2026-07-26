@@ -1,4 +1,5 @@
-import type { FiledReturnsFlowSummary, PortalContext } from "../../core/contracts";
+import type { PortalContext } from "../../core/contracts";
+import type { FiledReturnsFlowSummary } from "../../connectors/gst/filed-returns-contracts";
 import { canRetryFullFiscalYearZipWithoutPortal } from "./flow-summary";
 
 export type PopupPresentationKind =

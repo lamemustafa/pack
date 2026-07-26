@@ -1,15 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { DownloadObservationContext } from "../../src/background/download-correlation";
 import {
-  mergeDownloadTriggerWithDownloadObservation,
   mergeFlowStepWithDownloadObservation,
   observeBrowserDownloadById,
-  observeNextBrowserDownload,
   type DownloadCreatedItem,
   type DownloadDelta,
 } from "../../src/background/download-observer";
-import type { PortalDownloadTriggerResult, PortalFlowStepResult } from "../../src/core/contracts";
+import type { PortalFlowStepResult } from "../../src/connectors/gst/filed-returns-contracts";
 
-describe("download observer", () => {
+const ARMED_AT = new Date("2026-06-24T10:00:00.000Z");
+const STARTED_AT = "2026-06-24T10:00:02.000Z";
+
+describe("exact-ID download observer", () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -18,1265 +20,663 @@ describe("download observer", () => {
     vi.useRealTimers();
   });
 
-  it("reports a completed non-empty browser download", async () => {
-    const downloads = createDownloadsApi([{ id: 7, state: "complete", fileSize: 1234 }]);
-    const observation = observeNextBrowserDownload(downloads, 1_000);
+  it("completes a non-empty safe download only from the requested browser download id", async () => {
+    const downloads = createDownloadsApi([
+      completedItem(7, { fileSize: 2048, url: "https://example.invalid/artifact.pdf" }),
+      completedItem(8, { fileSize: 4096 }),
+    ]);
 
-    downloads.created.emit({ id: 7, state: "in_progress" });
-    downloads.changed.emit({ id: 7, state: { current: "complete" } });
-
-    await expect(observation.promise).resolves.toMatchObject({
+    await expect(
+      observeBrowserDownloadById(downloads, 7, exactIdContext(7)),
+    ).resolves.toMatchObject({
       state: "completed",
       safeSignals: expect.arrayContaining([
         "browser-download-created",
         "browser-download-completed",
+        "browser-download-id:7",
         "browser-download-non-empty",
       ]),
-    });
-  });
-
-  it("treats an unknown completed download size as unconfirmed", async () => {
-    const downloads = createDownloadsApi([{ id: 71, state: "complete" }]);
-    const observation = observeNextBrowserDownload(downloads, 1_000);
-
-    downloads.created.emit({ id: 71, state: "complete" });
-
-    await expect(observation.promise).resolves.toMatchObject({
-      state: "not-observed",
-      safeSignals: expect.arrayContaining(["browser-download-size-unknown"]),
-      userAction: {
-        type: "RETRY_PORTAL_GENERATION",
-      },
-    });
-  });
-
-  it("ignores unrelated downloads while waiting for the GST PDF", async () => {
-    const armedAt = new Date("2026-06-24T10:00:00.000Z");
-    const downloads = createDownloadsApi([
-      {
-        id: 12,
-        state: "complete",
-        fileSize: 999,
-        mime: "image/png",
-        url: "https://example.com/logo.png",
-      },
-      {
-        id: 13,
-        state: "complete",
-        fileSize: 1234,
-        mime: "application/pdf",
-        url: "https://return.gst.gov.in/returns/auth/gstr3b/download",
-      },
-    ]);
-    const observation = observeNextBrowserDownload(downloads, {
-      armedAt,
-      expectedFileExtensions: [".pdf"],
-      expectedMimeTypes: ["application/pdf"],
-      expectedOrigins: ["https://return.gst.gov.in"],
-    });
-
-    downloads.created.emit({
-      id: 12,
-      mime: "image/png",
-      startTime: "2026-06-24T10:00:01.000Z",
-      state: "complete",
-      url: "https://example.com/logo.png",
-    });
-    downloads.created.emit({
-      id: 13,
-      mime: "application/pdf",
-      startTime: "2026-06-24T10:00:02.000Z",
-      state: "complete",
-      url: "https://return.gst.gov.in/returns/auth/gstr3b/download",
-    });
-
-    await expect(observation.promise).resolves.toMatchObject({
-      state: "completed",
-      safeSignals: expect.arrayContaining(["browser-download-id:13"]),
       safeEvidence: {
         byteCountClass: "non-empty",
-        downloadId: 13,
+        downloadId: 7,
         mimeClass: "pdf",
         urlClass: "https",
       },
     });
+    expect(downloads.search).toHaveBeenCalled();
+    expect(downloads.search.mock.calls.every(([query]) => query.id === 7)).toBe(true);
   });
 
-  it("redacts blob download metadata to safe evidence classes", async () => {
-    const downloads = createDownloadsApi([
-      {
-        id: 21,
-        state: "complete",
-        fileSize: 1024,
-        mime: "application/pdf",
-        url: "blob:https://return.gst.gov.in/generated-pdf",
-      },
-    ]);
-    const observation = observeNextBrowserDownload(downloads, {
-      armedAt: new Date("2026-06-24T10:00:00.000Z"),
-      expectedFileExtensions: [".pdf"],
-      expectedMimeTypes: ["application/pdf"],
-      expectedOrigins: ["https://return.gst.gov.in"],
-      trustedDownloadIds: new Set([21]),
-    });
-
-    downloads.created.emit({
-      id: 21,
-      mime: "application/pdf",
-      startTime: "2026-06-24T10:00:02.000Z",
-      state: "complete",
-      url: "blob:https://return.gst.gov.in/generated-pdf",
-    });
-
-    await expect(observation.promise).resolves.toMatchObject({
-      state: "completed",
-      safeEvidence: {
-        byteCountClass: "non-empty",
-        downloadId: 21,
-        mimeClass: "pdf",
-        urlClass: "blob",
-      },
-    });
-  });
-
-  it.each([
-    ["GST-origin blob", "blob:https://return.gst.gov.in/generated-pdf", undefined],
-    [
-      "data URL with GST referrer",
-      "data:application/pdf;base64,JVBERi0xLjQK",
-      "https://return.gst.gov.in/returns/auth/gstr3b",
-    ],
-  ])(
-    "accepts a target-bound portal-click %s PDF without weakening origin checks",
-    async (_urlClass, url, referrer) => {
-      const armedAt = new Date("2026-06-24T10:00:00.000Z");
-      const downloads = createDownloadsApi([
-        {
-          id: 211,
-          state: "complete",
-          fileSize: 1024,
-          mime: "application/pdf",
-          ...(referrer ? { referrer } : {}),
-          startTime: "2026-06-24T10:00:02.000Z",
-          url,
-        },
-      ]);
-      const observation = observeNextBrowserDownload(downloads, {
-        armedAt,
-        expectedFileExtensions: [".pdf"],
-        expectedMimeTypes: ["application/pdf"],
-        expectedOrigins: ["https://return.gst.gov.in"],
-        trustedDownloadIds: new Set([211]),
-      });
-
-      downloads.created.emit({
-        id: 211,
-        mime: "application/pdf",
-        ...(referrer ? { referrer } : {}),
-        startTime: "2026-06-24T10:00:02.000Z",
-        state: "complete",
-        url,
-      });
-
-      await expect(observation.promise).resolves.toMatchObject({
-        state: "completed",
-        safeSignals: expect.arrayContaining(["browser-download-non-empty"]),
-      });
-    },
-  );
-
-  it.each([
-    ["blob", "blob:null/generated-pdf"],
-    ["data", "data:application/pdf;base64,JVBERi0xLjQK"],
-  ])("rejects an untrusted portal-click %s PDF without GST origin evidence", async (_kind, url) => {
-    const downloads = createDownloadsApi([]);
-    const observation = observeNextBrowserDownload(
-      downloads,
-      {
-        armedAt: new Date("2026-06-24T10:00:00.000Z"),
-        expectedFileExtensions: [".pdf"],
-        expectedMimeTypes: ["application/pdf"],
-        expectedOrigins: ["https://return.gst.gov.in"],
-      },
-      1_000,
-    );
-
-    downloads.created.emit({
-      id: 213,
-      mime: "application/pdf",
-      startTime: "2026-06-24T10:00:02.000Z",
-      state: "complete",
-      url,
-    });
-    await vi.advanceTimersByTimeAsync(1_000);
-
-    await expect(observation.promise).resolves.toMatchObject({ state: "not-observed" });
-  });
-
-  it("keeps blob PDFs without a target-bound portal click on strict origin correlation", async () => {
-    const downloads = createDownloadsApi([
-      {
-        id: 212,
-        state: "complete",
-        fileSize: 1024,
-        mime: "application/pdf",
-        startTime: "2026-06-24T10:00:02.000Z",
-        url: "blob:null/generated-pdf",
-      },
-    ]);
-    const observation = observeNextBrowserDownload(
-      downloads,
-      {
-        armedAt: new Date("2026-06-24T10:00:00.000Z"),
-        expectedFileExtensions: [".pdf"],
-        expectedMimeTypes: ["application/pdf"],
-        expectedOrigins: ["https://return.gst.gov.in"],
-      },
-      1_000,
-    );
-
-    downloads.created.emit({
-      id: 212,
-      mime: "application/pdf",
-      startTime: "2026-06-24T10:00:02.000Z",
-      state: "complete",
-      url: "blob:null/generated-pdf",
-    });
-    await vi.advanceTimersByTimeAsync(1_000);
-
-    await expect(observation.promise).resolves.toMatchObject({ state: "not-observed" });
-  });
-
-  it("observes only the browser download id returned by the direct download API", async () => {
-    const downloads = createDownloadsApi([
-      {
-        filename: "unrelated.pdf",
-        id: 80,
-        mime: "application/pdf",
-        state: "complete",
-        fileSize: 1234,
-        startTime: "2026-06-24T10:00:01.000Z",
-        url: "https://return.gst.gov.in/returns/auth/gstr3b/getgenpdf",
-      },
-      {
-        filename: "May-GSTR-3B.pdf",
-        id: 81,
-        mime: "application/pdf",
-        state: "complete",
-        fileSize: 2048,
-        startTime: "2026-06-24T10:00:02.000Z",
-        url: "https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=052026",
-      },
-    ]);
-
-    await expect(
-      observeBrowserDownloadById(downloads, 81, {
-        armedAt: new Date("2026-06-24T10:00:00.000Z"),
-        expectedFileExtensions: [".pdf"],
-        expectedMimeTypes: ["application/pdf"],
-        expectedOrigins: ["https://return.gst.gov.in"],
-      }),
-    ).resolves.toMatchObject({
-      state: "completed",
-      safeSignals: expect.arrayContaining(["browser-download-id:81"]),
-    });
-  });
-
-  it("rejects completed GST PDFs that do not match the requested return period marker", async () => {
-    const downloads = createDownloadsApi([
-      {
-        filename: "April-GSTR-3B.pdf",
-        id: 83,
-        mime: "application/pdf",
-        state: "complete",
-        fileSize: 2048,
-        startTime: "2026-06-24T10:00:02.000Z",
-        url: "https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=042026",
-      },
-    ]);
-    const observation = observeNextBrowserDownload(downloads, {
-      armedAt: new Date("2026-06-24T10:00:00.000Z"),
-      expectedFileExtensions: [".pdf"],
-      expectedMimeTypes: ["application/pdf"],
-      expectedOrigins: ["https://return.gst.gov.in"],
-      expectedUrlSubstrings: ["rtn_prd=052026"],
-    });
-
-    downloads.created.emit({
-      filename: "April-GSTR-3B.pdf",
-      id: 83,
-      mime: "application/pdf",
-      startTime: "2026-06-24T10:00:02.000Z",
-      state: "complete",
-      url: "https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=042026",
-    });
-    await vi.advanceTimersByTimeAsync(30_000);
-
-    await expect(observation.promise).resolves.toMatchObject({
-      state: "not-observed",
-      safeSignals: expect.arrayContaining(["browser-download-correlation-rejected"]),
-    });
-  });
-
-  it("rejects same-period GST PDFs outside the reviewed filed return endpoint", async () => {
-    const downloads = createDownloadsApi([
-      {
-        filename: "May-GSTR-3B.pdf",
-        id: 85,
-        mime: "application/pdf",
-        state: "complete",
-        fileSize: 2048,
-        startTime: "2026-06-24T10:00:02.000Z",
-        url: "https://return.gst.gov.in/returns/auth/api/gstr3b/preview?rtn_prd=052026",
-      },
-    ]);
-    const observation = observeNextBrowserDownload(downloads, {
-      armedAt: new Date("2026-06-24T10:00:00.000Z"),
-      expectedFileExtensions: [".pdf"],
-      expectedMimeTypes: ["application/pdf"],
-      expectedOrigins: ["https://return.gst.gov.in"],
-      expectedUrlSubstrings: ["/returns/auth/api/gstr3b/getgenpdf", "rtn_prd=052026"],
-    });
-
-    downloads.created.emit({
-      filename: "May-GSTR-3B.pdf",
-      id: 85,
-      mime: "application/pdf",
-      startTime: "2026-06-24T10:00:02.000Z",
-      state: "complete",
-      url: "https://return.gst.gov.in/returns/auth/api/gstr3b/preview?rtn_prd=052026",
-    });
-    await vi.advanceTimersByTimeAsync(30_000);
-
-    await expect(observation.promise).resolves.toMatchObject({
-      state: "not-observed",
-      safeSignals: expect.arrayContaining(["browser-download-correlation-rejected"]),
-    });
-  });
-
-  it("rejects a trusted suggested download id when target URL evidence is missing", async () => {
-    const suggestedFilename = "complyeaze-pack/gst/2026-27/gstr-3b/may.pdf";
-    const downloads = createDownloadsApi([
-      {
-        filename: suggestedFilename,
-        id: 84,
-        mime: "application/download",
-        state: "complete",
-        fileSize: 2048,
-        startTime: "2026-06-24T10:00:02.000Z",
-        url: "https://return.gst.gov.in/returns/auth/gstr3b/download",
-      },
-    ]);
-    const observation = observeNextBrowserDownload(downloads, {
-      armedAt: new Date("2026-06-24T10:00:00.000Z"),
-      expectedFileExtensions: [".pdf"],
-      expectedMimeTypes: ["application/pdf"],
-      expectedOrigins: ["https://return.gst.gov.in"],
-      expectedUrlSubstrings: ["rtn_prd=052026"],
-      ignoredFilenames: [suggestedFilename],
-      trustedDownloadIds: new Set([84]),
-    });
-
-    downloads.created.emit({
-      filename: suggestedFilename,
-      id: 84,
-      mime: "application/download",
-      startTime: "2026-06-24T10:00:02.000Z",
-      state: "complete",
-      url: "https://return.gst.gov.in/returns/auth/gstr3b/download",
-    });
-
-    await vi.advanceTimersByTimeAsync(30_000);
-
-    await expect(observation.promise).resolves.toMatchObject({
-      state: "not-observed",
-      safeSignals: expect.arrayContaining(["browser-download-correlation-rejected"]),
-    });
-  });
-
-  it("rejects a trusted direct-download id without PDF file evidence", async () => {
-    const downloads = createDownloadsApi([
-      {
-        id: 86,
-        mime: "application/download",
-        state: "complete",
-        fileSize: 2048,
-        startTime: "2026-06-24T10:00:02.000Z",
-        url: "https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=052026",
-      },
-    ]);
-    const observation = observeNextBrowserDownload(downloads, {
-      armedAt: new Date("2026-06-24T10:00:00.000Z"),
-      expectedFileExtensions: [],
-      expectedMimeTypes: ["application/pdf"],
-      expectedOrigins: ["https://return.gst.gov.in"],
-      expectedUrlSubstrings: ["/returns/auth/api/gstr3b/getgenpdf", "rtn_prd=052026"],
-      trustedDownloadIds: new Set([86]),
-    });
-
-    downloads.created.emit({
-      id: 86,
-      mime: "application/download",
-      startTime: "2026-06-24T10:00:02.000Z",
-      state: "complete",
-      url: "https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=052026",
-    });
-    await vi.advanceTimersByTimeAsync(30_000);
-
-    await expect(observation.promise).resolves.toMatchObject({
-      state: "not-observed",
-      safeSignals: expect.arrayContaining(["browser-download-correlation-rejected"]),
-    });
-  });
-
-  it("rechecks the direct download id after subscribing to avoid missing a fast completion", async () => {
-    const created = createEvent<DownloadCreatedItem>();
+  it("subscribes and rechecks so a fast completion between searches is not missed", async () => {
     const changed = createEvent<DownloadDelta>();
     const search = vi
       .fn()
-      .mockResolvedValueOnce([{ id: 82, state: "in_progress" }])
-      .mockResolvedValueOnce([
-        {
-          filename: "May-GSTR-3B.pdf",
-          id: 82,
-          mime: "application/pdf",
-          state: "complete",
-          fileSize: 2048,
-          startTime: "2026-06-24T10:00:02.000Z",
-          url: "https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=052026",
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          filename: "May-GSTR-3B.pdf",
-          id: 82,
-          mime: "application/pdf",
-          state: "complete",
-          fileSize: 2048,
-          startTime: "2026-06-24T10:00:02.000Z",
-          url: "https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=052026",
-        },
+      .mockResolvedValueOnce([{ id: 9, state: "in_progress" }])
+      .mockResolvedValue([
+        completedItem(9, {
+          filename: "artifact.pdf",
+          mime: "application/octet-stream",
+        }),
       ]);
 
     await expect(
-      observeBrowserDownloadById(
-        {
-          onCreated: created.api,
-          onChanged: changed.api,
-          search,
-        },
-        82,
-        {
-          armedAt: new Date("2026-06-24T10:00:00.000Z"),
-          expectedFileExtensions: [".pdf"],
-          expectedMimeTypes: ["application/pdf"],
-          expectedOrigins: ["https://return.gst.gov.in"],
-        },
-      ),
+      observeBrowserDownloadById({ onChanged: changed.api, search }, 9, exactIdContext(9)),
     ).resolves.toMatchObject({
       state: "completed",
-      safeSignals: expect.arrayContaining(["browser-download-id:82"]),
+      safeSignals: expect.arrayContaining(["browser-download-id:9"]),
     });
+    expect(search).toHaveBeenCalledTimes(3);
   });
 
-  it("rechecks a trusted completed download until non-empty size evidence is available", async () => {
-    const created = createEvent<DownloadCreatedItem>();
+  it("ignores other change events and settles from the exact id change", async () => {
     const changed = createEvent<DownloadDelta>();
-    const completedWithoutSize = {
-      id: 83,
-      mime: "application/zip",
-      startTime: "2026-06-24T10:00:02.000Z",
-      state: "complete",
-      url: "blob:https://extension.invalid/pack-zip",
+    let currentItem: DownloadCreatedItem = {
+      id: 10,
+      state: "in_progress",
     };
-    const search = vi
-      .fn()
-      .mockResolvedValueOnce([{ id: 83, state: "in_progress" }])
-      .mockResolvedValueOnce([completedWithoutSize])
-      .mockResolvedValueOnce([completedWithoutSize])
-      .mockResolvedValueOnce([{ ...completedWithoutSize, fileSize: 4096 }]);
-
+    const search = vi.fn(async () => [{ ...currentItem }]);
     const observation = observeBrowserDownloadById(
-      {
-        onCreated: created.api,
-        onChanged: changed.api,
-        search,
-      },
-      83,
-      {
-        armedAt: new Date("2026-06-24T10:00:00.000Z"),
-        expectedFileExtensions: [".zip"],
-        expectedMimeTypes: ["application/zip"],
-        expectedOrigins: [],
-        expectedUrlSubstrings: [],
-        trustedDownloadIds: new Set([83]),
-      },
+      { onChanged: changed.api, search },
+      10,
+      exactIdContext(10),
       1_000,
     );
+    let settled = false;
+    void observation.then(() => {
+      settled = true;
+    });
+    await vi.advanceTimersByTimeAsync(0);
 
-    await vi.advanceTimersByTimeAsync(500);
+    changed.emit({ id: 11, state: { current: "complete" } });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(settled).toBe(false);
+
+    currentItem = completedItem(10);
+    changed.emit({ id: 10, state: { current: "complete" } });
+    await expect(observation).resolves.toMatchObject({ state: "completed" });
+    expect(changed.listenerCount()).toBe(0);
+  });
+
+  it("re-proves the exact item is complete after a complete change event", async () => {
+    const changed = createEvent<DownloadDelta>();
+    let currentItem: DownloadCreatedItem = completedItem(11, { state: "in_progress" });
+    const search = vi.fn(async () => [{ ...currentItem }]);
+    const observation = observeBrowserDownloadById(
+      { onChanged: changed.api, search },
+      11,
+      exactIdContext(11),
+      1_000,
+    );
+    let settled = false;
+    void observation.then(() => {
+      settled = true;
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    changed.emit({ id: 11, state: { current: "complete" } });
+    await vi.advanceTimersByTimeAsync(499);
+    expect(settled).toBe(false);
+
+    currentItem = completedItem(11);
+    await vi.advanceTimersByTimeAsync(1);
 
     await expect(observation).resolves.toMatchObject({
       state: "completed",
+      safeSignals: expect.arrayContaining(["browser-download-id:11"]),
+    });
+  });
+
+  it("fails an exact download that was already interrupted", async () => {
+    const downloads = createDownloadsApi([
+      { error: "NETWORK_FAILED", id: 12, state: "interrupted" },
+    ]);
+
+    await expect(
+      observeBrowserDownloadById(downloads, 12, exactIdContext(12)),
+    ).resolves.toMatchObject({
+      state: "failed",
       safeSignals: expect.arrayContaining([
-        "browser-download-completed",
-        "browser-download-non-empty",
+        "browser-download-interrupted",
+        "browser-download-error-network-failed",
       ]),
     });
   });
 
-  it("keeps a trusted completed download unconfirmed when size stays unknown", async () => {
-    const completedWithoutSize = {
-      id: 84,
-      mime: "application/zip",
-      startTime: "2026-06-24T10:00:02.000Z",
-      state: "complete",
-      url: "blob:https://extension.invalid/pack-zip",
-    };
-    const downloads = createDownloadsApi([completedWithoutSize]);
+  it("fails an exact download interrupted after observation begins", async () => {
+    const changed = createEvent<DownloadDelta>();
+    const search = vi.fn(async () => [{ id: 13, state: "in_progress" }]);
     const observation = observeBrowserDownloadById(
-      downloads,
-      84,
-      {
-        armedAt: new Date("2026-06-24T10:00:00.000Z"),
-        expectedFileExtensions: [".zip"],
-        expectedMimeTypes: ["application/zip"],
-        expectedOrigins: [],
-        expectedUrlSubstrings: [],
-        trustedDownloadIds: new Set([84]),
-      },
+      { onChanged: changed.api, search },
+      13,
+      exactIdContext(13),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+
+    changed.emit({
+      error: { current: "USER_CANCELED" },
+      id: 13,
+      state: { current: "interrupted" },
+    });
+
+    await expect(observation).resolves.toMatchObject({
+      state: "failed",
+      safeSignals: expect.arrayContaining(["browser-download-error-user-canceled"]),
+    });
+    expect(changed.listenerCount()).toBe(0);
+  });
+
+  it("times out with an exact in-progress result instead of claiming no download was observed", async () => {
+    const downloads = createDownloadsApi([{ id: 14, state: "in_progress" }]);
+    const observation = observeBrowserDownloadById(downloads, 14, exactIdContext(14), 1_000);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    await expect(observation).resolves.toMatchObject({
+      state: "not-observed",
+      safeSignals: expect.arrayContaining([
+        "browser-download-in-progress",
+        "browser-download-save-dialog-may-be-open",
+      ]),
+    });
+    expect(downloads.changed.listenerCount()).toBe(0);
+  });
+
+  it("performs a final exact-ID search at timeout and completes without replay", async () => {
+    const changed = createEvent<DownloadDelta>();
+    let searchCount = 0;
+    const search = vi.fn(async () => {
+      searchCount += 1;
+      return [searchCount >= 3 ? completedItem(14) : { id: 14, state: "in_progress" }];
+    });
+    const observation = observeBrowserDownloadById(
+      { onChanged: changed.api, search },
+      14,
+      exactIdContext(14),
       1_000,
     );
 
     await vi.advanceTimersByTimeAsync(1_000);
 
     await expect(observation).resolves.toMatchObject({
-      state: "not-observed",
-      safeSignals: expect.arrayContaining(["browser-download-size-unknown"]),
-    });
-  });
-
-  it("rejects a GST-origin download that is not plausibly a PDF", async () => {
-    const downloads = createDownloadsApi([
-      {
-        id: 14,
-        state: "complete",
-        fileSize: 1234,
-        mime: "text/csv",
-        url: "https://return.gst.gov.in/returns/auth/gstr3b/export",
-      },
-    ]);
-    const observation = observeNextBrowserDownload(downloads, {
-      armedAt: new Date("2026-06-24T10:00:00.000Z"),
-      expectedFileExtensions: [".pdf"],
-      expectedMimeTypes: ["application/pdf"],
-      expectedOrigins: ["https://return.gst.gov.in"],
-    });
-
-    downloads.created.emit({
-      id: 14,
-      mime: "text/csv",
-      startTime: "2026-06-24T10:00:01.000Z",
-      state: "complete",
-      url: "https://return.gst.gov.in/returns/auth/gstr3b/export",
-    });
-    await vi.advanceTimersByTimeAsync(30_000);
-
-    await expect(observation.promise).resolves.toMatchObject({
-      state: "not-observed",
-      safeSignals: expect.arrayContaining(["browser-download-correlation-rejected"]),
-      userAction: {
-        type: "RETRY_PORTAL_GENERATION",
-      },
-    });
-  });
-
-  it("rejects contradictory MIME evidence even when the filename looks like a PDF", async () => {
-    const downloads = createDownloadsApi([
-      {
-        id: 147,
-        state: "complete",
-        fileSize: 1234,
-        filename: "GSTR3B.pdf",
-        mime: "text/csv",
-        url: "https://return.gst.gov.in/returns/auth/gstr3b/download.pdf",
-      },
-    ]);
-    const observation = observeNextBrowserDownload(downloads, {
-      armedAt: new Date("2026-06-24T10:00:00.000Z"),
-      expectedFileExtensions: [".pdf"],
-      expectedMimeTypes: ["application/pdf"],
-      expectedOrigins: ["https://return.gst.gov.in"],
-    });
-
-    downloads.created.emit({
-      id: 147,
-      filename: "GSTR3B.pdf",
-      mime: "text/csv",
-      startTime: "2026-06-24T10:00:01.000Z",
-      state: "complete",
-      url: "https://return.gst.gov.in/returns/auth/gstr3b/download.pdf",
-    });
-    await vi.advanceTimersByTimeAsync(30_000);
-
-    await expect(observation.promise).resolves.toMatchObject({
-      state: "not-observed",
-      safeSignals: expect.arrayContaining(["browser-download-correlation-rejected"]),
-    });
-  });
-
-  it("accepts generic attachment MIME evidence when the filename proves a PDF", async () => {
-    const downloads = createDownloadsApi([
-      {
-        filename: "GSTR3B.pdf",
-        id: 148,
-        mime: "application/download",
-        state: "complete",
-        fileSize: 1234,
-        url: "https://return.gst.gov.in/returns/auth/gstr3b/download",
-      },
-    ]);
-    const observation = observeNextBrowserDownload(downloads, {
-      armedAt: new Date("2026-06-24T10:00:00.000Z"),
-      expectedFileExtensions: [".pdf"],
-      expectedMimeTypes: ["application/pdf"],
-      expectedOrigins: ["https://return.gst.gov.in"],
-    });
-
-    downloads.created.emit({
-      filename: "GSTR3B.pdf",
-      id: 148,
-      mime: "application/download",
-      startTime: "2026-06-24T10:00:01.000Z",
-      state: "complete",
-      url: "https://return.gst.gov.in/returns/auth/gstr3b/download",
-    });
-
-    await expect(observation.promise).resolves.toMatchObject({
       state: "completed",
-      safeSignals: expect.arrayContaining(["browser-download-id:148"]),
+      safeSignals: expect.arrayContaining(["browser-download-id:14"]),
     });
+    expect(search).toHaveBeenCalledTimes(4);
   });
 
-  it("does not ignore portal-supplied basename evidence for a suggested Pack path", async () => {
-    const suggestedFilename = "complyeaze-pack/gst/2026-27/gstr-3b/may.pdf";
-    const downloads = createDownloadsApi([
-      {
-        filename: "may.pdf",
-        id: 153,
-        mime: "application/download",
-        state: "complete",
-        fileSize: 1234,
-        url: "https://return.gst.gov.in/returns/auth/gstr3b/download",
-      },
-    ]);
-    const observation = observeNextBrowserDownload(downloads, {
-      armedAt: new Date("2026-06-24T10:00:00.000Z"),
-      expectedFileExtensions: [".pdf"],
-      expectedMimeTypes: ["application/pdf"],
-      expectedOrigins: ["https://return.gst.gov.in"],
-      ignoredFilenames: [suggestedFilename],
+  it("waits for an in-flight exact-ID completion proof before settling the timeout", async () => {
+    const changed = createEvent<DownloadDelta>();
+    let resolveCompletionSearch: (items: DownloadCreatedItem[]) => void = () => undefined;
+    const completionSearch = new Promise<DownloadCreatedItem[]>((resolve) => {
+      resolveCompletionSearch = resolve;
     });
-
-    downloads.created.emit({
-      filename: "may.pdf",
-      id: 153,
-      mime: "application/download",
-      startTime: "2026-06-24T10:00:01.000Z",
-      state: "complete",
-      url: "https://return.gst.gov.in/returns/auth/gstr3b/download",
+    const search = vi
+      .fn()
+      .mockResolvedValueOnce([{ id: 14, state: "in_progress" }])
+      .mockResolvedValueOnce([{ id: 14, state: "in_progress" }])
+      .mockImplementationOnce(() => completionSearch)
+      .mockResolvedValue([completedItem(14)]);
+    const observation = observeBrowserDownloadById(
+      { onChanged: changed.api, search },
+      14,
+      exactIdContext(14),
+      1_000,
+    );
+    let settled = false;
+    void observation.then(() => {
+      settled = true;
     });
+    await vi.advanceTimersByTimeAsync(0);
 
-    await expect(observation.promise).resolves.toMatchObject({
+    changed.emit({ id: 14, state: { current: "complete" } });
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(settled).toBe(false);
+
+    resolveCompletionSearch([completedItem(14)]);
+    await expect(observation).resolves.toMatchObject({
       state: "completed",
-      safeSignals: expect.arrayContaining(["browser-download-id:153"]),
+      safeSignals: expect.arrayContaining(["browser-download-id:14"]),
     });
+    expect(search).toHaveBeenCalledTimes(3);
   });
 
-  it("does not let a caller-supplied direct-download filename prove PDF evidence", async () => {
-    const downloads = createDownloadsApi([
-      {
-        filename: "ComplyEaze-Pack/GSTR-3B/2026-27/May-GSTR-3B.pdf",
-        id: 149,
-        mime: "application/download",
-        state: "complete",
-        fileSize: 1234,
-        url: "https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=052026",
-      },
-    ]);
-    const observation = observeNextBrowserDownload(downloads, {
-      armedAt: new Date("2026-06-24T10:00:00.000Z"),
-      expectedFileExtensions: [],
-      expectedMimeTypes: ["application/pdf"],
-      expectedOrigins: ["https://return.gst.gov.in"],
-    });
-
-    downloads.created.emit({
-      filename: "ComplyEaze-Pack/GSTR-3B/2026-27/May-GSTR-3B.pdf",
-      id: 149,
-      mime: "application/download",
-      startTime: "2026-06-24T10:00:01.000Z",
-      state: "complete",
-      url: "https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=052026",
-    });
-    await vi.advanceTimersByTimeAsync(30_000);
-
-    await expect(observation.promise).resolves.toMatchObject({
-      state: "not-observed",
-      safeSignals: expect.arrayContaining(["browser-download-correlation-rejected"]),
-    });
-  });
-
-  it("rejects a trusted direct-download id with exact URL and generic attachment MIME", async () => {
-    const downloads = createDownloadsApi([
-      {
-        filename: "ComplyEaze-Pack/GSTR-3B/2026-27/May-GSTR-3B.pdf",
-        id: 154,
-        mime: "application/download",
-        state: "complete",
-        fileSize: 1234,
-        startTime: "2026-06-24T10:00:01.000Z",
-        url: "https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=052026",
-      },
-    ]);
-
-    await expect(
-      observeBrowserDownloadById(downloads, 154, {
-        armedAt: new Date("2026-06-24T10:00:00.000Z"),
-        expectedFileExtensions: [],
-        expectedMimeTypes: ["application/pdf"],
-        expectedOrigins: ["https://return.gst.gov.in"],
-        expectedUrlSubstrings: ["/returns/auth/api/gstr3b/getgenpdf", "rtn_prd=052026"],
-        trustedDownloadIds: new Set([154]),
+  it("rechecks a completed exact id until size evidence becomes non-empty", async () => {
+    const changed = createEvent<DownloadDelta>();
+    let sizeKnown = false;
+    const search = vi.fn(async () => [
+      completedItem(15, {
+        fileSize: sizeKnown ? 4096 : undefined,
+        mime: "application/zip",
       }),
-    ).resolves.toMatchObject({
-      state: "not-observed",
-      safeSignals: expect.arrayContaining(["browser-download-correlation-rejected"]),
-    });
-  });
-
-  it("accepts a trusted extension-owned data URL download with expected file evidence", async () => {
-    const downloads = createDownloadsApi([
-      {
-        id: 156,
-        mime: "application/pdf",
-        state: "complete",
-        fileSize: 1234,
-        startTime: "2026-06-24T10:00:01.000Z",
-        url: "data:application/pdf;base64,JVBERi0xLjQK",
-      },
     ]);
-
-    await expect(
-      observeBrowserDownloadById(downloads, 156, {
-        armedAt: new Date("2026-06-24T10:00:00.000Z"),
-        expectedFileExtensions: [],
-        expectedMimeTypes: ["application/pdf"],
-        expectedOrigins: ["https://return.gst.gov.in"],
-        expectedUrlSubstrings: [],
-        trustedDownloadIds: new Set([156]),
+    const observation = observeBrowserDownloadById(
+      { onChanged: changed.api, search },
+      15,
+      exactIdContext(15, {
+        expectedFileExtensions: [".zip"],
+        expectedMimeTypes: ["application/zip"],
       }),
-    ).resolves.toMatchObject({
-      state: "completed",
-      safeSignals: expect.arrayContaining(["browser-download-completed"]),
+      1_000,
+    );
+    let settled = false;
+    void observation.then(() => {
+      settled = true;
     });
-  });
+    await vi.advanceTimersByTimeAsync(499);
+    expect(settled).toBe(false);
 
-  it("rejects a trusted download id with data URL and contradictory non-PDF MIME", async () => {
-    const downloads = createDownloadsApi([
-      {
-        id: 157,
-        mime: "text/html",
-        state: "complete",
-        fileSize: 1234,
-        startTime: "2026-06-24T10:00:01.000Z",
-        url: "data:text/html;base64,PGh0bWw+",
-      },
-    ]);
+    sizeKnown = true;
+    await vi.advanceTimersByTimeAsync(1);
 
-    await expect(
-      observeBrowserDownloadById(downloads, 157, {
-        armedAt: new Date("2026-06-24T10:00:00.000Z"),
-        expectedFileExtensions: [],
-        expectedMimeTypes: ["application/pdf"],
-        expectedOrigins: ["https://return.gst.gov.in"],
-        expectedUrlSubstrings: [],
-        trustedDownloadIds: new Set([157]),
-      }),
-    ).resolves.toMatchObject({
-      state: "not-observed",
-      safeSignals: expect.arrayContaining(["browser-download-correlation-rejected"]),
-    });
-  });
-
-  it("rejects a trusted direct-download id with contradictory non-PDF MIME", async () => {
-    const downloads = createDownloadsApi([
-      {
-        filename: "ComplyEaze-Pack/GSTR-3B/2026-27/May-GSTR-3B.pdf",
-        id: 155,
-        mime: "text/csv",
-        state: "complete",
-        fileSize: 1234,
-        startTime: "2026-06-24T10:00:01.000Z",
-        url: "https://return.gst.gov.in/returns/auth/api/gstr3b/getgenpdf?rtn_prd=052026",
-      },
-    ]);
-
-    await expect(
-      observeBrowserDownloadById(downloads, 155, {
-        armedAt: new Date("2026-06-24T10:00:00.000Z"),
-        expectedFileExtensions: [],
-        expectedMimeTypes: ["application/pdf"],
-        expectedOrigins: ["https://return.gst.gov.in"],
-        expectedUrlSubstrings: ["/returns/auth/api/gstr3b/getgenpdf", "rtn_prd=052026"],
-        trustedDownloadIds: new Set([155]),
-      }),
-    ).resolves.toMatchObject({
-      state: "not-observed",
-      safeSignals: expect.arrayContaining(["browser-download-correlation-rejected"]),
-    });
-  });
-
-  it("does not let a Pack-suggested filename prove PDF evidence", async () => {
-    const suggestedFilename = "complyeaze-pack/gst/2026-27/gstr-3b/may.pdf";
-    const downloads = createDownloadsApi([
-      {
-        filename: suggestedFilename,
-        id: 150,
-        mime: "application/download",
-        state: "complete",
-        fileSize: 1234,
-        url: "https://return.gst.gov.in/returns/auth/gstr3b/download",
-      },
-    ]);
-    const observation = observeNextBrowserDownload(downloads, {
-      armedAt: new Date("2026-06-24T10:00:00.000Z"),
-      expectedFileExtensions: [".pdf"],
-      expectedMimeTypes: ["application/pdf"],
-      expectedOrigins: ["https://return.gst.gov.in"],
-      ignoredFilenames: [suggestedFilename],
-    });
-
-    downloads.created.emit({
-      filename: suggestedFilename,
-      id: 150,
-      mime: "application/download",
-      startTime: "2026-06-24T10:00:01.000Z",
-      state: "complete",
-      url: "https://return.gst.gov.in/returns/auth/gstr3b/download",
-    });
-    await vi.advanceTimersByTimeAsync(30_000);
-
-    await expect(observation.promise).resolves.toMatchObject({
-      state: "not-observed",
-      safeSignals: expect.arrayContaining(["browser-download-correlation-rejected"]),
-    });
-  });
-
-  it("does not let absolute or uniquified Pack-suggested paths prove PDF evidence", async () => {
-    const suggestedFilename = "complyeaze-pack/gst/2026-27/gstr-3b/may.pdf";
-    const returnedFilename = "/downloads/complyeaze-pack/gst/2026-27/gstr-3b/may (1).pdf";
-    const downloads = createDownloadsApi([
-      {
-        filename: returnedFilename,
-        id: 151,
-        mime: "application/download",
-        state: "complete",
-        fileSize: 1234,
-        url: "https://return.gst.gov.in/returns/auth/gstr3b/download",
-      },
-    ]);
-    const observation = observeNextBrowserDownload(downloads, {
-      armedAt: new Date("2026-06-24T10:00:00.000Z"),
-      expectedFileExtensions: [".pdf"],
-      expectedMimeTypes: ["application/pdf"],
-      expectedOrigins: ["https://return.gst.gov.in"],
-      ignoredFilenames: [suggestedFilename],
-    });
-
-    downloads.created.emit({
-      filename: returnedFilename,
-      id: 151,
-      mime: "application/download",
-      startTime: "2026-06-24T10:00:01.000Z",
-      state: "complete",
-      url: "https://return.gst.gov.in/returns/auth/gstr3b/download",
-    });
-    await vi.advanceTimersByTimeAsync(30_000);
-
-    await expect(observation.promise).resolves.toMatchObject({
-      state: "not-observed",
-      safeSignals: expect.arrayContaining(["browser-download-correlation-rejected"]),
-    });
-  });
-
-  it("rejects original filename evidence when the suggested Pack path masks PDF proof", async () => {
-    const suggestedFilename = "complyeaze-pack/gst/2026-27/gstr-3b/may.pdf";
-    const downloads = createDownloadsApi([
-      {
-        filename: suggestedFilename,
-        id: 152,
-        mime: "application/download",
-        state: "complete",
-        fileSize: 1234,
-        url: "https://return.gst.gov.in/returns/auth/gstr3b/download",
-      },
-    ]);
-    const observation = observeNextBrowserDownload(downloads, {
-      armedAt: new Date("2026-06-24T10:00:00.000Z"),
-      expectedFileExtensions: [".pdf"],
-      expectedMimeTypes: ["application/pdf"],
-      expectedOrigins: ["https://return.gst.gov.in"],
-      ignoredFilenames: [suggestedFilename],
-      trustedDownloadIds: new Set([152]),
-    });
-
-    downloads.created.emit({
-      filename: suggestedFilename,
-      id: 152,
-      mime: "application/download",
-      startTime: "2026-06-24T10:00:01.000Z",
-      state: "complete",
-      url: "https://return.gst.gov.in/returns/auth/gstr3b/download",
-    });
-
-    await vi.advanceTimersByTimeAsync(30_000);
-
-    await expect(observation.promise).resolves.toMatchObject({
-      state: "not-observed",
-      safeSignals: expect.arrayContaining(["browser-download-correlation-rejected"]),
-    });
-  });
-
-  it("keeps waiting when a same-origin non-PDF completes before the GST PDF", async () => {
-    const downloads = createDownloadsApi([
-      {
-        id: 141,
-        state: "complete",
-        fileSize: 1234,
-        mime: "text/csv",
-        url: "https://return.gst.gov.in/returns/auth/gstr3b/export",
-      },
-      {
-        id: 142,
-        state: "complete",
-        fileSize: 4321,
-        mime: "application/pdf",
-        url: "https://return.gst.gov.in/returns/auth/gstr3b/download",
-      },
-    ]);
-    const observation = observeNextBrowserDownload(downloads, {
-      armedAt: new Date("2026-06-24T10:00:00.000Z"),
-      expectedFileExtensions: [".pdf"],
-      expectedMimeTypes: ["application/pdf"],
-      expectedOrigins: ["https://return.gst.gov.in"],
-    });
-
-    downloads.created.emit({
-      id: 141,
-      mime: "text/csv",
-      startTime: "2026-06-24T10:00:01.000Z",
-      state: "complete",
-      url: "https://return.gst.gov.in/returns/auth/gstr3b/export",
-    });
-    downloads.created.emit({
-      id: 142,
-      mime: "application/pdf",
-      startTime: "2026-06-24T10:00:02.000Z",
-      state: "complete",
-      url: "https://return.gst.gov.in/returns/auth/gstr3b/download",
-    });
-
-    await expect(observation.promise).resolves.toMatchObject({
-      state: "completed",
-      safeSignals: expect.arrayContaining(["browser-download-id:142"]),
-    });
-  });
-
-  it("does not accept same-origin downloads missing start time evidence", async () => {
-    const downloads = createDownloadsApi([
-      {
-        id: 143,
-        state: "complete",
-        fileSize: 1234,
-        mime: "application/pdf",
-        url: "https://return.gst.gov.in/returns/auth/gstr3b/download",
-      },
-    ]);
-    const observation = observeNextBrowserDownload(downloads, {
-      armedAt: new Date("2026-06-24T10:00:00.000Z"),
-      expectedFileExtensions: [".pdf"],
-      expectedMimeTypes: ["application/pdf"],
-      expectedOrigins: ["https://return.gst.gov.in"],
-    });
-
-    downloads.created.emit({
-      id: 143,
-      mime: "application/pdf",
-      state: "complete",
-      url: "https://return.gst.gov.in/returns/auth/gstr3b/download",
-    });
-    await vi.advanceTimersByTimeAsync(30_000);
-
-    await expect(observation.promise).resolves.toMatchObject({
-      state: "not-observed",
-      safeSignals: ["browser-download-not-observed"],
-    });
-  });
-
-  it("uses later positive byte evidence when fileSize is zero but totalBytes is known", async () => {
-    const downloads = createDownloadsApi([
-      {
-        id: 144,
-        state: "complete",
-        fileSize: 0,
-        totalBytes: 2048,
-        mime: "application/pdf",
-        url: "https://return.gst.gov.in/returns/auth/gstr3b/download",
-      },
-    ]);
-    const observation = observeNextBrowserDownload(downloads, 1_000);
-
-    downloads.created.emit({ id: 144, state: "complete" });
-
-    await expect(observation.promise).resolves.toMatchObject({
+    await expect(observation).resolves.toMatchObject({
       state: "completed",
       safeSignals: expect.arrayContaining(["browser-download-non-empty"]),
     });
   });
 
-  it("keeps waiting when download search rejects for one candidate", async () => {
+  it("times out unconfirmed when completed size evidence stays unknown", async () => {
     const downloads = createDownloadsApi([
-      {
-        id: 146,
-        state: "complete",
-        fileSize: 1234,
-        mime: "application/pdf",
-        url: "https://return.gst.gov.in/returns/auth/gstr3b/download",
-      },
+      completedItem(16, {
+        bytesReceived: undefined,
+        fileSize: undefined,
+        totalBytes: undefined,
+      }),
     ]);
-    downloads.search.mockImplementationOnce(async () => {
-      throw new Error("downloads search unavailable");
-    });
-    const observation = observeNextBrowserDownload(downloads, {
-      armedAt: new Date("2026-06-24T10:00:00.000Z"),
-      expectedFileExtensions: [".pdf"],
-      expectedMimeTypes: ["application/pdf"],
-      expectedOrigins: ["https://return.gst.gov.in"],
-    });
-
-    downloads.created.emit({
-      id: 145,
-      mime: "application/pdf",
-      startTime: "2026-06-24T10:00:01.000Z",
-      state: "complete",
-      url: "https://return.gst.gov.in/returns/auth/gstr3b/download",
-    });
-    downloads.created.emit({
-      id: 146,
-      mime: "application/pdf",
-      startTime: "2026-06-24T10:00:02.000Z",
-      state: "complete",
-      url: "https://return.gst.gov.in/returns/auth/gstr3b/download",
-    });
-
-    await expect(observation.promise).resolves.toMatchObject({
-      state: "completed",
-      safeSignals: expect.arrayContaining(["browser-download-id:146"]),
-    });
-  });
-
-  it("resolves as not observed when stopped before a download is confirmed", async () => {
-    const downloads = createDownloadsApi([]);
-    const observation = observeNextBrowserDownload(downloads, 1_000);
-
-    observation.stop();
-
-    await expect(observation.promise).resolves.toMatchObject({
-      state: "not-observed",
-      safeSignals: ["browser-download-observation-stopped"],
-    });
-  });
-
-  it("rejects a GST-origin download with no PDF file evidence", async () => {
-    const downloads = createDownloadsApi([
-      {
-        id: 15,
-        state: "complete",
-        fileSize: 1234,
-        url: "https://return.gst.gov.in/returns/auth/gstr3b/download",
-      },
-    ]);
-    const observation = observeNextBrowserDownload(downloads, {
-      armedAt: new Date("2026-06-24T10:00:00.000Z"),
-      expectedFileExtensions: [".pdf"],
-      expectedMimeTypes: ["application/pdf"],
-      expectedOrigins: ["https://return.gst.gov.in"],
-    });
-
-    downloads.created.emit({
-      id: 15,
-      startTime: "2026-06-24T10:00:01.000Z",
-      state: "complete",
-      url: "https://return.gst.gov.in/returns/auth/gstr3b/download",
-    });
-    await vi.advanceTimersByTimeAsync(30_000);
-
-    await expect(observation.promise).resolves.toMatchObject({
-      state: "not-observed",
-      safeSignals: expect.arrayContaining(["browser-download-correlation-rejected"]),
-      userAction: {
-        type: "RETRY_PORTAL_GENERATION",
-      },
-    });
-  });
-
-  it("tracks GST-origin downloads before final PDF evidence is available", async () => {
-    const downloads = createDownloadsApi([
-      {
-        filename: "GSTR3B.pdf",
-        id: 16,
-        mime: "application/pdf",
-        state: "complete",
-        fileSize: 1234,
-        url: "https://return.gst.gov.in/returns/auth/gstr3b/download",
-      },
-    ]);
-    const observation = observeNextBrowserDownload(downloads, {
-      armedAt: new Date("2026-06-24T10:00:00.000Z"),
-      expectedFileExtensions: [".pdf"],
-      expectedMimeTypes: ["application/pdf"],
-      expectedOrigins: ["https://return.gst.gov.in"],
-    });
-
-    downloads.created.emit({
-      id: 16,
-      startTime: "2026-06-24T10:00:01.000Z",
-      state: "in_progress",
-      url: "https://return.gst.gov.in/returns/auth/gstr3b/download",
-    });
-    downloads.changed.emit({ id: 16, state: { current: "complete" } });
-
-    await expect(observation.promise).resolves.toMatchObject({
-      state: "completed",
-      safeSignals: expect.arrayContaining(["browser-download-id:16"]),
-    });
-  });
-
-  it("reports a user-action state when no browser download is observed", async () => {
-    const downloads = createDownloadsApi([]);
-    const observation = observeNextBrowserDownload(downloads, 1_000);
+    const observation = observeBrowserDownloadById(downloads, 16, exactIdContext(16), 1_000);
 
     await vi.advanceTimersByTimeAsync(1_000);
 
-    await expect(observation.promise).resolves.toMatchObject({
+    await expect(observation).resolves.toMatchObject({
       state: "not-observed",
-      safeSignals: ["browser-download-not-observed"],
-      userAction: {
-        type: "ALLOW_MULTIPLE_DOWNLOADS",
-        canResume: true,
-      },
+      safeSignals: expect.arrayContaining(["browser-download-size-unknown"]),
     });
   });
 
-  it("reports an interrupted browser download without exposing filenames", async () => {
-    const downloads = createDownloadsApi([]);
-    const observation = observeNextBrowserDownload(downloads, 1_000);
+  it("rechecks when exact-id search is temporarily missing and times out unconfirmed", async () => {
+    const changed = createEvent<DownloadDelta>();
+    const search = vi
+      .fn()
+      .mockResolvedValueOnce([completedItem(17)])
+      .mockResolvedValue([]);
+    const observation = observeBrowserDownloadById(
+      { onChanged: changed.api, search },
+      17,
+      exactIdContext(17),
+      1_000,
+    );
 
-    downloads.created.emit({ id: 8, state: "in_progress" });
-    downloads.changed.emit({
-      id: 8,
-      state: { current: "interrupted" },
-      error: { current: "FILE_FAILED" },
-    });
+    await vi.advanceTimersByTimeAsync(1_000);
 
-    await expect(observation.promise).resolves.toMatchObject({
-      state: "failed",
-      safeSignals: expect.arrayContaining([
-        "browser-download-created",
-        "browser-download-interrupted",
-        "browser-download-error-file-failed",
-      ]),
+    await expect(observation).resolves.toMatchObject({
+      state: "not-observed",
+      safeSignals: expect.arrayContaining(["browser-download-search-missing"]),
     });
   });
 
-  it("keeps waiting when a same-origin non-PDF is interrupted before the GST PDF", async () => {
-    const downloads = createDownloadsApi([
-      {
-        id: 18,
-        state: "interrupted",
-        fileSize: 512,
-        mime: "text/csv",
-        url: "https://return.gst.gov.in/returns/auth/gstr3b/export",
-      },
-      {
-        id: 19,
-        state: "complete",
-        fileSize: 4096,
-        mime: "application/pdf",
-        url: "https://return.gst.gov.in/returns/auth/gstr3b/download",
-      },
-    ]);
-    const observation = observeNextBrowserDownload(downloads, {
-      armedAt: new Date("2026-06-24T10:00:00.000Z"),
-      expectedFileExtensions: [".pdf"],
-      expectedMimeTypes: ["application/pdf"],
-      expectedOrigins: ["https://return.gst.gov.in"],
-    });
+  it("fails closed when exact-id search becomes unavailable during completion proof", async () => {
+    const changed = createEvent<DownloadDelta>();
+    const search = vi
+      .fn()
+      .mockResolvedValueOnce([completedItem(18)])
+      .mockRejectedValue(new Error("search unavailable"));
 
-    downloads.created.emit({
-      id: 18,
-      mime: "text/csv",
-      startTime: "2026-06-24T10:00:01.000Z",
-      state: "in_progress",
-      url: "https://return.gst.gov.in/returns/auth/gstr3b/export",
+    await expect(
+      observeBrowserDownloadById({ onChanged: changed.api, search }, 18, exactIdContext(18)),
+    ).resolves.toMatchObject({
+      state: "not-observed",
+      safeSignals: expect.arrayContaining(["browser-download-search-unavailable"]),
     });
-    downloads.changed.emit({
-      id: 18,
-      state: { current: "interrupted" },
-      error: { current: "FILE_FAILED" },
-    });
-    downloads.created.emit({
-      id: 19,
-      mime: "application/pdf",
-      startTime: "2026-06-24T10:00:02.000Z",
-      state: "complete",
-      url: "https://return.gst.gov.in/returns/auth/gstr3b/download",
-    });
+  });
 
-    await expect(observation.promise).resolves.toMatchObject({
+  it.each([
+    ["danger evidence", { danger: undefined, exists: true }, "browser-download-danger-unknown"],
+    [
+      "asynchronous scanning",
+      { danger: "asyncScanning", exists: true },
+      "browser-download-danger-pending",
+    ],
+    [
+      "local password scanning",
+      { danger: "asyncLocalPasswordScanning", exists: true },
+      "browser-download-danger-pending",
+    ],
+    [
+      "scan prompt",
+      { danger: "promptForScanning", exists: true },
+      "browser-download-danger-pending",
+    ],
+    [
+      "local password scan prompt",
+      { danger: "promptForLocalPasswordScanning", exists: true },
+      "browser-download-danger-pending",
+    ],
+  ] as const)(
+    "rechecks transient %s and completes only after safe, existing evidence appears",
+    async (_label, transientEvidence, expectedTransientSignal) => {
+      const changed = createEvent<DownloadDelta>();
+      let evidenceReady = false;
+      const search = vi.fn(async () => [completedItem(19, evidenceReady ? {} : transientEvidence)]);
+      const observation = observeBrowserDownloadById(
+        { onChanged: changed.api, search },
+        19,
+        exactIdContext(19),
+        1_000,
+      );
+      let settled = false;
+      void observation.then(() => {
+        settled = true;
+      });
+
+      await vi.advanceTimersByTimeAsync(499);
+      expect(settled).toBe(false);
+      expect(search).toHaveBeenCalled();
+
+      evidenceReady = true;
+      await vi.advanceTimersByTimeAsync(1);
+
+      const result = await observation;
+      expect(result).toMatchObject({ state: "completed" });
+      expect(result.safeSignals).not.toContain(expectedTransientSignal);
+    },
+  );
+
+  it.each([
+    ["unknown danger", { danger: undefined, exists: true }, "browser-download-danger-unknown"],
+    [
+      "pending danger",
+      { danger: "asyncScanning", exists: true },
+      "browser-download-danger-pending",
+    ],
+  ] as const)(
+    "times out %s as unconfirmed and never completes early",
+    async (_label, evidence, expectedSignal) => {
+      const downloads = createDownloadsApi([completedItem(20, evidence)]);
+      const observation = observeBrowserDownloadById(downloads, 20, exactIdContext(20), 1_000);
+      let settled = false;
+      void observation.then(() => {
+        settled = true;
+      });
+
+      await vi.advanceTimersByTimeAsync(999);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+
+      await expect(observation).resolves.toMatchObject({
+        state: "not-observed",
+        safeSignals: expect.arrayContaining([expectedSignal]),
+      });
+    },
+  );
+
+  it.each([false, undefined])(
+    "treats completed exact-id existence metadata %s as advisory",
+    async (exists) => {
+      const downloads = createDownloadsApi([completedItem(21, { exists })]);
+
+      await expect(
+        observeBrowserDownloadById(downloads, 21, exactIdContext(21)),
+      ).resolves.toMatchObject({
+        state: "completed",
+        safeSignals: expect.arrayContaining([
+          "browser-download-completed",
+          "browser-download-non-empty",
+        ]),
+      });
+    },
+  );
+
+  it("preserves defined exact-ID evidence when a later search returns undefined fields", async () => {
+    const changed = createEvent<DownloadDelta>();
+    const search = vi
+      .fn()
+      .mockResolvedValueOnce([completedItem(21)])
+      .mockResolvedValue([
+        completedItem(21, {
+          danger: undefined,
+          exists: undefined,
+          fileSize: undefined,
+          mime: undefined,
+          startTime: undefined,
+        }),
+      ]);
+
+    await expect(
+      observeBrowserDownloadById({ onChanged: changed.api, search }, 21, exactIdContext(21)),
+    ).resolves.toMatchObject({
       state: "completed",
-      safeSignals: expect.arrayContaining(["browser-download-id:19"]),
+      safeEvidence: { byteCountClass: "non-empty", downloadId: 21, mimeClass: "pdf" },
     });
   });
 
-  it("treats a zero-byte completed download as failed", async () => {
-    const downloads = createDownloadsApi([{ id: 9, state: "complete", fileSize: 0 }]);
-    const observation = observeNextBrowserDownload(downloads, 1_000);
+  it.each(["file", "malicious", "uncommon"])(
+    "rejects the final browser danger classification %s",
+    async (danger) => {
+      const downloads = createDownloadsApi([completedItem(22, { danger })]);
 
-    downloads.created.emit({ id: 9, state: "complete" });
+      await expect(
+        observeBrowserDownloadById(downloads, 22, exactIdContext(22)),
+      ).resolves.toMatchObject({
+        state: "failed",
+        safeSignals: expect.arrayContaining(["browser-download-danger-rejected"]),
+        userAction: { type: "NAVIGATE_TO_SUPPORTED_PAGE" },
+      });
+    },
+  );
 
-    await expect(observation.promise).resolves.toMatchObject({
+  it.each(["safe", "deepScannedSafe"])(
+    "allows the final browser danger classification %s",
+    async (danger) => {
+      const downloads = createDownloadsApi([completedItem(23, { danger })]);
+
+      await expect(
+        observeBrowserDownloadById(downloads, 23, exactIdContext(23)),
+      ).resolves.toMatchObject({ state: "completed" });
+    },
+  );
+
+  it("treats explicit zero fileSize as authoritative over positive transfer counts", async () => {
+    const downloads = createDownloadsApi([
+      completedItem(24, { bytesReceived: 2048, fileSize: 0, totalBytes: 2048 }),
+    ]);
+
+    await expect(
+      observeBrowserDownloadById(downloads, 24, exactIdContext(24)),
+    ).resolves.toMatchObject({
       state: "failed",
-      safeSignals: expect.arrayContaining([
-        "browser-download-completed",
-        "browser-download-zero-bytes",
-      ]),
-      userAction: {
-        type: "RETRY_PORTAL_GENERATION",
+      safeSignals: expect.arrayContaining(["browser-download-zero-bytes"]),
+      safeEvidence: { byteCountClass: "zero", downloadId: 24 },
+    });
+  });
+
+  it("uses positive transfer counts only when final fileSize is unavailable", async () => {
+    const downloads = createDownloadsApi([
+      completedItem(25, { bytesReceived: 1024, fileSize: undefined, totalBytes: 2048 }),
+    ]);
+
+    await expect(
+      observeBrowserDownloadById(downloads, 25, exactIdContext(25)),
+    ).resolves.toMatchObject({
+      state: "completed",
+      safeEvidence: { byteCountClass: "non-empty" },
+    });
+  });
+
+  it("does not accept negative or non-finite byte counts as size proof", async () => {
+    const downloads = createDownloadsApi([
+      completedItem(26, {
+        bytesReceived: Number.NaN,
+        fileSize: -1,
+        totalBytes: Number.POSITIVE_INFINITY,
+      }),
+    ]);
+    const observation = observeBrowserDownloadById(downloads, 26, exactIdContext(26), 1_000);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    await expect(observation).resolves.toMatchObject({
+      state: "not-observed",
+      safeSignals: expect.arrayContaining(["browser-download-size-unknown"]),
+    });
+  });
+
+  it.each([
+    ["matching MIME", { mime: "application/pdf" }],
+    [
+      "generic MIME plus matching filename extension",
+      { filename: "artifact.pdf", mime: "application/octet-stream" },
+    ],
+    [
+      "matching URL extension when MIME and filename are absent",
+      { filename: undefined, mime: undefined, url: "https://example.invalid/artifact.pdf" },
+    ],
+  ] as const)("accepts exact-id file evidence from %s", async (_label, evidence) => {
+    const downloads = createDownloadsApi([completedItem(27, evidence)]);
+
+    await expect(
+      observeBrowserDownloadById(downloads, 27, exactIdContext(27)),
+    ).resolves.toMatchObject({ state: "completed" });
+  });
+
+  it.each([
+    ["contradictory known MIME", { filename: "artifact.pdf", mime: "text/html" }],
+    [
+      "wrong generic filename extension",
+      { filename: "artifact.txt", mime: "application/download" },
+    ],
+    ["missing all file-type evidence", { filename: undefined, mime: undefined, url: undefined }],
+  ] as const)("rejects exact-id file evidence with %s", async (_label, evidence) => {
+    const downloads = createDownloadsApi([completedItem(28, evidence)]);
+
+    await expect(
+      observeBrowserDownloadById(downloads, 28, exactIdContext(28)),
+    ).resolves.toMatchObject({
+      state: "not-observed",
+      safeSignals: expect.arrayContaining(["browser-download-correlation-rejected"]),
+    });
+  });
+
+  it.each([
+    [
+      "spreadsheet",
+      {
+        filename: "artifact.xlsx",
+        mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      },
+      [".xlsx"],
+      ["spreadsheet"],
+      "spreadsheet",
+    ],
+    [
+      "ZIP",
+      { filename: "artifact.zip", mime: "application/zip" },
+      [".zip"],
+      ["application/zip"],
+      "other",
+    ],
+    [
+      "generic binary",
+      { filename: "artifact.bin", mime: "application/octet-stream" },
+      [".bin"],
+      ["application/octet-stream"],
+      "generic-binary",
+    ],
+  ] as const)(
+    "preserves safe MIME classification for a %s artifact",
+    async (_label, evidence, expectedFileExtensions, expectedMimeTypes, mimeClass) => {
+      const downloads = createDownloadsApi([completedItem(29, evidence)]);
+
+      await expect(
+        observeBrowserDownloadById(
+          downloads,
+          29,
+          exactIdContext(29, { expectedFileExtensions, expectedMimeTypes }),
+        ),
+      ).resolves.toMatchObject({
+        state: "completed",
+        safeEvidence: { mimeClass },
+      });
+    },
+  );
+
+  it.each([
+    ["missing", undefined],
+    ["invalid", "not-a-date"],
+    ["before observation was armed", "2026-06-24T09:59:59.999Z"],
+  ])("rejects %s start-time proof", async (_label, startTime) => {
+    const downloads = createDownloadsApi([completedItem(30, { startTime })]);
+
+    await expect(
+      observeBrowserDownloadById(downloads, 30, exactIdContext(30)),
+    ).resolves.toMatchObject({
+      state: "not-observed",
+      safeSignals: expect.arrayContaining(["browser-download-correlation-rejected"]),
+    });
+  });
+
+  it("rejects an exact search result that is not in the trusted id binding", async () => {
+    const downloads = createDownloadsApi([completedItem(31)]);
+
+    await expect(
+      observeBrowserDownloadById(downloads, 31, {
+        ...exactIdContext(31),
+        trustedDownloadIds: new Set([32]),
+      }),
+    ).resolves.toMatchObject({
+      state: "not-observed",
+      safeSignals: expect.arrayContaining(["browser-download-correlation-rejected"]),
+    });
+  });
+
+  it("rejects a browser search response containing a different id", async () => {
+    const changed = createEvent<DownloadDelta>();
+    const search = vi.fn(async () => [completedItem(34)]);
+
+    await expect(
+      observeBrowserDownloadById({ onChanged: changed.api, search }, 33, exactIdContext(33)),
+    ).resolves.toMatchObject({
+      state: "not-observed",
+      safeSignals: expect.arrayContaining(["browser-download-correlation-rejected"]),
+    });
+  });
+
+  it.each([
+    ["blob", "blob:https://extension.invalid/runtime", "blob"],
+    ["data", "data:application/pdf;base64,JVBERi0xLjQK", "data"],
+    ["https", "https://example.invalid/artifact.pdf", "https"],
+  ])("redacts a %s source to its safe URL class", async (_label, url, urlClass) => {
+    const downloads = createDownloadsApi([completedItem(35, { url })]);
+
+    const result = await observeBrowserDownloadById(downloads, 35, exactIdContext(35));
+
+    expect(result).toMatchObject({
+      state: "completed",
+      safeEvidence: {
+        byteCountClass: "non-empty",
+        downloadId: 35,
+        mimeClass: "pdf",
+        urlClass,
       },
     });
+    expect(Object.keys(result.safeEvidence ?? {}).sort()).toEqual([
+      "byteCountClass",
+      "downloadId",
+      "mimeClass",
+      "urlClass",
+    ]);
+    expect(JSON.stringify(result)).not.toContain(url);
   });
+});
 
-  it("merges completed evidence into guided flow steps", () => {
-    const step: PortalFlowStepResult = {
-      connectorId: "gst",
-      scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
-      state: "clicked",
-      safeSignals: ["filed-gstr3b-download-clicked"],
-      safeMessage: "Clicked.",
-    };
+describe("download observation flow merge", () => {
+  const step: PortalFlowStepResult = {
+    connectorId: "gst",
+    scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+    state: "clicked",
+    safeSignals: ["filed-return-download-clicked"],
+    safeMessage: "Clicked.",
+  };
 
+  it("merges completed evidence into a downloaded flow step", () => {
     expect(
       mergeFlowStepWithDownloadObservation(step, {
         state: "completed",
@@ -1285,52 +685,77 @@ describe("download observer", () => {
       }),
     ).toMatchObject({
       state: "downloaded",
-      safeSignals: ["filed-gstr3b-download-clicked", "browser-download-completed"],
+      safeSignals: ["filed-return-download-clicked", "browser-download-completed"],
       safeMessage: "Completed.",
     });
   });
 
-  it("merges missing download evidence into direct trigger results", () => {
-    const trigger: PortalDownloadTriggerResult = {
-      connectorId: "gst",
-      scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
-      state: "clicked",
-      safeSignals: ["filed-gstr3b-download-clicked"],
-      safeMessage: "Clicked.",
-    };
-
+  it.each([
+    ["failed", "blocked"],
+    ["not-observed", "download-unconfirmed"],
+  ] as const)("maps %s evidence to a %s flow step", (state, expectedState) => {
     expect(
-      mergeDownloadTriggerWithDownloadObservation(trigger, {
-        state: "not-observed",
-        safeSignals: ["browser-download-not-observed"],
-        safeMessage: "No browser event.",
+      mergeFlowStepWithDownloadObservation(step, {
+        state,
+        safeSignals: ["browser-download-not-confirmed"],
+        safeMessage: "Not confirmed.",
         userAction: {
           type: "ALLOW_MULTIPLE_DOWNLOADS",
-          message: "Allow downloads.",
+          message: "Review browser downloads.",
           canResume: true,
         },
       }),
     ).toMatchObject({
-      state: "download-unconfirmed",
-      safeSignals: ["filed-gstr3b-download-clicked", "browser-download-not-observed"],
-      safeMessage: "No browser event.",
-      userAction: {
-        type: "ALLOW_MULTIPLE_DOWNLOADS",
-      },
+      state: expectedState,
+      safeSignals: ["filed-return-download-clicked", "browser-download-not-confirmed"],
+      userAction: { type: "ALLOW_MULTIPLE_DOWNLOADS" },
     });
   });
 });
 
+function completedItem(
+  id: number,
+  overrides: Partial<DownloadCreatedItem> = {},
+): DownloadCreatedItem {
+  return {
+    danger: "safe",
+    exists: true,
+    fileSize: 1024,
+    id,
+    mime: "application/pdf",
+    startTime: STARTED_AT,
+    state: "complete",
+    ...overrides,
+  };
+}
+
+function exactIdContext(
+  downloadId: number,
+  overrides: Partial<DownloadObservationContext> = {},
+): DownloadObservationContext {
+  return {
+    armedAt: ARMED_AT,
+    expectedFileExtensions: [".pdf"],
+    expectedMimeTypes: ["application/pdf"],
+    trustedDownloadIds: new Set([downloadId]),
+    ...overrides,
+  };
+}
+
 function createDownloadsApi(items: DownloadCreatedItem[]) {
-  const created = createEvent<DownloadCreatedItem>();
   const changed = createEvent<DownloadDelta>();
+  const normalisedItems = items.map((item) => ({
+    danger: "safe",
+    exists: true,
+    ...item,
+  }));
 
   return {
-    created,
     changed,
-    onCreated: created.api,
     onChanged: changed.api,
-    search: vi.fn(async ({ id }: { id: number }) => items.filter((item) => item.id === id)),
+    search: vi.fn(async ({ id }: { id: number }) =>
+      normalisedItems.filter((item) => item.id === id),
+    ),
   };
 }
 
@@ -1347,6 +772,9 @@ function createEvent<T>() {
     },
     emit(input: T) {
       for (const listener of listeners) listener(input);
+    },
+    listenerCount() {
+      return listeners.size;
     },
   };
 }

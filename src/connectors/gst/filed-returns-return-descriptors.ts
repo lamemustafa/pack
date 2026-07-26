@@ -2,7 +2,7 @@ import {
   filedReturnsSafeSlug,
   filedReturnsScopeId,
   type FiledReturnsReturnType,
-} from "../../core/filed-returns-return-types";
+} from "./filed-returns-return-types";
 
 export interface FiledReturnDescriptor {
   returnType: FiledReturnsReturnType;
@@ -15,7 +15,6 @@ export interface FiledReturnDescriptor {
   excelDownloadPattern?: RegExp;
   secondaryDownloadPattern?: RegExp;
   systemGeneratedPattern?: RegExp;
-  supportsDirectDownload: boolean;
 }
 
 export const FILED_RETURN_DESCRIPTORS: Record<FiledReturnsReturnType, FiledReturnDescriptor> = {
@@ -28,7 +27,6 @@ export const FILED_RETURN_DESCRIPTORS: Record<FiledReturnsReturnType, FiledRetur
     detailHeadingPattern: /\bgstr[\s-]?3b\s*-\s*monthly\s+return\b/i,
     explicitDownloadPattern: /\bdownload\s+filed\s+gstr[\s-]?3b\b/i,
     systemGeneratedPattern: /\bsystem\s+generated\b.*\bgstr[\s-]?3b\b/i,
-    supportsDirectDownload: true,
   },
   "GSTR-1": {
     returnType: "GSTR-1",
@@ -41,7 +39,6 @@ export const FILED_RETURN_DESCRIPTORS: Record<FiledReturnsReturnType, FiledRetur
     excelDownloadPattern:
       /\bdownload\b.*\b(?:details?\b.*\b(?:e-?invoices?|excel)|excel\b.*\b(?:details?|e-?invoices?))\b/i,
     secondaryDownloadPattern: /\bdownload\s*\(?\s*pdf\s*\)?\b/i,
-    supportsDirectDownload: false,
   },
   "GSTR-2B": {
     returnType: "GSTR-2B",
@@ -54,7 +51,6 @@ export const FILED_RETURN_DESCRIPTORS: Record<FiledReturnsReturnType, FiledRetur
     excelDownloadPattern:
       /(?:\bdownload\s+gstr[^a-z0-9]?2b\s+details?\s*\(?\s*excel\s*\)?\b|\bdetails?\s*\(?\s*excel\s*\)?\b)/i,
     secondaryDownloadPattern: /\bsummary\s*\(?\s*pdf\s*\)?\b/i,
-    supportsDirectDownload: false,
   },
 };
 

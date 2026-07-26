@@ -4,14 +4,17 @@ import type {
   FiledReturnsFullFiscalYearTarget,
   FiledReturnsFullFiscalYearTargetStatus,
   PortalFlowStepResult,
-} from "../core/contracts";
+} from "../connectors/gst/filed-returns-contracts";
 import {
   filedReturnsArtifactLabel,
   normaliseFiledReturnsArtifactType,
-} from "../core/filed-returns-artifacts";
-import { filedReturnsScopeId } from "../core/filed-returns-return-types";
+} from "../connectors/gst/filed-returns-artifacts";
+import { filedReturnsScopeId } from "../connectors/gst/filed-returns-return-types";
 import { isUnconfirmedBrowserDownloadSignal } from "./download-evidence-signals";
-import { isFullFiscalYearLedgerStale } from "./filed-returns-full-fiscal-year-ledger";
+import {
+  canCompleteFullFiscalYearLedger,
+  isFullFiscalYearLedgerStale,
+} from "./filed-returns-full-fiscal-year-ledger";
 import { fullFiscalYearZipPhaseStep } from "./filed-returns-full-fiscal-year-zip-phase";
 
 const COMPLETED_SUMMARY_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
@@ -54,7 +57,7 @@ export function summariseFullFiscalYearLedger(
   }
   const zipPhaseStep = fullFiscalYearZipPhaseStep(ledger);
   if (zipPhaseStep) return toFullFiscalYearSummary(ledger, zipPhaseStep);
-  if (ledger.status === "complete") {
+  if (ledger.status === "complete" && canCompleteFullFiscalYearLedger(ledger)) {
     return toFullFiscalYearSummary(ledger, completeFullFiscalYearStep(ledger));
   }
   if (hasRecoverableActionRequiredTarget(ledger)) {

@@ -4,9 +4,9 @@ import type {
   FiledReturnsDownloadTarget,
   FiledReturnsFlowSummary,
   PortalFlowStepResult,
-} from "../core/contracts";
-import type { FiledReturnsConcreteArtifactType } from "../core/filed-returns-artifacts";
-import type { PackMessageResponse } from "../core/messages";
+} from "../connectors/gst/filed-returns-contracts";
+import type { FiledReturnsConcreteArtifactType } from "../connectors/gst/filed-returns-artifacts";
+import type { PackMessageResponse } from "../connectors/gst/messages";
 import { withFiledReturnsDownloadDiagnostic } from "./filed-returns-download-diagnostics";
 import { safeFiledReturnZipEntryPath } from "./filed-returns-download-filename";
 import { capturedFiledReturnsArtifactExtension } from "./captured-download-data-url";
@@ -18,6 +18,7 @@ import {
 import type { FiledReturnsFlowMessagingDeps } from "./filed-returns-flow-messaging";
 import { persistFiledReturnsTargetReview } from "./filed-returns-target-review";
 import { capturedDownloadSignalPrefix } from "./filed-returns-captured-signals";
+import { validatedCapturedArtifactMimeClass } from "./filed-returns-captured-evidence";
 import {
   type OffscreenFiledReturnStageResult,
   stageOffscreenFiledReturn,
@@ -109,7 +110,7 @@ export async function stageCapturedFiledReturnDownload({
     ),
     safeEvidence: {
       urlClass: "data",
-      mimeClass: artifactType === "PDF" ? "pdf" : "spreadsheet",
+      mimeClass: validatedCapturedArtifactMimeClass(artifactType),
       byteCountClass: "non-empty",
     },
     target,

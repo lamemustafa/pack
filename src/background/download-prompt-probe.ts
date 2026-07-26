@@ -1,5 +1,5 @@
 import { browser } from "wxt/browser";
-import type { DownloadPromptProbeResult } from "../core/messages";
+import type { DownloadPromptProbeResult } from "../connectors/gst/messages";
 import { observeBrowserDownloadById } from "./download-observer";
 import {
   closeOffscreenBlobDocument,
@@ -49,8 +49,6 @@ export async function runDownloadPromptProbe(
           armedAt: new Date(),
           expectedFileExtensions: [".txt"],
           expectedMimeTypes: ["text/plain"],
-          expectedOrigins: [],
-          expectedUrlSubstrings: [],
           trustedDownloadIds: new Set([downloadId]),
         },
         5_000,
@@ -81,7 +79,7 @@ export async function runDownloadPromptProbe(
         `download-prompt-probe-source:${sourceClass}`,
       ],
       safeMessage:
-        "Brave rejected the extension-owned download prompt probe before a download started.",
+        "The browser rejected the extension-owned download prompt probe before a download started.",
       saveAsFalse: true,
       sourceClass,
     };

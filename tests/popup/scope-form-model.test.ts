@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { FiledReturnsDownloadScope, FiledReturnsFlowSummary } from "../../src/core/contracts";
-import { FULL_FISCAL_YEAR_PERIOD } from "../../src/core/filed-returns-scope";
+import type {
+  FiledReturnsDownloadScope,
+  FiledReturnsFlowSummary,
+} from "../../src/connectors/gst/filed-returns-contracts";
+import { FULL_FISCAL_YEAR_PERIOD } from "../../src/connectors/gst/filed-returns-scope";
 import { getScopeFormStartAction } from "../../src/entrypoints/popup/scope-form-model";
 
 describe("popup scope form model", () => {
@@ -89,6 +92,65 @@ describe("popup scope form model", () => {
     );
 
     expect(action).toEqual({ disabled: false, label: "Retry final ZIP" });
+  });
+
+  it("requires an explicit Downloads check before retrying an ambiguous final ZIP", () => {
+    const scope = fullYearGstr2bScope();
+    const action = getScopeFormStartAction(
+      scope,
+      {
+        scope,
+        status: "blocked",
+        completedPeriods: ["April", "May"],
+        totalPeriods: 2,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr2b-pdf-excel-private-v0",
+          state: "download-unconfirmed",
+          safeSignals: [
+            "full-fiscal-year-final-zip-retry",
+            "full-fiscal-year-zip-download-unconfirmed",
+            "full-fiscal-year-zip-phase:download-started",
+            "full-fiscal-year-opfs-retained",
+          ],
+          safeMessage:
+            "Pack started the final fiscal-year ZIP download. Check browser Downloads before retrying it.",
+        },
+      },
+      null,
+      true,
+    );
+
+    expect(action).toEqual({ disabled: false, label: "I checked—retry final ZIP" });
+  });
+
+  it("reconciles a persisted final-ZIP download ID before offering another download", () => {
+    const scope = fullYearGstr2bScope();
+    const action = getScopeFormStartAction(
+      scope,
+      {
+        scope,
+        status: "blocked",
+        completedPeriods: ["April", "May"],
+        totalPeriods: 2,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr2b-pdf-excel-private-v0",
+          state: "download-unconfirmed",
+          safeSignals: [
+            "full-fiscal-year-final-zip-manual-review",
+            "full-fiscal-year-zip-download-unconfirmed",
+            "full-fiscal-year-zip-phase:download-observing",
+            "full-fiscal-year-opfs-retained",
+          ],
+          safeMessage: "Check the exact saved browser download ID.",
+        },
+      },
+      null,
+      true,
+    );
+
+    expect(action).toEqual({ disabled: false, label: "Check final ZIP status" });
   });
 });
 

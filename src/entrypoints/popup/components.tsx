@@ -1,12 +1,12 @@
+import type { PortalContext } from "../../core/contracts";
 import type {
   FiledReturnsDownloadScope,
   FiledReturnsFlowSummary,
-  PortalContext,
-} from "../../core/contracts";
+} from "../../connectors/gst/filed-returns-contracts";
 import {
   FULL_FISCAL_YEAR_PERIOD,
   normaliseFiledReturnsScope,
-} from "../../core/filed-returns-scope";
+} from "../../connectors/gst/filed-returns-scope";
 import { ScopeActionPanel } from "./scope-action-panel";
 import { ScopeButtonGroup } from "./scope-button-group";
 import { canRetryFullFiscalYearZipWithoutPortal } from "./flow-summary";

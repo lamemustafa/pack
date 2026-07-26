@@ -3,7 +3,7 @@ import {
   safeFiledReturnDownloadFilename,
   safeFiledReturnZipEntryPath,
 } from "../../src/background/filed-returns-download-filename";
-import type { FiledReturnsDownloadScope } from "../../src/core/contracts";
+import type { FiledReturnsDownloadScope } from "../../src/connectors/gst/filed-returns-contracts";
 
 describe("filed returns download filename helpers", () => {
   const scope: FiledReturnsDownloadScope = {

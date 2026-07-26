@@ -1,18 +1,18 @@
+import type { PortalDownloadTriggerResult } from "../../core/contracts";
 import type {
   FiledReturnsDownloadTarget,
   FiledReturnsMainWorldCaptureRequest,
-  PortalDownloadTriggerResult,
-} from "../../core/contracts";
+} from "./filed-returns-contracts";
 import {
   filedReturnsConcreteArtifactLabel,
   supportsFiledReturnsArtifactType,
-} from "../../core/filed-returns-artifacts";
+} from "./filed-returns-artifacts";
 import {
   dismissKnownFiledReturnsSummaryModal,
   isFiledReturnsSummaryModalDismissalBlocked,
 } from "./filed-returns-dialogs";
 import { detectFiledReturnDetailPage } from "./filed-returns-detail-page-guard";
-import { activateElement, scheduleElementActivation } from "./filed-returns-dom";
+import { activateElement } from "./filed-returns-dom";
 import { resolveVisibleFiledReturnDownloadCandidates } from "./filed-returns-download-candidates";
 import { verifyFiledReturnsDownloadTarget } from "./filed-returns-download-target";
 import { waitForPostClickBlockedState } from "./filed-returns-post-click-blocked-state";
@@ -36,7 +36,10 @@ const GSTR2B_CAPTURE_TIMEOUT_MS = 15_000;
 const GSTR1_CAPTURE_TIMEOUT_MS = 15_000;
 
 const DIALOG_SETTLE_DELAY_MS = 60;
-const GSTR3B_CAPTURE_TIMEOUT_MS = 5_000;
+// GSTR-3B generation can outlive the initial portal click by several async turns.
+// Keep the portal-native capture bounded, but do not abandon it before the portal
+// has a realistic chance to create its PDF artifact.
+const GSTR3B_CAPTURE_TIMEOUT_MS = 30_000;
 
 export interface FiledReturnDownloadTriggerResult {
   downloadTrigger: PortalDownloadTriggerResult;
@@ -68,7 +71,7 @@ export async function triggerFiledReturnDownload(
 
   const descriptor = filedReturnDescriptor(target.returnType);
   const artifactType = target.artifactType ?? "PDF";
-  const artifactLabel = filedReturnsConcreteArtifactLabel(artifactType);
+  const artifactLabel = filedReturnsConcreteArtifactLabel(artifactType, target.returnType);
   if (!supportsFiledReturnsArtifactType(target.returnType, artifactType)) {
     return {
       downloadTrigger: {
@@ -178,30 +181,11 @@ export async function triggerFiledReturnDownload(
     ...score.safeSignals,
   ];
 
-  if (target.forcePortalClick && target.returnType === "GSTR-2B") {
-    scheduleElementActivation(element);
-    return {
-      downloadTrigger: {
-        connectorId: "gst",
-        scopeId,
-        state: "clicked",
-        safeSignals: [
-          ...clickedSignals,
-          filedReturnScopedSignal(target.returnType, "portal-blob-download-click-scheduled"),
-          `filed-return-artifact-clicked:${artifactType}`,
-        ],
-        safeMessage: `Pack scheduled the GST Portal's verified filed ${descriptor.label} ${artifactLabel} download control.`,
-      },
-    };
-  }
-
-  const mainWorldCaptureRequest = target.forcePortalClick
-    ? null
-    : tryCaptureFiledReturnBlobDownload(documentRef, target, {
-        control: element,
-        safeSignals: clickedSignals,
-        scopeId,
-      });
+  const mainWorldCaptureRequest = tryCaptureFiledReturnBlobDownload(documentRef, target, {
+    control: element,
+    safeSignals: clickedSignals,
+    scopeId,
+  });
   if (mainWorldCaptureRequest) {
     return {
       mainWorldCaptureRequest,
@@ -255,8 +239,11 @@ function tryCaptureFiledReturnBlobDownload(
   const mainWorldCaptureRequest = prepareFiledReturnsPortalBlobDownloadCapture(
     documentRef,
     context.control,
-    target.actionId,
+    target,
     {
+      ...(target.returnType === "GSTR-3B" && (target.artifactType ?? "PDF") === "PDF"
+        ? { asyncBlobBinding: "action-xhr-non-artifact-to-pdf" as const }
+        : {}),
       signalPrefix: signalPrefix.endsWith("-") ? signalPrefix.slice(0, -1) : signalPrefix,
       ...(target.returnType === "GSTR-1" ? { timeoutMs: GSTR1_CAPTURE_TIMEOUT_MS } : {}),
       ...(target.returnType === "GSTR-3B" ? { timeoutMs: GSTR3B_CAPTURE_TIMEOUT_MS } : {}),

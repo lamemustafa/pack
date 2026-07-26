@@ -1,11 +1,11 @@
-import type { FiledReturnsDownloadScope } from "../core/contracts";
+import type { FiledReturnsDownloadScope } from "../connectors/gst/filed-returns-contracts";
 import {
   concreteFiledReturnsArtifactTypes,
   type FiledReturnsArtifactExtension,
   filedReturnsArtifactExtension,
   normaliseFiledReturnsArtifactType,
   type FiledReturnsConcreteArtifactType,
-} from "../core/filed-returns-artifacts";
+} from "../connectors/gst/filed-returns-artifacts";
 
 const SAFE_DOWNLOAD_ROOT = "complyeaze-pack/gst";
 

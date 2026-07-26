@@ -2,7 +2,7 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { browser } from "wxt/browser";
 import type { ArchiveManifest } from "../../core/contracts";
-import type { PackMessageResponse } from "../../core/messages";
+import type { PackMessageResponse } from "../../connectors/gst/messages";
 import "../../styles/global.css";
 import { runFileSystemAccessProbe } from "./file-system-access-probe";
 

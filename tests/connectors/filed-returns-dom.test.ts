@@ -2,7 +2,8 @@ import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
 import {
   clickPortalElement,
-  scheduleElementActivation,
+  findUniqueActionableExactSearchControl,
+  getActionableExactSearchControls,
 } from "../../src/connectors/gst/filed-returns-dom";
 
 describe("filed-return portal clicks", () => {
@@ -43,21 +44,51 @@ describe("filed-return portal clicks", () => {
     expect(clickCount).toBe(1);
     expect(defaultPrevented).toBe(false);
   });
+});
 
-  it("defers portal activation until the current response task has returned", async () => {
-    const documentRef = new JSDOM('<button data-control type="button">Download</button>').window
-      .document;
-    const control = documentRef.querySelector<HTMLElement>("[data-control]");
-    if (!control) throw new Error("Expected a synthetic portal control.");
-    let clickCount = 0;
-    control.addEventListener("click", () => {
-      clickCount += 1;
-    });
+describe("filed-return Search controls", () => {
+  it("keeps only an exact Search control with an actionable ancestor chain", () => {
+    const documentRef = new JSDOM(`
+      <style>.ng-hide { display: none; }</style>
+      <form class="ng-hide"><button data-hidden-css>Search</button></form>
+      <section aria-hidden="true"><button data-aria-hidden>Search</button></section>
+      <section inert><button data-inert>Search</button></section>
+      <button data-disabled disabled>Search</button>
+      <button data-class-disabled class="disabled">Search</button>
+      <fieldset disabled><span data-disabled-ancestor role="button">Search</span></fieldset>
+      <section aria-disabled="true"><button data-aria-disabled>Search</button></section>
+      <section style="opacity: 0"><button data-transparent>Search</button></section>
+      <section style="pointer-events: none"><button data-no-pointer>Search</button></section>
+      <button data-non-exact>Search returns</button>
+      <button data-actionable>Search</button>
+    `).window.document;
 
-    scheduleElementActivation(control);
+    expect(getActionableExactSearchControls(documentRef)).toEqual([
+      documentRef.querySelector("[data-actionable]"),
+    ]);
+    expect(findUniqueActionableExactSearchControl(documentRef)).toBe(
+      documentRef.querySelector("[data-actionable]"),
+    );
+  });
 
-    expect(clickCount).toBe(0);
-    await new Promise<void>((resolve) => documentRef.defaultView?.setTimeout(resolve, 0));
-    expect(clickCount).toBe(1);
+  it("fails closed when multiple actionable controls have the exact Search label", () => {
+    const documentRef = new JSDOM(`
+      <button data-first>Search</button>
+      <input data-second type="submit" value="Search" />
+    `).window.document;
+
+    expect(getActionableExactSearchControls(documentRef)).toHaveLength(2);
+    expect(findUniqueActionableExactSearchControl(documentRef)).toBeNull();
+  });
+
+  it("fails closed when no exact Search control is actionable", () => {
+    const documentRef = new JSDOM(`
+      <button hidden>Search</button>
+      <button disabled>Search</button>
+      <button>Search returns</button>
+    `).window.document;
+
+    expect(getActionableExactSearchControls(documentRef)).toEqual([]);
+    expect(findUniqueActionableExactSearchControl(documentRef)).toBeNull();
   });
 });

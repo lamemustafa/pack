@@ -1,11 +1,11 @@
-import { browser } from "wxt/browser";
-import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "../core/contracts";
-import type { PackMessageResponse } from "../core/messages";
-import {
-  filedReturnDescriptor,
-  filedReturnScopedSignal,
-} from "../connectors/gst/filed-returns-return-descriptors";
+import type {
+  FiledReturnsDownloadScope,
+  PortalFlowStepResult,
+} from "../connectors/gst/filed-returns-contracts";
+import type { PackMessageResponse } from "../connectors/gst/messages";
+import { filedReturnScopedSignal } from "../connectors/gst/filed-returns-return-descriptors";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
+import { persistCanonicalFiledReturnsObservation } from "./filed-returns-observation-state";
 
 export const FLOW_STEP_SETTLE_MS = 150;
 export const DETAIL_SUMMARY_MODAL_SETTLE_MS = 60;
@@ -50,20 +50,6 @@ export function isFiledReturnDownloadReady(
   );
 }
 
-export function shouldAttemptDirectDownloadFromDetailRoute(
-  step: PortalFlowStepResult,
-  scope: FiledReturnsDownloadScope,
-  deps: FiledReturnsFlowRunnerDeps,
-): boolean {
-  return Boolean(
-    deps.preferDirectDownload &&
-    filedReturnDescriptor(scope.returnType).supportsDirectDownload &&
-    step.safeSignals.includes("gstr-3b-detail-route") &&
-    !step.safeSignals.includes("detail-summary-modal") &&
-    hasDirectDownloadReadySignal(step, scope),
-  );
-}
-
 export function getResultRowNavigationSettleMs(deps: FiledReturnsFlowRunnerDeps): number {
   return deps.timings?.resultRowNavigationSettleMs ?? RESULT_ROW_NAVIGATION_SETTLE_MS;
 }
@@ -102,21 +88,11 @@ export async function persistFlowResponse(
   deps: FiledReturnsFlowRunnerDeps,
 ) {
   if ("observation" in response && response.observation) {
-    await browser.storage.session.set({
-      [deps.storageKeys.observation]: response.observation,
-    });
+    await persistCanonicalFiledReturnsObservation(
+      deps.storageKeys.observation,
+      response.observation,
+    );
   }
-}
-
-function hasDirectDownloadReadySignal(
-  step: PortalFlowStepResult,
-  scope: FiledReturnsDownloadScope,
-): boolean {
-  return (
-    isFiledReturnDownloadReady(step, scope) ||
-    (step.safeSignals.includes(`filed-return-detail-period:${scope.period}`) &&
-      step.safeSignals.includes(`filed-return-detail-financial-year:${scope.financialYear}`))
-  );
 }
 
 function isFiledReturnDetailNavigationStep(step: PortalFlowStepResult): boolean {

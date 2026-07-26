@@ -1,10 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { FULL_FISCAL_YEAR_PERIOD } from "../../src/core/filed-returns-scope";
+import { FULL_FISCAL_YEAR_PERIOD } from "../../src/connectors/gst/filed-returns-scope";
 import type {
+  FiledReturnsDownloadDiagnostic,
   FiledReturnsFlowSummary,
   FiledReturnsFullFiscalYearLedger,
-} from "../../src/core/contracts";
+} from "../../src/connectors/gst/filed-returns-contracts";
+import { acquireFiledReturnsRun } from "../../src/background/filed-returns-active-run";
 import { readCurrentFiledReturnsFlowSummary } from "../../src/background/filed-returns-current-state";
+import { clearPackLocalDataWithRecoveryGuard } from "../../src/background/local-data";
+import { FULL_FISCAL_YEAR_PLAN_VERSION } from "../../src/background/filed-returns-full-fiscal-year-plan";
+import { canonicalDurableTargetStatus } from "../../src/connectors/gst/filed-returns-durable-status";
 
 const filedReturnsCurrentStateStorageKeys = {
   activeRun: "pack:active-filed-returns-run",
@@ -12,6 +17,21 @@ const filedReturnsCurrentStateStorageKeys = {
   fullFiscalYearLedger: "pack:full-fiscal-year-ledger",
   targetReview: "pack:filed-returns-target-review",
 };
+
+const fullFiscalYearLedgerIds = {
+  complete: "full-fiscal-year-00000002",
+  durableZipPhase: "full-fiscal-year-00000003",
+  existing: "full-fiscal-year-00000001",
+  readyForZipRetry: "full-fiscal-year-00000004",
+  recoverable: "full-fiscal-year-00000005",
+} as const;
+const singlePeriodLedgerIds = {
+  clearWins: "single-period:00000004-clear",
+  local: "single-period:00000001-local",
+  recoverable: "single-period:00000002-local",
+  startWins: "single-period:00000003-start",
+} as const;
+const activeRunId = "filed-returns-run-00000001";
 
 const browserMocks = vi.hoisted(() => ({
   downloads: {
@@ -43,6 +63,7 @@ const browserMocks = vi.hoisted(() => ({
     session: {
       clear: vi.fn(async () => undefined),
       get: vi.fn(async () => ({})),
+      remove: vi.fn(async () => undefined),
       set: vi.fn(async () => undefined),
     },
   },
@@ -72,6 +93,17 @@ describe("Pack local data clearing", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
+    browserMocks.storage.local.get.mockReset().mockResolvedValue({});
+    browserMocks.storage.local.remove.mockReset().mockResolvedValue(undefined);
+    browserMocks.storage.local.set.mockReset().mockResolvedValue(undefined);
+    browserMocks.storage.local.setAccessLevel.mockReset().mockResolvedValue(undefined);
+    browserMocks.storage.session.clear.mockReset().mockResolvedValue(undefined);
+    browserMocks.storage.session.get.mockReset().mockResolvedValue({});
+    browserMocks.storage.session.remove.mockReset().mockResolvedValue(undefined);
+    browserMocks.storage.session.set.mockReset().mockResolvedValue(undefined);
+    zipMocks.discardFullFiscalYearFiledReturnsZip.mockReset();
+    zipMocks.discardSinglePeriodFiledReturnsZip.mockReset();
+    zipMocks.discardAllFiledReturnsStaging.mockReset();
     zipMocks.discardFullFiscalYearFiledReturnsZip.mockResolvedValue(
       "full-fiscal-year-opfs-cleared",
     );
@@ -104,7 +136,7 @@ describe("Pack local data clearing", () => {
         ? {
             [key]: {
               schemaVersion: "1.0",
-              ledgerId: "ledger-existing",
+              ledgerId: fullFiscalYearLedgerIds.existing,
               revision: 2,
               status: "blocked",
               scope: {
@@ -123,8 +155,9 @@ describe("Pack local data clearing", () => {
                   returnType: "GSTR-3B",
                   status: "download-unconfirmed",
                   attempts: 1,
-                  safeSignals: ["browser-download-size-unknown"],
-                  safeMessage: "Unconfirmed.",
+                  ...durableGstr3bTargetStatus("April", "download-unconfirmed", [
+                    "browser-download-size-unknown",
+                  ]),
                   updatedAt: "2026-06-24T00:00:00.000Z",
                 },
               ],
@@ -145,13 +178,46 @@ describe("Pack local data clearing", () => {
     expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
   });
 
+  it.each([
+    "export-pending",
+    "export-retry-pending",
+    "download-intent-persisted",
+    "download-observing",
+    "download-started",
+    "restaging-required",
+    "downloaded-cleanup-pending",
+    "no-artifacts-cleanup-pending",
+    "legacy-cleanup-pending",
+  ] as const)(
+    "refuses local-data clearing for a valid durable ZIP phase (%s)",
+    async (zipPhase) => {
+      const ledger = createDurableZipPhaseLedger(zipPhase);
+      browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+        key === "pack:full-fiscal-year-ledger" ? { [key]: ledger } : {},
+      );
+      const background = await import("../../src/entrypoints/background");
+
+      const response = await background.clearPackLocalData();
+
+      expect(response).toEqual({
+        ok: false,
+        error:
+          "Pack has unresolved filed-return recovery state. Cancel or resolve the run before clearing local data.",
+      });
+      expect(zipMocks.discardFullFiscalYearFiledReturnsZip).not.toHaveBeenCalled();
+      expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
+    },
+  );
+
   it("clears retained full-year files before removing a completed ledger", async () => {
     browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
       key === "pack:full-fiscal-year-ledger"
         ? {
             [key]: {
               schemaVersion: "1.0",
-              ledgerId: "ledger-complete",
+              planVersion: FULL_FISCAL_YEAR_PLAN_VERSION,
+              eligibleThrough: "April",
+              ledgerId: fullFiscalYearLedgerIds.complete,
               revision: 3,
               status: "complete",
               scope: {
@@ -169,8 +235,9 @@ describe("Pack local data clearing", () => {
                   returnType: "GSTR-3B",
                   status: "downloaded",
                   attempts: 1,
-                  safeSignals: ["full-fiscal-year-opfs-staged:PDF"],
-                  safeMessage: "Staged.",
+                  ...durableGstr3bTargetStatus("April", "downloaded", [
+                    "full-fiscal-year-opfs-staged:PDF",
+                  ]),
                   updatedAt: "2026-06-24T00:01:00.000Z",
                 },
               ],
@@ -183,7 +250,9 @@ describe("Pack local data clearing", () => {
     const response = await background.clearPackLocalData();
 
     expect(response).toEqual({ ok: true, cleared: true });
-    expect(zipMocks.discardFullFiscalYearFiledReturnsZip).toHaveBeenCalledWith("ledger-complete");
+    expect(zipMocks.discardFullFiscalYearFiledReturnsZip).toHaveBeenCalledWith(
+      fullFiscalYearLedgerIds.complete,
+    );
     expect(browserMocks.storage.local.remove).toHaveBeenCalledWith(
       background.PACK_CLEARABLE_LOCAL_STORAGE_KEYS,
     );
@@ -194,7 +263,7 @@ describe("Pack local data clearing", () => {
       key === "pack:single-period-staging"
         ? {
             [key]: {
-              ledgerId: "single-period:ledger",
+              ledgerId: singlePeriodLedgerIds.local,
               schemaVersion: "1.0",
             },
           }
@@ -206,7 +275,7 @@ describe("Pack local data clearing", () => {
 
     expect(response).toEqual({ ok: true, cleared: true });
     expect(zipMocks.discardSinglePeriodFiledReturnsZip).toHaveBeenCalledWith(
-      "single-period:ledger",
+      singlePeriodLedgerIds.local,
     );
     expect(browserMocks.storage.local.remove).toHaveBeenCalledWith(
       background.PACK_CLEARABLE_LOCAL_STORAGE_KEYS,
@@ -253,7 +322,7 @@ describe("Pack local data clearing", () => {
       key === "pack:single-period-staging"
         ? {
             [key]: {
-              ledgerId: "single-period:recoverable",
+              ledgerId: singlePeriodLedgerIds.recoverable,
               schemaVersion: "unexpected",
             },
           }
@@ -265,7 +334,7 @@ describe("Pack local data clearing", () => {
 
     expect(response).toEqual({ ok: true, cleared: true });
     expect(zipMocks.discardSinglePeriodFiledReturnsZip).toHaveBeenCalledWith(
-      "single-period:recoverable",
+      singlePeriodLedgerIds.recoverable,
     );
   });
 
@@ -277,7 +346,7 @@ describe("Pack local data clearing", () => {
       if (key === "pack:single-period-staging") {
         return {
           [key]: {
-            ledgerId: "single-period:ledger",
+            ledgerId: singlePeriodLedgerIds.local,
             schemaVersion: "1.0",
           },
         };
@@ -286,7 +355,7 @@ describe("Pack local data clearing", () => {
         return {
           [key]: {
             schemaVersion: "1.0",
-            ledgerId: "ledger-complete",
+            ledgerId: fullFiscalYearLedgerIds.complete,
             revision: 3,
             status: "complete",
             scope: {
@@ -325,7 +394,9 @@ describe("Pack local data clearing", () => {
         ? {
             [key]: {
               schemaVersion: "1.0",
-              ledgerId: "ledger-complete",
+              planVersion: FULL_FISCAL_YEAR_PLAN_VERSION,
+              eligibleThrough: "April",
+              ledgerId: fullFiscalYearLedgerIds.complete,
               revision: 3,
               status: "complete",
               scope: {
@@ -343,8 +414,9 @@ describe("Pack local data clearing", () => {
                   returnType: "GSTR-3B",
                   status: "downloaded",
                   attempts: 1,
-                  safeSignals: ["full-fiscal-year-opfs-staged:PDF"],
-                  safeMessage: "Staged.",
+                  ...durableGstr3bTargetStatus("April", "downloaded", [
+                    "full-fiscal-year-opfs-staged:PDF",
+                  ]),
                   updatedAt: "2026-06-24T00:01:00.000Z",
                 },
               ],
@@ -370,7 +442,7 @@ describe("Pack local data clearing", () => {
       key === "pack:full-fiscal-year-ledger"
         ? {
             [key]: {
-              ledgerId: "recoverable-full-year-ledger",
+              ledgerId: fullFiscalYearLedgerIds.recoverable,
               schemaVersion: "unexpected",
             },
           }
@@ -382,7 +454,41 @@ describe("Pack local data clearing", () => {
 
     expect(response).toEqual({ ok: true, cleared: true });
     expect(zipMocks.discardFullFiscalYearFiledReturnsZip).toHaveBeenCalledWith(
-      "recoverable-full-year-ledger",
+      fullFiscalYearLedgerIds.recoverable,
+    );
+    expect(browserMocks.storage.local.remove).toHaveBeenCalledWith(
+      background.PACK_CLEARABLE_LOCAL_STORAGE_KEYS,
+    );
+  });
+
+  it.each([
+    [
+      "unknown ZIP phase",
+      {
+        ...createDurableZipPhaseLedger("download-observing"),
+        zipPhase: "unknown-checkpoint",
+      },
+    ],
+    [
+      "malformed ZIP download attempt",
+      {
+        ...createDurableZipPhaseLedger("download-intent-persisted"),
+        zipDownloadAttempt: {
+          requestedAt: "not-a-timestamp",
+        },
+      },
+    ],
+  ])("keeps malformed %s explicitly clearable", async (_label, malformedLedger) => {
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      key === "pack:full-fiscal-year-ledger" ? { [key]: malformedLedger } : {},
+    );
+    const background = await import("../../src/entrypoints/background");
+
+    const response = await background.clearPackLocalData();
+
+    expect(response).toEqual({ ok: true, cleared: true });
+    expect(zipMocks.discardFullFiscalYearFiledReturnsZip).toHaveBeenCalledWith(
+      fullFiscalYearLedgerIds.durableZipPhase,
     );
     expect(browserMocks.storage.local.remove).toHaveBeenCalledWith(
       background.PACK_CLEARABLE_LOCAL_STORAGE_KEYS,
@@ -451,6 +557,136 @@ describe("Pack local data clearing", () => {
     expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
   });
 
+  it("uses Clear local Pack data as the explicit recovery path for a malformed active run", async () => {
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      key === "pack:active-filed-returns-run"
+        ? {
+            [key]: {
+              schemaVersion: "1.0",
+              runId: "invalid run id",
+              revision: 1,
+              scope: {
+                financialYear: "2026-27",
+                period: "April",
+                returnType: "GSTR-3B",
+              },
+              status: "running",
+              leaseUpdatedAt: "2026-06-24T00:00:00.000Z",
+            },
+          }
+        : {},
+    );
+    const background = await import("../../src/entrypoints/background");
+
+    const response = await background.clearPackLocalData();
+
+    expect(response).toEqual({ ok: true, cleared: true });
+    expect(browserMocks.storage.session.clear).toHaveBeenCalledTimes(1);
+    expect(browserMocks.storage.local.remove).toHaveBeenCalledWith(
+      background.PACK_CLEARABLE_LOCAL_STORAGE_KEYS,
+    );
+  });
+
+  it("blocks local-data clearing when run acquisition wins the operation race", async () => {
+    const state = installStatefulLocalStorage({
+      "pack:single-period-staging": {
+        ledgerId: singlePeriodLedgerIds.startWins,
+        schemaVersion: "1.0",
+      },
+    });
+    const scope = {
+      financialYear: "2026-27",
+      period: "April",
+      returnType: "GSTR-3B" as const,
+    };
+
+    const acquired = await acquireFiledReturnsRun(scope, {
+      storageKeys: { activeRun: "pack:active-filed-returns-run" },
+      now: () => new Date("2026-06-24T00:00:00.000Z"),
+    });
+    const response = await clearPackLocalDataWithRecoveryGuard(localDataRaceDeps());
+
+    expect(acquired).toMatchObject({ run: { scope } });
+    expect(response).toEqual({
+      ok: false,
+      error:
+        "Pack has unresolved filed-return recovery state. Cancel or resolve the run before clearing local data.",
+    });
+    expect(state["pack:active-filed-returns-run"]).toBeDefined();
+    expect(zipMocks.discardSinglePeriodFiledReturnsZip).not.toHaveBeenCalled();
+    expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
+  });
+
+  it("keeps run acquisition queued through awaited OPFS cleanup when clear wins", async () => {
+    const events: string[] = [];
+    const state = installStatefulLocalStorage(
+      {
+        "pack:single-period-staging": {
+          ledgerId: singlePeriodLedgerIds.clearWins,
+          schemaVersion: "1.0",
+        },
+      },
+      events,
+    );
+    let signalCleanupStarted: () => void = () => undefined;
+    const cleanupStarted = new Promise<void>((resolve) => {
+      signalCleanupStarted = resolve;
+    });
+    let releaseCleanup: () => void = () => undefined;
+    const cleanupGate = new Promise<void>((resolve) => {
+      releaseCleanup = resolve;
+    });
+    zipMocks.discardSinglePeriodFiledReturnsZip.mockImplementation(async () => {
+      events.push("opfs-cleanup-started");
+      signalCleanupStarted();
+      await cleanupGate;
+      events.push("opfs-cleanup-completed");
+      return "single-period-opfs-cleared";
+    });
+
+    const clearPromise = clearPackLocalDataWithRecoveryGuard(localDataRaceDeps());
+    await cleanupStarted;
+    let acquisitionSettled = false;
+    const acquirePromise = acquireFiledReturnsRun(
+      {
+        financialYear: "2026-27",
+        period: "April",
+        returnType: "GSTR-3B",
+      },
+      {
+        storageKeys: { activeRun: "pack:active-filed-returns-run" },
+        now: () => new Date("2026-06-24T00:00:00.000Z"),
+      },
+    ).then((result) => {
+      acquisitionSettled = true;
+      return result;
+    });
+    await Promise.resolve();
+
+    expect(acquisitionSettled).toBe(false);
+    expect(state["pack:active-filed-returns-run"]).toBeUndefined();
+    expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
+
+    releaseCleanup();
+    await expect(clearPromise).resolves.toEqual({ ok: true, cleared: true });
+    await expect(acquirePromise).resolves.toMatchObject({
+      run: {
+        scope: {
+          financialYear: "2026-27",
+          period: "April",
+          returnType: "GSTR-3B",
+        },
+      },
+    });
+    expect(events).toEqual([
+      "opfs-cleanup-started",
+      "opfs-cleanup-completed",
+      "local-storage-removed",
+      "active-run-acquired",
+    ]);
+    expect(state["pack:active-filed-returns-run"]).toBeDefined();
+  });
+
   it("restricts local storage to trusted extension contexts on startup", async () => {
     await import("../../src/entrypoints/background");
 
@@ -467,7 +703,9 @@ describe("Pack local data clearing", () => {
         returnType: "GSTR-3B",
       },
       status: "complete",
+      completedAt: "2026-06-24T00:00:00.000Z",
       completedPeriods: ["April"],
+      totalPeriods: 1,
       flowStep: {
         connectorId: "gst",
         scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
@@ -481,7 +719,7 @@ describe("Pack local data clearing", () => {
         ? {
             [key]: {
               schemaVersion: "1.0",
-              runId: "run-existing",
+              runId: activeRunId,
               revision: 1,
               scope: {
                 financialYear: "2026-27",
@@ -529,6 +767,7 @@ describe("Pack local data clearing", () => {
       totalPeriods: 1,
       flowStep: {
         connectorId: "gst",
+        downloadDiagnostic: positiveGstr3bDownloadDiagnostic("May", 72),
         scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
         state: "downloaded",
         safeSignals: ["filed-gstr3b-download-clicked", "browser-download-completed"],
@@ -540,7 +779,7 @@ describe("Pack local data clearing", () => {
         ? {
             [key]: {
               schemaVersion: "1.0",
-              runId: "run-existing",
+              runId: activeRunId,
               revision: 1,
               scope: {
                 financialYear: "2026-27",
@@ -599,7 +838,7 @@ describe("Pack local data clearing", () => {
         ? {
             [key]: {
               schemaVersion: "1.0",
-              runId: "run-existing",
+              runId: activeRunId,
               revision: 1,
               scope: {
                 financialYear: "2026-27",
@@ -653,10 +892,11 @@ describe("Pack local data clearing", () => {
           "full-fiscal-year-zip-download-unconfirmed",
           "full-fiscal-year-opfs-retained",
         ],
-        safeMessage: "The final ZIP download was not confirmed.",
+        safeMessage:
+          "Pack could not confirm the final fiscal-year ZIP. Check the exact browser download before retrying.",
         userAction: {
           type: "ALLOW_MULTIPLE_DOWNLOADS",
-          message: "Allow downloads, then retry the ZIP export.",
+          message: "Allow browser downloads for the GST Portal, then retry.",
           canResume: true,
         },
       },
@@ -666,7 +906,7 @@ describe("Pack local data clearing", () => {
         ? {
             [key]: {
               schemaVersion: "1.0",
-              ledgerId: "ledger-ready-for-zip-retry",
+              ledgerId: fullFiscalYearLedgerIds.readyForZipRetry,
               revision: 3,
               status: "blocked",
               scope: sessionSummary.scope,
@@ -680,8 +920,9 @@ describe("Pack local data clearing", () => {
                   returnType: "GSTR-3B",
                   status: "downloaded",
                   attempts: 1,
-                  safeSignals: ["full-fiscal-year-opfs-staged:PDF"],
-                  safeMessage: "Staged.",
+                  ...durableGstr3bTargetStatus("April", "downloaded", [
+                    "full-fiscal-year-opfs-staged:PDF",
+                  ]),
                   updatedAt,
                 },
               ],
@@ -703,6 +944,12 @@ describe("Pack local data clearing", () => {
 
   it.each([
     ["export-retry-pending", "full-fiscal-year-final-zip-retry", "blocked"],
+    [
+      "download-intent-persisted",
+      "full-fiscal-year-final-zip-manual-review",
+      "download-unconfirmed",
+    ],
+    ["download-observing", "full-fiscal-year-final-zip-manual-review", "download-unconfirmed"],
     ["download-started", "full-fiscal-year-zip-download-unconfirmed", "download-unconfirmed"],
     ["downloaded-cleanup-pending", "full-fiscal-year-local-cleanup-retry", "blocked"],
   ] as const)(
@@ -763,7 +1010,12 @@ describe("Pack local data clearing", () => {
     expect(summary).toMatchObject({
       scope: { period: "May" },
       status: "blocked",
-      flowStep: { safeSignals: ["filed-returns-target-review-required"] },
+      flowStep: {
+        safeSignals: expect.arrayContaining([
+          "filed-returns-target-review-required",
+          "browser-download-not-observed",
+        ]),
+      },
     });
   });
 
@@ -781,6 +1033,7 @@ describe("Pack local data clearing", () => {
       totalPeriods: 1,
       flowStep: {
         connectorId: "gst",
+        downloadDiagnostic: positiveGstr3bDownloadDiagnostic("May", 73),
         scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
         state: "downloaded",
         safeSignals: ["filed-gstr3b-download-clicked", "browser-download-completed"],
@@ -792,7 +1045,9 @@ describe("Pack local data clearing", () => {
         ? {
             [key]: {
               schemaVersion: "1.0",
-              ledgerId: "ledger-complete",
+              planVersion: FULL_FISCAL_YEAR_PLAN_VERSION,
+              eligibleThrough: "April",
+              ledgerId: fullFiscalYearLedgerIds.complete,
               revision: 2,
               status: "complete",
               scope: {
@@ -810,8 +1065,9 @@ describe("Pack local data clearing", () => {
                   returnType: "GSTR-3B",
                   status: "downloaded",
                   attempts: 1,
-                  safeSignals: [],
-                  safeMessage: "Downloaded.",
+                  ...durableGstr3bTargetStatus("April", "downloaded", [
+                    "full-fiscal-year-opfs-staged:PDF",
+                  ]),
                   updatedAt: "2026-06-24T00:00:00.000Z",
                   completedAt: "2026-06-24T00:00:00.000Z",
                 },
@@ -848,7 +1104,7 @@ describe("Pack local data clearing", () => {
         ? {
             [key]: {
               schemaVersion: "1.0",
-              ledgerId: "ledger-existing",
+              ledgerId: fullFiscalYearLedgerIds.existing,
               revision: 2,
               status: "running",
               scope: {
@@ -867,8 +1123,7 @@ describe("Pack local data clearing", () => {
                   returnType: "GSTR-3B",
                   status: "running",
                   attempts: 1,
-                  safeSignals: [],
-                  safeMessage: "Checking April.",
+                  ...durableGstr3bTargetStatus("April", "running", []),
                   updatedAt: "2026-06-24T00:00:00.000Z",
                 },
               ],
@@ -885,7 +1140,7 @@ describe("Pack local data clearing", () => {
       status: "blocked",
       currentPeriod: "April",
       fullFiscalYearRecovery: {
-        ledgerId: "ledger-existing",
+        ledgerId: fullFiscalYearLedgerIds.existing,
         targetId: "GSTR-3B:2026-27:April",
         expectedRevision: 2,
         targetStatus: "running",
@@ -897,16 +1152,81 @@ describe("Pack local data clearing", () => {
   });
 });
 
+function localDataRaceDeps() {
+  return {
+    clearableLocalStorageKeys: [
+      "pack:active-filed-returns-run",
+      "pack:filed-returns-target-review",
+      "pack:full-fiscal-year-ledger",
+      "pack:single-period-staging",
+    ],
+    storageKeys: {
+      activeRun: "pack:active-filed-returns-run",
+      fullFiscalYearLedger: "pack:full-fiscal-year-ledger",
+      targetReview: "pack:filed-returns-target-review",
+    },
+  };
+}
+
+function installStatefulLocalStorage(
+  initialState: Record<string, unknown>,
+  events: string[] = [],
+): Record<string, unknown> {
+  const state = { ...initialState };
+  browserMocks.storage.local.get.mockImplementation(async (keys: unknown) => {
+    if (typeof keys === "string") {
+      return Object.hasOwn(state, keys) ? { [keys]: state[keys] } : {};
+    }
+    if (Array.isArray(keys)) {
+      return Object.fromEntries(
+        keys
+          .filter((key): key is string => typeof key === "string" && Object.hasOwn(state, key))
+          .map((key) => [key, state[key]]),
+      );
+    }
+    return { ...state };
+  });
+  (
+    browserMocks.storage.local.set as unknown as {
+      mockImplementation: (
+        implementation: (values: Record<string, unknown>) => Promise<void>,
+      ) => void;
+    }
+  ).mockImplementation(async (values) => {
+    Object.assign(state, values);
+    if (Object.hasOwn(values, "pack:active-filed-returns-run")) {
+      events.push("active-run-acquired");
+    }
+  });
+  (
+    browserMocks.storage.local.remove as unknown as {
+      mockImplementation: (implementation: (keys: string | string[]) => Promise<void>) => void;
+    }
+  ).mockImplementation(async (keys) => {
+    for (const key of Array.isArray(keys) ? keys : [keys]) delete state[key];
+    events.push("local-storage-removed");
+  });
+  return state;
+}
+
 function createDurableZipPhaseLedger(
   zipPhase: NonNullable<FiledReturnsFullFiscalYearLedger["zipPhase"]>,
 ): FiledReturnsFullFiscalYearLedger {
   const updatedAt = "2026-06-24T00:10:00.000Z";
   return {
     schemaVersion: "1.0",
-    ledgerId: "ledger-durable-zip-phase",
+    planVersion: FULL_FISCAL_YEAR_PLAN_VERSION,
+    eligibleThrough: "May",
+    lastReconciledAt: updatedAt,
+    ledgerId: fullFiscalYearLedgerIds.durableZipPhase,
     revision: 4,
     status: zipPhase === "cleaned" ? "complete" : "blocked",
     zipPhase,
+    ...(zipPhase === "download-intent-persisted"
+      ? { zipDownloadAttempt: { requestedAt: updatedAt } }
+      : zipPhase === "download-observing"
+        ? { zipDownloadAttempt: { requestedAt: updatedAt, downloadId: 81 } }
+        : {}),
     scope: {
       financialYear: "2026-27",
       period: FULL_FISCAL_YEAR_PERIOD,
@@ -914,19 +1234,60 @@ function createDurableZipPhaseLedger(
     },
     createdAt: "2026-06-24T00:00:00.000Z",
     updatedAt,
-    targets: [
-      {
-        targetId: "GSTR-3B:2026-27:April",
-        financialYear: "2026-27",
-        period: "April",
-        returnType: "GSTR-3B",
-        status: "downloaded",
-        attempts: 1,
-        safeSignals: ["full-fiscal-year-opfs-staged:PDF"],
-        safeMessage: "Staged.",
-        updatedAt,
-        completedAt: updatedAt,
-      },
-    ],
+    targets: (["April", "May"] as const).map((period) => ({
+      targetId: `GSTR-3B:2026-27:${period}`,
+      financialYear: "2026-27",
+      period,
+      returnType: "GSTR-3B",
+      status: "downloaded",
+      attempts: 1,
+      ...durableGstr3bTargetStatus(period, "downloaded", ["full-fiscal-year-opfs-staged:PDF"]),
+      updatedAt,
+      completedAt: updatedAt,
+    })),
+  };
+}
+
+function durableGstr3bTargetStatus(
+  period: "April" | "May",
+  status: FiledReturnsFullFiscalYearLedger["targets"][number]["status"],
+  safeSignals: string[],
+): {
+  downloadDiagnostic?: FiledReturnsDownloadDiagnostic;
+  safeMessage: string;
+  safeSignals: string[];
+} {
+  const durableStatus = canonicalDurableTargetStatus(
+    {
+      financialYear: "2026-27",
+      period,
+      returnType: "GSTR-3B",
+    },
+    status,
+    safeSignals,
+  );
+  return status === "downloaded"
+    ? { ...durableStatus, downloadDiagnostic: positiveGstr3bDownloadDiagnostic(period) }
+    : durableStatus;
+}
+
+function positiveGstr3bDownloadDiagnostic(
+  period: "April" | "May",
+  downloadId?: number,
+): FiledReturnsDownloadDiagnostic {
+  return {
+    actionId: `action-87654321-${period === "April" ? "april001" : "may00001"}`,
+    artifactType: "PDF",
+    byteCountClass: "non-empty",
+    ...(downloadId !== undefined ? { downloadId } : {}),
+    downloadPathClass: "captured-portal-request-data",
+    endpointClass: "gstr3b-portal-blob-captured-download",
+    eventType: "filed-return-download-path",
+    financialYear: "2026-27",
+    mimeClass: "pdf",
+    period,
+    returnType: "GSTR-3B",
+    schemaVersion: "1.0",
+    status: "downloaded",
   };
 }

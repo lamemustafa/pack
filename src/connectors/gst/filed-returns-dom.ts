@@ -14,6 +14,17 @@ export function getClickableElements(root: ParentNode): HTMLElement[] {
   );
 }
 
+export function getActionableExactSearchControls(root: ParentNode): HTMLElement[] {
+  return getClickableElements(root).filter(
+    (element) => isActionablePortalControl(element) && hasExactSearchText(element),
+  );
+}
+
+export function findUniqueActionableExactSearchControl(root: ParentNode): HTMLElement | null {
+  const matches = getActionableExactSearchControls(root);
+  return matches.length === 1 ? (matches[0] ?? null) : null;
+}
+
 export function activateElement(element: HTMLElement) {
   element.scrollIntoView?.({ block: "center", inline: "center" });
   const MouseEventConstructor = element.ownerDocument.defaultView?.MouseEvent;
@@ -29,15 +40,6 @@ export function activateElement(element: HTMLElement) {
     }
   }
   clickPortalElement(element);
-}
-
-export function scheduleElementActivation(element: HTMLElement): void {
-  const view = element.ownerDocument.defaultView;
-  if (view) {
-    view.setTimeout(() => activateElement(element), 0);
-    return;
-  }
-  globalThis.setTimeout(() => activateElement(element), 0);
 }
 
 export function clickPortalElement(element: HTMLElement): void {
@@ -118,12 +120,62 @@ export function isVisible(element: HTMLElement): boolean {
   return rect.width > 0 || rect.height > 0 || Boolean(element.offsetParent);
 }
 
+export function isActionablePortalControl(element: HTMLElement): boolean {
+  if (!element.isConnected) return false;
+  const view = element.ownerDocument.defaultView;
+  let current: HTMLElement | null = element;
+  while (current) {
+    if (
+      current.matches(":disabled") ||
+      current.hidden ||
+      current.classList.contains("disabled") ||
+      current.hasAttribute("inert") ||
+      normaliseText(current.getAttribute("aria-hidden") ?? "") === "true" ||
+      normaliseText(current.getAttribute("aria-disabled") ?? "") === "true"
+    ) {
+      return false;
+    }
+
+    const style = view?.getComputedStyle(current);
+    if (
+      style &&
+      (style.display === "none" ||
+        style.visibility === "hidden" ||
+        style.visibility === "collapse" ||
+        style.opacity === "0" ||
+        style.pointerEvents === "none")
+    ) {
+      return false;
+    }
+
+    current = current.parentElement;
+  }
+
+  return true;
+}
+
 export function delay(ms: number): Promise<void> {
   return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
 }
 
 function normaliseComparable(value: string): string {
   return normaliseText(value).replace(/[^a-z0-9]/g, "");
+}
+
+function hasExactSearchText(element: HTMLElement): boolean {
+  const HTMLInputElementConstructor = element.ownerDocument.defaultView?.HTMLInputElement;
+  const inputValue =
+    HTMLInputElementConstructor && element instanceof HTMLInputElementConstructor
+      ? element.value
+      : "";
+  const textCandidates = [
+    element.innerText || "",
+    element.textContent || "",
+    inputValue,
+    element.getAttribute("aria-label") ?? "",
+    element.getAttribute("title") ?? "",
+  ];
+  return textCandidates.some((text) => normaliseText(text) === "search");
 }
 
 function containsComparableWithoutNumericPrefixCollision(

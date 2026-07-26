@@ -287,13 +287,13 @@ describe("filed returns private observer", () => {
   it("redacts sensitive identifiers from safe diagnostic labels", () => {
     const observation = observeFiledReturnsPageText(`
       View Filed Returns
-      29ABCDE1234F1Z5
-      ARN AA2901234567890
+      00XXXXX0000X0Z0
+      ARN AA0000000000000
       GSTR-3B Filed Download PDF
     `);
 
-    expect(JSON.stringify(observation)).not.toContain("29ABCDE1234F1Z5");
-    expect(JSON.stringify(observation)).not.toContain("AA2901234567890");
+    expect(JSON.stringify(observation)).not.toContain("00XXXXX0000X0Z0");
+    expect(JSON.stringify(observation)).not.toContain("AA0000000000000");
   });
 
   it("recognises the live e-filed returns route even when text is sparse", () => {

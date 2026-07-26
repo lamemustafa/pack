@@ -22,4 +22,28 @@ describe("main world capture contracts", () => {
       }),
     ).toBe(false);
   });
+
+  it("accepts only canonical optional delegation timestamps and known keys", () => {
+    expect(
+      isMainWorldCaptureOutcome({
+        capturedDownloadRequest: null,
+        safeFailureSignals: ["filed-gstr3b-target-bound-native-blob-click-delegated"],
+        targetBoundNativeDelegatedAt: "2026-06-24T00:00:00.100Z",
+      }),
+    ).toBe(true);
+    expect(
+      isMainWorldCaptureOutcome({
+        capturedDownloadRequest: null,
+        safeFailureSignals: [],
+        targetBoundNativeDelegatedAt: "not-a-timestamp",
+      }),
+    ).toBe(false);
+    expect(
+      isMainWorldCaptureOutcome({
+        capturedDownloadRequest: null,
+        extra: "page-controlled",
+        safeFailureSignals: [],
+      }),
+    ).toBe(false);
+  });
 });

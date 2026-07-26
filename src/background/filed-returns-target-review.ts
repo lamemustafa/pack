@@ -2,18 +2,39 @@ import { browser } from "wxt/browser";
 import type {
   FiledReturnsDownloadScope,
   FiledReturnsFlowSummary,
+  FiledReturnsTargetDownloadAttempt,
   FiledReturnsTargetReview,
   PortalFlowStepResult,
-} from "../core/contracts";
+} from "../connectors/gst/filed-returns-contracts";
 import {
   concreteFiledReturnsArtifactTypes,
   normaliseFiledReturnsArtifactType,
-} from "../core/filed-returns-artifacts";
-import { isFiledReturnsReturnType } from "../core/filed-returns-return-types";
-import type { PackMessageResponse } from "../core/messages";
+} from "../connectors/gst/filed-returns-artifacts";
+import type { PackMessageResponse } from "../connectors/gst/messages";
+import {
+  canonicalDurableTargetStatus,
+  parseDurableFiledReturnsScope,
+  parseDurableTargetStatus,
+} from "../connectors/gst/filed-returns-durable-status";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
+import { isCanonicalSinglePeriodLedgerId } from "../connectors/gst/filed-returns-ledger-id";
 import { readSinglePeriodStagingRecord } from "./filed-returns-artifact-progress";
-import { discardSinglePeriodFiledReturnsZip } from "./filed-returns-full-fiscal-year-zip";
+import { isFiledReturnsTargetDownloadAttempt } from "./filed-returns-target-download-attempt-validation";
+import {
+  copyFiledReturnsDownloadDiagnosticState,
+  isValidFiledReturnsDownloadDiagnosticState,
+  mergeFiledReturnsDownloadDiagnosticState,
+} from "./filed-returns-download-diagnostic-state";
+import { persistCanonicalFiledReturnsFlowSummary } from "./filed-returns-session-summary";
+import {
+  cleanupSinglePeriodBundleStaging,
+  type SinglePeriodBundleCleanupResult,
+} from "./filed-returns-single-period-bundle-cleanup";
+import {
+  readSinglePeriodBundleLedgerStorageState,
+  sameSinglePeriodBundleScope,
+  type SinglePeriodBundleLedger,
+} from "./filed-returns-single-period-bundle-ledger";
 
 export interface FiledReturnsTargetReviewDeps {
   storageKeys: {
@@ -23,6 +44,20 @@ export interface FiledReturnsTargetReviewDeps {
   now?: () => Date;
 }
 
+export type FiledReturnsTargetReviewStorageState =
+  | { state: "missing" }
+  | { state: "malformed" }
+  | { review: FiledReturnsTargetReview; state: "valid" };
+
+interface PersistFiledReturnsTargetReviewOptions {
+  downloadAttempt?: FiledReturnsTargetDownloadAttempt;
+  singlePeriodBundleCheckpoint?: NonNullable<
+    FiledReturnsTargetReview["singlePeriodBundleCheckpoint"]
+  >;
+}
+
+let targetReviewMutationCriticalSection = Promise.resolve();
+
 export async function readFiledReturnsTargetReview(
   scope: FiledReturnsDownloadScope,
   deps: FiledReturnsTargetReviewDeps,
@@ -30,20 +65,25 @@ export async function readFiledReturnsTargetReview(
   const key = deps.storageKeys.targetReview;
   if (!key) return null;
 
-  const values = await browser.storage.local.get(key);
-  const review = parseFiledReturnsTargetReview(values[key]);
-  if (!review || !sameFiledReturnsScope(review.scope, scope)) return null;
-  return review;
+  const state = await readCanonicalTargetReviewStorageStateByKey(key);
+  return state.state === "valid" && sameFiledReturnsScope(state.review.scope, scope)
+    ? state.review
+    : null;
 }
 
 export async function readCurrentFiledReturnsTargetReview(
   deps: FiledReturnsTargetReviewDeps,
 ): Promise<FiledReturnsTargetReview | null> {
-  const key = deps.storageKeys.targetReview;
-  if (!key) return null;
+  const state = await readCurrentFiledReturnsTargetReviewStorageState(deps);
+  return state.state === "valid" ? state.review : null;
+}
 
-  const values = await browser.storage.local.get(key);
-  return parseFiledReturnsTargetReview(values[key]);
+export async function readCurrentFiledReturnsTargetReviewStorageState(
+  deps: FiledReturnsTargetReviewDeps,
+): Promise<FiledReturnsTargetReviewStorageState> {
+  const key = deps.storageKeys.targetReview;
+  if (!key) return { state: "missing" };
+  return readCanonicalTargetReviewStorageStateByKey(key);
 }
 
 export async function readCurrentFiledReturnsTargetReviewSummary(
@@ -68,164 +108,567 @@ export async function persistFiledReturnsTargetReview(
   scope: FiledReturnsDownloadScope,
   flowStep: PortalFlowStepResult,
   deps: FiledReturnsTargetReviewDeps,
+  options: PersistFiledReturnsTargetReviewOptions = {},
 ): Promise<FiledReturnsFlowSummary | null> {
   const key = deps.storageKeys.targetReview;
   if (!key || !requiresTargetReview(flowStep)) return null;
 
-  const timestamp = (deps.now?.() ?? new Date()).toISOString();
-  const review = {
-    schemaVersion: "1.0",
-    targetId: createTargetId(scope),
-    status: "download-unconfirmed",
-    scope,
-    safeSignals: flowStep.safeSignals,
-    safeMessage: flowStep.safeMessage,
-    updatedAt: timestamp,
-  } satisfies FiledReturnsTargetReview;
-  await browser.storage.local.set({
-    [key]: review,
+  return runTargetReviewMutationCriticalSection(async () => {
+    const state = await readTargetReviewStorageStateByKey(key);
+    if (state.state === "malformed") return null;
+    if (state.state === "valid" && !sameFiledReturnsScope(state.review.scope, scope)) return null;
+
+    const existingReview = state.state === "valid" ? state.review : null;
+    const diagnosticState = mergeFiledReturnsDownloadDiagnosticState(
+      existingReview ?? {},
+      flowStep,
+      scope,
+    );
+    const diagnosticsRejected = diagnosticState === null;
+    const durableStatus = canonicalDurableTargetStatus(
+      scope,
+      "target-review",
+      diagnosticsRejected
+        ? uniqueSafeSignals([...flowStep.safeSignals, "filed-return-download-diagnostics-rejected"])
+        : flowStep.safeSignals,
+    );
+    const review = {
+      ...(options.downloadAttempt
+        ? { downloadAttempt: options.downloadAttempt }
+        : existingReview?.downloadAttempt
+          ? { downloadAttempt: existingReview.downloadAttempt }
+          : {}),
+      ...(options.singlePeriodBundleCheckpoint
+        ? { singlePeriodBundleCheckpoint: options.singlePeriodBundleCheckpoint }
+        : existingReview?.singlePeriodBundleCheckpoint
+          ? { singlePeriodBundleCheckpoint: existingReview.singlePeriodBundleCheckpoint }
+          : {}),
+      ...(diagnosticState ?? copyFiledReturnsDownloadDiagnosticState(existingReview ?? {})),
+      revision: nextTargetReviewRevision(existingReview),
+      schemaVersion: "1.0",
+      targetId: createTargetId(scope),
+      status: "download-unconfirmed",
+      scope: canonicalTargetReviewScope(scope),
+      ...durableStatus,
+      updatedAt: (deps.now?.() ?? new Date()).toISOString(),
+    } satisfies FiledReturnsTargetReview;
+    const parsedReview = parseFiledReturnsTargetReview(review);
+    if (!parsedReview) return null;
+    await browser.storage.local.set({ [key]: parsedReview });
+    return toTargetReviewSummary(parsedReview);
   });
-  return toTargetReviewSummary(review);
+}
+
+export async function replaceFiledReturnsTargetReview(
+  review: FiledReturnsTargetReview,
+  deps: FiledReturnsTargetReviewDeps,
+): Promise<boolean> {
+  const key = deps.storageKeys.targetReview;
+  if (!key) return false;
+  return runTargetReviewMutationCriticalSection(async () => {
+    const state = await readTargetReviewStorageStateByKey(key);
+    if (state.state !== "valid") return false;
+    if (
+      state.review.targetId !== review.targetId ||
+      targetReviewRevision(state.review) !== targetReviewRevision(review) ||
+      !sameFiledReturnsScope(state.review.scope, review.scope)
+    ) {
+      return false;
+    }
+    const nextReview = {
+      ...review,
+      revision: targetReviewRevision(state.review) + 1,
+    } satisfies FiledReturnsTargetReview;
+    const parsedReview = parseFiledReturnsTargetReview(nextReview);
+    if (!parsedReview) return false;
+    await browser.storage.local.set({ [key]: parsedReview });
+    return true;
+  });
+}
+
+export async function updateFiledReturnsTargetReview(
+  scope: FiledReturnsDownloadScope,
+  deps: FiledReturnsTargetReviewDeps,
+  update: (review: FiledReturnsTargetReview) => FiledReturnsTargetReview | null,
+): Promise<boolean> {
+  const key = deps.storageKeys.targetReview;
+  if (!key) return false;
+  return runTargetReviewMutationCriticalSection(async () => {
+    const state = await readTargetReviewStorageStateByKey(key);
+    if (state.state !== "valid" || !sameFiledReturnsScope(state.review.scope, scope)) return false;
+    const updated = update(state.review);
+    if (
+      !updated ||
+      updated.targetId !== state.review.targetId ||
+      !sameFiledReturnsScope(updated.scope, state.review.scope)
+    ) {
+      return false;
+    }
+    const nextReview = {
+      ...updated,
+      revision: targetReviewRevision(state.review) + 1,
+    } satisfies FiledReturnsTargetReview;
+    const parsedReview = parseFiledReturnsTargetReview(nextReview);
+    if (!parsedReview) return false;
+    await browser.storage.local.set({ [key]: parsedReview });
+    return true;
+  });
 }
 
 export async function clearFiledReturnsTargetReview(
   scope: FiledReturnsDownloadScope,
   deps: FiledReturnsTargetReviewDeps,
-): Promise<void> {
+  expectedRevision?: number,
+): Promise<boolean> {
   const key = deps.storageKeys.targetReview;
-  if (!key) return;
+  if (!key) return false;
+  if (
+    expectedRevision !== undefined &&
+    (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1 || expectedRevision > 10_000)
+  ) {
+    return false;
+  }
 
-  const review = await readFiledReturnsTargetReview(scope, deps);
-  if (review) await browser.storage.local.remove(key);
+  return runTargetReviewMutationCriticalSection(async () => {
+    const state = await readTargetReviewStorageStateByKey(key);
+    if (state.state !== "valid" || !sameFiledReturnsScope(state.review.scope, scope)) return false;
+    if (expectedRevision !== undefined && targetReviewRevision(state.review) !== expectedRevision) {
+      return false;
+    }
+    await browser.storage.local.remove(key);
+    return true;
+  });
 }
 
 export async function resolveUnconfirmedFiledReturnsDownload(
   scope: FiledReturnsDownloadScope,
-  resolution: "downloaded" | "cancelled",
+  resolution: "manually-observed" | "cancelled",
   deps: FiledReturnsTargetReviewDeps,
 ): Promise<PackMessageResponse> {
-  const review = await readFiledReturnsTargetReview(scope, deps);
-  if (!review) return noTargetReviewResponse(scope);
-  if (
-    hasSinglePeriodCleanupFailure(review.safeSignals) ||
-    (resolution === "downloaded" && review.safeSignals.includes("single-period-zip-incomplete"))
-  ) {
-    return responseForFiledReturnsTargetReview(review);
-  }
+  const key = deps.storageKeys.targetReview;
+  if (!key) return noTargetReviewResponse(scope);
+  return runTargetReviewMutationCriticalSection(async () => {
+    const state = await readTargetReviewStorageStateByKey(key);
+    if (state.state === "malformed") return malformedTargetReviewResponse(scope);
+    if (state.state !== "valid" || !sameFiledReturnsScope(state.review.scope, scope)) {
+      return noTargetReviewResponse(scope);
+    }
+    const review = state.review;
+    const hasCleanupFailure = hasSinglePeriodCleanupFailure(review.safeSignals);
+    if (hasCleanupFailure && resolution !== "cancelled") {
+      return responseForFiledReturnsTargetReview(review);
+    }
 
-  await clearFiledReturnsTargetReview(scope, deps);
-  const flowStep: PortalFlowStepResult = {
-    connectorId: "gst",
-    scopeId: filedReturnScopeId(scope.returnType),
-    state: resolution === "downloaded" ? "downloaded" : "user-action-required",
-    safeSignals: [
-      resolution === "downloaded"
-        ? "filed-returns-target-manually-confirmed"
-        : "filed-returns-target-cancelled",
-    ],
-    safeMessage:
-      resolution === "downloaded"
-        ? "Pack marked the unresolved filed-return download as manually reviewed."
-        : "Pack cancelled the unresolved filed-return target. No portal click was retried.",
-  };
-  const flowSummary: FiledReturnsFlowSummary = {
-    scope,
-    status: resolution === "downloaded" ? "complete" : "cancelled",
-    completedPeriods: resolution === "downloaded" ? [scope.period] : [],
-    totalPeriods: 1,
-    updatedAt: (deps.now?.() ?? new Date()).toISOString(),
-    flowStep,
-  };
-  await persistResolvedTargetReviewSummary(flowSummary, deps);
-  return {
-    ok: true,
-    flowStep,
-    flowSummary,
-  };
+    if (resolution === "manually-observed") {
+      const updatedReview: FiledReturnsTargetReview = {
+        ...review,
+        revision: targetReviewRevision(review) + 1,
+        safeSignals: uniqueSafeSignals([
+          ...review.safeSignals,
+          "filed-returns-target-manually-observed",
+        ]),
+        safeMessage:
+          "Pack recorded a manual observation, but it cannot verify this download. Retry or cancel the target before treating it as complete.",
+        updatedAt: (deps.now?.() ?? new Date()).toISOString(),
+      };
+      const parsedReview = parseFiledReturnsTargetReview(updatedReview);
+      if (!parsedReview) return malformedTargetReviewResponse(scope);
+      await browser.storage.local.set({ [key]: parsedReview });
+      return responseForFiledReturnsTargetReview(parsedReview);
+    }
+
+    if (review.downloadAttempt?.phase === "download-observing" && !hasCleanupFailure) {
+      return responseForFiledReturnsTargetReview({
+        ...review,
+        safeSignals: uniqueSafeSignals([
+          ...review.safeSignals,
+          "filed-returns-download-reconciliation-required",
+        ]),
+        safeMessage:
+          "Pack still has an exact browser download ID for this target. Retry the target so Pack can reconcile that ID before cancellation.",
+      });
+    }
+
+    const cancelledZipCleanup = await cleanupCancelledSinglePeriodZip(review);
+    if (cancelledZipCleanup?.state === "blocked") {
+      const cleanupReview: FiledReturnsTargetReview = {
+        ...review,
+        revision: targetReviewRevision(review) + 1,
+        safeSignals: uniqueSafeSignals([
+          ...review.safeSignals,
+          "single-period-zip-cancel-cleanup-failed",
+          ...cancelledZipCleanup.safeSignals,
+        ]),
+        safeMessage: cancelledZipCleanup.transientStagingCleared
+          ? "Pack cleared temporary selected-file staging but could not verify its durable cancellation checkpoint."
+          : "Pack could not cancel this selected-file ZIP because its temporary local staging could not be cleared.",
+        updatedAt: (deps.now?.() ?? new Date()).toISOString(),
+      };
+      const parsedReview = parseFiledReturnsTargetReview(cleanupReview);
+      if (!parsedReview) return malformedTargetReviewResponse(scope);
+      await browser.storage.local.set({ [key]: parsedReview });
+      return responseForFiledReturnsTargetReview(parsedReview);
+    }
+
+    await browser.storage.local.remove(key);
+    const flowStep: PortalFlowStepResult = {
+      connectorId: "gst",
+      scopeId: filedReturnScopeId(scope.returnType),
+      state: "user-action-required",
+      safeSignals: ["filed-returns-target-cancelled", ...(cancelledZipCleanup?.safeSignals ?? [])],
+      safeMessage:
+        "Pack cancelled the unresolved filed-return target. No portal click was retried.",
+      ...copyFiledReturnsDownloadDiagnosticState(review),
+    };
+    const flowSummary: FiledReturnsFlowSummary = {
+      scope: canonicalTargetReviewScope(scope),
+      status: "cancelled",
+      completedPeriods: [],
+      totalPeriods: 1,
+      updatedAt: (deps.now?.() ?? new Date()).toISOString(),
+      flowStep,
+    };
+    await persistResolvedTargetReviewSummary(flowSummary, deps);
+    return { ok: true, flowStep, flowSummary };
+  });
 }
 
 export async function retryCompletedSinglePeriodZipCleanup(
   scope: FiledReturnsDownloadScope,
   deps: FiledReturnsTargetReviewDeps,
 ): Promise<PackMessageResponse | null> {
-  const review = await readFiledReturnsTargetReview(scope, deps);
-  if (!review || !hasSinglePeriodCleanupFailure(review.safeSignals)) return null;
+  const key = deps.storageKeys.targetReview;
+  if (!key) return null;
+  return runTargetReviewMutationCriticalSection(async () => {
+    const state = await readTargetReviewStorageStateByKey(key);
+    if (
+      state.state !== "valid" ||
+      !sameFiledReturnsScope(state.review.scope, scope) ||
+      !hasSinglePeriodCleanupFailure(state.review.safeSignals)
+    ) {
+      return null;
+    }
+    const review = state.review;
+    const attemptLedgerId =
+      review.downloadAttempt?.kind === "single-period-zip"
+        ? review.downloadAttempt.stagingLedgerId
+        : null;
+    let cleanupLedgerId = attemptLedgerId;
+    let expectedLedger: SinglePeriodBundleLedger | undefined;
+    if (attemptLedgerId) {
+      let stagingRecord;
+      try {
+        stagingRecord = await readSinglePeriodStagingRecord();
+      } catch {
+        return responseForFiledReturnsTargetReview(review);
+      }
+      if (stagingRecord && stagingRecord.ledgerId !== attemptLedgerId) {
+        return responseForFiledReturnsTargetReview(review);
+      }
+    } else {
+      const cleanupTarget = await readScopeBoundSinglePeriodCleanupTarget(
+        review,
+        isInterruptedSinglePeriodBundleReview(review),
+      );
+      if (cleanupTarget.state === "blocked") {
+        return responseForFiledReturnsTargetReview(review);
+      }
+      cleanupLedgerId = cleanupTarget.ledgerId;
+      expectedLedger = cleanupTarget.expectedLedger;
+    }
+    if (!cleanupLedgerId) return responseForFiledReturnsTargetReview(review);
+    const cleanup = await cleanupSinglePeriodBundleStaging({
+      ...(expectedLedger ? { expectedLedger } : {}),
+      ledgerId: cleanupLedgerId,
+      scope,
+    });
+    if (cleanup.state === "blocked") {
+      return responseForFiledReturnsTargetReview(review);
+    }
 
-  let stagingRecord;
-  try {
-    stagingRecord = await readSinglePeriodStagingRecord();
-  } catch {
-    return responseForFiledReturnsTargetReview(review);
-  }
-  const clearSignal = stagingRecord
-    ? await discardSinglePeriodFiledReturnsZip(stagingRecord.ledgerId)
-    : "single-period-opfs-cleared";
-  if (clearSignal !== "single-period-opfs-cleared") {
-    return responseForFiledReturnsTargetReview(review);
-  }
-
-  await clearFiledReturnsTargetReview(scope, deps);
-  const flowStep: PortalFlowStepResult = {
-    connectorId: "gst",
-    scopeId: filedReturnScopeId(scope.returnType),
-    state: "downloaded",
-    safeSignals: [
-      "single-period-zip-downloaded",
-      "single-period-opfs-cleanup-completed",
-      clearSignal,
-    ],
-    safeMessage:
-      "Pack kept the completed selected-file ZIP and cleared its temporary local staging.",
-  };
-  const flowSummary: FiledReturnsFlowSummary = {
-    scope,
-    status: "complete",
-    completedPeriods: [scope.period],
-    totalPeriods: 1,
-    updatedAt: (deps.now?.() ?? new Date()).toISOString(),
-    flowStep,
-  };
-  await persistResolvedTargetReviewSummary(flowSummary, deps);
-  return { ok: true, flowStep, flowSummary };
+    const cancelled = review.safeSignals.includes("single-period-zip-cancel-cleanup-failed");
+    const flowStep: PortalFlowStepResult = {
+      connectorId: "gst",
+      scopeId: filedReturnScopeId(scope.returnType),
+      state: cancelled ? "user-action-required" : "downloaded",
+      safeSignals: Array.from(
+        new Set([
+          ...review.safeSignals,
+          ...(cancelled ? ["filed-returns-target-cancelled"] : ["single-period-zip-downloaded"]),
+          "single-period-opfs-cleanup-completed",
+          ...cleanup.safeSignals,
+        ]),
+      ),
+      safeMessage: cancelled
+        ? "Pack cancelled the selected-file ZIP and cleared its temporary local staging."
+        : "Pack kept the completed selected-file ZIP and cleared its temporary local staging.",
+      ...copyFiledReturnsDownloadDiagnosticState(review),
+    };
+    const flowSummary: FiledReturnsFlowSummary = {
+      scope: canonicalTargetReviewScope(scope),
+      status: cancelled ? "cancelled" : "complete",
+      completedPeriods: cancelled ? [] : [scope.period],
+      currentPeriod: scope.period,
+      totalPeriods: 1,
+      updatedAt: (deps.now?.() ?? new Date()).toISOString(),
+      flowStep,
+    };
+    const durableSummary = await persistResolvedTargetReviewSummary(flowSummary, deps);
+    if (!durableSummary) return responseForFiledReturnsTargetReview(review);
+    await browser.storage.local.remove(key);
+    return {
+      ok: true,
+      flowStep: durableSummary.flowStep,
+      flowSummary: durableSummary,
+    };
+  });
 }
 
-async function persistResolvedTargetReviewSummary(
+export async function persistResolvedTargetReviewSummary(
   flowSummary: FiledReturnsFlowSummary,
   deps: FiledReturnsTargetReviewDeps,
-): Promise<void> {
+): Promise<FiledReturnsFlowSummary | null> {
   const key = deps.storageKeys.completion;
-  if (!key) return;
-  await browser.storage.session.set({ [key]: flowSummary });
+  if (!key) return null;
+  return persistCanonicalFiledReturnsFlowSummary(key, flowSummary);
 }
 
 function parseFiledReturnsTargetReview(input: unknown): FiledReturnsTargetReview | null {
   if (!input || typeof input !== "object") return null;
-  const review = input as Partial<FiledReturnsTargetReview>;
+  const review = input as Partial<FiledReturnsTargetReview> & Record<string, unknown>;
+  if (
+    !hasOnlyKeys(review, [
+      "downloadAttempt",
+      "downloadDiagnostic",
+      "downloadDiagnostics",
+      "revision",
+      "safeMessage",
+      "safeSignals",
+      "schemaVersion",
+      "singlePeriodBundleCheckpoint",
+      "scope",
+      "status",
+      "targetId",
+      "updatedAt",
+    ])
+  ) {
+    return null;
+  }
   if (review.schemaVersion !== "1.0") return null;
+  const revision = review.revision ?? 1;
+  if (
+    typeof revision !== "number" ||
+    !Number.isInteger(revision) ||
+    revision < 1 ||
+    revision > 10_000
+  ) {
+    return null;
+  }
   if (!isBoundedString(review.targetId, 1, 120)) return null;
   if (review.status !== "download-unconfirmed") return null;
-  if (!review.scope || typeof review.scope !== "object") return null;
-  if (review.targetId !== createTargetId(review.scope as FiledReturnsDownloadScope)) return null;
+  const scope = parseDurableFiledReturnsScope(review.scope, false);
+  if (!scope) return null;
+  if (review.targetId !== createTargetId(scope)) return null;
+  const durableStatus = parseDurableTargetStatus(scope, "target-review", review.safeSignals);
+  if (!durableStatus) return null;
   if (
-    typeof review.scope.financialYear !== "string" ||
-    typeof review.scope.period !== "string" ||
-    !isFiledReturnsReturnType(review.scope.returnType) ||
-    normaliseFiledReturnsArtifactType(review.scope.returnType, review.scope.artifactType) !==
-      (review.scope.artifactType ?? "PDF")
+    review.downloadAttempt !== undefined &&
+    (!isFiledReturnsTargetDownloadAttempt(review.downloadAttempt) ||
+      !downloadAttemptMatchesReviewScope(review.downloadAttempt, scope))
   ) {
     return null;
   }
+  const singlePeriodBundleCheckpoint = parseSinglePeriodBundleCheckpoint(
+    review.singlePeriodBundleCheckpoint,
+  );
+  if (review.singlePeriodBundleCheckpoint !== undefined && !singlePeriodBundleCheckpoint) {
+    return null;
+  }
   if (
-    !Array.isArray(review.safeSignals) ||
-    !review.safeSignals.every((signal) => isBoundedString(signal, 1, 160))
+    singlePeriodBundleCheckpoint &&
+    (normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType) !== "PDF_AND_EXCEL" ||
+      review.downloadAttempt !== undefined ||
+      !durableStatus.safeSignals.includes("single-period-bundle-artifact-review-required"))
   ) {
     return null;
   }
-  if (!isBoundedString(review.safeMessage, 1, 500)) return null;
-  if (typeof review.updatedAt !== "string" || !Number.isFinite(Date.parse(review.updatedAt))) {
+  if (!isValidFiledReturnsDownloadDiagnosticState(review, scope)) {
     return null;
   }
-  return review as FiledReturnsTargetReview;
+  if (!downloadAttemptMatchesDiagnosticIdentity(review.downloadAttempt, review)) {
+    return null;
+  }
+  if (!isCanonicalTimestamp(review.updatedAt)) {
+    return null;
+  }
+  return {
+    ...review,
+    ...durableStatus,
+    revision,
+    scope,
+    ...(singlePeriodBundleCheckpoint ? { singlePeriodBundleCheckpoint } : {}),
+  } as FiledReturnsTargetReview;
+}
+
+function parseSinglePeriodBundleCheckpoint(
+  input: unknown,
+): NonNullable<FiledReturnsTargetReview["singlePeriodBundleCheckpoint"]> | null {
+  if (input === undefined) return null;
+  if (!input || typeof input !== "object") return null;
+  const checkpoint = input as Record<string, unknown>;
+  if (!hasOnlyKeys(checkpoint, ["ledgerId", "revision"])) return null;
+  if (!isCanonicalSinglePeriodLedgerId(checkpoint.ledgerId)) return null;
+  if (
+    !Number.isSafeInteger(checkpoint.revision) ||
+    Number(checkpoint.revision) < 1 ||
+    Number(checkpoint.revision) > 1_000_000
+  ) {
+    return null;
+  }
+  return {
+    ledgerId: checkpoint.ledgerId as string,
+    revision: checkpoint.revision as number,
+  };
+}
+
+async function cleanupCancelledSinglePeriodZip(
+  review: FiledReturnsTargetReview,
+): Promise<SinglePeriodBundleCleanupResult | null> {
+  const attempt = review.downloadAttempt;
+  if (attempt?.kind === "single-period-zip") {
+    return cleanupSinglePeriodBundleStaging({
+      ledgerId: attempt.stagingLedgerId,
+      scope: review.scope,
+    });
+  }
+  if (!isInterruptedSinglePeriodBundleReview(review)) return null;
+
+  const cleanupTarget = await readScopeBoundSinglePeriodCleanupTarget(review, true);
+  if (cleanupTarget.state === "blocked") {
+    return {
+      state: "blocked",
+      safeSignals: cleanupTarget.safeSignals,
+      transientStagingCleared: false,
+    };
+  }
+  if (!cleanupTarget.expectedLedger) {
+    return {
+      state: "blocked",
+      safeSignals: ["single-period-bundle-revision-conflict", "single-period-opfs-retained"],
+      transientStagingCleared: false,
+    };
+  }
+  return cleanupSinglePeriodBundleStaging({
+    expectedLedger: cleanupTarget.expectedLedger,
+    ledgerId: cleanupTarget.ledgerId,
+    scope: review.scope,
+  });
+}
+
+type ScopeBoundSinglePeriodCleanupTarget =
+  | {
+      state: "blocked";
+      safeSignals: string[];
+    }
+  | {
+      state: "ready";
+      expectedLedger?: SinglePeriodBundleLedger;
+      ledgerId: string;
+    };
+
+async function readScopeBoundSinglePeriodCleanupTarget(
+  review: FiledReturnsTargetReview,
+  requireInterruptedArtifact: boolean,
+): Promise<ScopeBoundSinglePeriodCleanupTarget> {
+  let storageState;
+  try {
+    storageState = await readSinglePeriodBundleLedgerStorageState();
+  } catch {
+    return blockedScopeBoundCleanup("single-period-bundle-state-read-failed");
+  }
+
+  if (storageState.state === "missing") {
+    return blockedScopeBoundCleanup("single-period-zip-recovery-checkpoint-missing");
+  }
+  if (storageState.state === "malformed") {
+    return blockedScopeBoundCleanup("single-period-bundle-ledger-malformed");
+  }
+  if (storageState.state === "legacy") {
+    return requireInterruptedArtifact
+      ? blockedScopeBoundCleanup("single-period-bundle-revision-conflict")
+      : { ledgerId: storageState.ledgerId, state: "ready" };
+  }
+
+  const ledger = storageState.ledger;
+  if (!sameSinglePeriodBundleScope(ledger.scope, review.scope)) {
+    return blockedScopeBoundCleanup("single-period-bundle-scope-conflict");
+  }
+  const reviewCheckpoint = review.singlePeriodBundleCheckpoint;
+  if (
+    requireInterruptedArtifact &&
+    (!reviewCheckpoint ||
+      reviewCheckpoint.ledgerId !== ledger.ledgerId ||
+      reviewCheckpoint.revision !== ledger.revision)
+  ) {
+    return blockedScopeBoundCleanup("single-period-bundle-revision-conflict");
+  }
+  if (
+    requireInterruptedArtifact &&
+    ledger.phase !== "artifact-review" &&
+    !ledger.artifacts.some((artifact) => artifact.status === "running")
+  ) {
+    return blockedScopeBoundCleanup("single-period-bundle-revision-conflict");
+  }
+  return {
+    expectedLedger: ledger,
+    ledgerId: ledger.ledgerId,
+    state: "ready",
+  };
+}
+
+function blockedScopeBoundCleanup(signal: string): ScopeBoundSinglePeriodCleanupTarget {
+  return {
+    state: "blocked",
+    safeSignals: [signal, "single-period-opfs-retained"],
+  };
+}
+
+function isInterruptedSinglePeriodBundleReview(review: FiledReturnsTargetReview): boolean {
+  return (
+    review.downloadAttempt === undefined &&
+    review.safeSignals.includes("single-period-bundle-artifact-review-required") &&
+    review.safeSignals.includes("single-period-bundle-running-ambiguous")
+  );
+}
+
+function downloadAttemptMatchesReviewScope(
+  attempt: NonNullable<FiledReturnsTargetReview["downloadAttempt"]>,
+  scope: FiledReturnsDownloadScope,
+): boolean {
+  const selectedArtifact = normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType);
+  if (attempt.kind === "single-period-zip") return selectedArtifact === "PDF_AND_EXCEL";
+  if (attempt.phase === "target-bound-candidate-observing") {
+    return scope.returnType === "GSTR-3B" && selectedArtifact === "PDF";
+  }
+  return selectedArtifact === attempt.artifactType;
+}
+
+function downloadAttemptMatchesDiagnosticIdentity(
+  attempt: FiledReturnsTargetReview["downloadAttempt"],
+  diagnostics: Pick<FiledReturnsTargetReview, "downloadDiagnostic" | "downloadDiagnostics">,
+): boolean {
+  if (!attempt || attempt.kind !== "single-artifact") return true;
+  const entries =
+    diagnostics.downloadDiagnostics ??
+    (diagnostics.downloadDiagnostic ? [diagnostics.downloadDiagnostic] : []);
+  if (entries.some((diagnostic) => diagnostic.actionId !== attempt.actionId)) return false;
+  if (attempt.phase === "download-intent-persisted") {
+    return entries.every((diagnostic) => diagnostic.downloadId === undefined);
+  }
+  return entries.every(
+    (diagnostic) =>
+      diagnostic.downloadId === undefined || diagnostic.downloadId === attempt.downloadId,
+  );
 }
 
 function toTargetReviewSummary(
@@ -244,39 +687,138 @@ function toTargetReviewSummary(
 }
 
 function targetReviewStep(review: FiledReturnsTargetReview): PortalFlowStepResult {
-  if (hasSinglePeriodCleanupFailure(review.safeSignals)) {
+  if (review.safeSignals.includes("filed-return-durable-status-rejected")) {
+    const hasExactDownloadId = review.downloadAttempt?.phase === "download-observing";
     return {
       connectorId: "gst",
       scopeId: filedReturnScopeId(review.scope.returnType),
       state: "blocked",
-      safeSignals: ["single-period-opfs-clear-failed", "single-period-opfs-cleanup-required"],
-      safeMessage:
-        "Pack cannot complete this review while temporary selected-file staging remains uncleared.",
+      safeSignals: [
+        "filed-returns-target-review-required",
+        ...(hasExactDownloadId
+          ? ["filed-returns-download-reconciliation-required"]
+          : ["filed-returns-download-manual-review-required"]),
+        "filed-return-durable-status-rejected",
+        ...(review.safeSignals.includes("single-period-opfs-cleared")
+          ? ["single-period-opfs-cleared"]
+          : []),
+      ],
+      safeMessage: hasExactDownloadId
+        ? "Pack confirmed the exact browser download but could not save canonical target completion. It will not start another download automatically."
+        : "Pack rejected non-canonical recovery state and cannot verify whether a download started. It will not continue automatically.",
       userAction: {
         type: "RETRY_PORTAL_GENERATION",
-        message: "Retry so Pack can clear the retained temporary staging before completion.",
+        message: hasExactDownloadId
+          ? "Re-check the saved exact browser download ID without starting another download."
+          : "Review or cancel this target before starting another portal action.",
         canResume: true,
       },
+      ...copyFiledReturnsDownloadDiagnosticState(review),
     };
   }
+  if (hasSinglePeriodCleanupFailure(review.safeSignals)) {
+    const transientStagingCleared = review.safeSignals.includes("single-period-opfs-cleared");
+    return {
+      connectorId: "gst",
+      scopeId: filedReturnScopeId(review.scope.returnType),
+      state: "blocked",
+      safeSignals: [
+        "filed-returns-target-review-required",
+        "filed-returns-target-local-cleanup-required",
+        ...(transientStagingCleared
+          ? ["single-period-opfs-cleared", "single-period-cleanup-checkpoint-failed"]
+          : ["single-period-opfs-clear-failed", "single-period-opfs-cleanup-required"]),
+      ],
+      safeMessage: transientStagingCleared
+        ? "Pack cleared temporary selected-file staging but could not verify its durable recovery checkpoint cleanup."
+        : "Pack cannot complete this review while temporary selected-file staging remains uncleared.",
+      userAction: {
+        type: "RETRY_PORTAL_GENERATION",
+        message: transientStagingCleared
+          ? "Retry so Pack can reconcile the durable selected-file recovery checkpoint."
+          : "Retry so Pack can clear the retained temporary staging before completion.",
+        canResume: true,
+      },
+      ...copyFiledReturnsDownloadDiagnosticState(review),
+    };
+  }
+  const interruptedSinglePeriodBundle = isInterruptedSinglePeriodBundleReview(review);
   return {
     connectorId: "gst",
     scopeId: filedReturnScopeId(review.scope.returnType),
     state: "user-action-required",
-    safeSignals: [
+    safeSignals: uniqueSafeSignals([
       "filed-returns-target-review-required",
+      ...(review.downloadAttempt
+        ? [
+            review.downloadAttempt.phase === "download-observing"
+              ? "filed-returns-download-reconciliation-required"
+              : "filed-returns-download-manual-review-required",
+          ]
+        : []),
+      ...(review.safeSignals.includes("filed-returns-target-manually-observed")
+        ? ["filed-returns-target-manually-observed"]
+        : []),
       ...(review.safeSignals.includes("single-period-zip-incomplete")
         ? ["single-period-zip-incomplete"]
         : []),
-    ],
+      ...(interruptedSinglePeriodBundle
+        ? review.safeSignals.filter(
+            (signal) =>
+              [
+                "portal-system-error",
+                "single-period-bundle-artifact-review-required",
+                "single-period-bundle-running-ambiguous",
+                "single-period-opfs-retained",
+              ].includes(signal) || signal.endsWith("-main-world-capture-timeout"),
+          )
+        : []),
+      ...(hasSinglePeriodCleanupFailure(review.safeSignals)
+        ? ["filed-returns-target-local-cleanup-required"]
+        : []),
+      ...targetReviewDiagnosticSignals(review.safeSignals),
+    ]),
     safeMessage: review.safeMessage,
     userAction: {
       type: "RETRY_PORTAL_GENERATION",
-      message: "Choose an explicit retry or cancellation before Pack clicks this period again.",
-      canResume: true,
+      message: interruptedSinglePeriodBundle
+        ? "Cancel and reset this retained bundle before starting the selected target again."
+        : "Choose an explicit retry or cancellation before Pack clicks this period again.",
+      canResume: !interruptedSinglePeriodBundle,
     },
+    ...copyFiledReturnsDownloadDiagnosticState(review),
   };
 }
+
+function targetReviewDiagnosticSignals(safeSignals: readonly string[]): string[] {
+  return safeSignals.filter(
+    (signal) =>
+      TARGET_REVIEW_BROWSER_DIAGNOSTIC_SIGNALS.has(signal) ||
+      signal.endsWith("-main-world-capture-armed") ||
+      signal.endsWith("-main-world-capture-exception") ||
+      signal.endsWith("-main-world-capture-result-rejected") ||
+      signal.endsWith("-main-world-capture-timeout") ||
+      signal.endsWith("-target-bound-native-blob-click-delegated"),
+  );
+}
+
+const TARGET_REVIEW_BROWSER_DIAGNOSTIC_SIGNALS = new Set([
+  "browser-download-correlation-rejected",
+  "browser-download-danger-pending",
+  "browser-download-danger-rejected",
+  "browser-download-danger-unknown",
+  "browser-download-existence-unknown",
+  "browser-download-file-missing",
+  "browser-download-in-progress",
+  "browser-download-interrupted",
+  "browser-download-not-observed",
+  "browser-download-save-dialog-may-be-open",
+  "browser-download-search-missing",
+  "browser-download-search-unavailable",
+  "browser-download-size-unknown",
+  "browser-download-state-unconfirmed",
+  "browser-download-zero-bytes",
+]);
 
 export function noTargetReviewResponse(scope: FiledReturnsDownloadScope): PackMessageResponse {
   const flowStep: PortalFlowStepResult = {
@@ -300,8 +842,41 @@ export function noTargetReviewResponse(scope: FiledReturnsDownloadScope): PackMe
   };
 }
 
+export function malformedTargetReviewResponse(
+  scope: FiledReturnsDownloadScope,
+): PackMessageResponse {
+  const flowStep: PortalFlowStepResult = {
+    connectorId: "gst",
+    scopeId: filedReturnScopeId(scope.returnType),
+    state: "blocked",
+    safeSignals: ["filed-returns-target-review-malformed"],
+    safeMessage:
+      "Pack found damaged filed-return recovery metadata and cannot verify whether a browser download already started.",
+    userAction: {
+      type: "RETRY_PORTAL_GENERATION",
+      message:
+        "Check browser Downloads, then use Clear local Pack data before starting another filed-return download.",
+      canResume: false,
+    },
+  };
+  return {
+    ok: true,
+    flowStep,
+    flowSummary: {
+      scope,
+      status: "blocked",
+      completedPeriods: [],
+      totalPeriods: 1,
+      currentPeriod: scope.period,
+      flowStep,
+    },
+  };
+}
+
 function requiresTargetReview(step: PortalFlowStepResult): boolean {
   if (hasSinglePeriodCleanupFailure(step.safeSignals)) return true;
+  if (step.safeSignals.includes("single-period-bundle-artifact-review-required")) return true;
+  if (step.safeSignals.includes("filed-return-durable-status-rejected")) return true;
   if (step.safeSignals.includes("filed-gstr1-excel-no-details-available")) return false;
   return (
     step.state === "download-unconfirmed" ||
@@ -310,6 +885,7 @@ function requiresTargetReview(step: PortalFlowStepResult): boolean {
       [
         "browser-download-size-unknown",
         "browser-download-not-observed",
+        "browser-download-danger-rejected",
         "filed-return-download-trigger-ambiguous",
         "filed-gstr3b-download-trigger-ambiguous",
       ].includes(signal),
@@ -318,7 +894,89 @@ function requiresTargetReview(step: PortalFlowStepResult): boolean {
 }
 
 function hasSinglePeriodCleanupFailure(safeSignals: readonly string[]): boolean {
-  return safeSignals.includes("single-period-opfs-clear-failed");
+  return safeSignals.some((signal) =>
+    [
+      "single-period-opfs-clear-failed",
+      "single-period-cleanup-checkpoint-failed",
+      "single-period-bundle-ledger-malformed",
+      "single-period-bundle-scope-conflict",
+      "single-period-bundle-revision-conflict",
+      "single-period-bundle-state-read-failed",
+      "single-period-zip-cancel-cleanup-failed",
+    ].includes(signal),
+  );
+}
+
+function uniqueSafeSignals(safeSignals: readonly string[]): string[] {
+  return [...new Set(safeSignals)];
+}
+
+async function readTargetReviewStorageStateByKey(
+  key: string,
+): Promise<FiledReturnsTargetReviewStorageState> {
+  const values = await browser.storage.local.get(key);
+  const stored = values[key];
+  if (stored === undefined || stored === null) return { state: "missing" };
+  const review = parseFiledReturnsTargetReview(stored);
+  return review ? { review, state: "valid" } : { state: "malformed" };
+}
+
+async function readCanonicalTargetReviewStorageStateByKey(
+  key: string,
+): Promise<FiledReturnsTargetReviewStorageState> {
+  return runTargetReviewMutationCriticalSection(async () => {
+    const values = await browser.storage.local.get(key);
+    const stored = values[key];
+    if (stored === undefined || stored === null) return { state: "missing" };
+    const review = parseFiledReturnsTargetReview(stored);
+    if (!review) {
+      await browser.storage.local.remove(key);
+      return { state: "malformed" };
+    }
+    if (!hasEquivalentJsonValue(stored, review)) {
+      await browser.storage.local.set({ [key]: review });
+    }
+    return { review, state: "valid" };
+  });
+}
+
+function hasEquivalentJsonValue(left: unknown, right: unknown): boolean {
+  try {
+    return JSON.stringify(left) === JSON.stringify(right);
+  } catch {
+    return false;
+  }
+}
+
+async function runTargetReviewMutationCriticalSection<T>(action: () => Promise<T>): Promise<T> {
+  const previous = targetReviewMutationCriticalSection;
+  let release: () => void = () => undefined;
+  targetReviewMutationCriticalSection = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await previous;
+  try {
+    return await action();
+  } finally {
+    release();
+  }
+}
+
+function targetReviewRevision(review: FiledReturnsTargetReview): number {
+  return review.revision ?? 1;
+}
+
+function nextTargetReviewRevision(review: FiledReturnsTargetReview | null): number {
+  return review ? targetReviewRevision(review) + 1 : 1;
+}
+
+function canonicalTargetReviewScope(scope: FiledReturnsDownloadScope): FiledReturnsDownloadScope {
+  return {
+    financialYear: scope.financialYear,
+    period: scope.period,
+    returnType: scope.returnType,
+    ...(scope.artifactType ? { artifactType: scope.artifactType } : {}),
+  };
 }
 
 function sameFiledReturnsScope(
@@ -354,4 +1012,15 @@ function createTargetId(scope: FiledReturnsDownloadScope): string {
 
 function isBoundedString(input: unknown, minLength: number, maxLength: number): input is string {
   return typeof input === "string" && input.length >= minLength && input.length <= maxLength;
+}
+
+function hasOnlyKeys(input: Record<string, unknown>, allowedKeys: readonly string[]): boolean {
+  const allowed = new Set(allowedKeys);
+  return Object.keys(input).every((key) => allowed.has(key));
+}
+
+function isCanonicalTimestamp(input: unknown): input is string {
+  if (typeof input !== "string" || input.length > 40) return false;
+  const parsed = Date.parse(input);
+  return Number.isFinite(parsed) && new Date(parsed).toISOString() === input;
 }

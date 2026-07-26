@@ -7,9 +7,11 @@ export interface RequestTimingLike {
   startTime: number;
 }
 
-const GSTIN_PATTERN = /\b\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]\b/g;
-const PAN_PATTERN = /\b[A-Z]{5}\d{4}[A-Z]\b/g;
-const ARN_PATTERN = /\b[A-Z]{2}\d{13,}\b/g;
+const SENSITIVE_IDENTIFIER_PATTERNS = [
+  /\b\d{2}[A-Z]{5}\d{4}[A-Z][0-9A-Z]Z[0-9A-Z]\b/i,
+  /\b[A-Z]{5}\d{4}[A-Z]\b/i,
+  /\b[A-Z]{2}\d{13,}\b/i,
+];
 const OPAQUE_PATH_SEGMENT_PATTERN = /^[A-Za-z0-9_-]{18,}$/;
 
 export function createSafeRequestShapes(
@@ -48,30 +50,31 @@ function parseSameOriginGstUrl(value: string, currentOrigin: string): URL | null
 }
 
 function sanitisePathShape(pathname: string): string {
-  return pathname
-    .split("/")
-    .map((segment) => sanitisePathSegment(segment))
-    .join("/")
-    .replace(GSTIN_PATTERN, "[redacted]")
-    .replace(PAN_PATTERN, "[redacted]")
-    .replace(ARN_PATTERN, "[redacted]");
+  return redactSensitiveIdentifiers(
+    pathname
+      .split("/")
+      .map((segment) => sanitisePathSegment(segment))
+      .join("/"),
+  );
 }
 
 function sanitisePathSegment(segment: string): string {
   if (!segment) return segment;
   const decoded = safeDecode(segment);
   if (
-    GSTIN_PATTERN.test(decoded) ||
-    PAN_PATTERN.test(decoded) ||
-    ARN_PATTERN.test(decoded) ||
+    SENSITIVE_IDENTIFIER_PATTERNS.some((pattern) => pattern.test(decoded)) ||
     OPAQUE_PATH_SEGMENT_PATTERN.test(decoded)
   ) {
     return "[opaque]";
   }
-  return decoded
-    .replace(GSTIN_PATTERN, "[redacted]")
-    .replace(PAN_PATTERN, "[redacted]")
-    .replace(ARN_PATTERN, "[redacted]");
+  return redactSensitiveIdentifiers(decoded);
+}
+
+function redactSensitiveIdentifiers(value: string): string {
+  return SENSITIVE_IDENTIFIER_PATTERNS.reduce(
+    (redacted, pattern) => redacted.replace(new RegExp(pattern.source, "gi"), "[redacted]"),
+    value,
+  );
 }
 
 function safeDecode(segment: string): string {

@@ -2,9 +2,10 @@ import { browser } from "wxt/browser";
 import {
   PACK_OFFSCREEN_BLOB_URL_TARGET,
   type PackOffscreenBlobUrlResponse,
-} from "../core/offscreen-blob-url";
-import type { FiledReturnsConcreteArtifactType } from "../core/filed-returns-artifacts";
-import type { FiledReturnsReturnType } from "../core/filed-returns-return-types";
+  type PackOffscreenFiledReturnZipExpectedEntry,
+} from "../connectors/gst/offscreen-blob-url";
+import type { FiledReturnsConcreteArtifactType } from "../connectors/gst/filed-returns-artifacts";
+import type { FiledReturnsReturnType } from "../connectors/gst/filed-returns-return-types";
 
 const OFFSCREEN_DOCUMENT_PATH = "offscreen.html";
 const OFFSCREEN_JUSTIFICATION =
@@ -60,9 +61,10 @@ export async function stageOffscreenFiledReturn({
 
 export async function createOffscreenFiledReturnZipUrl(
   ledgerId: string,
-  expected?: {
+  expected: {
     returnType: FiledReturnsReturnType;
-    artifactTypes: FiledReturnsConcreteArtifactType[];
+    entryCount: number;
+    entries: readonly PackOffscreenFiledReturnZipExpectedEntry[];
   },
 ): Promise<{ blobUrl: string; zipEntryCount: number } | null> {
   const requestId = createRequestId();
@@ -73,12 +75,9 @@ export async function createOffscreenFiledReturnZipUrl(
     payload: {
       requestId,
       ledgerId,
-      ...(expected
-        ? {
-            expectedReturnType: expected.returnType,
-            expectedArtifactTypes: expected.artifactTypes,
-          }
-        : {}),
+      expectedReturnType: expected.returnType,
+      expectedEntryCount: expected.entryCount,
+      expectedEntries: [...expected.entries],
     },
   });
   return isZipResponse(response, requestId)

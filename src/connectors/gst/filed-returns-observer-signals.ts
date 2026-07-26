@@ -35,7 +35,7 @@ export function detectSafeSignals(text: string, hints: FiledReturnsObservationHi
   if (/\bfiled\b/.test(text)) signals.push("filed");
   if (/\bdownload\b/.test(text)) signals.push("download");
   if (/\bpdf\b/.test(text)) signals.push("pdf");
-  return signals;
+  return Array.from(new Set(signals));
 }
 
 function addReturnTextSignals(text: string, signals: string[]): void {

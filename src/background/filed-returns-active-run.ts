@@ -3,14 +3,36 @@ import type {
   FiledReturnsDownloadScope,
   FiledReturnsFlowSummary,
   PortalFlowStepResult,
-} from "../core/contracts";
-import { isFiledReturnsReturnType } from "../core/filed-returns-return-types";
-import type { PackMessageResponse } from "../core/messages";
+} from "../connectors/gst/filed-returns-contracts";
+import { isFiledReturnsArtifactType } from "../connectors/gst/filed-returns-artifacts";
+import { isFiledReturnsReturnType } from "../connectors/gst/filed-returns-return-types";
+import {
+  FILED_RETURNS_MONTHS,
+  FULL_FISCAL_YEAR_PERIOD,
+  isSupportedFiledReturnsStartScope,
+} from "../connectors/gst/filed-returns-scope";
+import { isCanonicalFiledReturnsRunId } from "../connectors/gst/filed-returns-operation-id";
+import type { PackMessageResponse } from "../connectors/gst/messages";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 
 const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
 const ACTIVE_RUN_REVIEW_MS = 30_000;
 const ACTIVE_RUN_LEASE_RENEWAL_MS = 10_000;
+const ACTIVE_RUN_KEYS = [
+  "leaseUpdatedAt",
+  "revision",
+  "runId",
+  "schemaVersion",
+  "scope",
+  "status",
+] as const;
+const ACTIVE_RUN_SCOPE_KEYS = [
+  "artifactType",
+  "completedPeriods",
+  "financialYear",
+  "period",
+  "returnType",
+] as const;
 
 export interface ActiveFiledReturnsRun {
   schemaVersion: "1.0";
@@ -28,6 +50,11 @@ export interface FiledReturnsActiveRunDeps {
   now?: () => Date;
 }
 
+export type ActiveFiledReturnsRunStorageState =
+  | { state: "missing" }
+  | { recoverableScope: FiledReturnsDownloadScope | null; state: "malformed" }
+  | { run: ActiveFiledReturnsRun; state: "valid" };
+
 let activeRunCriticalSection = Promise.resolve();
 
 export async function acquireFiledReturnsRun(
@@ -37,11 +64,16 @@ export async function acquireFiledReturnsRun(
   const key = deps.storageKeys.activeRun;
   if (!key) return { run: createActiveRun(scope, deps.now?.() ?? new Date()) };
 
-  return runActiveRunCriticalSection(async () => {
+  return runFiledReturnsOperationCriticalSection(async () => {
     const now = deps.now?.() ?? new Date();
     const values = await browser.storage.local.get(key);
-    const existingRun = parseActiveRun(values[key]);
-    if (existingRun) return { response: activeRunResponse(existingRun, now) };
+    const storedRun = activeRunStorageState(values[key], now);
+    if (storedRun.state === "malformed") {
+      return { response: malformedActiveRunResponse(scope, now) };
+    }
+    if (storedRun.state === "valid") {
+      return { response: activeRunResponse(storedRun.run, now) };
+    }
 
     const run = createActiveRun(scope, now);
     await browser.storage.local.set({ [key]: run });
@@ -56,10 +88,10 @@ export async function releaseFiledReturnsRun(
   const key = deps.storageKeys.activeRun;
   if (!key) return;
 
-  await runActiveRunCriticalSection(async () => {
+  await runFiledReturnsOperationCriticalSection(async () => {
     const values = await browser.storage.local.get(key);
-    const storedRun = parseActiveRun(values[key]);
-    if (storedRun?.runId === run.runId) {
+    const storedRun = activeRunStorageState(values[key], deps.now?.() ?? new Date());
+    if (storedRun.state === "valid" && storedRun.run.runId === run.runId) {
       await browser.storage.local.remove(key);
     }
   });
@@ -82,15 +114,15 @@ export async function renewFiledReturnsRunLease(
   const key = deps.storageKeys.activeRun;
   if (!key) return;
 
-  await runActiveRunCriticalSection(async () => {
+  await runFiledReturnsOperationCriticalSection(async () => {
     const values = await browser.storage.local.get(key);
-    const storedRun = parseActiveRun(values[key]);
-    if (storedRun?.runId !== run.runId) return;
+    const storedRun = activeRunStorageState(values[key], deps.now?.() ?? new Date());
+    if (storedRun.state !== "valid" || storedRun.run.runId !== run.runId) return;
 
     await browser.storage.local.set({
       [key]: {
-        ...storedRun,
-        revision: storedRun.revision + 1,
+        ...storedRun.run,
+        revision: storedRun.run.revision + 1,
         leaseUpdatedAt: (deps.now?.() ?? new Date()).toISOString(),
       } satisfies ActiveFiledReturnsRun,
     });
@@ -100,14 +132,23 @@ export async function renewFiledReturnsRunLease(
 export async function readActiveFiledReturnsRunSummary(
   deps: FiledReturnsActiveRunDeps,
 ): Promise<FiledReturnsFlowSummary | null> {
+  const now = deps.now?.() ?? new Date();
+  const state = await readActiveFiledReturnsRunStorageState(deps, now);
+  if (state.state === "valid") return activeRunSummary(state.run, now);
+  return state.state === "malformed" && state.recoverableScope
+    ? malformedActiveRunSummary(state.recoverableScope, now)
+    : null;
+}
+
+export async function readActiveFiledReturnsRunStorageState(
+  deps: FiledReturnsActiveRunDeps,
+  now = deps.now?.() ?? new Date(),
+): Promise<ActiveFiledReturnsRunStorageState> {
   const key = deps.storageKeys.activeRun;
-  if (!key) return null;
+  if (!key) return { state: "missing" };
 
   const values = await browser.storage.local.get(key);
-  const run = parseActiveRun(values[key]);
-  if (!run) return null;
-
-  return activeRunSummary(run, deps.now?.() ?? new Date());
+  return activeRunStorageState(values[key], now);
 }
 
 export async function acknowledgeInterruptedFiledReturnsRun(
@@ -116,11 +157,21 @@ export async function acknowledgeInterruptedFiledReturnsRun(
   const key = deps.storageKeys.activeRun;
   if (!key) return acknowledgedRunResponse();
 
-  return runActiveRunCriticalSection(async () => {
+  return runFiledReturnsOperationCriticalSection(async () => {
     const now = deps.now?.() ?? new Date();
     const values = await browser.storage.local.get(key);
-    const run = parseActiveRun(values[key]);
-    if (!run) return acknowledgedRunResponse();
+    const storedRun = activeRunStorageState(values[key], now);
+    if (storedRun.state === "missing") return acknowledgedRunResponse();
+    if (storedRun.state === "malformed") {
+      return storedRun.recoverableScope
+        ? malformedActiveRunResponse(storedRun.recoverableScope, now)
+        : {
+            ok: false,
+            error:
+              "Pack found damaged active-run recovery metadata. Use Clear local Pack data before starting another filed-return download.",
+          };
+    }
+    const run = storedRun.run;
     if (!isInterruptedRun(run, now)) return activeRunResponse(run, now);
 
     await browser.storage.local.remove(key);
@@ -128,7 +179,9 @@ export async function acknowledgeInterruptedFiledReturnsRun(
   });
 }
 
-async function runActiveRunCriticalSection<T>(action: () => Promise<T>): Promise<T> {
+export async function runFiledReturnsOperationCriticalSection<T>(
+  action: () => Promise<T>,
+): Promise<T> {
   const previous = activeRunCriticalSection;
   let release: () => void = () => undefined;
   activeRunCriticalSection = new Promise<void>((resolve) => {
@@ -153,29 +206,96 @@ function createActiveRun(scope: FiledReturnsDownloadScope, now: Date): ActiveFil
   };
 }
 
-function parseActiveRun(input: unknown): ActiveFiledReturnsRun | null {
+function activeRunStorageState(input: unknown, now: Date): ActiveFiledReturnsRunStorageState {
+  if (input === undefined || input === null) return { state: "missing" };
+  const run = parseActiveRun(input, now);
+  return run
+    ? { run, state: "valid" }
+    : { recoverableScope: recoverableActiveRunScope(input, now), state: "malformed" };
+}
+
+function parseActiveRun(input: unknown, now: Date): ActiveFiledReturnsRun | null {
   if (!input || typeof input !== "object") return null;
-  const run = input as Partial<ActiveFiledReturnsRun>;
+  const run = input as Partial<ActiveFiledReturnsRun> & Record<string, unknown>;
+  if (!hasOnlyKeys(run, ACTIVE_RUN_KEYS)) return null;
   if (run.schemaVersion !== "1.0") return null;
-  if (typeof run.runId !== "string" || run.runId.length === 0 || run.runId.length > 120) {
-    return null;
-  }
+  if (!isCanonicalFiledReturnsRunId(run.runId)) return null;
   const revision = run.revision;
-  if (typeof revision !== "number" || !Number.isInteger(revision) || revision < 1) return null;
+  if (typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 1) return null;
   if (run.status !== "running") return null;
-  if (typeof run.leaseUpdatedAt !== "string" || !Number.isFinite(Date.parse(run.leaseUpdatedAt))) {
-    return null;
-  }
-  if (!run.scope || typeof run.scope !== "object") return null;
-  const scope = run.scope as Partial<FiledReturnsDownloadScope>;
+  if (!isCanonicalTimestamp(run.leaseUpdatedAt)) return null;
+  const scope = parseActiveRunScope(run.scope, now);
+  if (!scope) return null;
+  return {
+    leaseUpdatedAt: run.leaseUpdatedAt,
+    revision,
+    runId: run.runId,
+    schemaVersion: "1.0",
+    scope,
+    status: "running",
+  };
+}
+
+function recoverableActiveRunScope(input: unknown, now: Date): FiledReturnsDownloadScope | null {
+  if (!input || typeof input !== "object") return null;
+  return parseActiveRunScope((input as { scope?: unknown }).scope, now);
+}
+
+function parseActiveRunScope(input: unknown, now: Date): FiledReturnsDownloadScope | null {
+  if (!input || typeof input !== "object") return null;
+  const scope = input as Partial<FiledReturnsDownloadScope> & Record<string, unknown>;
+  if (!hasOnlyKeys(scope, ACTIVE_RUN_SCOPE_KEYS)) return null;
   if (
     typeof scope.financialYear !== "string" ||
     typeof scope.period !== "string" ||
-    !isFiledReturnsReturnType(scope.returnType)
+    !isFiledReturnsReturnType(scope.returnType) ||
+    (scope.artifactType !== undefined && !isFiledReturnsArtifactType(scope.artifactType))
   ) {
     return null;
   }
-  return run as ActiveFiledReturnsRun;
+  if (
+    scope.completedPeriods !== undefined &&
+    (!Array.isArray(scope.completedPeriods) ||
+      new Set(scope.completedPeriods).size !== scope.completedPeriods.length ||
+      !scope.completedPeriods.every(
+        (period) =>
+          typeof period === "string" &&
+          (FILED_RETURNS_MONTHS as readonly string[]).includes(period),
+      ))
+  ) {
+    return null;
+  }
+  if (
+    scope.period !== FULL_FISCAL_YEAR_PERIOD &&
+    !(FILED_RETURNS_MONTHS as readonly string[]).includes(scope.period)
+  ) {
+    return null;
+  }
+  const canonicalScope: FiledReturnsDownloadScope = {
+    financialYear: scope.financialYear,
+    period: scope.period,
+    returnType: scope.returnType,
+    ...(scope.artifactType ? { artifactType: scope.artifactType } : {}),
+    ...(scope.completedPeriods ? { completedPeriods: [...scope.completedPeriods] } : {}),
+  };
+  return isSupportedFiledReturnsStartScope(canonicalScope, now) ? canonicalScope : null;
+}
+
+function hasOnlyKeys(input: Record<string, unknown>, allowedKeys: readonly string[]): boolean {
+  const allowed = new Set(allowedKeys);
+  return Object.keys(input).every((key) => allowed.has(key));
+}
+
+function isCanonicalTimestamp(input: unknown): input is string {
+  if (
+    typeof input !== "string" ||
+    input.length > 40 ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(input)
+  ) {
+    return false;
+  }
+  const timestamp = Date.parse(input);
+  return Number.isFinite(timestamp) && new Date(timestamp).toISOString() === input;
 }
 
 function activeRunResponse(run: ActiveFiledReturnsRun, now: Date): PackMessageResponse {
@@ -199,6 +319,51 @@ function activeRunSummary(
     completedPeriods: [],
     updatedAt: run.leaseUpdatedAt,
     flowStep,
+  };
+}
+
+function malformedActiveRunResponse(
+  scope: FiledReturnsDownloadScope,
+  now: Date,
+): PackMessageResponse {
+  const flowStep = malformedActiveRunStep(scope.returnType);
+  return {
+    ok: true,
+    flowStep,
+    flowSummary: malformedActiveRunSummary(scope, now, flowStep),
+  };
+}
+
+function malformedActiveRunSummary(
+  scope: FiledReturnsDownloadScope,
+  now: Date,
+  flowStep = malformedActiveRunStep(scope.returnType),
+): FiledReturnsFlowSummary {
+  return {
+    scope,
+    status: "blocked",
+    completedPeriods: [],
+    updatedAt: now.toISOString(),
+    flowStep,
+  };
+}
+
+function malformedActiveRunStep(
+  returnType: FiledReturnsDownloadScope["returnType"],
+): PortalFlowStepResult {
+  return {
+    connectorId: "gst",
+    scopeId: filedReturnScopeId(returnType),
+    state: "blocked",
+    safeSignals: ["filed-returns-active-run-malformed"],
+    safeMessage:
+      "Pack found damaged active-run recovery metadata and cannot verify whether another filed-return action already started.",
+    userAction: {
+      type: "RETRY_PORTAL_GENERATION",
+      message:
+        "Check browser Downloads, then use Clear local Pack data before starting another filed-return download.",
+      canResume: false,
+    },
   };
 }
 

@@ -1,5 +1,11 @@
 import { createHash } from "node:crypto";
 
+import {
+  isFiledReturnsEndpointClassForArtifact,
+  isFiledReturnsEndpointPathPair,
+  isPortalClickDownloadPath,
+  isTargetBoundPortalClickDownloadPath,
+} from "../../src/connectors/gst/filed-returns-download-diagnostic-compatibility";
 import { LIVE_RUN_SENSITIVE_PATTERNS } from "./live-run-evidence-redaction";
 import type {
   LiveRunEvidence,
@@ -29,7 +35,11 @@ const HEX_40 = /^[a-f0-9]{40}$/;
 const HEX_64 = /^[a-f0-9]{64}$/;
 const FINANCIAL_YEAR = /^20\d{2}-\d{2}$/;
 const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
-const SUBJECT_ALIAS = /^SUBJECT-[A-Z0-9]{1,12}$/;
+const SUBJECT_ALIAS = /^SUBJECT-[A-Z0-9]{1,2}$/;
+const ACTION_ALIAS = /^ACTION-[1-9]\d{0,2}$/;
+const SEMVER = /^\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.\d+)?$/;
+const GIT_TAG = /^v\d+\.\d+\.\d+(?:-(?:(?:alpha|beta|rc)\.\d+|local))?$/;
+const BROWSER_VERSION = /^(?:\d+(?:\.\d+){1,4}|manual-entry-required)$/;
 const PERIODS = [
   "FULL_FISCAL_YEAR",
   "April",
@@ -106,7 +116,6 @@ const DOWNLOAD_EVIDENCE_KEYS = [
   "exactZipBuild",
 ];
 const DOWNLOAD_ENDPOINT_CLASSES = [
-  "gstr3b-getgenpdf",
   "gstr3b-portal-rendered-download",
   "gstr3b-portal-blob-captured-download",
   "gstr1-pdf-portal-rendered-download",
@@ -118,18 +127,11 @@ const DOWNLOAD_ENDPOINT_CLASSES = [
   "unknown",
 ] as const;
 const DOWNLOAD_PATH_CLASSES = [
-  "extension-direct-https",
-  "extension-direct-blob",
-  "extension-direct-data",
-  "extension-direct-unknown",
   "portal-click-https",
   "portal-click-blob",
   "portal-click-data",
   "portal-click-unknown",
-  "portal-click-after-direct-fallback-https",
-  "portal-click-after-direct-fallback-blob",
-  "portal-click-after-direct-fallback-data",
-  "portal-click-after-direct-fallback-unknown",
+  "target-bound-portal-click-blob",
   "captured-portal-request-https",
   "captured-portal-request-blob",
   "captured-portal-request-data",
@@ -185,13 +187,13 @@ export function validateLiveRunEvidence(input: unknown): LiveRunEvidenceValidati
 
   requireOnlyKeys(input, LIVE_RUN_EVIDENCE_KEYS, "evidence", errors);
   requireExact(input.schemaVersion, 1, "schemaVersion", errors);
-  requireBoundedString(input.evidenceId, "evidenceId", errors, 8, 120);
   requirePattern(input.sourceCommit, HEX_40, "sourceCommit", errors);
-  requireBoundedString(input.gitTag, "gitTag", errors, 2, 40);
+  requirePattern(input.gitTag, GIT_TAG, "gitTag", errors);
   requirePattern(input.zipSha256, HEX_64, "zipSha256", errors);
-  requireBoundedString(input.extensionVersion, "extensionVersion", errors, 1, 32);
+  requirePattern(input.extensionVersion, SEMVER, "extensionVersion", errors);
+  validateBuildIdentity(input, errors);
   validateBrowser(input.browser, errors);
-  requireBoundedString(input.profile, "profile", errors, 1, 80);
+  requireOneOf(input.profile, ["clean-test-profile", "manual-review-required"], "profile", errors);
   requirePattern(input.subjectAlias, SUBJECT_ALIAS, "subjectAlias", errors, {
     message: "subjectAlias must be a neutral SUBJECT-* alias",
   });
@@ -203,6 +205,7 @@ export function validateLiveRunEvidence(input: unknown): LiveRunEvidenceValidati
   validateScopeConsistency(input, errors);
   requireIsoTimestamp(input.startedAt, "startedAt", errors);
   requireIsoTimestamp(input.completedAt, "completedAt", errors);
+  validateEvidenceId(input, errors);
   validateTimeRange(input.startedAt, input.completedAt, errors);
   requireOneOf(input.outcome, ["pass", "blocked", "failed"], "outcome", errors);
   if (Object.prototype.hasOwnProperty.call(input, "notes")) {
@@ -243,7 +246,7 @@ function validateDownloadEvidence(
       return;
     }
     requireOnlyKeys(entry, DOWNLOAD_EVIDENCE_KEYS, `downloadEvidence[${index}]`, errors);
-    requireBoundedString(entry.actionId, `downloadEvidence[${index}].actionId`, errors, 4, 120);
+    requirePattern(entry.actionId, ACTION_ALIAS, `downloadEvidence[${index}].actionId`, errors);
     requireOneOf(
       entry.returnType,
       ["GSTR-3B", "GSTR-1", "GSTR-2B"],
@@ -296,6 +299,13 @@ function validateDownloadEvidence(
       errors,
     );
     requirePattern(entry.exactZipBuild, HEX_64, `downloadEvidence[${index}].exactZipBuild`, errors);
+    if (
+      typeof entry.exactZipBuild === "string" &&
+      typeof evidence.zipSha256 === "string" &&
+      entry.exactZipBuild !== evidence.zipSha256
+    ) {
+      errors.push(`downloadEvidence[${index}].exactZipBuild must match zipSha256`);
+    }
     validateDownloadScopeConsistency(
       entry as Partial<LiveRunDownloadEvidence>,
       evidence,
@@ -372,7 +382,8 @@ function validateDownloadEndpointPathConsistency(
     return;
   }
   const endpoint = entry.endpointClass;
-  const path = entry.downloadPathClass;
+  const typedEntry = entry as unknown as LiveRunDownloadEvidence;
+  validateTargetBoundPortalClickScope(typedEntry, evidence, index, errors);
   if (endpoint === "unknown") {
     if (evidence.outcome === "pass" || entry.status === "downloaded") {
       errors.push(
@@ -381,13 +392,48 @@ function validateDownloadEndpointPathConsistency(
     }
     return;
   }
-  const matchesRuntimePath =
-    (endpoint === "gstr3b-getgenpdf" && path.startsWith("extension-direct-")) ||
-    (endpoint.includes("portal-blob-captured-download") &&
-      path.startsWith("captured-portal-request-")) ||
-    (endpoint.includes("portal-rendered-download") && path.startsWith("portal-click-"));
-  if (!matchesRuntimePath) {
+  if (
+    (evidence.outcome === "pass" || entry.status === "downloaded") &&
+    isPortalClickDownloadPath(typedEntry.downloadPathClass)
+  ) {
+    errors.push(`downloadEvidence[${index}] plain portal-click evidence cannot confirm a download`);
+  }
+  if (
+    !isFiledReturnsEndpointClassForArtifact(
+      typedEntry.endpointClass,
+      typedEntry.returnType,
+      typedEntry.artifactType,
+    )
+  ) {
+    errors.push(
+      `downloadEvidence[${index}].endpointClass does not match returnType and artifactType`,
+    );
+  }
+  if (!isFiledReturnsEndpointPathPair(typedEntry.endpointClass, typedEntry.downloadPathClass)) {
     errors.push(`downloadEvidence[${index}].endpointClass is inconsistent with downloadPathClass`);
+  }
+}
+
+function validateTargetBoundPortalClickScope(
+  entry: LiveRunDownloadEvidence,
+  evidence: Record<string, unknown>,
+  index: number,
+  errors: string[],
+): void {
+  if (!isTargetBoundPortalClickDownloadPath(entry.downloadPathClass)) return;
+  if (
+    evidence.scenario !== "single-period" ||
+    evidence.returnType !== "GSTR-3B" ||
+    evidence.artifactType !== "PDF" ||
+    evidence.period === "FULL_FISCAL_YEAR" ||
+    entry.returnType !== "GSTR-3B" ||
+    entry.artifactType !== "PDF" ||
+    entry.period === "FULL_FISCAL_YEAR" ||
+    entry.endpointClass !== "gstr3b-portal-rendered-download"
+  ) {
+    errors.push(
+      `downloadEvidence[${index}].downloadPathClass target-bound-portal-click-blob is only valid for single-period GSTR-3B PDF evidence and cannot represent full-year or staged ZIP work`,
+    );
   }
 }
 
@@ -436,8 +482,29 @@ function validateBrowser(input: unknown, errors: string[]): void {
     return;
   }
   requireOnlyKeys(input, BROWSER_KEYS, "browser", errors);
-  requireBoundedString(input.name, "browser.name", errors, 1, 40);
-  requireBoundedString(input.version, "browser.version", errors, 1, 80);
+  requireOneOf(input.name, ["Brave", "Chrome"], "browser.name", errors);
+  requirePattern(input.version, BROWSER_VERSION, "browser.version", errors);
+}
+
+function validateEvidenceId(input: Record<string, unknown>, errors: string[]): void {
+  if (
+    typeof input.startedAt !== "string" ||
+    typeof input.subjectAlias !== "string" ||
+    typeof input.scenario !== "string"
+  ) {
+    errors.push("evidenceId is invalid");
+    return;
+  }
+  const expected = `pack-live-run-${input.startedAt.slice(0, 10)}-${input.subjectAlias.toLowerCase()}-${input.scenario}`;
+  if (input.evidenceId !== expected) errors.push("evidenceId must match the canonical run alias");
+}
+
+function validateBuildIdentity(input: Record<string, unknown>, errors: string[]): void {
+  if (typeof input.gitTag !== "string" || typeof input.extensionVersion !== "string") return;
+  const exactTag = `v${input.extensionVersion}`;
+  if (input.gitTag !== exactTag && input.gitTag !== `${exactTag}-local`) {
+    errors.push("gitTag must match extensionVersion");
+  }
 }
 
 function validateScopeConsistency(input: Record<string, unknown>, errors: string[]): void {
@@ -591,13 +658,20 @@ function validateMediaArtifacts(input: unknown, errors: string[]): void {
       `mediaArtifacts[${index}].classification`,
       errors,
     );
-    requireBoundedString(
+    requireOneOf(
       artifact.redactionMethod,
+      ["not-published", "synthetic-only", "manual-blur"],
       `mediaArtifacts[${index}].redactionMethod`,
       errors,
-      1,
-      80,
     );
+    if (
+      (artifact.classification === "private-debug-only" &&
+        artifact.redactionMethod !== "not-published") ||
+      (artifact.classification === "synthetic-public-demo" &&
+        artifact.redactionMethod !== "synthetic-only")
+    ) {
+      errors.push(`mediaArtifacts[${index}].redactionMethod must match classification`);
+    }
     if (artifact.sha256 !== undefined) {
       requirePattern(artifact.sha256, HEX_64, `mediaArtifacts[${index}].sha256`, errors);
     }
@@ -619,18 +693,6 @@ function requireExact(
   errors: string[],
 ): void {
   if (value !== expected) errors.push(`${field} must be ${String(expected)}`);
-}
-
-function requireBoundedString(
-  value: unknown,
-  field: string,
-  errors: string[],
-  minLength: number,
-  maxLength: number,
-): void {
-  if (typeof value !== "string" || value.length < minLength || value.length > maxLength) {
-    errors.push(`${field} must be a string between ${minLength} and ${maxLength} characters`);
-  }
 }
 
 function requirePattern(

@@ -1,11 +1,11 @@
-import { browser } from "wxt/browser";
 import type {
   FiledReturnsDownloadScope,
   FiledReturnsFlowSummary,
   PortalFlowStepResult,
-} from "../core/contracts";
-import type { PackMessageResponse } from "../core/messages";
+} from "../connectors/gst/filed-returns-contracts";
+import type { PackMessageResponse } from "../connectors/gst/messages";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
+import { persistCanonicalFiledReturnsFlowSummary } from "./filed-returns-session-summary";
 
 export async function withPersistedSinglePeriodSummary(
   scope: FiledReturnsDownloadScope,
@@ -15,28 +15,33 @@ export async function withPersistedSinglePeriodSummary(
 ): Promise<PackMessageResponse> {
   if (!shouldPersistSinglePeriodSummary) return response;
   if (response.flowSummary) {
-    await persistProvidedSinglePeriodSummary(response.flowSummary, deps);
-    return response;
+    const flowSummary = await persistProvidedSinglePeriodSummary(response.flowSummary, deps);
+    if (flowSummary) return { ...response, flowSummary };
+    const responseWithoutSummary = { ...response };
+    delete responseWithoutSummary.flowSummary;
+    const reconstructedSummary = await persistSinglePeriodSummary(scope, response.flowStep, deps);
+    return reconstructedSummary
+      ? { ...responseWithoutSummary, flowSummary: reconstructedSummary }
+      : responseWithoutSummary;
   }
   const flowSummary = await persistSinglePeriodSummary(scope, response.flowStep, deps);
-  return { ...response, flowSummary };
+  return flowSummary ? { ...response, flowSummary } : response;
 }
 
 async function persistSinglePeriodSummary(
   scope: FiledReturnsDownloadScope,
   flowStep: PortalFlowStepResult,
   deps: FiledReturnsFlowRunnerDeps,
-): Promise<FiledReturnsFlowSummary> {
+): Promise<FiledReturnsFlowSummary | null> {
   const summary = toSinglePeriodSummary(scope, flowStep, deps.now?.() ?? new Date());
-  await browser.storage.session.set({ [deps.storageKeys.completion]: summary });
-  return summary;
+  return persistCanonicalFiledReturnsFlowSummary(deps.storageKeys.completion, summary);
 }
 
 async function persistProvidedSinglePeriodSummary(
   flowSummary: FiledReturnsFlowSummary,
   deps: FiledReturnsFlowRunnerDeps,
-): Promise<void> {
-  await browser.storage.session.set({ [deps.storageKeys.completion]: flowSummary });
+): Promise<FiledReturnsFlowSummary | null> {
+  return persistCanonicalFiledReturnsFlowSummary(deps.storageKeys.completion, flowSummary);
 }
 
 function toSinglePeriodSummary(

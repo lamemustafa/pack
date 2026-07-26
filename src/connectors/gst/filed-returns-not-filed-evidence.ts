@@ -1,4 +1,4 @@
-import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "../../core/contracts";
+import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "./filed-returns-contracts";
 import { normaliseText } from "./filed-returns-dom";
 import { acceptedFiledReturnsPeriodTexts } from "./filed-returns-months";
 import { findMatchingFiledReturnRows } from "./filed-returns-result-rows";

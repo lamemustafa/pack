@@ -1,4 +1,4 @@
-import type { FiledReturnsDownloadScope } from "../../core/contracts";
+import type { FiledReturnsDownloadScope } from "./filed-returns-contracts";
 import {
   findFieldRoot,
   findFiledReturnsFilterRoot,
@@ -134,23 +134,6 @@ export async function waitForFieldSelection(
     }
     await delay(FIELD_SETTLE_POLL_MS);
   }
-}
-
-export function summariseNativeSelectOptions(documentRef: Document, labelPattern: RegExp): string {
-  const select =
-    findKnownGstSelect(documentRef, labelPattern) ??
-    findLabelledSelects(documentRef, labelPattern)[0] ??
-    null;
-  if (!select) return "control present but native options were not found";
-
-  const options = Array.from(select.options)
-    .map((option) => normaliseText(option.textContent || option.value))
-    .filter(Boolean);
-  if (options.length === 0) return "no options available";
-
-  const visibleOptions = options.slice(0, 6).join(", ");
-  const suffix = options.length > 6 ? `, +${options.length - 6} more` : "";
-  return `available options: ${visibleOptions}${suffix}`;
 }
 
 export async function selectFieldOption(

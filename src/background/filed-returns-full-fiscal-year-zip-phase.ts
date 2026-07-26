@@ -1,5 +1,8 @@
-import type { FiledReturnsFullFiscalYearLedger, PortalFlowStepResult } from "../core/contracts";
-import { filedReturnsScopeId } from "../core/filed-returns-return-types";
+import type {
+  FiledReturnsFullFiscalYearLedger,
+  PortalFlowStepResult,
+} from "../connectors/gst/filed-returns-contracts";
+import { filedReturnsScopeId } from "../connectors/gst/filed-returns-return-types";
 
 export function fullFiscalYearZipPhaseStep(
   ledger: FiledReturnsFullFiscalYearLedger,
@@ -24,20 +27,26 @@ export function fullFiscalYearZipPhaseStep(
   }
 
   const downloaded = ledger.zipPhase === "downloaded-cleanup-pending";
-  const downloadStarted = ledger.zipPhase === "download-started";
+  const downloadAmbiguous = [
+    "download-intent-persisted",
+    "download-observing",
+    "download-started",
+  ].includes(ledger.zipPhase ?? "");
   const noArtifacts = ledger.zipPhase === "no-artifacts-cleanup-pending";
   const cleanup =
     downloaded || noArtifacts || ledger.zipPhase === "legacy-cleanup-pending" || legacyRetained;
   return {
     connectorId: "gst",
     scopeId: filedReturnsScopeId(ledger.scope.returnType),
-    state: downloadStarted ? "download-unconfirmed" : "blocked",
+    state: downloadAmbiguous ? "download-unconfirmed" : "blocked",
     safeSignals: [
       ...(cleanup
         ? ["full-fiscal-year-local-cleanup-retry"]
-        : ["full-fiscal-year-final-zip-retry"]),
+        : downloadAmbiguous
+          ? ["full-fiscal-year-final-zip-manual-review"]
+          : ["full-fiscal-year-final-zip-retry"]),
       ...(downloaded ? ["full-fiscal-year-zip-downloaded"] : []),
-      ...(downloadStarted
+      ...(downloadAmbiguous
         ? ["full-fiscal-year-zip-download-started", "full-fiscal-year-zip-download-unconfirmed"]
         : []),
       ...(noArtifacts ? ["full-fiscal-year-no-zip-artifacts"] : []),
@@ -50,9 +59,21 @@ export function fullFiscalYearZipPhaseStep(
     ],
     safeMessage: cleanup
       ? "Pack retained local fiscal-year staging and can finish cleanup without reopening the GST Portal."
-      : downloadStarted
-        ? "Pack started the final fiscal-year ZIP download before the previous run stopped. Check browser Downloads before retrying it."
+      : downloadAmbiguous
+        ? ledger.zipPhase === "download-observing"
+          ? "Pack saved the browser download ID for the final fiscal-year ZIP and must reconcile that exact download before another ZIP can start."
+          : "Pack may have started the final fiscal-year ZIP before the previous run stopped. Check browser Downloads; Pack will not start another ZIP from this ambiguous state."
         : "Pack retained the prepared fiscal-year files and can retry the final ZIP without repeating portal periods.",
+    ...(downloadAmbiguous
+      ? {
+          userAction: {
+            type: "NAVIGATE_TO_SUPPORTED_PAGE" as const,
+            message:
+              "Check browser Downloads for the saved fiscal-year ZIP. Do not start another ZIP until this state is resolved.",
+            canResume: true,
+          },
+        }
+      : {}),
   };
 }
 

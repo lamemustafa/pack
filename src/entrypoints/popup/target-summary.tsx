@@ -1,9 +1,10 @@
-import type { FiledReturnsDownloadScope, PortalContext } from "../../core/contracts";
+import type { PortalContext } from "../../core/contracts";
+import type { FiledReturnsDownloadScope } from "../../connectors/gst/filed-returns-contracts";
 import {
   filedReturnsArtifactLabel,
   normaliseFiledReturnsArtifactType,
-} from "../../core/filed-returns-artifacts";
-import { isFullFiscalYearScope } from "../../core/filed-returns-scope";
+} from "../../connectors/gst/filed-returns-artifacts";
+import { isFullFiscalYearScope } from "../../connectors/gst/filed-returns-scope";
 
 export function DownloadTargetSummary({
   completionStatus,

@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  acquireFiledReturnsRun,
   acknowledgeInterruptedFiledReturnsRun,
   type ActiveFiledReturnsRun,
   readActiveFiledReturnsRunSummary,
+  readActiveFiledReturnsRunStorageState,
   renewFiledReturnsRunLease,
 } from "../../src/background/filed-returns-active-run";
 
@@ -22,7 +24,7 @@ vi.mock("wxt/browser", () => ({
 
 const ACTIVE_RUN = {
   schemaVersion: "1.0",
-  runId: "run-existing",
+  runId: "filed-returns-run-m0abc123",
   revision: 1,
   scope: {
     financialYear: "2026-27",
@@ -123,5 +125,74 @@ describe("filed returns active run recovery", () => {
         leaseUpdatedAt: "2026-06-24T00:00:20.000Z",
       },
     });
+  });
+
+  it("fails closed instead of overwriting malformed active-run metadata", async () => {
+    browserMocks.storage.local.get.mockResolvedValue({
+      "active-run": { ...ACTIVE_RUN, unexpectedPortalMetadata: "synthetic-forbidden" },
+    });
+
+    const result = await acquireFiledReturnsRun(ACTIVE_RUN.scope, {
+      storageKeys: { activeRun: "active-run" },
+      now: () => new Date("2026-06-24T00:00:05Z"),
+    });
+
+    expect(result).toMatchObject({
+      response: {
+        ok: true,
+        flowStep: {
+          state: "blocked",
+          safeSignals: ["filed-returns-active-run-malformed"],
+          userAction: { canResume: false },
+        },
+      },
+    });
+    expect(browserMocks.storage.local.set).not.toHaveBeenCalled();
+    expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
+  });
+
+  it("reports a recoverable scope for malformed metadata without exposing extra fields", async () => {
+    browserMocks.storage.local.get.mockResolvedValue({
+      "active-run": { ...ACTIVE_RUN, runId: "invalid run id" },
+    });
+
+    const state = await readActiveFiledReturnsRunStorageState(
+      { storageKeys: { activeRun: "active-run" } },
+      new Date("2026-06-24T00:00:05Z"),
+    );
+    const summary = await readActiveFiledReturnsRunSummary({
+      storageKeys: { activeRun: "active-run" },
+      now: () => new Date("2026-06-24T00:00:05Z"),
+    });
+
+    expect(state).toEqual({ state: "malformed", recoverableScope: ACTIVE_RUN.scope });
+    expect(summary).toMatchObject({
+      status: "blocked",
+      scope: ACTIVE_RUN.scope,
+      flowStep: {
+        safeSignals: ["filed-returns-active-run-malformed"],
+        userAction: { canResume: false },
+      },
+    });
+  });
+
+  it("does not acknowledge or delete malformed active-run metadata", async () => {
+    browserMocks.storage.local.get.mockResolvedValue({
+      "active-run": { ...ACTIVE_RUN, revision: 0 },
+    });
+
+    const response = await acknowledgeInterruptedFiledReturnsRun({
+      storageKeys: { activeRun: "active-run" },
+      now: () => new Date("2026-06-24T00:01:00Z"),
+    });
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "blocked",
+        safeSignals: ["filed-returns-active-run-malformed"],
+      },
+    });
+    expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
   });
 });

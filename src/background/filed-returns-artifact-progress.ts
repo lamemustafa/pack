@@ -3,14 +3,28 @@ import type {
   FiledReturnsDownloadScope,
   FiledReturnsFlowSummary,
   PortalFlowStepResult,
-} from "../core/contracts";
-import type { PackMessageResponse } from "../core/messages";
+} from "../connectors/gst/filed-returns-contracts";
+import type { PackMessageResponse } from "../connectors/gst/messages";
 import {
   normaliseFiledReturnsArtifactType,
   type FiledReturnsConcreteArtifactType,
-} from "../core/filed-returns-artifacts";
+} from "../connectors/gst/filed-returns-artifacts";
+import {
+  createFiledReturnsLedgerId,
+  isCanonicalSinglePeriodLedgerId,
+} from "../connectors/gst/filed-returns-ledger-id";
 import { PACK_LOCAL_STORAGE_KEYS } from "./storage-keys";
+import { parseDurableFiledReturnsFlowSummary } from "./filed-returns-durable-summary";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
+import {
+  persistCanonicalFiledReturnsFlowSummary,
+  readCanonicalFiledReturnsFlowSummary,
+} from "./filed-returns-session-summary";
+import {
+  copyFiledReturnsDownloadDiagnosticState,
+  isValidFiledReturnsDownloadDiagnosticState,
+  mergeFiledReturnsDownloadDiagnosticState,
+} from "./filed-returns-download-diagnostic-state";
 
 interface SinglePeriodStagingRecord {
   ledgerId: string;
@@ -24,10 +38,7 @@ export class InvalidSinglePeriodStagingRecordError extends Error {
 }
 
 export function createSinglePeriodBundleLedgerId(): string {
-  const suffix =
-    globalThis.crypto?.randomUUID?.() ??
-    `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
-  return `single-period:${suffix.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+  return createFiledReturnsLedgerId("single-period");
 }
 
 export async function reserveSinglePeriodBundleLedger(): Promise<string | null> {
@@ -64,20 +75,27 @@ export async function readSinglePeriodStagingRecord(): Promise<SinglePeriodStagi
   return { ledgerId: recoverableLedgerId, schemaVersion: "1.0" };
 }
 
-export async function clearSinglePeriodStagingRecord(ledgerId: string): Promise<void> {
-  const record = await readSinglePeriodStagingRecord().catch(() => null);
-  if (record?.ledgerId !== ledgerId) return;
-  await browser.storage.local.remove(PACK_LOCAL_STORAGE_KEYS.singlePeriodStaging).catch(() => {});
+export async function clearSinglePeriodStagingRecord(ledgerId: string): Promise<boolean> {
+  let record: SinglePeriodStagingRecord | null;
+  try {
+    record = await readSinglePeriodStagingRecord();
+  } catch {
+    return false;
+  }
+  if (!record) return true;
+  if (record.ledgerId !== ledgerId) return false;
+  try {
+    await browser.storage.local.remove(PACK_LOCAL_STORAGE_KEYS.singlePeriodStaging);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function recoverableSinglePeriodLedgerId(
   candidate: Partial<SinglePeriodStagingRecord>,
 ): string | null {
-  return typeof candidate.ledgerId === "string" &&
-    candidate.ledgerId.length <= 120 &&
-    /^single-period:[a-zA-Z0-9._-]+$/.test(candidate.ledgerId)
-    ? candidate.ledgerId
-    : null;
+  return isCanonicalSinglePeriodLedgerId(candidate.ledgerId) ? candidate.ledgerId : null;
 }
 
 export function toOptionalArtifactUnavailableFlowStep({
@@ -103,7 +121,7 @@ export function toOptionalArtifactUnavailableFlowStep({
     return null;
   }
 
-  const flowStep = combineDownloadedArtifactFlowSteps(combinedFlowStep, nextFlowStep);
+  const flowStep = combineDownloadedArtifactFlowSteps(combinedFlowStep, nextFlowStep, scope);
   return {
     ...flowStep,
     state: "downloaded",
@@ -130,10 +148,9 @@ export async function readPersistedArtifactProgress(
   completedArtifactTypes: FiledReturnsConcreteArtifactType[];
   flowStep: PortalFlowStepResult;
 } | null> {
-  const values = (await browser.storage.session
-    .get(deps.storageKeys.completion)
-    .catch(() => ({}))) as Record<string, unknown>;
-  const summary = parsePersistedPartialSummary(values[deps.storageKeys.completion]);
+  const summary = parsePersistedPartialSummary(
+    await readCanonicalFiledReturnsFlowSummary(deps.storageKeys.completion).catch(() => null),
+  );
   if (!summary || summary.status !== "partial") return null;
   if (!sameFiledReturnsScope(summary.scope, scope)) return null;
 
@@ -158,7 +175,7 @@ export async function persistPartialArtifactSummary(
     flowStep,
     totalPeriods: 1,
   };
-  await browser.storage.session.set({ [deps.storageKeys.completion]: summary });
+  await persistCanonicalFiledReturnsFlowSummary(deps.storageKeys.completion, summary);
   return summary;
 }
 
@@ -181,10 +198,45 @@ export function markArtifactProgressNeedsReview(
 export function combineDownloadedArtifactFlowSteps(
   combinedFlowStep: PortalFlowStepResult | null,
   nextFlowStep: PortalFlowStepResult,
+  scope: FiledReturnsDownloadScope,
 ): PortalFlowStepResult {
   if (!combinedFlowStep) return nextFlowStep;
+  const diagnosticState = mergeFiledReturnsDownloadDiagnosticState(
+    combinedFlowStep,
+    nextFlowStep,
+    scope,
+  );
+  if (!diagnosticState) {
+    const rejectedStep: PortalFlowStepResult = {
+      ...nextFlowStep,
+      state: "blocked",
+      safeSignals: Array.from(
+        new Set([
+          ...combinedFlowStep.safeSignals,
+          ...nextFlowStep.safeSignals,
+          "filed-return-download-diagnostics-rejected",
+        ]),
+      ),
+      safeMessage:
+        "Pack could not retain privacy-safe, target-bound evidence for every selected artifact.",
+      userAction: {
+        type: "RETRY_PORTAL_GENERATION",
+        message: "Review this target before retrying the selected artifacts.",
+        canResume: true,
+      },
+    };
+    delete rejectedStep.downloadDiagnostic;
+    delete rejectedStep.downloadDiagnostics;
+    return {
+      ...rejectedStep,
+      ...(isValidFiledReturnsDownloadDiagnosticState(combinedFlowStep, scope)
+        ? copyFiledReturnsDownloadDiagnosticState(combinedFlowStep)
+        : {}),
+    };
+  }
   return {
     ...nextFlowStep,
+    ...diagnosticState,
     safeSignals: Array.from(
       new Set([...combinedFlowStep.safeSignals, ...nextFlowStep.safeSignals]),
     ),
@@ -192,14 +244,12 @@ export function combineDownloadedArtifactFlowSteps(
 }
 
 function parsePersistedPartialSummary(input: unknown): FiledReturnsFlowSummary | null {
-  if (!input || typeof input !== "object") return null;
-  const summary = input as Partial<FiledReturnsFlowSummary>;
-  if (summary.status !== "partial") return null;
-  if (!summary.scope || typeof summary.scope !== "object") return null;
-  if (!summary.flowStep || typeof summary.flowStep !== "object") return null;
-  if (!Array.isArray(summary.flowStep.safeSignals)) return null;
-  if (typeof summary.flowStep.state !== "string") return null;
-  return summary as FiledReturnsFlowSummary;
+  const summary = parseDurableFiledReturnsFlowSummary(input);
+  if (!summary || summary.status !== "partial") return null;
+  if (!isValidFiledReturnsDownloadDiagnosticState(summary.flowStep, summary.scope)) {
+    return null;
+  }
+  return summary;
 }
 
 function downloadedArtifactTypes(

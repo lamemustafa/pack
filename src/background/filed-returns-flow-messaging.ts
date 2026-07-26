@@ -1,5 +1,5 @@
-import type { FiledReturnsDownloadTarget } from "../core/contracts";
-import type { PackMessage, PackMessageResponse } from "../core/messages";
+import type { FiledReturnsDownloadTarget } from "../connectors/gst/filed-returns-contracts";
+import type { PackMessage, PackMessageResponse } from "../connectors/gst/messages";
 import { ambiguousDownloadTriggerResponse } from "./filed-returns-flow-guards";
 
 const FLOW_STEP_MESSAGE_RETRY_MS = 1_250;
@@ -15,23 +15,24 @@ export interface FiledReturnsFlowMessagingDeps {
         type:
           | "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3"
           | "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3"
-          | "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3"
-          | "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V3";
+          | "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3";
       }
     >,
   ) => Promise<PackMessageResponse>;
   storageKeys: {
+    completion?: string;
     targetReview?: string;
   };
   now?: () => Date;
+  portalTabIncognito?: boolean;
   persistTargetReview?: boolean;
-  preferDirectDownload?: boolean;
   stageCapturedDownloads?: {
     bundleKind?: "full-fiscal-year" | "single-period";
     ledgerId: string;
   };
   timings?: {
     contentMessageTimeoutMs?: number;
+    targetBoundPortalDownloadWaitMs?: number;
   };
 }
 
@@ -44,24 +45,6 @@ export async function runDownloadTriggerOnce(
     return await withContentMessageTimeout(
       deps.sendMessageToTabWithInjection(tabId, {
         type: "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
-        payload: target,
-      }),
-      deps,
-    );
-  } catch {
-    return ambiguousDownloadTriggerResponse();
-  }
-}
-
-export async function resolveDirectDownloadRequestOnce(
-  deps: FiledReturnsFlowMessagingDeps,
-  tabId: number,
-  target: FiledReturnsDownloadTarget,
-): Promise<PackMessageResponse> {
-  try {
-    return await withContentMessageTimeout(
-      deps.sendMessageToTabWithInjection(tabId, {
-        type: "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V3",
         payload: target,
       }),
       deps,

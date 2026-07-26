@@ -6,7 +6,7 @@ import {
   createSyntheticGstResults,
 } from "../connectors/gst/planner";
 import { createArchiveManifest } from "../core/manifest";
-import type { PackMessageResponse } from "../core/messages";
+import type { PackMessageResponse } from "../connectors/gst/messages";
 
 export interface SyntheticDemoDeps {
   productVersion: string;

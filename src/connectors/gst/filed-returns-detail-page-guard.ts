@@ -1,5 +1,5 @@
-import type { FiledReturnsDownloadTarget } from "../../core/contracts";
-import type { FiledReturnsConcreteArtifactType } from "../../core/filed-returns-artifacts";
+import type { FiledReturnsDownloadTarget } from "./filed-returns-contracts";
+import type { FiledReturnsConcreteArtifactType } from "./filed-returns-artifacts";
 import { filedReturnDescriptor } from "./filed-returns-return-descriptors";
 
 export function detectFiledReturnDetailPage(

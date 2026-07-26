@@ -2,6 +2,7 @@ const UNCONFIRMED_BROWSER_DOWNLOAD_SIGNALS = new Set([
   "browser-download-not-observed",
   "browser-download-size-unknown",
   "browser-download-interrupted",
+  "browser-download-in-progress",
   "browser-download-correlation-rejected",
   "browser-download-search-unavailable",
   "browser-download-search-missing",

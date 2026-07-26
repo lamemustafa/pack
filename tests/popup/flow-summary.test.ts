@@ -7,8 +7,8 @@ import {
   hasUnresolvedFiledReturnsRecovery,
   hasUnresolvedFiledReturnsTargetReview,
 } from "../../src/entrypoints/popup/flow-summary";
-import type { FiledReturnsFlowSummary } from "../../src/core/contracts";
-import { FULL_FISCAL_YEAR_PERIOD } from "../../src/core/filed-returns-scope";
+import type { FiledReturnsFlowSummary } from "../../src/connectors/gst/filed-returns-contracts";
+import { FULL_FISCAL_YEAR_PERIOD } from "../../src/connectors/gst/filed-returns-scope";
 
 const COMPLETE_SUMMARY: FiledReturnsFlowSummary = {
   completedAt: "2026-06-20T16:30:00.000Z",
@@ -131,7 +131,9 @@ describe("popup filed returns flow summary", () => {
           status: "blocked",
         },
       ),
-    ).toBe("FY 2025-26 GSTR-2B prepared. 12 of 12 periods reconciled; retry the final ZIP save.");
+    ).toBe(
+      "FY 2025-26 GSTR-2B prepared. 12 of 12 periods reconciled; check Browser Downloads before retrying the final ZIP.",
+    );
   });
 
   it("shows reset full-year runs as ready for a fresh local run", () => {

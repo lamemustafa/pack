@@ -1,4 +1,4 @@
-import type { FiledReturnsDownloadTarget } from "../core/contracts";
+import type { FiledReturnsDownloadTarget } from "../connectors/gst/filed-returns-contracts";
 
 export function capturedDownloadSignalPrefix(target: FiledReturnsDownloadTarget): string {
   if (target.returnType === "GSTR-1") return "filed-gstr1";

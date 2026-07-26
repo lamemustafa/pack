@@ -1,4 +1,4 @@
-import type { FiledReturnsReturnType } from "../../core/filed-returns-return-types";
+import type { FiledReturnsReturnType } from "./filed-returns-return-types";
 import type { FiledReturnsObservation } from "./filed-returns-observer-types";
 
 export function detectVisibleReturnLabel(signals: readonly string[]): FiledReturnsReturnType {

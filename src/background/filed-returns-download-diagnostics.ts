@@ -5,13 +5,14 @@ import type {
   FiledReturnsDownloadPathClass,
   FiledReturnsDownloadTarget,
   PortalFlowStepResult,
-} from "../core/contracts";
+} from "../connectors/gst/filed-returns-contracts";
+import { isValidFiledReturnsDownloadErrorCategory } from "./filed-returns-download-diagnostic-state";
 
-type DownloadAttemptClass =
+export type DownloadAttemptClass =
+  | "captured-portal-request"
   | "extension-direct"
   | "portal-click"
-  | "portal-click-after-direct-fallback"
-  | "captured-portal-request";
+  | "target-bound-portal-click";
 
 export function withFiledReturnsDownloadDiagnostic({
   attemptClass,
@@ -37,7 +38,7 @@ export function withFiledReturnsDownloadDiagnostic({
       endpointClass: endpointClassForTarget(target, attemptClass),
       artifactType: target.artifactType ?? "PDF",
       downloadPathClass: downloadPathClass(attemptClass, safeEvidence),
-      ...(safeEvidence?.downloadId ? { downloadId: safeEvidence.downloadId } : {}),
+      ...(safeEvidence?.downloadId !== undefined ? { downloadId: safeEvidence.downloadId } : {}),
       status: flowStep.state,
       ...(safeEvidence?.mimeClass ? { mimeClass: safeEvidence.mimeClass } : {}),
       ...(safeEvidence?.byteCountClass ? { byteCountClass: safeEvidence.byteCountClass } : {}),
@@ -50,11 +51,11 @@ function endpointClassForTarget(
   target: FiledReturnsDownloadTarget,
   attemptClass: DownloadAttemptClass,
 ): FiledReturnsDownloadEndpointClass {
-  if (attemptClass === "extension-direct" && target.returnType === "GSTR-3B") {
-    return "gstr3b-getgenpdf";
-  }
   if (target.returnType === "GSTR-3B" && attemptClass === "captured-portal-request") {
     return "gstr3b-portal-blob-captured-download";
+  }
+  if (target.returnType === "GSTR-3B" && attemptClass === "extension-direct") {
+    return "gstr3b-browser-managed-direct-download";
   }
   if (target.returnType === "GSTR-1" && attemptClass === "captured-portal-request") {
     return target.artifactType === "EXCEL"
@@ -76,56 +77,18 @@ function downloadPathClass(
   attemptClass: DownloadAttemptClass,
   safeEvidence: BrowserDownloadSafeEvidence | undefined,
 ): FiledReturnsDownloadPathClass {
+  if (attemptClass === "target-bound-portal-click") {
+    return safeEvidence?.urlClass === "blob"
+      ? "target-bound-portal-click-blob"
+      : "portal-click-unknown";
+  }
   const suffix = safeEvidence?.urlClass ?? "unknown";
   return `${attemptClass}-${suffix}` as FiledReturnsDownloadPathClass;
 }
 
 function errorCategory(flowStep: PortalFlowStepResult): string | null {
-  const directFailure = flowStep.safeSignals.find((signal) =>
-    signal.startsWith("filed-gstr3b-direct-download-"),
-  );
-  if (directFailure && flowStep.state !== "downloaded") return directFailure;
-
-  const browserFailure = flowStep.safeSignals.find((signal) =>
-    signal.startsWith("browser-download-error-"),
-  );
-  if (browserFailure) return browserFailure;
-
-  const gstr2bCaptureFailure = flowStep.safeSignals.find((signal) =>
-    signal.startsWith("gstr2b-captured-download-"),
-  );
-  if (gstr2bCaptureFailure) return gstr2bCaptureFailure;
-
-  const capturedDownloadFailure = flowStep.safeSignals.find(isCapturedDownloadFailureSignal);
-  if (capturedDownloadFailure) {
-    return capturedDownloadFailure;
+  if (flowStep.safeSignals.some((signal) => signal.startsWith("browser-download-error-"))) {
+    return "browser-download-interrupted";
   }
-
-  if (flowStep.safeSignals.includes("browser-download-zero-bytes")) {
-    return "browser-download-zero-bytes";
-  }
-  if (flowStep.safeSignals.includes("browser-download-size-unknown")) {
-    return "browser-download-size-unknown";
-  }
-  if (flowStep.safeSignals.includes("browser-download-correlation-rejected")) {
-    return "browser-download-correlation-rejected";
-  }
-  if (flowStep.safeSignals.includes("browser-download-not-observed")) {
-    return "browser-download-not-observed";
-  }
-  return null;
-}
-
-function isCapturedDownloadFailureSignal(signal: string): boolean {
-  return (
-    signal === "filed-return-offscreen-blob-url-rejected" ||
-    signal.endsWith("-blob-capture-failed") ||
-    signal.endsWith("-captured-download-data-url-rejected") ||
-    signal.endsWith("-extension-download-start-rejected") ||
-    signal.endsWith("-main-world-capture-exception") ||
-    signal.endsWith("-main-world-capture-timeout") ||
-    signal.endsWith("-main-world-capture-result-rejected") ||
-    signal.endsWith("-chunk-count-rejected") ||
-    signal.endsWith("-opfs-chunk-stage-failed")
-  );
+  return flowStep.safeSignals.find(isValidFiledReturnsDownloadErrorCategory) ?? null;
 }

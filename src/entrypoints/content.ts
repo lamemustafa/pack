@@ -2,23 +2,20 @@ import { browser } from "wxt/browser";
 import { detectGstPortalContext } from "../connectors/gst/detect";
 import { runFiledReturnsDownloadStep } from "../connectors/gst/filed-returns-flow";
 import { triggerFiledReturnDownload } from "../connectors/gst/filed-returns-download";
-import { resolveFiledGstr3bVerifiedPdfDownloadRequest } from "../connectors/gst/filed-returns-direct-download-probe";
 import { navigateToFiledReturnsPage } from "../connectors/gst/filed-returns-navigator";
 import { observeFiledReturnsPageText } from "../connectors/gst/filed-returns-observer";
 import { detectPostClickBlockedState } from "../connectors/gst/filed-returns-post-click-blocked-state";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import {
   clearFiledReturnsSearchAttemptForScope,
-  markGstr1ViewActivationAttempted,
   markFiledReturnsSearchPending,
 } from "../connectors/gst/filed-returns-search-state";
-import { resolveGstr1FiledReturnViewPoint } from "../connectors/gst/filed-returns-result-row-navigation";
 import {
   PACK_CONTENT_REQUEST_ENVELOPE_TYPE,
   PACK_CONTENT_SCRIPT_PROTOCOL_VERSION,
   isPackMessage,
   type PackMessageResponse,
-} from "../core/messages";
+} from "../connectors/gst/messages";
 
 const PACK_CONTENT_LISTENER_KEY = `__packContentListenerInstalledV${PACK_CONTENT_SCRIPT_PROTOCOL_VERSION}`;
 const PACK_ACTIVE_CONTENT_PROTOCOL_KEY = "__packActiveContentProtocolVersion";
@@ -169,41 +166,6 @@ export default defineContentScript({
         return false;
       }
 
-      if (contentMessage.type === "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V3") {
-        void resolveFiledGstr3bVerifiedPdfDownloadRequest(document, contentMessage.payload)
-          .then((resolved) => {
-            const observation = sendFiledReturnsObservation();
-            if (!resolved.ok) {
-              sendResponse({
-                ok: true,
-                downloadTrigger: resolved.result,
-                observation,
-              } satisfies PackMessageResponse);
-              return;
-            }
-
-            sendResponse({
-              ok: true,
-              directDownloadRequest: {
-                actionId: contentMessage.payload.actionId,
-                url: new URL(resolved.pdfPath, window.location.origin).href,
-                safeSignals: resolved.safeSignals,
-              },
-              observation,
-            } satisfies PackMessageResponse);
-          })
-          .catch((error: unknown) =>
-            sendResponse({
-              ok: false,
-              error:
-                error instanceof Error
-                  ? error.message
-                  : "Filed GSTR-3B direct download resolution failed.",
-            } satisfies PackMessageResponse),
-          );
-        return true;
-      }
-
       if (contentMessage.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3") {
         void runFiledReturnsDownloadStep(document, contentMessage.payload)
           .then((flowStep) => {
@@ -249,45 +211,6 @@ export default defineContentScript({
             state: "clicked",
             safeSignals: ["filed-return-search-pending-cleared"],
             safeMessage: "Pack cleared an unsubmitted filed-return search attempt.",
-          },
-        } satisfies PackMessageResponse);
-        return false;
-      }
-
-      if (contentMessage.type === "PACK_CONTENT_RESOLVE_GSTR1_VIEW_POINT_V3") {
-        void resolveGstr1FiledReturnViewPoint(document, contentMessage.payload)
-          .then((resolution) => {
-            if (!resolution.ok) {
-              sendResponse({
-                ok: true,
-                flowStep: resolution.flowStep,
-              } satisfies PackMessageResponse);
-              return;
-            }
-            sendResponse({
-              ok: true,
-              gstr1ViewPoint: resolution.point,
-            } satisfies PackMessageResponse);
-          })
-          .catch(() =>
-            sendResponse({
-              ok: false,
-              error: "GSTR-1_VIEW_POINT_UNAVAILABLE",
-            } satisfies PackMessageResponse),
-          );
-        return true;
-      }
-
-      if (contentMessage.type === "PACK_CONTENT_MARK_GSTR1_VIEW_ACTIVATION_V3") {
-        markGstr1ViewActivationAttempted(document, contentMessage.payload);
-        sendResponse({
-          ok: true,
-          flowStep: {
-            connectorId: "gst",
-            scopeId: filedReturnScopeId("GSTR-1"),
-            state: "clicked",
-            safeSignals: ["filed-gstr1-result-view-navigation-pending"],
-            safeMessage: "Pack marked the exact GSTR-1 View action as navigation-pending.",
           },
         } satisfies PackMessageResponse);
         return false;

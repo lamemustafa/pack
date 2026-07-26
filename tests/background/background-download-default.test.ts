@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getFiledReturnsFullFiscalYearPeriods } from "../../src/core/filed-returns-scope";
-import type { PackMessage, PackMessageResponse } from "../../src/core/messages";
+import { PACK_CONTENT_REQUEST_ENVELOPE_TYPE } from "../../src/connectors/gst/messages";
+import {
+  getFiledReturnsFullFiscalYearPeriods,
+  type FiledReturnsMonth,
+} from "../../src/connectors/gst/filed-returns-scope";
+import type { PackMessage, PackMessageResponse } from "../../src/connectors/gst/messages";
 import { observeBrowserDownloadById } from "../../src/background/download-observer";
 
 const browserMocks = vi.hoisted(() => {
@@ -11,9 +15,13 @@ const browserMocks = vi.hoisted(() => {
         sendResponse: (response: PackMessageResponse) => void,
       ) => boolean | undefined)
     | null = null;
+  let localStorageState: Record<string, unknown> = {};
 
   return {
     getMessageListener: () => messageListener,
+    resetLocalStorage: () => {
+      localStorageState = {};
+    },
     downloads: {
       download: vi.fn(async () => 481),
     },
@@ -105,21 +113,59 @@ const browserMocks = vi.hoisted(() => {
       }),
     },
     scripting: {
-      executeScript: vi.fn(async (details: { args?: [{ actionId?: string }] }) => [
-        {
-          result: {
-            actionId: details.args?.[0]?.actionId ?? "action-captured",
-            dataUrl: `data:application/pdf;base64,${globalThis.btoa("%PDF-1.7 synthetic\n%%EOF\n")}`,
-            safeSignals: ["portal-blob-captured", "native-blob-click-suppressed"],
-          },
+      executeScript: vi.fn(
+        async (details: { args?: [{ actionId?: string; signalPrefix?: string }] }) => {
+          const signalPrefix = details.args?.[0]?.signalPrefix ?? "filed-gstr3b";
+          return [
+            {
+              result: {
+                capturedDownloadRequest: {
+                  actionId: details.args?.[0]?.actionId ?? "action-captured",
+                  dataUrl: `data:application/pdf;base64,${globalThis.btoa("%PDF-1.7 synthetic\n%%EOF\n")}`,
+                  safeSignals: [
+                    `${signalPrefix}-portal-blob-captured`,
+                    `${signalPrefix}-native-blob-click-suppressed`,
+                    `${signalPrefix}-main-world-capture`,
+                  ],
+                },
+                safeFailureSignals: [],
+              },
+            },
+          ];
         },
-      ]),
+      ),
     },
     storage: {
       local: {
-        get: vi.fn(async () => ({})),
-        remove: vi.fn(async () => undefined),
-        set: vi.fn(async () => undefined),
+        get: vi.fn(async (keys?: string | string[] | Record<string, unknown>) => {
+          if (typeof keys === "string") {
+            return keys in localStorageState ? { [keys]: localStorageState[keys] } : {};
+          }
+          if (Array.isArray(keys)) {
+            return Object.fromEntries(
+              keys
+                .filter((key) => key in localStorageState)
+                .map((key) => [key, localStorageState[key]]),
+            );
+          }
+          if (keys && typeof keys === "object") {
+            return Object.fromEntries(
+              Object.entries(keys).map(([key, fallback]) => [
+                key,
+                key in localStorageState ? localStorageState[key] : fallback,
+              ]),
+            );
+          }
+          return { ...localStorageState };
+        }),
+        remove: vi.fn(async (keys: string | string[]) => {
+          for (const key of Array.isArray(keys) ? keys : [keys]) {
+            delete localStorageState[key];
+          }
+        }),
+        set: vi.fn(async (values: Record<string, unknown>) => {
+          Object.assign(localStorageState, values);
+        }),
         setAccessLevel: vi.fn(async () => undefined),
       },
       session: {
@@ -161,14 +207,12 @@ vi.mock("../../src/background/download-observer", () => ({
     state: "completed",
     safeSignals: ["browser-download-completed", "browser-download-non-empty"],
     safeMessage: "Completed.",
-  })),
-  observeNextBrowserDownload: vi.fn(() => ({
-    promise: Promise.resolve({
-      state: "completed",
-      safeSignals: ["browser-download-completed", "browser-download-non-empty"],
-      safeMessage: "Completed.",
-    }),
-    stop: vi.fn(),
+    safeEvidence: {
+      byteCountClass: "non-empty",
+      downloadId: 481,
+      mimeClass: "pdf",
+      urlClass: "blob",
+    },
   })),
   mergeFlowStepWithDownloadObservation: vi.fn((step, observation) =>
     observation.state === "completed"
@@ -188,22 +232,19 @@ vi.mock("../../src/background/download-observer", () => ({
   ),
 }));
 
-vi.mock("../../src/background/download-filename-suggester", () => ({
-  suggestNextBrowserDownloadFilename: vi.fn(() => ({ stop: vi.fn() })),
-}));
-
 describe("background filed returns download defaults", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
     vi.useRealTimers();
+    browserMocks.resetLocalStorage();
     vi.stubGlobal("defineBackground", (entrypoint: () => void) => {
       entrypoint();
       return entrypoint;
     });
   });
 
-  it("prefers target-bound portal capture over the unreliable direct request", async () => {
+  it("captures single-period GSTR-3B bytes in the authenticated page before downloading", async () => {
     browserMocks.tabs.sendMessage.mockImplementation(async (_tabId, message: PackMessage) => {
       message = unwrapContentRequest(message);
       if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3") {
@@ -222,23 +263,22 @@ describe("background filed returns download defaults", () => {
       if (message.type === "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3") {
         return {
           ok: true,
-          mainWorldCaptureRequest: {
-            actionId: message.payload.actionId,
-            controlAttribute: "data-pack-download-action-id",
-            controlId: message.payload.actionId,
-            maxBytes: 10_000_000,
-            signalPrefix: "filed-gstr3b",
-          },
           downloadTrigger: {
             connectorId: "gst",
             scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
             state: "clicked",
-            safeSignals: [
-              "filed-return-download-clicked",
-              "filed-gstr3b-download-clicked",
-              "filed-gstr3b-portal-blob-download-captured",
-            ],
-            safeMessage: "Captured.",
+            safeSignals: ["filed-gstr3b-download-clicked"],
+            safeMessage: "Clicked.",
+          },
+          mainWorldCaptureRequest: {
+            actionId: message.payload.actionId,
+            asyncBlobBinding: "action-xhr-non-artifact-to-pdf",
+            controlAttribute: "data-pack-gstr2b-capture-action",
+            controlId: "capture-single-period",
+            maxBytes: 36 * 1024 * 1024,
+            signalPrefix: "filed-gstr3b",
+            targetBinding: testCaptureBinding(message.payload, "PDF"),
+            timeoutMs: 30_000,
           },
         } satisfies PackMessageResponse;
       }
@@ -262,16 +302,24 @@ describe("background filed returns download defaults", () => {
       flowStep: {
         state: "downloaded",
         safeSignals: expect.arrayContaining([
-          "filed-gstr3b-extension-download-started",
+          "filed-gstr3b-main-world-capture",
           "browser-download-completed",
+          "browser-download-non-empty",
         ]),
       },
     });
-    expect(browserMocks.downloads.download).toHaveBeenCalledWith(
+    expect(browserMocks.downloads.download).toHaveBeenCalledWith({
+      conflictAction: "uniquify",
+      filename: "complyeaze-pack/gst/2026-27/gstr-3b/may.pdf",
+      saveAs: false,
+      url: "blob:chrome-extension://pack/download-prompt-probe",
+    });
+    expect(observeBrowserDownloadById).toHaveBeenCalledWith(
+      browserMocks.downloads,
+      481,
       expect.objectContaining({
-        conflictAction: "uniquify",
-        filename: "complyeaze-pack/gst/2026-27/gstr-3b/may.pdf",
-        saveAs: false,
+        expectedMimeTypes: ["application/pdf"],
+        trustedDownloadIds: new Set([481]),
       }),
     );
     expect(sentActionMessageTypes()).toEqual([
@@ -305,23 +353,22 @@ describe("background filed returns download defaults", () => {
       if (message.type === "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3") {
         return {
           ok: true,
-          mainWorldCaptureRequest: {
-            actionId: message.payload.actionId,
-            controlAttribute: "data-pack-download-action-id",
-            controlId: message.payload.actionId,
-            maxBytes: 10_000_000,
-            signalPrefix: "filed-gstr3b",
-          },
           downloadTrigger: {
             connectorId: "gst",
             scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
             state: "clicked",
-            safeSignals: [
-              "filed-return-download-clicked",
-              "filed-gstr3b-download-clicked",
-              "filed-gstr3b-portal-blob-download-captured",
-            ],
-            safeMessage: "Captured.",
+            safeSignals: ["filed-gstr3b-download-clicked"],
+            safeMessage: "Clicked.",
+          },
+          mainWorldCaptureRequest: {
+            actionId: message.payload.actionId,
+            asyncBlobBinding: "action-xhr-non-artifact-to-pdf",
+            controlAttribute: "data-pack-gstr2b-capture-action",
+            controlId: `capture-${message.payload.period.toLowerCase()}`,
+            maxBytes: 36 * 1024 * 1024,
+            signalPrefix: "filed-gstr3b",
+            targetBinding: testCaptureBinding(message.payload, "PDF"),
+            timeoutMs: 30_000,
           },
         } satisfies PackMessageResponse;
       }
@@ -398,7 +445,7 @@ describe("background filed returns download defaults", () => {
     ]);
   });
 
-  it("does not use the GSTR-3B direct-download resolver for GSTR-2B", async () => {
+  it("fails closed when a GSTR-2B portal click has no action-bound bytes", async () => {
     browserMocks.tabs.sendMessage.mockImplementation(async (_tabId, message: PackMessage) => {
       message = unwrapContentRequest(message);
       if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3") {
@@ -449,14 +496,16 @@ describe("background filed returns download defaults", () => {
     expect(response).toMatchObject({
       ok: true,
       flowStep: {
-        state: "downloaded",
+        state: "download-unconfirmed",
         safeSignals: expect.arrayContaining([
           "gstr2b-portal-blob-download-clicked",
-          "browser-download-completed",
+          "filed-return-portal-click-evidence-unavailable",
+          "filed-return-artifact-unconfirmed:EXCEL",
         ]),
       },
     });
     expect(browserMocks.downloads.download).not.toHaveBeenCalled();
+    expect(observeBrowserDownloadById).not.toHaveBeenCalled();
     expect(sentActionMessageTypes()).toEqual([
       "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
       "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
@@ -609,6 +658,23 @@ describe("background filed returns download defaults", () => {
   });
 });
 
+function testCaptureBinding(
+  target: Extract<
+    PackMessage,
+    { type: "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3" }
+  >["payload"],
+  artifactType: "PDF" | "EXCEL",
+) {
+  return {
+    artifactType,
+    controlTextDigest: "1234abcd",
+    financialYear: target.financialYear,
+    pathnameDigest: "abcd1234",
+    period: target.period as FiledReturnsMonth,
+    returnType: target.returnType,
+  };
+}
+
 async function sendBackgroundMessage(message: PackMessage): Promise<PackMessageResponse> {
   const listener = browserMocks.getMessageListener();
   if (!listener) throw new Error("background listener was not registered");
@@ -633,7 +699,7 @@ function unwrapContentRequest(message: unknown): PackMessage {
     message &&
     typeof message === "object" &&
     "type" in message &&
-    message.type === "PACK_CONTENT_REQUEST_V31" &&
+    message.type === PACK_CONTENT_REQUEST_ENVELOPE_TYPE &&
     "payload" in message &&
     message.payload &&
     typeof message.payload === "object"

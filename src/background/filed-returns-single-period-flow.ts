@@ -1,5 +1,8 @@
-import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "../core/contracts";
-import type { PackMessageResponse } from "../core/messages";
+import type {
+  FiledReturnsDownloadScope,
+  PortalFlowStepResult,
+} from "../connectors/gst/filed-returns-contracts";
+import type { PackMessageResponse } from "../connectors/gst/messages";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
 import { getRequiredGstTab } from "./filed-returns-active-tab";
@@ -12,10 +15,12 @@ import {
   isFiledReturnDownloadReady,
   maxFlowStepsFor,
   persistFlowResponse,
-  shouldAttemptDirectDownloadFromDetailRoute,
   shouldContinueFlow,
 } from "./filed-returns-flow-runner-utils";
-import { triggerSelectedArtifacts } from "./filed-returns-selected-artifacts";
+import {
+  preflightSelectedArtifactsRecovery,
+  triggerSelectedArtifacts,
+} from "./filed-returns-selected-artifacts";
 import {
   detailStepLimitReachedMessage,
   searchStepLimitReachedMessage,
@@ -31,6 +36,17 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
   options: { persistSinglePeriodSummary?: boolean } = {},
 ): Promise<PackMessageResponse> {
   const shouldPersistSinglePeriodSummary = options.persistSinglePeriodSummary !== false;
+  const recoveryResponse = await preflightSelectedArtifactsRecovery({ deps, scope });
+  if (recoveryResponse) {
+    return recoveryResponse.ok && "flowStep" in recoveryResponse
+      ? withPersistedSinglePeriodSummary(
+          scope,
+          recoveryResponse,
+          deps,
+          shouldPersistSinglePeriodSummary,
+        )
+      : recoveryResponse;
+  }
   const activeTab = await getRequiredGstTab(deps.getActiveGstTab);
   if (!activeTab) {
     return withPersistedSinglePeriodSummary(
@@ -57,7 +73,12 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
     );
   }
 
-  return runSinglePeriodSteps(scope, deps, activeTab.tab.id, shouldPersistSinglePeriodSummary);
+  return runSinglePeriodSteps(
+    scope,
+    { ...deps, portalTabIncognito: activeTab.tab.incognito === true },
+    activeTab.tab.id,
+    shouldPersistSinglePeriodSummary,
+  );
 }
 
 async function runSinglePeriodSteps(
@@ -78,26 +99,6 @@ async function runSinglePeriodSteps(
     await persistFlowResponse(response, deps);
     lastStep = response.flowStep;
     activePeriod = extractActivePeriod(lastStep) ?? activePeriod;
-
-    if (
-      lastStep.safeSignals.includes("filed-gstr1-result-view-user-action-required") &&
-      deps.clickGstr1ResultViewWithDebugger
-    ) {
-      const debuggerStep = await deps.clickGstr1ResultViewWithDebugger(tabId, scope);
-      const debuggerResponse = { ok: true as const, flowStep: debuggerStep };
-      await persistFlowResponse(debuggerResponse, deps);
-      lastStep = debuggerStep;
-      if (!shouldContinueFlow(debuggerStep)) {
-        return withPersistedSinglePeriodSummary(
-          scope,
-          debuggerResponse,
-          deps,
-          shouldPersistSinglePeriodSummary,
-        );
-      }
-      await delay(getFlowStepSettleMs(debuggerStep, deps));
-      continue;
-    }
 
     if (lastStep.safeSignals.includes("filed-return-api-result-posted")) {
       return waitForDetailReadyThenTrigger({
@@ -243,16 +244,6 @@ async function waitForDetailReadyThenTrigger({
     activePeriod = extractActivePeriod(lastStep) ?? activePeriod;
 
     if (isFiledReturnDownloadReady(lastStep, scope)) {
-      return triggerSinglePeriodDownloadAndPersistSummary({
-        activePeriod,
-        deps,
-        shouldPersistSinglePeriodSummary,
-        scope,
-        tabId,
-      });
-    }
-
-    if (shouldAttemptDirectDownloadFromDetailRoute(lastStep, scope, deps)) {
       return triggerSinglePeriodDownloadAndPersistSummary({
         activePeriod,
         deps,

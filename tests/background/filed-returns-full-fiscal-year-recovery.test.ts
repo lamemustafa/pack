@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { FiledReturnsFullFiscalYearLedger } from "../../src/core/contracts";
-import { FULL_FISCAL_YEAR_PERIOD } from "../../src/core/filed-returns-scope";
+import type { FiledReturnsFullFiscalYearLedger } from "../../src/connectors/gst/filed-returns-contracts";
+import { FULL_FISCAL_YEAR_PERIOD } from "../../src/connectors/gst/filed-returns-scope";
 import {
   prepareFullFiscalYearTargetRetry,
   resolveFullFiscalYearTarget,
 } from "../../src/background/filed-returns-full-fiscal-year-recovery";
 import { browser } from "wxt/browser";
+import { canonicalDurableTargetStatus } from "../../src/connectors/gst/filed-returns-durable-status";
 
 const browserMocks = vi.hoisted(() => ({
   storage: {
@@ -15,6 +16,7 @@ const browserMocks = vi.hoisted(() => ({
       set: vi.fn(async () => undefined),
     },
     session: {
+      remove: vi.fn(async () => undefined),
       set: vi.fn(async () => undefined),
     },
   },
@@ -22,6 +24,7 @@ const browserMocks = vi.hoisted(() => ({
 const zipMocks = vi.hoisted(() => ({
   discardFullFiscalYearFiledReturnsZip: vi.fn(async () => "full-fiscal-year-opfs-cleared"),
 }));
+const LEDGER_ID = "full-fiscal-year-12345678";
 
 vi.mock("wxt/browser", () => ({
   browser: browserMocks,
@@ -43,7 +46,7 @@ describe("full fiscal-year recovery", () => {
 
     const recovery = await prepareFullFiscalYearTargetRetry(
       {
-        ledgerId: "ledger-existing",
+        ledgerId: LEDGER_ID,
         targetId: "GSTR-3B:2026-27:April",
         expectedRevision: 2,
       },
@@ -82,7 +85,7 @@ describe("full fiscal-year recovery", () => {
 
     const recovery = await prepareFullFiscalYearTargetRetry(
       {
-        ledgerId: "ledger-existing",
+        ledgerId: LEDGER_ID,
         targetId: "GSTR-3B:2026-27:April",
         expectedRevision: 2,
       },
@@ -118,7 +121,7 @@ describe("full fiscal-year recovery", () => {
 
     const recovery = await prepareFullFiscalYearTargetRetry(
       {
-        ledgerId: "ledger-existing",
+        ledgerId: LEDGER_ID,
         targetId: "GSTR-3B:2026-27:April",
         expectedRevision: 2,
       },
@@ -135,6 +138,39 @@ describe("full fiscal-year recovery", () => {
     });
   });
 
+  it("blocks retry of an interrupted running target without replaying a possible orphan stage", async () => {
+    mockLocalStorageGet({
+      "full-year-ledger": createRecoveryLedger({
+        revision: 2,
+        targetStatus: "running",
+        safeSignals: ["full-fiscal-year-target-running"],
+      }),
+    });
+
+    const recovery = await prepareFullFiscalYearTargetRetry(
+      {
+        ledgerId: LEDGER_ID,
+        targetId: "GSTR-3B:2026-27:April",
+        expectedRevision: 2,
+      },
+      recoveryDeps(),
+    );
+
+    expect(recovery).toMatchObject({
+      ok: false,
+      response: {
+        flowStep: {
+          safeSignals: ["full-fiscal-year-run-interrupted"],
+          state: "user-action-required",
+        },
+      },
+    });
+    expect(browser.storage.local.set).not.toHaveBeenCalled();
+    expect(browser.storage.local.remove).not.toHaveBeenCalled();
+    expect(browser.storage.session.set).not.toHaveBeenCalled();
+    expect(zipMocks.discardFullFiscalYearFiledReturnsZip).not.toHaveBeenCalled();
+  });
+
   it("discards a pending full-year resume without leaving a recoverable target", async () => {
     mockLocalStorageGet({
       "full-year-ledger": createRecoveryLedger({
@@ -146,7 +182,7 @@ describe("full fiscal-year recovery", () => {
 
     const response = await resolveFullFiscalYearTarget(
       {
-        ledgerId: "ledger-existing",
+        ledgerId: LEDGER_ID,
         targetId: "GSTR-3B:2026-27:April",
         expectedRevision: 2,
       },
@@ -166,7 +202,7 @@ describe("full fiscal-year recovery", () => {
       },
     });
     expect(JSON.stringify(response)).not.toContain("fullFiscalYearRecovery");
-    expect(zipMocks.discardFullFiscalYearFiledReturnsZip).toHaveBeenCalledWith("ledger-existing");
+    expect(zipMocks.discardFullFiscalYearFiledReturnsZip).toHaveBeenCalledWith(LEDGER_ID);
     expect(browser.storage.local.remove).toHaveBeenCalledWith("full-year-ledger");
     expect(browser.storage.local.remove).not.toHaveBeenCalledWith("target-review");
     expect(browser.storage.session.set).toHaveBeenCalledWith({
@@ -174,6 +210,40 @@ describe("full fiscal-year recovery", () => {
         status: "cancelled",
       }),
     });
+  });
+
+  it("discards an interrupted running target through exact run cleanup", async () => {
+    mockLocalStorageGet({
+      "full-year-ledger": createRecoveryLedger({
+        revision: 2,
+        targetStatus: "running",
+        safeSignals: ["full-fiscal-year-target-running"],
+      }),
+    });
+
+    const response = await resolveFullFiscalYearTarget(
+      {
+        ledgerId: LEDGER_ID,
+        targetId: "GSTR-3B:2026-27:April",
+        expectedRevision: 2,
+      },
+      "cancelled",
+      recoveryDeps(),
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "user-action-required",
+        safeSignals: ["full-fiscal-year-run-discarded", "full-fiscal-year-opfs-cleared"],
+      },
+      flowSummary: {
+        status: "cancelled",
+        currentPeriod: "April",
+      },
+    });
+    expect(zipMocks.discardFullFiscalYearFiledReturnsZip).toHaveBeenCalledWith(LEDGER_ID);
+    expect(browser.storage.local.remove).toHaveBeenCalledWith("full-year-ledger");
   });
 
   it("discards a blocked full-year run without leaving the saved ledger", async () => {
@@ -201,7 +271,7 @@ describe("full fiscal-year recovery", () => {
 
     const response = await resolveFullFiscalYearTarget(
       {
-        ledgerId: "ledger-existing",
+        ledgerId: LEDGER_ID,
         targetId: "GSTR-3B:2026-27:April",
         expectedRevision: 2,
       },
@@ -227,7 +297,7 @@ describe("full fiscal-year recovery", () => {
 
     const response = await resolveFullFiscalYearTarget(
       {
-        ledgerId: "ledger-existing",
+        ledgerId: LEDGER_ID,
         targetId: "GSTR-3B:2026-27:April",
         expectedRevision: 2,
       },
@@ -282,7 +352,7 @@ describe("full fiscal-year recovery", () => {
 
     const recovery = await prepareFullFiscalYearTargetRetry(
       {
-        ledgerId: "ledger-existing",
+        ledgerId: LEDGER_ID,
         targetId: "GSTR-3B:2026-27:April",
         expectedRevision: 2,
       },
@@ -312,7 +382,7 @@ describe("full fiscal-year recovery", () => {
 
     const response = await resolveFullFiscalYearTarget(
       {
-        ledgerId: "ledger-existing",
+        ledgerId: LEDGER_ID,
         targetId: "GSTR-3B:2026-27:April",
         expectedRevision: 2,
       },
@@ -338,6 +408,46 @@ describe("full fiscal-year recovery", () => {
     expect(browser.storage.local.remove).not.toHaveBeenCalledWith("full-year-ledger");
   });
 
+  it("retains an interrupted running target when exact discard cleanup fails", async () => {
+    zipMocks.discardFullFiscalYearFiledReturnsZip.mockResolvedValueOnce(
+      "full-fiscal-year-opfs-clear-failed",
+    );
+    mockLocalStorageGet({
+      "full-year-ledger": createRecoveryLedger({
+        revision: 2,
+        targetStatus: "running",
+        safeSignals: ["full-fiscal-year-target-running"],
+      }),
+    });
+
+    const response = await resolveFullFiscalYearTarget(
+      {
+        ledgerId: LEDGER_ID,
+        targetId: "GSTR-3B:2026-27:April",
+        expectedRevision: 2,
+      },
+      "cancelled",
+      recoveryDeps(),
+    );
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "blocked",
+        safeSignals: expect.arrayContaining([
+          "full-fiscal-year-run-discard-cleanup-failed",
+          "full-fiscal-year-opfs-retained",
+        ]),
+      },
+      flowSummary: {
+        fullFiscalYearRecovery: {
+          targetStatus: "running",
+        },
+      },
+    });
+    expect(browser.storage.local.remove).not.toHaveBeenCalledWith("full-year-ledger");
+  });
+
   it("rejects manual observation when the target has no final-click evidence", async () => {
     mockLocalStorageGet({
       "full-year-ledger": createRecoveryLedger({
@@ -349,7 +459,7 @@ describe("full fiscal-year recovery", () => {
 
     const response = await resolveFullFiscalYearTarget(
       {
-        ledgerId: "ledger-existing",
+        ledgerId: LEDGER_ID,
         targetId: "GSTR-3B:2026-27:April",
         expectedRevision: 2,
       },
@@ -383,7 +493,7 @@ describe("full fiscal-year recovery", () => {
     );
 
     const payload = {
-      ledgerId: "ledger-existing",
+      ledgerId: LEDGER_ID,
       targetId: "GSTR-3B:2026-27:April",
       expectedRevision: 2,
     };
@@ -438,11 +548,16 @@ function createRecoveryLedger({
   targetStatus?: FiledReturnsFullFiscalYearLedger["targets"][number]["status"];
   safeSignals?: string[];
 }): FiledReturnsFullFiscalYearLedger {
+  const scope = {
+    financialYear: "2026-27",
+    period: "April" as const,
+    returnType: "GSTR-3B" as const,
+  };
   return {
     schemaVersion: "1.0",
-    ledgerId: "ledger-existing",
+    ledgerId: LEDGER_ID,
     revision,
-    status: "blocked",
+    status: targetStatus === "running" ? "running" : "blocked",
     scope: {
       financialYear: "2026-27",
       period: FULL_FISCAL_YEAR_PERIOD,
@@ -454,13 +569,10 @@ function createRecoveryLedger({
     targets: [
       {
         targetId: "GSTR-3B:2026-27:April",
-        financialYear: "2026-27",
-        period: "April",
-        returnType: "GSTR-3B",
+        ...scope,
         status: targetStatus,
         attempts: 1,
-        safeSignals,
-        safeMessage: "Unconfirmed.",
+        ...canonicalDurableTargetStatus(scope, targetStatus, safeSignals),
         updatedAt: "2026-06-24T00:00:00.000Z",
       },
     ],

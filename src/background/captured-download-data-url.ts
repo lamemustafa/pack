@@ -2,16 +2,16 @@ import {
   filedReturnsArtifactMimeTypes,
   type FiledReturnsArtifactExtension,
   type FiledReturnsConcreteArtifactType,
-} from "../core/filed-returns-artifacts";
-import type { FiledReturnsDownloadTarget } from "../core/contracts";
+} from "../connectors/gst/filed-returns-artifacts";
+import type { FiledReturnsDownloadTarget } from "../connectors/gst/filed-returns-contracts";
 import {
   isLikelyGstr2bPortalXlsxBytes,
   isLikelyPdfBytes,
   isLikelyXlsBytes,
   isLikelyXlsxBytes,
-} from "../core/filed-return-artifact-bytes";
-import type { FiledReturnsReturnType } from "../core/filed-returns-return-types";
-import { PACK_OFFSCREEN_DATA_URL_MAX_LENGTH } from "../core/offscreen-blob-url";
+} from "../connectors/gst/filed-return-artifact-bytes";
+import type { FiledReturnsReturnType } from "../connectors/gst/filed-returns-return-types";
+import { PACK_OFFSCREEN_DATA_URL_MAX_LENGTH } from "../connectors/gst/offscreen-blob-url";
 
 const GSTR2B_MIN_PORTAL_PDF_BYTES = 20 * 1024;
 

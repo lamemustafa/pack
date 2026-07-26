@@ -1,4 +1,4 @@
-import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "../../core/contracts";
+import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "./filed-returns-contracts";
 import { findFiledReturnsFilterRoot } from "./filed-returns-custom-dropdown";
 import { filedReturnsFilterFieldMatches } from "./filed-returns-filter-fields";
 import {
@@ -15,11 +15,14 @@ import {
   readFilterSelectionState,
   RETURN_TYPE_LABEL,
   selectFieldOption,
-  summariseNativeSelectOptions,
   shouldLeaveFilingPeriodUnselected,
   waitForFieldSelection,
 } from "./filed-returns-filter-selection";
-import { activateElement, delay, getClickableElements, normaliseText } from "./filed-returns-dom";
+import {
+  activateElement,
+  delay,
+  findUniqueActionableExactSearchControl,
+} from "./filed-returns-dom";
 import { markFiledReturnsSearchPending } from "./filed-returns-search-state";
 import { filedReturnDescriptor } from "./filed-returns-return-descriptors";
 
@@ -105,7 +108,7 @@ export async function selectFiledReturnsFiltersAndSearch(
 
   const formRoot = findFiledReturnsFilterRoot(documentRef);
   const searchRoot = formRoot ?? documentRef;
-  const search = findSearchButton(searchRoot) ?? findSearchButton(documentRef);
+  const search = findUniqueActionableExactSearchControl(searchRoot);
 
   if (
     !financialYearSelected ||
@@ -120,13 +123,16 @@ export async function selectFiledReturnsFiltersAndSearch(
       (monthFieldPresent && monthSelected) ||
       returnTypeSelected
     ) {
-      const missingContext = describeMissingFilterContext(documentRef, {
-        financialYearSelected,
-        periodSelected,
-        monthFieldPresent,
-        monthSelected,
-        returnTypeSelected,
-      });
+      const missingContext = describeMissingFilterContext(
+        {
+          financialYearSelected,
+          periodSelected,
+          monthFieldPresent,
+          monthSelected,
+          returnTypeSelected,
+        },
+        Boolean(search),
+      );
       return {
         connectorId: "gst",
         scopeId,
@@ -250,12 +256,15 @@ function readPortalFilterSelectionState(
     : state;
 }
 
-function describeMissingFilterContext(documentRef: Document, state: FilterSelectionState): string {
+function describeMissingFilterContext(
+  state: FilterSelectionState,
+  hasUniqueSearchControl: boolean,
+): string {
   const missing: string[] = [];
   if (!state.financialYearSelected) missing.push("financial year");
   if (!state.periodSelected) missing.push("filing period");
   if (state.monthFieldPresent && !state.monthSelected) {
-    missing.push(`month (${summariseNativeSelectOptions(documentRef, MONTH_LABEL)})`);
+    missing.push("month selection still pending");
   }
   if (!state.returnTypeSelected) missing.push("return type");
   if (
@@ -263,41 +272,10 @@ function describeMissingFilterContext(documentRef: Document, state: FilterSelect
     state.periodSelected &&
     state.monthSelected &&
     state.returnTypeSelected &&
-    !findSearchButton(documentRef)
+    !hasUniqueSearchControl
   ) {
     missing.push("search button");
   }
 
   return missing.length > 0 ? ` Missing: ${missing.join(", ")}.` : "";
-}
-
-function findSearchButton(root: ParentNode): HTMLElement | null {
-  return (
-    getClickableElements(root).find((element) =>
-      /^search$/i.test(normaliseText(readElementText(element))),
-    ) ?? null
-  );
-}
-
-function readElementText(element: HTMLElement): string {
-  const HTMLInputElementConstructor = element.ownerDocument.defaultView?.HTMLInputElement;
-  const inputValue =
-    HTMLInputElementConstructor && element instanceof HTMLInputElementConstructor
-      ? element.value
-      : "";
-  const seenTexts = new Set<string>();
-  return [
-    element.innerText || "",
-    element.textContent || "",
-    inputValue,
-    element.getAttribute("aria-label") ?? "",
-    element.getAttribute("title") ?? "",
-  ]
-    .filter((text) => {
-      const comparable = normaliseText(text);
-      if (!comparable || seenTexts.has(comparable)) return false;
-      seenTexts.add(comparable);
-      return true;
-    })
-    .join(" ");
 }

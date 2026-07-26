@@ -1,4 +1,5 @@
-import type { FiledReturnsDownloadTarget, PortalDownloadTriggerResult } from "../../core/contracts";
+import type { PortalDownloadTriggerResult } from "../../core/contracts";
+import type { FiledReturnsDownloadTarget } from "./filed-returns-contracts";
 import { filedReturnScopeId } from "./filed-returns-return-descriptors";
 
 const GSTR1_EXCEL_POST_CLICK_BLOCKED_WAIT_MS = 800;

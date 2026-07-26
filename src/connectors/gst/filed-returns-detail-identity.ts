@@ -1,4 +1,4 @@
-import type { FiledReturnsReturnType } from "../../core/filed-returns-return-types";
+import type { FiledReturnsReturnType } from "./filed-returns-return-types";
 import { normaliseText } from "./filed-returns-dom";
 import { canonicalFiledReturnsMonth } from "./filed-returns-months";
 import { filedReturnDescriptor } from "./filed-returns-return-descriptors";

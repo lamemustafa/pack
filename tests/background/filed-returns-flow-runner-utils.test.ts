@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PortalFlowStepResult } from "../../src/core/contracts";
+import type { PortalFlowStepResult } from "../../src/connectors/gst/filed-returns-contracts";
 import {
   DETAIL_SUMMARY_MODAL_SETTLE_MS,
   FLOW_STEP_SETTLE_MS,

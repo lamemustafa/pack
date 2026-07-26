@@ -1,39 +1,17 @@
-import { browser } from "wxt/browser";
 import type {
   FiledReturnsDownloadScope,
   FiledReturnsDownloadTarget,
   FiledReturnsFlowSummary,
   PortalFlowStepResult,
-} from "../core/contracts";
-import type { PackMessageResponse } from "../core/messages";
-import { FULL_FISCAL_YEAR_PERIOD } from "../core/filed-returns-scope";
-import { type FiledReturnsConcreteArtifactType } from "../core/filed-returns-artifacts";
+} from "../connectors/gst/filed-returns-contracts";
+import type { PackMessageResponse } from "../connectors/gst/messages";
+import { FULL_FISCAL_YEAR_PERIOD } from "../connectors/gst/filed-returns-scope";
+import { type FiledReturnsConcreteArtifactType } from "../connectors/gst/filed-returns-artifacts";
 import { filedReturnDescriptor } from "../connectors/gst/filed-returns-return-descriptors";
-import {
-  shouldFallBackAfterCaptureFailure,
-  shouldFallBackToPortalClick,
-  targetBoundPortalClickObservationTimeoutMs,
-  withCaptureFallbackSignal,
-} from "../connectors/gst/filed-returns-download-fallback";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
-import {
-  mergeFlowStepWithDownloadObservation,
-  observeNextBrowserDownload,
-} from "./download-observer";
-import { suggestNextBrowserDownloadFilename } from "./download-filename-suggester";
-import {
-  startCapturedFiledReturnDownload,
-  startMainWorldCapturedFiledReturnDownload,
-} from "./filed-returns-captured-download";
-import { triggerDirectFiledReturnDownload } from "./filed-returns-direct-download-trigger";
-import { expectedDownloadForScope } from "./filed-returns-download-expectations";
+import { startMainWorldCapturedFiledReturnDownload } from "./filed-returns-captured-download";
 import { withFiledReturnsDownloadDiagnostic } from "./filed-returns-download-diagnostics";
-import { safeFiledReturnDownloadFilename } from "./filed-returns-download-filename";
-import {
-  targetReviewScope,
-  withArtifactDownloadMessage,
-  withDownloadedArtifactSignal,
-} from "./filed-returns-download-result";
+import { targetReviewScope } from "./filed-returns-download-result";
 import {
   runDownloadTriggerOnce,
   type FiledReturnsFlowMessagingDeps,
@@ -48,75 +26,19 @@ export async function triggerAndObserveFiledReturnDownload({
   deps,
   scope,
   tabId,
-  targetOverride,
 }: {
   activePeriod: string | null;
   artifactType?: FiledReturnsConcreteArtifactType;
   deps: FiledReturnsFlowMessagingDeps;
   scope: FiledReturnsDownloadScope;
   tabId: number;
-  targetOverride?: FiledReturnsDownloadTarget;
 }): Promise<PackMessageResponse> {
-  const target = targetOverride ?? createDownloadTarget(scope, artifactType);
+  const target = createDownloadTarget(scope, artifactType);
   if (!target) return unverifiedPeriodResponse(scope);
-  const shouldAttemptDirectDownload =
-    artifactType === "PDF" &&
-    !target.forcePortalClick &&
-    deps.preferDirectDownload &&
-    filedReturnDescriptor(scope.returnType).supportsDirectDownload;
 
-  if (shouldAttemptDirectDownload) {
-    const directDownloadResponse = await triggerDirectFiledReturnDownload({
-      activePeriod,
-      deps,
-      scope,
-      tabId,
-      target,
-    });
-    if (directDownloadResponse && !shouldFallBackToPortalClick(directDownloadResponse)) {
-      return directDownloadResponse;
-    }
-  }
-
-  const armedAt = new Date();
-  const filename = safeFiledReturnDownloadFilename(scope, artifactType);
-  const trustedDownloadIds = new Set<number>();
-  const observationContext = {
-    ...expectedDownloadForScope(scope, artifactType),
-    armedAt,
-    expectedUrlSubstrings: [],
-    ignoredFilenames: [filename],
-    trustedDownloadIds,
-  };
-  const detailDownloadFilenameSuggestion = suggestNextBrowserDownloadFilename(
-    browser.downloads,
-    observationContext,
-    filename,
-  );
-  const detailDownloadObservation = target.forcePortalClick
-    ? observeFiledReturnDownload(observationContext, targetBoundPortalClickObservationTimeoutMs())
-    : observeFiledReturnDownload(observationContext);
-  const observedDownloadPromise = detailDownloadObservation.promise.finally(() => {
-    detailDownloadFilenameSuggestion.stop();
-  });
   const triggerResponse = await runDownloadTriggerOnce(deps, tabId, target);
-  if (triggerResponse.ok && "capturedDownloadRequest" in triggerResponse) {
-    detailDownloadObservation.stop();
-    detailDownloadFilenameSuggestion.stop();
-    return startCapturedFiledReturnDownload({
-      activePeriod,
-      armedAt,
-      artifactType,
-      capturedDownloadRequest: triggerResponse.capturedDownloadRequest,
-      deps,
-      scope,
-      target,
-      triggerStep: triggerResponse.downloadTrigger,
-    });
-  }
   if (triggerResponse.ok && "mainWorldCaptureRequest" in triggerResponse) {
-    detailDownloadObservation.stop();
-    detailDownloadFilenameSuggestion.stop();
+    const armedAt = deps.now?.() ?? new Date();
     const captureResponse = await startMainWorldCapturedFiledReturnDownload({
       activePeriod,
       armedAt,
@@ -128,95 +50,57 @@ export async function triggerAndObserveFiledReturnDownload({
       target,
       triggerStep: triggerResponse.downloadTrigger,
     });
+    const captureTimedOut =
+      captureResponse.ok &&
+      "flowStep" in captureResponse &&
+      captureResponse.flowStep.safeSignals.some((signal) =>
+        signal.endsWith("-main-world-capture-timeout"),
+      );
     if (
-      deps.stageCapturedDownloads ||
-      !shouldFallBackAfterCaptureFailure(captureResponse, target)
+      (!deps.stageCapturedDownloads ||
+        (deps.stageCapturedDownloads.bundleKind === "single-period" && captureTimedOut)) &&
+      deps.persistTargetReview !== false &&
+      captureResponse.ok &&
+      "flowStep" in captureResponse &&
+      captureResponse.flowStep.state !== "downloaded"
     ) {
-      const captureTimedOut =
-        captureResponse.ok &&
-        "flowStep" in captureResponse &&
-        captureResponse.flowStep.safeSignals.some((signal) =>
-          signal.endsWith("-main-world-capture-timeout"),
-        );
-      if (
-        (!deps.stageCapturedDownloads ||
-          (deps.stageCapturedDownloads.bundleKind === "single-period" && captureTimedOut)) &&
-        deps.persistTargetReview !== false &&
-        captureResponse.ok &&
-        "flowStep" in captureResponse
-      ) {
-        const stagedSelectionTimedOut =
-          deps.stageCapturedDownloads?.bundleKind === "single-period" && captureTimedOut;
-        const reviewStep = stagedSelectionTimedOut
-          ? {
-              ...captureResponse.flowStep,
-              safeSignals: [
-                ...captureResponse.flowStep.safeSignals,
-                "single-period-zip-incomplete",
-              ],
-            }
-          : captureResponse.flowStep;
-        const flowSummary = await persistFiledReturnsTargetReview(
-          stagedSelectionTimedOut ? scope : targetReviewScope(scope, artifactType),
-          reviewStep,
-          deps,
-        );
-        if (flowSummary) return { ...captureResponse, flowSummary };
-      }
-      return captureResponse;
-    }
-    return withCaptureFallbackSignal(
-      await triggerAndObserveFiledReturnDownload({
-        activePeriod,
-        artifactType,
+      const stagedSelectionTimedOut =
+        deps.stageCapturedDownloads?.bundleKind === "single-period" && captureTimedOut;
+      const reviewStep = stagedSelectionTimedOut
+        ? {
+            ...captureResponse.flowStep,
+            safeSignals: [...captureResponse.flowStep.safeSignals, "single-period-zip-incomplete"],
+          }
+        : captureResponse.flowStep;
+      const flowSummary = await persistFiledReturnsTargetReview(
+        stagedSelectionTimedOut ? scope : targetReviewScope(scope, artifactType),
+        reviewStep,
         deps,
-        scope,
-        tabId,
-        targetOverride: { ...target, forcePortalClick: true },
-      }),
-      target,
-    );
+      );
+      if (flowSummary) return { ...captureResponse, flowSummary };
+    }
+    return captureResponse;
   }
 
   const triggerFlowResponse = toTriggerFlowResponse(triggerResponse, activePeriod);
   if (!triggerFlowResponse.ok || !("flowStep" in triggerFlowResponse)) {
-    detailDownloadObservation.stop();
-    detailDownloadFilenameSuggestion.stop();
     return triggerFlowResponse;
   }
 
-  if (!shouldAwaitDownloadObservation(triggerFlowResponse.flowStep)) {
-    detailDownloadObservation.stop();
-    detailDownloadFilenameSuggestion.stop();
+  if (!requiresUntrustedPortalClickReview(triggerFlowResponse.flowStep)) {
     return {
       ...triggerFlowResponse,
       flowStep: withFiledReturnsDownloadDiagnostic({
-        attemptClass: shouldAttemptDirectDownload
-          ? "portal-click-after-direct-fallback"
-          : "portal-click",
+        attemptClass: "portal-click",
         flowStep: triggerFlowResponse.flowStep,
         target,
       }),
     };
   }
 
-  const observedDownload = await observedDownloadPromise;
   const flowStep = withFiledReturnsDownloadDiagnostic({
-    attemptClass: shouldAttemptDirectDownload
-      ? "portal-click-after-direct-fallback"
-      : "portal-click",
-    flowStep: withArtifactDownloadMessage(
-      withDownloadedArtifactSignal(
-        normaliseAmbiguousTriggerDownloadResult(
-          triggerFlowResponse.flowStep,
-          mergeFlowStepWithDownloadObservation(triggerFlowResponse.flowStep, observedDownload),
-        ),
-        artifactType,
-      ),
-      scope,
-      artifactType,
-    ),
-    safeEvidence: observedDownload.safeEvidence,
+    attemptClass: "portal-click",
+    flowStep: untrustedPortalClickReviewStep(triggerFlowResponse.flowStep, artifactType),
     target,
   });
   let flowSummary: FiledReturnsFlowSummary | null = null;
@@ -268,7 +152,7 @@ function toTriggerFlowResponse(
   return response;
 }
 
-function shouldAwaitDownloadObservation(step: PortalFlowStepResult): boolean {
+function requiresUntrustedPortalClickReview(step: PortalFlowStepResult): boolean {
   if (step.safeSignals.includes("filed-gstr3b-download-trigger-ambiguous")) return true;
   if (step.state !== "clicked") return false;
   return (
@@ -279,23 +163,25 @@ function shouldAwaitDownloadObservation(step: PortalFlowStepResult): boolean {
   );
 }
 
-function normaliseAmbiguousTriggerDownloadResult(
-  triggerStep: PortalFlowStepResult,
-  mergedStep: PortalFlowStepResult,
+function untrustedPortalClickReviewStep(
+  step: PortalFlowStepResult,
+  artifactType: FiledReturnsConcreteArtifactType,
 ): PortalFlowStepResult {
-  if (
-    !triggerStep.safeSignals.includes("filed-gstr3b-download-trigger-ambiguous") ||
-    mergedStep.state !== "downloaded"
-  ) {
-    return mergedStep;
-  }
-
   return {
-    ...mergedStep,
+    ...step,
     state: "download-unconfirmed",
+    safeSignals: [
+      ...step.safeSignals,
+      "filed-return-portal-click-evidence-unavailable",
+      `filed-return-artifact-unconfirmed:${artifactType}`,
+    ],
     safeMessage:
-      "Pack saw a matching GST PDF download, but could not confirm that Pack delivered the download click. It will not mark this target as downloaded without a confirmed click.",
-    ...(triggerStep.userAction ? { userAction: triggerStep.userAction } : {}),
+      "Pack used the verified GST Portal download control, but the resulting browser download is not bound to this target. Pack did not mark it complete and will not click again automatically.",
+    userAction: {
+      type: "RETRY_PORTAL_GENERATION",
+      message: "Review the target, then choose an explicit retry or cancellation.",
+      canResume: true,
+    },
   };
 }
 
@@ -316,15 +202,6 @@ function unverifiedPeriodResponse(scope: FiledReturnsDownloadScope): FlowStepRes
       },
     },
   };
-}
-
-export function observeFiledReturnDownload(
-  context = { ...expectedDownloadForScope({ returnType: "GSTR-3B" }, "PDF"), armedAt: new Date() },
-  timeoutMs?: number,
-) {
-  return timeoutMs === undefined
-    ? observeNextBrowserDownload(browser.downloads, context)
-    : observeNextBrowserDownload(browser.downloads, context, timeoutMs);
 }
 
 function createActionId(): string {

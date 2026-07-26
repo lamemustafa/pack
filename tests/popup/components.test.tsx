@@ -1,8 +1,9 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import type { FiledReturnsFlowSummary, PortalContext } from "../../src/core/contracts";
-import { FULL_FISCAL_YEAR_PERIOD } from "../../src/core/filed-returns-scope";
+import type { PortalContext } from "../../src/core/contracts";
+import type { FiledReturnsFlowSummary } from "../../src/connectors/gst/filed-returns-contracts";
+import { FULL_FISCAL_YEAR_PERIOD } from "../../src/connectors/gst/filed-returns-scope";
 import { ScopeForm, ScopeFormAction } from "../../src/entrypoints/popup/components";
 
 const context: PortalContext = {

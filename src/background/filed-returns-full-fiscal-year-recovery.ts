@@ -6,17 +6,21 @@ import type {
   FiledReturnsFullFiscalYearTarget,
   FiledReturnsFullFiscalYearTargetStatus,
   PortalFlowStepResult,
-} from "../core/contracts";
-import type { FullFiscalYearTargetRecoveryPayload, PackMessageResponse } from "../core/messages";
+} from "../connectors/gst/filed-returns-contracts";
+import type {
+  FullFiscalYearTargetRecoveryPayload,
+  PackMessageResponse,
+} from "../connectors/gst/messages";
 import {
   isFullFiscalYearLedger,
   markFullFiscalYearTargetTerminal,
 } from "./filed-returns-full-fiscal-year-ledger";
 import { toFullFiscalYearSummary } from "./filed-returns-full-fiscal-year-summary";
 import { clearFiledReturnsTargetReview } from "./filed-returns-target-review";
-import { normaliseFiledReturnsArtifactType } from "../core/filed-returns-artifacts";
-import { filedReturnsScopeId } from "../core/filed-returns-return-types";
+import { normaliseFiledReturnsArtifactType } from "../connectors/gst/filed-returns-artifacts";
+import { filedReturnsScopeId } from "../connectors/gst/filed-returns-return-types";
 import { discardFullFiscalYearFiledReturnsZip } from "./filed-returns-full-fiscal-year-zip";
+import { persistCanonicalFiledReturnsFlowSummary } from "./filed-returns-session-summary";
 
 const RECOVERABLE_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
   "pending",
@@ -70,6 +74,16 @@ export async function prepareFullFiscalYearTargetRetry(
   return runRecoveryCriticalSection(async () => {
     const checked = await readRecoverableFullFiscalYearTarget(payload, deps);
     if ("response" in checked) return { ok: false, response: checked.response };
+    if (checked.target.status === "running") {
+      return {
+        ok: false,
+        response: recoveryActionUnavailableResponse(
+          "full-fiscal-year-run-interrupted",
+          `Pack cannot safely retry interrupted ${checked.target.period} because a staged file may exist without its final ledger checkpoint. Discard this saved run before starting again.`,
+          checked.ledger,
+        ),
+      };
+    }
 
     const now = deps.now?.() ?? new Date();
     const updatedLedger = resetFullFiscalYearTargetForRetry(checked.ledger, checked.target, now);
@@ -257,6 +271,7 @@ function resetFullFiscalYearTargetForRetry(
     ),
   };
   delete retryLedger.zipPhase;
+  delete retryLedger.zipDownloadAttempt;
   return retryLedger;
 }
 
@@ -353,7 +368,7 @@ async function persistSummary(
 ): Promise<void> {
   const key = deps.storageKeys.completion;
   if (!key) return;
-  await browser.storage.session.set({ [key]: summary });
+  await persistCanonicalFiledReturnsFlowSummary(key, summary);
 }
 
 async function clearLegacyTargetReview(

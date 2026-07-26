@@ -1,6 +1,6 @@
 import { JSDOM } from "jsdom";
 import { describe, expect, it, vi } from "vitest";
-import type { FiledReturnsDownloadScope } from "../../src/core/contracts";
+import type { FiledReturnsDownloadScope } from "../../src/connectors/gst/filed-returns-contracts";
 import { runFiledReturnsDownloadStep } from "../../src/connectors/gst/filed-returns-flow";
 import { findGstr2bDashboardControl } from "../../src/connectors/gst/gstr2b-dashboard-view";
 import { filedReturnScopeId } from "../../src/connectors/gst/filed-returns-return-descriptors";
@@ -588,7 +588,16 @@ describe("filed returns guided flow", () => {
     expect(result.mainWorldCaptureRequest).toMatchObject({
       actionId: "action-gstr2b-pdf",
       signalPrefix: "filed-gstr2b",
+      targetBinding: {
+        artifactType: "PDF",
+        controlTextDigest: expect.stringMatching(/^[a-f0-9]{8}$/),
+        financialYear: "2026-27",
+        pathnameDigest: expect.stringMatching(/^[a-f0-9]{8}$/),
+        period: "May",
+        returnType: "GSTR-2B",
+      },
     });
+    expect(result.mainWorldCaptureRequest).not.toHaveProperty("asyncBlobBinding");
     expect(result.mainWorldCaptureRequest?.timeoutMs).toBe(15_000);
     expect(result.downloadTrigger.safeSignals).toEqual(
       expect.arrayContaining([
@@ -599,43 +608,6 @@ describe("filed returns guided flow", () => {
       ]),
     );
   });
-
-  it.each(["PDF", "EXCEL"] as const)(
-    "uses the verified GSTR-2B %s portal control for the target-bound fallback",
-    async (artifactType) => {
-      const documentRef = createGstr2bSummaryDocument();
-      const expectedControl = Array.from(documentRef.querySelectorAll<HTMLElement>("button")).find(
-        (element) =>
-          element.textContent?.includes(artifactType === "EXCEL" ? "DETAILS" : "SUMMARY"),
-      );
-      let clickCount = 0;
-      expectedControl?.addEventListener("click", () => {
-        clickCount += 1;
-      });
-
-      const result = await triggerFiledReturnDownload(documentRef, {
-        actionId: `action-gstr2b-${artifactType.toLowerCase()}-fallback`,
-        artifactType,
-        financialYear: "2026-27",
-        forcePortalClick: true,
-        period: "May",
-        returnType: "GSTR-2B",
-      });
-
-      expect(result.mainWorldCaptureRequest).toBeUndefined();
-      expect(clickCount).toBe(0);
-      await new Promise<void>((resolve) => documentRef.defaultView?.setTimeout(resolve, 0));
-      expect(clickCount).toBe(1);
-      expect(result.downloadTrigger).toMatchObject({
-        state: "clicked",
-        safeSignals: expect.arrayContaining([
-          "filed-gstr2b-download-clicked",
-          "filed-gstr2b-portal-blob-download-click-scheduled",
-          `filed-return-artifact-clicked:${artifactType}`,
-        ]),
-      });
-    },
-  );
 
   it("finds GSTR-2B download controls when the section carries the return label", async () => {
     const documentRef = createGstDocument(
@@ -4527,7 +4499,7 @@ describe("filed returns guided flow", () => {
     }
   });
 
-  it("reports available month options when GST keeps the month field unselectable", async () => {
+  it("keeps portal option text out of the pending month-selection status", async () => {
     vi.useFakeTimers();
     try {
       const documentRef = createDocument(`
@@ -4550,7 +4522,7 @@ describe("filed returns guided flow", () => {
           <div>
             <div>Month</div>
             <select id="periodValue">
-              <option>Select</option>
+              <option>Synthetic Taxpayer GSTIN 00XXXXX0000X0Z0</option>
             </select>
           </div>
           <div>
@@ -4585,7 +4557,9 @@ describe("filed returns guided flow", () => {
         ]),
       );
       expect(result.safeSignals).not.toContain("month-selected");
-      expect(result.safeMessage).toContain("Missing: month (available options: select).");
+      expect(result.safeMessage).toContain("Missing: month selection still pending.");
+      expect(result.safeMessage).not.toContain("00XXXXX0000X0Z0");
+      expect(result.safeMessage).not.toContain("Synthetic Taxpayer");
       expect(searchClicked).toBe(0);
     } finally {
       vi.useRealTimers();
@@ -6650,42 +6624,19 @@ describe("filed returns guided flow", () => {
     );
     expect(result.mainWorldCaptureRequest).toMatchObject({
       actionId: "test-action",
+      asyncBlobBinding: "action-xhr-non-artifact-to-pdf",
       signalPrefix: "filed-gstr3b",
-      timeoutMs: 5_000,
+      targetBinding: {
+        artifactType: "PDF",
+        controlTextDigest: expect.stringMatching(/^[a-f0-9]{8}$/),
+        financialYear: "2025-26",
+        pathnameDigest: expect.stringMatching(/^[a-f0-9]{8}$/),
+        period: "March",
+        returnType: "GSTR-3B",
+      },
+      timeoutMs: 30_000,
     });
     expect(downloadClicked).toBe(0);
-  });
-
-  it("clicks the verified GSTR-3B portal control when capture falls back", async () => {
-    const documentRef = createDocument(`
-      <main>
-        <nav>Returns / Filed Returns</nav>
-        <h1>GSTR-3B - Monthly Return</h1>
-        <div>Status - Filed</div>
-        <div>Financial Year - 2025-26</div>
-        <div>Return Period - March</div>
-        <button>DOWNLOAD FILED GSTR-3B</button>
-      </main>
-    `);
-    makeLayoutVisible(documentRef);
-    let downloadClicked = 0;
-    documentRef.querySelector("button")?.addEventListener("click", () => {
-      downloadClicked += 1;
-    });
-
-    const result = await triggerFiledReturnDownload(documentRef, {
-      actionId: "test-action",
-      financialYear: "2025-26",
-      forcePortalClick: true,
-      period: "March",
-      returnType: "GSTR-3B",
-    });
-
-    expect(result.downloadTrigger.safeSignals).toEqual(
-      expect.arrayContaining(["filed-return-download-clicked", "filed-gstr3b-download-clicked"]),
-    );
-    expect(result.mainWorldCaptureRequest).toBeUndefined();
-    expect(downloadClicked).toBe(1);
   });
 
   it("does not trigger a GSTR-3B download while the portal summary overlay remains open", async () => {
@@ -6773,8 +6724,17 @@ describe("filed returns guided flow", () => {
     expect(result.mainWorldCaptureRequest).toMatchObject({
       actionId: "test-action",
       signalPrefix: "filed-gstr1",
+      targetBinding: {
+        artifactType: "PDF",
+        controlTextDigest: expect.stringMatching(/^[a-f0-9]{8}$/),
+        financialYear: "2025-26",
+        pathnameDigest: expect.stringMatching(/^[a-f0-9]{8}$/),
+        period: "March",
+        returnType: "GSTR-1",
+      },
       timeoutMs: 15_000,
     });
+    expect(result.mainWorldCaptureRequest).not.toHaveProperty("asyncBlobBinding");
     expect(downloadClicked).toBe(0);
   });
 

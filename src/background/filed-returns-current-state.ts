@@ -1,7 +1,11 @@
 import { browser } from "wxt/browser";
-import type { FiledReturnsFlowSummary, FiledReturnsFullFiscalYearLedger } from "../core/contracts";
-import { isFullFiscalYearScope } from "../core/filed-returns-scope";
+import type {
+  FiledReturnsFlowSummary,
+  FiledReturnsFullFiscalYearLedger,
+} from "../connectors/gst/filed-returns-contracts";
+import { isFullFiscalYearScope } from "../connectors/gst/filed-returns-scope";
 import { readActiveFiledReturnsRunSummary } from "./filed-returns-active-run";
+import { readCanonicalFiledReturnsFlowSummary } from "./filed-returns-session-summary";
 import { summariseFullFiscalYearLedger } from "./filed-returns-full-fiscal-year";
 import {
   isFullFiscalYearLedger,
@@ -22,9 +26,7 @@ export interface FiledReturnsCurrentStateDeps {
 export async function readCurrentFiledReturnsFlowSummary(
   deps: FiledReturnsCurrentStateDeps,
 ): Promise<FiledReturnsFlowSummary | null> {
-  const completionSummary = await readSessionValue<FiledReturnsFlowSummary>(
-    deps.storageKeys.completion,
-  );
+  const completionSummary = await readCanonicalFiledReturnsFlowSummary(deps.storageKeys.completion);
   const activeRunSummary = await readActiveFiledReturnsRunSummary({
     storageKeys: { activeRun: deps.storageKeys.activeRun },
     ...(deps.now ? { now: deps.now } : {}),
@@ -51,7 +53,17 @@ export async function readCurrentFiledReturnsFlowSummary(
 
   if (isFullFiscalYearLedger(ledger)) return summariseFullFiscalYearLedger(ledger, deps.now?.());
 
-  return completionSummary;
+  return isUnbackedFullFiscalYearCompletion(completionSummary) ? null : completionSummary;
+}
+
+function isUnbackedFullFiscalYearCompletion(
+  completionSummary: FiledReturnsFlowSummary | null,
+): boolean {
+  return Boolean(
+    completionSummary &&
+    completionSummary.status === "complete" &&
+    isFullFiscalYearScope(completionSummary.scope),
+  );
 }
 
 function isRetainedZipRetrySummary(
@@ -97,11 +109,6 @@ function flowSummaryTimestampMs(summary: FiledReturnsFlowSummary): number {
   const timestamp = summary.completedAt ?? summary.updatedAt;
   if (!timestamp) return Number.NaN;
   return Date.parse(timestamp);
-}
-
-async function readSessionValue<T>(key: string): Promise<T | null> {
-  const values = await browser.storage.session.get(key);
-  return (values[key] as T | undefined) ?? null;
 }
 
 async function readLocalValue<T>(key: string): Promise<T | null> {

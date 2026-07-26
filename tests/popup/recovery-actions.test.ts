@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { FiledReturnsFlowSummary, PortalContext } from "../../src/core/contracts";
-import { FULL_FISCAL_YEAR_PERIOD } from "../../src/core/filed-returns-scope";
+import type { PortalContext } from "../../src/core/contracts";
+import type { FiledReturnsFlowSummary } from "../../src/connectors/gst/filed-returns-contracts";
+import { FULL_FISCAL_YEAR_PERIOD } from "../../src/connectors/gst/filed-returns-scope";
 import { ScopeForm } from "../../src/entrypoints/popup/components";
 import {
   canManuallyObserveFullFiscalYearTarget,
@@ -114,13 +115,115 @@ describe("popup full-year recovery actions", () => {
       }),
     );
 
-    expect(markup).toContain("Retry this period");
+    expect(markup).not.toContain("Retry this period");
+    expect(markup).not.toContain("Reconcile browser download");
     expect(markup).toContain("Discard saved state and start selected download");
     expect(markup).toContain("Cancel and reset");
     expect(markup).not.toContain("Cancel target");
     expect(markup).toContain(
       "Why Pack paused: Pack could not confirm the browser download for May.",
     );
+  });
+
+  it("shows only allowlisted download diagnostics for a target that needs review", () => {
+    const summary = targetReviewSummary();
+    summary.flowStep.safeSignals.push(
+      "filed-gstr3b-main-world-capture-armed",
+      "filed-gstr3b-target-bound-native-blob-click-delegated",
+      "browser-download-not-observed",
+      "unrelated-opaque-value",
+    );
+
+    const markup = renderToStaticMarkup(
+      createElement(RecoveryActions, {
+        busy: null,
+        portalReady: true,
+        summary,
+        onAcknowledgeInterruptedRun: () => undefined,
+        onRetryFullFiscalYearTarget: () => undefined,
+        onRetryTarget: () => undefined,
+        onResolveFullFiscalYearTarget: () => undefined,
+        onResolveTarget: () => undefined,
+        onStartFresh: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain("Safe diagnostics");
+    expect(markup).toContain("filed-gstr3b-main-world-capture-armed");
+    expect(markup).toContain("filed-gstr3b-target-bound-native-blob-click-delegated");
+    expect(markup).toContain("browser-download-not-observed");
+    expect(markup).not.toContain("unrelated-opaque-value");
+  });
+
+  it("offers only explicit reset controls for an interrupted selected-file bundle", () => {
+    const summary = targetReviewSummary();
+    summary.scope.artifactType = "PDF_AND_EXCEL";
+    summary.flowStep.safeSignals.push(
+      "single-period-bundle-artifact-review-required",
+      "single-period-bundle-running-ambiguous",
+      "single-period-opfs-retained",
+    );
+    const markup = renderToStaticMarkup(
+      createElement(RecoveryActions, {
+        busy: null,
+        portalReady: true,
+        summary,
+        onStartFresh: () => undefined,
+        onAcknowledgeInterruptedRun: () => undefined,
+        onRetryFullFiscalYearTarget: () => undefined,
+        onRetryTarget: () => undefined,
+        onResolveFullFiscalYearTarget: () => undefined,
+        onResolveTarget: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain("Discard saved state and start selected download");
+    expect(markup).toContain("Cancel and reset");
+    expect(markup).not.toContain("Retry this period");
+    expect(markup).not.toContain("Reconcile browser download");
+    expect(markup).not.toContain("Retry local cleanup");
+  });
+
+  it("labels exact-ID target recovery as reconciliation, not retry", () => {
+    const summary = targetReviewSummary();
+    summary.flowStep.safeSignals.push("filed-returns-download-reconciliation-required");
+    const markup = renderToStaticMarkup(
+      createElement(RecoveryActions, {
+        busy: null,
+        portalReady: true,
+        summary,
+        onStartFresh: () => undefined,
+        onAcknowledgeInterruptedRun: () => undefined,
+        onRetryFullFiscalYearTarget: () => undefined,
+        onRetryTarget: () => undefined,
+        onResolveFullFiscalYearTarget: () => undefined,
+        onResolveTarget: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain("Reconcile browser download");
+    expect(markup).not.toContain("Retry this period");
+  });
+
+  it("keeps local-only cleanup available without labeling it as a portal retry", () => {
+    const summary = targetReviewSummary();
+    summary.flowStep.safeSignals.push("filed-returns-target-local-cleanup-required");
+    const markup = renderToStaticMarkup(
+      createElement(RecoveryActions, {
+        busy: null,
+        portalReady: true,
+        summary,
+        onStartFresh: () => undefined,
+        onAcknowledgeInterruptedRun: () => undefined,
+        onRetryFullFiscalYearTarget: () => undefined,
+        onRetryTarget: () => undefined,
+        onResolveFullFiscalYearTarget: () => undefined,
+        onResolveTarget: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain("Retry local cleanup");
+    expect(markup).not.toContain("Retry this period");
   });
 
   it("does not offer manual completion for an incomplete selected-file ZIP", () => {
@@ -142,7 +245,7 @@ describe("popup full-year recovery actions", () => {
     );
 
     expect(markup).toContain("Cancel and reset");
-    expect(markup).not.toContain("Mark reviewed manually");
+    expect(markup).not.toContain("Record manual observation");
   });
 
   it("keeps portal-dependent destructive restart disabled without a GST tab", () => {
@@ -163,7 +266,7 @@ describe("popup full-year recovery actions", () => {
     expect(markup).toContain(
       '<button type="button" class="secondary" disabled="">Discard saved state and start selected download</button>',
     );
-    expect(markup).toContain("Mark reviewed manually");
+    expect(markup).toContain("Record manual observation");
     expect(markup).toContain("Cancel and reset");
   });
 

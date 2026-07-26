@@ -1,20 +1,19 @@
 import React from "react";
 import { browser } from "wxt/browser";
+import type { PortalContext, PortalObservation } from "../../core/contracts";
 import type {
   FiledReturnsDownloadScope,
   FiledReturnsFlowSummary,
-  PortalContext,
-  PortalObservation,
-} from "../../core/contracts";
+} from "../../connectors/gst/filed-returns-contracts";
 import type {
   FullFiscalYearTargetRecoveryPayload,
   PackMessage,
   PackMessageResponse,
-} from "../../core/messages";
+} from "../../connectors/gst/messages";
 import {
   DEFAULT_FILED_RETURNS_DOWNLOAD_SCOPE,
   normaliseFiledReturnsScope,
-} from "../../core/filed-returns-scope";
+} from "../../connectors/gst/filed-returns-scope";
 import {
   getFiledReturnsCompletionStatus,
   getFiledReturnsSummaryHeading,
@@ -122,12 +121,12 @@ export function usePackPopupController() {
   }, [applyFlowResponse, filedReturnsFlowSummary?.scope, withBusy]);
 
   const resolveUnconfirmedDownload = React.useCallback(
-    async (resolution: "downloaded" | "cancelled") => {
+    async (resolution: "manually-observed" | "cancelled") => {
       const recoveryScope = filedReturnsFlowSummary?.scope;
       if (!recoveryScope) return;
 
       await withBusy(
-        resolution === "downloaded"
+        resolution === "manually-observed"
           ? "resolve-unconfirmed-download"
           : "cancel-unconfirmed-download",
         async () => {

@@ -2,8 +2,8 @@ import type {
   FiledReturnsDownloadScope,
   FiledReturnsFullFiscalYearTarget,
   PortalFlowStepResult,
-} from "../core/contracts";
-import { concreteFiledReturnsArtifactTypes } from "../core/filed-returns-artifacts";
+} from "../connectors/gst/filed-returns-contracts";
+import { concreteFiledReturnsArtifactTypes } from "../connectors/gst/filed-returns-artifacts";
 
 const FULL_YEAR_STAGED_SIGNAL_PREFIX = "full-fiscal-year-opfs-staged:";
 

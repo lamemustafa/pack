@@ -1,8 +1,8 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import type { FiledReturnsFlowSummary } from "../../src/core/contracts";
-import { FULL_FISCAL_YEAR_PERIOD } from "../../src/core/filed-returns-scope";
+import type { FiledReturnsFlowSummary } from "../../src/connectors/gst/filed-returns-contracts";
+import { FULL_FISCAL_YEAR_PERIOD } from "../../src/connectors/gst/filed-returns-scope";
 import {
   getInlinePrimaryAction,
   InlineStatus,
@@ -72,6 +72,80 @@ describe("inline filed-return recovery status", () => {
     expect(markup).not.toContain("The selected file was saved by your browser.");
   });
 
+  it("shows the final-ZIP check warning without requiring a current period", () => {
+    const summary: FiledReturnsFlowSummary = {
+      ...blockedSummary,
+      scope: { ...blockedSummary.scope, period: FULL_FISCAL_YEAR_PERIOD },
+      currentPeriod: undefined,
+      completedPeriods: ["April", "May"],
+      totalPeriods: 2,
+      flowStep: {
+        ...blockedSummary.flowStep,
+        state: "download-unconfirmed",
+        safeSignals: [
+          "full-fiscal-year-final-zip-retry",
+          "full-fiscal-year-zip-download-unconfirmed",
+          "full-fiscal-year-zip-phase:download-started",
+          "full-fiscal-year-opfs-retained",
+        ],
+        safeMessage:
+          "Pack started the final fiscal-year ZIP download before the previous run stopped. Check browser Downloads before retrying it.",
+      },
+    };
+
+    const markup = renderToStaticMarkup(
+      <InlineStatus
+        busy={null}
+        onOpenPortal={vi.fn()}
+        onRestartTarget={vi.fn()}
+        onRetryFullFiscalYearTarget={vi.fn()}
+        onRetryTarget={vi.fn()}
+        presentation={blockedPresentation}
+        summary={summary}
+      />,
+    );
+
+    expect(markup).toContain("Check Browser Downloads");
+    expect(markup).toContain("Check browser Downloads before retrying it");
+  });
+
+  it("offers exact-ID status reconciliation without another ZIP download", () => {
+    const summary: FiledReturnsFlowSummary = {
+      ...blockedSummary,
+      scope: { ...blockedSummary.scope, period: FULL_FISCAL_YEAR_PERIOD },
+      currentPeriod: undefined,
+      completedPeriods: ["April", "May"],
+      totalPeriods: 2,
+      flowStep: {
+        ...blockedSummary.flowStep,
+        state: "download-unconfirmed",
+        safeSignals: [
+          "full-fiscal-year-final-zip-manual-review",
+          "full-fiscal-year-zip-download-unconfirmed",
+          "full-fiscal-year-zip-phase:download-observing",
+          "full-fiscal-year-opfs-retained",
+        ],
+        safeMessage:
+          "Pack saved the browser download ID and must reconcile that exact download before another ZIP can start.",
+      },
+    };
+
+    const markup = renderToStaticMarkup(
+      <InlineStatus
+        busy={null}
+        onOpenPortal={vi.fn()}
+        onRestartTarget={vi.fn()}
+        onRetryFullFiscalYearTarget={vi.fn()}
+        onRetryTarget={vi.fn()}
+        presentation={blockedPresentation}
+        summary={summary}
+      />,
+    );
+
+    expect(markup).toContain("Check final ZIP status");
+    expect(markup).toContain("reconcile that exact download");
+  });
+
   it("offers an explicit retry for a blocked period", () => {
     expect(hasInlinePrimaryAction(blockedPresentation, blockedSummary)).toBe(true);
     const onRestartTarget = vi.fn();
@@ -104,7 +178,7 @@ describe("inline filed-return recovery status", () => {
     expect(onRetryTarget).not.toHaveBeenCalled();
   });
 
-  it("explains that an unresolved target review blocks choosing another period", () => {
+  it("keeps an ambiguous no-ID review fail-closed behind explicit run controls", () => {
     const targetReviewSummary: FiledReturnsFlowSummary = {
       ...blockedSummary,
       flowStep: {
@@ -121,7 +195,7 @@ describe("inline filed-return recovery status", () => {
       onRetryFullFiscalYearTarget: vi.fn(),
       onRetryTarget,
     });
-    action?.onClick();
+    expect(action).toBeNull();
     const markup = renderToStaticMarkup(
       <InlineStatus
         busy={null}
@@ -137,8 +211,49 @@ describe("inline filed-return recovery status", () => {
     expect(markup).toContain("May needs review");
     expect(markup).toContain("Resolve May before choosing another period");
     expect(markup).toContain("More run controls");
-    expect(markup).toContain("after checking Browser Downloads");
-    expect(markup).toContain("Retry May");
+    expect(markup).toContain("Check Browser Downloads");
+    expect(markup).not.toContain("Retry May");
+    expect(onRetryTarget).not.toHaveBeenCalled();
+    expect(onRestartTarget).not.toHaveBeenCalled();
+  });
+
+  it("labels an exact-ID target action as reconciliation", () => {
+    const targetReviewSummary: FiledReturnsFlowSummary = {
+      ...blockedSummary,
+      flowStep: {
+        ...blockedSummary.flowStep,
+        state: "download-unconfirmed",
+        safeSignals: [
+          "filed-returns-target-review-required",
+          "filed-returns-download-reconciliation-required",
+        ],
+      },
+    };
+    const onRestartTarget = vi.fn();
+    const onRetryTarget = vi.fn();
+    const action = getInlinePrimaryAction(blockedPresentation, targetReviewSummary, {
+      onOpenPortal: vi.fn(),
+      onRestartTarget,
+      onRetryFullFiscalYearTarget: vi.fn(),
+      onRetryTarget,
+    });
+    action?.onClick();
+
+    const markup = renderToStaticMarkup(
+      <InlineStatus
+        busy={null}
+        onOpenPortal={vi.fn()}
+        onRestartTarget={onRestartTarget}
+        onRetryFullFiscalYearTarget={vi.fn()}
+        onRetryTarget={onRetryTarget}
+        presentation={blockedPresentation}
+        summary={targetReviewSummary}
+      />,
+    );
+
+    expect(action?.label).toBe("Reconcile browser download");
+    expect(markup).toContain("Reconcile browser download");
+    expect(markup).not.toContain("Retry May");
     expect(onRetryTarget).toHaveBeenCalledOnce();
     expect(onRestartTarget).not.toHaveBeenCalled();
   });
@@ -165,7 +280,7 @@ describe("inline filed-return recovery status", () => {
       />,
     );
 
-    expect(markup).toContain("Retry the selected files from a signed-in GST Portal tab");
+    expect(markup).toContain("discard the saved state and start the selected files again");
     expect(markup).toContain("cancel and reset");
     expect(markup).not.toContain("mark it reviewed");
   });

@@ -1,4 +1,5 @@
-import type { PortalDownloadTriggerResult, PortalFlowStepResult } from "../../core/contracts";
+import type { PortalDownloadTriggerResult } from "../../core/contracts";
+import type { PortalFlowStepResult } from "./filed-returns-contracts";
 
 const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
 const BLOCKED_PORTAL_PATTERNS = [

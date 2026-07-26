@@ -1,4 +1,5 @@
-import type { FiledReturnsFlowSummary } from "../../core/contracts";
+import type { FiledReturnsFlowSummary } from "../../connectors/gst/filed-returns-contracts";
+import { DiagnosticSignals, hasDiagnosticSignals } from "./run-summary";
 
 export interface RecoveryActionsProps {
   busy: string | null;
@@ -8,7 +9,7 @@ export interface RecoveryActionsProps {
   onRetryFullFiscalYearTarget: () => void;
   onRetryTarget: () => void;
   onResolveFullFiscalYearTarget: (resolution: "manually-observed" | "cancelled") => void;
-  onResolveTarget: (resolution: "downloaded" | "cancelled") => void;
+  onResolveTarget: (resolution: "manually-observed" | "cancelled") => void;
   onStartFresh: () => void;
 }
 
@@ -28,7 +29,11 @@ export function RecoveryActions({
   const { needsFullFiscalYearReview, needsRunReview, needsTargetReview, runActive, signals } =
     recoveryState;
   const canManuallyObserveFullYear = canManuallyObserveFullFiscalYearTarget(summary);
-  const canManuallyResolveTarget = !signals.has("single-period-zip-incomplete");
+  const canManuallyResolveTarget =
+    !signals.has("single-period-zip-incomplete") &&
+    !signals.has("filed-returns-target-manually-observed");
+  const canReconcileTarget = signals.has("filed-returns-download-reconciliation-required");
+  const canRetryTargetCleanup = signals.has("filed-returns-target-local-cleanup-required");
   const retryDisabled = busy !== null || !portalReady;
   return (
     <details className="recovery-details" open>
@@ -57,12 +62,28 @@ export function RecoveryActions({
         {needsTargetReview ? (
           <>
             <p className="muted">Why Pack paused: {summary.flowStep.safeMessage}</p>
-            {!portalReady ? (
-              <p className="muted">Open a signed-in GST Portal tab before retrying this period.</p>
+            {hasDiagnosticSignals(summary) ? (
+              <details className="diagnostic-details">
+                <summary>Safe diagnostics</summary>
+                <DiagnosticSignals summary={summary} />
+              </details>
             ) : null}
-            <button type="button" disabled={retryDisabled} onClick={onRetryTarget}>
-              {busy === "retry-filed-returns-target" ? "Retrying..." : "Retry this period"}
-            </button>
+            {!portalReady ? (
+              <p className="muted">
+                Open a signed-in GST Portal tab before reconciling or starting again.
+              </p>
+            ) : null}
+            {canReconcileTarget || canRetryTargetCleanup ? (
+              <button type="button" disabled={retryDisabled} onClick={onRetryTarget}>
+                {busy === "retry-filed-returns-target"
+                  ? canReconcileTarget
+                    ? "Reconciling..."
+                    : "Cleaning up..."
+                  : canReconcileTarget
+                    ? "Reconcile browser download"
+                    : "Retry local cleanup"}
+              </button>
+            ) : null}
             <button
               type="button"
               className="secondary"
@@ -78,10 +99,17 @@ export function RecoveryActions({
                 type="button"
                 className="secondary"
                 disabled={busy !== null}
-                onClick={() => onResolveTarget("downloaded")}
+                onClick={() => onResolveTarget("manually-observed")}
               >
-                {busy === "resolve-unconfirmed-download" ? "Saving..." : "Mark reviewed manually"}
+                {busy === "resolve-unconfirmed-download"
+                  ? "Saving..."
+                  : "Record manual observation"}
               </button>
+            ) : null}
+            {signals.has("filed-returns-target-manually-observed") ? (
+              <p className="muted">
+                Manual observation recorded. It does not complete this target.
+              </p>
             ) : null}
             <button
               type="button"

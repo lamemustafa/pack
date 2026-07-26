@@ -1,18 +1,21 @@
-import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "../core/contracts";
+import type {
+  FiledReturnsDownloadScope,
+  PortalFlowStepResult,
+} from "../connectors/gst/filed-returns-contracts";
 import type {
   FullFiscalYearTargetRecoveryPayload,
   FiledReturnsFreshStartPayload,
   PackMessage,
   PackMessageResponse,
-} from "../core/messages";
-import { isFullFiscalYearScope } from "../core/filed-returns-scope";
+} from "../connectors/gst/messages";
+import { isFullFiscalYearScope } from "../connectors/gst/filed-returns-scope";
 import {
   acquireFiledReturnsRun,
   releaseFiledReturnsRun,
   startFiledReturnsRunLeaseRenewal,
 } from "./filed-returns-active-run";
 import type { ActiveGstTab } from "./filed-returns-active-tab";
-import type { MainWorldFiledReturnsFilterSelectionOutcome } from "./main-world-filed-returns-filter-selection";
+import type { MainWorldFiledReturnsFilterSelectionOutcome } from "../connectors/gst/main-world-filed-returns-filter-selection";
 import { startFullFiscalYearDownloadFlow } from "./filed-returns-full-fiscal-year";
 import {
   prepareFullFiscalYearTargetRetry,
@@ -31,14 +34,17 @@ import {
 } from "./filed-returns-full-fiscal-year-run-state";
 import {
   clearFiledReturnsTargetReview,
+  malformedTargetReviewResponse,
   noTargetReviewResponse,
   readFiledReturnsTargetReview,
   readCurrentFiledReturnsTargetReview,
+  readCurrentFiledReturnsTargetReviewStorageState,
   retryCompletedSinglePeriodZipCleanup,
   resolveUnconfirmedFiledReturnsDownload,
   responseForFiledReturnsTargetReview,
 } from "./filed-returns-target-review";
 import { startSinglePeriodFiledReturnsDownloadFlow } from "./filed-returns-single-period-flow";
+import { reconcileFiledReturnsTargetDownload } from "./filed-returns-target-download-recovery";
 
 export type { ActiveGstTab } from "./filed-returns-active-tab";
 
@@ -53,17 +59,11 @@ export interface FiledReturnsFlowRunnerDeps {
           | "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3"
           | "PACK_CONTENT_MARK_FILED_RETURNS_SEARCH_PENDING_V3"
           | "PACK_CONTENT_CLEAR_FILED_RETURNS_SEARCH_PENDING_V3"
-          | "PACK_CONTENT_RESOLVE_GSTR1_VIEW_POINT_V3"
           | "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3"
-          | "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3"
-          | "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V3";
+          | "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3";
       }
     >,
   ) => Promise<PackMessageResponse>;
-  clickGstr1ResultViewWithDebugger?: (
-    tabId: number,
-    scope: FiledReturnsDownloadScope,
-  ) => Promise<PortalFlowStepResult>;
   storageKeys: {
     activeRun?: string;
     completion: string;
@@ -72,8 +72,8 @@ export interface FiledReturnsFlowRunnerDeps {
     targetReview?: string;
   };
   now?: () => Date;
+  portalTabIncognito?: boolean;
   persistTargetReview?: boolean;
-  preferDirectDownload?: boolean;
   selectFiltersInMainWorld?: (
     tabId: number,
     scope: FiledReturnsDownloadScope,
@@ -88,6 +88,7 @@ export interface FiledReturnsFlowRunnerDeps {
     flowStepSettleMs?: number;
     portalNavigationSettleMs?: number;
     resultRowNavigationSettleMs?: number;
+    targetBoundPortalDownloadWaitMs?: number;
   };
 }
 
@@ -95,8 +96,11 @@ export async function startFiledReturnsDownloadFlow(
   scope: FiledReturnsDownloadScope,
   deps: FiledReturnsFlowRunnerDeps,
 ): Promise<PackMessageResponse> {
-  const targetReview = await readCurrentFiledReturnsTargetReview(deps);
-  if (targetReview) return responseForFiledReturnsTargetReview(targetReview);
+  const targetReviewState = await readCurrentFiledReturnsTargetReviewStorageState(deps);
+  if (targetReviewState.state === "malformed") return malformedTargetReviewResponse(scope);
+  if (targetReviewState.state === "valid") {
+    return responseForFiledReturnsTargetReview(targetReviewState.review);
+  }
 
   if (isFullFiscalYearScope(scope)) {
     const malformedLedger = await readMalformedLedgerState(deps.storageKeys.fullFiscalYearLedger);
@@ -203,18 +207,85 @@ export async function retryFiledReturnsTargetDownloadFlow(
   scope: FiledReturnsDownloadScope,
   deps: FiledReturnsFlowRunnerDeps,
 ): Promise<PackMessageResponse> {
-  const targetReview = await readFiledReturnsTargetReview(scope, deps);
-  if (!targetReview) return noTargetReviewResponse(scope);
+  const initialTargetReview = await readFiledReturnsTargetReview(scope, deps);
+  if (!initialTargetReview) return noTargetReviewResponse(scope);
 
   const activeRun = await acquireFiledReturnsRun(scope, deps);
   if ("response" in activeRun) return activeRun.response;
 
   const stopLeaseRenewal = startFiledReturnsRunLeaseRenewal(activeRun.run, deps);
   try {
+    const targetReview = await readFiledReturnsTargetReview(scope, deps);
+    if (!targetReview) {
+      const currentState = await readCurrentFiledReturnsTargetReviewStorageState(deps);
+      if (currentState.state === "malformed") return malformedTargetReviewResponse(scope);
+      return currentState.state === "valid"
+        ? responseForFiledReturnsTargetReview(currentState.review)
+        : noTargetReviewResponse(scope);
+    }
     const cleanupResponse = await retryCompletedSinglePeriodZipCleanup(scope, deps);
     if (cleanupResponse) return cleanupResponse;
-    await clearFiledReturnsTargetReview(scope, deps);
+    const reconciliation = await reconcileFiledReturnsTargetDownload(targetReview, deps);
+    if (reconciliation.state === "handled") return reconciliation.response;
+    const retrySafeReview = await readFiledReturnsTargetReview(scope, deps);
+    if (retrySafeReview) {
+      const cleared = await clearFiledReturnsTargetReview(
+        scope,
+        deps,
+        retrySafeReview.revision ?? 1,
+      );
+      if (!cleared) {
+        const currentState = await readCurrentFiledReturnsTargetReviewStorageState(deps);
+        if (currentState.state === "malformed") return malformedTargetReviewResponse(scope);
+        if (currentState.state === "valid") {
+          return responseForFiledReturnsTargetReview(currentState.review);
+        }
+      }
+    } else {
+      const currentState = await readCurrentFiledReturnsTargetReviewStorageState(deps);
+      if (currentState.state === "malformed") return malformedTargetReviewResponse(scope);
+      if (currentState.state === "valid") {
+        return responseForFiledReturnsTargetReview(currentState.review);
+      }
+    }
     return startSinglePeriodFiledReturnsDownloadFlow(scope, deps);
+  } finally {
+    stopLeaseRenewal();
+    await releaseFiledReturnsRun(activeRun.run, deps);
+  }
+}
+
+export async function resolveUnconfirmedFiledReturnsDownloadFlow(
+  scope: FiledReturnsDownloadScope,
+  resolution: "manually-observed" | "cancelled",
+  deps: FiledReturnsFlowRunnerDeps,
+): Promise<PackMessageResponse> {
+  const activeRun = await acquireFiledReturnsRun(scope, deps);
+  if ("response" in activeRun) return activeRun.response;
+
+  const stopLeaseRenewal = startFiledReturnsRunLeaseRenewal(activeRun.run, deps);
+  try {
+    return resolveUnconfirmedFiledReturnsDownload(scope, resolution, deps);
+  } finally {
+    stopLeaseRenewal();
+    await releaseFiledReturnsRun(activeRun.run, deps);
+  }
+}
+
+export async function resolveFullFiscalYearTargetFlow(
+  payload: FullFiscalYearTargetRecoveryPayload,
+  resolution: "manually-observed" | "cancelled",
+  deps: FiledReturnsFlowRunnerDeps,
+): Promise<PackMessageResponse> {
+  const recoveryScope = await readFullFiscalYearTargetRecoveryScope(payload, deps);
+  if ("response" in recoveryScope) return recoveryScope.response;
+
+  const activeRun = await acquireFiledReturnsRun(recoveryScope.scope, deps);
+  if ("response" in activeRun) return activeRun.response;
+
+  const stopLeaseRenewal = startFiledReturnsRunLeaseRenewal(activeRun.run, deps);
+  try {
+    return resolveFullFiscalYearTarget(payload, resolution, deps);
   } finally {
     stopLeaseRenewal();
     await releaseFiledReturnsRun(activeRun.run, deps);
@@ -238,6 +309,14 @@ export async function startFreshFiledReturnsDownloadFlow(
 
   const stopLeaseRenewal = startFiledReturnsRunLeaseRenewal(activeRun.run, deps);
   try {
+    if (payload.recovery.kind === "target-review") {
+      const targetReview = await readFiledReturnsTargetReview(payload.recovery.scope, deps);
+      if (!targetReview) return noTargetReviewResponse(payload.recovery.scope);
+      if (targetReview.downloadAttempt) {
+        const reconciliation = await reconcileFiledReturnsTargetDownload(targetReview, deps);
+        if (reconciliation.state === "handled") return reconciliation.response;
+      }
+    }
     const discarded =
       payload.recovery.kind === "target-review"
         ? await resolveUnconfirmedFiledReturnsDownload(payload.recovery.scope, "cancelled", deps)

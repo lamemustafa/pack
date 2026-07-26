@@ -1,10 +1,13 @@
-import type { FiledReturnsDownloadScope, FiledReturnsFlowSummary } from "../../core/contracts";
+import type {
+  FiledReturnsDownloadScope,
+  FiledReturnsFlowSummary,
+} from "../../connectors/gst/filed-returns-contracts";
 import {
   FILED_RETURNS_ARTIFACT_TYPES,
   concreteFiledReturnsArtifactTypes,
   normaliseFiledReturnsArtifactType,
   supportsFiledReturnsArtifactType,
-} from "../../core/filed-returns-artifacts";
+} from "../../connectors/gst/filed-returns-artifacts";
 import {
   FILED_RETURNS_MONTHS,
   getFiledReturnsFinancialYearOptions,
@@ -12,9 +15,13 @@ import {
   getFiledReturnsScopePeriodOptions,
   FULL_FISCAL_YEAR_PERIOD,
   isFullFiscalYearScope,
-} from "../../core/filed-returns-scope";
-import { FILED_RETURNS_RETURN_TYPES } from "../../core/filed-returns-return-types";
-import { canRetryFullFiscalYearZipWithoutPortal } from "./flow-summary";
+} from "../../connectors/gst/filed-returns-scope";
+import { FILED_RETURNS_RETURN_TYPES } from "../../connectors/gst/filed-returns-return-types";
+import {
+  canRetryFullFiscalYearZipWithoutPortal,
+  hasPersistedFullFiscalYearZipDownloadId,
+  isAmbiguousFullFiscalYearZipHandoff,
+} from "./flow-summary";
 
 export function createScopeFormModel(scope: FiledReturnsDownloadScope) {
   const singlePeriodOptions = getFiledReturnsPeriodOptions(scope.financialYear, new Date());
@@ -127,7 +134,14 @@ export function getScopeFormStartAction(
     canRetryFullFiscalYearZipWithoutPortal(summary) &&
     isSameScope(scope, summary.scope)
   ) {
-    return { disabled: false, label: "Retry final ZIP" };
+    return {
+      disabled: false,
+      label: hasPersistedFullFiscalYearZipDownloadId(summary)
+        ? "Check final ZIP status"
+        : isAmbiguousFullFiscalYearZipHandoff(summary)
+          ? "I checked—retry final ZIP"
+          : "Retry final ZIP",
+    };
   }
   if (summary && isSameScope(scope, summary.scope)) {
     const signals = new Set(summary.flowStep.safeSignals);

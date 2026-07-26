@@ -221,7 +221,7 @@ describe("filed returns navigation matcher", () => {
   it("keeps navigation diagnostics allow-listed and identifier-safe", () => {
     const diagnostics = collectSafeNavigationDiagnostics([
       { text: "Services" },
-      { text: "27ABCDE1234F1Z5" },
+      { text: "00XXXXX0000X0Z0" },
       { text: "Return Dashboard" },
       { text: "Private Legal Name Pvt Ltd" },
       { text: "View Filed Returns" },

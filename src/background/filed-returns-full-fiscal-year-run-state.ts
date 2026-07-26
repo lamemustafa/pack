@@ -3,8 +3,8 @@ import type {
   FiledReturnsFlowSummary,
   FiledReturnsFullFiscalYearLedger,
   PortalFlowStepResult,
-} from "../core/contracts";
-import type { PackMessageResponse } from "../core/messages";
+} from "../connectors/gst/filed-returns-contracts";
+import type { PackMessageResponse } from "../connectors/gst/messages";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
 import {
@@ -24,6 +24,7 @@ import {
   toFullFiscalYearSummary,
 } from "./filed-returns-full-fiscal-year-summary";
 import { hasLegacyRetainedStaging } from "./filed-returns-full-fiscal-year-zip-phase";
+import { persistCanonicalFiledReturnsFlowSummary } from "./filed-returns-session-summary";
 
 export function hasTerminalPositiveTarget(ledger: FiledReturnsFullFiscalYearLedger): boolean {
   return ledger.targets.some((target) =>
@@ -155,9 +156,21 @@ export function shouldPersistReconciledLedger(
 ): boolean {
   return (
     (previous.revision ?? 1) !== (reconciled.revision ?? 1) ||
+    previous.planVersion !== reconciled.planVersion ||
     previous.status !== reconciled.status ||
     previous.targets.length !== reconciled.targets.length ||
-    previous.eligibleThrough !== reconciled.eligibleThrough
+    previous.eligibleThrough !== reconciled.eligibleThrough ||
+    previous.zipPhase !== reconciled.zipPhase ||
+    previous.zipDownloadAttempt?.requestedAt !== reconciled.zipDownloadAttempt?.requestedAt ||
+    previous.zipDownloadAttempt?.downloadId !== reconciled.zipDownloadAttempt?.downloadId ||
+    previous.targets.some((target, index) => {
+      const nextTarget = reconciled.targets[index];
+      return (
+        !nextTarget ||
+        target.targetId !== nextTarget.targetId ||
+        target.status !== nextTarget.status
+      );
+    })
   );
 }
 
@@ -207,7 +220,7 @@ export async function persistSummary(
   deps: FiledReturnsFlowRunnerDeps,
   summary: FiledReturnsFlowSummary,
 ): Promise<void> {
-  await browser.storage.session.set({ [deps.storageKeys.completion]: summary });
+  await persistCanonicalFiledReturnsFlowSummary(deps.storageKeys.completion, summary);
 }
 
 export function fullFiscalYearErrorStep(

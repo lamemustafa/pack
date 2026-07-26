@@ -1,25 +1,24 @@
 import { browser } from "wxt/browser";
-import type { ArchiveManifest, PortalObservation } from "../core/contracts";
+import type { ArchiveManifest } from "../core/contracts";
 import { PACK_PRODUCT_VERSION } from "../extension/version";
-import { isPackMessage, type PackMessageResponse } from "../core/messages";
+import { isPackMessage, type PackMessageResponse } from "../connectors/gst/messages";
 import {
   acknowledgeInterruptedFiledReturnsRun,
   readActiveFiledReturnsRunSummary,
 } from "../background/filed-returns-active-run";
 import { readCurrentFiledReturnsFlowSummary } from "../background/filed-returns-current-state";
-import { resolveFullFiscalYearTarget } from "../background/filed-returns-full-fiscal-year-recovery";
 import {
+  resolveFullFiscalYearTargetFlow,
+  resolveUnconfirmedFiledReturnsDownloadFlow,
   retryFullFiscalYearTargetDownloadFlow,
   retryFiledReturnsTargetDownloadFlow,
   startFreshFiledReturnsDownloadFlow,
   startFiledReturnsDownloadFlow,
 } from "../background/filed-returns-flow-runner";
-import { resolveUnconfirmedFiledReturnsDownload } from "../background/filed-returns-target-review";
 import { clearPackLocalDataWithRecoveryGuard } from "../background/local-data";
 import { startSyntheticDemo } from "../background/synthetic-demo";
 import { runDownloadPromptProbe } from "../background/download-prompt-probe";
 import { selectFiledReturnsFiltersInMainWorldForTab } from "../background/main-world-filed-returns-filter-executor";
-import { clickGstr1ResultViewWithDebugger } from "../background/gstr1-debugger-view";
 import {
   PACK_CLEARABLE_LOCAL_STORAGE_KEYS,
   PACK_LOCAL_STORAGE_KEYS,
@@ -36,6 +35,19 @@ import {
   rememberGstTabIfSupported,
   sendMessageToTabWithInjection,
 } from "../background/gst-tab-context";
+import {
+  parseCanonicalFiledReturnsObservation,
+  persistCanonicalFiledReturnsObservation,
+  readCanonicalFiledReturnsObservation,
+} from "../background/filed-returns-observation-state";
+import {
+  parseCanonicalGstPortalContext,
+  persistCanonicalGstPortalContext,
+} from "../background/gst-context-state";
+import {
+  installFiledReturnsDurableDownloadReconciler,
+  reconcileTerminalFiledReturnsDownload,
+} from "../background/filed-returns-durable-download-reconciler";
 
 export {
   PACK_CLEARABLE_LOCAL_STORAGE_KEYS,
@@ -55,6 +67,7 @@ const OFFICIAL_URL = "https://pack.complyeaze.com";
 
 export default defineBackground(() => {
   void restrictLocalStorageToTrustedContexts().catch(() => undefined);
+  installFiledReturnsDurableDownloadReconciler();
 
   browser.tabs.onActivated.addListener(({ tabId }) => {
     void rememberActiveGstTabById(tabId).catch(() => undefined);
@@ -98,28 +111,53 @@ async function handleMessage(
   message: unknown,
   sender: Browser.runtime.MessageSender,
 ): Promise<PackMessageResponse> {
-  if (!isPackMessage(message)) return { ok: false, error: "Unsupported Pack message." };
+  if (
+    !isPackMessage(message, {
+      portalContext: (input) => parseCanonicalGstPortalContext(input, sender.tab?.url) !== null,
+      portalObservation: (input) => parseCanonicalFiledReturnsObservation(input) !== null,
+    })
+  ) {
+    if (sender.id === browser.runtime.id && isSupportedGstBrowserTab(sender.tab)) {
+      if (isFiledReturnsObservationEnvelope(message)) {
+        await browser.storage.session.remove(PACK_SESSION_STORAGE_KEYS.lastFiledReturnsObservation);
+      }
+      if (isContentContextEnvelope(message)) {
+        await browser.storage.session.remove(PACK_SESSION_STORAGE_KEYS.lastContext);
+      }
+    }
+    return { ok: false, error: "Unsupported Pack message." };
+  }
 
   switch (message.type) {
     case "PACK_CONTENT_CONTEXT": {
-      if (sender.id !== browser.runtime.id) return { ok: false, error: "Invalid Pack sender." };
-      const nextSessionValues: Record<string, unknown> = {
-        [PACK_SESSION_STORAGE_KEYS.lastContext]: message.payload,
-      };
-      if (isSupportedGstBrowserTab(sender.tab)) {
-        nextSessionValues[PACK_SESSION_STORAGE_KEYS.lastGstTabId] = sender.tab.id;
+      if (sender.id !== browser.runtime.id || !isSupportedGstBrowserTab(sender.tab)) {
+        return { ok: false, error: "Invalid Pack sender or context." };
       }
+      const context = await persistCanonicalGstPortalContext(
+        PACK_SESSION_STORAGE_KEYS.lastContext,
+        message.payload,
+        sender.tab.url,
+      );
+      if (!context) return { ok: false, error: "Invalid Pack sender or context." };
+      const nextSessionValues: Record<string, unknown> = {
+        [PACK_SESSION_STORAGE_KEYS.lastGstTabId]: sender.tab.id,
+      };
       await browser.storage.session.set({
         ...nextSessionValues,
       });
-      return { ok: true, context: message.payload };
+      return { ok: true, context };
     }
     case "PACK_FILED_RETURNS_OBSERVATION": {
-      if (sender.id !== browser.runtime.id) return { ok: false, error: "Invalid Pack sender." };
-      await browser.storage.session.set({
-        [PACK_SESSION_STORAGE_KEYS.lastFiledReturnsObservation]: message.payload,
-      });
-      return { ok: true, observation: message.payload };
+      if (sender.id !== browser.runtime.id || !isSupportedGstBrowserTab(sender.tab)) {
+        return { ok: false, error: "Invalid Pack sender." };
+      }
+      const observation = await persistCanonicalFiledReturnsObservation(
+        PACK_SESSION_STORAGE_KEYS.lastFiledReturnsObservation,
+        message.payload,
+      );
+      return observation
+        ? { ok: true, observation }
+        : { ok: false, error: "Invalid Pack observation." };
     }
     case "PACK_GET_CONTEXT":
       return {
@@ -133,12 +171,15 @@ async function handleMessage(
         observation:
           refreshedObservation ??
           (await inferActiveFiledReturnsObservation()) ??
-          (await readSessionValue<PortalObservation>(
+          (await readCanonicalFiledReturnsObservation(
             PACK_SESSION_STORAGE_KEYS.lastFiledReturnsObservation,
           )),
       };
     }
     case "PACK_GET_FILED_RETURNS_FLOW_SUMMARY":
+      await reconcileTerminalFiledReturnsDownload(browser.downloads, {
+        storageKeys: filedReturnsStorageKeys(),
+      }).catch(() => undefined);
       return {
         ok: true,
         flowSummary: await readCurrentFiledReturnsFlowSummary({
@@ -161,18 +202,13 @@ async function handleMessage(
     case "PACK_RETRY_FULL_FISCAL_YEAR_TARGET":
       return retryFullFiscalYearTargetDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
     case "PACK_RESOLVE_UNCONFIRMED_DOWNLOAD":
-      return resolveUnconfirmedFiledReturnsDownload(
+      return resolveUnconfirmedFiledReturnsDownloadFlow(
         message.payload.scope,
         message.payload.resolution,
-        {
-          storageKeys: {
-            completion: PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary,
-            targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview,
-          },
-        },
+        filedReturnsFlowRunnerDeps(),
       );
     case "PACK_RESOLVE_FULL_FISCAL_YEAR_TARGET":
-      return resolveFullFiscalYearTarget(
+      return resolveFullFiscalYearTargetFlow(
         message.payload,
         message.payload.resolution,
         filedReturnsFlowRunnerDeps(),
@@ -205,18 +241,28 @@ async function handleMessage(
   return { ok: false, error: "Unsupported Pack message." };
 }
 
+function isFiledReturnsObservationEnvelope(input: unknown): boolean {
+  return Boolean(
+    input &&
+    typeof input === "object" &&
+    "type" in input &&
+    input.type === "PACK_FILED_RETURNS_OBSERVATION",
+  );
+}
+
+function isContentContextEnvelope(input: unknown): boolean {
+  return Boolean(
+    input && typeof input === "object" && "type" in input && input.type === "PACK_CONTENT_CONTEXT",
+  );
+}
+
 function packRuntimeVersion() {
   return browser.runtime.getManifest().version ?? PACK_PRODUCT_VERSION;
 }
 
 function filedReturnsFlowRunnerDeps() {
   return {
-    clickGstr1ResultViewWithDebugger,
     getActiveGstTab,
-    // The authenticated portal click/capture remains the default. Browser-initiated
-    // direct endpoint downloads are retained for targeted tests only: Brave can
-    // reject their initiator context even when the active portal session is valid.
-    preferDirectDownload: false,
     selectFiltersInMainWorld: selectFiledReturnsFiltersInMainWorldForTab,
     sendMessageToTabWithInjection,
     storageKeys: filedReturnsStorageKeys(),
@@ -232,11 +278,6 @@ export async function clearPackLocalData(): Promise<PackMessageResponse> {
       targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview,
     },
   });
-}
-
-async function readSessionValue<T>(key: string): Promise<T | null> {
-  const values = await browser.storage.session.get(key);
-  return (values[key] as T | undefined) ?? null;
 }
 
 async function readLocalValue<T>(key: string): Promise<T | null> {

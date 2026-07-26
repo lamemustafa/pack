@@ -1,4 +1,4 @@
-import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "../../core/contracts";
+import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "./filed-returns-contracts";
 import { activateElement, matchesAcceptedText, normaliseText } from "./filed-returns-dom";
 import {
   dismissSafePostLoginDialogs,

@@ -3,24 +3,16 @@ export type LiveRunOutcome = "pass" | "blocked" | "failed";
 export type LiveRunReturnType = "GSTR-3B" | "GSTR-1" | "GSTR-2B";
 export type LiveRunArtifactType = "PDF" | "EXCEL" | "PDF_AND_EXCEL";
 export type LiveRunDownloadPathClass =
-  | "extension-direct-https"
-  | "extension-direct-blob"
-  | "extension-direct-data"
-  | "extension-direct-unknown"
   | "portal-click-https"
   | "portal-click-blob"
   | "portal-click-data"
   | "portal-click-unknown"
-  | "portal-click-after-direct-fallback-https"
-  | "portal-click-after-direct-fallback-blob"
-  | "portal-click-after-direct-fallback-data"
-  | "portal-click-after-direct-fallback-unknown"
+  | "target-bound-portal-click-blob"
   | "captured-portal-request-https"
   | "captured-portal-request-blob"
   | "captured-portal-request-data"
   | "captured-portal-request-unknown";
 export type LiveRunEndpointClass =
-  | "gstr3b-getgenpdf"
   | "gstr3b-portal-rendered-download"
   | "gstr3b-portal-blob-captured-download"
   | "gstr1-pdf-portal-rendered-download"
@@ -48,10 +40,10 @@ export interface LiveRunEvidence {
   zipSha256: string;
   extensionVersion: string;
   browser: {
-    name: "Brave" | "Chrome" | string;
+    name: "Brave" | "Chrome";
     version: string;
   };
-  profile: "clean-test-profile" | string;
+  profile: "clean-test-profile" | "manual-review-required";
   subjectAlias: string;
   returnType: LiveRunReturnType;
   artifactType: LiveRunArtifactType;
@@ -128,7 +120,7 @@ export interface LiveRunEvidenceRedaction {
 export interface LiveRunEvidenceMediaArtifact {
   kind: "screenshot" | "screen-recording" | "other";
   classification: "private-debug-only" | "synthetic-public-demo" | "public-redacted-live-portal";
-  redactionMethod: "not-published" | "synthetic-only" | "manual-blur" | string;
+  redactionMethod: "not-published" | "synthetic-only" | "manual-blur";
   sha256?: string;
 }
 

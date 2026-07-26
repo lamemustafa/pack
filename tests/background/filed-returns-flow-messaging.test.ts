@@ -4,8 +4,8 @@ import {
   runDownloadTriggerOnce,
   type FiledReturnsFlowMessagingDeps,
 } from "../../src/background/filed-returns-flow-messaging";
-import type { FiledReturnsDownloadTarget } from "../../src/core/contracts";
-import type { PackMessageResponse } from "../../src/core/messages";
+import type { FiledReturnsDownloadTarget } from "../../src/connectors/gst/filed-returns-contracts";
+import type { PackMessageResponse } from "../../src/connectors/gst/messages";
 
 const BASE_DEPS = {
   storageKeys: {},

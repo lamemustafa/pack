@@ -1,6 +1,9 @@
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
-import type { FiledReturnsDownloadScope, FiledReturnsDownloadTarget } from "../core/contracts";
-import type { PackMessageResponse } from "../core/messages";
+import type {
+  FiledReturnsDownloadScope,
+  FiledReturnsDownloadTarget,
+} from "../connectors/gst/filed-returns-contracts";
+import type { PackMessageResponse } from "../connectors/gst/messages";
 import { withFiledReturnsDownloadDiagnostic } from "./filed-returns-download-diagnostics";
 
 export function capturedDownloadRejected(

@@ -1,5 +1,5 @@
-import type { FiledReturnsConcreteArtifactType } from "../../core/filed-returns-artifacts";
-import type { FiledReturnsReturnType } from "../../core/filed-returns-return-types";
+import type { FiledReturnsConcreteArtifactType } from "./filed-returns-artifacts";
+import type { FiledReturnsReturnType } from "./filed-returns-return-types";
 import type { NavigationCandidateInput } from "./filed-returns-navigation-candidates";
 import { filedReturnDescriptor } from "./filed-returns-return-descriptors";
 

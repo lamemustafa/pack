@@ -1,14 +1,14 @@
 import {
   filedReturnsArtifactMimeTypes,
   type FiledReturnsConcreteArtifactType,
-} from "../../core/filed-returns-artifacts";
+} from "../../connectors/gst/filed-returns-artifacts";
 import {
   isLikelyGstr2bPortalXlsxBytes,
   isLikelyPdfBytes,
   isLikelyXlsBytes,
   isLikelyXlsxBytes,
-} from "../../core/filed-return-artifact-bytes";
-import type { FiledReturnsReturnType } from "../../core/filed-returns-return-types";
+} from "../../connectors/gst/filed-return-artifact-bytes";
+import type { FiledReturnsReturnType } from "../../connectors/gst/filed-returns-return-types";
 
 const GSTR2B_MIN_PORTAL_PDF_BYTES = 20 * 1024;
 

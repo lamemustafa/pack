@@ -2,8 +2,8 @@ import type {
   FiledReturnsDownloadScope,
   FiledReturnsDownloadTarget,
   PortalFlowStepResult,
-} from "../core/contracts";
-import type { PackMessageResponse } from "../core/messages";
+} from "../connectors/gst/filed-returns-contracts";
+import type { PackMessageResponse } from "../connectors/gst/messages";
 import { withFiledReturnsDownloadDiagnostic } from "./filed-returns-download-diagnostics";
 
 export function gstr2bDialogFreeUnsupportedStep({
@@ -35,7 +35,7 @@ export function gstr2bDialogFreeUnsupportedStep({
           ...(activePeriod ? [`filed-return-detail-period:${activePeriod}`] : []),
         ],
         safeMessage:
-          "Pack could not complete a dialog-free GSTR-2B download in this Brave profile. Use the GST Portal download manually for this period; Pack will not keep retrying this path until a reviewed direct endpoint is added.",
+          "Pack could not complete a dialog-free GSTR-2B download in this browser profile. Use the visible GST Portal download manually for this period; Pack will not retry the unresolved capture automatically.",
         userAction: {
           type: "NAVIGATE_TO_SUPPORTED_PAGE",
           message: "Use the visible GST Portal GSTR-2B download control manually for this period.",

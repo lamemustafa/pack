@@ -519,7 +519,7 @@ function hostilePageHtml() {
       <body>
         <main>
           <h1>Hostile synthetic page</h1>
-          <input name="gstin" value="29ABCDE1234F1Z5" />
+          <input name="gstin" value="00XXXXX0000X0Z0" />
           <script>window.__packExternalMessageAvailable = Boolean(globalThis.chrome?.runtime?.sendMessage);</script>
         </main>
       </body>
