@@ -17,6 +17,8 @@ import {
   type FiledReturnsFlowMessagingDeps,
 } from "./filed-returns-flow-messaging";
 import { persistFiledReturnsTargetReview } from "./filed-returns-target-review";
+import { acquireGstr3bPdfAfterPreflight } from "./gstr3b-artifact-acquisition";
+import { toPortalReturnPeriod } from "../connectors/gst/filed-returns-return-period";
 
 type FlowStepResponse = Extract<PackMessageResponse, { ok: true; flowStep: PortalFlowStepResult }>;
 
@@ -33,6 +35,23 @@ export async function triggerAndObserveFiledReturnDownload({
   scope: FiledReturnsDownloadScope;
   tabId: number;
 }): Promise<PackMessageResponse> {
+  if (scope.returnType === "GSTR-3B" && artifactType === "PDF" && scope.period !== "ALL") {
+    const returnPeriod = toPortalReturnPeriod(scope.period, scope.financialYear);
+    if (returnPeriod) {
+      const requestId = createActionId();
+      const response = await deps.sendMessageToTabWithInjection(tabId, {
+        type: "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34",
+        payload: { artifactType: "PDF", financialYear: scope.financialYear, period: scope.period, requestId, returnPeriod, returnType: "GSTR-3B" },
+      });
+      if (response.ok && "artifact" in response && !response.artifact.ok && response.artifact.safeSignals.includes("page-generated-pdf-ready")) {
+        const acquired = await acquireGstr3bPdfAfterPreflight({ filename: `Pack/${scope.financialYear}/${scope.period}/GSTR-3B.pdf`, requestId, returnPeriod, tabId });
+        return acquired.ok
+          ? { ok: true, flowStep: { connectorId: "gst", scopeId: filedReturnScopeId("GSTR-3B"), state: "downloaded", safeSignals: acquired.safeSignals, safeMessage: "Pack saved the portal-produced filed GSTR-3B PDF." } }
+          : { ok: true, flowStep: { connectorId: "gst", scopeId: filedReturnScopeId("GSTR-3B"), state: "blocked", safeSignals: ["artifact-acquisition-failed", `artifact-${acquired.reason}`], safeMessage: "Pack did not save an unverified filed-return artifact." } };
+      }
+      return response;
+    }
+  }
   const target = createDownloadTarget(scope, artifactType);
   if (!target) return unverifiedPeriodResponse(scope);
 

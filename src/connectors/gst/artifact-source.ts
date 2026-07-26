@@ -1,5 +1,6 @@
 import { validateArtifactBytes } from "./artifact-validation";
 import { detectFiledReturnDetailPage } from "./filed-returns-detail-page-guard";
+import { resolveVisibleFiledReturnDownloadCandidates } from "./filed-returns-download-candidates";
 
 const GSTR3B_GET_GEN_PDF_PATH = "/returns/auth/api/gstr3b/getgenpdf";
 const GST_RETURNS_ORIGIN = "https://return.gst.gov.in";
@@ -60,7 +61,10 @@ export async function acquireFiledReturnArtifact(
   if (request.artifactType === "JSON") {
     return { ok: true, requestId: request.requestId, bytes, mimeType: preflight.mimeType, safeSignals: ["target-period-verified"] };
   }
-  return failed(request, "control-not-found", ["target-period-verified", "page-generated-pdf-required"]);
+  const candidates = resolveVisibleFiledReturnDownloadCandidates(documentRef, "GSTR-3B", "PDF");
+  if (candidates.length !== 1 || !candidates[0]) return failed(request, "control-not-found", ["target-period-verified"]);
+  candidates[0].element.setAttribute("data-pack-artifact-request", request.requestId);
+  return failed(request, "control-not-found", ["target-period-verified", "page-generated-pdf-ready"]);
 }
 
 function failed(
