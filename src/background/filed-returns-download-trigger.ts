@@ -43,7 +43,7 @@ export async function triggerAndObserveFiledReturnDownload({
       const requestId = createActionId();
       const response = await deps.sendMessageToTabWithInjection(tabId, {
         type: "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34",
-        payload: { artifactType: "PDF", financialYear: scope.financialYear, period: scope.period, requestId, returnPeriod, returnType: "GSTR-3B" },
+        payload: { artifactType, financialYear: scope.financialYear, period: scope.period, requestId, returnPeriod, returnType: "GSTR-3B" },
       });
       if (artifactType === "JSON" && response.ok && "artifact" in response && response.artifact.ok) {
         await persistArtifactAcquisitionIntent({ artifactType, requestId });
