@@ -53,7 +53,7 @@ patches 8+ prototypes, **suppresses `window.open`**) breaks the flow it is obser
 | An HTTP response body saved unmodified        | A JSON Pack reshaped, normalised, or re-keyed |
 |                                               | Two portal responses merged into one file     |
 
-`GET /returns/auth/api/gstr3b/getgenpdf?rtn_prd=<MMYYYY>` returns ~1.8 KB of JSON holding
+The same-origin GSTR-3B preflight endpoint (period parameter redacted) returns ~1.8 KB of JSON holding
 the complete return — `r3b.sup_details`, `r3b.itc_elg`, `r3b.tt_val`, `trdnm`, `lglnm`,
 `arn`, `arnDt`, `authSig`, `desig`. The portal composes the PDF from this **client-side**.
 
@@ -197,7 +197,7 @@ Hard rules:
 Before acquiring either artifact:
 
 ```
-GET /returns/auth/api/gstr3b/getgenpdf?rtn_prd=<returnPeriod>   credentials: "same-origin"
+same-origin GSTR-3B preflight endpoint (period parameter redacted)   credentials: "same-origin"
   → non-200                              → "preflight-failed"
   → body.status !== 1                    → "preflight-failed"
   → body.data.r3b.ret_period !== returnPeriod → "target-period-mismatch"   [HARD FAIL]
