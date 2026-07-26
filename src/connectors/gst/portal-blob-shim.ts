@@ -12,6 +12,11 @@ export function capturePortalPdfBlob(input: PortalBlobShimInput): Promise<Portal
   let blobUrl: string | null = null;
   let blob: Blob | null = null;
   let settled = false;
+  const toBase64 = (bytes: Uint8Array) => {
+    let binary = "";
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    return btoa(binary);
+  };
   const restore = () => {
     anchor.dispatchEvent = originalDispatch;
     anchor.click = originalClick;
@@ -61,10 +66,4 @@ export function capturePortalPdfBlob(input: PortalBlobShimInput): Promise<Portal
       finish({ ok: false, reason: "unexpected-content", safeSignals: [] });
     }
   }).finally(restore);
-}
-
-function toBase64(bytes: Uint8Array): string {
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
 }
