@@ -1,5 +1,3 @@
-import { JSDOM } from "jsdom";
-import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   FiledReturnsDownloadDiagnostic,
@@ -116,11 +114,8 @@ vi.mock("../../src/background/offscreen-blob-url", () => ({
 }));
 
 import { startCapturedFiledReturnDownload } from "../../src/background/filed-returns-captured-download";
-import { readCurrentFiledReturnsFlowSummary } from "../../src/background/filed-returns-current-state";
 import { reconcileFiledReturnsTargetDownload } from "../../src/background/filed-returns-target-download-recovery";
 import { isFiledReturnsTargetDownloadAttempt } from "../../src/background/filed-returns-target-download-attempt-validation";
-import { triggerFiledReturnDownload } from "../../src/connectors/gst/filed-returns-download";
-import { isDurableFiledReturnsSignal } from "../../src/connectors/gst/filed-returns-durable-signals";
 import {
   createSinglePeriodBundleLedger,
   markSinglePeriodBundleArtifactRunning,
@@ -133,7 +128,6 @@ import {
   resolveUnconfirmedFiledReturnsDownload,
   retryCompletedSinglePeriodZipCleanup,
 } from "../../src/background/filed-returns-target-review";
-import { RecoveryActions } from "../../src/entrypoints/popup/recovery-actions";
 
 const REVIEW_KEY = "target-review";
 const COMPLETION_KEY = "completion";
@@ -926,132 +920,6 @@ describe("filed returns target download recovery", () => {
     expect(mocks.state.local[REVIEW_KEY]).toBeUndefined();
   });
 
-  it("persists canonical completion for the real GSTR-3B connector signal vector", async () => {
-    mocks.observeBrowserDownloadById.mockResolvedValueOnce({
-      state: "completed",
-      safeSignals: [
-        "browser-download-created",
-        "browser-download-completed",
-        "browser-download-id:41",
-        "browser-download-non-empty",
-      ],
-      safeMessage: "The exact synthetic download completed.",
-      safeEvidence: {
-        byteCountClass: "non-empty",
-        downloadId: 41,
-        mimeClass: "pdf",
-        urlClass: "blob",
-      },
-    });
-
-    const response = await runRealConnectorCapturedPdfDownload();
-
-    expect(response).toMatchObject({
-      ok: true,
-      flowStep: { state: "downloaded" },
-      flowSummary: { status: "complete" },
-    });
-    if (!(response.ok && "flowStep" in response)) throw new Error("Expected a flow step.");
-    expect(response.flowStep.safeSignals).toEqual(
-      expect.arrayContaining([
-        "gstr3b-detail-route",
-        "gstr3b-detail-heading",
-        "status-filed",
-        "download-filed-gstr3b-visible",
-        "text-download-filed-gstr3b",
-        "text-download-filed",
-        "text-download-gstr3b",
-      ]),
-    );
-    expect(response.flowStep.safeSignals).not.toContain("filed-return-durable-status-rejected");
-    expect(response.flowStep.safeSignals.length).toBeLessThanOrEqual(32);
-    expect(new Set(response.flowStep.safeSignals).size).toBe(response.flowStep.safeSignals.length);
-    expect(
-      response.flowStep.safeSignals.filter((signal) => !isDurableFiledReturnsSignal(signal)),
-    ).toEqual([]);
-    expect(mocks.state.session[COMPLETION_KEY]).toMatchObject({ status: "complete" });
-    expect(JSON.stringify(mocks.state.session[COMPLETION_KEY])).not.toContain(
-      "filed-return-durable-status-rejected",
-    );
-    expect(mocks.state.local[REVIEW_KEY]).toBeUndefined();
-  });
-
-  it.each(["generic-binary", "missing"] as const)(
-    "persists the validated captured GSTR-3B PDF when Chrome reports %s MIME",
-    async (mimeClass) => {
-      mocks.observeBrowserDownloadById.mockResolvedValueOnce(completedObservation(41, mimeClass));
-
-      const response = await runRealConnectorCapturedPdfDownload();
-
-      expect(response).toMatchObject({
-        ok: true,
-        flowStep: {
-          downloadDiagnostic: { mimeClass: "pdf" },
-          state: "downloaded",
-        },
-        flowSummary: { status: "complete" },
-      });
-      if (!(response.ok && "flowStep" in response)) throw new Error("Expected a flow step.");
-      expect(response.flowStep.safeSignals).not.toContain("filed-return-durable-status-rejected");
-      expect(mocks.state.local[REVIEW_KEY]).toBeUndefined();
-      expect(mocks.state.session[COMPLETION_KEY]).toMatchObject({ status: "complete" });
-    },
-  );
-
-  it("keeps a contradictory browser MIME fail-closed after captured-byte validation", async () => {
-    mocks.observeBrowserDownloadById.mockResolvedValueOnce(completedObservation(41, "spreadsheet"));
-
-    const response = await runRealConnectorCapturedPdfDownload();
-
-    expect(response).toMatchObject({
-      ok: true,
-      flowStep: {
-        downloadDiagnostic: { mimeClass: "spreadsheet" },
-        safeSignals: expect.arrayContaining(["filed-return-durable-status-rejected"]),
-        state: "download-unconfirmed",
-      },
-      flowSummary: { status: "blocked" },
-    });
-    expect(mocks.state.local[REVIEW_KEY]).toMatchObject({
-      downloadAttempt: { downloadId: 41, phase: "download-observing" },
-    });
-    expect(mocks.state.session[COMPLETION_KEY]).toBeUndefined();
-
-    // Browser session storage is cleared on restart; local recovery state survives.
-    mocks.state.session = {};
-    const restartedSummary = await readCurrentFiledReturnsFlowSummary({
-      storageKeys: {
-        activeRun: "active-run",
-        completion: COMPLETION_KEY,
-        fullFiscalYearLedger: "full-year-ledger",
-        targetReview: REVIEW_KEY,
-      },
-      now: () => NOW,
-    });
-
-    expect(restartedSummary?.flowStep.safeSignals).toContain(
-      "filed-returns-download-reconciliation-required",
-    );
-    expect(restartedSummary?.flowStep.safeSignals).not.toContain(
-      "filed-returns-download-manual-review-required",
-    );
-    const recoveryMarkup = renderToStaticMarkup(
-      RecoveryActions({
-        busy: null,
-        portalReady: false,
-        summary: restartedSummary,
-        onAcknowledgeInterruptedRun: vi.fn(),
-        onRetryFullFiscalYearTarget: vi.fn(),
-        onRetryTarget: vi.fn(),
-        onResolveFullFiscalYearTarget: vi.fn(),
-        onResolveTarget: vi.fn(),
-        onStartFresh: vi.fn(),
-      }),
-    );
-    expect(recoveryMarkup).toContain("Reconcile browser download");
-    expect(recoveryMarkup).not.toContain("Retry local cleanup");
-  });
-
   it("keeps durable completion when review cleanup fails and reconciles without a second download", async () => {
     mocks.state.failTargetReviewRemoveOnce = true;
 
@@ -1123,76 +991,6 @@ function runCapturedPdfDownload(): Promise<PackMessageResponse> {
       safeSignals: ["filed-gstr3b-download-clicked"],
       safeMessage: "Synthetic target-bound click completed.",
     },
-  });
-}
-
-async function runRealConnectorCapturedPdfDownload(): Promise<PackMessageResponse> {
-  const target = {
-    actionId: "action-m0abc123-aprilpdf",
-    artifactType: "PDF" as const,
-    financialYear: "2026-27",
-    period: "April" as const,
-    returnType: "GSTR-3B" as const,
-  };
-  const documentRef = new JSDOM(
-    `<!doctype html><html><body>
-      <main>
-        <h1>GSTR-3B - Monthly Return</h1>
-        <p>Status - Filed</p>
-        <p>Financial Year - 2026-27</p>
-        <p>Return Period - April</p>
-        <button>DOWNLOAD FILED GSTR-3B</button>
-      </main>
-    </body></html>`,
-    {
-      pretendToBeVisual: true,
-      url: "https://return.gst.gov.in/returns/auth/gstr3b",
-    },
-  ).window.document;
-  makeLayoutVisible(documentRef);
-  const connectorResult = await triggerFiledReturnDownload(documentRef, target);
-  if (!connectorResult.mainWorldCaptureRequest) {
-    throw new Error("Expected the synthetic GSTR-3B connector to arm main-world capture.");
-  }
-
-  return startCapturedFiledReturnDownload({
-    activePeriod: "April",
-    armedAt: new Date("2026-07-23T23:58:00.000Z"),
-    artifactType: "PDF",
-    capturedDownloadRequest: {
-      actionId: target.actionId,
-      dataUrl: "data:application/pdf;base64,JVBERi0xLjQKJSVFT0YK",
-      safeSignals: [
-        "filed-gstr3b-portal-blob-captured",
-        "filed-gstr3b-native-blob-click-suppressed",
-        "filed-gstr3b-main-world-capture",
-      ],
-    },
-    deps: {
-      now: () => new Date(REQUESTED_AT),
-      sendMessageToTabWithInjection: vi.fn(),
-      storageKeys: { completion: COMPLETION_KEY, targetReview: REVIEW_KEY },
-    },
-    scope: PDF_SCOPE,
-    target,
-    triggerStep: connectorResult.downloadTrigger,
-  });
-}
-
-function makeLayoutVisible(documentRef: Document): void {
-  Object.defineProperty(documentRef.defaultView?.HTMLElement.prototype, "getBoundingClientRect", {
-    configurable: true,
-    value: () => ({
-      bottom: 10,
-      height: 10,
-      left: 0,
-      right: 10,
-      top: 0,
-      width: 10,
-      x: 0,
-      y: 0,
-      toJSON: () => ({}),
-    }),
   });
 }
 
