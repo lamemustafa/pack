@@ -27,6 +27,7 @@ import {
   toStepLimitReachedFlowStep,
 } from "./filed-returns-step-limit";
 import { withPersistedSinglePeriodSummary } from "./filed-returns-single-period-summary";
+import { reconcileArtifactAcquisitionCheckpoint } from "./artifact-acquisition-state";
 
 const MAIN_WORLD_FILTER_SEARCH_SETTLE_MS = 1_000;
 
@@ -36,6 +37,22 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
   options: { persistSinglePeriodSummary?: boolean } = {},
 ): Promise<PackMessageResponse> {
   const shouldPersistSinglePeriodSummary = options.persistSinglePeriodSummary !== false;
+  if (scope.returnType === "GSTR-3B") {
+    const acquisitionRecovery = await reconcileArtifactAcquisitionCheckpoint();
+    if (acquisitionRecovery.state === "needs-review") {
+      return {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: filedReturnScopeId("GSTR-3B"),
+          state: "blocked",
+          safeSignals: acquisitionRecovery.safeSignals,
+          safeMessage: "Pack found an interrupted artifact download and will not repeat the target automatically.",
+          userAction: { type: "RETRY_PORTAL_GENERATION", message: "Check the exact browser download before starting again.", canResume: true },
+        },
+      };
+    }
+  }
   const recoveryResponse = await preflightSelectedArtifactsRecovery({ deps, scope });
   if (recoveryResponse) {
     return recoveryResponse.ok && "flowStep" in recoveryResponse
