@@ -98,7 +98,11 @@ export async function triggerAndObserveFiledReturnDownload({
                 connectorId: "gst",
                 scopeId: filedReturnScopeId("GSTR-3B"),
                 state: "downloaded",
-                safeSignals: [...response.artifact.safeSignals, "extension-download-complete"],
+                safeSignals: [
+                  ...response.artifact.safeSignals,
+                  ...delivery.safeSignals,
+                  "extension-download-complete",
+                ],
                 safeMessage: "Pack saved the portal-produced GSTR-3B data JSON.",
               },
             }
@@ -108,7 +112,11 @@ export async function triggerAndObserveFiledReturnDownload({
                 connectorId: "gst",
                 scopeId: filedReturnScopeId("GSTR-3B"),
                 state: "blocked",
-                safeSignals: ["artifact-acquisition-failed", `artifact-${delivery.reason}`],
+                safeSignals: [
+                  "artifact-acquisition-failed",
+                  `artifact-${delivery.reason}`,
+                  ...delivery.safeSignals,
+                ],
                 safeMessage: artifactFailureMessageForDelivery(delivery.reason),
               },
             };
@@ -151,7 +159,11 @@ export async function triggerAndObserveFiledReturnDownload({
                 connectorId: "gst",
                 scopeId: filedReturnScopeId("GSTR-3B"),
                 state: "blocked",
-                safeSignals: ["artifact-acquisition-failed", `artifact-${acquired.reason}`],
+                safeSignals: [
+                  "artifact-acquisition-failed",
+                  `artifact-${acquired.reason}`,
+                  ...acquired.safeSignals,
+                ],
                 safeMessage: artifactFailureMessageForDelivery(acquired.reason),
               },
             };

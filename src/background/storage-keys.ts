@@ -1,5 +1,6 @@
 export const PACK_LOCAL_STORAGE_KEYS = {
   activeFiledReturnsRun: "pack:active-filed-returns-run",
+  downloadSavePromptNoticeDismissed: "pack:download-save-prompt-notice-dismissed",
   fullFiscalYearLedger: "pack:full-fiscal-year-ledger",
   install: "pack:install",
   lastManifest: "pack:last-manifest",

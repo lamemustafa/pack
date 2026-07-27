@@ -50,7 +50,6 @@ export type { ActiveGstTab } from "./filed-returns-active-tab";
 
 export interface FiledReturnsFlowRunnerDeps {
   getActiveGstTab: () => Promise<ActiveGstTab | null>;
-  navigateGstr3bTabToFiledReturns?: (tabId: number) => Promise<boolean>;
   sendMessageToTabWithInjection: (
     tabId: number,
     message: Extract<

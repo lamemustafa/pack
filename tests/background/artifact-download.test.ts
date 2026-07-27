@@ -44,6 +44,43 @@ describe("downloadAcquiredArtifact", () => {
     vi.useRealTimers();
   });
 
+  it("records a save-prompt observation when the exact download is still in progress with no filename", async () => {
+    vi.useFakeTimers();
+    try {
+      let item = { id: 9, state: "in_progress", filename: "", bytesReceived: 0 };
+      downloads.search.mockImplementation(async () => [item]);
+      const result = downloadAcquiredArtifact(input(), deps({ timeoutMs: 10_000 }));
+
+      await vi.advanceTimersByTimeAsync(2_500);
+      item = { id: 9, state: "complete", filename: "Pack/return.pdf", bytesReceived: 12 };
+      for (const listener of listeners) listener({ id: 9 });
+
+      await expect(result).resolves.toMatchObject({
+        ok: true,
+        safeSignals: ["download-save-prompt-observed"],
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not record a save-prompt observation when the exact download receives a filename", async () => {
+    vi.useFakeTimers();
+    try {
+      let item = { id: 9, state: "in_progress", filename: "Pack/return.pdf", bytesReceived: 0 };
+      downloads.search.mockImplementation(async () => [item]);
+      const result = downloadAcquiredArtifact(input(), deps({ timeoutMs: 10_000 }));
+
+      await vi.advanceTimersByTimeAsync(2_500);
+      item = { id: 9, state: "complete", filename: "Pack/return.pdf", bytesReceived: 12 };
+      for (const listener of listeners) listener({ id: 9 });
+
+      await expect(result).resolves.toMatchObject({ ok: true, safeSignals: [] });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("revokes and closes an offscreen URL on every large-artifact exit", async () => {
     const revoke = vi.fn(async () => undefined);
     const close = vi.fn(async () => undefined);

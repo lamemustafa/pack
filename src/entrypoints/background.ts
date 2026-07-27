@@ -29,7 +29,6 @@ import {
   getActiveGstTab,
   inferActiveFiledReturnsObservation,
   isSupportedGstBrowserTab,
-  navigateGstr3bTabToFiledReturns,
   refreshActiveFiledReturnsObservation,
   refreshActiveGstContext,
   rememberActiveGstTabById,
@@ -264,7 +263,6 @@ function packRuntimeVersion() {
 function filedReturnsFlowRunnerDeps() {
   return {
     getActiveGstTab,
-    navigateGstr3bTabToFiledReturns,
     selectFiltersInMainWorld: selectFiledReturnsFiltersInMainWorldForTab,
     sendMessageToTabWithInjection,
     storageKeys: filedReturnsStorageKeys(),

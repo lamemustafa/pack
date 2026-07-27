@@ -7,6 +7,7 @@ import {
 
 const DATA_URL_LIMIT = 1_500_000;
 const DEFAULT_TIMEOUT_MS = 30_000;
+const SAVE_PROMPT_OBSERVATION_MS = 2_500;
 
 type DownloadFailure = "start-rejected" | "interrupted" | "empty" | "timeout";
 export type ArtifactDownloadResult =
@@ -87,12 +88,19 @@ function awaitCompletion(
 ): Promise<ArtifactDownloadResult> {
   return new Promise((resolve) => {
     let done = false;
+    let savePromptObserved = false;
     const finish = (result: ArtifactDownloadResult) => {
       if (done) return;
       done = true;
       globalThis.clearTimeout(timer);
+      globalThis.clearTimeout(savePromptTimer);
       downloads.onChanged.removeListener(listener);
-      resolve(result);
+      resolve({
+        ...result,
+        safeSignals: savePromptObserved
+          ? [...result.safeSignals, "download-save-prompt-observed"]
+          : result.safeSignals,
+      });
     };
     const inspect = () =>
       void downloads
@@ -118,6 +126,14 @@ function awaitCompletion(
     const listener = (delta: { id: number }) => {
       if (delta.id === downloadId) inspect();
     };
+    const savePromptTimer = globalThis.setTimeout(() => {
+      void downloads
+        .search({ id: downloadId })
+        .then(([item]) => {
+          if (item?.state === "in_progress" && !item.filename) savePromptObserved = true;
+        })
+        .catch(() => undefined);
+    }, SAVE_PROMPT_OBSERVATION_MS);
     const timer = globalThis.setTimeout(
       () => finish({ ok: false, reason: "timeout", safeSignals: [] }),
       timeoutMs,

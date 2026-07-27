@@ -5,6 +5,7 @@ import "../../styles/global.css";
 import "../../styles/popup.css";
 import "../../styles/popup-controls.css";
 import { ScopeForm, ScopeFormAction } from "./components";
+import { DownloadSavePromptNotice } from "./download-save-prompt-notice";
 import { canRetryFullFiscalYearZipWithoutPortal } from "./flow-summary";
 import { hasInlinePrimaryAction, InlineStatus } from "./inline-status";
 import { PackSummary } from "./pack-summary";
@@ -99,6 +100,10 @@ function App() {
           }
           onResolveTarget={(resolution) => void popup.resolveUnconfirmedDownload(resolution)}
         />
+      ) : null}
+
+      {popup.showDownloadSavePromptNotice ? (
+        <DownloadSavePromptNotice onDismiss={() => void popup.dismissDownloadSavePromptNotice()} />
       ) : null}
 
       <footer className="fineprint" aria-label="Pack privacy boundary">

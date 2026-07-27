@@ -9,7 +9,9 @@ export async function acquireGstr3bPdfAfterPreflight(input: {
   returnPeriod: string;
   filename: string;
   onStarted?: (downloadId: number) => Promise<void>;
-}): Promise<{ ok: true; safeSignals: string[] } | { ok: false; reason: string }> {
+}): Promise<
+  { ok: true; safeSignals: string[] } | { ok: false; reason: string; safeSignals: string[] }
+> {
   const removeSafetyNet = installPortalBlobDownloadSafetyNet(input.tabId);
   try {
     const [injection] = await browser.scripting.executeScript({
@@ -19,10 +21,12 @@ export async function acquireGstr3bPdfAfterPreflight(input: {
       world: "MAIN",
     });
     const captured = injection?.result;
-    if (!captured?.ok) return { ok: false, reason: captured?.reason ?? "generation-timeout" };
+    if (!captured?.ok) {
+      return { ok: false, reason: captured?.reason ?? "generation-timeout", safeSignals: [] };
+    }
     const bytes = Uint8Array.from(atob(captured.base64), (value) => value.charCodeAt(0));
     const validation = validateArtifactBytes(bytes, "PDF", input.returnPeriod);
-    if (!validation.ok) return { ok: false, reason: validation.reason };
+    if (!validation.ok) return { ok: false, reason: validation.reason, safeSignals: [] };
     const delivery = await downloadAcquiredArtifact({
       requestId: input.requestId,
       base64: captured.base64,
@@ -31,8 +35,15 @@ export async function acquireGstr3bPdfAfterPreflight(input: {
       ...(input.onStarted ? { onStarted: input.onStarted } : {}),
     });
     return delivery.ok
-      ? { ok: true, safeSignals: [...captured.safeSignals, "extension-download-complete"] }
-      : { ok: false, reason: delivery.reason };
+      ? {
+          ok: true,
+          safeSignals: [
+            ...captured.safeSignals,
+            ...delivery.safeSignals,
+            "extension-download-complete",
+          ],
+        }
+      : { ok: false, reason: delivery.reason, safeSignals: delivery.safeSignals };
   } finally {
     removeSafetyNet();
   }

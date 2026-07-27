@@ -96,31 +96,28 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
   }
 
   if (scope.returnType === "GSTR-3B" && !isReturnsOrigin(activeTab.tab.url)) {
-    const contentReady = await deps.navigateGstr3bTabToFiledReturns?.(activeTab.tab.id);
-    if (contentReady !== true) {
-      return withPersistedSinglePeriodSummary(
-        scope,
-        {
-          ok: true,
-          flowStep: {
-            connectorId: "gst",
-            scopeId: filedReturnScopeId("GSTR-3B"),
-            state: "blocked",
-            safeSignals: ["gstr3b-return-origin-navigation-failed"],
-            safeMessage:
-              "Pack could not open the authenticated GST filed-returns page with the current content script.",
-            userAction: {
-              type: "NAVIGATE_TO_SUPPORTED_PAGE",
-              message:
-                "Open an authenticated GST return page, then retry the requested GSTR-3B period.",
-              canResume: true,
-            },
+    return withPersistedSinglePeriodSummary(
+      scope,
+      {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: filedReturnScopeId("GSTR-3B"),
+          state: "blocked",
+          safeSignals: ["wrong-origin-open-returns-dashboard"],
+          safeMessage:
+            "Pack can acquire filed GSTR-3B only from the authenticated GST Returns origin.",
+          userAction: {
+            type: "NAVIGATE_TO_SUPPORTED_PAGE",
+            message:
+              "Open Services > Returns > Returns Dashboard in the GST Portal, then press Start again.",
+            canResume: true,
           },
         },
-        deps,
-        shouldPersistSinglePeriodSummary,
-      );
-    }
+      },
+      deps,
+      shouldPersistSinglePeriodSummary,
+    );
   }
 
   return runSinglePeriodSteps(
