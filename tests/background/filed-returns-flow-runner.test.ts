@@ -5269,7 +5269,7 @@ describe("filed returns flow runner", () => {
     "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
     "https://services.gst.gov.in/services/auth/dashboard",
   ])(
-    "blocks a GSTR-3B run outside the Returns origin without assigning a portal URL (%s)",
+    "renders a blocked GSTR-3B start outside the Returns origin when no portal link is available (%s)",
     async (url) => {
       const sendMessageToTabWithInjection =
         vi.fn<FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]>();
@@ -5281,6 +5281,7 @@ describe("filed returns flow runner", () => {
             ...ACTIVE_GST_TAB,
             url,
           })),
+          openReturnsDashboardWithPortalAnchor: vi.fn(async () => "not-found" as const),
           sendMessageToTabWithInjection,
           storageKeys: {
             completion: "completion",
@@ -5293,7 +5294,11 @@ describe("filed returns flow runner", () => {
       expect(response).toMatchObject({
         flowStep: {
           state: "blocked",
-          safeSignals: ["wrong-origin-open-returns-dashboard"],
+          safeSignals: [
+            "wrong-origin-open-returns-dashboard",
+            "returns-dashboard-anchor-not-found",
+          ],
+          safeMessage: expect.any(String),
           userAction: {
             type: "NAVIGATE_TO_SUPPORTED_PAGE",
             message: expect.stringContaining("Services > Returns > Returns Dashboard"),
@@ -5307,6 +5312,58 @@ describe("filed returns flow runner", () => {
       );
     },
   );
+
+  it("continues a GSTR-3B Start after one portal-owned dashboard anchor hop", async () => {
+    const getActiveGstTab = vi
+      .fn<FiledReturnsFlowRunnerDeps["getActiveGstTab"]>()
+      .mockResolvedValueOnce({
+        ...ACTIVE_GST_TAB,
+        url: "https://services.gst.gov.in/services/auth/fowelcome",
+      })
+      .mockResolvedValue({ ...ACTIVE_GST_TAB });
+    const sendMessageToTabWithInjection = vi.fn<
+      FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
+    >(async () => {
+      return {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+          state: "downloaded",
+          safeSignals: ["synthetic-terminal-download"],
+          safeMessage: "Complete.",
+        },
+      };
+    });
+
+    await expect(
+      startFiledReturnsDownloadFlow(
+        { financialYear: "2025-26", period: "April", returnType: "GSTR-3B" },
+        {
+          getActiveGstTab,
+          openReturnsDashboardWithPortalAnchor: vi.fn(async () => "clicked" as const),
+          verifyReturnsOriginContentScript: vi.fn(async () => true),
+          sendMessageToTabWithInjection,
+          storageKeys: {
+            completion: "completion",
+            fullFiscalYearLedger: "full-year-ledger",
+            observation: "observation",
+          },
+        },
+      ),
+    ).resolves.toMatchObject({ flowStep: { state: "downloaded" } });
+
+    expect(sendMessageToTabWithInjection.mock.calls.map(([, message]) => message.type)).toEqual([
+      "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
+    ]);
+    expect(browser.tabs.update).not.toHaveBeenCalledWith(
+      ACTIVE_GST_TAB.id,
+      expect.objectContaining({ url: expect.any(String) }),
+    );
+    expect(browser.tabs.create).not.toHaveBeenCalledWith(
+      expect.objectContaining({ url: expect.stringContaining("return.gst.gov.in") }),
+    );
+  });
 
   it("accepts consecutive fresh GSTR-3B periods on the Returns origin without a tab navigation", async () => {
     const sendMessageToTabWithInjection = vi.fn<
@@ -5345,7 +5402,9 @@ describe("filed returns flow runner", () => {
     ).resolves.toMatchObject({ flowStep: { state: "downloaded" } });
 
     expect(
-      sendMessageToTabWithInjection.mock.calls.map(([, message]) => message.payload.period),
+      sendMessageToTabWithInjection.mock.calls
+        .filter(([, message]) => message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3")
+        .map(([, message]) => message.payload.period),
     ).toEqual(["April", "May"]);
     expect(browser.tabs.update).not.toHaveBeenCalledWith(
       ACTIVE_GST_TAB.id,

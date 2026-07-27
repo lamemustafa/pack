@@ -29,6 +29,24 @@ export function isCurrentContentScriptPingResponse(response: PackMessageResponse
   );
 }
 
+export async function clickReturnsDashboardAnchorFromTab(
+  tabId: number,
+): Promise<"clicked" | "not-found" | "ambiguous" | null> {
+  const response = await sendMessageToTabWithInjection(tabId, {
+    type: "PACK_CONTENT_OPEN_RETURNS_DASHBOARD_V34",
+  });
+  return response.ok && "returnsDashboardNavigation" in response
+    ? response.returnsDashboardNavigation
+    : null;
+}
+
+export async function verifyCurrentContentScriptFromTab(tabId: number): Promise<boolean> {
+  const response = await sendMessageToTabWithInjection(tabId, {
+    type: "PACK_CONTENT_REFRESH_CONTEXT_V3",
+  });
+  return response.ok && "context" in response;
+}
+
 export async function refreshActiveFiledReturnsObservation(): Promise<PortalObservation | null> {
   const activeTab = await getActiveGstTab();
   if (!activeTab) return null;
@@ -160,6 +178,7 @@ export async function sendMessageToTabWithInjection(
         | "PACK_CONTENT_REFRESH_FILED_RETURNS_OBSERVATION_V3"
         | "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3"
         | "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34"
+        | "PACK_CONTENT_OPEN_RETURNS_DASHBOARD_V34"
         | "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3"
         | "PACK_CONTENT_MARK_FILED_RETURNS_SEARCH_PENDING_V3"
         | "PACK_CONTENT_CLEAR_FILED_RETURNS_SEARCH_PENDING_V3"

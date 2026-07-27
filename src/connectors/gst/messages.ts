@@ -100,6 +100,7 @@ export type PackMessage =
       payload: FiledReturnsDownloadTarget;
     }
   | { type: "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34"; payload: ArtifactRequest }
+  | { type: "PACK_CONTENT_OPEN_RETURNS_DASHBOARD_V34"; payload?: undefined }
   | {
       type: "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3";
       payload: FiledReturnsDownloadTarget;
@@ -153,6 +154,10 @@ export type PackMessageResponse =
           }
         | { ok: true; state: "ready"; requestId: string; safeSignals: string[] }
         | { ok: false; requestId: string; reason: ArtifactFailureReason; safeSignals: string[] };
+    }
+  | {
+      ok: true;
+      returnsDashboardNavigation: "clicked" | "not-found" | "ambiguous";
     }
   | {
       ok: true;
@@ -221,6 +226,7 @@ export function isPackMessage(
     case "PACK_CONTENT_REFRESH_CONTEXT_V3":
     case "PACK_CONTENT_REFRESH_FILED_RETURNS_OBSERVATION_V3":
     case "PACK_CONTENT_NAVIGATE_FILED_RETURNS_V3":
+    case "PACK_CONTENT_OPEN_RETURNS_DASHBOARD_V34":
       return input.payload === undefined;
     case "PACK_RETRY_FILED_RETURNS_TARGET":
       return (

@@ -6,6 +6,7 @@ import { triggerFiledReturnDownload } from "../connectors/gst/filed-returns-down
 import { navigateToFiledReturnsPage } from "../connectors/gst/filed-returns-navigator";
 import { observeFiledReturnsPageText } from "../connectors/gst/filed-returns-observer";
 import { detectPostClickBlockedState } from "../connectors/gst/filed-returns-post-click-blocked-state";
+import { clickReturnsDashboardAnchor } from "../connectors/gst/returns-dashboard-anchor";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import {
   clearFiledReturnsSearchAttemptForScope,
@@ -177,6 +178,14 @@ export default defineContentScript({
             } satisfies PackMessageResponse),
           );
         return true;
+      }
+
+      if (contentMessage.type === "PACK_CONTENT_OPEN_RETURNS_DASHBOARD_V34") {
+        sendResponse({
+          ok: true,
+          returnsDashboardNavigation: clickReturnsDashboardAnchor(document),
+        } satisfies PackMessageResponse);
+        return false;
       }
 
       if (contentMessage.type === "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3") {

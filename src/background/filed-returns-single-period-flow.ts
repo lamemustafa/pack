@@ -6,6 +6,10 @@ import type { PackMessageResponse } from "../connectors/gst/messages";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
 import { getRequiredGstTab } from "./filed-returns-active-tab";
+import {
+  clickReturnsDashboardAnchorFromTab,
+  verifyCurrentContentScriptFromTab,
+} from "./gst-tab-context";
 import { runDownloadStepWithRetry } from "./filed-returns-flow-messaging";
 import {
   delay,
@@ -96,28 +100,39 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
   }
 
   if (scope.returnType === "GSTR-3B" && !isReturnsOrigin(activeTab.tab.url)) {
-    return withPersistedSinglePeriodSummary(
-      scope,
-      {
-        ok: true,
-        flowStep: {
-          connectorId: "gst",
-          scopeId: filedReturnScopeId("GSTR-3B"),
-          state: "blocked",
-          safeSignals: ["wrong-origin-open-returns-dashboard"],
-          safeMessage:
-            "Pack can acquire filed GSTR-3B only from the authenticated GST Returns origin.",
-          userAction: {
-            type: "NAVIGATE_TO_SUPPORTED_PAGE",
-            message:
-              "Open Services > Returns > Returns Dashboard in the GST Portal, then press Start again.",
-            canResume: true,
-          },
-        },
-      },
-      deps,
-      shouldPersistSinglePeriodSummary,
-    );
+    const portalNavigation = await (
+      deps.openReturnsDashboardWithPortalAnchor ?? clickReturnsDashboardAnchorFromTab
+    )(activeTab.tab.id);
+    if (!portalNavigation) {
+      return blockedWrongOriginResponse(
+        scope,
+        deps,
+        shouldPersistSinglePeriodSummary,
+        "unavailable",
+      );
+    }
+    if (portalNavigation !== "clicked") {
+      return blockedWrongOriginResponse(
+        scope,
+        deps,
+        shouldPersistSinglePeriodSummary,
+        portalNavigation,
+      );
+    }
+    if (!(await waitForReturnsOrigin(activeTab.tab.id, deps))) {
+      return blockedWrongOriginResponse(scope, deps, shouldPersistSinglePeriodSummary, "timeout");
+    }
+    const contentScriptReady = await (
+      deps.verifyReturnsOriginContentScript ?? verifyCurrentContentScriptFromTab
+    )(activeTab.tab.id);
+    if (!contentScriptReady) {
+      return blockedWrongOriginResponse(
+        scope,
+        deps,
+        shouldPersistSinglePeriodSummary,
+        "unavailable",
+      );
+    }
   }
 
   return runSinglePeriodSteps(
@@ -126,6 +141,54 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
     activeTab.tab.id,
     shouldPersistSinglePeriodSummary,
   );
+}
+
+async function blockedWrongOriginResponse(
+  scope: FiledReturnsDownloadScope,
+  deps: FiledReturnsFlowRunnerDeps,
+  shouldPersistSinglePeriodSummary: boolean,
+  reason: "ambiguous" | "not-found" | "timeout" | "unavailable",
+): Promise<PackMessageResponse> {
+  return withPersistedSinglePeriodSummary(
+    scope,
+    {
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: filedReturnScopeId("GSTR-3B"),
+        state: "blocked",
+        safeSignals: ["wrong-origin-open-returns-dashboard", `returns-dashboard-anchor-${reason}`],
+        safeMessage:
+          reason === "ambiguous"
+            ? "Pack found more than one matching Returns Dashboard link and will not choose one."
+            : reason === "timeout"
+              ? "Pack clicked the GST Portal Returns Dashboard link but the portal did not finish opening it in time."
+              : "Pack needs the GST Portal Returns Dashboard before it can acquire filed GSTR-3B.",
+        userAction: {
+          type: "NAVIGATE_TO_SUPPORTED_PAGE",
+          message:
+            "Open Services > Returns > Returns Dashboard in the GST Portal, then press Start again.",
+          canResume: true,
+        },
+      },
+    },
+    deps,
+    shouldPersistSinglePeriodSummary,
+  );
+}
+
+async function waitForReturnsOrigin(
+  tabId: number,
+  deps: FiledReturnsFlowRunnerDeps,
+): Promise<boolean> {
+  const timeoutMs = deps.timings?.returnsDashboardNavigationTimeoutMs ?? 15_000;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const activeTab = await getRequiredGstTab(deps.getActiveGstTab);
+    if (activeTab?.tab.id === tabId && isReturnsOrigin(activeTab.tab.url)) return true;
+    await delay(250);
+  }
+  return false;
 }
 
 function isReturnsOrigin(url: string | undefined): boolean {

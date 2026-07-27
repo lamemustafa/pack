@@ -73,6 +73,10 @@ export interface FiledReturnsFlowRunnerDeps {
     targetReview?: string;
   };
   now?: () => Date;
+  openReturnsDashboardWithPortalAnchor?: (
+    tabId: number,
+  ) => Promise<"clicked" | "not-found" | "ambiguous" | null>;
+  verifyReturnsOriginContentScript?: (tabId: number) => Promise<boolean>;
   portalTabIncognito?: boolean;
   persistTargetReview?: boolean;
   selectFiltersInMainWorld?: (
@@ -88,6 +92,7 @@ export interface FiledReturnsFlowRunnerDeps {
     detailSummaryModalSettleMs?: number;
     flowStepSettleMs?: number;
     portalNavigationSettleMs?: number;
+    returnsDashboardNavigationTimeoutMs?: number;
     resultRowNavigationSettleMs?: number;
     targetBoundPortalDownloadWaitMs?: number;
   };
