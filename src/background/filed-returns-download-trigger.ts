@@ -38,6 +38,24 @@ import {
 
 type FlowStepResponse = Extract<PackMessageResponse, { ok: true; flowStep: PortalFlowStepResult }>;
 
+export enum Gstr2bArtifactDispatchFailureReason {
+  ContentUnavailable = "gstr2b-artifact-content-unavailable",
+  PeriodInvalid = "gstr2b-artifact-period-invalid",
+  ResponseMissing = "gstr2b-artifact-response-missing",
+  StateInvalid = "gstr2b-artifact-state-invalid",
+}
+
+export const GSTR2B_ARTIFACT_DISPATCH_FAILURE_MESSAGES = {
+  [Gstr2bArtifactDispatchFailureReason.ContentUnavailable]:
+    "Pack could not start GSTR-2B acquisition from the active portal page. Retry from the same summary page.",
+  [Gstr2bArtifactDispatchFailureReason.PeriodInvalid]:
+    "Pack could not derive the requested GSTR-2B portal period, so it did not start acquisition.",
+  [Gstr2bArtifactDispatchFailureReason.ResponseMissing]:
+    "Pack did not receive a GSTR-2B acquisition result from the active portal page.",
+  [Gstr2bArtifactDispatchFailureReason.StateInvalid]:
+    "Pack received an unsupported GSTR-2B acquisition state and did not start a download.",
+} satisfies Record<Gstr2bArtifactDispatchFailureReason, string>;
+
 export async function triggerAndObserveFiledReturnDownload({
   activePeriod,
   artifactType = "PDF",
@@ -71,13 +89,7 @@ export async function triggerAndObserveFiledReturnDownload({
     };
   }
   if (scope.returnType === "GSTR-2B" && scope.period !== "ALL") {
-    const gstr2bResponse = await triggerGstr2bSinglePeriodArtifact(
-      scope,
-      artifactType,
-      deps,
-      tabId,
-    );
-    if (gstr2bResponse) return gstr2bResponse;
+    return triggerGstr2bSinglePeriodArtifact(scope, artifactType, deps, tabId);
   }
   if (
     scope.returnType === "GSTR-3B" &&
@@ -359,9 +371,11 @@ async function triggerGstr2bSinglePeriodArtifact(
   artifactType: FiledReturnsConcreteArtifactType,
   deps: FiledReturnsFlowMessagingDeps,
   tabId: number,
-): Promise<PackMessageResponse | null> {
+): Promise<PackMessageResponse> {
   const returnPeriod = toPortalReturnPeriod(scope.period, scope.financialYear);
-  if (!returnPeriod) return null;
+  if (!returnPeriod) {
+    return gstr2bArtifactDispatchFailure(Gstr2bArtifactDispatchFailureReason.PeriodInvalid);
+  }
   const requestId = createActionId();
   const response = await deps.sendMessageToTabWithInjection(tabId, {
     type: "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34",
@@ -381,7 +395,19 @@ async function triggerGstr2bSinglePeriodArtifact(
       "GSTR-2B",
     );
   }
-  if (!response.ok || !("artifact" in response) || !response.artifact.ok) return response;
+  if (!response.ok) {
+    return gstr2bArtifactDispatchFailure(Gstr2bArtifactDispatchFailureReason.ContentUnavailable);
+  }
+  if (!("artifact" in response)) {
+    return gstr2bArtifactDispatchFailure(Gstr2bArtifactDispatchFailureReason.ResponseMissing);
+  }
+  if (!response.artifact.ok) {
+    return artifactFailureResponse(
+      response.artifact.reason,
+      response.artifact.safeSignals,
+      "GSTR-2B",
+    );
+  }
   const artifact = response.artifact;
   const checkpointTarget = {
     artifactType,
@@ -431,7 +457,9 @@ async function triggerGstr2bSinglePeriodArtifact(
               ...callbacks,
             })
           : null;
-    if (!acquired) return response;
+    if (!acquired) {
+      return gstr2bArtifactDispatchFailure(Gstr2bArtifactDispatchFailureReason.StateInvalid);
+    }
     retainCheckpointForRecovery =
       !acquired.ok &&
       (acquired.reason === "checkpoint-failed" ||
@@ -470,6 +498,26 @@ async function triggerGstr2bSinglePeriodArtifact(
       await clearArtifactAcquisitionCheckpoint(checkpointTarget, requestId);
     }
   }
+}
+
+function gstr2bArtifactDispatchFailure(
+  reason: Gstr2bArtifactDispatchFailureReason,
+): FlowStepResponse {
+  return {
+    ok: true,
+    flowStep: {
+      connectorId: "gst",
+      scopeId: filedReturnScopeId("GSTR-2B"),
+      state: "blocked",
+      safeSignals: [reason],
+      safeMessage: GSTR2B_ARTIFACT_DISPATCH_FAILURE_MESSAGES[reason],
+      userAction: {
+        type: "RETRY_PORTAL_GENERATION",
+        message: "Keep the selected GSTR-2B summary page open, then retry the artifact.",
+        canResume: true,
+      },
+    },
+  };
 }
 
 function artifactFailureResponse(

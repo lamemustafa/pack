@@ -166,6 +166,7 @@ const browserMocks = vi.hoisted(() => {
       },
       session: {
         get: vi.fn(async () => ({})),
+        remove: vi.fn(async () => undefined),
         set: vi.fn(async () => undefined),
       },
     },
@@ -283,6 +284,65 @@ describe("background filed returns download defaults", () => {
       "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
       "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34",
     ]);
+  });
+
+  it("persists a terminal GSTR-2B April summary failure when acquisition returns no artifact", async () => {
+    browserMocks.tabs.query.mockResolvedValueOnce([
+      {
+        active: true,
+        id: 17,
+        url: "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
+        windowId: 1,
+      },
+    ]);
+    browserMocks.tabs.sendMessage.mockImplementation(async (_tabId, message: PackMessage) => {
+      message = unwrapContentRequest(message);
+      if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3") {
+        return {
+          ok: true,
+          flowStep: {
+            connectorId: "gst",
+            scopeId: "gst-gstr2b-private-v0",
+            state: "ready",
+            safeSignals: [
+              "download-gstr2b-summary-pdf",
+              "download-gstr2b-details-excel",
+              "filed-gstr2b-download-ready",
+            ],
+            safeMessage: "GSTR-2B download controls appear ready.",
+          },
+        } satisfies PackMessageResponse;
+      }
+      if (message.type === "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34") {
+        return { ok: true } as PackMessageResponse;
+      }
+      return { ok: false, error: "Unexpected message." } satisfies PackMessageResponse;
+    });
+
+    await import("../../src/entrypoints/background");
+
+    const response = await sendBackgroundMessage({
+      type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",
+      payload: { financialYear: "2026-27", period: "April", returnType: "GSTR-2B" },
+    });
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "blocked",
+        safeSignals: expect.arrayContaining(["gstr2b-artifact-response-missing"]),
+        safeMessage: expect.any(String),
+      },
+      flowSummary: { status: "blocked" },
+    });
+    expect(browserMocks.storage.session.set).toHaveBeenCalledWith({
+      "pack:last-filed-returns-flow-summary": expect.objectContaining({
+        status: "blocked",
+        flowStep: expect.objectContaining({
+          safeSignals: expect.arrayContaining(["gstr2b-artifact-response-missing"]),
+        }),
+      }),
+    });
   });
 
   it("blocks a full-fiscal-year GSTR-3B request before it can start legacy targets", async () => {

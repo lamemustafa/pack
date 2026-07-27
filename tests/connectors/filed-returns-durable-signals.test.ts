@@ -7,6 +7,10 @@ import {
   parseDurableFiledReturnsSignals,
 } from "../../src/connectors/gst/filed-returns-durable-signals";
 import { scoreFiledReturnsSummaryModalDismissalCandidate } from "../../src/connectors/gst/filed-returns-navigation-candidates";
+import {
+  GSTR2B_ARTIFACT_DISPATCH_FAILURE_MESSAGES,
+  Gstr2bArtifactDispatchFailureReason,
+} from "../../src/background/filed-returns-download-trigger";
 
 describe("filed-return durable signal contract", () => {
   it("accepts the bounded signals emitted by detail, download, and summary-dialog classifiers", () => {
@@ -131,6 +135,15 @@ describe("filed-return durable signal contract", () => {
         Array.from({ length: 33 }, (_, index) => `browser-download-id:${index + 1}`),
       ),
     ).toBeNull();
+  });
+
+  it("accepts every GSTR-2B acquisition terminal reason for durable summaries", () => {
+    const reasons = Object.values(Gstr2bArtifactDispatchFailureReason);
+
+    expect(parseDurableFiledReturnsSignals(reasons)).toEqual(reasons);
+    for (const reason of reasons) {
+      expect(GSTR2B_ARTIFACT_DISPATCH_FAILURE_MESSAGES[reason].trim()).not.toBe("");
+    }
   });
 
   it("accepts only the fixed categorical capture-context diagnostics", () => {

@@ -47,8 +47,17 @@ import {
   ARTIFACT_FAILURE_MESSAGES,
   type ArtifactFailureReason,
 } from "../../src/connectors/gst/artifact-source";
-import { triggerAndObserveFiledReturnDownload } from "../../src/background/filed-returns-download-trigger";
+import {
+  GSTR2B_ARTIFACT_DISPATCH_FAILURE_MESSAGES,
+  Gstr2bArtifactDispatchFailureReason,
+  triggerAndObserveFiledReturnDownload,
+} from "../../src/background/filed-returns-download-trigger";
 import { startFullFiscalYearDownloadFlow } from "../../src/background/filed-returns-full-fiscal-year";
+import { FILED_RETURNS_RETURN_TYPES } from "../../src/connectors/gst/filed-returns-return-types";
+
+const ARTIFACT_ACQUISITION_RETURN_TYPES = FILED_RETURNS_RETURN_TYPES.filter(
+  (returnType) => returnType !== "GSTR-1",
+);
 
 describe("GSTR-3B artifact acquisition dispatch", () => {
   it("blocks the full-year runner before it can expand GSTR-3B into legacy monthly targets", async () => {
@@ -117,9 +126,15 @@ describe("GSTR-3B artifact acquisition dispatch", () => {
     );
   });
 
-  it.each(Object.keys(ARTIFACT_FAILURE_MESSAGES) as ArtifactFailureReason[])(
-    "surfaces the %s acquisition failure as a distinct blocked popup message",
-    async (reason) => {
+  it.each(
+    ARTIFACT_ACQUISITION_RETURN_TYPES.flatMap((returnType) =>
+      (Object.keys(ARTIFACT_FAILURE_MESSAGES) as ArtifactFailureReason[]).map(
+        (reason) => [returnType, reason] as const,
+      ),
+    ),
+  )(
+    "surfaces the %s %s acquisition failure as a distinct blocked popup message",
+    async (returnType, reason) => {
       const response = await triggerAndObserveFiledReturnDownload({
         activePeriod: "April",
         artifactType: "PDF",
@@ -138,7 +153,7 @@ describe("GSTR-3B artifact acquisition dispatch", () => {
           ),
           storageKeys: {},
         },
-        scope: { financialYear: "2025-26", period: "April", returnType: "GSTR-3B" },
+        scope: { financialYear: "2025-26", period: "April", returnType },
         tabId: 17,
       });
 
@@ -153,6 +168,52 @@ describe("GSTR-3B artifact acquisition dispatch", () => {
           ]),
         },
       });
+    },
+  );
+
+  it.each(FILED_RETURNS_RETURN_TYPES)(
+    "renders a non-empty terminal message for a blocked %s flow",
+    async (returnType) => {
+      const response = await triggerAndObserveFiledReturnDownload({
+        activePeriod: "April",
+        artifactType: "PDF",
+        deps: {
+          sendMessageToTabWithInjection: vi.fn(async (_tabId, message) => {
+            if (message.type === "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34") {
+              return {
+                ok: true,
+                artifact: {
+                  ok: false,
+                  reason: "generation-timeout",
+                  requestId: "synthetic-request",
+                  safeSignals: [],
+                },
+              } satisfies PackMessageResponse;
+            }
+            return {
+              ok: true,
+              downloadTrigger: {
+                connectorId: "gst",
+                scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
+                state: "blocked",
+                safeSignals: ["filed-gstr1-download-trigger-ambiguous"],
+                safeMessage: "The synthetic GSTR-1 portal control was ambiguous.",
+              },
+            } satisfies PackMessageResponse;
+          }),
+          storageKeys: {},
+        },
+        scope: { financialYear: "2025-26", period: "April", returnType },
+        tabId: 17,
+      });
+
+      expect(response).toMatchObject({
+        ok: true,
+        flowStep: { state: "blocked", safeMessage: expect.any(String) },
+      });
+      if (!response.ok || !("flowStep" in response))
+        throw new Error("Expected terminal flow step.");
+      expect(response.flowStep.safeMessage.trim()).not.toBe("");
     },
   );
 
@@ -251,6 +312,74 @@ describe("GSTR-3B artifact acquisition dispatch", () => {
 });
 
 describe("GSTR-2B artifact acquisition dispatch", () => {
+  it("turns an April summary-page response without an artifact into a terminal message", async () => {
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "April",
+      artifactType: "PDF",
+      deps: {
+        sendMessageToTabWithInjection: vi.fn(async () => ({ ok: true }) as PackMessageResponse),
+        storageKeys: {},
+      },
+      scope: { financialYear: "2026-27", period: "April", returnType: "GSTR-2B" },
+      tabId: 17,
+    });
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "blocked",
+        safeMessage: expect.any(String),
+        safeSignals: expect.arrayContaining(["gstr2b-artifact-response-missing"]),
+      },
+    });
+  });
+
+  it.each([
+    [Gstr2bArtifactDispatchFailureReason.PeriodInvalid, "Unknown", "PDF", undefined],
+    [
+      Gstr2bArtifactDispatchFailureReason.ContentUnavailable,
+      "April",
+      "PDF",
+      { ok: false, error: "CONTENT_SCRIPT_UNAVAILABLE" },
+    ],
+    [Gstr2bArtifactDispatchFailureReason.ResponseMissing, "April", "PDF", { ok: true }],
+    [
+      Gstr2bArtifactDispatchFailureReason.StateInvalid,
+      "April",
+      "JSON",
+      {
+        ok: true,
+        artifact: {
+          ok: true,
+          requestId: "synthetic-2b-request",
+          safeSignals: [],
+          state: "ready",
+        },
+      },
+    ],
+  ] as const)(
+    "maps %s to a durable terminal message",
+    async (reason, period, artifactType, reply) => {
+      const sendMessageToTabWithInjection = vi.fn(async () => reply as PackMessageResponse);
+      const response = await triggerAndObserveFiledReturnDownload({
+        activePeriod: period,
+        artifactType,
+        deps: { sendMessageToTabWithInjection, storageKeys: {} },
+        scope: { financialYear: "2026-27", period, returnType: "GSTR-2B" },
+        tabId: 17,
+      });
+
+      expect(response).toMatchObject({
+        ok: true,
+        flowStep: {
+          state: "blocked",
+          safeSignals: [reason],
+          safeMessage: GSTR2B_ARTIFACT_DISPATCH_FAILURE_MESSAGES[reason],
+        },
+      });
+    },
+  );
+
   it.each([
     ["PDF", "ComplyEaze-Pack/2026-27/GSTR-2B/June.pdf"],
     ["EXCEL", "ComplyEaze-Pack/2026-27/GSTR-2B/June.xlsx"],
