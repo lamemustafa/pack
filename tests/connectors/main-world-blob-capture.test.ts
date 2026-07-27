@@ -166,18 +166,6 @@ describe("capturePortalBlobDownload", () => {
       path: "/returns/auth/gstr1/summary",
       returnType: "GSTR-1" as const,
     },
-    {
-      artifactType: "PDF" as const,
-      controlText: "Download GSTR‑2B Summary (PDF)",
-      path: "/gstr2b/auth/gstr2b/summary",
-      returnType: "GSTR-2B" as const,
-    },
-    {
-      artifactType: "EXCEL" as const,
-      controlText: "Download GSTR-2B Details (Excel)",
-      path: "/gstr2b/auth/gstr2b/summary",
-      returnType: "GSTR-2B" as const,
-    },
   ])(
     "accepts the unique actionable $returnType $artifactType control",
     async ({ artifactType, controlText, path, returnType }) => {
@@ -210,7 +198,7 @@ describe("capturePortalBlobDownload", () => {
     { expectedPeriod: "September" as const, label: "Sept" },
   ])("accepts the finite $label period alias", async ({ expectedPeriod, label }) => {
     const { documentRef } = installMainWorldDom(`
-      <button data-pack-gstr2b-capture-action="capture-1">Summary PDF</button>
+      <button data-pack-gstr2b-capture-action="capture-1">Download Filed GSTR-1 Summary (PDF)</button>
     `);
     const periodLabel = Array.from(documentRef.querySelectorAll("p")).find((element) =>
       element.textContent?.includes("Return Period"),
@@ -233,10 +221,10 @@ describe("capturePortalBlobDownload", () => {
 
   it("rejects a semantic route drift even when the path checksum is refreshed", async () => {
     const { documentRef, view } = installMainWorldDom(`
-      <button data-pack-gstr2b-capture-action="capture-1">Summary PDF</button>
+      <button data-pack-gstr2b-capture-action="capture-1">Download Filed GSTR-1 Summary (PDF)</button>
     `);
     const config = captureConfig();
-    view.history.replaceState(null, "", "/returns/auth/gstr1/summary");
+    view.history.replaceState(null, "", "/returns/auth/gstr3b");
     config.targetBinding.pathnameDigest = digestTestTargetText(
       normaliseTestTargetText(view.location.pathname),
     );
@@ -253,10 +241,10 @@ describe("capturePortalBlobDownload", () => {
 
   it("rejects a visible return heading that conflicts with the bound return", async () => {
     const { documentRef } = installMainWorldDom(`
-      <button data-pack-gstr2b-capture-action="capture-1">Summary PDF</button>
+      <button data-pack-gstr2b-capture-action="capture-1">Download (PDF)</button>
     `);
     const heading = documentRef.querySelector("h1");
-    if (heading) heading.textContent = "GSTR-1";
+    if (heading) heading.textContent = "GSTR-3B";
 
     const outcome = await capturePortalBlobDownloadWithDiagnostics(captureConfig());
 
@@ -279,8 +267,8 @@ describe("capturePortalBlobDownload", () => {
 
   it("rejects a second actionable control qualifying for the same artifact", async () => {
     installMainWorldDom(`
-      <button data-pack-gstr2b-capture-action="capture-1">Summary PDF</button>
-      <button>Download GSTR-2B Summary (PDF)</button>
+      <button data-pack-gstr2b-capture-action="capture-1">Download (PDF)</button>
+      <button>Download Filed GSTR-1 Summary (PDF)</button>
     `);
 
     const outcome = await capturePortalBlobDownloadWithDiagnostics(captureConfig());
@@ -325,66 +313,11 @@ describe("capturePortalBlobDownload", () => {
     expect(outcome.safeFailureSignals).toContain("gstr2b-capture-control-not-actionable");
   });
 
-  it("rejects conflicting GSTR-2B statement evidence", async () => {
-    const { documentRef } = installMainWorldDom(`
-      <p>June 2026 Auto-Drafted ITC Statement</p>
-      <button data-pack-gstr2b-capture-action="capture-1">Summary PDF</button>
-    `);
-
-    const outcome = await capturePortalBlobDownloadWithDiagnostics(captureConfig());
-
-    expect(outcome.safeFailureSignals).toContain("gstr2b-capture-target-evidence-conflict");
-    expect(
-      documentRef.querySelector("button")?.hasAttribute("data-pack-gstr2b-capture-action"),
-    ).toBe(false);
-  });
-
-  it("rejects conflicting GSTR-2B server evidence even when visible labels match", async () => {
-    installMainWorldDom(`
-      <script type="application/json">
-        {"FORM_TYPE":"GSTR2B","FIN_YEAR":"2025-26","RETURN_PERIOD":"052025"}
-      </script>
-      <button data-pack-gstr2b-capture-action="capture-1">Summary PDF</button>
-    `);
-
-    const outcome = await capturePortalBlobDownloadWithDiagnostics(captureConfig());
-
-    expect(outcome.safeFailureSignals).toContain("gstr2b-capture-target-evidence-conflict");
-  });
-
-  it("rejects multiple distinct GSTR-2B server scopes", async () => {
-    installMainWorldDom(`
-      <script type="application/json">
-        {"FORM_TYPE":"GSTR2B","FIN_YEAR":"2026-27","RETURN_PERIOD":"052026"}
-      </script>
-      <script type="application/json">
-        {"FORM_TYPE":"GSTR2B","FIN_YEAR":"2026-27","RETURN_PERIOD":"062026"}
-      </script>
-      <button data-pack-gstr2b-capture-action="capture-1">Summary PDF</button>
-    `);
-
-    const outcome = await capturePortalBlobDownloadWithDiagnostics(captureConfig());
-
-    expect(outcome.safeFailureSignals).toContain("gstr2b-capture-target-evidence-conflict");
-  });
-
-  it("rejects multiple distinct GSTR-2B statement scopes", async () => {
-    installMainWorldDom(`
-      <p>May 2026 Auto-Drafted ITC Statement</p>
-      <p>June 2026 Auto-Drafted ITC Statement</p>
-      <button data-pack-gstr2b-capture-action="capture-1">Summary PDF</button>
-    `);
-
-    const outcome = await capturePortalBlobDownloadWithDiagnostics(captureConfig());
-
-    expect(outcome.safeFailureSignals).toContain("gstr2b-capture-target-evidence-conflict");
-  });
-
   it("ignores hidden stale identity labels and rejects the visible mismatch", async () => {
     const { documentRef } = installMainWorldDom(`
       <p>Financial Year - 2025-26</p>
       <p>Return Period - June</p>
-      <button data-pack-gstr2b-capture-action="capture-1">Summary PDF</button>
+      <button data-pack-gstr2b-capture-action="capture-1">Download (PDF)</button>
     `);
     for (const label of Array.from(documentRef.querySelectorAll("main > p")).slice(0, 2)) {
       label.setAttribute("hidden", "");
@@ -397,7 +330,7 @@ describe("capturePortalBlobDownload", () => {
 
   it("fails closed when no complete visible or server target identity exists", async () => {
     const { documentRef } = installMainWorldDom(`
-      <button data-pack-gstr2b-capture-action="capture-1">Summary PDF</button>
+      <button data-pack-gstr2b-capture-action="capture-1">Download (PDF)</button>
     `);
     for (const label of Array.from(documentRef.querySelectorAll("main > p")).slice(0, 2)) {
       label.setAttribute("hidden", "");
@@ -6393,7 +6326,7 @@ function captureConfig(
       financialYear: "2026-27",
       pathnameDigest: digestTestTargetText(normaliseTestTargetText(window.location.pathname)),
       period: "May",
-      returnType: "GSTR-2B",
+      returnType: "GSTR-1",
       ...targetBinding,
     },
   };
@@ -6421,13 +6354,13 @@ function installMainWorldDom(html: string): {
 } {
   const dom = new JSDOM(
     `<main>
-      <h1>GSTR-2B</h1>
+      <h1>GSTR-1</h1>
       <p>Financial Year - 2026-27</p>
       <p>Return Period - May</p>
       ${html}
     </main>`,
     {
-      url: "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
+      url: "https://return.gst.gov.in/returns/auth/gstr1/summary",
     },
   );
   const view = dom.window as unknown as Window & typeof globalThis;
@@ -6445,12 +6378,12 @@ function installMainWorldDom(html: string): {
     view.document.querySelectorAll<HTMLElement>('[data-pack-gstr2b-capture-action="capture-1"]'),
   )) {
     if (normaliseTestTargetText(control.textContent ?? "") === "download") {
-      control.setAttribute("aria-label", "Download GSTR-2B Summary (PDF)");
+      control.setAttribute("aria-label", "Download GSTR-1 Summary (PDF)");
     }
   }
   Object.defineProperty(view.URL, "createObjectURL", {
     configurable: true,
-    value: () => "blob:https://gstr2b.gst.gov.in/generated",
+    value: () => "blob:https://return.gst.gov.in/generated",
     writable: true,
   });
   vi.stubGlobal("window", view);

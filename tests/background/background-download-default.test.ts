@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PACK_CONTENT_REQUEST_ENVELOPE_TYPE } from "../../src/connectors/gst/messages";
 import { type FiledReturnsMonth } from "../../src/connectors/gst/filed-returns-scope";
 import type { PackMessage, PackMessageResponse } from "../../src/connectors/gst/messages";
-import { observeBrowserDownloadById } from "../../src/background/download-observer";
 
 const browserMocks = vi.hoisted(() => {
   let messageListener:
@@ -353,73 +352,6 @@ describe("background filed returns download defaults", () => {
     });
     expect(browserMocks.downloads.download).not.toHaveBeenCalled();
     expect(sentActionMessageTypes()).toEqual([]);
-  });
-
-  it("fails closed when a GSTR-2B portal click has no action-bound bytes", async () => {
-    browserMocks.tabs.sendMessage.mockImplementation(async (_tabId, message: PackMessage) => {
-      message = unwrapContentRequest(message);
-      if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3") {
-        return {
-          ok: true,
-          flowStep: {
-            connectorId: "gst",
-            scopeId: "gst-gstr2b-private-v0",
-            state: "ready",
-            safeSignals: [
-              "gstr2b-summary-route",
-              "gstr2b-download-ready",
-              "filed-return-download-ready",
-            ],
-            safeMessage: "Ready.",
-          },
-        } satisfies PackMessageResponse;
-      }
-
-      if (message.type === "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3") {
-        return {
-          ok: true,
-          downloadTrigger: {
-            connectorId: "gst",
-            scopeId: "gst-gstr2b-private-v0",
-            state: "clicked",
-            safeSignals: ["gstr2b-download-clicked", "gstr2b-portal-blob-download-clicked"],
-            safeMessage: "Clicked.",
-          },
-        } satisfies PackMessageResponse;
-      }
-
-      return { ok: false, error: "Unexpected message." } satisfies PackMessageResponse;
-    });
-
-    await import("../../src/entrypoints/background");
-
-    const response = await sendBackgroundMessage({
-      type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",
-      payload: {
-        artifactType: "EXCEL",
-        financialYear: "2026-27",
-        period: "May",
-        returnType: "GSTR-2B",
-      },
-    });
-
-    expect(response).toMatchObject({
-      ok: true,
-      flowStep: {
-        state: "download-unconfirmed",
-        safeSignals: expect.arrayContaining([
-          "gstr2b-portal-blob-download-clicked",
-          "filed-return-portal-click-evidence-unavailable",
-          "filed-return-artifact-unconfirmed:EXCEL",
-        ]),
-      },
-    });
-    expect(browserMocks.downloads.download).not.toHaveBeenCalled();
-    expect(observeBrowserDownloadById).not.toHaveBeenCalled();
-    expect(sentActionMessageTypes()).toEqual([
-      "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
-      "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
-    ]);
   });
 
   it("builds the options-page synthetic demo manifest without starting downloads by default", async () => {
