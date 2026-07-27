@@ -20,6 +20,27 @@ its own git repository.
 - Follow `docs/AGENT_REVIEW_RECTIFY.md` for non-trivial changes, review-rectify
   loops, release work, and logical commit segregation.
 
+### Portal interaction
+
+Pack talks to the GST Portal only the way the portal talks to itself: a real
+anchor click, or a same-origin fetch/form POST issued from a portal page.
+Never a constructed URL, and never a background-context request to an
+authenticated path. The portal's edge layer gates on Referer and
+Sec-Fetch-Site; rejections have invalidated a live user session. Verified
+failures: a background chrome.downloads.download to an authenticated API path
+returned accessdenied; a constructed navigation to /returns/auth/efiledreturns
+was WAF-rejected; a constructed navigation to /returns/auth/dashboard returned
+Access Denied and ended the session. Clicking the portal's own Returns
+Dashboard anchor works, because it carries a Referer.
+
+### Terminal states must speak
+
+Every terminal state Pack can reach must render a message naming its reason.
+A silent no-op is a worse defect than a wrong result, because it cannot be
+diagnosed from outside the extension. Verified failure: a wrong-origin start
+produced no navigation, no download and no message, which took several
+debugging rounds to attribute.
+
 ## Agent-Instruction Precedence
 
 - This Pack `AGENTS.md` is the source of truth for the nested extension repo and
