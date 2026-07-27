@@ -211,6 +211,34 @@ describe("durable selected-artifact progress", () => {
     ).resolves.toMatchObject({ completedArtifactTypes: ["PDF"] });
   });
 
+  it("recovers completed GSTR-2B JSON alongside the selected PDF and Excel artifacts", async () => {
+    const gstr2bScope: FiledReturnsDownloadScope = {
+      artifactType: "PDF_AND_EXCEL",
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-2B",
+    };
+    await persistPartialArtifactSummary(
+      gstr2bScope,
+      {
+        connectorId: "gst",
+        scopeId: "gst-gstr2b-private-v0",
+        state: "blocked",
+        safeSignals: [
+          "filed-return-artifact-downloaded:PDF",
+          "filed-return-artifact-downloaded:JSON",
+          "filed-return-artifact-failed:EXCEL",
+        ],
+        safeMessage: "Synthetic GSTR-2B artifact progress.",
+      },
+      deps,
+    );
+
+    await expect(
+      readPersistedArtifactProgress(gstr2bScope, ["PDF", "EXCEL", "JSON"], deps),
+    ).resolves.toMatchObject({ completedArtifactTypes: ["PDF", "JSON"] });
+  });
+
   it("does not retain partial progress with an unknown signal", async () => {
     state.session.completion = { stale: true };
     await persistPartialArtifactSummary(

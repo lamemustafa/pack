@@ -309,7 +309,13 @@ describe("background filed returns download defaults", () => {
       },
     });
 
-    expect(response).toEqual({ ok: false, error: "CONTENT_SCRIPT_UNAVAILABLE" });
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "blocked",
+        safeSignals: ["artifact-acquisition-failed", "artifact-response-missing"],
+      },
+    });
     expect(browserMocks.downloads.download).not.toHaveBeenCalled();
     expect(sentActionMessageTypes()).toEqual([
       "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",

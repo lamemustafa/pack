@@ -306,8 +306,31 @@ describe("GSTR-3B artifact acquisition dispatch", () => {
 
     expect(response).toMatchObject({ flowStep: { state: "downloaded" } });
     expect(captureMocks.acquireGstr3bPdfAfterPreflight).toHaveBeenCalledWith(
-      expect.objectContaining({ filename: "ComplyEaze-Pack/2026-27/GSTR-3B/June.pdf" }),
+      expect.objectContaining({ filename: "ComplyEaze-Pack/2026-27/GSTR-3B/June-return.pdf" }),
     );
+  });
+
+  it("turns a successful V34 reply without an artifact into a terminal GSTR-3B failure", async () => {
+    await expect(
+      triggerAndObserveFiledReturnDownload({
+        activePeriod: "April",
+        artifactType: "PDF",
+        deps: {
+          sendMessageToTabWithInjection: vi.fn(async () => ({ ok: true }) as PackMessageResponse),
+          storageKeys: {},
+        },
+        scope: { financialYear: "2025-26", period: "April", returnType: "GSTR-3B" },
+        tabId: 17,
+      }),
+    ).resolves.toMatchObject({
+      flowStep: {
+        state: "blocked",
+        safeSignals: expect.arrayContaining([
+          "artifact-acquisition-failed",
+          "artifact-response-missing",
+        ]),
+      },
+    });
   });
 });
 
@@ -381,8 +404,8 @@ describe("GSTR-2B artifact acquisition dispatch", () => {
   );
 
   it.each([
-    ["PDF", "ComplyEaze-Pack/2026-27/GSTR-2B/June.pdf"],
-    ["EXCEL", "ComplyEaze-Pack/2026-27/GSTR-2B/June.xlsx"],
+    ["PDF", "ComplyEaze-Pack/2026-27/GSTR-2B/June-summary.pdf"],
+    ["EXCEL", "ComplyEaze-Pack/2026-27/GSTR-2B/June-details.xlsx"],
   ] as const)("never reaches main-world capture for %s", async (artifactType, filename) => {
     const response = await triggerAndObserveFiledReturnDownload({
       activePeriod: "June",
@@ -409,6 +432,36 @@ describe("GSTR-2B artifact acquisition dispatch", () => {
     expect(captureMocks.startMainWorldCapturedFiledReturnDownload).not.toHaveBeenCalled();
     expect(captureMocks.acquireGstr2bPageGeneratedArtifact).toHaveBeenCalledWith(
       expect.objectContaining({ artifactType, filename, tabId: 17 }),
+    );
+  });
+
+  it("writes GSTR-2B portal data with its data suffix", async () => {
+    await triggerAndObserveFiledReturnDownload({
+      activePeriod: "June",
+      artifactType: "JSON",
+      deps: {
+        sendMessageToTabWithInjection: vi.fn(
+          async (_tabId, message) =>
+            ({
+              ok: true,
+              artifact: {
+                ok: true,
+                state: "acquired",
+                requestId: message.payload.requestId,
+                base64: "e30=",
+                mimeType: "application/json",
+                safeSignals: ["target-period-verified"],
+              },
+            }) as PackMessageResponse,
+        ),
+        storageKeys: {},
+      },
+      scope: { financialYear: "2026-27", period: "June", returnType: "GSTR-2B" },
+      tabId: 17,
+    });
+
+    expect(captureMocks.downloadAcquiredArtifact).toHaveBeenCalledWith(
+      expect.objectContaining({ filename: "ComplyEaze-Pack/2026-27/GSTR-2B/June-data.json" }),
     );
   });
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { withArtifactDownloadMessage } from "../../src/background/filed-returns-download-result";
 
 describe("filed-return download result copy", () => {
-  it("labels a completed GSTR-2B workbook as details Excel", () => {
+  it("labels a completed GSTR-2B workbook as Details (Excel)", () => {
     const result = withArtifactDownloadMessage(
       {
         connectorId: "gst",
@@ -21,7 +21,7 @@ describe("filed-return download result copy", () => {
     );
 
     expect(result.safeMessage).toBe(
-      "The browser reported that the filed-return details Excel download completed. Check the local downloads folder for the GST Portal file.",
+      "The browser reported that the filed-return Details (Excel) download completed. Check the local downloads folder for the GST Portal file.",
     );
     expect(result.safeMessage).not.toContain("e-invoice");
   });

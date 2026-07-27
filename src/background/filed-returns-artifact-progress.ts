@@ -256,10 +256,10 @@ function downloadedArtifactTypes(
   safeSignals: readonly string[],
 ): FiledReturnsConcreteArtifactType[] {
   const completedArtifactTypes = safeSignals
-    .map((signal) => signal.match(/^filed-return-artifact-downloaded:(PDF|EXCEL)$/)?.[1])
+    .map((signal) => signal.match(/^filed-return-artifact-downloaded:(PDF|JSON|EXCEL)$/)?.[1])
     .filter(
       (artifactType): artifactType is FiledReturnsConcreteArtifactType =>
-        artifactType === "PDF" || artifactType === "EXCEL",
+        artifactType === "PDF" || artifactType === "JSON" || artifactType === "EXCEL",
     );
   return Array.from(new Set(completedArtifactTypes));
 }

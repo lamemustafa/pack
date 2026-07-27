@@ -67,9 +67,8 @@ export async function preflightSelectedArtifactsRecovery({
   deps: FiledReturnsFlowRunnerDeps;
   scope: FiledReturnsDownloadScope;
 }): Promise<PackMessageResponse | null> {
-  const artifactTypes = concreteFiledReturnsArtifactTypes(
-    normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType),
-  );
+  if (scope.returnType === "GSTR-2B") return null;
+  const artifactTypes = selectedArtifactTypes(scope);
   const compatibleDurableSinglePeriodBundle =
     artifactTypes.length > 1 && !deps.stageCapturedDownloads;
 
@@ -119,10 +118,10 @@ export async function triggerSelectedArtifacts({
   scope: FiledReturnsDownloadScope;
   tabId: number;
 }): Promise<PackMessageResponse> {
-  const artifactTypes = concreteFiledReturnsArtifactTypes(
-    normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType),
-  );
-  const usesDurableSinglePeriodBundle = artifactTypes.length > 1 && !deps.stageCapturedDownloads;
+  const artifactTypes = selectedArtifactTypes(scope);
+  const continueAfterArtifactFailure = scope.returnType === "GSTR-2B" && artifactTypes.length > 1;
+  const usesDurableSinglePeriodBundle =
+    scope.returnType !== "GSTR-2B" && artifactTypes.length > 1 && !deps.stageCapturedDownloads;
   let singlePeriodBundleLedger: SinglePeriodBundleLedger | null = null;
   if (usesDurableSinglePeriodBundle) {
     const reservation = await reserveSinglePeriodBundleLedger(scope, deps.now?.() ?? new Date());
@@ -176,6 +175,7 @@ export async function triggerSelectedArtifacts({
     PackMessageResponse,
     { ok: true; flowStep: PortalFlowStepResult }
   > | null = null;
+  const failedArtifactTypes = new Set<FiledReturnsConcreteArtifactType>();
 
   for (const artifactType of artifactTypes) {
     if (completedArtifactTypes.has(artifactType)) continue;
@@ -233,6 +233,7 @@ export async function triggerSelectedArtifacts({
       return response;
     }
     if (response.flowStep.state !== "downloaded") {
+      const artifactOutcome = withArtifactOutcome(response.flowStep, artifactType);
       const unavailableArtifactFlowStep = toOptionalArtifactUnavailableFlowStep({
         artifactType,
         artifactTypes,
@@ -282,6 +283,19 @@ export async function triggerSelectedArtifacts({
         );
       }
 
+      if (continueAfterArtifactFailure) {
+        failedArtifactTypes.add(artifactType);
+        completedArtifactTypes.add(artifactType);
+        combinedFlowStep = combineDownloadedArtifactFlowSteps(
+          combinedFlowStep,
+          artifactOutcome,
+          scope,
+        );
+        lastResponse = { ...response, flowStep: combinedFlowStep };
+        await persistPartialArtifactSummary(scope, combinedFlowStep, artifactDeps);
+        continue;
+      }
+
       if (!combinedFlowStep || artifactTypes.length === 1) {
         return response;
       }
@@ -298,7 +312,8 @@ export async function triggerSelectedArtifacts({
       };
     }
 
-    lastResponse = response;
+    const artifactOutcome = withArtifactOutcome(response.flowStep, artifactType);
+    lastResponse = { ...response, flowStep: artifactOutcome };
     completedArtifactTypes.add(artifactType);
     if (singlePeriodBundleLedger) {
       const stagedLedger = await persistSinglePeriodBundleArtifactStaged(
@@ -320,7 +335,7 @@ export async function triggerSelectedArtifacts({
     } else {
       combinedFlowStep = combineDownloadedArtifactFlowSteps(
         combinedFlowStep,
-        response.flowStep,
+        artifactOutcome,
         scope,
       );
     }
@@ -349,11 +364,22 @@ export async function triggerSelectedArtifacts({
     flowStep:
       artifactTypes.length === 1
         ? combinedFlowStep
-        : {
-            ...combinedFlowStep,
-            safeMessage: selectedArtifactsSafeMessage(combinedFlowStep),
-          },
+        : failedArtifactTypes.size > 0
+          ? {
+              ...combinedFlowStep,
+              state: "blocked",
+              safeMessage:
+                "Pack finished the available GSTR-2B artifacts, but one or more selected artifacts need review before retrying.",
+            }
+          : {
+              ...combinedFlowStep,
+              safeMessage: selectedArtifactsSafeMessage(combinedFlowStep),
+            },
   };
+  if (failedArtifactTypes.size > 0 && response.ok && "flowStep" in response) {
+    const flowSummary = await persistPartialArtifactSummary(scope, response.flowStep, artifactDeps);
+    return { ...response, flowSummary };
+  }
   if (!singlePeriodBundleLedgerId || artifactTypes.length === 1 || !response.ok) return response;
   if (!("flowStep" in response) || response.flowStep.state !== "downloaded") {
     return singlePeriodBundleLedger
@@ -519,6 +545,30 @@ export async function triggerSelectedArtifacts({
     ...response,
     flowStep: zipFlowStep,
     ...(flowSummary ? { flowSummary } : {}),
+  };
+}
+
+function selectedArtifactTypes(
+  scope: FiledReturnsDownloadScope,
+): FiledReturnsConcreteArtifactType[] {
+  const selected = normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType);
+  if (scope.returnType === "GSTR-2B" && selected === "PDF_AND_EXCEL") {
+    return ["PDF", "EXCEL", "JSON"];
+  }
+  return concreteFiledReturnsArtifactTypes(selected);
+}
+
+function withArtifactOutcome(
+  flowStep: PortalFlowStepResult,
+  artifactType: FiledReturnsConcreteArtifactType,
+): PortalFlowStepResult {
+  const outcome =
+    flowStep.state === "downloaded"
+      ? `filed-return-artifact-downloaded:${artifactType}`
+      : `filed-return-artifact-failed:${artifactType}`;
+  return {
+    ...flowStep,
+    safeSignals: Array.from(new Set([...flowStep.safeSignals, outcome])),
   };
 }
 

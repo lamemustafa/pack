@@ -159,7 +159,8 @@ describe("GSTR-2B artifact acquisition", () => {
     expect(result).toMatchObject({ ok: true, state: "acquired", mimeType: "application/json" });
     if (!result.ok || result.state !== "acquired") return;
     expect(new TextDecoder().decode(result.bytes)).toBe(raw);
-    const [requestedPath, options] = fetch.mock.calls[0] ?? [];
+    const [requestedPath, options] =
+      (fetch.mock.calls[0] as [RequestInfo | URL, RequestInit] | undefined) ?? [];
     const requestedUrl = new URL(String(requestedPath), "https://synthetic.test");
     expect(requestedUrl.pathname).toBe(GSTR2B_JSON_PATH);
     expect(requestedUrl.searchParams.get("rtnprd")).toBe(request.returnPeriod);

@@ -1305,7 +1305,7 @@ describe("filed returns flow runner", () => {
       artifactType: "PDF_AND_EXCEL" as const,
       financialYear: "2026-27",
       period: "May" as const,
-      returnType: "GSTR-2B" as const,
+      returnType: "GSTR-1" as const,
     };
     const getActiveGstTab = vi.fn(async () => ACTIVE_GST_TAB);
     const deps: FiledReturnsFlowRunnerDeps = {
@@ -4886,9 +4886,9 @@ async function createFailedInterruptedBundleReview() {
         ok: true,
         flowStep: {
           connectorId: "gst",
-          scopeId: "gst-gstr2b-private-v0",
+          scopeId: "gst-filed-returns-gstr1-private-v0",
           state: "ready",
-          safeSignals: ["gstr2b-summary-route", "filed-return-download-ready"],
+          safeSignals: ["gstr1-results-route", "filed-return-download-ready"],
           safeMessage: "Ready.",
         },
       } as PackMessageResponse;
@@ -4898,7 +4898,7 @@ async function createFailedInterruptedBundleReview() {
         ok: true,
         downloadTrigger: {
           connectorId: "gst",
-          scopeId: "gst-gstr2b-private-v0",
+          scopeId: "gst-filed-returns-gstr1-private-v0",
           state: "blocked",
           safeSignals: ["portal-system-error"],
           safeMessage: "The portal blocked the selected artifact.",
@@ -4911,7 +4911,7 @@ async function createFailedInterruptedBundleReview() {
     artifactType: "PDF_AND_EXCEL" as const,
     financialYear: "2026-27",
     period: "May" as const,
-    returnType: "GSTR-2B" as const,
+    returnType: "GSTR-1" as const,
   };
   const getActiveGstTab = vi.fn(async () => ACTIVE_GST_TAB);
   const deps: FiledReturnsFlowRunnerDeps = {

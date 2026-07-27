@@ -26,6 +26,7 @@ export type ArtifactFailureReason =
   | "wrong-page"
   | "control-not-found"
   | "preflight-failed"
+  | "response-missing"
   | "target-period-mismatch"
   | "endpoint-unavailable"
   | "http-error"
@@ -42,6 +43,7 @@ export const ARTIFACT_FAILURE_MESSAGES = {
   "control-not-found":
     "Pack could not find exactly one filed GSTR-3B PDF control on the verified detail page.",
   "preflight-failed": "The GST Portal did not accept Pack's artifact preflight request.",
+  "response-missing": "Pack did not receive a usable filed-return artifact from the GST Portal.",
   "target-period-mismatch":
     "The GST Portal returned artifact data for a different requested return period.",
   "endpoint-unavailable":

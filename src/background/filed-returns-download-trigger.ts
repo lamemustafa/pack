@@ -269,7 +269,7 @@ export async function triggerAndObserveFiledReturnDownload({
       if (response.ok && "artifact" in response && !response.artifact.ok) {
         return artifactFailureResponse(response.artifact.reason, response.artifact.safeSignals);
       }
-      return response;
+      return artifactFailureResponse("response-missing", [], "GSTR-3B");
     }
   }
   const target = createDownloadTarget(scope, artifactType);
@@ -362,7 +362,15 @@ function artifactFilename(
   artifactType: "PDF" | "JSON" | "EXCEL",
 ): string {
   const suffix =
-    artifactType === "PDF" ? ".pdf" : artifactType === "EXCEL" ? ".xlsx" : "-data.json";
+    artifactType === "JSON"
+      ? "-data.json"
+      : scope.returnType === "GSTR-2B"
+        ? artifactType === "PDF"
+          ? "-summary.pdf"
+          : "-details.xlsx"
+        : artifactType === "PDF"
+          ? "-return.pdf"
+          : ".xlsx";
   return `ComplyEaze-Pack/${scope.financialYear}/${scope.returnType}/${scope.period}${suffix}`;
 }
 

@@ -409,7 +409,7 @@ export function isDurableFiledReturnsSignal(signal: string): boolean {
     return true;
   }
   const artifactSignal =
-    /^filed-return-artifact-(?:clicked|downloaded|unavailable|unconfirmed):(PDF|EXCEL)$/.exec(
+    /^filed-return-artifact-(?:clicked|downloaded|failed|unavailable|unconfirmed):(PDF|JSON|EXCEL)$/.exec(
       signal,
     );
   if (artifactSignal) return true;
