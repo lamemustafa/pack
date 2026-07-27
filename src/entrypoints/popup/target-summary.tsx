@@ -75,7 +75,7 @@ function targetRunSteps(
   if (returnType === "GSTR-2B") {
     return fullFiscalYear
       ? ["Open each period", "Capture portal files", "Save one ZIP"]
-      : ["Use visible page", "Capture portal files", "Save local ZIP"];
+      : ["Use visible page", "Download selected formats", "Save local files"];
   }
   if (fullFiscalYear) return ["Open each period", "Confirm filed page", "Save one ZIP"];
   return ["Use visible page", "Confirm target", "Save locally"];

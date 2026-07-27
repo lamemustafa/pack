@@ -418,7 +418,7 @@ describe("popup full-year recovery actions", () => {
     expect(markup).toContain('value="May" selected=""');
     expect(markup).toContain('value="June"');
     expect(markup).toContain('checked="" value="PDF_AND_EXCEL"');
-    expect(markup).toContain("PDF + Excel ZIP");
+    expect(markup).toContain("All formats");
     expect(markup).not.toContain("E-invoice Excel");
   });
 
@@ -461,10 +461,10 @@ describe("popup full-year recovery actions", () => {
     );
 
     expect(markup).toContain("Download all 2025-26 GSTR-2B files");
-    expect(markup).toContain("PDF + Excel ZIP");
+    expect(markup).toContain("All formats");
   });
 
-  it("labels multi-file single-period runs as a single zip handoff", () => {
+  it("labels multi-file single-period runs as separate artifact downloads", () => {
     const markup = renderToStaticMarkup(
       createElement(ScopeForm, {
         busy: null,
@@ -481,9 +481,10 @@ describe("popup full-year recovery actions", () => {
       }),
     );
 
-    expect(markup).toContain("Collect the selected period into one local ZIP.");
-    expect(markup).toContain("Download May 2026-27 GSTR-2B ZIP");
-    expect(markup).not.toContain(">Download selected period<");
+    expect(markup).toContain("Download each selected format from the active GST tab.");
+    expect(markup).toContain("Download May 2026-27 GSTR-2B all formats");
+    expect(markup).not.toContain("Collect the selected period into one local ZIP.");
+    expect(markup).not.toContain("Download May 2026-27 GSTR-2B ZIP");
   });
 
   it("explains single-period runs as active-tab downloads", () => {

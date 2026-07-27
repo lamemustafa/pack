@@ -92,6 +92,16 @@ export function getScopeActionCopy(
   const concreteArtifactCount = concreteFiledReturnsArtifactTypes(artifactType).length;
   if (!fullFiscalYear) {
     if (concreteArtifactCount > 1) {
+      if (scope.returnType === "GSTR-2B") {
+        return {
+          summary: "Download each selected format from the active GST tab.",
+          details: [
+            "Saves PDF, Excel, and portal data separately",
+            "One target-bound download per format",
+            "No portal data leaves the device",
+          ],
+        };
+      }
       return {
         summary: "Collect the selected period into one local ZIP.",
         details: [
@@ -180,7 +190,9 @@ function defaultStartLabel(scope: FiledReturnsDownloadScope, fullFiscalYear: boo
     return `Download all ${scope.financialYear} ${scope.returnType} ${noun}`;
   }
   const noun = multiFile
-    ? "ZIP"
+    ? scope.returnType === "GSTR-2B"
+      ? "all formats"
+      : "ZIP"
     : artifactType === "EXCEL"
       ? "Excel"
       : artifactType === "JSON"
@@ -193,7 +205,9 @@ function artifactOptionDescription(
   returnType: FiledReturnsDownloadScope["returnType"],
   artifactType: (typeof FILED_RETURNS_ARTIFACT_TYPES)[number],
 ): string {
-  if (artifactType === "PDF_AND_EXCEL") return "PDF and Excel";
+  if (artifactType === "PDF_AND_EXCEL") {
+    return returnType === "GSTR-2B" ? "PDF, Excel, and portal data" : "PDF and Excel";
+  }
   if (artifactType === "EXCEL") {
     return returnType === "GSTR-2B" ? "Details workbook" : "E-invoice workbook";
   }
@@ -207,12 +221,18 @@ function artifactOptionLabel(
   returnType: FiledReturnsDownloadScope["returnType"],
   artifactType: (typeof FILED_RETURNS_ARTIFACT_TYPES)[number],
 ): string {
-  if (artifactType === "PDF_AND_EXCEL") return "PDF + Excel ZIP";
-  if (artifactType === "EXCEL") {
-    return returnType === "GSTR-1" ? "E-invoice Excel" : "Details Excel";
+  if (returnType === "GSTR-1") {
+    if (artifactType === "PDF_AND_EXCEL") return "PDF + Excel ZIP";
+    if (artifactType === "EXCEL") return "E-invoice Excel";
+    if (artifactType === "JSON") return "portal data (JSON)";
+    return "Summary PDF";
   }
-  if (artifactType === "JSON") return "portal data (JSON)";
-  return returnType === "GSTR-3B" ? "PDF" : "Summary PDF";
+  if (artifactType === "PDF_AND_EXCEL") return "All formats";
+  if (artifactType === "EXCEL") {
+    return "Details (Excel)";
+  }
+  if (artifactType === "JSON") return "Portal data (JSON)";
+  return returnType === "GSTR-3B" ? "Filed return (PDF)" : "Summary (PDF)";
 }
 
 function isSameScope(left: FiledReturnsDownloadScope, right: FiledReturnsDownloadScope): boolean {

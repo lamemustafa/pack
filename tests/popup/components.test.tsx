@@ -48,9 +48,9 @@ describe("popup scope form", () => {
 
     expect(markup).toContain("<legend>File format</legend>");
     expect(markup).toContain('name="scope-file-format"');
-    expect(markup).toContain("Summary PDF");
-    expect(markup).toContain("Details Excel");
-    expect(markup).toContain("PDF + Excel ZIP");
+    expect(markup).toContain("Summary (PDF)");
+    expect(markup).toContain("Details (Excel)");
+    expect(markup).toContain("All formats");
     expect(markup).not.toContain("<details");
     expect(markup).not.toContain("More options");
     expect(markup).not.toContain('id="scope-file-format"');

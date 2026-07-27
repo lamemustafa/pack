@@ -29,7 +29,7 @@ describe("popup scope form model", () => {
     });
   });
 
-  it("offers GSTR-3B portal data as JSON without calling it a filed return", () => {
+  it("uses the consistent GSTR-3B format labels", () => {
     const model = createScopeFormModel({
       artifactType: "JSON",
       financialYear: "2024-25",
@@ -38,7 +38,7 @@ describe("popup scope form model", () => {
     });
     expect(model.artifactOptions).toContainEqual({
       value: "JSON",
-      label: "portal data (JSON)",
+      label: "Portal data (JSON)",
       description: "Saved verbatim from the portal; not a filed return",
     });
     expect(
@@ -49,6 +49,29 @@ describe("popup scope form model", () => {
         false,
       ),
     ).toEqual({ disabled: false, label: "Download April 2024-25 GSTR-3B portal data (JSON)" });
+  });
+
+  it("labels GSTR-2B multi-artifact selection without promising a ZIP", () => {
+    const scope = {
+      artifactType: "PDF_AND_EXCEL" as const,
+      financialYear: "2026-27",
+      period: "June" as const,
+      returnType: "GSTR-2B" as const,
+    };
+    const model = createScopeFormModel(scope);
+
+    expect(model.artifactOptions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ value: "PDF", label: "Summary (PDF)" }),
+        expect.objectContaining({ value: "EXCEL", label: "Details (Excel)" }),
+        expect.objectContaining({ value: "JSON", label: "Portal data (JSON)" }),
+        expect.objectContaining({ value: "PDF_AND_EXCEL", label: "All formats" }),
+      ]),
+    );
+    expect(getScopeFormStartAction(scope, null, null, false)).toEqual({
+      disabled: false,
+      label: "Download June 2026-27 GSTR-2B all formats",
+    });
   });
 
   it("keeps the full workbench start action available when portal context is inactive", () => {

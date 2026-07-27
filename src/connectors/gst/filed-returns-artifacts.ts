@@ -55,16 +55,17 @@ export function filedReturnsArtifactLabel(
 ): string {
   switch (artifactType) {
     case "EXCEL":
-      if (returnType === "GSTR-2B") return "Details Excel";
+      if (returnType === "GSTR-2B") return "Details (Excel)";
       return "E-invoice details Excel";
     case "PDF_AND_EXCEL":
-      if (returnType === "GSTR-2B") return "Summary PDF + details Excel";
+      if (returnType === "GSTR-2B") return "All formats";
       return "Summary PDF + e-invoice details Excel";
     case "PDF":
-      if (returnType === "GSTR-1" || returnType === "GSTR-2B") return "Summary PDF";
-      return "PDF";
+      if (returnType === "GSTR-1") return "Summary PDF";
+      if (returnType === "GSTR-2B") return "Summary (PDF)";
+      return returnType === "GSTR-3B" ? "Filed return (PDF)" : "PDF";
     case "JSON":
-      return returnType === "GSTR-3B" ? "portal data (JSON)" : "JSON";
+      return returnType === "GSTR-3B" || returnType === "GSTR-2B" ? "Portal data (JSON)" : "JSON";
   }
 }
 
@@ -72,9 +73,15 @@ export function filedReturnsConcreteArtifactLabel(
   artifactType: FiledReturnsConcreteArtifactType,
   returnType?: FiledReturnsReturnType,
 ): string {
-  if (artifactType === "PDF") return "PDF";
-  if (artifactType === "JSON") return "portal data (JSON)";
-  if (returnType === "GSTR-2B") return "details Excel";
+  if (artifactType === "PDF") {
+    if (returnType === "GSTR-2B") return "Summary (PDF)";
+    return returnType === "GSTR-3B" ? "Filed return (PDF)" : "PDF";
+  }
+  if (artifactType === "JSON")
+    return returnType === "GSTR-3B" || returnType === "GSTR-2B"
+      ? "Portal data (JSON)"
+      : "portal data (JSON)";
+  if (returnType === "GSTR-2B") return "Details (Excel)";
   if (returnType === "GSTR-1") return "e-invoice details Excel";
   return "Excel";
 }
