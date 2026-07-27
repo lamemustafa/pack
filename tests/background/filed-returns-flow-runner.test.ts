@@ -4267,6 +4267,7 @@ describe("filed returns flow runner", () => {
           ok: true,
           artifact: {
             ok: true,
+            state: "acquired",
             requestId: message.payload.requestId,
             base64: globalThis.btoa(
               JSON.stringify({ status: 1, data: { r3b: { ret_period: "052026" } } }),
@@ -4329,6 +4330,7 @@ describe("filed returns flow runner", () => {
           ok: true,
           artifact: {
             ok: true,
+            state: "acquired",
             requestId: message.payload.requestId,
             base64: globalThis.btoa(
               JSON.stringify({ status: 1, data: { r3b: { ret_period: "052026" } } }),
@@ -6042,6 +6044,7 @@ describe("filed returns flow runner", () => {
           ok: true,
           artifact: {
             ok: true,
+            state: "acquired",
             requestId: message.payload.requestId,
             base64: globalThis.btoa(
               JSON.stringify({ status: 1, data: { r3b: { ret_period: "052025" } } }),

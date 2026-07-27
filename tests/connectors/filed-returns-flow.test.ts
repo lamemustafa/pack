@@ -7333,9 +7333,9 @@ describe("filed returns guided flow", () => {
       returnType: "GSTR-3B",
     });
 
-    expect(result.state).toBe("candidate-not-found");
+    expect(result.state).toBe("blocked");
     expect(result.safeSignals).toEqual(
-      expect.arrayContaining(["filed-gstr3b-download-candidate-ambiguous"]),
+      expect.arrayContaining(["gstr3b-legacy-acquisition-retired"]),
     );
     expect(clicked).toBe(0);
   });

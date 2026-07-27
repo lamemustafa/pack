@@ -27,7 +27,7 @@ describe("acquireFiledReturnArtifact", () => {
       mimeType: "application/json",
       safeSignals: ["target-period-verified"],
     });
-    if (!result.ok) return;
+    if (!result.ok || result.state !== "acquired") return;
     expect(new TextDecoder().decode(result.bytes)).toBe(raw);
     expect(fetch).toHaveBeenCalledOnce();
   });
@@ -75,12 +75,75 @@ describe("acquireFiledReturnArtifact", () => {
     const signals = result.safeSignals.join(" ");
     expect(signals).not.toMatch(/http|gst\.gov\.in|\?|\/|\d{6,}/i);
   });
+
+  it("returns an explicit ready result after arming one PDF control", async () => {
+    const { documentRef } = page(validJson());
+    const result = await acquireFiledReturnArtifact(documentRef, {
+      ...REQUEST,
+      artifactType: "PDF",
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      requestId: REQUEST.requestId,
+      safeSignals: ["target-period-verified", "page-generated-pdf-ready"],
+      state: "ready",
+    });
+    expect(documentRef.querySelector("button")?.getAttribute("data-pack-artifact-request")).toBe(
+      REQUEST.requestId,
+    );
+  });
+
+  it("fails closed when the PDF preflight finds duplicate visible controls", async () => {
+    const { documentRef } = page(validJson());
+    const duplicate = documentRef.createElement("button");
+    duplicate.textContent = "Download Filed GSTR-3B";
+    documentRef.body.append(duplicate);
+    const click = vi.fn();
+    documentRef.body.addEventListener("click", click);
+
+    await expect(
+      acquireFiledReturnArtifact(documentRef, { ...REQUEST, artifactType: "PDF" }),
+    ).resolves.toEqual({
+      ok: false,
+      reason: "control-not-found",
+      requestId: REQUEST.requestId,
+      safeSignals: ["target-period-verified"],
+    });
+    expect(click).not.toHaveBeenCalled();
+  });
 });
+
+function validJson() {
+  return JSON.stringify({
+    status: 1,
+    data: { r3b: { ret_period: REQUEST.returnPeriod } },
+    padding: "x".repeat(100),
+  });
+}
 
 function page(body: string, status = 200, url = "https://return.gst.gov.in/returns/auth/gstr3b") {
   const dom = new JSDOM(
     "<body><h1>GSTR-3B - Monthly Return</h1><p>Status - Filed</p><button>Download Filed GSTR-3B</button></body>",
     { url },
+  );
+  Object.defineProperty(
+    (dom.window as unknown as typeof globalThis).HTMLElement.prototype,
+    "getBoundingClientRect",
+    {
+      configurable: true,
+      value: () => ({
+        bottom: 10,
+        height: 10,
+        left: 0,
+        right: 10,
+        top: 0,
+        width: 10,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }),
+    },
   );
   const fetch = vi.fn(async () => new Response(body, { status }));
   Object.defineProperty(dom.window, "fetch", { configurable: true, value: fetch });

@@ -29,7 +29,15 @@ export type ArtifactFailureReason =
   | "generation-timeout";
 
 export type ArtifactResult =
-  | { ok: true; requestId: string; bytes: Uint8Array; mimeType: string; safeSignals: string[] }
+  | {
+      ok: true;
+      state: "acquired";
+      requestId: string;
+      bytes: Uint8Array;
+      mimeType: string;
+      safeSignals: string[];
+    }
+  | { ok: true; state: "ready"; requestId: string; safeSignals: string[] }
   | { ok: false; requestId: string; reason: ArtifactFailureReason; safeSignals: string[] };
 
 /** Acquires only raw, portal-produced GSTR-3B JSON bytes in the page's origin context. */
@@ -68,6 +76,7 @@ export async function acquireFiledReturnArtifact(
   if (request.artifactType === "JSON") {
     return {
       ok: true,
+      state: "acquired",
       requestId: request.requestId,
       bytes,
       mimeType: preflight.mimeType,
@@ -78,10 +87,12 @@ export async function acquireFiledReturnArtifact(
   if (candidates.length !== 1 || !candidates[0])
     return failed(request, "control-not-found", ["target-period-verified"]);
   candidates[0].element.setAttribute("data-pack-artifact-request", request.requestId);
-  return failed(request, "control-not-found", [
-    "target-period-verified",
-    "page-generated-pdf-ready",
-  ]);
+  return {
+    ok: true,
+    state: "ready",
+    requestId: request.requestId,
+    safeSignals: ["target-period-verified", "page-generated-pdf-ready"],
+  };
 }
 
 function failed(

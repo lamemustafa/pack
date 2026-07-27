@@ -70,7 +70,8 @@ export async function triggerAndObserveFiledReturnDownload({
         artifactType === "JSON" &&
         response.ok &&
         "artifact" in response &&
-        response.artifact.ok
+        response.artifact.ok &&
+        response.artifact.state === "acquired"
       ) {
         await persistArtifactAcquisitionIntent({ artifactType, requestId });
         const delivery = await downloadAcquiredArtifact({
@@ -112,8 +113,8 @@ export async function triggerAndObserveFiledReturnDownload({
         artifactType === "PDF" &&
         response.ok &&
         "artifact" in response &&
-        !response.artifact.ok &&
-        response.artifact.safeSignals.includes("page-generated-pdf-ready")
+        response.artifact.ok &&
+        response.artifact.state === "ready"
       ) {
         await persistArtifactAcquisitionIntent({ artifactType, requestId });
         const acquired = await acquireGstr3bPdfAfterPreflight({

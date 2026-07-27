@@ -157,15 +157,17 @@ export default defineContentScript({
           .then((artifact) =>
             sendResponse({
               ok: true,
-              artifact: artifact.ok
-                ? {
-                    requestId: artifact.requestId,
-                    base64: bytesToBase64(artifact.bytes),
-                    mimeType: artifact.mimeType,
-                    safeSignals: artifact.safeSignals,
-                    ok: true,
-                  }
-                : artifact,
+              artifact:
+                artifact.ok && artifact.state === "acquired"
+                  ? {
+                      state: "acquired",
+                      requestId: artifact.requestId,
+                      base64: bytesToBase64(artifact.bytes),
+                      mimeType: artifact.mimeType,
+                      safeSignals: artifact.safeSignals,
+                      ok: true,
+                    }
+                  : artifact,
             } satisfies PackMessageResponse),
           )
           .catch(() =>

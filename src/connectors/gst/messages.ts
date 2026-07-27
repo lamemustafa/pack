@@ -143,7 +143,15 @@ export type PackMessageResponse =
   | {
       ok: true;
       artifact:
-        | { ok: true; requestId: string; base64: string; mimeType: string; safeSignals: string[] }
+        | {
+            ok: true;
+            state: "acquired";
+            requestId: string;
+            base64: string;
+            mimeType: string;
+            safeSignals: string[];
+          }
+        | { ok: true; state: "ready"; requestId: string; safeSignals: string[] }
         | { ok: false; requestId: string; reason: ArtifactFailureReason; safeSignals: string[] };
     }
   | {
