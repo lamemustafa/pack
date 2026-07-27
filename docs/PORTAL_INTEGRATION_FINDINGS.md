@@ -31,3 +31,9 @@ This log records live diagnostic findings that constrain Pack's local, target-bo
 13. GSTR-2B JSON preflight requires the requested return period as a query parameter. Without it,
     the response omits `data.rtnprd` entirely. Diagnostic probes that log only URL pathnames hide
     required query parameters; that omission caused an earlier integration-spec error.
+14. Pack saves the minified raw GSTR-2B JSON API response. A period's raw response was about 129 KB
+    while the portal-initiated download was about 408 KB because it was pretty-printed; Pack must
+    keep the raw response and must not reformat it to imitate that download.
+15. Portal-generated artifacts are not byte-stable across downloads. Three copies of the same PDF
+    and two copies of the same XLSX produced different SHA-256 values because of PDF generation and
+    XLSX ZIP entry timestamps, so neither a file hash nor byte size is valid document-identity evidence.
