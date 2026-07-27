@@ -33,6 +33,16 @@ was WAF-rejected; a constructed navigation to /returns/auth/dashboard returned
 Access Denied and ended the session. Clicking the portal's own Returns
 Dashboard anchor works, because it carries a Referer.
 
+### Download filename arbitration
+
+Any installed extension can rewrite the filename of every download via
+`chrome.downloads.onDeterminingFilename`, and Chrome awards the conflict to the most recently
+installed listener. Pack therefore cannot guarantee its own filenames. Pack re-asserts its path
+for its own download IDs only, never for downloads it did not start, and verifies the saved
+filename after completion — reporting an override rather than silently accepting it. Verified
+failure: WOP GSTR Downloader suggested an empty filename for every download, so Pack's artifacts
+landed as `download.pdf` and `<blob-uuid>.pdf` until this was detected.
+
 ### Terminal states must speak
 
 Every terminal state Pack can reach must render a message naming its reason.
