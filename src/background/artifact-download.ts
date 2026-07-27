@@ -185,9 +185,24 @@ function isRequestedFilenameOverridden(
   const observedPath = normaliseFilenamePath(observedFilename);
   const expectedBasename = filenameBasename(requestedPath);
   const observedBasename = filenameBasename(observedPath);
-  const relativePathMatches =
-    observedPath === requestedPath || observedPath.endsWith(`/${requestedPath}`);
-  return !relativePathMatches || observedBasename !== expectedBasename;
+  const requestedDirectory = requestedPath.slice(0, requestedPath.lastIndexOf("/"));
+  const observedDirectory = observedPath.slice(0, observedPath.lastIndexOf("/"));
+  const relativeDirectoryMatches =
+    observedDirectory === requestedDirectory ||
+    observedDirectory.endsWith(`/${requestedDirectory}`);
+  return !relativeDirectoryMatches || !matchesRequestedBasename(expectedBasename, observedBasename);
+}
+
+function matchesRequestedBasename(requested: string, observed: string): boolean {
+  if (observed === requested) return true;
+  const extensionIndex = requested.lastIndexOf(".");
+  const base = extensionIndex > 0 ? requested.slice(0, extensionIndex) : requested;
+  const extension = extensionIndex > 0 ? requested.slice(extensionIndex) : "";
+  return (
+    observed.startsWith(`${base} (`) &&
+    observed.endsWith(`)${extension}`) &&
+    /^\d+$/.test(observed.slice(base.length + 2, observed.length - extension.length - 1))
+  );
 }
 
 function filenameBasename(path: string): string {

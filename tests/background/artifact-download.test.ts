@@ -94,7 +94,34 @@ describe("downloadAcquiredArtifact", () => {
     vi.useRealTimers();
   });
 
-  it("keeps a completed target complete when the browser saved it under a different filename", async () => {
+  it("does not warn when the browser saved the exact requested filename", async () => {
+    await expect(
+      downloadAcquiredArtifact(
+        input(),
+        deps({
+          downloads: { ...downloads, search: vi.fn(async () => [matchingItem()]) } as never,
+        }),
+      ),
+    ).resolves.toMatchObject({ ok: true, safeSignals: [] });
+  });
+
+  it("does not warn when the browser applies its uniquify suffix in the requested directory", async () => {
+    const result = await downloadAcquiredArtifact(
+      input(),
+      deps({
+        downloads: {
+          ...downloads,
+          search: vi.fn(async () => [
+            matchingItem("ComplyEaze-Pack/2026-27/GSTR-3B/April (4).pdf"),
+          ]),
+        } as never,
+      }),
+    );
+
+    expect(result).toMatchObject({ ok: true, safeSignals: [] });
+  });
+
+  it("keeps a completed target complete when the browser saved it under a different base name", async () => {
     const observedFilename = "/synthetic/Downloads/download.pdf";
     const result = await downloadAcquiredArtifact(
       input(),
@@ -111,6 +138,23 @@ describe("downloadAcquiredArtifact", () => {
       safeSignals: ["download-filename-overridden"],
       safeMessage:
         "Another extension changed where this file was saved; Pack asked for ComplyEaze-Pack/2026-27/GSTR-3B/April.pdf; the browser saved it elsewhere as download.pdf.",
+    });
+  });
+
+  it("warns when the browser saved the requested name in a different directory", async () => {
+    const result = await downloadAcquiredArtifact(
+      input(),
+      deps({
+        downloads: {
+          ...downloads,
+          search: vi.fn(async () => [matchingItem("ComplyEaze-Pack/2026-27/Other/April.pdf")]),
+        } as never,
+      }),
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      safeSignals: ["download-filename-overridden"],
     });
   });
 
