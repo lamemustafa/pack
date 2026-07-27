@@ -110,6 +110,29 @@ describe("GSTR-3B artifact acquisition checkpoint cleanup", () => {
     );
   });
 
+  it("retains the JSON checkpoint for review after its download ID checkpoint fails", async () => {
+    mocks.downloadAcquiredArtifact.mockImplementationOnce(async (input) => {
+      await input.onStartCheckpointFailed?.(91);
+      return { ok: false, reason: "checkpoint-failed", safeSignals: [] };
+    });
+    const target = { ...scope, artifactType: "JSON" as const };
+
+    await triggerAndObserveFiledReturnDownload({
+      activePeriod: "May",
+      artifactType: "JSON",
+      deps: {
+        sendMessageToTabWithInjection: vi.fn(async () => acquiredJson()),
+        storageKeys: {},
+      },
+      scope: target,
+      tabId: 17,
+    });
+
+    expect(mocks.session[artifactAcquisitionCheckpointKey(target)]).toEqual(
+      expect.objectContaining({ downloadId: 91, state: "download-unconfirmed" }),
+    );
+  });
+
   it.each(Object.keys(ARTIFACT_FAILURE_MESSAGES))(
     "clears the PDF checkpoint after terminal %s acquisition failure",
     async (reason) => {
@@ -152,6 +175,28 @@ describe("GSTR-3B artifact acquisition checkpoint cleanup", () => {
     expect(response).toMatchObject({ flowStep: { state: "blocked" } });
     expect(mocks.session[artifactAcquisitionCheckpointKey(scope)]).toEqual(
       expect.objectContaining({ downloadId: 92 }),
+    );
+  });
+
+  it("retains the PDF checkpoint for review after its download ID checkpoint fails", async () => {
+    mocks.acquireGstr3bPdfAfterPreflight.mockImplementationOnce(async (input) => {
+      await input.onStartCheckpointFailed?.(92);
+      return { ok: false, reason: "checkpoint-failed", safeSignals: [] };
+    });
+
+    await triggerAndObserveFiledReturnDownload({
+      activePeriod: "May",
+      artifactType: "PDF",
+      deps: {
+        sendMessageToTabWithInjection: vi.fn(async () => preparedPdf()),
+        storageKeys: {},
+      },
+      scope,
+      tabId: 17,
+    });
+
+    expect(mocks.session[artifactAcquisitionCheckpointKey(scope)]).toEqual(
+      expect.objectContaining({ downloadId: 92, state: "download-unconfirmed" }),
     );
   });
 });

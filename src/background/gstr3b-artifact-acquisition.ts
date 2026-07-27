@@ -9,6 +9,7 @@ export async function acquireGstr3bPdfAfterPreflight(input: {
   returnPeriod: string;
   filename: string;
   onStarted?: (downloadId: number) => Promise<void>;
+  onStartCheckpointFailed?: (downloadId: number) => Promise<void>;
 }): Promise<
   { ok: true; safeSignals: string[] } | { ok: false; reason: string; safeSignals: string[] }
 > {
@@ -33,6 +34,9 @@ export async function acquireGstr3bPdfAfterPreflight(input: {
       filename: input.filename,
       mimeType: validation.mimeType,
       ...(input.onStarted ? { onStarted: input.onStarted } : {}),
+      ...(input.onStartCheckpointFailed
+        ? { onStartCheckpointFailed: input.onStartCheckpointFailed }
+        : {}),
     });
     return delivery.ok
       ? {

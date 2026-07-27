@@ -23,6 +23,7 @@ import {
   clearArtifactAcquisitionCheckpoint,
   persistArtifactAcquisitionDownloadId,
   persistArtifactAcquisitionIntent,
+  persistArtifactAcquisitionUnconfirmedDownload,
   reconcileArtifactAcquisitionCheckpoint,
 } from "../../src/background/artifact-acquisition-state";
 
@@ -93,13 +94,27 @@ describe("artifact acquisition checkpoint", () => {
     });
   });
 
-  it("clears an intent-only checkpoint because no browser download ID exists to reconcile", async () => {
+  it("blocks an intent-only checkpoint because a start may have escaped persistence", async () => {
     await persistArtifactAcquisitionIntent({ ...MAY_PDF, requestId: "request-intent" });
 
     await expect(reconcileArtifactAcquisitionCheckpoint(MAY_PDF)).resolves.toEqual({
-      state: "retry-safe",
+      state: "needs-review",
+      safeSignals: ["artifact-acquisition-start-unreconciled"],
     });
-    expect(mocks.session).toEqual({});
+  });
+
+  it("blocks a download whose correlation checkpoint could not be persisted", async () => {
+    await persistArtifactAcquisitionUnconfirmedDownload({
+      ...MAY_PDF,
+      downloadId: 9,
+      requestId: "request-unconfirmed",
+      state: "download-unconfirmed",
+    });
+
+    await expect(reconcileArtifactAcquisitionCheckpoint(MAY_PDF)).resolves.toEqual({
+      state: "needs-review",
+      safeSignals: ["artifact-acquisition-download-unconfirmed"],
+    });
   });
 
   it("clears a checkpoint once its browser download has a known terminal outcome", async () => {

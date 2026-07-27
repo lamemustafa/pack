@@ -15,6 +15,7 @@ const captureMocks = vi.hoisted(() => ({
   clearArtifactAcquisitionCheckpoint: vi.fn(async () => undefined),
   persistArtifactAcquisitionDownloadId: vi.fn(async () => undefined),
   persistArtifactAcquisitionIntent: vi.fn(async () => undefined),
+  persistArtifactAcquisitionUnconfirmedDownload: vi.fn(async () => undefined),
   startMainWorldCapturedFiledReturnDownload: vi.fn(),
 }));
 
@@ -26,6 +27,8 @@ vi.mock("../../src/background/artifact-acquisition-state", () => ({
   clearArtifactAcquisitionCheckpoint: captureMocks.clearArtifactAcquisitionCheckpoint,
   persistArtifactAcquisitionDownloadId: captureMocks.persistArtifactAcquisitionDownloadId,
   persistArtifactAcquisitionIntent: captureMocks.persistArtifactAcquisitionIntent,
+  persistArtifactAcquisitionUnconfirmedDownload:
+    captureMocks.persistArtifactAcquisitionUnconfirmedDownload,
 }));
 vi.mock("../../src/background/gstr3b-artifact-acquisition", () => ({
   acquireGstr3bPdfAfterPreflight: captureMocks.acquireGstr3bPdfAfterPreflight,

@@ -10,7 +10,7 @@ export type ArtifactAcquisitionTarget = Pick<
 
 export type ArtifactAcquisitionCheckpoint = ArtifactAcquisitionTarget & {
   requestId: string;
-  state: "intent" | "download-observing";
+  state: "intent" | "download-observing" | "download-unconfirmed";
   downloadId?: number;
 };
 
@@ -39,6 +39,15 @@ export async function persistArtifactAcquisitionDownloadId(
   });
 }
 
+export async function persistArtifactAcquisitionUnconfirmedDownload(
+  input: ArtifactAcquisitionCheckpoint,
+): Promise<void> {
+  const key = artifactAcquisitionCheckpointKey(input);
+  await browser.storage.session.set({
+    [key]: { ...input, state: "download-unconfirmed" } satisfies ArtifactAcquisitionCheckpoint,
+  });
+}
+
 export async function clearArtifactAcquisitionCheckpoint(
   target: ArtifactAcquisitionTarget,
   requestId: string,
@@ -57,9 +66,14 @@ export async function reconcileArtifactAcquisitionCheckpoint(
   const stored = await browser.storage.session.get(key);
   const checkpoint = stored[key] as ArtifactAcquisitionCheckpoint | undefined;
   if (!checkpoint || typeof checkpoint.requestId !== "string") return { state: "retry-safe" };
-  if (checkpoint.state !== "download-observing" || !Number.isSafeInteger(checkpoint.downloadId)) {
-    await browser.storage.session.remove(key);
-    return { state: "retry-safe" };
+  if (checkpoint.state === "intent" || !Number.isSafeInteger(checkpoint.downloadId)) {
+    return { state: "needs-review", safeSignals: ["artifact-acquisition-start-unreconciled"] };
+  }
+  if (checkpoint.state === "download-unconfirmed") {
+    return {
+      state: "needs-review",
+      safeSignals: ["artifact-acquisition-download-unconfirmed"],
+    };
   }
   try {
     const [item] = await browser.downloads.search({ id: checkpoint.downloadId });

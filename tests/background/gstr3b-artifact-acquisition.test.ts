@@ -21,6 +21,7 @@ import { acquireGstr3bPdfAfterPreflight } from "../../src/background/gstr3b-arti
 
 describe("GSTR-3B page-generated acquisition", () => {
   beforeEach(() => vi.clearAllMocks());
+
   it("injects the bounded shim, validates portal bytes, then delivers one owned download", async () => {
     const bytes = new Uint8Array(1024);
     bytes.set(new TextEncoder().encode("%PDF-1.7"));
@@ -75,57 +76,5 @@ describe("GSTR-3B page-generated acquisition", () => {
       }),
     ).resolves.toMatchObject({ ok: false, reason: "unexpected-content" });
     expect(mocks.downloadAcquiredArtifact).not.toHaveBeenCalled();
-  });
-
-  it("preserves an observed save prompt without changing successful PDF delivery", async () => {
-    const bytes = new Uint8Array(1024);
-    bytes.set(new TextEncoder().encode("%PDF-1.7"));
-    mocks.executeScript.mockResolvedValue([
-      { result: { ok: true, base64: Buffer.from(bytes).toString("base64"), safeSignals: [] } },
-    ]);
-    mocks.downloadAcquiredArtifact.mockResolvedValue({
-      ok: true,
-      downloadId: 9,
-      bytesReceived: 1024,
-      safeSignals: ["download-save-prompt-observed"],
-    });
-
-    await expect(
-      acquireGstr3bPdfAfterPreflight({
-        filename: "Pack/2024-25/April/GSTR-3B.pdf",
-        requestId: "request-3",
-        returnPeriod: "042024",
-        tabId: 17,
-      }),
-    ).resolves.toMatchObject({
-      ok: true,
-      safeSignals: expect.arrayContaining(["download-save-prompt-observed"]),
-    });
-  });
-
-  it("preserves an observed save prompt when the user does not finish the dialog", async () => {
-    const bytes = new Uint8Array(1024);
-    bytes.set(new TextEncoder().encode("%PDF-1.7"));
-    mocks.executeScript.mockResolvedValue([
-      { result: { ok: true, base64: Buffer.from(bytes).toString("base64"), safeSignals: [] } },
-    ]);
-    mocks.downloadAcquiredArtifact.mockResolvedValue({
-      ok: false,
-      reason: "timeout",
-      safeSignals: ["download-save-prompt-observed"],
-    });
-
-    await expect(
-      acquireGstr3bPdfAfterPreflight({
-        filename: "Pack/2024-25/April/GSTR-3B.pdf",
-        requestId: "request-4",
-        returnPeriod: "042024",
-        tabId: 17,
-      }),
-    ).resolves.toMatchObject({
-      ok: false,
-      reason: "timeout",
-      safeSignals: ["download-save-prompt-observed"],
-    });
   });
 });

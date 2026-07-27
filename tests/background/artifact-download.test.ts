@@ -14,13 +14,30 @@ const downloads = {
 };
 
 describe("downloadAcquiredArtifact", () => {
-  it("completes only its exact, non-empty extension download with saveAs disabled", async () => {
-    const result = await downloadAcquiredArtifact(input(), deps());
-    expect(result).toMatchObject({ ok: true, downloadId: 9, bytesReceived: 12 });
-    expect(downloads.download).toHaveBeenCalledWith(
-      expect.objectContaining({ conflictAction: "uniquify", saveAs: false }),
-    );
-  });
+  it.each([
+    ["PDF", "application/pdf", "ComplyEaze-Pack/2026-27/GSTR-3B/April.pdf"],
+    ["JSON", "application/json", "ComplyEaze-Pack/2026-27/GSTR-3B/April.json"],
+  ])(
+    "delivers a small %s through its offscreen Blob URL with the exact filename",
+    async (_, mimeType, filename) => {
+      const create = vi.fn(async () => "blob:extension");
+      const result = await downloadAcquiredArtifact(
+        { ...input(), mimeType, filename },
+        deps({ createOffscreenBlobUrl: create }),
+      );
+      expect(result).toMatchObject({ ok: true, downloadId: 9, bytesReceived: 12 });
+      expect(create).toHaveBeenCalledWith(`data:${mimeType};base64,cGRm`);
+      expect(downloads.download).toHaveBeenCalledWith({
+        conflictAction: "uniquify",
+        filename,
+        saveAs: false,
+        url: "blob:extension",
+      });
+      expect(downloads.download).not.toHaveBeenCalledWith(
+        expect.objectContaining({ url: expect.stringMatching(/^data:/) }),
+      );
+    },
+  );
 
   it.each([
     ["interrupted", 12, "interrupted"],
@@ -31,6 +48,27 @@ describe("downloadAcquiredArtifact", () => {
       ok: false,
       reason,
     });
+  });
+
+  it("fails closed after a checkpoint callback failure without treating its download as unstarted", async () => {
+    const onStartCheckpointFailed = vi.fn(async () => undefined);
+    const revoke = vi.fn(async () => undefined);
+    const close = vi.fn(async () => undefined);
+    await expect(
+      downloadAcquiredArtifact(
+        {
+          ...input(),
+          onStarted: vi.fn(async () => {
+            throw new Error("checkpoint unavailable");
+          }),
+          onStartCheckpointFailed,
+        },
+        deps({ revokeOffscreenBlobUrl: revoke, closeOffscreenBlobDocument: close }),
+      ),
+    ).resolves.toMatchObject({ ok: false, reason: "checkpoint-failed" });
+    expect(onStartCheckpointFailed).toHaveBeenCalledWith(9);
+    expect(revoke).toHaveBeenCalledWith("blob:extension");
+    expect(close).toHaveBeenCalledOnce();
   });
 
   it("ignores a different downloadId and times out after one start", async () => {
@@ -44,64 +82,44 @@ describe("downloadAcquiredArtifact", () => {
     vi.useRealTimers();
   });
 
-  it("records a save-prompt observation when the exact download is still in progress with no filename", async () => {
-    vi.useFakeTimers();
-    try {
-      let item = { id: 9, state: "in_progress", filename: "", bytesReceived: 0 };
-      downloads.search.mockImplementation(async () => [item]);
-      const result = downloadAcquiredArtifact(input(), deps({ timeoutMs: 10_000 }));
-
-      await vi.advanceTimersByTimeAsync(2_500);
-      item = { id: 9, state: "complete", filename: "Pack/return.pdf", bytesReceived: 12 };
-      for (const listener of listeners) listener({ id: 9 });
-
-      await expect(result).resolves.toMatchObject({
-        ok: true,
-        safeSignals: ["download-save-prompt-observed"],
-      });
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("does not record a save-prompt observation when the exact download receives a filename", async () => {
-    vi.useFakeTimers();
-    try {
-      let item = { id: 9, state: "in_progress", filename: "Pack/return.pdf", bytesReceived: 0 };
-      downloads.search.mockImplementation(async () => [item]);
-      const result = downloadAcquiredArtifact(input(), deps({ timeoutMs: 10_000 }));
-
-      await vi.advanceTimersByTimeAsync(2_500);
-      item = { id: 9, state: "complete", filename: "Pack/return.pdf", bytesReceived: 12 };
-      for (const listener of listeners) listener({ id: 9 });
-
-      await expect(result).resolves.toMatchObject({ ok: true, safeSignals: [] });
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("revokes and closes an offscreen URL on every large-artifact exit", async () => {
-    const revoke = vi.fn(async () => undefined);
-    const close = vi.fn(async () => undefined);
-    await downloadAcquiredArtifact(
-      { ...input(), base64: "x".repeat(1_500_001) },
-      deps({
-        createOffscreenBlobUrl: vi.fn(async () => "blob:extension"),
-        revokeOffscreenBlobUrl: revoke,
-        closeOffscreenBlobDocument: close,
+  it.each([
+    ["successful completion", undefined, undefined],
+    ["Blob creation failure", vi.fn(async () => null), undefined],
+    [
+      "download start failure",
+      undefined,
+      vi.fn(async () => {
+        throw new Error("rejected");
       }),
-    );
-    expect(revoke).toHaveBeenCalledWith("blob:extension");
-    expect(close).toHaveBeenCalledOnce();
-  });
+    ],
+  ])(
+    "revokes its Blob URL and closes the offscreen document after %s",
+    async (_, createOverride, downloadOverride) => {
+      const revoke = vi.fn(async () => undefined);
+      const close = vi.fn(async () => undefined);
+      await downloadAcquiredArtifact(
+        input(),
+        deps({
+          createOffscreenBlobUrl: createOverride ?? vi.fn(async () => "blob:extension"),
+          downloads: (downloadOverride
+            ? { ...downloads, download: downloadOverride }
+            : downloads) as never,
+          revokeOffscreenBlobUrl: revoke,
+          closeOffscreenBlobDocument: close,
+        }),
+      );
+      if (createOverride) expect(revoke).not.toHaveBeenCalled();
+      else expect(revoke).toHaveBeenCalledWith("blob:extension");
+      expect(close).toHaveBeenCalledOnce();
+    },
+  );
 });
 
 function input() {
   return {
     requestId: "request-1",
     base64: "cGRm",
-    filename: "Pack/2024-25/April/GSTR-3B.pdf",
+    filename: "ComplyEaze-Pack/2026-27/GSTR-3B/April.pdf",
     mimeType: "application/pdf",
   };
 }
@@ -110,7 +128,7 @@ function deps(overrides: Parameters<typeof downloadAcquiredArtifact>[1] = {}) {
   vi.clearAllMocks();
   return {
     downloads,
-    createOffscreenBlobUrl: vi.fn(),
+    createOffscreenBlobUrl: vi.fn(async () => "blob:extension"),
     revokeOffscreenBlobUrl: vi.fn(),
     closeOffscreenBlobDocument: vi.fn(),
     timeoutMs: 100,

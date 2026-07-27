@@ -28,6 +28,7 @@ import {
   clearArtifactAcquisitionCheckpoint,
   persistArtifactAcquisitionDownloadId,
   persistArtifactAcquisitionIntent,
+  persistArtifactAcquisitionUnconfirmedDownload,
 } from "./artifact-acquisition-state";
 import {
   gstr3bFullFiscalYearAcquisitionNotWiredStep,
@@ -102,9 +103,19 @@ export async function triggerAndObserveFiledReturnDownload({
               });
               checkpointHasDownloadId = true;
             },
+            onStartCheckpointFailed: async (downloadId) => {
+              await persistArtifactAcquisitionUnconfirmedDownload({
+                ...checkpointTarget,
+                downloadId,
+                requestId,
+                state: "download-unconfirmed",
+              });
+            },
           });
           retainCheckpointForRecovery =
-            !delivery.ok && delivery.reason === "timeout" && checkpointHasDownloadId;
+            !delivery.ok &&
+            (delivery.reason === "checkpoint-failed" ||
+              (delivery.reason === "timeout" && checkpointHasDownloadId));
           return delivery.ok
             ? {
                 ok: true,
@@ -171,9 +182,19 @@ export async function triggerAndObserveFiledReturnDownload({
               });
               checkpointHasDownloadId = true;
             },
+            onStartCheckpointFailed: async (downloadId) => {
+              await persistArtifactAcquisitionUnconfirmedDownload({
+                ...checkpointTarget,
+                downloadId,
+                requestId,
+                state: "download-unconfirmed",
+              });
+            },
           });
           retainCheckpointForRecovery =
-            !acquired.ok && acquired.reason === "timeout" && checkpointHasDownloadId;
+            !acquired.ok &&
+            (acquired.reason === "checkpoint-failed" ||
+              (acquired.reason === "timeout" && checkpointHasDownloadId));
           return acquired.ok
             ? {
                 ok: true,
