@@ -20,10 +20,6 @@ import {
   getScopeMatchedFiledReturnsSummary,
   hasUnresolvedFiledReturnsRecovery,
 } from "./flow-summary";
-import { shouldShowDownloadSavePromptNotice } from "./download-save-prompt-notice";
-
-const DOWNLOAD_SAVE_PROMPT_NOTICE_DISMISSED_KEY = "pack:download-save-prompt-notice-dismissed";
-
 export function usePackPopupController() {
   const [status, setStatus] = React.useState("Loading Pack context...");
   const [scope, setScopeState] = React.useState<FiledReturnsDownloadScope>(
@@ -35,20 +31,6 @@ export function usePackPopupController() {
   const [filedReturnsFlowSummary, setFiledReturnsFlowSummary] =
     React.useState<FiledReturnsFlowSummary | null>(null);
   const [busy, setBusy] = React.useState<string | null>(null);
-  const [downloadSavePromptNoticeDismissed, setDownloadSavePromptNoticeDismissed] =
-    React.useState(false);
-
-  React.useEffect(() => {
-    void browser.storage.local
-      .get(DOWNLOAD_SAVE_PROMPT_NOTICE_DISMISSED_KEY)
-      .then((values) =>
-        setDownloadSavePromptNoticeDismissed(
-          values[DOWNLOAD_SAVE_PROMPT_NOTICE_DISMISSED_KEY] === true,
-        ),
-      )
-      .catch(() => undefined);
-  }, []);
-
   React.useEffect(() => {
     void Promise.all([
       sendPackMessage({ type: "PACK_GET_CONTEXT" }),
@@ -247,26 +229,13 @@ export function usePackPopupController() {
     ? getFiledReturnsSummaryHeading(scope, scopedFlowSummary)
     : null;
   const effectiveBusy = scopedFlowSummary?.status === "complete" ? null : busy;
-  const dismissDownloadSavePromptNotice = React.useCallback(async () => {
-    setDownloadSavePromptNoticeDismissed(true);
-    try {
-      await browser.storage.local.set({ [DOWNLOAD_SAVE_PROMPT_NOTICE_DISMISSED_KEY]: true });
-    } catch {
-      // The current popup session remains dismissed even if extension storage is temporarily unavailable.
-    }
-  }, []);
-  const showDownloadSavePromptNotice = shouldShowDownloadSavePromptNotice(
-    filedReturnsFlowSummary,
-    downloadSavePromptNoticeDismissed,
-  );
-
   return {
     acknowledgeInterruptedRun,
     completionStatus,
     context,
-    dismissDownloadSavePromptNotice,
     effectiveBusy,
     filedReturnsObservation,
+    lastRunSummary: filedReturnsFlowSummary,
     recoverySummary,
     resolveFullFiscalYearTarget,
     resolveUnconfirmedDownload,
@@ -275,7 +244,6 @@ export function usePackPopupController() {
     scope,
     scopeLockedForReview,
     scopedFlowSummary,
-    showDownloadSavePromptNotice,
     setScope,
     startFiledReturnsFlow,
     startFreshFiledReturnsFlow,

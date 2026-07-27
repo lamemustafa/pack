@@ -5,10 +5,10 @@ import "../../styles/global.css";
 import "../../styles/popup.css";
 import "../../styles/popup-controls.css";
 import { ScopeForm, ScopeFormAction } from "./components";
-import { DownloadSavePromptNotice } from "./download-save-prompt-notice";
 import { canRetryFullFiscalYearZipWithoutPortal } from "./flow-summary";
 import { hasInlinePrimaryAction, InlineStatus } from "./inline-status";
 import { PackSummary } from "./pack-summary";
+import { LastRunDiagnostics } from "./last-run-diagnostics";
 import { getPopupPresentationState, type PopupPresentationState } from "./presentation-state";
 import { RecoveryActions, hasRecoveryActions } from "./recovery-actions";
 import { usePackPopupController } from "./use-pack-popup-controller";
@@ -106,17 +106,14 @@ function App() {
         />
       ) : null}
 
-      {popup.showDownloadSavePromptNotice ? (
-        <DownloadSavePromptNotice onDismiss={() => void popup.dismissDownloadSavePromptNotice()} />
-      ) : null}
-
       <footer className="fineprint" aria-label="Pack privacy boundary">
         <span>Local only · GST login and PDFs stay on your device.</span>
-        <span className="fineprint-links">
+        <div className="fineprint-links">
+          <LastRunDiagnostics summary={popup.lastRunSummary} />
           <a href="https://pack.complyeaze.com/privacy" target="_blank" rel="noreferrer">
-            Details
+            Privacy
           </a>
-        </span>
+        </div>
       </footer>
     </main>
   );
