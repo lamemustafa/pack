@@ -50,8 +50,12 @@ export function getPopupPresentationState(
     };
   }
 
-  // A stale run summary must not mask the active tab's portal state.
-  if (context && !context.supported) {
+  // A terminal response from the current Start action must remain visible even
+  // when the portal page itself is not a Pack-supported page.
+  const hasTerminalSummary = Boolean(
+    summary && ["complete", "partial", "blocked", "cancelled"].includes(summary.status),
+  );
+  if (context && !context.supported && !hasTerminalSummary) {
     return getUnsupportedContextState(context);
   }
 

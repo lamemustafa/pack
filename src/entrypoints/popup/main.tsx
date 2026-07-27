@@ -24,8 +24,12 @@ function App() {
     popup.effectiveBusy,
   );
   const portalIndependentZipRetry = canRetryFullFiscalYearZipWithoutPortal(displaySummary);
+  const terminalSummary = Boolean(
+    displaySummary &&
+    ["complete", "partial", "blocked", "cancelled"].includes(displaySummary.status),
+  );
   const showBuilder =
-    (popup.context?.supported === true || portalIndependentZipRetry) &&
+    (popup.context?.supported === true || portalIndependentZipRetry || terminalSummary) &&
     !["loading", "unsupported", "session-expired"].includes(presentation.kind);
   const statusOwnsPrimaryAction = hasInlinePrimaryAction(presentation, displaySummary);
 

@@ -36,6 +36,30 @@ const blockedSummary: FiledReturnsFlowSummary = {
 };
 
 describe("inline filed-return recovery status", () => {
+  it("renders the cross-origin blocked start message", () => {
+    const summary: FiledReturnsFlowSummary = {
+      ...blockedSummary,
+      flowStep: {
+        ...blockedSummary.flowStep,
+        safeSignals: ["wrong-origin-open-returns-dashboard"],
+        safeMessage: "Open Returns Dashboard in the GST Portal, then press Start again.",
+      },
+    };
+    const markup = renderToStaticMarkup(
+      <InlineStatus
+        busy={null}
+        onOpenPortal={vi.fn()}
+        onRestartTarget={vi.fn()}
+        onRetryFullFiscalYearTarget={vi.fn()}
+        onRetryTarget={vi.fn()}
+        presentation={blockedPresentation}
+        summary={summary}
+      />,
+    );
+
+    expect(markup).toContain("Open Returns Dashboard in the GST Portal");
+  });
+
   it("describes a completed full fiscal year as one ZIP", () => {
     const summary: FiledReturnsFlowSummary = {
       ...blockedSummary,
