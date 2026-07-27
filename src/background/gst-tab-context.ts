@@ -19,6 +19,7 @@ import { persistCanonicalFiledReturnsObservation } from "./filed-returns-observa
 import { persistCanonicalGstPortalContext } from "./gst-context-state";
 
 const CONTENT_SCRIPT_FILE = "/content-scripts/content.js";
+const GSTR3B_FILED_RETURNS_URL = "https://return.gst.gov.in/returns/auth/efiledreturns";
 const contentInjectionByTab = new Map<number, Promise<void>>();
 
 export function isCurrentContentScriptPingResponse(response: PackMessageResponse): boolean {
@@ -179,6 +180,27 @@ export async function sendMessageToTabWithInjection(
     await ensureContentScript(tabId);
     return browser.tabs.sendMessage(tabId, request) as Promise<PackMessageResponse>;
   }
+}
+
+/** Moves a supported authenticated GST tab onto the returns origin and proves V34 is live. */
+export async function navigateGstr3bTabToFiledReturns(tabId: number): Promise<boolean> {
+  try {
+    await browser.tabs.update(tabId, { url: GSTR3B_FILED_RETURNS_URL });
+  } catch {
+    return false;
+  }
+
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    if (await pingContentScript(tabId)) return true;
+    try {
+      await ensureContentScript(tabId);
+      if (await pingContentScript(tabId)) return true;
+    } catch {
+      // Navigation can still be replacing the document; retry the protocol ping below.
+    }
+    await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 250));
+  }
+  return false;
 }
 
 async function readRememberedGstTab(): Promise<ActiveGstTab | null> {

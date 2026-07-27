@@ -95,12 +95,48 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
     );
   }
 
+  if (scope.returnType === "GSTR-3B" && !isReturnsOrigin(activeTab.tab.url)) {
+    const contentReady = await deps.navigateGstr3bTabToFiledReturns?.(activeTab.tab.id);
+    if (contentReady !== true) {
+      return withPersistedSinglePeriodSummary(
+        scope,
+        {
+          ok: true,
+          flowStep: {
+            connectorId: "gst",
+            scopeId: filedReturnScopeId("GSTR-3B"),
+            state: "blocked",
+            safeSignals: ["gstr3b-return-origin-navigation-failed"],
+            safeMessage:
+              "Pack could not open the authenticated GST filed-returns page with the current content script.",
+            userAction: {
+              type: "NAVIGATE_TO_SUPPORTED_PAGE",
+              message:
+                "Open an authenticated GST return page, then retry the requested GSTR-3B period.",
+              canResume: true,
+            },
+          },
+        },
+        deps,
+        shouldPersistSinglePeriodSummary,
+      );
+    }
+  }
+
   return runSinglePeriodSteps(
     scope,
     { ...deps, portalTabIncognito: activeTab.tab.incognito === true },
     activeTab.tab.id,
     shouldPersistSinglePeriodSummary,
   );
+}
+
+function isReturnsOrigin(url: string | undefined): boolean {
+  try {
+    return new URL(url ?? "").origin === "https://return.gst.gov.in";
+  } catch {
+    return false;
+  }
 }
 
 async function runSinglePeriodSteps(

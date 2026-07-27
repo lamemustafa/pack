@@ -69,7 +69,7 @@ export async function openFiledReturnFromApiSearch(
   return {
     connectorId: "gst",
     scopeId,
-    state: "user-action-required",
+    state: "blocked",
     safeSignals: [
       "filed-return-api-searched",
       "filed-return-api-result-found",
@@ -86,10 +86,7 @@ export async function openFiledReturnFromApiSearch(
 
 function canUseFiledReturnsApi(documentRef: Document): boolean {
   const location = documentRef.defaultView?.location;
-  return (
-    location?.origin === "https://return.gst.gov.in" &&
-    location.pathname.toLowerCase() === "/returns/auth/efiledreturns"
-  );
+  return location?.origin === "https://return.gst.gov.in";
 }
 
 async function queryFiledReturnsApi(

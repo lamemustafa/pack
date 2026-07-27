@@ -50,6 +50,27 @@ export async function runFiledReturnsDownloadStep(
     return portalAvailabilityIssue;
   }
 
+  if (scope.returnType === "GSTR-3B") {
+    const detailIdentity = extractFiledReturnsDetailIdentity(documentRef, scope.returnType);
+    if (!filedReturnDetailIdentityMatchesScope(detailIdentity, scope)) {
+      const apiSearchResult = await openFiledReturnFromApiSearch(documentRef, scope, scopeId);
+      if (apiSearchResult) return apiSearchResult;
+      return {
+        connectorId: "gst",
+        scopeId,
+        state: "blocked",
+        safeSignals: ["filed-return-api-navigation-unavailable"],
+        safeMessage:
+          "Pack could not open the requested filed GSTR-3B period from this authenticated GST page.",
+        userAction: {
+          type: "RETRY_PORTAL_GENERATION",
+          message: "Keep the GST Portal signed in, then retry the requested GSTR-3B period.",
+          canResume: true,
+        },
+      };
+    }
+  }
+
   if (isGstr2bSummaryRoute(documentRef)) {
     clearFiledReturnsSearchAttempt(documentRef);
     const navigation = await navigateToFiledReturnsPage(documentRef);

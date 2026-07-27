@@ -5265,6 +5265,88 @@ describe("filed returns flow runner", () => {
     expect(observeBrowserDownloadById).not.toHaveBeenCalled();
   });
 
+  it("retargets an authenticated non-return tab once, then accepts consecutive fresh GSTR-3B periods", async () => {
+    const activeTab: ActiveGstTab = {
+      ...ACTIVE_GST_TAB,
+      url: "https://services.gst.gov.in/services/auth/dashboard",
+    };
+    const navigateGstr3bTabToFiledReturns = vi.fn(async (tabId: number) => {
+      expect(tabId).toBe(ACTIVE_GST_TAB.id);
+      activeTab.url = "https://return.gst.gov.in/returns/auth/efiledreturns";
+      return true;
+    });
+    const sendMessageToTabWithInjection = vi.fn<
+      FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
+    >(async () => ({
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "downloaded",
+        safeSignals: ["synthetic-terminal-download"],
+        safeMessage: "Complete.",
+      },
+    }));
+    const deps: FiledReturnsFlowRunnerDeps = {
+      getActiveGstTab: vi.fn(async () => activeTab),
+      navigateGstr3bTabToFiledReturns,
+      sendMessageToTabWithInjection,
+      storageKeys: {
+        completion: "completion",
+        fullFiscalYearLedger: "full-year-ledger",
+        observation: "observation",
+      },
+    };
+
+    await expect(
+      startFiledReturnsDownloadFlow(
+        { financialYear: "2025-26", period: "April", returnType: "GSTR-3B" },
+        deps,
+      ),
+    ).resolves.toMatchObject({ flowStep: { state: "downloaded" } });
+    await expect(
+      startFiledReturnsDownloadFlow(
+        { financialYear: "2025-26", period: "May", returnType: "GSTR-3B" },
+        deps,
+      ),
+    ).resolves.toMatchObject({ flowStep: { state: "downloaded" } });
+
+    expect(navigateGstr3bTabToFiledReturns).toHaveBeenCalledTimes(1);
+    expect(
+      sendMessageToTabWithInjection.mock.calls.map(([, message]) => message.payload.period),
+    ).toEqual(["April", "May"]);
+  });
+
+  it("blocks a GSTR-3B run when return-origin navigation cannot prove the current content script", async () => {
+    const sendMessageToTabWithInjection =
+      vi.fn<FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]>();
+
+    const response = await startFiledReturnsDownloadFlow(
+      { financialYear: "2025-26", period: "April", returnType: "GSTR-3B" },
+      {
+        getActiveGstTab: vi.fn(async () => ({
+          ...ACTIVE_GST_TAB,
+          url: "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
+        })),
+        navigateGstr3bTabToFiledReturns: vi.fn(async () => false),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+        },
+      },
+    );
+
+    expect(response).toMatchObject({
+      flowStep: {
+        state: "blocked",
+        safeSignals: ["gstr3b-return-origin-navigation-failed"],
+      },
+    });
+    expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
+  });
+
   it("opens the login page instead of silently switching to another GST tab", async () => {
     vi.mocked(browser.tabs.query).mockResolvedValueOnce([
       {

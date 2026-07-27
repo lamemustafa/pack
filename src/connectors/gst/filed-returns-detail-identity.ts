@@ -121,7 +121,7 @@ function findFiledReturnDownloadControl(
 
 function findDetailIdentityRoot(downloadControl: HTMLElement): HTMLElement | null {
   let current: HTMLElement | null = downloadControl;
-  while (current && current !== downloadControl.ownerDocument.body) {
+  while (current) {
     const text = readElementText(current);
     if (
       /\b(?:(?:return|tax)\s*period|month)\b/i.test(text) &&
@@ -129,6 +129,7 @@ function findDetailIdentityRoot(downloadControl: HTMLElement): HTMLElement | nul
     ) {
       return current;
     }
+    if (current === downloadControl.ownerDocument.body) break;
     current = current.parentElement;
   }
   return downloadControl.ownerDocument.body;

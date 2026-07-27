@@ -2,7 +2,9 @@ import { JSDOM } from "jsdom";
 import { describe, expect, it, vi } from "vitest";
 import {
   acquireFiledReturnArtifact,
+  ARTIFACT_FAILURE_MESSAGES,
   type ArtifactRequest,
+  type ArtifactFailureReason,
 } from "../../src/connectors/gst/artifact-source";
 
 const REQUEST: ArtifactRequest = {
@@ -15,6 +17,15 @@ const REQUEST: ArtifactRequest = {
 };
 
 describe("acquireFiledReturnArtifact", () => {
+  it("maps every artifact failure reason to a user-facing message", () => {
+    for (const reason of Object.keys(ARTIFACT_FAILURE_MESSAGES) as ArtifactFailureReason[]) {
+      expect(ARTIFACT_FAILURE_MESSAGES[reason].trim()).not.toBe("");
+    }
+    expect(new Set(Object.values(ARTIFACT_FAILURE_MESSAGES)).size).toBe(
+      Object.keys(ARTIFACT_FAILURE_MESSAGES).length,
+    );
+  });
+
   it("returns the raw response bytes without reserialising them", async () => {
     const raw =
       '{  "status":1, "data" : {"r3b":{"ret_period":"042024"}}, "padding":"' +
@@ -112,6 +123,22 @@ describe("acquireFiledReturnArtifact", () => {
     });
     expect(click).not.toHaveBeenCalled();
   });
+
+  it("rejects a requested period that does not match the visible detail page", async () => {
+    const { documentRef, fetch } = page(validJson());
+    documentRef.body.innerHTML = documentRef.body.innerHTML.replaceAll("April", "May");
+    const click = vi.fn();
+    documentRef.body.addEventListener("click", click);
+
+    await expect(acquireFiledReturnArtifact(documentRef, REQUEST)).resolves.toEqual({
+      ok: false,
+      reason: "page-period-mismatch",
+      requestId: REQUEST.requestId,
+      safeSignals: ["page-target-unverified"],
+    });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(click).not.toHaveBeenCalled();
+  });
 });
 
 function validJson() {
@@ -124,7 +151,7 @@ function validJson() {
 
 function page(body: string, status = 200, url = "https://return.gst.gov.in/returns/auth/gstr3b") {
   const dom = new JSDOM(
-    "<body><h1>GSTR-3B - Monthly Return</h1><p>Status - Filed</p><button>Download Filed GSTR-3B</button></body>",
+    "<body><main><h1>GSTR-3B - Monthly Return</h1><p>Status - Filed</p><p>Financial Year - 2024-25</p><p>Return Period - April</p><button aria-label='Download Filed GSTR-3B Financial Year 2024-25 Return Period April'>Download Filed GSTR-3B</button></main></body>",
     { url },
   );
   Object.defineProperty(

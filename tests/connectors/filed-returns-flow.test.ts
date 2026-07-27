@@ -3767,6 +3767,37 @@ describe("filed returns guided flow", () => {
     expect(submittedForms).toEqual([{ action: "/returns/auth/gstr3b", method: "POST" }]);
   });
 
+  it("uses the filed-return API from a different GSTR-3B detail page", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <h1>GSTR-3B - Monthly Return</h1>
+          <p>Status - Filed</p>
+          <p>Financial Year - 2025-26</p>
+          <p>Return Period - April</p>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/gstr3b",
+    );
+    const submittedForms = stubFormSubmit(documentRef);
+    stubFiledReturnsApi(documentRef, {
+      roleStatus: { userPref: "M" },
+      rows: [{ rtntype: "GSTR3B", fy: "2025-26", taxp: "May" }],
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-3B",
+    });
+
+    expect(result).toMatchObject({
+      state: "clicked",
+      safeSignals: expect.arrayContaining(["filed-return-api-result-posted"]),
+    });
+    expect(submittedForms).toEqual([{ action: "/returns/auth/gstr3b", method: "POST" }]);
+  });
+
   it("uses monthly preference for pre-quarterly GSTR-3B API handoff when role status omits userPref", async () => {
     const documentRef = createGstDocument(`
       <main>
@@ -4643,7 +4674,7 @@ describe("filed returns guided flow", () => {
     }
   }, 12_000);
 
-  it("falls back to the portal filter flow when API role status is unavailable", async () => {
+  it("blocks GSTR-3B acquisition when the API detail handoff cannot verify role status", async () => {
     vi.useFakeTimers();
     try {
       const documentRef = createGstDocument(`
@@ -4701,24 +4732,21 @@ describe("filed returns guided flow", () => {
       await vi.advanceTimersByTimeAsync(47_000);
       const result = await resultPromise;
 
-      expect(result.state).toBe("clicked");
+      expect(result.state).toBe("blocked");
       expect(result.safeSignals).toEqual(
         expect.arrayContaining([
-          "financial-year-selected",
-          "period-selected",
-          "month-selected",
-          "return-type-selected",
-          "search-clicked",
+          "filed-return-api-searched",
+          "filed-return-api-result-found",
+          "filed-return-api-result-role-status-unavailable",
         ]),
       );
-      expect(result.safeSignals).not.toContain("filed-return-api-result-posted");
-      expect(searchClicked).toBe(1);
+      expect(searchClicked).toBe(0);
     } finally {
       vi.useRealTimers();
     }
   }, 12_000);
 
-  it("uses portal filters instead of defaulting monthly when role status omits user preference", async () => {
+  it("blocks GSTR-3B acquisition when a quarterly-era role response omits user preference", async () => {
     vi.useFakeTimers();
     try {
       const documentRef = createGstDocument(`
@@ -4747,10 +4775,11 @@ describe("filed returns guided flow", () => {
       await vi.advanceTimersByTimeAsync(47_000);
       const result = await resultPromise;
 
-      expect(result.state).toBe("clicked");
-      expect(result.safeSignals).toEqual(expect.arrayContaining(["search-clicked"]));
-      expect(result.safeSignals).not.toContain("filed-return-api-result-posted");
-      expect(searchClicked).toBe(1);
+      expect(result.state).toBe("blocked");
+      expect(result.safeSignals).toEqual(
+        expect.arrayContaining(["filed-return-api-result-role-status-unavailable"]),
+      );
+      expect(searchClicked).toBe(0);
     } finally {
       vi.useRealTimers();
     }

@@ -5,6 +5,10 @@ import type {
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
 import type { PackMessageResponse } from "../connectors/gst/messages";
+import {
+  artifactFailureMessage,
+  type ArtifactFailureReason,
+} from "../connectors/gst/artifact-source";
 import { FULL_FISCAL_YEAR_PERIOD } from "../connectors/gst/filed-returns-scope";
 import { type FiledReturnsConcreteArtifactType } from "../connectors/gst/filed-returns-artifacts";
 import { filedReturnDescriptor } from "../connectors/gst/filed-returns-return-descriptors";
@@ -76,7 +80,7 @@ export async function triggerAndObserveFiledReturnDownload({
         await persistArtifactAcquisitionIntent({ artifactType, requestId });
         const delivery = await downloadAcquiredArtifact({
           base64: response.artifact.base64,
-          filename: `Pack/${scope.financialYear}/${scope.period}/GSTR-3B-data.json`,
+          filename: artifactFilename(scope, "JSON"),
           mimeType: response.artifact.mimeType,
           requestId,
           onStarted: (downloadId) =>
@@ -105,7 +109,7 @@ export async function triggerAndObserveFiledReturnDownload({
                 scopeId: filedReturnScopeId("GSTR-3B"),
                 state: "blocked",
                 safeSignals: ["artifact-acquisition-failed", `artifact-${delivery.reason}`],
-                safeMessage: "Pack did not save an unverified filed-return artifact.",
+                safeMessage: artifactFailureMessageForDelivery(delivery.reason),
               },
             };
       }
@@ -118,7 +122,7 @@ export async function triggerAndObserveFiledReturnDownload({
       ) {
         await persistArtifactAcquisitionIntent({ artifactType, requestId });
         const acquired = await acquireGstr3bPdfAfterPreflight({
-          filename: `Pack/${scope.financialYear}/${scope.period}/GSTR-3B.pdf`,
+          filename: artifactFilename(scope, "PDF"),
           requestId,
           returnPeriod,
           tabId,
@@ -148,9 +152,12 @@ export async function triggerAndObserveFiledReturnDownload({
                 scopeId: filedReturnScopeId("GSTR-3B"),
                 state: "blocked",
                 safeSignals: ["artifact-acquisition-failed", `artifact-${acquired.reason}`],
-                safeMessage: "Pack did not save an unverified filed-return artifact.",
+                safeMessage: artifactFailureMessageForDelivery(acquired.reason),
               },
             };
+      }
+      if (response.ok && "artifact" in response && !response.artifact.ok) {
+        return artifactFailureResponse(response.artifact.reason, response.artifact.safeSignals);
       }
       return response;
     }
@@ -238,6 +245,36 @@ export async function triggerAndObserveFiledReturnDownload({
     flowStep,
     ...(flowSummary ? { flowSummary } : {}),
   };
+}
+
+function artifactFilename(scope: FiledReturnsDownloadScope, artifactType: "PDF" | "JSON"): string {
+  const suffix = artifactType === "PDF" ? ".pdf" : "-data.json";
+  return `ComplyEaze-Pack/${scope.financialYear}/GSTR-3B/${scope.period}${suffix}`;
+}
+
+function artifactFailureResponse(
+  reason: ArtifactFailureReason,
+  safeSignals: readonly string[],
+): FlowStepResponse {
+  return {
+    ok: true,
+    flowStep: {
+      connectorId: "gst",
+      scopeId: filedReturnScopeId("GSTR-3B"),
+      state: "blocked",
+      safeSignals: ["artifact-acquisition-failed", `artifact-${reason}`, ...safeSignals],
+      safeMessage: artifactFailureMessage(reason),
+      userAction: {
+        type: "RETRY_PORTAL_GENERATION",
+        message: "Review the filed GSTR-3B page, then retry this artifact.",
+        canResume: true,
+      },
+    },
+  };
+}
+
+function artifactFailureMessageForDelivery(reason: string): string {
+  return `Pack did not save the verified filed-return artifact: ${reason.replace(/-/g, " ")}.`;
 }
 
 function createDownloadTarget(
