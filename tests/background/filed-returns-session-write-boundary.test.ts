@@ -2,10 +2,25 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FiledReturnsFlowRunnerDeps } from "../../src/background/filed-returns-flow-runner";
 import { persistFlowResponse } from "../../src/background/filed-returns-flow-runner-utils";
 import { persistSummary } from "../../src/background/filed-returns-full-fiscal-year-run-state";
-import { persistCanonicalFiledReturnsFlowSummary } from "../../src/background/filed-returns-session-summary";
+import {
+  persistCanonicalFiledReturnsFlowSummary,
+  readCanonicalFiledReturnsFlowSummary,
+} from "../../src/background/filed-returns-session-summary";
 import { withPersistedSinglePeriodSummary } from "../../src/background/filed-returns-single-period-summary";
+import {
+  ARTIFACT_FAILURE_MESSAGES,
+  type ArtifactFailureReason,
+} from "../../src/connectors/gst/artifact-source";
 import { isDurableFiledReturnsSignal } from "../../src/connectors/gst/filed-returns-durable-signals";
 import type { FiledReturnsFlowSummary } from "../../src/connectors/gst/filed-returns-contracts";
+import {
+  FILED_RETURNS_RETURN_TYPES,
+  filedReturnsScopeId,
+} from "../../src/connectors/gst/filed-returns-return-types";
+import {
+  GSTR2B_ARTIFACT_DISPATCH_FAILURE_MESSAGES,
+  Gstr2bArtifactDispatchFailureReason,
+} from "../../src/background/filed-returns-download-trigger";
 
 const storage = vi.hoisted(() => ({ session: {} as Record<string, unknown> }));
 
@@ -81,6 +96,82 @@ describe("filed-return session write boundary", () => {
     expect(isDurableFiledReturnsSignal("filed-gstr3b-extension-download-started")).toBe(true);
     expect(isDurableFiledReturnsSignal("synthetic-extension-download-started")).toBe(false);
   });
+
+  it.each(
+    FILED_RETURNS_RETURN_TYPES.flatMap((returnType) =>
+      (Object.keys(ARTIFACT_FAILURE_MESSAGES) as ArtifactFailureReason[]).map(
+        (reason) => [returnType, reason] as const,
+      ),
+    ),
+  )(
+    "persists a popup-readable terminal message for every %s %s artifact failure",
+    async (returnType, reason) => {
+      const scope = {
+        artifactType: "PDF" as const,
+        financialYear: "2025-26",
+        period: "March" as const,
+        returnType,
+      };
+      const response = await withPersistedSinglePeriodSummary(
+        scope,
+        {
+          ok: true,
+          flowStep: {
+            connectorId: "gst",
+            scopeId: filedReturnsScopeId(returnType),
+            state: "blocked",
+            safeSignals: ["artifact-acquisition-failed", `artifact-${reason}`],
+            safeMessage: ARTIFACT_FAILURE_MESSAGES[reason],
+          },
+        },
+        deps,
+        true,
+      );
+
+      expect(response).toHaveProperty(
+        "flowSummary.flowStep.safeMessage",
+        expect.stringMatching(/\S/),
+      );
+      await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+        flowStep: { safeMessage: expect.stringMatching(/\S/) },
+      });
+    },
+  );
+
+  it.each(Object.values(Gstr2bArtifactDispatchFailureReason))(
+    "persists a popup-readable terminal message for GSTR-2B %s",
+    async (reason) => {
+      const scope = {
+        artifactType: "PDF" as const,
+        financialYear: "2025-26",
+        period: "March" as const,
+        returnType: "GSTR-2B" as const,
+      };
+      const response = await withPersistedSinglePeriodSummary(
+        scope,
+        {
+          ok: true,
+          flowStep: {
+            connectorId: "gst",
+            scopeId: filedReturnsScopeId(scope.returnType),
+            state: "blocked",
+            safeSignals: [reason],
+            safeMessage: GSTR2B_ARTIFACT_DISPATCH_FAILURE_MESSAGES[reason],
+          },
+        },
+        deps,
+        true,
+      );
+
+      expect(response).toHaveProperty(
+        "flowSummary.flowStep.safeMessage",
+        expect.stringMatching(/\S/),
+      );
+      await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+        flowStep: { safeMessage: expect.stringMatching(/\S/) },
+      });
+    },
+  );
 
   it("canonicalizes provided single-period and full-year summary writes", async () => {
     const response = await withPersistedSinglePeriodSummary(

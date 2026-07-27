@@ -6,6 +6,7 @@ import {
   type ArtifactRequest,
   type ArtifactFailureReason,
 } from "../../src/connectors/gst/artifact-source";
+import { GSTR2B_JSON_PATH } from "../../src/connectors/gst/portal-artifact-endpoints";
 
 const REQUEST: ArtifactRequest = {
   artifactType: "JSON",
@@ -158,7 +159,11 @@ describe("GSTR-2B artifact acquisition", () => {
     expect(result).toMatchObject({ ok: true, state: "acquired", mimeType: "application/json" });
     if (!result.ok || result.state !== "acquired") return;
     expect(new TextDecoder().decode(result.bytes)).toBe(raw);
-    expect(fetch).toHaveBeenCalledWith("/gstr2b/auth/api/gstr2b/getjson", {
+    const [requestedPath, options] = fetch.mock.calls[0] ?? [];
+    const requestedUrl = new URL(String(requestedPath), "https://synthetic.test");
+    expect(requestedUrl.pathname).toBe(GSTR2B_JSON_PATH);
+    expect(requestedUrl.searchParams.get("rtnprd")).toBe(request.returnPeriod);
+    expect(options).toEqual({
       credentials: "same-origin",
     });
   });
@@ -172,6 +177,17 @@ describe("GSTR-2B artifact acquisition", () => {
       reason: "target-period-mismatch",
     });
     expect(click).not.toHaveBeenCalled();
+  });
+
+  it("rejects a getjson response without the requested return period", async () => {
+    const { documentRef } = gstr2bPage(
+      JSON.stringify({ data: { padding: "x".repeat(100) }, chksum: "synthetic" }),
+    );
+
+    await expect(acquireFiledReturnArtifact(documentRef, request)).resolves.toMatchObject({
+      ok: false,
+      reason: "unexpected-content",
+    });
   });
 
   it.each(["PDF", "EXCEL"] as const)(

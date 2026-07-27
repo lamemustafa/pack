@@ -12,11 +12,15 @@ const browserMocks = vi.hoisted(() => {
       ) => boolean | undefined)
     | null = null;
   let localStorageState: Record<string, unknown> = {};
+  let sessionStorageState: Record<string, unknown> = {};
 
   return {
     getMessageListener: () => messageListener,
     resetLocalStorage: () => {
       localStorageState = {};
+    },
+    resetSessionStorage: () => {
+      sessionStorageState = {};
     },
     downloads: {
       download: vi.fn(async () => 481),
@@ -165,9 +169,35 @@ const browserMocks = vi.hoisted(() => {
         setAccessLevel: vi.fn(async () => undefined),
       },
       session: {
-        get: vi.fn(async () => ({})),
-        remove: vi.fn(async () => undefined),
-        set: vi.fn(async () => undefined),
+        get: vi.fn(async (keys?: string | string[] | Record<string, unknown>) => {
+          if (typeof keys === "string") {
+            return keys in sessionStorageState ? { [keys]: sessionStorageState[keys] } : {};
+          }
+          if (Array.isArray(keys)) {
+            return Object.fromEntries(
+              keys
+                .filter((key) => key in sessionStorageState)
+                .map((key) => [key, sessionStorageState[key]]),
+            );
+          }
+          if (keys && typeof keys === "object") {
+            return Object.fromEntries(
+              Object.entries(keys).map(([key, fallback]) => [
+                key,
+                key in sessionStorageState ? sessionStorageState[key] : fallback,
+              ]),
+            );
+          }
+          return { ...sessionStorageState };
+        }),
+        remove: vi.fn(async (keys: string | string[]) => {
+          for (const key of Array.isArray(keys) ? keys : [keys]) {
+            delete sessionStorageState[key];
+          }
+        }),
+        set: vi.fn(async (values: Record<string, unknown>) => {
+          Object.assign(sessionStorageState, values);
+        }),
       },
     },
     tabs: {
@@ -235,6 +265,7 @@ describe("background filed returns download defaults", () => {
     vi.resetModules();
     vi.useRealTimers();
     browserMocks.resetLocalStorage();
+    browserMocks.resetSessionStorage();
     vi.stubGlobal("defineBackground", (entrypoint: () => void) => {
       entrypoint();
       return entrypoint;
@@ -286,7 +317,7 @@ describe("background filed returns download defaults", () => {
     ]);
   });
 
-  it("persists a terminal GSTR-2B April summary failure when acquisition returns no artifact", async () => {
+  it("persists and returns a terminal GSTR-2B mismatch summary to the popup", async () => {
     browserMocks.tabs.query.mockResolvedValueOnce([
       {
         active: true,
@@ -314,7 +345,15 @@ describe("background filed returns download defaults", () => {
         } satisfies PackMessageResponse;
       }
       if (message.type === "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34") {
-        return { ok: true } as PackMessageResponse;
+        return {
+          ok: true,
+          artifact: {
+            ok: false,
+            reason: "target-period-mismatch",
+            requestId: "synthetic-request",
+            safeSignals: [],
+          },
+        } satisfies PackMessageResponse;
       }
       return { ok: false, error: "Unexpected message." } satisfies PackMessageResponse;
     });
@@ -330,8 +369,12 @@ describe("background filed returns download defaults", () => {
       ok: true,
       flowStep: {
         state: "blocked",
-        safeSignals: expect.arrayContaining(["gstr2b-artifact-response-missing"]),
-        safeMessage: expect.any(String),
+        safeSignals: expect.arrayContaining([
+          "artifact-acquisition-failed",
+          "artifact-target-period-mismatch",
+        ]),
+        safeMessage:
+          "The GST Portal returned artifact data for a different requested return period.",
       },
       flowSummary: { status: "blocked" },
     });
@@ -339,9 +382,24 @@ describe("background filed returns download defaults", () => {
       "pack:last-filed-returns-flow-summary": expect.objectContaining({
         status: "blocked",
         flowStep: expect.objectContaining({
-          safeSignals: expect.arrayContaining(["gstr2b-artifact-response-missing"]),
+          safeSignals: expect.arrayContaining([
+            "artifact-acquisition-failed",
+            "artifact-target-period-mismatch",
+          ]),
         }),
       }),
+    });
+
+    await expect(
+      sendBackgroundMessage({ type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" }),
+    ).resolves.toMatchObject({
+      ok: true,
+      flowSummary: {
+        status: "blocked",
+        flowStep: {
+          safeMessage: expect.stringMatching(/\S/),
+        },
+      },
     });
   });
 

@@ -148,7 +148,10 @@ async function acquireGstr2bArtifact(
   if (!fetch) return failed(request, "endpoint-unavailable");
   let response: Response;
   try {
-    response = await fetch(GSTR2B_JSON_PATH, { credentials: "same-origin" });
+    response = await fetch(
+      `${GSTR2B_JSON_PATH}?rtnprd=${encodeURIComponent(request.returnPeriod)}`,
+      { credentials: "same-origin" },
+    );
   } catch {
     return failed(request, "endpoint-unavailable");
   }

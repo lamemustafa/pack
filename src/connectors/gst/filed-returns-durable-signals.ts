@@ -1,4 +1,5 @@
 import { FILED_RETURNS_MONTHS } from "./filed-returns-scope";
+import { ARTIFACT_FAILURE_MESSAGES } from "./artifact-source";
 
 const MAX_DURABLE_SIGNAL_COUNT = 32;
 
@@ -386,6 +387,10 @@ const SCOPED_RETURN_SIGNAL_SUFFIXES = new Set([
   "extension-download-requested",
   "portal-blob-download-captured",
 ]);
+const ARTIFACT_FAILURE_SIGNALS = new Set([
+  "artifact-acquisition-failed",
+  ...Object.keys(ARTIFACT_FAILURE_MESSAGES).map((reason) => `artifact-${reason}`),
+]);
 
 export function parseDurableFiledReturnsSignals(input: unknown): string[] | null {
   if (!Array.isArray(input) || input.length > MAX_DURABLE_SIGNAL_COUNT) return null;
@@ -395,7 +400,12 @@ export function parseDurableFiledReturnsSignals(input: unknown): string[] | null
 }
 
 export function isDurableFiledReturnsSignal(signal: string): boolean {
-  if (EXACT_DURABLE_SIGNALS.has(signal) || CAPTURE_SIGNALS.has(signal) || ZIP_SIGNALS.has(signal)) {
+  if (
+    EXACT_DURABLE_SIGNALS.has(signal) ||
+    CAPTURE_SIGNALS.has(signal) ||
+    ZIP_SIGNALS.has(signal) ||
+    ARTIFACT_FAILURE_SIGNALS.has(signal)
+  ) {
     return true;
   }
   const artifactSignal =

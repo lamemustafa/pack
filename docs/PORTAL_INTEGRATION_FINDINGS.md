@@ -28,3 +28,6 @@ This log records live diagnostic findings that constrain Pack's local, target-bo
     serialisation are unverified, so Pack does not use it yet.
 12. A GSTR-3B JSON response may be saved verbatim; composing a PDF from it is forbidden because a
     Pack-produced document is not the portal artifact.
+13. GSTR-2B JSON preflight requires the requested return period as a query parameter. Without it,
+    the response omits `data.rtnprd` entirely. Diagnostic probes that log only URL pathnames hide
+    required query parameters; that omission caused an earlier integration-spec error.

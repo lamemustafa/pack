@@ -55,7 +55,7 @@ export function validateArtifactBytes(
         : parsed.status === 1
           ? parsed.data?.r3b?.ret_period
           : null;
-    if (actualPeriod === null) return { ok: false, reason: "unexpected-content" };
+    if (typeof actualPeriod !== "string") return { ok: false, reason: "unexpected-content" };
     return actualPeriod === expectedReturnPeriod
       ? { ok: true, mimeType: "application/json" }
       : { ok: false, reason: "target-period-mismatch" };
