@@ -50,24 +50,11 @@ export async function runFiledReturnsDownloadStep(
     return portalAvailabilityIssue;
   }
 
-  if (scope.returnType === "GSTR-3B") {
+  if (scope.returnType === "GSTR-3B" && isReturnsOrigin(documentRef)) {
     const detailIdentity = extractFiledReturnsDetailIdentity(documentRef, scope.returnType);
     if (!filedReturnDetailIdentityMatchesScope(detailIdentity, scope)) {
       const apiSearchResult = await openFiledReturnFromApiSearch(documentRef, scope, scopeId);
       if (apiSearchResult) return apiSearchResult;
-      return {
-        connectorId: "gst",
-        scopeId,
-        state: "blocked",
-        safeSignals: ["filed-return-api-navigation-unavailable"],
-        safeMessage:
-          "Pack could not open the requested filed GSTR-3B period from this authenticated GST page.",
-        userAction: {
-          type: "RETRY_PORTAL_GENERATION",
-          message: "Keep the GST Portal signed in, then retry the requested GSTR-3B period.",
-          canResume: true,
-        },
-      };
     }
   }
 
@@ -292,6 +279,10 @@ export async function runFiledReturnsDownloadStep(
     },
     observation.userAction,
   );
+}
+
+function isReturnsOrigin(documentRef: Document): boolean {
+  return documentRef.defaultView?.location.origin === "https://return.gst.gov.in";
 }
 
 function isAuthenticatedGstr1Route(documentRef: Document): boolean {
