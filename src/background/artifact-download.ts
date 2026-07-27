@@ -4,12 +4,19 @@ import {
   createOffscreenBlobUrl,
   revokeOffscreenBlobUrl,
 } from "./offscreen-blob-url";
+import { installPackDownloadFilenameReassertion } from "./pack-download-filename-reassertion";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 type DownloadFailure = "checkpoint-failed" | "start-rejected" | "interrupted" | "empty" | "timeout";
 export type ArtifactDownloadResult =
-  | { ok: true; downloadId: number; bytesReceived: number; safeSignals: string[] }
+  | {
+      ok: true;
+      downloadId: number;
+      bytesReceived: number;
+      safeMessage?: string;
+      safeSignals: string[];
+    }
   | { ok: false; reason: DownloadFailure; safeSignals: string[] };
 
 type DownloadApi = Pick<typeof browser.downloads, "download" | "search" | "onChanged">;
@@ -18,6 +25,8 @@ type DeliveryDeps = {
   createOffscreenBlobUrl: typeof createOffscreenBlobUrl;
   revokeOffscreenBlobUrl: typeof revokeOffscreenBlobUrl;
   closeOffscreenBlobDocument: typeof closeOffscreenBlobDocument;
+  releaseRequestedFilename: (downloadId: number) => void;
+  trackRequestedFilename: (downloadId: number, filename: string) => void;
   timeoutMs: number;
 };
 
@@ -37,9 +46,17 @@ export async function downloadAcquiredArtifact(
     createOffscreenBlobUrl: overrides.createOffscreenBlobUrl ?? createOffscreenBlobUrl,
     revokeOffscreenBlobUrl: overrides.revokeOffscreenBlobUrl ?? revokeOffscreenBlobUrl,
     closeOffscreenBlobDocument: overrides.closeOffscreenBlobDocument ?? closeOffscreenBlobDocument,
+    releaseRequestedFilename:
+      overrides.releaseRequestedFilename ??
+      ((downloadId) => installPackDownloadFilenameReassertion().release(downloadId)),
+    trackRequestedFilename:
+      overrides.trackRequestedFilename ??
+      ((downloadId, filename) =>
+        installPackDownloadFilenameReassertion().track(downloadId, filename)),
     timeoutMs: overrides.timeoutMs ?? DEFAULT_TIMEOUT_MS,
   };
   let blobUrl: string | null = null;
+  let trackedDownloadId: number | null = null;
   let offscreenRequested = false;
   try {
     offscreenRequested = true;
@@ -53,6 +70,8 @@ export async function downloadAcquiredArtifact(
         saveAs: false,
         url: blobUrl,
       });
+      deps.trackRequestedFilename(downloadId, input.filename);
+      trackedDownloadId = downloadId;
     } catch {
       return { ok: false, reason: "start-rejected", safeSignals: [] };
     }
@@ -64,11 +83,12 @@ export async function downloadAcquiredArtifact(
       } catch {
         // Keep the original intent checkpoint for fail-closed recovery.
       }
-      await awaitCompletion(deps.downloads, downloadId, deps.timeoutMs);
+      await awaitCompletion(deps.downloads, downloadId, input.filename, deps.timeoutMs);
       return { ok: false, reason: "checkpoint-failed", safeSignals: [] };
     }
-    return await awaitCompletion(deps.downloads, downloadId, deps.timeoutMs);
+    return await awaitCompletion(deps.downloads, downloadId, input.filename, deps.timeoutMs);
   } finally {
+    if (trackedDownloadId !== null) deps.releaseRequestedFilename(trackedDownloadId);
     if (blobUrl) await deps.revokeOffscreenBlobUrl(blobUrl);
     if (offscreenRequested) await deps.closeOffscreenBlobDocument();
   }
@@ -90,6 +110,7 @@ export function installPortalBlobDownloadSafetyNet(tabId: number): () => void {
 function awaitCompletion(
   downloads: DownloadApi,
   downloadId: number,
+  requestedFilename: string,
   timeoutMs: number,
 ): Promise<ArtifactDownloadResult> {
   return new Promise((resolve) => {
@@ -116,7 +137,7 @@ function awaitCompletion(
             );
             return finish(
               bytes > 0
-                ? { ok: true, downloadId, bytesReceived: bytes, safeSignals: [] }
+                ? completedArtifact(downloadId, bytes, requestedFilename, item.filename)
                 : { ok: false, reason: "empty", safeSignals: [] },
             );
           }
@@ -132,4 +153,47 @@ function awaitCompletion(
     downloads.onChanged.addListener(listener);
     inspect();
   });
+}
+
+function completedArtifact(
+  downloadId: number,
+  bytesReceived: number,
+  requestedFilename: string,
+  observedFilename: string | undefined,
+): Extract<ArtifactDownloadResult, { ok: true }> {
+  if (!isRequestedFilenameOverridden(requestedFilename, observedFilename)) {
+    return { ok: true, downloadId, bytesReceived, safeSignals: [] };
+  }
+  const observedBasename = filenameBasename(normaliseFilenamePath(observedFilename ?? ""));
+  return {
+    ok: true,
+    downloadId,
+    bytesReceived,
+    safeMessage:
+      `Another extension changed where this file was saved; Pack asked for ${requestedFilename}; ` +
+      `the browser saved it elsewhere as ${observedBasename}.`,
+    safeSignals: ["download-filename-overridden"],
+  };
+}
+
+function isRequestedFilenameOverridden(
+  requestedFilename: string,
+  observedFilename: string | undefined,
+): boolean {
+  if (!observedFilename) return false;
+  const requestedPath = normaliseFilenamePath(requestedFilename);
+  const observedPath = normaliseFilenamePath(observedFilename);
+  const expectedBasename = filenameBasename(requestedPath);
+  const observedBasename = filenameBasename(observedPath);
+  const relativePathMatches =
+    observedPath === requestedPath || observedPath.endsWith(`/${requestedPath}`);
+  return !relativePathMatches || observedBasename !== expectedBasename;
+}
+
+function filenameBasename(path: string): string {
+  return path.slice(path.lastIndexOf("/") + 1);
+}
+
+function normaliseFilenamePath(path: string): string {
+  return path.replaceAll("\\", "/").replace(/^\/+|\/+$/g, "");
 }

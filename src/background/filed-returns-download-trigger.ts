@@ -128,7 +128,8 @@ export async function triggerAndObserveFiledReturnDownload({
                     ...delivery.safeSignals,
                     "extension-download-complete",
                   ],
-                  safeMessage: "Pack saved the portal-produced GSTR-3B data JSON.",
+                  safeMessage:
+                    delivery.safeMessage ?? "Pack saved the portal-produced GSTR-3B data JSON.",
                 },
               }
             : {
@@ -203,7 +204,8 @@ export async function triggerAndObserveFiledReturnDownload({
                   scopeId: filedReturnScopeId("GSTR-3B"),
                   state: "downloaded",
                   safeSignals: acquired.safeSignals,
-                  safeMessage: "Pack saved the portal-produced filed GSTR-3B PDF.",
+                  safeMessage:
+                    acquired.safeMessage ?? "Pack saved the portal-produced filed GSTR-3B PDF.",
                 },
               }
             : {

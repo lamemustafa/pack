@@ -11,7 +11,12 @@ export async function acquireGstr3bPdfAfterPreflight(input: {
   onStarted?: (downloadId: number) => Promise<void>;
   onStartCheckpointFailed?: (downloadId: number) => Promise<void>;
 }): Promise<
-  { ok: true; safeSignals: string[] } | { ok: false; reason: string; safeSignals: string[] }
+  | { ok: true; safeMessage?: string; safeSignals: string[] }
+  | {
+      ok: false;
+      reason: string;
+      safeSignals: string[];
+    }
 > {
   const removeSafetyNet = installPortalBlobDownloadSafetyNet(input.tabId);
   try {
@@ -46,6 +51,7 @@ export async function acquireGstr3bPdfAfterPreflight(input: {
             ...delivery.safeSignals,
             "extension-download-complete",
           ],
+          ...(delivery.safeMessage ? { safeMessage: delivery.safeMessage } : {}),
         }
       : { ok: false, reason: delivery.reason, safeSignals: delivery.safeSignals };
   } finally {

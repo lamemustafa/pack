@@ -4,7 +4,7 @@ import { downloadAcquiredArtifact } from "../../src/background/artifact-download
 const listeners = new Set<(delta: { id: number }) => void>();
 const downloads = {
   download: vi.fn(async () => 9),
-  search: vi.fn(async () => [{ id: 9, state: "complete", bytesReceived: 12 }]),
+  search: vi.fn(async () => [matchingItem()]),
   onChanged: {
     addListener: vi.fn((listener: (delta: { id: number }) => void) => listeners.add(listener)),
     removeListener: vi.fn((listener: (delta: { id: number }) => void) =>
@@ -21,11 +21,21 @@ describe("downloadAcquiredArtifact", () => {
     "delivers a small %s through its offscreen Blob URL with the exact filename",
     async (_, mimeType, filename) => {
       const create = vi.fn(async () => "blob:extension");
+      const releaseRequestedFilename = vi.fn();
+      const trackRequestedFilename = vi.fn();
       const result = await downloadAcquiredArtifact(
         { ...input(), mimeType, filename },
-        deps({ createOffscreenBlobUrl: create }),
+        deps({
+          createOffscreenBlobUrl: create,
+          releaseRequestedFilename,
+          trackRequestedFilename,
+          downloads: {
+            ...downloads,
+            search: vi.fn(async () => [matchingItem(filename)]),
+          } as never,
+        }),
       );
-      expect(result).toMatchObject({ ok: true, downloadId: 9, bytesReceived: 12 });
+      expect(result).toMatchObject({ ok: true, downloadId: 9, bytesReceived: 12, safeSignals: [] });
       expect(create).toHaveBeenCalledWith(`data:${mimeType};base64,cGRm`);
       expect(downloads.download).toHaveBeenCalledWith({
         conflictAction: "uniquify",
@@ -36,6 +46,8 @@ describe("downloadAcquiredArtifact", () => {
       expect(downloads.download).not.toHaveBeenCalledWith(
         expect.objectContaining({ url: expect.stringMatching(/^data:/) }),
       );
+      expect(trackRequestedFilename).toHaveBeenCalledWith(9, filename);
+      expect(releaseRequestedFilename).toHaveBeenCalledWith(9);
     },
   );
 
@@ -43,7 +55,7 @@ describe("downloadAcquiredArtifact", () => {
     ["interrupted", 12, "interrupted"],
     ["complete", 0, "empty"],
   ] as const)("fails %s downloads without completing", async (state, bytesReceived, reason) => {
-    downloads.search.mockResolvedValueOnce([{ id: 9, state, bytesReceived }]);
+    downloads.search.mockResolvedValueOnce([{ id: 9, state, bytesReceived }] as never);
     await expect(downloadAcquiredArtifact(input(), deps())).resolves.toMatchObject({
       ok: false,
       reason,
@@ -80,6 +92,50 @@ describe("downloadAcquiredArtifact", () => {
     await expect(result).resolves.toMatchObject({ ok: false, reason: "timeout" });
     expect(downloads.download).toHaveBeenCalledTimes(1);
     vi.useRealTimers();
+  });
+
+  it("keeps a completed target complete when the browser saved it under a different filename", async () => {
+    const observedFilename = "/synthetic/Downloads/download.pdf";
+    const result = await downloadAcquiredArtifact(
+      input(),
+      deps({
+        downloads: {
+          ...downloads,
+          search: vi.fn(async () => [{ ...matchingItem(), filename: observedFilename }]),
+        } as never,
+      }),
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      safeSignals: ["download-filename-overridden"],
+      safeMessage:
+        "Another extension changed where this file was saved; Pack asked for ComplyEaze-Pack/2026-27/GSTR-3B/April.pdf; the browser saved it elsewhere as download.pdf.",
+    });
+  });
+
+  it("does not claim a filename override when the completion search has no item", async () => {
+    vi.useFakeTimers();
+    try {
+      const search = vi
+        .fn()
+        .mockResolvedValueOnce([{ ...matchingItem(), state: "in_progress" }])
+        .mockResolvedValueOnce([]);
+      const result = downloadAcquiredArtifact(
+        input(),
+        deps({ downloads: { ...downloads, search } as never, timeoutMs: 30 }),
+      );
+      for (const listener of listeners) listener({ id: 9 });
+      await vi.advanceTimersByTimeAsync(30);
+
+      await expect(result).resolves.toMatchObject({
+        ok: false,
+        reason: "timeout",
+        safeSignals: [],
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it.each([
@@ -131,7 +187,18 @@ function deps(overrides: Parameters<typeof downloadAcquiredArtifact>[1] = {}) {
     createOffscreenBlobUrl: vi.fn(async () => "blob:extension"),
     revokeOffscreenBlobUrl: vi.fn(),
     closeOffscreenBlobDocument: vi.fn(),
+    releaseRequestedFilename: vi.fn(),
+    trackRequestedFilename: vi.fn(),
     timeoutMs: 100,
     ...overrides,
   } as Parameters<typeof downloadAcquiredArtifact>[1];
+}
+
+function matchingItem(filename = input().filename) {
+  return {
+    id: 9,
+    state: "complete",
+    bytesReceived: 12,
+    filename: `/synthetic/Downloads/${filename}`,
+  };
 }

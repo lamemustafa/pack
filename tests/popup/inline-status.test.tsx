@@ -96,6 +96,42 @@ describe("inline filed-return recovery status", () => {
     expect(markup).not.toContain("The selected file was saved by your browser.");
   });
 
+  it("renders a completed filename override message", () => {
+    const summary: FiledReturnsFlowSummary = {
+      ...blockedSummary,
+      status: "complete",
+      completedPeriods: ["May"],
+      flowStep: {
+        ...blockedSummary.flowStep,
+        state: "downloaded",
+        safeSignals: ["download-filename-overridden"],
+        safeMessage:
+          "Another extension changed where this file was saved; Pack asked for ComplyEaze-Pack/2026-27/GSTR-3B/May.pdf; the browser saved it elsewhere as download.pdf.",
+      },
+    };
+    const markup = renderToStaticMarkup(
+      <InlineStatus
+        busy={null}
+        onOpenPortal={vi.fn()}
+        onRestartTarget={vi.fn()}
+        onRetryFullFiscalYearTarget={vi.fn()}
+        onRetryTarget={vi.fn()}
+        presentation={{
+          badge: "Complete",
+          body: "Complete.",
+          icon: "✓",
+          kind: "complete",
+          title: "Download complete",
+          tone: "success",
+        }}
+        summary={summary}
+      />,
+    );
+
+    expect(markup).toContain("Another extension changed where this file was saved");
+    expect(markup).toContain("download.pdf");
+  });
+
   it("shows the final-ZIP check warning without requiring a current period", () => {
     const summary: FiledReturnsFlowSummary = {
       ...blockedSummary,

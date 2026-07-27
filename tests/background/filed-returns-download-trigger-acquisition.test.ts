@@ -10,6 +10,7 @@ const captureMocks = vi.hoisted(() => ({
     ok: true as const,
     downloadId: 91,
     bytesReceived: 128,
+    safeMessage: undefined as string | undefined,
     safeSignals: ["synthetic-extension-download-complete"],
   })),
   clearArtifactAcquisitionCheckpoint: vi.fn(async () => undefined),
@@ -181,6 +182,37 @@ describe("GSTR-3B artifact acquisition dispatch", () => {
     );
   });
 
+  it("surfaces a completed JSON filename override without treating the target as failed", async () => {
+    captureMocks.downloadAcquiredArtifact.mockResolvedValueOnce({
+      ok: true,
+      downloadId: 91,
+      bytesReceived: 128,
+      safeMessage:
+        "Another extension changed where this file was saved; Pack asked for ComplyEaze-Pack/2026-27/GSTR-3B/June-data.json; the browser saved it elsewhere as download.json.",
+      safeSignals: ["download-filename-overridden"],
+    });
+
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "June",
+      artifactType: "JSON",
+      deps: {
+        sendMessageToTabWithInjection: vi.fn(async () => acquiredJson()),
+        storageKeys: {},
+      },
+      scope: { financialYear: "2026-27", period: "June", returnType: "GSTR-3B" },
+      tabId: 17,
+    });
+
+    expect(response).toMatchObject({
+      flowStep: {
+        state: "downloaded",
+        safeSignals: expect.arrayContaining(["download-filename-overridden"]),
+        safeMessage:
+          "Another extension changed where this file was saved; Pack asked for ComplyEaze-Pack/2026-27/GSTR-3B/June-data.json; the browser saved it elsewhere as download.json.",
+      },
+    });
+  });
+
   it("writes a prepared PDF into the FY, return-type, and period folder", async () => {
     const response = await triggerAndObserveFiledReturnDownload({
       activePeriod: "June",
@@ -210,3 +242,17 @@ describe("GSTR-3B artifact acquisition dispatch", () => {
     );
   });
 });
+
+function acquiredJson(): PackMessageResponse {
+  return {
+    ok: true,
+    artifact: {
+      ok: true,
+      state: "acquired",
+      requestId: "synthetic-request",
+      base64: "eyJzdGF0dXMiOjF9",
+      mimeType: "application/json",
+      safeSignals: [],
+    },
+  };
+}

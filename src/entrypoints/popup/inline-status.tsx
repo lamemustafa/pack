@@ -99,10 +99,16 @@ function getInlineStatusCopy(
   if (presentation.kind === "complete") {
     const periods = summary?.completedPeriods.length ?? 0;
     const isFullYear = summary?.scope.period === FULL_FISCAL_YEAR_PERIOD;
+    const filenameOverridden = summary?.flowStep.safeSignals.includes(
+      "download-filename-overridden",
+    );
     return {
       body: isFullYear
         ? `${periods} periods saved as one ZIP.`
-        : "The selected file was saved by your browser.",
+        : filenameOverridden
+          ? (summary?.flowStep.safeMessage ??
+            "Another extension changed where this file was saved. Check browser Downloads.")
+          : "The selected file was saved by your browser.",
       icon: "✓",
       title: "Download complete",
       tone: "success",

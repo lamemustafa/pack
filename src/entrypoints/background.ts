@@ -48,6 +48,7 @@ import {
   installFiledReturnsDurableDownloadReconciler,
   reconcileTerminalFiledReturnsDownload,
 } from "../background/filed-returns-durable-download-reconciler";
+import { installPackDownloadFilenameReassertion } from "../background/pack-download-filename-reassertion";
 
 export {
   PACK_CLEARABLE_LOCAL_STORAGE_KEYS,
@@ -68,6 +69,7 @@ const OFFICIAL_URL = "https://pack.complyeaze.com";
 export default defineBackground(() => {
   void restrictLocalStorageToTrustedContexts().catch(() => undefined);
   installFiledReturnsDurableDownloadReconciler();
+  installPackDownloadFilenameReassertion();
 
   browser.tabs.onActivated.addListener(({ tabId }) => {
     void rememberActiveGstTabById(tabId).catch(() => undefined);
