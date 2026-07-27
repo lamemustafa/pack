@@ -33,15 +33,18 @@ describe("popup presentation state", () => {
     expect(state.body).toBeTruthy();
   });
 
-  it.each([completeSummary(), partialSummary(), blockedSummary(), cancelledSummary()])(
-    "renders a non-empty message for terminal %s state on an unsupported tab",
-    (summary) => {
-      const state = getPopupPresentationState(unsupportedContext(), summary, null);
+  it.each([
+    completeSummary(),
+    unavailableSummary(),
+    partialSummary(),
+    blockedSummary(),
+    cancelledSummary(),
+  ])("renders a non-empty message for terminal %s state on an unsupported tab", (summary) => {
+    const state = getPopupPresentationState(unsupportedContext(), summary, null);
 
-      expect(state.body.trim()).not.toBe("");
-      expect(state.title.trim()).not.toBe("");
-    },
-  );
+    expect(state.body.trim()).not.toBe("");
+    expect(state.title.trim()).not.toBe("");
+  });
 
   it("renders the cross-origin blocked step's user-facing message", () => {
     const state = getPopupPresentationState(
