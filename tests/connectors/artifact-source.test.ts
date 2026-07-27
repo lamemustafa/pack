@@ -141,6 +141,69 @@ describe("acquireFiledReturnArtifact", () => {
   });
 });
 
+describe("GSTR-2B artifact acquisition", () => {
+  const request: ArtifactRequest = {
+    artifactType: "JSON",
+    financialYear: "2024-25",
+    period: "April",
+    requestId: "gstr2b-request",
+    returnPeriod: "042024",
+    returnType: "GSTR-2B",
+  };
+
+  it("reuses byte-identical raw getjson bytes for JSON", async () => {
+    const raw = `{ "data" : { "rtnprd" : "042024", "padding":"${"x".repeat(100)}" }, "chksum":"synthetic" }`;
+    const { documentRef, fetch } = gstr2bPage(raw);
+    const result = await acquireFiledReturnArtifact(documentRef, request);
+    expect(result).toMatchObject({ ok: true, state: "acquired", mimeType: "application/json" });
+    if (!result.ok || result.state !== "acquired") return;
+    expect(new TextDecoder().decode(result.bytes)).toBe(raw);
+    expect(fetch).toHaveBeenCalledWith("/gstr2b/auth/api/gstr2b/getjson", {
+      credentials: "same-origin",
+    });
+  });
+
+  it("fails before any click when the nested target period differs", async () => {
+    const { documentRef } = gstr2bPage(gstr2bJson("052024"));
+    const click = vi.fn();
+    documentRef.body.addEventListener("click", click);
+    await expect(acquireFiledReturnArtifact(documentRef, request)).resolves.toMatchObject({
+      ok: false,
+      reason: "target-period-mismatch",
+    });
+    expect(click).not.toHaveBeenCalled();
+  });
+
+  it.each(["PDF", "EXCEL"] as const)(
+    "arms exactly one GSTR-2B %s summary control",
+    async (artifactType) => {
+      const { documentRef } = gstr2bPage(gstr2bJson("042024"));
+      const result = await acquireFiledReturnArtifact(documentRef, { ...request, artifactType });
+      expect(result).toMatchObject({ ok: true, state: "ready" });
+      const control = Array.from(documentRef.querySelectorAll("button")).find((element) =>
+        element.textContent?.includes(artifactType === "PDF" ? "SUMMARY" : "DETAILS"),
+      );
+      expect(control?.getAttribute("data-pack-artifact-request")).toBe(request.requestId);
+    },
+  );
+
+  it("fails closed on HTTP failure or a non-summary page", async () => {
+    const denied = gstr2bPage("{}", 500);
+    await expect(acquireFiledReturnArtifact(denied.documentRef, request)).resolves.toMatchObject({
+      ok: false,
+      reason: "preflight-failed",
+    });
+    const wrongPage = gstr2bPage(
+      gstr2bJson("042024"),
+      200,
+      "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2bdwld",
+    );
+    await expect(
+      acquireFiledReturnArtifact(wrongPage.documentRef, { ...request, artifactType: "PDF" }),
+    ).resolves.toMatchObject({ ok: false, reason: "wrong-page" });
+  });
+});
+
 function validJson() {
   return JSON.stringify({
     status: 1,
@@ -175,4 +238,25 @@ function page(body: string, status = 200, url = "https://return.gst.gov.in/retur
   const fetch = vi.fn(async () => new Response(body, { status }));
   Object.defineProperty(dom.window, "fetch", { configurable: true, value: fetch });
   return { documentRef: dom.window.document, fetch };
+}
+
+function gstr2bPage(
+  body: string,
+  status = 200,
+  url = "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
+) {
+  const dom = new JSDOM(
+    "<body><button>DOWNLOAD GSTR-2B SUMMARY (PDF)</button><button>DOWNLOAD GSTR-2B DETAILS (EXCEL)</button></body>",
+    { url },
+  );
+  const fetch = vi.fn(async () => new Response(body, { status }));
+  Object.defineProperty(dom.window, "fetch", { configurable: true, value: fetch });
+  return { documentRef: dom.window.document, fetch };
+}
+
+function gstr2bJson(returnPeriod: string) {
+  return JSON.stringify({
+    data: { rtnprd: returnPeriod, padding: "x".repeat(100) },
+    chksum: "synthetic",
+  });
 }

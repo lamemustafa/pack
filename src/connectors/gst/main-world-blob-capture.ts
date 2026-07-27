@@ -241,101 +241,14 @@ export async function capturePortalBlobDownloadWithDiagnostics(
       }
       return { financialYears, periods };
     };
-    const targetFromCalendarMonth = (monthText: string, yearText: string) => {
-      const period = canonicalTargetMonth(monthText);
-      const calendarYear = Number(yearText);
-      if (!period || !Number.isSafeInteger(calendarYear)) return null;
-      const financialYearStart = ["January", "February", "March"].includes(period)
-        ? calendarYear - 1
-        : calendarYear;
-      return {
-        financialYear: `${financialYearStart}-${String((financialYearStart + 1) % 100).padStart(2, "0")}`,
-        period,
-      };
-    };
-    const collectGstr2bStatementEvidence = (text: string) => {
-      const targets = new Map<
-        string,
-        { financialYear: string; period: (typeof targetMonths)[number] }
-      >();
-      const monthPattern =
-        "(?:january|jan|february|feb|march|mar|april|apr|may|june|jun|july|jul|august|aug|september|sept|sep|october|oct|november|nov|december|dec)";
-      const patterns = [
-        new RegExp(
-          `\\b(${monthPattern})\\s+(20\\d{2})\\s+auto\\s*-?\\s*drafted\\s+itc\\s+statement\\b`,
-          "gi",
-        ),
-        new RegExp(
-          `\\bauto\\s*-?\\s*drafted\\s+itc\\s+statement(?:\\s+(?:for|of))?\\s+(${monthPattern})\\s+(20\\d{2})\\b`,
-          "gi",
-        ),
-      ];
-      for (const pattern of patterns) {
-        for (const match of text.matchAll(pattern)) {
-          if (!match[1] || !match[2]) continue;
-          const target = targetFromCalendarMonth(match[1], match[2]);
-          if (target) targets.set(`${target.financialYear}:${target.period}`, target);
-        }
-      }
-      return targets;
-    };
-    const collectGstr2bServerEvidence = () => {
-      const targets = new Map<
-        string,
-        { financialYear: string; period: (typeof targetMonths)[number] }
-      >();
-      let present = false;
-      let invalid = false;
-      for (const script of Array.from(document.scripts)) {
-        const scriptText = script.textContent ?? "";
-        if (!/["']?FORM_TYPE["']?\s*:\s*["']GSTR-?2B["']/i.test(scriptText)) continue;
-        present = true;
-        const financialYears = new Set<string>();
-        const returnPeriods = new Set<string>();
-        for (const match of scriptText.matchAll(/["']?FIN_YEAR["']?\s*:\s*["']([^"']+)["']/gi)) {
-          if (!match[1]) continue;
-          const financialYear = canonicalTargetFinancialYear(match[1]);
-          if (financialYear) financialYears.add(financialYear);
-          else invalid = true;
-        }
-        for (const match of scriptText.matchAll(
-          /["']?RETURN_PERIOD["']?\s*:\s*["']([^"']+)["']/gi,
-        )) {
-          if (match[1]) returnPeriods.add(match[1].trim());
-        }
-        if (financialYears.size !== 1 || returnPeriods.size !== 1) {
-          invalid = true;
-          continue;
-        }
-        const financialYear = Array.from(financialYears)[0];
-        const returnPeriod = Array.from(returnPeriods)[0];
-        const periodMatch = /^(0[1-9]|1[0-2])(20\d{2})$/.exec(returnPeriod ?? "");
-        const monthIndex = periodMatch?.[1] ? Number(periodMatch[1]) - 1 : -1;
-        const period = monthIndex >= 0 ? (targetMonths[monthIndex] ?? null) : null;
-        const calendarTarget =
-          period && periodMatch?.[2] ? targetFromCalendarMonth(period, periodMatch[2]) : null;
-        if (
-          !financialYear ||
-          !period ||
-          !calendarTarget ||
-          calendarTarget.financialYear !== financialYear
-        ) {
-          invalid = true;
-          continue;
-        }
-        targets.set(`${financialYear}:${period}`, { financialYear, period });
-      }
-      return { invalid, present, targets };
-    };
     const collectVisibleHeadingTypes = () => {
-      const types = new Set<"GSTR-1" | "GSTR-2B" | "GSTR-3B">();
+      const types = new Set<"GSTR-1" | "GSTR-3B">();
       for (const heading of Array.from(
         document.querySelectorAll("h1,h2,h3,h4,h5,h6,[role='heading']"),
       )) {
         if (!isVisibleIdentityElement(heading)) continue;
         const text = readVisibleIdentityText(heading);
         if (/\bgstr\s*-?\s*3b\b/i.test(text)) types.add("GSTR-3B");
-        if (/\bgstr\s*-?\s*2b\b/i.test(text)) types.add("GSTR-2B");
         if (/\bgstr\s*-?\s*1\b/i.test(text)) types.add("GSTR-1");
       }
       return types;
@@ -344,7 +257,7 @@ export async function capturePortalBlobDownloadWithDiagnostics(
       const pathname = window.location.pathname;
       if (returnType === "GSTR-3B") return /\/returns\/auth\/gstr3b\/?$/i.test(pathname);
       if (returnType === "GSTR-1") return /\/returns\/auth\/gstr1(?:\/|$)/i.test(pathname);
-      return returnType === "GSTR-2B" && /\/gstr2b\/auth\/gstr2b\/summary\/?$/i.test(pathname);
+      return false;
     };
     const isQualifyingArtifactControl = (
       control: HTMLElement,
@@ -376,22 +289,13 @@ export async function capturePortalBlobDownloadWithDiagnostics(
       if (returnType === "GSTR-1" && artifactType === "EXCEL") {
         return hasDownload && hasExcel && /\b(?:details?|e-?invoices?)\b/.test(text) && !hasPdf;
       }
-      if (returnType === "GSTR-2B" && artifactType === "PDF") {
-        return /\bsummary\b/.test(text) && hasPdf && !hasExcel;
-      }
-      return (
-        returnType === "GSTR-2B" &&
-        artifactType === "EXCEL" &&
-        /\bdetails?\b/.test(text) &&
-        hasExcel &&
-        !hasPdf
-      );
+      return false;
     };
     const captureTargetFailure = (control: HTMLElement) => {
       const binding = config.targetBinding;
       if (!binding) return "capture-target-binding-missing";
       const validArtifact = binding.artifactType === "PDF" || binding.artifactType === "EXCEL";
-      const validReturnType = ["GSTR-3B", "GSTR-1", "GSTR-2B"].includes(binding.returnType);
+      const validReturnType = ["GSTR-3B", "GSTR-1"].includes(binding.returnType);
       const validFinancialYear =
         canonicalTargetFinancialYear(binding.financialYear) === binding.financialYear;
       const validPeriod = targetMonths.includes(binding.period);
@@ -431,32 +335,18 @@ export async function capturePortalBlobDownloadWithDiagnostics(
       const headingTypes = collectVisibleHeadingTypes();
       if (headingTypes.size === 0) return "capture-target-identity-missing";
       if (headingTypes.size > 1) return "capture-target-evidence-conflict";
-      if (!headingTypes.has(binding.returnType)) return "capture-target-identity-mismatch";
+      if (binding.returnType === "GSTR-2B" || !headingTypes.has(binding.returnType)) {
+        return "capture-target-identity-mismatch";
+      }
 
       const visibleText = readVisibleIdentityText(document.body);
       const labelEvidence = collectLabelEvidence(visibleText);
       const financialYears = new Set(labelEvidence.financialYears);
       const periods = new Set(labelEvidence.periods);
-      let completeSources =
+      const completeSources =
         labelEvidence.financialYears.size === 1 && labelEvidence.periods.size === 1 ? 1 : 0;
-      let sourceConflict = labelEvidence.financialYears.size > 1 || labelEvidence.periods.size > 1;
-      if (binding.returnType === "GSTR-2B") {
-        const statementTargets = collectGstr2bStatementEvidence(visibleText);
-        const serverEvidence = collectGstr2bServerEvidence();
-        if (
-          statementTargets.size > 1 ||
-          serverEvidence.invalid ||
-          serverEvidence.targets.size > 1
-        ) {
-          sourceConflict = true;
-        }
-        if (statementTargets.size === 1) completeSources += 1;
-        if (serverEvidence.present && serverEvidence.targets.size === 1) completeSources += 1;
-        for (const target of [...statementTargets.values(), ...serverEvidence.targets.values()]) {
-          financialYears.add(target.financialYear);
-          periods.add(target.period);
-        }
-      }
+      const sourceConflict =
+        labelEvidence.financialYears.size > 1 || labelEvidence.periods.size > 1;
       if (sourceConflict || financialYears.size > 1 || periods.size > 1) {
         return "capture-target-evidence-conflict";
       }

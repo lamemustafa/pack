@@ -10,7 +10,6 @@ import type { PackMessageResponse } from "../connectors/gst/messages";
 import { filedReturnScopedSignal } from "../connectors/gst/filed-returns-return-descriptors";
 import { isExpectedCapturedDataUrlForTarget } from "./captured-download-data-url";
 import { downloadCapturedFiledReturnThroughExtension } from "./filed-returns-captured-extension-download";
-import { gstr2bDialogFreeUnsupportedStep } from "./filed-returns-captured-portal-guard";
 import { capturedDownloadRejected } from "./filed-returns-captured-rejected";
 import { stageCapturedFiledReturnDownload } from "./filed-returns-captured-staging";
 import { withFiledReturnsDownloadDiagnostic } from "./filed-returns-download-diagnostics";
@@ -130,15 +129,6 @@ export async function startMainWorldCapturedFiledReturnDownload({
         }),
       };
     }
-    const unsupportedStep = gstr2bDialogFreeUnsupportedStep({
-      activePeriod,
-      safeFailureSignals,
-      scope,
-      target,
-      triggerStep: captureFailureTriggerStep,
-    });
-    if (unsupportedStep) return unsupportedStep;
-
     return {
       ok: true,
       flowStep: withFiledReturnsDownloadDiagnostic({

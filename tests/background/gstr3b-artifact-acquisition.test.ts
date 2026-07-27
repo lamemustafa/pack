@@ -18,6 +18,7 @@ vi.mock("../../src/background/artifact-download", async (importOriginal) => ({
 }));
 
 import { acquireGstr3bPdfAfterPreflight } from "../../src/background/gstr3b-artifact-acquisition";
+import { acquireGstr2bPageGeneratedArtifact } from "../../src/background/gstr2b-artifact-acquisition";
 
 describe("GSTR-3B page-generated acquisition", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -76,5 +77,49 @@ describe("GSTR-3B page-generated acquisition", () => {
       }),
     ).resolves.toMatchObject({ ok: false, reason: "unexpected-content" });
     expect(mocks.downloadAcquiredArtifact).not.toHaveBeenCalled();
+  });
+});
+
+describe("GSTR-2B page-generated acquisition", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("uses the configured XLSX MIME, validates PK bytes, and delivers one owned download", async () => {
+    const bytes = new Uint8Array(1024);
+    bytes.set([0x50, 0x4b]);
+    mocks.executeScript.mockResolvedValue([
+      {
+        result: {
+          ok: true,
+          base64: Buffer.from(bytes).toString("base64"),
+          safeSignals: ["portal-blob-shim-suppressed-via-dispatchEvent"],
+        },
+      },
+    ]);
+    mocks.downloadAcquiredArtifact.mockResolvedValue({
+      ok: true,
+      downloadId: 10,
+      bytesReceived: 1024,
+      safeSignals: [],
+    });
+    await expect(
+      acquireGstr2bPageGeneratedArtifact({
+        artifactType: "EXCEL",
+        filename: "ComplyEaze-Pack/2024-25/GSTR-2B/April.xlsx",
+        requestId: "request-2b",
+        returnPeriod: "042024",
+        tabId: 17,
+      }),
+    ).resolves.toMatchObject({ ok: true });
+    expect(mocks.executeScript).toHaveBeenCalledWith(
+      expect.objectContaining({
+        args: [
+          expect.objectContaining({
+            expectedMime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          }),
+        ],
+        target: { tabId: 17 },
+        world: "MAIN",
+      }),
+    );
   });
 });

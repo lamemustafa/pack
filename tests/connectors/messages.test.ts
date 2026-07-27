@@ -14,6 +14,28 @@ const GST_PAYLOAD_VALIDATORS = {
 };
 
 describe("message boundary", () => {
+  it("accepts GSTR-2B artifact acquisition only for its verified artifact kinds", () => {
+    const payload = {
+      financialYear: "2026-27",
+      period: "April",
+      requestId: "synthetic-request",
+      returnPeriod: "042026",
+      returnType: "GSTR-2B",
+    };
+    expect(
+      isPackMessage({
+        type: "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34",
+        payload: { ...payload, artifactType: "EXCEL" },
+      }),
+    ).toBe(true);
+    expect(
+      isPackMessage({
+        type: "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34",
+        payload: { ...payload, artifactType: "ZIP" },
+      }),
+    ).toBe(false);
+  });
+
   it("accepts only known Pack messages", () => {
     expect(isPackMessage({ type: "PACK_GET_CONTEXT" })).toBe(true);
     expect(isPackMessage({ type: "PACK_START_SYNTHETIC_DEMO" })).toBe(true);

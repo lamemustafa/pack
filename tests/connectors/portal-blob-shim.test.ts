@@ -13,7 +13,10 @@ describe("capturePortalPdfBlob", () => {
       documentRef
         .querySelector("button")
         ?.addEventListener("click", () => savePdf(documentRef, view, method));
-      const result = await capturePortalPdfBlob({ controlSelector: "button" });
+      const result = await capturePortalPdfBlob({
+        controlSelector: "button",
+        expectedMime: "application/pdf",
+      });
       expect(result).toMatchObject({
         ok: true,
         safeSignals: [`portal-blob-shim-suppressed-via-${method}`],
@@ -21,7 +24,27 @@ describe("capturePortalPdfBlob", () => {
     },
   );
 
-  it("does not suppress an unrelated anchor and ignores non-PDF blobs", async () => {
+  it("captures the configured workbook MIME and ignores other blob MIME types", async () => {
+    const { documentRef, view, url } = environment();
+    install(view, url);
+    documentRef.querySelector("button")?.addEventListener("click", () => {
+      url.createObjectURL(new view.Blob(["not a workbook"], { type: "application/pdf" }));
+      saveBlob(
+        documentRef,
+        view,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "click",
+      );
+    });
+    await expect(
+      capturePortalPdfBlob({
+        controlSelector: "button",
+        expectedMime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      }),
+    ).resolves.toMatchObject({ ok: true, safeSignals: ["portal-blob-shim-suppressed-via-click"] });
+  });
+
+  it("does not suppress an unrelated anchor and ignores non-matching blobs", async () => {
     const { documentRef, view, url } = environment();
     install(view, url);
     const originalClick = view.HTMLAnchorElement.prototype.click;
@@ -34,7 +57,11 @@ describe("capturePortalPdfBlob", () => {
       url.createObjectURL(new view.Blob(["not a pdf"], { type: "text/plain" }));
       unrelated.click();
     });
-    const result = await capturePortalPdfBlob({ controlSelector: "button", timeoutMs: 0 });
+    const result = await capturePortalPdfBlob({
+      controlSelector: "button",
+      expectedMime: "application/pdf",
+      timeoutMs: 0,
+    });
     expect(result).toMatchObject({ ok: false, reason: "generation-timeout" });
     expect(click).toHaveBeenCalledOnce();
     expect(view.HTMLAnchorElement.prototype.click).toBe(originalClick);
@@ -49,7 +76,11 @@ describe("capturePortalPdfBlob", () => {
     const open = view.open;
     const fetch = view.fetch;
     const xhr = view.XMLHttpRequest;
-    const result = await capturePortalPdfBlob({ controlSelector: "missing", timeoutMs: 0 });
+    const result = await capturePortalPdfBlob({
+      controlSelector: "missing",
+      expectedMime: "application/pdf",
+      timeoutMs: 0,
+    });
     expect(result).toMatchObject({ ok: false, reason: "control-not-found" });
     expect(view.HTMLAnchorElement.prototype.dispatchEvent).toBe(dispatch);
     expect(view.HTMLAnchorElement.prototype.click).toBe(click);
@@ -58,6 +89,24 @@ describe("capturePortalPdfBlob", () => {
     expect(view.fetch).toBe(fetch);
     expect(view.XMLHttpRequest).toBe(xhr);
     expect(documentRef.querySelector("button")).not.toBeNull();
+  });
+
+  it("restores every wrapper after a control throw", async () => {
+    const { documentRef, view, url } = environment();
+    install(view, url);
+    const dispatch = view.HTMLAnchorElement.prototype.dispatchEvent;
+    const click = view.HTMLAnchorElement.prototype.click;
+    const create = url.createObjectURL;
+    const control = documentRef.querySelector("button") as HTMLElement;
+    control.click = () => {
+      throw new Error("synthetic");
+    };
+    await expect(
+      capturePortalPdfBlob({ controlSelector: "button", expectedMime: "application/pdf" }),
+    ).resolves.toMatchObject({ ok: false, reason: "unexpected-content" });
+    expect(view.HTMLAnchorElement.prototype.dispatchEvent).toBe(dispatch);
+    expect(view.HTMLAnchorElement.prototype.click).toBe(click);
+    expect(url.createObjectURL).toBe(create);
   });
 
   it("keeps the shim under its hard 120-line limit", async () => {
@@ -94,8 +143,17 @@ function install(view: TestWindow, url: { createObjectURL: (value: Blob) => stri
 }
 
 function savePdf(documentRef: Document, view: TestWindow, method: "dispatchEvent" | "click") {
+  saveBlob(documentRef, view, "application/pdf", method);
+}
+
+function saveBlob(
+  documentRef: Document,
+  view: TestWindow,
+  mimeType: string,
+  method: "dispatchEvent" | "click",
+) {
   const link = documentRef.createElement("a");
-  link.href = URL.createObjectURL(new view.Blob(["%PDF-synthetic"], { type: "application/pdf" }));
+  link.href = URL.createObjectURL(new view.Blob(["synthetic portal bytes"], { type: mimeType }));
   documentRef.body.append(link);
   if (method === "click") link.click();
   else link.dispatchEvent(new view.MouseEvent("click"));

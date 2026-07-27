@@ -32,7 +32,6 @@ export {
   scoreFiledGstr3bDownloadCandidate,
 } from "./filed-returns-download-candidates";
 
-const GSTR2B_CAPTURE_TIMEOUT_MS = 15_000;
 const GSTR1_CAPTURE_TIMEOUT_MS = 15_000;
 
 const DIALOG_SETTLE_DELAY_MS = 60;
@@ -251,7 +250,6 @@ function tryCaptureFiledReturnBlobDownload(
     {
       signalPrefix: signalPrefix.endsWith("-") ? signalPrefix.slice(0, -1) : signalPrefix,
       ...(target.returnType === "GSTR-1" ? { timeoutMs: GSTR1_CAPTURE_TIMEOUT_MS } : {}),
-      ...(target.returnType === "GSTR-2B" ? { timeoutMs: GSTR2B_CAPTURE_TIMEOUT_MS } : {}),
     },
   );
   if (mainWorldCaptureRequest) return mainWorldCaptureRequest;
@@ -260,7 +258,7 @@ function tryCaptureFiledReturnBlobDownload(
 }
 
 function supportsFiledReturnBlobCapture(target: FiledReturnsDownloadTarget): boolean {
-  return target.returnType === "GSTR-1" || target.returnType === "GSTR-2B";
+  return target.returnType === "GSTR-1";
 }
 
 function detectBlockedPortalState(

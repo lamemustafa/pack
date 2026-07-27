@@ -3291,13 +3291,10 @@ describe("filed returns guided flow", () => {
         "filed-gstr2b-download-clicked",
       ]),
     });
-    expect(result.mainWorldCaptureRequest).toMatchObject({
-      actionId: "action-server-scope",
-      signalPrefix: "filed-gstr2b",
-    });
+    expect(result.mainWorldCaptureRequest).toBeUndefined();
   });
 
-  it("clicks only the requested GSTR-2B details Excel control", async () => {
+  it("does not arm main-world capture for a GSTR-2B details Excel control", async () => {
     const documentRef = createGstDocument(
       `
         <main>
@@ -3318,16 +3315,6 @@ describe("filed returns guided flow", () => {
     });
     documentRef.querySelector("[data-excel]")?.addEventListener("click", () => {
       excelClicked += 1;
-      const view = documentRef.defaultView;
-      if (!view) return;
-      const blob = new view.Blob(["PK\u0003\u0004synthetic gstr-2b xlsx"], {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      });
-      const url = view.URL.createObjectURL(blob);
-      const anchor = documentRef.createElement("a");
-      anchor.href = url;
-      anchor.download = "gstr2b.xlsx";
-      anchor.click();
     });
 
     const result = await triggerFiledReturnDownload(documentRef, {
@@ -3343,18 +3330,12 @@ describe("filed returns guided flow", () => {
       expect.arrayContaining([
         "filed-return-download-clicked",
         "filed-gstr2b-download-clicked",
-        "filed-gstr2b-portal-blob-download-captured",
         "filed-return-artifact-clicked:EXCEL",
       ]),
     );
-    expect(result.mainWorldCaptureRequest).toMatchObject({
-      actionId: "action-1",
-      controlAttribute: "data-pack-gstr2b-capture-action",
-      maxBytes: 36 * 1024 * 1024,
-      signalPrefix: "filed-gstr2b",
-    });
+    expect(result.mainWorldCaptureRequest).toBeUndefined();
     expect(pdfClicked).toBe(0);
-    expect(excelClicked).toBe(0);
+    expect(excelClicked).toBe(1);
   });
 
   it("dismisses the GST bank warning with Cancel and does not click File Amendment", async () => {

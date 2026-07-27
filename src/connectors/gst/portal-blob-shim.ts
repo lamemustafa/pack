@@ -1,4 +1,8 @@
-export type PortalBlobShimInput = { controlSelector: string; timeoutMs?: number };
+export type PortalBlobShimInput = {
+  controlSelector: string;
+  expectedMime: string;
+  timeoutMs?: number;
+};
 export type PortalBlobShimResult =
   | { ok: true; base64: string; safeSignals: string[] }
   | {
@@ -46,7 +50,7 @@ export function capturePortalPdfBlob(input: PortalBlobShimInput): Promise<Portal
     };
     URL.createObjectURL = ((value: Blob | MediaSource) => {
       const url = originalCreate.call(URL, value);
-      if (!blob && value instanceof Blob && value.type === "application/pdf") {
+      if (!blob && value instanceof Blob && value.type === input.expectedMime) {
         blob = value;
         blobUrl = url;
       }

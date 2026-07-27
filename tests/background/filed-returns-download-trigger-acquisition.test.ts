@@ -6,6 +6,10 @@ const captureMocks = vi.hoisted(() => ({
     ok: true as const,
     safeSignals: ["synthetic-extension-download-complete"],
   })),
+  acquireGstr2bPageGeneratedArtifact: vi.fn(async () => ({
+    ok: true as const,
+    safeSignals: ["synthetic-extension-download-complete"],
+  })),
   downloadAcquiredArtifact: vi.fn(async () => ({
     ok: true as const,
     downloadId: 91,
@@ -33,6 +37,9 @@ vi.mock("../../src/background/artifact-acquisition-state", () => ({
 }));
 vi.mock("../../src/background/gstr3b-artifact-acquisition", () => ({
   acquireGstr3bPdfAfterPreflight: captureMocks.acquireGstr3bPdfAfterPreflight,
+}));
+vi.mock("../../src/background/gstr2b-artifact-acquisition", () => ({
+  acquireGstr2bPageGeneratedArtifact: captureMocks.acquireGstr2bPageGeneratedArtifact,
 }));
 
 import { Gstr3bArtifactAcquisitionBlockReason } from "../../src/background/gstr3b-artifact-acquisition-block";
@@ -240,6 +247,59 @@ describe("GSTR-3B artifact acquisition dispatch", () => {
     expect(captureMocks.acquireGstr3bPdfAfterPreflight).toHaveBeenCalledWith(
       expect.objectContaining({ filename: "ComplyEaze-Pack/2026-27/GSTR-3B/June.pdf" }),
     );
+  });
+});
+
+describe("GSTR-2B artifact acquisition dispatch", () => {
+  it.each([
+    ["PDF", "ComplyEaze-Pack/2026-27/GSTR-2B/June.pdf"],
+    ["EXCEL", "ComplyEaze-Pack/2026-27/GSTR-2B/June.xlsx"],
+  ] as const)("never reaches main-world capture for %s", async (artifactType, filename) => {
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "June",
+      artifactType,
+      deps: {
+        sendMessageToTabWithInjection: vi.fn(
+          async () =>
+            ({
+              ok: true,
+              artifact: {
+                ok: true,
+                requestId: "synthetic-2b-request",
+                safeSignals: ["target-period-verified"],
+                state: "ready",
+              },
+            }) as PackMessageResponse,
+        ),
+        storageKeys: {},
+      },
+      scope: { financialYear: "2026-27", period: "June", returnType: "GSTR-2B" },
+      tabId: 17,
+    });
+    expect(response).toMatchObject({ flowStep: { state: "downloaded" } });
+    expect(captureMocks.startMainWorldCapturedFiledReturnDownload).not.toHaveBeenCalled();
+    expect(captureMocks.acquireGstr2bPageGeneratedArtifact).toHaveBeenCalledWith(
+      expect.objectContaining({ artifactType, filename, tabId: 17 }),
+    );
+  });
+
+  it("blocks a GSTR-2B full-year request instead of falling through to legacy capture", async () => {
+    const sendMessageToTabWithInjection = vi.fn();
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: null,
+      artifactType: "PDF",
+      deps: { sendMessageToTabWithInjection, storageKeys: {} },
+      scope: { financialYear: "2026-27", period: "ALL", returnType: "GSTR-2B" },
+      tabId: 17,
+    });
+    expect(response).toMatchObject({
+      flowStep: {
+        safeSignals: ["gstr2b-full-fiscal-year-acquisition-not-wired"],
+        state: "blocked",
+      },
+    });
+    expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
+    expect(captureMocks.startMainWorldCapturedFiledReturnDownload).not.toHaveBeenCalled();
   });
 });
 

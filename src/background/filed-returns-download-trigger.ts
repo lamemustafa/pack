@@ -22,6 +22,7 @@ import {
 } from "./filed-returns-flow-messaging";
 import { persistFiledReturnsTargetReview } from "./filed-returns-target-review";
 import { acquireGstr3bPdfAfterPreflight } from "./gstr3b-artifact-acquisition";
+import { acquireGstr2bPageGeneratedArtifact } from "./gstr2b-artifact-acquisition";
 import { toPortalReturnPeriod } from "../connectors/gst/filed-returns-return-period";
 import { downloadAcquiredArtifact } from "./artifact-download";
 import {
@@ -52,6 +53,31 @@ export async function triggerAndObserveFiledReturnDownload({
 }): Promise<PackMessageResponse> {
   if (isGstr3bFullFiscalYearAcquisitionScope(scope)) {
     return { ok: true, flowStep: gstr3bFullFiscalYearAcquisitionNotWiredStep() };
+  }
+  if (
+    scope.returnType === "GSTR-2B" &&
+    (scope.period === "ALL" || scope.period === FULL_FISCAL_YEAR_PERIOD)
+  ) {
+    return {
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: filedReturnScopeId("GSTR-2B"),
+        state: "blocked",
+        safeSignals: ["gstr2b-full-fiscal-year-acquisition-not-wired"],
+        safeMessage:
+          "Pack supports GSTR-2B artifact acquisition for one selected period only; it did not start a legacy full-year capture.",
+      },
+    };
+  }
+  if (scope.returnType === "GSTR-2B" && scope.period !== "ALL") {
+    const gstr2bResponse = await triggerGstr2bSinglePeriodArtifact(
+      scope,
+      artifactType,
+      deps,
+      tabId,
+    );
+    if (gstr2bResponse) return gstr2bResponse;
   }
   if (
     scope.returnType === "GSTR-3B" &&
@@ -319,26 +345,149 @@ export async function triggerAndObserveFiledReturnDownload({
   };
 }
 
-function artifactFilename(scope: FiledReturnsDownloadScope, artifactType: "PDF" | "JSON"): string {
-  const suffix = artifactType === "PDF" ? ".pdf" : "-data.json";
-  return `ComplyEaze-Pack/${scope.financialYear}/GSTR-3B/${scope.period}${suffix}`;
+function artifactFilename(
+  scope: FiledReturnsDownloadScope,
+  artifactType: "PDF" | "JSON" | "EXCEL",
+): string {
+  const suffix =
+    artifactType === "PDF" ? ".pdf" : artifactType === "EXCEL" ? ".xlsx" : "-data.json";
+  return `ComplyEaze-Pack/${scope.financialYear}/${scope.returnType}/${scope.period}${suffix}`;
+}
+
+async function triggerGstr2bSinglePeriodArtifact(
+  scope: FiledReturnsDownloadScope,
+  artifactType: FiledReturnsConcreteArtifactType,
+  deps: FiledReturnsFlowMessagingDeps,
+  tabId: number,
+): Promise<PackMessageResponse | null> {
+  const returnPeriod = toPortalReturnPeriod(scope.period, scope.financialYear);
+  if (!returnPeriod) return null;
+  const requestId = createActionId();
+  const response = await deps.sendMessageToTabWithInjection(tabId, {
+    type: "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34",
+    payload: {
+      artifactType,
+      financialYear: scope.financialYear,
+      period: scope.period,
+      requestId,
+      returnPeriod,
+      returnType: "GSTR-2B",
+    },
+  });
+  if (response.ok && "artifact" in response && !response.artifact.ok) {
+    return artifactFailureResponse(
+      response.artifact.reason,
+      response.artifact.safeSignals,
+      "GSTR-2B",
+    );
+  }
+  if (!response.ok || !("artifact" in response) || !response.artifact.ok) return response;
+  const artifact = response.artifact;
+  const checkpointTarget = {
+    artifactType,
+    financialYear: scope.financialYear,
+    period: scope.period,
+    returnType: scope.returnType,
+  };
+  await persistArtifactAcquisitionIntent({ ...checkpointTarget, requestId });
+  let checkpointHasDownloadId = false;
+  let retainCheckpointForRecovery = false;
+  try {
+    const callbacks = {
+      onStarted: async (downloadId: number) => {
+        await persistArtifactAcquisitionDownloadId({
+          ...checkpointTarget,
+          downloadId,
+          requestId,
+          state: "download-observing",
+        });
+        checkpointHasDownloadId = true;
+      },
+      onStartCheckpointFailed: async (downloadId: number) => {
+        await persistArtifactAcquisitionUnconfirmedDownload({
+          ...checkpointTarget,
+          downloadId,
+          requestId,
+          state: "download-unconfirmed",
+        });
+      },
+    };
+    const acquired =
+      artifact.state === "acquired"
+        ? await downloadAcquiredArtifact({
+            base64: artifact.base64,
+            filename: artifactFilename(scope, "JSON"),
+            mimeType: artifact.mimeType,
+            requestId,
+            ...callbacks,
+          })
+        : artifact.state === "ready" && (artifactType === "PDF" || artifactType === "EXCEL")
+          ? await acquireGstr2bPageGeneratedArtifact({
+              artifactType,
+              filename: artifactFilename(scope, artifactType),
+              requestId,
+              returnPeriod,
+              tabId,
+              ...callbacks,
+            })
+          : null;
+    if (!acquired) return response;
+    retainCheckpointForRecovery =
+      !acquired.ok &&
+      (acquired.reason === "checkpoint-failed" ||
+        (acquired.reason === "timeout" && checkpointHasDownloadId));
+    return acquired.ok
+      ? {
+          ok: true,
+          flowStep: {
+            connectorId: "gst",
+            scopeId: filedReturnScopeId("GSTR-2B"),
+            state: "downloaded",
+            safeSignals: [
+              ...artifact.safeSignals,
+              ...acquired.safeSignals,
+              "extension-download-complete",
+            ],
+            safeMessage: acquired.safeMessage ?? "Pack saved the portal-produced GSTR-2B artifact.",
+          },
+        }
+      : {
+          ok: true,
+          flowStep: {
+            connectorId: "gst",
+            scopeId: filedReturnScopeId("GSTR-2B"),
+            state: "blocked",
+            safeSignals: [
+              "artifact-acquisition-failed",
+              `artifact-${acquired.reason}`,
+              ...acquired.safeSignals,
+            ],
+            safeMessage: artifactFailureMessageForDelivery(acquired.reason),
+          },
+        };
+  } finally {
+    if (!retainCheckpointForRecovery) {
+      await clearArtifactAcquisitionCheckpoint(checkpointTarget, requestId);
+    }
+  }
 }
 
 function artifactFailureResponse(
   reason: ArtifactFailureReason,
   safeSignals: readonly string[],
+  returnType: "GSTR-3B" | "GSTR-2B" = "GSTR-3B",
 ): FlowStepResponse {
   return {
     ok: true,
     flowStep: {
       connectorId: "gst",
-      scopeId: filedReturnScopeId("GSTR-3B"),
+      scopeId: filedReturnScopeId(returnType),
       state: "blocked",
       safeSignals: ["artifact-acquisition-failed", `artifact-${reason}`, ...safeSignals],
       safeMessage: artifactFailureMessage(reason),
       userAction: {
         type: "RETRY_PORTAL_GENERATION",
-        message: "Review the filed GSTR-3B page, then retry this artifact.",
+        message: `Review the filed ${returnType} page, then retry this artifact.`,
         canResume: true,
       },
     },

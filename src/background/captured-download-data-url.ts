@@ -5,15 +5,11 @@ import {
 } from "../connectors/gst/filed-returns-artifacts";
 import type { FiledReturnsDownloadTarget } from "../connectors/gst/filed-returns-contracts";
 import {
-  isLikelyGstr2bPortalXlsxBytes,
   isLikelyPdfBytes,
   isLikelyXlsBytes,
   isLikelyXlsxBytes,
 } from "../connectors/gst/filed-return-artifact-bytes";
-import type { FiledReturnsReturnType } from "../connectors/gst/filed-returns-return-types";
 import { PACK_OFFSCREEN_DATA_URL_MAX_LENGTH } from "../connectors/gst/offscreen-blob-url";
-
-const GSTR2B_MIN_PORTAL_PDF_BYTES = 20 * 1024;
 
 export function isExpectedCapturedDataUrl(
   dataUrl: string,
@@ -50,16 +46,10 @@ export function isExpectedCapturedDataUrlForTarget(
 export function isExpectedCapturedDataUrlForReturnType(
   dataUrl: string,
   artifactType: FiledReturnsConcreteArtifactType,
-  returnType: FiledReturnsReturnType,
+  _returnType: unknown,
 ): boolean {
-  if (!isExpectedCapturedDataUrl(dataUrl, artifactType)) return false;
-  if (returnType !== "GSTR-2B") return true;
-  const decoded = decodeDataUrl(dataUrl);
-  if (!decoded) return false;
-  if (artifactType === "PDF") {
-    return decoded.bytes.byteLength >= GSTR2B_MIN_PORTAL_PDF_BYTES;
-  }
-  return isLikelyGstr2bPortalXlsxBytes(decoded.bytes);
+  void _returnType;
+  return isExpectedCapturedDataUrl(dataUrl, artifactType);
 }
 
 export function capturedFiledReturnsArtifactExtension(

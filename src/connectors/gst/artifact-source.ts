@@ -1,4 +1,11 @@
 import { validateArtifactBytes } from "./artifact-validation";
+import {
+  GSTR2B_JSON_PATH,
+  GSTR2B_ORIGIN,
+  GSTR2B_PAGE_GENERATED_ARTIFACTS,
+  GSTR2B_SUMMARY_PATH,
+} from "./portal-artifact-endpoints";
+import { normaliseText } from "./filed-returns-dom";
 import { resolveVisibleFiledReturnDownloadCandidates } from "./filed-returns-download-candidates";
 import { verifyFiledReturnsDownloadTarget } from "./filed-returns-download-target";
 
@@ -6,8 +13,8 @@ const GSTR3B_GET_GEN_PDF_PATH = "/returns/auth/api/gstr3b/getgenpdf";
 const GST_RETURNS_ORIGIN = "https://return.gst.gov.in";
 
 export type ArtifactRequest = {
-  returnType: "GSTR-3B";
-  artifactType: "PDF" | "JSON";
+  returnType: "GSTR-3B" | "GSTR-2B";
+  artifactType: "PDF" | "JSON" | "EXCEL";
   financialYear: string;
   period: string;
   returnPeriod: string;
@@ -72,7 +79,8 @@ export async function acquireFiledReturnArtifact(
   documentRef: Document,
   request: ArtifactRequest,
 ): Promise<ArtifactResult> {
-  if (request.returnType !== "GSTR-3B") return failed(request, "unsupported-target");
+  if (request.returnType === "GSTR-2B") return acquireGstr2bArtifact(documentRef, request);
+  if (request.artifactType === "EXCEL") return failed(request, "unsupported-target");
   const view = documentRef.defaultView;
   if (!view || view.location.origin !== GST_RETURNS_ORIGIN) return failed(request, "wrong-page");
   const pageGuard = verifyFiledReturnsDownloadTarget(
@@ -127,6 +135,56 @@ export async function acquireFiledReturnArtifact(
     state: "ready",
     requestId: request.requestId,
     safeSignals: ["target-period-verified", "page-generated-pdf-ready"],
+  };
+}
+
+async function acquireGstr2bArtifact(
+  documentRef: Document,
+  request: ArtifactRequest,
+): Promise<ArtifactResult> {
+  const view = documentRef.defaultView;
+  if (!view || view.location.origin !== GSTR2B_ORIGIN) return failed(request, "wrong-page");
+  const fetch = view.fetch?.bind(view);
+  if (!fetch) return failed(request, "endpoint-unavailable");
+  let response: Response;
+  try {
+    response = await fetch(GSTR2B_JSON_PATH, { credentials: "same-origin" });
+  } catch {
+    return failed(request, "endpoint-unavailable");
+  }
+  if (!response.ok) return failed(request, "preflight-failed");
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  const preflight = validateArtifactBytes(bytes, "JSON", request.returnPeriod, "GSTR-2B");
+  if (!preflight.ok) return failed(request, preflight.reason);
+  if (request.artifactType === "JSON") {
+    return {
+      ok: true,
+      state: "acquired",
+      requestId: request.requestId,
+      bytes,
+      mimeType: preflight.mimeType,
+      safeSignals: ["target-period-verified"],
+    };
+  }
+  if (view.location.pathname !== GSTR2B_SUMMARY_PATH)
+    return failed(request, "wrong-page", ["target-period-verified"]);
+  const descriptor = GSTR2B_PAGE_GENERATED_ARTIFACTS[request.artifactType];
+  const controls = Array.from(
+    documentRef.querySelectorAll<HTMLElement>("a, button, [role='button']"),
+  ).filter(
+    (element) => normaliseText(element.textContent || "") === normaliseText(descriptor.controlText),
+  );
+  if (controls.length !== 1 || !controls[0])
+    return failed(request, "control-not-found", ["target-period-verified"]);
+  controls[0].setAttribute("data-pack-artifact-request", request.requestId);
+  return {
+    ok: true,
+    state: "ready",
+    requestId: request.requestId,
+    safeSignals: [
+      "target-period-verified",
+      `page-generated-${request.artifactType.toLowerCase()}-ready`,
+    ],
   };
 }
 

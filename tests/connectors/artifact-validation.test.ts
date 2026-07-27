@@ -54,4 +54,24 @@ describe("validateArtifactBytes", () => {
       reason: "too-large",
     });
   });
+
+  it("validates GSTR-2B JSON at data.rtnprd and portal XLSX bytes", () => {
+    const json = encoder.encode(
+      JSON.stringify({ data: { rtnprd: "042024", padding: "x".repeat(100) }, chksum: "synthetic" }),
+    );
+    const workbook = new Uint8Array(1024);
+    workbook.set([0x50, 0x4b]);
+    expect(validateArtifactBytes(json, "JSON", "042024", "GSTR-2B")).toEqual({
+      ok: true,
+      mimeType: "application/json",
+    });
+    expect(validateArtifactBytes(workbook, "EXCEL", "042024", "GSTR-2B")).toEqual({
+      ok: true,
+      mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    expect(validateArtifactBytes(workbook, "PDF", "042024", "GSTR-2B")).toEqual({
+      ok: false,
+      reason: "unexpected-content",
+    });
+  });
 });
