@@ -12,6 +12,7 @@ const captureMocks = vi.hoisted(() => ({
     bytesReceived: 128,
     safeSignals: ["synthetic-extension-download-complete"],
   })),
+  clearArtifactAcquisitionCheckpoint: vi.fn(async () => undefined),
   persistArtifactAcquisitionDownloadId: vi.fn(async () => undefined),
   persistArtifactAcquisitionIntent: vi.fn(async () => undefined),
   startMainWorldCapturedFiledReturnDownload: vi.fn(),
@@ -22,6 +23,7 @@ vi.mock("../../src/background/artifact-download", () => ({
   downloadAcquiredArtifact: captureMocks.downloadAcquiredArtifact,
 }));
 vi.mock("../../src/background/artifact-acquisition-state", () => ({
+  clearArtifactAcquisitionCheckpoint: captureMocks.clearArtifactAcquisitionCheckpoint,
   persistArtifactAcquisitionDownloadId: captureMocks.persistArtifactAcquisitionDownloadId,
   persistArtifactAcquisitionIntent: captureMocks.persistArtifactAcquisitionIntent,
 }));

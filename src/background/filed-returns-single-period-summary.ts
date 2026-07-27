@@ -6,7 +6,6 @@ import type {
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
 import { persistCanonicalFiledReturnsFlowSummary } from "./filed-returns-session-summary";
-import { clearCompletedArtifactAcquisitionCheckpoint } from "./artifact-acquisition-state";
 
 export async function withPersistedSinglePeriodSummary(
   scope: FiledReturnsDownloadScope,
@@ -26,9 +25,6 @@ export async function withPersistedSinglePeriodSummary(
       : responseWithoutSummary;
   }
   const flowSummary = await persistSinglePeriodSummary(scope, response.flowStep, deps);
-  if (flowSummary?.status === "complete" && scope.returnType === "GSTR-3B") {
-    await clearCompletedArtifactAcquisitionCheckpoint();
-  }
   return flowSummary ? { ...response, flowSummary } : response;
 }
 

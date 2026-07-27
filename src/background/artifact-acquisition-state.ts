@@ -1,60 +1,73 @@
 import { browser } from "wxt/browser";
+import type { FiledReturnsDownloadScope } from "../connectors/gst/filed-returns-contracts";
 
-const KEY = "pack.artifact-acquisition.v1";
-export type ArtifactAcquisitionCheckpoint = {
+const KEY_PREFIX = "pack.artifact-acquisition.v2";
+
+export type ArtifactAcquisitionTarget = Pick<
+  FiledReturnsDownloadScope,
+  "artifactType" | "financialYear" | "period" | "returnType"
+>;
+
+export type ArtifactAcquisitionCheckpoint = ArtifactAcquisitionTarget & {
   requestId: string;
-  artifactType: "PDF" | "JSON";
   state: "intent" | "download-observing";
   downloadId?: number;
 };
 
+export function artifactAcquisitionCheckpointKey(target: ArtifactAcquisitionTarget): string {
+  const artifactType = target.artifactType ?? "PDF";
+  return [KEY_PREFIX, target.returnType, target.financialYear, target.period, artifactType]
+    .map((value) => encodeURIComponent(value ?? ""))
+    .join(".");
+}
+
 export async function persistArtifactAcquisitionIntent(
   input: Omit<ArtifactAcquisitionCheckpoint, "state" | "downloadId">,
 ): Promise<void> {
+  const key = artifactAcquisitionCheckpointKey(input);
   await browser.storage.session.set({
-    [KEY]: { ...input, state: "intent" } satisfies ArtifactAcquisitionCheckpoint,
+    [key]: { ...input, state: "intent" } satisfies ArtifactAcquisitionCheckpoint,
   });
 }
 
 export async function persistArtifactAcquisitionDownloadId(
   input: ArtifactAcquisitionCheckpoint,
 ): Promise<void> {
+  const key = artifactAcquisitionCheckpointKey(input);
   await browser.storage.session.set({
-    [KEY]: { ...input, state: "download-observing" } satisfies ArtifactAcquisitionCheckpoint,
+    [key]: { ...input, state: "download-observing" } satisfies ArtifactAcquisitionCheckpoint,
   });
 }
 
-export async function clearArtifactAcquisitionCheckpoint(requestId: string): Promise<void> {
-  const stored = await browser.storage.session.get(KEY);
-  if ((stored[KEY] as { requestId?: unknown } | undefined)?.requestId === requestId)
-    await browser.storage.session.remove(KEY);
+export async function clearArtifactAcquisitionCheckpoint(
+  target: ArtifactAcquisitionTarget,
+  requestId: string,
+): Promise<void> {
+  const key = artifactAcquisitionCheckpointKey(target);
+  const stored = await browser.storage.session.get(key);
+  if ((stored[key] as { requestId?: unknown } | undefined)?.requestId === requestId) {
+    await browser.storage.session.remove(key);
+  }
 }
 
-export async function clearCompletedArtifactAcquisitionCheckpoint(): Promise<void> {
-  await browser.storage.session.remove(KEY);
-}
-
-export async function reconcileArtifactAcquisitionCheckpoint(): Promise<
-  { state: "retry-safe" } | { state: "needs-review"; safeSignals: string[] }
-> {
-  const stored = await browser.storage.session.get(KEY);
-  const checkpoint = stored[KEY] as ArtifactAcquisitionCheckpoint | undefined;
+export async function reconcileArtifactAcquisitionCheckpoint(
+  target: ArtifactAcquisitionTarget,
+): Promise<{ state: "retry-safe" } | { state: "needs-review"; safeSignals: string[] }> {
+  const key = artifactAcquisitionCheckpointKey(target);
+  const stored = await browser.storage.session.get(key);
+  const checkpoint = stored[key] as ArtifactAcquisitionCheckpoint | undefined;
   if (!checkpoint || typeof checkpoint.requestId !== "string") return { state: "retry-safe" };
   if (checkpoint.state !== "download-observing" || !Number.isSafeInteger(checkpoint.downloadId)) {
-    return { state: "needs-review", safeSignals: ["artifact-acquisition-intent-interrupted"] };
+    await browser.storage.session.remove(key);
+    return { state: "retry-safe" };
   }
   try {
     const [item] = await browser.downloads.search({ id: checkpoint.downloadId });
-    if (
-      item?.state === "complete" &&
-      Math.max(item.bytesReceived ?? 0, item.fileSize ?? 0, item.totalBytes ?? 0) > 0
-    ) {
-      return {
-        state: "needs-review",
-        safeSignals: ["artifact-acquisition-download-complete-unreconciled"],
-      };
+    if (item?.state === "in_progress" || !item?.state) {
+      return { state: "needs-review", safeSignals: ["artifact-acquisition-download-unreconciled"] };
     }
-    return { state: "needs-review", safeSignals: ["artifact-acquisition-download-unreconciled"] };
+    await browser.storage.session.remove(key);
+    return { state: "retry-safe" };
   } catch {
     return {
       state: "needs-review",

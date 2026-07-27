@@ -43,6 +43,10 @@ import { GST_CONNECTOR_DESCRIPTOR } from "../../src/connectors/gst/constants";
 import { PACK_PRODUCT_VERSION } from "../../src/extension/version";
 import { canonicalDurableTargetStatus } from "../../src/connectors/gst/filed-returns-durable-status";
 import { isDurableFiledReturnsSignal } from "../../src/connectors/gst/filed-returns-durable-signals";
+import {
+  artifactAcquisitionCheckpointKey,
+  persistArtifactAcquisitionDownloadId,
+} from "../../src/background/artifact-acquisition-state";
 
 const FULL_FISCAL_YEAR_LEDGER_ID = "full-fiscal-year-12345678";
 const ACTIVE_RUN_ID = "filed-returns-run-12345678";
@@ -53,6 +57,7 @@ type RuntimeMock = typeof browser.runtime & {
 
 let stagedZipEntryCount = 0;
 let localStorageValues: Record<string, unknown> = {};
+let sessionStorageValues: Record<string, unknown> = {};
 
 vi.mock("wxt/browser", () => ({
   browser: {
@@ -311,6 +316,7 @@ describe("filed returns flow runner", () => {
     vi.clearAllMocks();
     stagedZipEntryCount = 0;
     localStorageValues = {};
+    sessionStorageValues = {};
     (
       browser.downloads.download as unknown as {
         mockResolvedValue: (downloadId: number) => void;
@@ -335,7 +341,27 @@ describe("filed returns flow runner", () => {
     vi.mocked(browser.storage.local.remove).mockImplementation(async (keys) => {
       for (const key of Array.isArray(keys) ? keys : [keys]) delete localStorageValues[key];
     });
-    vi.mocked(browser.storage.session.set).mockResolvedValue(undefined);
+    vi.mocked(browser.storage.session.get).mockImplementation(async (keys) => {
+      if (typeof keys === "string") {
+        return Object.hasOwn(sessionStorageValues, keys)
+          ? { [keys]: sessionStorageValues[keys] }
+          : {};
+      }
+      if (Array.isArray(keys)) {
+        return Object.fromEntries(
+          keys
+            .filter((key) => Object.hasOwn(sessionStorageValues, key))
+            .map((key) => [key, sessionStorageValues[key]]),
+        );
+      }
+      return { ...sessionStorageValues };
+    });
+    vi.mocked(browser.storage.session.set).mockImplementation(async (values) => {
+      Object.assign(sessionStorageValues, values);
+    });
+    vi.mocked(browser.storage.session.remove).mockImplementation(async (keys) => {
+      for (const key of Array.isArray(keys) ? keys : [keys]) delete sessionStorageValues[key];
+    });
     vi.mocked(observeBrowserDownloadById).mockResolvedValue({
       state: "completed",
       safeSignals: ["browser-download-completed", "browser-download-non-empty"],
@@ -4310,7 +4336,12 @@ describe("filed returns flow runner", () => {
       expect.objectContaining({ type: "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34" }),
     );
     expect(browser.storage.session.set).toHaveBeenCalledWith({
-      "pack.artifact-acquisition.v1": expect.objectContaining({
+      [artifactAcquisitionCheckpointKey({
+        artifactType: "JSON",
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-3B",
+      })]: expect.objectContaining({
         artifactType: "JSON",
         state: "download-observing",
       }),
@@ -4374,12 +4405,117 @@ describe("filed returns flow runner", () => {
       expect.objectContaining({ type: "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34" }),
     );
     expect(browser.storage.session.set).toHaveBeenCalledWith({
-      "pack.artifact-acquisition.v1": expect.objectContaining({
+      [artifactAcquisitionCheckpointKey({
+        artifactType: "JSON",
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-3B",
+      })]: expect.objectContaining({
         artifactType: "JSON",
         state: "intent",
       }),
     });
   });
+  it("does not let a stale May PDF checkpoint block a June PDF request", async () => {
+    const staleTarget = {
+      artifactType: "PDF" as const,
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-3B" as const,
+    };
+    await persistArtifactAcquisitionDownloadId({
+      ...staleTarget,
+      downloadId: 9,
+      requestId: "stale-may-pdf",
+      state: "download-observing",
+    });
+    const sendMessageToTabWithInjection = vi.fn<
+      FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
+    >(async (_tabId, message) => {
+      if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3") {
+        return {
+          ok: true,
+          flowStep: {
+            connectorId: "gst",
+            scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+            state: "user-action-required",
+            safeSignals: ["synthetic-june-flow"],
+            safeMessage: "Continue the June flow.",
+          },
+        };
+      }
+      return { ok: false, error: "Unexpected call." };
+    });
+
+    const response = await startFiledReturnsDownloadFlow(
+      { artifactType: "PDF", financialYear: "2026-27", period: "June", returnType: "GSTR-3B" },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+        },
+        timings: { flowStepSettleMs: 0, resultRowNavigationSettleMs: 0 },
+      },
+    );
+
+    expect(response).toMatchObject({ flowStep: { safeSignals: ["synthetic-june-flow"] } });
+    expect(sendMessageToTabWithInjection).toHaveBeenCalledTimes(1);
+    expect(sessionStorageValues[artifactAcquisitionCheckpointKey(staleTarget)]).toBeDefined();
+  });
+
+  it("does not let a stale May PDF checkpoint block a May JSON request", async () => {
+    const staleTarget = {
+      artifactType: "PDF" as const,
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-3B" as const,
+    };
+    await persistArtifactAcquisitionDownloadId({
+      ...staleTarget,
+      downloadId: 9,
+      requestId: "stale-may-pdf",
+      state: "download-observing",
+    });
+    const sendMessageToTabWithInjection = vi.fn<
+      FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]
+    >(async (_tabId, message) => {
+      if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3") {
+        return {
+          ok: true,
+          flowStep: {
+            connectorId: "gst",
+            scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+            state: "user-action-required",
+            safeSignals: ["synthetic-may-json-flow"],
+            safeMessage: "Continue the May JSON flow.",
+          },
+        };
+      }
+      return { ok: false, error: "Unexpected call." };
+    });
+
+    const response = await startFiledReturnsDownloadFlow(
+      { artifactType: "JSON", financialYear: "2026-27", period: "May", returnType: "GSTR-3B" },
+      {
+        getActiveGstTab: vi.fn(async () => ACTIVE_GST_TAB),
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "full-year-ledger",
+          observation: "observation",
+        },
+        timings: { flowStepSettleMs: 0, resultRowNavigationSettleMs: 0 },
+      },
+    );
+
+    expect(response).toMatchObject({ flowStep: { safeSignals: ["synthetic-may-json-flow"] } });
+    expect(sendMessageToTabWithInjection).toHaveBeenCalledTimes(1);
+    expect(sessionStorageValues[artifactAcquisitionCheckpointKey(staleTarget)]).toBeDefined();
+  });
+
   it("explains when search does not reach a filed GSTR-1 result before the retry limit", async () => {
     const sendMessageToTabWithInjection = vi.fn<
       FiledReturnsFlowRunnerDeps["sendMessageToTabWithInjection"]

@@ -25,6 +25,7 @@ import { acquireGstr3bPdfAfterPreflight } from "./gstr3b-artifact-acquisition";
 import { toPortalReturnPeriod } from "../connectors/gst/filed-returns-return-period";
 import { downloadAcquiredArtifact } from "./artifact-download";
 import {
+  clearArtifactAcquisitionCheckpoint,
   persistArtifactAcquisitionDownloadId,
   persistArtifactAcquisitionIntent,
 } from "./artifact-acquisition-state";
@@ -77,49 +78,67 @@ export async function triggerAndObserveFiledReturnDownload({
         response.artifact.ok &&
         response.artifact.state === "acquired"
       ) {
-        await persistArtifactAcquisitionIntent({ artifactType, requestId });
-        const delivery = await downloadAcquiredArtifact({
-          base64: response.artifact.base64,
-          filename: artifactFilename(scope, "JSON"),
-          mimeType: response.artifact.mimeType,
-          requestId,
-          onStarted: (downloadId) =>
-            persistArtifactAcquisitionDownloadId({
-              artifactType,
-              downloadId,
-              requestId,
-              state: "download-observing",
-            }),
-        });
-        return delivery.ok
-          ? {
-              ok: true,
-              flowStep: {
-                connectorId: "gst",
-                scopeId: filedReturnScopeId("GSTR-3B"),
-                state: "downloaded",
-                safeSignals: [
-                  ...response.artifact.safeSignals,
-                  ...delivery.safeSignals,
-                  "extension-download-complete",
-                ],
-                safeMessage: "Pack saved the portal-produced GSTR-3B data JSON.",
-              },
-            }
-          : {
-              ok: true,
-              flowStep: {
-                connectorId: "gst",
-                scopeId: filedReturnScopeId("GSTR-3B"),
-                state: "blocked",
-                safeSignals: [
-                  "artifact-acquisition-failed",
-                  `artifact-${delivery.reason}`,
-                  ...delivery.safeSignals,
-                ],
-                safeMessage: artifactFailureMessageForDelivery(delivery.reason),
-              },
-            };
+        const checkpointTarget = {
+          artifactType,
+          financialYear: scope.financialYear,
+          period: scope.period,
+          returnType: scope.returnType,
+        };
+        await persistArtifactAcquisitionIntent({ ...checkpointTarget, requestId });
+        let checkpointHasDownloadId = false;
+        let retainCheckpointForRecovery = false;
+        try {
+          const delivery = await downloadAcquiredArtifact({
+            base64: response.artifact.base64,
+            filename: artifactFilename(scope, "JSON"),
+            mimeType: response.artifact.mimeType,
+            requestId,
+            onStarted: async (downloadId) => {
+              await persistArtifactAcquisitionDownloadId({
+                ...checkpointTarget,
+                downloadId,
+                requestId,
+                state: "download-observing",
+              });
+              checkpointHasDownloadId = true;
+            },
+          });
+          retainCheckpointForRecovery =
+            !delivery.ok && delivery.reason === "timeout" && checkpointHasDownloadId;
+          return delivery.ok
+            ? {
+                ok: true,
+                flowStep: {
+                  connectorId: "gst",
+                  scopeId: filedReturnScopeId("GSTR-3B"),
+                  state: "downloaded",
+                  safeSignals: [
+                    ...response.artifact.safeSignals,
+                    ...delivery.safeSignals,
+                    "extension-download-complete",
+                  ],
+                  safeMessage: "Pack saved the portal-produced GSTR-3B data JSON.",
+                },
+              }
+            : {
+                ok: true,
+                flowStep: {
+                  connectorId: "gst",
+                  scopeId: filedReturnScopeId("GSTR-3B"),
+                  state: "blocked",
+                  safeSignals: [
+                    "artifact-acquisition-failed",
+                    `artifact-${delivery.reason}`,
+                    ...delivery.safeSignals,
+                  ],
+                  safeMessage: artifactFailureMessageForDelivery(delivery.reason),
+                },
+              };
+        } finally {
+          if (!retainCheckpointForRecovery) {
+            await clearArtifactAcquisitionCheckpoint(checkpointTarget, requestId);
+          }
+        }
       }
       if (
         artifactType === "PDF" &&
@@ -128,45 +147,63 @@ export async function triggerAndObserveFiledReturnDownload({
         response.artifact.ok &&
         response.artifact.state === "ready"
       ) {
-        await persistArtifactAcquisitionIntent({ artifactType, requestId });
-        const acquired = await acquireGstr3bPdfAfterPreflight({
-          filename: artifactFilename(scope, "PDF"),
-          requestId,
-          returnPeriod,
-          tabId,
-          onStarted: (downloadId) =>
-            persistArtifactAcquisitionDownloadId({
-              artifactType,
-              downloadId,
-              requestId,
-              state: "download-observing",
-            }),
-        });
-        return acquired.ok
-          ? {
-              ok: true,
-              flowStep: {
-                connectorId: "gst",
-                scopeId: filedReturnScopeId("GSTR-3B"),
-                state: "downloaded",
-                safeSignals: acquired.safeSignals,
-                safeMessage: "Pack saved the portal-produced filed GSTR-3B PDF.",
-              },
-            }
-          : {
-              ok: true,
-              flowStep: {
-                connectorId: "gst",
-                scopeId: filedReturnScopeId("GSTR-3B"),
-                state: "blocked",
-                safeSignals: [
-                  "artifact-acquisition-failed",
-                  `artifact-${acquired.reason}`,
-                  ...acquired.safeSignals,
-                ],
-                safeMessage: artifactFailureMessageForDelivery(acquired.reason),
-              },
-            };
+        const checkpointTarget = {
+          artifactType,
+          financialYear: scope.financialYear,
+          period: scope.period,
+          returnType: scope.returnType,
+        };
+        await persistArtifactAcquisitionIntent({ ...checkpointTarget, requestId });
+        let checkpointHasDownloadId = false;
+        let retainCheckpointForRecovery = false;
+        try {
+          const acquired = await acquireGstr3bPdfAfterPreflight({
+            filename: artifactFilename(scope, "PDF"),
+            requestId,
+            returnPeriod,
+            tabId,
+            onStarted: async (downloadId) => {
+              await persistArtifactAcquisitionDownloadId({
+                ...checkpointTarget,
+                downloadId,
+                requestId,
+                state: "download-observing",
+              });
+              checkpointHasDownloadId = true;
+            },
+          });
+          retainCheckpointForRecovery =
+            !acquired.ok && acquired.reason === "timeout" && checkpointHasDownloadId;
+          return acquired.ok
+            ? {
+                ok: true,
+                flowStep: {
+                  connectorId: "gst",
+                  scopeId: filedReturnScopeId("GSTR-3B"),
+                  state: "downloaded",
+                  safeSignals: acquired.safeSignals,
+                  safeMessage: "Pack saved the portal-produced filed GSTR-3B PDF.",
+                },
+              }
+            : {
+                ok: true,
+                flowStep: {
+                  connectorId: "gst",
+                  scopeId: filedReturnScopeId("GSTR-3B"),
+                  state: "blocked",
+                  safeSignals: [
+                    "artifact-acquisition-failed",
+                    `artifact-${acquired.reason}`,
+                    ...acquired.safeSignals,
+                  ],
+                  safeMessage: artifactFailureMessageForDelivery(acquired.reason),
+                },
+              };
+        } finally {
+          if (!retainCheckpointForRecovery) {
+            await clearArtifactAcquisitionCheckpoint(checkpointTarget, requestId);
+          }
+        }
       }
       if (response.ok && "artifact" in response && !response.artifact.ok) {
         return artifactFailureResponse(response.artifact.reason, response.artifact.safeSignals);

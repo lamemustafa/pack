@@ -42,7 +42,7 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
 ): Promise<PackMessageResponse> {
   const shouldPersistSinglePeriodSummary = options.persistSinglePeriodSummary !== false;
   if (scope.returnType === "GSTR-3B") {
-    const acquisitionRecovery = await reconcileArtifactAcquisitionCheckpoint();
+    const acquisitionRecovery = await reconcileArtifactAcquisitionCheckpoint(scope);
     if (acquisitionRecovery.state === "needs-review") {
       return {
         ok: true,
