@@ -59,6 +59,7 @@ export function isExpectedFiledReturnBytesForReturnType(
   if (artifactType === "PDF") {
     return bytes.byteLength >= GSTR2B_MIN_PORTAL_PDF_BYTES;
   }
+  if (artifactType === "JSON") return true;
   return isLikelyGstr2bPortalXlsxBytes(bytes);
 }
 
@@ -167,9 +168,18 @@ function isExpectedFiledReturnBytes(
   bytes: Uint8Array,
   artifactType: FiledReturnsConcreteArtifactType,
 ): boolean {
-  return artifactType === "PDF"
-    ? isLikelyPdfBytes(bytes)
-    : isLikelyXlsxBytes(bytes) || isLikelyXlsBytes(bytes);
+  if (artifactType === "PDF") return isLikelyPdfBytes(bytes);
+  if (artifactType === "JSON") return isLikelyJsonBytes(bytes);
+  return isLikelyXlsxBytes(bytes) || isLikelyXlsBytes(bytes);
+}
+
+function isLikelyJsonBytes(bytes: Uint8Array): boolean {
+  try {
+    const value = JSON.parse(new TextDecoder().decode(bytes));
+    return value !== null && typeof value === "object";
+  } catch {
+    return false;
+  }
 }
 
 function metadataIncludesExpectedMime(

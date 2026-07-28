@@ -346,6 +346,65 @@ describe("offscreen Blob URL entrypoint", () => {
     expect(opfsFiles.has(`filed-return-packs/${TEST_LEDGER_ID}/may.pdf`)).toBe(false);
   });
 
+  it("stages the generated GSTR-2B JSON ZIP entry name without re-encoding its bytes", async () => {
+    await loadOffscreenEntrypoint();
+    const json = JSON.stringify({ synthetic: true, period: "May" });
+    const staged = await sendOffscreenMessage({
+      type: "PACK_OFFSCREEN_STAGE_FILED_RETURN",
+      target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+      payload: {
+        requestId: "stage-json-request",
+        ledgerId: TEST_LEDGER_ID,
+        zipPath: "may-data.json",
+        returnType: "GSTR-2B",
+        artifactType: "JSON",
+        dataUrl: `data:application/json;base64,${btoa(json)}`,
+      },
+    });
+
+    expect(staged).toMatchObject({ ok: true, staged: true });
+    const zip = await sendOffscreenMessage({
+      type: "PACK_OFFSCREEN_CREATE_FILED_RETURN_ZIP",
+      target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+      payload: {
+        requestId: "zip-json-request",
+        ledgerId: TEST_LEDGER_ID,
+        expectedReturnType: "GSTR-2B",
+        expectedEntryCount: 1,
+        expectedEntries: [{ artifactType: "JSON", entryNames: ["may-data.json"] }],
+      },
+    });
+
+    expect(zip).toMatchObject({ ok: true, zipEntryCount: 1 });
+  });
+
+  it("rejects a staged ZIP input larger than 100 MB before creating a Blob URL", async () => {
+    await loadOffscreenEntrypoint();
+    opfsFiles.set(
+      `filed-return-packs/${TEST_LEDGER_ID}/may.pdf`,
+      new Blob(["%PDF-1.7 oversized\n", new Uint8Array(100 * 1024 * 1024), "\n%%EOF\n"]),
+    );
+
+    const response = await sendOffscreenMessage({
+      type: "PACK_OFFSCREEN_CREATE_FILED_RETURN_ZIP",
+      target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+      payload: {
+        requestId: "oversized-zip-request",
+        ledgerId: TEST_LEDGER_ID,
+        expectedReturnType: "GSTR-3B",
+        expectedEntryCount: 1,
+        expectedEntries: [{ artifactType: "PDF", entryNames: ["may.pdf"] }],
+      },
+    });
+
+    expect(response).toEqual({
+      ok: false,
+      requestId: "oversized-zip-request",
+      errorCategory: "zip-too-large",
+    });
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+  });
+
   it("clears every Pack filed-return staging directory on explicit reset", async () => {
     await loadOffscreenEntrypoint();
     opfsFiles.set(`filed-return-packs/${TEST_LEDGER_ID}/april.pdf`, new Blob(["one"]));

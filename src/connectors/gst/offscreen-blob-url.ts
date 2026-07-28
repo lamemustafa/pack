@@ -119,6 +119,7 @@ export type PackOffscreenBlobUrlResponse =
         | "clear-failed"
         | "zip-invalid-entry"
         | "zip-empty"
+        | "zip-too-large"
         | "zip-failed";
     };
 
@@ -168,7 +169,7 @@ export function isPackOffscreenBlobUrlMessageShape(
       typeof expectedEntryCount === "number" &&
       Number.isInteger(expectedEntryCount) &&
       expectedEntryCount >= 1 &&
-      expectedEntryCount <= 24 &&
+      expectedEntryCount <= 36 &&
       isExpectedZipEntryPlanShape(expectedEntries) &&
       expectedEntries.length === expectedEntryCount
     );
@@ -202,7 +203,7 @@ function isBoundedString(value: unknown, minLength: number, maxLength: number): 
 function isExpectedZipEntryPlanShape(
   input: unknown,
 ): input is PackOffscreenFiledReturnZipExpectedEntry[] {
-  if (!Array.isArray(input) || input.length < 1 || input.length > 24) return false;
+  if (!Array.isArray(input) || input.length < 1 || input.length > 36) return false;
   for (const candidate of input) {
     if (!isRecord(candidate) || !hasOnlyKeys(candidate, ["artifactType", "entryNames"])) {
       return false;

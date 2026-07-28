@@ -120,7 +120,7 @@ export function isValidFiledReturnsDownloadDiagnosticState(
   const entries = input.downloadDiagnostics;
   if (singular !== undefined && !isValidDownloadDiagnostic(singular, binding)) return false;
   if (entries === undefined) return true;
-  if (!Array.isArray(entries) || entries.length < 1 || entries.length > 2) return false;
+  if (!Array.isArray(entries) || entries.length < 1 || entries.length > 3) return false;
   if (!entries.every((entry) => isValidDownloadDiagnostic(entry, binding))) return false;
 
   const diagnostics = entries as FiledReturnsDownloadDiagnostic[];
@@ -182,7 +182,7 @@ export function mergeFiledReturnsDownloadDiagnosticState(
     if (merged.some((candidate) => candidate.actionId === diagnostic.actionId)) return null;
     merged.push(diagnostic);
   }
-  if (merged.length > 2) return null;
+  if (merged.length > 3) return null;
 
   return {
     downloadDiagnostic: merged[merged.length - 1]!,
@@ -228,11 +228,7 @@ function isValidDownloadDiagnostic(input: unknown, binding: DiagnosticBinding): 
   if (diagnostic.financialYear !== binding.financialYear || diagnostic.period !== binding.period) {
     return false;
   }
-  const allowedArtifacts = new Set(
-    concreteFiledReturnsArtifactTypes(
-      normaliseFiledReturnsArtifactType(binding.returnType, binding.artifactType),
-    ),
-  );
+  const allowedArtifacts = new Set(selectedArtifactTypes(binding));
   if (!diagnostic.artifactType || !allowedArtifacts.has(diagnostic.artifactType)) return false;
   if (
     typeof diagnostic.endpointClass !== "string" ||
@@ -290,7 +286,12 @@ function isPositiveArtifactDiagnostic(
   if (diagnostic.status !== "downloaded" || diagnostic.byteCountClass !== "non-empty") {
     return false;
   }
-  const expectedMime = diagnostic.artifactType === "PDF" ? "pdf" : "spreadsheet";
+  const expectedMime =
+    diagnostic.artifactType === "PDF"
+      ? "pdf"
+      : diagnostic.artifactType === "JSON"
+        ? "json"
+        : "spreadsheet";
   if (diagnostic.mimeClass !== expectedMime) return false;
   const hasExactDownloadId =
     typeof diagnostic.downloadId === "number" &&
@@ -300,6 +301,13 @@ function isPositiveArtifactDiagnostic(
     stagingKind !== null &&
     safeSignals.includes(`${stagingKind}-opfs-staged:${diagnostic.artifactType}`);
   return hasExactDownloadId || hasExactStagingSignal;
+}
+
+function selectedArtifactTypes(binding: DiagnosticBinding) {
+  const artifactType = normaliseFiledReturnsArtifactType(binding.returnType, binding.artifactType);
+  return binding.returnType === "GSTR-2B" && artifactType === "PDF_AND_EXCEL"
+    ? (["PDF", "EXCEL", "JSON"] as const)
+    : concreteFiledReturnsArtifactTypes(artifactType);
 }
 
 function sameDownloadDiagnostic(

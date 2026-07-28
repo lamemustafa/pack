@@ -260,6 +260,7 @@ export interface PortalFlowStepResult {
   state:
     | "clicked"
     | "downloaded"
+    | "partial"
     | "download-unconfirmed"
     | "ready"
     | "login-required"

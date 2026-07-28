@@ -5,7 +5,6 @@ import type {
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
 import {
-  concreteFiledReturnsArtifactTypes,
   normaliseFiledReturnsArtifactType,
   type FiledReturnsConcreteArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
@@ -21,6 +20,12 @@ import {
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import { isValidFiledReturnsDownloadDiagnosticState } from "./filed-returns-download-diagnostic-state";
 import { PACK_LOCAL_STORAGE_KEYS } from "./storage-keys";
+import { ARTIFACT_FAILURE_MESSAGES } from "../connectors/gst/artifact-source";
+
+const MISSING_ARTIFACT_REASONS = new Set([
+  "artifact-filed-gstr1-excel-no-details-available",
+  ...Object.keys(ARTIFACT_FAILURE_MESSAGES).map((reason) => `artifact-${reason}`),
+]);
 
 const LEDGER_KEYS = [
   "artifactPlan",
@@ -39,13 +44,13 @@ const ARTIFACT_KEYS = [
   "artifactType",
   "completedAt",
   "downloadDiagnostic",
+  "missingReason",
   "safeSignals",
   "startedAt",
   "status",
   "updatedAt",
 ] as const;
 const ZIP_ATTEMPT_KEYS = ["downloadId", "requestedAt"] as const;
-const ARTIFACT_PLAN = ["PDF", "EXCEL"] as const;
 
 export type SinglePeriodBundleArtifactStatus = "pending" | "running" | "staged" | "unavailable";
 
@@ -62,6 +67,7 @@ export interface SinglePeriodBundleArtifact {
   status: SinglePeriodBundleArtifactStatus;
   safeSignals: string[];
   downloadDiagnostic?: FiledReturnsDownloadDiagnostic;
+  missingReason?: string;
   startedAt?: string;
   completedAt?: string;
   updatedAt: string;
@@ -109,8 +115,8 @@ export function createSinglePeriodBundleLedger(
     return null;
   }
   return {
-    artifactPlan: [...ARTIFACT_PLAN],
-    artifacts: ARTIFACT_PLAN.map((artifactType) => ({
+    artifactPlan: artifactPlanForScope(scope),
+    artifacts: artifactPlanForScope(scope).map((artifactType) => ({
       artifactType,
       safeSignals: ["single-period-bundle-artifact-pending"],
       status: "pending",
@@ -358,19 +364,20 @@ export function markSinglePeriodBundleArtifactUnavailable(
   const artifact = ledger.artifacts.find((candidate) => candidate.artifactType === artifactType);
   if (
     ledger.phase !== "collecting" ||
-    ledger.scope.returnType !== "GSTR-1" ||
-    artifactType !== "EXCEL" ||
     !artifact ||
     artifact.status !== "running" ||
-    !flowStep.safeSignals.includes("filed-gstr1-excel-no-details-available")
+    flowStep.state === "downloaded"
   ) {
     return null;
   }
   const diagnostic = optionalArtifactDiagnostic(flowStep, ledger.scope, artifactType);
+  const missingReason = missingArtifactReason(flowStep);
+  if (!missingReason) return null;
   const updated = updateArtifact(ledger, artifactType, now, {
     artifactType,
     completedAt: now.toISOString(),
     ...(diagnostic ? { downloadDiagnostic: diagnostic } : {}),
+    missingReason,
     safeSignals: ["single-period-bundle-artifact-unavailable"],
     startedAt: artifact.startedAt!,
     status: "unavailable",
@@ -466,7 +473,9 @@ export function singlePeriodBundleFlowStep(
   return {
     connectorId: "gst",
     scopeId: filedReturnScopeId(ledger.scope.returnType),
-    state: "downloaded",
+    state: ledger.artifacts.some((artifact) => artifact.status === "unavailable")
+      ? "partial"
+      : "downloaded",
     safeSignals: Array.from(
       new Set([
         "single-period-bundle-recovered",
@@ -477,11 +486,14 @@ export function singlePeriodBundleFlowStep(
                 "single-period-opfs-staged",
                 `single-period-opfs-staged:${artifact.artifactType}`,
               ]
-            : [`filed-return-artifact-unavailable:${artifact.artifactType}`],
+            : [
+                `filed-return-artifact-unavailable:${artifact.artifactType}`,
+                artifact.missingReason!,
+              ],
         ),
       ]),
     ),
-    safeMessage: "Pack recovered the durably staged selected-file artifacts.",
+    safeMessage: bundleSafeMessage(ledger),
     ...(diagnostics.length > 0
       ? {
           downloadDiagnostic: diagnostics.at(-1)!,
@@ -521,13 +533,17 @@ function parseSinglePeriodBundleLedger(input: unknown): SinglePeriodBundleLedger
   if (Date.parse(ledger.createdAt) > Date.parse(ledger.updatedAt)) return null;
   if (!isBundlePhase(ledger.phase) || !isSupportedBundleScope(ledger.scope)) return null;
   if (!hasOnlyKeys(ledger.scope as unknown as Record<string, unknown>, SCOPE_KEYS)) return null;
-  if (!isExactArtifactPlan(ledger.artifactPlan) || !Array.isArray(ledger.artifacts)) return null;
-  if (ledger.artifacts.length !== ARTIFACT_PLAN.length) return null;
+  const artifactPlan = parsedArtifactPlan(
+    ledger.scope as FiledReturnsDownloadScope,
+    ledger.artifactPlan,
+  );
+  if (!artifactPlan || !Array.isArray(ledger.artifacts)) return null;
+  if (ledger.artifacts.length !== artifactPlan.length) return null;
   const artifacts = ledger.artifacts.map((artifact, index) =>
     parseArtifact(
       artifact,
       ledger.scope as FiledReturnsDownloadScope,
-      ARTIFACT_PLAN[index]!,
+      artifactPlan[index]!,
       ledger.createdAt as string,
       ledger.updatedAt as string,
     ),
@@ -542,7 +558,7 @@ function parseSinglePeriodBundleLedger(input: unknown): SinglePeriodBundleLedger
   );
   if (zipDownloadAttempt === false) return null;
   return {
-    artifactPlan: [...ARTIFACT_PLAN],
+    artifactPlan,
     artifacts: artifacts as SinglePeriodBundleArtifact[],
     createdAt: ledger.createdAt,
     ledgerId: ledger.ledgerId,
@@ -599,19 +615,28 @@ function parseArtifact(
   if (artifact.downloadDiagnostic !== undefined && !diagnostic) return null;
 
   if (artifact.status === "pending") {
-    if (artifact.startedAt || artifact.completedAt || artifact.downloadDiagnostic) return null;
+    if (
+      artifact.startedAt ||
+      artifact.completedAt ||
+      artifact.downloadDiagnostic ||
+      artifact.missingReason
+    ) {
+      return null;
+    }
   } else if (artifact.status === "running") {
-    if (!artifact.startedAt || artifact.completedAt) return null;
+    if (!artifact.startedAt || artifact.completedAt || artifact.missingReason) return null;
   } else if (artifact.status === "staged") {
-    if (!artifact.startedAt || !artifact.completedAt || !diagnostic) return null;
+    if (!artifact.startedAt || !artifact.completedAt || !diagnostic || artifact.missingReason) {
+      return null;
+    }
     if (diagnostic.byteCountClass !== "non-empty") return null;
     if (expectedArtifactType === "PDF" && diagnostic.mimeClass !== "pdf") return null;
+    if (expectedArtifactType === "JSON" && diagnostic.mimeClass !== "json") return null;
     if (expectedArtifactType === "EXCEL" && diagnostic.mimeClass !== "spreadsheet") return null;
   } else if (
     !artifact.startedAt ||
     !artifact.completedAt ||
-    expectedArtifactType !== "EXCEL" ||
-    scope.returnType !== "GSTR-1"
+    !isMissingReason(artifact.missingReason)
   ) {
     return null;
   }
@@ -620,6 +645,7 @@ function parseArtifact(
     artifactType: expectedArtifactType,
     ...(artifact.completedAt ? { completedAt: artifact.completedAt } : {}),
     ...(diagnostic ? { downloadDiagnostic: diagnostic } : {}),
+    ...(artifact.missingReason ? { missingReason: artifact.missingReason } : {}),
     safeSignals: expectedSignals,
     ...(artifact.startedAt ? { startedAt: artifact.startedAt } : {}),
     status: artifact.status,
@@ -667,16 +693,16 @@ function validPhaseState(
   phase: SinglePeriodBundlePhase,
   artifacts: SinglePeriodBundleArtifact[],
 ): boolean {
-  const [pdf, excel] = artifacts;
-  if (!pdf || !excel) return false;
-  const collectingProgression =
-    (pdf.status === "pending" && excel.status === "pending") ||
-    (pdf.status === "running" && excel.status === "pending") ||
-    (pdf.status === "staged" && excel.status === "pending") ||
-    (pdf.status === "staged" && excel.status === "running");
-  const reviewProgression =
-    (pdf.status === "running" && excel.status === "pending") ||
-    (pdf.status === "staged" && excel.status === "running");
+  const runningIndex = artifacts.findIndex((artifact) => artifact.status === "running");
+  const firstPendingIndex = artifacts.findIndex((artifact) => artifact.status === "pending");
+  const boundary =
+    runningIndex >= 0 ? runningIndex : firstPendingIndex < 0 ? artifacts.length : firstPendingIndex;
+  const collectingProgression = artifacts.every((artifact, index) => {
+    if (index < boundary) return artifact.status === "staged" || artifact.status === "unavailable";
+    if (index === runningIndex) return artifact.status === "running";
+    return artifact.status === "pending";
+  });
+  const reviewProgression = runningIndex >= 0 && collectingProgression;
   const allTerminal = allArtifactsTerminal({ artifacts } as SinglePeriodBundleLedger);
   if (phase === "artifact-review") return reviewProgression;
   if (phase === "collecting") return collectingProgression;
@@ -809,13 +835,47 @@ function isSupportedBundleScope(input: unknown): input is FiledReturnsDownloadSc
     return false;
   }
   return (
-    normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType) === "PDF_AND_EXCEL" &&
-    sameStrings(concreteFiledReturnsArtifactTypes("PDF_AND_EXCEL"), ARTIFACT_PLAN)
+    normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType) === "PDF_AND_EXCEL"
   );
 }
 
-function isExactArtifactPlan(input: unknown): boolean {
-  return sameStrings(input, ARTIFACT_PLAN);
+function artifactPlanForScope(
+  scope: FiledReturnsDownloadScope,
+): FiledReturnsConcreteArtifactType[] {
+  return scope.returnType === "GSTR-2B" ? ["PDF", "EXCEL", "JSON"] : ["PDF", "EXCEL"];
+}
+
+function parsedArtifactPlan(
+  scope: FiledReturnsDownloadScope,
+  plan: unknown,
+): FiledReturnsConcreteArtifactType[] | null {
+  const current = artifactPlanForScope(scope);
+  if (sameStrings(plan, current)) return current;
+  return scope.returnType === "GSTR-2B" && sameStrings(plan, ["PDF", "EXCEL"])
+    ? ["PDF", "EXCEL"]
+    : null;
+}
+
+function missingArtifactReason(flowStep: PortalFlowStepResult): string | null {
+  return (
+    flowStep.safeSignals.find((signal) => MISSING_ARTIFACT_REASONS.has(signal)) ??
+    (flowStep.safeSignals.includes("filed-gstr1-excel-no-details-available")
+      ? "artifact-filed-gstr1-excel-no-details-available"
+      : null)
+  );
+}
+
+function isMissingReason(value: unknown): value is string {
+  return typeof value === "string" && MISSING_ARTIFACT_REASONS.has(value);
+}
+
+function bundleSafeMessage(ledger: SinglePeriodBundleLedger): string {
+  const missing = ledger.artifacts
+    .filter((artifact) => artifact.status === "unavailable")
+    .map((artifact) => `${artifact.artifactType} (${artifact.missingReason})`);
+  return missing.length === 0
+    ? "Pack recovered the durably staged selected-file artifacts."
+    : `Pack prepared a partial ZIP; missing ${missing.join(", ")}.`;
 }
 
 function isArtifactStatus(input: unknown): input is SinglePeriodBundleArtifactStatus {

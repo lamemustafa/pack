@@ -86,7 +86,7 @@ export function getPopupPresentationState(
   if (summary?.status === "partial") {
     return {
       badge: "Partly complete",
-      body: "Some selected files were saved. Check the affected period before continuing.",
+      body: summary.flowStep.safeMessage,
       icon: "!",
       kind: "partial",
       title: "Download partly complete",

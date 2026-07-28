@@ -20,6 +20,7 @@ import {
 } from "./filed-return-data-url";
 
 const blobUrlsByRequest = new Map<string, string>();
+const MAX_ZIP_INPUT_BYTES = 100 * 1024 * 1024;
 const FILED_RETURN_PERIOD_ORDER = new Map(
   FILED_RETURNS_MONTHS.map((period, index) => [period.toLowerCase(), index]),
 );
@@ -55,6 +56,13 @@ async function handleMessage(
   if (message.type === "PACK_OFFSCREEN_CREATE_FILED_RETURN_ZIP") {
     try {
       const directory = await getLedgerDirectory(message.payload.ledgerId, false);
+      if ((await stagedZipInputByteLength(directory)) > MAX_ZIP_INPUT_BYTES) {
+        return {
+          ok: false,
+          requestId: message.payload.requestId,
+          errorCategory: "zip-too-large",
+        };
+      }
       const entries = await readZipEntries(directory);
       if (entries.length === 0) {
         return {
@@ -285,7 +293,21 @@ function artifactTypeFromZipPath(zipPath: string): FiledReturnsConcreteArtifactT
   const lowerPath = zipPath.toLowerCase();
   if (lowerPath.endsWith(".pdf")) return "PDF";
   if (lowerPath.endsWith(".xls") || lowerPath.endsWith(".xlsx")) return "EXCEL";
+  if (lowerPath.endsWith(".json")) return "JSON";
   return null;
+}
+
+async function stagedZipInputByteLength(directory: FileSystemDirectoryHandle): Promise<number> {
+  let total = 0;
+  for await (const [, handle] of directory.entries()) {
+    if (handle.kind === "directory") {
+      total += await stagedZipInputByteLength(handle);
+    } else {
+      total += (await handle.getFile()).size;
+    }
+    if (total > MAX_ZIP_INPUT_BYTES) return total;
+  }
+  return total;
 }
 
 async function readZipEntries(
@@ -321,7 +343,7 @@ function filedReturnZipPeriodOrder(path: string): number {
   const fileName = path.split("/").at(-1)?.toLowerCase() ?? "";
   const extensionIndex = fileName.indexOf(".");
   if (extensionIndex < 1) return FILED_RETURNS_MONTHS.length;
-  const period = fileName.slice(0, extensionIndex);
+  const period = fileName.slice(0, extensionIndex).replace(/-(summary|details|data)$/, "");
   return FILED_RETURN_PERIOD_ORDER.get(period) ?? FILED_RETURNS_MONTHS.length;
 }
 

@@ -36,6 +36,42 @@ const blockedSummary: FiledReturnsFlowSummary = {
 };
 
 describe("inline filed-return recovery status", () => {
+  it("renders every safe missing artifact reason for a partial ZIP", () => {
+    const summary: FiledReturnsFlowSummary = {
+      ...blockedSummary,
+      status: "partial",
+      currentPeriod: undefined,
+      flowStep: {
+        ...blockedSummary.flowStep,
+        state: "partial",
+        safeSignals: ["filed-return-artifact-unavailable:EXCEL", "artifact-generation-timeout"],
+        safeMessage: "Pack prepared a partial ZIP; missing EXCEL (artifact-generation-timeout).",
+      },
+    };
+    const presentation: PopupPresentationState = {
+      badge: "Partly complete",
+      body: summary.flowStep.safeMessage,
+      icon: "!",
+      kind: "partial",
+      title: "Download partly complete",
+      tone: "warning",
+    };
+
+    const markup = renderToStaticMarkup(
+      <InlineStatus
+        busy={null}
+        onOpenPortal={vi.fn()}
+        onRestartTarget={vi.fn()}
+        onRetryFullFiscalYearTarget={vi.fn()}
+        onRetryTarget={vi.fn()}
+        presentation={presentation}
+        summary={summary}
+      />,
+    );
+
+    expect(markup).toContain("EXCEL (artifact-generation-timeout)");
+  });
+
   it("renders the cross-origin blocked start message", () => {
     const summary: FiledReturnsFlowSummary = {
       ...blockedSummary,

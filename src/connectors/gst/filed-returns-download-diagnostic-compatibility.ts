@@ -32,7 +32,7 @@ export function isFiledReturnsEndpointClassForArtifact(
   }
   return (
     returnType === "GSTR-2B" &&
-    (artifactType === "PDF" || artifactType === "EXCEL") &&
+    (artifactType === "PDF" || artifactType === "JSON" || artifactType === "EXCEL") &&
     (endpointClass === "filed-return-portal-rendered-download" ||
       endpointClass === "gstr2b-portal-blob-captured-download")
   );

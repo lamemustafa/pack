@@ -393,6 +393,7 @@ const SCOPED_RETURN_SIGNAL_SUFFIXES = new Set([
 ]);
 const ARTIFACT_FAILURE_SIGNALS = new Set([
   "artifact-acquisition-failed",
+  "artifact-filed-gstr1-excel-no-details-available",
   ...Object.keys(ARTIFACT_FAILURE_MESSAGES).map((reason) => `artifact-${reason}`),
 ]);
 
@@ -417,7 +418,7 @@ export function isDurableFiledReturnsSignal(signal: string): boolean {
       signal,
     );
   if (artifactSignal) return true;
-  const stagedArtifact = /^(?:full-fiscal-year|single-period)-opfs-staged:(PDF|EXCEL)$/.exec(
+  const stagedArtifact = /^(?:full-fiscal-year|single-period)-opfs-staged:(PDF|JSON|EXCEL)$/.exec(
     signal,
   );
   if (stagedArtifact) return true;
@@ -435,7 +436,7 @@ export function isDurableFiledReturnsSignal(signal: string): boolean {
     );
   if (zipCount) {
     const count = Number(zipCount[2]);
-    return zipCount[1] === "single-period" ? count <= 2 : count <= 24;
+    return zipCount[1] === "single-period" ? count <= 3 : count <= 36;
   }
   const opfsStageError = /^(full-fiscal-year|single-period)-opfs-stage-error:([a-z-]+)$/.exec(
     signal,

@@ -1,7 +1,7 @@
 import { browser } from "wxt/browser";
 import { validateArtifactBytes } from "../connectors/gst/artifact-validation";
 import { capturePortalPdfBlob } from "../connectors/gst/portal-blob-shim";
-import { downloadAcquiredArtifact, installPortalBlobDownloadSafetyNet } from "./artifact-download";
+import { installPortalBlobDownloadSafetyNet } from "./artifact-download";
 
 const MIME_TYPES = {
   EXCEL: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -10,15 +10,12 @@ const MIME_TYPES = {
 
 export async function acquirePageGeneratedArtifact(input: {
   artifactType: "PDF" | "EXCEL";
-  filename: string;
-  onStarted?: (downloadId: number) => Promise<void>;
-  onStartCheckpointFailed?: (downloadId: number) => Promise<void>;
   requestId: string;
   returnPeriod: string;
   returnType: "GSTR-1" | "GSTR-2B";
   tabId: number;
 }): Promise<
-  | { ok: true; safeMessage?: string; safeSignals: string[] }
+  | { ok: true; bytes: Uint8Array; mimeType: string; safeSignals: string[] }
   | { ok: false; reason: string; safeSignals: string[] }
 > {
   const removeSafetyNet = installPortalBlobDownloadSafetyNet(input.tabId);
@@ -45,27 +42,7 @@ export async function acquirePageGeneratedArtifact(input: {
       input.returnType,
     );
     if (!validation.ok) return { ok: false, reason: validation.reason, safeSignals: [] };
-    const delivery = await downloadAcquiredArtifact({
-      base64: captured.base64,
-      filename: input.filename,
-      mimeType: validation.mimeType,
-      requestId: input.requestId,
-      ...(input.onStarted ? { onStarted: input.onStarted } : {}),
-      ...(input.onStartCheckpointFailed
-        ? { onStartCheckpointFailed: input.onStartCheckpointFailed }
-        : {}),
-    });
-    return delivery.ok
-      ? {
-          ok: true,
-          safeSignals: [
-            ...captured.safeSignals,
-            ...delivery.safeSignals,
-            "extension-download-complete",
-          ],
-          ...(delivery.safeMessage ? { safeMessage: delivery.safeMessage } : {}),
-        }
-      : { ok: false, reason: delivery.reason, safeSignals: delivery.safeSignals };
+    return { ok: true, bytes, mimeType: validation.mimeType, safeSignals: captured.safeSignals };
   } finally {
     removeSafetyNet();
   }

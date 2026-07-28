@@ -1,5 +1,6 @@
 import type {
   FiledReturnsDownloadScope,
+  FiledReturnsDownloadDiagnostic,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
 import type { PackMessageResponse } from "../connectors/gst/messages";
@@ -15,6 +16,8 @@ import { acquireGstr3bPdfAfterPreflight } from "./gstr3b-artifact-acquisition";
 import { acquirePageGeneratedArtifact } from "./gstr2b-artifact-acquisition";
 import { toPortalReturnPeriod } from "../connectors/gst/filed-returns-return-period";
 import { downloadAcquiredArtifact } from "./artifact-download";
+import { stageOffscreenFiledReturn } from "./offscreen-blob-url";
+import { safeFiledReturnZipEntryPath } from "./filed-returns-download-filename";
 import {
   clearArtifactAcquisitionCheckpoint,
   persistArtifactAcquisitionDownloadId,
@@ -409,23 +412,40 @@ async function triggerPageGeneratedSinglePeriodArtifact(
     };
     const acquired =
       returnType === "GSTR-2B" && artifact.state === "acquired"
-        ? await downloadAcquiredArtifact({
+        ? await deliverValidatedArtifact({
+            artifactType,
             base64: artifact.base64,
+            callbacks,
+            deps,
             filename: artifactFilename(scope, "JSON"),
             mimeType: artifact.mimeType,
             requestId,
-            ...callbacks,
+            returnType,
+            scope,
           })
         : artifact.state === "ready" && (artifactType === "PDF" || artifactType === "EXCEL")
           ? await acquirePageGeneratedArtifact({
               artifactType,
-              filename: artifactFilename(scope, artifactType),
               requestId,
               returnPeriod,
               returnType,
               tabId,
-              ...callbacks,
-            })
+            }).then((captured) =>
+              captured.ok
+                ? deliverValidatedArtifact({
+                    artifactType,
+                    base64: bytesToBase64(captured.bytes),
+                    callbacks,
+                    deps,
+                    filename: artifactFilename(scope, artifactType),
+                    mimeType: captured.mimeType,
+                    requestId,
+                    returnType,
+                    scope,
+                    safeSignals: captured.safeSignals,
+                  })
+                : captured,
+            )
           : null;
     if (!acquired) {
       return pageGeneratedArtifactDispatchFailure(returnType, "StateInvalid");
@@ -447,6 +467,9 @@ async function triggerPageGeneratedSinglePeriodArtifact(
               "extension-download-complete",
             ],
             safeMessage: acquired.safeMessage ?? artifactSuccessMessage(returnType, artifactType),
+            ...(acquired.downloadDiagnostic
+              ? { downloadDiagnostic: acquired.downloadDiagnostic }
+              : {}),
           },
         }
       : {
@@ -468,6 +491,123 @@ async function triggerPageGeneratedSinglePeriodArtifact(
       await clearArtifactAcquisitionCheckpoint(checkpointTarget, requestId);
     }
   }
+}
+
+async function deliverValidatedArtifact({
+  artifactType,
+  base64,
+  callbacks,
+  deps,
+  filename,
+  mimeType,
+  requestId,
+  returnType,
+  scope,
+  safeSignals = [],
+}: {
+  artifactType: FiledReturnsConcreteArtifactType;
+  base64: string;
+  callbacks: {
+    onStarted: (downloadId: number) => Promise<void>;
+    onStartCheckpointFailed: (downloadId: number) => Promise<void>;
+  };
+  deps: FiledReturnsFlowMessagingDeps;
+  filename: string;
+  mimeType: string;
+  requestId: string;
+  returnType: "GSTR-1" | "GSTR-2B";
+  scope: FiledReturnsDownloadScope;
+  safeSignals?: string[];
+}): Promise<
+  | {
+      ok: true;
+      downloadDiagnostic?: FiledReturnsDownloadDiagnostic;
+      safeMessage?: string;
+      safeSignals: string[];
+    }
+  | { ok: false; reason: string; safeSignals: string[] }
+> {
+  const staging = deps.stageCapturedDownloads;
+  if (staging) {
+    const result = await stageOffscreenFiledReturn({
+      artifactType,
+      dataUrl: `data:${mimeType};base64,${base64}`,
+      ledgerId: staging.ledgerId,
+      returnType,
+      zipPath: safeFiledReturnZipEntryPath(scope, artifactType),
+    });
+    return result.status === "staged"
+      ? {
+          ok: true,
+          safeSignals: [
+            ...safeSignals,
+            `${staging.bundleKind}-opfs-staged`,
+            `${staging.bundleKind}-opfs-staged:${artifactType}`,
+          ],
+          downloadDiagnostic: stagedArtifactDiagnostic(scope, artifactType, mimeType, requestId),
+        }
+      : { ok: false, reason: result.errorCategory ?? "stage-failed", safeSignals };
+  }
+  const delivery = await downloadAcquiredArtifact({
+    base64,
+    filename,
+    mimeType,
+    requestId,
+    ...callbacks,
+  });
+  return delivery.ok
+    ? {
+        ok: true,
+        safeSignals: [...safeSignals, ...delivery.safeSignals, "extension-download-complete"],
+        ...(delivery.safeMessage ? { safeMessage: delivery.safeMessage } : {}),
+      }
+    : {
+        ok: false,
+        reason: delivery.reason,
+        safeSignals: [...safeSignals, ...delivery.safeSignals],
+      };
+}
+
+function stagedArtifactDiagnostic(
+  scope: FiledReturnsDownloadScope,
+  artifactType: FiledReturnsConcreteArtifactType,
+  mimeType: string,
+  actionId: string,
+): FiledReturnsDownloadDiagnostic {
+  const mimeClass =
+    mimeType === "application/pdf"
+      ? "pdf"
+      : mimeType === "application/json"
+        ? "json"
+        : "spreadsheet";
+  const endpointClass =
+    scope.returnType === "GSTR-2B"
+      ? "gstr2b-portal-blob-captured-download"
+      : artifactType === "EXCEL"
+        ? "gstr1-excel-portal-blob-captured-download"
+        : "gstr1-pdf-portal-blob-captured-download";
+  return {
+    actionId,
+    artifactType,
+    byteCountClass: "non-empty",
+    downloadPathClass: "captured-portal-request-data",
+    endpointClass,
+    eventType: "filed-return-download-path",
+    financialYear: scope.financialYear,
+    mimeClass,
+    period: scope.period,
+    returnType: scope.returnType,
+    schemaVersion: "1.0",
+    status: "downloaded",
+  };
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  }
+  return btoa(binary);
 }
 
 function gstr2bArtifactDispatchFailure(

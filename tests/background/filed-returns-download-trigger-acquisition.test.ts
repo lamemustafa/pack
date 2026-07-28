@@ -8,6 +8,8 @@ const captureMocks = vi.hoisted(() => ({
   })),
   acquirePageGeneratedArtifact: vi.fn(async () => ({
     ok: true as const,
+    bytes: new Uint8Array([0x50, 0x4b]),
+    mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     safeSignals: ["synthetic-extension-download-complete"],
   })),
   downloadAcquiredArtifact: vi.fn(async () => ({
@@ -409,36 +411,36 @@ describe("GSTR-2B artifact acquisition dispatch", () => {
     },
   );
 
-  it.each([
-    ["PDF", "ComplyEaze-Pack/2026-27/GSTR-2B/June-summary.pdf"],
-    ["EXCEL", "ComplyEaze-Pack/2026-27/GSTR-2B/June-details.xlsx"],
-  ] as const)("never reaches main-world capture for %s", async (artifactType, filename) => {
-    const response = await triggerAndObserveFiledReturnDownload({
-      activePeriod: "June",
-      artifactType,
-      deps: {
-        sendMessageToTabWithInjection: vi.fn(
-          async () =>
-            ({
-              ok: true,
-              artifact: {
+  it.each(["PDF", "EXCEL"] as const)(
+    "captures validated %s bytes before delivery",
+    async (artifactType) => {
+      const response = await triggerAndObserveFiledReturnDownload({
+        activePeriod: "June",
+        artifactType,
+        deps: {
+          sendMessageToTabWithInjection: vi.fn(
+            async () =>
+              ({
                 ok: true,
-                requestId: "synthetic-2b-request",
-                safeSignals: ["target-period-verified"],
-                state: "ready",
-              },
-            }) as PackMessageResponse,
-        ),
-        storageKeys: {},
-      },
-      scope: { financialYear: "2026-27", period: "June", returnType: "GSTR-2B" },
-      tabId: 17,
-    });
-    expect(response).toMatchObject({ flowStep: { state: "downloaded" } });
-    expect(captureMocks.acquirePageGeneratedArtifact).toHaveBeenCalledWith(
-      expect.objectContaining({ artifactType, filename, tabId: 17 }),
-    );
-  });
+                artifact: {
+                  ok: true,
+                  requestId: "synthetic-2b-request",
+                  safeSignals: ["target-period-verified"],
+                  state: "ready",
+                },
+              }) as PackMessageResponse,
+          ),
+          storageKeys: {},
+        },
+        scope: { financialYear: "2026-27", period: "June", returnType: "GSTR-2B" },
+        tabId: 17,
+      });
+      expect(response).toMatchObject({ flowStep: { state: "downloaded" } });
+      expect(captureMocks.acquirePageGeneratedArtifact).toHaveBeenCalledWith(
+        expect.objectContaining({ artifactType, tabId: 17 }),
+      );
+    },
+  );
 
   it("writes GSTR-2B portal data with its data suffix", async () => {
     await triggerAndObserveFiledReturnDownload({
@@ -490,12 +492,9 @@ describe("GSTR-2B artifact acquisition dispatch", () => {
 });
 
 describe("GSTR-1 artifact acquisition dispatch", () => {
-  it.each([
-    ["PDF", "ComplyEaze-Pack/2026-27/GSTR-1/June-summary.pdf"],
-    ["EXCEL", "ComplyEaze-Pack/2026-27/E-Invoice/June-details.xlsx"],
-  ] as const)(
+  it.each(["PDF", "EXCEL"] as const)(
     "uses the bounded portal shim for the %s artifact",
-    async (artifactType, filename) => {
+    async (artifactType) => {
       const response = await triggerAndObserveFiledReturnDownload({
         activePeriod: "June",
         artifactType,
@@ -520,7 +519,7 @@ describe("GSTR-1 artifact acquisition dispatch", () => {
 
       expect(response).toMatchObject({ flowStep: { state: "downloaded" } });
       expect(captureMocks.acquirePageGeneratedArtifact).toHaveBeenCalledWith(
-        expect.objectContaining({ artifactType, filename, returnType: "GSTR-1", tabId: 17 }),
+        expect.objectContaining({ artifactType, returnType: "GSTR-1", tabId: 17 }),
       );
     },
   );

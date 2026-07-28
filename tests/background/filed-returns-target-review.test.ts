@@ -762,7 +762,7 @@ describe("filed returns target review", () => {
 });
 
 function diagnostic(
-  artifactType: "PDF" | "EXCEL",
+  artifactType: "PDF" | "JSON" | "EXCEL",
   actionId: string,
 ): FiledReturnsDownloadDiagnostic {
   return {
@@ -775,9 +775,9 @@ function diagnostic(
     endpointClass: "gstr2b-portal-blob-captured-download",
     artifactType,
     downloadPathClass: "captured-portal-request-blob",
-    downloadId: artifactType === "PDF" ? 41 : 42,
+    downloadId: artifactType === "PDF" ? 41 : artifactType === "JSON" ? 43 : 42,
     status: artifactType === "PDF" ? "downloaded" : "download-unconfirmed",
-    mimeClass: artifactType === "PDF" ? "pdf" : "spreadsheet",
+    mimeClass: artifactType === "PDF" ? "pdf" : artifactType === "JSON" ? "json" : "spreadsheet",
     byteCountClass: artifactType === "PDF" ? "non-empty" : "unknown",
   };
 }
@@ -874,23 +874,41 @@ function intentBundleLedger(scope: FiledReturnsDownloadScope) {
     stagedBundleStep(scope, "EXCEL"),
     new Date("2026-06-23T23:59:59.000Z"),
   )!;
-  return markSinglePeriodBundleZipIntent(ready, new Date("2026-06-24T00:00:00.000Z"))!;
+  if (scope.returnType !== "GSTR-2B") {
+    return markSinglePeriodBundleZipIntent(ready, new Date("2026-06-24T00:00:00.000Z"))!;
+  }
+  const jsonRunning = markSinglePeriodBundleArtifactRunning(
+    ready,
+    "JSON",
+    new Date("2026-06-24T00:00:00.000Z"),
+  )!;
+  const jsonStaged = markSinglePeriodBundleArtifactStaged(
+    jsonRunning,
+    "JSON",
+    stagedBundleStep(scope, "JSON"),
+    new Date("2026-06-24T00:00:01.000Z"),
+  )!;
+  return markSinglePeriodBundleZipIntent(jsonStaged, new Date("2026-06-24T00:00:02.000Z"))!;
 }
 
 function stagedBundleStep(
   scope: FiledReturnsDownloadScope,
-  artifactType: "PDF" | "EXCEL",
+  artifactType: "PDF" | "JSON" | "EXCEL",
 ): PortalFlowStepResult {
   return {
     connectorId: "gst",
     downloadDiagnostic: {
       ...diagnostic(
         artifactType,
-        artifactType === "PDF" ? "action-m0abc123-pdf00001" : "action-m0abc123-excel001",
+        artifactType === "PDF"
+          ? "action-m0abc123-pdf00001"
+          : artifactType === "JSON"
+            ? "action-m0abc123-json0001"
+            : "action-m0abc123-excel001",
       ),
       byteCountClass: "non-empty",
       downloadId: artifactType === "PDF" ? 51 : 52,
-      mimeClass: artifactType === "PDF" ? "pdf" : "spreadsheet",
+      mimeClass: artifactType === "PDF" ? "pdf" : artifactType === "JSON" ? "json" : "spreadsheet",
       status: "downloaded",
       financialYear: scope.financialYear,
       period: scope.period,

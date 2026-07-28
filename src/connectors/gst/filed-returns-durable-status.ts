@@ -68,6 +68,17 @@ export function canonicalDurableSummaryMessage(
   status: FiledReturnsFlowSummary["status"],
   signals: readonly string[],
 ): string {
+  if (status === "partial") {
+    const missingArtifacts = signals
+      .map((signal) => /^filed-return-artifact-unavailable:(PDF|JSON|EXCEL)$/.exec(signal)?.[1])
+      .filter((artifactType): artifactType is string => Boolean(artifactType));
+    const missingReasons = signals.filter((signal) => /^artifact-[a-z0-9-]+$/.test(signal));
+    if (missingArtifacts.length > 0 && missingArtifacts.length === missingReasons.length) {
+      return `Pack prepared a partial ZIP; missing ${missingArtifacts
+        .map((artifactType, index) => `${artifactType} (${missingReasons[index]})`)
+        .join(", ")}.`;
+    }
+  }
   return renderDurableMessage(messageKeyForSummary(status, signals), scope);
 }
 

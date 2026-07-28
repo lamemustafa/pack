@@ -58,6 +58,7 @@ const FLOW_STATES = new Set<PortalFlowStepResult["state"]>([
   "download-unconfirmed",
   "downloaded",
   "login-required",
+  "partial",
   "ready",
   "unsupported-page",
   "user-action-required",

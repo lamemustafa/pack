@@ -239,7 +239,10 @@ export async function exportSinglePeriodFiledReturnsZip({
     completeStep,
     ledgerId,
     scope,
-    safeMessage: "Pack exported the selected filed-return files as one local zip.",
+    safeMessage:
+      completeStep.state === "partial"
+        ? completeStep.safeMessage
+        : "Pack exported the selected filed-return files as one local zip.",
     startRejectedMessage:
       "Pack prepared the selected filed-return zip, but the browser rejected the final save.",
     unconfirmedMessage:
@@ -706,7 +709,7 @@ function fullFiscalYearStagingRequirement(ledger: FiledReturnsFullFiscalYearLedg
   for (const target of ledger.targets) {
     if (target.status === "not-filed") continue;
     const signals = new Set(target.safeSignals);
-    for (const artifactType of concreteFiledReturnsArtifactTypes(target.artifactType)) {
+    for (const artifactType of selectedArtifactTypesForScope(target)) {
       if (signals.has(`filed-return-artifact-unavailable:${artifactType}`)) continue;
       expectedEntries.push(
         ...transientSinglePeriodZipExpectedEntries(
@@ -731,18 +734,30 @@ function fullFiscalYearStagingRequirement(ledger: FiledReturnsFullFiscalYearLedg
   };
 }
 
+function selectedArtifactTypesForScope(
+  scope: Pick<FiledReturnsDownloadScope, "artifactType" | "returnType">,
+): FiledReturnsConcreteArtifactType[] {
+  return scope.returnType === "GSTR-2B" && scope.artifactType === "PDF_AND_EXCEL"
+    ? ["PDF", "EXCEL", "JSON"]
+    : concreteFiledReturnsArtifactTypes(scope.artifactType);
+}
+
 function isValidSinglePeriodZipEntryPlan(
   scope: FiledReturnsDownloadScope,
   entryPlan: SinglePeriodFiledReturnsZipEntryPlan,
 ): boolean {
-  const selectedArtifactTypes = concreteFiledReturnsArtifactTypes(
-    normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType),
-  );
+  const selectedArtifactTypes: FiledReturnsConcreteArtifactType[] =
+    scope.returnType === "GSTR-2B" &&
+    normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType) === "PDF_AND_EXCEL"
+      ? ["PDF", "EXCEL", "JSON"]
+      : concreteFiledReturnsArtifactTypes(
+          normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType),
+        );
   const unavailableArtifactTypes = [...entryPlan.unavailableArtifactTypes];
   const expectedArtifactTypes = [...entryPlan.artifactTypes];
   if (
     expectedArtifactTypes.length < 1 ||
-    expectedArtifactTypes.length > 2 ||
+    expectedArtifactTypes.length > 3 ||
     new Set(expectedArtifactTypes).size !== expectedArtifactTypes.length ||
     new Set(unavailableArtifactTypes).size !== unavailableArtifactTypes.length ||
     expectedArtifactTypes.some((artifactType) => unavailableArtifactTypes.includes(artifactType))
@@ -753,9 +768,7 @@ function isValidSinglePeriodZipEntryPlan(
   if (
     accountedArtifactTypes.size !== selectedArtifactTypes.length ||
     selectedArtifactTypes.some((artifactType) => !accountedArtifactTypes.has(artifactType)) ||
-    unavailableArtifactTypes.some(
-      (artifactType) => scope.returnType !== "GSTR-1" || artifactType !== "EXCEL",
-    )
+    unavailableArtifactTypes.some((artifactType) => !selectedArtifactTypes.includes(artifactType))
   ) {
     return false;
   }
@@ -771,10 +784,12 @@ function transientSinglePeriodZipExpectedEntries(
     entryNames:
       artifactType === "PDF"
         ? [safeFiledReturnZipEntryPath(scope, artifactType, ".pdf")]
-        : [
-            safeFiledReturnZipEntryPath(scope, artifactType, ".xls"),
-            safeFiledReturnZipEntryPath(scope, artifactType, ".xlsx"),
-          ],
+        : artifactType === "JSON"
+          ? [safeFiledReturnZipEntryPath(scope, artifactType, ".json")]
+          : [
+              safeFiledReturnZipEntryPath(scope, artifactType, ".xls"),
+              safeFiledReturnZipEntryPath(scope, artifactType, ".xlsx"),
+            ],
   }));
 }
 

@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type * as ArtifactDownloadModule from "../../src/background/artifact-download";
-
 const mocks = vi.hoisted(() => ({
   executeScript: vi.fn(),
   removeListener: vi.fn(),
@@ -95,22 +94,15 @@ describe("GSTR-2B page-generated acquisition", () => {
         },
       },
     ]);
-    mocks.downloadAcquiredArtifact.mockResolvedValue({
-      ok: true,
-      downloadId: 10,
-      bytesReceived: 1024,
-      safeSignals: [],
-    });
     await expect(
       acquirePageGeneratedArtifact({
         artifactType: "EXCEL",
-        filename: "ComplyEaze-Pack/2024-25/GSTR-2B/April.xlsx",
         requestId: "request-2b",
         returnPeriod: "042024",
         returnType: "GSTR-2B",
         tabId: 17,
       }),
-    ).resolves.toMatchObject({ ok: true });
+    ).resolves.toMatchObject({ ok: true, mimeType: expect.stringContaining("spreadsheet") });
     expect(mocks.executeScript).toHaveBeenCalledWith(
       expect.objectContaining({
         args: [
@@ -132,7 +124,6 @@ describe("GSTR-2B page-generated acquisition", () => {
     await expect(
       acquirePageGeneratedArtifact({
         artifactType: "PDF",
-        filename: "ComplyEaze-Pack/2024-25/GSTR-1/April-summary.pdf",
         requestId: "gstr1-timeout",
         returnPeriod: "042024",
         returnType: "GSTR-1",

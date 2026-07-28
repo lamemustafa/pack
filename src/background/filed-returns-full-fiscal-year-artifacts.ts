@@ -34,8 +34,8 @@ export function mergeRetriedArtifactSignals(
 export function durableFullFiscalYearArtifactSignals(signals: readonly string[]): string[] {
   return signals.filter(
     (signal) =>
-      /^filed-return-artifact-(?:downloaded|unavailable):(?:PDF|EXCEL)$/.test(signal) ||
-      /^full-fiscal-year-opfs-staged:(?:PDF|EXCEL)$/.test(signal),
+      /^filed-return-artifact-(?:downloaded|unavailable):(?:PDF|JSON|EXCEL)$/.test(signal) ||
+      /^full-fiscal-year-opfs-staged:(?:PDF|JSON|EXCEL)$/.test(signal),
   );
 }
 
@@ -45,7 +45,7 @@ export function requireFullFiscalYearArtifactsStaged(
 ): PortalFlowStepResult {
   if (flowStep.state !== "downloaded") return flowStep;
   const signals = new Set(flowStep.safeSignals);
-  const missingArtifactTypes = concreteFiledReturnsArtifactTypes(scope.artifactType).filter(
+  const missingArtifactTypes = selectedArtifactTypes(scope).filter(
     (artifactType) =>
       !signals.has(`${FULL_YEAR_STAGED_SIGNAL_PREFIX}${artifactType}`) &&
       !signals.has(`filed-return-artifact-unavailable:${artifactType}`),
@@ -85,4 +85,10 @@ function remainingArtifactTypeForTarget(
   if (pdfDone && !excelDone) return "EXCEL";
   if (excelDone && !pdfDone) return "PDF";
   return target.artifactType;
+}
+
+function selectedArtifactTypes(scope: FiledReturnsDownloadScope) {
+  return scope.returnType === "GSTR-2B" && scope.artifactType === "PDF_AND_EXCEL"
+    ? (["PDF", "EXCEL", "JSON"] as const)
+    : concreteFiledReturnsArtifactTypes(scope.artifactType);
 }

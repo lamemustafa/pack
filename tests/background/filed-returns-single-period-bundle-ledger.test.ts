@@ -37,11 +37,11 @@ const browserMocks = vi.hoisted(() => ({
 vi.mock("wxt/browser", () => ({ browser: browserMocks }));
 
 const STORAGE_KEY = "pack:single-period-staging";
-const GSTR2B_SCOPE = {
+const GSTR1_SCOPE = {
   artifactType: "PDF_AND_EXCEL",
   financialYear: "2026-27",
   period: "April",
-  returnType: "GSTR-2B",
+  returnType: "GSTR-1",
 } as const satisfies FiledReturnsDownloadScope;
 const CREATED_AT = new Date("2026-07-24T00:00:00.000Z");
 const PDF_RUNNING_AT = new Date("2026-07-24T00:00:01.000Z");
@@ -67,7 +67,7 @@ describe("single-period bundle ledger", () => {
   });
 
   it("persists a versioned, scope-bound ordered bundle intent", async () => {
-    const reservation = await reserveSinglePeriodBundleLedger(GSTR2B_SCOPE, CREATED_AT);
+    const reservation = await reserveSinglePeriodBundleLedger(GSTR1_SCOPE, CREATED_AT);
 
     expect(reservation).toMatchObject({
       state: "created",
@@ -76,7 +76,7 @@ describe("single-period bundle ledger", () => {
         phase: "collecting",
         revision: 1,
         schemaVersion: "1.0",
-        scope: GSTR2B_SCOPE,
+        scope: GSTR1_SCOPE,
         artifacts: [
           { artifactType: "PDF", status: "pending" },
           { artifactType: "EXCEL", status: "pending" },
@@ -85,20 +85,67 @@ describe("single-period bundle ledger", () => {
     });
     expect(await readSinglePeriodBundleLedgerStorageState()).toMatchObject({
       state: "valid",
-      ledger: { revision: 1, scope: GSTR2B_SCOPE },
+      ledger: { revision: 1, scope: GSTR1_SCOPE },
     });
     expect(JSON.stringify(localValues[STORAGE_KEY])).not.toMatch(
       /zipPath|filename|localPath|https?:|blob:|data:/i,
     );
     expect(
-      createSinglePeriodBundleLedger(GSTR2B_SCOPE, "full-fiscal-year-abcd1234", CREATED_AT),
+      createSinglePeriodBundleLedger(GSTR1_SCOPE, "full-fiscal-year-abcd1234", CREATED_AT),
     ).toBeNull();
   });
 
+  it("plans all three GSTR-2B formats and preserves their staged order", () => {
+    const scope = { ...GSTR1_SCOPE, returnType: "GSTR-2B" as const };
+    const created = createSinglePeriodBundleLedger(
+      scope,
+      "single-period:12345678-gstr2b",
+      CREATED_AT,
+    )!;
+    const pdfRunning = markSinglePeriodBundleArtifactRunning(created, "PDF", PDF_RUNNING_AT)!;
+    const pdfStaged = markSinglePeriodBundleArtifactStaged(
+      pdfRunning,
+      "PDF",
+      stagedStep(scope, "PDF"),
+      PDF_STAGED_AT,
+    )!;
+    const excelRunning = markSinglePeriodBundleArtifactRunning(
+      pdfStaged,
+      "EXCEL",
+      EXCEL_RUNNING_AT,
+    )!;
+    const excelStaged = markSinglePeriodBundleArtifactStaged(
+      excelRunning,
+      "EXCEL",
+      stagedStep(scope, "EXCEL"),
+      EXCEL_STAGED_AT,
+    )!;
+    const jsonRunning = markSinglePeriodBundleArtifactRunning(
+      excelStaged,
+      "JSON",
+      new Date("2026-07-24T00:00:05.000Z"),
+    )!;
+    const ready = markSinglePeriodBundleArtifactStaged(
+      jsonRunning,
+      "JSON",
+      stagedStep(scope, "JSON"),
+      new Date("2026-07-24T00:00:06.000Z"),
+    )!;
+
+    expect(ready).toMatchObject({
+      artifactPlan: ["PDF", "EXCEL", "JSON"],
+      phase: "ready-for-zip",
+    });
+    expect(singlePeriodBundleEntryPlan(ready)).toEqual({
+      artifactTypes: ["PDF", "EXCEL", "JSON"],
+      unavailableArtifactTypes: [],
+    });
+  });
+
   it("returns the saved ledger for a duplicate reservation without replacing its identity", async () => {
-    const first = await reserveSinglePeriodBundleLedger(GSTR2B_SCOPE, CREATED_AT);
+    const first = await reserveSinglePeriodBundleLedger(GSTR1_SCOPE, CREATED_AT);
     const duplicate = await reserveSinglePeriodBundleLedger(
-      GSTR2B_SCOPE,
+      GSTR1_SCOPE,
       new Date("2026-07-24T00:01:00.000Z"),
     );
 
@@ -149,7 +196,7 @@ describe("single-period bundle ledger", () => {
     const pdfStaged = await persistSinglePeriodBundleArtifactStaged(
       pdfRunning!,
       "PDF",
-      stagedStep(GSTR2B_SCOPE, "PDF"),
+      stagedStep(GSTR1_SCOPE, "PDF"),
       PDF_STAGED_AT,
     );
 
@@ -187,15 +234,15 @@ describe("single-period bundle ledger", () => {
     const ready = await persistBothArtifacts();
     const flowStep = singlePeriodBundleFlowStep(ready!);
 
-    expect(flowStep?.scopeId).toBe("gst-gstr2b-private-v0");
+    expect(flowStep?.scopeId).toBe("gst-filed-returns-gstr1-pdf-private-v0");
     expect(
       flowStep?.safeSignals.filter((signal) => signal === "single-period-opfs-staged"),
     ).toEqual(["single-period-opfs-staged"]);
     expect(new Set(flowStep?.safeSignals).size).toBe(flowStep?.safeSignals.length);
   });
 
-  it("allows only policy-approved GSTR-1 Excel unavailability in the ZIP plan", async () => {
-    const scope = { ...GSTR2B_SCOPE, returnType: "GSTR-1" as const };
+  it("records an unavailable selected artifact with its safe reason in the ZIP plan", async () => {
+    const scope = GSTR1_SCOPE;
     const initial = createSinglePeriodBundleLedger(
       scope,
       "single-period:12345678-gstr1",
@@ -230,12 +277,27 @@ describe("single-period bundle ledger", () => {
       artifactTypes: ["PDF"],
       unavailableArtifactTypes: ["EXCEL"],
     });
+    expect(singlePeriodBundleFlowStep(ready!)?.safeMessage).toContain(
+      "EXCEL (artifact-filed-gstr1-excel-no-details-available)",
+    );
+  });
+
+  it("rejects non-enumerated artifact signals before they can enter durable state", () => {
+    const initial = requiredLedger();
+    const running = markSinglePeriodBundleArtifactRunning(initial, "PDF", PDF_RUNNING_AT)!;
+
     expect(
       markSinglePeriodBundleArtifactUnavailable(
-        { ...excelRunning!, scope: GSTR2B_SCOPE },
-        "EXCEL",
-        unavailableExcelStep(GSTR2B_SCOPE),
-        EXCEL_STAGED_AT,
+        running,
+        "PDF",
+        {
+          connectorId: "gst",
+          safeMessage: "Synthetic failure.",
+          safeSignals: ["artifact-unlisted-portal-signal"],
+          scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
+          state: "blocked",
+        },
+        PDF_STAGED_AT,
       ),
     ).toBeNull();
   });
@@ -320,7 +382,7 @@ describe("single-period bundle ledger", () => {
       recoverableLedgerId: ledger.ledgerId,
       state: "malformed",
     });
-    await expect(reserveSinglePeriodBundleLedger(GSTR2B_SCOPE, CREATED_AT)).resolves.toEqual({
+    await expect(reserveSinglePeriodBundleLedger(GSTR1_SCOPE, CREATED_AT)).resolves.toEqual({
       recoverableLedgerId: ledger.ledgerId,
       state: "malformed",
     });
@@ -374,7 +436,7 @@ describe("single-period bundle ledger", () => {
     await expect(
       persistSinglePeriodBundleArtifactRunning(initial, "EXCEL", EXCEL_RUNNING_AT),
     ).resolves.toBeNull();
-    const missingDiagnosticStep = stagedStep(GSTR2B_SCOPE, "PDF");
+    const missingDiagnosticStep = stagedStep(GSTR1_SCOPE, "PDF");
     delete missingDiagnosticStep.downloadDiagnostic;
     expect(
       markSinglePeriodBundleArtifactStaged(running!, "PDF", missingDiagnosticStep, PDF_STAGED_AT),
@@ -383,11 +445,7 @@ describe("single-period bundle ledger", () => {
 });
 
 function requiredLedger() {
-  return createSinglePeriodBundleLedger(
-    GSTR2B_SCOPE,
-    "single-period:12345678-durable",
-    CREATED_AT,
-  )!;
+  return createSinglePeriodBundleLedger(GSTR1_SCOPE, "single-period:12345678-durable", CREATED_AT)!;
 }
 
 async function persistBothArtifacts() {
@@ -397,7 +455,7 @@ async function persistBothArtifacts() {
   const pdfStaged = await persistSinglePeriodBundleArtifactStaged(
     pdfRunning!,
     "PDF",
-    stagedStep(GSTR2B_SCOPE, "PDF"),
+    stagedStep(GSTR1_SCOPE, "PDF"),
     PDF_STAGED_AT,
   );
   const excelRunning = await persistSinglePeriodBundleArtifactRunning(
@@ -408,14 +466,14 @@ async function persistBothArtifacts() {
   return persistSinglePeriodBundleArtifactStaged(
     excelRunning!,
     "EXCEL",
-    stagedStep(GSTR2B_SCOPE, "EXCEL"),
+    stagedStep(GSTR1_SCOPE, "EXCEL"),
     EXCEL_STAGED_AT,
   );
 }
 
 function stagedStep(
   scope: FiledReturnsDownloadScope,
-  artifactType: "PDF" | "EXCEL",
+  artifactType: "PDF" | "JSON" | "EXCEL",
 ): PortalFlowStepResult {
   return {
     connectorId: "gst",
@@ -444,7 +502,7 @@ function unavailableExcelStep(scope: FiledReturnsDownloadScope): PortalFlowStepR
 
 function diagnostic(
   scope: FiledReturnsDownloadScope,
-  artifactType: "PDF" | "EXCEL",
+  artifactType: "PDF" | "JSON" | "EXCEL",
   status: PortalFlowStepResult["state"],
 ): FiledReturnsDownloadDiagnostic {
   return {
@@ -460,7 +518,7 @@ function diagnostic(
         : "gstr2b-portal-blob-captured-download",
     eventType: "filed-return-download-path",
     financialYear: scope.financialYear,
-    mimeClass: artifactType === "PDF" ? "pdf" : "spreadsheet",
+    mimeClass: artifactType === "PDF" ? "pdf" : artifactType === "JSON" ? "json" : "spreadsheet",
     period: scope.period,
     returnType: scope.returnType,
     schemaVersion: "1.0",

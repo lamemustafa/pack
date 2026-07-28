@@ -681,11 +681,13 @@ describe("filed returns target download recovery", () => {
         safeSignals: expect.arrayContaining([
           "single-period-opfs-staged:PDF",
           "single-period-opfs-staged:EXCEL",
+          "single-period-opfs-staged:JSON",
           "single-period-zip-downloaded",
         ]),
         downloadDiagnostics: [
           expect.objectContaining({ artifactType: "PDF", status: "downloaded" }),
           expect.objectContaining({ artifactType: "EXCEL", status: "downloaded" }),
+          expect.objectContaining({ artifactType: "JSON", status: "downloaded" }),
         ],
       },
     });
@@ -1009,7 +1011,18 @@ function intentBundleLedger() {
     stagedBundleStep("EXCEL"),
     new Date("2026-07-23T23:58:54.000Z"),
   )!;
-  return markSinglePeriodBundleZipIntent(ready, new Date(REQUESTED_AT))!;
+  const jsonRunning = markSinglePeriodBundleArtifactRunning(
+    ready,
+    "JSON",
+    new Date("2026-07-23T23:58:55.000Z"),
+  )!;
+  const jsonStaged = markSinglePeriodBundleArtifactStaged(
+    jsonRunning,
+    "JSON",
+    stagedBundleStep("JSON"),
+    new Date("2026-07-23T23:58:56.000Z"),
+  )!;
+  return markSinglePeriodBundleZipIntent(jsonStaged, new Date(REQUESTED_AT))!;
 }
 
 function observingBundleLedger(downloadId: number) {
@@ -1021,7 +1034,7 @@ function observingBundleLedger(downloadId: number) {
   )!;
 }
 
-function stagedBundleStep(artifactType: "PDF" | "EXCEL"): PortalFlowStepResult {
+function stagedBundleStep(artifactType: "PDF" | "JSON" | "EXCEL"): PortalFlowStepResult {
   return {
     connectorId: "gst",
     downloadDiagnostic: bundleDiagnostic(artifactType),
@@ -1036,16 +1049,21 @@ function stagedBundleStep(artifactType: "PDF" | "EXCEL"): PortalFlowStepResult {
   };
 }
 
-function bundleDiagnostic(artifactType: "PDF" | "EXCEL"): FiledReturnsDownloadDiagnostic {
+function bundleDiagnostic(artifactType: "PDF" | "JSON" | "EXCEL"): FiledReturnsDownloadDiagnostic {
   return {
-    actionId: artifactType === "PDF" ? "action-m0abc123-pdf00001" : "action-m0abc123-excel001",
+    actionId:
+      artifactType === "PDF"
+        ? "action-m0abc123-pdf00001"
+        : artifactType === "JSON"
+          ? "action-m0abc123-json0001"
+          : "action-m0abc123-excel001",
     artifactType,
     byteCountClass: "non-empty",
     downloadPathClass: "captured-portal-request-data",
     endpointClass: "gstr2b-portal-blob-captured-download",
     eventType: "filed-return-download-path",
     financialYear: ZIP_SCOPE.financialYear,
-    mimeClass: artifactType === "PDF" ? "pdf" : "spreadsheet",
+    mimeClass: artifactType === "PDF" ? "pdf" : artifactType === "JSON" ? "json" : "spreadsheet",
     period: ZIP_SCOPE.period,
     returnType: ZIP_SCOPE.returnType,
     schemaVersion: "1.0",

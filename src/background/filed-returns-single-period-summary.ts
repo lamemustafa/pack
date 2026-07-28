@@ -52,9 +52,10 @@ function toSinglePeriodSummary(
   const isReconciled =
     flowStep.state === "downloaded" ||
     flowStep.safeSignals.includes("filed-return-positively-not-filed");
+  const isPartial = flowStep.state === "partial";
   return {
     scope,
-    status: isReconciled ? "complete" : "blocked",
+    status: isReconciled ? "complete" : isPartial ? "partial" : "blocked",
     ...(isReconciled ? { completedAt: now.toISOString() } : { updatedAt: now.toISOString() }),
     completedPeriods: isReconciled ? [scope.period] : [],
     currentPeriod: scope.period,

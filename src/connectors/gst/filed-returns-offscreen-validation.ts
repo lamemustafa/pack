@@ -40,7 +40,7 @@ export function isPackOffscreenBlobUrlMessage(
 
 export function isCanonicalFiledReturnZipEntryName(value: unknown): value is string {
   if (typeof value !== "string") return false;
-  const match = /^([a-z]+)\.(pdf|xls|xlsx)$/.exec(value);
+  const match = /^([a-z]+)(?:-(summary|details|data))?\.(pdf|xls|xlsx|json)$/.exec(value);
   return Boolean(match && FILED_RETURNS_MONTHS.some((period) => period.toLowerCase() === match[1]));
 }
 
@@ -69,5 +69,6 @@ function artifactTypeFromZipEntryName(zipPath: string): FiledReturnsConcreteArti
   const lowerPath = zipPath.toLowerCase();
   if (lowerPath.endsWith(".pdf")) return "PDF";
   if (lowerPath.endsWith(".xls") || lowerPath.endsWith(".xlsx")) return "EXCEL";
+  if (lowerPath.endsWith(".json")) return "JSON";
   return null;
 }

@@ -67,7 +67,6 @@ export async function preflightSelectedArtifactsRecovery({
   deps: FiledReturnsFlowRunnerDeps;
   scope: FiledReturnsDownloadScope;
 }): Promise<PackMessageResponse | null> {
-  if (scope.returnType === "GSTR-2B") return null;
   const artifactTypes = selectedArtifactTypes(scope);
   const compatibleDurableSinglePeriodBundle =
     artifactTypes.length > 1 && !deps.stageCapturedDownloads;
@@ -119,9 +118,7 @@ export async function triggerSelectedArtifacts({
   tabId: number;
 }): Promise<PackMessageResponse> {
   const artifactTypes = selectedArtifactTypes(scope);
-  const continueAfterArtifactFailure = scope.returnType === "GSTR-2B" && artifactTypes.length > 1;
-  const usesDurableSinglePeriodBundle =
-    scope.returnType !== "GSTR-2B" && artifactTypes.length > 1 && !deps.stageCapturedDownloads;
+  const usesDurableSinglePeriodBundle = artifactTypes.length > 1 && !deps.stageCapturedDownloads;
   let singlePeriodBundleLedger: SinglePeriodBundleLedger | null = null;
   if (usesDurableSinglePeriodBundle) {
     const reservation = await reserveSinglePeriodBundleLedger(scope, deps.now?.() ?? new Date());
@@ -175,7 +172,6 @@ export async function triggerSelectedArtifacts({
     PackMessageResponse,
     { ok: true; flowStep: PortalFlowStepResult }
   > | null = null;
-  const failedArtifactTypes = new Set<FiledReturnsConcreteArtifactType>();
 
   for (const artifactType of artifactTypes) {
     if (completedArtifactTypes.has(artifactType)) continue;
@@ -233,7 +229,33 @@ export async function triggerSelectedArtifacts({
       return response;
     }
     if (response.flowStep.state !== "downloaded") {
-      const artifactOutcome = withArtifactOutcome(response.flowStep, artifactType);
+      if (singlePeriodBundleLedger) {
+        const unavailableLedger = await persistSinglePeriodBundleArtifactUnavailable(
+          singlePeriodBundleLedger,
+          artifactType,
+          response.flowStep,
+          deps.now?.() ?? new Date(),
+        );
+        if (!unavailableLedger) {
+          const reviewLedger = await persistSinglePeriodBundleArtifactReview(
+            singlePeriodBundleLedger,
+            artifactType,
+            response.flowStep,
+            deps.now?.() ?? new Date(),
+          );
+          return persistAmbiguousSinglePeriodBundleResponse(
+            reviewLedger ?? singlePeriodBundleLedger,
+            deps,
+            response.flowStep,
+          );
+        }
+        singlePeriodBundleLedger = unavailableLedger;
+        combinedFlowStep = singlePeriodBundleFlowStep(unavailableLedger);
+        if (!combinedFlowStep) return staleSinglePeriodBundleResponse(unavailableLedger);
+        lastResponse = { ...response, flowStep: combinedFlowStep };
+        completedArtifactTypes.add(artifactType);
+        continue;
+      }
       const unavailableArtifactFlowStep = toOptionalArtifactUnavailableFlowStep({
         artifactType,
         artifactTypes,
@@ -242,57 +264,9 @@ export async function triggerSelectedArtifacts({
         scope,
       });
       if (unavailableArtifactFlowStep) {
-        if (singlePeriodBundleLedger) {
-          const unavailableLedger = await persistSinglePeriodBundleArtifactUnavailable(
-            singlePeriodBundleLedger,
-            artifactType,
-            response.flowStep,
-            deps.now?.() ?? new Date(),
-          );
-          if (!unavailableLedger) {
-            return persistAmbiguousSinglePeriodBundleResponse(
-              singlePeriodBundleLedger,
-              deps,
-              response.flowStep,
-            );
-          }
-          singlePeriodBundleLedger = unavailableLedger;
-          combinedFlowStep = singlePeriodBundleFlowStep(unavailableLedger);
-          if (!combinedFlowStep) return staleSinglePeriodBundleResponse(unavailableLedger);
-          lastResponse = { ...response, flowStep: combinedFlowStep };
-          completedArtifactTypes.add(artifactType);
-          continue;
-        }
         lastResponse = { ...response, flowStep: unavailableArtifactFlowStep };
         completedArtifactTypes.add(artifactType);
         combinedFlowStep = unavailableArtifactFlowStep;
-        continue;
-      }
-
-      if (singlePeriodBundleLedger) {
-        const reviewLedger = await persistSinglePeriodBundleArtifactReview(
-          singlePeriodBundleLedger,
-          artifactType,
-          response.flowStep,
-          deps.now?.() ?? new Date(),
-        );
-        return persistAmbiguousSinglePeriodBundleResponse(
-          reviewLedger ?? singlePeriodBundleLedger,
-          deps,
-          response.flowStep,
-        );
-      }
-
-      if (continueAfterArtifactFailure) {
-        failedArtifactTypes.add(artifactType);
-        completedArtifactTypes.add(artifactType);
-        combinedFlowStep = combineDownloadedArtifactFlowSteps(
-          combinedFlowStep,
-          artifactOutcome,
-          scope,
-        );
-        lastResponse = { ...response, flowStep: combinedFlowStep };
-        await persistPartialArtifactSummary(scope, combinedFlowStep, artifactDeps);
         continue;
       }
 
@@ -364,24 +338,15 @@ export async function triggerSelectedArtifacts({
     flowStep:
       artifactTypes.length === 1
         ? combinedFlowStep
-        : failedArtifactTypes.size > 0
-          ? {
-              ...combinedFlowStep,
-              state: "blocked",
-              safeMessage:
-                "Pack finished the available GSTR-2B artifacts, but one or more selected artifacts need review before retrying.",
-            }
+        : combinedFlowStep.state === "partial"
+          ? combinedFlowStep
           : {
               ...combinedFlowStep,
               safeMessage: selectedArtifactsSafeMessage(combinedFlowStep),
             },
   };
-  if (failedArtifactTypes.size > 0 && response.ok && "flowStep" in response) {
-    const flowSummary = await persistPartialArtifactSummary(scope, response.flowStep, artifactDeps);
-    return { ...response, flowSummary };
-  }
   if (!singlePeriodBundleLedgerId || artifactTypes.length === 1 || !response.ok) return response;
-  if (!("flowStep" in response) || response.flowStep.state !== "downloaded") {
+  if (!("flowStep" in response) || !["downloaded", "partial"].includes(response.flowStep.state)) {
     return singlePeriodBundleLedger
       ? staleSinglePeriodBundleResponse(singlePeriodBundleLedger)
       : response;
@@ -394,6 +359,16 @@ export async function triggerSelectedArtifacts({
   if (!singlePeriodBundleLedger) return staleSinglePeriodBundleResponse(null, scope);
   const entryPlan = singlePeriodBundleEntryPlan(singlePeriodBundleLedger);
   if (!entryPlan) return staleSinglePeriodBundleResponse(singlePeriodBundleLedger);
+  if (entryPlan.artifactTypes.length === 0) {
+    return {
+      ...response,
+      flowStep: {
+        ...response.flowStep,
+        state: "blocked",
+        safeMessage: `${response.flowStep.safeMessage} Pack could not create a ZIP because every selected artifact was missing.`,
+      },
+    };
+  }
 
   const zipCheckpointDeps = {
     ...artifactDeps,
@@ -431,7 +406,9 @@ export async function triggerSelectedArtifacts({
               ]),
             ),
             safeMessage:
-              "Pack confirmed the selected-file ZIP and saved its completion before clearing recovery checkpoints.",
+              stagedFlowStep.state === "partial"
+                ? stagedFlowStep.safeMessage
+                : "Pack confirmed the selected-file ZIP and saved its completion before clearing recovery checkpoints.",
           };
           const completionCheckpoint = await persistFiledReturnsTargetReview(
             scope,
@@ -455,14 +432,16 @@ export async function triggerSelectedArtifacts({
           if (!canClearSinglePeriodBundleRecovery(singlePeriodBundleLedger, targetReview)) {
             throw new Error("single-period ZIP completion checkpoint mismatch");
           }
-          const durableCompletion = await persistCanonicalSinglePeriodCompletion(
-            zipCheckpointDeps.storageKeys.completion,
-            scope,
-            completionStep,
-            deps.now?.() ?? new Date(),
-          );
-          if (!durableCompletion) {
-            throw new Error("single-period ZIP canonical completion checkpoint failed");
+          if (completionStep.state === "downloaded") {
+            const durableCompletion = await persistCanonicalSinglePeriodCompletion(
+              zipCheckpointDeps.storageKeys.completion,
+              scope,
+              completionStep,
+              deps.now?.() ?? new Date(),
+            );
+            if (!durableCompletion) {
+              throw new Error("single-period ZIP canonical completion checkpoint failed");
+            }
           }
         }
         const bundleCleared = await clearSinglePeriodBundleLedger(

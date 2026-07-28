@@ -123,6 +123,14 @@ function getInlineStatusCopy(
     };
   }
   if (presentation.kind === "partial") {
+    if (summary?.flowStep.safeMessage) {
+      return {
+        body: summary.flowStep.safeMessage,
+        icon: "!",
+        title: "Download partly complete",
+        tone: "warning",
+      };
+    }
     const completed = summary?.completedPeriods.length ?? 0;
     const total = summary?.totalPeriods ?? completed;
     return {
