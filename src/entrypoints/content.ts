@@ -2,7 +2,6 @@ import { browser } from "wxt/browser";
 import { detectGstPortalContext } from "../connectors/gst/detect";
 import { acquireFiledReturnArtifact } from "../connectors/gst/artifact-source";
 import { runFiledReturnsDownloadStep } from "../connectors/gst/filed-returns-flow";
-import { triggerFiledReturnDownload } from "../connectors/gst/filed-returns-download";
 import { navigateToFiledReturnsPage } from "../connectors/gst/filed-returns-navigator";
 import { observeFiledReturnsPageText } from "../connectors/gst/filed-returns-observer";
 import { detectPostClickBlockedState } from "../connectors/gst/filed-returns-post-click-blocked-state";
@@ -122,35 +121,6 @@ export default defineContentScript({
           observation,
         } satisfies PackMessageResponse);
         return false;
-      }
-
-      if (contentMessage.type === "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3") {
-        void triggerFiledReturnDownload(document, contentMessage.payload)
-          .then(({ mainWorldCaptureRequest, downloadTrigger }) => {
-            const observation = sendFiledReturnsObservation();
-            if (mainWorldCaptureRequest) {
-              sendResponse({
-                ok: true,
-                mainWorldCaptureRequest,
-                downloadTrigger,
-                observation,
-              } satisfies PackMessageResponse);
-              return;
-            }
-            sendResponse({
-              ok: true,
-              downloadTrigger,
-              observation,
-            } satisfies PackMessageResponse);
-          })
-          .catch((error: unknown) =>
-            sendResponse({
-              ok: false,
-              error:
-                error instanceof Error ? error.message : "Filed return download trigger failed.",
-            } satisfies PackMessageResponse),
-          );
-        return true;
       }
 
       if (contentMessage.type === "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34") {

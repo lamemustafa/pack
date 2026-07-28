@@ -6,7 +6,7 @@ const captureMocks = vi.hoisted(() => ({
     ok: true as const,
     safeSignals: ["synthetic-extension-download-complete"],
   })),
-  acquireGstr2bPageGeneratedArtifact: vi.fn(async () => ({
+  acquirePageGeneratedArtifact: vi.fn(async () => ({
     ok: true as const,
     safeSignals: ["synthetic-extension-download-complete"],
   })),
@@ -21,10 +21,16 @@ const captureMocks = vi.hoisted(() => ({
   persistArtifactAcquisitionDownloadId: vi.fn(async () => undefined),
   persistArtifactAcquisitionIntent: vi.fn(async () => undefined),
   persistArtifactAcquisitionUnconfirmedDownload: vi.fn(async () => undefined),
-  startMainWorldCapturedFiledReturnDownload: vi.fn(),
+}));
+const summaryStorage = vi.hoisted(() => ({
+  remove: vi.fn(async () => undefined),
+  set: vi.fn(async () => undefined),
 }));
 
-vi.mock("../../src/background/filed-returns-captured-download", () => captureMocks);
+vi.mock("wxt/browser", () => ({
+  browser: { storage: { session: summaryStorage } },
+}));
+
 vi.mock("../../src/background/artifact-download", () => ({
   downloadAcquiredArtifact: captureMocks.downloadAcquiredArtifact,
 }));
@@ -39,7 +45,7 @@ vi.mock("../../src/background/gstr3b-artifact-acquisition", () => ({
   acquireGstr3bPdfAfterPreflight: captureMocks.acquireGstr3bPdfAfterPreflight,
 }));
 vi.mock("../../src/background/gstr2b-artifact-acquisition", () => ({
-  acquireGstr2bPageGeneratedArtifact: captureMocks.acquireGstr2bPageGeneratedArtifact,
+  acquirePageGeneratedArtifact: captureMocks.acquirePageGeneratedArtifact,
 }));
 
 import { Gstr3bArtifactAcquisitionBlockReason } from "../../src/background/gstr3b-artifact-acquisition-block";
@@ -49,15 +55,16 @@ import {
 } from "../../src/connectors/gst/artifact-source";
 import {
   GSTR2B_ARTIFACT_DISPATCH_FAILURE_MESSAGES,
+  GSTR1_ARTIFACT_DISPATCH_FAILURE_MESSAGES,
+  Gstr1ArtifactDispatchFailureReason,
   Gstr2bArtifactDispatchFailureReason,
   triggerAndObserveFiledReturnDownload,
 } from "../../src/background/filed-returns-download-trigger";
 import { startFullFiscalYearDownloadFlow } from "../../src/background/filed-returns-full-fiscal-year";
+import { withPersistedSinglePeriodSummary } from "../../src/background/filed-returns-single-period-summary";
 import { FILED_RETURNS_RETURN_TYPES } from "../../src/connectors/gst/filed-returns-return-types";
 
-const ARTIFACT_ACQUISITION_RETURN_TYPES = FILED_RETURNS_RETURN_TYPES.filter(
-  (returnType) => returnType !== "GSTR-1",
-);
+const ARTIFACT_ACQUISITION_RETURN_TYPES = FILED_RETURNS_RETURN_TYPES;
 
 describe("GSTR-3B artifact acquisition dispatch", () => {
   it("blocks the full-year runner before it can expand GSTR-3B into legacy monthly targets", async () => {
@@ -105,7 +112,6 @@ describe("GSTR-3B artifact acquisition dispatch", () => {
       tabId: 17,
     });
 
-    expect(captureMocks.startMainWorldCapturedFiledReturnDownload).not.toHaveBeenCalled();
     if (period === "ALL") {
       expect(response).toMatchObject({
         flowStep: {
@@ -429,8 +435,7 @@ describe("GSTR-2B artifact acquisition dispatch", () => {
       tabId: 17,
     });
     expect(response).toMatchObject({ flowStep: { state: "downloaded" } });
-    expect(captureMocks.startMainWorldCapturedFiledReturnDownload).not.toHaveBeenCalled();
-    expect(captureMocks.acquireGstr2bPageGeneratedArtifact).toHaveBeenCalledWith(
+    expect(captureMocks.acquirePageGeneratedArtifact).toHaveBeenCalledWith(
       expect.objectContaining({ artifactType, filename, tabId: 17 }),
     );
   });
@@ -481,8 +486,121 @@ describe("GSTR-2B artifact acquisition dispatch", () => {
       },
     });
     expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
-    expect(captureMocks.startMainWorldCapturedFiledReturnDownload).not.toHaveBeenCalled();
   });
+});
+
+describe("GSTR-1 artifact acquisition dispatch", () => {
+  it.each([
+    ["PDF", "ComplyEaze-Pack/2026-27/GSTR-1/June-summary.pdf"],
+    ["EXCEL", "ComplyEaze-Pack/2026-27/E-Invoice/June-details.xlsx"],
+  ] as const)(
+    "uses the bounded portal shim for the %s artifact",
+    async (artifactType, filename) => {
+      const response = await triggerAndObserveFiledReturnDownload({
+        activePeriod: "June",
+        artifactType,
+        deps: {
+          sendMessageToTabWithInjection: vi.fn(
+            async () =>
+              ({
+                ok: true,
+                artifact: {
+                  ok: true,
+                  requestId: "synthetic-gstr1-request",
+                  safeSignals: ["target-period-verified"],
+                  state: "ready",
+                },
+              }) as PackMessageResponse,
+          ),
+          storageKeys: {},
+        },
+        scope: { financialYear: "2026-27", period: "June", returnType: "GSTR-1" },
+        tabId: 17,
+      });
+
+      expect(response).toMatchObject({ flowStep: { state: "downloaded" } });
+      expect(captureMocks.acquirePageGeneratedArtifact).toHaveBeenCalledWith(
+        expect.objectContaining({ artifactType, filename, returnType: "GSTR-1", tabId: 17 }),
+      );
+    },
+  );
+
+  it.each([
+    [Gstr1ArtifactDispatchFailureReason.PeriodInvalid, "FULL_FISCAL_YEAR", "PDF", undefined],
+    [
+      Gstr1ArtifactDispatchFailureReason.ContentUnavailable,
+      "April",
+      "PDF",
+      { ok: false, error: "CONTENT_SCRIPT_UNAVAILABLE" },
+    ],
+    [Gstr1ArtifactDispatchFailureReason.ResponseMissing, "April", "PDF", { ok: true }],
+    [
+      Gstr1ArtifactDispatchFailureReason.StateInvalid,
+      "April",
+      "PDF",
+      {
+        ok: true,
+        artifact: {
+          ok: true,
+          requestId: "synthetic-gstr1-request",
+          safeSignals: [],
+          state: "acquired",
+          base64: "e30=",
+          mimeType: "application/json",
+        },
+      },
+    ],
+  ] as const)(
+    "maps %s to a rendered terminal message",
+    async (reason, period, artifactType, reply) => {
+      vi.clearAllMocks();
+      const scope = {
+        artifactType,
+        financialYear: "2026-27",
+        period,
+        returnType: "GSTR-1",
+      } as const;
+      const response = await triggerAndObserveFiledReturnDownload({
+        activePeriod: period,
+        artifactType,
+        deps: {
+          sendMessageToTabWithInjection: vi.fn(async () => reply as PackMessageResponse),
+          storageKeys: {},
+        },
+        scope,
+        tabId: 17,
+      });
+
+      expect(response).toMatchObject({
+        ok: true,
+        flowStep: {
+          safeMessage: GSTR1_ARTIFACT_DISPATCH_FAILURE_MESSAGES[reason],
+          safeSignals: [reason],
+          state: "blocked",
+        },
+      });
+      if (!response.ok || !("flowStep" in response))
+        throw new Error("Expected a terminal flow step.");
+      const durableScope = period === "FULL_FISCAL_YEAR" ? { ...scope, period: "April" } : scope;
+      const persisted = await withPersistedSinglePeriodSummary(
+        durableScope,
+        response,
+        { storageKeys: { completion: "completion" } } as never,
+        true,
+      );
+      expect(persisted).toMatchObject({
+        flowSummary: {
+          flowStep: { safeSignals: [reason], state: "blocked" },
+          status: "blocked",
+        },
+      });
+      expect(summaryStorage.set).toHaveBeenCalledWith({
+        completion: expect.objectContaining({
+          flowStep: expect.objectContaining({ safeSignals: [reason], state: "blocked" }),
+        }),
+      });
+    },
+  );
 });
 
 function acquiredJson(): PackMessageResponse {

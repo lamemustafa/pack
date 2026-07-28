@@ -18,7 +18,7 @@ export function validateArtifactBytes(
   bytes: Uint8Array,
   artifactType: "PDF" | "JSON" | "EXCEL",
   expectedReturnPeriod: string,
-  returnType: "GSTR-3B" | "GSTR-2B" = "GSTR-3B",
+  returnType: "GSTR-3B" | "GSTR-2B" | "GSTR-1" = "GSTR-3B",
 ): ArtifactValidationResult {
   if (bytes.byteLength === 0) return { ok: false, reason: "empty" };
   if (bytes.byteLength > MAX_ARTIFACT_BYTES) return { ok: false, reason: "too-large" };
@@ -47,14 +47,16 @@ export function validateArtifactBytes(
   try {
     const parsed = JSON.parse(new TextDecoder().decode(bytes)) as {
       status?: unknown;
-      data?: { r3b?: { ret_period?: unknown }; rtnprd?: unknown };
+      data?: { r3b?: { ret_period?: unknown }; ret_period?: unknown; rtnprd?: unknown };
     };
     const actualPeriod =
       returnType === "GSTR-2B"
         ? parsed.data?.rtnprd
-        : parsed.status === 1
-          ? parsed.data?.r3b?.ret_period
-          : null;
+        : returnType === "GSTR-1"
+          ? parsed.data?.ret_period
+          : parsed.status === 1
+            ? parsed.data?.r3b?.ret_period
+            : null;
     if (typeof actualPeriod !== "string") return { ok: false, reason: "unexpected-content" };
     return actualPeriod === expectedReturnPeriod
       ? { ok: true, mimeType: "application/json" }

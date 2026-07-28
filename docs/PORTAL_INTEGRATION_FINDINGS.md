@@ -37,3 +37,20 @@ This log records live diagnostic findings that constrain Pack's local, target-bo
 15. Portal-generated artifacts are not byte-stable across downloads. Three copies of the same PDF
     and two copies of the same XLSX produced different SHA-256 values because of PDF generation and
     XLSX ZIP entry timestamps, so neither a file hash nor byte size is valid document-identity evidence.
+16. Return-period parameters and response fields vary by endpoint:
+
+    | Return    | Query parameter | Verified response field   |
+    | --------- | --------------- | ------------------------- |
+    | GSTR-3B   | `rtn_prd`       | `data.r3b.ret_period`     |
+    | GSTR-2B   | `rtnprd`        | `data.rtnprd`             |
+    | GSTR-1    | `rtn_prd`       | `data.ret_period`         |
+    | E-invoice | `rtn_prd`       | uses the GSTR-1 preflight |
+
+    Omitting the required parameter can yield HTML or a body without a period field, so preflight
+    fails closed on missing or mismatched periods. GSTR-1 validates `data.ret_period` alone; it
+    does not gate on the unverified root-level status value. Diagnostic probes must record
+    parameter names, not only URL pathnames.
+
+17. GSTR-1 exposes three artifacts: a period-scoped Summary PDF, a period-scoped E-invoice details
+    (Excel) workbook from a separate subsystem, and asynchronous offline-download JSON. Pack
+    supports the first two portal-produced artifacts only; the asynchronous JSON remains unsupported.

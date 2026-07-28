@@ -1,5 +1,9 @@
 import { validateArtifactBytes } from "./artifact-validation";
 import {
+  GSTR1_DETAIL_PATH,
+  GSTR1_PAGE_GENERATED_ARTIFACTS,
+  GSTR1_SUMMARY_PATH,
+  GSTR1_SUMMARY_PREFLIGHT_PATH,
   GSTR2B_JSON_PATH,
   GSTR2B_ORIGIN,
   GSTR2B_PAGE_GENERATED_ARTIFACTS,
@@ -13,7 +17,7 @@ const GSTR3B_GET_GEN_PDF_PATH = "/returns/auth/api/gstr3b/getgenpdf";
 const GST_RETURNS_ORIGIN = "https://return.gst.gov.in";
 
 export type ArtifactRequest = {
-  returnType: "GSTR-3B" | "GSTR-2B";
+  returnType: "GSTR-1" | "GSTR-3B" | "GSTR-2B";
   artifactType: "PDF" | "JSON" | "EXCEL";
   financialYear: string;
   period: string;
@@ -39,9 +43,10 @@ export type ArtifactFailureReason =
 
 export const ARTIFACT_FAILURE_MESSAGES = {
   "unsupported-target": "Pack cannot acquire that filed-return artifact.",
-  "wrong-page": "Pack can acquire this artifact only from an authenticated GSTR-3B detail page.",
+  "wrong-page":
+    "Pack can acquire this artifact only from the matching authenticated GST Portal page.",
   "control-not-found":
-    "Pack could not find exactly one filed GSTR-3B PDF control on the verified detail page.",
+    "Pack could not find exactly one verified artifact control on the authenticated GST Portal page.",
   "preflight-failed": "The GST Portal did not accept Pack's artifact preflight request.",
   "response-missing": "Pack did not receive a usable filed-return artifact from the GST Portal.",
   "target-period-mismatch":
@@ -55,9 +60,10 @@ export const ARTIFACT_FAILURE_MESSAGES = {
     "The GST Portal returned content that is not a verified filed-return artifact.",
   empty: "The GST Portal returned an empty filed-return artifact.",
   "too-large": "The GST Portal returned an artifact that exceeds Pack's safe local size limit.",
-  "generation-timeout": "The GST Portal did not finish generating the filed-return PDF in time.",
+  "generation-timeout":
+    "The GST Portal did not finish generating the filed-return artifact in time.",
   "page-period-mismatch":
-    "The visible GSTR-3B detail page does not match the requested financial year and period.",
+    "The visible GST Portal page does not match the requested financial year and period.",
 } satisfies Record<ArtifactFailureReason, string>;
 
 export function artifactFailureMessage(reason: ArtifactFailureReason): string {
@@ -82,6 +88,7 @@ export async function acquireFiledReturnArtifact(
   request: ArtifactRequest,
 ): Promise<ArtifactResult> {
   if (request.returnType === "GSTR-2B") return acquireGstr2bArtifact(documentRef, request);
+  if (request.returnType === "GSTR-1") return acquireGstr1Artifact(documentRef, request);
   if (request.artifactType === "EXCEL") return failed(request, "unsupported-target");
   const view = documentRef.defaultView;
   if (!view || view.location.origin !== GST_RETURNS_ORIGIN) return failed(request, "wrong-page");
@@ -138,6 +145,71 @@ export async function acquireFiledReturnArtifact(
     requestId: request.requestId,
     safeSignals: ["target-period-verified", "page-generated-pdf-ready"],
   };
+}
+
+async function acquireGstr1Artifact(
+  documentRef: Document,
+  request: ArtifactRequest,
+): Promise<ArtifactResult> {
+  if (request.artifactType === "JSON") return failed(request, "unsupported-target");
+  const view = documentRef.defaultView;
+  if (!view || view.location.origin !== GST_RETURNS_ORIGIN) return failed(request, "wrong-page");
+  const fetch = view.fetch?.bind(view);
+  if (!fetch) return failed(request, "endpoint-unavailable");
+  let response: Response;
+  try {
+    response = await fetch(
+      `${GSTR1_SUMMARY_PREFLIGHT_PATH}?rtn_prd=${encodeURIComponent(request.returnPeriod)}`,
+      { credentials: "same-origin" },
+    );
+  } catch {
+    return failed(request, "endpoint-unavailable");
+  }
+  if (!response.ok) return failed(request, "preflight-failed");
+  const preflightBytes = new Uint8Array(await response.arrayBuffer());
+  if (isHtmlResponse(preflightBytes)) return failed(request, "preflight-failed");
+  const preflight = validateArtifactBytes(preflightBytes, "JSON", request.returnPeriod, "GSTR-1");
+  if (!preflight.ok) return failed(request, preflight.reason);
+  const expectedPath = request.artifactType === "PDF" ? GSTR1_SUMMARY_PATH : GSTR1_DETAIL_PATH;
+  if (view.location.pathname !== expectedPath)
+    return failed(request, "wrong-page", ["target-period-verified"]);
+  if (!hasVisibleGstr1Target(documentRef, request)) {
+    return failed(request, "page-period-mismatch", [
+      "target-period-verified",
+      "page-target-unverified",
+    ]);
+  }
+  const descriptor = GSTR1_PAGE_GENERATED_ARTIFACTS[request.artifactType];
+  const controls = Array.from(
+    documentRef.querySelectorAll<HTMLElement>("a, button, [role='button']"),
+  ).filter(
+    (element) => normaliseText(element.textContent || "") === normaliseText(descriptor.controlText),
+  );
+  if (controls.length !== 1 || !controls[0])
+    return failed(request, "control-not-found", ["target-period-verified"]);
+  controls[0].setAttribute("data-pack-artifact-request", request.requestId);
+  return {
+    ok: true,
+    state: "ready",
+    requestId: request.requestId,
+    safeSignals: [
+      "target-period-verified",
+      `page-generated-${request.artifactType.toLowerCase()}-ready`,
+    ],
+  };
+}
+
+function hasVisibleGstr1Target(documentRef: Document, request: ArtifactRequest): boolean {
+  const text = normaliseText(documentRef.body?.textContent || "");
+  return (
+    text.includes(`financial year - ${normaliseText(request.financialYear)}`) &&
+    text.includes(`return period - ${normaliseText(request.period)}`)
+  );
+}
+
+function isHtmlResponse(bytes: Uint8Array): boolean {
+  const prefix = new TextDecoder().decode(bytes.subarray(0, 256)).trimStart().toLowerCase();
+  return prefix.startsWith("<!doctype html") || prefix.startsWith("<html");
 }
 
 async function acquireGstr2bArtifact(

@@ -221,6 +221,99 @@ describe("GSTR-2B artifact acquisition", () => {
   });
 });
 
+describe("GSTR-1 artifact acquisition", () => {
+  const request: ArtifactRequest = {
+    artifactType: "PDF",
+    financialYear: "2024-25",
+    period: "April",
+    requestId: "gstr1-request",
+    returnPeriod: "042024",
+    returnType: "GSTR-1",
+  };
+
+  it("preflights with rtn_prd and accepts data.ret_period without a status field", async () => {
+    const { documentRef, fetch } = gstr1Page(gstr1Json("042024"));
+
+    await expect(acquireFiledReturnArtifact(documentRef, request)).resolves.toMatchObject({
+      ok: true,
+      safeSignals: ["target-period-verified", "page-generated-pdf-ready"],
+      state: "ready",
+    });
+    const [requestedPath, options] =
+      (fetch.mock.calls[0] as [RequestInfo | URL, RequestInit] | undefined) ?? [];
+    const requestedUrl = new URL(String(requestedPath), "https://synthetic.test");
+    expect(requestedUrl.pathname).toBe("/returns/auth/api/gstr1/summary");
+    expect(requestedUrl.searchParams.get("rtn_prd")).toBe(request.returnPeriod);
+    expect(options).toEqual({ credentials: "same-origin" });
+    expect(documentRef.querySelector("button")?.getAttribute("data-pack-artifact-request")).toBe(
+      request.requestId,
+    );
+  });
+
+  it.each([
+    [
+      "missing period",
+      JSON.stringify({ data: { padding: "x".repeat(100) } }),
+      "unexpected-content",
+    ],
+    ["wrong period", gstr1Json("052024"), "target-period-mismatch"],
+  ] as const)("fails closed for %s before clicking", async (_label, responseBody, reason) => {
+    const { documentRef } = gstr1Page(responseBody);
+    const click = vi.fn();
+    documentRef.body.addEventListener("click", click);
+
+    await expect(acquireFiledReturnArtifact(documentRef, request)).resolves.toMatchObject({
+      ok: false,
+      reason,
+    });
+    expect(click).not.toHaveBeenCalled();
+  });
+
+  it("fails closed for an HTTP failure or HTML preflight response", async () => {
+    const denied = gstr1Page("{}", undefined, undefined, 500);
+    await expect(acquireFiledReturnArtifact(denied.documentRef, request)).resolves.toMatchObject({
+      ok: false,
+      reason: "preflight-failed",
+    });
+
+    const html = gstr1Page("<!doctype html><html><body>synthetic</body></html>");
+    await expect(acquireFiledReturnArtifact(html.documentRef, request)).resolves.toMatchObject({
+      ok: false,
+      reason: "preflight-failed",
+    });
+  });
+
+  it("fails closed before arming when the visible GSTR-1 period is stale", async () => {
+    const { documentRef, fetch } = gstr1Page(gstr1Json("042024"));
+    documentRef.body.innerHTML = documentRef.body.innerHTML.replaceAll("April", "May");
+
+    await expect(acquireFiledReturnArtifact(documentRef, request)).resolves.toMatchObject({
+      ok: false,
+      reason: "page-period-mismatch",
+      safeSignals: ["target-period-verified", "page-target-unverified"],
+    });
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(
+      documentRef.querySelector("button")?.getAttribute("data-pack-artifact-request"),
+    ).toBeNull();
+  });
+
+  it("arms the E-invoice workbook only on the matching GSTR-1 detail page", async () => {
+    const { documentRef } = gstr1Page(
+      gstr1Json("042024"),
+      "https://return.gst.gov.in/returns/auth/gstr1",
+      "DOWNLOAD DETAILS FROM E-INVOICES (EXCEL)",
+    );
+
+    await expect(
+      acquireFiledReturnArtifact(documentRef, { ...request, artifactType: "EXCEL" }),
+    ).resolves.toMatchObject({ ok: true, state: "ready" });
+    expect(documentRef.querySelector("button")?.getAttribute("data-pack-artifact-request")).toBe(
+      request.requestId,
+    );
+  });
+});
+
 function validJson() {
   return JSON.stringify({
     status: 1,
@@ -276,4 +369,31 @@ function gstr2bJson(returnPeriod: string) {
     data: { rtnprd: returnPeriod, padding: "x".repeat(100) },
     chksum: "synthetic",
   });
+}
+
+function gstr1Page(
+  body: string,
+  url = "https://return.gst.gov.in/returns/auth/gstr1/gstr1sum",
+  controlText = "DOWNLOAD SUMMARY (PDF)",
+  status = 200,
+) {
+  const dom = new JSDOM(
+    `<body><main><h1>GSTR-1 Summary</h1><p>Status - Filed</p><p>Financial Year - 2024-25</p><p>Return Period - April</p><button>${controlText}</button></main></body>`,
+    { url },
+  );
+  Object.defineProperty(
+    (dom.window as unknown as typeof globalThis).HTMLElement.prototype,
+    "getBoundingClientRect",
+    {
+      configurable: true,
+      value: () => ({ bottom: 10, height: 10, left: 0, right: 10, top: 0, width: 10 }),
+    },
+  );
+  const fetch = vi.fn(async () => new Response(body, { status }));
+  Object.defineProperty(dom.window, "fetch", { configurable: true, value: fetch });
+  return { documentRef: dom.window.document, fetch };
+}
+
+function gstr1Json(returnPeriod: string) {
+  return JSON.stringify({ data: { ret_period: returnPeriod, padding: "x".repeat(100) } });
 }

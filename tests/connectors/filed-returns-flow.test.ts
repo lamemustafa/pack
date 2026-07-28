@@ -591,7 +591,6 @@ describe("filed returns guided flow", () => {
     expect(result.downloadTrigger.safeSignals).toContain(
       "filed-gstr2b-download-candidate-ambiguous",
     );
-    expect(result.mainWorldCaptureRequest).toBeUndefined();
   });
 
   it("navigates authenticated wrong-page GSTR-2B starts through the Return Dashboard", async () => {
@@ -3067,7 +3066,6 @@ describe("filed returns guided flow", () => {
 
     expect(result.downloadTrigger.state).toBe("blocked");
     expect(result.downloadTrigger.safeSignals).toContain("filed-return-download-target-mismatch");
-    expect(result.mainWorldCaptureRequest).toBeUndefined();
     expect(pdfClicked).toBe(0);
   });
 
@@ -3108,7 +3106,6 @@ describe("filed returns guided flow", () => {
         "filed-gstr2b-download-clicked",
       ]),
     });
-    expect(result.mainWorldCaptureRequest).toBeUndefined();
   });
 
   it("dismisses the GST bank warning with Cancel and does not click File Amendment", async () => {
@@ -6402,7 +6399,6 @@ describe("filed returns guided flow", () => {
         state: "blocked",
         safeSignals: expect.arrayContaining(["gstr3b-legacy-acquisition-retired"]),
       });
-      expect(result.mainWorldCaptureRequest).toBeUndefined();
       expect(downloadClicked).toBe(0);
     },
   );
@@ -6482,28 +6478,10 @@ describe("filed returns guided flow", () => {
     expect(result.downloadTrigger.state).toBe("clicked");
     expect(result.downloadTrigger.scopeId).toBe("gst-filed-returns-gstr1-pdf-private-v0");
     expect(result.downloadTrigger.safeSignals).toEqual(
-      expect.arrayContaining([
-        "filed-return-download-clicked",
-        "filed-gstr1-download-clicked",
-        "filed-gstr1-portal-blob-download-captured",
-        "filed-gstr1-extension-download-requested",
-      ]),
+      expect.arrayContaining(["filed-return-download-clicked", "filed-gstr1-download-clicked"]),
     );
-    expect(result.mainWorldCaptureRequest).toMatchObject({
-      actionId: "test-action",
-      signalPrefix: "filed-gstr1",
-      targetBinding: {
-        artifactType: "PDF",
-        controlTextDigest: expect.stringMatching(/^[a-f0-9]{8}$/),
-        financialYear: "2025-26",
-        pathnameDigest: expect.stringMatching(/^[a-f0-9]{8}$/),
-        period: "March",
-        returnType: "GSTR-1",
-      },
-      timeoutMs: 15_000,
-    });
-    expect(result.mainWorldCaptureRequest).not.toHaveProperty("asyncBlobBinding");
-    expect(downloadClicked).toBe(0);
+    expect(result).not.toHaveProperty("mainWorldCaptureRequest");
+    expect(downloadClicked).toBe(1);
   });
 
   it("treats the filed GSTR-1 View Summary page as PDF-download ready", async () => {
@@ -6576,16 +6554,10 @@ describe("filed returns guided flow", () => {
         "download-pdf-gstr1-visible",
         "filed-return-download-clicked",
         "text-download-pdf-gstr1",
-        "filed-gstr1-portal-blob-download-captured",
-        "filed-gstr1-extension-download-requested",
       ]),
     );
-    expect(result.mainWorldCaptureRequest).toMatchObject({
-      actionId: "test-action",
-      signalPrefix: "filed-gstr1",
-      timeoutMs: 15_000,
-    });
-    expect(downloadClicked).toBe(0);
+    expect(result).not.toHaveProperty("mainWorldCaptureRequest");
+    expect(downloadClicked).toBe(1);
   });
 
   it("returns from the filed GSTR-1 View Summary page before an Excel-only trigger", async () => {
@@ -6830,17 +6802,11 @@ describe("filed returns guided flow", () => {
         "filed-return-download-clicked",
         "filed-gstr1-download-clicked",
         "text-download-excel-gstr1",
-        "filed-gstr1-portal-blob-download-captured",
-        "filed-gstr1-extension-download-requested",
       ]),
     );
-    expect(result.mainWorldCaptureRequest).toMatchObject({
-      actionId: "test-action",
-      signalPrefix: "filed-gstr1",
-      timeoutMs: 15_000,
-    });
+    expect(result).not.toHaveProperty("mainWorldCaptureRequest");
     expect(pdfClicked).toBe(0);
-    expect(excelClicked).toBe(0);
+    expect(excelClicked).toBe(1);
   });
 
   it("classifies the GSTR-1 e-invoice no-details modal after the capture click", async () => {

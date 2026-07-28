@@ -25,7 +25,7 @@ describe("popup scope form model", () => {
 
     expect(action).toEqual({
       disabled: false,
-      label: "Download June 2026-27 GSTR-1 Excel",
+      label: "Download June 2026-27 E-invoice details (Excel)",
     });
   });
 

@@ -388,9 +388,9 @@ describe("popup full-year recovery actions", () => {
     expect(markup).toContain('value="PDF"');
     expect(markup).toContain("Summary PDF");
     expect(markup).toContain('value="EXCEL"');
-    expect(markup).toContain("E-invoice Excel");
+    expect(markup).toContain("E-invoice details (Excel)");
     expect(markup).toContain('checked="" value="PDF_AND_EXCEL"');
-    expect(markup).toContain("PDF + Excel ZIP");
+    expect(markup).toContain("All formats");
     expect(markup).toContain("Single period");
     expect(markup).toContain("Full year");
     expect(markup).not.toContain("monthly GSTR-3B filers only");
@@ -419,7 +419,7 @@ describe("popup full-year recovery actions", () => {
     expect(markup).toContain('value="June"');
     expect(markup).toContain('checked="" value="PDF_AND_EXCEL"');
     expect(markup).toContain("All formats");
-    expect(markup).not.toContain("E-invoice Excel");
+    expect(markup).toContain("Details workbook");
   });
 
   it("explains GSTR-2B full-year Excel as portal-generated capture", () => {

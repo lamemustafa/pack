@@ -65,7 +65,7 @@ export function returnTypeOptions() {
       return {
         value: returnType,
         label: returnType,
-        description: "PDF + Excel",
+        description: "Summary PDF + E-invoice details (Excel)",
       };
     }
     return {
@@ -180,6 +180,9 @@ function defaultStartLabel(scope: FiledReturnsDownloadScope, fullFiscalYear: boo
   const artifactType = normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType);
   const multiFile = concreteFiledReturnsArtifactTypes(artifactType).length > 1;
   if (fullFiscalYear) {
+    if (scope.returnType === "GSTR-1" && artifactType === "EXCEL") {
+      return `Download all ${scope.financialYear} E-invoice details (Excel) files`;
+    }
     const noun = multiFile
       ? "files"
       : artifactType === "EXCEL"
@@ -188,6 +191,9 @@ function defaultStartLabel(scope: FiledReturnsDownloadScope, fullFiscalYear: boo
           ? "JSON files"
           : "PDFs";
     return `Download all ${scope.financialYear} ${scope.returnType} ${noun}`;
+  }
+  if (scope.returnType === "GSTR-1" && artifactType === "EXCEL") {
+    return `Download ${scope.period} ${scope.financialYear} E-invoice details (Excel)`;
   }
   const noun = multiFile
     ? scope.returnType === "GSTR-2B"
@@ -222,8 +228,8 @@ function artifactOptionLabel(
   artifactType: (typeof FILED_RETURNS_ARTIFACT_TYPES)[number],
 ): string {
   if (returnType === "GSTR-1") {
-    if (artifactType === "PDF_AND_EXCEL") return "PDF + Excel ZIP";
-    if (artifactType === "EXCEL") return "E-invoice Excel";
+    if (artifactType === "PDF_AND_EXCEL") return "All formats";
+    if (artifactType === "EXCEL") return "E-invoice details (Excel)";
     if (artifactType === "JSON") return "portal data (JSON)";
     return "Summary PDF";
   }

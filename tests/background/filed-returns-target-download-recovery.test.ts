@@ -6,7 +6,6 @@ import type {
   FiledReturnsTargetReview,
   PortalFlowStepResult,
 } from "../../src/connectors/gst/filed-returns-contracts";
-import type { PackMessageResponse } from "../../src/connectors/gst/messages";
 import type { SafeDownloadObservation } from "../../src/background/download-observer";
 
 const mocks = vi.hoisted(() => {
@@ -113,7 +112,6 @@ vi.mock("../../src/background/offscreen-blob-url", () => ({
   revokeOffscreenBlobUrl: vi.fn(async () => undefined),
 }));
 
-import { startCapturedFiledReturnDownload } from "../../src/background/filed-returns-captured-download";
 import { reconcileFiledReturnsTargetDownload } from "../../src/background/filed-returns-target-download-recovery";
 import { isFiledReturnsTargetDownloadAttempt } from "../../src/background/filed-returns-target-download-attempt-validation";
 import {
@@ -896,103 +894,7 @@ describe("filed returns target download recovery", () => {
     expect(mocks.discardSinglePeriodFiledReturnsZip).not.toHaveBeenCalled();
     expect(mocks.state.local[REVIEW_KEY]).toEqual(review);
   });
-
-  it("persists intent before download and exact ID before observation", async () => {
-    await runCapturedPdfDownload();
-
-    expect(mocks.events).toEqual([
-      "storage:intent",
-      "download",
-      "storage:observing",
-      "observe",
-      "storage:completion",
-      "storage:review-clear-attempt",
-    ]);
-    expect(mocks.observeBrowserDownloadById).toHaveBeenCalledWith(
-      mocks.browser.downloads,
-      41,
-      expect.objectContaining({
-        armedAt: new Date(REQUESTED_AT),
-        trustedDownloadIds: new Set([41]),
-      }),
-    );
-    expect(mocks.state.session[COMPLETION_KEY]).toMatchObject({ status: "complete" });
-    expect(mocks.state.local[REVIEW_KEY]).toBeUndefined();
-  });
-
-  it("keeps durable completion when review cleanup fails and reconciles without a second download", async () => {
-    mocks.state.failTargetReviewRemoveOnce = true;
-
-    const first = await runCapturedPdfDownload();
-
-    expect(first).toMatchObject({
-      ok: true,
-      flowStep: {
-        state: "download-unconfirmed",
-        safeSignals: expect.arrayContaining(["filed-returns-target-review-clear-failed"]),
-      },
-    });
-    expect(mocks.state.session[COMPLETION_KEY]).toMatchObject({ status: "complete" });
-    expect(mocks.state.local[REVIEW_KEY]).toMatchObject({
-      downloadAttempt: { downloadId: 41, phase: "download-observing" },
-    });
-    const completionIndex = mocks.events.indexOf("storage:completion");
-    const clearAttemptIndex = mocks.events.indexOf("storage:review-clear-attempt");
-    expect(completionIndex).toBeGreaterThanOrEqual(0);
-    expect(clearAttemptIndex).toBeGreaterThan(completionIndex);
-
-    mocks.browser.downloads.search.mockResolvedValue([
-      { danger: "safe", exists: true, fileSize: 1024, id: 41, state: "complete" },
-    ]);
-    const retainedReview = mocks.state.local[REVIEW_KEY] as FiledReturnsTargetReview;
-    const second = await reconcileFiledReturnsTargetDownload(retainedReview, deps);
-
-    expect(second).toMatchObject({
-      state: "handled",
-      response: {
-        flowStep: { state: "downloaded" },
-        flowSummary: { status: "complete" },
-      },
-    });
-    expect(mocks.browser.downloads.download).toHaveBeenCalledTimes(1);
-    expect(mocks.browser.tabs.sendMessage).not.toHaveBeenCalled();
-    expect(mocks.state.local[REVIEW_KEY]).toBeUndefined();
-    expect(mocks.state.session[COMPLETION_KEY]).toMatchObject({ status: "complete" });
-  });
 });
-
-function runCapturedPdfDownload(): Promise<PackMessageResponse> {
-  return startCapturedFiledReturnDownload({
-    activePeriod: "April",
-    armedAt: new Date("2026-07-23T23:58:00.000Z"),
-    artifactType: "PDF",
-    capturedDownloadRequest: {
-      actionId: "action-m0abc123-aprilpdf",
-      dataUrl: "data:application/pdf;base64,JVBERi0xLjQKJSVFT0YK",
-      safeSignals: ["filed-gstr3b-portal-blob-download-captured"],
-    },
-    deps: {
-      now: () => new Date(REQUESTED_AT),
-      sendMessageToTabWithInjection: vi.fn(),
-      storageKeys: { completion: COMPLETION_KEY, targetReview: REVIEW_KEY },
-    },
-    scope: PDF_SCOPE,
-    target: {
-      actionId: "action-m0abc123-aprilpdf",
-      artifactType: "PDF",
-      financialYear: "2026-27",
-      period: "April",
-      returnType: "GSTR-3B",
-    },
-    triggerStep: {
-      connectorId: "gst",
-      scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
-      state: "clicked",
-      safeSignals: ["filed-gstr3b-download-clicked"],
-      safeMessage: "Synthetic target-bound click completed.",
-    },
-  });
-}
 
 function reviewFor(
   scope: FiledReturnsDownloadScope,

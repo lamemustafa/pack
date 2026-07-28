@@ -18,7 +18,7 @@ vi.mock("../../src/background/artifact-download", async (importOriginal) => ({
 }));
 
 import { acquireGstr3bPdfAfterPreflight } from "../../src/background/gstr3b-artifact-acquisition";
-import { acquireGstr2bPageGeneratedArtifact } from "../../src/background/gstr2b-artifact-acquisition";
+import { acquirePageGeneratedArtifact } from "../../src/background/gstr2b-artifact-acquisition";
 
 describe("GSTR-3B page-generated acquisition", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -102,11 +102,12 @@ describe("GSTR-2B page-generated acquisition", () => {
       safeSignals: [],
     });
     await expect(
-      acquireGstr2bPageGeneratedArtifact({
+      acquirePageGeneratedArtifact({
         artifactType: "EXCEL",
         filename: "ComplyEaze-Pack/2024-25/GSTR-2B/April.xlsx",
         requestId: "request-2b",
         returnPeriod: "042024",
+        returnType: "GSTR-2B",
         tabId: 17,
       }),
     ).resolves.toMatchObject({ ok: true });
@@ -121,5 +122,23 @@ describe("GSTR-2B page-generated acquisition", () => {
         world: "MAIN",
       }),
     );
+  });
+
+  it("reports a GSTR-1 portal generation timeout without delivering a file", async () => {
+    mocks.executeScript.mockResolvedValue([
+      { result: { ok: false, reason: "generation-timeout", safeSignals: [] } },
+    ]);
+
+    await expect(
+      acquirePageGeneratedArtifact({
+        artifactType: "PDF",
+        filename: "ComplyEaze-Pack/2024-25/GSTR-1/April-summary.pdf",
+        requestId: "gstr1-timeout",
+        returnPeriod: "042024",
+        returnType: "GSTR-1",
+        tabId: 17,
+      }),
+    ).resolves.toMatchObject({ ok: false, reason: "generation-timeout" });
+    expect(mocks.downloadAcquiredArtifact).not.toHaveBeenCalled();
   });
 });

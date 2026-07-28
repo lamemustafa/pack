@@ -1,7 +1,5 @@
 import type {
   FiledReturnsDownloadScope,
-  FiledReturnsDownloadTarget,
-  FiledReturnsFlowSummary,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
 import type { PackMessageResponse } from "../connectors/gst/messages";
@@ -11,18 +9,10 @@ import {
 } from "../connectors/gst/artifact-source";
 import { FULL_FISCAL_YEAR_PERIOD } from "../connectors/gst/filed-returns-scope";
 import { type FiledReturnsConcreteArtifactType } from "../connectors/gst/filed-returns-artifacts";
-import { filedReturnDescriptor } from "../connectors/gst/filed-returns-return-descriptors";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
-import { startMainWorldCapturedFiledReturnDownload } from "./filed-returns-captured-download";
-import { withFiledReturnsDownloadDiagnostic } from "./filed-returns-download-diagnostics";
-import { targetReviewScope } from "./filed-returns-download-result";
-import {
-  runDownloadTriggerOnce,
-  type FiledReturnsFlowMessagingDeps,
-} from "./filed-returns-flow-messaging";
-import { persistFiledReturnsTargetReview } from "./filed-returns-target-review";
+import type { FiledReturnsFlowMessagingDeps } from "./filed-returns-flow-messaging";
 import { acquireGstr3bPdfAfterPreflight } from "./gstr3b-artifact-acquisition";
-import { acquireGstr2bPageGeneratedArtifact } from "./gstr2b-artifact-acquisition";
+import { acquirePageGeneratedArtifact } from "./gstr2b-artifact-acquisition";
 import { toPortalReturnPeriod } from "../connectors/gst/filed-returns-return-period";
 import { downloadAcquiredArtifact } from "./artifact-download";
 import {
@@ -56,8 +46,26 @@ export const GSTR2B_ARTIFACT_DISPATCH_FAILURE_MESSAGES = {
     "Pack received an unsupported GSTR-2B acquisition state and did not start a download.",
 } satisfies Record<Gstr2bArtifactDispatchFailureReason, string>;
 
+export enum Gstr1ArtifactDispatchFailureReason {
+  ContentUnavailable = "gstr1-artifact-content-unavailable",
+  PeriodInvalid = "gstr1-artifact-period-invalid",
+  ResponseMissing = "gstr1-artifact-response-missing",
+  StateInvalid = "gstr1-artifact-state-invalid",
+}
+
+export const GSTR1_ARTIFACT_DISPATCH_FAILURE_MESSAGES = {
+  [Gstr1ArtifactDispatchFailureReason.ContentUnavailable]:
+    "Pack could not start GSTR-1 acquisition from the active portal page. Retry from the matching summary or detail page.",
+  [Gstr1ArtifactDispatchFailureReason.PeriodInvalid]:
+    "Pack could not derive the requested GSTR-1 portal period, so it did not start acquisition.",
+  [Gstr1ArtifactDispatchFailureReason.ResponseMissing]:
+    "Pack did not receive a GSTR-1 acquisition result from the active portal page.",
+  [Gstr1ArtifactDispatchFailureReason.StateInvalid]:
+    "Pack received an unsupported GSTR-1 acquisition state and did not start a download.",
+} satisfies Record<Gstr1ArtifactDispatchFailureReason, string>;
+
 export async function triggerAndObserveFiledReturnDownload({
-  activePeriod,
+  activePeriod: _activePeriod,
   artifactType = "PDF",
   deps,
   scope,
@@ -69,6 +77,7 @@ export async function triggerAndObserveFiledReturnDownload({
   scope: FiledReturnsDownloadScope;
   tabId: number;
 }): Promise<PackMessageResponse> {
+  void _activePeriod;
   if (isGstr3bFullFiscalYearAcquisitionScope(scope)) {
     return { ok: true, flowStep: gstr3bFullFiscalYearAcquisitionNotWiredStep() };
   }
@@ -90,6 +99,15 @@ export async function triggerAndObserveFiledReturnDownload({
   }
   if (scope.returnType === "GSTR-2B" && scope.period !== "ALL") {
     return triggerGstr2bSinglePeriodArtifact(scope, artifactType, deps, tabId);
+  }
+  if (
+    scope.returnType === "GSTR-1" &&
+    (scope.period === "ALL" || scope.period === FULL_FISCAL_YEAR_PERIOD)
+  ) {
+    return gstr1ArtifactDispatchFailure(Gstr1ArtifactDispatchFailureReason.PeriodInvalid);
+  }
+  if (scope.returnType === "GSTR-1") {
+    return triggerGstr1SinglePeriodArtifact(scope, artifactType, deps, tabId);
   }
   if (
     scope.returnType === "GSTR-3B" &&
@@ -272,89 +290,7 @@ export async function triggerAndObserveFiledReturnDownload({
       return artifactFailureResponse("response-missing", [], "GSTR-3B");
     }
   }
-  const target = createDownloadTarget(scope, artifactType);
-  if (!target) return unverifiedPeriodResponse(scope);
-
-  const triggerResponse = await runDownloadTriggerOnce(deps, tabId, target);
-  if (triggerResponse.ok && "mainWorldCaptureRequest" in triggerResponse) {
-    const armedAt = deps.now?.() ?? new Date();
-    const captureResponse = await startMainWorldCapturedFiledReturnDownload({
-      activePeriod,
-      armedAt,
-      artifactType,
-      deps,
-      mainWorldCaptureRequest: triggerResponse.mainWorldCaptureRequest,
-      scope,
-      tabId,
-      target,
-      triggerStep: triggerResponse.downloadTrigger,
-    });
-    const captureTimedOut =
-      captureResponse.ok &&
-      "flowStep" in captureResponse &&
-      captureResponse.flowStep.safeSignals.some((signal) =>
-        signal.endsWith("-main-world-capture-timeout"),
-      );
-    if (
-      (!deps.stageCapturedDownloads ||
-        (deps.stageCapturedDownloads.bundleKind === "single-period" && captureTimedOut)) &&
-      deps.persistTargetReview !== false &&
-      captureResponse.ok &&
-      "flowStep" in captureResponse &&
-      captureResponse.flowStep.state !== "downloaded"
-    ) {
-      const stagedSelectionTimedOut =
-        deps.stageCapturedDownloads?.bundleKind === "single-period" && captureTimedOut;
-      const reviewStep = stagedSelectionTimedOut
-        ? {
-            ...captureResponse.flowStep,
-            safeSignals: [...captureResponse.flowStep.safeSignals, "single-period-zip-incomplete"],
-          }
-        : captureResponse.flowStep;
-      const flowSummary = await persistFiledReturnsTargetReview(
-        stagedSelectionTimedOut ? scope : targetReviewScope(scope, artifactType),
-        reviewStep,
-        deps,
-      );
-      if (flowSummary) return { ...captureResponse, flowSummary };
-    }
-    return captureResponse;
-  }
-
-  const triggerFlowResponse = toTriggerFlowResponse(triggerResponse, activePeriod);
-  if (!triggerFlowResponse.ok || !("flowStep" in triggerFlowResponse)) {
-    return triggerFlowResponse;
-  }
-
-  if (!requiresUntrustedPortalClickReview(triggerFlowResponse.flowStep)) {
-    return {
-      ...triggerFlowResponse,
-      flowStep: withFiledReturnsDownloadDiagnostic({
-        attemptClass: "portal-click",
-        flowStep: triggerFlowResponse.flowStep,
-        target,
-      }),
-    };
-  }
-
-  const flowStep = withFiledReturnsDownloadDiagnostic({
-    attemptClass: "portal-click",
-    flowStep: untrustedPortalClickReviewStep(triggerFlowResponse.flowStep, artifactType),
-    target,
-  });
-  let flowSummary: FiledReturnsFlowSummary | null = null;
-  if (deps.persistTargetReview !== false) {
-    flowSummary = await persistFiledReturnsTargetReview(
-      targetReviewScope(scope, artifactType),
-      flowStep,
-      deps,
-    );
-  }
-  return {
-    ...triggerFlowResponse,
-    flowStep,
-    ...(flowSummary ? { flowSummary } : {}),
-  };
+  return artifactFailureResponse("unsupported-target", [], "GSTR-3B");
 }
 
 function artifactFilename(
@@ -364,14 +300,20 @@ function artifactFilename(
   const suffix =
     artifactType === "JSON"
       ? "-data.json"
-      : scope.returnType === "GSTR-2B"
+      : scope.returnType === "GSTR-1"
         ? artifactType === "PDF"
           ? "-summary.pdf"
           : "-details.xlsx"
-        : artifactType === "PDF"
-          ? "-return.pdf"
-          : ".xlsx";
-  return `ComplyEaze-Pack/${scope.financialYear}/${scope.returnType}/${scope.period}${suffix}`;
+        : scope.returnType === "GSTR-2B"
+          ? artifactType === "PDF"
+            ? "-summary.pdf"
+            : "-details.xlsx"
+          : artifactType === "PDF"
+            ? "-return.pdf"
+            : ".xlsx";
+  const folder =
+    scope.returnType === "GSTR-1" && artifactType === "EXCEL" ? "E-Invoice" : scope.returnType;
+  return `ComplyEaze-Pack/${scope.financialYear}/${folder}/${scope.period}${suffix}`;
 }
 
 async function triggerGstr2bSinglePeriodArtifact(
@@ -380,9 +322,28 @@ async function triggerGstr2bSinglePeriodArtifact(
   deps: FiledReturnsFlowMessagingDeps,
   tabId: number,
 ): Promise<PackMessageResponse> {
+  return triggerPageGeneratedSinglePeriodArtifact(scope, artifactType, deps, tabId, "GSTR-2B");
+}
+
+async function triggerGstr1SinglePeriodArtifact(
+  scope: FiledReturnsDownloadScope,
+  artifactType: FiledReturnsConcreteArtifactType,
+  deps: FiledReturnsFlowMessagingDeps,
+  tabId: number,
+): Promise<PackMessageResponse> {
+  return triggerPageGeneratedSinglePeriodArtifact(scope, artifactType, deps, tabId, "GSTR-1");
+}
+
+async function triggerPageGeneratedSinglePeriodArtifact(
+  scope: FiledReturnsDownloadScope,
+  artifactType: FiledReturnsConcreteArtifactType,
+  deps: FiledReturnsFlowMessagingDeps,
+  tabId: number,
+  returnType: "GSTR-1" | "GSTR-2B",
+): Promise<PackMessageResponse> {
   const returnPeriod = toPortalReturnPeriod(scope.period, scope.financialYear);
   if (!returnPeriod) {
-    return gstr2bArtifactDispatchFailure(Gstr2bArtifactDispatchFailureReason.PeriodInvalid);
+    return pageGeneratedArtifactDispatchFailure(returnType, "PeriodInvalid");
   }
   const requestId = createActionId();
   const response = await deps.sendMessageToTabWithInjection(tabId, {
@@ -393,27 +354,27 @@ async function triggerGstr2bSinglePeriodArtifact(
       period: scope.period,
       requestId,
       returnPeriod,
-      returnType: "GSTR-2B",
+      returnType,
     },
   });
   if (response.ok && "artifact" in response && !response.artifact.ok) {
     return artifactFailureResponse(
       response.artifact.reason,
       response.artifact.safeSignals,
-      "GSTR-2B",
+      returnType,
     );
   }
   if (!response.ok) {
-    return gstr2bArtifactDispatchFailure(Gstr2bArtifactDispatchFailureReason.ContentUnavailable);
+    return pageGeneratedArtifactDispatchFailure(returnType, "ContentUnavailable");
   }
   if (!("artifact" in response)) {
-    return gstr2bArtifactDispatchFailure(Gstr2bArtifactDispatchFailureReason.ResponseMissing);
+    return pageGeneratedArtifactDispatchFailure(returnType, "ResponseMissing");
   }
   if (!response.artifact.ok) {
     return artifactFailureResponse(
       response.artifact.reason,
       response.artifact.safeSignals,
-      "GSTR-2B",
+      returnType,
     );
   }
   const artifact = response.artifact;
@@ -447,7 +408,7 @@ async function triggerGstr2bSinglePeriodArtifact(
       },
     };
     const acquired =
-      artifact.state === "acquired"
+      returnType === "GSTR-2B" && artifact.state === "acquired"
         ? await downloadAcquiredArtifact({
             base64: artifact.base64,
             filename: artifactFilename(scope, "JSON"),
@@ -456,17 +417,18 @@ async function triggerGstr2bSinglePeriodArtifact(
             ...callbacks,
           })
         : artifact.state === "ready" && (artifactType === "PDF" || artifactType === "EXCEL")
-          ? await acquireGstr2bPageGeneratedArtifact({
+          ? await acquirePageGeneratedArtifact({
               artifactType,
               filename: artifactFilename(scope, artifactType),
               requestId,
               returnPeriod,
+              returnType,
               tabId,
               ...callbacks,
             })
           : null;
     if (!acquired) {
-      return gstr2bArtifactDispatchFailure(Gstr2bArtifactDispatchFailureReason.StateInvalid);
+      return pageGeneratedArtifactDispatchFailure(returnType, "StateInvalid");
     }
     retainCheckpointForRecovery =
       !acquired.ok &&
@@ -477,21 +439,21 @@ async function triggerGstr2bSinglePeriodArtifact(
           ok: true,
           flowStep: {
             connectorId: "gst",
-            scopeId: filedReturnScopeId("GSTR-2B"),
+            scopeId: filedReturnScopeId(returnType),
             state: "downloaded",
             safeSignals: [
               ...artifact.safeSignals,
               ...acquired.safeSignals,
               "extension-download-complete",
             ],
-            safeMessage: acquired.safeMessage ?? "Pack saved the portal-produced GSTR-2B artifact.",
+            safeMessage: acquired.safeMessage ?? artifactSuccessMessage(returnType, artifactType),
           },
         }
       : {
           ok: true,
           flowStep: {
             connectorId: "gst",
-            scopeId: filedReturnScopeId("GSTR-2B"),
+            scopeId: filedReturnScopeId(returnType),
             state: "blocked",
             safeSignals: [
               "artifact-acquisition-failed",
@@ -528,10 +490,39 @@ function gstr2bArtifactDispatchFailure(
   };
 }
 
+function gstr1ArtifactDispatchFailure(
+  reason: Gstr1ArtifactDispatchFailureReason,
+): FlowStepResponse {
+  return {
+    ok: true,
+    flowStep: {
+      connectorId: "gst",
+      scopeId: filedReturnScopeId("GSTR-1"),
+      state: "blocked",
+      safeSignals: [reason],
+      safeMessage: GSTR1_ARTIFACT_DISPATCH_FAILURE_MESSAGES[reason],
+      userAction: {
+        type: "RETRY_PORTAL_GENERATION",
+        message: "Keep the selected GSTR-1 page open, then retry the artifact.",
+        canResume: true,
+      },
+    },
+  };
+}
+
+function pageGeneratedArtifactDispatchFailure(
+  returnType: "GSTR-1" | "GSTR-2B",
+  reason: "ContentUnavailable" | "PeriodInvalid" | "ResponseMissing" | "StateInvalid",
+): FlowStepResponse {
+  return returnType === "GSTR-1"
+    ? gstr1ArtifactDispatchFailure(Gstr1ArtifactDispatchFailureReason[reason])
+    : gstr2bArtifactDispatchFailure(Gstr2bArtifactDispatchFailureReason[reason]);
+}
+
 function artifactFailureResponse(
   reason: ArtifactFailureReason,
   safeSignals: readonly string[],
-  returnType: "GSTR-3B" | "GSTR-2B" = "GSTR-3B",
+  returnType: "GSTR-1" | "GSTR-3B" | "GSTR-2B" = "GSTR-3B",
 ): FlowStepResponse {
   return {
     ok: true,
@@ -554,90 +545,15 @@ function artifactFailureMessageForDelivery(reason: string): string {
   return `Pack did not save the verified filed-return artifact: ${reason.replace(/-/g, " ")}.`;
 }
 
-function createDownloadTarget(
-  scope: FiledReturnsDownloadScope,
+function artifactSuccessMessage(
+  returnType: "GSTR-1" | "GSTR-2B",
   artifactType: FiledReturnsConcreteArtifactType,
-): FiledReturnsDownloadTarget | null {
-  if (scope.period === "ALL" || scope.period === FULL_FISCAL_YEAR_PERIOD) return null;
-  return {
-    actionId: createActionId(),
-    artifactType,
-    financialYear: scope.financialYear,
-    period: scope.period,
-    returnType: scope.returnType,
-  };
-}
-
-function toTriggerFlowResponse(
-  response: PackMessageResponse,
-  activePeriod: string | null,
-): PackMessageResponse {
-  if (!response.ok || "flowStep" in response) return response;
-  if ("downloadTrigger" in response) {
-    return {
-      ...response,
-      flowStep: {
-        ...response.downloadTrigger,
-        safeSignals: [
-          ...response.downloadTrigger.safeSignals,
-          ...(activePeriod ? [`filed-return-detail-period:${activePeriod}`] : []),
-        ],
-      },
-    };
+): string {
+  if (returnType === "GSTR-1" && artifactType === "EXCEL") {
+    return "Pack saved the portal-produced E-invoice details (Excel) workbook.";
   }
-  return response;
-}
-
-function requiresUntrustedPortalClickReview(step: PortalFlowStepResult): boolean {
-  if (step.safeSignals.includes("filed-gstr3b-download-trigger-ambiguous")) return true;
-  if (step.state !== "clicked") return false;
-  return (
-    step.safeSignals.includes("filed-return-download-clicked") ||
-    step.safeSignals.includes("gstr2b-download-clicked") ||
-    step.safeSignals.includes("filed-gstr3b-download-clicked") ||
-    step.safeSignals.includes("filed-gstr3b-download-trigger-ambiguous")
-  );
-}
-
-function untrustedPortalClickReviewStep(
-  step: PortalFlowStepResult,
-  artifactType: FiledReturnsConcreteArtifactType,
-): PortalFlowStepResult {
-  return {
-    ...step,
-    state: "download-unconfirmed",
-    safeSignals: [
-      ...step.safeSignals,
-      "filed-return-portal-click-evidence-unavailable",
-      `filed-return-artifact-unconfirmed:${artifactType}`,
-    ],
-    safeMessage:
-      "Pack used the verified GST Portal download control, but the resulting browser download is not bound to this target. Pack did not mark it complete and will not click again automatically.",
-    userAction: {
-      type: "RETRY_PORTAL_GENERATION",
-      message: "Review the target, then choose an explicit retry or cancellation.",
-      canResume: true,
-    },
-  };
-}
-
-function unverifiedPeriodResponse(scope: FiledReturnsDownloadScope): FlowStepResponse {
-  const descriptor = filedReturnDescriptor(scope.returnType);
-  return {
-    ok: true,
-    flowStep: {
-      connectorId: "gst",
-      scopeId: filedReturnScopeId(scope.returnType),
-      state: "user-action-required",
-      safeSignals: ["filed-return-detail-period-unverified"],
-      safeMessage: `Pack could not verify which ${descriptor.label} period is open, so it did not click the download control.`,
-      userAction: {
-        type: "NAVIGATE_TO_SUPPORTED_PAGE",
-        message: `Open the filed ${descriptor.label} detail page for one period, then start Pack again.`,
-        canResume: true,
-      },
-    },
-  };
+  if (returnType === "GSTR-1") return "Pack saved the portal-produced GSTR-1 Summary PDF.";
+  return "Pack saved the portal-produced GSTR-2B artifact.";
 }
 
 function createActionId(): string {

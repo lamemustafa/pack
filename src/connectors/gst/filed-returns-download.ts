@@ -1,8 +1,5 @@
 import type { PortalDownloadTriggerResult } from "../../core/contracts";
-import type {
-  FiledReturnsDownloadTarget,
-  FiledReturnsMainWorldCaptureRequest,
-} from "./filed-returns-contracts";
+import type { FiledReturnsDownloadTarget } from "./filed-returns-contracts";
 import {
   filedReturnsConcreteArtifactLabel,
   supportsFiledReturnsArtifactType,
@@ -25,19 +22,15 @@ import {
   filedReturnScopedSignal,
   filedReturnScopeId,
 } from "./filed-returns-return-descriptors";
-import { prepareFiledReturnsPortalBlobDownloadCapture } from "./filed-returns-portal-blob-capture";
 
 export {
   findFiledGstr3bDownloadCandidateIndex,
   scoreFiledGstr3bDownloadCandidate,
 } from "./filed-returns-download-candidates";
 
-const GSTR1_CAPTURE_TIMEOUT_MS = 15_000;
-
 const DIALOG_SETTLE_DELAY_MS = 60;
 export interface FiledReturnDownloadTriggerResult {
   downloadTrigger: PortalDownloadTriggerResult;
-  mainWorldCaptureRequest?: FiledReturnsMainWorldCaptureRequest;
 }
 
 export async function triggerFiledGstr3bFiledPdfDownload(
@@ -188,29 +181,6 @@ export async function triggerFiledReturnDownload(
     ...score.safeSignals,
   ];
 
-  const mainWorldCaptureRequest = tryCaptureFiledReturnBlobDownload(documentRef, target, {
-    control: element,
-    safeSignals: clickedSignals,
-    scopeId,
-  });
-  if (mainWorldCaptureRequest) {
-    return {
-      mainWorldCaptureRequest,
-      downloadTrigger: {
-        connectorId: "gst",
-        scopeId,
-        state: "clicked",
-        safeSignals: [
-          ...clickedSignals,
-          filedReturnScopedSignal(target.returnType, "portal-blob-download-captured"),
-          filedReturnScopedSignal(target.returnType, "extension-download-requested"),
-          `filed-return-artifact-clicked:${artifactType}`,
-        ],
-        safeMessage: `Pack captured the GST Portal's generated filed ${descriptor.label} ${artifactLabel} file and will save it through the browser downloads API.`,
-      },
-    };
-  }
-
   activateElement(element);
   await delay(DIALOG_SETTLE_DELAY_MS);
 
@@ -230,35 +200,6 @@ export async function triggerFiledReturnDownload(
       safeMessage: `Pack clicked the GST portal's filed ${descriptor.label} ${artifactLabel} download control. Check the browser downloads shelf/folder for the file.`,
     },
   };
-}
-
-function tryCaptureFiledReturnBlobDownload(
-  documentRef: Document,
-  target: FiledReturnsDownloadTarget,
-  context: {
-    control: HTMLElement;
-    safeSignals: string[];
-    scopeId: string;
-  },
-): FiledReturnsMainWorldCaptureRequest | null {
-  if (!supportsFiledReturnBlobCapture(target)) return null;
-  const signalPrefix = filedReturnScopedSignal(target.returnType, "");
-  const mainWorldCaptureRequest = prepareFiledReturnsPortalBlobDownloadCapture(
-    documentRef,
-    context.control,
-    target,
-    {
-      signalPrefix: signalPrefix.endsWith("-") ? signalPrefix.slice(0, -1) : signalPrefix,
-      ...(target.returnType === "GSTR-1" ? { timeoutMs: GSTR1_CAPTURE_TIMEOUT_MS } : {}),
-    },
-  );
-  if (mainWorldCaptureRequest) return mainWorldCaptureRequest;
-  context.safeSignals.push(filedReturnScopedSignal(target.returnType, "blob-capture-failed"));
-  return null;
-}
-
-function supportsFiledReturnBlobCapture(target: FiledReturnsDownloadTarget): boolean {
-  return target.returnType === "GSTR-1";
 }
 
 function detectBlockedPortalState(

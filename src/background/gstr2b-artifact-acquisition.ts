@@ -8,13 +8,14 @@ const MIME_TYPES = {
   PDF: "application/pdf",
 } as const;
 
-export async function acquireGstr2bPageGeneratedArtifact(input: {
+export async function acquirePageGeneratedArtifact(input: {
   artifactType: "PDF" | "EXCEL";
   filename: string;
   onStarted?: (downloadId: number) => Promise<void>;
   onStartCheckpointFailed?: (downloadId: number) => Promise<void>;
   requestId: string;
   returnPeriod: string;
+  returnType: "GSTR-1" | "GSTR-2B";
   tabId: number;
 }): Promise<
   | { ok: true; safeMessage?: string; safeSignals: string[] }
@@ -41,7 +42,7 @@ export async function acquireGstr2bPageGeneratedArtifact(input: {
       bytes,
       input.artifactType,
       input.returnPeriod,
-      "GSTR-2B",
+      input.returnType,
     );
     if (!validation.ok) return { ok: false, reason: validation.reason, safeSignals: [] };
     const delivery = await downloadAcquiredArtifact({
