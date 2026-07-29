@@ -2,22 +2,13 @@ import {
   ARTIFACT_FAILURE_MESSAGES,
   type ArtifactFailureReason,
 } from "../connectors/gst/artifact-source";
-import type { PackMessage, PackMessageResponse } from "../connectors/gst/messages";
+import {
+  contentScriptUnavailableResponse,
+  type PackMessage,
+  type PackMessageResponse,
+} from "../connectors/gst/messages";
 
-export type ContentScriptUnavailableReason = "empty-response" | "unreachable";
-
-export function contentScriptUnavailableResponse(
-  reason: ContentScriptUnavailableReason,
-): Extract<PackMessageResponse, { ok: false }> {
-  return {
-    ok: false,
-    error: "CONTENT_SCRIPT_UNAVAILABLE",
-    safeMessage:
-      reason === "empty-response"
-        ? "The GST tab responded to Pack without a usable result. Reload the GST Portal tab, then try again."
-        : "Pack could not safely reach the GST tab. Reload the GST Portal tab, then try again.",
-  };
-}
+export { contentScriptUnavailableResponse } from "../connectors/gst/messages";
 
 export function normaliseContentScriptMessageResponse(
   input: unknown,
@@ -28,16 +19,11 @@ export function normaliseContentScriptMessageResponse(
   }
   if (
     requestType === "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34" &&
-    !isMissingArtifactMessageResponse(input) &&
     !isArtifactMessageResponse(input)
   ) {
     return contentScriptUnavailableResponse("empty-response");
   }
   return input as PackMessageResponse;
-}
-
-function isMissingArtifactMessageResponse(input: Record<string, unknown>): boolean {
-  return hasOnlyKeys(input, ["ok"]);
 }
 
 function isArtifactMessageResponse(

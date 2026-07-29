@@ -258,6 +258,7 @@ describe("Pack GST tab selection", () => {
     "unexpected",
     42,
     {},
+    { ok: true },
     { ok: true, artifact: null },
     { ok: true, artifact: "x" },
     {

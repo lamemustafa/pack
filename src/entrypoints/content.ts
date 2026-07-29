@@ -14,6 +14,7 @@ import {
 import {
   PACK_CONTENT_REQUEST_ENVELOPE_TYPE,
   PACK_CONTENT_SCRIPT_PROTOCOL_VERSION,
+  contentScriptUnavailableResponse,
   isPackMessage,
   type PackMessageResponse,
 } from "../connectors/gst/messages";
@@ -105,12 +106,7 @@ export default defineContentScript({
           .then((navigation) =>
             sendResponse({ ok: true, navigation } satisfies PackMessageResponse),
           )
-          .catch((error: unknown) =>
-            sendResponse({
-              ok: false,
-              error: error instanceof Error ? error.message : "Filed returns navigation failed.",
-            } satisfies PackMessageResponse),
-          );
+          .catch(() => sendResponse(contentScriptUnavailableResponse("empty-response")));
         return true;
       }
 
@@ -141,12 +137,7 @@ export default defineContentScript({
                   : artifact,
             } satisfies PackMessageResponse),
           )
-          .catch(() =>
-            sendResponse({
-              ok: false,
-              error: "Filed return artifact acquisition failed.",
-            } satisfies PackMessageResponse),
-          );
+          .catch(() => sendResponse(contentScriptUnavailableResponse("empty-response")));
         return true;
       }
 
@@ -183,13 +174,7 @@ export default defineContentScript({
               observation,
             } satisfies PackMessageResponse);
           })
-          .catch((error: unknown) =>
-            sendResponse({
-              ok: false,
-              error:
-                error instanceof Error ? error.message : "Filed returns download flow step failed.",
-            } satisfies PackMessageResponse),
-          );
+          .catch(() => sendResponse(contentScriptUnavailableResponse("empty-response")));
         return true;
       }
 

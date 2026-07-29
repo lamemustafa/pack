@@ -428,7 +428,7 @@ describe("GSTR-2B artifact acquisition dispatch", () => {
     expect(response).toMatchObject({ flowStep: { state: "downloaded" } });
   });
 
-  it("turns an April summary-page response without an artifact into a terminal message", async () => {
+  it("turns a malformed April summary-page response into a terminal message", async () => {
     const response = await triggerAndObserveFiledReturnDownload({
       activePeriod: "April",
       artifactType: "PDF",
@@ -445,7 +445,7 @@ describe("GSTR-2B artifact acquisition dispatch", () => {
       flowStep: {
         state: "blocked",
         safeMessage: expect.any(String),
-        safeSignals: expect.arrayContaining(["gstr2b-artifact-response-missing"]),
+        safeSignals: expect.arrayContaining(["gstr2b-artifact-content-unavailable"]),
       },
     });
   });
@@ -458,7 +458,7 @@ describe("GSTR-2B artifact acquisition dispatch", () => {
       "PDF",
       { ok: false, error: "CONTENT_SCRIPT_UNAVAILABLE" },
     ],
-    [Gstr2bArtifactDispatchFailureReason.ResponseMissing, "April", "PDF", { ok: true }],
+    [Gstr2bArtifactDispatchFailureReason.ContentUnavailable, "April", "PDF", { ok: true }],
     [
       Gstr2bArtifactDispatchFailureReason.StateInvalid,
       "April",
@@ -659,7 +659,7 @@ describe("GSTR-1 artifact acquisition dispatch", () => {
     ],
     [Gstr1ArtifactDispatchFailureReason.ContentUnavailable, "April", "PDF", undefined],
     [Gstr1ArtifactDispatchFailureReason.ContentUnavailable, "April", "PDF", {}],
-    [Gstr1ArtifactDispatchFailureReason.ResponseMissing, "April", "PDF", { ok: true }],
+    [Gstr1ArtifactDispatchFailureReason.ContentUnavailable, "April", "PDF", { ok: true }],
     [
       Gstr1ArtifactDispatchFailureReason.ContentUnavailable,
       "April",

@@ -177,6 +177,21 @@ export type PackMessageResponse =
       safeSite?: `background-message-handler:${string}`;
     };
 
+export type ContentScriptUnavailableReason = "empty-response" | "unreachable";
+
+export function contentScriptUnavailableResponse(
+  reason: ContentScriptUnavailableReason,
+): Extract<PackMessageResponse, { ok: false }> {
+  return {
+    ok: false,
+    error: "CONTENT_SCRIPT_UNAVAILABLE",
+    safeMessage:
+      reason === "empty-response"
+        ? "The GST tab responded to Pack without a usable result. Reload the GST Portal tab, then try again."
+        : "Pack could not safely reach the GST tab. Reload the GST Portal tab, then try again.",
+  };
+}
+
 export interface FullFiscalYearTargetRecoveryPayload {
   ledgerId: string;
   targetId: string;
