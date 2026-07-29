@@ -54,3 +54,30 @@ This log records live diagnostic findings that constrain Pack's local, target-bo
 17. GSTR-1 exposes three artifacts: a period-scoped Summary PDF, a period-scoped E-invoice details
     (Excel) workbook from a separate subsystem, and asynchronous offline-download JSON. Pack
     supports the first two portal-produced artifacts only; the asynchronous JSON remains unsupported.
+
+18. Captured leaf download controls, enumerated live with the full clickable selector set. Every
+    control below is reachable by `a, button, [role='button']`, so selector breadth is not the
+    constraint; label shape is.
+
+    | Page                                | Control `textContent`                      | `ng-click` |
+    | ----------------------------------- | ------------------------------------------ | ---------- |
+    | `/returns/auth/gstr1/gstr1sum`      | `DOWNLOAD SUMMARY (PDF) DOWNLOAD (PDF)`    | yes        |
+    | `/returns/auth/gstr1`               | `DOWNLOAD DETAILS FROM E-INVOICES (EXCEL)` | yes        |
+    | `/gstr2b/auth/gstr2b/summary`       | `DOWNLOAD GSTR-2B SUMMARY (PDF)`           | no         |
+    | `/gstr2b/auth/gstr2b/summary`       | `DOWNLOAD GSTR-2B DETAILS (EXCEL)`         | no         |
+    | `/returns/auth/gstr3b`              | `Download Filed GSTR-3B`                   | yes        |
+
+    The GSTR-1 summary PDF control is a single `<button>` carrying two responsive labels, only one
+    of which is visible at a time, so its `textContent` is their concatenation. Exact-equality
+    matching against a control label therefore cannot bind it, while it happens to work on GSTR-2B
+    because those buttons carry one label each. Match by containment plus a uniqueness check, never
+    by equality. The same enumeration on a second period returned an identical control set, so these
+    labels do not drift by period.
+
+19. Six defects in one engagement shared a single shape: a hand-maintained duplicate of a fact that
+    already had a canonical source in this repository. The return-period parameter spelling, the
+    artifact-request return-type allowlist in `messages.ts`, a signal-uniqueness assumption in the
+    background response guard, the detail-identity label strings, the identity-region text scoping,
+    and the control-label match were each a second copy that drifted from the first. When a portal
+    integration fails, check for a duplicated contract before writing new code, and prefer deriving
+    from the canonical predicate over restating it.
