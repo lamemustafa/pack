@@ -1729,6 +1729,7 @@ describe("filed returns guided flow", () => {
     expect(result.safeSignals).toEqual(
       expect.arrayContaining([
         "gstr2b-return-dashboard-filters-selected",
+        "gstr2b-dashboard-selected-quarter:quarter-1-apr-jun",
         "gstr2b-dashboard-selected-period:may",
         "search-clicked",
       ]),

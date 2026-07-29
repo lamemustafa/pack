@@ -38,9 +38,90 @@ describe("filed returns flow messaging", () => {
     await expect(responsePromise).resolves.toEqual({
       ok: false,
       error: "CONTENT_SCRIPT_UNAVAILABLE",
+      safeMessage:
+        "Pack could not safely reach the GST tab. Reload the GST Portal tab, then try again.",
     });
     expect(deps.sendMessageToTabWithInjection).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    undefined,
+    null,
+    "",
+    0,
+    {},
+    { ok: true },
+    { ok: true, flowStep: null },
+    { ok: false, error: "raw content-script exception detail" },
+    {
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "invented-state",
+        safeSignals: [],
+        safeMessage: "Invalid state.",
+      },
+    },
+    {
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "ready",
+        safeSignals: [],
+        safeMessage: "Wrong return scope.",
+      },
+    },
+    {
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
+        state: "ready",
+        safeSignals: ["unsafe signal with spaces"],
+        safeMessage: "Malformed signal.",
+      },
+    },
+    {
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
+        state: "ready",
+        safeSignals: [],
+        safeMessage: "x".repeat(501),
+      },
+    },
+  ])(
+    "renders content unavailable when a content step responds with %p",
+    async (invalidResponse) => {
+      const deps: FiledReturnsFlowMessagingDeps = {
+        ...BASE_DEPS,
+        sendMessageToTabWithInjection: vi.fn(
+          async () => invalidResponse as unknown as PackMessageResponse,
+        ),
+      };
+
+      await expect(
+        runDownloadStepWithRetry(deps, 10, {
+          type: "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
+          payload: {
+            financialYear: "2026-27",
+            period: "April",
+            returnType: "GSTR-1",
+            artifactType: "PDF",
+          },
+        }),
+      ).resolves.toEqual({
+        ok: false,
+        error: "CONTENT_SCRIPT_UNAVAILABLE",
+        safeMessage:
+          "The GST tab responded to Pack without a usable result. Reload the GST Portal tab, then try again.",
+      });
+      expect(deps.sendMessageToTabWithInjection).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it("keeps default content steps alive past the dropdown convergence budget", async () => {
     vi.useFakeTimers();
@@ -83,6 +164,36 @@ describe("filed returns flow messaging", () => {
       flowStep: { state: "clicked" },
     });
     expect(deps.sendMessageToTabWithInjection).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts the token-safe GSTR-2B selected-quarter diagnostic", async () => {
+    const deps: FiledReturnsFlowMessagingDeps = {
+      ...BASE_DEPS,
+      sendMessageToTabWithInjection: vi.fn(
+        async () =>
+          ({
+            ok: true,
+            flowStep: {
+              connectorId: "gst",
+              scopeId: "gst-gstr2b-private-v0",
+              state: "clicked",
+              safeSignals: ["gstr2b-dashboard-selected-quarter:quarter-1-apr-jun"],
+              safeMessage: "Pack selected the requested GSTR-2B quarter.",
+            },
+          }) satisfies PackMessageResponse,
+      ),
+    };
+
+    await expect(
+      runDownloadStepWithRetry(deps, 10, {
+        type: "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
+        payload: {
+          financialYear: "2026-27",
+          period: "May",
+          returnType: "GSTR-2B",
+        },
+      }),
+    ).resolves.toMatchObject({ ok: true, flowStep: { state: "clicked" } });
   });
 
   it("uses ambiguous download recovery when a trigger message never resolves", async () => {

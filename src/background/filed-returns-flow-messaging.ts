@@ -1,10 +1,37 @@
-import type { FiledReturnsDownloadTarget } from "../connectors/gst/filed-returns-contracts";
+import type {
+  FiledReturnsDownloadScope,
+  FiledReturnsDownloadTarget,
+  PortalFlowStepResult,
+} from "../connectors/gst/filed-returns-contracts";
 import type { PackMessage, PackMessageResponse } from "../connectors/gst/messages";
+import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import { ambiguousDownloadTriggerResponse } from "./filed-returns-flow-guards";
+import { isValidFiledReturnsDownloadDiagnosticState } from "./filed-returns-download-diagnostic-state";
 
 const FLOW_STEP_MESSAGE_RETRY_MS = 1_250;
 const MAX_FLOW_STEP_MESSAGE_ATTEMPTS = 8;
 const CONTENT_MESSAGE_TIMEOUT_MS = 60_000;
+const FLOW_STEP_STATES = new Set<PortalFlowStepResult["state"]>([
+  "blocked",
+  "candidate-not-found",
+  "clicked",
+  "download-unconfirmed",
+  "downloaded",
+  "login-required",
+  "partial",
+  "ready",
+  "unsupported-page",
+  "user-action-required",
+]);
+const USER_ACTION_TYPES = new Set<NonNullable<PortalFlowStepResult["userAction"]>["type"]>([
+  "ALLOW_MULTIPLE_DOWNLOADS",
+  "COMPLETE_CAPTCHA",
+  "COMPLETE_OTP",
+  "LOGIN",
+  "NAVIGATE_TO_SUPPORTED_PAGE",
+  "RETRY_PORTAL_GENERATION",
+  "WAIT_FOR_PORTAL_AVAILABILITY",
+]);
 
 export interface FiledReturnsFlowMessagingDeps {
   sendMessageToTabWithInjection: (
@@ -62,10 +89,13 @@ export async function runDownloadStepWithRetry(
 ): Promise<PackMessageResponse> {
   for (let attempt = 0; attempt < MAX_FLOW_STEP_MESSAGE_ATTEMPTS; attempt += 1) {
     try {
-      return await withContentMessageTimeout(
+      const response: unknown = await withContentMessageTimeout(
         deps.sendMessageToTabWithInjection(tabId, message),
         deps,
       );
+      return isRunDownloadStepResponse(response, message.payload)
+        ? response
+        : contentScriptUnavailableResponse("empty-response");
     } catch (error) {
       if (isContentMessageTimeoutError(error)) break;
       if (attempt < MAX_FLOW_STEP_MESSAGE_ATTEMPTS - 1) {
@@ -74,10 +104,107 @@ export async function runDownloadStepWithRetry(
     }
   }
 
+  return contentScriptUnavailableResponse("unreachable");
+}
+
+function contentScriptUnavailableResponse(
+  reason: "empty-response" | "unreachable",
+): Extract<PackMessageResponse, { ok: false }> {
   return {
     ok: false,
     error: "CONTENT_SCRIPT_UNAVAILABLE",
+    safeMessage:
+      reason === "empty-response"
+        ? "The GST tab responded to Pack without a usable result. Reload the GST Portal tab, then try again."
+        : "Pack could not safely reach the GST tab. Reload the GST Portal tab, then try again.",
   };
+}
+
+function isRunDownloadStepResponse(
+  input: unknown,
+  scope: FiledReturnsDownloadScope,
+): input is Extract<PackMessageResponse, { ok: true; flowStep: PortalFlowStepResult }> {
+  if (!input || typeof input !== "object" || !("ok" in input) || input.ok !== true) return false;
+  if (!("flowStep" in input) || !input.flowStep || typeof input.flowStep !== "object") return false;
+  const step = input.flowStep;
+  return (
+    hasOnlyKeys(step, [
+      "connectorId",
+      "downloadDiagnostic",
+      "downloadDiagnostics",
+      "safeMessage",
+      "safeSignals",
+      "scopeId",
+      "state",
+      "userAction",
+    ]) &&
+    "connectorId" in step &&
+    step.connectorId === "gst" &&
+    "scopeId" in step &&
+    step.scopeId === filedReturnScopeId(scope.returnType) &&
+    "state" in step &&
+    typeof step.state === "string" &&
+    FLOW_STEP_STATES.has(step.state as PortalFlowStepResult["state"]) &&
+    "safeSignals" in step &&
+    isSafeSignalList(step.safeSignals) &&
+    "safeMessage" in step &&
+    typeof step.safeMessage === "string" &&
+    step.safeMessage.length > 0 &&
+    step.safeMessage.length <= 500 &&
+    isValidUserAction("userAction" in step ? step.userAction : undefined) &&
+    isValidFlowStepDiagnostics(step, scope)
+  );
+}
+
+function isValidFlowStepDiagnostics(step: object, scope: FiledReturnsDownloadScope): boolean {
+  return isValidFiledReturnsDownloadDiagnosticState(
+    {
+      ...(step && "downloadDiagnostic" in step
+        ? { downloadDiagnostic: step.downloadDiagnostic }
+        : {}),
+      ...(step && "downloadDiagnostics" in step
+        ? { downloadDiagnostics: step.downloadDiagnostics }
+        : {}),
+    },
+    scope,
+  );
+}
+
+function isSafeSignalList(input: unknown): input is string[] {
+  return (
+    Array.isArray(input) &&
+    input.length <= 32 &&
+    new Set(input).size === input.length &&
+    input.every(
+      (signal) =>
+        typeof signal === "string" &&
+        signal.length > 0 &&
+        signal.length <= 120 &&
+        /^[A-Za-z0-9:._-]+$/.test(signal),
+    )
+  );
+}
+
+function isValidUserAction(input: unknown): boolean {
+  if (input === undefined) return true;
+  if (!input || typeof input !== "object") return false;
+  if (!hasOnlyKeys(input, ["canResume", "message", "type"])) return false;
+  return (
+    "canResume" in input &&
+    typeof input.canResume === "boolean" &&
+    "message" in input &&
+    typeof input.message === "string" &&
+    input.message.length > 0 &&
+    input.message.length <= 500 &&
+    "type" in input &&
+    typeof input.type === "string" &&
+    USER_ACTION_TYPES.has(input.type as NonNullable<PortalFlowStepResult["userAction"]>["type"])
+  );
+}
+
+function hasOnlyKeys(input: object, keys: readonly string[]): boolean {
+  const allowed = new Set(keys);
+  return Object.keys(input).every((key) => allowed.has(key));
 }
 
 class ContentMessageTimeoutError extends Error {

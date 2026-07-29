@@ -70,7 +70,9 @@ export function usePackPopupController() {
         setFiledReturnsObservation(response.observation);
       }
     } else {
-      setStatus(response.ok ? "Unexpected Pack response." : response.error);
+      setStatus(
+        response.ok ? "Unexpected Pack response." : (response.safeMessage ?? response.error),
+      );
     }
   }, []);
 
@@ -100,7 +102,9 @@ export function usePackPopupController() {
         setStatus(response.flowStep.safeMessage);
         setFiledReturnsFlowSummary(null);
       } else {
-        setStatus(response.ok ? "Unexpected Pack response." : response.error);
+        setStatus(
+          response.ok ? "Unexpected Pack response." : (response.safeMessage ?? response.error),
+        );
       }
     });
   }, [withBusy]);

@@ -323,6 +323,24 @@ describe("background filed returns download defaults", () => {
     ]);
   });
 
+  it("returns a safe source when an unexpected background failure occurs", async () => {
+    browserMocks.storage.local.get.mockRejectedValueOnce(
+      new Error("sensitive portal URL and local path must not escape"),
+    );
+    await import("../../src/entrypoints/background");
+
+    const response = await sendBackgroundMessage({ type: "PACK_GET_LAST_MANIFEST" });
+
+    expect(response).toEqual({
+      ok: false,
+      error: "BACKGROUND_MESSAGE_HANDLER_FAILED",
+      safeMessage: "Pack stopped while handling the local manifest request. Try the action again.",
+    });
+    if (response.ok) throw new Error("expected a safe background failure");
+    expect(response.safeMessage).not.toContain("portal URL");
+    expect(response.safeMessage).not.toContain("local path");
+  });
+
   it("persists and returns a terminal GSTR-2B mismatch summary to the popup", async () => {
     browserMocks.tabs.query.mockResolvedValueOnce([
       {

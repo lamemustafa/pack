@@ -92,15 +92,39 @@ export default defineBackground(() => {
   browser.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
     void handleMessage(message, sender)
       .then((response) => sendResponse(response))
-      .catch((error: unknown) =>
+      .catch(() =>
         sendResponse({
           ok: false,
-          error: error instanceof Error ? error.message : "Unexpected Pack error.",
+          error: "BACKGROUND_MESSAGE_HANDLER_FAILED",
+          safeMessage: `Pack stopped while handling ${backgroundMessageSource(message)}. Try the action again.`,
         } satisfies PackMessageResponse),
       );
     return true;
   });
 });
+
+function backgroundMessageSource(message: unknown): string {
+  if (!message || typeof message !== "object" || !("type" in message)) {
+    return "an extension request";
+  }
+  switch (message.type) {
+    case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
+    case "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW":
+    case "PACK_RETRY_FILED_RETURNS_TARGET":
+    case "PACK_RETRY_FULL_FISCAL_YEAR_TARGET":
+      return "a filed-returns download request";
+    case "PACK_START_SYNTHETIC_DEMO":
+      return "the synthetic reviewer demo";
+    case "PACK_RUN_DOWNLOAD_PROMPT_PROBE":
+      return "the download prompt probe";
+    case "PACK_GET_LAST_MANIFEST":
+      return "the local manifest request";
+    case "PACK_CLEAR_LOCAL_DATA":
+      return "the local data cleanup request";
+    default:
+      return "an extension request";
+  }
+}
 
 export async function restrictLocalStorageToTrustedContexts(): Promise<void> {
   const storageArea = browser.storage.local as typeof browser.storage.local & {

@@ -125,7 +125,8 @@ function selectedDashboardFilterSignal(
 
 function sanitizeDiagnosticSignalValue(value: string): string {
   return normaliseText(value)
-    .replace(/[^a-z0-9 -]/gi, "")
+    .replace(/[^a-z0-9]+/gi, "-")
+    .replace(/^-+|-+$/g, "")
     .slice(0, 40);
 }
 
