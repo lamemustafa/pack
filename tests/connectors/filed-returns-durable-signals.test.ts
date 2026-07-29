@@ -32,6 +32,16 @@ describe("filed-return durable signal contract", () => {
     ]);
   });
 
+  it("retains categorical artifact page-identity diagnostics", () => {
+    const signals = [
+      "target-period-verified",
+      "page-target-unverified",
+      "page-identity-region-not-found",
+    ];
+
+    expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);
+  });
+
   it("accepts the bounded signals emitted by detail, download, and summary-dialog classifiers", () => {
     const emittedSignals = new Set<string>();
 

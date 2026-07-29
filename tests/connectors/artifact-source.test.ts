@@ -317,6 +317,59 @@ describe("GSTR-1 artifact acquisition", () => {
     },
   );
 
+  it("fails closed when matching identity text is available only through whole-body fallback", async () => {
+    const { documentRef, fetch } = gstr1WholeBodyFallbackPage(gstr1Json("042026"));
+
+    await expect(acquireFiledReturnArtifact(documentRef, request)).resolves.toEqual({
+      ok: false,
+      reason: "page-period-mismatch",
+      requestId: request.requestId,
+      safeSignals: [
+        "target-period-verified",
+        "page-target-unverified",
+        "page-identity-region-not-found",
+      ],
+    });
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(
+      documentRef.querySelector("button")?.getAttribute("data-pack-artifact-request"),
+    ).toBeNull();
+  });
+
+  it("fails closed when the selected control region contains conflicting period identities", async () => {
+    const { documentRef } = gstr1Page(gstr1Json("042026"));
+    const section = documentRef.querySelector("main section");
+    const conflictingIdentity = documentRef.createElement("p");
+    conflictingIdentity.textContent = "FY - 2026-27 Tax Period - May Status - Filed";
+    section?.append(conflictingIdentity);
+
+    await expect(acquireFiledReturnArtifact(documentRef, request)).resolves.toMatchObject({
+      ok: false,
+      reason: "page-period-mismatch",
+      safeSignals: ["target-period-verified", "page-target-unverified"],
+    });
+    expect(
+      documentRef.querySelector("button")?.getAttribute("data-pack-artifact-request"),
+    ).toBeNull();
+  });
+
+  it("binds identity verification to the exact requested artifact control", async () => {
+    const { documentRef } = gstr1SplitArtifactRegionsPage(gstr1Json("042026"));
+
+    await expect(
+      acquireFiledReturnArtifact(documentRef, { ...request, artifactType: "EXCEL" }),
+    ).resolves.toMatchObject({
+      ok: false,
+      reason: "page-period-mismatch",
+      safeSignals: ["target-period-verified", "page-target-unverified"],
+    });
+    expect(
+      Array.from(documentRef.querySelectorAll("button")).map((control) =>
+        control.getAttribute("data-pack-artifact-request"),
+      ),
+    ).toEqual([null, null]);
+  });
+
   it("arms the E-invoice workbook only on the matching GSTR-1 detail page", async () => {
     const { documentRef } = gstr1Page(
       gstr1Json("042026"),
@@ -398,15 +451,24 @@ function gstr1Page(
 ) {
   const dom = new JSDOM(
     `<body>
+      <nav>
+        <a>Status Track</a>
+        <a>Status Home</a>
+        <a>Status Transition</a>
+        <a>Status Application</a>
+        <a>GSTR-3B - Monthly Return</a>
+      </nav>
       <main>
-        <h1>GSTR-1 Summary</h1>
-        <p>GSTIN - 00XXXXX0000X0Z0</p>
-        <p>Legal Name - Synthetic Legal Name Pvt Ltd</p>
-        <p>Trade Name - Synthetic Trade Name</p>
-        <p>FY - 2026-27</p>
-        <p>Tax Period - April</p>
-        <p>Status - Filed</p>
-        <button>${controlText}</button>
+        <section>
+          <h1>GSTR-1 Summary</h1>
+          <p>GSTIN - 00XXXXX0000X0Z0</p>
+          <p>Legal Name - Synthetic Legal Name Pvt Ltd</p>
+          <p>Trade Name - Synthetic Trade Name</p>
+          <p>FY - 2026-27</p>
+          <p>Tax Period - April</p>
+          <p>Status - Filed</p>
+          <button>${controlText}</button>
+        </section>
       </main>
     </body>`,
     { url },
@@ -420,6 +482,52 @@ function gstr1Page(
     },
   );
   const fetch = vi.fn(async () => new Response(body, { status }));
+  Object.defineProperty(dom.window, "fetch", { configurable: true, value: fetch });
+  return { documentRef: dom.window.document, fetch };
+}
+
+function gstr1WholeBodyFallbackPage(body: string) {
+  const dom = new JSDOM(
+    `<body>
+      <main>
+        <section>
+          <h1>GSTR-1 Summary</h1>
+          <p>GSTIN - 00XXXXX0000X0Z0</p>
+          <p>Legal Name - Synthetic Legal Name Pvt Ltd</p>
+          <p>Trade Name - Synthetic Trade Name</p>
+          <p>FY - 2026-27</p>
+          <p>Tax Period - April</p>
+          <p>Status - Filed</p>
+        </section>
+      </main>
+      <button>DOWNLOAD SUMMARY (PDF)</button>
+    </body>`,
+    { url: "https://return.gst.gov.in/returns/auth/gstr1/gstr1sum" },
+  );
+  const fetch = vi.fn(async () => new Response(body));
+  Object.defineProperty(dom.window, "fetch", { configurable: true, value: fetch });
+  return { documentRef: dom.window.document, fetch };
+}
+
+function gstr1SplitArtifactRegionsPage(body: string) {
+  const dom = new JSDOM(
+    `<body>
+      <main>
+        <section>
+          <h1>GSTR-1 Summary</h1>
+          <p>FY - 2026-27 Tax Period - April Status - Filed</p>
+          <button>DOWNLOAD SUMMARY (PDF)</button>
+        </section>
+        <section>
+          <h1>GSTR-1 E-invoice Details</h1>
+          <p>FY - 2026-27 Tax Period - May Status - Filed</p>
+          <button>DOWNLOAD DETAILS FROM E-INVOICES (EXCEL)</button>
+        </section>
+      </main>
+    </body>`,
+    { url: "https://return.gst.gov.in/returns/auth/gstr1" },
+  );
+  const fetch = vi.fn(async () => new Response(body));
   Object.defineProperty(dom.window, "fetch", { configurable: true, value: fetch });
   return { documentRef: dom.window.document, fetch };
 }

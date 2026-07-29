@@ -228,6 +228,8 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "hidden-filed-returns-candidate-clicked",
   "month-selected",
   "no-files-available-for-download",
+  "page-identity-region-not-found",
+  "page-target-unverified",
   "period-selected",
   "quarter-selected",
   "portal-blocked-or-session-expired",
@@ -293,6 +295,7 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "text-download-pdf-gstr1",
   "text-download-pdf-gstr2b",
   "text-summary-pdf-gstr2b",
+  "target-period-verified",
 ]);
 
 const BROWSER_DOWNLOAD_ERROR_SUFFIXES = new Set([

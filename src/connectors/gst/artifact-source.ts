@@ -10,7 +10,7 @@ import {
   GSTR2B_SUMMARY_PATH,
 } from "./portal-artifact-endpoints";
 import { normaliseText } from "./filed-returns-dom";
-import { extractFiledReturnsDetailIdentity } from "./filed-returns-detail-identity";
+import { extractScopedFiledReturnsDetailIdentity } from "./filed-returns-detail-identity";
 import { filedReturnDetailIdentityMatchesScope } from "./filed-returns-detail-navigation";
 import { resolveVisibleFiledReturnDownloadCandidates } from "./filed-returns-download-candidates";
 import { verifyFiledReturnsDownloadTarget } from "./filed-returns-download-target";
@@ -175,12 +175,6 @@ async function acquireGstr1Artifact(
   const expectedPath = request.artifactType === "PDF" ? GSTR1_SUMMARY_PATH : GSTR1_DETAIL_PATH;
   if (view.location.pathname !== expectedPath)
     return failed(request, "wrong-page", ["target-period-verified"]);
-  if (!hasVisibleGstr1Target(documentRef, request)) {
-    return failed(request, "page-period-mismatch", [
-      "target-period-verified",
-      "page-target-unverified",
-    ]);
-  }
   const descriptor = GSTR1_PAGE_GENERATED_ARTIFACTS[request.artifactType];
   const controls = Array.from(
     documentRef.querySelectorAll<HTMLElement>("a, button, [role='button']"),
@@ -189,6 +183,13 @@ async function acquireGstr1Artifact(
   );
   if (controls.length !== 1 || !controls[0])
     return failed(request, "control-not-found", ["target-period-verified"]);
+  const pageTargetMismatchSignals = gstr1PageTargetMismatchSignals(controls[0], request);
+  if (pageTargetMismatchSignals.length > 0) {
+    return failed(request, "page-period-mismatch", [
+      "target-period-verified",
+      ...pageTargetMismatchSignals,
+    ]);
+  }
   controls[0].setAttribute("data-pack-artifact-request", request.requestId);
   return {
     ok: true,
@@ -201,9 +202,13 @@ async function acquireGstr1Artifact(
   };
 }
 
-function hasVisibleGstr1Target(documentRef: Document, request: ArtifactRequest): boolean {
-  const identity = extractFiledReturnsDetailIdentity(documentRef);
-  return filedReturnDetailIdentityMatchesScope(identity, request);
+function gstr1PageTargetMismatchSignals(
+  downloadControl: HTMLElement,
+  request: ArtifactRequest,
+): string[] {
+  const identity = extractScopedFiledReturnsDetailIdentity(downloadControl);
+  if (!identity) return ["page-target-unverified", "page-identity-region-not-found"];
+  return filedReturnDetailIdentityMatchesScope(identity, request) ? [] : ["page-target-unverified"];
 }
 
 function isHtmlResponse(bytes: Uint8Array): boolean {
