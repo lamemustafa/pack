@@ -46,6 +46,7 @@ vi.mock("../../src/background/pack-download-filename-reassertion", async (import
 });
 
 import {
+  discardFullFiscalYearFiledReturnsZip,
   exportFullFiscalYearZip,
   exportSinglePeriodFiledReturnsZip,
 } from "../../src/background/filed-returns-full-fiscal-year-zip";
@@ -58,7 +59,7 @@ describe("filed-return ZIP filename reassertion", () => {
       blobUrl: "blob:pack-owned/zip",
       zipEntryCount: 3,
     });
-    mocks.clearOffscreenFiledReturnLedger.mockResolvedValue("cleared");
+    mocks.clearOffscreenFiledReturnLedger.mockResolvedValue({ status: "cleared" });
     mocks.observeBrowserDownloadById.mockResolvedValue({
       state: "completed",
       safeSignals: ["browser-download-completed", "browser-download-non-empty"],
@@ -129,6 +130,54 @@ describe("filed-return ZIP filename reassertion", () => {
     expect(mocks.reservation.bind).toHaveBeenCalledWith(91);
     expect(mocks.reservation.release).toHaveBeenCalledOnce();
     expect(result.safeSignals).not.toContain("zip-download-filename-overridden");
+  });
+
+  it("emits the bounded OPFS clear category for selected ZIP cleanup failure", async () => {
+    mocks.clearOffscreenFiledReturnLedger.mockResolvedValueOnce({
+      status: "failed",
+      errorCategory: "opfs-unavailable",
+    });
+
+    const result = await exportSinglePeriodFiledReturnsZip({
+      completeStep: completeStep(),
+      entryPlan: { artifactTypes: ["PDF", "EXCEL", "JSON"], unavailableArtifactTypes: [] },
+      ledgerId: "single-period:12345678-test",
+      options: {
+        onAfterStagingCleared: vi.fn(async () => undefined),
+        onBeforeDownloadStart: vi.fn(async () => undefined),
+        onDownloadStarted: vi.fn(async () => undefined),
+      },
+      scope: {
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2026-27",
+        period: "April",
+        returnType: "GSTR-2B",
+      },
+    });
+
+    expect(result).toMatchObject({
+      state: "blocked",
+      safeSignals: expect.arrayContaining([
+        "single-period-zip-downloaded",
+        "single-period-opfs-clear-failed",
+        "single-period-opfs-clear-error:opfs-unavailable",
+        "single-period-opfs-retained",
+      ]),
+    });
+  });
+
+  it("emits the full-year transport signal when offscreen clear is unreachable", async () => {
+    mocks.clearOffscreenFiledReturnLedger.mockResolvedValueOnce({
+      status: "failed",
+      errorCategory: "offscreen-unreachable",
+    });
+
+    await expect(
+      discardFullFiscalYearFiledReturnsZip("full-fiscal-year-12345678-test"),
+    ).resolves.toEqual([
+      "full-fiscal-year-opfs-clear-failed",
+      "full-fiscal-year-opfs-clear-offscreen-unreachable",
+    ]);
   });
 
   it("reports the same ZIP basename when the browser changes its directory", async () => {

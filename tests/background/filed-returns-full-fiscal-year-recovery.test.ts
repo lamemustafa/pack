@@ -22,7 +22,7 @@ const browserMocks = vi.hoisted(() => ({
   },
 }));
 const zipMocks = vi.hoisted(() => ({
-  discardFullFiscalYearFiledReturnsZip: vi.fn(async () => "full-fiscal-year-opfs-cleared"),
+  discardFullFiscalYearFiledReturnsZip: vi.fn(async () => ["full-fiscal-year-opfs-cleared"]),
 }));
 const LEDGER_ID = "full-fiscal-year-12345678";
 
@@ -34,9 +34,9 @@ vi.mock("../../src/background/filed-returns-full-fiscal-year-zip", () => zipMock
 describe("full fiscal-year recovery", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    zipMocks.discardFullFiscalYearFiledReturnsZip.mockResolvedValue(
+    zipMocks.discardFullFiscalYearFiledReturnsZip.mockResolvedValue([
       "full-fiscal-year-opfs-cleared",
-    );
+    ]);
   });
 
   it("rejects stale target recovery revisions without mutating storage", async () => {
@@ -369,9 +369,10 @@ describe("full fiscal-year recovery", () => {
   });
 
   it("retains the saved ledger when discard cannot clear staged files", async () => {
-    zipMocks.discardFullFiscalYearFiledReturnsZip.mockResolvedValueOnce(
+    zipMocks.discardFullFiscalYearFiledReturnsZip.mockResolvedValueOnce([
       "full-fiscal-year-opfs-clear-failed",
-    );
+      "full-fiscal-year-opfs-clear-error:clear-failed",
+    ]);
     mockLocalStorageGet({
       "full-year-ledger": createRecoveryLedger({
         revision: 2,
@@ -396,6 +397,7 @@ describe("full fiscal-year recovery", () => {
         state: "blocked",
         safeSignals: expect.arrayContaining([
           "full-fiscal-year-run-discard-cleanup-failed",
+          "full-fiscal-year-opfs-clear-error:clear-failed",
           "full-fiscal-year-opfs-retained",
         ]),
       },
@@ -409,9 +411,9 @@ describe("full fiscal-year recovery", () => {
   });
 
   it("retains an interrupted running target when exact discard cleanup fails", async () => {
-    zipMocks.discardFullFiscalYearFiledReturnsZip.mockResolvedValueOnce(
+    zipMocks.discardFullFiscalYearFiledReturnsZip.mockResolvedValueOnce([
       "full-fiscal-year-opfs-clear-failed",
-    );
+    ]);
     mockLocalStorageGet({
       "full-year-ledger": createRecoveryLedger({
         revision: 2,

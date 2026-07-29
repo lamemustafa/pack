@@ -115,6 +115,8 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "filed-returns-download-state-unknown",
   "filed-returns-heading",
   "filed-returns-opfs-clear-failed",
+  "filed-returns-opfs-clear-offscreen-unreachable",
+  "filed-returns-opfs-clear-offscreen-response-invalid",
   "filed-returns-opfs-cleared",
   "filed-returns-page-settling",
   "filed-returns-route",
@@ -139,6 +141,8 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "full-fiscal-year-manual-observation-needs-restaging",
   "full-fiscal-year-no-zip-artifacts",
   "full-fiscal-year-opfs-clear-failed",
+  "full-fiscal-year-opfs-clear-offscreen-unreachable",
+  "full-fiscal-year-opfs-clear-offscreen-response-invalid",
   "full-fiscal-year-opfs-cleared",
   "full-fiscal-year-opfs-retained",
   "full-fiscal-year-opfs-staged",
@@ -257,6 +261,8 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "single-period-opfs-cleanup-completed",
   "single-period-opfs-cleanup-required",
   "single-period-opfs-clear-failed",
+  "single-period-opfs-clear-offscreen-unreachable",
+  "single-period-opfs-clear-offscreen-response-invalid",
   "single-period-opfs-cleared",
   "single-period-opfs-retained",
   "single-period-opfs-staged",
@@ -426,6 +432,7 @@ const OPFS_STAGE_ERROR_CATEGORIES = new Set([
   "zip-failed",
   "zip-invalid-entry",
 ]);
+const OPFS_CLEAR_ERROR_CATEGORIES = new Set(["clear-failed", "opfs-unavailable"]);
 
 const SCOPED_RETURN_SIGNAL_SUFFIXES = new Set([
   "artifact-unsupported",
@@ -491,6 +498,9 @@ export function isDurableFiledReturnsSignal(signal: string): boolean {
     signal,
   );
   if (opfsStageError) return OPFS_STAGE_ERROR_CATEGORIES.has(opfsStageError[2] ?? "");
+  const opfsClearError =
+    /^(filed-returns|full-fiscal-year|single-period)-opfs-clear-error:([a-z-]+)$/.exec(signal);
+  if (opfsClearError) return OPFS_CLEAR_ERROR_CATEGORIES.has(opfsClearError[2] ?? "");
   const zipExportError = /^(full-fiscal-year|single-period)-zip-export-error:([a-z-]+)$/.exec(
     signal,
   );

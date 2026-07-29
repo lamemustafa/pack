@@ -64,11 +64,11 @@ export async function cleanupSinglePeriodBundleStaging({
     return blockedBeforeTransientClear("single-period-bundle-revision-conflict");
   }
 
-  const clearSignal = await discardSinglePeriodFiledReturnsZip(ledgerId);
-  if (clearSignal !== "single-period-opfs-cleared") {
+  const clearSignals = await discardSinglePeriodFiledReturnsZip(ledgerId);
+  if (!clearSignals.includes("single-period-opfs-cleared")) {
     return {
       state: "blocked",
-      safeSignals: [clearSignal, "single-period-opfs-retained"],
+      safeSignals: [...clearSignals, "single-period-opfs-retained"],
       transientStagingCleared: false,
     };
   }

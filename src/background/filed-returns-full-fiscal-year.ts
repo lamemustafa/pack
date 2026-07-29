@@ -175,10 +175,10 @@ export async function startFullFiscalYearDownloadFlow(
     !hasRetainedFullFiscalYearStaging(existingLedger) &&
     !options.allowExistingLedgerResume;
   if (existingLedger && replaceCompletedSameScopeLedger) {
-    const clearSignal = await discardFullFiscalYearFiledReturnsZip(existingLedger.ledgerId);
-    if (clearSignal !== "full-fiscal-year-opfs-cleared") {
+    const clearSignals = await discardFullFiscalYearFiledReturnsZip(existingLedger.ledgerId);
+    if (!clearSignals.includes("full-fiscal-year-opfs-cleared")) {
       const cleanupPendingLedger = markFullFiscalYearCleanupPending(existingLedger, now);
-      const step = completedRunCleanupBlockedStep(cleanupPendingLedger);
+      const step = completedRunCleanupBlockedStep(cleanupPendingLedger, clearSignals);
       const summary = toFullFiscalYearSummary(cleanupPendingLedger, step);
       await persistLedgerAndSummary(deps, cleanupPendingLedger, step);
       return { ok: true, flowStep: step, flowSummary: summary };

@@ -13,6 +13,18 @@ import {
 } from "../../src/background/filed-returns-download-trigger";
 
 describe("filed-return durable signal contract", () => {
+  it("accepts only bounded OPFS clear error categories", () => {
+    for (const prefix of ["filed-returns", "full-fiscal-year", "single-period"]) {
+      expect(isDurableFiledReturnsSignal(`${prefix}-opfs-clear-error:clear-failed`)).toBe(true);
+      expect(isDurableFiledReturnsSignal(`${prefix}-opfs-clear-error:opfs-unavailable`)).toBe(true);
+      expect(isDurableFiledReturnsSignal(`${prefix}-opfs-clear-error:private-value`)).toBe(false);
+      expect(isDurableFiledReturnsSignal(`${prefix}-opfs-clear-offscreen-unreachable`)).toBe(true);
+      expect(isDurableFiledReturnsSignal(`${prefix}-opfs-clear-offscreen-response-invalid`)).toBe(
+        true,
+      );
+    }
+  });
+
   it("retains the filename-free ZIP override marker", () => {
     expect(isDurableFiledReturnsSignal("zip-download-filename-overridden")).toBe(true);
     expect(parseDurableFiledReturnsSignals(["zip-download-filename-overridden"])).toEqual([

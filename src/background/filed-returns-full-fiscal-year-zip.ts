@@ -16,6 +16,7 @@ import {
   closeOffscreenBlobDocument,
   createOffscreenFiledReturnZipUrl,
   revokeOffscreenBlobUrl,
+  type OffscreenFiledReturnClearResult,
 } from "./offscreen-blob-url";
 import { observeBrowserDownloadById } from "./download-observer";
 import {
@@ -262,22 +263,28 @@ export async function exportSinglePeriodFiledReturnsZip({
   });
 }
 
-export async function discardSinglePeriodFiledReturnsZip(ledgerId: string): Promise<string> {
-  const cleared = (await clearOffscreenFiledReturnLedger(ledgerId)) === "cleared";
+export async function discardSinglePeriodFiledReturnsZip(ledgerId: string): Promise<string[]> {
+  const clearSignals = opfsClearSignals(
+    await clearOffscreenFiledReturnLedger(ledgerId),
+    "single-period",
+  );
   await closeOffscreenBlobDocument();
-  return cleared ? "single-period-opfs-cleared" : "single-period-opfs-clear-failed";
+  return clearSignals;
 }
 
-export async function discardFullFiscalYearFiledReturnsZip(ledgerId: string): Promise<string> {
-  const clearSignal = await clearStagedLedgerSignal(ledgerId, "full-fiscal-year");
+export async function discardFullFiscalYearFiledReturnsZip(ledgerId: string): Promise<string[]> {
+  const clearSignals = await clearStagedLedgerSignals(ledgerId, "full-fiscal-year");
   await closeOffscreenBlobDocument();
-  return clearSignal;
+  return clearSignals;
 }
 
-export async function discardAllFiledReturnsStaging(): Promise<string> {
-  const cleared = (await clearAllOffscreenFiledReturnLedgers()) === "cleared";
+export async function discardAllFiledReturnsStaging(): Promise<string[]> {
+  const clearSignals = opfsClearSignals(
+    await clearAllOffscreenFiledReturnLedgers(),
+    "filed-returns",
+  );
   await closeOffscreenBlobDocument();
-  return cleared ? "filed-returns-opfs-cleared" : "filed-returns-opfs-clear-failed";
+  return clearSignals;
 }
 
 async function exportStagedFiledReturnsZip({
@@ -842,12 +849,16 @@ async function clearSinglePeriodExportStaging(
   onAfterStagingCleared: ((outcome: "downloaded" | "not-downloaded") => Promise<void>) | undefined,
   outcome: "downloaded" | "not-downloaded",
 ): Promise<SinglePeriodStagingClearResult> {
-  const opfsCleared = (await clearOffscreenFiledReturnLedger(ledgerId)) === "cleared";
+  const clearSignals = opfsClearSignals(
+    await clearOffscreenFiledReturnLedger(ledgerId),
+    "single-period",
+  );
+  const opfsCleared = clearSignals.includes("single-period-opfs-cleared");
   if (!opfsCleared) {
     return {
       cleanupCheckpointVerified: false,
       opfsCleared: false,
-      safeSignals: ["single-period-opfs-clear-failed", "single-period-opfs-retained"],
+      safeSignals: [...clearSignals, "single-period-opfs-retained"],
     };
   }
   try {
@@ -867,10 +878,25 @@ async function clearSinglePeriodExportStaging(
   }
 }
 
-async function clearStagedLedgerSignal(
+async function clearStagedLedgerSignals(
   ledgerId: string,
   prefix: "full-fiscal-year",
-): Promise<string> {
-  const cleared = (await clearOffscreenFiledReturnLedger(ledgerId)) === "cleared";
-  return cleared ? `${prefix}-opfs-cleared` : `${prefix}-opfs-clear-failed`;
+): Promise<string[]> {
+  return opfsClearSignals(await clearOffscreenFiledReturnLedger(ledgerId), prefix);
+}
+
+function opfsClearSignals(
+  result: OffscreenFiledReturnClearResult,
+  prefix: "filed-returns" | "full-fiscal-year" | "single-period",
+): string[] {
+  if (result.status === "cleared") return [`${prefix}-opfs-cleared`];
+  if (result.errorCategory === "clear-failed" || result.errorCategory === "opfs-unavailable") {
+    return [`${prefix}-opfs-clear-failed`, `${prefix}-opfs-clear-error:${result.errorCategory}`];
+  }
+  return [
+    `${prefix}-opfs-clear-failed`,
+    result.errorCategory === "offscreen-response-invalid"
+      ? `${prefix}-opfs-clear-offscreen-response-invalid`
+      : `${prefix}-opfs-clear-offscreen-unreachable`,
+  ];
 }

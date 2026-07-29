@@ -38,7 +38,7 @@ const browserMocks = vi.hoisted(() => ({
   },
 }));
 const zipMocks = vi.hoisted(() => ({
-  discardSinglePeriodFiledReturnsZip: vi.fn(async () => "single-period-opfs-cleared"),
+  discardSinglePeriodFiledReturnsZip: vi.fn(async () => ["single-period-opfs-cleared"]),
 }));
 
 vi.mock("wxt/browser", () => ({
@@ -58,7 +58,7 @@ describe("filed returns target review", () => {
     });
     browserMocks.storage.local.remove.mockResolvedValue(undefined);
     browserMocks.storage.session.set.mockResolvedValue(undefined);
-    zipMocks.discardSinglePeriodFiledReturnsZip.mockResolvedValue("single-period-opfs-cleared");
+    zipMocks.discardSinglePeriodFiledReturnsZip.mockResolvedValue(["single-period-opfs-cleared"]);
   });
 
   it("records a manual observation without completing or clearing the unresolved target", async () => {
@@ -598,9 +598,9 @@ describe("filed returns target review", () => {
     browserMocks.storage.local.remove.mockImplementation(async (keys) => {
       for (const key of Array.isArray(keys) ? keys : [keys]) delete localValues[key];
     });
-    zipMocks.discardSinglePeriodFiledReturnsZip.mockResolvedValue(
+    zipMocks.discardSinglePeriodFiledReturnsZip.mockResolvedValue([
       "single-period-opfs-clear-failed",
-    );
+    ]);
 
     const response = await resolveUnconfirmedFiledReturnsDownload(scope, "cancelled", {
       storageKeys: { completion: "completion", targetReview: "target-review" },
@@ -627,7 +627,7 @@ describe("filed returns target review", () => {
       flowSummary: { status: "blocked" },
     });
 
-    zipMocks.discardSinglePeriodFiledReturnsZip.mockResolvedValue("single-period-opfs-cleared");
+    zipMocks.discardSinglePeriodFiledReturnsZip.mockResolvedValue(["single-period-opfs-cleared"]);
     const cleanupResponse = await retryCompletedSinglePeriodZipCleanup(scope, {
       storageKeys: { completion: "completion", targetReview: "target-review" },
     });
@@ -655,9 +655,9 @@ describe("filed returns target review", () => {
     };
     const review = intentOnlyZipReview(scope);
     browserMocks.storage.local.get.mockResolvedValue({ "target-review": review });
-    zipMocks.discardSinglePeriodFiledReturnsZip.mockResolvedValue(
+    zipMocks.discardSinglePeriodFiledReturnsZip.mockResolvedValue([
       "single-period-opfs-clear-failed",
-    );
+    ]);
 
     const response = await resolveUnconfirmedFiledReturnsDownload(scope, "cancelled", {
       storageKeys: { targetReview: "target-review" },

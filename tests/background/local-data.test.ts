@@ -79,9 +79,9 @@ const browserMocks = vi.hoisted(() => ({
   },
 }));
 const zipMocks = vi.hoisted(() => ({
-  discardAllFiledReturnsStaging: vi.fn(async () => "filed-returns-opfs-cleared"),
-  discardFullFiscalYearFiledReturnsZip: vi.fn(async () => "full-fiscal-year-opfs-cleared"),
-  discardSinglePeriodFiledReturnsZip: vi.fn(async () => "single-period-opfs-cleared"),
+  discardAllFiledReturnsStaging: vi.fn(async () => ["filed-returns-opfs-cleared"]),
+  discardFullFiscalYearFiledReturnsZip: vi.fn(async () => ["full-fiscal-year-opfs-cleared"]),
+  discardSinglePeriodFiledReturnsZip: vi.fn(async () => ["single-period-opfs-cleared"]),
 }));
 
 vi.mock("wxt/browser", () => ({
@@ -104,11 +104,11 @@ describe("Pack local data clearing", () => {
     zipMocks.discardFullFiscalYearFiledReturnsZip.mockReset();
     zipMocks.discardSinglePeriodFiledReturnsZip.mockReset();
     zipMocks.discardAllFiledReturnsStaging.mockReset();
-    zipMocks.discardFullFiscalYearFiledReturnsZip.mockResolvedValue(
+    zipMocks.discardFullFiscalYearFiledReturnsZip.mockResolvedValue([
       "full-fiscal-year-opfs-cleared",
-    );
-    zipMocks.discardSinglePeriodFiledReturnsZip.mockResolvedValue("single-period-opfs-cleared");
-    zipMocks.discardAllFiledReturnsStaging.mockResolvedValue("filed-returns-opfs-cleared");
+    ]);
+    zipMocks.discardSinglePeriodFiledReturnsZip.mockResolvedValue(["single-period-opfs-cleared"]);
+    zipMocks.discardAllFiledReturnsStaging.mockResolvedValue(["filed-returns-opfs-cleared"]);
     vi.stubGlobal("defineBackground", (entrypoint: () => void) => {
       entrypoint();
       return entrypoint;
@@ -339,9 +339,9 @@ describe("Pack local data clearing", () => {
   });
 
   it("does not delete full-year staging when single-period cleanup fails", async () => {
-    zipMocks.discardSinglePeriodFiledReturnsZip.mockResolvedValueOnce(
+    zipMocks.discardSinglePeriodFiledReturnsZip.mockResolvedValueOnce([
       "single-period-opfs-clear-failed",
-    );
+    ]);
     browserMocks.storage.local.get.mockImplementation(async (key: unknown) => {
       if (key === "pack:single-period-staging") {
         return {
@@ -386,9 +386,9 @@ describe("Pack local data clearing", () => {
   });
 
   it("keeps local state when retained full-year files cannot be cleared", async () => {
-    zipMocks.discardFullFiscalYearFiledReturnsZip.mockResolvedValueOnce(
+    zipMocks.discardFullFiscalYearFiledReturnsZip.mockResolvedValueOnce([
       "full-fiscal-year-opfs-clear-failed",
-    );
+    ]);
     browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
       key === "pack:full-fiscal-year-ledger"
         ? {
@@ -538,7 +538,9 @@ describe("Pack local data clearing", () => {
   );
 
   it("keeps local state when the explicit broad staging clear fails", async () => {
-    zipMocks.discardAllFiledReturnsStaging.mockResolvedValueOnce("filed-returns-opfs-clear-failed");
+    zipMocks.discardAllFiledReturnsStaging.mockResolvedValueOnce([
+      "filed-returns-opfs-clear-failed",
+    ]);
     browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
       key === "pack:full-fiscal-year-ledger"
         ? { [key]: { ledgerId: "unsafe/ledger", schemaVersion: "unexpected" } }
@@ -641,7 +643,7 @@ describe("Pack local data clearing", () => {
       signalCleanupStarted();
       await cleanupGate;
       events.push("opfs-cleanup-completed");
-      return "single-period-opfs-cleared";
+      return ["single-period-opfs-cleared"];
     });
 
     const clearPromise = clearPackLocalDataWithRecoveryGuard(localDataRaceDeps());

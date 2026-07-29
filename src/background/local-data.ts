@@ -71,8 +71,8 @@ async function clearPackLocalDataWithinOperation(
   requiresBroadStagingClear ||= ledger !== null && !fullFiscalYearLedgerId;
 
   if (requiresBroadStagingClear) {
-    const clearSignal = await discardAllFiledReturnsStaging();
-    if (clearSignal !== "filed-returns-opfs-cleared") {
+    const clearSignals = await discardAllFiledReturnsStaging();
+    if (!clearSignals.includes("filed-returns-opfs-cleared")) {
       return {
         ok: false,
         error:
@@ -80,8 +80,8 @@ async function clearPackLocalDataWithinOperation(
       };
     }
   } else if (singlePeriodStaging) {
-    const clearSignal = await discardSinglePeriodFiledReturnsZip(singlePeriodStaging.ledgerId);
-    if (clearSignal !== "single-period-opfs-cleared") {
+    const clearSignals = await discardSinglePeriodFiledReturnsZip(singlePeriodStaging.ledgerId);
+    if (!clearSignals.includes("single-period-opfs-cleared")) {
       return {
         ok: false,
         error:
@@ -90,8 +90,8 @@ async function clearPackLocalDataWithinOperation(
     }
   }
   if (!requiresBroadStagingClear && fullFiscalYearLedgerId) {
-    const clearSignal = await discardFullFiscalYearFiledReturnsZip(fullFiscalYearLedgerId);
-    if (clearSignal !== "full-fiscal-year-opfs-cleared") {
+    const clearSignals = await discardFullFiscalYearFiledReturnsZip(fullFiscalYearLedgerId);
+    if (!clearSignals.includes("full-fiscal-year-opfs-cleared")) {
       return {
         ok: false,
         error:

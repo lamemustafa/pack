@@ -15,6 +15,16 @@ export type OffscreenFiledReturnStageResult =
 export type OffscreenFiledReturnZipResult =
   | { status: "created"; blobUrl: string; zipEntryCount: number }
   | { status: "failed"; errorCategory?: string };
+export type OffscreenFiledReturnClearResult =
+  | { status: "cleared" }
+  | {
+      status: "failed";
+      errorCategory?:
+        | "clear-failed"
+        | "offscreen-response-invalid"
+        | "offscreen-unreachable"
+        | "opfs-unavailable";
+    };
 
 let creatingOffscreenDocument: Promise<void> | null = null;
 
@@ -88,7 +98,7 @@ export async function createOffscreenFiledReturnZipUrl(
 
 export async function clearOffscreenFiledReturnLedger(
   ledgerId: string,
-): Promise<"cleared" | "failed"> {
+): Promise<OffscreenFiledReturnClearResult> {
   const requestId = createRequestId();
   try {
     await ensureOffscreenDocument();
@@ -100,13 +110,13 @@ export async function clearOffscreenFiledReturnLedger(
         ledgerId,
       },
     });
-    return isClearedResponse(response, requestId) ? "cleared" : "failed";
+    return toClearResult(response, requestId);
   } catch {
-    return "failed";
+    return { status: "failed", errorCategory: "offscreen-unreachable" };
   }
 }
 
-export async function clearAllOffscreenFiledReturnLedgers(): Promise<"cleared" | "failed"> {
+export async function clearAllOffscreenFiledReturnLedgers(): Promise<OffscreenFiledReturnClearResult> {
   const requestId = createRequestId();
   try {
     await ensureOffscreenDocument();
@@ -115,9 +125,9 @@ export async function clearAllOffscreenFiledReturnLedgers(): Promise<"cleared" |
       target: PACK_OFFSCREEN_BLOB_URL_TARGET,
       payload: { requestId },
     });
-    return isClearedResponse(response, requestId) ? "cleared" : "failed";
+    return toClearResult(response, requestId);
   } catch {
-    return "failed";
+    return { status: "failed", errorCategory: "offscreen-unreachable" };
   }
 }
 
@@ -280,6 +290,21 @@ function isClearedResponse(
   if (typeof response !== "object" || response === null) return false;
   const record = response as Record<string, unknown>;
   return record.ok === true && record.requestId === requestId && record.cleared === true;
+}
+
+function toClearResult(response: unknown, requestId: string): OffscreenFiledReturnClearResult {
+  if (isClearedResponse(response, requestId)) return { status: "cleared" };
+  if (typeof response === "object" && response !== null) {
+    const record = response as Record<string, unknown>;
+    if (
+      record.ok === false &&
+      record.requestId === requestId &&
+      (record.errorCategory === "clear-failed" || record.errorCategory === "opfs-unavailable")
+    ) {
+      return { status: "failed", errorCategory: record.errorCategory };
+    }
+  }
+  return { status: "failed", errorCategory: "offscreen-response-invalid" };
 }
 
 function createRequestId(): string {

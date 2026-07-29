@@ -91,7 +91,7 @@ const mocks = vi.hoisted(() => {
         sendMessage: vi.fn(async () => undefined),
       },
     },
-    discardSinglePeriodFiledReturnsZip: vi.fn(async () => "single-period-opfs-cleared"),
+    discardSinglePeriodFiledReturnsZip: vi.fn(async () => ["single-period-opfs-cleared"]),
     events,
     observeBrowserDownloadById,
     state,
@@ -168,7 +168,7 @@ describe("filed returns target download recovery", () => {
     });
     mocks.discardSinglePeriodFiledReturnsZip.mockImplementation(async () => {
       mocks.events.push("opfs:clear");
-      return "single-period-opfs-cleared";
+      return ["single-period-opfs-cleared"];
     });
     mocks.observeBrowserDownloadById.mockImplementation(async () => {
       mocks.events.push("observe");
@@ -850,7 +850,7 @@ describe("filed returns target download recovery", () => {
       { danger: "safe", exists: true, fileSize: 2048, id: 73, state: "complete" },
     ]);
     mocks.observeBrowserDownloadById.mockResolvedValue(completedObservation(73, "generic-binary"));
-    mocks.discardSinglePeriodFiledReturnsZip.mockResolvedValue("single-period-opfs-clear-failed");
+    mocks.discardSinglePeriodFiledReturnsZip.mockResolvedValue(["single-period-opfs-clear-failed"]);
 
     const result = await reconcileFiledReturnsTargetDownload(review, deps);
 

@@ -46,9 +46,19 @@ const browserMocks = vi.hoisted(() => ({
 }));
 
 const offscreenMocks = vi.hoisted(() => ({
-  clearOffscreenFiledReturnLedger: vi.fn<() => Promise<"cleared" | "failed">>(
-    async () => "cleared",
-  ),
+  clearOffscreenFiledReturnLedger: vi.fn<
+    () => Promise<
+      | { status: "cleared" }
+      | {
+          status: "failed";
+          errorCategory?:
+            | "clear-failed"
+            | "offscreen-response-invalid"
+            | "offscreen-unreachable"
+            | "opfs-unavailable";
+        }
+    >
+  >(async () => ({ status: "cleared" })),
   closeOffscreenBlobDocument: vi.fn(async () => undefined),
 }));
 
@@ -60,7 +70,7 @@ describe("single-period filed-return staging ownership", () => {
     state.local = {};
     state.session = {};
     vi.clearAllMocks();
-    offscreenMocks.clearOffscreenFiledReturnLedger.mockResolvedValue("cleared");
+    offscreenMocks.clearOffscreenFiledReturnLedger.mockResolvedValue({ status: "cleared" });
   });
 
   it("persists an opaque cleanup identity before returning a ledger id", async () => {
@@ -97,7 +107,7 @@ describe("single-period filed-return staging ownership", () => {
       ledgerId: "single-period:aaaaaaaaaaaaaaaaaaaa",
       schemaVersion: "1.0",
     };
-    offscreenMocks.clearOffscreenFiledReturnLedger.mockResolvedValue("failed");
+    offscreenMocks.clearOffscreenFiledReturnLedger.mockResolvedValue({ status: "failed" });
 
     const ledgerId = await reserveSinglePeriodBundleLedger();
 

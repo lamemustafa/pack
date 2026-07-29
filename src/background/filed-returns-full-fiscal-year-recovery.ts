@@ -146,9 +146,9 @@ async function discardFullFiscalYearRun(
     flowStep,
     now,
   );
-  const clearSignal = await discardFullFiscalYearFiledReturnsZip(ledger.ledgerId);
-  if (clearSignal !== "full-fiscal-year-opfs-cleared") {
-    const cleanupStep = discardCleanupFailedStep(ledger);
+  const clearSignals = await discardFullFiscalYearFiledReturnsZip(ledger.ledgerId);
+  if (!clearSignals.includes("full-fiscal-year-opfs-cleared")) {
+    const cleanupStep = discardCleanupFailedStep(ledger, clearSignals);
     const cleanupSummary = toFullFiscalYearSummary(ledger, cleanupStep);
     await persistSummary(cleanupSummary, deps);
     return { ok: true, flowStep: cleanupStep, flowSummary: cleanupSummary };
@@ -156,7 +156,7 @@ async function discardFullFiscalYearRun(
 
   const clearedFlowStep: PortalFlowStepResult = {
     ...flowStep,
-    safeSignals: [...flowStep.safeSignals, clearSignal],
+    safeSignals: [...flowStep.safeSignals, "full-fiscal-year-opfs-cleared"],
   };
   const flowSummary = toFullFiscalYearSummary(cancelledLedger, clearedFlowStep);
   delete flowSummary.fullFiscalYearRecovery;
@@ -310,14 +310,17 @@ function discardedRunStep(target: FiledReturnsFullFiscalYearTarget): PortalFlowS
   };
 }
 
-function discardCleanupFailedStep(ledger: FiledReturnsFullFiscalYearLedger): PortalFlowStepResult {
+function discardCleanupFailedStep(
+  ledger: FiledReturnsFullFiscalYearLedger,
+  clearSignals: readonly string[],
+): PortalFlowStepResult {
   return {
     connectorId: "gst",
     scopeId: filedReturnsScopeId(ledger.scope.returnType),
     state: "blocked",
     safeSignals: [
       "full-fiscal-year-run-discard-cleanup-failed",
-      "full-fiscal-year-opfs-clear-failed",
+      ...clearSignals,
       "full-fiscal-year-opfs-retained",
     ],
     safeMessage:

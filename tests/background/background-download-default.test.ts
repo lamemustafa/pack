@@ -272,6 +272,57 @@ describe("background filed returns download defaults", () => {
     });
   });
 
+  it("preserves an answered offscreen clear failure category", async () => {
+    browserMocks.runtime.sendMessage.mockImplementationOnce(async (message: unknown) => {
+      if (
+        typeof message === "object" &&
+        message !== null &&
+        "payload" in message &&
+        typeof message.payload === "object" &&
+        message.payload !== null &&
+        "requestId" in message.payload
+      ) {
+        return {
+          ok: false,
+          requestId: message.payload.requestId,
+          errorCategory: "clear-failed",
+        } as never;
+      }
+      return { ok: false, errorCategory: "invalid-message" } as never;
+    });
+    const { clearOffscreenFiledReturnLedger } =
+      await import("../../src/background/offscreen-blob-url");
+
+    await expect(
+      clearOffscreenFiledReturnLedger("single-period:synthetic-clear-test"),
+    ).resolves.toEqual({ status: "failed", errorCategory: "clear-failed" });
+  });
+
+  it("distinguishes unreachable offscreen clear communication", async () => {
+    browserMocks.runtime.sendMessage.mockRejectedValueOnce(new Error("synthetic unreachable"));
+    const { clearAllOffscreenFiledReturnLedgers } =
+      await import("../../src/background/offscreen-blob-url");
+
+    await expect(clearAllOffscreenFiledReturnLedgers()).resolves.toEqual({
+      status: "failed",
+      errorCategory: "offscreen-unreachable",
+    });
+  });
+
+  it("distinguishes an invalid answered offscreen clear response", async () => {
+    browserMocks.runtime.sendMessage.mockResolvedValueOnce({
+      ok: false,
+      errorCategory: "invalid-message",
+    } as never);
+    const { clearAllOffscreenFiledReturnLedgers } =
+      await import("../../src/background/offscreen-blob-url");
+
+    await expect(clearAllOffscreenFiledReturnLedgers()).resolves.toEqual({
+      status: "failed",
+      errorCategory: "offscreen-response-invalid",
+    });
+  });
+
   it("uses the authenticated-page GSTR-3B acquisition request instead of legacy capture", async () => {
     browserMocks.tabs.sendMessage.mockImplementation(async (_tabId, message: PackMessage) => {
       message = unwrapContentRequest(message);

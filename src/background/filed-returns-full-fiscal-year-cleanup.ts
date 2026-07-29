@@ -209,9 +209,9 @@ export async function finishFullFiscalYearCleanup(
   }
   cleanupPendingLedger = reconciledLedger;
 
-  const clearSignal = await discardFullFiscalYearFiledReturnsZip(cleanupPendingLedger.ledgerId);
-  if (clearSignal !== "full-fiscal-year-opfs-cleared") {
-    const step = fullFiscalYearCleanupFailedStep(cleanupPendingLedger, clearSignal);
+  const clearSignals = await discardFullFiscalYearFiledReturnsZip(cleanupPendingLedger.ledgerId);
+  if (!clearSignals.includes("full-fiscal-year-opfs-cleared")) {
+    const step = fullFiscalYearCleanupFailedStep(cleanupPendingLedger, clearSignals);
     await persistLedgerAndSummary(deps, cleanupPendingLedger, step);
     return {
       ok: true,
@@ -224,7 +224,7 @@ export async function finishFullFiscalYearCleanup(
     cleanupPendingLedger,
     deps.now?.() ?? new Date(),
   );
-  const step = fullFiscalYearCleanupCompletedStep(cleanupPendingLedger, clearSignal);
+  const step = fullFiscalYearCleanupCompletedStep(cleanupPendingLedger);
   await persistLedgerAndSummary(deps, completedLedger, step);
   return {
     ok: true,
@@ -235,6 +235,7 @@ export async function finishFullFiscalYearCleanup(
 
 export function completedRunCleanupBlockedStep(
   ledger: FiledReturnsFullFiscalYearLedger,
+  clearSignals: readonly string[] = ["full-fiscal-year-opfs-clear-failed"],
 ): PortalFlowStepResult {
   return {
     connectorId: "gst",
@@ -244,7 +245,7 @@ export function completedRunCleanupBlockedStep(
       "full-fiscal-year-local-cleanup-retry",
       "full-fiscal-year-completed-staging-cleanup-failed",
       "full-fiscal-year-zip-cleanup-pending",
-      "full-fiscal-year-opfs-clear-failed",
+      ...clearSignals,
       "full-fiscal-year-opfs-retained",
     ],
     safeMessage:
@@ -259,7 +260,7 @@ export function completedRunCleanupBlockedStep(
 
 function fullFiscalYearCleanupFailedStep(
   ledger: FiledReturnsFullFiscalYearLedger,
-  clearSignal: string,
+  clearSignals: readonly string[],
 ): PortalFlowStepResult {
   const zipDownloaded = ledger.zipPhase === "downloaded-cleanup-pending";
   const noArtifacts = ledger.zipPhase === "no-artifacts-cleanup-pending";
@@ -272,7 +273,7 @@ function fullFiscalYearCleanupFailedStep(
       ...(zipDownloaded ? ["full-fiscal-year-zip-downloaded"] : []),
       ...(noArtifacts ? ["full-fiscal-year-no-zip-artifacts"] : []),
       "full-fiscal-year-zip-cleanup-pending",
-      clearSignal,
+      ...clearSignals,
       "full-fiscal-year-opfs-retained",
     ],
     safeMessage: noArtifacts
@@ -285,7 +286,6 @@ function fullFiscalYearCleanupFailedStep(
 
 function fullFiscalYearCleanupCompletedStep(
   ledger: FiledReturnsFullFiscalYearLedger,
-  clearSignal: string,
 ): PortalFlowStepResult {
   const zipDownloaded = ledger.zipPhase === "downloaded-cleanup-pending";
   const noArtifacts = ledger.zipPhase === "no-artifacts-cleanup-pending";
@@ -299,7 +299,7 @@ function fullFiscalYearCleanupCompletedStep(
         "full-fiscal-year-complete",
         ...(zipDownloaded ? ["full-fiscal-year-zip-downloaded"] : []),
         ...(noArtifacts ? ["full-fiscal-year-no-zip-artifacts"] : []),
-        clearSignal,
+        "full-fiscal-year-opfs-cleared",
         ...availabilitySignals,
       ]),
     ),
