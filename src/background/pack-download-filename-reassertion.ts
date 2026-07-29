@@ -7,7 +7,7 @@ type FilenameSuggestion = {
 
 export type FilenameDeterminationListener = (
   item: { id: number; url?: string },
-  suggest: (suggestion: FilenameSuggestion) => void,
+  suggest: (suggestion?: FilenameSuggestion) => void,
 ) => void;
 
 export interface FilenameDeterminationApi {
@@ -18,6 +18,10 @@ export interface FilenameDeterminationApi {
 
 export interface PackDownloadFilenameReassertion {
   reserve(url: string, filename: string): PackDownloadFilenameReservation;
+  reserveDataUrl(
+    url: string,
+    filename: string,
+  ): { reservation: PackDownloadFilenameReservation; url: string };
 }
 
 export interface PackDownloadFilenameReservation {
@@ -38,37 +42,51 @@ export function createPackDownloadFilenameReassertion(
     const requested =
       requestedFilenamesByDownloadId.get(item.id) ??
       (item.url ? requestedFilenamesByUrl.get(item.url) : undefined);
-    if (!requested) return;
+    if (!requested) {
+      suggest();
+      return;
+    }
     suggest({ conflictAction: "uniquify", filename: requested.filename });
   });
 
   return {
     reserve(url, filename) {
       if (!isOwnedBlobUrl(url) || !isRequestedFilename(filename)) return noOpReservation();
-      const requested = { filename };
-      let boundDownloadId: number | null = null;
-      let released = false;
-      requestedFilenamesByUrl.set(url, requested);
-      return {
-        bind(downloadId) {
-          if (released || !Number.isSafeInteger(downloadId) || downloadId < 0) return;
-          boundDownloadId = downloadId;
-          requestedFilenamesByDownloadId.set(downloadId, requested);
-        },
-        release() {
-          if (released) return;
-          released = true;
-          if (requestedFilenamesByUrl.get(url) === requested) requestedFilenamesByUrl.delete(url);
-          if (
-            boundDownloadId !== null &&
-            requestedFilenamesByDownloadId.get(boundDownloadId) === requested
-          ) {
-            requestedFilenamesByDownloadId.delete(boundDownloadId);
-          }
-        },
-      };
+      return reserveOwnedUrl(url, filename);
+    },
+    reserveDataUrl(url, filename) {
+      if (!isDataUrl(url) || !isRequestedFilename(filename)) {
+        return { reservation: noOpReservation(), url };
+      }
+      const ownedUrl = `${url}#pack-download-${globalThis.crypto.randomUUID()}`;
+      return { reservation: reserveOwnedUrl(ownedUrl, filename), url: ownedUrl };
     },
   };
+
+  function reserveOwnedUrl(url: string, filename: string): PackDownloadFilenameReservation {
+    const requested = { filename };
+    let boundDownloadId: number | null = null;
+    let released = false;
+    requestedFilenamesByUrl.set(url, requested);
+    return {
+      bind(downloadId) {
+        if (released || !Number.isSafeInteger(downloadId) || downloadId < 0) return;
+        boundDownloadId = downloadId;
+        requestedFilenamesByDownloadId.set(downloadId, requested);
+      },
+      release() {
+        if (released) return;
+        released = true;
+        if (requestedFilenamesByUrl.get(url) === requested) requestedFilenamesByUrl.delete(url);
+        if (
+          boundDownloadId !== null &&
+          requestedFilenamesByDownloadId.get(boundDownloadId) === requested
+        ) {
+          requestedFilenamesByDownloadId.delete(boundDownloadId);
+        }
+      },
+    };
+  }
 }
 
 function noOpReservation(): PackDownloadFilenameReservation {
@@ -77,6 +95,10 @@ function noOpReservation(): PackDownloadFilenameReservation {
 
 function isOwnedBlobUrl(value: unknown): value is string {
   return typeof value === "string" && value.startsWith("blob:");
+}
+
+function isDataUrl(value: unknown): value is string {
+  return typeof value === "string" && value.startsWith("data:");
 }
 
 function isRequestedFilename(value: unknown): value is string {

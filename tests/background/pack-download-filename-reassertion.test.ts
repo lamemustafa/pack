@@ -47,6 +47,44 @@ describe("Pack download filename reassertion", () => {
     reservation.release();
   });
 
+  it("suggests a reserved Pack-created data URL filename", () => {
+    const listeners: FilenameDeterminationListener[] = [];
+    const reassertion = createPackDownloadFilenameReassertion({
+      onDeterminingFilename: {
+        addListener(candidate) {
+          listeners.push(candidate);
+        },
+      },
+    });
+    const suggest = vi.fn();
+    const sourceUrl = "data:text/plain;base64,c3ludGhldGlj";
+    const filename = "Pack-Diagnostics/download-prompt-probe.txt";
+    const { url } = reassertion.reserveDataUrl(sourceUrl, filename);
+
+    listeners[0]?.({ id: 92, url }, suggest);
+
+    expect(url).toMatch(/^data:text\/plain;base64,c3ludGhldGlj#pack-download-/);
+    expect(suggest).toHaveBeenCalledWith({ conflictAction: "uniquify", filename });
+  });
+
+  it("does not claim the reproducible source data URL without Pack's ownership token", () => {
+    const listeners: FilenameDeterminationListener[] = [];
+    const reassertion = createPackDownloadFilenameReassertion({
+      onDeterminingFilename: {
+        addListener(candidate) {
+          listeners.push(candidate);
+        },
+      },
+    });
+    const suggest = vi.fn();
+    const sourceUrl = "data:text/plain;base64,c3ludGhldGlj";
+    reassertion.reserveDataUrl(sourceUrl, "Pack-Diagnostics/download-prompt-probe.txt");
+
+    listeners[0]?.({ id: 93, url: sourceUrl }, suggest);
+
+    expect(suggest).toHaveBeenCalledWith();
+  });
+
   it("releases both URL and download-ID ownership", () => {
     const listeners: FilenameDeterminationListener[] = [];
     const reassertion = createPackDownloadFilenameReassertion({
@@ -64,10 +102,11 @@ describe("Pack download filename reassertion", () => {
 
     listeners[0]?.({ id: 91, url: "blob:pack-owned/zip" }, suggest);
 
-    expect(suggest).not.toHaveBeenCalled();
+    expect(suggest).toHaveBeenCalledOnce();
+    expect(suggest).toHaveBeenCalledWith();
   });
 
-  it("never suggests a filename for an unknown download ID", () => {
+  it("keeps an unknown download's tentative filename without claiming it", () => {
     const listeners: FilenameDeterminationListener[] = [];
     createPackDownloadFilenameReassertion({
       onDeterminingFilename: {
@@ -80,6 +119,7 @@ describe("Pack download filename reassertion", () => {
 
     listeners[0]?.({ id: 404, url: "blob:not-owned/download" }, suggest);
 
-    expect(suggest).not.toHaveBeenCalled();
+    expect(suggest).toHaveBeenCalledOnce();
+    expect(suggest).toHaveBeenCalledWith();
   });
 });
