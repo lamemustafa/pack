@@ -171,10 +171,11 @@ function isValidFlowStepDiagnostics(step: object, scope: FiledReturnsDownloadSco
 }
 
 function isSafeSignalList(input: unknown): input is string[] {
+  // Portal steps may repeat a bounded safe token across transient snapshots.
+  // Durable persistence performs its own stricter canonical signal validation.
   return (
     Array.isArray(input) &&
     input.length <= 32 &&
-    new Set(input).size === input.length &&
     input.every(
       (signal) =>
         typeof signal === "string" &&

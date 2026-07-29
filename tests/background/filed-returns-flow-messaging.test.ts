@@ -90,6 +90,15 @@ describe("filed returns flow messaging", () => {
         scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
         state: "ready",
         safeSignals: [],
+      },
+    },
+    {
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
+        state: "ready",
+        safeSignals: [],
         safeMessage: "x".repeat(501),
       },
     },
@@ -194,6 +203,51 @@ describe("filed returns flow messaging", () => {
         },
       }),
     ).resolves.toMatchObject({ ok: true, flowStep: { state: "clicked" } });
+  });
+
+  it("accepts the live GSTR-2B dashboard response with repeated filter snapshots", async () => {
+    const response = {
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-gstr2b-private-v0",
+        state: "clicked",
+        safeSignals: [
+          "gstr2b-return-dashboard-route",
+          "gstr2b-dashboard-root-found",
+          "gstr2b-dashboard-year-select-found",
+          "gstr2b-dashboard-quarter-select-found",
+          "gstr2b-dashboard-period-select-found",
+          "gstr2b-dashboard-search-found",
+          "gstr2b-dashboard-selected-year:2026-27",
+          "gstr2b-dashboard-selected-quarter:quarter-1-apr-jun",
+          "gstr2b-dashboard-selected-period:june",
+          "gstr2b-return-dashboard-filter-selection-in-progress",
+          "period-selected",
+          "gstr2b-dashboard-selected-year:2026-27",
+          "gstr2b-dashboard-selected-quarter:quarter-1-apr-jun",
+          "gstr2b-dashboard-selected-period:april",
+        ],
+        safeMessage:
+          "Pack selected part of the GSTR-2B return dashboard filters and is waiting for the GST portal to finish updating them.",
+      },
+    } satisfies PackMessageResponse;
+    const deps: FiledReturnsFlowMessagingDeps = {
+      ...BASE_DEPS,
+      sendMessageToTabWithInjection: vi.fn(async () => response),
+    };
+
+    await expect(
+      runDownloadStepWithRetry(deps, 10, {
+        type: "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
+        payload: {
+          financialYear: "2026-27",
+          period: "April",
+          returnType: "GSTR-2B",
+          artifactType: "PDF_AND_EXCEL",
+        },
+      }),
+    ).resolves.toEqual(response);
   });
 
   it("uses ambiguous download recovery when a trigger message never resolves", async () => {
