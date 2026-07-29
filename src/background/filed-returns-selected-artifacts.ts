@@ -18,7 +18,10 @@ import {
   selectedArtifactsSafeMessage,
   toOptionalArtifactUnavailableFlowStep,
 } from "./filed-returns-artifact-progress";
-import { triggerAndObserveFiledReturnDownload } from "./filed-returns-download-trigger";
+import {
+  gstr1VisibleScopeMismatchResponse,
+  triggerAndObserveFiledReturnDownload,
+} from "./filed-returns-download-trigger";
 import { exportSinglePeriodFiledReturnsZip } from "./filed-returns-full-fiscal-year-zip";
 import {
   clearFiledReturnsTargetReview,
@@ -34,6 +37,7 @@ import { runDownloadStepWithRetry } from "./filed-returns-flow-messaging";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
 import {
   delay,
+  extractActiveFinancialYear,
   extractActivePeriod,
   getFlowStepSettleMs,
   isFiledReturnDownloadReady,
@@ -109,11 +113,13 @@ export async function preflightSelectedArtifactsRecovery({
 
 export async function triggerSelectedArtifacts({
   activePeriod,
+  activeFinancialYear = null,
   deps,
   scope,
   tabId,
 }: {
   activePeriod: string | null;
+  activeFinancialYear?: string | null;
   deps: FiledReturnsFlowRunnerDeps;
   scope: FiledReturnsDownloadScope;
   tabId: number;
@@ -179,6 +185,7 @@ export async function triggerSelectedArtifacts({
 
     const pagePreparation = await preparePageForSelectedArtifact({
       activePeriod,
+      activeFinancialYear,
       artifactType,
       completedArtifactTypes,
       deps: artifactDeps,
@@ -195,6 +202,14 @@ export async function triggerSelectedArtifacts({
       return pagePreparation.response;
     }
     activePeriod = pagePreparation.activePeriod;
+    activeFinancialYear = pagePreparation.activeFinancialYear;
+
+    const visibleScopeMismatch = gstr1VisibleScopeMismatchResponse(
+      scope,
+      activePeriod,
+      activeFinancialYear,
+    );
+    if (visibleScopeMismatch) return visibleScopeMismatch;
 
     if (singlePeriodBundleLedger) {
       const runningLedger = await persistSinglePeriodBundleArtifactRunning(
@@ -208,6 +223,7 @@ export async function triggerSelectedArtifacts({
 
     const response = await triggerAndObserveFiledReturnDownload({
       activePeriod,
+      activeFinancialYear,
       artifactType,
       deps: artifactDeps,
       scope,
@@ -799,6 +815,7 @@ function canClearSinglePeriodBundleRecovery(
 
 async function preparePageForSelectedArtifact({
   activePeriod,
+  activeFinancialYear,
   artifactType,
   completedArtifactTypes,
   deps,
@@ -806,13 +823,15 @@ async function preparePageForSelectedArtifact({
   tabId,
 }: {
   activePeriod: string | null;
+  activeFinancialYear: string | null;
   artifactType: FiledReturnsConcreteArtifactType;
   completedArtifactTypes: ReadonlySet<FiledReturnsConcreteArtifactType>;
   deps: FiledReturnsFlowRunnerDeps;
   scope: FiledReturnsDownloadScope;
   tabId: number;
 }): Promise<
-  { ok: true; activePeriod: string | null } | { ok: false; response: PackMessageResponse }
+  | { ok: true; activeFinancialYear: string | null; activePeriod: string | null }
+  | { ok: false; response: PackMessageResponse }
 > {
   if (
     scope.returnType !== "GSTR-1" ||
@@ -820,11 +839,12 @@ async function preparePageForSelectedArtifact({
     artifactType !== "EXCEL" ||
     !completedArtifactTypes.has("PDF")
   ) {
-    return { ok: true, activePeriod };
+    return { ok: true, activeFinancialYear, activePeriod };
   }
 
   return waitForGstr1ExcelDetailReady({
     activePeriod,
+    activeFinancialYear,
     deps,
     scope: { ...scope, artifactType: "EXCEL" },
     tabId,
@@ -833,19 +853,23 @@ async function preparePageForSelectedArtifact({
 
 async function waitForGstr1ExcelDetailReady({
   activePeriod,
+  activeFinancialYear,
   deps,
   scope,
   tabId,
 }: {
   activePeriod: string | null;
+  activeFinancialYear: string | null;
   deps: FiledReturnsFlowRunnerDeps;
   scope: FiledReturnsDownloadScope;
   tabId: number;
 }): Promise<
-  { ok: true; activePeriod: string | null } | { ok: false; response: PackMessageResponse }
+  | { ok: true; activeFinancialYear: string | null; activePeriod: string | null }
+  | { ok: false; response: PackMessageResponse }
 > {
   let lastStep: PortalFlowStepResult | null = null;
   let nextActivePeriod = activePeriod;
+  let nextActiveFinancialYear = activeFinancialYear;
 
   for (let attempt = 0; attempt < MAX_FLOW_STEPS; attempt += 1) {
     const response = await runDownloadStepWithRetry(deps, tabId, {
@@ -859,9 +883,14 @@ async function waitForGstr1ExcelDetailReady({
     await persistFlowResponse(response, deps);
     lastStep = response.flowStep;
     nextActivePeriod = extractActivePeriod(lastStep) ?? nextActivePeriod;
+    nextActiveFinancialYear = extractActiveFinancialYear(lastStep) ?? nextActiveFinancialYear;
 
     if (isFiledReturnDownloadReady(lastStep, scope)) {
-      return { ok: true, activePeriod: nextActivePeriod };
+      return {
+        ok: true,
+        activeFinancialYear: nextActiveFinancialYear,
+        activePeriod: nextActivePeriod,
+      };
     }
 
     if (!shouldContinueFlow(lastStep)) {

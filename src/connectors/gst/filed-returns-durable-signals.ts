@@ -59,6 +59,7 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "filed-gstr1-summary-view-clicked",
   "filed-gstr1-summary-view-pending",
   "filed-gstr1-target-bound-detail",
+  "filed-gstr1-visible-scope-mismatch",
   "filed-gstr3b-download-clicked",
   "filed-gstr3b-download-trigger-ambiguous",
   "filed-gstr3b-direct-download-action-mismatch",

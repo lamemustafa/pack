@@ -13,6 +13,7 @@ import {
 import { runDownloadStepWithRetry } from "./filed-returns-flow-messaging";
 import {
   delay,
+  extractActiveFinancialYear,
   extractActivePeriod,
   getFlowStepSettleMs,
   getResultRowNavigationSettleMs,
@@ -207,6 +208,7 @@ async function runSinglePeriodSteps(
 ): Promise<PackMessageResponse> {
   let lastStep: PortalFlowStepResult | null = null;
   let activePeriod: string | null = null;
+  let activeFinancialYear: string | null = null;
   let mainWorldFilterAttempted = false;
   for (let attempt = 0; attempt < maxFlowStepsFor(scope); attempt += 1) {
     const response = await runScopedDownloadStepWithRetry(deps, tabId, scope);
@@ -217,10 +219,12 @@ async function runSinglePeriodSteps(
     await persistFlowResponse(response, deps);
     lastStep = response.flowStep;
     activePeriod = extractActivePeriod(lastStep) ?? activePeriod;
+    activeFinancialYear = extractActiveFinancialYear(lastStep) ?? activeFinancialYear;
 
     if (lastStep.safeSignals.includes("filed-return-api-result-posted")) {
       return waitForDetailReadyThenTrigger({
         activePeriod,
+        activeFinancialYear,
         deps,
         shouldPersistSinglePeriodSummary,
         scope,
@@ -236,6 +240,7 @@ async function runSinglePeriodSteps(
       if (shouldWaitForDetailReadyAfterResultNavigation(scope)) {
         return waitForDetailReadyThenTrigger({
           activePeriod,
+          activeFinancialYear,
           deps,
           shouldPersistSinglePeriodSummary,
           scope,
@@ -247,6 +252,7 @@ async function runSinglePeriodSteps(
 
       return triggerSinglePeriodDownloadAndPersistSummary({
         activePeriod,
+        activeFinancialYear,
         deps,
         shouldPersistSinglePeriodSummary,
         scope,
@@ -257,6 +263,7 @@ async function runSinglePeriodSteps(
     if (isFiledReturnDownloadReady(lastStep, scope)) {
       return triggerSinglePeriodDownloadAndPersistSummary({
         activePeriod,
+        activeFinancialYear,
         deps,
         shouldPersistSinglePeriodSummary,
         scope,
@@ -339,12 +346,14 @@ async function clearUnsubmittedMainWorldSearch(
 
 async function waitForDetailReadyThenTrigger({
   activePeriod,
+  activeFinancialYear,
   deps,
   shouldPersistSinglePeriodSummary,
   scope,
   tabId,
 }: {
   activePeriod: string | null;
+  activeFinancialYear: string | null;
   deps: FiledReturnsFlowRunnerDeps;
   shouldPersistSinglePeriodSummary: boolean;
   scope: FiledReturnsDownloadScope;
@@ -361,10 +370,12 @@ async function waitForDetailReadyThenTrigger({
     await persistFlowResponse(response, deps);
     lastStep = response.flowStep;
     activePeriod = extractActivePeriod(lastStep) ?? activePeriod;
+    activeFinancialYear = extractActiveFinancialYear(lastStep) ?? activeFinancialYear;
 
     if (isFiledReturnDownloadReady(lastStep, scope)) {
       return triggerSinglePeriodDownloadAndPersistSummary({
         activePeriod,
+        activeFinancialYear,
         deps,
         shouldPersistSinglePeriodSummary,
         scope,
@@ -412,12 +423,14 @@ function runScopedDownloadStepWithRetry(
 
 async function triggerSinglePeriodDownloadAndPersistSummary({
   activePeriod,
+  activeFinancialYear,
   deps,
   shouldPersistSinglePeriodSummary,
   scope,
   tabId,
 }: {
   activePeriod: string | null;
+  activeFinancialYear: string | null;
   deps: FiledReturnsFlowRunnerDeps;
   shouldPersistSinglePeriodSummary: boolean;
   scope: FiledReturnsDownloadScope;
@@ -425,6 +438,7 @@ async function triggerSinglePeriodDownloadAndPersistSummary({
 }): Promise<PackMessageResponse> {
   const response = await triggerSelectedArtifacts({
     activePeriod,
+    activeFinancialYear,
     deps,
     scope,
     tabId,

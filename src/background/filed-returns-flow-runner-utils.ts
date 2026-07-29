@@ -79,6 +79,12 @@ export function extractActivePeriod(step: PortalFlowStepResult): string | null {
   return null;
 }
 
+export function extractActiveFinancialYear(step: PortalFlowStepResult): string | null {
+  const prefix = "filed-return-detail-financial-year:";
+  const signal = step.safeSignals.find((candidate) => candidate.startsWith(prefix));
+  return signal ? signal.slice(prefix.length) : null;
+}
+
 export function delay(ms: number): Promise<void> {
   return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
 }

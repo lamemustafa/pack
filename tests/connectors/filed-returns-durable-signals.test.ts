@@ -42,6 +42,12 @@ describe("filed-return durable signal contract", () => {
     expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);
   });
 
+  it("retains the categorical GSTR-1 visible-scope mismatch marker", () => {
+    expect(parseDurableFiledReturnsSignals(["filed-gstr1-visible-scope-mismatch"])).toEqual([
+      "filed-gstr1-visible-scope-mismatch",
+    ]);
+  });
+
   it("accepts the bounded signals emitted by detail, download, and summary-dialog classifiers", () => {
     const emittedSignals = new Set<string>();
 

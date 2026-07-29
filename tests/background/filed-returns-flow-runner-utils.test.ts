@@ -7,6 +7,7 @@ import {
   MAX_GSTR3B_FLOW_STEPS,
   PORTAL_NAVIGATION_SETTLE_MS,
   RESULT_ROW_NAVIGATION_SETTLE_MS,
+  extractActiveFinancialYear,
   getFlowStepSettleMs,
   maxFlowStepsFor,
   shouldContinueFlow,
@@ -32,6 +33,15 @@ const BASE_DEPS: FiledReturnsFlowRunnerDeps = {
 };
 
 describe("filed returns flow runner wait policy", () => {
+  it("extracts the portal-observed financial year for the acquisition boundary", () => {
+    expect(
+      extractActiveFinancialYear({
+        ...BASE_STEP,
+        safeSignals: ["filed-return-detail-financial-year:2026-27"],
+      }),
+    ).toBe("2026-27");
+  });
+
   it("keeps the longer settle only for portal result-to-detail navigation", () => {
     expect(
       getFlowStepSettleMs(

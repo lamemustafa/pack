@@ -5,6 +5,7 @@ import type {
   PortalFlowStepResult,
 } from "../../src/connectors/gst/filed-returns-contracts";
 import type { FiledReturnsConcreteArtifactType } from "../../src/connectors/gst/filed-returns-artifacts";
+import type { PackMessageResponse } from "../../src/connectors/gst/messages";
 
 type SyntheticBundleArtifact = {
   artifactType: FiledReturnsConcreteArtifactType;
@@ -45,6 +46,9 @@ const mocks = vi.hoisted(() => ({
   >(),
   selectedArtifactsSafeMessage: vi.fn(() => "Selected artifacts downloaded."),
   toOptionalArtifactUnavailableFlowStep: vi.fn(() => null),
+  gstr1VisibleScopeMismatchResponse: vi.fn<(...args: unknown[]) => PackMessageResponse | null>(
+    () => null,
+  ),
   triggerAndObserveFiledReturnDownload: vi.fn(),
 }));
 const bundleMocks = vi.hoisted(() => {
@@ -152,6 +156,7 @@ const bundleMocks = vi.hoisted(() => {
 vi.mock("wxt/browser", () => ({ browser: { storage: { local: {}, session: {} } } }));
 vi.mock("../../src/background/filed-returns-artifact-progress", () => mocks);
 vi.mock("../../src/background/filed-returns-download-trigger", () => ({
+  gstr1VisibleScopeMismatchResponse: mocks.gstr1VisibleScopeMismatchResponse,
   triggerAndObserveFiledReturnDownload: mocks.triggerAndObserveFiledReturnDownload,
 }));
 vi.mock("../../src/background/filed-returns-single-period-bundle-ledger", () => bundleMocks);
@@ -250,6 +255,45 @@ describe("GSTR-2B all-format selection", () => {
     ).toBeUndefined();
     expect(bundleMocks.exportSinglePeriodFiledReturnsZip).not.toHaveBeenCalled();
     expect(response).toMatchObject({ flowStep: { state: "downloaded" } });
+  });
+
+  it("preserves a known GSTR-1 scope mismatch before marking a bundle artifact running", async () => {
+    mocks.gstr1VisibleScopeMismatchResponse.mockReturnValueOnce({
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
+        state: "blocked",
+        safeSignals: ["filed-gstr1-visible-scope-mismatch"],
+        safeMessage:
+          "Pack found filed GSTR-1 for June 2026-27, but this run requested April 2026-27. Pack did not start artifact acquisition.",
+      },
+    });
+
+    const response = await triggerSelectedArtifacts({
+      activeFinancialYear: "2026-27",
+      activePeriod: "June",
+      deps: { storageKeys: {} } as never,
+      scope: {
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2026-27",
+        period: "April",
+        returnType: "GSTR-1",
+      },
+      tabId: 17,
+    });
+
+    expect(response).toMatchObject({
+      flowStep: {
+        safeMessage: expect.stringContaining("June 2026-27"),
+        state: "blocked",
+      },
+    });
+    expect(response).toMatchObject({
+      flowStep: { safeMessage: expect.stringContaining("April 2026-27") },
+    });
+    expect(bundleMocks.persistSinglePeriodBundleArtifactRunning).not.toHaveBeenCalled();
+    expect(mocks.triggerAndObserveFiledReturnDownload).not.toHaveBeenCalled();
   });
 
   it("stages PDF, Excel, and JSON, then exports one ZIP", async () => {

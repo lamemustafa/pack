@@ -11,6 +11,7 @@ import {
 } from "../connectors/gst/artifact-source";
 import { FULL_FISCAL_YEAR_PERIOD } from "../connectors/gst/filed-returns-scope";
 import { type FiledReturnsConcreteArtifactType } from "../connectors/gst/filed-returns-artifacts";
+import { matchesAcceptedText } from "../connectors/gst/filed-returns-dom";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import type { FiledReturnsFlowMessagingDeps } from "./filed-returns-flow-messaging";
 import { acquireGstr3bPdfAfterPreflight } from "./gstr3b-artifact-acquisition";
@@ -69,19 +70,20 @@ export const GSTR1_ARTIFACT_DISPATCH_FAILURE_MESSAGES = {
 } satisfies Record<Gstr1ArtifactDispatchFailureReason, string>;
 
 export async function triggerAndObserveFiledReturnDownload({
-  activePeriod: _activePeriod,
+  activePeriod,
+  activeFinancialYear = null,
   artifactType = "PDF",
   deps,
   scope,
   tabId,
 }: {
   activePeriod: string | null;
+  activeFinancialYear?: string | null;
   artifactType?: FiledReturnsConcreteArtifactType;
   deps: FiledReturnsFlowMessagingDeps;
   scope: FiledReturnsDownloadScope;
   tabId: number;
 }): Promise<PackMessageResponse> {
-  void _activePeriod;
   if (isGstr3bFullFiscalYearAcquisitionScope(scope)) {
     return { ok: true, flowStep: gstr3bFullFiscalYearAcquisitionNotWiredStep() };
   }
@@ -111,6 +113,12 @@ export async function triggerAndObserveFiledReturnDownload({
     return gstr1ArtifactDispatchFailure(Gstr1ArtifactDispatchFailureReason.PeriodInvalid);
   }
   if (scope.returnType === "GSTR-1") {
+    const visibleScopeMismatch = gstr1VisibleScopeMismatchResponse(
+      scope,
+      activePeriod,
+      activeFinancialYear,
+    );
+    if (visibleScopeMismatch) return visibleScopeMismatch;
     return triggerGstr1SinglePeriodArtifact(scope, artifactType, deps, tabId);
   }
   if (
@@ -647,6 +655,42 @@ function gstr1ArtifactDispatchFailure(
       userAction: {
         type: "RETRY_PORTAL_GENERATION",
         message: "Keep the selected GSTR-1 page open, then retry the artifact.",
+        canResume: true,
+      },
+    },
+  };
+}
+
+export function gstr1VisibleScopeMismatchResponse(
+  scope: FiledReturnsDownloadScope,
+  activePeriod: string | null,
+  activeFinancialYear: string | null,
+): FlowStepResponse | null {
+  if (scope.returnType !== "GSTR-1") return null;
+
+  const periodMismatch =
+    activePeriod !== null && !matchesAcceptedText(activePeriod, [scope.period]);
+  const financialYearMismatch =
+    activeFinancialYear !== null &&
+    !matchesAcceptedText(activeFinancialYear, [scope.financialYear]);
+  if (!periodMismatch && !financialYearMismatch) return null;
+
+  const visibleScope = [activePeriod, activeFinancialYear].filter(Boolean).join(" ");
+  const requestedScope = `${scope.period} ${scope.financialYear}`;
+  return {
+    ok: true,
+    flowStep: {
+      connectorId: "gst",
+      scopeId: filedReturnScopeId("GSTR-1"),
+      state: "blocked",
+      safeSignals: [
+        "filed-gstr1-visible-scope-mismatch",
+        ...(activePeriod ? [`filed-return-detail-period:${activePeriod}`] : []),
+      ],
+      safeMessage: `Pack found filed GSTR-1 for ${visibleScope}, but this run requested ${requestedScope}. Pack did not start artifact acquisition.`,
+      userAction: {
+        type: "NAVIGATE_TO_SUPPORTED_PAGE",
+        message: `Open the filed GSTR-1 for ${requestedScope}, then resume this run.`,
         canResume: true,
       },
     },

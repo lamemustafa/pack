@@ -392,6 +392,42 @@ describe("GSTR-2B artifact acquisition dispatch", () => {
     expect(response.flowStep.safeSignals).not.toContain("extension-download-complete");
   });
 
+  it("does not apply the GSTR-1 visible-scope guard to GSTR-2B acquisition", async () => {
+    const sendMessageToTabWithInjection = vi.fn(
+      async (_tabId, message) =>
+        ({
+          ok: true,
+          artifact: {
+            ok: true,
+            state: "acquired",
+            requestId: message.payload.requestId,
+            base64: "JVBERi0xLjQ=",
+            mimeType: "application/pdf",
+            safeSignals: ["target-period-verified"],
+          },
+        }) as PackMessageResponse,
+    );
+
+    const response = await triggerAndObserveFiledReturnDownload({
+      activeFinancialYear: "2025-26",
+      activePeriod: "May",
+      artifactType: "PDF",
+      deps: {
+        sendMessageToTabWithInjection,
+        stageCapturedDownloads: {
+          bundleKind: "single-period",
+          ledgerId: "single-period:12345678-test",
+        },
+        storageKeys: {},
+      },
+      scope: { financialYear: "2026-27", period: "June", returnType: "GSTR-2B" },
+      tabId: 17,
+    });
+
+    expect(sendMessageToTabWithInjection).toHaveBeenCalledOnce();
+    expect(response).toMatchObject({ flowStep: { state: "downloaded" } });
+  });
+
   it("turns an April summary-page response without an artifact into a terminal message", async () => {
     const response = await triggerAndObserveFiledReturnDownload({
       activePeriod: "April",
@@ -541,10 +577,50 @@ describe("GSTR-2B artifact acquisition dispatch", () => {
 });
 
 describe("GSTR-1 artifact acquisition dispatch", () => {
+  it.each([
+    ["period", "June", "2026-27", "April", "2026-27"],
+    ["financial year", "April", "2025-26", "April", "2026-27"],
+  ] as const)(
+    "blocks acquisition when the visible %s differs from the requested scope",
+    async (_field, activePeriod, activeFinancialYear, requestedPeriod, requestedFinancialYear) => {
+      const sendMessageToTabWithInjection = vi.fn();
+      captureMocks.acquirePageGeneratedArtifact.mockClear();
+
+      const response = await triggerAndObserveFiledReturnDownload({
+        activeFinancialYear,
+        activePeriod,
+        artifactType: "PDF",
+        deps: { sendMessageToTabWithInjection, storageKeys: {} },
+        scope: {
+          financialYear: requestedFinancialYear,
+          period: requestedPeriod,
+          returnType: "GSTR-1",
+        },
+        tabId: 17,
+      });
+
+      expect(response).toMatchObject({
+        flowStep: {
+          safeSignals: expect.arrayContaining(["filed-gstr1-visible-scope-mismatch"]),
+          state: "blocked",
+          userAction: { type: "NAVIGATE_TO_SUPPORTED_PAGE", canResume: true },
+        },
+      });
+      if (!response.ok || !("flowStep" in response)) throw new Error("Expected flow step.");
+      expect(response.flowStep.safeMessage).toContain(`${activePeriod} ${activeFinancialYear}`);
+      expect(response.flowStep.safeMessage).toContain(
+        `${requestedPeriod} ${requestedFinancialYear}`,
+      );
+      expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
+      expect(captureMocks.acquirePageGeneratedArtifact).not.toHaveBeenCalled();
+    },
+  );
+
   it.each(["PDF", "EXCEL"] as const)(
     "uses the bounded portal shim for the %s artifact",
     async (artifactType) => {
       const response = await triggerAndObserveFiledReturnDownload({
+        activeFinancialYear: "2026-27",
         activePeriod: "June",
         artifactType,
         deps: {
