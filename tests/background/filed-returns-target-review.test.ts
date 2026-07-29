@@ -6,6 +6,8 @@ import {
   retryCompletedSinglePeriodZipCleanup,
 } from "../../src/background/filed-returns-target-review";
 import { persistFiledReturnsTargetDownloadId } from "../../src/background/filed-returns-target-download-attempt";
+import { parseDurableFiledReturnsFlowSummary } from "../../src/background/filed-returns-durable-summary";
+import { canonicalDurableSummaryMessage } from "../../src/connectors/gst/filed-returns-durable-status";
 import type {
   FiledReturnsDownloadDiagnostic,
   FiledReturnsDownloadScope,
@@ -457,6 +459,129 @@ describe("filed returns target review", () => {
         safeSignals: expect.arrayContaining(["single-period-opfs-clear-failed"]),
       }),
     });
+    expect(parseDurableFiledReturnsFlowSummary(summary)?.flowStep.safeMessage).toBe(
+      "Pack cannot complete this review while temporary selected-file staging remains uncleared.",
+    );
+  });
+
+  it("never renders a confirmed ZIP cleanup failure as an unverified download", async () => {
+    const summary = await persistFiledReturnsTargetReview(
+      {
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2026-27",
+        period: "April",
+        returnType: "GSTR-2B",
+      },
+      {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr2b-pdf-private-v0",
+        state: "blocked",
+        safeSignals: [
+          "single-period-zip-downloaded",
+          "single-period-opfs-clear-failed",
+          "single-period-opfs-clear-error:clear-failed",
+          "single-period-opfs-retained",
+          "browser-download-completed",
+          "browser-download-id:178",
+          "browser-download-non-empty",
+        ],
+        safeMessage: "The synthetic ZIP completed before cleanup failed.",
+      },
+      {
+        now: () => new Date("2026-07-29T00:00:00.000Z"),
+        storageKeys: { targetReview: "target-review" },
+      },
+    );
+    const durableSummary = parseDurableFiledReturnsFlowSummary(summary);
+
+    expect(durableSummary).toMatchObject({
+      status: "blocked",
+      flowStep: {
+        state: "blocked",
+        safeSignals: expect.arrayContaining([
+          "filed-returns-target-review-required",
+          "filed-returns-target-local-cleanup-required",
+          "single-period-zip-downloaded",
+          "single-period-opfs-clear-failed",
+          "single-period-opfs-clear-error:clear-failed",
+          "single-period-opfs-cleanup-required",
+          "browser-download-completed",
+          "browser-download-id:178",
+          "browser-download-non-empty",
+        ]),
+        safeMessage:
+          "Pack confirmed the selected ZIP download for April; only temporary local staging remains to be cleared.",
+        userAction: { canResume: true },
+      },
+    });
+    expect(durableSummary?.flowStep.safeMessage).not.toContain("could not verify");
+  });
+
+  it("does not treat completed cleanup checkpoints as a cleanup failure", () => {
+    expect(
+      canonicalDurableSummaryMessage(
+        {
+          artifactType: "PDF_AND_EXCEL",
+          financialYear: "2026-27",
+          period: "April",
+          returnType: "GSTR-2B",
+        },
+        "complete",
+        ["single-period-cleanup-checkpoints-cleared"],
+      ),
+    ).toBe("Pack completed the local filed-return download for April.");
+  });
+
+  it("does not render a confirmed fiscal-year ZIP cleanup failure as unconfirmed", () => {
+    expect(
+      canonicalDurableSummaryMessage(
+        {
+          financialYear: "2026-27",
+          period: "FULL_FISCAL_YEAR",
+          returnType: "GSTR-3B",
+        },
+        "blocked",
+        [
+          "full-fiscal-year-zip-downloaded",
+          "full-fiscal-year-zip-cleanup-pending",
+          "full-fiscal-year-opfs-clear-failed",
+          "full-fiscal-year-opfs-retained",
+        ],
+      ),
+    ).toBe(
+      "Pack confirmed the final fiscal-year ZIP download; only retained local staging remains to be cleared.",
+    );
+  });
+
+  it.each([
+    ["multiple browser IDs", ["browser-download-id:179"]],
+    ["zero-byte contradiction", ["browser-download-zero-bytes"]],
+    ["correlation contradiction", ["browser-download-correlation-rejected"]],
+  ])("does not claim confirmed ZIP evidence with %s", (_label, contradictorySignals) => {
+    const message = canonicalDurableSummaryMessage(
+      {
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2026-27",
+        period: "April",
+        returnType: "GSTR-2B",
+      },
+      "blocked",
+      [
+        "filed-returns-target-review-required",
+        "single-period-zip-downloaded",
+        "single-period-opfs-clear-failed",
+        "single-period-opfs-cleanup-required",
+        "browser-download-completed",
+        "browser-download-id:178",
+        "browser-download-non-empty",
+        ...contradictorySignals,
+      ],
+    );
+
+    expect(message).toBe(
+      "Pack cannot complete this review while temporary selected-file staging remains uncleared.",
+    );
+    expect(message).not.toContain("confirmed the selected ZIP download");
   });
 
   it("clears selected-file staging before cancelling an intent-only ZIP", async () => {

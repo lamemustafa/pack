@@ -13,6 +13,7 @@ import {
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import {
   canonicalDurableTargetStatus,
+  hasConfirmedSinglePeriodZipDownloadEvidence,
   parseDurableFiledReturnsScope,
   parseDurableTargetStatus,
 } from "../connectors/gst/filed-returns-durable-status";
@@ -718,20 +719,25 @@ function targetReviewStep(review: FiledReturnsTargetReview): PortalFlowStepResul
   }
   if (hasSinglePeriodCleanupFailure(review.safeSignals)) {
     const transientStagingCleared = review.safeSignals.includes("single-period-opfs-cleared");
+    const downloadConfirmed = hasConfirmedSinglePeriodZipDownloadEvidence(review.safeSignals);
     return {
       connectorId: "gst",
       scopeId: filedReturnScopeId(review.scope.returnType),
       state: "blocked",
-      safeSignals: [
+      safeSignals: uniqueSafeSignals([
         "filed-returns-target-review-required",
         "filed-returns-target-local-cleanup-required",
         ...(transientStagingCleared
           ? ["single-period-opfs-cleared", "single-period-cleanup-checkpoint-failed"]
           : ["single-period-opfs-clear-failed", "single-period-opfs-cleanup-required"]),
-      ],
+        ...confirmedSinglePeriodZipSignals(review.safeSignals),
+        ...singlePeriodOpfsClearDiagnosticSignals(review.safeSignals),
+      ]),
       safeMessage: transientStagingCleared
         ? "Pack cleared temporary selected-file staging but could not verify its durable recovery checkpoint cleanup."
-        : "Pack cannot complete this review while temporary selected-file staging remains uncleared.",
+        : downloadConfirmed
+          ? `Pack confirmed the selected ZIP download for ${review.scope.period}; only temporary local staging remains to be cleared.`
+          : "Pack cannot complete this review while temporary selected-file staging remains uncleared.",
       userAction: {
         type: "RETRY_PORTAL_GENERATION",
         message: transientStagingCleared
@@ -788,6 +794,25 @@ function targetReviewStep(review: FiledReturnsTargetReview): PortalFlowStepResul
     },
     ...copyFiledReturnsDownloadDiagnosticState(review),
   };
+}
+
+function confirmedSinglePeriodZipSignals(safeSignals: readonly string[]): string[] {
+  return safeSignals.filter(
+    (signal) =>
+      signal === "single-period-zip-downloaded" ||
+      signal === "browser-download-completed" ||
+      signal === "browser-download-non-empty" ||
+      /^browser-download-id:\d{1,10}$/.test(signal),
+  );
+}
+
+function singlePeriodOpfsClearDiagnosticSignals(safeSignals: readonly string[]): string[] {
+  return safeSignals.filter(
+    (signal) =>
+      signal === "single-period-opfs-clear-offscreen-response-invalid" ||
+      signal === "single-period-opfs-clear-offscreen-unreachable" ||
+      /^single-period-opfs-clear-error:(clear-failed|opfs-unavailable)$/.test(signal),
+  );
 }
 
 function targetReviewDiagnosticSignals(safeSignals: readonly string[]): string[] {

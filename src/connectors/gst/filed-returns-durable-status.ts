@@ -16,6 +16,7 @@ type DurableMessageKey =
   | "complete"
   | "durable-status-rejected"
   | "full-year-active"
+  | "full-year-downloaded-cleanup-blocked"
   | "full-year-interrupted"
   | "full-year-needs-action"
   | "full-year-resume"
@@ -25,6 +26,7 @@ type DurableMessageKey =
   | "target-cancelled"
   | "target-cleanup-blocked"
   | "target-downloaded"
+  | "target-downloaded-cleanup-blocked"
   | "target-manually-observed"
   | "target-pending"
   | "target-restaging"
@@ -82,6 +84,17 @@ export function canonicalDurableSummaryMessage(
   return renderDurableMessage(messageKeyForSummary(status, signals), scope);
 }
 
+export function hasConfirmedSinglePeriodZipDownloadEvidence(signals: readonly string[]): boolean {
+  const downloadIds = signals.filter((signal) => /^browser-download-id:\d{1,10}$/.test(signal));
+  return (
+    signals.includes("single-period-zip-downloaded") &&
+    signals.includes("browser-download-completed") &&
+    signals.includes("browser-download-non-empty") &&
+    downloadIds.length === 1 &&
+    !signals.some(isContradictoryDownloadSignal)
+  );
+}
+
 export function parseDurableFiledReturnsScope(
   input: unknown,
   allowFullFiscalYear = true,
@@ -136,9 +149,7 @@ function messageKeyForTarget(
   if (signals.includes("full-fiscal-year-restaging-required")) return "target-restaging";
   if (signals.includes("full-fiscal-year-target-retry-approved")) return "target-retry-approved";
   if (signals.includes("filed-returns-target-manually-observed")) return "target-manually-observed";
-  if (
-    signals.some((signal) => signal.includes("cleanup") || signal.includes("opfs-clear-failed"))
-  ) {
+  if (hasCleanupFailureSignal(signals)) {
     return "target-cleanup-blocked";
   }
   if (signals.includes("filed-return-positively-not-filed") || status === "not-filed") {
@@ -160,6 +171,14 @@ function messageKeyForSummary(
   if (signals.includes("full-fiscal-year-run-interrupted")) return "full-year-interrupted";
   if (signals.includes("full-fiscal-year-run-needs-action")) return "full-year-needs-action";
   if (signals.includes("full-fiscal-year-run-active")) return "full-year-active";
+  if (hasCleanupFailureSignal(signals)) {
+    if (signals.includes("full-fiscal-year-zip-downloaded")) {
+      return "full-year-downloaded-cleanup-blocked";
+    }
+    return hasConfirmedSinglePeriodZipDownloadEvidence(signals)
+      ? "target-downloaded-cleanup-blocked"
+      : "target-cleanup-blocked";
+  }
   if (signals.some((signal) => signal.includes("full-fiscal-year-zip-download"))) {
     return "full-year-zip-review";
   }
@@ -179,6 +198,8 @@ function renderDurableMessage(key: DurableMessageKey, scope: FiledReturnsDownloa
     "durable-status-rejected":
       "Pack rejected non-canonical recovery metadata and will not continue automatically.",
     "full-year-active": `The saved FY ${scope.financialYear} run is still active.`,
+    "full-year-downloaded-cleanup-blocked":
+      "Pack confirmed the final fiscal-year ZIP download; only retained local staging remains to be cleared.",
     "full-year-interrupted": `Pack stopped before it could confirm ${period}. Check Downloads before retrying.`,
     "full-year-needs-action": `Pack needs an explicit recovery action before continuing ${period}.`,
     "full-year-resume":
@@ -191,6 +212,7 @@ function renderDurableMessage(key: DurableMessageKey, scope: FiledReturnsDownloa
     "target-cleanup-blocked":
       "Pack cannot complete this review while temporary selected-file staging remains uncleared.",
     "target-downloaded": `Pack confirmed the filed-return download for ${period}.`,
+    "target-downloaded-cleanup-blocked": `Pack confirmed the selected ZIP download for ${period}; only temporary local staging remains to be cleared.`,
     "target-manually-observed":
       "Pack recorded a manual observation, but the target still requires an explicit retry or cancellation.",
     "target-pending": "Not checked yet.",
@@ -201,6 +223,43 @@ function renderDurableMessage(key: DurableMessageKey, scope: FiledReturnsDownloa
   };
   return messages[key];
 }
+
+function hasCleanupFailureSignal(signals: readonly string[]): boolean {
+  return signals.some(
+    (signal) =>
+      signal.includes("opfs-clear-failed") ||
+      signal.includes("cleanup-failed") ||
+      signal.includes("cleanup-checkpoint-failed") ||
+      signal.endsWith("cleanup-required"),
+  );
+}
+
+function isContradictoryDownloadSignal(signal: string): boolean {
+  return (
+    CONTRADICTORY_DOWNLOAD_SIGNALS.has(signal) ||
+    signal.startsWith("browser-download-error-") ||
+    signal === "single-period-zip-download-unconfirmed" ||
+    signal === "single-period-zip-incomplete"
+  );
+}
+
+const CONTRADICTORY_DOWNLOAD_SIGNALS = new Set([
+  "browser-download-correlation-rejected",
+  "browser-download-danger-pending",
+  "browser-download-danger-rejected",
+  "browser-download-danger-unknown",
+  "browser-download-existence-unknown",
+  "browser-download-file-missing",
+  "browser-download-in-progress",
+  "browser-download-interrupted",
+  "browser-download-not-observed",
+  "browser-download-save-dialog-may-be-open",
+  "browser-download-search-missing",
+  "browser-download-search-unavailable",
+  "browser-download-size-unknown",
+  "browser-download-state-unconfirmed",
+  "browser-download-zero-bytes",
+]);
 
 function parsePeriods(input: unknown): string[] | null {
   if (!Array.isArray(input) || input.length > FILED_RETURNS_MONTHS.length) return null;
