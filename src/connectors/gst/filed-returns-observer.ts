@@ -154,7 +154,7 @@ export function observeFiledReturnsPageText(
       connectorId: "gst",
       pageKind: "gst-filed-returns",
       scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
-      state: "gstr-3b-not-visible",
+      state: "download-not-visible",
       safeSignals,
       safeMessage:
         "The filed returns page is visible, but the requested return type is not visible yet.",

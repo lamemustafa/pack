@@ -91,6 +91,7 @@ export async function preflightSelectedArtifactsRecovery({
   }
 
   const ledger = storageState.ledger;
+  if (!sameSinglePeriodBundleScope(ledger.scope, scope)) return null;
   if (
     ledger.phase === "artifact-review" ||
     ledger.artifacts.some((artifact) => artifact.status === "running")
@@ -100,7 +101,7 @@ export async function preflightSelectedArtifactsRecovery({
   if (["zip-intent-persisted", "zip-observing", "cleanup-pending"].includes(ledger.phase)) {
     return finalZipSinglePeriodBundleResponse(ledger);
   }
-  if (!compatibleDurableSinglePeriodBundle || !sameSinglePeriodBundleScope(ledger.scope, scope)) {
+  if (!compatibleDurableSinglePeriodBundle) {
     return conflictingSinglePeriodBundleResponse(ledger);
   }
   return null;
@@ -293,14 +294,14 @@ export async function triggerSelectedArtifacts({
       const stagedLedger = await persistSinglePeriodBundleArtifactStaged(
         singlePeriodBundleLedger,
         artifactType,
-        response.flowStep,
+        artifactOutcome,
         deps.now?.() ?? new Date(),
       );
       if (!stagedLedger) {
         return persistAmbiguousSinglePeriodBundleResponse(
           singlePeriodBundleLedger,
           deps,
-          response.flowStep,
+          artifactOutcome,
         );
       }
       singlePeriodBundleLedger = stagedLedger;

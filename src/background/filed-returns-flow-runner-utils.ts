@@ -99,6 +99,7 @@ function isFiledReturnDetailNavigationStep(step: PortalFlowStepResult): boolean 
   return (
     step.safeSignals.includes("filed-return-result-view-clicked") ||
     step.safeSignals.includes("filed-return-api-result-posted") ||
+    step.safeSignals.includes("gstr1-dashboard-view-clicked") ||
     step.safeSignals.includes("gstr2b-dashboard-view-clicked")
   );
 }

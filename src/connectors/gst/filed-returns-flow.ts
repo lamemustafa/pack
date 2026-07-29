@@ -1,11 +1,15 @@
 import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "./filed-returns-contracts";
 import { runGstr2bDownloadStep } from "./gstr2b-flow";
+import { activateElement } from "./filed-returns-dom";
 import { extractFiledReturnsDetailIdentity } from "./filed-returns-detail-identity";
 import {
   dismissKnownFiledReturnsSummaryModal,
   isFiledReturnsSummaryModalDismissalBlocked,
 } from "./filed-returns-dialogs";
-import { navigateToFiledReturnsPage } from "./filed-returns-navigator";
+import {
+  navigateToFiledReturnsPage,
+  navigateToReturnDashboardPage,
+} from "./filed-returns-navigator";
 import { openFiledReturnFromApiSearch } from "./filed-returns-api-search";
 import { selectFiledReturnsFiltersAndSearch } from "./filed-returns-filter-form";
 import { detectPositiveNotFiledEvidence } from "./filed-returns-not-filed-evidence";
@@ -35,6 +39,12 @@ import {
   hasSettledFiledReturnsSearchForScope,
   hasUnchangedFiledReturnsSearchForScope,
 } from "./filed-returns-search-state";
+import { findReturnDashboardControl } from "./gstr2b-dashboard-view";
+import {
+  clearGstr2bDashboardSearchPending,
+  isReturnDashboardRoute,
+  selectReturnDashboardFiltersAndSearch,
+} from "./gstr2b-dashboard-filters";
 
 export async function runFiledReturnsDownloadStep(
   documentRef: Document,
@@ -74,6 +84,42 @@ export async function runFiledReturnsDownloadStep(
       },
       navigation.userAction,
     );
+  }
+
+  if (scope.returnType === "GSTR-1" && isReturnDashboardRoute(documentRef)) {
+    const dashboardSelection = await selectReturnDashboardFiltersAndSearch(
+      documentRef,
+      scope,
+      scopeId,
+      [],
+    );
+    if (dashboardSelection) return dashboardSelection;
+
+    const viewControl = findReturnDashboardControl(documentRef, scope.returnType, "view");
+    if (viewControl) {
+      clearGstr2bDashboardSearchPending(documentRef);
+      activateElement(viewControl);
+      return {
+        connectorId: "gst",
+        scopeId,
+        state: "clicked",
+        safeSignals: ["gstr1-dashboard-view-clicked"],
+        safeMessage: "Pack opened the GSTR-1 tile from the target-bound Return Dashboard card.",
+      };
+    }
+  }
+
+  if (scope.returnType === "GSTR-1" && isFiledReturnsRoute(documentRef)) {
+    clearFiledReturnsSearchAttempt(documentRef);
+    const navigation = await navigateToReturnDashboardPage(documentRef, scopeId);
+    return {
+      ...navigation,
+      safeSignals: ["gstr1-filed-returns-route-mismatched", ...navigation.safeSignals],
+      safeMessage:
+        navigation.state === "clicked"
+          ? "Pack left View Filed Returns and opened Returns Dashboard for the selected GSTR-1 period."
+          : navigation.safeMessage,
+    };
   }
 
   const summaryModalSignals = await dismissKnownFiledReturnsSummaryModal(documentRef);
@@ -256,7 +302,10 @@ export async function runFiledReturnsDownloadStep(
 
   if (observation.state === "wrong-page") {
     clearFiledReturnsSearchAttempt(documentRef);
-    const navigation = await navigateToFiledReturnsPage(documentRef);
+    const navigation =
+      scope.returnType === "GSTR-1"
+        ? await navigateToReturnDashboardPage(documentRef, scopeId)
+        : await navigateToFiledReturnsPage(documentRef);
     return withOptionalUserAction(
       {
         connectorId: "gst",
@@ -283,6 +332,12 @@ export async function runFiledReturnsDownloadStep(
 
 function isReturnsOrigin(documentRef: Document): boolean {
   return documentRef.defaultView?.location.origin === "https://return.gst.gov.in";
+}
+
+function isFiledReturnsRoute(documentRef: Document): boolean {
+  return /\/returns\/auth\/efiledReturns\/?$/i.test(
+    documentRef.defaultView?.location.pathname ?? "",
+  );
 }
 
 function isAuthenticatedGstr1Route(documentRef: Document): boolean {

@@ -104,7 +104,10 @@ export async function startFiledReturnsDownloadFlow(
 ): Promise<PackMessageResponse> {
   const targetReviewState = await readCurrentFiledReturnsTargetReviewStorageState(deps);
   if (targetReviewState.state === "malformed") return malformedTargetReviewResponse(scope);
-  if (targetReviewState.state === "valid") {
+  if (
+    targetReviewState.state === "valid" &&
+    sameFiledReturnsScope(targetReviewState.review.scope, scope)
+  ) {
     return responseForFiledReturnsTargetReview(targetReviewState.review);
   }
 

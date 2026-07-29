@@ -90,6 +90,47 @@ describe("filed-return session write boundary", () => {
     expect(storage.session[COMPLETION_KEY]).toBeUndefined();
   });
 
+  it("persists a restart-safe GSTR-1 Return Dashboard navigation failure", async () => {
+    const response = await withPersistedSinglePeriodSummary(
+      {
+        artifactType: "PDF",
+        financialYear: "2026-27",
+        period: "April",
+        returnType: "GSTR-1",
+      },
+      {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
+          state: "candidate-not-found",
+          safeSignals: [
+            "gstr1-filed-returns-route-mismatched",
+            "return-dashboard-initial-scan",
+            "no-return-dashboard-candidate",
+          ],
+          safeMessage: "Synthetic Return Dashboard navigation failure.",
+        },
+      },
+      deps,
+      true,
+    );
+
+    expect(response).toMatchObject({
+      flowSummary: {
+        status: "blocked",
+        flowStep: {
+          safeSignals: [
+            "gstr1-filed-returns-route-mismatched",
+            "return-dashboard-initial-scan",
+            "no-return-dashboard-candidate",
+          ],
+        },
+      },
+    });
+    expect(storage.session[COMPLETION_KEY]).toBeDefined();
+  });
+
   it("allows only scoped captured-download start signals at the durable boundary", () => {
     expect(isDurableFiledReturnsSignal("filed-gstr1-extension-download-started")).toBe(true);
     expect(isDurableFiledReturnsSignal("filed-gstr2b-extension-download-started")).toBe(true);

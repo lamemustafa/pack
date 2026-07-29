@@ -230,6 +230,7 @@ async function runSinglePeriodSteps(
 
     if (
       lastStep.safeSignals.includes("filed-return-result-view-clicked") ||
+      lastStep.safeSignals.includes("gstr1-dashboard-view-clicked") ||
       lastStep.safeSignals.includes("gstr2b-dashboard-view-clicked")
     ) {
       if (shouldWaitForDetailReadyAfterResultNavigation(scope)) {

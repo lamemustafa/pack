@@ -461,11 +461,7 @@ async function triggerPageGeneratedSinglePeriodArtifact(
             connectorId: "gst",
             scopeId: filedReturnScopeId(returnType),
             state: "downloaded",
-            safeSignals: [
-              ...artifact.safeSignals,
-              ...acquired.safeSignals,
-              "extension-download-complete",
-            ],
+            safeSignals: [...artifact.safeSignals, ...acquired.safeSignals],
             safeMessage: acquired.safeMessage ?? artifactSuccessMessage(returnType, artifactType),
             ...(acquired.downloadDiagnostic
               ? { downloadDiagnostic: acquired.downloadDiagnostic }

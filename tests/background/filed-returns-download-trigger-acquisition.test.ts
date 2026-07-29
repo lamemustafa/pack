@@ -23,6 +23,7 @@ const captureMocks = vi.hoisted(() => ({
   persistArtifactAcquisitionDownloadId: vi.fn(async () => undefined),
   persistArtifactAcquisitionIntent: vi.fn(async () => undefined),
   persistArtifactAcquisitionUnconfirmedDownload: vi.fn(async () => undefined),
+  stageOffscreenFiledReturn: vi.fn(async () => ({ status: "staged" as const })),
 }));
 const summaryStorage = vi.hoisted(() => ({
   remove: vi.fn(async () => undefined),
@@ -48,6 +49,9 @@ vi.mock("../../src/background/gstr3b-artifact-acquisition", () => ({
 }));
 vi.mock("../../src/background/gstr2b-artifact-acquisition", () => ({
   acquirePageGeneratedArtifact: captureMocks.acquirePageGeneratedArtifact,
+}));
+vi.mock("../../src/background/offscreen-blob-url", () => ({
+  stageOffscreenFiledReturn: captureMocks.stageOffscreenFiledReturn,
 }));
 
 import { Gstr3bArtifactAcquisitionBlockReason } from "../../src/background/gstr3b-artifact-acquisition-block";
@@ -343,6 +347,51 @@ describe("GSTR-3B artifact acquisition dispatch", () => {
 });
 
 describe("GSTR-2B artifact acquisition dispatch", () => {
+  it("stages a bundled artifact without reporting or starting a loose download", async () => {
+    vi.clearAllMocks();
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "June",
+      artifactType: "PDF",
+      deps: {
+        sendMessageToTabWithInjection: vi.fn(
+          async (_tabId, message) =>
+            ({
+              ok: true,
+              artifact: {
+                ok: true,
+                state: "acquired",
+                requestId: message.payload.requestId,
+                base64: "JVBERi0xLjQ=",
+                mimeType: "application/pdf",
+                safeSignals: ["target-period-verified"],
+              },
+            }) as PackMessageResponse,
+        ),
+        stageCapturedDownloads: {
+          bundleKind: "single-period",
+          ledgerId: "single-period:12345678-test",
+        },
+        storageKeys: {},
+      },
+      scope: { financialYear: "2026-27", period: "June", returnType: "GSTR-2B" },
+      tabId: 17,
+    });
+
+    expect(captureMocks.stageOffscreenFiledReturn).toHaveBeenCalledOnce();
+    expect(captureMocks.downloadAcquiredArtifact).not.toHaveBeenCalled();
+    expect(response).toMatchObject({
+      flowStep: {
+        state: "downloaded",
+        safeSignals: expect.arrayContaining([
+          "single-period-opfs-staged",
+          "single-period-opfs-staged:PDF",
+        ]),
+      },
+    });
+    if (!response.ok || !("flowStep" in response)) throw new Error("expected flow step");
+    expect(response.flowStep.safeSignals).not.toContain("extension-download-complete");
+  });
+
   it("turns an April summary-page response without an artifact into a terminal message", async () => {
     const response = await triggerAndObserveFiledReturnDownload({
       activePeriod: "April",

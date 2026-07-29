@@ -137,6 +137,29 @@ describe("filed-return durable signal contract", () => {
     ).toBeNull();
   });
 
+  it("accepts bounded GSTR-1 dashboard recovery signals without persisting selected values", () => {
+    const signals = [
+      "gstr1-filed-returns-route-mismatched",
+      "return-dashboard-initial-scan",
+      "return-dashboard-after-services-menu",
+      "return-dashboard-after-returns-menu",
+      "no-return-dashboard-candidate",
+      "gstr1-return-dashboard-route",
+      "gstr1-dashboard-root-found",
+      "gstr1-dashboard-year-select-found",
+      "gstr1-dashboard-quarter-select-found",
+      "gstr1-dashboard-period-select-found",
+      "gstr1-dashboard-search-found",
+      "gstr1-return-dashboard-filters-selected",
+      "gstr1-return-dashboard-search-results-pending",
+      "gstr1-dashboard-view-clicked",
+    ];
+
+    expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);
+    expect(isDurableFiledReturnsSignal("gstr1-dashboard-selected-period:april")).toBe(false);
+    expect(isDurableFiledReturnsSignal("gstr1-dashboard-selected-year:2026-27")).toBe(false);
+  });
+
   it("accepts every GSTR-2B acquisition terminal reason for durable summaries", () => {
     const reasons = Object.values(Gstr2bArtifactDispatchFailureReason);
 

@@ -376,4 +376,12 @@ describe("filed returns private observer", () => {
       expect.arrayContaining(["filed-returns-route", "filed-returns-heading", "filter-form"]),
     );
   });
+
+  it("uses a return-neutral state when no requested return identity is visible", () => {
+    const observation = observeFiledReturnsPageText("View Filed Returns");
+
+    expect(observation.state).toBe("download-not-visible");
+    expect(observation.state).not.toBe("gstr-3b-not-visible");
+    expect(observation.safeMessage).toContain("requested return type");
+  });
 });

@@ -31,7 +31,11 @@ export function findReturnDashboardControls(documentRef: Document): ReturnDashbo
   return { year, quarter, period, search };
 }
 
-export function diagnoseReturnDashboardControls(documentRef: Document): string[] {
+export function diagnoseReturnDashboardControls(
+  documentRef: Document,
+  signalPrefix = "gstr2b",
+  includeSelectedValues = true,
+): string[] {
   const root =
     findReturnDashboardFilterRoot(documentRef) ?? findNativeReturnDashboardRoot(documentRef);
   const probeRoot = root ?? documentRef.body ?? documentRef;
@@ -52,25 +56,36 @@ export function diagnoseReturnDashboardControls(documentRef: Document): string[]
   const search = findSearchButton(probeRoot);
 
   return [
-    "gstr2b-return-dashboard-route",
-    root ? "gstr2b-dashboard-root-found" : "gstr2b-dashboard-root-missing",
-    year ? "gstr2b-dashboard-year-select-found" : "gstr2b-dashboard-year-select-missing",
-    quarter ? "gstr2b-dashboard-quarter-select-found" : "gstr2b-dashboard-quarter-select-missing",
-    period ? "gstr2b-dashboard-period-select-found" : "gstr2b-dashboard-period-select-missing",
-    search ? "gstr2b-dashboard-search-found" : "gstr2b-dashboard-search-missing",
-    ...selectedDashboardFilterSignals({ year, quarter, period }),
+    `${signalPrefix}-return-dashboard-route`,
+    root ? `${signalPrefix}-dashboard-root-found` : `${signalPrefix}-dashboard-root-missing`,
+    year
+      ? `${signalPrefix}-dashboard-year-select-found`
+      : `${signalPrefix}-dashboard-year-select-missing`,
+    quarter
+      ? `${signalPrefix}-dashboard-quarter-select-found`
+      : `${signalPrefix}-dashboard-quarter-select-missing`,
+    period
+      ? `${signalPrefix}-dashboard-period-select-found`
+      : `${signalPrefix}-dashboard-period-select-missing`,
+    search ? `${signalPrefix}-dashboard-search-found` : `${signalPrefix}-dashboard-search-missing`,
+    ...(includeSelectedValues
+      ? selectedDashboardFilterSignals({ year, quarter, period }, signalPrefix)
+      : []),
   ];
 }
 
-export function selectedDashboardFilterSignals(controls: {
-  year: HTMLSelectElement | null;
-  quarter: HTMLSelectElement | null;
-  period: HTMLSelectElement | null;
-}): string[] {
+export function selectedDashboardFilterSignals(
+  controls: {
+    year: HTMLSelectElement | null;
+    quarter: HTMLSelectElement | null;
+    period: HTMLSelectElement | null;
+  },
+  signalPrefix = "gstr2b",
+): string[] {
   return [
-    selectedDashboardFilterSignal("year", controls.year),
-    selectedDashboardFilterSignal("quarter", controls.quarter),
-    selectedDashboardFilterSignal("period", controls.period),
+    selectedDashboardFilterSignal("year", controls.year, signalPrefix),
+    selectedDashboardFilterSignal("quarter", controls.quarter, signalPrefix),
+    selectedDashboardFilterSignal("period", controls.period, signalPrefix),
   ].filter((signal): signal is string => Boolean(signal));
 }
 
@@ -99,12 +114,13 @@ function findDashboardControlSelect(
 function selectedDashboardFilterSignal(
   role: "year" | "quarter" | "period",
   select: HTMLSelectElement | null,
+  signalPrefix: string,
 ): string | null {
   if (!select) return null;
   const label = sanitizeDiagnosticSignalValue(
     select.selectedOptions[0]?.textContent || select.value,
   );
-  return label ? `gstr2b-dashboard-selected-${role}:${label}` : null;
+  return label ? `${signalPrefix}-dashboard-selected-${role}:${label}` : null;
 }
 
 function sanitizeDiagnosticSignalValue(value: string): string {

@@ -47,6 +47,16 @@ describe("filed returns flow runner wait policy", () => {
       getFlowStepSettleMs(
         {
           ...BASE_STEP,
+          safeSignals: ["gstr1-dashboard-view-clicked"],
+        },
+        BASE_DEPS,
+      ),
+    ).toBe(RESULT_ROW_NAVIGATION_SETTLE_MS);
+
+    expect(
+      getFlowStepSettleMs(
+        {
+          ...BASE_STEP,
           safeSignals: ["gstr2b-dashboard-view-clicked"],
         },
         BASE_DEPS,

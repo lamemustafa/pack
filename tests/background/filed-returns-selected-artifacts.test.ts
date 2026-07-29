@@ -16,7 +16,7 @@ type SyntheticBundleLedger = {
   artifactPlan: FiledReturnsConcreteArtifactType[];
   artifacts: SyntheticBundleArtifact[];
   ledgerId: string;
-  phase: "collecting" | "ready-for-zip";
+  phase: "collecting" | "ready-for-zip" | "zip-intent-persisted";
   revision: number;
   scope: FiledReturnsDownloadScope;
 };
@@ -95,8 +95,14 @@ const bundleMocks = vi.hoisted(() => {
         transition(ledger, artifactType, "running"),
     ),
     persistSinglePeriodBundleArtifactStaged: vi.fn(
-      async (ledger: SyntheticBundleLedger, artifactType: FiledReturnsConcreteArtifactType) =>
-        transition(ledger, artifactType, "staged"),
+      async (
+        ledger: SyntheticBundleLedger,
+        artifactType: FiledReturnsConcreteArtifactType,
+        flowStep: PortalFlowStepResult,
+      ) =>
+        flowStep.safeSignals.includes(`filed-return-artifact-downloaded:${artifactType}`)
+          ? transition(ledger, artifactType, "staged")
+          : null,
     ),
     persistSinglePeriodBundleArtifactUnavailable: vi.fn(
       async (ledger: SyntheticBundleLedger, artifactType: FiledReturnsConcreteArtifactType) =>
@@ -121,7 +127,13 @@ const bundleMocks = vi.hoisted(() => {
         scope,
       },
     })),
-    sameSinglePeriodBundleScope: vi.fn(() => true),
+    sameSinglePeriodBundleScope: vi.fn(
+      (left: FiledReturnsDownloadScope, right: FiledReturnsDownloadScope) =>
+        left.returnType === right.returnType &&
+        left.financialYear === right.financialYear &&
+        left.period === right.period &&
+        (left.artifactType ?? "PDF") === (right.artifactType ?? "PDF"),
+    ),
     singlePeriodBundleEntryPlan: vi.fn((ledger: SyntheticBundleLedger) => ({
       artifactTypes: ledger.artifacts
         .filter((artifact) => artifact.status === "staged")
@@ -147,7 +159,10 @@ vi.mock("../../src/background/filed-returns-full-fiscal-year-zip", () => ({
   exportSinglePeriodFiledReturnsZip: bundleMocks.exportSinglePeriodFiledReturnsZip,
 }));
 
-import { triggerSelectedArtifacts } from "../../src/background/filed-returns-selected-artifacts";
+import {
+  preflightSelectedArtifactsRecovery,
+  triggerSelectedArtifacts,
+} from "../../src/background/filed-returns-selected-artifacts";
 
 describe("GSTR-2B all-format selection", () => {
   beforeEach(() => {
@@ -320,7 +335,11 @@ function downloaded(artifactType: string) {
       connectorId: "gst",
       scopeId: "gst-gstr2b-private-v0",
       state: "downloaded",
-      safeSignals: [`synthetic-${artifactType.toLowerCase()}-downloaded`],
+      safeSignals: [
+        `synthetic-${artifactType.toLowerCase()}-downloaded`,
+        "single-period-opfs-staged",
+        `single-period-opfs-staged:${artifactType}`,
+      ],
       safeMessage: `${artifactType} downloaded.`,
     },
   };
@@ -335,6 +354,26 @@ function blocked(artifactType: string) {
       state: "blocked",
       safeSignals: ["artifact-generation-timeout"],
       safeMessage: `${artifactType} failed.`,
+    },
+  };
+}
+
+function retainedGstr2bBundle(): SyntheticBundleLedger {
+  return {
+    artifactPlan: ["PDF", "EXCEL", "JSON"],
+    artifacts: (["PDF", "EXCEL", "JSON"] as const).map((artifactType) => ({
+      artifactType,
+      safeSignals: [],
+      status: "staged",
+    })),
+    ledgerId: "single-period:12345678-retained",
+    phase: "zip-intent-persisted",
+    revision: 7,
+    scope: {
+      artifactType: "PDF_AND_EXCEL",
+      financialYear: "2026-27",
+      period: "June",
+      returnType: "GSTR-2B",
     },
   };
 }

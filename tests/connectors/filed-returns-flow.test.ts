@@ -2,7 +2,10 @@ import { JSDOM } from "jsdom";
 import { describe, expect, it, vi } from "vitest";
 import type { FiledReturnsDownloadScope } from "../../src/connectors/gst/filed-returns-contracts";
 import { runFiledReturnsDownloadStep } from "../../src/connectors/gst/filed-returns-flow";
-import { findGstr2bDashboardControl } from "../../src/connectors/gst/gstr2b-dashboard-view";
+import {
+  findGstr2bDashboardControl,
+  findReturnDashboardControl,
+} from "../../src/connectors/gst/gstr2b-dashboard-view";
 import { filedReturnScopeId } from "../../src/connectors/gst/filed-returns-return-descriptors";
 import {
   triggerFiledGstr3bFiledPdfDownload,
@@ -628,6 +631,43 @@ describe("filed returns guided flow", () => {
     expect(clickedHrefs).toEqual(["https://return.gst.gov.in/returns/auth/dashboard"]);
   });
 
+  it("leaves View Filed Returns for the GSTR-1 Return Dashboard route", async () => {
+    const documentRef = createGstDocument(`
+      <main>
+        <a data-dashboard href="/returns/auth/dashboard">Returns Dashboard</a>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <label>Financial Year</label><select><option>2026-27</option></select>
+          <label>Return Filing Period</label><select><option>Monthly</option></select>
+          <label>Return Type</label><select><option>GSTR-1</option></select>
+          <button type="button">Search</button>
+        </form>
+      </main>
+    `);
+    makeLayoutVisible(documentRef);
+    let dashboardClicked = 0;
+    documentRef.querySelector("[data-dashboard]")?.addEventListener("click", (event) => {
+      event.preventDefault();
+      dashboardClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "April",
+      returnType: "GSTR-1",
+    });
+
+    expect(result).toMatchObject({
+      state: "clicked",
+      safeSignals: expect.arrayContaining([
+        "gstr1-filed-returns-route-mismatched",
+        "return-dashboard-candidate-clicked",
+      ]),
+    });
+    expect(dashboardClicked).toBe(1);
+  });
+
   it("reveals the Services menu before navigating wrong-page GSTR-2B starts", async () => {
     const documentRef = createGstDocument(
       `
@@ -955,6 +995,70 @@ describe("filed returns guided flow", () => {
     expect(gstr1ViewClicked).toBe(0);
     expect(gstr2bViewClicked).toBe(1);
     expect(searchClicked).toBe(1);
+  });
+
+  it("opens only the card-contained GSTR-1 View after target-bound dashboard search", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <form name="dashboard">
+            <label for="fy">Financial Year</label>
+            <select id="fy" name="fin"><option selected>2026-27</option></select>
+            <label for="quarter">Quarter</label>
+            <select id="quarter" name="quarter"><option selected>Quarter 1 (Apr - Jun)</option></select>
+            <label for="period">Period</label>
+            <select id="period" name="mon"><option selected>April</option></select>
+            <button type="button" data-search>Search</button>
+          </form>
+          <section class="return-grid">
+            <article>
+              <h3>Details of outward supplies of goods or services GSTR-1</h3>
+              <button type="button" data-gstr1-view>VIEW</button>
+            </article>
+            <article>
+              <h3>Auto-drafted ITC Statement GSTR-2B</h3>
+              <button type="button" data-gstr2b-view>VIEW</button>
+            </article>
+          </section>
+        </main>
+      `,
+      "https://portal.example.test/returns/auth/dashboard",
+    );
+    makeLayoutVisible(documentRef);
+    let searchClicked = 0;
+    let gstr1ViewClicked = 0;
+    let gstr2bViewClicked = 0;
+    documentRef.querySelector("[data-search]")?.addEventListener("click", () => {
+      searchClicked += 1;
+    });
+    documentRef.querySelector("[data-gstr1-view]")?.addEventListener("click", () => {
+      gstr1ViewClicked += 1;
+    });
+    documentRef.querySelector("[data-gstr2b-view]")?.addEventListener("click", () => {
+      gstr2bViewClicked += 1;
+    });
+    const scope: FiledReturnsDownloadScope = {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "April",
+      returnType: "GSTR-1",
+    };
+
+    const searchResult = await runFiledReturnsDownloadStep(documentRef, scope);
+    replaceDashboardView(documentRef, "GSTR-1");
+    const stabilizingResult = await runFiledReturnsDownloadStep(documentRef, scope);
+    const settlingResult = await runFiledReturnsDownloadStep(documentRef, scope);
+    const result = await runFiledReturnsDownloadStep(documentRef, scope);
+
+    expect(searchResult.safeSignals).toContain("search-clicked");
+    expect(stabilizingResult.safeSignals).toContain(
+      "gstr1-return-dashboard-search-results-pending",
+    );
+    expect(settlingResult.safeSignals).toContain("gstr1-return-dashboard-search-results-pending");
+    expect(result.safeSignals).toContain("gstr1-dashboard-view-clicked");
+    expect(searchClicked).toBe(1);
+    expect(gstr1ViewClicked).toBe(1);
+    expect(gstr2bViewClicked).toBe(0);
   });
 
   it("keeps the unchanged GSTR-2B View pending after an in-place status mutation", async () => {
@@ -3734,7 +3838,7 @@ describe("filed returns guided flow", () => {
     expect(searchClicked).toBe(1);
   });
 
-  it("selects filed GSTR-1 filters without using the GSTR-3B API handoff", async () => {
+  it("does not reuse the filed-returns form as a GSTR-1 navigation shortcut", async () => {
     const scope: FiledReturnsDownloadScope = {
       financialYear: "2025-26",
       period: "March",
@@ -3763,18 +3867,15 @@ describe("filed returns guided flow", () => {
 
     const result = await runFiledReturnsDownloadStep(documentRef, scope);
 
-    expect(result.state).toBe("clicked");
+    expect(result.state).toBe("candidate-not-found");
     expect(result.scopeId).toBe("gst-filed-returns-gstr1-pdf-private-v0");
     expect(result.safeSignals).toEqual(
       expect.arrayContaining([
-        "filed-return-filters-selected",
-        "financial-year-selected",
-        "period-selected",
-        "return-type-selected",
-        "search-clicked",
+        "gstr1-filed-returns-route-mismatched",
+        "no-return-dashboard-candidate",
       ]),
     );
-    expect(searchClicked).toBe(1);
+    expect(searchClicked).toBe(0);
     expect(documentRef.defaultView?.localStorage.getItem("rtn_prd")).toBeNull();
   });
 
@@ -8008,6 +8109,18 @@ function appendOwnedOption(documentRef: Document, id: string, text: string, onCl
 
 function replaceGstr2bDashboardView(documentRef: Document): void {
   const previousView = findGstr2bDashboardControl(documentRef, "view");
+  expect(previousView).not.toBeNull();
+  if (!previousView) return;
+  const replacement = previousView.cloneNode(true) as HTMLElement;
+  replacement.addEventListener("click", () => previousView.click());
+  previousView.replaceWith(replacement);
+}
+
+function replaceDashboardView(
+  documentRef: Document,
+  returnType: "GSTR-1" | "GSTR-2B" | "GSTR-3B",
+): void {
+  const previousView = findReturnDashboardControl(documentRef, returnType, "view");
   expect(previousView).not.toBeNull();
   if (!previousView) return;
   const replacement = previousView.cloneNode(true) as HTMLElement;
