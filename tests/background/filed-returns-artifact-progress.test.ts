@@ -74,15 +74,23 @@ describe("single-period filed-return staging ownership", () => {
   });
 
   it("persists an opaque cleanup identity before returning a ledger id", async () => {
+    const requestedScope = {
+      financialYear: "2026-27",
+      period: "April",
+      returnType: "GSTR-2B",
+    } as const;
     const ledgerId = await reserveSinglePeriodBundleLedger();
 
+    expect(ledgerId).not.toBeNull();
+    if (!ledgerId) return;
     expect(ledgerId).toMatch(/^single-period:[a-zA-Z0-9._-]+$/);
     expect(state.local["pack:single-period-staging"]).toEqual({
       ledgerId,
       schemaVersion: "1.0",
     });
-    expect(ledgerId).not.toContain("GSTR");
-    expect(ledgerId).not.toContain("202");
+    expect(ledgerId).not.toContain(requestedScope.returnType);
+    expect(ledgerId).not.toContain(requestedScope.financialYear);
+    expect(ledgerId.toLowerCase()).not.toContain(requestedScope.period.toLowerCase());
   });
 
   it("preserves retained staging instead of repeating portal artifacts after restart", async () => {
