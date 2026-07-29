@@ -198,10 +198,15 @@ describe("GSTR-2B artifact acquisition", () => {
       const { documentRef } = gstr2bPage(gstr2bJson("042024"));
       const result = await acquireFiledReturnArtifact(documentRef, { ...request, artifactType });
       expect(result).toMatchObject({ ok: true, state: "ready" });
-      const control = Array.from(documentRef.querySelectorAll("button")).find((element) =>
-        element.textContent?.includes(artifactType === "PDF" ? "SUMMARY" : "DETAILS"),
+      const expectedText =
+        artifactType === "PDF"
+          ? "DOWNLOAD GSTR-2B SUMMARY (PDF)"
+          : "DOWNLOAD GSTR-2B DETAILS (EXCEL)";
+      const control = Array.from(documentRef.querySelectorAll("button")).find(
+        (element) => element.textContent === expectedText,
       );
       expect(control?.getAttribute("data-pack-artifact-request")).toBe(request.requestId);
+      expect(documentRef.querySelectorAll("[data-pack-artifact-request]").length).toBe(1);
     },
   );
 
@@ -257,9 +262,11 @@ describe("GSTR-1 artifact acquisition", () => {
     expect(requestedUrl.pathname).toBe("/returns/auth/api/gstr1/summary");
     expect(requestedUrl.searchParams.get("rtn_prd")).toBe(request.returnPeriod);
     expect(options).toEqual({ credentials: "same-origin" });
-    expect(documentRef.querySelector("button")?.getAttribute("data-pack-artifact-request")).toBe(
-      request.requestId,
-    );
+    const artifactControl = documentRef.querySelector("[data-testid='artifact-control']");
+    expect(artifactControl?.textContent).toContain("DOWNLOAD SUMMARY (PDF)");
+    expect(artifactControl?.textContent).toContain("DOWNLOAD (PDF)");
+    expect(artifactControl?.getAttribute("data-pack-artifact-request")).toBe(request.requestId);
+    expect(documentRef.querySelectorAll("[data-pack-artifact-request]").length).toBe(1);
   });
 
   it.each([
@@ -312,7 +319,9 @@ describe("GSTR-1 artifact acquisition", () => {
       });
       expect(fetch).toHaveBeenCalledOnce();
       expect(
-        documentRef.querySelector("button")?.getAttribute("data-pack-artifact-request"),
+        documentRef
+          .querySelector("[data-testid='artifact-control']")
+          ?.getAttribute("data-pack-artifact-request"),
       ).toBeNull();
     },
   );
@@ -331,9 +340,9 @@ describe("GSTR-1 artifact acquisition", () => {
       ],
     });
     expect(fetch).toHaveBeenCalledOnce();
-    expect(
-      documentRef.querySelector("button")?.getAttribute("data-pack-artifact-request"),
-    ).toBeNull();
+    expect(documentRef.querySelector("button")?.getAttribute("data-pack-artifact-request")).toBe(
+      null,
+    );
   });
 
   it("fails closed when the selected control region contains conflicting period identities", async () => {
@@ -349,8 +358,42 @@ describe("GSTR-1 artifact acquisition", () => {
       safeSignals: ["target-period-verified", "page-target-unverified"],
     });
     expect(
-      documentRef.querySelector("button")?.getAttribute("data-pack-artifact-request"),
+      documentRef
+        .querySelector("[data-testid='artifact-control']")
+        ?.getAttribute("data-pack-artifact-request"),
     ).toBeNull();
+  });
+
+  it("rejects a clickable ancestor whose text is composed from separate leaf controls", async () => {
+    const { documentRef } = gstr1Page(gstr1Json("042026"));
+    const artifactControl = documentRef.querySelector("[data-testid='artifact-control']");
+    const ancestor = documentRef.createElement("div");
+    ancestor.setAttribute("role", "button");
+    ancestor.innerHTML = "<button>DOWNLOAD SUMMARY</button> <button>(PDF)</button>";
+    artifactControl?.replaceWith(ancestor);
+
+    await expect(acquireFiledReturnArtifact(documentRef, request)).resolves.toEqual({
+      ok: false,
+      reason: "control-not-found",
+      requestId: request.requestId,
+      safeSignals: ["target-period-verified"],
+    });
+    expect(documentRef.querySelectorAll("[data-pack-artifact-request]").length).toBe(0);
+  });
+
+  it("fails closed when multiple leaf controls contain the canonical label", async () => {
+    const { documentRef } = gstr1Page(gstr1Json("042026"));
+    const duplicate = documentRef.createElement("button");
+    duplicate.textContent = "DOWNLOAD SUMMARY (PDF)";
+    documentRef.querySelector("main section")?.append(duplicate);
+
+    await expect(acquireFiledReturnArtifact(documentRef, request)).resolves.toEqual({
+      ok: false,
+      reason: "control-not-found",
+      requestId: request.requestId,
+      safeSignals: ["target-period-verified"],
+    });
+    expect(documentRef.querySelectorAll("[data-pack-artifact-request]").length).toBe(0);
   });
 
   it("binds identity verification to the exact requested artifact control", async () => {
@@ -380,9 +423,10 @@ describe("GSTR-1 artifact acquisition", () => {
     await expect(
       acquireFiledReturnArtifact(documentRef, { ...request, artifactType: "EXCEL" }),
     ).resolves.toMatchObject({ ok: true, state: "ready" });
-    expect(documentRef.querySelector("button")?.getAttribute("data-pack-artifact-request")).toBe(
-      request.requestId,
-    );
+    const artifactControl = documentRef.querySelector("[data-testid='artifact-control']");
+    expect(artifactControl?.textContent).toBe("DOWNLOAD DETAILS FROM E-INVOICES (EXCEL)");
+    expect(artifactControl?.getAttribute("data-pack-artifact-request")).toBe(request.requestId);
+    expect(documentRef.querySelectorAll("[data-pack-artifact-request]").length).toBe(1);
   });
 });
 
@@ -428,7 +472,15 @@ function gstr2bPage(
   url = "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
 ) {
   const dom = new JSDOM(
-    "<body><button>DOWNLOAD GSTR-2B SUMMARY (PDF)</button><button>DOWNLOAD GSTR-2B DETAILS (EXCEL)</button></body>",
+    `<body>
+      <a>Downloads</a>
+      <button>View/Download Certificates</button>
+      <button>DOWNLOAD ADVISORY</button>
+      <button>E-INVOICE DOWNLOAD HISTORY</button>
+      <button hidden>GENERATE SUMMARY</button>
+      <button>DOWNLOAD GSTR-2B SUMMARY (PDF)</button>
+      <button>DOWNLOAD GSTR-2B DETAILS (EXCEL)</button>
+    </body>`,
     { url },
   );
   const fetch = vi.fn(async () => new Response(body, { status }));
@@ -446,7 +498,7 @@ function gstr2bJson(returnPeriod: string) {
 function gstr1Page(
   body: string,
   url = "https://return.gst.gov.in/returns/auth/gstr1/gstr1sum",
-  controlText = "DOWNLOAD SUMMARY (PDF)",
+  controlMarkup = "<span>DOWNLOAD SUMMARY (PDF)</span> <span hidden>DOWNLOAD (PDF)</span>",
   status = 200,
 ) {
   const dom = new JSDOM(
@@ -457,6 +509,7 @@ function gstr1Page(
         <a>Status Transition</a>
         <a>Status Application</a>
         <a>GSTR-3B - Monthly Return</a>
+        <a>Downloads</a>
       </nav>
       <main>
         <section>
@@ -467,7 +520,11 @@ function gstr1Page(
           <p>FY - 2026-27</p>
           <p>Tax Period - April</p>
           <p>Status - Filed</p>
-          <button>${controlText}</button>
+          <button>View/Download Certificates</button>
+          <button>DOWNLOAD ADVISORY</button>
+          <button>E-INVOICE DOWNLOAD HISTORY</button>
+          <button hidden>GENERATE SUMMARY</button>
+          <button data-testid="artifact-control">${controlMarkup}</button>
         </section>
       </main>
     </body>`,

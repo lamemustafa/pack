@@ -17,6 +17,7 @@ import { verifyFiledReturnsDownloadTarget } from "./filed-returns-download-targe
 
 const GSTR3B_GET_GEN_PDF_PATH = "/returns/auth/api/gstr3b/getgenpdf";
 const GST_RETURNS_ORIGIN = "https://return.gst.gov.in";
+const PAGE_ARTIFACT_CONTROL_SELECTOR = "a, button, [role='button']";
 
 export type ArtifactRequest = {
   returnType: "GSTR-1" | "GSTR-3B" | "GSTR-2B";
@@ -176,11 +177,7 @@ async function acquireGstr1Artifact(
   if (view.location.pathname !== expectedPath)
     return failed(request, "wrong-page", ["target-period-verified"]);
   const descriptor = GSTR1_PAGE_GENERATED_ARTIFACTS[request.artifactType];
-  const controls = Array.from(
-    documentRef.querySelectorAll<HTMLElement>("a, button, [role='button']"),
-  ).filter(
-    (element) => normaliseText(element.textContent || "") === normaliseText(descriptor.controlText),
-  );
+  const controls = resolvePageArtifactControls(documentRef, descriptor.controlText);
   if (controls.length !== 1 || !controls[0])
     return failed(request, "control-not-found", ["target-period-verified"]);
   const pageTargetMismatchSignals = gstr1PageTargetMismatchSignals(controls[0], request);
@@ -250,11 +247,7 @@ async function acquireGstr2bArtifact(
   if (view.location.pathname !== GSTR2B_SUMMARY_PATH)
     return failed(request, "wrong-page", ["target-period-verified"]);
   const descriptor = GSTR2B_PAGE_GENERATED_ARTIFACTS[request.artifactType];
-  const controls = Array.from(
-    documentRef.querySelectorAll<HTMLElement>("a, button, [role='button']"),
-  ).filter(
-    (element) => normaliseText(element.textContent || "") === normaliseText(descriptor.controlText),
-  );
+  const controls = resolvePageArtifactControls(documentRef, descriptor.controlText);
   if (controls.length !== 1 || !controls[0])
     return failed(request, "control-not-found", ["target-period-verified"]);
   controls[0].setAttribute("data-pack-artifact-request", request.requestId);
@@ -267,6 +260,17 @@ async function acquireGstr2bArtifact(
       `page-generated-${request.artifactType.toLowerCase()}-ready`,
     ],
   };
+}
+
+function resolvePageArtifactControls(documentRef: Document, canonicalLabel: string): HTMLElement[] {
+  const normalisedLabel = normaliseText(canonicalLabel);
+  return Array.from(
+    documentRef.querySelectorAll<HTMLElement>(PAGE_ARTIFACT_CONTROL_SELECTOR),
+  ).filter(
+    (element) =>
+      !element.querySelector(PAGE_ARTIFACT_CONTROL_SELECTOR) &&
+      normaliseText(element.textContent || "").includes(normalisedLabel),
+  );
 }
 
 function failed(
