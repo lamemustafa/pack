@@ -133,6 +133,7 @@ export async function triggerAndObserveFiledReturnDownload({
             returnType: "GSTR-3B",
           },
         }),
+        "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34",
       );
       if (
         artifactType === "JSON" &&
@@ -364,6 +365,7 @@ async function triggerPageGeneratedSinglePeriodArtifact(
         returnType,
       },
     }),
+    "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34",
   );
   if (response.ok && "artifact" in response && !response.artifact.ok) {
     return artifactFailureResponse(

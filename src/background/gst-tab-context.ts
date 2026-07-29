@@ -193,11 +193,17 @@ export async function sendMessageToTabWithInjection(
     payload: message,
   };
   try {
-    return normaliseContentScriptMessageResponse(await browser.tabs.sendMessage(tabId, request));
+    return normaliseContentScriptMessageResponse(
+      await browser.tabs.sendMessage(tabId, request),
+      message.type,
+    );
   } catch (error) {
     if (!isMissingReceivingEndError(error)) throw error;
     await ensureContentScript(tabId);
-    return normaliseContentScriptMessageResponse(await browser.tabs.sendMessage(tabId, request));
+    return normaliseContentScriptMessageResponse(
+      await browser.tabs.sendMessage(tabId, request),
+      message.type,
+    );
   }
 }
 

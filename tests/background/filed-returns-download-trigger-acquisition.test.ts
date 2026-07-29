@@ -582,7 +582,41 @@ describe("GSTR-1 artifact acquisition dispatch", () => {
       { ok: false, error: "CONTENT_SCRIPT_UNAVAILABLE" },
     ],
     [Gstr1ArtifactDispatchFailureReason.ContentUnavailable, "April", "PDF", undefined],
+    [Gstr1ArtifactDispatchFailureReason.ContentUnavailable, "April", "PDF", {}],
     [Gstr1ArtifactDispatchFailureReason.ResponseMissing, "April", "PDF", { ok: true }],
+    [
+      Gstr1ArtifactDispatchFailureReason.ContentUnavailable,
+      "April",
+      "PDF",
+      { ok: true, artifact: null },
+    ],
+    [
+      Gstr1ArtifactDispatchFailureReason.ContentUnavailable,
+      "April",
+      "PDF",
+      { ok: true, artifact: "x" },
+    ],
+    [
+      Gstr1ArtifactDispatchFailureReason.ContentUnavailable,
+      "April",
+      "PDF",
+      { ok: false, error: { category: "synthetic" } },
+    ],
+    [
+      Gstr1ArtifactDispatchFailureReason.ContentUnavailable,
+      "April",
+      "PDF",
+      {
+        ok: true,
+        artifact: {
+          ok: true,
+          requestId: "synthetic-gstr1-request",
+          safeSignals: ["target-period-verified"],
+          state: "ready",
+        },
+        unexpected: "must-not-pass-through",
+      },
+    ],
     [
       Gstr1ArtifactDispatchFailureReason.StateInvalid,
       "April",
@@ -613,7 +647,7 @@ describe("GSTR-1 artifact acquisition dispatch", () => {
         activePeriod: period,
         artifactType,
         deps: {
-          sendMessageToTabWithInjection: vi.fn(async () => reply as PackMessageResponse),
+          sendMessageToTabWithInjection: vi.fn(async () => reply as unknown as PackMessageResponse),
           storageKeys: {},
         },
         scope,
