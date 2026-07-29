@@ -116,11 +116,11 @@ describe("filed-return ZIP filename reassertion", () => {
       {
         id: 91,
         state: "complete",
-        filename: "/synthetic/Downloads/GSTR-3B-2026-27-full-year.zip",
+        filename: "/synthetic/Downloads/gstr-3b-2026-27-full-year.zip",
       },
     ]);
 
-    await exportFullFiscalYearZip(fullYearLedger(), completeStep());
+    const result = await exportFullFiscalYearZip(fullYearLedger(), completeStep());
 
     expect(mocks.reserve).toHaveBeenCalledWith(
       "blob:pack-owned/full-year-zip",
@@ -128,6 +128,38 @@ describe("filed-return ZIP filename reassertion", () => {
     );
     expect(mocks.reservation.bind).toHaveBeenCalledWith(91);
     expect(mocks.reservation.release).toHaveBeenCalledOnce();
+    expect(result.safeSignals).not.toContain("zip-download-filename-overridden");
+  });
+
+  it("reports the same ZIP basename when the browser changes its directory", async () => {
+    mocks.browser.downloads.search.mockResolvedValueOnce([
+      {
+        id: 91,
+        state: "complete",
+        filename: "/synthetic/Downloads/ComplyEaze-Pack/2026-27/GSTR-3B/April.zip",
+      },
+    ]);
+
+    const result = await exportSinglePeriodFiledReturnsZip({
+      completeStep: completeStep(),
+      entryPlan: { artifactTypes: ["PDF", "EXCEL", "JSON"], unavailableArtifactTypes: [] },
+      ledgerId: "single-period:12345678-test",
+      options: {
+        onAfterStagingCleared: vi.fn(async () => undefined),
+        onBeforeDownloadStart: vi.fn(async () => undefined),
+        onDownloadStarted: vi.fn(async () => undefined),
+      },
+      scope: {
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2026-27",
+        period: "April",
+        returnType: "GSTR-2B",
+      },
+    });
+
+    expect(result.safeSignals).toContain("zip-download-filename-overridden");
+    expect(result.safeMessage).not.toContain("GSTR-3B");
+    expect(result.safeMessage).not.toContain("April.zip");
   });
 
   it("releases the ZIP filename reservation when the browser rejects the start", async () => {

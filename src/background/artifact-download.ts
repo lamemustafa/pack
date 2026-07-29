@@ -6,6 +6,7 @@ import {
 } from "./offscreen-blob-url";
 import { installPackDownloadFilenameReassertion } from "./pack-download-filename-reassertion";
 import type { PackDownloadFilenameReservation } from "./pack-download-filename-reassertion";
+import { isRequestedFilenameOverridden } from "./download-filename-comparison";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
@@ -160,51 +161,12 @@ function completedArtifact(
   if (!isRequestedFilenameOverridden(requestedFilename, observedFilename)) {
     return { ok: true, downloadId, bytesReceived, safeSignals: [] };
   }
-  const observedBasename = filenameBasename(normaliseFilenamePath(observedFilename ?? ""));
   return {
     ok: true,
     downloadId,
     bytesReceived,
     safeMessage:
-      `Another extension changed where this file was saved; Pack asked for ${requestedFilename}; ` +
-      `the browser saved it elsewhere as ${observedBasename}.`,
+      "Another extension changed where this file was saved. Check browser Downloads before using it.",
     safeSignals: ["download-filename-overridden"],
   };
-}
-
-function isRequestedFilenameOverridden(
-  requestedFilename: string,
-  observedFilename: string | undefined,
-): boolean {
-  if (!observedFilename) return false;
-  const requestedPath = normaliseFilenamePath(requestedFilename);
-  const observedPath = normaliseFilenamePath(observedFilename);
-  const expectedBasename = filenameBasename(requestedPath);
-  const observedBasename = filenameBasename(observedPath);
-  const requestedDirectory = requestedPath.slice(0, requestedPath.lastIndexOf("/"));
-  const observedDirectory = observedPath.slice(0, observedPath.lastIndexOf("/"));
-  const relativeDirectoryMatches =
-    observedDirectory === requestedDirectory ||
-    observedDirectory.endsWith(`/${requestedDirectory}`);
-  return !relativeDirectoryMatches || !matchesRequestedBasename(expectedBasename, observedBasename);
-}
-
-function matchesRequestedBasename(requested: string, observed: string): boolean {
-  if (observed === requested) return true;
-  const extensionIndex = requested.lastIndexOf(".");
-  const base = extensionIndex > 0 ? requested.slice(0, extensionIndex) : requested;
-  const extension = extensionIndex > 0 ? requested.slice(extensionIndex) : "";
-  return (
-    observed.startsWith(`${base} (`) &&
-    observed.endsWith(`)${extension}`) &&
-    /^\d+$/.test(observed.slice(base.length + 2, observed.length - extension.length - 1))
-  );
-}
-
-function filenameBasename(path: string): string {
-  return path.slice(path.lastIndexOf("/") + 1);
-}
-
-function normaliseFilenamePath(path: string): string {
-  return path.replaceAll("\\", "/").replace(/^\/+|\/+$/g, "");
 }

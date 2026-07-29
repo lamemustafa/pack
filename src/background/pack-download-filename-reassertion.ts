@@ -71,23 +71,6 @@ export function createPackDownloadFilenameReassertion(
   };
 }
 
-export function matchesRequestedFilenameBasename(
-  requestedFilename: string,
-  observedFilename: string,
-): boolean {
-  const requested = filenameBasename(normaliseFilenamePath(requestedFilename));
-  const observed = filenameBasename(normaliseFilenamePath(observedFilename));
-  if (observed === requested) return true;
-  const extensionIndex = requested.lastIndexOf(".");
-  const base = extensionIndex > 0 ? requested.slice(0, extensionIndex) : requested;
-  const extension = extensionIndex > 0 ? requested.slice(extensionIndex) : "";
-  return (
-    observed.startsWith(`${base} (`) &&
-    observed.endsWith(`)${extension}`) &&
-    /^\d+$/.test(observed.slice(base.length + 2, observed.length - extension.length - 1))
-  );
-}
-
 function noOpReservation(): PackDownloadFilenameReservation {
   return { bind() {}, release() {} };
 }
@@ -104,14 +87,6 @@ function isRequestedFilename(value: unknown): value is string {
     !value.startsWith("\\") &&
     !value.includes("..")
   );
-}
-
-function filenameBasename(path: string): string {
-  return path.slice(path.lastIndexOf("/") + 1);
-}
-
-function normaliseFilenamePath(path: string): string {
-  return path.replaceAll("\\", "/").replace(/^\/+|\/+$/g, "");
 }
 
 let installed: PackDownloadFilenameReassertion | null = null;

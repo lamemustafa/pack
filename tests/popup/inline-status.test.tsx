@@ -142,7 +142,7 @@ describe("inline filed-return recovery status", () => {
         state: "downloaded",
         safeSignals: ["download-filename-overridden"],
         safeMessage:
-          "Another extension changed where this file was saved; Pack asked for ComplyEaze-Pack/2026-27/GSTR-3B/May.pdf; the browser saved it elsewhere as download.pdf.",
+          "Another extension changed where this file was saved. Check browser Downloads before using it.",
       },
     };
     const markup = renderToStaticMarkup(
@@ -165,7 +165,7 @@ describe("inline filed-return recovery status", () => {
     );
 
     expect(markup).toContain("Another extension changed where this file was saved");
-    expect(markup).toContain("download.pdf");
+    expect(markup).not.toContain("download.pdf");
   });
 
   it("renders the filename-free ZIP override message ahead of the full-year success summary", () => {

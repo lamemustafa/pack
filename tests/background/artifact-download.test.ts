@@ -138,7 +138,7 @@ describe("downloadAcquiredArtifact", () => {
       ok: true,
       safeSignals: ["download-filename-overridden"],
       safeMessage:
-        "Another extension changed where this file was saved; Pack asked for ComplyEaze-Pack/2026-27/GSTR-3B/April.pdf; the browser saved it elsewhere as download.pdf.",
+        "Another extension changed where this file was saved. Check browser Downloads before using it.",
     });
   });
 

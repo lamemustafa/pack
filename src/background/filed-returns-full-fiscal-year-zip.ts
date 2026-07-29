@@ -23,10 +23,8 @@ import {
   safeFullFiscalYearZipFilename,
   safeSinglePeriodZipFilename,
 } from "./filed-returns-download-filename";
-import {
-  installPackDownloadFilenameReassertion,
-  matchesRequestedFilenameBasename,
-} from "./pack-download-filename-reassertion";
+import { installPackDownloadFilenameReassertion } from "./pack-download-filename-reassertion";
+import { isRequestedFilenameOverridden } from "./download-filename-comparison";
 import {
   canCompleteFullFiscalYearLedger,
   hasCanonicalFullFiscalYearTargetPlan,
@@ -646,7 +644,7 @@ async function completedZipFilenameOutcome(
   requestedFilename: string,
 ): Promise<{ safeMessage?: string; safeSignals: string[] }> {
   const [item] = await browser.downloads.search({ id: downloadId }).catch(() => []);
-  if (!item?.filename || matchesRequestedFilenameBasename(requestedFilename, item.filename)) {
+  if (!isRequestedFilenameOverridden(requestedFilename, item?.filename)) {
     return { safeSignals: [] };
   }
   return {

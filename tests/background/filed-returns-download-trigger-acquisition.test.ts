@@ -268,7 +268,7 @@ describe("GSTR-3B artifact acquisition dispatch", () => {
       downloadId: 91,
       bytesReceived: 128,
       safeMessage:
-        "Another extension changed where this file was saved; Pack asked for ComplyEaze-Pack/2026-27/GSTR-3B/June-data.json; the browser saved it elsewhere as download.json.",
+        "Another extension changed where this file was saved. Check browser Downloads before using it.",
       safeSignals: ["download-filename-overridden"],
     });
 
@@ -288,7 +288,7 @@ describe("GSTR-3B artifact acquisition dispatch", () => {
         state: "downloaded",
         safeSignals: expect.arrayContaining(["download-filename-overridden"]),
         safeMessage:
-          "Another extension changed where this file was saved; Pack asked for ComplyEaze-Pack/2026-27/GSTR-3B/June-data.json; the browser saved it elsewhere as download.json.",
+          "Another extension changed where this file was saved. Check browser Downloads before using it.",
       },
     });
   });
