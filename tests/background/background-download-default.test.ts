@@ -386,6 +386,7 @@ describe("background filed returns download defaults", () => {
       ok: false,
       error: "BACKGROUND_MESSAGE_HANDLER_FAILED",
       safeMessage: "Pack stopped while handling the local manifest request. Try the action again.",
+      safeSite: "background-message-handler:last-manifest",
     });
     if (response.ok) throw new Error("expected a safe background failure");
     expect(response.safeMessage).not.toContain("portal URL");

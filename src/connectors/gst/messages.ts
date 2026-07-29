@@ -170,7 +170,12 @@ export type PackMessageResponse =
   | { ok: true; downloaded: number; manifest: ArchiveManifest }
   | { ok: true; downloadPromptProbe: DownloadPromptProbeResult }
   | { ok: true; cleared: true }
-  | { ok: false; error: string; safeMessage?: string };
+  | {
+      ok: false;
+      error: string;
+      safeMessage?: string;
+      safeSite?: `background-message-handler:${string}`;
+    };
 
 export interface FullFiscalYearTargetRecoveryPayload {
   ledgerId: string;

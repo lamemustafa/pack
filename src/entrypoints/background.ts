@@ -97,6 +97,7 @@ export default defineBackground(() => {
           ok: false,
           error: "BACKGROUND_MESSAGE_HANDLER_FAILED",
           safeMessage: `Pack stopped while handling ${backgroundMessageSource(message)}. Try the action again.`,
+          safeSite: backgroundMessageHandlerSite(message),
         } satisfies PackMessageResponse),
       );
     return true;
@@ -123,6 +124,32 @@ function backgroundMessageSource(message: unknown): string {
       return "the local data cleanup request";
     default:
       return "an extension request";
+  }
+}
+
+function backgroundMessageHandlerSite(message: unknown): `background-message-handler:${string}` {
+  if (!message || typeof message !== "object" || !("type" in message)) {
+    return "background-message-handler:invalid-message";
+  }
+  switch (message.type) {
+    case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
+      return "background-message-handler:filed-returns-start";
+    case "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW":
+      return "background-message-handler:filed-returns-start-fresh";
+    case "PACK_RETRY_FILED_RETURNS_TARGET":
+      return "background-message-handler:filed-returns-retry";
+    case "PACK_RETRY_FULL_FISCAL_YEAR_TARGET":
+      return "background-message-handler:full-fiscal-year-retry";
+    case "PACK_START_SYNTHETIC_DEMO":
+      return "background-message-handler:synthetic-demo";
+    case "PACK_RUN_DOWNLOAD_PROMPT_PROBE":
+      return "background-message-handler:download-prompt-probe";
+    case "PACK_GET_LAST_MANIFEST":
+      return "background-message-handler:last-manifest";
+    case "PACK_CLEAR_LOCAL_DATA":
+      return "background-message-handler:local-data-clear";
+    default:
+      return "background-message-handler:extension-request";
   }
 }
 

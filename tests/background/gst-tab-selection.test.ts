@@ -252,6 +252,47 @@ describe("Pack GST tab selection", () => {
     });
   });
 
+  it.each([undefined, null, "unexpected", 42])(
+    "normalises an unusable content-script response %p",
+    async (invalidResponse) => {
+      const sendMessage = browserMocks.tabs.sendMessage as unknown as {
+        mockImplementation: (
+          implementation: (tabId: number, message: { type: string }) => Promise<unknown>,
+        ) => void;
+      };
+      sendMessage.mockImplementation(async (_tabId, message) => {
+        if (message.type === "PACK_CONTENT_PING_V2") {
+          return {
+            ok: true,
+            context: null,
+            contentScriptVersion: PACK_CONTENT_SCRIPT_PROTOCOL_VERSION,
+          };
+        }
+        return invalidResponse;
+      });
+      const { sendMessageToTabWithInjection } = await import("../../src/entrypoints/background");
+
+      await expect(
+        sendMessageToTabWithInjection(33, {
+          type: "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34",
+          payload: {
+            artifactType: "PDF",
+            financialYear: "2026-27",
+            period: "April",
+            requestId: "synthetic-request",
+            returnPeriod: "042026",
+            returnType: "GSTR-1",
+          },
+        }),
+      ).resolves.toEqual({
+        ok: false,
+        error: "CONTENT_SCRIPT_UNAVAILABLE",
+        safeMessage:
+          "The GST tab responded to Pack without a usable result. Reload the GST Portal tab, then try again.",
+      });
+    },
+  );
+
   it("refreshes popup context from the active GST tab before using cached context", async () => {
     const liveContext = {
       connectorId: "gst",

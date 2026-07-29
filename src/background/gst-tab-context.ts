@@ -17,6 +17,7 @@ import type { ActiveGstTab } from "./filed-returns-flow-runner";
 import { PACK_SESSION_STORAGE_KEYS } from "./storage-keys";
 import { persistCanonicalFiledReturnsObservation } from "./filed-returns-observation-state";
 import { persistCanonicalGstPortalContext } from "./gst-context-state";
+import { normaliseContentScriptMessageResponse } from "./content-script-message-response";
 
 const CONTENT_SCRIPT_FILE = "/content-scripts/content.js";
 const contentInjectionByTab = new Map<number, Promise<void>>();
@@ -192,11 +193,11 @@ export async function sendMessageToTabWithInjection(
     payload: message,
   };
   try {
-    return (await browser.tabs.sendMessage(tabId, request)) as PackMessageResponse;
+    return normaliseContentScriptMessageResponse(await browser.tabs.sendMessage(tabId, request));
   } catch (error) {
     if (!isMissingReceivingEndError(error)) throw error;
     await ensureContentScript(tabId);
-    return browser.tabs.sendMessage(tabId, request) as Promise<PackMessageResponse>;
+    return normaliseContentScriptMessageResponse(await browser.tabs.sendMessage(tabId, request));
   }
 }
 

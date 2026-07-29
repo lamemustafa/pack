@@ -5,6 +5,10 @@ import type {
 } from "../connectors/gst/filed-returns-contracts";
 import type { PackMessage, PackMessageResponse } from "../connectors/gst/messages";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
+import {
+  contentScriptUnavailableResponse,
+  normaliseContentScriptMessageResponse,
+} from "./content-script-message-response";
 import { ambiguousDownloadTriggerResponse } from "./filed-returns-flow-guards";
 import { isValidFiledReturnsDownloadDiagnosticState } from "./filed-returns-download-diagnostic-state";
 
@@ -70,12 +74,14 @@ export async function runDownloadTriggerOnce(
   target: FiledReturnsDownloadTarget,
 ): Promise<PackMessageResponse> {
   try {
-    return await withContentMessageTimeout(
-      deps.sendMessageToTabWithInjection(tabId, {
-        type: "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
-        payload: target,
-      }),
-      deps,
+    return normaliseContentScriptMessageResponse(
+      await withContentMessageTimeout(
+        deps.sendMessageToTabWithInjection(tabId, {
+          type: "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
+          payload: target,
+        }),
+        deps,
+      ),
     );
   } catch {
     return ambiguousDownloadTriggerResponse();
@@ -89,9 +95,8 @@ export async function runDownloadStepWithRetry(
 ): Promise<PackMessageResponse> {
   for (let attempt = 0; attempt < MAX_FLOW_STEP_MESSAGE_ATTEMPTS; attempt += 1) {
     try {
-      const response: unknown = await withContentMessageTimeout(
-        deps.sendMessageToTabWithInjection(tabId, message),
-        deps,
+      const response = normaliseContentScriptMessageResponse(
+        await withContentMessageTimeout(deps.sendMessageToTabWithInjection(tabId, message), deps),
       );
       return isRunDownloadStepResponse(response, message.payload)
         ? response
@@ -105,19 +110,6 @@ export async function runDownloadStepWithRetry(
   }
 
   return contentScriptUnavailableResponse("unreachable");
-}
-
-function contentScriptUnavailableResponse(
-  reason: "empty-response" | "unreachable",
-): Extract<PackMessageResponse, { ok: false }> {
-  return {
-    ok: false,
-    error: "CONTENT_SCRIPT_UNAVAILABLE",
-    safeMessage:
-      reason === "empty-response"
-        ? "The GST tab responded to Pack without a usable result. Reload the GST Portal tab, then try again."
-        : "Pack could not safely reach the GST tab. Reload the GST Portal tab, then try again.",
-  };
 }
 
 function isRunDownloadStepResponse(

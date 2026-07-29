@@ -3,6 +3,7 @@ import type {
   FiledReturnsDownloadDiagnostic,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
+import { normaliseContentScriptMessageResponse } from "./content-script-message-response";
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import {
   artifactFailureMessage,
@@ -120,17 +121,19 @@ export async function triggerAndObserveFiledReturnDownload({
     const returnPeriod = toPortalReturnPeriod(scope.period, scope.financialYear);
     if (returnPeriod) {
       const requestId = createActionId();
-      const response = await deps.sendMessageToTabWithInjection(tabId, {
-        type: "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34",
-        payload: {
-          artifactType,
-          financialYear: scope.financialYear,
-          period: scope.period,
-          requestId,
-          returnPeriod,
-          returnType: "GSTR-3B",
-        },
-      });
+      const response = normaliseContentScriptMessageResponse(
+        await deps.sendMessageToTabWithInjection(tabId, {
+          type: "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34",
+          payload: {
+            artifactType,
+            financialYear: scope.financialYear,
+            period: scope.period,
+            requestId,
+            returnPeriod,
+            returnType: "GSTR-3B",
+          },
+        }),
+      );
       if (
         artifactType === "JSON" &&
         response.ok &&
@@ -349,17 +352,19 @@ async function triggerPageGeneratedSinglePeriodArtifact(
     return pageGeneratedArtifactDispatchFailure(returnType, "PeriodInvalid");
   }
   const requestId = createActionId();
-  const response = await deps.sendMessageToTabWithInjection(tabId, {
-    type: "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34",
-    payload: {
-      artifactType,
-      financialYear: scope.financialYear,
-      period: scope.period,
-      requestId,
-      returnPeriod,
-      returnType,
-    },
-  });
+  const response = normaliseContentScriptMessageResponse(
+    await deps.sendMessageToTabWithInjection(tabId, {
+      type: "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34",
+      payload: {
+        artifactType,
+        financialYear: scope.financialYear,
+        period: scope.period,
+        requestId,
+        returnPeriod,
+        returnType,
+      },
+    }),
+  );
   if (response.ok && "artifact" in response && !response.artifact.ok) {
     return artifactFailureResponse(
       response.artifact.reason,

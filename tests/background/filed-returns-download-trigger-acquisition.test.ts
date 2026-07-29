@@ -581,6 +581,7 @@ describe("GSTR-1 artifact acquisition dispatch", () => {
       "PDF",
       { ok: false, error: "CONTENT_SCRIPT_UNAVAILABLE" },
     ],
+    [Gstr1ArtifactDispatchFailureReason.ContentUnavailable, "April", "PDF", undefined],
     [Gstr1ArtifactDispatchFailureReason.ResponseMissing, "April", "PDF", { ok: true }],
     [
       Gstr1ArtifactDispatchFailureReason.StateInvalid,
