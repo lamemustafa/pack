@@ -6,6 +6,7 @@ import {
   type ArtifactRequest,
   type ArtifactFailureReason,
 } from "../../src/connectors/gst/artifact-source";
+import { extractFiledReturnsDetailIdentity } from "../../src/connectors/gst/filed-returns-detail-identity";
 import { GSTR2B_JSON_PATH } from "../../src/connectors/gst/portal-artifact-endpoints";
 
 const REQUEST: ArtifactRequest = {
@@ -224,15 +225,26 @@ describe("GSTR-2B artifact acquisition", () => {
 describe("GSTR-1 artifact acquisition", () => {
   const request: ArtifactRequest = {
     artifactType: "PDF",
-    financialYear: "2024-25",
+    financialYear: "2026-27",
     period: "April",
     requestId: "gstr1-request",
-    returnPeriod: "042024",
+    returnPeriod: "042026",
     returnType: "GSTR-1",
   };
 
   it("preflights with rtn_prd and accepts data.ret_period without a status field", async () => {
-    const { documentRef, fetch } = gstr1Page(gstr1Json("042024"));
+    const { documentRef, fetch } = gstr1Page(gstr1Json("042026"));
+
+    expect(extractFiledReturnsDetailIdentity(documentRef, "GSTR-1")).toEqual({
+      financialYear: "2026-27",
+      period: "April",
+      returnType: "GSTR-1",
+      safeSignals: [
+        "filed-return-detail-period:April",
+        "filed-return-detail-financial-year:2026-27",
+        "filed-return-detail-type:GSTR-1",
+      ],
+    });
 
     await expect(acquireFiledReturnArtifact(documentRef, request)).resolves.toMatchObject({
       ok: true,
@@ -256,7 +268,7 @@ describe("GSTR-1 artifact acquisition", () => {
       JSON.stringify({ data: { padding: "x".repeat(100) } }),
       "unexpected-content",
     ],
-    ["wrong period", gstr1Json("052024"), "target-period-mismatch"],
+    ["wrong period", gstr1Json("052026"), "target-period-mismatch"],
   ] as const)("fails closed for %s before clicking", async (_label, responseBody, reason) => {
     const { documentRef } = gstr1Page(responseBody);
     const click = vi.fn();
@@ -283,8 +295,8 @@ describe("GSTR-1 artifact acquisition", () => {
     });
   });
 
-  it("fails closed before arming when the visible GSTR-1 period is stale", async () => {
-    const { documentRef, fetch } = gstr1Page(gstr1Json("042024"));
+  it("fails closed on the live header shape when the visible GSTR-1 period is stale", async () => {
+    const { documentRef, fetch } = gstr1Page(gstr1Json("042026"));
     documentRef.body.innerHTML = documentRef.body.innerHTML.replaceAll("April", "May");
 
     await expect(acquireFiledReturnArtifact(documentRef, request)).resolves.toMatchObject({
@@ -300,7 +312,7 @@ describe("GSTR-1 artifact acquisition", () => {
 
   it("arms the E-invoice workbook only on the matching GSTR-1 detail page", async () => {
     const { documentRef } = gstr1Page(
-      gstr1Json("042024"),
+      gstr1Json("042026"),
       "https://return.gst.gov.in/returns/auth/gstr1",
       "DOWNLOAD DETAILS FROM E-INVOICES (EXCEL)",
     );
@@ -378,7 +390,18 @@ function gstr1Page(
   status = 200,
 ) {
   const dom = new JSDOM(
-    `<body><main><h1>GSTR-1 Summary</h1><p>Status - Filed</p><p>Financial Year - 2024-25</p><p>Return Period - April</p><button>${controlText}</button></main></body>`,
+    `<body>
+      <main>
+        <h1>GSTR-1 Summary</h1>
+        <p>GSTIN - 00XXXXX0000X0Z0</p>
+        <p>Legal Name - Synthetic Legal Name Pvt Ltd</p>
+        <p>Trade Name - Synthetic Trade Name</p>
+        <p>FY - 2026-27</p>
+        <p>Tax Period - April</p>
+        <p>Status - Filed</p>
+        <button>${controlText}</button>
+      </main>
+    </body>`,
     { url },
   );
   Object.defineProperty(

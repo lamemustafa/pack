@@ -10,6 +10,8 @@ import {
   GSTR2B_SUMMARY_PATH,
 } from "./portal-artifact-endpoints";
 import { normaliseText } from "./filed-returns-dom";
+import { extractFiledReturnsDetailIdentity } from "./filed-returns-detail-identity";
+import { filedReturnDetailIdentityMatchesScope } from "./filed-returns-detail-navigation";
 import { resolveVisibleFiledReturnDownloadCandidates } from "./filed-returns-download-candidates";
 import { verifyFiledReturnsDownloadTarget } from "./filed-returns-download-target";
 
@@ -200,11 +202,8 @@ async function acquireGstr1Artifact(
 }
 
 function hasVisibleGstr1Target(documentRef: Document, request: ArtifactRequest): boolean {
-  const text = normaliseText(documentRef.body?.textContent || "");
-  return (
-    text.includes(`financial year - ${normaliseText(request.financialYear)}`) &&
-    text.includes(`return period - ${normaliseText(request.period)}`)
-  );
+  const identity = extractFiledReturnsDetailIdentity(documentRef, "GSTR-1");
+  return filedReturnDetailIdentityMatchesScope(identity, request);
 }
 
 function isHtmlResponse(bytes: Uint8Array): boolean {
