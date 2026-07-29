@@ -203,7 +203,8 @@ function gstr1PageTargetMismatchSignals(
   downloadControl: HTMLElement,
   request: ArtifactRequest,
 ): string[] {
-  const identity = extractScopedFiledReturnsDetailIdentity(downloadControl);
+  const pathname = downloadControl.ownerDocument.defaultView?.location.pathname ?? "";
+  const identity = extractScopedFiledReturnsDetailIdentity(downloadControl, pathname);
   if (!identity) return ["page-target-unverified", "page-identity-region-not-found"];
   return filedReturnDetailIdentityMatchesScope(identity, request) ? [] : ["page-target-unverified"];
 }

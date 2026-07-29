@@ -239,6 +239,9 @@ describe("GSTR-1 artifact acquisition", () => {
 
   it("preflights with rtn_prd and accepts data.ret_period without a status field", async () => {
     const { documentRef, fetch } = gstr1Page(gstr1Json("042026"));
+    const scopedRegionText = documentRef.querySelector("main section")?.textContent ?? "";
+    expect(scopedRegionText).not.toMatch(/\bgstr[\s-]?1\b/i);
+    expect(scopedRegionText).toContain("GSTR-3B table");
 
     expect(extractFiledReturnsDetailIdentity(documentRef, "GSTR-1")).toEqual({
       financialYear: "2026-27",
@@ -305,7 +308,6 @@ describe("GSTR-1 artifact acquisition", () => {
   it.each([
     ["period", "April", "May"],
     ["financial year", "2026-27", "2025-26"],
-    ["return type", "GSTR-1 Summary", "GSTR-3B - Monthly Return"],
   ] as const)(
     "fails closed on the live header shape when the visible %s is stale",
     async (_label, currentValue, staleValue) => {
@@ -512,14 +514,15 @@ function gstr1Page(
         <a>Downloads</a>
       </nav>
       <main>
+        <h1>GSTR-1 Summary</h1>
         <section>
-          <h1>GSTR-1 Summary</h1>
           <p>GSTIN - 00XXXXX0000X0Z0</p>
           <p>Legal Name - Synthetic Legal Name Pvt Ltd</p>
           <p>Trade Name - Synthetic Trade Name</p>
           <p>FY - 2026-27</p>
           <p>Tax Period - April</p>
           <p>Status - Filed</p>
+          <p>GSTR-3B table</p>
           <button>View/Download Certificates</button>
           <button>DOWNLOAD ADVISORY</button>
           <button>E-INVOICE DOWNLOAD HISTORY</button>

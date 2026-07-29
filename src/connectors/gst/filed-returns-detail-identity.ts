@@ -26,11 +26,12 @@ export function extractFiledReturnsDetailIdentity(
 
 export function extractScopedFiledReturnsDetailIdentity(
   downloadControl: HTMLElement,
+  pathname: string,
 ): FiledReturnsDetailIdentity | null {
   const scopedRoot = findDetailIdentityRoot(downloadControl);
   if (!scopedRoot) return null;
   const text = readElementText(scopedRoot);
-  return scopedDetailIdentityFromText(text);
+  return scopedDetailIdentityFromText(text, pathname);
 }
 
 function detailIdentityFromText(
@@ -42,13 +43,13 @@ function detailIdentityFromText(
   return createDetailIdentity(financialYear, period, detectedReturnType);
 }
 
-function scopedDetailIdentityFromText(text: string): FiledReturnsDetailIdentity {
+function scopedDetailIdentityFromText(text: string, pathname: string): FiledReturnsDetailIdentity {
   const periods = extractDetailTaxPeriods(text);
   const financialYears = extractDetailFinancialYears(text);
   return createDetailIdentity(
     financialYears.length === 1 ? (financialYears[0] ?? null) : null,
     periods.length === 1 ? (periods[0] ?? null) : null,
-    extractPageDerivedReturnType(text),
+    extractPathDerivedReturnType(pathname),
   );
 }
 
@@ -153,9 +154,9 @@ function extractDetailReturnType(
   return null;
 }
 
-function extractPageDerivedReturnType(text: string): FiledReturnsReturnType | null {
+function extractPathDerivedReturnType(pathname: string): FiledReturnsReturnType | null {
   const matches = FILED_RETURNS_RETURN_TYPES.filter((returnType) =>
-    filedReturnDescriptor(returnType).detailHeadingPattern.test(text),
+    filedReturnDescriptor(returnType).detailRoutePattern.test(pathname),
   );
   return matches.length === 1 ? (matches[0] ?? null) : null;
 }
