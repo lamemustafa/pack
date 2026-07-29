@@ -202,7 +202,7 @@ async function acquireGstr1Artifact(
 }
 
 function hasVisibleGstr1Target(documentRef: Document, request: ArtifactRequest): boolean {
-  const identity = extractFiledReturnsDetailIdentity(documentRef, "GSTR-1");
+  const identity = extractFiledReturnsDetailIdentity(documentRef);
   return filedReturnDetailIdentityMatchesScope(identity, request);
 }
 

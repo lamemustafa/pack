@@ -295,20 +295,27 @@ describe("GSTR-1 artifact acquisition", () => {
     });
   });
 
-  it("fails closed on the live header shape when the visible GSTR-1 period is stale", async () => {
-    const { documentRef, fetch } = gstr1Page(gstr1Json("042026"));
-    documentRef.body.innerHTML = documentRef.body.innerHTML.replaceAll("April", "May");
+  it.each([
+    ["period", "April", "May"],
+    ["financial year", "2026-27", "2025-26"],
+    ["return type", "GSTR-1 Summary", "GSTR-3B - Monthly Return"],
+  ] as const)(
+    "fails closed on the live header shape when the visible %s is stale",
+    async (_label, currentValue, staleValue) => {
+      const { documentRef, fetch } = gstr1Page(gstr1Json("042026"));
+      documentRef.body.innerHTML = documentRef.body.innerHTML.replaceAll(currentValue, staleValue);
 
-    await expect(acquireFiledReturnArtifact(documentRef, request)).resolves.toMatchObject({
-      ok: false,
-      reason: "page-period-mismatch",
-      safeSignals: ["target-period-verified", "page-target-unverified"],
-    });
-    expect(fetch).toHaveBeenCalledOnce();
-    expect(
-      documentRef.querySelector("button")?.getAttribute("data-pack-artifact-request"),
-    ).toBeNull();
-  });
+      await expect(acquireFiledReturnArtifact(documentRef, request)).resolves.toMatchObject({
+        ok: false,
+        reason: "page-period-mismatch",
+        safeSignals: ["target-period-verified", "page-target-unverified"],
+      });
+      expect(fetch).toHaveBeenCalledOnce();
+      expect(
+        documentRef.querySelector("button")?.getAttribute("data-pack-artifact-request"),
+      ).toBeNull();
+    },
+  );
 
   it("arms the E-invoice workbook only on the matching GSTR-1 detail page", async () => {
     const { documentRef } = gstr1Page(
