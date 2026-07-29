@@ -14,24 +14,83 @@ const GST_PAYLOAD_VALIDATORS = {
 };
 
 describe("message boundary", () => {
-  it("accepts GSTR-2B artifact acquisition only for its verified artifact kinds", () => {
+  it.each([
+    ["GSTR-3B", "PDF"],
+    ["GSTR-3B", "JSON"],
+    ["GSTR-2B", "PDF"],
+    ["GSTR-2B", "JSON"],
+    ["GSTR-2B", "EXCEL"],
+    ["GSTR-1", "PDF"],
+    ["GSTR-1", "EXCEL"],
+  ] as const)(
+    "accepts the supported %s %s artifact acquisition pair",
+    (returnType, artifactType) => {
+      const payload = {
+        artifactType,
+        financialYear: "2026-27",
+        period: "April",
+        requestId: "synthetic-request",
+        returnPeriod: "042026",
+        returnType,
+      };
+      expect(
+        isPackMessage({
+          type: "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34",
+          payload,
+        }),
+      ).toBe(true);
+    },
+  );
+
+  it.each([
+    ["GSTR-1", "JSON"],
+    ["GSTR-3B", "EXCEL"],
+    ["GSTR-2B", "PDF_AND_EXCEL"],
+    ["GSTR-2B", "ZIP"],
+  ] as const)(
+    "rejects the unsupported %s %s artifact acquisition pair",
+    (returnType, artifactType) => {
+      expect(
+        isPackMessage({
+          type: "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34",
+          payload: {
+            artifactType,
+            financialYear: "2026-27",
+            period: "April",
+            requestId: "synthetic-request",
+            returnPeriod: "042026",
+            returnType,
+          },
+        }),
+      ).toBe(false);
+    },
+  );
+
+  it("keeps artifact acquisition payloads exact and bounded", () => {
     const payload = {
+      artifactType: "PDF",
       financialYear: "2026-27",
       period: "April",
       requestId: "synthetic-request",
       returnPeriod: "042026",
-      returnType: "GSTR-2B",
+      returnType: "GSTR-1",
     };
     expect(
       isPackMessage({
         type: "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34",
-        payload: { ...payload, artifactType: "EXCEL" },
+        payload: { ...payload, extra: "not-allowed" },
       }),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       isPackMessage({
         type: "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34",
-        payload: { ...payload, artifactType: "ZIP" },
+        payload: { ...payload, returnPeriod: "42026" },
+      }),
+    ).toBe(false);
+    expect(
+      isPackMessage({
+        type: "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34",
+        payload: { ...payload, requestId: "x".repeat(121) },
       }),
     ).toBe(false);
   });

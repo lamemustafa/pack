@@ -280,12 +280,9 @@ function isArtifactRequest(input: unknown): input is ArtifactRequest {
       "returnPeriod",
       "requestId",
     ]) &&
-    ((input.returnType === "GSTR-3B" &&
-      (input.artifactType === "PDF" || input.artifactType === "JSON")) ||
-      (input.returnType === "GSTR-2B" &&
-        (input.artifactType === "PDF" ||
-          input.artifactType === "JSON" ||
-          input.artifactType === "EXCEL"))) &&
+    isFiledReturnsReturnType(input.returnType) &&
+    isFiledReturnsConcreteArtifactType(input.artifactType) &&
+    supportsFiledReturnsArtifactType(input.returnType, input.artifactType) &&
     isBoundedString(input.financialYear, 1, 20) &&
     isBoundedString(input.period, 1, 20) &&
     /^\d{6}$/.test(String(input.returnPeriod)) &&
