@@ -392,6 +392,13 @@ const ZIP_SIGNALS = new Set(
     ZIP_SIGNAL_SUFFIXES.map((suffix) => `${prefix}-zip-${suffix}`),
   ),
 );
+const ZIP_EXPORT_ERROR_CATEGORIES = new Set([
+  "opfs-unavailable",
+  "zip-empty",
+  "zip-failed",
+  "zip-invalid-entry",
+  "zip-too-large",
+]);
 const OPFS_STAGE_ERROR_CATEGORIES = new Set([
   "blob-url-failed",
   "clear-failed",
@@ -466,6 +473,10 @@ export function isDurableFiledReturnsSignal(signal: string): boolean {
     signal,
   );
   if (opfsStageError) return OPFS_STAGE_ERROR_CATEGORIES.has(opfsStageError[2] ?? "");
+  const zipExportError = /^(full-fiscal-year|single-period)-zip-export-error:([a-z-]+)$/.exec(
+    signal,
+  );
+  if (zipExportError) return ZIP_EXPORT_ERROR_CATEGORIES.has(zipExportError[2] ?? "");
   const scopedReturnSignal = /^filed-(gstr1|gstr2b|gstr3b)-(.+)$/.exec(signal);
   if (scopedReturnSignal) {
     return SCOPED_RETURN_SIGNAL_SUFFIXES.has(scopedReturnSignal[2] ?? "");

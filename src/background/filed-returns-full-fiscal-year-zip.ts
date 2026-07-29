@@ -335,7 +335,7 @@ async function exportStagedFiledReturnsZip({
     entryCount: expectedZipEntryCount,
     entries: expectedZipEntries,
   });
-  if (!zip) {
+  if (zip.status !== "created") {
     const stagingClear =
       clearSignalPrefix === "single-period"
         ? await clearSinglePeriodExportStaging(ledgerId, onAfterStagingCleared, "not-downloaded")
@@ -350,6 +350,9 @@ async function exportStagedFiledReturnsZip({
       safeSignals: [
         ...completeStep.safeSignals,
         `${clearSignalPrefix}-zip-export-failed`,
+        ...(zip.errorCategory
+          ? [`${clearSignalPrefix}-zip-export-error:${zip.errorCategory}`]
+          : []),
         ...stagedLedgerSignals,
       ],
       safeMessage:

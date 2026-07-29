@@ -12,6 +12,9 @@ const OFFSCREEN_JUSTIFICATION =
   "Create and revoke a temporary Blob URL for an explicit local GST return download.";
 export type OffscreenFiledReturnStageResult =
   { status: "staged" } | { status: "failed"; errorCategory?: string };
+export type OffscreenFiledReturnZipResult =
+  | { status: "created"; blobUrl: string; zipEntryCount: number }
+  | { status: "failed"; errorCategory?: string };
 
 let creatingOffscreenDocument: Promise<void> | null = null;
 
@@ -66,7 +69,7 @@ export async function createOffscreenFiledReturnZipUrl(
     entryCount: number;
     entries: readonly PackOffscreenFiledReturnZipExpectedEntry[];
   },
-): Promise<{ blobUrl: string; zipEntryCount: number } | null> {
+): Promise<OffscreenFiledReturnZipResult> {
   const requestId = createRequestId();
   await ensureOffscreenDocument();
   const response = await browser.runtime.sendMessage({
@@ -80,9 +83,7 @@ export async function createOffscreenFiledReturnZipUrl(
       expectedEntries: [...expected.entries],
     },
   });
-  return isZipResponse(response, requestId)
-    ? { blobUrl: response.blobUrl, zipEntryCount: response.zipEntryCount }
-    : null;
+  return toZipResult(response, requestId);
 }
 
 export async function clearOffscreenFiledReturnLedger(
@@ -249,6 +250,27 @@ function isZipResponse(
     Number.isInteger(record.zipEntryCount) &&
     record.zipEntryCount > 0
   );
+}
+
+function toZipResult(response: unknown, requestId: string): OffscreenFiledReturnZipResult {
+  if (isZipResponse(response, requestId)) {
+    return {
+      status: "created",
+      blobUrl: response.blobUrl,
+      zipEntryCount: response.zipEntryCount,
+    };
+  }
+  if (typeof response === "object" && response !== null) {
+    const record = response as Record<string, unknown>;
+    if (
+      record.ok === false &&
+      record.requestId === requestId &&
+      typeof record.errorCategory === "string"
+    ) {
+      return { status: "failed", errorCategory: record.errorCategory };
+    }
+  }
+  return { status: "failed" };
 }
 
 function isClearedResponse(

@@ -505,6 +505,40 @@ describe("offscreen Blob URL entrypoint", () => {
     });
   });
 
+  it("creates the GSTR-2B all-formats ZIP from the canonical staged entry names", async () => {
+    await loadOffscreenEntrypoint();
+    opfsFiles.set(
+      `filed-return-packs/${TEST_LEDGER_ID}/april-summary.pdf`,
+      new Blob([`%PDF-1.7 portal summary\n${"0".repeat(20 * 1024)}\n%%EOF\n`]),
+    );
+    opfsFiles.set(
+      `filed-return-packs/${TEST_LEDGER_ID}/april-details.xlsx`,
+      new Blob([toArrayBuffer(createPortalGstr2bWorkbook())]),
+    );
+    opfsFiles.set(
+      `filed-return-packs/${TEST_LEDGER_ID}/april-data.json`,
+      new Blob([JSON.stringify({ synthetic: true, period: "April" })]),
+    );
+
+    const zip = await sendOffscreenMessage({
+      type: "PACK_OFFSCREEN_CREATE_FILED_RETURN_ZIP",
+      target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+      payload: {
+        requestId: "gstr2b-all-formats-request",
+        ledgerId: TEST_LEDGER_ID,
+        expectedReturnType: "GSTR-2B",
+        expectedEntryCount: 3,
+        expectedEntries: [
+          { artifactType: "PDF", entryNames: ["april-summary.pdf"] },
+          { artifactType: "EXCEL", entryNames: ["april-details.xls", "april-details.xlsx"] },
+          { artifactType: "JSON", entryNames: ["april-data.json"] },
+        ],
+      },
+    });
+
+    expect(zip).toMatchObject({ ok: true, zipEntryCount: 3 });
+  });
+
   it.each([
     ["missing PDF", ["may.xls"]],
     ["missing Excel", ["may.pdf"]],
@@ -598,7 +632,7 @@ describe("offscreen Blob URL entrypoint", () => {
     expect(URL.createObjectURL).not.toHaveBeenCalled();
   });
 
-  it("rejects a reordered full-year target plan", async () => {
+  it("accepts a reordered target plan for the exact same staged artifact set", async () => {
     await loadOffscreenEntrypoint();
     opfsFiles.set(
       `filed-return-packs/${TEST_FULL_YEAR_LEDGER_ID}/april.pdf`,
@@ -609,17 +643,20 @@ describe("offscreen Blob URL entrypoint", () => {
       new Blob(["%PDF-1.7 May\n%%EOF\n"]),
     );
 
+    // Plan slot order is the caller's acquisition order and never reaches the ZIP, whose entry
+    // order is the canonical staged order. Only the exact artifact set is load-bearing here; the
+    // rejection cases above still cover a missing, extra, wrong, or duplicated target.
     const response = await sendExactFullYearZipRequest([
       { artifactType: "PDF", entryNames: ["may.pdf"] },
       { artifactType: "PDF", entryNames: ["april.pdf"] },
     ]);
 
     expect(response).toEqual({
-      ok: false,
+      ok: true,
       requestId: "exact-full-year-request",
-      errorCategory: "zip-invalid-entry",
+      blobUrl: "blob:pack-test/1",
+      zipEntryCount: 2,
     });
-    expect(URL.createObjectURL).not.toHaveBeenCalled();
   });
 
   it("rejects type-swapped bytes in a full-year target slot", async () => {

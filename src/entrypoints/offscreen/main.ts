@@ -270,23 +270,29 @@ function matchesExpectedZipEntryPlan(
   expectedReturnType: FiledReturnsReturnType,
 ): boolean {
   if (entries.length !== expectedEntries.length) return false;
-  for (const [index, entry] of entries.entries()) {
-    const expectedSlot = expectedEntries[index];
-    if (
-      expectedSlot !== undefined &&
-      expectedSlot.entryNames.includes(entry.path) &&
-      artifactTypeFromZipPath(entry.path) === expectedSlot.artifactType &&
-      isExpectedFiledReturnBytesForReturnType(
-        entry.bytes,
-        expectedSlot.artifactType,
-        expectedReturnType,
-      )
-    ) {
-      continue;
-    }
-    return false;
+  // Staged entries are read back in canonical ZIP order, which is independent of the caller's
+  // artifact-acquisition order. Bind each entry to exactly one unconsumed plan slot so a correct
+  // artifact set is never rejected for slot ordering alone, while an extra, missing, duplicate, or
+  // type-swapped file still leaves a slot unmatched.
+  const unmatchedSlots = new Set(expectedEntries.keys());
+  for (const entry of entries) {
+    const slotIndex = [...unmatchedSlots].find((index) => {
+      const expectedSlot = expectedEntries[index];
+      return (
+        expectedSlot !== undefined &&
+        expectedSlot.entryNames.includes(entry.path) &&
+        artifactTypeFromZipPath(entry.path) === expectedSlot.artifactType &&
+        isExpectedFiledReturnBytesForReturnType(
+          entry.bytes,
+          expectedSlot.artifactType,
+          expectedReturnType,
+        )
+      );
+    });
+    if (slotIndex === undefined) return false;
+    unmatchedSlots.delete(slotIndex);
   }
-  return true;
+  return unmatchedSlots.size === 0;
 }
 
 function artifactTypeFromZipPath(zipPath: string): FiledReturnsConcreteArtifactType | null {
