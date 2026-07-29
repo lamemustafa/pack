@@ -118,6 +118,7 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "filed-returns-page-settling",
   "filed-returns-route",
   "filed-returns-run-acknowledged",
+  "zip-download-filename-overridden",
   "filed-returns-run-active",
   "filed-returns-run-needs-review",
   "filed-returns-target-cancelled",

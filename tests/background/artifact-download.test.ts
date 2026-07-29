@@ -21,14 +21,14 @@ describe("downloadAcquiredArtifact", () => {
     "delivers a small %s through its offscreen Blob URL with the exact filename",
     async (_, mimeType, filename) => {
       const create = vi.fn(async () => "blob:extension");
-      const releaseRequestedFilename = vi.fn();
-      const trackRequestedFilename = vi.fn();
+      const bind = vi.fn();
+      const release = vi.fn();
+      const reserveRequestedFilename = vi.fn(() => ({ bind, release }));
       const result = await downloadAcquiredArtifact(
         { ...input(), mimeType, filename },
         deps({
           createOffscreenBlobUrl: create,
-          releaseRequestedFilename,
-          trackRequestedFilename,
+          reserveRequestedFilename,
           downloads: {
             ...downloads,
             search: vi.fn(async () => [matchingItem(filename)]),
@@ -46,8 +46,9 @@ describe("downloadAcquiredArtifact", () => {
       expect(downloads.download).not.toHaveBeenCalledWith(
         expect.objectContaining({ url: expect.stringMatching(/^data:/) }),
       );
-      expect(trackRequestedFilename).toHaveBeenCalledWith(9, filename);
-      expect(releaseRequestedFilename).toHaveBeenCalledWith(9);
+      expect(reserveRequestedFilename).toHaveBeenCalledWith("blob:extension", filename);
+      expect(bind).toHaveBeenCalledWith(9);
+      expect(release).toHaveBeenCalledOnce();
     },
   );
 
@@ -231,8 +232,7 @@ function deps(overrides: Parameters<typeof downloadAcquiredArtifact>[1] = {}) {
     createOffscreenBlobUrl: vi.fn(async () => "blob:extension"),
     revokeOffscreenBlobUrl: vi.fn(),
     closeOffscreenBlobDocument: vi.fn(),
-    releaseRequestedFilename: vi.fn(),
-    trackRequestedFilename: vi.fn(),
+    reserveRequestedFilename: vi.fn(() => ({ bind: vi.fn(), release: vi.fn() })),
     timeoutMs: 100,
     ...overrides,
   } as Parameters<typeof downloadAcquiredArtifact>[1];

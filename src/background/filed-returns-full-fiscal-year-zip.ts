@@ -24,6 +24,10 @@ import {
   safeSinglePeriodZipFilename,
 } from "./filed-returns-download-filename";
 import {
+  installPackDownloadFilenameReassertion,
+  matchesRequestedFilenameBasename,
+} from "./pack-download-filename-reassertion";
+import {
   canCompleteFullFiscalYearLedger,
   hasCanonicalFullFiscalYearTargetPlan,
 } from "./filed-returns-full-fiscal-year-ledger";
@@ -454,6 +458,10 @@ async function exportStagedFiledReturnsZip({
       },
     };
   }
+  const filenameReservation = installPackDownloadFilenameReassertion().reserve(
+    zip.blobUrl,
+    zipFilename,
+  );
   try {
     downloadId = await browser.downloads.download({
       conflictAction: "uniquify",
@@ -462,6 +470,7 @@ async function exportStagedFiledReturnsZip({
       url: zip.blobUrl,
     });
   } catch {
+    filenameReservation.release();
     await revokeOffscreenBlobUrl(zip.blobUrl);
     const stagingClear =
       clearSignalPrefix === "single-period"
@@ -492,6 +501,7 @@ async function exportStagedFiledReturnsZip({
   }
 
   if (!Number.isSafeInteger(downloadId) || downloadId === null || downloadId < 0) {
+    filenameReservation.release();
     await revokeOffscreenBlobUrl(zip.blobUrl);
     await closeOffscreenBlobDocument();
     return {
@@ -507,10 +517,12 @@ async function exportStagedFiledReturnsZip({
       userAction: checkBrowserDownloadsAction(clearSignalPrefix),
     };
   }
+  filenameReservation.bind(downloadId);
 
   try {
     await onDownloadStarted?.(downloadId);
   } catch {
+    filenameReservation.release();
     await revokeOffscreenBlobUrl(zip.blobUrl);
     await closeOffscreenBlobDocument();
     return {
@@ -536,6 +548,7 @@ async function exportStagedFiledReturnsZip({
   await revokeOffscreenBlobUrl(zip.blobUrl);
 
   if (observed.state !== "completed") {
+    filenameReservation.release();
     await closeOffscreenBlobDocument();
     return {
       ...completeStep,
@@ -552,6 +565,8 @@ async function exportStagedFiledReturnsZip({
     };
   }
 
+  const filenameOutcome = await completedZipFilenameOutcome(downloadId, zipFilename);
+  filenameReservation.release();
   const stagingClear =
     clearSignalPrefix === "single-period"
       ? await clearSinglePeriodExportStaging(ledgerId, onAfterStagingCleared, "downloaded")
@@ -572,6 +587,7 @@ async function exportStagedFiledReturnsZip({
           `single-period-zip-entry-count:${zip.zipEntryCount}`,
           ...stagedLedgerSignals,
           ...observed.safeSignals,
+          ...filenameOutcome.safeSignals,
         ],
         safeMessage:
           "Pack downloaded the selected ZIP but could not clear its temporary local staging.",
@@ -593,6 +609,7 @@ async function exportStagedFiledReturnsZip({
           `single-period-zip-entry-count:${zip.zipEntryCount}`,
           ...stagedLedgerSignals,
           ...observed.safeSignals,
+          ...filenameOutcome.safeSignals,
         ],
         safeMessage: singlePeriodCleanupCheckpointFailedMessage(),
         userAction: {
@@ -613,8 +630,26 @@ async function exportStagedFiledReturnsZip({
       `${clearSignalPrefix}-zip-entry-count:${zip.zipEntryCount}`,
       ...stagedLedgerSignals,
       ...observed.safeSignals,
+      ...filenameOutcome.safeSignals,
     ],
-    safeMessage,
+    safeMessage: filenameOutcome.safeMessage
+      ? `${safeMessage} ${filenameOutcome.safeMessage}`
+      : safeMessage,
+  };
+}
+
+async function completedZipFilenameOutcome(
+  downloadId: number,
+  requestedFilename: string,
+): Promise<{ safeMessage?: string; safeSignals: string[] }> {
+  const [item] = await browser.downloads.search({ id: downloadId }).catch(() => []);
+  if (!item?.filename || matchesRequestedFilenameBasename(requestedFilename, item.filename)) {
+    return { safeSignals: [] };
+  }
+  return {
+    safeSignals: ["zip-download-filename-overridden"],
+    safeMessage:
+      "Pack completed the ZIP download, but the browser saved it under a different name. Check browser Downloads before using the file.",
   };
 }
 

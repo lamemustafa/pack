@@ -13,6 +13,13 @@ import {
 } from "../../src/background/filed-returns-download-trigger";
 
 describe("filed-return durable signal contract", () => {
+  it("retains the filename-free ZIP override marker", () => {
+    expect(isDurableFiledReturnsSignal("zip-download-filename-overridden")).toBe(true);
+    expect(parseDurableFiledReturnsSignals(["zip-download-filename-overridden"])).toEqual([
+      "zip-download-filename-overridden",
+    ]);
+  });
+
   it("accepts the bounded signals emitted by detail, download, and summary-dialog classifiers", () => {
     const emittedSignals = new Set<string>();
 

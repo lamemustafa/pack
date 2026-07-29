@@ -5,6 +5,7 @@ import {
   revokeOffscreenBlobUrl,
 } from "./offscreen-blob-url";
 import { installPackDownloadFilenameReassertion } from "./pack-download-filename-reassertion";
+import type { PackDownloadFilenameReservation } from "./pack-download-filename-reassertion";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
@@ -25,8 +26,7 @@ type DeliveryDeps = {
   createOffscreenBlobUrl: typeof createOffscreenBlobUrl;
   revokeOffscreenBlobUrl: typeof revokeOffscreenBlobUrl;
   closeOffscreenBlobDocument: typeof closeOffscreenBlobDocument;
-  releaseRequestedFilename: (downloadId: number) => void;
-  trackRequestedFilename: (downloadId: number, filename: string) => void;
+  reserveRequestedFilename: (url: string, filename: string) => PackDownloadFilenameReservation;
   timeoutMs: number;
 };
 
@@ -46,22 +46,19 @@ export async function downloadAcquiredArtifact(
     createOffscreenBlobUrl: overrides.createOffscreenBlobUrl ?? createOffscreenBlobUrl,
     revokeOffscreenBlobUrl: overrides.revokeOffscreenBlobUrl ?? revokeOffscreenBlobUrl,
     closeOffscreenBlobDocument: overrides.closeOffscreenBlobDocument ?? closeOffscreenBlobDocument,
-    releaseRequestedFilename:
-      overrides.releaseRequestedFilename ??
-      ((downloadId) => installPackDownloadFilenameReassertion().release(downloadId)),
-    trackRequestedFilename:
-      overrides.trackRequestedFilename ??
-      ((downloadId, filename) =>
-        installPackDownloadFilenameReassertion().track(downloadId, filename)),
+    reserveRequestedFilename:
+      overrides.reserveRequestedFilename ??
+      ((url, filename) => installPackDownloadFilenameReassertion().reserve(url, filename)),
     timeoutMs: overrides.timeoutMs ?? DEFAULT_TIMEOUT_MS,
   };
   let blobUrl: string | null = null;
-  let trackedDownloadId: number | null = null;
+  let filenameReservation: PackDownloadFilenameReservation | null = null;
   let offscreenRequested = false;
   try {
     offscreenRequested = true;
     blobUrl = await deps.createOffscreenBlobUrl(`data:${input.mimeType};base64,${input.base64}`);
     if (!blobUrl) return { ok: false, reason: "start-rejected", safeSignals: [] };
+    filenameReservation = deps.reserveRequestedFilename(blobUrl, input.filename);
     let downloadId: number;
     try {
       downloadId = await deps.downloads.download({
@@ -70,8 +67,7 @@ export async function downloadAcquiredArtifact(
         saveAs: false,
         url: blobUrl,
       });
-      deps.trackRequestedFilename(downloadId, input.filename);
-      trackedDownloadId = downloadId;
+      filenameReservation.bind(downloadId);
     } catch {
       return { ok: false, reason: "start-rejected", safeSignals: [] };
     }
@@ -88,7 +84,7 @@ export async function downloadAcquiredArtifact(
     }
     return await awaitCompletion(deps.downloads, downloadId, input.filename, deps.timeoutMs);
   } finally {
-    if (trackedDownloadId !== null) deps.releaseRequestedFilename(trackedDownloadId);
+    filenameReservation?.release();
     if (blobUrl) await deps.revokeOffscreenBlobUrl(blobUrl);
     if (offscreenRequested) await deps.closeOffscreenBlobDocument();
   }

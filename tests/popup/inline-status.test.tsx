@@ -168,6 +168,44 @@ describe("inline filed-return recovery status", () => {
     expect(markup).toContain("download.pdf");
   });
 
+  it("renders the filename-free ZIP override message ahead of the full-year success summary", () => {
+    const summary: FiledReturnsFlowSummary = {
+      ...blockedSummary,
+      status: "complete",
+      scope: { ...blockedSummary.scope, period: FULL_FISCAL_YEAR_PERIOD },
+      completedPeriods: ["April", "May"],
+      totalPeriods: 2,
+      flowStep: {
+        ...blockedSummary.flowStep,
+        state: "downloaded",
+        safeSignals: ["full-fiscal-year-zip-downloaded", "zip-download-filename-overridden"],
+        safeMessage:
+          "Pack completed the ZIP download, but the browser saved it under a different name. Check browser Downloads before using the file.",
+      },
+    };
+    const markup = renderToStaticMarkup(
+      <InlineStatus
+        busy={null}
+        onOpenPortal={vi.fn()}
+        onRestartTarget={vi.fn()}
+        onRetryFullFiscalYearTarget={vi.fn()}
+        onRetryTarget={vi.fn()}
+        presentation={{
+          badge: "Complete",
+          body: "Complete.",
+          icon: "✓",
+          kind: "complete",
+          title: "Download complete",
+          tone: "success",
+        }}
+        summary={summary}
+      />,
+    );
+
+    expect(markup).toContain("browser saved it under a different name");
+    expect(markup).not.toContain("2 periods saved as one ZIP.");
+  });
+
   it("shows the final-ZIP check warning without requiring a current period", () => {
     const summary: FiledReturnsFlowSummary = {
       ...blockedSummary,
