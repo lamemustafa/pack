@@ -71,15 +71,15 @@ export async function selectReturnDashboardFiltersAndSearch(
       connectorId: "gst",
       scopeId,
       state: "clicked",
-      safeSignals: [
-        ...safeSignals,
-        ...diagnosticSignals,
-        ...(searchPending
+      safeSignals: uniqueSignals(
+        safeSignals,
+        diagnosticSignals,
+        searchPending
           ? [`${signalPrefix}-return-dashboard-search-results-pending`]
           : viewControl
             ? [`${signalPrefix}-dashboard-view-unscoped`]
-            : []),
-      ],
+            : [],
+      ),
       safeMessage:
         "Pack recognized the GST Return Dashboard and is waiting for target-bound dashboard controls to render. Diagnostic signals: " +
         diagnosticSignals.join(", "),
@@ -151,13 +151,13 @@ export async function selectReturnDashboardFiltersAndSearch(
       connectorId: "gst",
       scopeId,
       state: "clicked",
-      safeSignals: [
-        ...safeSignals,
-        ...diagnosticSignals,
-        `${signalPrefix}-return-dashboard-filters-selected`,
-        ...dashboardFilterDiagnosticSignals(controls, signalPrefix),
-        `${signalPrefix}-return-dashboard-search-results-pending`,
-      ],
+      safeSignals: uniqueSignals(
+        safeSignals,
+        diagnosticSignals,
+        [`${signalPrefix}-return-dashboard-filters-selected`],
+        dashboardFilterDiagnosticSignals(controls, signalPrefix),
+        [`${signalPrefix}-return-dashboard-search-results-pending`],
+      ),
       safeMessage: `Pack already searched the ${scope.returnType} return dashboard for this period and is waiting for the GST Portal results to finish rendering.`,
     };
   }
@@ -168,13 +168,13 @@ export async function selectReturnDashboardFiltersAndSearch(
     connectorId: "gst",
     scopeId,
     state: "clicked",
-    safeSignals: [
-      ...safeSignals,
-      ...diagnosticSignals,
-      `${signalPrefix}-return-dashboard-filters-selected`,
-      ...dashboardFilterDiagnosticSignals(controls, signalPrefix),
-      "search-clicked",
-    ],
+    safeSignals: uniqueSignals(
+      safeSignals,
+      diagnosticSignals,
+      [`${signalPrefix}-return-dashboard-filters-selected`],
+      dashboardFilterDiagnosticSignals(controls, signalPrefix),
+      ["search-clicked"],
+    ),
     safeMessage: `Pack selected the ${scope.returnType} return dashboard filters and clicked Search.`,
   };
 }
@@ -190,11 +190,9 @@ function unchangedDashboardViewRecovery(
     connectorId: "gst",
     scopeId,
     state: "user-action-required",
-    safeSignals: [
-      ...safeSignals,
-      ...diagnosticSignals,
+    safeSignals: uniqueSignals(safeSignals, diagnosticSignals, [
       `${signalPrefix}-dashboard-view-unchanged-after-search`,
-    ],
+    ]),
     safeMessage: `The GST Portal did not refresh the visible ${scope.returnType} View result after Search, so Pack could not prove that it belongs to the selected period.`,
     userAction: {
       type: "NAVIGATE_TO_SUPPORTED_PAGE",
@@ -224,16 +222,17 @@ function dashboardSelectionInProgress(
   selectionSignals: readonly string[],
 ): PortalFlowStepResult {
   const signalPrefix = dashboardSignalPrefix(scope);
+  const selectedSignalPrefix = `${signalPrefix}-dashboard-selected-`;
   return {
     connectorId: "gst",
     scopeId,
     state: "clicked",
-    safeSignals: [
-      ...safeSignals,
-      ...diagnosticSignals,
-      `${signalPrefix}-return-dashboard-filter-selection-in-progress`,
-      ...selectionSignals,
-    ],
+    safeSignals: uniqueSignals(
+      safeSignals,
+      diagnosticSignals.filter((signal) => !signal.startsWith(selectedSignalPrefix)),
+      [`${signalPrefix}-return-dashboard-filter-selection-in-progress`],
+      selectionSignals,
+    ),
     safeMessage: `Pack selected part of the ${scope.returnType} return dashboard filters and is waiting for the GST portal to finish updating them.`,
   };
 }
@@ -249,6 +248,10 @@ function dashboardFilterDiagnosticSignals(
   signalPrefix: "gstr1" | "gstr2b" | "gstr3b",
 ): string[] {
   return signalPrefix === "gstr1" ? [] : selectedDashboardFilterSignals(controls, signalPrefix);
+}
+
+function uniqueSignals(...groups: ReadonlyArray<readonly string[]>): string[] {
+  return Array.from(new Set(groups.flat()));
 }
 
 function hasRecentDashboardSearch(

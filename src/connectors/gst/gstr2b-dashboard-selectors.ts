@@ -6,6 +6,10 @@ import {
 } from "./filed-returns-dom";
 import { findKnownGstSelect, findLabelledSelects } from "./filed-returns-filter-fields";
 import { findSearchButton, findSearchButtons } from "./gstr2b-dashboard-search";
+import {
+  isSafeDashboardSelectedValue,
+  type DashboardSelectedRole,
+} from "./dashboard-selected-signal-values";
 
 const FINANCIAL_YEAR_LABEL = /financial\s+year/i;
 const QUARTER_LABEL = /^quarter\b/i;
@@ -112,7 +116,7 @@ function findDashboardControlSelect(
 }
 
 function selectedDashboardFilterSignal(
-  role: "year" | "quarter" | "period",
+  role: DashboardSelectedRole,
   select: HTMLSelectElement | null,
   signalPrefix: string,
 ): string | null {
@@ -120,7 +124,9 @@ function selectedDashboardFilterSignal(
   const label = sanitizeDiagnosticSignalValue(
     select.selectedOptions[0]?.textContent || select.value,
   );
-  return label ? `${signalPrefix}-dashboard-selected-${role}:${label}` : null;
+  return label && isSafeDashboardSelectedValue(role, label)
+    ? `${signalPrefix}-dashboard-selected-${role}:${label}`
+    : null;
 }
 
 function sanitizeDiagnosticSignalValue(value: string): string {

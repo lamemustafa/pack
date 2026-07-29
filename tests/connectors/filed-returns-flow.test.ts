@@ -1826,9 +1826,53 @@ describe("filed returns guided flow", () => {
 
     expect(maySearch.safeSignals).toContain("search-clicked");
     expect(aprilSelection.safeSignals).toContain("period-selected");
+    expect(aprilSelection.safeSignals).toContain("gstr2b-dashboard-selected-period:april");
+    expect(aprilSelection.safeSignals).not.toContain("gstr2b-dashboard-selected-period:may");
+    expect(new Set(aprilSelection.safeSignals).size).toBe(aprilSelection.safeSignals.length);
     expect(aprilSearch.safeSignals).toContain("search-clicked");
+    expect(new Set(aprilSearch.safeSignals).size).toBe(aprilSearch.safeSignals.length);
     expect(aprilSearch.safeSignals).not.toContain("gstr2b-return-dashboard-search-results-pending");
     expect(searchClicked).toBe(2);
+  });
+
+  it("drops unrecognized selected-option values from GSTR-2B dashboard diagnostics", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <form name="dashboard">
+            <label for="fin">Financial Year</label>
+            <select name="fin">
+              <option selected>unrecognized-year-option</option>
+              <option>2026-27</option>
+            </select>
+            <label for="quarter">Quarter</label>
+            <select name="quarter">
+              <option selected>unrecognized-quarter-option</option>
+              <option>Quarter 1 (Apr - Jun)</option>
+            </select>
+            <label for="mon">Period</label>
+            <select name="mon">
+              <option selected>unrecognized-period-option</option>
+              <option>April</option>
+            </select>
+            <button type="button" data-search>Search</button>
+          </form>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/dashboard",
+    );
+    makeLayoutVisible(documentRef);
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      artifactType: "PDF_AND_EXCEL",
+      financialYear: "2026-27",
+      period: "April",
+      returnType: "GSTR-2B",
+    });
+
+    expect(result.safeSignals).toContain("gstr2b-dashboard-selected-year:2026-27");
+    expect(result.safeSignals.some((signal) => signal.includes("unrecognized"))).toBe(false);
+    expect(result.safeMessage).not.toContain("unrecognized");
   });
 
   it("selects GSTR-2B prior-year dashboard filters when the quarter field is absent", async () => {

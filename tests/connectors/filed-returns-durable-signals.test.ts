@@ -167,6 +167,37 @@ describe("filed-return durable signal contract", () => {
     expect(isDurableFiledReturnsSignal("gstr1-dashboard-selected-year:2026-27")).toBe(false);
   });
 
+  it("accepts only bounded GSTR-2B dashboard recovery and selected-filter signals", () => {
+    const signals = [
+      "gstr2b-return-dashboard-route",
+      "gstr2b-dashboard-root-found",
+      "gstr2b-dashboard-year-select-found",
+      "gstr2b-dashboard-quarter-select-found",
+      "gstr2b-dashboard-period-select-found",
+      "gstr2b-dashboard-search-found",
+      "gstr2b-dashboard-selected-year:2026-27",
+      "gstr2b-dashboard-selected-quarter:quarter-1-apr-jun",
+      "gstr2b-dashboard-selected-quarter:apr-jun",
+      "gstr2b-dashboard-selected-period:april",
+      "gstr2b-return-dashboard-filter-selection-in-progress",
+      "period-selected",
+      "gstr2b-dashboard-view-unchanged-after-search",
+    ];
+
+    expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);
+    expect(parseDurableFiledReturnsSignals([...signals, signals[0]])).toBeNull();
+    for (const signal of [
+      "gstr2b-dashboard-selected-year:2026-28",
+      "gstr2b-dashboard-selected-year:private-value",
+      "gstr2b-dashboard-selected-quarter:quarter-5-apr-jun",
+      "gstr2b-dashboard-selected-quarter:private-value",
+      "gstr2b-dashboard-selected-period:not-a-month",
+      "gstr2b-dashboard-selected-period:april:private-value",
+    ]) {
+      expect(isDurableFiledReturnsSignal(signal)).toBe(false);
+    }
+  });
+
   it("accepts every GSTR-2B acquisition terminal reason for durable summaries", () => {
     const reasons = Object.values(Gstr2bArtifactDispatchFailureReason);
 

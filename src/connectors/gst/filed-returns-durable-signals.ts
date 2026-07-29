@@ -1,5 +1,6 @@
 import { FILED_RETURNS_MONTHS } from "./filed-returns-scope";
 import { ARTIFACT_FAILURE_MESSAGES } from "./artifact-source";
+import { isSafeDashboardSelectedValue } from "./dashboard-selected-signal-values";
 
 const MAX_DURABLE_SIGNAL_COUNT = 32;
 
@@ -193,7 +194,19 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "gstr1-artifact-state-invalid",
   "gstr2b-detail-heading",
   "gstr2b-detail-route",
+  "gstr2b-dashboard-period-select-found",
+  "gstr2b-dashboard-period-select-missing",
+  "gstr2b-dashboard-quarter-select-found",
+  "gstr2b-dashboard-quarter-select-missing",
+  "gstr2b-dashboard-root-found",
+  "gstr2b-dashboard-root-missing",
+  "gstr2b-dashboard-search-found",
+  "gstr2b-dashboard-search-missing",
   "gstr2b-dashboard-view-clicked",
+  "gstr2b-dashboard-view-unchanged-after-search",
+  "gstr2b-dashboard-view-unscoped",
+  "gstr2b-dashboard-year-select-found",
+  "gstr2b-dashboard-year-select-missing",
   "gstr2b-artifact-content-unavailable",
   "gstr2b-artifact-period-invalid",
   "gstr2b-artifact-response-missing",
@@ -201,6 +214,10 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "gstr2b-dialog-free-capture-unsupported",
   "gstr2b-download-clicked",
   "gstr2b-portal-blob-download-clicked",
+  "gstr2b-return-dashboard-filter-selection-in-progress",
+  "gstr2b-return-dashboard-filters-selected",
+  "gstr2b-return-dashboard-loading",
+  "gstr2b-return-dashboard-route",
   "gstr2b-return-dashboard-search-results-pending",
   "gstr3b-detail-heading",
   "gstr3b-detail-route",
@@ -444,6 +461,7 @@ export function isDurableFiledReturnsSignal(signal: string): boolean {
   ) {
     return true;
   }
+  if (isDurableGstr2bDashboardSelectionSignal(signal)) return true;
   const artifactSignal =
     /^filed-return-artifact-(?:clicked|downloaded|failed|unavailable|unconfirmed):(PDF|JSON|EXCEL)$/.exec(
       signal,
@@ -489,4 +507,15 @@ export function isDurableFiledReturnsSignal(signal: string): boolean {
     "full-fiscal-year-zip-phase:legacy-cleanup-pending",
     "pack-error:CONTENT_SCRIPT_UNAVAILABLE",
   ].includes(signal);
+}
+
+function isDurableGstr2bDashboardSelectionSignal(signal: string): boolean {
+  const year = /^gstr2b-dashboard-selected-year:([a-z0-9-]{1,40})$/.exec(signal)?.[1];
+  if (year) return isSafeDashboardSelectedValue("year", year);
+
+  const quarter = /^gstr2b-dashboard-selected-quarter:([a-z0-9-]{1,40})$/.exec(signal)?.[1];
+  if (quarter) return isSafeDashboardSelectedValue("quarter", quarter);
+
+  const period = /^gstr2b-dashboard-selected-period:([a-z0-9-]{1,40})$/.exec(signal)?.[1];
+  return Boolean(period && isSafeDashboardSelectedValue("period", period));
 }
