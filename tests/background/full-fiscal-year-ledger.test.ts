@@ -20,7 +20,7 @@ import {
   nextRunnableFullFiscalYearTarget,
   reconcileFullFiscalYearLedgerTargets,
 } from "../../src/background/filed-returns-full-fiscal-year-ledger";
-import { FULL_FISCAL_YEAR_PLAN_VERSION } from "../../src/background/filed-returns-full-fiscal-year-plan";
+import { FULL_FISCAL_YEAR_PLAN_VERSION } from "../../src/background/filed-returns-full-fiscal-year-validation";
 import { canonicalDurableTargetStatus } from "../../src/connectors/gst/filed-returns-durable-status";
 import {
   summariseFullFiscalYearLedger,

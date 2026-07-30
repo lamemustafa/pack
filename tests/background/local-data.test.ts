@@ -8,7 +8,7 @@ import type {
 import { acquireFiledReturnsRun } from "../../src/background/filed-returns-active-run";
 import { readCurrentFiledReturnsFlowSummary } from "../../src/background/filed-returns-current-state";
 import { clearPackLocalDataWithRecoveryGuard } from "../../src/background/local-data";
-import { FULL_FISCAL_YEAR_PLAN_VERSION } from "../../src/background/filed-returns-full-fiscal-year-plan";
+import { FULL_FISCAL_YEAR_PLAN_VERSION } from "../../src/background/filed-returns-full-fiscal-year-validation";
 import { canonicalDurableTargetStatus } from "../../src/connectors/gst/filed-returns-durable-status";
 
 const filedReturnsCurrentStateStorageKeys = {

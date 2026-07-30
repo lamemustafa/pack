@@ -18,7 +18,7 @@ import { createFiledReturnsLedgerId } from "../connectors/gst/filed-returns-ledg
 import { GST_CONNECTOR_DESCRIPTOR } from "../connectors/gst/constants";
 import { canonicalDurableTargetStatus } from "../connectors/gst/filed-returns-durable-status";
 import { PACK_PRODUCT_VERSION } from "../extension/version";
-import { durableFullFiscalYearArtifactSignals } from "./filed-returns-full-fiscal-year-artifacts";
+import { durableFullFiscalYearArtifactSignals } from "./filed-returns-full-fiscal-year-validation";
 import { mergeFiledReturnsDownloadDiagnosticState } from "./filed-returns-download-diagnostic-state";
 import {
   FULL_FISCAL_YEAR_PLAN_VERSION,
@@ -26,12 +26,12 @@ import {
   hasCanonicalFullFiscalYearTargetPlan,
   hasLegacyCanonicalFullFiscalYearTargetPrefix,
   isCanonicalFullFiscalYearPeriodPlan,
-} from "./filed-returns-full-fiscal-year-plan";
+} from "./filed-returns-full-fiscal-year-validation";
 export {
+  hasCanonicalFullFiscalYearTargetPlan,
   isFullFiscalYearLedger,
   recoverableFullFiscalYearLedgerId,
 } from "./filed-returns-full-fiscal-year-validation";
-export { hasCanonicalFullFiscalYearTargetPlan } from "./filed-returns-full-fiscal-year-plan";
 
 const ACTIVE_LEDGER_STALE_MS = 30_000;
 const POSITIVE_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([

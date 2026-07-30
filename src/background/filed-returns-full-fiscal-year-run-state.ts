@@ -18,12 +18,12 @@ import {
   activeFullFiscalYearStep,
   blockedFullFiscalYearStep,
   downloadUnconfirmedFullFiscalYearStep,
+  hasLegacyRetainedStaging,
   interruptedFullFiscalYearStep,
   needsResumeConfirmation,
   summariseFullFiscalYearLedger,
   toFullFiscalYearSummary,
 } from "./filed-returns-full-fiscal-year-summary";
-import { hasLegacyRetainedStaging } from "./filed-returns-full-fiscal-year-zip-phase";
 import { persistCanonicalFiledReturnsFlowSummary } from "./filed-returns-session-summary";
 
 export function hasTerminalPositiveTarget(ledger: FiledReturnsFullFiscalYearLedger): boolean {
