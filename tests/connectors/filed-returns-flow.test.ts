@@ -6740,7 +6740,7 @@ describe("filed returns guided flow", () => {
     expect(back).toHaveBeenCalledTimes(1);
   });
 
-  it("returns from a filed GSTR-1 summary when the requested period changes", async () => {
+  it("requires the Returns Dashboard when a mismatched GSTR-1 summary has no dashboard control", async () => {
     const documentRef = createGstDocument(
       `
         <main>
@@ -6766,21 +6766,22 @@ describe("filed returns guided flow", () => {
     });
 
     expect(result).toMatchObject({
-      state: "clicked",
-      safeSignals: [
-        "filed-gstr1-summary-period-mismatch",
+      state: "candidate-not-found",
+      safeSignals: expect.arrayContaining([
+        "filed-gstr1-scope-switch-navigation",
         "filed-return-detail-period:May",
-        "filed-gstr1-summary-back-clicked",
-      ],
+        "no-return-dashboard-candidate",
+      ]),
+      userAction: { type: "NAVIGATE_TO_SUPPORTED_PAGE", canResume: true },
     });
-    expect(back).toHaveBeenCalledTimes(1);
+    expect(back).not.toHaveBeenCalled();
   });
 
   it("prefers portal navigation over history when switching from a prior GSTR-1 summary", async () => {
     const documentRef = createGstDocument(
       `
         <main>
-          <a data-filed-returns>View Filed Returns</a>
+          <a data-return-dashboard href="/returns/auth/dashboard">Returns Dashboard</a>
           <h1>GSTR-1 Summary</h1>
           <div>Status - Filed</div>
           <div>Financial Year - 2025-26</div>
@@ -6794,9 +6795,10 @@ describe("filed returns guided flow", () => {
     const view = documentRef.defaultView;
     if (!view) throw new Error("Expected JSDOM window.");
     const back = vi.spyOn(view.history, "back").mockImplementation(() => undefined);
-    let filedReturnsClicked = 0;
-    documentRef.querySelector("[data-filed-returns]")?.addEventListener("click", () => {
-      filedReturnsClicked += 1;
+    let returnDashboardClicked = 0;
+    documentRef.querySelector("[data-return-dashboard]")?.addEventListener("click", (event) => {
+      event.preventDefault();
+      returnDashboardClicked += 1;
     });
 
     const result = await runFiledReturnsDownloadStep(documentRef, {
@@ -6810,11 +6812,11 @@ describe("filed returns guided flow", () => {
     expect(result.safeSignals).toEqual(
       expect.arrayContaining([
         "filed-gstr1-scope-switch-navigation",
-        "filed-returns-candidate-clicked",
+        "return-dashboard-candidate-clicked",
         "filed-return-detail-period:May",
       ]),
     );
-    expect(filedReturnsClicked).toBe(1);
+    expect(returnDashboardClicked).toBe(1);
     expect(back).not.toHaveBeenCalled();
   });
 
@@ -6822,7 +6824,7 @@ describe("filed returns guided flow", () => {
     const documentRef = createGstDocument(
       `
         <main>
-          <a data-filed-returns>View Filed Returns</a>
+          <a data-return-dashboard href="/returns/auth/dashboard">Returns Dashboard</a>
           <h1>GSTR-1</h1>
           <div>Status - Filed</div>
           <div>Financial Year - 2025-26</div>
@@ -6834,10 +6836,11 @@ describe("filed returns guided flow", () => {
       "https://return.gst.gov.in/returns/auth/gstr1",
     );
     makeLayoutVisible(documentRef);
-    let filedReturnsClicked = 0;
+    let returnDashboardClicked = 0;
     let backClicked = 0;
-    documentRef.querySelector("[data-filed-returns]")?.addEventListener("click", () => {
-      filedReturnsClicked += 1;
+    documentRef.querySelector("[data-return-dashboard]")?.addEventListener("click", (event) => {
+      event.preventDefault();
+      returnDashboardClicked += 1;
     });
     documentRef.querySelector("[data-back]")?.addEventListener("click", () => {
       backClicked += 1;
@@ -6854,10 +6857,10 @@ describe("filed returns guided flow", () => {
     expect(result.safeSignals).toEqual(
       expect.arrayContaining([
         "filed-gstr1-scope-switch-navigation",
-        "filed-returns-candidate-clicked",
+        "return-dashboard-candidate-clicked",
       ]),
     );
-    expect(filedReturnsClicked).toBe(1);
+    expect(returnDashboardClicked).toBe(1);
     expect(backClicked).toBe(0);
   });
 
