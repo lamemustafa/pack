@@ -59,7 +59,9 @@ describe("verifyFiledReturnsDownloadTarget", () => {
           "filed-return-download-target-mismatch",
         ]),
       );
-      expect(result?.safeSignals.join(" ")).not.toMatch(/synthetic taxpayer|synthetic traders/i);
+      expect(result?.safeSignals.join(" ")).not.toMatch(
+        /00XXXXX0000X0Z0|synthetic taxpayer|synthetic traders/i,
+      );
     },
   );
 
@@ -110,7 +112,7 @@ function gstr3bDetailPage(): Document {
       <main>
         <aside>GSTR-3B table</aside>
         <section aria-label="Filed return detail">
-          <p>GSTIN - 22AAAAA0000A1Z5</p>
+          <p>GSTIN - 00XXXXX0000X0Z0</p>
           <p>Legal Name - Synthetic Taxpayer Private Limited</p>
           <p>Trade Name - Synthetic Traders</p>
           <header>
