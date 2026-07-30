@@ -31,6 +31,10 @@ import {
   hasCanonicalFullFiscalYearTargetPlan,
 } from "./filed-returns-full-fiscal-year-ledger";
 import type { DownloadCreatedItem, SafeDownloadObservation } from "./download-observer";
+import {
+  SinglePeriodCleanupCheckpointError,
+  singlePeriodCleanupCheckpointFailureSignal,
+} from "../connectors/gst/single-period-cleanup-checkpoint";
 
 const USER_MEDIATED_ZIP_DOWNLOAD_WAIT_MS = 45 * 1000;
 
@@ -863,17 +867,25 @@ async function clearSinglePeriodExportStaging(
   }
   try {
     await onAfterStagingCleared?.(outcome);
-    if (!onAfterStagingCleared) throw new Error("cleanup callback missing");
+    if (!onAfterStagingCleared) {
+      throw new SinglePeriodCleanupCheckpointError("callback-missing");
+    }
     return {
       cleanupCheckpointVerified: true,
       opfsCleared: true,
       safeSignals: ["single-period-opfs-cleared", "single-period-cleanup-checkpoints-cleared"],
     };
-  } catch {
+  } catch (error) {
+    const stage =
+      error instanceof SinglePeriodCleanupCheckpointError ? error.stage : "callback-failed";
     return {
       cleanupCheckpointVerified: false,
       opfsCleared: true,
-      safeSignals: ["single-period-opfs-cleared", "single-period-cleanup-checkpoint-failed"],
+      safeSignals: [
+        "single-period-opfs-cleared",
+        "single-period-cleanup-checkpoint-failed",
+        singlePeriodCleanupCheckpointFailureSignal(stage),
+      ],
     };
   }
 }

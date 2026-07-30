@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type * as FilenameReassertionModule from "../../src/background/pack-download-filename-reassertion";
 import type { FiledReturnsFullFiscalYearLedger } from "../../src/connectors/gst/filed-returns-contracts";
+import {
+  SINGLE_PERIOD_CLEANUP_CHECKPOINT_FAILURE_STAGES,
+  SinglePeriodCleanupCheckpointError,
+  singlePeriodCleanupCheckpointFailureSignal,
+} from "../../src/connectors/gst/single-period-cleanup-checkpoint";
 
 const mocks = vi.hoisted(() => {
   const reservation = { bind: vi.fn(), release: vi.fn() };
@@ -164,6 +169,65 @@ describe("filed-return ZIP filename reassertion", () => {
         "single-period-opfs-retained",
       ]),
     });
+  });
+
+  it.each(SINGLE_PERIOD_CLEANUP_CHECKPOINT_FAILURE_STAGES)(
+    "identifies the %s cleanup checkpoint stage without exposing exception text",
+    async (stage) => {
+      const result = await exportSinglePeriodFiledReturnsZip({
+        completeStep: completeStep(),
+        entryPlan: { artifactTypes: ["PDF", "EXCEL", "JSON"], unavailableArtifactTypes: [] },
+        ledgerId: "single-period:12345678-test",
+        options: {
+          onAfterStagingCleared: vi.fn(async () => {
+            throw new SinglePeriodCleanupCheckpointError(stage);
+          }),
+          onBeforeDownloadStart: vi.fn(async () => undefined),
+          onDownloadStarted: vi.fn(async () => undefined),
+        },
+        scope: {
+          artifactType: "PDF_AND_EXCEL",
+          financialYear: "2026-27",
+          period: "April",
+          returnType: "GSTR-2B",
+        },
+      });
+
+      expect(result).toMatchObject({
+        state: "blocked",
+        safeSignals: expect.arrayContaining([
+          "single-period-cleanup-checkpoint-failed",
+          singlePeriodCleanupCheckpointFailureSignal(stage),
+        ]),
+      });
+      expect(result.safeMessage).not.toContain("SinglePeriodCleanupCheckpointError");
+    },
+  );
+
+  it("maps an untyped cleanup exception to the closed callback-failed stage", async () => {
+    const result = await exportSinglePeriodFiledReturnsZip({
+      completeStep: completeStep(),
+      entryPlan: { artifactTypes: ["PDF", "EXCEL", "JSON"], unavailableArtifactTypes: [] },
+      ledgerId: "single-period:12345678-test",
+      options: {
+        onAfterStagingCleared: vi.fn(async () => {
+          throw new Error("untrusted synthetic exception detail");
+        }),
+        onBeforeDownloadStart: vi.fn(async () => undefined),
+        onDownloadStarted: vi.fn(async () => undefined),
+      },
+      scope: {
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2026-27",
+        period: "April",
+        returnType: "GSTR-2B",
+      },
+    });
+
+    expect(result.safeSignals).toContain(
+      singlePeriodCleanupCheckpointFailureSignal("callback-failed"),
+    );
+    expect(result.safeMessage).not.toContain("untrusted synthetic exception detail");
   });
 
   it("emits the full-year transport signal when offscreen clear is unreachable", async () => {

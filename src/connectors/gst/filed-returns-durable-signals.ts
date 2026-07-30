@@ -1,6 +1,10 @@
 import { FILED_RETURNS_MONTHS } from "./filed-returns-scope";
 import { ARTIFACT_FAILURE_MESSAGES } from "./artifact-source";
 import { isSafeDashboardSelectedValue } from "./dashboard-selected-signal-values";
+import {
+  SINGLE_PERIOD_CLEANUP_CHECKPOINT_FAILURE_STAGES,
+  singlePeriodCleanupCheckpointFailureSignal,
+} from "./single-period-cleanup-checkpoint";
 
 const MAX_DURABLE_SIGNAL_COUNT = 32;
 
@@ -260,6 +264,9 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "single-period-bundle-state-persist-failed",
   "single-period-bundle-state-read-failed",
   "single-period-cleanup-checkpoint-failed",
+  ...SINGLE_PERIOD_CLEANUP_CHECKPOINT_FAILURE_STAGES.map(
+    singlePeriodCleanupCheckpointFailureSignal,
+  ),
   "single-period-cleanup-checkpoints-cleared",
   "single-period-opfs-cleanup-completed",
   "single-period-opfs-cleanup-required",

@@ -4,6 +4,7 @@ import type {
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
 import type { PackMessageResponse } from "../connectors/gst/messages";
+import { SinglePeriodCleanupCheckpointError } from "../connectors/gst/single-period-cleanup-checkpoint";
 import {
   concreteFiledReturnsArtifactTypes,
   normaliseFiledReturnsArtifactType,
@@ -402,16 +403,16 @@ export async function triggerSelectedArtifacts({
     options: {
       onAfterStagingCleared: async (outcome) => {
         if (!singlePeriodBundleLedger) {
-          throw new Error("single-period bundle cleanup checkpoint missing");
+          throw new SinglePeriodCleanupCheckpointError("bundle-missing");
         }
         let targetReview = await readFiledReturnsTargetReview(scope, zipCheckpointDeps);
         if (!canClearSinglePeriodBundleRecovery(singlePeriodBundleLedger, targetReview)) {
-          throw new Error("single-period bundle cleanup checkpoint mismatch");
+          throw new SinglePeriodCleanupCheckpointError("bundle-mismatch");
         }
         if (outcome === "downloaded") {
           const stagedFlowStep = singlePeriodBundleFlowStep(singlePeriodBundleLedger);
           if (!stagedFlowStep) {
-            throw new Error("single-period bundle completion evidence missing");
+            throw new SinglePeriodCleanupCheckpointError("completion-evidence-missing");
           }
           const completionStep: PortalFlowStepResult = {
             ...stagedFlowStep,
@@ -443,11 +444,11 @@ export async function triggerSelectedArtifacts({
             zipCheckpointDeps,
           );
           if (!completionCheckpoint) {
-            throw new Error("single-period ZIP completion checkpoint failed");
+            throw new SinglePeriodCleanupCheckpointError("completion-persist-failed");
           }
           targetReview = await readFiledReturnsTargetReview(scope, zipCheckpointDeps);
           if (!canClearSinglePeriodBundleRecovery(singlePeriodBundleLedger, targetReview)) {
-            throw new Error("single-period ZIP completion checkpoint mismatch");
+            throw new SinglePeriodCleanupCheckpointError("completion-mismatch");
           }
           if (completionStep.state === "downloaded") {
             const durableCompletion = await persistCanonicalSinglePeriodCompletion(
@@ -457,7 +458,7 @@ export async function triggerSelectedArtifacts({
               deps.now?.() ?? new Date(),
             );
             if (!durableCompletion) {
-              throw new Error("single-period ZIP canonical completion checkpoint failed");
+              throw new SinglePeriodCleanupCheckpointError("canonical-completion-persist-failed");
             }
           }
         }
@@ -466,7 +467,7 @@ export async function triggerSelectedArtifacts({
           singlePeriodBundleLedger.revision,
         );
         if (!bundleCleared) {
-          throw new Error("single-period bundle cleanup checkpoint failed");
+          throw new SinglePeriodCleanupCheckpointError("bundle-clear-failed");
         }
         if (targetReview) {
           const reviewCleared = await clearFiledReturnsTargetReview(
@@ -475,7 +476,7 @@ export async function triggerSelectedArtifacts({
             targetReview.revision ?? 1,
           );
           if (!reviewCleared) {
-            throw new Error("single-period ZIP target-review cleanup failed");
+            throw new SinglePeriodCleanupCheckpointError("target-review-clear-failed");
           }
         }
       },

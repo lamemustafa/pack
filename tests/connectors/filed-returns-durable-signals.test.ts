@@ -11,6 +11,10 @@ import {
   GSTR2B_ARTIFACT_DISPATCH_FAILURE_MESSAGES,
   Gstr2bArtifactDispatchFailureReason,
 } from "../../src/background/filed-returns-download-trigger";
+import {
+  SINGLE_PERIOD_CLEANUP_CHECKPOINT_FAILURE_STAGES,
+  singlePeriodCleanupCheckpointFailureSignal,
+} from "../../src/connectors/gst/single-period-cleanup-checkpoint";
 
 describe("filed-return durable signal contract", () => {
   it("accepts only bounded OPFS clear error categories", () => {
@@ -46,6 +50,17 @@ describe("filed-return durable signal contract", () => {
     expect(parseDurableFiledReturnsSignals(["filed-gstr1-visible-scope-mismatch"])).toEqual([
       "filed-gstr1-visible-scope-mismatch",
     ]);
+  });
+
+  it("accepts only the closed cleanup-checkpoint failure stages", () => {
+    for (const stage of SINGLE_PERIOD_CLEANUP_CHECKPOINT_FAILURE_STAGES) {
+      expect(isDurableFiledReturnsSignal(singlePeriodCleanupCheckpointFailureSignal(stage))).toBe(
+        true,
+      );
+    }
+    expect(
+      isDurableFiledReturnsSignal("single-period-cleanup-checkpoint-failed:private-value"),
+    ).toBe(false);
   });
 
   it("accepts the bounded signals emitted by detail, download, and summary-dialog classifiers", () => {
