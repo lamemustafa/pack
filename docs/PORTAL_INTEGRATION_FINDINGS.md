@@ -59,13 +59,13 @@ This log records live diagnostic findings that constrain Pack's local, target-bo
     control below is reachable by `a, button, [role='button']`, so selector breadth is not the
     constraint; label shape is.
 
-    | Page                                | Control `textContent`                      | `ng-click` |
-    | ----------------------------------- | ------------------------------------------ | ---------- |
-    | `/returns/auth/gstr1/gstr1sum`      | `DOWNLOAD SUMMARY (PDF) DOWNLOAD (PDF)`    | yes        |
-    | `/returns/auth/gstr1`               | `DOWNLOAD DETAILS FROM E-INVOICES (EXCEL)` | yes        |
-    | `/gstr2b/auth/gstr2b/summary`       | `DOWNLOAD GSTR-2B SUMMARY (PDF)`           | no         |
-    | `/gstr2b/auth/gstr2b/summary`       | `DOWNLOAD GSTR-2B DETAILS (EXCEL)`         | no         |
-    | `/returns/auth/gstr3b`              | `Download Filed GSTR-3B`                   | yes        |
+    | Page                           | Control `textContent`                      | `ng-click` |
+    | ------------------------------ | ------------------------------------------ | ---------- |
+    | `/returns/auth/gstr1/gstr1sum` | `DOWNLOAD SUMMARY (PDF) DOWNLOAD (PDF)`    | yes        |
+    | `/returns/auth/gstr1`          | `DOWNLOAD DETAILS FROM E-INVOICES (EXCEL)` | yes        |
+    | `/gstr2b/auth/gstr2b/summary`  | `DOWNLOAD GSTR-2B SUMMARY (PDF)`           | no         |
+    | `/gstr2b/auth/gstr2b/summary`  | `DOWNLOAD GSTR-2B DETAILS (EXCEL)`         | no         |
+    | `/returns/auth/gstr3b`         | `Download Filed GSTR-3B`                   | yes        |
 
     The GSTR-1 summary PDF control is a single `<button>` carrying two responsive labels, only one
     of which is visible at a time, so its `textContent` is their concatenation. Exact-equality
