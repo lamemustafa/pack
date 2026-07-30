@@ -41,8 +41,16 @@ named functions — `getClickableElements`, `activateElement`, `isVisible`, and 
 `filed-returns-flow-runner-utils.ts`) `delay` — with differing implementations, while
 `navigation-dom.ts` imports from `dom.ts`, so the split is deliberate rather than accidental.
 
-This is the root cause of the control-resolution defect fixed on 2026-07-30: `artifact-source.ts`
-used the narrowest of the thirteen variants and could not see the GSTR-1 control.
+Correction to an earlier draft of this section: the GSTR-1 control-resolution defect of 2026-07-30
+was **not** caused by selector narrowness. Finding 18 records that every captured control is
+reachable by `a, button, [role='button']`, and the live enumeration reported
+`reachableByNarrowSelector: true` for all of them. That defect was caused by exact-equality label
+matching against a button whose `textContent` concatenates two responsive labels.
+
+The divergence is still worth removing on its own merits — thirteen definitions that disagree about
+which elements are clickable is a standing hazard, and two of them export identically named
+functions with different behaviour — but it is a latent risk being retired, not the diagnosed cause
+of a shipped defect.
 
 This fix reduces defects more than lines. Some sites are legitimately different —
 `filed-returns-portal-availability.ts` tests page structure, not clickability — so consolidate to
