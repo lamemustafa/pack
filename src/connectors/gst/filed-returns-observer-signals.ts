@@ -1,4 +1,5 @@
 import { filedReturnScopedSignal } from "./filed-returns-return-descriptors";
+import type { FiledReturnsReturnType } from "./filed-returns-return-types";
 import type { FiledReturnsObservationHints } from "./filed-returns-observer-types";
 
 export function detectSafeSignals(text: string, hints: FiledReturnsObservationHints): string[] {
@@ -36,6 +37,15 @@ export function detectSafeSignals(text: string, hints: FiledReturnsObservationHi
   if (/\bdownload\b/.test(text)) signals.push("download");
   if (/\bpdf\b/.test(text)) signals.push("pdf");
   return Array.from(new Set(signals));
+}
+
+export function detectFiledReturnRouteType(
+  hints: FiledReturnsObservationHints,
+): FiledReturnsReturnType | null {
+  if (isGstr3bDetailRoute(hints)) return "GSTR-3B";
+  if (isGstr1DetailRoute(hints) || isGstr1SummaryRoute(hints)) return "GSTR-1";
+  if (isGstr2bSummaryRoute(hints)) return "GSTR-2B";
+  return null;
 }
 
 function addReturnTextSignals(text: string, signals: string[]): void {

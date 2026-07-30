@@ -36,9 +36,12 @@ import { reconcileArtifactAcquisitionCheckpoint } from "./artifact-acquisition-s
 import {
   explainIncompleteGstr1PeriodMismatchRecovery,
   pendingGstr1PeriodMismatchRecoveryStep,
+  stopNonConvergingReturnTypeMismatchRecovery,
   stopNonConvergingGstr1PeriodMismatchRecovery,
+  updateReturnTypeMismatchRecovery,
   updateGstr1PeriodMismatchRecovery,
   type Gstr1PeriodMismatchRecovery,
+  type ReturnTypeMismatchRecovery,
 } from "./filed-returns-gstr1-period-mismatch-recovery";
 
 const MAIN_WORLD_FILTER_SEARCH_SETTLE_MS = 1_000;
@@ -218,6 +221,7 @@ async function runSinglePeriodSteps(
   let activeFinancialYear: string | null = null;
   let mainWorldFilterAttempted = false;
   let mismatchRecovery: Gstr1PeriodMismatchRecovery | null = null;
+  let returnTypeMismatchRecovery: ReturnTypeMismatchRecovery | null = null;
   for (let attempt = 0; attempt < maxFlowStepsFor(scope); attempt += 1) {
     const response = await runScopedDownloadStepWithRetry(deps, tabId, scope);
     if (!response.ok || !("flowStep" in response)) {
@@ -242,6 +246,24 @@ async function runSinglePeriodSteps(
         shouldPersistSinglePeriodSummary,
       );
     }
+    returnTypeMismatchRecovery = updateReturnTypeMismatchRecovery(
+      returnTypeMismatchRecovery,
+      scope,
+      lastStep,
+    );
+    const returnTypeMismatchRecoveryStop = stopNonConvergingReturnTypeMismatchRecovery(
+      scope,
+      response,
+      returnTypeMismatchRecovery,
+    );
+    if (returnTypeMismatchRecoveryStop) {
+      return withPersistedSinglePeriodSummary(
+        scope,
+        returnTypeMismatchRecoveryStop,
+        deps,
+        shouldPersistSinglePeriodSummary,
+      );
+    }
 
     if (lastStep.safeSignals.includes("filed-return-api-result-posted")) {
       return waitForDetailReadyThenTrigger({
@@ -249,6 +271,7 @@ async function runSinglePeriodSteps(
         activeFinancialYear,
         deps,
         mismatchRecovery,
+        returnTypeMismatchRecovery,
         shouldPersistSinglePeriodSummary,
         scope,
         tabId,
@@ -266,6 +289,7 @@ async function runSinglePeriodSteps(
           activeFinancialYear,
           deps,
           mismatchRecovery,
+          returnTypeMismatchRecovery,
           shouldPersistSinglePeriodSummary,
           scope,
           tabId,
@@ -388,6 +412,7 @@ async function waitForDetailReadyThenTrigger({
   activeFinancialYear,
   deps,
   mismatchRecovery: initialMismatchRecovery,
+  returnTypeMismatchRecovery: initialReturnTypeMismatchRecovery,
   shouldPersistSinglePeriodSummary,
   scope,
   tabId,
@@ -396,12 +421,14 @@ async function waitForDetailReadyThenTrigger({
   activeFinancialYear: string | null;
   deps: FiledReturnsFlowRunnerDeps;
   mismatchRecovery: Gstr1PeriodMismatchRecovery | null;
+  returnTypeMismatchRecovery: ReturnTypeMismatchRecovery | null;
   shouldPersistSinglePeriodSummary: boolean;
   scope: FiledReturnsDownloadScope;
   tabId: number;
 }): Promise<PackMessageResponse> {
   let lastStep: PortalFlowStepResult | null = null;
   let mismatchRecovery = initialMismatchRecovery;
+  let returnTypeMismatchRecovery = initialReturnTypeMismatchRecovery;
 
   for (let attempt = 0; attempt < maxFlowStepsFor(scope); attempt += 1) {
     const response = await runScopedDownloadStepWithRetry(deps, tabId, scope);
@@ -423,6 +450,24 @@ async function waitForDetailReadyThenTrigger({
       return withPersistedSinglePeriodSummary(
         scope,
         mismatchRecoveryStop,
+        deps,
+        shouldPersistSinglePeriodSummary,
+      );
+    }
+    returnTypeMismatchRecovery = updateReturnTypeMismatchRecovery(
+      returnTypeMismatchRecovery,
+      scope,
+      lastStep,
+    );
+    const returnTypeMismatchRecoveryStop = stopNonConvergingReturnTypeMismatchRecovery(
+      scope,
+      response,
+      returnTypeMismatchRecovery,
+    );
+    if (returnTypeMismatchRecoveryStop) {
+      return withPersistedSinglePeriodSummary(
+        scope,
+        returnTypeMismatchRecoveryStop,
         deps,
         shouldPersistSinglePeriodSummary,
       );

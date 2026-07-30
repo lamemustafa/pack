@@ -1,4 +1,5 @@
 import { FILED_RETURNS_MONTHS } from "./filed-returns-scope";
+import type { FiledReturnsReturnType } from "./filed-returns-return-types";
 import { ARTIFACT_FAILURE_MESSAGES } from "./artifact-source";
 import { isSafeDashboardSelectedValue } from "./dashboard-selected-signal-values";
 import {
@@ -10,6 +11,13 @@ const MAX_DURABLE_SIGNAL_COUNT = 32;
 
 export const GSTR1_PERIOD_MISMATCH_RECOVERY_STOPPED_SIGNAL =
   "filed-gstr1-period-mismatch-recovery-stopped";
+export const RETURN_TYPE_MISMATCH_RECOVERY_STOPPED_SIGNAL =
+  "filed-return-type-mismatch-recovery-stopped";
+export const FILED_RETURN_ROUTE_MISMATCH_SIGNALS = {
+  "GSTR-1": "gstr1-route-mismatched-return",
+  "GSTR-2B": "gstr2b-summary-route-mismatched-return",
+  "GSTR-3B": "gstr3b-route-mismatched-return",
+} as const satisfies Record<FiledReturnsReturnType, string>;
 
 const EXACT_DURABLE_SIGNALS = new Set([
   "browser-download-completed",
@@ -111,6 +119,8 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "filed-return-results-visible",
   "filed-return-search-results-pending",
   "filed-return-search-results-unchanged",
+  RETURN_TYPE_MISMATCH_RECOVERY_STOPPED_SIGNAL,
+  ...Object.values(FILED_RETURN_ROUTE_MISMATCH_SIGNALS),
   "filed-returns-candidate-clicked",
   "filed-returns-download-attempt-clear-failed",
   "filed-returns-download-id-not-found",

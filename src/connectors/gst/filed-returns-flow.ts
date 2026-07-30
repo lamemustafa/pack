@@ -14,11 +14,11 @@ import { openFiledReturnFromApiSearch } from "./filed-returns-api-search";
 import { selectFiledReturnsFiltersAndSearch } from "./filed-returns-filter-form";
 import { detectPositiveNotFiledEvidence } from "./filed-returns-not-filed-evidence";
 import { observeFiledReturnsPageText } from "./filed-returns-observer";
+import { returnFromMismatchedReturnPage } from "./filed-returns-return-type-navigation";
 import {
   clickFiledGstr1SummaryForPdf,
   clickFiledReturnDetailBack,
   filedReturnDetailIdentityMatchesScope,
-  isGstr2bSummaryRoute,
   returnFromFiledGstr1SummaryForExcel,
   returnFromMismatchedFiledGstr1Page,
   shouldReturnFromMismatchedDetail,
@@ -52,7 +52,6 @@ export async function runFiledReturnsDownloadStep(
 ): Promise<PortalFlowStepResult> {
   if (scope.returnType === "GSTR-2B") return runGstr2bDownloadStep(documentRef, scope);
 
-  const descriptor = filedReturnDescriptor(scope.returnType);
   const scopeId = filedReturnScopeId(scope.returnType);
   const portalAvailabilityIssue = detectFiledReturnsPortalAvailabilityIssue(documentRef, scopeId);
   if (portalAvailabilityIssue) {
@@ -60,30 +59,17 @@ export async function runFiledReturnsDownloadStep(
     return portalAvailabilityIssue;
   }
 
+  const mismatchedReturnNavigation = returnFromMismatchedReturnPage(documentRef, scope);
+  if (mismatchedReturnNavigation) return mismatchedReturnNavigation;
+
+  const descriptor = filedReturnDescriptor(scope.returnType);
+
   if (scope.returnType === "GSTR-3B" && isReturnsOrigin(documentRef)) {
     const detailIdentity = extractFiledReturnsDetailIdentity(documentRef, scope.returnType);
     if (!filedReturnDetailIdentityMatchesScope(detailIdentity, scope)) {
       const apiSearchResult = await openFiledReturnFromApiSearch(documentRef, scope, scopeId);
       if (apiSearchResult) return apiSearchResult;
     }
-  }
-
-  if (isGstr2bSummaryRoute(documentRef)) {
-    clearFiledReturnsSearchAttempt(documentRef);
-    const navigation = await navigateToFiledReturnsPage(documentRef);
-    return withOptionalUserAction(
-      {
-        connectorId: "gst",
-        scopeId,
-        state: navigation.state,
-        safeSignals: ["gstr2b-summary-route-mismatched-return", ...navigation.safeSignals],
-        safeMessage:
-          navigation.state === "clicked"
-            ? `Pack left the GSTR-2B summary page to find the filed ${descriptor.label} return.`
-            : navigation.safeMessage,
-      },
-      navigation.userAction,
-    );
   }
 
   if (scope.returnType === "GSTR-1" && isReturnDashboardRoute(documentRef)) {

@@ -6,6 +6,7 @@ import {
 } from "./filed-returns-dialogs";
 import { navigateToReturnDashboardPage } from "./filed-returns-navigator";
 import { detectFiledReturnsPortalAvailabilityIssue } from "./filed-returns-portal-availability";
+import { returnFromMismatchedReturnPage } from "./filed-returns-return-type-navigation";
 import { findMatchingActionableFiledReturnRows } from "./filed-returns-result-rows";
 import { filedReturnScopeId } from "./filed-returns-return-descriptors";
 import { selectFiledReturnsFiltersAndSearch } from "./filed-returns-filter-form";
@@ -71,6 +72,13 @@ export async function runGstr2bDownloadStep(
       },
     };
   }
+
+  const mismatchedReturnNavigation = returnFromMismatchedReturnPage(
+    documentRef,
+    scope,
+    safeSignals,
+  );
+  if (mismatchedReturnNavigation) return mismatchedReturnNavigation;
 
   if (isGstr2bSummaryPage(documentRef, normalised)) {
     const periodGuard = verifyVisibleGstr2bPeriod(documentRef, normalised, scope);

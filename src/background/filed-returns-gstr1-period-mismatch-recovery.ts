@@ -3,7 +3,9 @@ import type {
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
 import {
+  FILED_RETURN_ROUTE_MISMATCH_SIGNALS,
   GSTR1_PERIOD_MISMATCH_RECOVERY_STOPPED_SIGNAL,
+  RETURN_TYPE_MISMATCH_RECOVERY_STOPPED_SIGNAL,
   isDurableFiledReturnsSignal,
 } from "../connectors/gst/filed-returns-durable-signals";
 import {
@@ -11,6 +13,7 @@ import {
   incompleteGstr1PeriodMismatchRecoveryMessage,
 } from "../connectors/gst/filed-returns-durable-status";
 import { FILED_RETURNS_MONTHS } from "../connectors/gst/filed-returns-scope";
+import type { FiledReturnsReturnType } from "../connectors/gst/filed-returns-return-types";
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import { extractActivePeriod } from "./filed-returns-flow-runner-utils";
 
@@ -20,6 +23,12 @@ const MISMATCH_RECOVERY_SIGNALS = new Set([
   "filed-gstr1-scope-switch-navigation",
   "filed-gstr1-summary-period-mismatch",
 ]);
+const RETURN_TYPE_MISMATCH_SIGNALS = new Map<string, FiledReturnsReturnType>(
+  Object.entries(FILED_RETURN_ROUTE_MISMATCH_SIGNALS).map(([returnType, signal]) => [
+    signal,
+    returnType as FiledReturnsReturnType,
+  ]),
+);
 
 export const MAX_GSTR1_PERIOD_MISMATCH_RECOVERY_ATTEMPTS = 1;
 
@@ -27,6 +36,60 @@ export interface Gstr1PeriodMismatchRecovery {
   attempts: number;
   safeSignals: string[];
   visiblePeriod: string;
+}
+
+export interface ReturnTypeMismatchRecovery {
+  attempts: number;
+  safeSignals: string[];
+  visibleReturnType: FiledReturnsReturnType;
+}
+
+export function updateReturnTypeMismatchRecovery(
+  current: ReturnTypeMismatchRecovery | null,
+  scope: FiledReturnsDownloadScope,
+  step: PortalFlowStepResult,
+): ReturnTypeMismatchRecovery | null {
+  const mismatchSignal = step.safeSignals.find((signal) =>
+    RETURN_TYPE_MISMATCH_SIGNALS.has(signal),
+  );
+  if (!mismatchSignal) return current;
+  const visibleReturnType = RETURN_TYPE_MISMATCH_SIGNALS.get(mismatchSignal);
+  if (!visibleReturnType || visibleReturnType === scope.returnType) return current;
+
+  return {
+    attempts: (current?.attempts ?? 0) + 1,
+    safeSignals: uniqueSignals(current?.safeSignals ?? [], [mismatchSignal]),
+    visibleReturnType,
+  };
+}
+
+export function stopNonConvergingReturnTypeMismatchRecovery(
+  scope: FiledReturnsDownloadScope,
+  response: FlowStepResponse,
+  recovery: ReturnTypeMismatchRecovery | null,
+): FlowStepResponse | null {
+  if (!recovery || recovery.attempts <= MAX_GSTR1_PERIOD_MISMATCH_RECOVERY_ATTEMPTS) return null;
+  if (hasHigherPriorityPortalAction(response.flowStep)) return null;
+
+  const instruction = `Open the requested ${scope.returnType} return page in the GST Portal, then start Pack again.`;
+  return {
+    ...response,
+    flowStep: {
+      ...response.flowStep,
+      state: "user-action-required",
+      safeSignals: uniqueSignals(
+        recovery.safeSignals,
+        [RETURN_TYPE_MISMATCH_RECOVERY_STOPPED_SIGNAL],
+        response.flowStep.safeSignals.filter(isDurableFiledReturnsSignal),
+      ).slice(0, 32),
+      safeMessage: `Pack remained on a filed ${recovery.visibleReturnType} page after one bounded navigation attempt, while the requested return is ${scope.returnType}. ${instruction}`,
+      userAction: {
+        type: "NAVIGATE_TO_SUPPORTED_PAGE",
+        message: instruction,
+        canResume: true,
+      },
+    },
+  };
 }
 
 export function updateGstr1PeriodMismatchRecovery(
