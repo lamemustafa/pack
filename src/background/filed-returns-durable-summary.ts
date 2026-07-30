@@ -14,7 +14,9 @@ import {
 import { isCanonicalFullFiscalYearLedgerId } from "../connectors/gst/filed-returns-ledger-id";
 import {
   canonicalDurableSummaryMessage,
+  gstr1PeriodMismatchRecoveryUserAction,
   parseDurableFiledReturnsScope,
+  visibleGstr1MismatchPeriod,
 } from "../connectors/gst/filed-returns-durable-status";
 import { parseDurableFiledReturnsSignals } from "../connectors/gst/filed-returns-durable-signals";
 import {
@@ -196,8 +198,16 @@ function parseDurableFlowStep(
   if (typeof step.safeMessage !== "string" || step.safeMessage.length > 500) return null;
   const safeSignals = parseDurableFiledReturnsSignals(step.safeSignals);
   if (!safeSignals) return null;
-  const userAction = parseUserAction(step.userAction);
-  if (step.userAction !== undefined && !userAction) return null;
+  const parsedUserAction = parseUserAction(step.userAction);
+  if (step.userAction !== undefined && !parsedUserAction) return null;
+  const userAction = shouldUseGstr1MismatchRecoveryAction(
+    scope,
+    summaryStatus,
+    safeSignals,
+    parsedUserAction,
+  )
+    ? gstr1PeriodMismatchRecoveryUserAction(scope)
+    : parsedUserAction;
   const diagnosticScope =
     scope.period === FULL_FISCAL_YEAR_PERIOD && currentPeriod
       ? { ...scope, period: currentPeriod }
@@ -212,6 +222,20 @@ function parseDurableFlowStep(
     ...(userAction ? { userAction } : {}),
     ...copyFiledReturnsDownloadDiagnosticState(step),
   };
+}
+
+function shouldUseGstr1MismatchRecoveryAction(
+  scope: FiledReturnsDownloadScope,
+  summaryStatus: FiledReturnsFlowSummary["status"],
+  safeSignals: readonly string[],
+  action: UserActionRequired | null,
+): boolean {
+  if (!visibleGstr1MismatchPeriod(scope, summaryStatus, safeSignals)) return false;
+  if (!action || action.type === "NAVIGATE_TO_SUPPORTED_PAGE") return true;
+  return (
+    action.type === "WAIT_FOR_PORTAL_AVAILABILITY" &&
+    safeSignals.includes("flow-step-limit-reached")
+  );
 }
 
 function parseRecovery(

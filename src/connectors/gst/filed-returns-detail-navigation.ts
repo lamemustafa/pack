@@ -6,7 +6,7 @@ import {
   normaliseText,
 } from "./filed-returns-dom";
 import type { extractFiledReturnsDetailIdentity } from "./filed-returns-detail-identity";
-import { navigateToFiledReturnsPage } from "./filed-returns-navigator";
+import { navigateToReturnDashboardPage } from "./filed-returns-navigator";
 import { filedReturnDescriptor, filedReturnScopeId } from "./filed-returns-return-descriptors";
 
 export function shouldReturnFromMismatchedDetail(
@@ -37,27 +37,19 @@ export async function returnFromMismatchedFiledGstr1Page(
   if (scope.returnType !== "GSTR-1") return null;
   if (!shouldReturnFromMismatchedDetail(detailIdentity, scope)) return null;
 
-  const navigation = await navigateToFiledReturnsPage(documentRef);
-  if (navigation.state !== "candidate-not-found") {
-    return {
-      ...navigation,
-      scopeId: filedReturnScopeId("GSTR-1"),
-      safeSignals: [
-        "filed-gstr1-scope-switch-navigation",
-        ...detailPeriodSignal(detailIdentity.period),
-        ...navigation.safeSignals,
-      ],
-      safeMessage:
-        navigation.state === "clicked"
-          ? gstr1PeriodMismatchMessage(scope, detailIdentity.period, "Pack is selecting it now.")
-          : navigation.safeMessage,
-    };
-  }
-
-  return (
-    returnFromMismatchedFiledGstr1Summary(documentRef, scope, detailIdentity) ??
-    clickFiledReturnDetailBack(documentRef, scope)
-  );
+  const navigation = await navigateToReturnDashboardPage(documentRef, filedReturnScopeId("GSTR-1"));
+  return {
+    ...navigation,
+    safeSignals: [
+      "filed-gstr1-scope-switch-navigation",
+      ...detailPeriodSignal(detailIdentity.period),
+      ...navigation.safeSignals,
+    ],
+    safeMessage:
+      navigation.state === "clicked"
+        ? gstr1PeriodMismatchMessage(scope, detailIdentity.period, "Pack is selecting it now.")
+        : navigation.safeMessage,
+  };
 }
 
 export function clickFiledReturnDetailBack(
@@ -147,52 +139,6 @@ export function waitForFiledGstr1ExcelControl(
     safeSignals: ["filed-gstr1-target-bound-detail", "filed-gstr1-excel-control-pending"],
     safeMessage:
       "Pack verified the filed GSTR-1 period and is waiting for its e-invoice details Excel control.",
-  };
-}
-
-export function returnFromMismatchedFiledGstr1Summary(
-  documentRef: Document,
-  scope: FiledReturnsDownloadScope,
-  detailIdentity: ReturnType<typeof extractFiledReturnsDetailIdentity>,
-): PortalFlowStepResult | null {
-  if (scope.returnType !== "GSTR-1") return null;
-  if (!isGstr1SummaryRoute(documentRef)) return null;
-  if (!shouldReturnFromMismatchedDetail(detailIdentity, scope)) return null;
-
-  const view = documentRef.defaultView;
-  if (!view) {
-    return {
-      connectorId: "gst",
-      scopeId: filedReturnScopeId("GSTR-1"),
-      state: "user-action-required",
-      safeSignals: [
-        "filed-gstr1-summary-period-mismatch",
-        ...detailPeriodSignal(detailIdentity.period),
-        "filed-gstr1-summary-back-unavailable",
-      ],
-      safeMessage: gstr1PeriodMismatchMessage(
-        scope,
-        detailIdentity.period,
-        "Pack could not return to the prior portal page.",
-      ),
-    };
-  }
-
-  view.history.back();
-  return {
-    connectorId: "gst",
-    scopeId: filedReturnScopeId("GSTR-1"),
-    state: "clicked",
-    safeSignals: [
-      "filed-gstr1-summary-period-mismatch",
-      ...detailPeriodSignal(detailIdentity.period),
-      "filed-gstr1-summary-back-clicked",
-    ],
-    safeMessage: gstr1PeriodMismatchMessage(
-      scope,
-      detailIdentity.period,
-      "Pack returned to the prior portal page and is selecting it now.",
-    ),
   };
 }
 

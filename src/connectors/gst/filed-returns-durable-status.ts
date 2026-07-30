@@ -1,3 +1,4 @@
+import type { UserActionRequired } from "../../core/contracts";
 import type {
   FiledReturnsDownloadScope,
   FiledReturnsFlowSummary,
@@ -92,7 +93,21 @@ export function incompleteGstr1PeriodMismatchRecoveryMessage(
   scope: FiledReturnsDownloadScope,
   visiblePeriod: string,
 ): string {
-  return `Pack found a filed GSTR-1 page showing ${visiblePeriod}, but could not reach the requested ${scope.period} period. Open the GST Returns Dashboard for ${scope.period}, then start Pack again.`;
+  return `Pack found a filed GSTR-1 page showing ${visiblePeriod}, but could not reach the requested ${scope.period} period. ${gstr1PeriodMismatchRecoveryInstruction(scope)}`;
+}
+
+export function gstr1PeriodMismatchRecoveryInstruction(scope: FiledReturnsDownloadScope): string {
+  return `Open the GST Returns Dashboard for ${scope.period}, then start Pack again.`;
+}
+
+export function gstr1PeriodMismatchRecoveryUserAction(
+  scope: FiledReturnsDownloadScope,
+): UserActionRequired {
+  return {
+    type: "NAVIGATE_TO_SUPPORTED_PAGE",
+    message: gstr1PeriodMismatchRecoveryInstruction(scope),
+    canResume: true,
+  };
 }
 
 export function hasConfirmedSinglePeriodZipDownloadEvidence(signals: readonly string[]): boolean {
@@ -173,7 +188,7 @@ function messageKeyForTarget(
   return "target-review";
 }
 
-function visibleGstr1MismatchPeriod(
+export function visibleGstr1MismatchPeriod(
   scope: FiledReturnsDownloadScope,
   status: FiledReturnsFlowSummary["status"],
   signals: readonly string[],

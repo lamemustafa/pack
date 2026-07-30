@@ -8,6 +8,9 @@ import {
 
 const MAX_DURABLE_SIGNAL_COUNT = 32;
 
+export const GSTR1_PERIOD_MISMATCH_RECOVERY_STOPPED_SIGNAL =
+  "filed-gstr1-period-mismatch-recovery-stopped";
+
 const EXACT_DURABLE_SIGNALS = new Set([
   "browser-download-completed",
   "browser-download-correlation-rejected",
@@ -52,6 +55,7 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "filed-gstr1-download-trigger-ambiguous",
   "filed-gstr1-excel-control-pending",
   "filed-gstr1-excel-no-details-available",
+  GSTR1_PERIOD_MISMATCH_RECOVERY_STOPPED_SIGNAL,
   "filed-gstr1-result-view-auto-attempt-failed",
   "filed-gstr1-result-view-auto-clicked",
   "filed-gstr1-result-view-navigation-pending",

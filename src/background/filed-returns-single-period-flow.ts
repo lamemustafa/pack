@@ -36,6 +36,7 @@ import { reconcileArtifactAcquisitionCheckpoint } from "./artifact-acquisition-s
 import {
   explainIncompleteGstr1PeriodMismatchRecovery,
   pendingGstr1PeriodMismatchRecoveryStep,
+  stopNonConvergingGstr1PeriodMismatchRecovery,
   updateGstr1PeriodMismatchRecovery,
   type Gstr1PeriodMismatchRecovery,
 } from "./filed-returns-gstr1-period-mismatch-recovery";
@@ -228,6 +229,19 @@ async function runSinglePeriodSteps(
     activePeriod = extractActivePeriod(lastStep) ?? activePeriod;
     activeFinancialYear = extractActiveFinancialYear(lastStep) ?? activeFinancialYear;
     mismatchRecovery = updateGstr1PeriodMismatchRecovery(mismatchRecovery, scope, lastStep);
+    const mismatchRecoveryStop = stopNonConvergingGstr1PeriodMismatchRecovery(
+      scope,
+      response,
+      mismatchRecovery,
+    );
+    if (mismatchRecoveryStop) {
+      return withPersistedSinglePeriodSummary(
+        scope,
+        mismatchRecoveryStop,
+        deps,
+        shouldPersistSinglePeriodSummary,
+      );
+    }
 
     if (lastStep.safeSignals.includes("filed-return-api-result-posted")) {
       return waitForDetailReadyThenTrigger({
@@ -400,6 +414,19 @@ async function waitForDetailReadyThenTrigger({
     activePeriod = extractActivePeriod(lastStep) ?? activePeriod;
     activeFinancialYear = extractActiveFinancialYear(lastStep) ?? activeFinancialYear;
     mismatchRecovery = updateGstr1PeriodMismatchRecovery(mismatchRecovery, scope, lastStep);
+    const mismatchRecoveryStop = stopNonConvergingGstr1PeriodMismatchRecovery(
+      scope,
+      response,
+      mismatchRecovery,
+    );
+    if (mismatchRecoveryStop) {
+      return withPersistedSinglePeriodSummary(
+        scope,
+        mismatchRecoveryStop,
+        deps,
+        shouldPersistSinglePeriodSummary,
+      );
+    }
 
     if (isFiledReturnDownloadReady(lastStep, scope)) {
       return triggerSinglePeriodDownloadAndPersistSummary({
