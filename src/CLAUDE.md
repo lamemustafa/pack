@@ -30,8 +30,8 @@ portal: filed-return contracts and validators (`filed-returns-contracts.ts`,
 `offscreen-blob-url.ts`), artifact-byte validation
 (`filed-return-artifact-bytes.ts`), host allowlisting (`hosts.ts`), DOM scraping/observation
 (`filed-returns-dom.ts`, `filed-returns-observer.ts`), portal navigation and
-download triggering (`filed-returns-navigator.ts`,
-`filed-returns-download.ts`), filter/
+download validation (`filed-returns-navigator.ts`,
+`filed-returns-download-{candidates,target}.ts`), filter/
 search state (`filed-returns-filter-*.ts`, `filed-returns-search-state.ts`),
 and the flow/planner glue (`filed-returns-flow.ts`, `planner.ts`). If you're
 touching selectors, GST URL shapes, or portal copy, it belongs here — not in
