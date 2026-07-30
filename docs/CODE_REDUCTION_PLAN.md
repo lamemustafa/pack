@@ -12,12 +12,12 @@ Four modules have no production importer. Verified by import-graph scan plus man
 apparent hits on `filed-returns-download` were prefix collisions with `-download-trigger` and
 `-download-diagnostic-state`.
 
-| Lines | Module | Referenced by |
-| ----- | ------ | ------------- |
-| 215 | `src/connectors/gst/filed-returns-download.ts` | 2 test files only |
-| 177 | `src/background/filed-returns-single-artifact-download-completion.ts` | nothing |
-| 90 | `src/connectors/gst/request-shape-observer.ts` | 1 test file only |
-| 15 | `src/background/async-timeout.ts` | nothing |
+| Lines | Module                                                                | Referenced by     |
+| ----- | --------------------------------------------------------------------- | ----------------- |
+| 215   | `src/connectors/gst/filed-returns-download.ts`                        | 2 test files only |
+| 177   | `src/background/filed-returns-single-artifact-download-completion.ts` | nothing           |
+| 90    | `src/connectors/gst/request-shape-observer.ts`                        | 1 test file only  |
+| 15    | `src/background/async-timeout.ts`                                     | nothing           |
 
 **497 src lines** plus their test files. `src/extension/manifest-policy.ts` also reports zero src
 importers but is consumed by `wxt.config.ts`; it is alive.
@@ -46,7 +46,7 @@ used the narrowest of the thirteen variants and could not see the GSTR-1 control
 
 This fix reduces defects more than lines. Some sites are legitimately different —
 `filed-returns-portal-availability.ts` tests page structure, not clickability — so consolidate to
-one canonical clickable set plus a small number of *named, justified* variants, and make every
+one canonical clickable set plus a small number of _named, justified_ variants, and make every
 call site name which one it wants.
 
 `reserveSinglePeriodBundleLedger` is also exported from two modules
@@ -54,25 +54,25 @@ call site name which one it wants.
 
 ## 3. Full-fiscal-year cluster — 3,694 lines, 11 modules, never run
 
-| Lines | Module |
-| ----- | ------ |
-| 914 | `filed-returns-full-fiscal-year-zip.ts` |
-| 465 | `filed-returns-full-fiscal-year.ts` |
-| 413 | `-ledger.ts` |
-| 396 | `-validation.ts` |
-| 388 | `-recovery.ts` |
-| 311 | `-cleanup.ts` |
-| 275 | `-summary.ts` |
-| 244 | `-run-state.ts` |
-| 102 | `-plan.ts` |
-| 94 | `-artifacts.ts` |
-| 92 | `-zip-phase.ts` |
+| Lines | Module                                  |
+| ----- | --------------------------------------- |
+| 914   | `filed-returns-full-fiscal-year-zip.ts` |
+| 465   | `filed-returns-full-fiscal-year.ts`     |
+| 413   | `-ledger.ts`                            |
+| 396   | `-validation.ts`                        |
+| 388   | `-recovery.ts`                          |
+| 311   | `-cleanup.ts`                           |
+| 275   | `-summary.ts`                           |
+| 244   | `-run-state.ts`                         |
+| 102   | `-plan.ts`                              |
+| 94    | `-artifacts.ts`                         |
+| 92    | `-zip-phase.ts`                         |
 
 11.8% of all src for a feature that has never executed against the portal. Full-year is next on the
 roadmap, so this is **consolidation, not deletion**.
 
 The risk is concrete rather than theoretical: `-zip.ts` also serves the single-period ZIP export
-that *is* verified, and `-validation.ts` (396 lines) has no direct test importer. Every change here
+that _is_ verified, and `-validation.ts` (396 lines) has no direct test importer. Every change here
 must be followed by a live re-run of the six verified paths, not a suite run alone.
 
 ## 4. Single-consumer modules — consolidation candidates
