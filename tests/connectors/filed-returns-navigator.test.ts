@@ -3,9 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   findFiledGstr3bDownloadCandidateIndex,
   scoreFiledGstr3bDownloadCandidate,
-  triggerFiledReturnDownload,
-  triggerFiledGstr3bFiledPdfDownload,
-} from "../../src/connectors/gst/filed-returns-download";
+} from "../../src/connectors/gst/filed-returns-download-candidates";
 import {
   collectSafeNavigationDiagnostics,
   findDialogDismissalCandidateIndex,
@@ -466,76 +464,6 @@ describe("filed returns navigation matcher", () => {
     ).toBeLessThan(0);
     expect(scoreFiledGstr3bDownloadCandidate({ text: "SAVE GSTR3B" }).score).toBeLessThan(0);
     expect(scoreFiledGstr3bDownloadCandidate({ text: "SUBMIT" }).score).toBeLessThan(0);
-  });
-
-  it("does not arm legacy capture for the selected filed GSTR-3B PDF control", async () => {
-    const documentRef = createDocument(`
-      <main>
-        <h1>GSTR-3B - Monthly Return</h1>
-        <div>Status - Filed</div>
-        <div>Financial Year - 2025-26</div>
-        <div>Return Period - March</div>
-        <button>DOWNLOAD FILED GSTR-3B</button>
-        <a title="Click here to download GSTR-3B system generated PDF">SYSTEM GENERATED GSTR-3B</a>
-      </main>
-    `);
-    const [filedButton, systemLink] = Array.from(documentRef.querySelectorAll("button, a"));
-    let filedClicked = 0;
-    let systemClicked = 0;
-    filedButton?.addEventListener("click", () => {
-      filedClicked += 1;
-    });
-    systemLink?.addEventListener("click", () => {
-      systemClicked += 1;
-    });
-
-    const result = await triggerFiledReturnDownload(documentRef, {
-      actionId: "test-action",
-      financialYear: "2025-26",
-      period: "March",
-      returnType: "GSTR-3B",
-    });
-
-    expect(result.downloadTrigger).toMatchObject({
-      state: "blocked",
-      safeSignals: expect.arrayContaining(["gstr3b-legacy-acquisition-retired"]),
-    });
-    expect(result.downloadTrigger.safeSignals).toEqual(
-      expect.arrayContaining(["gstr3b-legacy-acquisition-retired"]),
-    );
-    expect("mainWorldCaptureRequest" in result).toBe(false);
-    expect(filedButton?.hasAttribute("data-pack-gstr2b-capture-action")).toBe(false);
-    expect(systemLink?.hasAttribute("data-pack-gstr2b-capture-action")).toBe(false);
-    expect(filedClicked).toBe(0);
-    expect(systemClicked).toBe(0);
-  });
-
-  it("does not click the GST home due-date PDF download", async () => {
-    const documentRef = createDocument(`
-      <main>
-        <h1>Goods and Services Tax</h1>
-        <section>
-          <h2>Upcoming Due Dates</h2>
-          <button>DOWNLOAD PDF</button>
-          <p>GSTR-3B (May, 2026)</p>
-        </section>
-      </main>
-    `);
-    let dueDateDownloadClicked = 0;
-    documentRef.querySelector("button")?.addEventListener("click", () => {
-      dueDateDownloadClicked += 1;
-    });
-
-    const result = await triggerFiledGstr3bFiledPdfDownload(documentRef, {
-      actionId: "test-action",
-      financialYear: "2025-26",
-      period: "March",
-      returnType: "GSTR-3B",
-    });
-
-    expect(result.state).toBe("candidate-not-found");
-    expect(result.safeSignals).toEqual(expect.arrayContaining(["not-filed-gstr3b-detail-page"]));
-    expect(dueDateDownloadClicked).toBe(0);
   });
 });
 
