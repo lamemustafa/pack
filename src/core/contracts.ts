@@ -145,13 +145,6 @@ export interface PortalObservation {
   userAction?: UserActionRequired;
 }
 
-export interface PortalRequestShape {
-  connectorId: ConnectorId;
-  origin: string;
-  pathShape: string;
-  initiatorType: string;
-}
-
 export interface PortalNavigationResult {
   connectorId: ConnectorId;
   scopeId: string;
