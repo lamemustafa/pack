@@ -6767,7 +6767,11 @@ describe("filed returns guided flow", () => {
 
     expect(result).toMatchObject({
       state: "clicked",
-      safeSignals: ["filed-gstr1-summary-period-mismatch", "filed-gstr1-summary-back-clicked"],
+      safeSignals: [
+        "filed-gstr1-summary-period-mismatch",
+        "filed-return-detail-period:May",
+        "filed-gstr1-summary-back-clicked",
+      ],
     });
     expect(back).toHaveBeenCalledTimes(1);
   });
@@ -6807,6 +6811,7 @@ describe("filed returns guided flow", () => {
       expect.arrayContaining([
         "filed-gstr1-scope-switch-navigation",
         "filed-returns-candidate-clicked",
+        "filed-return-detail-period:May",
       ]),
     );
     expect(filedReturnsClicked).toBe(1);

@@ -121,6 +121,16 @@ describe("filed returns flow runner wait policy", () => {
       getFlowStepSettleMs(
         {
           ...BASE_STEP,
+          safeSignals: ["filed-gstr1-scope-switch-navigation"],
+        },
+        BASE_DEPS,
+      ),
+    ).toBe(PORTAL_NAVIGATION_SETTLE_MS);
+
+    expect(
+      getFlowStepSettleMs(
+        {
+          ...BASE_STEP,
           safeSignals: ["filed-returns-page-settling"],
         },
         BASE_DEPS,
