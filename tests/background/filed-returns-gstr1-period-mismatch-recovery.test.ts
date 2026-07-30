@@ -1,8 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FiledReturnsFlowRunnerDeps } from "../../src/background/filed-returns-flow-runner";
 import { MAX_GSTR1_PERIOD_MISMATCH_RECOVERY_ATTEMPTS } from "../../src/background/filed-returns-gstr1-period-mismatch-recovery";
-import { GSTR1_PERIOD_MISMATCH_RECOVERY_STOPPED_SIGNAL } from "../../src/connectors/gst/filed-returns-durable-signals";
+import {
+  FILED_RETURN_ROUTE_MISMATCH_SIGNALS,
+  GSTR1_PERIOD_MISMATCH_RECOVERY_STOPPED_SIGNAL,
+  RETURN_TYPE_MISMATCH_RECOVERY_STOPPED_SIGNAL,
+} from "../../src/connectors/gst/filed-returns-durable-signals";
 import { gstr1PeriodMismatchRecoveryInstruction } from "../../src/connectors/gst/filed-returns-durable-status";
+import { filedReturnScopeId } from "../../src/connectors/gst/filed-returns-return-descriptors";
 import type { PackMessageResponse } from "../../src/connectors/gst/messages";
 
 const browserMocks = vi.hoisted(() => ({
@@ -160,6 +165,39 @@ describe("GSTR-1 period-mismatch recovery", () => {
       },
     });
     expect(JSON.stringify(browserMocks.session.completion)).toContain("April");
+    expect(flowMocks.triggerSelectedArtifacts).not.toHaveBeenCalled();
+  });
+
+  it("stops a repeated cross-return navigation before the flow-step limit", async () => {
+    const scope = { ...SCOPE, returnType: "GSTR-3B" as const };
+    const deps = createDeps(async () =>
+      step(
+        [FILED_RETURN_ROUTE_MISMATCH_SIGNALS["GSTR-1"], "filed-returns-candidate-clicked"],
+        "clicked",
+        "Pack is leaving the mismatched synthetic return page.",
+        filedReturnScopeId(scope.returnType),
+      ),
+    );
+
+    const response = await startSinglePeriodFiledReturnsDownloadFlow(scope, deps);
+
+    expect(response).toMatchObject({
+      flowStep: {
+        state: "user-action-required",
+        safeSignals: expect.arrayContaining([
+          FILED_RETURN_ROUTE_MISMATCH_SIGNALS["GSTR-1"],
+          RETURN_TYPE_MISMATCH_RECOVERY_STOPPED_SIGNAL,
+        ]),
+        userAction: { type: "NAVIGATE_TO_SUPPORTED_PAGE", canResume: true },
+      },
+    });
+    if (!response.ok || !("flowStep" in response)) throw new Error("Expected a flow step.");
+    expect(deps.sendMessageToTabWithInjection).toHaveBeenCalledTimes(
+      MAX_GSTR1_PERIOD_MISMATCH_RECOVERY_ATTEMPTS + 1,
+    );
+    expect(response.flowStep.safeSignals).not.toContain("flow-step-limit-reached");
+    expect(response.flowStep.safeMessage).toContain("GSTR-1");
+    expect(response.flowStep.safeMessage).toContain("GSTR-3B");
     expect(flowMocks.triggerSelectedArtifacts).not.toHaveBeenCalled();
   });
 
@@ -446,12 +484,13 @@ function step(
   safeSignals: string[],
   state: "clicked" | "ready" | "user-action-required" = "clicked",
   safeMessage = "Pack is continuing the synthetic GSTR-1 flow.",
+  scopeId = "gst-filed-returns-gstr1-pdf-private-v0",
 ): PackMessageResponse {
   return {
     ok: true,
     flowStep: {
       connectorId: "gst",
-      scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
+      scopeId,
       state,
       safeSignals,
       safeMessage,

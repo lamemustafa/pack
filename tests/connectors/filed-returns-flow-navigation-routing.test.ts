@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { FiledReturnsDownloadScope } from "../../src/connectors/gst/filed-returns-contracts";
 import { runFiledReturnsDownloadStep } from "../../src/connectors/gst/filed-returns-flow";
+import { FILED_RETURN_ROUTE_MISMATCH_SIGNALS } from "../../src/connectors/gst/filed-returns-durable-signals";
 import { filedReturnScopeId } from "../../src/connectors/gst/filed-returns-return-descriptors";
 import { navigateToFiledReturnsPage } from "../../src/connectors/gst/filed-returns-navigator";
 import {
@@ -173,8 +174,62 @@ describe("filed returns flow — navigation and routing", () => {
     expect(searchClicked).toBe(1);
   });
 
+  it.each([
+    ["GSTR-1", "GSTR-3B", "filed-returns"],
+    ["GSTR-1", "GSTR-2B", "return-dashboard"],
+    ["GSTR-3B", "GSTR-1", "return-dashboard"],
+    ["GSTR-3B", "GSTR-2B", "return-dashboard"],
+  ] as const)(
+    "leaves a %s page before starting a %s run",
+    async (visibleReturnType, returnType, expectedNavigation) => {
+      const documentRef = createGstDocument(
+        `<main>
+          <h1>Filed ${visibleReturnType}</h1>
+          <button>Download Filed ${visibleReturnType}</button>
+          <nav>
+            <a data-filed-returns href="/returns/auth/efiledReturns">View Filed Returns</a>
+            <a data-return-dashboard href="/returns/auth/dashboard">Return Dashboard</a>
+          </nav>
+        </main>`,
+        `https://return.gst.gov.in/returns/auth/${visibleReturnType === "GSTR-1" ? "gstr1" : "gstr3b"}`,
+      );
+      makeLayoutVisible(documentRef);
+      const clicked = { filedReturns: 0, returnDashboard: 0 };
+      documentRef.querySelector("[data-filed-returns]")?.addEventListener("click", (event) => {
+        event.preventDefault();
+        clicked.filedReturns += 1;
+      });
+      documentRef.querySelector("[data-return-dashboard]")?.addEventListener("click", (event) => {
+        event.preventDefault();
+        clicked.returnDashboard += 1;
+      });
+
+      const result = await runFiledReturnsDownloadStep(documentRef, {
+        artifactType: "PDF",
+        financialYear: "2026-27",
+        period: "May",
+        returnType,
+      });
+
+      expect(result.state).toBe("clicked");
+      expect(result.safeSignals).toContain(FILED_RETURN_ROUTE_MISMATCH_SIGNALS[visibleReturnType]);
+      expect(result.safeSignals).toContain(
+        expectedNavigation === "filed-returns"
+          ? "filed-returns-candidate-clicked"
+          : "return-dashboard-candidate-clicked",
+      );
+      expect(result.safeMessage).toContain(visibleReturnType);
+      expect(result.safeMessage).toContain(returnType);
+      expect(clicked).toEqual(
+        expectedNavigation === "filed-returns"
+          ? { filedReturns: 1, returnDashboard: 0 }
+          : { filedReturns: 0, returnDashboard: 1 },
+      );
+    },
+  );
+
   it.each(["GSTR-1", "GSTR-3B"] as const)(
-    "leaves the GSTR-2B summary page before starting a %s filed-return run",
+    "preserves the GSTR-2B summary exit before starting a %s run",
     async (returnType) => {
       const documentRef = createGstr2bSummaryDocument(`
         <nav>
@@ -197,7 +252,7 @@ describe("filed returns flow — navigation and routing", () => {
       expect(result.state).toBe("clicked");
       expect(result.safeSignals).toEqual(
         expect.arrayContaining([
-          "gstr2b-summary-route-mismatched-return",
+          FILED_RETURN_ROUTE_MISMATCH_SIGNALS["GSTR-2B"],
           "return-dashboard-candidate-clicked",
         ]),
       );
@@ -205,6 +260,90 @@ describe("filed returns flow — navigation and routing", () => {
       expect(dashboardClicked).toBe(1);
     },
   );
+
+  it("fails closed with both return types when mismatched-page navigation is unavailable", async () => {
+    const documentRef = createGstDocument(
+      "<main><h1>Filed GSTR-1</h1><button>Download Filed GSTR-1</button></main>",
+      "https://return.gst.gov.in/returns/auth/gstr1",
+    );
+    makeLayoutVisible(documentRef);
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "June",
+      returnType: "GSTR-3B",
+    });
+
+    expect(result.state).toBe("candidate-not-found");
+    expect(result.userAction?.type).toBe("NAVIGATE_TO_SUPPORTED_PAGE");
+    expect(result.safeMessage).toContain("GSTR-1");
+    expect(result.safeMessage).toContain("GSTR-3B");
+  });
+
+  it("keeps GSTR-2B login evidence ahead of mismatched-page navigation", async () => {
+    const documentRef = createGstDocument(
+      `<main>
+        <h1>Login</h1>
+        <label>Username</label><input />
+        <label>Captcha</label><input />
+        <button>Login</button>
+        <a data-dashboard href="/returns/auth/dashboard">Return Dashboard</a>
+      </main>`,
+      "https://return.gst.gov.in/returns/auth/gstr1",
+    );
+    makeLayoutVisible(documentRef);
+    let dashboardClicked = 0;
+    documentRef.querySelector("[data-dashboard]")?.addEventListener("click", () => {
+      dashboardClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "June",
+      returnType: "GSTR-2B",
+    });
+
+    expect(result.state).toBe("login-required");
+    expect(result.userAction?.type).toBe("LOGIN");
+    expect(dashboardClicked).toBe(0);
+  });
+
+  it("waits for a GSTR-2B session dialog before mismatched-page navigation", async () => {
+    const documentRef = createGstDocument(
+      `<main>
+        <section class="modal show" role="dialog">
+          <p>Your logged in session will expire soon. Click Continue to extend your session, or click Logout.</p>
+          <a data-logout href="/services/logout">Logout</a>
+          <button data-continue>Continue</button>
+        </section>
+        <div class="modal-backdrop show"></div>
+        <h1>Filed GSTR-1</h1>
+        <a data-dashboard href="/returns/auth/dashboard">Return Dashboard</a>
+      </main>`,
+      "https://return.gst.gov.in/returns/auth/gstr1",
+    );
+    makeLayoutVisible(documentRef);
+    let dashboardClicked = 0;
+    documentRef.querySelector("[data-dashboard]")?.addEventListener("click", () => {
+      dashboardClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "June",
+      returnType: "GSTR-2B",
+    });
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining(["safe-dialog-still-visible", "gstr2b-dialog-dismissal-waiting"]),
+    );
+    expect(result.safeSignals).not.toContain(FILED_RETURN_ROUTE_MISMATCH_SIGNALS["GSTR-1"]);
+    expect(dashboardClicked).toBe(0);
+  });
 
   it("navigates authenticated wrong-page GSTR-2B starts through the Return Dashboard", async () => {
     const documentRef = createGstDocument(
