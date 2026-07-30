@@ -24,7 +24,7 @@ import {
   gstr1VisibleScopeMismatchResponse,
   triggerAndObserveFiledReturnDownload,
 } from "./filed-returns-download-trigger";
-import { exportSinglePeriodFiledReturnsZip } from "./filed-returns-full-fiscal-year-zip";
+import { exportSinglePeriodFiledReturnsZip } from "./filed-returns-single-period-zip";
 import {
   clearFiledReturnsTargetReview,
   persistFiledReturnsTargetReview,

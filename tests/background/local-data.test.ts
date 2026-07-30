@@ -87,7 +87,15 @@ const zipMocks = vi.hoisted(() => ({
 vi.mock("wxt/browser", () => ({
   browser: browserMocks,
 }));
-vi.mock("../../src/background/filed-returns-full-fiscal-year-zip", () => zipMocks);
+vi.mock("../../src/background/filed-returns-full-fiscal-year-zip", () => ({
+  discardFullFiscalYearFiledReturnsZip: zipMocks.discardFullFiscalYearFiledReturnsZip,
+}));
+vi.mock("../../src/background/filed-returns-single-period-zip", () => ({
+  discardSinglePeriodFiledReturnsZip: zipMocks.discardSinglePeriodFiledReturnsZip,
+}));
+vi.mock("../../src/background/filed-returns-staged-zip", () => ({
+  discardAllFiledReturnsStaging: zipMocks.discardAllFiledReturnsStaging,
+}));
 
 describe("Pack local data clearing", () => {
   beforeEach(() => {
