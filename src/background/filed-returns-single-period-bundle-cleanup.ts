@@ -1,5 +1,5 @@
 import type { FiledReturnsDownloadScope } from "../connectors/gst/filed-returns-contracts";
-import { discardSinglePeriodFiledReturnsZip } from "./filed-returns-full-fiscal-year-zip";
+import { discardSinglePeriodFiledReturnsZip } from "./filed-returns-single-period-zip";
 import {
   clearLegacySinglePeriodStagingRecord,
   clearSinglePeriodBundleLedger,

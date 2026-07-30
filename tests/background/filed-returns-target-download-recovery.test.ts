@@ -103,7 +103,7 @@ vi.mock("../../src/background/download-observer", async (importOriginal) => ({
   ...(await importOriginal()),
   observeBrowserDownloadById: mocks.observeBrowserDownloadById,
 }));
-vi.mock("../../src/background/filed-returns-full-fiscal-year-zip", () => ({
+vi.mock("../../src/background/filed-returns-single-period-zip", () => ({
   discardSinglePeriodFiledReturnsZip: mocks.discardSinglePeriodFiledReturnsZip,
 }));
 vi.mock("../../src/background/offscreen-blob-url", () => ({

@@ -53,8 +53,8 @@ vi.mock("../../src/background/pack-download-filename-reassertion", async (import
 import {
   discardFullFiscalYearFiledReturnsZip,
   exportFullFiscalYearZip,
-  exportSinglePeriodFiledReturnsZip,
 } from "../../src/background/filed-returns-full-fiscal-year-zip";
+import { exportSinglePeriodFiledReturnsZip } from "../../src/background/filed-returns-single-period-zip";
 
 describe("filed-return ZIP filename reassertion", () => {
   beforeEach(() => {

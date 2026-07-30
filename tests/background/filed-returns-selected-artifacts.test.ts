@@ -160,7 +160,7 @@ vi.mock("../../src/background/filed-returns-download-trigger", () => ({
   triggerAndObserveFiledReturnDownload: mocks.triggerAndObserveFiledReturnDownload,
 }));
 vi.mock("../../src/background/filed-returns-single-period-bundle-ledger", () => bundleMocks);
-vi.mock("../../src/background/filed-returns-full-fiscal-year-zip", () => ({
+vi.mock("../../src/background/filed-returns-single-period-zip", () => ({
   exportSinglePeriodFiledReturnsZip: bundleMocks.exportSinglePeriodFiledReturnsZip,
 }));
 
