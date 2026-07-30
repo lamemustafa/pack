@@ -70,6 +70,10 @@ export function canonicalDurableSummaryMessage(
   status: FiledReturnsFlowSummary["status"],
   signals: readonly string[],
 ): string {
+  const mismatchedGstr1Period = visibleGstr1MismatchPeriod(scope, status, signals);
+  if (mismatchedGstr1Period) {
+    return incompleteGstr1PeriodMismatchRecoveryMessage(scope, mismatchedGstr1Period);
+  }
   if (status === "partial") {
     const missingArtifacts = signals
       .map((signal) => /^filed-return-artifact-unavailable:(PDF|JSON|EXCEL)$/.exec(signal)?.[1])
@@ -82,6 +86,13 @@ export function canonicalDurableSummaryMessage(
     }
   }
   return renderDurableMessage(messageKeyForSummary(status, signals), scope);
+}
+
+export function incompleteGstr1PeriodMismatchRecoveryMessage(
+  scope: FiledReturnsDownloadScope,
+  visiblePeriod: string,
+): string {
+  return `Pack found a filed GSTR-1 page showing ${visiblePeriod}, but could not reach the requested ${scope.period} period. Open the GST Returns Dashboard for ${scope.period}, then start Pack again.`;
 }
 
 export function hasConfirmedSinglePeriodZipDownloadEvidence(signals: readonly string[]): boolean {
@@ -160,6 +171,29 @@ function messageKeyForTarget(
   if (status === "downloaded") return "target-downloaded";
   if (status === "cancelled") return "target-cancelled";
   return "target-review";
+}
+
+function visibleGstr1MismatchPeriod(
+  scope: FiledReturnsDownloadScope,
+  status: FiledReturnsFlowSummary["status"],
+  signals: readonly string[],
+): string | null {
+  if (scope.returnType !== "GSTR-1" || status !== "blocked") return null;
+  if (
+    !signals.some((signal) =>
+      ["filed-gstr1-scope-switch-navigation", "filed-gstr1-summary-period-mismatch"].includes(
+        signal,
+      ),
+    )
+  ) {
+    return null;
+  }
+  const visiblePeriod = signals
+    .map((signal) => /^filed-return-detail-period:([A-Za-z]+)$/.exec(signal)?.[1])
+    .find((period): period is string => Boolean(period && period !== scope.period));
+  return visiblePeriod && FILED_RETURNS_MONTHS.includes(visiblePeriod as never)
+    ? visiblePeriod
+    : null;
 }
 
 function messageKeyForSummary(

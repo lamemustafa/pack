@@ -115,6 +115,7 @@ function isPortalNavigationStep(step: PortalFlowStepResult): boolean {
     [
       "filed-returns-candidate-clicked",
       "filed-return-detail-back-clicked",
+      "filed-gstr1-scope-switch-navigation",
       "filed-returns-page-settling",
       "filed-return-search-results-pending",
       "filed-gstr1-controls-pending",

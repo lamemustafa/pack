@@ -33,6 +33,12 @@ import {
 } from "./filed-returns-step-limit";
 import { withPersistedSinglePeriodSummary } from "./filed-returns-single-period-summary";
 import { reconcileArtifactAcquisitionCheckpoint } from "./artifact-acquisition-state";
+import {
+  explainIncompleteGstr1PeriodMismatchRecovery,
+  pendingGstr1PeriodMismatchRecoveryStep,
+  updateGstr1PeriodMismatchRecovery,
+  type Gstr1PeriodMismatchRecovery,
+} from "./filed-returns-gstr1-period-mismatch-recovery";
 
 const MAIN_WORLD_FILTER_SEARCH_SETTLE_MS = 1_000;
 
@@ -210,6 +216,7 @@ async function runSinglePeriodSteps(
   let activePeriod: string | null = null;
   let activeFinancialYear: string | null = null;
   let mainWorldFilterAttempted = false;
+  let mismatchRecovery: Gstr1PeriodMismatchRecovery | null = null;
   for (let attempt = 0; attempt < maxFlowStepsFor(scope); attempt += 1) {
     const response = await runScopedDownloadStepWithRetry(deps, tabId, scope);
     if (!response.ok || !("flowStep" in response)) {
@@ -220,12 +227,14 @@ async function runSinglePeriodSteps(
     lastStep = response.flowStep;
     activePeriod = extractActivePeriod(lastStep) ?? activePeriod;
     activeFinancialYear = extractActiveFinancialYear(lastStep) ?? activeFinancialYear;
+    mismatchRecovery = updateGstr1PeriodMismatchRecovery(mismatchRecovery, scope, lastStep);
 
     if (lastStep.safeSignals.includes("filed-return-api-result-posted")) {
       return waitForDetailReadyThenTrigger({
         activePeriod,
         activeFinancialYear,
         deps,
+        mismatchRecovery,
         shouldPersistSinglePeriodSummary,
         scope,
         tabId,
@@ -242,6 +251,7 @@ async function runSinglePeriodSteps(
           activePeriod,
           activeFinancialYear,
           deps,
+          mismatchRecovery,
           shouldPersistSinglePeriodSummary,
           scope,
           tabId,
@@ -302,10 +312,21 @@ async function runSinglePeriodSteps(
       await clearUnsubmittedMainWorldSearch(deps, tabId, scope);
     }
 
+    const mismatchRecoveryPending = pendingGstr1PeriodMismatchRecoveryStep(
+      scope,
+      lastStep,
+      mismatchRecovery,
+    );
+    if (mismatchRecoveryPending) {
+      lastStep = mismatchRecoveryPending;
+      await delay(getFlowStepSettleMs(lastStep, deps));
+      continue;
+    }
+
     if (!shouldContinueFlow(lastStep)) {
       return withPersistedSinglePeriodSummary(
         scope,
-        response,
+        explainIncompleteGstr1PeriodMismatchRecovery(scope, response, mismatchRecovery),
         deps,
         shouldPersistSinglePeriodSummary,
       );
@@ -313,17 +334,21 @@ async function runSinglePeriodSteps(
     await delay(getFlowStepSettleMs(lastStep, deps));
   }
 
+  const stepLimitResponse: Extract<
+    PackMessageResponse,
+    { ok: true; flowStep: PortalFlowStepResult }
+  > = {
+    ok: true,
+    flowStep: toStepLimitReachedFlowStep(scope, lastStep, {
+      safeSignal: "flow-step-limit-reached",
+      safeMessage: searchStepLimitReachedMessage(scope),
+      userActionMessage:
+        "Wait for the GST Portal result page to finish loading, then click Start download again.",
+    }),
+  };
   return withPersistedSinglePeriodSummary(
     scope,
-    {
-      ok: true,
-      flowStep: toStepLimitReachedFlowStep(scope, lastStep, {
-        safeSignal: "flow-step-limit-reached",
-        safeMessage: searchStepLimitReachedMessage(scope),
-        userActionMessage:
-          "Wait for the GST Portal result page to finish loading, then click Start download again.",
-      }),
-    },
+    explainIncompleteGstr1PeriodMismatchRecovery(scope, stepLimitResponse, mismatchRecovery),
     deps,
     shouldPersistSinglePeriodSummary,
   );
@@ -348,6 +373,7 @@ async function waitForDetailReadyThenTrigger({
   activePeriod,
   activeFinancialYear,
   deps,
+  mismatchRecovery: initialMismatchRecovery,
   shouldPersistSinglePeriodSummary,
   scope,
   tabId,
@@ -355,11 +381,13 @@ async function waitForDetailReadyThenTrigger({
   activePeriod: string | null;
   activeFinancialYear: string | null;
   deps: FiledReturnsFlowRunnerDeps;
+  mismatchRecovery: Gstr1PeriodMismatchRecovery | null;
   shouldPersistSinglePeriodSummary: boolean;
   scope: FiledReturnsDownloadScope;
   tabId: number;
 }): Promise<PackMessageResponse> {
   let lastStep: PortalFlowStepResult | null = null;
+  let mismatchRecovery = initialMismatchRecovery;
 
   for (let attempt = 0; attempt < maxFlowStepsFor(scope); attempt += 1) {
     const response = await runScopedDownloadStepWithRetry(deps, tabId, scope);
@@ -371,6 +399,7 @@ async function waitForDetailReadyThenTrigger({
     lastStep = response.flowStep;
     activePeriod = extractActivePeriod(lastStep) ?? activePeriod;
     activeFinancialYear = extractActiveFinancialYear(lastStep) ?? activeFinancialYear;
+    mismatchRecovery = updateGstr1PeriodMismatchRecovery(mismatchRecovery, scope, lastStep);
 
     if (isFiledReturnDownloadReady(lastStep, scope)) {
       return triggerSinglePeriodDownloadAndPersistSummary({
@@ -383,10 +412,21 @@ async function waitForDetailReadyThenTrigger({
       });
     }
 
+    const mismatchRecoveryPending = pendingGstr1PeriodMismatchRecoveryStep(
+      scope,
+      lastStep,
+      mismatchRecovery,
+    );
+    if (mismatchRecoveryPending) {
+      lastStep = mismatchRecoveryPending;
+      await delay(getFlowStepSettleMs(lastStep, deps));
+      continue;
+    }
+
     if (!shouldContinueFlow(lastStep)) {
       return withPersistedSinglePeriodSummary(
         scope,
-        response,
+        explainIncompleteGstr1PeriodMismatchRecovery(scope, response, mismatchRecovery),
         deps,
         shouldPersistSinglePeriodSummary,
       );
@@ -394,17 +434,21 @@ async function waitForDetailReadyThenTrigger({
     await delay(getFlowStepSettleMs(lastStep, deps));
   }
 
+  const stepLimitResponse: Extract<
+    PackMessageResponse,
+    { ok: true; flowStep: PortalFlowStepResult }
+  > = {
+    ok: true,
+    flowStep: toStepLimitReachedFlowStep(scope, lastStep, {
+      safeSignal: "detail-ready-step-limit-reached",
+      safeMessage: detailStepLimitReachedMessage(scope),
+      userActionMessage:
+        "Wait for the filed-return detail page to finish loading, then click Start download again.",
+    }),
+  };
   return withPersistedSinglePeriodSummary(
     scope,
-    {
-      ok: true,
-      flowStep: toStepLimitReachedFlowStep(scope, lastStep, {
-        safeSignal: "detail-ready-step-limit-reached",
-        safeMessage: detailStepLimitReachedMessage(scope),
-        userActionMessage:
-          "Wait for the filed-return detail page to finish loading, then click Start download again.",
-      }),
-    },
+    explainIncompleteGstr1PeriodMismatchRecovery(scope, stepLimitResponse, mismatchRecovery),
     deps,
     shouldPersistSinglePeriodSummary,
   );

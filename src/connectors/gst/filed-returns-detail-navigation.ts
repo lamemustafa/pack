@@ -42,10 +42,14 @@ export async function returnFromMismatchedFiledGstr1Page(
     return {
       ...navigation,
       scopeId: filedReturnScopeId("GSTR-1"),
-      safeSignals: ["filed-gstr1-scope-switch-navigation", ...navigation.safeSignals],
+      safeSignals: [
+        "filed-gstr1-scope-switch-navigation",
+        ...detailPeriodSignal(detailIdentity.period),
+        ...navigation.safeSignals,
+      ],
       safeMessage:
         navigation.state === "clicked"
-          ? "Pack used the GST Portal navigation to leave the prior filed GSTR-1 period before selecting the requested period."
+          ? gstr1PeriodMismatchMessage(scope, detailIdentity.period, "Pack is selecting it now.")
           : navigation.safeMessage,
     };
   }
@@ -161,9 +165,16 @@ export function returnFromMismatchedFiledGstr1Summary(
       connectorId: "gst",
       scopeId: filedReturnScopeId("GSTR-1"),
       state: "user-action-required",
-      safeSignals: ["filed-gstr1-summary-period-mismatch", "filed-gstr1-summary-back-unavailable"],
-      safeMessage:
-        "Pack found a filed GSTR-1 summary for a different period, but could not return to the prior portal page.",
+      safeSignals: [
+        "filed-gstr1-summary-period-mismatch",
+        ...detailPeriodSignal(detailIdentity.period),
+        "filed-gstr1-summary-back-unavailable",
+      ],
+      safeMessage: gstr1PeriodMismatchMessage(
+        scope,
+        detailIdentity.period,
+        "Pack could not return to the prior portal page.",
+      ),
     };
   }
 
@@ -172,9 +183,16 @@ export function returnFromMismatchedFiledGstr1Summary(
     connectorId: "gst",
     scopeId: filedReturnScopeId("GSTR-1"),
     state: "clicked",
-    safeSignals: ["filed-gstr1-summary-period-mismatch", "filed-gstr1-summary-back-clicked"],
-    safeMessage:
-      "Pack returned from the prior filed GSTR-1 summary before selecting the requested period.",
+    safeSignals: [
+      "filed-gstr1-summary-period-mismatch",
+      ...detailPeriodSignal(detailIdentity.period),
+      "filed-gstr1-summary-back-clicked",
+    ],
+    safeMessage: gstr1PeriodMismatchMessage(
+      scope,
+      detailIdentity.period,
+      "Pack returned to the prior portal page and is selecting it now.",
+    ),
   };
 }
 
@@ -223,6 +241,20 @@ export function isGstr2bSummaryRoute(documentRef: Document): boolean {
 
 function scopeIncludesPdfArtifact(scope: FiledReturnsDownloadScope): boolean {
   return scope.artifactType !== "EXCEL";
+}
+
+function gstr1PeriodMismatchMessage(
+  scope: FiledReturnsDownloadScope,
+  visiblePeriod: string | null,
+  nextStep: string,
+): string {
+  return visiblePeriod
+    ? `Pack found a filed GSTR-1 page showing ${visiblePeriod}, while the requested period is ${scope.period}. ${nextStep}`
+    : `Pack found a filed GSTR-1 page for a different period than the requested ${scope.period}. ${nextStep}`;
+}
+
+function detailPeriodSignal(period: string | null): string[] {
+  return period ? [`filed-return-detail-period:${period}`] : [];
 }
 
 function isGstr1SummaryRoute(documentRef: Document): boolean {
