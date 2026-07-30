@@ -79,6 +79,18 @@ call site name which one it wants.
 11.8% of all src for a feature that has never executed against the portal. Full-year is next on the
 roadmap, so this is **consolidation, not deletion**.
 
+**Measured outcome, 2026-07-31.** The six modules with no importer outside the cluster
+(`-validation`, `-cleanup`, `-summary`, `-plan`, `-artifacts`, `-zip-phase`; 1,270 lines) were
+consolidated into three. Only **27 lines — 2% — proved redundant**; the remainder was distinct
+logic that had merely been split across files. Module count fell 11 → 8 and the cluster fell
+3,694 → 3,662 lines.
+
+This falsifies the expectation that the cluster was the largest available lever for line
+reduction. It is not bloated with duplication; it is simply a large amount of real code for a
+feature that has never run. The same caveat should be assumed for §4 below: expect relocation, not
+reduction. The remaining question about this cluster is a product one — whether 3,662 lines of
+unexecuted machinery should exist before the feature is proven — not a refactoring one.
+
 The risk is concrete rather than theoretical: `-zip.ts` also serves the single-period ZIP export
 that _is_ verified, and `-validation.ts` (396 lines) has no direct test importer. Every change here
 must be followed by a live re-run of the six verified paths, not a suite run alone.
