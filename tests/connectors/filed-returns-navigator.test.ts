@@ -2,6 +2,7 @@ import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
 import {
   findFiledGstr3bDownloadCandidateIndex,
+  resolveVisibleFiledReturnDownloadCandidates,
   scoreFiledGstr3bDownloadCandidate,
 } from "../../src/connectors/gst/filed-returns-download-candidates";
 import {
@@ -23,6 +24,27 @@ import {
 } from "../../src/connectors/gst/filed-returns-navigator";
 
 describe("filed returns navigation matcher", () => {
+  it("keeps zero-size download controls excluded even when they have an offset parent", () => {
+    const documentRef = createDocument(`<button>Download Filed GSTR-3B</button>`);
+    const control = documentRef.querySelector<HTMLElement>("button");
+    if (!control) throw new Error("Expected a synthetic download control.");
+    Object.defineProperty(control, "offsetParent", { value: documentRef.body });
+    control.getBoundingClientRect = () =>
+      ({
+        bottom: 0,
+        height: 0,
+        left: 0,
+        right: 0,
+        top: 0,
+        width: 0,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    expect(resolveVisibleFiledReturnDownloadCandidates(documentRef, "GSTR-3B")).toEqual([]);
+  });
+
   it("prefers the explicit View Filed Returns portal candidate", () => {
     const index = findFiledReturnsNavigationCandidateIndex([
       { text: "File Returns", href: "https://return.gst.gov.in/returns/auth/dashboard" },
@@ -72,6 +94,7 @@ describe("filed returns navigation matcher", () => {
         <button>RETURN DASHBOARD</button>
         <section>
           <h2>Would you like to Authenticate Aadhaar or Upload E-KYC Documents of Partner/Promoter and Primary Authorized Signatory?</h2>
+          <input type="button" aria-label="REMIND ME LATER" />
           <a>YES, NAVIGATE TO MY PROFILE</a>
           <a>REMIND ME LATER</a>
           <p>NOTE : For future reference you can access this link again through Dashboard>My Profile>Aadhaar Authentication Status</p>
@@ -143,6 +166,7 @@ describe("filed returns navigation matcher", () => {
     const documentRef = createDocument(
       `
       <main>
+        <input type="button" aria-label="Services" />
         <button data-services>Services</button>
         <nav data-menu hidden></nav>
       </main>
@@ -232,6 +256,7 @@ describe("filed returns navigation matcher", () => {
     const documentRef = createDocument(`
       <div class="modal show" style="display:block">
         <div>System generated summary for GSTR-3B</div>
+        <input type="button" aria-label="Close" />
         <button aria-label="Close">x</button>
         <button>DOWNLOAD FILED GSTR-3B</button>
       </div>

@@ -1,4 +1,4 @@
-const CLICKABLE_SELECTOR = [
+export const CLICKABLE_CONTROL_SELECTOR = [
   "a",
   "button",
   "[role='button']",
@@ -9,8 +9,15 @@ const CLICKABLE_SELECTOR = [
 ].join(",");
 
 export function getClickableElements(root: ParentNode): HTMLElement[] {
-  return Array.from(root.querySelectorAll(CLICKABLE_SELECTOR)).filter((element) =>
+  return Array.from(root.querySelectorAll(CLICKABLE_CONTROL_SELECTOR)).filter((element) =>
     isHtmlElement(root, element),
+  );
+}
+
+export function isPlainFormActionInput(element: HTMLElement): boolean {
+  return (
+    element.matches("input[type='button'],input[type='submit']") &&
+    !element.matches("[role='button'],[ng-click],[data-ng-click]")
   );
 }
 
@@ -27,6 +34,11 @@ export function findUniqueActionableExactSearchControl(root: ParentNode): HTMLEl
 
 export function activateElement(element: HTMLElement) {
   element.scrollIntoView?.({ block: "center", inline: "center" });
+  dispatchPointerSequence(element);
+  clickPortalElement(element);
+}
+
+export function dispatchPointerSequence(element: HTMLElement): void {
   const MouseEventConstructor = element.ownerDocument.defaultView?.MouseEvent;
   if (MouseEventConstructor) {
     for (const type of ["pointerover", "mouseover", "mouseenter", "pointerdown", "mousedown"]) {
@@ -39,7 +51,6 @@ export function activateElement(element: HTMLElement) {
       );
     }
   }
-  clickPortalElement(element);
 }
 
 export function clickPortalElement(element: HTMLElement): void {
@@ -112,12 +123,19 @@ export function matchesAcceptedText(text: string, acceptedTexts: readonly string
   });
 }
 
-export function isVisible(element: HTMLElement): boolean {
+export function isVisible(
+  element: HTMLElement,
+  options: { requireRenderedBox?: boolean } = {},
+): boolean {
+  if (element.hidden) return false;
   const view = element.ownerDocument.defaultView;
   const style = view?.getComputedStyle(element);
   if (style && (style.display === "none" || style.visibility === "hidden")) return false;
   const rect = element.getBoundingClientRect();
-  return rect.width > 0 || rect.height > 0 || Boolean(element.offsetParent);
+  const hasRenderedBox = rect.width > 0 || rect.height > 0;
+  return options.requireRenderedBox
+    ? hasRenderedBox
+    : hasRenderedBox || Boolean(element.offsetParent);
 }
 
 export function isActionablePortalControl(element: HTMLElement): boolean {
@@ -152,10 +170,6 @@ export function isActionablePortalControl(element: HTMLElement): boolean {
   }
 
   return true;
-}
-
-export function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
 }
 
 function normaliseComparable(value: string): string {

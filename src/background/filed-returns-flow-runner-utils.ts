@@ -85,10 +85,6 @@ export function extractActiveFinancialYear(step: PortalFlowStepResult): string |
   return signal ? signal.slice(prefix.length) : null;
 }
 
-export function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
-}
-
 export async function persistFlowResponse(
   response: Extract<PackMessageResponse, { ok: true }>,
   deps: FiledReturnsFlowRunnerDeps,

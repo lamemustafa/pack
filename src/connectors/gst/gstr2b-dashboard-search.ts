@@ -1,4 +1,12 @@
-import { getClickableElements, normaliseText } from "./filed-returns-dom";
+import {
+  CLICKABLE_CONTROL_SELECTOR,
+  getClickableElements,
+  normaliseText,
+} from "./filed-returns-dom";
+
+const SEARCH_IDENTITY_SELECTOR = ["[class*='srchbtn']", "[class*='search']", "[id*='search']"].join(
+  ",",
+);
 
 export function findSearchButton(root: ParentNode): HTMLElement | null {
   return findSearchButtons(root)[0] ?? null;
@@ -9,19 +17,15 @@ export function findSearchButtons(root: ParentNode): HTMLElement[] {
     /^search$/i.test(normaliseText(readElementText(element))),
   );
   const selectorMatches = Array.from(
-    root.querySelectorAll(
-      [
-        "button",
-        "input[type='button']",
-        "input[type='submit']",
-        "[role='button']",
-        "[class*='srchbtn']",
-        "[class*='search']",
-        "[id*='search']",
-      ].join(","),
-    ),
+    root.querySelectorAll(`${CLICKABLE_CONTROL_SELECTOR},${SEARCH_IDENTITY_SELECTOR}`),
   ).filter((element): element is HTMLElement => {
     if (!isClickableHtmlElement(element)) return false;
+    if (
+      !element.matches("button,input[type='button'],input[type='submit'],[role='button']") &&
+      !element.matches(SEARCH_IDENTITY_SELECTOR)
+    ) {
+      return false;
+    }
     const identity = normaliseText(
       [
         readElementText(element),

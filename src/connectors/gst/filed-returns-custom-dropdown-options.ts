@@ -1,10 +1,5 @@
-import {
-  delay,
-  isHtmlElement,
-  isVisible,
-  matchesAcceptedText,
-  normaliseText,
-} from "./filed-returns-dom";
+import { delay } from "../../core/time";
+import { isHtmlElement, isVisible, matchesAcceptedText, normaliseText } from "./filed-returns-dom";
 
 const DROPDOWN_POLL_MS = 50;
 const DROPDOWN_OPEN_TIMEOUT_MS = 400;

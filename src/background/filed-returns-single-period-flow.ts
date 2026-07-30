@@ -2,6 +2,7 @@ import type {
   FiledReturnsDownloadScope,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
+import { delay } from "../core/time";
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
@@ -12,7 +13,6 @@ import {
 } from "./gst-tab-context";
 import { runDownloadStepWithRetry } from "./filed-returns-flow-messaging";
 import {
-  delay,
   extractActiveFinancialYear,
   extractActivePeriod,
   getFlowStepSettleMs,

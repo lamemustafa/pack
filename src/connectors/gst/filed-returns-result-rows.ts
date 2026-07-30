@@ -1,5 +1,9 @@
 import type { FiledReturnsDownloadScope } from "./filed-returns-contracts";
-import { getClickableElements, normaliseText } from "./filed-returns-dom";
+import {
+  CLICKABLE_CONTROL_SELECTOR,
+  getClickableElements,
+  normaliseText,
+} from "./filed-returns-dom";
 import { extractTaxPeriodFromRow } from "./filed-returns-detail-identity";
 import {
   canonicalResultRowPeriod,
@@ -190,7 +194,7 @@ function readVisibleResultIdentityText(container: HTMLElement): string {
 function isResultIdentityTextElement(element: HTMLElement): boolean {
   if (!isVisibleResultControl(element)) return false;
   if (["INPUT", "OPTION", "SELECT"].includes(element.tagName)) return false;
-  return !element.closest("a, button, [role='button'], [ng-click], [data-ng-click]");
+  return !element.closest(CLICKABLE_CONTROL_SELECTOR);
 }
 
 function readResultRowText(row: HTMLTableRowElement): string {

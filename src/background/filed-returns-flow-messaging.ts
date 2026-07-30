@@ -3,6 +3,7 @@ import type {
   FiledReturnsDownloadTarget,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
+import { delay } from "../core/time";
 import type { PackMessage, PackMessageResponse } from "../connectors/gst/messages";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import {
@@ -226,8 +227,4 @@ function withContentMessageTimeout(
 
 function isContentMessageTimeoutError(error: unknown): boolean {
   return error instanceof ContentMessageTimeoutError;
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
 }

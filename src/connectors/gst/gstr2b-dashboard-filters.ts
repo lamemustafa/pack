@@ -1,7 +1,7 @@
 import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "./filed-returns-contracts";
+import { delay } from "../../core/time";
 import {
   activateElement,
-  delay,
   dispatchChange,
   matchesAcceptedText,
   normaliseText,

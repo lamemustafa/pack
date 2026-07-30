@@ -383,6 +383,42 @@ describe("GSTR-1 artifact acquisition", () => {
     expect(documentRef.querySelectorAll("[data-pack-artifact-request]").length).toBe(0);
   });
 
+  it("recognises a canonical Angular leaf control without relaxing uniqueness", async () => {
+    const { documentRef } = gstr1Page(gstr1Json("042026"));
+    const artifactControl = documentRef.querySelector("[data-testid='artifact-control']");
+    const angularControl = documentRef.createElement("span");
+    angularControl.setAttribute("ng-click", "downloadSummary() ");
+    angularControl.textContent = "DOWNLOAD SUMMARY (PDF)";
+    artifactControl?.replaceWith(angularControl);
+
+    await expect(acquireFiledReturnArtifact(documentRef, request)).resolves.toMatchObject({
+      ok: true,
+      state: "ready",
+      requestId: request.requestId,
+    });
+    expect(angularControl.getAttribute("data-pack-artifact-request")).toBe(request.requestId);
+  });
+
+  it("fails closed when a matching canonical control contains an input control descendant", async () => {
+    const { documentRef } = gstr1Page(gstr1Json("042026"));
+    const artifactControl = documentRef.querySelector("[data-testid='artifact-control']");
+    const ancestor = documentRef.createElement("button");
+    ancestor.textContent = "DOWNLOAD SUMMARY (PDF)";
+    const nestedInput = documentRef.createElement("input");
+    nestedInput.type = "button";
+    nestedInput.value = "Decorative action";
+    ancestor.append(nestedInput);
+    artifactControl?.replaceWith(ancestor);
+
+    await expect(acquireFiledReturnArtifact(documentRef, request)).resolves.toEqual({
+      ok: false,
+      reason: "control-not-found",
+      requestId: request.requestId,
+      safeSignals: ["target-period-verified"],
+    });
+    expect(documentRef.querySelectorAll("[data-pack-artifact-request]").length).toBe(0);
+  });
+
   it("fails closed when multiple leaf controls contain the canonical label", async () => {
     const { documentRef } = gstr1Page(gstr1Json("042026"));
     const duplicate = documentRef.createElement("button");

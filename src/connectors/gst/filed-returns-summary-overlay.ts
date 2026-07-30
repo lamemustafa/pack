@@ -3,20 +3,24 @@ import {
   type NavigationCandidateInput,
   type NavigationCandidateScore,
 } from "./filed-returns-navigation-candidates";
-import { clickPortalElement } from "./filed-returns-dom";
+import { delay } from "../../core/time";
+import {
+  CLICKABLE_CONTROL_SELECTOR,
+  activateElement,
+  isHtmlElement,
+  isPlainFormActionInput,
+  isVisible,
+} from "./filed-returns-dom";
 
 const SUMMARY_DIALOG_SETTLE_DELAY_MS = 1_000;
 const SUMMARY_DIALOG_CONTROL_WAIT_MS = 1_000;
 const SUMMARY_DIALOG_POLL_MS = 15;
 const SUMMARY_MODAL_PATTERN = /system generated summary for gstr[\s-]?3b/i;
 const MODAL_SELECTOR = ".modal.in, .modal.show, .modal-open .modal, [role='dialog']";
-const CLICKABLE_SELECTOR = [
-  "a",
-  "button",
-  "[role='button']",
-  "[ng-click]",
-  "[data-ng-click]",
-  "[data-dismiss='modal']",
+const SUMMARY_DIALOG_EXTRA_ACTION_SELECTOR = "[data-dismiss='modal']";
+const SUMMARY_DIALOG_ACTION_SELECTOR = [
+  CLICKABLE_CONTROL_SELECTOR,
+  SUMMARY_DIALOG_EXTRA_ACTION_SELECTOR,
 ].join(",");
 
 export async function dismissKnownFiledReturnsSummaryModal(
@@ -72,7 +76,7 @@ function findVisibleSummaryModal(documentRef: Document): HTMLElement | null {
   const roots = Array.from(documentRef.querySelectorAll(MODAL_SELECTOR)).filter(
     (element): element is HTMLElement => isHtmlElement(documentRef, element) && isVisible(element),
   );
-  for (const element of getClickableElements(documentRef)) {
+  for (const element of getSummaryDialogActionElements(documentRef)) {
     const score = scoreFiledReturnsSummaryModalDismissalCandidate(toCandidateInput(element));
     if (score.score < 60) continue;
     let current: HTMLElement | null = element;
@@ -96,7 +100,7 @@ function findDismissalCandidate(
 ): { element: HTMLElement; score: NavigationCandidateScore } | null {
   let bestElement: HTMLElement | null = null;
   let bestScore: NavigationCandidateScore = { score: 0, safeSignals: [] };
-  for (const element of getClickableElements(modalRoot)) {
+  for (const element of getSummaryDialogActionElements(modalRoot)) {
     const score = scoreFiledReturnsSummaryModalDismissalCandidate(toCandidateInput(element));
     if (score.score > bestScore.score) {
       bestElement = element;
@@ -114,9 +118,12 @@ async function waitForSummaryModalToSettle(documentRef: Document): Promise<void>
   }
 }
 
-function getClickableElements(root: ParentNode): HTMLElement[] {
-  return Array.from(root.querySelectorAll(CLICKABLE_SELECTOR)).filter(
-    (element): element is HTMLElement => isHtmlElement(root, element) && isVisible(element),
+function getSummaryDialogActionElements(root: ParentNode): HTMLElement[] {
+  return Array.from(root.querySelectorAll(SUMMARY_DIALOG_ACTION_SELECTOR)).filter(
+    (element): element is HTMLElement =>
+      isHtmlElement(root, element) &&
+      (!isPlainFormActionInput(element) || element.matches(SUMMARY_DIALOG_EXTRA_ACTION_SELECTOR)) &&
+      isVisible(element),
   );
 }
 
@@ -132,38 +139,4 @@ function toCandidateInput(element: HTMLElement): NavigationCandidateInput {
   }
   if (title) input.title = title;
   return input;
-}
-
-function activateElement(element: HTMLElement): void {
-  element.scrollIntoView?.({ block: "center", inline: "center" });
-  const MouseEventConstructor = element.ownerDocument.defaultView?.MouseEvent;
-  if (MouseEventConstructor) {
-    for (const type of ["pointerover", "mouseover", "mouseenter", "pointerdown", "mousedown"]) {
-      element.dispatchEvent(
-        new MouseEventConstructor(type, {
-          bubbles: true,
-          cancelable: true,
-          view: element.ownerDocument.defaultView,
-        }),
-      );
-    }
-  }
-  clickPortalElement(element);
-}
-
-function isVisible(element: HTMLElement): boolean {
-  const style = element.ownerDocument.defaultView?.getComputedStyle(element);
-  if (!style || style.display === "none" || style.visibility === "hidden") return false;
-  const rect = element.getBoundingClientRect();
-  return rect.width > 0 || rect.height > 0 || element.offsetParent !== null;
-}
-
-function isHtmlElement(root: ParentNode, element: Element): element is HTMLElement {
-  const documentRef = root.nodeType === 9 ? (root as Document) : root.ownerDocument;
-  const HTMLElementConstructor = documentRef?.defaultView?.HTMLElement;
-  return HTMLElementConstructor ? element instanceof HTMLElementConstructor : false;
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
 }

@@ -11,6 +11,7 @@ export interface MainWorldFiledReturnsFilterSelectionOutcome {
  */
 export async function selectFiledReturnsFiltersInMainWorld(
   scope: FiledReturnsDownloadScope,
+  clickableControlSelector: string,
 ): Promise<MainWorldFiledReturnsFilterSelectionOutcome> {
   const filterTimeoutMs = 15_000;
   const filterPollMs = 250;
@@ -205,9 +206,7 @@ export async function selectFiledReturnsFiltersInMainWorld(
   }
 
   const searchMatches = Array.from(
-    document.querySelectorAll<HTMLElement>(
-      "a, button, [role='button'], [ng-click], [data-ng-click], input[type='button'], input[type='submit']",
-    ),
+    document.querySelectorAll<HTMLElement>(clickableControlSelector),
   ).filter(
     (element) =>
       isControlActionable(element) &&

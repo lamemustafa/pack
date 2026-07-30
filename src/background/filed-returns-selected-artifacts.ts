@@ -3,6 +3,7 @@ import type {
   FiledReturnsTargetReview,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
+import { delay } from "../core/time";
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import { SinglePeriodCleanupCheckpointError } from "../connectors/gst/single-period-cleanup-checkpoint";
 import {
@@ -37,12 +38,11 @@ import {
 import { runDownloadStepWithRetry } from "./filed-returns-flow-messaging";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
 import {
-  delay,
   extractActiveFinancialYear,
   extractActivePeriod,
   getFlowStepSettleMs,
   isFiledReturnDownloadReady,
-  MAX_FLOW_STEPS,
+  maxFlowStepsFor,
   persistFlowResponse,
   shouldContinueFlow,
 } from "./filed-returns-flow-runner-utils";
@@ -872,7 +872,7 @@ async function waitForGstr1ExcelDetailReady({
   let nextActivePeriod = activePeriod;
   let nextActiveFinancialYear = activeFinancialYear;
 
-  for (let attempt = 0; attempt < MAX_FLOW_STEPS; attempt += 1) {
+  for (let attempt = 0; attempt < maxFlowStepsFor(scope); attempt += 1) {
     const response = await runDownloadStepWithRetry(deps, tabId, {
       type: "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
       payload: scope,

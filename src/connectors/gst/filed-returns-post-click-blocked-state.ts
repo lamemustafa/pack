@@ -1,4 +1,5 @@
 import type { PortalDownloadTriggerResult } from "../../core/contracts";
+import { delay } from "../../core/time";
 import type { FiledReturnsDownloadTarget } from "./filed-returns-contracts";
 import { filedReturnScopeId } from "./filed-returns-return-descriptors";
 
@@ -57,8 +58,4 @@ export function detectPostClickBlockedState(
       canResume: true,
     },
   };
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
 }

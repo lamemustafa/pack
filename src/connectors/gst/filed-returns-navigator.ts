@@ -1,5 +1,7 @@
 import type { PortalNavigationResult } from "../../core/contracts";
+import { delay } from "../../core/time";
 import { dismissSafePostLoginDialogs } from "./filed-returns-dialogs";
+import { activateElement } from "./filed-returns-dom";
 import { clickBestHiddenFiledReturnsMenuCandidate } from "./filed-returns-hidden-navigation";
 import {
   collectSafeNavigationDiagnostics,
@@ -9,8 +11,7 @@ import {
   scoreReturnDashboardNavigationCandidate,
 } from "./filed-returns-navigation-candidates";
 import {
-  activateElement,
-  getClickableElements,
+  getNavigationElements,
   isReturnsMenuCandidate,
   isServicesMenuCandidate,
   revealMenuCandidate,
@@ -90,7 +91,7 @@ export async function navigateToFiledReturnsPage(
   }
 
   const diagnostics = collectSafeNavigationDiagnostics(
-    getClickableElements(documentRef).map(toNavigationCandidateInput),
+    getNavigationElements(documentRef).map(toNavigationCandidateInput),
   );
 
   return {
@@ -174,7 +175,7 @@ export async function navigateToReturnDashboardPage(
   if (afterReturns) return afterReturns;
 
   const diagnostics = collectSafeNavigationDiagnostics(
-    getClickableElements(documentRef).map(toNavigationCandidateInput),
+    getNavigationElements(documentRef).map(toNavigationCandidateInput),
   );
 
   return {
@@ -201,7 +202,7 @@ function clickBestFiledReturnsCandidate(
   scanStage: string,
   prefixSignals: readonly string[],
 ): PortalNavigationResult | null {
-  const elements = getClickableElements(documentRef);
+  const elements = getNavigationElements(documentRef);
   const candidates = elements.map(toNavigationCandidateInput);
   const candidateIndex = findFiledReturnsNavigationCandidateIndex(candidates);
   if (candidateIndex === -1) return null;
@@ -233,7 +234,7 @@ export function clickBestReturnDashboardCandidate(
   prefixSignals: readonly string[],
   scopeId = FILED_RETURNS_SCOPE_ID,
 ): PortalNavigationResult | null {
-  const elements = getClickableElements(documentRef);
+  const elements = getNavigationElements(documentRef);
   const candidateIndex = findReturnDashboardCandidateIndex(
     elements.map(toNavigationCandidateInput),
   );
@@ -276,8 +277,4 @@ function detectBlockedPortalState(documentRef: Document): PortalNavigationResult
     safeMessage: issue.safeMessage,
     ...(issue.userAction ? { userAction: issue.userAction } : {}),
   };
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
 }

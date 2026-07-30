@@ -11,7 +11,8 @@ import {
   hasFiledReturnsFilterFieldControl,
 } from "./filed-returns-filter-fields";
 import { acceptedFiledReturnsMonthTexts } from "./filed-returns-months";
-import { delay, dispatchChange, matchesAcceptedText, normaliseText } from "./filed-returns-dom";
+import { delay } from "../../core/time";
+import { dispatchChange, matchesAcceptedText, normaliseText } from "./filed-returns-dom";
 
 const FIELD_SETTLE_DELAY_MS = 500;
 const FIELD_SETTLE_POLL_MS = 50;

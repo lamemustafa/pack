@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { browser } from "wxt/browser";
 import { selectFiledReturnsFiltersInMainWorldForTab } from "../../src/background/main-world-filed-returns-filter-executor";
+import { CLICKABLE_CONTROL_SELECTOR } from "../../src/connectors/gst/filed-returns-dom";
 
 vi.mock("wxt/browser", () => ({
   browser: {
@@ -39,6 +40,7 @@ describe("main-world filed-return filter executor", () => {
             period: "May",
             returnType: "GSTR-3B",
           },
+          CLICKABLE_CONTROL_SELECTOR,
         ],
         target: { tabId: 17 },
         world: "MAIN",

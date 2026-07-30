@@ -1,6 +1,7 @@
+import { delay } from "../../core/time";
 import {
+  CLICKABLE_CONTROL_SELECTOR,
   activateElement,
-  delay,
   getActionableExactSearchControls,
   isHtmlElement,
   isVisible,
@@ -100,20 +101,21 @@ export function findFieldRoot(root: ParentNode, labelPattern: RegExp): HTMLEleme
 }
 
 export function getCustomDropdownControls(root: ParentNode): HTMLElement[] {
-  const selector = [
-    "button",
-    "[role='button']",
+  const extraSelector = [
     "[aria-haspopup]",
-    "[ng-click]",
-    "[data-ng-click]",
     ".select2-choice",
     ".ui-select-match",
     ".chosen-single",
     ".dropdown-toggle",
   ].join(",");
+  const selector = [CLICKABLE_CONTROL_SELECTOR, extraSelector].join(",");
 
-  return Array.from(root.querySelectorAll(selector)).filter((element) =>
-    isHtmlElement(root, element),
+  return Array.from(root.querySelectorAll(selector)).filter(
+    (element): element is HTMLElement =>
+      isHtmlElement(root, element) &&
+      (!element.matches("a,input[type='button'],input[type='submit']") ||
+        element.matches("[role='button'],[ng-click],[data-ng-click]") ||
+        element.matches(extraSelector)),
   );
 }
 

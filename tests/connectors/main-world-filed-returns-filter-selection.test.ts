@@ -1,6 +1,11 @@
 import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { CLICKABLE_CONTROL_SELECTOR } from "../../src/connectors/gst/filed-returns-dom";
 import { selectFiledReturnsFiltersInMainWorld } from "../../src/connectors/gst/main-world-filed-returns-filter-selection";
+
+function selectFilters(scope: Parameters<typeof selectFiledReturnsFiltersInMainWorld>[0]) {
+  return selectFiledReturnsFiltersInMainWorld(scope, CLICKABLE_CONTROL_SELECTOR);
+}
 
 afterEach(() => {
   vi.useRealTimers();
@@ -41,7 +46,7 @@ describe("main-world filed-return filter selection", () => {
       if (month) month.value = "Select";
     });
 
-    const outcome = await selectFiledReturnsFiltersInMainWorld({
+    const outcome = await selectFilters({
       financialYear: "2026-27",
       period: "May",
       returnType: "GSTR-1",
@@ -86,7 +91,7 @@ describe("main-world filed-return filter selection", () => {
       if (returnType) returnType.value = "Select";
     });
 
-    const outcome = await selectFiledReturnsFiltersInMainWorld({
+    const outcome = await selectFilters({
       financialYear: "2026-27",
       period: "May",
       returnType: "GSTR-1",
@@ -118,7 +123,7 @@ describe("main-world filed-return filter selection", () => {
     vi.stubGlobal("HTMLSelectElement", browserGlobals.HTMLSelectElement);
     vi.stubGlobal("Event", browserGlobals.Event);
 
-    const outcome = await selectFiledReturnsFiltersInMainWorld({
+    const outcome = await selectFilters({
       financialYear: "2026-27",
       period: "May",
       returnType: "GSTR-2B",
@@ -148,7 +153,7 @@ describe("main-world filed-return filter selection", () => {
     vi.stubGlobal("HTMLSelectElement", browserGlobals.HTMLSelectElement);
     vi.stubGlobal("Event", browserGlobals.Event);
 
-    const outcome = await selectFiledReturnsFiltersInMainWorld({
+    const outcome = await selectFilters({
       financialYear: "2026-27",
       period: "May",
       returnType: "GSTR-2B",
@@ -204,7 +209,7 @@ describe("main-world filed-return filter selection", () => {
       liveSearchClicks += 1;
     });
 
-    const outcomePromise = selectFiledReturnsFiltersInMainWorld({
+    const outcomePromise = selectFilters({
       financialYear: "2026-27",
       period: "May",
       returnType: "GSTR-1",
@@ -255,7 +260,7 @@ describe("main-world filed-return filter selection", () => {
       });
     }
 
-    const outcomePromise = selectFiledReturnsFiltersInMainWorld({
+    const outcomePromise = selectFilters({
       financialYear: "2026-27",
       period: "May",
       returnType: "GSTR-1",
@@ -289,7 +294,7 @@ describe("main-world filed-return filter selection", () => {
     vi.stubGlobal("HTMLSelectElement", browserGlobals.HTMLSelectElement);
     vi.stubGlobal("Event", browserGlobals.Event);
 
-    const outcomePromise = selectFiledReturnsFiltersInMainWorld({
+    const outcomePromise = selectFilters({
       financialYear: "2026-27",
       period: "May",
       returnType: "GSTR-1",

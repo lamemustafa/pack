@@ -1,4 +1,5 @@
 import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "./filed-returns-contracts";
+import { delay } from "../../core/time";
 import { findFiledReturnsFilterRoot } from "./filed-returns-custom-dropdown";
 import { filedReturnsFilterFieldMatches } from "./filed-returns-filter-fields";
 import {
@@ -18,11 +19,7 @@ import {
   shouldLeaveFilingPeriodUnselected,
   waitForFieldSelection,
 } from "./filed-returns-filter-selection";
-import {
-  activateElement,
-  delay,
-  findUniqueActionableExactSearchControl,
-} from "./filed-returns-dom";
+import { activateElement, findUniqueActionableExactSearchControl } from "./filed-returns-dom";
 import { markFiledReturnsSearchPending } from "./filed-returns-search-state";
 import { filedReturnDescriptor } from "./filed-returns-return-descriptors";
 

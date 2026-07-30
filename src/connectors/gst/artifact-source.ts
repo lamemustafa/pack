@@ -9,7 +9,7 @@ import {
   GSTR2B_PAGE_GENERATED_ARTIFACTS,
   GSTR2B_SUMMARY_PATH,
 } from "./portal-artifact-endpoints";
-import { normaliseText } from "./filed-returns-dom";
+import { getClickableElements, normaliseText } from "./filed-returns-dom";
 import { extractScopedFiledReturnsDetailIdentity } from "./filed-returns-detail-identity";
 import { filedReturnDetailIdentityMatchesScope } from "./filed-returns-detail-navigation";
 import { resolveVisibleFiledReturnDownloadCandidates } from "./filed-returns-download-candidates";
@@ -17,7 +17,6 @@ import { verifyFiledReturnsDownloadTarget } from "./filed-returns-download-targe
 
 const GSTR3B_GET_GEN_PDF_PATH = "/returns/auth/api/gstr3b/getgenpdf";
 const GST_RETURNS_ORIGIN = "https://return.gst.gov.in";
-const PAGE_ARTIFACT_CONTROL_SELECTOR = "a, button, [role='button']";
 
 export type ArtifactRequest = {
   returnType: "GSTR-1" | "GSTR-3B" | "GSTR-2B";
@@ -265,11 +264,9 @@ async function acquireGstr2bArtifact(
 
 function resolvePageArtifactControls(documentRef: Document, canonicalLabel: string): HTMLElement[] {
   const normalisedLabel = normaliseText(canonicalLabel);
-  return Array.from(
-    documentRef.querySelectorAll<HTMLElement>(PAGE_ARTIFACT_CONTROL_SELECTOR),
-  ).filter(
+  return getClickableElements(documentRef).filter(
     (element) =>
-      !element.querySelector(PAGE_ARTIFACT_CONTROL_SELECTOR) &&
+      getClickableElements(element).length === 0 &&
       normaliseText(element.textContent || "").includes(normalisedLabel),
   );
 }

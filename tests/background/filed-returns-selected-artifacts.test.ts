@@ -296,6 +296,127 @@ describe("GSTR-2B all-format selection", () => {
     expect(mocks.triggerAndObserveFiledReturnDownload).not.toHaveBeenCalled();
   });
 
+  it("keeps waiting for the GSTR-1 Excel detail page beyond the generic flow limit", async () => {
+    mocks.triggerAndObserveFiledReturnDownload.mockImplementation(
+      async ({ artifactType }: { artifactType: FiledReturnsConcreteArtifactType }) =>
+        downloaded(artifactType),
+    );
+    const pendingStep: PackMessageResponse = {
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
+        state: "clicked",
+        safeSignals: ["filed-gstr1-controls-pending"],
+        safeMessage: "Pack is waiting for the authenticated GSTR-1 page controls.",
+      },
+    };
+    const readyStep: PackMessageResponse = {
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
+        state: "ready",
+        safeSignals: [
+          "filed-return-download-ready",
+          "filed-gstr1-download-ready",
+          "filed-return-detail-period:April",
+          "filed-return-detail-financial-year:2026-27",
+        ],
+        safeMessage: "Pack found the target-bound GSTR-1 Excel control.",
+      },
+    };
+    const responses = [
+      pendingStep,
+      pendingStep,
+      pendingStep,
+      pendingStep,
+      pendingStep,
+      pendingStep,
+      readyStep,
+    ];
+    const sendMessageToTabWithInjection = vi.fn(async () => responses.shift() ?? readyStep);
+
+    const response = await triggerSelectedArtifacts({
+      activeFinancialYear: "2026-27",
+      activePeriod: "April",
+      deps: {
+        sendMessageToTabWithInjection,
+        stageCapturedDownloads: { ledgerId: "full-year-synthetic" },
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "ledger",
+          observation: "observation",
+        },
+        timings: { flowStepSettleMs: 0, portalNavigationSettleMs: 0 },
+      } as never,
+      scope: {
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2026-27",
+        period: "April",
+        returnType: "GSTR-1",
+      },
+      tabId: 17,
+    });
+
+    expect(response).toMatchObject({ flowStep: { state: "downloaded" } });
+    expect(sendMessageToTabWithInjection).toHaveBeenCalledTimes(7);
+    expect(
+      mocks.triggerAndObserveFiledReturnDownload.mock.calls.map(([input]) => input.artifactType),
+    ).toEqual(["PDF", "EXCEL"]);
+  });
+
+  it("stops the GSTR-1 Excel handoff at its bounded retry limit without triggering Excel", async () => {
+    mocks.triggerAndObserveFiledReturnDownload.mockImplementation(
+      async ({ artifactType }: { artifactType: FiledReturnsConcreteArtifactType }) =>
+        downloaded(artifactType),
+    );
+    const pendingStep: PackMessageResponse = {
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
+        state: "clicked",
+        safeSignals: ["filed-gstr1-controls-pending"],
+        safeMessage: "Pack is waiting for the authenticated GSTR-1 page controls.",
+      },
+    };
+    const sendMessageToTabWithInjection = vi.fn(async () => pendingStep);
+
+    const response = await triggerSelectedArtifacts({
+      activeFinancialYear: "2026-27",
+      activePeriod: "April",
+      deps: {
+        sendMessageToTabWithInjection,
+        stageCapturedDownloads: { ledgerId: "full-year-synthetic" },
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "ledger",
+          observation: "observation",
+        },
+        timings: { flowStepSettleMs: 0, portalNavigationSettleMs: 0 },
+      } as never,
+      scope: {
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2026-27",
+        period: "April",
+        returnType: "GSTR-1",
+      },
+      tabId: 17,
+    });
+
+    expect(response).toMatchObject({
+      flowStep: {
+        state: "user-action-required",
+        safeSignals: expect.arrayContaining(["gstr1-excel-detail-step-limit-reached"]),
+      },
+    });
+    expect(sendMessageToTabWithInjection).toHaveBeenCalledTimes(30);
+    expect(
+      mocks.triggerAndObserveFiledReturnDownload.mock.calls.map(([input]) => input.artifactType),
+    ).toEqual(["PDF"]);
+  });
+
   it("stages PDF, Excel, and JSON, then exports one ZIP", async () => {
     mocks.triggerAndObserveFiledReturnDownload
       .mockResolvedValueOnce(downloaded("PDF"))
