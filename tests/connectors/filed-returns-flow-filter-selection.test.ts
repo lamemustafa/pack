@@ -57,7 +57,7 @@ describe("filed returns flow — filter selection and API search", () => {
     expect(submittedForms).toEqual([{ action: "/returns/auth/gstr3b", method: "POST" }]);
   });
 
-  it("uses the filed-return API from a different GSTR-3B detail page", async () => {
+  it("requires user action rather than using the API from a different GSTR-3B detail page", async () => {
     const documentRef = createGstDocument(
       `
         <main>
@@ -82,10 +82,10 @@ describe("filed returns flow — filter selection and API search", () => {
     });
 
     expect(result).toMatchObject({
-      state: "clicked",
-      safeSignals: expect.arrayContaining(["filed-return-api-result-posted"]),
+      state: "user-action-required",
+      safeSignals: expect.arrayContaining(["gstr-3b-detail-route"]),
     });
-    expect(submittedForms).toEqual([{ action: "/returns/auth/gstr3b", method: "POST" }]);
+    expect(submittedForms).toEqual([]);
   });
 
   it("uses monthly preference for pre-quarterly GSTR-3B API handoff when role status omits userPref", async () => {
@@ -920,7 +920,7 @@ describe("filed returns flow — filter selection and API search", () => {
     }
   }, 12_000);
 
-  it("blocks GSTR-3B acquisition when the API detail handoff cannot verify role status", async () => {
+  it("falls back to visible GSTR-3B filters when API role status is unavailable", async () => {
     vi.useFakeTimers();
     try {
       const documentRef = createGstDocument(`
@@ -978,21 +978,17 @@ describe("filed returns flow — filter selection and API search", () => {
       await vi.advanceTimersByTimeAsync(47_000);
       const result = await resultPromise;
 
-      expect(result.state).toBe("blocked");
+      expect(result.state).toBe("clicked");
       expect(result.safeSignals).toEqual(
-        expect.arrayContaining([
-          "filed-return-api-searched",
-          "filed-return-api-result-found",
-          "filed-return-api-result-role-status-unavailable",
-        ]),
+        expect.arrayContaining(["filed-return-filter-selection-in-progress"]),
       );
-      expect(searchClicked).toBe(0);
+      expect(searchClicked).toBe(1);
     } finally {
       vi.useRealTimers();
     }
   }, 12_000);
 
-  it("blocks GSTR-3B acquisition when a quarterly-era role response omits user preference", async () => {
+  it("falls back to visible GSTR-3B filters when a quarterly-era API role response omits preference", async () => {
     vi.useFakeTimers();
     try {
       const documentRef = createGstDocument(`
@@ -1021,11 +1017,11 @@ describe("filed returns flow — filter selection and API search", () => {
       await vi.advanceTimersByTimeAsync(47_000);
       const result = await resultPromise;
 
-      expect(result.state).toBe("blocked");
+      expect(result.state).toBe("clicked");
       expect(result.safeSignals).toEqual(
-        expect.arrayContaining(["filed-return-api-result-role-status-unavailable"]),
+        expect.arrayContaining(["filed-return-filter-selection-in-progress"]),
       );
-      expect(searchClicked).toBe(0);
+      expect(searchClicked).toBe(1);
     } finally {
       vi.useRealTimers();
     }
