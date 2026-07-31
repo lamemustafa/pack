@@ -17,6 +17,7 @@ export const DEFAULT_SCOPE: FiledReturnsDownloadScope = {
 export function createDocument(body: string): Document {
   return new JSDOM(`<!doctype html><html><body>${body}</body></html>`, {
     pretendToBeVisual: true,
+    url: "https://returns.example.test/pages/returns/efiledreturns.html",
   }).window.document;
 }
 

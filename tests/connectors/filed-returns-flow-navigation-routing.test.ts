@@ -352,6 +352,47 @@ describe("filed returns flow — navigation and routing", () => {
     expect(clickedHrefs).toEqual(["https://return.gst.gov.in/returns/auth/dashboard"]);
   });
 
+  it("treats the duplicate-labelled Returns Quick Links hub as a GSTR-1 navigation waypoint", async () => {
+    const documentRef = createGstDocument(
+      `
+        <nav>
+          <a data-dashboard href="/returns/auth/dashboard">Returns Dashboard</a>
+          <a href="/returns/auth/efiledReturns">View Filed Returns</a>
+          <a>Track Return Status</a>
+          <a>ITC Forms</a>
+        </nav>
+        <main>
+          <a data-dashboard href="/returns/auth/dashboard">Returns Dashboard</a>
+          <a href="/returns/auth/efiledReturns">View Filed Returns</a>
+          <a>Track Return Status</a>
+          <a>ITC Forms</a>
+        </main>
+      `,
+      "https://services.example.test/services/auth/quicklinks/returns",
+    );
+    makeLayoutVisible(documentRef);
+    let dashboardClicked = 0;
+    for (const dashboard of documentRef.querySelectorAll("[data-dashboard]")) {
+      dashboard.addEventListener("click", (event) => {
+        event.preventDefault();
+        dashboardClicked += 1;
+      });
+    }
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "June",
+      returnType: "GSTR-1",
+    });
+
+    expect(result.state).toBe("clicked");
+    expect(result.safeSignals).not.toContain("filed-returns-heading");
+    expect(result.safeSignals).toContain("return-dashboard-candidate-clicked");
+    expect(result.safeMessage).toMatch(/\S/);
+    expect(dashboardClicked).toBe(1);
+  });
+
   it("leaves View Filed Returns for the GSTR-1 Return Dashboard route", async () => {
     const documentRef = createGstDocument(`
       <main>

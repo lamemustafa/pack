@@ -1013,20 +1013,23 @@ describe("filed returns flow — search and no-record observation", () => {
   });
 
   it("does not mark not-filed from non-filed-returns GST pages", async () => {
-    const documentRef = createDocument(`
-      <main>
-        <h1>Other GST Search</h1>
-        <form>
-          <select id="finYr"><option selected>2025-26</option></select>
-          <select id="optValue"><option selected>Monthly</option></select>
-          <select id="month"><option selected>March</option></select>
-          <select id="retTyp"><option selected>GSTR3B</option></select>
-        </form>
-        <section aria-label="Search results">
-          <p>No records found</p>
-        </section>
-      </main>
-    `);
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <h1>Other GST Search</h1>
+          <form>
+            <select id="finYr"><option selected>2025-26</option></select>
+            <select id="optValue"><option selected>Monthly</option></select>
+            <select id="month"><option selected>March</option></select>
+            <select id="retTyp"><option selected>GSTR3B</option></select>
+          </form>
+          <section aria-label="Search results">
+            <p>No records found</p>
+          </section>
+        </main>
+      `,
+      "https://returns.example.test/returns/auth/dashboard",
+    );
     markPackSubmittedSearch(documentRef, DEFAULT_SCOPE);
 
     const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);

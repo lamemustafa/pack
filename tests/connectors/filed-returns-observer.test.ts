@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { observeFiledReturnsPageText } from "../../src/connectors/gst/filed-returns-observer";
 
+const FILED_RETURNS_ROUTE_HINTS = { pathname: "/returns/auth/efiledReturns" };
+const GSTR1_DETAIL_ROUTE_HINTS = { pathname: "/returns/auth/gstr1" };
+const GSTR3B_DETAIL_ROUTE_HINTS = { pathname: "/returns/auth/gstr3b" };
+
 describe("filed returns private observer", () => {
   it("does not mark generic PDF controls as filed GSTR-3B readiness", () => {
-    const observation = observeFiledReturnsPageText(`
+    const observation = observeFiledReturnsPageText(
+      `
       View Filed Returns
       Financial Year 2023-24
       Return Filing Period APR
@@ -11,7 +16,9 @@ describe("filed returns private observer", () => {
       Filed
       Download
       PDF
-    `);
+    `,
+      GSTR3B_DETAIL_ROUTE_HINTS,
+    );
 
     expect(observation.state).toBe("download-not-visible");
     expect(observation.safeSignals).toEqual(
@@ -21,12 +28,15 @@ describe("filed returns private observer", () => {
   });
 
   it("marks the page ready when the explicit filed GSTR-3B download control is visible", () => {
-    const observation = observeFiledReturnsPageText(`
+    const observation = observeFiledReturnsPageText(
+      `
       View Filed Returns
       GSTR-3B - Monthly Return
       Status - Filed
       DOWNLOAD FILED GSTR-3B
-    `);
+    `,
+      GSTR3B_DETAIL_ROUTE_HINTS,
+    );
 
     expect(observation.state).toBe("ready");
     expect(observation.safeSignals).toEqual(
@@ -36,12 +46,15 @@ describe("filed returns private observer", () => {
   });
 
   it("marks the page ready when the explicit filed GSTR-1 download control is visible", () => {
-    const observation = observeFiledReturnsPageText(`
+    const observation = observeFiledReturnsPageText(
+      `
       View Filed Returns
       GSTR-1
       Status - Filed
       DOWNLOAD FILED GSTR-1
-    `);
+    `,
+      GSTR1_DETAIL_ROUTE_HINTS,
+    );
 
     expect(observation.state).toBe("ready");
     expect(observation.scopeId).toBe("gst-filed-returns-gstr1-pdf-private-v0");
@@ -51,13 +64,16 @@ describe("filed returns private observer", () => {
   });
 
   it("does not mark generic GSTR-1 PDF controls as filed-return readiness", () => {
-    const observation = observeFiledReturnsPageText(`
+    const observation = observeFiledReturnsPageText(
+      `
       View Filed Returns
       GSTR-1
       Filed
       Download
       PDF
-    `);
+    `,
+      GSTR1_DETAIL_ROUTE_HINTS,
+    );
 
     expect(observation.state).toBe("download-not-visible");
     expect(observation.safeSignals).toEqual(
@@ -78,7 +94,8 @@ describe("filed returns private observer", () => {
   });
 
   it("marks the initial filed-returns filter form as requiring filters", () => {
-    const observation = observeFiledReturnsPageText(`
+    const observation = observeFiledReturnsPageText(
+      `
       View Filed Returns
       Financial Year
       Return Filing Period
@@ -86,7 +103,9 @@ describe("filed returns private observer", () => {
       GSTR-1
       GSTR-3B
       Search
-    `);
+    `,
+      FILED_RETURNS_ROUTE_HINTS,
+    );
 
     expect(observation.state).toBe("filters-required");
     expect(observation.safeSignals).toEqual(
@@ -95,7 +114,8 @@ describe("filed returns private observer", () => {
   });
 
   it("marks the filed returns result table as requiring a row view before PDF readiness", () => {
-    const observation = observeFiledReturnsPageText(`
+    const observation = observeFiledReturnsPageText(
+      `
       View Filed Returns
       Financial Year
       Return Filing Period
@@ -110,7 +130,9 @@ describe("filed returns private observer", () => {
       View/Download
       GSTR3B
       View
-    `);
+    `,
+      FILED_RETURNS_ROUTE_HINTS,
+    );
 
     expect(observation.state).toBe("filed-return-results-visible");
     expect(observation.safeSignals).toEqual(
@@ -256,13 +278,16 @@ describe("filed returns private observer", () => {
   });
 
   it("asks the user to log in without exposing portal text", () => {
-    const observation = observeFiledReturnsPageText(`
+    const observation = observeFiledReturnsPageText(
+      `
       Goods and Services Tax
       Login
       Username
       Password
       CAPTCHA
-    `);
+    `,
+      FILED_RETURNS_ROUTE_HINTS,
+    );
 
     expect(observation.state).toBe("login-required");
     expect(observation.userAction?.type).toBe("LOGIN");
@@ -270,7 +295,8 @@ describe("filed returns private observer", () => {
   });
 
   it("does not treat authenticated Last Login text as a login requirement", () => {
-    const observation = observeFiledReturnsPageText(`
+    const observation = observeFiledReturnsPageText(
+      `
       View Filed Returns
       Last Login: 24/06/2026
       Financial Year
@@ -278,7 +304,9 @@ describe("filed returns private observer", () => {
       Return Type
       GSTR-3B
       Search
-    `);
+    `,
+      FILED_RETURNS_ROUTE_HINTS,
+    );
 
     expect(observation.state).toBe("filters-required");
     expect(observation.safeSignals).not.toContain("login");
@@ -377,11 +405,11 @@ describe("filed returns private observer", () => {
     );
   });
 
-  it("uses a return-neutral state when no requested return identity is visible", () => {
+  it("does not treat a View Filed Returns label without its canonical route as filed returns", () => {
     const observation = observeFiledReturnsPageText("View Filed Returns");
 
-    expect(observation.state).toBe("download-not-visible");
-    expect(observation.state).not.toBe("gstr-3b-not-visible");
-    expect(observation.safeMessage).toContain("requested return type");
+    expect(observation.state).toBe("wrong-page");
+    expect(observation.safeSignals).not.toContain("filed-returns-heading");
+    expect(observation.userAction?.type).toBe("NAVIGATE_TO_SUPPORTED_PAGE");
   });
 });
