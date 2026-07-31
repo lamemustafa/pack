@@ -5,7 +5,15 @@ import {
   normaliseFiledReturnsArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
 
-const KEY_PREFIX = "pack.artifact-acquisition.v2";
+/**
+ * Canonical prefix for the per-target session checkpoint family. Exported so the
+ * storage-disclosure test can assert the README documents it: this family is
+ * generated rather than listed in PACK_SESSION_STORAGE_KEYS, so an inventory
+ * test driven only by those objects cannot see it.
+ */
+export const PACK_ARTIFACT_ACQUISITION_KEY_PREFIX = "pack.artifact-acquisition.v2";
+
+const KEY_PREFIX = PACK_ARTIFACT_ACQUISITION_KEY_PREFIX;
 
 export type ArtifactAcquisitionTarget = Pick<
   FiledReturnsDownloadScope,

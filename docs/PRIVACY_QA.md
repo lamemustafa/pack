@@ -63,11 +63,19 @@ For each release candidate:
   GSTIN/PAN, taxpayer name, portal HTML, credential, cookie, token or artifact
   bytes. Shareable evidence must replace the runtime action id with a neutral
   `ACTION-*` alias and omit the browser download id.
-- Confirm `pack:full-fiscal-year-ledger`, when present, contains only financial
-  year, period, return type, artifact type, target status, attempts, safe
-  signals/messages, and timestamps. It must not contain raw URLs/referrers,
-  local paths, filenames, GSTIN/PAN, taxpayer names, ARNs, portal HTML, cookies,
-  credentials, OTP, or CAPTCHA data.
+- Confirm `pack:full-fiscal-year-ledger`, when present, contains only ledger,
+  schema, plan, connector and extension-version identifiers; financial year,
+  period, return type and artifact type; target status, attempts, safe
+  signals/messages, revisions, ZIP phase and timestamps; during a final ZIP
+  handoff the ZIP request timestamp and the exact numeric browser download ID;
+  and per-target diagnostics limited to an opaque action ID, the exact numeric
+  browser download ID, and endpoint, download-path, MIME, byte-count, status and
+  error **classes**. It must not contain raw URLs/referrers, local paths,
+  filenames, GSTIN/PAN, taxpayer names, ARNs, portal HTML, cookies, credentials,
+  OTP, or CAPTCHA data. This list must stay identical to the
+  `pack:full-fiscal-year-ledger` entry in `README.md`; both describe one record
+  shape owned by the code, so a difference between them is a defect in whichever
+  is stale, not a judgement call.
 - Confirm "Clear local Pack data" is only exposed from Pack Options, blocks
   while filed-return recovery remains unresolved, clears recoverable temporary
   OPFS staging before deleting its ledger identifiers, and then removes the

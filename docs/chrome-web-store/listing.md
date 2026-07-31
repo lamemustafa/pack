@@ -91,13 +91,13 @@ Used only after an explicit user action to save a target-bound GST Portal artifa
 ### `offscreen`
 
 ```text
-Used only for a bundled extension-owned offscreen document to create and revoke temporary Blob URLs, stage user-selected PDF or Excel bytes in browser-local OPFS for interrupted ZIP recovery, and assemble a requested ZIP. It loads no remote content and closes after the bounded operation.
+Used only for a bundled extension-owned offscreen document to create and revoke temporary Blob URLs, stage user-selected PDF, Excel or portal-data JSON bytes in browser-local OPFS for interrupted ZIP recovery, and assemble a requested ZIP. It loads no remote content and closes after the bounded operation.
 ```
 
 ### `scripting`
 
 ```text
-Used only on the four declared GST Portal hosts to detect supported filed-return pages; verify the selected return, financial year, period, and artifact identity; activate user-requested portal download controls; and, for action-bound capture paths, intercept the resulting fetch, XHR, or Blob response in the page's main world so the selected PDF or Excel bytes can be saved locally or staged in OPFS.
+Used only on the four declared GST Portal hosts to detect supported filed-return pages; verify the selected return, financial year, period, and artifact identity; activate user-requested portal download controls; and, for action-bound capture paths, intercept the resulting fetch, XHR, or Blob response in the page's main world so the selected PDF, Excel or portal-data JSON bytes can be saved locally or staged in OPFS.
 ```
 
 ### `storage`
