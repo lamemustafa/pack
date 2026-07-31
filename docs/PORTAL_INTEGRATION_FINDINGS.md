@@ -81,3 +81,11 @@ This log records live diagnostic findings that constrain Pack's local, target-bo
     and the control-label match were each a second copy that drifted from the first. When a portal
     integration fails, check for a duplicated contract before writing new code, and prefer deriving
     from the canonical predicate over restating it.
+
+20. Observed in authorised manual QA: the Returns Quick Links hub is a third-origin waypoint, not
+    the View Filed Returns destination. It contains both `Returns Dashboard` and `View Filed
+Returns` twice (once in navigation and once in the body), alongside `Track Return Status` and
+    `ITC Forms`. Treat its labels only as navigation candidates: route-derived page classification
+    must leave this hub as a wrong page, while the existing scored navigator tolerates the duplicate
+    candidates and continues through Returns Dashboard. The portal location is deliberately not
+    recorded here; Pack never persists, logs, or constructs portal URLs.
