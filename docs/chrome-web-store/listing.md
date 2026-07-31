@@ -97,7 +97,7 @@ Used only for a bundled extension-owned offscreen document to create and revoke 
 ### `scripting`
 
 ```text
-Used only on the four declared GST Portal hosts to detect supported filed-return pages; verify the selected return, financial year, period, and artifact identity; activate user-requested portal download controls; and, for action-bound capture paths, intercept the resulting fetch, XHR, or Blob response in the page's main world so the selected PDF, Excel or portal-data JSON bytes can be saved locally or staged in OPFS.
+Used only on the four declared GST Portal hosts to detect supported filed-return pages; verify the selected return, financial year, period, and artifact identity; activate user-requested portal download controls and, for those action-bound capture paths, intercept the resulting fetch, XHR, or Blob response in the page's main world so the selected PDF or Excel bytes can be saved locally or staged in OPFS; and, when portal data (JSON) is the requested artifact, issue one authenticated same-origin request from the page's own context to the portal's JSON endpoint for the verified period so those bytes can be saved locally or staged in OPFS.
 ```
 
 ### `storage`

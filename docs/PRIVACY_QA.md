@@ -38,7 +38,8 @@ For each release candidate:
 - Confirm transient artifact-byte handling is used only for an explicit
   user-started, target-bound local download or ZIP export and its saved
   recovery/cleanup lifecycle. Generated ZIP bytes must remain transiently in
-  memory. Captured PDF/XLS bytes may also use temporary local OPFS staging;
+  memory. Captured PDF, XLS and portal-data JSON bytes may also use temporary
+  local OPFS staging;
   interrupted exports or cleanup failures may retain that staging across
   recovery attempts until confirmed cleanup or a successful explicit discard.
   Artifact bytes must not be written to extension storage, IndexedDB, Cache

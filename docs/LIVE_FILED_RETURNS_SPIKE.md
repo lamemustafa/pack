@@ -397,7 +397,8 @@ flow step. The diagnostic is limited to:
 
 The diagnostic must not include raw URLs, query strings, headers, cookies,
 tokens, filenames, local paths, GSTIN/PAN, taxpayer names, portal HTML, response
-bodies or PDF/XLS bytes. Phase 0 acceptance requires clean Chrome, clean Brave
+bodies, or PDF, XLS and portal-data JSON bytes. Phase 0 acceptance requires
+clean Chrome, clean Brave
 and the real profile where the native Save dialog appeared, with "Ask where to
 save each file" tested on and off. If GSTR-3B action-bound capture passes this
 matrix, the next decision is whether a GSTR-3B-only V0 cut is acceptable or
@@ -418,8 +419,8 @@ and the runtime action id is replaced there with a neutral `ACTION-*` alias.
 
 ## Transient artifact-byte boundary
 
-Pack may handle filed-return PDF/XLS bytes only for an explicit user-started,
-target-bound local download. A single-artifact handoff is transient in memory.
+Pack may handle filed-return PDF, XLS and portal-data JSON bytes only for an
+explicit user-started, target-bound local download. A single-artifact handoff is transient in memory.
 Selected-file ZIP and full-fiscal-year export may additionally use temporary
 local OPFS staging so a service-worker restart can resume from a durable
 checkpoint or safely clean up the same exact run. If the worker stops after an
