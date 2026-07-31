@@ -5,11 +5,18 @@ const mocks = vi.hoisted(() => {
   return {
     session,
     browser: {
-      downloads: { search: vi.fn() },
+      downloads: { cancel: vi.fn(), search: vi.fn() },
       storage: {
         session: {
-          get: vi.fn(async (key: string) => ({ [key]: session[key] })),
-          remove: vi.fn(async (key: string) => delete session[key]),
+          get: vi.fn(async (keys?: string | string[]) => {
+            if (keys === undefined) return { ...session };
+            return Object.fromEntries(
+              (Array.isArray(keys) ? keys : [keys]).map((key) => [key, session[key]]),
+            );
+          }),
+          remove: vi.fn(async (keys: string | string[]) => {
+            for (const key of Array.isArray(keys) ? keys : [keys]) delete session[key];
+          }),
           set: vi.fn(async (values: Record<string, unknown>) => Object.assign(session, values)),
         },
       },
@@ -21,6 +28,7 @@ vi.mock("wxt/browser", () => ({ browser: mocks.browser }));
 import {
   artifactAcquisitionCheckpointKey,
   clearArtifactAcquisitionCheckpoint,
+  clearArtifactAcquisitionCheckpoints,
   clearArtifactAcquisitionCheckpointsAfterPersistedSummary,
   persistArtifactAcquisitionDownloadId,
   persistArtifactAcquisitionIntent,
@@ -40,6 +48,12 @@ const MAY_DEFAULT_ARTIFACT = {
   financialYear: MAY_PDF.financialYear,
   period: MAY_PDF.period,
   returnType: MAY_PDF.returnType,
+};
+const MAY_COMPOSITE = {
+  artifactType: "PDF_AND_EXCEL" as const,
+  financialYear: "2025-26",
+  period: "May",
+  returnType: "GSTR-2B" as const,
 };
 
 describe("artifact acquisition checkpoint", () => {
@@ -209,6 +223,95 @@ describe("artifact acquisition checkpoint", () => {
     expect(mocks.session[artifactAcquisitionCheckpointKey(JUNE_PDF)]).toEqual(
       expect.objectContaining({ requestId: "request-june" }),
     );
+  });
+
+  it("clears every concrete interrupted checkpoint when a composite target review is cancelled", async () => {
+    await persistArtifactAcquisitionDownloadId({
+      ...MAY_COMPOSITE,
+      artifactType: "PDF",
+      downloadId: 9,
+      requestId: "request-may-pdf",
+      state: "download-observing",
+    });
+    await persistArtifactAcquisitionDownloadId({
+      ...MAY_COMPOSITE,
+      artifactType: "EXCEL",
+      downloadId: 10,
+      requestId: "request-may-excel",
+      state: "download-observing",
+    });
+    mocks.browser.downloads.search.mockResolvedValue([{ state: "interrupted" }]);
+
+    await expect(clearArtifactAcquisitionCheckpoints(MAY_COMPOSITE)).resolves.toBe(true);
+
+    expect(
+      mocks.session[artifactAcquisitionCheckpointKey({ ...MAY_COMPOSITE, artifactType: "PDF" })],
+    ).toBeUndefined();
+    expect(
+      mocks.session[artifactAcquisitionCheckpointKey({ ...MAY_COMPOSITE, artifactType: "EXCEL" })],
+    ).toBeUndefined();
+    await expect(
+      reconcileArtifactAcquisitionCheckpoint({ ...MAY_COMPOSITE, artifactType: "PDF" }),
+    ).resolves.toEqual({ state: "retry-safe" });
+    await expect(
+      reconcileArtifactAcquisitionCheckpoint({ ...MAY_COMPOSITE, artifactType: "EXCEL" }),
+    ).resolves.toEqual({ state: "retry-safe" });
+  });
+
+  it("cancels exact active downloads before clearing their checkpoints", async () => {
+    await persistArtifactAcquisitionDownloadId({
+      ...MAY_COMPOSITE,
+      artifactType: "PDF",
+      downloadId: 9,
+      requestId: "request-may-pdf",
+      state: "download-observing",
+    });
+    await persistArtifactAcquisitionDownloadId({
+      ...MAY_COMPOSITE,
+      artifactType: "EXCEL",
+      downloadId: 10,
+      requestId: "request-may-excel",
+      state: "download-observing",
+    });
+    mocks.browser.downloads.search
+      .mockResolvedValueOnce([{ state: "in_progress" }])
+      .mockResolvedValueOnce([{ state: "interrupted" }])
+      .mockResolvedValueOnce([{ state: "in_progress" }])
+      .mockResolvedValueOnce([{ state: "interrupted" }]);
+    mocks.browser.downloads.cancel.mockResolvedValue(undefined);
+
+    await expect(clearArtifactAcquisitionCheckpoints(MAY_COMPOSITE)).resolves.toBe(true);
+
+    expect(mocks.browser.downloads.cancel).toHaveBeenNthCalledWith(1, 9);
+    expect(mocks.browser.downloads.cancel).toHaveBeenNthCalledWith(2, 10);
+  });
+
+  it("retains completed checkpoints when cancellation cannot make them retry-safe", async () => {
+    await persistArtifactAcquisitionDownloadId({
+      ...MAY_COMPOSITE,
+      artifactType: "PDF",
+      downloadId: 9,
+      requestId: "request-may-pdf",
+      state: "download-observing",
+    });
+    await persistArtifactAcquisitionDownloadId({
+      ...MAY_COMPOSITE,
+      artifactType: "EXCEL",
+      downloadId: 10,
+      requestId: "request-may-excel",
+      state: "download-observing",
+    });
+    mocks.browser.downloads.search.mockResolvedValue([{ state: "complete" }]);
+
+    await expect(clearArtifactAcquisitionCheckpoints(MAY_COMPOSITE)).resolves.toBe(false);
+
+    expect(
+      mocks.session[artifactAcquisitionCheckpointKey({ ...MAY_COMPOSITE, artifactType: "PDF" })],
+    ).toBeDefined();
+    expect(
+      mocks.session[artifactAcquisitionCheckpointKey({ ...MAY_COMPOSITE, artifactType: "EXCEL" })],
+    ).toBeDefined();
+    expect(mocks.browser.downloads.cancel).not.toHaveBeenCalled();
   });
 
   it("clears a completed target only after its summary is durable", async () => {

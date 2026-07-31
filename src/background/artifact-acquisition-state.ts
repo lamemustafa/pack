@@ -73,6 +73,46 @@ export async function clearArtifactAcquisitionCheckpoint(
   }
 }
 
+/**
+ * Cancels exact in-progress downloads before clearing every checkpoint for an
+ * explicitly cancelled target review. Completed, unknown, and intent-only
+ * checkpoints remain fail-closed because they cannot be safely retried.
+ */
+export async function clearArtifactAcquisitionCheckpoints(
+  scope: FiledReturnsDownloadScope,
+): Promise<boolean> {
+  const keys = concreteFiledReturnsArtifactTypes(
+    normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType),
+  ).map((artifactType) => artifactAcquisitionCheckpointKey({ ...scope, artifactType }));
+  try {
+    const stored = await browser.storage.session.get(keys);
+    for (const key of keys) {
+      const checkpoint = stored[key];
+      if (
+        !isArtifactAcquisitionCheckpoint(checkpoint) ||
+        typeof checkpoint.downloadId !== "number" ||
+        !Number.isSafeInteger(checkpoint.downloadId)
+      ) {
+        return false;
+      }
+      const downloadId = checkpoint.downloadId;
+      const [download] = await browser.downloads.search({ id: downloadId });
+      if (download?.state === "complete" || !download?.state) return false;
+      if (download.state === "in_progress") {
+        await browser.downloads.cancel(downloadId);
+        const [cancelledDownload] = await browser.downloads.search({ id: downloadId });
+        if (cancelledDownload?.state !== "interrupted") return false;
+      } else if (download.state !== "interrupted") {
+        return false;
+      }
+    }
+    await browser.storage.session.remove(keys);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Clears completed exact-ID ownership only after the matching summary is durable. */
 export async function clearArtifactAcquisitionCheckpointsAfterPersistedSummary(
   scope: FiledReturnsDownloadScope,

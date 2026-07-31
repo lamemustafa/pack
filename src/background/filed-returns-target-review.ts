@@ -10,6 +10,7 @@ import {
   concreteFiledReturnsArtifactTypes,
   normaliseFiledReturnsArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
+import { clearArtifactAcquisitionCheckpoints } from "./artifact-acquisition-state";
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import {
   canonicalDurableTargetStatus,
@@ -314,6 +315,27 @@ export async function resolveUnconfirmedFiledReturnsDownload(
       if (!parsedReview) return malformedTargetReviewResponse(scope);
       await browser.storage.local.set({ [key]: parsedReview });
       return responseForFiledReturnsTargetReview(parsedReview);
+    }
+
+    if (hasArtifactAcquisitionRecoverySignal(review.safeSignals)) {
+      const checkpointsCleared = await clearArtifactAcquisitionCheckpoints(review.scope);
+      if (!checkpointsCleared) {
+        const clearFailureReview: FiledReturnsTargetReview = {
+          ...review,
+          revision: targetReviewRevision(review) + 1,
+          safeSignals: uniqueSafeSignals([
+            ...review.safeSignals,
+            "artifact-acquisition-checkpoint-clear-failed",
+          ]),
+          safeMessage:
+            "Pack could not clear retained artifact recovery state. It will not start another portal action automatically.",
+          updatedAt: (deps.now?.() ?? new Date()).toISOString(),
+        };
+        const parsedReview = parseFiledReturnsTargetReview(clearFailureReview);
+        if (!parsedReview) return malformedTargetReviewResponse(scope);
+        await browser.storage.local.set({ [key]: parsedReview });
+        return responseForFiledReturnsTargetReview(parsedReview);
+      }
     }
 
     await browser.storage.local.remove(key);
@@ -804,6 +826,7 @@ function targetReviewStep(review: FiledReturnsTargetReview): PortalFlowStepResul
               ].includes(signal) || signal.endsWith("-main-world-capture-timeout"),
           )
         : []),
+      ...review.safeSignals.filter((signal) => signal.startsWith("artifact-acquisition-")),
       ...(hasSinglePeriodCleanupFailure(review.safeSignals)
         ? ["filed-returns-target-local-cleanup-required"]
         : []),
@@ -850,6 +873,10 @@ function targetReviewDiagnosticSignals(safeSignals: readonly string[]): string[]
       signal.endsWith("-main-world-capture-timeout") ||
       signal.endsWith("-target-bound-native-blob-click-delegated"),
   );
+}
+
+function hasArtifactAcquisitionRecoverySignal(safeSignals: readonly string[]): boolean {
+  return safeSignals.some((signal) => signal.startsWith("artifact-acquisition-"));
 }
 
 const TARGET_REVIEW_BROWSER_DIAGNOSTIC_SIGNALS = new Set([
@@ -927,6 +954,7 @@ function requiresTargetReview(step: PortalFlowStepResult): boolean {
   if (hasSinglePeriodCleanupFailure(step.safeSignals)) return true;
   if (step.safeSignals.includes("single-period-bundle-artifact-review-required")) return true;
   if (step.safeSignals.includes("filed-return-durable-status-rejected")) return true;
+  if (hasArtifactAcquisitionRecoverySignal(step.safeSignals)) return true;
   if (step.safeSignals.includes("filed-gstr1-excel-no-details-available")) return false;
   return (
     step.state === "download-unconfirmed" ||
