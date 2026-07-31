@@ -9,9 +9,16 @@ import {
   normaliseFiledReturnsArtifactType,
   supportsFiledReturnsArtifactType,
 } from "./filed-returns-artifacts";
-import { isFiledReturnsReturnType } from "./filed-returns-return-types";
+import {
+  isFiledReturnsReturnType,
+  type FiledReturnsReturnType,
+} from "./filed-returns-return-types";
 import { FILED_RETURNS_MONTHS, FULL_FISCAL_YEAR_PERIOD } from "./filed-returns-scope";
-import { parseDurableFiledReturnsSignals } from "./filed-returns-durable-signals";
+import {
+  FILED_RETURN_ROUTE_MISMATCH_SIGNALS,
+  RETURN_TYPE_MISMATCH_RECOVERY_STOPPED_SIGNAL,
+  parseDurableFiledReturnsSignals,
+} from "./filed-returns-durable-signals";
 
 type DurableMessageKey =
   | "complete"
@@ -71,6 +78,10 @@ export function canonicalDurableSummaryMessage(
   status: FiledReturnsFlowSummary["status"],
   signals: readonly string[],
 ): string {
+  const mismatchedReturnType = visibleReturnTypeMismatch(scope, status, signals);
+  if (mismatchedReturnType) {
+    return incompleteReturnTypeMismatchRecoveryMessage(scope, mismatchedReturnType);
+  }
   const mismatchedGstr1Period = visibleGstr1MismatchPeriod(scope, status, signals);
   if (mismatchedGstr1Period) {
     return incompleteGstr1PeriodMismatchRecoveryMessage(scope, mismatchedGstr1Period);
@@ -87,6 +98,17 @@ export function canonicalDurableSummaryMessage(
     }
   }
   return renderDurableMessage(messageKeyForSummary(status, signals), scope);
+}
+
+export function incompleteReturnTypeMismatchRecoveryMessage(
+  scope: FiledReturnsDownloadScope,
+  visibleReturnType: FiledReturnsReturnType,
+): string {
+  return `Pack remained on a filed ${visibleReturnType} page after one bounded navigation attempt, while the requested return is ${scope.returnType}. ${returnTypeMismatchRecoveryInstruction(scope)}`;
+}
+
+export function returnTypeMismatchRecoveryInstruction(scope: FiledReturnsDownloadScope): string {
+  return `Open the requested ${scope.returnType} return page in the GST Portal, then start Pack again.`;
 }
 
 export function incompleteGstr1PeriodMismatchRecoveryMessage(
@@ -209,6 +231,21 @@ export function visibleGstr1MismatchPeriod(
   return visiblePeriod && FILED_RETURNS_MONTHS.includes(visiblePeriod as never)
     ? visiblePeriod
     : null;
+}
+
+function visibleReturnTypeMismatch(
+  scope: FiledReturnsDownloadScope,
+  status: FiledReturnsFlowSummary["status"],
+  signals: readonly string[],
+): FiledReturnsReturnType | null {
+  if (status !== "blocked" || !signals.includes(RETURN_TYPE_MISMATCH_RECOVERY_STOPPED_SIGNAL)) {
+    return null;
+  }
+  const visibleReturnTypes = Object.entries(FILED_RETURN_ROUTE_MISMATCH_SIGNALS)
+    .filter(([, signal]) => signals.includes(signal))
+    .map(([returnType]) => returnType as FiledReturnsReturnType)
+    .filter((returnType) => returnType !== scope.returnType);
+  return visibleReturnTypes.length === 1 ? (visibleReturnTypes[0] ?? null) : null;
 }
 
 function messageKeyForSummary(

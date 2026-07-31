@@ -10,7 +10,9 @@ import {
 } from "../connectors/gst/filed-returns-durable-signals";
 import {
   gstr1PeriodMismatchRecoveryUserAction,
+  incompleteReturnTypeMismatchRecoveryMessage,
   incompleteGstr1PeriodMismatchRecoveryMessage,
+  returnTypeMismatchRecoveryInstruction,
 } from "../connectors/gst/filed-returns-durable-status";
 import { FILED_RETURNS_MONTHS } from "../connectors/gst/filed-returns-scope";
 import type { FiledReturnsReturnType } from "../connectors/gst/filed-returns-return-types";
@@ -58,7 +60,7 @@ export function updateReturnTypeMismatchRecovery(
 
   return {
     attempts: (current?.attempts ?? 0) + 1,
-    safeSignals: uniqueSignals(current?.safeSignals ?? [], [mismatchSignal]),
+    safeSignals: [mismatchSignal],
     visibleReturnType,
   };
 }
@@ -71,7 +73,7 @@ export function stopNonConvergingReturnTypeMismatchRecovery(
   if (!recovery || recovery.attempts <= MAX_GSTR1_PERIOD_MISMATCH_RECOVERY_ATTEMPTS) return null;
   if (hasHigherPriorityPortalAction(response.flowStep)) return null;
 
-  const instruction = `Open the requested ${scope.returnType} return page in the GST Portal, then start Pack again.`;
+  const instruction = returnTypeMismatchRecoveryInstruction(scope);
   return {
     ...response,
     flowStep: {
@@ -82,7 +84,7 @@ export function stopNonConvergingReturnTypeMismatchRecovery(
         [RETURN_TYPE_MISMATCH_RECOVERY_STOPPED_SIGNAL],
         response.flowStep.safeSignals.filter(isDurableFiledReturnsSignal),
       ).slice(0, 32),
-      safeMessage: `Pack remained on a filed ${recovery.visibleReturnType} page after one bounded navigation attempt, while the requested return is ${scope.returnType}. ${instruction}`,
+      safeMessage: incompleteReturnTypeMismatchRecoveryMessage(scope, recovery.visibleReturnType),
       userAction: {
         type: "NAVIGATE_TO_SUPPORTED_PAGE",
         message: instruction,

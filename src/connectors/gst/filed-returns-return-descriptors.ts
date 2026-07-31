@@ -9,6 +9,7 @@ export interface FiledReturnDescriptor {
   label: FiledReturnsReturnType;
   scopeId: string;
   signalSlug: string;
+  reselectionDestination: "filed-returns" | "return-dashboard";
   detailRoutePattern: RegExp;
   detailHeadingPattern: RegExp;
   explicitDownloadPattern: RegExp;
@@ -23,6 +24,7 @@ export const FILED_RETURN_DESCRIPTORS: Record<FiledReturnsReturnType, FiledRetur
     label: "GSTR-3B",
     scopeId: filedReturnsScopeId("GSTR-3B"),
     signalSlug: filedReturnsSafeSlug("GSTR-3B"),
+    reselectionDestination: "filed-returns",
     detailRoutePattern: /\/returns\/auth\/gstr3b$/i,
     detailHeadingPattern: /\bgstr[\s-]?3b\s*-\s*monthly\s+return\b/i,
     explicitDownloadPattern: /\bdownload\s+filed\s+gstr[\s-]?3b\b/i,
@@ -33,6 +35,7 @@ export const FILED_RETURN_DESCRIPTORS: Record<FiledReturnsReturnType, FiledRetur
     label: "GSTR-1",
     scopeId: filedReturnsScopeId("GSTR-1"),
     signalSlug: filedReturnsSafeSlug("GSTR-1"),
+    reselectionDestination: "return-dashboard",
     detailRoutePattern: /\/returns\/auth\/gstr1(?:\/|$)/i,
     detailHeadingPattern: /\bgstr[\s-]?1\b/i,
     explicitDownloadPattern: /\bdownload\s+filed\s+gstr[\s-]?1\b/i,
@@ -45,6 +48,7 @@ export const FILED_RETURN_DESCRIPTORS: Record<FiledReturnsReturnType, FiledRetur
     label: "GSTR-2B",
     scopeId: filedReturnsScopeId("GSTR-2B"),
     signalSlug: filedReturnsSafeSlug("GSTR-2B"),
+    reselectionDestination: "return-dashboard",
     detailRoutePattern: /\/gstr2b\/auth\/gstr2b\/summary\/?$/i,
     detailHeadingPattern: /\bgstr[^a-z0-9]?2b\b/i,
     explicitDownloadPattern: /\bdownload\s+gstr[^a-z0-9]?2b\s+summary\s*\(?\s*pdf\s*\)?\b/i,

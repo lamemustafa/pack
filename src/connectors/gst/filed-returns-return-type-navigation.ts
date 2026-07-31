@@ -31,12 +31,13 @@ async function navigateFromMismatchedReturnPage(
 ): Promise<PortalFlowStepResult> {
   clearFiledReturnsSearchAttempt(documentRef);
   const scopeId = filedReturnScopeId(scope.returnType);
+  const requestedDescriptor = filedReturnDescriptor(scope.returnType);
   const navigation =
-    visibleReturnType === "GSTR-2B" || scope.returnType === "GSTR-3B"
+    requestedDescriptor.reselectionDestination === "filed-returns"
       ? await navigateToFiledReturnsPage(documentRef)
       : await navigateToReturnDashboardPage(documentRef, scopeId);
   const visibleLabel = filedReturnDescriptor(visibleReturnType).label;
-  const requestedLabel = filedReturnDescriptor(scope.returnType).label;
+  const requestedLabel = requestedDescriptor.label;
 
   return {
     connectorId: "gst",
@@ -49,9 +50,7 @@ async function navigateFromMismatchedReturnPage(
     ],
     safeMessage:
       navigation.state === "clicked"
-        ? visibleReturnType === "GSTR-2B"
-          ? `Pack left the GSTR-2B summary page to find the filed ${requestedLabel} return.`
-          : `Pack left the filed ${visibleLabel} page to find the requested filed ${requestedLabel} return.`
+        ? `Pack left the filed ${visibleLabel} page to find the requested filed ${requestedLabel} return.`
         : `Pack found a filed ${visibleLabel} page while the requested return is ${requestedLabel}, but could not reach the portal page needed to continue. ${navigation.safeMessage}`,
     ...(navigation.userAction ? { userAction: navigation.userAction } : {}),
   };
