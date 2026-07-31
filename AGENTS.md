@@ -128,6 +128,23 @@ with evidence, stale with evidence, rejected with evidence, or a linked follow-u
   mechanism and each was falsified by the next probe.
 - Follow `docs/AGENT_REVIEW_RECTIFY.md` for review, rectify, and release loops.
 
+## Private knowledge hub
+
+A shared cross-repo knowledge repository (`brain`, https://github.com/lamemustafa/brain) holds
+material that must not live in this repo: vulnerabilities, crash triggers, competitor teardowns,
+pricing, market research, and durable protocol findings. If you have access, it is cloned as a
+sibling at `../brain`.
+
+- **Consult before you build.** Before implementing a flow touching a shared domain (Tally, GST,
+  MCA, portal auth) or a competitor feature:
+  `grep -rin "<topic>" ../brain/10-domains ../brain/40-decisions ../brain/30-market`.
+- **Write sensitive findings there, not here.** A vulnerability, crash trigger, sensitive
+  behaviour, or market/pricing fact goes in `brain`; leave only a de-fanged rule here.
+- This repo is **public**: never paste a restricted `brain` entry's body here, and never reference
+  the hub other than by its plain repo URL.
+- If `../brain` is absent (fresh clone, CI, or no access): skip the consult step — it is an
+  enhancement, never a build blocker.
+
 ## Reviewers and skills
 
 `.claude/agents/` and `.claude/skills/` describe themselves; do not restate them here. Use the
