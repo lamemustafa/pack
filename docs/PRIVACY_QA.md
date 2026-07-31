@@ -64,22 +64,32 @@ For each release candidate:
   GSTIN/PAN, taxpayer name, portal HTML, credential, cookie, token or artifact
   bytes. Shareable evidence must replace the runtime action id with a neutral
   `ACTION-*` alias and omit the browser download id.
-- Confirm `pack:full-fiscal-year-ledger`, when present, contains only ledger,
-  schema, plan, connector and extension-version identifiers; financial year,
-  period, return type and artifact type; target status, attempts, safe
-  signals/messages, revisions, ZIP phase and timestamps; during a final ZIP
-  handoff the ZIP request timestamp and the exact numeric browser download ID;
-  and per-target diagnostics matching the `FiledReturnsDownloadDiagnostic`
-  contract in `src/connectors/gst/filed-returns-contracts.ts`. Check diagnostics
-  against that type rather than against a field list restated here: every value
-  it admits is a scope field the user chose, an opaque identifier, or a
-  **class** rather than a raw value, and that property is what this checklist
-  needs to confirm. Two earlier revisions of this line were restated field
-  lists, and both drifted — one omitted the ZIP correlation fields the code
-  writes, and its replacement omitted the identity fields the contract
-  requires, so QA following either would have rejected a valid ledger. The
-  ledger must not contain raw URLs/referrers, local paths, filenames, GSTIN/PAN,
-  taxpayer names, ARNs, portal HTML, cookies, credentials, OTP, or CAPTCHA data.
+- Confirm `pack:full-fiscal-year-ledger`, when present, satisfies the two runtime
+  validators that own its shape, rather than a field list restated here:
+  - `isFullFiscalYearLedger` in
+    `src/background/filed-returns-full-fiscal-year-validation.ts`, which admits
+    exactly `LEDGER_KEYS` and `TARGET_KEYS` through `hasOnlyKeys` and so rejects
+    any field the code does not write; and
+  - `isValidFiledReturnsDownloadDiagnosticState` in
+    `src/background/filed-returns-download-diagnostic-state.ts` for any
+    diagnostics present, which is what actually enforces a canonical action ID
+    and an allow-listed error category. The `FiledReturnsDownloadDiagnostic`
+    interface alone does **not**: it types `actionId` and `errorCategory` as
+    unrestricted strings, so a raw value can satisfy the type and still be
+    unsafe.
+
+  Independently confirm the ledger contains no raw URLs/referrers, local paths,
+  filenames, GSTIN/PAN, taxpayer names, ARNs, portal HTML, cookies, credentials,
+  OTP, or CAPTCHA data.
+
+  Three earlier revisions of this item were hand-maintained field lists and each
+  drifted from the code in a different direction — one omitted the ZIP
+  correlation fields, one omitted the diagnostic identity fields, one omitted
+  `targetId` and `currentTargetId` — so QA following any of them would have
+  rejected a valid ledger. Do not replace the validator references with a list
+  again; a list here cannot be checked by anything, while these two functions are
+  exercised by the suite on every run.
+
 - Confirm "Clear local Pack data" is only exposed from Pack Options, blocks
   while filed-return recovery remains unresolved, clears recoverable temporary
   OPFS staging before deleting its ledger identifiers, and then removes the
