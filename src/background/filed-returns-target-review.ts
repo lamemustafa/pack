@@ -318,32 +318,8 @@ export async function resolveUnconfirmedFiledReturnsDownload(
     }
 
     if (hasArtifactAcquisitionRecoverySignal(review.safeSignals)) {
-      const cancellation = await clearArtifactAcquisitionCheckpoints(review.scope);
-      if (cancellation.state === "completed") {
-        // The browser reports every held download for this scope complete,
-        // non-empty and safe. That is the positive exact-ID evidence Pack
-        // requires, so the target is reconciled as downloaded rather than
-        // discarded — cancelling is the way out of a stuck review, not an
-        // instruction to disbelieve evidence already held.
-        const completedReview: FiledReturnsTargetReview = {
-          ...review,
-          revision: targetReviewRevision(review) + 1,
-          safeSignals: uniqueSafeSignals([
-            ...review.safeSignals,
-            "browser-download-completed",
-            "browser-download-non-empty",
-            ...cancellation.downloadIds.map((id) => `browser-download-id:${id}`),
-          ]),
-          safeMessage:
-            "Pack reconciled this target from the exact browser download, which the browser reports completed and non-empty. No portal action was repeated.",
-          updatedAt: (deps.now?.() ?? new Date()).toISOString(),
-        };
-        const parsedCompleted = parseFiledReturnsTargetReview(completedReview);
-        if (!parsedCompleted) return malformedTargetReviewResponse(scope);
-        await browser.storage.local.set({ [key]: parsedCompleted });
-        return responseForFiledReturnsTargetReview(parsedCompleted);
-      }
-      if (cancellation.state === "blocked") {
+      const checkpointsCleared = await clearArtifactAcquisitionCheckpoints(review.scope);
+      if (!checkpointsCleared) {
         const clearFailureReview: FiledReturnsTargetReview = {
           ...review,
           revision: targetReviewRevision(review) + 1,

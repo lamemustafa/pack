@@ -242,9 +242,7 @@ describe("artifact acquisition checkpoint", () => {
     });
     mocks.browser.downloads.search.mockResolvedValue([{ state: "interrupted" }]);
 
-    await expect(clearArtifactAcquisitionCheckpoints(MAY_COMPOSITE)).resolves.toEqual({
-      state: "cleared",
-    });
+    await expect(clearArtifactAcquisitionCheckpoints(MAY_COMPOSITE)).resolves.toBe(true);
 
     expect(
       mocks.session[artifactAcquisitionCheckpointKey({ ...MAY_COMPOSITE, artifactType: "PDF" })],
@@ -282,85 +280,10 @@ describe("artifact acquisition checkpoint", () => {
       .mockResolvedValueOnce([{ state: "interrupted" }]);
     mocks.browser.downloads.cancel.mockResolvedValue(undefined);
 
-    await expect(clearArtifactAcquisitionCheckpoints(MAY_COMPOSITE)).resolves.toEqual({
-      state: "cleared",
-    });
+    await expect(clearArtifactAcquisitionCheckpoints(MAY_COMPOSITE)).resolves.toBe(true);
 
     expect(mocks.browser.downloads.cancel).toHaveBeenNthCalledWith(1, 9);
     expect(mocks.browser.downloads.cancel).toHaveBeenNthCalledWith(2, 10);
-  });
-
-  it("reconciles a cancelled target as completed when every held download has exact-ID evidence", async () => {
-    // The bytes demonstrably arrived. Discarding that on cancel would throw away
-    // Pack's only positive evidence and invite the user to download the same
-    // file again.
-    for (const [artifactType, downloadId, requestId] of [
-      ["PDF", 9, "request-may-pdf"],
-      ["EXCEL", 10, "request-may-excel"],
-    ] as const) {
-      await persistArtifactAcquisitionDownloadId({
-        ...MAY_COMPOSITE,
-        artifactType,
-        downloadId,
-        requestId,
-        state: "download-observing",
-      });
-    }
-    mocks.browser.downloads.search.mockImplementation(async ({ id }: { id: number }) => [
-      { id, state: "complete", danger: "safe", fileSize: 2048 },
-    ]);
-
-    await expect(clearArtifactAcquisitionCheckpoints(MAY_COMPOSITE)).resolves.toEqual({
-      state: "completed",
-      downloadIds: [9, 10],
-    });
-    expect(mocks.browser.downloads.cancel).not.toHaveBeenCalled();
-    expect(
-      mocks.session[artifactAcquisitionCheckpointKey({ ...MAY_COMPOSITE, artifactType: "PDF" })],
-    ).toBeUndefined();
-  });
-
-  it("does not call a bundle completed when only part of it has evidence", async () => {
-    await persistArtifactAcquisitionDownloadId({
-      ...MAY_COMPOSITE,
-      artifactType: "PDF",
-      downloadId: 9,
-      requestId: "request-may-pdf",
-      state: "download-observing",
-    });
-    await persistArtifactAcquisitionDownloadId({
-      ...MAY_COMPOSITE,
-      artifactType: "EXCEL",
-      downloadId: 10,
-      requestId: "request-may-excel",
-      state: "download-observing",
-    });
-    mocks.browser.downloads.search.mockImplementation(async ({ id }: { id: number }) =>
-      id === 9
-        ? [{ id, state: "complete", danger: "safe", fileSize: 2048 }]
-        : [{ id, state: "interrupted" }],
-    );
-
-    await expect(clearArtifactAcquisitionCheckpoints(MAY_COMPOSITE)).resolves.toEqual({
-      state: "cleared",
-    });
-  });
-
-  it("blocks a completed download whose danger classification is not safe", async () => {
-    await persistArtifactAcquisitionDownloadId({
-      ...MAY_COMPOSITE,
-      artifactType: "PDF",
-      downloadId: 9,
-      requestId: "request-may-pdf",
-      state: "download-observing",
-    });
-    mocks.browser.downloads.search.mockResolvedValue([
-      { id: 9, state: "complete", danger: "dangerousFile", fileSize: 2048 },
-    ]);
-
-    await expect(clearArtifactAcquisitionCheckpoints(MAY_COMPOSITE)).resolves.toEqual({
-      state: "blocked",
-    });
   });
 
   it("treats an absent checkpoint as already cleared so a restart cannot block the target forever", async () => {
@@ -369,9 +292,7 @@ describe("artifact acquisition checkpoint", () => {
     // storage.local and survives all four. If absence counted as a failed
     // clear, the review could never be resolved and an extension update alone
     // would strand the target permanently.
-    await expect(clearArtifactAcquisitionCheckpoints(MAY_COMPOSITE)).resolves.toEqual({
-      state: "cleared",
-    });
+    await expect(clearArtifactAcquisitionCheckpoints(MAY_COMPOSITE)).resolves.toBe(true);
     expect(mocks.browser.downloads.cancel).not.toHaveBeenCalled();
   });
 
@@ -391,9 +312,7 @@ describe("artifact acquisition checkpoint", () => {
     };
     mocks.browser.downloads.search.mockResolvedValue([{ state: "in_progress" }]);
 
-    await expect(clearArtifactAcquisitionCheckpoints(MAY_COMPOSITE)).resolves.toEqual({
-      state: "blocked",
-    });
+    await expect(clearArtifactAcquisitionCheckpoints(MAY_COMPOSITE)).resolves.toBe(false);
     expect(mocks.browser.downloads.cancel).not.toHaveBeenCalled();
     expect(mocks.session[key]).toBeDefined();
   });
@@ -415,9 +334,7 @@ describe("artifact acquisition checkpoint", () => {
     });
     mocks.browser.downloads.search.mockResolvedValue([{ state: "complete" }]);
 
-    await expect(clearArtifactAcquisitionCheckpoints(MAY_COMPOSITE)).resolves.toEqual({
-      state: "blocked",
-    });
+    await expect(clearArtifactAcquisitionCheckpoints(MAY_COMPOSITE)).resolves.toBe(false);
 
     expect(
       mocks.session[artifactAcquisitionCheckpointKey({ ...MAY_COMPOSITE, artifactType: "PDF" })],
