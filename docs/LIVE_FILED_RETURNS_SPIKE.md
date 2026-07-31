@@ -439,6 +439,16 @@ offscreen document for a temporary extension Blob URL, starts
 browser-download state, revokes the Blob URL, closes the offscreen document,
 and then drops in-memory bytes.
 
+That click-and-capture sequence describes the PDF and Excel paths only. A
+requested portal-data JSON artifact does not go through it: the injected
+main-world function issues its own authenticated same-origin `fetch` to the
+portal's JSON endpoint for the already-verified period and returns those bytes
+as the script result, with no control click and no generated blob. Everything
+after acquisition — validation, offscreen Blob URL, download, staging, cleanup
+and the byte-handling prohibitions below — is identical for all three artifact
+types. Reviewers verifying JSON acquisition should expect the fetch branch, not
+a marked control.
+
 Raw artifact bytes must not be sent through page-observable `postMessage`,
 runtime messages from content scripts, extension storage, IndexedDB, Cache
 Storage, logs, diagnostics, evidence files, support bundles, telemetry, or any

@@ -69,14 +69,17 @@ For each release candidate:
   period, return type and artifact type; target status, attempts, safe
   signals/messages, revisions, ZIP phase and timestamps; during a final ZIP
   handoff the ZIP request timestamp and the exact numeric browser download ID;
-  and per-target diagnostics limited to an opaque action ID, the exact numeric
-  browser download ID, and endpoint, download-path, MIME, byte-count, status and
-  error **classes**. It must not contain raw URLs/referrers, local paths,
-  filenames, GSTIN/PAN, taxpayer names, ARNs, portal HTML, cookies, credentials,
-  OTP, or CAPTCHA data. This list must stay identical to the
-  `pack:full-fiscal-year-ledger` entry in `README.md`; both describe one record
-  shape owned by the code, so a difference between them is a defect in whichever
-  is stale, not a judgement call.
+  and per-target diagnostics matching the `FiledReturnsDownloadDiagnostic`
+  contract in `src/connectors/gst/filed-returns-contracts.ts`. Check diagnostics
+  against that type rather than against a field list restated here: every value
+  it admits is a scope field the user chose, an opaque identifier, or a
+  **class** rather than a raw value, and that property is what this checklist
+  needs to confirm. Two earlier revisions of this line were restated field
+  lists, and both drifted — one omitted the ZIP correlation fields the code
+  writes, and its replacement omitted the identity fields the contract
+  requires, so QA following either would have rejected a valid ledger. The
+  ledger must not contain raw URLs/referrers, local paths, filenames, GSTIN/PAN,
+  taxpayer names, ARNs, portal HTML, cookies, credentials, OTP, or CAPTCHA data.
 - Confirm "Clear local Pack data" is only exposed from Pack Options, blocks
   while filed-return recovery remains unresolved, clears recoverable temporary
   OPFS staging before deleting its ledger identifiers, and then removes the
