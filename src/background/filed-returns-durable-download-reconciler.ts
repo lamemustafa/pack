@@ -35,6 +35,7 @@ export interface DurableDownloadReconcilerDeps extends FiledReturnsTargetReviewD
 const liveInlineObservationIds = new Set<number>();
 const extensionOwnedCreationIds = new Set<number>();
 const terminalChangesAwaitingPersistence = new Set<number>();
+const pendingExtensionDownloadUrls = new Set<string>();
 
 /** Keeps the global listener from racing the flow that already owns this exact ID. */
 export function beginLiveFiledReturnsDownloadObservation(downloadId: number): () => void {
@@ -47,6 +48,13 @@ export function beginLiveFiledReturnsDownloadObservation(downloadId: number): ()
     extensionOwnedCreationIds.delete(downloadId);
     terminalChangesAwaitingPersistence.delete(downloadId);
   };
+}
+
+/** Registers one extension Blob URL for the brief onCreated-to-ID-persistence gap. */
+export function beginPendingExtensionDownloadUrl(url: string): () => void {
+  if (!url.startsWith("blob:chrome-extension://")) return () => undefined;
+  pendingExtensionDownloadUrls.add(url);
+  return () => pendingExtensionDownloadUrls.delete(url);
 }
 
 /**
@@ -126,6 +134,7 @@ export function installFiledReturnsDurableDownloadReconciler(
 
   const onCreated = (item: DownloadCreatedItem) => {
     if (liveInlineObservationIds.has(item.id)) return;
+    if (!item.url || !pendingExtensionDownloadUrls.has(item.url)) return;
     terminalChangesAwaitingPersistence.delete(item.id);
     extensionOwnedCreationIds.add(item.id);
     // Suppression must cover only the gap between creation and persistence.

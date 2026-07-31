@@ -184,7 +184,7 @@ function getInlineStatusCopy(
   }
   if (presentation.kind === "error") {
     return {
-      body: "Reopen the filed-return page on the GST Portal, then retry.",
+      body: presentation.body,
       icon: "!",
       title: "Pack could not confirm the download",
       tone: "warning",

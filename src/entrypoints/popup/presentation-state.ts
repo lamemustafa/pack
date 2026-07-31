@@ -27,6 +27,7 @@ export function getPopupPresentationState(
   context: PortalContext | null,
   summary: FiledReturnsFlowSummary | null,
   busy: string | null,
+  actionError: string | null = null,
 ): PopupPresentationState {
   if (busy === "start-filed-returns-flow" || summary?.status === "running") {
     return {
@@ -36,6 +37,17 @@ export function getPopupPresentationState(
       kind: "downloading",
       title: "Packing your files",
       tone: "ready",
+    };
+  }
+
+  if (actionError) {
+    return {
+      badge: "Action failed",
+      body: actionError,
+      icon: "!",
+      kind: "error",
+      title: "Pack could not finish that action",
+      tone: "danger",
     };
   }
 

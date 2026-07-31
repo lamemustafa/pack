@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { FiledReturnsTargetReview } from "../../src/connectors/gst/filed-returns-contracts";
 import {
+  beginPendingExtensionDownloadUrl,
   beginLiveFiledReturnsDownloadObservation,
   installFiledReturnsDurableDownloadReconciler,
   reconcileTerminalFiledReturnsDownload,
@@ -32,12 +33,12 @@ const review = {
 
 function downloadsWithState(state: string): {
   downloads: DurableDownloadReconcilerDownloads;
-  emitCreated(item: { byExtensionId?: string; id: number; startTime?: string }): void;
+  emitCreated(item: { byExtensionId?: string; id: number; startTime?: string; url?: string }): void;
   emit(delta: { id: number; state?: { current?: string } }): void;
 } {
   const listeners = new Set<(delta: { id: number; state?: { current?: string } }) => void>();
   const createdListeners = new Set<
-    (item: { byExtensionId?: string; id: number; startTime?: string }) => void
+    (item: { byExtensionId?: string; id: number; startTime?: string; url?: string }) => void
   >();
   return {
     downloads: {
@@ -133,11 +134,15 @@ describe("durable filed-return download reconciler", () => {
     });
     await Promise.resolve();
     persistDownloadId.mockClear();
+    const endPendingDownloadUrl = beginPendingExtensionDownloadUrl(
+      "blob:chrome-extension://pack-id/zip",
+    );
 
     fixture.emitCreated({
       byExtensionId: "pack-id",
       id: 41,
       startTime: "2026-07-26T00:00:01.000Z",
+      url: "blob:chrome-extension://pack-id/zip",
     });
     await Promise.resolve();
     await Promise.resolve();
@@ -145,6 +150,7 @@ describe("durable filed-return download reconciler", () => {
     reconcile.mockClear();
     fixture.emit({ id: 41, state: { current: "complete" } });
     await vi.waitFor(() => expect(reconcile).toHaveBeenCalledWith(review));
+    endPendingDownloadUrl();
     dispose();
   });
 
@@ -177,11 +183,15 @@ describe("durable filed-return download reconciler", () => {
     });
     await Promise.resolve();
     reconcile.mockClear();
+    const endPendingDownloadUrl = beginPendingExtensionDownloadUrl(
+      "blob:chrome-extension://pack-id/zip",
+    );
 
     fixture.emitCreated({
       byExtensionId: "pack-id",
       id: 41,
       startTime: "2026-07-26T00:00:01.000Z",
+      url: "blob:chrome-extension://pack-id/zip",
     });
     await Promise.resolve();
     fixture.emit({ id: 41, state: { current: "complete" } });
@@ -189,6 +199,45 @@ describe("durable filed-return download reconciler", () => {
     resolvePersist(true);
 
     await vi.waitFor(() => expect(reconcile).toHaveBeenCalledWith(review));
+    endPendingDownloadUrl();
+    dispose();
+  });
+
+  it("does not bind another Pack download that only shares the ZIP intent window", async () => {
+    const fixture = downloadsWithState("complete");
+    const currentReview: FiledReturnsTargetReview = {
+      ...review,
+      downloadAttempt: {
+        actionId: review.downloadAttempt.actionId,
+        artifactType: "PDF",
+        kind: "single-artifact",
+        phase: "download-intent-persisted",
+        requestedAt: review.downloadAttempt.requestedAt,
+      },
+    };
+    const persistDownloadId = vi.fn(async () => true);
+    const dispose = installFiledReturnsDurableDownloadReconciler(fixture.downloads, {
+      extensionId: "pack-id",
+      persistDownloadId,
+      readCurrentReview: async () => currentReview,
+      storageKeys: {},
+    });
+    const endPendingDownloadUrl = beginPendingExtensionDownloadUrl(
+      "blob:chrome-extension://pack-id/selected-file-zip",
+    );
+    await Promise.resolve();
+    persistDownloadId.mockClear();
+
+    fixture.emitCreated({
+      byExtensionId: "pack-id",
+      id: 77,
+      startTime: "2026-07-26T00:00:01.000Z",
+      url: "blob:chrome-extension://pack-id/download-prompt-probe",
+    });
+    await Promise.resolve();
+
+    expect(persistDownloadId).not.toHaveBeenCalled();
+    endPendingDownloadUrl();
     dispose();
   });
 
@@ -239,11 +288,15 @@ describe("durable filed-return download reconciler", () => {
       storageKeys: {},
     });
     await Promise.resolve();
+    const endPendingDownloadUrl = beginPendingExtensionDownloadUrl(
+      "blob:chrome-extension://pack-id/zip",
+    );
 
     fixture.emitCreated({
       byExtensionId: "pack-id",
       id: 41,
       startTime: "2026-07-26T00:00:01.000Z",
+      url: "blob:chrome-extension://pack-id/zip",
     });
     await Promise.resolve();
     await Promise.resolve();
@@ -258,6 +311,7 @@ describe("durable filed-return download reconciler", () => {
 
     fixture.emit({ id: 41, state: { current: "complete" } });
     await vi.waitFor(() => expect(reconcile).toHaveBeenCalledWith(review));
+    endPendingDownloadUrl();
     dispose();
   });
 });

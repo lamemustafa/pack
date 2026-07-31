@@ -22,6 +22,7 @@ function App() {
     popup.context,
     displaySummary,
     popup.effectiveBusy,
+    popup.actionError,
   );
   const portalIndependentZipRetry = canRetryFullFiscalYearZipWithoutPortal(displaySummary);
   const terminalSummary = Boolean(
@@ -135,19 +136,9 @@ function ContextState({
       </div>
       <div className="context-state-content">
         <p className="context-state-kicker">GST Portal status</p>
-        <h2>
-          {isChecking
-            ? "Checking this tab"
-            : isSessionExpired
-              ? "Sign in again on the GST Portal"
-              : "Open the GST Portal to use Pack"}
-        </h2>
+        <h2>{isChecking ? "Checking this tab" : status.title}</h2>
         <p>
-          {isChecking
-            ? "Checking for a supported GST Portal page in this browser."
-            : isSessionExpired
-              ? "Your GST Portal session appears to have expired. Sign in there, then reopen Pack."
-              : "Navigate to the filed returns page. Pack will detect the supported page automatically."}
+          {isChecking ? "Checking for a supported GST Portal page in this browser." : status.body}
         </p>
         {!isChecking ? (
           <button

@@ -139,6 +139,18 @@ export async function acquireFiledReturnArtifact(
   const bytes = new Uint8Array(await response.arrayBuffer());
   const preflight = validateArtifactBytes(bytes, "JSON", request.returnPeriod);
   if (!preflight.ok) return failed(request, preflight.reason);
+  const recheck = verifyFiledReturnsDownloadTarget(
+    documentRef,
+    {
+      actionId: request.requestId,
+      artifactType: request.artifactType,
+      financialYear: request.financialYear,
+      period: request.period,
+      returnType: request.returnType,
+    },
+    [],
+  );
+  if (recheck) return failed(request, "page-period-mismatch", ["page-target-unverified"]);
   const candidates = resolveVisibleFiledReturnDownloadCandidates(documentRef, "GSTR-3B", "PDF");
   if (candidates.length !== 1 || !candidates[0])
     return failed(request, "control-not-found", ["target-period-verified"]);

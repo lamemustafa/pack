@@ -107,6 +107,25 @@ describe("acquireFiledReturnArtifact", () => {
     );
   });
 
+  it("does not arm the GSTR-3B PDF control after the visible target changes during preflight", async () => {
+    const { documentRef, fetch } = page(validJson());
+    fetch.mockImplementationOnce(async () => {
+      documentRef.body.innerHTML = documentRef.body.innerHTML.replaceAll("April", "May");
+      return new Response(validJson());
+    });
+
+    await expect(
+      acquireFiledReturnArtifact(documentRef, { ...REQUEST, artifactType: "PDF" }),
+    ).resolves.toMatchObject({
+      ok: false,
+      reason: "page-period-mismatch",
+      safeSignals: ["page-target-unverified"],
+    });
+    expect(
+      documentRef.querySelector("button")?.getAttribute("data-pack-artifact-request"),
+    ).toBeNull();
+  });
+
   it("fails closed when the PDF preflight finds duplicate visible controls", async () => {
     const { documentRef } = page(validJson());
     const duplicate = documentRef.createElement("button");

@@ -101,6 +101,21 @@ describe("popup presentation state", () => {
       tone: "ready",
     });
   });
+
+  it("renders a caught background failure instead of leaving the prior presentation visible", () => {
+    expect(
+      getPopupPresentationState(
+        supportedContext(),
+        null,
+        null,
+        "Pack stopped while handling this action. Try again.",
+      ),
+    ).toMatchObject({
+      body: "Pack stopped while handling this action. Try again.",
+      kind: "error",
+      title: "Pack could not finish that action",
+    });
+  });
 });
 
 function supportedContext(): PortalContext {

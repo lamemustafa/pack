@@ -13,6 +13,7 @@ import {
   type OffscreenFiledReturnClearResult,
 } from "./offscreen-blob-url";
 import { observeBrowserDownloadById } from "./download-observer";
+import { beginPendingExtensionDownloadUrl } from "./filed-returns-durable-download-reconciler";
 import { safeFiledReturnZipEntryPath } from "./filed-returns-download-filename";
 import { installPackDownloadFilenameReassertion } from "./pack-download-filename-reassertion";
 import { isRequestedFilenameOverridden } from "./download-filename-comparison";
@@ -212,6 +213,7 @@ export async function exportStagedFiledReturnsZip({
     zip.blobUrl,
     zipFilename,
   );
+  const endPendingDownloadUrl = beginPendingExtensionDownloadUrl(zip.blobUrl);
   try {
     downloadId = await browser.downloads.download({
       conflictAction: "uniquify",
@@ -220,6 +222,7 @@ export async function exportStagedFiledReturnsZip({
       url: zip.blobUrl,
     });
   } catch {
+    endPendingDownloadUrl();
     filenameReservation.release();
     await revokeOffscreenBlobUrl(zip.blobUrl);
     const stagingClear = onClearStaging ? await onClearStaging("not-downloaded") : null;
@@ -248,6 +251,7 @@ export async function exportStagedFiledReturnsZip({
   }
 
   if (!Number.isSafeInteger(downloadId) || downloadId === null || downloadId < 0) {
+    endPendingDownloadUrl();
     filenameReservation.release();
     await revokeOffscreenBlobUrl(zip.blobUrl);
     await closeOffscreenBlobDocument();
@@ -269,6 +273,7 @@ export async function exportStagedFiledReturnsZip({
   try {
     await onDownloadStarted?.(downloadId);
   } catch {
+    endPendingDownloadUrl();
     filenameReservation.release();
     await revokeOffscreenBlobUrl(zip.blobUrl);
     await closeOffscreenBlobDocument();
@@ -285,6 +290,7 @@ export async function exportStagedFiledReturnsZip({
       userAction: checkBrowserDownloadsAction(clearSignalPrefix),
     };
   }
+  endPendingDownloadUrl();
 
   const observed = await observeBrowserDownloadById(
     browser.downloads,
