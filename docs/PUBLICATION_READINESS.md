@@ -170,7 +170,8 @@ stable-release claims.
       MIME/size/magic validation, offscreen temporary Blob URL creation,
       `chrome.downloads.download({ saveAs: false })`, terminal browser-download
       observation, Blob URL revocation, offscreen close, and byte disposal. Raw
-      PDF/XLS bytes must not cross page `postMessage`, content-script runtime
+      PDF, XLS and portal-data JSON bytes must not cross page `postMessage`,
+      content-script runtime
       messages, extension storage, IndexedDB, Cache Storage, diagnostics, live
       evidence, logs, telemetry, support bundles, or ComplyEaze systems.
 - [ ] File System Access remains a foreground Options-only probe until live

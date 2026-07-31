@@ -38,7 +38,8 @@ For each release candidate:
 - Confirm transient artifact-byte handling is used only for an explicit
   user-started, target-bound local download or ZIP export and its saved
   recovery/cleanup lifecycle. Generated ZIP bytes must remain transiently in
-  memory. Captured PDF/XLS bytes may also use temporary local OPFS staging;
+  memory. Captured PDF, XLS and portal-data JSON bytes may also use temporary
+  local OPFS staging;
   interrupted exports or cleanup failures may retain that staging across
   recovery attempts until confirmed cleanup or a successful explicit discard.
   Artifact bytes must not be written to extension storage, IndexedDB, Cache
@@ -63,11 +64,32 @@ For each release candidate:
   GSTIN/PAN, taxpayer name, portal HTML, credential, cookie, token or artifact
   bytes. Shareable evidence must replace the runtime action id with a neutral
   `ACTION-*` alias and omit the browser download id.
-- Confirm `pack:full-fiscal-year-ledger`, when present, contains only financial
-  year, period, return type, artifact type, target status, attempts, safe
-  signals/messages, and timestamps. It must not contain raw URLs/referrers,
-  local paths, filenames, GSTIN/PAN, taxpayer names, ARNs, portal HTML, cookies,
-  credentials, OTP, or CAPTCHA data.
+- Confirm `pack:full-fiscal-year-ledger`, when present, satisfies the two runtime
+  validators that own its shape, rather than a field list restated here:
+  - `isFullFiscalYearLedger` in
+    `src/background/filed-returns-full-fiscal-year-validation.ts`, which admits
+    exactly `LEDGER_KEYS` and `TARGET_KEYS` through `hasOnlyKeys` and so rejects
+    any field the code does not write; and
+  - `isValidFiledReturnsDownloadDiagnosticState` in
+    `src/background/filed-returns-download-diagnostic-state.ts` for any
+    diagnostics present, which is what actually enforces a canonical action ID
+    and an allow-listed error category. The `FiledReturnsDownloadDiagnostic`
+    interface alone does **not**: it types `actionId` and `errorCategory` as
+    unrestricted strings, so a raw value can satisfy the type and still be
+    unsafe.
+
+  Independently confirm the ledger contains no raw URLs/referrers, local paths,
+  filenames, GSTIN/PAN, taxpayer names, ARNs, portal HTML, cookies, credentials,
+  OTP, or CAPTCHA data.
+
+  Three earlier revisions of this item were hand-maintained field lists and each
+  drifted from the code in a different direction — one omitted the ZIP
+  correlation fields, one omitted the diagnostic identity fields, one omitted
+  `targetId` and `currentTargetId` — so QA following any of them would have
+  rejected a valid ledger. Do not replace the validator references with a list
+  again; a list here cannot be checked by anything, while these two functions are
+  exercised by the suite on every run.
+
 - Confirm "Clear local Pack data" is only exposed from Pack Options, blocks
   while filed-return recovery remains unresolved, clears recoverable temporary
   OPFS staging before deleting its ledger identifiers, and then removes the

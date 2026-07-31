@@ -193,8 +193,14 @@ Pack uses Chrome extension storage only inside the current browser profile.
 - `pack:active-filed-returns-run`: a short-lived local run lease used to prevent
   overlapping filed-return downloads in the same browser profile;
 - `pack:full-fiscal-year-ledger`: local-only full fiscal year run status with
-  financial year, period, return type, target status, safe messages/signals,
-  attempts, and timestamps only;
+  ledger, schema, plan, connector and extension-version identifiers; financial
+  year, period, return type and artifact type; target status, safe
+  messages/signals, attempts, revisions, ZIP phase and timestamps. During a
+  final ZIP handoff, it also records the ZIP request timestamp and, after
+  browser creation, the exact numeric browser download ID. Per-target
+  diagnostics may include an opaque action ID, the exact numeric browser
+  download ID, endpoint and download-path classes, MIME and byte-count classes,
+  and status and error classes;
 - `pack:single-period-staging`: a short-lived local recovery ledger for a
   selected-file ZIP. It stores an opaque ledger identifier, canonical scope
   (financial year, period, return type and selected artifacts), per-artifact
@@ -235,11 +241,12 @@ The Options page "Clear local Pack data" control removes the local keys above
 and clears Pack session storage. Pack does not store GST Portal credentials,
 OTPs, CAPTCHA values, cookies, GSTIN/PAN, taxpayer names, portal HTML, raw
 URLs/referrers, local download paths, filenames, or raw network captures.
-Generated ZIP bytes exist only transiently in memory. Source PDF and spreadsheet
-bytes may also be written to the temporary local OPFS staging described below;
-interrupted exports or cleanup failures may retain that staging locally across
-saved-run recovery attempts. Pack removes it only after confirmed cleanup or an
-explicit discard that successfully clears the retained staging.
+Generated ZIP bytes exist only transiently in memory. Source PDF, spreadsheet
+and acquired portal-data JSON bytes may also be written to the temporary local
+OPFS staging described below; interrupted exports or cleanup failures may retain
+that staging locally across saved-run recovery attempts. Pack removes it only
+after confirmed cleanup or an explicit discard that successfully clears the
+retained staging.
 
 The Options page also includes a foreground File System Access probe for
 Chromium browsers. It runs only after a user click, writes and reads back a
