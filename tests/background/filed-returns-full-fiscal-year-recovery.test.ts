@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FiledReturnsFullFiscalYearLedger } from "../../src/connectors/gst/filed-returns-contracts";
 import { FULL_FISCAL_YEAR_PERIOD } from "../../src/connectors/gst/filed-returns-scope";
+import { getFiledReturnsFullFiscalYearPeriods } from "../../src/connectors/gst/filed-returns-scope";
+import { createFullFiscalYearLedger } from "../../src/background/filed-returns-full-fiscal-year-ledger";
+import { startFullFiscalYearDownloadFlow } from "../../src/background/filed-returns-full-fiscal-year";
 import {
   prepareFullFiscalYearTargetRetry,
   resolveFullFiscalYearTarget,
@@ -23,6 +26,8 @@ const browserMocks = vi.hoisted(() => ({
 }));
 const zipMocks = vi.hoisted(() => ({
   discardFullFiscalYearFiledReturnsZip: vi.fn(async () => ["full-fiscal-year-opfs-cleared"]),
+  exportFullFiscalYearZip: vi.fn(),
+  reconcileFullFiscalYearZipDownload: vi.fn(),
 }));
 const LEDGER_ID = "full-fiscal-year-12345678";
 
@@ -63,6 +68,71 @@ describe("full fiscal-year recovery", () => {
       },
     });
     expect(browser.storage.local.set).not.toHaveBeenCalled();
+  });
+
+  it("keeps an uncorrelated final ZIP intent in manual review instead of exporting again", async () => {
+    const now = new Date("2026-06-24T00:00:00.000Z");
+    const scope = {
+      artifactType: "PDF" as const,
+      financialYear: "2026-27",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-1" as const,
+    };
+    const periods = getFiledReturnsFullFiscalYearPeriods(scope.financialYear, now);
+    const baseLedger = createFullFiscalYearLedger(scope, now, periods);
+    const ledger: FiledReturnsFullFiscalYearLedger = {
+      ...baseLedger,
+      status: "blocked",
+      zipPhase: "download-intent-persisted",
+      zipDownloadAttempt: { requestedAt: now.toISOString() },
+      targets: baseLedger.targets.map((target, index) => {
+        const targetScope = {
+          artifactType: "PDF" as const,
+          financialYear: target.financialYear,
+          period: target.period,
+          returnType: target.returnType,
+        };
+        return {
+          ...target,
+          status: "downloaded" as const,
+          ...canonicalDurableTargetStatus(targetScope, "downloaded", [
+            "filed-return-artifact-downloaded:PDF",
+            "full-fiscal-year-opfs-staged:PDF",
+          ]),
+          downloadDiagnostic: {
+            actionId: `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+            artifactType: "PDF" as const,
+            byteCountClass: "non-empty" as const,
+            downloadPathClass: "captured-portal-request-data" as const,
+            endpointClass: "gstr1-pdf-portal-blob-captured-download" as const,
+            eventType: "filed-return-download-path" as const,
+            financialYear: target.financialYear,
+            mimeClass: "pdf" as const,
+            period: target.period,
+            returnType: "GSTR-1" as const,
+            schemaVersion: "1.0" as const,
+            status: "downloaded" as const,
+          },
+        };
+      }),
+    };
+    mockLocalStorageGet({ "full-year-ledger": ledger });
+
+    const response = await startFullFiscalYearDownloadFlow(scope, recoveryDeps() as never, vi.fn());
+
+    expect(response).toMatchObject({
+      flowStep: {
+        state: "download-unconfirmed",
+        safeSignals: expect.arrayContaining(["full-fiscal-year-final-zip-manual-review"]),
+      },
+    });
+    expect(zipMocks.exportFullFiscalYearZip).not.toHaveBeenCalled();
+    expect(browser.storage.local.set).toHaveBeenCalledWith({
+      "full-year-ledger": expect.objectContaining({
+        zipPhase: "download-intent-persisted",
+        zipDownloadAttempt: { requestedAt: now.toISOString() },
+      }),
+    });
   });
 
   it("resets one recoverable target for retry and clears legacy single-period review state", async () => {

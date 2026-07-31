@@ -64,14 +64,6 @@ export async function runFiledReturnsDownloadStep(
 
   const descriptor = filedReturnDescriptor(scope.returnType);
 
-  if (scope.returnType === "GSTR-3B" && isReturnsOrigin(documentRef)) {
-    const detailIdentity = extractFiledReturnsDetailIdentity(documentRef, scope.returnType);
-    if (!filedReturnDetailIdentityMatchesScope(detailIdentity, scope)) {
-      const apiSearchResult = await openFiledReturnFromApiSearch(documentRef, scope, scopeId);
-      if (apiSearchResult) return apiSearchResult;
-    }
-  }
-
   if (scope.returnType === "GSTR-1" && isReturnDashboardRoute(documentRef)) {
     const dashboardSelection = await selectReturnDashboardFiltersAndSearch(
       documentRef,
@@ -314,10 +306,6 @@ export async function runFiledReturnsDownloadStep(
     },
     observation.userAction,
   );
-}
-
-function isReturnsOrigin(documentRef: Document): boolean {
-  return documentRef.defaultView?.location.origin === "https://return.gst.gov.in";
 }
 
 function isFiledReturnsRoute(documentRef: Document): boolean {

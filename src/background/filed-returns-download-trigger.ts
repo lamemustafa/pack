@@ -483,6 +483,8 @@ async function triggerPageGeneratedSinglePeriodArtifact(
         : artifact.state === "ready" && (artifactType === "PDF" || artifactType === "EXCEL")
           ? await acquirePageGeneratedArtifact({
               artifactType,
+              financialYear: scope.financialYear,
+              period: scope.period,
               requestId,
               returnPeriod,
               returnType,

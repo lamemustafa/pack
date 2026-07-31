@@ -137,16 +137,17 @@ export async function startFullFiscalYearDownloadFlow(
       sameScopeExistingLedger.zipPhase ?? "",
     )
   ) {
-    // This function is reached only from an explicit user-started background
-    // message. Passive summary reconstruction uses fullFiscalYearZipPhaseStep
-    // and never calls this mutating path. A no-ID or legacy checkpoint may be
-    // retried here after the user has reviewed browser Downloads.
-    const retryLedger = markFullFiscalYearZipPhase(
-      sameScopeExistingLedger,
-      now,
-      "export-retry-pending",
-    );
-    return completeRun(deps, retryLedger);
+    // A saved intent without a correlated download ID is ambiguous across an
+    // MV3 restart. Keep the staged files and require explicit review/discard;
+    // a repeated Start must never infer that the previous ZIP may be replayed.
+    const reviewLedger = markFullFiscalYearZipManualReview(sameScopeExistingLedger, now);
+    const reviewStep = fullFiscalYearZipPhaseStep(reviewLedger)!;
+    await persistLedgerAndSummary(deps, reviewLedger, reviewStep);
+    return {
+      ok: true,
+      flowStep: reviewStep,
+      flowSummary: toFullFiscalYearSummary(reviewLedger, reviewStep),
+    };
   }
   if (
     sameScopeExistingLedger &&

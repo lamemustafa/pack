@@ -109,6 +109,8 @@ describe("GSTR-2B page-generated acquisition", () => {
     await expect(
       acquirePageGeneratedArtifact({
         artifactType: "EXCEL",
+        financialYear: "2024-25",
+        period: "April",
         requestId: "request-2b",
         returnPeriod: "042024",
         returnType: "GSTR-2B",
@@ -120,6 +122,11 @@ describe("GSTR-2B page-generated acquisition", () => {
         args: [
           expect.objectContaining({
             expectedMime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            expectedTarget: {
+              financialYear: "2024-25",
+              period: "April",
+              returnType: "GSTR-2B",
+            },
           }),
         ],
         target: { tabId: 17 },
@@ -136,12 +143,27 @@ describe("GSTR-2B page-generated acquisition", () => {
     await expect(
       acquirePageGeneratedArtifact({
         artifactType: "PDF",
+        financialYear: "2024-25",
+        period: "April",
         requestId: "gstr1-timeout",
         returnPeriod: "042024",
         returnType: "GSTR-1",
         tabId: 17,
       }),
     ).resolves.toMatchObject({ ok: false, reason: "generation-timeout" });
+    expect(mocks.executeScript).toHaveBeenCalledWith(
+      expect.objectContaining({
+        args: [
+          expect.objectContaining({
+            expectedTarget: {
+              financialYear: "2024-25",
+              period: "April",
+              returnType: "GSTR-1",
+            },
+          }),
+        ],
+      }),
+    );
     expect(mocks.downloadAcquiredArtifact).not.toHaveBeenCalled();
   });
 });

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { FiledReturnsDownloadScope } from "../../src/connectors/gst/filed-returns-contracts";
 import { runFiledReturnsDownloadStep } from "../../src/connectors/gst/filed-returns-flow";
 import { FILED_RETURN_ROUTE_MISMATCH_SIGNALS } from "../../src/connectors/gst/filed-returns-durable-signals";
@@ -251,6 +251,41 @@ describe("filed returns flow — navigation and routing", () => {
     expect(result.userAction?.type).toBe("NAVIGATE_TO_SUPPORTED_PAGE");
     expect(result.safeMessage).toContain("GSTR-1");
     expect(result.safeMessage).toContain("GSTR-3B");
+  });
+
+  it("returns from a mismatched GSTR-3B detail page without invoking its API handoff", async () => {
+    const documentRef = createGstDocument(
+      `<main>
+        <h1>GSTR-3B - Monthly Return</h1>
+        <p>Status - Filed</p>
+        <p>Financial Year - 2025-26</p>
+        <p>Return Period - May</p>
+        <button>BACK</button>
+        <button>DOWNLOAD FILED GSTR-3B</button>
+      </main>`,
+      "https://return.gst.gov.in/returns/auth/gstr3b",
+    );
+    makeLayoutVisible(documentRef);
+    const fetch = vi.fn();
+    Object.defineProperty(documentRef.defaultView, "fetch", { configurable: true, value: fetch });
+    let backClicked = 0;
+    documentRef.querySelector("button")?.addEventListener("click", () => {
+      backClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      artifactType: "PDF",
+      financialYear: "2025-26",
+      period: "April",
+      returnType: "GSTR-3B",
+    });
+
+    expect(result).toMatchObject({
+      state: "clicked",
+      safeSignals: ["filed-return-detail-back-clicked"],
+    });
+    expect(backClicked).toBe(1);
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it("keeps GSTR-2B login evidence ahead of mismatched-page navigation", async () => {

@@ -10,6 +10,8 @@ const MIME_TYPES = {
 
 export async function acquirePageGeneratedArtifact(input: {
   artifactType: "PDF" | "EXCEL";
+  financialYear: string;
+  period: string;
   requestId: string;
   returnPeriod: string;
   returnType: "GSTR-1" | "GSTR-2B";
@@ -25,6 +27,11 @@ export async function acquirePageGeneratedArtifact(input: {
         {
           controlSelector: `[data-pack-artifact-request="${input.requestId}"]`,
           expectedMime: MIME_TYPES[input.artifactType],
+          expectedTarget: {
+            financialYear: input.financialYear,
+            period: input.period,
+            returnType: input.returnType,
+          },
         },
       ],
       func: capturePortalPdfBlob,
@@ -33,7 +40,11 @@ export async function acquirePageGeneratedArtifact(input: {
     });
     const captured = injection?.result;
     if (!captured?.ok)
-      return { ok: false, reason: captured?.reason ?? "generation-timeout", safeSignals: [] };
+      return {
+        ok: false,
+        reason: captured?.reason ?? "generation-timeout",
+        safeSignals: captured?.safeSignals ?? [],
+      };
     const bytes = Uint8Array.from(atob(captured.base64), (value) => value.charCodeAt(0));
     const validation = validateArtifactBytes(
       bytes,
