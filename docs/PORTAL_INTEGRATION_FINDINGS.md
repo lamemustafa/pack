@@ -82,10 +82,17 @@ This log records live diagnostic findings that constrain Pack's local, target-bo
     integration fails, check for a duplicated contract before writing new code, and prefer deriving
     from the canonical predicate over restating it.
 
-20. Observed in authorised manual QA: the Returns Quick Links hub is a third-origin waypoint, not
-    the View Filed Returns destination. It contains both `Returns Dashboard` and `View Filed
-Returns` twice (once in navigation and once in the body), alongside `Track Return Status` and
-    `ITC Forms`. Treat its labels only as navigation candidates: route-derived page classification
-    must leave this hub as a wrong page, while the existing scored navigator tolerates the duplicate
-    candidates and continues through Returns Dashboard. The portal location is deliberately not
-    recorded here; Pack never persists, logs, or constructs portal URLs.
+20. Observed in authorised manual QA: `/services/auth/quicklinks/returns` is the Returns Quick
+    Links hub — a waypoint on a third origin, distinct from the filed-list and detail routes, and
+    not the View Filed Returns destination. Recording the route pattern is consistent with finding
+    18 and with `detect.ts`, which already holds it; no full URL, query string, or session material
+    is recorded anywhere.
+
+    Its labels `Returns Dashboard` and `View Filed Returns` each appear **twice**, once in
+    navigation and once in the body, alongside `Track Return Status` and `ITC Forms`. Any rule
+    requiring exactly one text match fails here; the scored navigator tolerates duplicates.
+
+    Pack stalled on this page three times because the observer classified it from body text — the
+    phrase "View Filed Returns" appears as a link label — rather than from the route, so the flow
+    believed it had already arrived and stopped navigating. Page classification derives from the
+    route only. Treat these labels as navigation candidates, never as evidence of arrival.
