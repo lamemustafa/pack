@@ -44,12 +44,7 @@ function isArtifactMessageResponse(
   if (artifact.state === "ready") {
     return hasOnlyKeys(artifact, ["ok", "requestId", "safeSignals", "state"]);
   }
-  return (
-    artifact.state === "acquired" &&
-    hasOnlyKeys(artifact, ["base64", "mimeType", "ok", "requestId", "safeSignals", "state"]) &&
-    typeof artifact.base64 === "string" &&
-    isBoundedString(artifact.mimeType, 1, 200)
-  );
+  return false;
 }
 
 function isArtifactFailureReason(input: unknown): input is ArtifactFailureReason {

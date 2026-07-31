@@ -52,6 +52,16 @@ describe("downloadAcquiredArtifact", () => {
     },
   );
 
+  it("treats an exact-ID download search failure as unconfirmed", async () => {
+    downloads.search.mockRejectedValueOnce(new Error("synthetic downloads unavailable"));
+
+    await expect(downloadAcquiredArtifact(input(), deps())).resolves.toMatchObject({
+      ok: false,
+      reason: "search-unavailable",
+      safeSignals: ["browser-download-search-unavailable"],
+    });
+  });
+
   it.each([
     ["interrupted", 12, "safe", "interrupted"],
     ["complete", 0, "safe", "empty"],

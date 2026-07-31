@@ -7,7 +7,6 @@ import {
   type ArtifactFailureReason,
 } from "../../src/connectors/gst/artifact-source";
 import { extractFiledReturnsDetailIdentity } from "../../src/connectors/gst/filed-returns-detail-identity";
-import { GSTR2B_JSON_PATH } from "../../src/connectors/gst/portal-artifact-endpoints";
 
 const REQUEST: ArtifactRequest = {
   artifactType: "JSON",
@@ -28,25 +27,24 @@ describe("acquireFiledReturnArtifact", () => {
     );
   });
 
-  it("returns the raw response bytes without reserialising them", async () => {
+  it("prepares JSON without fetching or returning portal bytes to the content script", async () => {
     const raw =
       '{  "status":1, "data" : {"r3b":{"ret_period":"042024"}}, "padding":"' +
       "x".repeat(100) +
       '" }';
     const { documentRef, fetch } = page(raw);
     const result = await acquireFiledReturnArtifact(documentRef, REQUEST);
-    expect(result).toMatchObject({
+    expect(result).toEqual({
       ok: true,
-      mimeType: "application/json",
+      requestId: REQUEST.requestId,
       safeSignals: ["target-period-verified"],
+      state: "ready",
     });
-    if (!result.ok || result.state !== "acquired") return;
-    expect(new TextDecoder().decode(result.bytes)).toBe(raw);
-    expect(fetch).toHaveBeenCalledOnce();
+    expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("fails closed before a click when preflight target mismatches", async () => {
-    const { documentRef } = page(
+  it("defers the JSON endpoint result to the worker without arming a control", async () => {
+    const { documentRef, fetch } = page(
       JSON.stringify({
         status: 1,
         data: { r3b: { ret_period: "052024" } },
@@ -56,18 +54,20 @@ describe("acquireFiledReturnArtifact", () => {
     const click = vi.fn();
     documentRef.body.addEventListener("click", click);
     await expect(acquireFiledReturnArtifact(documentRef, REQUEST)).resolves.toMatchObject({
-      ok: false,
-      reason: "target-period-mismatch",
+      ok: true,
+      state: "ready",
     });
+    expect(fetch).not.toHaveBeenCalled();
     expect(click).not.toHaveBeenCalled();
   });
 
-  it("rejects failed preflight and never fetches on the wrong page", async () => {
+  it("rejects a wrong page without attempting a JSON endpoint fetch", async () => {
     const denied = page("{}", 403);
     await expect(acquireFiledReturnArtifact(denied.documentRef, REQUEST)).resolves.toMatchObject({
-      ok: false,
-      reason: "not-authenticated",
+      ok: true,
+      state: "ready",
     });
+    expect(denied.fetch).not.toHaveBeenCalled();
     const wrong = page("{}", 200, "https://example.test/not-gst");
     await expect(acquireFiledReturnArtifact(wrong.documentRef, REQUEST)).resolves.toMatchObject({
       ok: false,
@@ -153,43 +153,41 @@ describe("GSTR-2B artifact acquisition", () => {
     returnType: "GSTR-2B",
   };
 
-  it("reuses byte-identical raw getjson bytes for JSON", async () => {
+  it("prepares GSTR-2B JSON without fetching or returning portal bytes", async () => {
     const raw = `{ "data" : { "rtnprd" : "042024", "padding":"${"x".repeat(100)}" }, "chksum":"synthetic" }`;
     const { documentRef, fetch } = gstr2bPage(raw);
     const result = await acquireFiledReturnArtifact(documentRef, request);
-    expect(result).toMatchObject({ ok: true, state: "acquired", mimeType: "application/json" });
-    if (!result.ok || result.state !== "acquired") return;
-    expect(new TextDecoder().decode(result.bytes)).toBe(raw);
-    const [requestedPath, options] =
-      (fetch.mock.calls[0] as [RequestInfo | URL, RequestInit] | undefined) ?? [];
-    const requestedUrl = new URL(String(requestedPath), "https://synthetic.test");
-    expect(requestedUrl.pathname).toBe(GSTR2B_JSON_PATH);
-    expect(requestedUrl.searchParams.get("rtnprd")).toBe(request.returnPeriod);
-    expect(options).toEqual({
-      credentials: "same-origin",
+    expect(result).toEqual({
+      ok: true,
+      requestId: request.requestId,
+      safeSignals: ["target-period-verified"],
+      state: "ready",
     });
+    expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("fails before any click when the nested target period differs", async () => {
-    const { documentRef } = gstr2bPage(gstr2bJson("052024"));
+  it("defers GSTR-2B JSON endpoint validation to the worker without a click", async () => {
+    const { documentRef, fetch } = gstr2bPage(gstr2bJson("052024"));
     const click = vi.fn();
     documentRef.body.addEventListener("click", click);
     await expect(acquireFiledReturnArtifact(documentRef, request)).resolves.toMatchObject({
-      ok: false,
-      reason: "target-period-mismatch",
+      ok: true,
+      state: "ready",
     });
+    expect(fetch).not.toHaveBeenCalled();
     expect(click).not.toHaveBeenCalled();
   });
 
-  it("rejects a getjson response without the requested return period", async () => {
-    const { documentRef } = gstr2bPage(
+  it("does not inspect GSTR-2B JSON response bytes in the content script", async () => {
+    const { documentRef, fetch } = gstr2bPage(
       JSON.stringify({ data: { padding: "x".repeat(100) }, chksum: "synthetic" }),
     );
 
     await expect(acquireFiledReturnArtifact(documentRef, request)).resolves.toMatchObject({
-      ok: false,
-      reason: "unexpected-content",
+      ok: true,
+      state: "ready",
     });
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it.each(["PDF", "EXCEL"] as const)(
@@ -227,12 +225,13 @@ describe("GSTR-2B artifact acquisition", () => {
     },
   );
 
-  it("fails closed on HTTP failure or a non-summary page", async () => {
+  it("defers GSTR-2B JSON HTTP outcomes but still rejects a non-summary PDF page", async () => {
     const denied = gstr2bPage("{}", 500);
     await expect(acquireFiledReturnArtifact(denied.documentRef, request)).resolves.toMatchObject({
-      ok: false,
-      reason: "preflight-failed",
+      ok: true,
+      state: "ready",
     });
+    expect(denied.fetch).not.toHaveBeenCalled();
     const wrongPage = gstr2bPage(
       gstr2bJson("042024"),
       200,

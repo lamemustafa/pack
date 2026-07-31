@@ -121,22 +121,7 @@ export default defineContentScript({
 
       if (contentMessage.type === "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34") {
         void acquireFiledReturnArtifact(document, contentMessage.payload)
-          .then((artifact) =>
-            sendResponse({
-              ok: true,
-              artifact:
-                artifact.ok && artifact.state === "acquired"
-                  ? {
-                      state: "acquired",
-                      requestId: artifact.requestId,
-                      base64: bytesToBase64(artifact.bytes),
-                      mimeType: artifact.mimeType,
-                      safeSignals: artifact.safeSignals,
-                      ok: true,
-                    }
-                  : artifact,
-            } satisfies PackMessageResponse),
-          )
+          .then((artifact) => sendResponse({ ok: true, artifact } satisfies PackMessageResponse))
           .catch(() => sendResponse(contentScriptUnavailableResponse("empty-response")));
         return true;
       }
@@ -227,12 +212,6 @@ function sendFiledReturnsObservation() {
       // Service workers can be unavailable during extension reload.
     });
   return observation;
-}
-
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
 }
 
 function unwrapContentRequest(message: unknown): unknown {

@@ -94,10 +94,10 @@ export function getScopeActionCopy(
     if (concreteArtifactCount > 1) {
       if (scope.returnType === "GSTR-2B") {
         return {
-          summary: "Download each selected format from the active GST tab.",
+          summary: "Collect the selected GSTR-2B formats into one local ZIP.",
           details: [
-            "Saves PDF, Excel, and portal data separately",
-            "One target-bound download per format",
+            "Stages PDF, Excel, and portal data as ZIP entries",
+            "One target-bound browser ZIP handoff",
             "No portal data leaves the device",
           ],
         };

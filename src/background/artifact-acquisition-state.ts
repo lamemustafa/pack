@@ -1,5 +1,9 @@
 import { browser } from "wxt/browser";
 import type { FiledReturnsDownloadScope } from "../connectors/gst/filed-returns-contracts";
+import {
+  concreteFiledReturnsArtifactTypes,
+  normaliseFiledReturnsArtifactType,
+} from "../connectors/gst/filed-returns-artifacts";
 
 const KEY_PREFIX = "pack.artifact-acquisition.v2";
 
@@ -56,6 +60,23 @@ export async function clearArtifactAcquisitionCheckpoint(
   const stored = await browser.storage.session.get(key);
   if ((stored[key] as { requestId?: unknown } | undefined)?.requestId === requestId) {
     await browser.storage.session.remove(key);
+  }
+}
+
+/** Clears completed exact-ID ownership only after the matching summary is durable. */
+export async function clearArtifactAcquisitionCheckpointsAfterPersistedSummary(
+  scope: FiledReturnsDownloadScope,
+): Promise<void> {
+  for (const artifactType of concreteFiledReturnsArtifactTypes(
+    normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType),
+  )) {
+    const target = { ...scope, artifactType };
+    const key = artifactAcquisitionCheckpointKey(target);
+    const stored = await browser.storage.session.get(key);
+    const checkpoint = stored[key] as ArtifactAcquisitionCheckpoint | undefined;
+    if (checkpoint?.state === "download-observing" && Number.isSafeInteger(checkpoint.downloadId)) {
+      await browser.storage.session.remove(key);
+    }
   }
 }
 

@@ -1,14 +1,21 @@
 import { describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ persist: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  clearAfterPersist: vi.fn(async () => undefined),
+  persist: vi.fn(),
+}));
 vi.mock("../../src/background/filed-returns-session-summary", () => ({
   persistCanonicalFiledReturnsFlowSummary: mocks.persist,
+}));
+vi.mock("../../src/background/artifact-acquisition-state", () => ({
+  clearArtifactAcquisitionCheckpointsAfterPersistedSummary: mocks.clearAfterPersist,
 }));
 import { withPersistedSinglePeriodSummary } from "../../src/background/filed-returns-single-period-summary";
 
 describe("GSTR-3B artifact checkpoint completion ordering", () => {
-  it("persists completion without owning artifact checkpoint cleanup", async () => {
+  it("clears artifact checkpoint ownership only after completion persists", async () => {
     mocks.persist.mockImplementation(async () => {
+      expect(mocks.clearAfterPersist).not.toHaveBeenCalled();
       return { completedPeriods: ["April"], flowStep: step(), scope, status: "complete" };
     });
     const response = await withPersistedSinglePeriodSummary(
@@ -25,6 +32,7 @@ describe("GSTR-3B artifact checkpoint completion ordering", () => {
     );
     expect(response).toMatchObject({ flowSummary: { status: "complete" } });
     expect(mocks.persist).toHaveBeenCalledTimes(1);
+    expect(mocks.clearAfterPersist).toHaveBeenCalledWith(scope);
   });
 });
 

@@ -6,6 +6,7 @@ import type {
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
 import { persistCanonicalFiledReturnsFlowSummary } from "./filed-returns-session-summary";
+import { clearArtifactAcquisitionCheckpointsAfterPersistedSummary } from "./artifact-acquisition-state";
 
 export async function withPersistedSinglePeriodSummary(
   scope: FiledReturnsDownloadScope,
@@ -16,16 +17,27 @@ export async function withPersistedSinglePeriodSummary(
   if (!shouldPersistSinglePeriodSummary) return response;
   if (response.flowSummary) {
     const flowSummary = await persistProvidedSinglePeriodSummary(response.flowSummary, deps);
-    if (flowSummary) return { ...response, flowSummary };
+    if (flowSummary) return responseAfterPersistedSummary(scope, response, flowSummary);
     const responseWithoutSummary = { ...response };
     delete responseWithoutSummary.flowSummary;
     const reconstructedSummary = await persistSinglePeriodSummary(scope, response.flowStep, deps);
     return reconstructedSummary
-      ? { ...responseWithoutSummary, flowSummary: reconstructedSummary }
+      ? responseAfterPersistedSummary(scope, responseWithoutSummary, reconstructedSummary)
       : responseWithoutSummary;
   }
   const flowSummary = await persistSinglePeriodSummary(scope, response.flowStep, deps);
-  return flowSummary ? { ...response, flowSummary } : response;
+  return flowSummary ? responseAfterPersistedSummary(scope, response, flowSummary) : response;
+}
+
+async function responseAfterPersistedSummary(
+  scope: FiledReturnsDownloadScope,
+  response: Extract<PackMessageResponse, { ok: true; flowStep: PortalFlowStepResult }>,
+  flowSummary: FiledReturnsFlowSummary,
+): Promise<PackMessageResponse> {
+  if (response.flowStep.state === "downloaded") {
+    await clearArtifactAcquisitionCheckpointsAfterPersistedSummary(scope);
+  }
+  return { ...response, flowSummary };
 }
 
 async function persistSinglePeriodSummary(

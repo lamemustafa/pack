@@ -12,6 +12,11 @@ const captureMocks = vi.hoisted(() => ({
     mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     safeSignals: ["synthetic-extension-download-complete"],
   })),
+  acquireFiledReturnJsonInMainWorld: vi.fn(async () => ({
+    ok: true as const,
+    safeMessage: undefined as string | undefined,
+    safeSignals: ["synthetic-extension-download-complete"],
+  })),
   downloadAcquiredArtifact: vi.fn(async () => ({
     ok: true as const,
     downloadId: 91,
@@ -49,6 +54,9 @@ vi.mock("../../src/background/gstr3b-artifact-acquisition", () => ({
 }));
 vi.mock("../../src/background/gstr2b-artifact-acquisition", () => ({
   acquirePageGeneratedArtifact: captureMocks.acquirePageGeneratedArtifact,
+}));
+vi.mock("../../src/background/filed-returns-json-acquisition", () => ({
+  acquireFiledReturnJsonInMainWorld: captureMocks.acquireFiledReturnJsonInMainWorld,
 }));
 vi.mock("../../src/background/offscreen-blob-url", () => ({
   stageOffscreenFiledReturn: captureMocks.stageOffscreenFiledReturn,
@@ -229,7 +237,7 @@ describe("GSTR-3B artifact acquisition dispatch", () => {
     },
   );
 
-  it("writes acquired JSON into the FY, return-type, and period folder", async () => {
+  it("hands prepared JSON to the service-worker MAIN-world path", async () => {
     const response = await triggerAndObserveFiledReturnDownload({
       activePeriod: "June",
       artifactType: "JSON",
@@ -240,10 +248,8 @@ describe("GSTR-3B artifact acquisition dispatch", () => {
               ok: true,
               artifact: {
                 ok: true,
-                state: "acquired",
+                state: "ready",
                 requestId: "synthetic-request",
-                base64: "eyJzdGF0dXMiOjF9",
-                mimeType: "application/json",
                 safeSignals: ["target-period-verified"],
               },
             }) as PackMessageResponse,
@@ -255,7 +261,7 @@ describe("GSTR-3B artifact acquisition dispatch", () => {
     });
 
     expect(response).toMatchObject({ flowStep: { state: "downloaded" } });
-    expect(captureMocks.downloadAcquiredArtifact).toHaveBeenCalledWith(
+    expect(captureMocks.acquireFiledReturnJsonInMainWorld).toHaveBeenCalledWith(
       expect.objectContaining({
         filename: "ComplyEaze-Pack/2026-27/GSTR-3B/June-data.json",
       }),
@@ -263,10 +269,8 @@ describe("GSTR-3B artifact acquisition dispatch", () => {
   });
 
   it("surfaces a completed JSON filename override without treating the target as failed", async () => {
-    captureMocks.downloadAcquiredArtifact.mockResolvedValueOnce({
+    captureMocks.acquireFiledReturnJsonInMainWorld.mockResolvedValueOnce({
       ok: true,
-      downloadId: 91,
-      bytesReceived: 128,
       safeMessage:
         "Another extension changed where this file was saved. Check browser Downloads before using it.",
       safeSignals: ["download-filename-overridden"],
@@ -359,10 +363,8 @@ describe("GSTR-2B artifact acquisition dispatch", () => {
               ok: true,
               artifact: {
                 ok: true,
-                state: "acquired",
+                state: "ready",
                 requestId: message.payload.requestId,
-                base64: "JVBERi0xLjQ=",
-                mimeType: "application/pdf",
                 safeSignals: ["target-period-verified"],
               },
             }) as PackMessageResponse,
@@ -399,10 +401,8 @@ describe("GSTR-2B artifact acquisition dispatch", () => {
           ok: true,
           artifact: {
             ok: true,
-            state: "acquired",
+            state: "ready",
             requestId: message.payload.requestId,
-            base64: "JVBERi0xLjQ=",
-            mimeType: "application/pdf",
             safeSignals: ["target-period-verified"],
           },
         }) as PackMessageResponse,
@@ -459,20 +459,6 @@ describe("GSTR-2B artifact acquisition dispatch", () => {
       { ok: false, error: "CONTENT_SCRIPT_UNAVAILABLE" },
     ],
     [Gstr2bArtifactDispatchFailureReason.ContentUnavailable, "April", "PDF", { ok: true }],
-    [
-      Gstr2bArtifactDispatchFailureReason.StateInvalid,
-      "April",
-      "JSON",
-      {
-        ok: true,
-        artifact: {
-          ok: true,
-          requestId: "synthetic-2b-request",
-          safeSignals: [],
-          state: "ready",
-        },
-      },
-    ],
   ] as const)(
     "maps %s to a durable terminal message",
     async (reason, period, artifactType, reply) => {
@@ -538,10 +524,8 @@ describe("GSTR-2B artifact acquisition dispatch", () => {
               ok: true,
               artifact: {
                 ok: true,
-                state: "acquired",
+                state: "ready",
                 requestId: message.payload.requestId,
-                base64: "e30=",
-                mimeType: "application/json",
                 safeSignals: ["target-period-verified"],
               },
             }) as PackMessageResponse,
@@ -552,9 +536,41 @@ describe("GSTR-2B artifact acquisition dispatch", () => {
       tabId: 17,
     });
 
-    expect(captureMocks.downloadAcquiredArtifact).toHaveBeenCalledWith(
+    expect(captureMocks.acquireFiledReturnJsonInMainWorld).toHaveBeenCalledWith(
       expect.objectContaining({ filename: "ComplyEaze-Pack/2026-27/GSTR-2B/June-data.json" }),
     );
+  });
+
+  it("keeps GSTR-2B JSON inside a selected-file staging handoff", async () => {
+    vi.clearAllMocks();
+
+    await triggerAndObserveFiledReturnDownload({
+      activePeriod: "June",
+      artifactType: "JSON",
+      deps: {
+        sendMessageToTabWithInjection: vi.fn(
+          async (_tabId, message) =>
+            ({
+              ok: true,
+              artifact: {
+                ok: true,
+                state: "ready",
+                requestId: message.payload.requestId,
+                safeSignals: ["target-period-verified"],
+              },
+            }) as PackMessageResponse,
+        ),
+        stageCapturedDownloads: { bundleKind: "single-period", ledgerId: "single-period-test" },
+        storageKeys: {},
+      },
+      scope: { financialYear: "2026-27", period: "June", returnType: "GSTR-2B" },
+      tabId: 17,
+    });
+
+    expect(captureMocks.acquireFiledReturnJsonInMainWorld).toHaveBeenCalledWith(
+      expect.objectContaining({ deliver: expect.any(Function) }),
+    );
+    expect(captureMocks.persistArtifactAcquisitionIntent).not.toHaveBeenCalled();
   });
 
   it("blocks a GSTR-2B full-year request instead of falling through to legacy capture", async () => {
@@ -693,22 +709,6 @@ describe("GSTR-1 artifact acquisition dispatch", () => {
         unexpected: "must-not-pass-through",
       },
     ],
-    [
-      Gstr1ArtifactDispatchFailureReason.StateInvalid,
-      "April",
-      "PDF",
-      {
-        ok: true,
-        artifact: {
-          ok: true,
-          requestId: "synthetic-gstr1-request",
-          safeSignals: [],
-          state: "acquired",
-          base64: "e30=",
-          mimeType: "application/json",
-        },
-      },
-    ],
   ] as const)(
     "maps %s to a rendered terminal message",
     async (reason, period, artifactType, reply) => {
@@ -767,10 +767,8 @@ function acquiredJson(): PackMessageResponse {
     ok: true,
     artifact: {
       ok: true,
-      state: "acquired",
+      state: "ready",
       requestId: "synthetic-request",
-      base64: "eyJzdGF0dXMiOjF9",
-      mimeType: "application/json",
       safeSignals: [],
     },
   };

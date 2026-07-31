@@ -7,6 +7,9 @@ const mocks = vi.hoisted(() => {
   const session: Record<string, unknown> = {};
   return {
     acquireGstr3bPdfAfterPreflight: vi.fn(),
+    acquireFiledReturnJsonInMainWorld: vi.fn(async (input) =>
+      mocks.downloadAcquiredArtifact(input),
+    ),
     downloadAcquiredArtifact: vi.fn(),
     session,
     browser: {
@@ -29,6 +32,9 @@ vi.mock("../../src/background/artifact-download", () => ({
 vi.mock("../../src/background/gstr3b-artifact-acquisition", () => ({
   acquireGstr3bPdfAfterPreflight: mocks.acquireGstr3bPdfAfterPreflight,
 }));
+vi.mock("../../src/background/filed-returns-json-acquisition", () => ({
+  acquireFiledReturnJsonInMainWorld: mocks.acquireFiledReturnJsonInMainWorld,
+}));
 
 import { triggerAndObserveFiledReturnDownload } from "../../src/background/filed-returns-download-trigger";
 
@@ -39,7 +45,11 @@ const scope = {
   returnType: "GSTR-3B" as const,
 };
 
-const RETAINED_TERMINAL_DELIVERY_FAILURES = ["danger-unconfirmed", "danger-rejected"] as const;
+const RETAINED_TERMINAL_DELIVERY_FAILURES = [
+  "danger-unconfirmed",
+  "danger-rejected",
+  "search-unavailable",
+] as const;
 
 describe("GSTR-3B artifact acquisition checkpoint cleanup", () => {
   beforeEach(() => {
@@ -159,7 +169,7 @@ describe("GSTR-3B artifact acquisition checkpoint cleanup", () => {
     expect(mocks.session).toEqual({});
   });
 
-  it.each(RETAINED_TERMINAL_DELIVERY_FAILURES)(
+  it.each(["danger-unconfirmed", "danger-rejected"] as const)(
     "retains the JSON checkpoint after a completed browser download is %s",
     async (reason) => {
       mocks.downloadAcquiredArtifact.mockImplementationOnce(async (input) => {
@@ -270,10 +280,8 @@ function acquiredJson(): PackMessageResponse {
     ok: true,
     artifact: {
       ok: true,
-      state: "acquired",
+      state: "ready",
       requestId: "synthetic-request",
-      base64: "eyJzdGF0dXMiOjF9",
-      mimeType: "application/json",
       safeSignals: [],
     },
   };

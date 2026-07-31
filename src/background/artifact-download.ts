@@ -17,6 +17,7 @@ type DownloadFailure =
   | "interrupted"
   | "empty"
   | "timeout"
+  | "search-unavailable"
   | "danger-unconfirmed"
   | "danger-rejected";
 export type ArtifactDownloadResult =
@@ -165,7 +166,13 @@ function awaitCompletion(
             );
           }
         })
-        .catch(() => finish({ ok: false, reason: "interrupted", safeSignals: [] }));
+        .catch(() =>
+          finish({
+            ok: false,
+            reason: "search-unavailable",
+            safeSignals: ["browser-download-search-unavailable"],
+          }),
+        );
     const listener = (delta: { id: number }) => {
       if (delta.id === downloadId) inspect();
     };

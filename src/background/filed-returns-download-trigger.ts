@@ -16,6 +16,7 @@ import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descr
 import type { FiledReturnsFlowMessagingDeps } from "./filed-returns-flow-messaging";
 import { acquireGstr3bPdfAfterPreflight } from "./gstr3b-artifact-acquisition";
 import { acquirePageGeneratedArtifact } from "./gstr2b-artifact-acquisition";
+import { acquireFiledReturnJsonInMainWorld } from "./filed-returns-json-acquisition";
 import { toPortalReturnPeriod } from "../connectors/gst/filed-returns-return-period";
 import { downloadAcquiredArtifact } from "./artifact-download";
 import { stageOffscreenFiledReturn } from "./offscreen-blob-url";
@@ -148,7 +149,7 @@ export async function triggerAndObserveFiledReturnDownload({
         response.ok &&
         "artifact" in response &&
         response.artifact.ok &&
-        response.artifact.state === "acquired"
+        response.artifact.state === "ready"
       ) {
         const checkpointTarget = {
           artifactType,
@@ -160,11 +161,12 @@ export async function triggerAndObserveFiledReturnDownload({
         let checkpointHasDownloadId = false;
         let retainCheckpointForRecovery = false;
         try {
-          const delivery = await downloadAcquiredArtifact({
-            base64: response.artifact.base64,
+          const delivery = await acquireFiledReturnJsonInMainWorld({
             filename: artifactFilename(scope, "JSON"),
-            mimeType: response.artifact.mimeType,
             requestId,
+            returnPeriod,
+            returnType: "GSTR-3B",
+            tabId,
             onStarted: async (downloadId) => {
               await persistArtifactAcquisitionDownloadId({
                 ...checkpointTarget,
@@ -184,7 +186,7 @@ export async function triggerAndObserveFiledReturnDownload({
             },
           });
           retainCheckpointForRecovery =
-            !delivery.ok &&
+            delivery.ok ||
             shouldRetainArtifactAcquisitionCheckpoint(delivery, checkpointHasDownloadId);
           return delivery.ok
             ? {
@@ -263,7 +265,7 @@ export async function triggerAndObserveFiledReturnDownload({
             },
           });
           retainCheckpointForRecovery =
-            !acquired.ok &&
+            acquired.ok ||
             shouldRetainArtifactAcquisitionCheckpoint(acquired, checkpointHasDownloadId);
           return acquired.ok
             ? {
@@ -315,8 +317,16 @@ function shouldRetainArtifactAcquisitionCheckpoint(
   // settle as safe later, but it must not be forgotten and repeated first.
   return (
     checkpointHasDownloadId &&
-    ["timeout", "danger-unconfirmed", "danger-rejected"].includes(delivery.reason)
+    ["timeout", "search-unavailable", "danger-unconfirmed", "danger-rejected"].includes(
+      delivery.reason,
+    )
   );
+}
+
+function hasDownloadDiagnostic(
+  input: unknown,
+): input is { downloadDiagnostic?: FiledReturnsDownloadDiagnostic } {
+  return typeof input === "object" && input !== null && "downloadDiagnostic" in input;
 }
 
 function artifactFilename(
@@ -413,7 +423,12 @@ async function triggerPageGeneratedSinglePeriodArtifact(
     period: scope.period,
     returnType: scope.returnType,
   };
-  await persistArtifactAcquisitionIntent({ ...checkpointTarget, requestId });
+  // OPFS staging has a separate durable bundle ledger. Only a browser-created
+  // download needs this exact-ID checkpoint for recovery.
+  const tracksBrowserDownload = !deps.stageCapturedDownloads;
+  if (tracksBrowserDownload) {
+    await persistArtifactAcquisitionIntent({ ...checkpointTarget, requestId });
+  }
   let checkpointHasDownloadId = false;
   let retainCheckpointForRecovery = false;
   try {
@@ -437,17 +452,31 @@ async function triggerPageGeneratedSinglePeriodArtifact(
       },
     };
     const acquired =
-      returnType === "GSTR-2B" && artifact.state === "acquired"
-        ? await deliverValidatedArtifact({
-            artifactType,
-            base64: artifact.base64,
-            callbacks,
-            deps,
+      returnType === "GSTR-2B" && artifactType === "JSON" && artifact.state === "ready"
+        ? await acquireFiledReturnJsonInMainWorld({
+            ...(deps.stageCapturedDownloads
+              ? {
+                  deliver: ({ base64, mimeType }) =>
+                    deliverValidatedArtifact({
+                      artifactType,
+                      base64,
+                      callbacks,
+                      deps,
+                      filename: artifactFilename(scope, artifactType),
+                      mimeType,
+                      requestId,
+                      returnType,
+                      scope,
+                    }),
+                }
+              : {}),
             filename: artifactFilename(scope, "JSON"),
-            mimeType: artifact.mimeType,
+            onStartCheckpointFailed: callbacks.onStartCheckpointFailed,
+            onStarted: callbacks.onStarted,
             requestId,
+            returnPeriod,
             returnType,
-            scope,
+            tabId,
           })
         : artifact.state === "ready" && (artifactType === "PDF" || artifactType === "EXCEL")
           ? await acquirePageGeneratedArtifact({
@@ -477,7 +506,8 @@ async function triggerPageGeneratedSinglePeriodArtifact(
       return pageGeneratedArtifactDispatchFailure(returnType, "StateInvalid");
     }
     retainCheckpointForRecovery =
-      !acquired.ok && shouldRetainArtifactAcquisitionCheckpoint(acquired, checkpointHasDownloadId);
+      tracksBrowserDownload &&
+      (acquired.ok || shouldRetainArtifactAcquisitionCheckpoint(acquired, checkpointHasDownloadId));
     return acquired.ok
       ? {
           ok: true,
@@ -487,7 +517,7 @@ async function triggerPageGeneratedSinglePeriodArtifact(
             state: "downloaded",
             safeSignals: [...artifact.safeSignals, ...acquired.safeSignals],
             safeMessage: acquired.safeMessage ?? artifactSuccessMessage(returnType, artifactType),
-            ...(acquired.downloadDiagnostic
+            ...(hasDownloadDiagnostic(acquired) && acquired.downloadDiagnostic
               ? { downloadDiagnostic: acquired.downloadDiagnostic }
               : {}),
           },
@@ -507,7 +537,7 @@ async function triggerPageGeneratedSinglePeriodArtifact(
           },
         };
   } finally {
-    if (!retainCheckpointForRecovery) {
+    if (tracksBrowserDownload && !retainCheckpointForRecovery) {
       await clearArtifactAcquisitionCheckpoint(checkpointTarget, requestId);
     }
   }

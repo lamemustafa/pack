@@ -1,7 +1,7 @@
 # Pack — Artifact Acquisition Rewrite Spec (rev 4, FINAL)
 
 **For:** Codex / GPT-5.6 terra-high, goal mode
-**Repo:** `pack` (nested extension repo, `/private/tmp/pack-gst-matrix-stabilization`)
+**Repo:** `pack` (nested extension repo)
 **Base commit:** `31ea38e` on `tapish-codex/gst-matrix-stabilization`
 **Work branch:** `claude/acquisition-rewrite` (create from `31ea38e`)
 **Scope:** GSTR-3B only. GSTR-1 and GSTR-2B are explicitly out (§10).

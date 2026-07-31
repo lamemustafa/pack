@@ -464,7 +464,7 @@ describe("popup full-year recovery actions", () => {
     expect(markup).toContain("All formats");
   });
 
-  it("labels multi-file single-period runs as separate artifact downloads", () => {
+  it("labels multi-file single-period runs as one local ZIP", () => {
     const markup = renderToStaticMarkup(
       createElement(ScopeForm, {
         busy: null,
@@ -481,9 +481,9 @@ describe("popup full-year recovery actions", () => {
       }),
     );
 
-    expect(markup).toContain("Download each selected format from the active GST tab.");
+    expect(markup).toContain("Collect the selected GSTR-2B formats into one local ZIP.");
     expect(markup).toContain("Download May 2026-27 GSTR-2B all formats");
-    expect(markup).not.toContain("Collect the selected period into one local ZIP.");
+    expect(markup).not.toContain("Download each selected format from the active GST tab.");
     expect(markup).not.toContain("Download May 2026-27 GSTR-2B ZIP");
   });
 

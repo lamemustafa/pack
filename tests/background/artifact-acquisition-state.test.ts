@@ -21,6 +21,7 @@ vi.mock("wxt/browser", () => ({ browser: mocks.browser }));
 import {
   artifactAcquisitionCheckpointKey,
   clearArtifactAcquisitionCheckpoint,
+  clearArtifactAcquisitionCheckpointsAfterPersistedSummary,
   persistArtifactAcquisitionDownloadId,
   persistArtifactAcquisitionIntent,
   persistArtifactAcquisitionUnconfirmedDownload,
@@ -176,6 +177,28 @@ describe("artifact acquisition checkpoint", () => {
     expect(mocks.session[artifactAcquisitionCheckpointKey(MAY_PDF)]).toBeUndefined();
     expect(mocks.session[artifactAcquisitionCheckpointKey(JUNE_PDF)]).toEqual(
       expect.objectContaining({ requestId: "request-june" }),
+    );
+  });
+
+  it("clears a completed target only after its summary is durable", async () => {
+    await persistArtifactAcquisitionDownloadId({
+      ...MAY_PDF,
+      downloadId: 9,
+      requestId: "request-may-pdf",
+      state: "download-observing",
+    });
+    await persistArtifactAcquisitionUnconfirmedDownload({
+      ...MAY_JSON,
+      downloadId: 10,
+      requestId: "request-may-json",
+      state: "download-unconfirmed",
+    });
+
+    await clearArtifactAcquisitionCheckpointsAfterPersistedSummary(MAY_PDF);
+
+    expect(mocks.session[artifactAcquisitionCheckpointKey(MAY_PDF)]).toBeUndefined();
+    expect(mocks.session[artifactAcquisitionCheckpointKey(MAY_JSON)]).toEqual(
+      expect.objectContaining({ downloadId: 10, state: "download-unconfirmed" }),
     );
   });
 });

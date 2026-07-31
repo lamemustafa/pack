@@ -16,8 +16,8 @@ import { resolveVisibleFiledReturnDownloadCandidates } from "./filed-returns-dow
 import { verifyFiledReturnsDownloadTarget } from "./filed-returns-download-target";
 import { verifyVisibleGstr2bSummaryScope } from "./gstr2b-summary";
 
-const GSTR3B_GET_GEN_PDF_PATH = "/returns/auth/api/gstr3b/getgenpdf";
 const GST_RETURNS_ORIGIN = "https://return.gst.gov.in";
+const GSTR3B_GET_GEN_PDF_PATH = "/returns/auth/api/gstr3b/getgenpdf";
 
 export type ArtifactRequest = {
   returnType: "GSTR-1" | "GSTR-3B" | "GSTR-2B";
@@ -42,6 +42,7 @@ export type ArtifactFailureReason =
   | "empty"
   | "too-large"
   | "generation-timeout"
+  | "search-unavailable"
   | "page-period-mismatch"
   | "danger-unconfirmed"
   | "danger-rejected";
@@ -67,6 +68,8 @@ export const ARTIFACT_FAILURE_MESSAGES = {
   "too-large": "The GST Portal returned an artifact that exceeds Pack's safe local size limit.",
   "generation-timeout":
     "The GST Portal did not finish generating the filed-return artifact in time.",
+  "search-unavailable":
+    "Pack could not confirm the browser download state, so it did not mark the target saved.",
   "page-period-mismatch":
     "The visible GST Portal page does not match the requested financial year and period.",
   "danger-unconfirmed":
@@ -80,18 +83,10 @@ export function artifactFailureMessage(reason: ArtifactFailureReason): string {
 }
 
 export type ArtifactResult =
-  | {
-      ok: true;
-      state: "acquired";
-      requestId: string;
-      bytes: Uint8Array;
-      mimeType: string;
-      safeSignals: string[];
-    }
   | { ok: true; state: "ready"; requestId: string; safeSignals: string[] }
   | { ok: false; requestId: string; reason: ArtifactFailureReason; safeSignals: string[] };
 
-/** Acquires only raw, portal-produced GSTR-3B JSON bytes in the page's origin context. */
+/** Prepares a target-bound portal action without returning raw bytes to the content script. */
 export async function acquireFiledReturnArtifact(
   documentRef: Document,
   request: ArtifactRequest,
@@ -113,6 +108,16 @@ export async function acquireFiledReturnArtifact(
     [],
   );
   if (pageGuard) return failed(request, "page-period-mismatch", ["page-target-unverified"]);
+  if (request.artifactType === "JSON") {
+    // The background worker fetches JSON through its one-shot MAIN-world
+    // execution result. A content-script runtime response must stay metadata-only.
+    return {
+      ok: true,
+      state: "ready",
+      requestId: request.requestId,
+      safeSignals: ["target-period-verified"],
+    };
+  }
   const fetch = view.fetch?.bind(view);
   if (!fetch) return failed(request, "endpoint-unavailable");
   let response: Response;
@@ -134,16 +139,6 @@ export async function acquireFiledReturnArtifact(
   const bytes = new Uint8Array(await response.arrayBuffer());
   const preflight = validateArtifactBytes(bytes, "JSON", request.returnPeriod);
   if (!preflight.ok) return failed(request, preflight.reason);
-  if (request.artifactType === "JSON") {
-    return {
-      ok: true,
-      state: "acquired",
-      requestId: request.requestId,
-      bytes,
-      mimeType: preflight.mimeType,
-      safeSignals: ["target-period-verified"],
-    };
-  }
   const candidates = resolveVisibleFiledReturnDownloadCandidates(documentRef, "GSTR-3B", "PDF");
   if (candidates.length !== 1 || !candidates[0])
     return failed(request, "control-not-found", ["target-period-verified"]);
@@ -226,13 +221,32 @@ async function acquireGstr2bArtifact(
 ): Promise<ArtifactResult> {
   const view = documentRef.defaultView;
   if (!view || view.location.origin !== GSTR2B_ORIGIN) return failed(request, "wrong-page");
+  if (request.artifactType === "JSON") {
+    if (view.location.pathname !== GSTR2B_SUMMARY_PATH) return failed(request, "wrong-page");
+    const visibleScopeGuard = verifyVisibleGstr2bSummaryScope(documentRef, {
+      financialYear: request.financialYear,
+      period: request.period,
+      returnType: "GSTR-2B",
+    });
+    if (visibleScopeGuard) {
+      return failed(request, "page-period-mismatch", ["page-target-unverified"]);
+    }
+    return {
+      ok: true,
+      state: "ready",
+      requestId: request.requestId,
+      safeSignals: ["target-period-verified"],
+    };
+  }
   const fetch = view.fetch?.bind(view);
   if (!fetch) return failed(request, "endpoint-unavailable");
   let response: Response;
   try {
     response = await fetch(
       `${GSTR2B_JSON_PATH}?rtnprd=${encodeURIComponent(request.returnPeriod)}`,
-      { credentials: "same-origin" },
+      {
+        credentials: "same-origin",
+      },
     );
   } catch {
     return failed(request, "endpoint-unavailable");
@@ -241,16 +255,6 @@ async function acquireGstr2bArtifact(
   const bytes = new Uint8Array(await response.arrayBuffer());
   const preflight = validateArtifactBytes(bytes, "JSON", request.returnPeriod, "GSTR-2B");
   if (!preflight.ok) return failed(request, preflight.reason);
-  if (request.artifactType === "JSON") {
-    return {
-      ok: true,
-      state: "acquired",
-      requestId: request.requestId,
-      bytes,
-      mimeType: preflight.mimeType,
-      safeSignals: ["target-period-verified"],
-    };
-  }
   if (view.location.pathname !== GSTR2B_SUMMARY_PATH)
     return failed(request, "wrong-page", ["target-period-verified"]);
   const descriptor = GSTR2B_PAGE_GENERATED_ARTIFACTS[request.artifactType];
