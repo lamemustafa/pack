@@ -286,6 +286,37 @@ describe("artifact acquisition checkpoint", () => {
     expect(mocks.browser.downloads.cancel).toHaveBeenNthCalledWith(2, 10);
   });
 
+  it("treats an absent checkpoint as already cleared so a restart cannot block the target forever", async () => {
+    // Chrome clears storage.session when the extension is disabled, reloaded or
+    // updated and when the browser restarts; the target review lives in
+    // storage.local and survives all four. If absence counted as a failed
+    // clear, the review could never be resolved and an extension update alone
+    // would strand the target permanently.
+    await expect(clearArtifactAcquisitionCheckpoints(MAY_COMPOSITE)).resolves.toBe(true);
+    expect(mocks.browser.downloads.cancel).not.toHaveBeenCalled();
+  });
+
+  it("refuses to cancel a download ID whose checkpoint does not describe this target", async () => {
+    // Chrome does not document whether a DownloadItem id is ever reused, so a
+    // record that no longer describes the target under whose key it sits is not
+    // permission to cancel the id it carries.
+    const key = artifactAcquisitionCheckpointKey({ ...MAY_COMPOSITE, artifactType: "PDF" });
+    mocks.session[key] = {
+      requestId: "request-drifted",
+      state: "download-observing",
+      downloadId: 9,
+      returnType: MAY_COMPOSITE.returnType,
+      financialYear: MAY_COMPOSITE.financialYear,
+      period: "April",
+      artifactType: "PDF",
+    };
+    mocks.browser.downloads.search.mockResolvedValue([{ state: "in_progress" }]);
+
+    await expect(clearArtifactAcquisitionCheckpoints(MAY_COMPOSITE)).resolves.toBe(false);
+    expect(mocks.browser.downloads.cancel).not.toHaveBeenCalled();
+    expect(mocks.session[key]).toBeDefined();
+  });
+
   it("retains completed checkpoints when cancellation cannot make them retry-safe", async () => {
     await persistArtifactAcquisitionDownloadId({
       ...MAY_COMPOSITE,

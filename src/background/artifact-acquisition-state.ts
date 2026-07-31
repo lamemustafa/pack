@@ -81,15 +81,26 @@ export async function clearArtifactAcquisitionCheckpoint(
 export async function clearArtifactAcquisitionCheckpoints(
   scope: FiledReturnsDownloadScope,
 ): Promise<boolean> {
-  const keys = concreteFiledReturnsArtifactTypes(
+  const targets = concreteFiledReturnsArtifactTypes(
     normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType),
-  ).map((artifactType) => artifactAcquisitionCheckpointKey({ ...scope, artifactType }));
+  ).map((artifactType) => ({ ...scope, artifactType }) as ArtifactAcquisitionTarget);
+  const keys = targets.map((target) => artifactAcquisitionCheckpointKey(target));
   try {
     const stored = await browser.storage.session.get(keys);
-    for (const key of keys) {
+    for (const target of targets) {
+      const key = artifactAcquisitionCheckpointKey(target);
       const checkpoint = stored[key];
+      // Chrome clears storage.session when the extension is disabled, reloaded
+      // or updated and when the browser restarts, while the target review lives
+      // in storage.local and survives all four. An absent checkpoint therefore
+      // means there is nothing left to clear — that is the success condition,
+      // not a failure. Treating it as a failure retained the review forever,
+      // because every later attempt read the same absence, and an extension
+      // update alone was enough to reach it.
+      if (checkpoint === undefined) continue;
       if (
         !isArtifactAcquisitionCheckpoint(checkpoint) ||
+        !checkpointOwnsTarget(checkpoint, target) ||
         typeof checkpoint.downloadId !== "number" ||
         !Number.isSafeInteger(checkpoint.downloadId)
       ) {
@@ -184,6 +195,26 @@ export async function reconcileArtifactAcquisitionCheckpoint(
       safeSignals: ["artifact-acquisition-download-search-unavailable"],
     };
   }
+}
+
+/**
+ * A stored record is only permission to cancel a browser download if it is the
+ * checkpoint for exactly this target. Chrome does not document whether a
+ * DownloadItem id is ever reused, so nothing may rely on a stale id being
+ * harmless; the id is trusted only when the record it came from still describes
+ * the target whose key it sits under, and carries a live acquisition state.
+ */
+function checkpointOwnsTarget(
+  checkpoint: ArtifactAcquisitionCheckpoint,
+  target: ArtifactAcquisitionTarget,
+): boolean {
+  return (
+    (checkpoint.state === "download-observing" || checkpoint.state === "download-unconfirmed") &&
+    checkpoint.returnType === target.returnType &&
+    checkpoint.financialYear === target.financialYear &&
+    checkpoint.period === target.period &&
+    (checkpoint.artifactType ?? "PDF") === (target.artifactType ?? "PDF")
+  );
 }
 
 function isArtifactAcquisitionCheckpoint(input: unknown): input is ArtifactAcquisitionCheckpoint {
