@@ -182,7 +182,12 @@ export function failedObservation(errorCode?: string): SafeDownloadObservation {
   };
 }
 
-function firstKnownSize(item: DownloadCreatedItem | undefined): number | null {
+/**
+ * The single owner of "what size did the browser actually report". Exported so
+ * any path that needs positive non-empty evidence derives it here rather than
+ * re-picking among fileSize, totalBytes and bytesReceived.
+ */
+export function firstKnownSize(item: DownloadCreatedItem | undefined): number | null {
   const fileSize = item?.fileSize;
   if (typeof fileSize === "number" && Number.isFinite(fileSize) && fileSize >= 0) {
     return fileSize;

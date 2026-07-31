@@ -65,7 +65,7 @@ describe("filed returns target review", () => {
     browserMocks.storage.local.remove.mockResolvedValue(undefined);
     browserMocks.storage.session.set.mockResolvedValue(undefined);
     zipMocks.discardSinglePeriodFiledReturnsZip.mockResolvedValue(["single-period-opfs-cleared"]);
-    acquisitionMocks.clearArtifactAcquisitionCheckpoints.mockResolvedValue(true);
+    acquisitionMocks.clearArtifactAcquisitionCheckpoints.mockResolvedValue({ state: "cleared" });
   });
 
   it("records a manual observation without completing or clearing the unresolved target", async () => {
@@ -188,7 +188,7 @@ describe("filed returns target review", () => {
       updatedAt: "2026-08-01T00:00:00.000Z",
     };
     browserMocks.storage.local.get.mockResolvedValue({ "target-review": review });
-    acquisitionMocks.clearArtifactAcquisitionCheckpoints.mockResolvedValue(false);
+    acquisitionMocks.clearArtifactAcquisitionCheckpoints.mockResolvedValue({ state: "blocked" });
 
     const response = await resolveUnconfirmedFiledReturnsDownload(scope, "cancelled", {
       storageKeys: { completion: "completion", targetReview: "target-review" },

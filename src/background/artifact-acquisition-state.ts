@@ -4,6 +4,10 @@ import {
   concreteFiledReturnsArtifactTypes,
   normaliseFiledReturnsArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
+import {
+  classifyDownloadDanger,
+  firstKnownSize as firstKnownDownloadSize,
+} from "./download-observer-results";
 
 /**
  * Canonical prefix for the per-target session checkpoint family. Exported so the
@@ -82,17 +86,31 @@ export async function clearArtifactAcquisitionCheckpoint(
 }
 
 /**
- * Cancels exact in-progress downloads before clearing every checkpoint for an
- * explicitly cancelled target review. Completed, unknown, and intent-only
- * checkpoints remain fail-closed because they cannot be safely retried.
+ * Resolves every checkpoint for an explicitly cancelled target review.
+ *
+ * `completed` is returned only when every checkpoint still held for the scope
+ * carries positive exact-ID evidence — the browser reports that download
+ * complete, non-empty and classified safe. That is the same bar the shared
+ * observer applies, so a target whose bytes demonstrably arrived is reconciled
+ * as downloaded rather than discarded: cancelling is the user's way out of a
+ * stuck review, not an instruction to disbelieve evidence Pack already holds.
+ *
+ * `blocked` keeps the review when a checkpoint cannot be resolved safely, which
+ * includes a completed download whose size or danger classification cannot be
+ * established. Unknown is never treated as either outcome.
  */
+export type ArtifactCheckpointCancellation =
+  { state: "cleared" } | { state: "completed"; downloadIds: number[] } | { state: "blocked" };
+
 export async function clearArtifactAcquisitionCheckpoints(
   scope: FiledReturnsDownloadScope,
-): Promise<boolean> {
+): Promise<ArtifactCheckpointCancellation> {
   const targets = concreteFiledReturnsArtifactTypes(
     normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType),
   ).map((artifactType) => ({ ...scope, artifactType }) as ArtifactAcquisitionTarget);
   const keys = targets.map((target) => artifactAcquisitionCheckpointKey(target));
+  const completedDownloadIds: number[] = [];
+  let heldCheckpoints = 0;
   try {
     const stored = await browser.storage.session.get(keys);
     for (const target of targets) {
@@ -106,29 +124,48 @@ export async function clearArtifactAcquisitionCheckpoints(
       // because every later attempt read the same absence, and an extension
       // update alone was enough to reach it.
       if (checkpoint === undefined) continue;
+      heldCheckpoints += 1;
       if (
         !isArtifactAcquisitionCheckpoint(checkpoint) ||
         !checkpointOwnsTarget(checkpoint, target) ||
         typeof checkpoint.downloadId !== "number" ||
         !Number.isSafeInteger(checkpoint.downloadId)
       ) {
-        return false;
+        return { state: "blocked" };
       }
       const downloadId = checkpoint.downloadId;
       const [download] = await browser.downloads.search({ id: downloadId });
-      if (download?.state === "complete" || !download?.state) return false;
+      if (!download?.state) return { state: "blocked" };
+      if (download.state === "complete") {
+        // The bytes demonstrably arrived. Discarding that on cancel would throw
+        // away the only positive evidence Pack holds and invite the user to
+        // download the same file again, so it is reconciled instead — but only
+        // on the shared observer's bar: safe classification and a known
+        // non-zero size. Complete-but-unverifiable stays blocked.
+        if (classifyDownloadDanger(download) !== "safe") return { state: "blocked" };
+        const size = firstKnownDownloadSize(download);
+        if (size === null || size === 0) return { state: "blocked" };
+        completedDownloadIds.push(downloadId);
+        continue;
+      }
       if (download.state === "in_progress") {
         await browser.downloads.cancel(downloadId);
         const [cancelledDownload] = await browser.downloads.search({ id: downloadId });
-        if (cancelledDownload?.state !== "interrupted") return false;
+        if (cancelledDownload?.state !== "interrupted") return { state: "blocked" };
       } else if (download.state !== "interrupted") {
-        return false;
+        return { state: "blocked" };
       }
     }
     await browser.storage.session.remove(keys);
-    return true;
+    // Only a scope whose every held checkpoint was evidenced complete counts as
+    // completed; a bundle where one artifact arrived and another was cancelled
+    // is not a completed target.
+    if (heldCheckpoints > 0 && completedDownloadIds.length === heldCheckpoints) {
+      return { state: "completed", downloadIds: completedDownloadIds };
+    }
+    return { state: "cleared" };
   } catch {
-    return false;
+    return { state: "blocked" };
   }
 }
 
