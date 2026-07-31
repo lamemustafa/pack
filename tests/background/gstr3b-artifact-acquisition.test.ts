@@ -42,14 +42,24 @@ describe("GSTR-3B page-generated acquisition", () => {
     });
     await expect(
       acquireGstr3bPdfAfterPreflight({
+        financialYear: "2024-25",
         filename: "Pack/2024-25/April/GSTR-3B.pdf",
+        period: "April",
         requestId: "request-1",
         returnPeriod: "042024",
         tabId: 17,
       }),
     ).resolves.toMatchObject({ ok: true });
     expect(mocks.executeScript).toHaveBeenCalledWith(
-      expect.objectContaining({ target: { tabId: 17 }, world: "MAIN" }),
+      expect.objectContaining({
+        args: [
+          expect.objectContaining({
+            expectedTarget: { financialYear: "2024-25", period: "April", returnType: "GSTR-3B" },
+          }),
+        ],
+        target: { tabId: 17 },
+        world: "MAIN",
+      }),
     );
     expect(mocks.downloadAcquiredArtifact).toHaveBeenCalledWith(
       expect.objectContaining({ filename: "Pack/2024-25/April/GSTR-3B.pdf" }),
@@ -69,7 +79,9 @@ describe("GSTR-3B page-generated acquisition", () => {
     ]);
     await expect(
       acquireGstr3bPdfAfterPreflight({
+        financialYear: "2024-25",
         filename: "Pack/2024-25/April/GSTR-3B.pdf",
+        period: "April",
         requestId: "request-2",
         returnPeriod: "042024",
         tabId: 17,

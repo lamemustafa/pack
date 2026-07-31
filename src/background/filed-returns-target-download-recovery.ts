@@ -30,10 +30,7 @@ import {
 import { copyFiledReturnsDownloadDiagnosticState } from "./filed-returns-download-diagnostic-state";
 import { hasPositiveFiledReturnsDownloadEvidence } from "./filed-returns-download-diagnostic-state";
 import { persistCanonicalSinglePeriodCompletion } from "./filed-returns-session-summary";
-import {
-  clearFiledReturnsTargetDownloadAttempt,
-  moveFiledReturnsTargetDownloadToManualReview,
-} from "./filed-returns-target-download-attempt";
+import { moveFiledReturnsTargetDownloadToManualReview } from "./filed-returns-target-download-attempt";
 
 const PERSISTED_DOWNLOAD_RECONCILIATION_WAIT_MS = 30_000;
 
@@ -110,38 +107,15 @@ export async function reconcileFiledReturnsTargetDownload(
       response: await completeReconciledDownload(review, observation, deps),
     };
   }
-  const requiresManualReview = observation.safeSignals.includes("browser-download-danger-rejected");
-  if (requiresManualReview) {
+  const requiresManualReview = observation.safeSignals.some((signal) =>
+    [
+      "browser-download-danger-rejected",
+      "browser-download-interrupted",
+      "browser-download-zero-bytes",
+    ].includes(signal),
+  );
+  if (observation.safeSignals.includes("browser-download-danger-rejected")) {
     await moveFiledReturnsTargetDownloadToManualReview(review.scope, deps);
-  } else if (observation.state === "failed" && isSafeExplicitRetry(observation)) {
-    if (attempt.kind === "single-period-zip") {
-      const cleanup = await cleanupSinglePeriodBundleStaging({
-        ledgerId: attempt.stagingLedgerId,
-        scope: review.scope,
-      });
-      if (cleanup.state === "blocked") {
-        return {
-          state: "handled",
-          response: await persistZipRetryCleanupFailure(
-            review.scope,
-            observation,
-            cleanup.safeSignals,
-            deps,
-          ),
-        };
-      }
-    }
-    let attemptCleared = false;
-    try {
-      attemptCleared = await clearFiledReturnsTargetDownloadAttempt(review.scope, deps);
-    } catch {
-      attemptCleared = false;
-    }
-    if (attemptCleared) return { state: "retry-safe" };
-    return {
-      state: "handled",
-      response: await persistAttemptCleanupFailure(review.scope, observation, deps),
-    };
   }
   return {
     state: "handled",
@@ -152,62 +126,6 @@ export async function reconcileFiledReturnsTargetDownload(
       requiresManualReview,
     ),
   };
-}
-
-async function persistZipRetryCleanupFailure(
-  scope: FiledReturnsDownloadScope,
-  observation: SafeDownloadObservation,
-  cleanupSignals: readonly string[],
-  deps: FiledReturnsTargetReviewDeps,
-): Promise<PackMessageResponse> {
-  const flowStep: PortalFlowStepResult = {
-    connectorId: "gst",
-    scopeId: filedReturnScopeId(scope.returnType),
-    state: "blocked",
-    safeSignals: [
-      "filed-returns-download-reconciled-by-id",
-      "single-period-zip-retry-cleanup-failed",
-      ...cleanupSignals,
-      ...observation.safeSignals,
-    ],
-    safeMessage:
-      "Pack confirmed that the prior selected-file ZIP did not complete, but could not clear its retained staging for a safe retry.",
-    userAction: {
-      type: "RETRY_PORTAL_GENERATION",
-      message: "Retry so Pack can clear the retained selected-file staging.",
-      canResume: true,
-    },
-  };
-  await persistFiledReturnsTargetReview(scope, flowStep, deps);
-  const review = await readFiledReturnsTargetReview(scope, deps);
-  return review ? responseForFiledReturnsTargetReview(review) : { ok: true, flowStep };
-}
-
-async function persistAttemptCleanupFailure(
-  scope: FiledReturnsDownloadScope,
-  observation: SafeDownloadObservation,
-  deps: FiledReturnsTargetReviewDeps,
-): Promise<PackMessageResponse> {
-  const flowStep: PortalFlowStepResult = {
-    connectorId: "gst",
-    scopeId: filedReturnScopeId(scope.returnType),
-    state: "download-unconfirmed",
-    safeSignals: [
-      "filed-returns-download-reconciled-by-id",
-      "filed-returns-download-attempt-clear-failed",
-      ...observation.safeSignals,
-    ],
-    safeMessage:
-      "Pack confirmed that the prior download did not complete, but could not clear its saved recovery checkpoint for a safe retry.",
-    userAction: {
-      type: "RETRY_PORTAL_GENERATION",
-      message: "Retry after Pack can update its local recovery state.",
-      canResume: true,
-    },
-  };
-  await persistFiledReturnsTargetReview(scope, flowStep, deps);
-  const review = await readFiledReturnsTargetReview(scope, deps);
-  return review ? responseForFiledReturnsTargetReview(review) : { ok: true, flowStep };
 }
 
 async function completeReconciledDownload(
@@ -658,7 +576,9 @@ async function persistReconciliationReview(
   const flowStep: PortalFlowStepResult = {
     connectorId: "gst",
     scopeId: filedReturnScopeId(scope.returnType),
-    state: observation.state === "failed" ? "blocked" : "download-unconfirmed",
+    // Every unconfirmed terminal outcome must enter the durable review record;
+    // `blocked` alone is not admitted by the target-review persistence gate.
+    state: "download-unconfirmed",
     safeSignals: [
       "filed-returns-download-reconciled-by-id",
       ...(manualReview ? ["filed-returns-download-manual-review-required"] : []),
@@ -726,10 +646,4 @@ function observationContext(
     ...(attempt.directDownload ? { requireExpectedMime: true } : {}),
     ...common,
   };
-}
-
-function isSafeExplicitRetry(observation: SafeDownloadObservation): boolean {
-  return observation.safeSignals.some((signal) =>
-    ["browser-download-interrupted", "browser-download-zero-bytes"].includes(signal),
-  );
 }

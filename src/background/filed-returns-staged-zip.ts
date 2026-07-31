@@ -13,7 +13,10 @@ import {
   type OffscreenFiledReturnClearResult,
 } from "./offscreen-blob-url";
 import { observeBrowserDownloadById } from "./download-observer";
-import { beginPendingExtensionDownloadUrl } from "./filed-returns-durable-download-reconciler";
+import {
+  beginPendingExtensionDownloadUrl,
+  extensionBlobUrlFingerprint,
+} from "./filed-returns-durable-download-reconciler";
 import { safeFiledReturnZipEntryPath } from "./filed-returns-download-filename";
 import { installPackDownloadFilenameReassertion } from "./pack-download-filename-reassertion";
 import { isRequestedFilenameOverridden } from "./download-filename-comparison";
@@ -63,7 +66,7 @@ export async function exportStagedFiledReturnsZip({
   zipFilename: string;
   expectedZipEntries?: readonly PackOffscreenFiledReturnZipExpectedEntry[];
   expectedZipEntryCount?: number;
-  onBeforeDownloadStart?: (requestedAt: Date) => Promise<void>;
+  onBeforeDownloadStart?: (requestedAt: Date, extensionBlobUrlFingerprint: string) => Promise<void>;
   onClearStaging?: (
     outcome: "downloaded" | "not-downloaded",
   ) => Promise<StagedFiledReturnsZipClearResult>;
@@ -156,7 +159,9 @@ export async function exportStagedFiledReturnsZip({
   let downloadId: number | null = null;
   const armedAt = new Date();
   try {
-    await onBeforeDownloadStart?.(armedAt);
+    const fingerprint = await extensionBlobUrlFingerprint(zip.blobUrl);
+    if (!fingerprint) throw new Error("extension Blob URL fingerprint unavailable");
+    await onBeforeDownloadStart?.(armedAt, fingerprint);
   } catch {
     await revokeOffscreenBlobUrl(zip.blobUrl);
     const stagingClear = onClearStaging ? await onClearStaging("not-downloaded") : null;

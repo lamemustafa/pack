@@ -1,17 +1,17 @@
 export type PortalBlobShimInput = {
   controlSelector: string;
   expectedMime: string;
+  expectedTarget?: { financialYear: string; period: string; returnType: string };
   timeoutMs?: number;
 };
 export type PortalBlobShimResult =
   | { ok: true; base64: string; safeSignals: string[] }
   | {
       ok: false;
-      reason: "control-not-found" | "generation-timeout" | "unexpected-content";
+      reason:
+        "control-not-found" | "generation-timeout" | "page-period-mismatch" | "unexpected-content";
       safeSignals: string[];
     };
-
-/** Runs in the MAIN world. It observes one portal PDF Blob and suppresses only its exact save click. */
 export function capturePortalPdfBlob(input: PortalBlobShimInput): Promise<PortalBlobShimResult> {
   const anchor = HTMLAnchorElement.prototype;
   const originalDispatch = anchor.dispatchEvent;
@@ -72,6 +72,13 @@ export function capturePortalPdfBlob(input: PortalBlobShimInput): Promise<Portal
     };
     const control = document.querySelector<HTMLElement>(input.controlSelector);
     if (!control) return finish({ ok: false, reason: "control-not-found", safeSignals: [] });
+    if (input.expectedTarget && !controlHasVisibleTarget(control, input.expectedTarget)) {
+      return finish({
+        ok: false,
+        reason: "page-period-mismatch",
+        safeSignals: ["page-target-unverified"],
+      });
+    }
     globalThis.setTimeout(
       () => finish({ ok: false, reason: "generation-timeout", safeSignals: [] }),
       input.timeoutMs ?? 20_000,
@@ -82,4 +89,31 @@ export function capturePortalPdfBlob(input: PortalBlobShimInput): Promise<Portal
       finish({ ok: false, reason: "unexpected-content", safeSignals: [] });
     }
   }).finally(restore);
+}
+
+function controlHasVisibleTarget(
+  control: HTMLElement,
+  expected: NonNullable<PortalBlobShimInput["expectedTarget"]>,
+): boolean {
+  let current: HTMLElement | null = control;
+  const escape = (value: string) => value.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&");
+  while (current && current !== control.ownerDocument.body) {
+    const text = (current.textContent ?? "").replace(/\s+/g, " ").trim();
+    if (
+      /\b(?:(?:return|tax)\s*period|month)\b/i.test(text) &&
+      /\b(?:financial\s*year|fy)\b/i.test(text) &&
+      new RegExp(`\\b${escape(expected.returnType).replace("-", "[\\s-]?")}\\b`, "i").test(text) &&
+      new RegExp(
+        `\\b(?:(?:return|tax)\\s*period|month)\\b\\s*(?:[-:]\\s*)?${escape(expected.period)}\\b`,
+        "i",
+      ).test(text) &&
+      new RegExp(
+        `\\b(?:financial\\s*year|fy)\\b\\s*(?:[-:]\\s*)?${escape(expected.financialYear)}`,
+        "i",
+      ).test(text)
+    )
+      return true;
+    current = current.parentElement;
+  }
+  return false;
 }

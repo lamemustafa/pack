@@ -4,8 +4,10 @@ import { capturePortalPdfBlob } from "../connectors/gst/portal-blob-shim";
 import { downloadAcquiredArtifact, installPortalBlobDownloadSafetyNet } from "./artifact-download";
 
 export async function acquireGstr3bPdfAfterPreflight(input: {
+  financialYear: string;
   tabId: number;
   requestId: string;
+  period: string;
   returnPeriod: string;
   filename: string;
   onStarted?: (downloadId: number) => Promise<void>;
@@ -25,6 +27,11 @@ export async function acquireGstr3bPdfAfterPreflight(input: {
         {
           controlSelector: `[data-pack-artifact-request="${input.requestId}"]`,
           expectedMime: "application/pdf",
+          expectedTarget: {
+            financialYear: input.financialYear,
+            period: input.period,
+            returnType: "GSTR-3B",
+          },
         },
       ],
       func: capturePortalPdfBlob,
@@ -33,7 +40,11 @@ export async function acquireGstr3bPdfAfterPreflight(input: {
     });
     const captured = injection?.result;
     if (!captured?.ok) {
-      return { ok: false, reason: captured?.reason ?? "generation-timeout", safeSignals: [] };
+      return {
+        ok: false,
+        reason: captured?.reason ?? "generation-timeout",
+        safeSignals: captured?.safeSignals ?? [],
+      };
     }
     const bytes = Uint8Array.from(atob(captured.base64), (value) => value.charCodeAt(0));
     const validation = validateArtifactBytes(bytes, "PDF", input.returnPeriod);

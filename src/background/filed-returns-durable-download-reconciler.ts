@@ -34,8 +34,27 @@ export interface DurableDownloadReconcilerDeps extends FiledReturnsTargetReviewD
 
 const liveInlineObservationIds = new Set<number>();
 const extensionOwnedCreationIds = new Set<number>();
+const extensionBlobCreationCandidates = new Set<number>();
 const terminalChangesAwaitingPersistence = new Set<number>();
 const pendingExtensionDownloadUrls = new Set<string>();
+
+/**
+ * Produces a non-reversible local correlation value for an extension Blob URL.
+ * The raw URL stays in memory only; the selected-ZIP recovery checkpoint stores
+ * this digest so a restarted MV3 worker can still match its onCreated event.
+ */
+export async function extensionBlobUrlFingerprint(url: string): Promise<string | null> {
+  if (!url.startsWith("blob:")) return null;
+  try {
+    const bytes = new TextEncoder().encode(url);
+    const digest = await crypto.subtle.digest("SHA-256", bytes);
+    return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join(
+      "",
+    );
+  } catch {
+    return null;
+  }
+}
 
 /** Keeps the global listener from racing the flow that already owns this exact ID. */
 export function beginLiveFiledReturnsDownloadObservation(downloadId: number): () => void {
@@ -122,7 +141,7 @@ export function installFiledReturnsDurableDownloadReconciler(
   const onChanged = (delta: DownloadDelta) => {
     if (!isTerminalDownloadState(delta.state?.current) || liveInlineObservationIds.has(delta.id))
       return;
-    if (extensionOwnedCreationIds.has(delta.id)) {
+    if (extensionOwnedCreationIds.has(delta.id) || extensionBlobCreationCandidates.has(delta.id)) {
       // A complete event can arrive between onCreated and the persisted exact
       // ID. Remember it and reconcile immediately after persistence instead of
       // dropping the terminal evidence forever.
@@ -134,21 +153,12 @@ export function installFiledReturnsDurableDownloadReconciler(
 
   const onCreated = (item: DownloadCreatedItem) => {
     if (liveInlineObservationIds.has(item.id)) return;
-    if (!item.url || !pendingExtensionDownloadUrls.has(item.url)) return;
+    if (!isExtensionBlobCreationCandidate(item, deps)) return;
+    // Claim synchronously before the async fingerprint/storage reads. A ZIP can
+    // reach a terminal browser state before this listener has resolved either.
     terminalChangesAwaitingPersistence.delete(item.id);
-    extensionOwnedCreationIds.add(item.id);
-    // Suppression must cover only the gap between creation and persistence.
-    // Holding a *persisted* ID suppressed strands its late terminal event: an
-    // extension-owned ZIP left in a Save dialog past the inline observation
-    // timeout completes with nothing listening, and nothing else releases the
-    // ID, so reconciliation waited for a worker restart. Inline observers that
-    // still own an ID register in liveInlineObservationIds instead.
-    void persistExtensionOwnedDownloadId(item, deps).finally(() => {
-      extensionOwnedCreationIds.delete(item.id);
-      if (terminalChangesAwaitingPersistence.delete(item.id)) {
-        void reconcile().catch(() => undefined);
-      }
-    });
+    extensionBlobCreationCandidates.add(item.id);
+    void claimPendingExtensionDownload(item, deps, reconcile);
   };
 
   downloadApi.onChanged.addListener(onChanged);
@@ -158,6 +168,57 @@ export function installFiledReturnsDurableDownloadReconciler(
     downloadApi.onChanged.removeListener(onChanged);
     downloadApi.onCreated?.removeListener(onCreated);
   };
+}
+
+async function claimPendingExtensionDownload(
+  item: DownloadCreatedItem,
+  deps: DurableDownloadReconcilerDeps,
+  reconcile: () => Promise<boolean>,
+): Promise<void> {
+  if (!item.url) return;
+  const liveMatch = pendingExtensionDownloadUrls.has(item.url);
+  const fingerprint = liveMatch ? null : await extensionBlobUrlFingerprint(item.url);
+  const review = await (deps.readCurrentReview
+    ? deps.readCurrentReview()
+    : readCurrentFiledReturnsTargetReview(deps));
+  const attempt = review?.downloadAttempt;
+  const durableMatch =
+    attempt?.kind === "single-period-zip" &&
+    attempt.phase === "download-intent-persisted" &&
+    Boolean(fingerprint) &&
+    fingerprint === attempt.extensionBlobUrlFingerprint;
+  if (!liveMatch && !durableMatch) {
+    extensionBlobCreationCandidates.delete(item.id);
+    terminalChangesAwaitingPersistence.delete(item.id);
+    return;
+  }
+
+  extensionBlobCreationCandidates.delete(item.id);
+  extensionOwnedCreationIds.add(item.id);
+  // Suppression must cover only the gap between creation and persistence.
+  // Holding a *persisted* ID suppressed strands its late terminal event: an
+  // extension-owned ZIP left in a Save dialog past the inline observation
+  // timeout completes with nothing listening, and nothing else releases the
+  // ID, so reconciliation waited for a worker restart. Inline observers that
+  // still own an ID register in liveInlineObservationIds instead.
+  await persistExtensionOwnedDownloadId(item, deps).finally(() => {
+    extensionOwnedCreationIds.delete(item.id);
+    if (terminalChangesAwaitingPersistence.delete(item.id)) {
+      void reconcile().catch(() => undefined);
+    }
+  });
+}
+
+function isExtensionBlobCreationCandidate(
+  item: DownloadCreatedItem,
+  deps: DurableDownloadReconcilerDeps,
+): boolean {
+  const extensionId = deps.extensionId ?? browser.runtime.id;
+  return Boolean(
+    item.url?.startsWith("blob:chrome-extension://") &&
+    extensionId &&
+    item.byExtensionId === extensionId,
+  );
 }
 
 async function persistExtensionOwnedDownloadId(

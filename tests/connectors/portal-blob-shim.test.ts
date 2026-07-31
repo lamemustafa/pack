@@ -67,6 +67,48 @@ describe("capturePortalPdfBlob", () => {
     expect(view.HTMLAnchorElement.prototype.click).toBe(originalClick);
   });
 
+  it("does not click a generic control after its visible target changes", async () => {
+    const { documentRef, view, url } = environment();
+    install(view, url);
+    documentRef.body.innerHTML = `
+      <section><h1>GSTR-3B Monthly Return</h1><p>Tax Period: May</p>
+      <p>Financial Year: 2024-25</p><button>Download</button></section>`;
+    const click = vi.fn();
+    documentRef.querySelector("button")?.addEventListener("click", click);
+
+    await expect(
+      capturePortalPdfBlob({
+        controlSelector: "button",
+        expectedMime: "application/pdf",
+        expectedTarget: { financialYear: "2024-25", period: "April", returnType: "GSTR-3B" },
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      reason: "page-period-mismatch",
+      safeSignals: ["page-target-unverified"],
+    });
+    expect(click).not.toHaveBeenCalled();
+  });
+
+  it("clicks only when the generic control remains in the expected detail surface", async () => {
+    const { documentRef, view, url } = environment();
+    install(view, url);
+    documentRef.body.innerHTML = `
+      <section><h1>GSTR-3B Monthly Return</h1> <p>Tax Period: April</p>
+      <p>Financial Year: 2024-25</p><button>Download</button></section>`;
+    documentRef
+      .querySelector("button")
+      ?.addEventListener("click", () => savePdf(documentRef, view, "click"));
+
+    await expect(
+      capturePortalPdfBlob({
+        controlSelector: "button",
+        expectedMime: "application/pdf",
+        expectedTarget: { financialYear: "2024-25", period: "April", returnType: "GSTR-3B" },
+      }),
+    ).resolves.toMatchObject({ ok: true, safeSignals: ["portal-blob-shim-suppressed-via-click"] });
+  });
+
   it("restores every wrapped member and never patches unrelated APIs", async () => {
     const { documentRef, view, url } = environment();
     install(view, url);

@@ -202,6 +202,27 @@ describe("filed returns target download recovery", () => {
     },
   );
 
+  it.each([
+    { label: "a SHA-256 digest", value: "a".repeat(64), valid: true },
+    {
+      label: "a raw extension Blob URL",
+      value: "blob:chrome-extension://pack-id/synthetic",
+      valid: false,
+    },
+    { label: "a raw portal URL", value: "https://return.gst.gov.in/synthetic", valid: false },
+  ])("accepts only $label as a persisted selected-ZIP correlation value", ({ value, valid }) => {
+    expect(
+      isFiledReturnsTargetDownloadAttempt({
+        artifactType: "ZIP",
+        extensionBlobUrlFingerprint: value,
+        kind: "single-period-zip",
+        phase: "download-intent-persisted",
+        requestedAt: REQUESTED_AT,
+        stagingLedgerId: "single-period:dddddddddddddddddddd",
+      }),
+    ).toBe(valid);
+  });
+
   it("keeps an interrupted provisional target-bound candidate manual and never reconciles it", async () => {
     const diagnostic = targetBoundPortalDiagnostic(41);
     const review = {
@@ -603,7 +624,7 @@ describe("filed returns target download recovery", () => {
   });
 
   it.each(["browser-download-interrupted", "browser-download-zero-bytes"])(
-    "makes %s evidence retry-safe and clears only the saved attempt",
+    "keeps %s evidence bound to its exact ID for manual review",
     async (safeSignal) => {
       const review = reviewFor(PDF_SCOPE, observingArtifactAttempt(41));
       mocks.state.local[REVIEW_KEY] = review;
@@ -614,13 +635,21 @@ describe("filed returns target download recovery", () => {
         safeMessage: "The synthetic exact-ID download did not complete.",
       });
 
-      await expect(reconcileFiledReturnsTargetDownload(review, deps)).resolves.toEqual({
-        state: "retry-safe",
+      await expect(reconcileFiledReturnsTargetDownload(review, deps)).resolves.toMatchObject({
+        state: "handled",
+        response: {
+          flowSummary: {
+            flowStep: {
+              safeSignals: expect.arrayContaining([
+                "filed-returns-target-review-required",
+                "filed-returns-download-reconciliation-required",
+              ]),
+              state: "user-action-required",
+            },
+          },
+        },
       });
-      expect(currentAttempt()).toBeUndefined();
-      expect(mocks.state.local[REVIEW_KEY]).toMatchObject({
-        status: "download-unconfirmed",
-      });
+      expect(currentAttempt()).toMatchObject({ downloadId: 41, phase: "download-observing" });
       expect(mocks.browser.downloads.download).not.toHaveBeenCalled();
     },
   );

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { FiledReturnsTargetReview } from "../../src/connectors/gst/filed-returns-contracts";
 import {
   beginPendingExtensionDownloadUrl,
+  extensionBlobUrlFingerprint,
   beginLiveFiledReturnsDownloadObservation,
   installFiledReturnsDurableDownloadReconciler,
   reconcileTerminalFiledReturnsDownload,
@@ -193,8 +194,8 @@ describe("durable filed-return download reconciler", () => {
       startTime: "2026-07-26T00:00:01.000Z",
       url: "blob:chrome-extension://pack-id/zip",
     });
-    await Promise.resolve();
     fixture.emit({ id: 41, state: { current: "complete" } });
+    await vi.waitFor(() => expect(persistDownloadId).toHaveBeenCalledOnce());
     currentReview = review;
     resolvePersist(true);
 
@@ -238,6 +239,40 @@ describe("durable filed-return download reconciler", () => {
 
     expect(persistDownloadId).not.toHaveBeenCalled();
     endPendingDownloadUrl();
+    dispose();
+  });
+
+  it("rebinds a selected ZIP after a worker restart from its persisted URL fingerprint", async () => {
+    const fixture = downloadsWithState("complete");
+    const url = "blob:chrome-extension://pack-id/restart-safe-zip";
+    const extensionBlobUrlFingerprintValue = await extensionBlobUrlFingerprint(url);
+    expect(extensionBlobUrlFingerprintValue).toMatch(/^[a-f0-9]{64}$/);
+    const currentReview: FiledReturnsTargetReview = {
+      ...review,
+      downloadAttempt: {
+        artifactType: "ZIP",
+        extensionBlobUrlFingerprint: extensionBlobUrlFingerprintValue!,
+        kind: "single-period-zip",
+        phase: "download-intent-persisted",
+        requestedAt: review.downloadAttempt.requestedAt,
+        stagingLedgerId: "single-period:restart-safe",
+      },
+    };
+    const persistDownloadId = vi.fn(async () => true);
+    const dispose = installFiledReturnsDurableDownloadReconciler(fixture.downloads, {
+      extensionId: "pack-id",
+      persistDownloadId,
+      readCurrentReview: async () => currentReview,
+      storageKeys: {},
+    });
+
+    fixture.emitCreated({
+      byExtensionId: "pack-id",
+      id: 52,
+      startTime: "2026-07-26T00:00:01.000Z",
+      url,
+    });
+    await vi.waitFor(() => expect(persistDownloadId).toHaveBeenCalledWith(currentReview, 52));
     dispose();
   });
 

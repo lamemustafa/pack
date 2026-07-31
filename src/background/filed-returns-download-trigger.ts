@@ -242,7 +242,9 @@ export async function triggerAndObserveFiledReturnDownload({
         let retainCheckpointForRecovery = false;
         try {
           const acquired = await acquireGstr3bPdfAfterPreflight({
+            financialYear: scope.financialYear,
             filename: artifactFilename(scope, "PDF"),
+            period: scope.period,
             requestId,
             returnPeriod,
             tabId,

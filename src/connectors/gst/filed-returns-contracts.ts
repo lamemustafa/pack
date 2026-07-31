@@ -85,6 +85,8 @@ export type FiledReturnsTargetDownloadAttempt =
       phase: "download-intent-persisted";
       requestedAt: string;
       stagingLedgerId: string;
+      /** SHA-256 of the transient extension Blob URL; the URL itself is never persisted. */
+      extensionBlobUrlFingerprint?: string;
     }
   | {
       artifactType: "ZIP";
@@ -93,6 +95,7 @@ export type FiledReturnsTargetDownloadAttempt =
       phase: "download-observing";
       requestedAt: string;
       stagingLedgerId: string;
+      extensionBlobUrlFingerprint?: string;
     };
 
 export interface FiledReturnsTargetReview {

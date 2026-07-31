@@ -42,12 +42,14 @@ export function isFiledReturnsTargetDownloadAttempt(
     const allowedKeys = [
       ...COMMON_KEYS,
       "stagingLedgerId",
+      ...(attempt.extensionBlobUrlFingerprint === undefined ? [] : ["extensionBlobUrlFingerprint"]),
       ...(isObserving(attempt) ? ["downloadId"] : []),
     ];
     return (
       hasOnlyKeys(attempt, allowedKeys) &&
       attempt.artifactType === "ZIP" &&
       isCanonicalSinglePeriodLedgerId(attempt.stagingLedgerId) &&
+      hasValidExtensionBlobUrlFingerprint(attempt.extensionBlobUrlFingerprint) &&
       hasValidDownloadIdForPhase(attempt)
     );
   }
@@ -76,11 +78,18 @@ export function toManualReviewDownloadAttempt(
   }
   return {
     artifactType: "ZIP",
+    ...(attempt.extensionBlobUrlFingerprint
+      ? { extensionBlobUrlFingerprint: attempt.extensionBlobUrlFingerprint }
+      : {}),
     kind: attempt.kind,
     phase: "download-intent-persisted",
     requestedAt: attempt.requestedAt,
     stagingLedgerId: attempt.stagingLedgerId,
   };
+}
+
+function hasValidExtensionBlobUrlFingerprint(value: unknown): boolean {
+  return value === undefined || (typeof value === "string" && /^[a-f0-9]{64}$/.test(value));
 }
 
 function isObserving(

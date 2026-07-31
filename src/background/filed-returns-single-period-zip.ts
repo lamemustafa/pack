@@ -22,7 +22,7 @@ import { clearOffscreenFiledReturnLedger, closeOffscreenBlobDocument } from "./o
 
 interface SinglePeriodZipDownloadCheckpointCallbacks {
   onAfterStagingCleared: (outcome: "downloaded" | "not-downloaded") => Promise<void>;
-  onBeforeDownloadStart: (requestedAt: Date) => Promise<void>;
+  onBeforeDownloadStart: (requestedAt: Date, extensionBlobUrlFingerprint: string) => Promise<void>;
   onDownloadStarted: (downloadId: number) => Promise<void>;
 }
 

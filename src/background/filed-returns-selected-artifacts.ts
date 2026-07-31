@@ -480,7 +480,7 @@ export async function triggerSelectedArtifacts({
           }
         }
       },
-      onBeforeDownloadStart: async (requestedAt) => {
+      onBeforeDownloadStart: async (requestedAt, extensionBlobUrlFingerprint) => {
         const persisted = await persistFiledReturnsTargetDownloadIntent(
           scope,
           {
@@ -489,6 +489,7 @@ export async function triggerSelectedArtifacts({
             phase: "download-intent-persisted",
             requestedAt: requestedAt.toISOString(),
             stagingLedgerId: singlePeriodBundleLedgerId,
+            extensionBlobUrlFingerprint,
           },
           zipCheckpointDeps,
           response.flowStep,
