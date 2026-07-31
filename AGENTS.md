@@ -46,6 +46,13 @@ Eight defects in one week shared one shape — a hand-maintained duplicate of a 
 had a canonical source in this repo. When something breaks, look for the duplicate before writing
 new code.
 
+Public copy is one of those duplicates, and the worst-placed one: nothing in this repo reads
+`README.md`, so a claim there cannot be contradicted by a test and drifts silently. A paragraph
+describing the download-correlation path was wrong in all four of its clauses because the code moved
+past it. Before changing any claim about behaviour, re-derive it from the module that owns the
+behaviour — and find that module by listing importers, not by reading names. The file that _looked_
+like the correlation path was dead code.
+
 Guards fail closed: never treat "could not determine" as "matches". Every terminal state renders
 a user-visible `safeMessage`; a silent no-op is a bug, because it cannot be diagnosed from outside.
 When a boundary rejects a value, the rejection must name its own reason — seven defects took an
@@ -68,6 +75,12 @@ what it contains.
 The suite has repeatedly been green while the product was broken, so green is necessary and not
 sufficient. Runtime, download, manifest, permission, and privacy changes additionally require a
 live authenticated run.
+
+A module whose only importer is its own test is dead, and its passing test says nothing about
+whether anything calls it. Deleting the four unreferenced modules in `docs/CODE_REDUCTION_PLAN.md`
+orphaned two more that had been reachable only through them, so re-run the unreferenced-module scan
+to a fixed point after any deletion. When an orphaned _guard_ turns up, confirm a live replacement
+exists before deleting it — tested-but-never-called is a live defect wearing the same disguise.
 
 ## Git workflow
 
