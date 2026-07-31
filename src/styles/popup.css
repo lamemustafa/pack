@@ -220,6 +220,47 @@ html[data-pack-surface="popup"] #root {
   font-weight: 800;
 }
 
+.download-save-prompt-notice {
+  display: flex;
+  gap: 10px;
+  align-items: start;
+  border: 1px solid #e7c27d;
+  border-radius: 9px;
+  background: #fff7e8;
+  color: #75420b;
+  padding: 10px 11px;
+}
+
+.download-save-prompt-notice div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.download-save-prompt-notice strong {
+  color: #172033;
+  font-size: 0.8125rem;
+  line-height: 1.25;
+}
+
+.download-save-prompt-notice p {
+  margin: 0;
+  color: #5e6b80;
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.download-save-prompt-notice button {
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #244d7c;
+  padding: 2px 0;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
 .inline-status-primary:hover:not(:disabled) {
   background: #173b62;
 }

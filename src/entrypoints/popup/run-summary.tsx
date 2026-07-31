@@ -1,4 +1,4 @@
-import type { FiledReturnsFlowSummary } from "../../core/contracts";
+import type { FiledReturnsFlowSummary } from "../../connectors/gst/filed-returns-contracts";
 
 export function DiagnosticSignals({ summary }: { summary: FiledReturnsFlowSummary }) {
   const signals = summary.flowStep.safeSignals.filter(isDownloadDiagnosticSignal);
@@ -33,6 +33,7 @@ export function hasDiagnosticSignals(summary: FiledReturnsFlowSummary): boolean 
 function isDownloadDiagnosticSignal(signal: string): boolean {
   return (
     signal.includes("blob-capture") ||
+    signal.includes("browser-download") ||
     signal.includes("portal-blob") ||
     signal.includes("extension-download") ||
     signal.includes("native-blob-click") ||
@@ -40,8 +41,6 @@ function isDownloadDiagnosticSignal(signal: string): boolean {
     signal.includes("chunk") ||
     signal.includes("opfs") ||
     signal.includes("file-reader") ||
-    signal.includes("create-object-url") ||
-    signal.startsWith("filed-gstr3b-direct-download-started") ||
-    signal.startsWith("filed-gstr3b-direct-download-start-rejected")
+    signal.includes("create-object-url")
   );
 }

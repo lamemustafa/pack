@@ -1,4 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  PACK_CONTENT_REQUEST_ENVELOPE_TYPE,
+  PACK_CONTENT_SCRIPT_PROTOCOL_VERSION,
+} from "../../src/connectors/gst/messages";
+
+const GST_RETURNS_ORIGIN = "https://return.gst.gov.in";
 
 const browserMocks = vi.hoisted(() => {
   let messageListener:
@@ -38,6 +44,7 @@ const browserMocks = vi.hoisted(() => {
       },
       session: {
         get: vi.fn(async () => ({})),
+        remove: vi.fn(async () => undefined),
         set: vi.fn(async () => undefined),
       },
     },
@@ -63,10 +70,11 @@ vi.mock("wxt/browser", () => ({
 }));
 
 describe("Pack GST tab selection", () => {
-  it("uses protocol version 31 for activation-message reinjection", async () => {
-    const { PACK_CONTENT_SCRIPT_PROTOCOL_VERSION } = await import("../../src/core/messages");
-
-    expect(PACK_CONTENT_SCRIPT_PROTOCOL_VERSION).toBe(31);
+  it("uses the current protocol constants for activation-message reinjection", () => {
+    expect(PACK_CONTENT_SCRIPT_PROTOCOL_VERSION).toBeGreaterThan(0);
+    expect(PACK_CONTENT_REQUEST_ENVELOPE_TYPE).toBe(
+      `PACK_CONTENT_REQUEST_V${PACK_CONTENT_SCRIPT_PROTOCOL_VERSION}`,
+    );
   });
 
   beforeEach(() => {
@@ -97,8 +105,84 @@ describe("Pack GST tab selection", () => {
     });
   });
 
+  it("uses one globally active GST tab when a shortcut popup has no normal current tab", async () => {
+    browserMocks.storage.session.get.mockResolvedValueOnce({});
+    browserMocks.tabs.query
+      .mockResolvedValueOnce([
+        {
+          active: true,
+          id: 20,
+          url: "chrome-extension://pack-test-extension/popup.html",
+        },
+      ])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          active: true,
+          id: 20,
+          url: "chrome-extension://pack-test-extension/popup.html",
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          active: true,
+          id: 21,
+          url: "https://services.gst.gov.in/services/auth/dashboard",
+        },
+      ]);
+    const { getActiveGstTab } = await import("../../src/entrypoints/background");
+
+    await expect(getActiveGstTab()).resolves.toMatchObject({ id: 21 });
+
+    expect(browserMocks.tabs.query).toHaveBeenLastCalledWith({
+      active: true,
+      url: [
+        "https://www.gst.gov.in/*",
+        "https://services.gst.gov.in/*",
+        "https://return.gst.gov.in/*",
+        "https://gstr2b.gst.gov.in/*",
+      ],
+    });
+  });
+
+  it("does not choose between multiple globally active GST tabs", async () => {
+    browserMocks.storage.session.get.mockResolvedValueOnce({});
+    browserMocks.tabs.query
+      .mockResolvedValueOnce([
+        {
+          active: true,
+          id: 20,
+          url: "chrome-extension://pack-test-extension/popup.html",
+        },
+      ])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          active: true,
+          id: 20,
+          url: "chrome-extension://pack-test-extension/popup.html",
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          active: true,
+          id: 21,
+          url: "https://services.gst.gov.in/services/auth/dashboard",
+        },
+        {
+          active: true,
+          id: 22,
+          url: "https://return.gst.gov.in/returns/auth/efiledReturns",
+        },
+      ]);
+    const { getActiveGstTab } = await import("../../src/entrypoints/background");
+
+    await expect(getActiveGstTab()).resolves.toBeNull();
+  });
+
   it("rejects stale content script ping responses without the current protocol version", async () => {
-    const { PACK_CONTENT_SCRIPT_PROTOCOL_VERSION } = await import("../../src/core/messages");
+    const { PACK_CONTENT_SCRIPT_PROTOCOL_VERSION } =
+      await import("../../src/connectors/gst/messages");
     const { isCurrentContentScriptPingResponse } = await import("../../src/entrypoints/background");
 
     expect(isCurrentContentScriptPingResponse({ ok: true, context: null })).toBe(false);
@@ -112,7 +196,8 @@ describe("Pack GST tab selection", () => {
   });
 
   it("checks the content script protocol before sending side-effectful tab messages", async () => {
-    const { PACK_CONTENT_SCRIPT_PROTOCOL_VERSION } = await import("../../src/core/messages");
+    const { PACK_CONTENT_SCRIPT_PROTOCOL_VERSION } =
+      await import("../../src/connectors/gst/messages");
     const sendMessage = browserMocks.tabs.sendMessage as unknown as {
       mockImplementation: (
         implementation: (tabId: number, message: { type: string }) => Promise<unknown>,
@@ -155,7 +240,7 @@ describe("Pack GST tab selection", () => {
       target: { tabId: 33 },
     });
     expect(browserMocks.tabs.sendMessage).toHaveBeenLastCalledWith(33, {
-      type: "PACK_CONTENT_REQUEST_V31",
+      type: PACK_CONTENT_REQUEST_ENVELOPE_TYPE,
       payload: {
         type: "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
         payload: {
@@ -167,10 +252,88 @@ describe("Pack GST tab selection", () => {
     });
   });
 
+  it.each([
+    undefined,
+    null,
+    "unexpected",
+    42,
+    {},
+    { ok: true },
+    { ok: true, artifact: null },
+    { ok: true, artifact: "x" },
+    {
+      ok: true,
+      artifact: {
+        ok: false,
+        reason: "response-missing",
+        requestId: "synthetic-request",
+        safeSignals: null,
+      },
+    },
+    {
+      ok: true,
+      artifact: {
+        ok: false,
+        reason: "toString",
+        requestId: "synthetic-request",
+        safeSignals: [],
+      },
+    },
+    { ok: false, error: { category: "synthetic" } },
+    { ok: false, error: "untrusted synthetic error", unexpected: "must-not-pass-through" },
+    {
+      ok: true,
+      artifact: {
+        ok: true,
+        requestId: "synthetic-request",
+        safeSignals: [],
+        state: "ready",
+      },
+      unexpected: "must-not-pass-through",
+    },
+  ])("normalises an unusable content-script response %p", async (invalidResponse) => {
+    const sendMessage = browserMocks.tabs.sendMessage as unknown as {
+      mockImplementation: (
+        implementation: (tabId: number, message: { type: string }) => Promise<unknown>,
+      ) => void;
+    };
+    sendMessage.mockImplementation(async (_tabId, message) => {
+      if (message.type === "PACK_CONTENT_PING_V2") {
+        return {
+          ok: true,
+          context: null,
+          contentScriptVersion: PACK_CONTENT_SCRIPT_PROTOCOL_VERSION,
+        };
+      }
+      return invalidResponse;
+    });
+    const { sendMessageToTabWithInjection } = await import("../../src/entrypoints/background");
+
+    await expect(
+      sendMessageToTabWithInjection(33, {
+        type: "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34",
+        payload: {
+          artifactType: "PDF",
+          financialYear: "2026-27",
+          period: "April",
+          requestId: "synthetic-request",
+          returnPeriod: "042026",
+          returnType: "GSTR-1",
+        },
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      error: "CONTENT_SCRIPT_UNAVAILABLE",
+      safeMessage:
+        "The GST tab responded to Pack without a usable result. Reload the GST Portal tab, then try again.",
+    });
+  });
+
   it("refreshes popup context from the active GST tab before using cached context", async () => {
     const liveContext = {
+      connectorId: "gst",
       origin: "https://gstr2b.gst.gov.in",
-      pageKind: "gst-gstr2b-summary",
+      pageKind: "gst-filed-returns",
       supported: true,
     };
     const cachedContext = {
@@ -196,7 +359,8 @@ describe("Pack GST tab selection", () => {
     };
     sendMessage.mockImplementation(async (_tabId, message) => {
       if (message.type === "PACK_CONTENT_PING_V2") {
-        const { PACK_CONTENT_SCRIPT_PROTOCOL_VERSION } = await import("../../src/core/messages");
+        const { PACK_CONTENT_SCRIPT_PROTOCOL_VERSION } =
+          await import("../../src/connectors/gst/messages");
         return {
           ok: true,
           context: null,
@@ -204,7 +368,8 @@ describe("Pack GST tab selection", () => {
         };
       }
       if (unwrapContentRequest(message).type === "PACK_CONTENT_REFRESH_CONTEXT_V3") {
-        const { PACK_CONTENT_SCRIPT_PROTOCOL_VERSION } = await import("../../src/core/messages");
+        const { PACK_CONTENT_SCRIPT_PROTOCOL_VERSION } =
+          await import("../../src/connectors/gst/messages");
         return {
           ok: true,
           context: liveContext,
@@ -225,7 +390,7 @@ describe("Pack GST tab selection", () => {
 
     expect(response).toMatchObject({ ok: true, context: liveContext });
     expect(browserMocks.tabs.sendMessage).toHaveBeenCalledWith(31, {
-      type: "PACK_CONTENT_REQUEST_V31",
+      type: PACK_CONTENT_REQUEST_ENVELOPE_TYPE,
       payload: { type: "PACK_CONTENT_REFRESH_CONTEXT_V3" },
     });
     expect(browserMocks.storage.session.set).toHaveBeenCalledWith({
@@ -273,7 +438,8 @@ describe("Pack GST tab selection", () => {
   });
 
   it("infers a GSTR-2B observation from the active summary route instead of returning stale wrong-page", async () => {
-    const { PACK_CONTENT_SCRIPT_PROTOCOL_VERSION } = await import("../../src/core/messages");
+    const { PACK_CONTENT_SCRIPT_PROTOCOL_VERSION } =
+      await import("../../src/connectors/gst/messages");
     browserMocks.storage.session.get.mockResolvedValue({});
     browserMocks.tabs.query
       .mockResolvedValueOnce([
@@ -358,7 +524,7 @@ describe("Pack GST tab selection", () => {
   });
 
   function unwrapContentRequest(message: { payload?: unknown; type: string }): { type?: string } {
-    return message.type === "PACK_CONTENT_REQUEST_V31" && message.payload
+    return message.type === PACK_CONTENT_REQUEST_ENVELOPE_TYPE && message.payload
       ? (message.payload as { type?: string })
       : message;
   }
@@ -648,6 +814,229 @@ describe("Pack GST tab selection", () => {
     expect(browserMocks.tabs.onUpdated.addListener).toHaveBeenCalledTimes(1);
   });
 
+  it("stores only a canonical context bound to the supported sender tab", async () => {
+    await import("../../src/entrypoints/background");
+
+    const listener = browserMocks.getMessageListener();
+    expect(listener).not.toBeNull();
+    const response = await new Promise((resolve) => {
+      listener?.(
+        {
+          type: "PACK_CONTENT_CONTEXT",
+          payload: {
+            connectorId: "gst",
+            supported: true,
+            origin: "https://services.gst.gov.in",
+            pageKind: "gst-filed-returns",
+          },
+        },
+        {
+          id: "pack-test-extension",
+          tab: {
+            id: 47,
+            url: "https://services.gst.gov.in/services/auth/returns/view-filed-returns",
+          } as Browser.tabs.Tab,
+        },
+        resolve,
+      );
+    });
+
+    const context = {
+      connectorId: "gst",
+      supported: true,
+      origin: "https://services.gst.gov.in",
+      pageKind: "gst-filed-returns",
+    };
+    expect(response).toEqual({ ok: true, context });
+    expect(browserMocks.storage.session.set).toHaveBeenNthCalledWith(1, {
+      "pack:last-context": context,
+    });
+    expect(browserMocks.storage.session.set).toHaveBeenNthCalledWith(2, {
+      "pack:last-gst-tab-id": 47,
+    });
+  });
+
+  it("rejects a content context whose claimed origin does not match the sender tab", async () => {
+    await import("../../src/entrypoints/background");
+
+    const listener = browserMocks.getMessageListener();
+    expect(listener).not.toBeNull();
+    const response = await new Promise((resolve) => {
+      listener?.(
+        {
+          type: "PACK_CONTENT_CONTEXT",
+          payload: {
+            connectorId: "gst",
+            supported: true,
+            origin: "https://return.gst.gov.in",
+            pageKind: "gst-filed-returns",
+          },
+        },
+        {
+          id: "pack-test-extension",
+          tab: {
+            id: 48,
+            url: "https://services.gst.gov.in/services/auth/returns/view-filed-returns",
+          } as Browser.tabs.Tab,
+        },
+        resolve,
+      );
+    });
+
+    expect(response).toEqual({ ok: false, error: "Unsupported Pack message." });
+    expect(browserMocks.storage.session.set).not.toHaveBeenCalled();
+  });
+
+  it("stores only a canonical observation from a supported GST sender tab", async () => {
+    await import("../../src/entrypoints/background");
+
+    const listener = browserMocks.getMessageListener();
+    expect(listener).not.toBeNull();
+    const response = await new Promise((resolve) => {
+      listener?.(
+        {
+          type: "PACK_FILED_RETURNS_OBSERVATION",
+          payload: {
+            connectorId: "gst",
+            pageKind: "gst-filed-returns",
+            scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+            state: "login-required",
+            safeSignals: ["login"],
+            safeMessage: "Synthetic Taxpayer Co. confidential note.",
+            userAction: {
+              type: "LOGIN",
+              message: "Synthetic account-specific instruction.",
+              canResume: false,
+            },
+          },
+        },
+        {
+          id: "pack-test-extension",
+          tab: {
+            id: 49,
+            url: "https://return.gst.gov.in/returns/auth/efiledReturns",
+          } as Browser.tabs.Tab,
+        },
+        resolve,
+      );
+    });
+
+    expect(response).toMatchObject({
+      ok: true,
+      observation: {
+        safeMessage: "Sign in to the GST Portal, then reopen Pack.",
+        userAction: {
+          type: "LOGIN",
+          message: "Sign in to the GST Portal in this browser tab, then reopen Pack.",
+          canResume: true,
+        },
+      },
+    });
+    expect(browserMocks.storage.session.set).toHaveBeenCalledWith({
+      "pack:last-filed-returns-observation": expect.objectContaining({
+        safeMessage: "Sign in to the GST Portal, then reopen Pack.",
+      }),
+    });
+    expect(JSON.stringify(browserMocks.storage.session.set.mock.calls)).not.toContain(
+      "Synthetic Taxpayer Co.",
+    );
+  });
+
+  it("rejects an observation from an unbound extension sender", async () => {
+    await import("../../src/entrypoints/background");
+
+    const listener = browserMocks.getMessageListener();
+    expect(listener).not.toBeNull();
+    const response = await new Promise((resolve) => {
+      listener?.(
+        {
+          type: "PACK_FILED_RETURNS_OBSERVATION",
+          payload: readyObservation(),
+        },
+        { id: "pack-test-extension" },
+        resolve,
+      );
+    });
+
+    expect(response).toEqual({ ok: false, error: "Invalid Pack sender." });
+    expect(browserMocks.storage.session.set).not.toHaveBeenCalled();
+    expect(browserMocks.storage.session.remove).not.toHaveBeenCalled();
+  });
+
+  it("allows only a supported GST sender to clear a malformed observation envelope", async () => {
+    await import("../../src/entrypoints/background");
+
+    const listener = browserMocks.getMessageListener();
+    expect(listener).not.toBeNull();
+    const malformedMessage = {
+      type: "PACK_FILED_RETURNS_OBSERVATION",
+      payload: { ...readyObservation(), portalHtml: "Synthetic Taxpayer Co." },
+    };
+
+    const unboundResponse = await new Promise((resolve) => {
+      listener?.(malformedMessage, { id: "pack-test-extension" }, resolve);
+    });
+    expect(unboundResponse).toEqual({ ok: false, error: "Unsupported Pack message." });
+    expect(browserMocks.storage.session.remove).not.toHaveBeenCalled();
+
+    const boundResponse = await new Promise((resolve) => {
+      listener?.(
+        malformedMessage,
+        {
+          id: "pack-test-extension",
+          tab: {
+            id: 50,
+            url: "https://return.gst.gov.in/returns/auth/efiledReturns",
+          } as Browser.tabs.Tab,
+        },
+        resolve,
+      );
+    });
+    expect(boundResponse).toEqual({ ok: false, error: "Unsupported Pack message." });
+    expect(browserMocks.storage.session.remove).toHaveBeenCalledWith(
+      "pack:last-filed-returns-observation",
+    );
+  });
+
+  it("allows only a supported GST sender to clear a malformed context envelope", async () => {
+    await import("../../src/entrypoints/background");
+
+    const listener = browserMocks.getMessageListener();
+    expect(listener).not.toBeNull();
+    const malformedMessage = {
+      type: "PACK_CONTENT_CONTEXT",
+      payload: {
+        connectorId: "gst",
+        supported: true,
+        origin: "https://return.gst.gov.in",
+        pageKind: "gst-filed-returns",
+        portalHtml: "Synthetic Taxpayer Co.",
+      },
+    };
+
+    const unboundResponse = await new Promise((resolve) => {
+      listener?.(malformedMessage, { id: "pack-test-extension" }, resolve);
+    });
+    expect(unboundResponse).toEqual({ ok: false, error: "Unsupported Pack message." });
+    expect(browserMocks.storage.session.remove).not.toHaveBeenCalled();
+
+    const boundResponse = await new Promise((resolve) => {
+      listener?.(
+        malformedMessage,
+        {
+          id: "pack-test-extension",
+          tab: {
+            id: 51,
+            url: "https://return.gst.gov.in/returns/auth/efiledReturns",
+          } as Browser.tabs.Tab,
+        },
+        resolve,
+      );
+    });
+    expect(boundResponse).toEqual({ ok: false, error: "Unsupported Pack message." });
+    expect(browserMocks.storage.session.remove).toHaveBeenCalledWith("pack:last-context");
+  });
+
   it("ignores a stale remembered GST tab and then uses the unique best candidate", async () => {
     browserMocks.storage.session.get.mockResolvedValueOnce({
       "pack:last-gst-tab-id": 25,
@@ -836,7 +1225,7 @@ describe("Pack GST tab selection", () => {
         {
           active: false,
           id: 26,
-          url: "https://return.gst.gov.in/returns/auth/dashboard?from=menu",
+          url: gstReturnsUrl("/returns/auth/dashboard", { from: "menu" }),
         },
       ]);
     const { getActiveGstTab } = await import("../../src/entrypoints/background");
@@ -865,3 +1254,27 @@ describe("Pack GST tab selection", () => {
     await expect(getActiveGstTab()).resolves.toBeNull();
   });
 });
+
+function gstReturnsUrl(pathname: string, searchParams: Record<string, string> = {}): string {
+  const url = new URL(pathname, GST_RETURNS_ORIGIN);
+  for (const [key, value] of Object.entries(searchParams)) url.searchParams.set(key, value);
+  return url.href;
+}
+
+function readyObservation() {
+  return {
+    connectorId: "gst",
+    pageKind: "gst-filed-returns",
+    scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+    state: "ready",
+    safeSignals: [
+      "gstr-3b-detail-route",
+      "filed-returns-heading",
+      "gstr-3b",
+      "download-filed-gstr-3b",
+      "filed-return-download-ready",
+      "filed-gstr3b-download-ready",
+    ],
+    safeMessage: "Filed GSTR-3B PDF controls appear ready for the private spike.",
+  };
+}

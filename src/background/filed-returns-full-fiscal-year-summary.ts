@@ -4,15 +4,104 @@ import type {
   FiledReturnsFullFiscalYearTarget,
   FiledReturnsFullFiscalYearTargetStatus,
   PortalFlowStepResult,
-} from "../core/contracts";
+} from "../connectors/gst/filed-returns-contracts";
 import {
   filedReturnsArtifactLabel,
   normaliseFiledReturnsArtifactType,
-} from "../core/filed-returns-artifacts";
-import { filedReturnsScopeId } from "../core/filed-returns-return-types";
+} from "../connectors/gst/filed-returns-artifacts";
+import { filedReturnsScopeId } from "../connectors/gst/filed-returns-return-types";
 import { isUnconfirmedBrowserDownloadSignal } from "./download-evidence-signals";
-import { isFullFiscalYearLedgerStale } from "./filed-returns-full-fiscal-year-ledger";
-import { fullFiscalYearZipPhaseStep } from "./filed-returns-full-fiscal-year-zip-phase";
+import {
+  canCompleteFullFiscalYearLedger,
+  isFullFiscalYearLedgerStale,
+} from "./filed-returns-full-fiscal-year-ledger";
+
+export function fullFiscalYearZipPhaseStep(
+  ledger: FiledReturnsFullFiscalYearLedger,
+): PortalFlowStepResult | null {
+  if (ledger.zipPhase === "cleaned") return null;
+  const legacyRetained = hasLegacyRetainedStaging(ledger);
+  if (ledger.zipPhase === undefined && !legacyRetained) return null;
+  if (ledger.zipPhase === "restaging-required") {
+    return {
+      connectorId: "gst",
+      scopeId: filedReturnsScopeId(ledger.scope.returnType),
+      state: "blocked",
+      safeSignals: [
+        "full-fiscal-year-run-needs-action",
+        "full-fiscal-year-restaging-required",
+        "gst-portal-tab-required",
+        "full-fiscal-year-opfs-retained",
+      ],
+      safeMessage:
+        "Pack must restage the saved fiscal-year periods from the GST Portal before rebuilding the ZIP.",
+    };
+  }
+
+  const downloaded = ledger.zipPhase === "downloaded-cleanup-pending";
+  const downloadAmbiguous = [
+    "download-intent-persisted",
+    "download-observing",
+    "download-started",
+  ].includes(ledger.zipPhase ?? "");
+  const noArtifacts = ledger.zipPhase === "no-artifacts-cleanup-pending";
+  const cleanup =
+    downloaded || noArtifacts || ledger.zipPhase === "legacy-cleanup-pending" || legacyRetained;
+  return {
+    connectorId: "gst",
+    scopeId: filedReturnsScopeId(ledger.scope.returnType),
+    state: downloadAmbiguous ? "download-unconfirmed" : "blocked",
+    safeSignals: [
+      ...(cleanup
+        ? ["full-fiscal-year-local-cleanup-retry"]
+        : downloadAmbiguous
+          ? ["full-fiscal-year-final-zip-manual-review"]
+          : ["full-fiscal-year-final-zip-retry"]),
+      ...(downloaded ? ["full-fiscal-year-zip-downloaded"] : []),
+      ...(downloadAmbiguous
+        ? ["full-fiscal-year-zip-download-started", "full-fiscal-year-zip-download-unconfirmed"]
+        : []),
+      ...(noArtifacts ? ["full-fiscal-year-no-zip-artifacts"] : []),
+      legacyRetained
+        ? "full-fiscal-year-zip-phase:legacy-cleanup-pending"
+        : ledger.zipPhase === "export-pending"
+          ? "full-fiscal-year-zip-export-pending"
+          : `full-fiscal-year-zip-phase:${ledger.zipPhase}`,
+      "full-fiscal-year-opfs-retained",
+    ],
+    safeMessage: cleanup
+      ? "Pack retained local fiscal-year staging and can finish cleanup without reopening the GST Portal."
+      : downloadAmbiguous
+        ? ledger.zipPhase === "download-observing"
+          ? "Pack saved the browser download ID for the final fiscal-year ZIP and must reconcile that exact download before another ZIP can start."
+          : "Pack may have started the final fiscal-year ZIP before the previous run stopped. Check browser Downloads; Pack will not start another ZIP from this ambiguous state."
+        : "Pack retained the prepared fiscal-year files and can retry the final ZIP without repeating portal periods.",
+    ...(downloadAmbiguous
+      ? {
+          userAction: {
+            type: "NAVIGATE_TO_SUPPORTED_PAGE" as const,
+            message:
+              "Check browser Downloads for the saved fiscal-year ZIP. Do not start another ZIP until this state is resolved.",
+            canResume: true,
+          },
+        }
+      : {}),
+  };
+}
+
+export function hasLegacyRetainedStaging(ledger: FiledReturnsFullFiscalYearLedger): boolean {
+  return (
+    ledger.zipPhase === undefined &&
+    ledger.status === "complete" &&
+    ledger.targets.some((target) =>
+      target.safeSignals.some(
+        (signal) =>
+          signal === "full-fiscal-year-opfs-staged" ||
+          signal.startsWith("full-fiscal-year-opfs-staged:"),
+      ),
+    )
+  );
+}
 
 const COMPLETED_SUMMARY_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
   "downloaded",
@@ -54,7 +143,7 @@ export function summariseFullFiscalYearLedger(
   }
   const zipPhaseStep = fullFiscalYearZipPhaseStep(ledger);
   if (zipPhaseStep) return toFullFiscalYearSummary(ledger, zipPhaseStep);
-  if (ledger.status === "complete") {
+  if (ledger.status === "complete" && canCompleteFullFiscalYearLedger(ledger)) {
     return toFullFiscalYearSummary(ledger, completeFullFiscalYearStep(ledger));
   }
   if (hasRecoverableActionRequiredTarget(ledger)) {

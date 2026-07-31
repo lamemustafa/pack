@@ -1,4 +1,5 @@
 import { filedReturnScopedSignal } from "./filed-returns-return-descriptors";
+import type { FiledReturnsReturnType } from "./filed-returns-return-types";
 import type { FiledReturnsObservationHints } from "./filed-returns-observer-types";
 
 export function detectSafeSignals(text: string, hints: FiledReturnsObservationHints): string[] {
@@ -9,9 +10,7 @@ export function detectSafeSignals(text: string, hints: FiledReturnsObservationHi
   if (isGstr1DetailRoute(hints)) signals.push("gstr-1-detail-route");
   if (isGstr1SummaryRoute(hints)) signals.push("gstr-1-summary-route");
   if (isGstr2bSummaryRoute(hints)) signals.push("gstr2b-summary-route", "gstr-2b");
-  if (/view filed returns|filed returns/.test(text) || signals.includes("filed-returns-route")) {
-    signals.push("filed-returns-heading");
-  }
+  if (signals.includes("filed-returns-route")) signals.push("filed-returns-heading");
   if (signals.includes("gstr-3b-detail-route")) signals.push("filed-returns-heading");
   if (signals.includes("gstr-1-detail-route")) signals.push("filed-returns-heading", "gstr-1");
   if (signals.includes("gstr-1-summary-route")) signals.push("filed-returns-heading", "gstr-1");
@@ -35,7 +34,16 @@ export function detectSafeSignals(text: string, hints: FiledReturnsObservationHi
   if (/\bfiled\b/.test(text)) signals.push("filed");
   if (/\bdownload\b/.test(text)) signals.push("download");
   if (/\bpdf\b/.test(text)) signals.push("pdf");
-  return signals;
+  return Array.from(new Set(signals));
+}
+
+export function detectFiledReturnRouteType(
+  hints: FiledReturnsObservationHints,
+): FiledReturnsReturnType | null {
+  if (isGstr3bDetailRoute(hints)) return "GSTR-3B";
+  if (isGstr1DetailRoute(hints) || isGstr1SummaryRoute(hints)) return "GSTR-1";
+  if (isGstr2bSummaryRoute(hints)) return "GSTR-2B";
+  return null;
 }
 
 function addReturnTextSignals(text: string, signals: string[]): void {

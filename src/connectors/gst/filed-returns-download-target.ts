@@ -1,4 +1,5 @@
-import type { FiledReturnsDownloadTarget, PortalDownloadTriggerResult } from "../../core/contracts";
+import type { PortalDownloadTriggerResult } from "../../core/contracts";
+import type { FiledReturnsDownloadTarget } from "./filed-returns-contracts";
 import { normaliseText } from "./filed-returns-dom";
 import { extractFiledReturnsDetailIdentity } from "./filed-returns-detail-identity";
 import { filedReturnScopeId } from "./filed-returns-return-descriptors";

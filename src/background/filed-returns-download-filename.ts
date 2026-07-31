@@ -1,11 +1,11 @@
-import type { FiledReturnsDownloadScope } from "../core/contracts";
+import type { FiledReturnsDownloadScope } from "../connectors/gst/filed-returns-contracts";
 import {
   concreteFiledReturnsArtifactTypes,
   type FiledReturnsArtifactExtension,
   filedReturnsArtifactExtension,
   normaliseFiledReturnsArtifactType,
   type FiledReturnsConcreteArtifactType,
-} from "../core/filed-returns-artifacts";
+} from "../connectors/gst/filed-returns-artifacts";
 
 const SAFE_DOWNLOAD_ROOT = "complyeaze-pack/gst";
 
@@ -29,7 +29,10 @@ export function safeFiledReturnZipEntryPath(
   artifactType: FiledReturnsConcreteArtifactType,
   extension: FiledReturnsArtifactExtension = filedReturnsArtifactExtension(artifactType),
 ): string {
-  return `${safeFilenameSegment(scope.period)}${extension}`;
+  const period = safeFilenameSegment(scope.period);
+  if (artifactType === "JSON") return `${period}-data.json`;
+  if (artifactType === "EXCEL") return `${period}-details${extension}`;
+  return scope.returnType === "GSTR-3B" ? `${period}-return.pdf` : `${period}-summary.pdf`;
 }
 
 export function safeFullFiscalYearZipFilename(scope: FiledReturnsDownloadScope): string {
@@ -39,14 +42,16 @@ export function safeFullFiscalYearZipFilename(scope: FiledReturnsDownloadScope):
 }
 
 export function safeSinglePeriodZipFilename(scope: FiledReturnsDownloadScope): string {
-  return `${safeFilenameSegment(scope.returnType)}-${safeFilenameSegment(
-    scope.financialYear,
-  )}-${safeFilenameSegment(scope.period)}.zip`;
+  return [
+    "ComplyEaze-Pack",
+    safeFilenameSegment(scope.financialYear),
+    safeFilenameSegment(scope.returnType, false),
+    `${safeFilenameSegment(scope.period, false)}.zip`,
+  ].join("/");
 }
 
-function safeFilenameSegment(value: string): string {
-  return value
-    .toLowerCase()
+function safeFilenameSegment(value: string, lowercase = true): string {
+  return (lowercase ? value.toLowerCase() : value)
     .replace(/[^A-Za-z0-9._-]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 80);

@@ -2,10 +2,9 @@ import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
 import {
   findFiledGstr3bDownloadCandidateIndex,
+  resolveVisibleFiledReturnDownloadCandidates,
   scoreFiledGstr3bDownloadCandidate,
-  triggerFiledReturnDownload,
-  triggerFiledGstr3bFiledPdfDownload,
-} from "../../src/connectors/gst/filed-returns-download";
+} from "../../src/connectors/gst/filed-returns-download-candidates";
 import {
   collectSafeNavigationDiagnostics,
   findDialogDismissalCandidateIndex,
@@ -25,6 +24,27 @@ import {
 } from "../../src/connectors/gst/filed-returns-navigator";
 
 describe("filed returns navigation matcher", () => {
+  it("keeps zero-size download controls excluded even when they have an offset parent", () => {
+    const documentRef = createDocument(`<button>Download Filed GSTR-3B</button>`);
+    const control = documentRef.querySelector<HTMLElement>("button");
+    if (!control) throw new Error("Expected a synthetic download control.");
+    Object.defineProperty(control, "offsetParent", { value: documentRef.body });
+    control.getBoundingClientRect = () =>
+      ({
+        bottom: 0,
+        height: 0,
+        left: 0,
+        right: 0,
+        top: 0,
+        width: 0,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    expect(resolveVisibleFiledReturnDownloadCandidates(documentRef, "GSTR-3B")).toEqual([]);
+  });
+
   it("prefers the explicit View Filed Returns portal candidate", () => {
     const index = findFiledReturnsNavigationCandidateIndex([
       { text: "File Returns", href: "https://return.gst.gov.in/returns/auth/dashboard" },
@@ -74,6 +94,7 @@ describe("filed returns navigation matcher", () => {
         <button>RETURN DASHBOARD</button>
         <section>
           <h2>Would you like to Authenticate Aadhaar or Upload E-KYC Documents of Partner/Promoter and Primary Authorized Signatory?</h2>
+          <input type="button" aria-label="REMIND ME LATER" />
           <a>YES, NAVIGATE TO MY PROFILE</a>
           <a>REMIND ME LATER</a>
           <p>NOTE : For future reference you can access this link again through Dashboard>My Profile>Aadhaar Authentication Status</p>
@@ -145,6 +166,7 @@ describe("filed returns navigation matcher", () => {
     const documentRef = createDocument(
       `
       <main>
+        <input type="button" aria-label="Services" />
         <button data-services>Services</button>
         <nav data-menu hidden></nav>
       </main>
@@ -221,7 +243,7 @@ describe("filed returns navigation matcher", () => {
   it("keeps navigation diagnostics allow-listed and identifier-safe", () => {
     const diagnostics = collectSafeNavigationDiagnostics([
       { text: "Services" },
-      { text: "27ABCDE1234F1Z5" },
+      { text: "00XXXXX0000X0Z0" },
       { text: "Return Dashboard" },
       { text: "Private Legal Name Pvt Ltd" },
       { text: "View Filed Returns" },
@@ -234,6 +256,7 @@ describe("filed returns navigation matcher", () => {
     const documentRef = createDocument(`
       <div class="modal show" style="display:block">
         <div>System generated summary for GSTR-3B</div>
+        <input type="button" aria-label="Close" />
         <button aria-label="Close">x</button>
         <button>DOWNLOAD FILED GSTR-3B</button>
       </div>
@@ -466,77 +489,6 @@ describe("filed returns navigation matcher", () => {
     ).toBeLessThan(0);
     expect(scoreFiledGstr3bDownloadCandidate({ text: "SAVE GSTR3B" }).score).toBeLessThan(0);
     expect(scoreFiledGstr3bDownloadCandidate({ text: "SUBMIT" }).score).toBeLessThan(0);
-  });
-
-  it("arms only the selected filed GSTR-3B PDF download control for capture", async () => {
-    const documentRef = createDocument(`
-      <main>
-        <h1>GSTR-3B - Monthly Return</h1>
-        <div>Status - Filed</div>
-        <div>Financial Year - 2025-26</div>
-        <div>Return Period - March</div>
-        <button>DOWNLOAD FILED GSTR-3B</button>
-        <a title="Click here to download GSTR-3B system generated PDF">SYSTEM GENERATED GSTR-3B</a>
-      </main>
-    `);
-    const [filedButton, systemLink] = Array.from(documentRef.querySelectorAll("button, a"));
-    let filedClicked = 0;
-    let systemClicked = 0;
-    filedButton?.addEventListener("click", () => {
-      filedClicked += 1;
-    });
-    systemLink?.addEventListener("click", () => {
-      systemClicked += 1;
-    });
-
-    const result = await triggerFiledReturnDownload(documentRef, {
-      actionId: "test-action",
-      financialYear: "2025-26",
-      period: "March",
-      returnType: "GSTR-3B",
-    });
-
-    expect(result.downloadTrigger.state).toBe("clicked");
-    expect(result.downloadTrigger.safeSignals).toEqual(
-      expect.arrayContaining([
-        "filed-gstr3b-download-clicked",
-        "text-download-filed-gstr3b",
-        "filed-gstr3b-portal-blob-download-captured",
-      ]),
-    );
-    expect("mainWorldCaptureRequest" in result).toBe(true);
-    expect(filedButton?.hasAttribute("data-pack-gstr2b-capture-action")).toBe(true);
-    expect(systemLink?.hasAttribute("data-pack-gstr2b-capture-action")).toBe(false);
-    expect(filedClicked).toBe(0);
-    expect(systemClicked).toBe(0);
-  });
-
-  it("does not click the GST home due-date PDF download", async () => {
-    const documentRef = createDocument(`
-      <main>
-        <h1>Goods and Services Tax</h1>
-        <section>
-          <h2>Upcoming Due Dates</h2>
-          <button>DOWNLOAD PDF</button>
-          <p>GSTR-3B (May, 2026)</p>
-        </section>
-      </main>
-    `);
-    let dueDateDownloadClicked = 0;
-    documentRef.querySelector("button")?.addEventListener("click", () => {
-      dueDateDownloadClicked += 1;
-    });
-
-    const result = await triggerFiledGstr3bFiledPdfDownload(documentRef, {
-      actionId: "test-action",
-      financialYear: "2025-26",
-      period: "March",
-      returnType: "GSTR-3B",
-    });
-
-    expect(result.state).toBe("candidate-not-found");
-    expect(result.safeSignals).toEqual(expect.arrayContaining(["not-filed-gstr3b-detail-page"]));
-    expect(dueDateDownloadClicked).toBe(0);
   });
 });
 

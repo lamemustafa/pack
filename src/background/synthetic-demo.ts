@@ -6,7 +6,8 @@ import {
   createSyntheticGstResults,
 } from "../connectors/gst/planner";
 import { createArchiveManifest } from "../core/manifest";
-import type { PackMessageResponse } from "../core/messages";
+import type { PackMessageResponse } from "../connectors/gst/messages";
+import { installPackDownloadFilenameReassertion } from "./pack-download-filename-reassertion";
 
 export interface SyntheticDemoDeps {
   productVersion: string;
@@ -35,13 +36,23 @@ export async function startSyntheticDemo(deps: SyntheticDemoDeps): Promise<PackM
   let downloaded = 0;
   if (deps.downloadArtifacts === true) {
     for (const artifact of syntheticDownloadArtifacts(plan, results, manifest)) {
-      await browser.downloads.download({
-        conflictAction: "uniquify",
-        filename: `Pack-Demo/${artifact.filename}`,
-        saveAs: false,
-        url: makeDataUrl(artifact.mimeType, artifact.body),
-      });
-      downloaded += 1;
+      const filename = `Pack-Demo/${artifact.filename}`;
+      const { reservation, url } = installPackDownloadFilenameReassertion().reserveDataUrl(
+        makeDataUrl(artifact.mimeType, artifact.body),
+        filename,
+      );
+      try {
+        const downloadId = await browser.downloads.download({
+          conflictAction: "uniquify",
+          filename,
+          saveAs: false,
+          url,
+        });
+        reservation.bind(downloadId);
+        downloaded += 1;
+      } finally {
+        reservation.release();
+      }
     }
   }
 

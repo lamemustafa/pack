@@ -1,8 +1,9 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import type { FiledReturnsFlowSummary, PortalContext } from "../../src/core/contracts";
-import { FULL_FISCAL_YEAR_PERIOD } from "../../src/core/filed-returns-scope";
+import type { PortalContext } from "../../src/core/contracts";
+import type { FiledReturnsFlowSummary } from "../../src/connectors/gst/filed-returns-contracts";
+import { FULL_FISCAL_YEAR_PERIOD } from "../../src/connectors/gst/filed-returns-scope";
 import { ScopeForm, ScopeFormAction } from "../../src/entrypoints/popup/components";
 
 const context: PortalContext = {
@@ -47,9 +48,9 @@ describe("popup scope form", () => {
 
     expect(markup).toContain("<legend>File format</legend>");
     expect(markup).toContain('name="scope-file-format"');
-    expect(markup).toContain("Summary PDF");
-    expect(markup).toContain("Details Excel");
-    expect(markup).toContain("PDF + Excel ZIP");
+    expect(markup).toContain("Summary (PDF)");
+    expect(markup).toContain("Details (Excel)");
+    expect(markup).toContain("All formats");
     expect(markup).not.toContain("<details");
     expect(markup).not.toContain("More options");
     expect(markup).not.toContain('id="scope-file-format"');

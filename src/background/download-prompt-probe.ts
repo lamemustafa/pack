@@ -1,11 +1,12 @@
 import { browser } from "wxt/browser";
-import type { DownloadPromptProbeResult } from "../core/messages";
+import type { DownloadPromptProbeResult } from "../connectors/gst/messages";
 import { observeBrowserDownloadById } from "./download-observer";
 import {
   closeOffscreenBlobDocument,
   createOffscreenBlobUrl,
   revokeOffscreenBlobUrl,
 } from "./offscreen-blob-url";
+import { installPackDownloadFilenameReassertion } from "./pack-download-filename-reassertion";
 
 const PROBE_BODY = [
   "ComplyEaze Pack download prompt probe",
@@ -34,13 +35,19 @@ export async function runDownloadPromptProbe(
     };
   }
 
+  const filenameReassertion = installPackDownloadFilenameReassertion();
+  const filenameClaim =
+    sourceClass === "data-url"
+      ? filenameReassertion.reserveDataUrl(url, PROBE_FILENAME)
+      : { reservation: filenameReassertion.reserve(url, PROBE_FILENAME), url };
   try {
     const downloadId = await browser.downloads.download({
       conflictAction: "uniquify",
       filename: PROBE_FILENAME,
       saveAs: false,
-      url,
+      url: filenameClaim.url,
     });
+    filenameClaim.reservation.bind(downloadId);
     if (sourceClass === "offscreen-blob-url") {
       await observeBrowserDownloadById(
         browser.downloads,
@@ -49,8 +56,6 @@ export async function runDownloadPromptProbe(
           armedAt: new Date(),
           expectedFileExtensions: [".txt"],
           expectedMimeTypes: ["text/plain"],
-          expectedOrigins: [],
-          expectedUrlSubstrings: [],
           trustedDownloadIds: new Set([downloadId]),
         },
         5_000,
@@ -81,11 +86,12 @@ export async function runDownloadPromptProbe(
         `download-prompt-probe-source:${sourceClass}`,
       ],
       safeMessage:
-        "Brave rejected the extension-owned download prompt probe before a download started.",
+        "The browser rejected the extension-owned download prompt probe before a download started.",
       saveAsFalse: true,
       sourceClass,
     };
   } finally {
+    filenameClaim.reservation.release();
     if (sourceClass === "offscreen-blob-url") {
       await revokeOffscreenBlobUrl(url);
       await closeOffscreenBlobDocument();

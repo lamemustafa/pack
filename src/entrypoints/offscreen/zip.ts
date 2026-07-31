@@ -10,6 +10,7 @@ export function createZip(entries: readonly ZipEntry[], modifiedAt = new Date())
   let offset = 0;
 
   for (const entry of entries) {
+    if (!isSafeEntryPath(entry.path)) throw new Error("Invalid ZIP entry path.");
     const name = new TextEncoder().encode(entry.path);
     const crc = crc32(entry.bytes);
     const localHeader = new Uint8Array(30 + name.length);
@@ -82,6 +83,7 @@ function crc32(bytes: Uint8Array): number {
 }
 
 function toDosTimestamp(value: Date): { date: number; time: number } {
+  // ZIP timestamps make otherwise identical archives differ byte-for-byte.
   const fallback = new Date("2026-01-01T00:00:00.000Z");
   const date = Number.isFinite(value.getTime()) ? value : fallback;
   const year = Math.min(2107, Math.max(1980, date.getFullYear()));
@@ -95,4 +97,13 @@ function toDosTimestamp(value: Date): { date: number; time: number } {
     date: ((year - 1980) << 9) | (month << 5) | day,
     time: (hours << 11) | (minutes << 5) | seconds,
   };
+}
+
+function isSafeEntryPath(path: string): boolean {
+  return (
+    path.length > 0 &&
+    !path.startsWith("/") &&
+    !path.includes("\\") &&
+    !path.split("/").includes("..")
+  );
 }

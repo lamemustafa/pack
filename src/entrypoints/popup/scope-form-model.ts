@@ -1,10 +1,13 @@
-import type { FiledReturnsDownloadScope, FiledReturnsFlowSummary } from "../../core/contracts";
+import type {
+  FiledReturnsDownloadScope,
+  FiledReturnsFlowSummary,
+} from "../../connectors/gst/filed-returns-contracts";
 import {
   FILED_RETURNS_ARTIFACT_TYPES,
   concreteFiledReturnsArtifactTypes,
   normaliseFiledReturnsArtifactType,
   supportsFiledReturnsArtifactType,
-} from "../../core/filed-returns-artifacts";
+} from "../../connectors/gst/filed-returns-artifacts";
 import {
   FILED_RETURNS_MONTHS,
   getFiledReturnsFinancialYearOptions,
@@ -12,9 +15,13 @@ import {
   getFiledReturnsScopePeriodOptions,
   FULL_FISCAL_YEAR_PERIOD,
   isFullFiscalYearScope,
-} from "../../core/filed-returns-scope";
-import { FILED_RETURNS_RETURN_TYPES } from "../../core/filed-returns-return-types";
-import { canRetryFullFiscalYearZipWithoutPortal } from "./flow-summary";
+} from "../../connectors/gst/filed-returns-scope";
+import { FILED_RETURNS_RETURN_TYPES } from "../../connectors/gst/filed-returns-return-types";
+import {
+  canRetryFullFiscalYearZipWithoutPortal,
+  hasPersistedFullFiscalYearZipDownloadId,
+  isAmbiguousFullFiscalYearZipHandoff,
+} from "./flow-summary";
 
 export function createScopeFormModel(scope: FiledReturnsDownloadScope) {
   const singlePeriodOptions = getFiledReturnsPeriodOptions(scope.financialYear, new Date());
@@ -51,14 +58,14 @@ export function returnTypeOptions() {
       return {
         value: returnType,
         label: returnType,
-        description: "Filed PDF",
+        description: "Filed PDF or portal data (JSON)",
       };
     }
     if (returnType === "GSTR-1") {
       return {
         value: returnType,
         label: returnType,
-        description: "PDF + Excel",
+        description: "Summary PDF + E-invoice details (Excel)",
       };
     }
     return {
@@ -85,6 +92,16 @@ export function getScopeActionCopy(
   const concreteArtifactCount = concreteFiledReturnsArtifactTypes(artifactType).length;
   if (!fullFiscalYear) {
     if (concreteArtifactCount > 1) {
+      if (scope.returnType === "GSTR-2B") {
+        return {
+          summary: "Collect the selected GSTR-2B formats into one local ZIP.",
+          details: [
+            "Stages PDF, Excel, and portal data as ZIP entries",
+            "One target-bound browser ZIP handoff",
+            "No portal data leaves the device",
+          ],
+        };
+      }
       return {
         summary: "Collect the selected period into one local ZIP.",
         details: [
@@ -127,7 +144,14 @@ export function getScopeFormStartAction(
     canRetryFullFiscalYearZipWithoutPortal(summary) &&
     isSameScope(scope, summary.scope)
   ) {
-    return { disabled: false, label: "Retry final ZIP" };
+    return {
+      disabled: false,
+      label: hasPersistedFullFiscalYearZipDownloadId(summary)
+        ? "Check final ZIP status"
+        : isAmbiguousFullFiscalYearZipHandoff(summary)
+          ? "I checked—retry final ZIP"
+          : "Retry final ZIP",
+    };
   }
   if (summary && isSameScope(scope, summary.scope)) {
     const signals = new Set(summary.flowStep.safeSignals);
@@ -156,10 +180,30 @@ function defaultStartLabel(scope: FiledReturnsDownloadScope, fullFiscalYear: boo
   const artifactType = normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType);
   const multiFile = concreteFiledReturnsArtifactTypes(artifactType).length > 1;
   if (fullFiscalYear) {
-    const noun = multiFile ? "files" : artifactType === "EXCEL" ? "Excel files" : "PDFs";
+    if (scope.returnType === "GSTR-1" && artifactType === "EXCEL") {
+      return `Download all ${scope.financialYear} E-invoice details (Excel) files`;
+    }
+    const noun = multiFile
+      ? "files"
+      : artifactType === "EXCEL"
+        ? "Excel files"
+        : artifactType === "JSON"
+          ? "JSON files"
+          : "PDFs";
     return `Download all ${scope.financialYear} ${scope.returnType} ${noun}`;
   }
-  const noun = multiFile ? "ZIP" : artifactType === "EXCEL" ? "Excel" : "PDF";
+  if (scope.returnType === "GSTR-1" && artifactType === "EXCEL") {
+    return `Download ${scope.period} ${scope.financialYear} E-invoice details (Excel)`;
+  }
+  const noun = multiFile
+    ? scope.returnType === "GSTR-2B"
+      ? "all formats"
+      : "ZIP"
+    : artifactType === "EXCEL"
+      ? "Excel"
+      : artifactType === "JSON"
+        ? "portal data (JSON)"
+        : "PDF";
   return `Download ${scope.period} ${scope.financialYear} ${scope.returnType} ${noun}`;
 }
 
@@ -167,10 +211,13 @@ function artifactOptionDescription(
   returnType: FiledReturnsDownloadScope["returnType"],
   artifactType: (typeof FILED_RETURNS_ARTIFACT_TYPES)[number],
 ): string {
-  if (artifactType === "PDF_AND_EXCEL") return "PDF and Excel";
+  if (artifactType === "PDF_AND_EXCEL") {
+    return returnType === "GSTR-2B" ? "PDF, Excel, and portal data" : "PDF and Excel";
+  }
   if (artifactType === "EXCEL") {
     return returnType === "GSTR-2B" ? "Details workbook" : "E-invoice workbook";
   }
+  if (artifactType === "JSON") return "Saved verbatim from the portal; not a filed return";
   if (returnType === "GSTR-3B") return "Filed copy";
   if (returnType === "GSTR-2B") return "Summary file";
   return "Summary copy";
@@ -180,11 +227,18 @@ function artifactOptionLabel(
   returnType: FiledReturnsDownloadScope["returnType"],
   artifactType: (typeof FILED_RETURNS_ARTIFACT_TYPES)[number],
 ): string {
-  if (artifactType === "PDF_AND_EXCEL") return "PDF + Excel ZIP";
-  if (artifactType === "EXCEL") {
-    return returnType === "GSTR-1" ? "E-invoice Excel" : "Details Excel";
+  if (returnType === "GSTR-1") {
+    if (artifactType === "PDF_AND_EXCEL") return "All formats";
+    if (artifactType === "EXCEL") return "E-invoice details (Excel)";
+    if (artifactType === "JSON") return "portal data (JSON)";
+    return "Summary PDF";
   }
-  return returnType === "GSTR-3B" ? "PDF" : "Summary PDF";
+  if (artifactType === "PDF_AND_EXCEL") return "All formats";
+  if (artifactType === "EXCEL") {
+    return "Details (Excel)";
+  }
+  if (artifactType === "JSON") return "Portal data (JSON)";
+  return returnType === "GSTR-3B" ? "Filed return (PDF)" : "Summary (PDF)";
 }
 
 function isSameScope(left: FiledReturnsDownloadScope, right: FiledReturnsDownloadScope): boolean {

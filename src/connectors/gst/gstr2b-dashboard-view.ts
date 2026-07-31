@@ -1,7 +1,16 @@
 import { getClickableElements, isVisible, normaliseText } from "./filed-returns-dom";
+import type { FiledReturnsReturnType } from "./filed-returns-return-types";
 
 export function findGstr2bDashboardControl(
   documentRef: Document,
+  intent: "view",
+): HTMLElement | null {
+  return findReturnDashboardControl(documentRef, "GSTR-2B", intent);
+}
+
+export function findReturnDashboardControl(
+  documentRef: Document,
+  returnType: FiledReturnsReturnType,
   intent: "view",
 ): HTMLElement | null {
   const containers = Array.from(
@@ -21,46 +30,58 @@ export function findGstr2bDashboardControl(
   ).sort((left, right) => (left.textContent?.length ?? 0) - (right.textContent?.length ?? 0));
   for (const container of containers) {
     const text = normaliseText(container.textContent ?? "");
-    if (!text.includes("gstr-2b") && !text.includes("gstr2b")) continue;
-    const control = findMatchingGstr2bControl(container, intent);
+    if (!isSpecificReturnTypeText(text, returnType)) continue;
+    const control = findMatchingReturnControl(container, returnType, intent);
     if (control) return control;
   }
 
-  const gstr2bControls = getClickableElements(documentRef).filter((element) => {
+  const returnControls = getClickableElements(documentRef).filter((element) => {
     const text = normaliseText(readElementText(element));
-    return text.includes("gstr-2b") || text.includes("gstr2b");
+    return isSpecificReturnTypeText(text, returnType);
   });
-  for (const gstr2bControl of gstr2bControls) {
-    const control = findNearestGstr2bControl(gstr2bControl, intent);
+  for (const returnControl of returnControls) {
+    const control = findNearestReturnControl(returnControl, returnType, intent);
     if (control) return control;
   }
-  const nearbyIntentControl = findNearbyGstr2bIntentControl(documentRef, intent);
+  const nearbyIntentControl = findNearbyReturnIntentControl(documentRef, returnType, intent);
   if (nearbyIntentControl) return nearbyIntentControl;
   return null;
 }
 
-function findNearestGstr2bControl(element: HTMLElement, intent: "view"): HTMLElement | null {
+function findNearestReturnControl(
+  element: HTMLElement,
+  returnType: FiledReturnsReturnType,
+  intent: "view",
+): HTMLElement | null {
   let current: HTMLElement | null = element.parentElement;
   for (let depth = 0; current && depth < 6; depth += 1, current = current.parentElement) {
-    if (!normaliseText(current.textContent ?? "").match(/gstr-?2b/)) continue;
-    const control = findMatchingGstr2bControl(current, intent);
+    if (!isSpecificReturnTypeText(current.textContent ?? "", returnType)) continue;
+    const control = findMatchingReturnControl(current, returnType, intent);
     if (control) return control;
   }
   return null;
 }
 
-function findMatchingGstr2bControl(container: Element, intent: "view"): HTMLElement | null {
+function findMatchingReturnControl(
+  container: Element,
+  returnType: FiledReturnsReturnType,
+  intent: "view",
+): HTMLElement | null {
   const candidates = getClickableElements(container).filter((element) =>
     matchesGstr2bIntentControl(element, intent),
   );
-  return candidates.find(hasLocallyScopedGstr2bText) ?? null;
+  return candidates.find((element) => hasLocallyScopedReturnTypeText(element, returnType)) ?? null;
 }
 
-function findNearbyGstr2bIntentControl(documentRef: Document, intent: "view"): HTMLElement | null {
+function findNearbyReturnIntentControl(
+  documentRef: Document,
+  returnType: FiledReturnsReturnType,
+  intent: "view",
+): HTMLElement | null {
   return (
     getClickableElements(documentRef).find((element) => {
       if (!matchesGstr2bIntentControl(element, intent)) return false;
-      return hasLocallyScopedGstr2bText(element);
+      return hasLocallyScopedReturnTypeText(element, returnType);
     }) ?? null
   );
 }
@@ -76,26 +97,30 @@ function matchesGstr2bIntentControl(element: HTMLElement, intent: "view"): boole
   return intent === "view" && action.includes("page_rtp") && !label.includes("download");
 }
 
-function hasLocallyScopedGstr2bText(element: HTMLElement): boolean {
+function hasLocallyScopedReturnTypeText(
+  element: HTMLElement,
+  returnType: FiledReturnsReturnType,
+): boolean {
   let current: HTMLElement | null = element;
   for (let depth = 0; current && depth < 5; depth += 1, current = current.parentElement) {
     const currentText = visibleElementText(current);
-    if (containsReturnTypeText(currentText)) return isSpecificGstr2bText(currentText);
+    if (containsReturnTypeText(currentText))
+      return isSpecificReturnTypeText(currentText, returnType);
     const previous = current.previousElementSibling;
     const next = current.nextElementSibling;
-    if (previous && isVisibleGstr2bText(previous)) return true;
-    if (next && isVisibleGstr2bText(next)) return true;
+    if (previous && isVisibleReturnTypeText(previous, returnType)) return true;
+    if (next && isVisibleReturnTypeText(next, returnType)) return true;
   }
   return false;
 }
 
-function isVisibleGstr2bText(element: Element): boolean {
+function isVisibleReturnTypeText(element: Element, returnType: FiledReturnsReturnType): boolean {
   const HTMLElementConstructor = element.ownerDocument.defaultView?.HTMLElement;
   return Boolean(
     HTMLElementConstructor &&
     element instanceof HTMLElementConstructor &&
     isVisible(element as HTMLElement) &&
-    isSpecificGstr2bText(visibleElementText(element as HTMLElement)),
+    isSpecificReturnTypeText(visibleElementText(element as HTMLElement), returnType),
   );
 }
 
@@ -116,10 +141,22 @@ function containsReturnTypeText(text: string): boolean {
   return /gstr-?(?:1a?|2a|2b|3b)\b/.test(normaliseText(text));
 }
 
-function isSpecificGstr2bText(text: string): boolean {
+function isSpecificReturnTypeText(text: string, returnType: FiledReturnsReturnType): boolean {
   const normalised = normaliseText(text);
-  if (!/gstr-?2b/.test(normalised)) return false;
-  return !/gstr-?1a?\b|gstr-?2a\b|gstr-?3b\b/.test(normalised);
+  const requested =
+    returnType === "GSTR-1"
+      ? /gstr-?1\b/.test(normalised) && !/gstr-?1a\b/.test(normalised)
+      : returnType === "GSTR-2B"
+        ? /gstr-?2b\b/.test(normalised)
+        : /gstr-?3b\b/.test(normalised);
+  if (!requested) return false;
+  return !otherReturnTypePattern(returnType).test(normalised);
+}
+
+function otherReturnTypePattern(returnType: FiledReturnsReturnType): RegExp {
+  if (returnType === "GSTR-1") return /gstr-?1a\b|gstr-?2a\b|gstr-?2b\b|gstr-?3b\b/;
+  if (returnType === "GSTR-2B") return /gstr-?1a?\b|gstr-?2a\b|gstr-?3b\b/;
+  return /gstr-?1a?\b|gstr-?2a\b|gstr-?2b\b/;
 }
 
 function readElementText(element: HTMLElement): string {

@@ -1,4 +1,7 @@
-import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "../core/contracts";
+import type {
+  FiledReturnsDownloadScope,
+  PortalFlowStepResult,
+} from "../connectors/gst/filed-returns-contracts";
 import {
   filedReturnDescriptor,
   filedReturnScopeId,

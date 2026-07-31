@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   safeFiledReturnDownloadFilename,
   safeFiledReturnZipEntryPath,
+  safeSinglePeriodZipFilename,
 } from "../../src/background/filed-returns-download-filename";
-import type { FiledReturnsDownloadScope } from "../../src/core/contracts";
+import type { FiledReturnsDownloadScope } from "../../src/connectors/gst/filed-returns-contracts";
 
 describe("filed returns download filename helpers", () => {
   const scope: FiledReturnsDownloadScope = {
@@ -14,9 +15,15 @@ describe("filed returns download filename helpers", () => {
   };
 
   it("uses the captured artifact extension for legacy GSTR-2B Excel bytes", () => {
-    expect(safeFiledReturnZipEntryPath(scope, "EXCEL", ".xls")).toBe("may.xls");
+    expect(safeFiledReturnZipEntryPath(scope, "EXCEL", ".xls")).toBe("may-details.xls");
     expect(safeFiledReturnDownloadFilename(scope, "EXCEL", ".xls")).toBe(
       "complyeaze-pack/gst/2026-27/gstr-2b/may.xls",
+    );
+  });
+
+  it("names a selected-artifact archive under the requested return type", () => {
+    expect(safeSinglePeriodZipFilename({ ...scope, artifactType: "PDF_AND_EXCEL" })).toBe(
+      "ComplyEaze-Pack/2026-27/GSTR-2B/May.zip",
     );
   });
 });

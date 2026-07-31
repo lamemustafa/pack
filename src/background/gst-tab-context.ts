@@ -12,9 +12,12 @@ import {
   PACK_CONTENT_SCRIPT_PROTOCOL_VERSION,
   type PackMessage,
   type PackMessageResponse,
-} from "../core/messages";
+} from "../connectors/gst/messages";
 import type { ActiveGstTab } from "./filed-returns-flow-runner";
 import { PACK_SESSION_STORAGE_KEYS } from "./storage-keys";
+import { persistCanonicalFiledReturnsObservation } from "./filed-returns-observation-state";
+import { persistCanonicalGstPortalContext } from "./gst-context-state";
+import { normaliseContentScriptMessageResponse } from "./content-script-message-response";
 
 const CONTENT_SCRIPT_FILE = "/content-scripts/content.js";
 const contentInjectionByTab = new Map<number, Promise<void>>();
@@ -25,6 +28,24 @@ export function isCurrentContentScriptPingResponse(response: PackMessageResponse
     "contentScriptVersion" in response &&
     response.contentScriptVersion === PACK_CONTENT_SCRIPT_PROTOCOL_VERSION
   );
+}
+
+export async function clickReturnsDashboardAnchorFromTab(
+  tabId: number,
+): Promise<"clicked" | "not-found" | "ambiguous" | null> {
+  const response = await sendMessageToTabWithInjection(tabId, {
+    type: "PACK_CONTENT_OPEN_RETURNS_DASHBOARD_V34",
+  });
+  return response.ok && "returnsDashboardNavigation" in response
+    ? response.returnsDashboardNavigation
+    : null;
+}
+
+export async function verifyCurrentContentScriptFromTab(tabId: number): Promise<boolean> {
+  const response = await sendMessageToTabWithInjection(tabId, {
+    type: "PACK_CONTENT_REFRESH_CONTEXT_V3",
+  });
+  return response.ok && "context" in response;
 }
 
 export async function refreshActiveFiledReturnsObservation(): Promise<PortalObservation | null> {
@@ -38,10 +59,10 @@ export async function refreshActiveFiledReturnsObservation(): Promise<PortalObse
   if (!response.ok) return null;
 
   if ("observation" in response && response.observation) {
-    await browser.storage.session.set({
-      [PACK_SESSION_STORAGE_KEYS.lastFiledReturnsObservation]: response.observation,
-    });
-    return response.observation;
+    return persistCanonicalFiledReturnsObservation(
+      PACK_SESSION_STORAGE_KEYS.lastFiledReturnsObservation,
+      response.observation,
+    );
   }
   return null;
 }
@@ -64,10 +85,10 @@ export async function inferActiveFiledReturnsObservation(): Promise<PortalObserv
     const observation = observeFiledReturnsPageText("GSTR-2B", {
       pathname: parsed.pathname,
     });
-    await browser.storage.session.set({
-      [PACK_SESSION_STORAGE_KEYS.lastFiledReturnsObservation]: observation,
-    });
-    return observation;
+    return persistCanonicalFiledReturnsObservation(
+      PACK_SESSION_STORAGE_KEYS.lastFiledReturnsObservation,
+      observation,
+    );
   }
 
   return null;
@@ -83,10 +104,11 @@ export async function refreshActiveGstContext(): Promise<PortalContext | null> {
 
   if (!response.ok || !("context" in response)) return null;
 
-  await browser.storage.session.set({
-    [PACK_SESSION_STORAGE_KEYS.lastContext]: response.context,
-  });
-  return response.context;
+  return persistCanonicalGstPortalContext(
+    PACK_SESSION_STORAGE_KEYS.lastContext,
+    response.context,
+    activeTab.url,
+  );
 }
 
 export async function getActiveGstTab(): Promise<ActiveGstTab | null> {
@@ -110,7 +132,19 @@ export async function getActiveGstTab(): Promise<ActiveGstTab | null> {
       typeof tab.id === "number" && isActionableGstPortalTabUrl(tab.url),
   );
   if (fallbackGstTabs.length === 1) return fallbackGstTabs[0] ?? null;
-  return pickUniquePreferredGstPortalTab(fallbackGstTabs);
+  const preferredCurrentWindowTab = pickUniquePreferredGstPortalTab(fallbackGstTabs);
+  if (preferredCurrentWindowTab) return preferredCurrentWindowTab;
+
+  // Browser-action keyboard shortcuts can host the popup in a transient window
+  // with no normal active tab. Fall back only when exactly one actionable GST
+  // tab is active across all browser windows; ambiguity remains fail-closed.
+  const activeGstTabsAcrossWindows = (
+    await browser.tabs.query({ active: true, url: [...GST_PORTAL_TAB_URL_PATTERNS] })
+  ).filter(
+    (tab): tab is Browser.tabs.Tab & { id: number } =>
+      typeof tab.id === "number" && isActionableGstPortalTabUrl(tab.url),
+  );
+  return activeGstTabsAcrossWindows.length === 1 ? (activeGstTabsAcrossWindows[0] ?? null) : null;
 }
 
 export async function rememberActiveGstTabById(tabId: number): Promise<void> {
@@ -144,12 +178,11 @@ export async function sendMessageToTabWithInjection(
         | "PACK_CONTENT_REFRESH_CONTEXT_V3"
         | "PACK_CONTENT_REFRESH_FILED_RETURNS_OBSERVATION_V3"
         | "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3"
+        | "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34"
+        | "PACK_CONTENT_OPEN_RETURNS_DASHBOARD_V34"
         | "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3"
-        | "PACK_CONTENT_RESOLVE_FILED_GSTR3B_DIRECT_DOWNLOAD_V3"
         | "PACK_CONTENT_MARK_FILED_RETURNS_SEARCH_PENDING_V3"
         | "PACK_CONTENT_CLEAR_FILED_RETURNS_SEARCH_PENDING_V3"
-        | "PACK_CONTENT_RESOLVE_GSTR1_VIEW_POINT_V3"
-        | "PACK_CONTENT_MARK_GSTR1_VIEW_ACTIVATION_V3"
         | "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3";
     }
   >,
@@ -160,11 +193,17 @@ export async function sendMessageToTabWithInjection(
     payload: message,
   };
   try {
-    return (await browser.tabs.sendMessage(tabId, request)) as PackMessageResponse;
+    return normaliseContentScriptMessageResponse(
+      await browser.tabs.sendMessage(tabId, request),
+      message.type,
+    );
   } catch (error) {
     if (!isMissingReceivingEndError(error)) throw error;
     await ensureContentScript(tabId);
-    return browser.tabs.sendMessage(tabId, request) as Promise<PackMessageResponse>;
+    return normaliseContentScriptMessageResponse(
+      await browser.tabs.sendMessage(tabId, request),
+      message.type,
+    );
   }
 }
 

@@ -2,7 +2,7 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { browser } from "wxt/browser";
 import type { ArchiveManifest } from "../../core/contracts";
-import type { PackMessageResponse } from "../../core/messages";
+import type { PackMessageResponse } from "../../connectors/gst/messages";
 import "../../styles/global.css";
 import { runFileSystemAccessProbe } from "./file-system-access-probe";
 
@@ -21,7 +21,11 @@ function OptionsPage() {
       const response = (await browser.runtime.sendMessage({
         type: "PACK_CLEAR_LOCAL_DATA",
       })) as PackMessageResponse;
-      setStatus(response.ok ? "Pack local and session storage keys cleared." : response.error);
+      setStatus(
+        response.ok
+          ? "Pack local and session storage keys cleared."
+          : (response.safeMessage ?? response.error),
+      );
       if (response.ok) {
         setManifestSummary("");
         setDownloadProbeSummary("");
@@ -42,7 +46,9 @@ function OptionsPage() {
         setDownloadProbeSummary(formatDownloadPromptProbeSummary(response.downloadPromptProbe));
         setStatus(response.downloadPromptProbe.safeMessage);
       } else {
-        setStatus(response.ok ? "Unexpected Pack response." : response.error);
+        setStatus(
+          response.ok ? "Unexpected Pack response." : (response.safeMessage ?? response.error),
+        );
       }
     } finally {
       setBusy(null);
@@ -64,7 +70,9 @@ function OptionsPage() {
             : "Synthetic reviewer demo manifest created without starting local downloads.",
         );
       } else {
-        setStatus(response.ok ? "Unexpected Pack response." : response.error);
+        setStatus(
+          response.ok ? "Unexpected Pack response." : (response.safeMessage ?? response.error),
+        );
       }
     } catch {
       setStatus(
@@ -91,7 +99,9 @@ function OptionsPage() {
             : "No synthetic demo manifest is stored yet.",
         );
       } else {
-        setStatus(response.ok ? "Unexpected Pack response." : response.error);
+        setStatus(
+          response.ok ? "Unexpected Pack response." : (response.safeMessage ?? response.error),
+        );
       }
     } finally {
       setBusy(null);

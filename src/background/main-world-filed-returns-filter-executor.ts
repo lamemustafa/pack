@@ -1,9 +1,10 @@
 import { browser } from "wxt/browser";
-import type { FiledReturnsDownloadScope } from "../core/contracts";
+import type { FiledReturnsDownloadScope } from "../connectors/gst/filed-returns-contracts";
+import { CLICKABLE_CONTROL_SELECTOR } from "../connectors/gst/filed-returns-dom";
 import {
   selectFiledReturnsFiltersInMainWorld,
   type MainWorldFiledReturnsFilterSelectionOutcome,
-} from "./main-world-filed-returns-filter-selection";
+} from "../connectors/gst/main-world-filed-returns-filter-selection";
 
 export async function selectFiledReturnsFiltersInMainWorldForTab(
   tabId: number,
@@ -11,7 +12,7 @@ export async function selectFiledReturnsFiltersInMainWorldForTab(
 ): Promise<MainWorldFiledReturnsFilterSelectionOutcome> {
   try {
     const [result] = await browser.scripting.executeScript({
-      args: [scope],
+      args: [scope, CLICKABLE_CONTROL_SELECTOR],
       func: selectFiledReturnsFiltersInMainWorld,
       target: { tabId },
       world: "MAIN",

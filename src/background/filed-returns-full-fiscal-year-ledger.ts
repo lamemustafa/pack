@@ -4,23 +4,36 @@ import type {
   FiledReturnsFullFiscalYearTarget,
   FiledReturnsFullFiscalYearTargetStatus,
   PortalFlowStepResult,
-} from "../core/contracts";
+} from "../connectors/gst/filed-returns-contracts";
 import {
   normaliseFiledReturnsArtifactType,
   type FiledReturnsArtifactType,
-} from "../core/filed-returns-artifacts";
-import { FULL_FISCAL_YEAR_PERIOD, type FiledReturnsMonth } from "../core/filed-returns-scope";
-import type { FiledReturnsReturnType } from "../core/filed-returns-return-types";
+} from "../connectors/gst/filed-returns-artifacts";
+import {
+  FULL_FISCAL_YEAR_PERIOD,
+  type FiledReturnsMonth,
+} from "../connectors/gst/filed-returns-scope";
+import type { FiledReturnsReturnType } from "../connectors/gst/filed-returns-return-types";
+import { createFiledReturnsLedgerId } from "../connectors/gst/filed-returns-ledger-id";
 import { GST_CONNECTOR_DESCRIPTOR } from "../connectors/gst/constants";
+import { canonicalDurableTargetStatus } from "../connectors/gst/filed-returns-durable-status";
 import { PACK_PRODUCT_VERSION } from "../extension/version";
-import { durableFullFiscalYearArtifactSignals } from "./filed-returns-full-fiscal-year-artifacts";
+import { durableFullFiscalYearArtifactSignals } from "./filed-returns-full-fiscal-year-validation";
+import { mergeFiledReturnsDownloadDiagnosticState } from "./filed-returns-download-diagnostic-state";
+import {
+  FULL_FISCAL_YEAR_PLAN_VERSION,
+  canonicalFullFiscalYearPlanPeriods,
+  hasCanonicalFullFiscalYearTargetPlan,
+  hasLegacyCanonicalFullFiscalYearTargetPrefix,
+  isCanonicalFullFiscalYearPeriodPlan,
+} from "./filed-returns-full-fiscal-year-validation";
 export {
+  hasCanonicalFullFiscalYearTargetPlan,
   isFullFiscalYearLedger,
   recoverableFullFiscalYearLedgerId,
 } from "./filed-returns-full-fiscal-year-validation";
 
 const ACTIVE_LEDGER_STALE_MS = 30_000;
-const FULL_FISCAL_YEAR_PLAN_VERSION = "filed-returns-monthly-v2";
 const POSITIVE_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
   "downloaded",
   "not-filed",
@@ -31,6 +44,9 @@ export function createFullFiscalYearLedger(
   now: Date,
   periods: readonly FiledReturnsMonth[],
 ): FiledReturnsFullFiscalYearLedger {
+  if (!isCanonicalFullFiscalYearPeriodPlan(scope.financialYear, periods)) {
+    throw new Error("Invalid full-fiscal-year target plan.");
+  }
   const timestamp = now.toISOString();
   const eligibleThrough = periods.at(-1);
   const artifactType = normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType);
@@ -39,7 +55,7 @@ export function createFullFiscalYearLedger(
     planVersion: FULL_FISCAL_YEAR_PLAN_VERSION,
     connectorVersion: GST_CONNECTOR_DESCRIPTOR.version,
     createdWithExtensionVersion: PACK_PRODUCT_VERSION,
-    ledgerId: createLedgerId(now),
+    ledgerId: createFiledReturnsLedgerId("full-fiscal-year", now),
     revision: 1,
     status: "running",
     scope: {
@@ -52,18 +68,22 @@ export function createFullFiscalYearLedger(
     updatedAt: timestamp,
     ...(eligibleThrough ? { eligibleThrough } : {}),
     lastReconciledAt: timestamp,
-    targets: periods.map((period) => ({
-      targetId: createTargetId(scope.financialYear, period, scope.returnType, artifactType),
-      financialYear: scope.financialYear,
-      period,
-      returnType: scope.returnType,
-      artifactType,
-      status: "pending",
-      attempts: 0,
-      safeSignals: [],
-      safeMessage: "Not checked yet.",
-      updatedAt: timestamp,
-    })),
+    targets: periods.map((period) => {
+      const targetScope = {
+        artifactType,
+        financialYear: scope.financialYear,
+        period,
+        returnType: scope.returnType,
+      };
+      return {
+        targetId: createTargetId(scope.financialYear, period, scope.returnType, artifactType),
+        ...targetScope,
+        status: "pending",
+        attempts: 0,
+        ...canonicalDurableTargetStatus(targetScope, "pending", []),
+        updatedAt: timestamp,
+      };
+    }),
   };
 }
 
@@ -72,48 +92,72 @@ export function reconcileFullFiscalYearLedgerTargets(
   now: Date,
   periods: readonly FiledReturnsMonth[],
 ): FiledReturnsFullFiscalYearLedger {
+  if (!isCanonicalFullFiscalYearPeriodPlan(ledger.scope.financialYear, periods)) return ledger;
+
+  const existingPeriods = existingCanonicalPlanPeriods(ledger);
+  if (!existingPeriods) return ledger;
+  const plannedPeriods = longerCompatiblePeriodPlan(existingPeriods, periods);
+  if (!plannedPeriods) return ledger;
+
   const timestamp = now.toISOString();
-  const eligibleThrough = periods.at(-1);
+  const eligibleThrough = plannedPeriods.at(-1);
+  if (!eligibleThrough) return ledger;
   const artifactType = normaliseFiledReturnsArtifactType(
     ledger.scope.returnType,
     ledger.scope.artifactType,
   );
-  const existingTargetIds = new Set(ledger.targets.map((target) => target.targetId));
-  const missingTargets = periods
-    .map((period) => ({
+  const missingTargets = plannedPeriods.slice(existingPeriods.length).map((period) => {
+    const targetScope = {
+      artifactType,
+      financialYear: ledger.scope.financialYear,
+      period,
+      returnType: ledger.scope.returnType,
+    };
+    return {
       targetId: createTargetId(
         ledger.scope.financialYear,
         period,
         ledger.scope.returnType,
         artifactType,
       ),
-      financialYear: ledger.scope.financialYear,
-      period,
-      returnType: ledger.scope.returnType,
-      artifactType,
+      ...targetScope,
       status: "pending" as const,
       attempts: 0,
-      safeSignals: [],
-      safeMessage: "Not checked yet.",
+      ...canonicalDurableTargetStatus(targetScope, "pending", []),
       updatedAt: timestamp,
-    }))
-    .filter((target) => !existingTargetIds.has(target.targetId));
+    };
+  });
   const targets = [...ledger.targets, ...missingTargets];
+  const metadataChanged =
+    ledger.planVersion !== FULL_FISCAL_YEAR_PLAN_VERSION ||
+    ledger.eligibleThrough !== eligibleThrough ||
+    ledger.connectorVersion !== GST_CONNECTOR_DESCRIPTOR.version ||
+    ledger.createdWithExtensionVersion === undefined;
+  const changed = metadataChanged || missingTargets.length > 0;
+  const hasActionRequiredTarget = ledger.targets.some(
+    (target) =>
+      target.status !== "pending" &&
+      target.status !== "running" &&
+      !POSITIVE_TARGET_STATUSES.has(target.status),
+  );
+  const hasRunningTarget = ledger.targets.some((target) => target.status === "running");
 
   const reconciledLedger: FiledReturnsFullFiscalYearLedger = {
     ...ledger,
-    revision: missingTargets.length > 0 ? nextRevision(ledger) : (ledger.revision ?? 1),
+    revision: changed ? nextRevision(ledger) : (ledger.revision ?? 1),
     planVersion: FULL_FISCAL_YEAR_PLAN_VERSION,
     connectorVersion: GST_CONNECTOR_DESCRIPTOR.version,
     createdWithExtensionVersion: ledger.createdWithExtensionVersion ?? PACK_PRODUCT_VERSION,
-    status: ledger.status === "complete" && missingTargets.length > 0 ? "running" : ledger.status,
-    updatedAt:
-      missingTargets.length > 0 && ledger.status !== "running" ? timestamp : ledger.updatedAt,
-    ...(eligibleThrough ? { eligibleThrough } : {}),
-    lastReconciledAt: timestamp,
+    status: missingTargets.length > 0 && !hasActionRequiredTarget ? "running" : ledger.status,
+    updatedAt: missingTargets.length > 0 && !hasRunningTarget ? timestamp : ledger.updatedAt,
+    eligibleThrough,
+    lastReconciledAt: changed ? timestamp : (ledger.lastReconciledAt ?? timestamp),
     targets,
   };
-  if (missingTargets.length > 0) delete reconciledLedger.zipPhase;
+  if (missingTargets.length > 0) {
+    delete reconciledLedger.zipPhase;
+    delete reconciledLedger.zipDownloadAttempt;
+  }
   return reconciledLedger;
 }
 
@@ -142,6 +186,7 @@ export function nextRunnableFullFiscalYearTarget(
 
 export function canCompleteFullFiscalYearLedger(ledger: FiledReturnsFullFiscalYearLedger): boolean {
   return (
+    hasCanonicalFullFiscalYearTargetPlan(ledger) &&
     ledger.targets.length > 0 &&
     ledger.targets.every((target) => POSITIVE_TARGET_STATUSES.has(target.status))
   );
@@ -169,22 +214,30 @@ export function markFullFiscalYearTargetRunning(
     updatedAt: timestamp,
     targets: ledger.targets.map((target) =>
       target.targetId === targetId
-        ? {
-            ...target,
-            status: "running",
-            attempts: target.attempts + 1,
-            safeSignals: [
-              ...durableFullFiscalYearArtifactSignals(target.safeSignals),
-              "full-fiscal-year-target-running",
-            ],
-            safeMessage: `Checking ${target.period}.`,
-            startedAt: target.startedAt ?? timestamp,
-            updatedAt: timestamp,
-          }
+        ? (() => {
+            const targetScope = {
+              financialYear: target.financialYear,
+              period: target.period,
+              returnType: target.returnType,
+              ...(target.artifactType ? { artifactType: target.artifactType } : {}),
+            };
+            return {
+              ...target,
+              status: "running",
+              attempts: target.attempts + 1,
+              ...canonicalDurableTargetStatus(targetScope, "running", [
+                ...durableFullFiscalYearArtifactSignals(target.safeSignals),
+                "full-fiscal-year-target-running",
+              ]),
+              startedAt: target.startedAt ?? timestamp,
+              updatedAt: timestamp,
+            };
+          })()
         : target,
     ),
   };
   delete runningLedger.zipPhase;
+  delete runningLedger.zipDownloadAttempt;
   return runningLedger;
 }
 
@@ -196,25 +249,60 @@ export function markFullFiscalYearTargetTerminal(
   now: Date,
 ): FiledReturnsFullFiscalYearLedger {
   const timestamp = now.toISOString();
-  const nextTargets = ledger.targets.map((target) =>
-    target.targetId === targetId
-      ? {
-          ...target,
-          status,
-          safeSignals: flowStep.safeSignals,
-          safeMessage: flowStep.safeMessage,
-          ...(flowStep.downloadDiagnostic
-            ? { downloadDiagnostic: flowStep.downloadDiagnostic }
-            : {}),
-          ...(POSITIVE_TARGET_STATUSES.has(status) ? { completedAt: timestamp } : {}),
-          updatedAt: timestamp,
-        }
-      : target,
-  );
+  const currentTarget = ledger.targets.find((target) => target.targetId === targetId);
+  const diagnosticState = currentTarget
+    ? mergeFiledReturnsDownloadDiagnosticState(currentTarget, flowStep, {
+        artifactType: currentTarget.artifactType,
+        financialYear: currentTarget.financialYear,
+        period: currentTarget.period,
+        returnType: currentTarget.returnType,
+      })
+    : null;
+  const diagnosticsRejected = Boolean(currentTarget && !diagnosticState);
+  const inputSignals = diagnosticsRejected
+    ? Array.from(new Set([...flowStep.safeSignals, "filed-return-download-diagnostics-rejected"]))
+    : flowStep.safeSignals;
+  const durableStatus = currentTarget
+    ? canonicalDurableTargetStatus(
+        {
+          financialYear: currentTarget.financialYear,
+          period: currentTarget.period,
+          returnType: currentTarget.returnType,
+          ...(currentTarget.artifactType ? { artifactType: currentTarget.artifactType } : {}),
+        },
+        status,
+        inputSignals,
+      )
+    : null;
+  const durableStatusRejected =
+    durableStatus?.safeSignals.includes("filed-return-durable-status-rejected") ?? false;
+  const effectiveStatus: FiledReturnsFullFiscalYearTargetStatus =
+    diagnosticsRejected || durableStatusRejected ? "blocked" : status;
+  const nextTargets = ledger.targets.map((target) => {
+    if (target.targetId !== targetId) return target;
+    return {
+      ...target,
+      status: effectiveStatus,
+      ...(durableStatus ??
+        canonicalDurableTargetStatus(
+          {
+            financialYear: target.financialYear,
+            period: target.period,
+            returnType: target.returnType,
+            ...(target.artifactType ? { artifactType: target.artifactType } : {}),
+          },
+          "blocked",
+          ["filed-return-durable-status-rejected"],
+        )),
+      ...(diagnosticState ?? {}),
+      ...(POSITIVE_TARGET_STATUSES.has(effectiveStatus) ? { completedAt: timestamp } : {}),
+      updatedAt: timestamp,
+    };
+  });
   return {
     ...ledger,
     revision: nextRevision(ledger),
-    status: ledgerStatus(nextTargets, status),
+    status: ledgerStatus(nextTargets, effectiveStatus),
     currentTargetId: targetId,
     updatedAt: timestamp,
     targets: nextTargets,
@@ -225,14 +313,17 @@ export function completeFullFiscalYearLedger(
   ledger: FiledReturnsFullFiscalYearLedger,
   now: Date,
 ): FiledReturnsFullFiscalYearLedger {
+  if (!canCompleteFullFiscalYearLedger(ledger)) return ledger;
   const ledgerWithoutCurrentTarget = withoutCurrentTarget(ledger);
-  return {
+  const completedLedger: FiledReturnsFullFiscalYearLedger = {
     ...ledgerWithoutCurrentTarget,
     revision: nextRevision(ledger),
     status: "complete",
     updatedAt: now.toISOString(),
     zipPhase: "cleaned",
   };
+  delete completedLedger.zipDownloadAttempt;
+  return completedLedger;
 }
 
 export function sameFiledReturnsScope(
@@ -279,12 +370,6 @@ function ledgerStatus(
   return "blocked";
 }
 
-function createLedgerId(now: Date): string {
-  const randomId = globalThis.crypto?.randomUUID?.();
-  if (randomId) return randomId;
-  return `full-fiscal-year-${now.getTime().toString(36)}`;
-}
-
 export function createFullFiscalYearTargetId(
   financialYear: string,
   period: string,
@@ -303,4 +388,26 @@ function createTargetId(
   artifactType?: FiledReturnsArtifactType,
 ): string {
   return createFullFiscalYearTargetId(financialYear, period, returnType, artifactType);
+}
+
+function existingCanonicalPlanPeriods(
+  ledger: FiledReturnsFullFiscalYearLedger,
+): FiledReturnsMonth[] | null {
+  if (hasCanonicalFullFiscalYearTargetPlan(ledger)) {
+    return canonicalFullFiscalYearPlanPeriods(ledger.scope.financialYear, ledger.eligibleThrough);
+  }
+  return hasLegacyCanonicalFullFiscalYearTargetPrefix(ledger)
+    ? ledger.targets.map((target) => target.period as FiledReturnsMonth)
+    : null;
+}
+
+function longerCompatiblePeriodPlan(
+  existingPeriods: readonly FiledReturnsMonth[],
+  currentPeriods: readonly FiledReturnsMonth[],
+): readonly FiledReturnsMonth[] | null {
+  const prefixLength = Math.min(existingPeriods.length, currentPeriods.length);
+  for (let index = 0; index < prefixLength; index += 1) {
+    if (existingPeriods[index] !== currentPeriods[index]) return null;
+  }
+  return existingPeriods.length >= currentPeriods.length ? existingPeriods : currentPeriods;
 }

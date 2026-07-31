@@ -1,11 +1,8 @@
-import type { FiledReturnsConcreteArtifactType } from "../../core/filed-returns-artifacts";
-import type { FiledReturnsReturnType } from "../../core/filed-returns-return-types";
+import type { FiledReturnsConcreteArtifactType } from "./filed-returns-artifacts";
+import type { FiledReturnsReturnType } from "./filed-returns-return-types";
 import type { NavigationCandidateInput } from "./filed-returns-navigation-candidates";
 import { filedReturnDescriptor } from "./filed-returns-return-descriptors";
-
-const CLICKABLE_SELECTOR = ["a", "button", "[role='button']", "[ng-click]", "[data-ng-click]"].join(
-  ",",
-);
+import { getClickableElements, isPlainFormActionInput, isVisible } from "./filed-returns-dom";
 
 interface CandidateScore {
   score: number;
@@ -54,10 +51,6 @@ export function scoreFiledReturnDownloadCandidate(
   if (hasSecondaryPdfDownload) {
     score += 120;
     safeSignals.push(`text-download-pdf-${descriptor.signalSlug}`);
-  }
-  if (returnType === "GSTR-2B" && /\bsummary\b/.test(searchable) && /\bpdf\b/.test(searchable)) {
-    score += 120;
-    safeSignals.push("text-summary-pdf-gstr2b");
   }
   if (/\bdownload\b/.test(searchable) && /\bfiled\b/.test(searchable)) {
     score += 50;
@@ -110,10 +103,6 @@ function scoreFiledReturnExcelDownloadCandidate(
   if (/\bdownload\b/.test(searchable) && /\be-?invoices?\b/.test(searchable)) {
     score += 80;
     safeSignals.push(`text-download-einvoice-${descriptor.signalSlug}`);
-  }
-  if (returnType === "GSTR-2B" && /\bdetails?\b/.test(searchable) && /\bexcel\b/.test(searchable)) {
-    score += 180;
-    safeSignals.push("text-details-excel-gstr2b");
   }
 
   if (descriptor.explicitDownloadPattern.test(searchable) || /\bpdf\b/.test(searchable)) {
@@ -214,7 +203,8 @@ export function resolveVisibleFiledReturnDownloadCandidates(
   artifactType: FiledReturnsConcreteArtifactType = "PDF",
 ): FiledReturnDownloadCandidate[] {
   return getClickableElements(documentRef)
-    .filter((element) => !isDisabled(element) && isVisible(element))
+    .filter((element) => !isDisabled(element) && isVisible(element, { requireRenderedBox: true }))
+    .filter((element) => !isPlainFormActionInput(element))
     .map((element) => ({
       candidate: toNavigationCandidateInput(element),
       element,
@@ -225,12 +215,6 @@ export function resolveVisibleFiledReturnDownloadCandidates(
       score: scoreFiledReturnDownloadCandidate(candidate, returnType, artifactType),
     }))
     .filter((candidate) => candidate.score.score >= 120);
-}
-
-function getClickableElements(root: ParentNode): HTMLElement[] {
-  return Array.from(root.querySelectorAll(CLICKABLE_SELECTOR)).filter((element) =>
-    isHtmlElement(root, element),
-  );
 }
 
 function toNavigationCandidateInput(element: HTMLElement): NavigationCandidateInput {
@@ -258,21 +242,6 @@ function isDisabled(element: HTMLElement): boolean {
     element.getAttribute("aria-disabled") === "true" ||
     element.classList.contains("disabled")
   );
-}
-
-function isVisible(element: HTMLElement): boolean {
-  if (element.hidden) return false;
-  const style = element.ownerDocument.defaultView?.getComputedStyle(element);
-  if (style?.display === "none" || style?.visibility === "hidden") return false;
-  const rect = element.getBoundingClientRect?.();
-  return !rect || rect.width > 0 || rect.height > 0;
-}
-
-function isHtmlElement(root: ParentNode, element: Element): element is HTMLElement {
-  const documentRef = root.nodeType === 9 ? (root as Document) : root.ownerDocument;
-  if (!documentRef) return false;
-  const HTMLElementConstructor = documentRef.defaultView?.HTMLElement;
-  return HTMLElementConstructor ? element instanceof HTMLElementConstructor : false;
 }
 
 function normaliseCandidateText(values: readonly (string | undefined)[]): string {

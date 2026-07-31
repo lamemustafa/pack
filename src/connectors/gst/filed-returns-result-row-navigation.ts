@@ -1,9 +1,5 @@
-import type {
-  FiledReturnsDownloadScope,
-  FiledReturnsTargetBoundViewPoint,
-  PortalFlowStepResult,
-} from "../../core/contracts";
-import { activateElement, delay } from "./filed-returns-dom";
+import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "./filed-returns-contracts";
+import { activateElement } from "./filed-returns-dom";
 import { filedReturnsFilterSelectionMatchesScope } from "./filed-returns-filter-form";
 import {
   findMatchingActionableFiledReturnRows,
@@ -14,7 +10,6 @@ import { filedReturnDescriptor, filedReturnScopeId } from "./filed-returns-retur
 import {
   consumeSettledFiledReturnsSearchForScope,
   gstr1ViewActivationStateForScope,
-  hasSettledFiledReturnsSearchForScope,
   markGstr1ViewActivationAttempted,
 } from "./filed-returns-search-state";
 
@@ -23,10 +18,6 @@ interface ResolvedFiledReturnResultCandidates {
   filterBoundResults: ReturnType<typeof findMatchingFilterBoundGstr1Results>;
   matchingRows: ReturnType<typeof findMatchingFiledReturnRows>;
 }
-
-export type Gstr1ViewPointResolution =
-  | { ok: true; point: FiledReturnsTargetBoundViewPoint }
-  | { ok: false; flowStep: PortalFlowStepResult };
 
 export function openFiledReturnResultRow(
   documentRef: Document,
@@ -134,69 +125,6 @@ export function openFiledReturnResultRow(
     safeSignals: ["filed-return-result-row-not-found"],
     safeMessage: `Pack could not find a filed ${descriptor.label} result row for the selected period. Check the portal results and start Pack again.`,
   };
-}
-
-export async function resolveGstr1FiledReturnViewPoint(
-  documentRef: Document,
-  scope: FiledReturnsDownloadScope,
-): Promise<Gstr1ViewPointResolution> {
-  const searchSettled = hasSettledFiledReturnsSearchForScope(documentRef, scope);
-  const { actionableRows, filterBoundResults, matchingRows } = resolveResultCandidates(
-    documentRef,
-    scope,
-    searchSettled,
-  );
-  const actionableResult = actionableRows[0] ?? filterBoundResults[0];
-  if (
-    scope.returnType !== "GSTR-1" ||
-    matchingRows.length + filterBoundResults.length !== 1 ||
-    !actionableResult
-  ) {
-    return {
-      ok: false,
-      flowStep: openFiledReturnResultRow(documentRef, scope, searchSettled),
-    };
-  }
-  const fallback = gstr1ViewUserActionRequired(
-    scope,
-    filedReturnScopeId("GSTR-1"),
-    actionableResult,
-    actionableResult.filterBound,
-    false,
-  );
-  const view = actionableResult.view;
-
-  view.scrollIntoView?.({ block: "center", inline: "center" });
-  await delay(50);
-  const rect = view.getBoundingClientRect();
-  const x = rect.left + rect.width / 2;
-  const y = rect.top + rect.height / 2;
-  const windowRef = documentRef.defaultView;
-  const hitTarget = documentRef.elementFromPoint?.(x, y) ?? null;
-  if (
-    !windowRef ||
-    !Number.isFinite(x) ||
-    !Number.isFinite(y) ||
-    rect.width <= 0 ||
-    rect.height <= 0 ||
-    x < 0 ||
-    y < 0 ||
-    x >= windowRef.innerWidth ||
-    y >= windowRef.innerHeight ||
-    (hitTarget !== view && !view.contains(hitTarget))
-  ) {
-    return {
-      ok: false,
-      flowStep: {
-        ...fallback,
-        safeSignals: [...fallback.safeSignals, "filed-gstr1-result-view-point-unavailable"],
-        safeMessage:
-          "Pack verified the filed GSTR-1 result, but its exact View control is not safely clickable yet. Keep the result visible and retry this period.",
-      },
-    };
-  }
-
-  return { ok: true, point: { x, y } };
 }
 
 function gstr1ViewUserActionRequired(

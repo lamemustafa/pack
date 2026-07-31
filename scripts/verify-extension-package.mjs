@@ -48,14 +48,7 @@ const expectedPackagedBrandAssets = [
   "brand/pack-logo-reversed.svg",
   "brand/pack-logo-reversed-outlined.svg",
 ];
-const allowLocalGstr1Debugger = process.env.PACK_ALLOW_LOCAL_GSTR1_DEBUGGER === "1";
-const expectedPermissions = [
-  "downloads",
-  "offscreen",
-  "scripting",
-  "storage",
-  ...(allowLocalGstr1Debugger ? ["debugger"] : []),
-];
+const expectedPermissions = ["downloads", "offscreen", "scripting", "storage"];
 const expectedHostPermissions = [
   "https://www.gst.gov.in/*",
   "https://services.gst.gov.in/*",
@@ -115,10 +108,7 @@ for (const permission of expectedPermissions) {
 for (const permission of manifest.permissions ?? []) {
   if (!expectedPermissions.includes(permission))
     throw new Error(`Unexpected permission present: ${permission}`);
-  if (
-    forbiddenPermissions.has(permission) &&
-    !(allowLocalGstr1Debugger && permission === "debugger")
-  )
+  if (forbiddenPermissions.has(permission))
     throw new Error(`Forbidden permission present: ${permission}`);
 }
 
@@ -404,8 +394,8 @@ function stableJson(value) {
 
 function validatePolicyPatternSamples(patterns) {
   const samples = new Map([
-    ["gstin", ["27ABCDE1234F1Z5"]],
-    ["pan", ["ABCDE1234F"]],
+    ["gstin", ["00XXXXX0000X0Z0"]],
+    ["pan", ["XXXXX0000X"]],
     ["openai-secret", ["sk-proj-example_secret"]],
     ["cookie-header", ["cookie: SID=secret-value", "authorization: Bearer value"]],
     [

@@ -1,4 +1,5 @@
-import type { FiledReturnsFlowSummary, PortalContext } from "../../core/contracts";
+import type { PortalContext } from "../../core/contracts";
+import type { FiledReturnsFlowSummary } from "../../connectors/gst/filed-returns-contracts";
 import { canRetryFullFiscalYearZipWithoutPortal } from "./flow-summary";
 
 export type PopupPresentationKind =
@@ -26,6 +27,7 @@ export function getPopupPresentationState(
   context: PortalContext | null,
   summary: FiledReturnsFlowSummary | null,
   busy: string | null,
+  actionError: string | null = null,
 ): PopupPresentationState {
   if (busy === "start-filed-returns-flow" || summary?.status === "running") {
     return {
@@ -35,6 +37,17 @@ export function getPopupPresentationState(
       kind: "downloading",
       title: "Packing your files",
       tone: "ready",
+    };
+  }
+
+  if (actionError) {
+    return {
+      badge: "Action failed",
+      body: actionError,
+      icon: "!",
+      kind: "error",
+      title: "Pack could not finish that action",
+      tone: "danger",
     };
   }
 
@@ -49,8 +62,12 @@ export function getPopupPresentationState(
     };
   }
 
-  // A stale run summary must not mask the active tab's portal state.
-  if (context && !context.supported) {
+  // A terminal response from the current Start action must remain visible even
+  // when the portal page itself is not a Pack-supported page.
+  const hasTerminalSummary = Boolean(
+    summary && ["complete", "partial", "blocked", "cancelled"].includes(summary.status),
+  );
+  if (context && !context.supported && !hasTerminalSummary) {
     return getUnsupportedContextState(context);
   }
 
@@ -81,7 +98,7 @@ export function getPopupPresentationState(
   if (summary?.status === "partial") {
     return {
       badge: "Partly complete",
-      body: "Some selected files were saved. Check the affected period before continuing.",
+      body: summary.flowStep.safeMessage,
       icon: "!",
       kind: "partial",
       title: "Download partly complete",

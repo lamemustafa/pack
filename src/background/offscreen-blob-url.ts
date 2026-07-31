@@ -2,15 +2,29 @@ import { browser } from "wxt/browser";
 import {
   PACK_OFFSCREEN_BLOB_URL_TARGET,
   type PackOffscreenBlobUrlResponse,
-} from "../core/offscreen-blob-url";
-import type { FiledReturnsConcreteArtifactType } from "../core/filed-returns-artifacts";
-import type { FiledReturnsReturnType } from "../core/filed-returns-return-types";
+  type PackOffscreenFiledReturnZipExpectedEntry,
+} from "../connectors/gst/offscreen-blob-url";
+import type { FiledReturnsConcreteArtifactType } from "../connectors/gst/filed-returns-artifacts";
+import type { FiledReturnsReturnType } from "../connectors/gst/filed-returns-return-types";
 
 const OFFSCREEN_DOCUMENT_PATH = "offscreen.html";
 const OFFSCREEN_JUSTIFICATION =
   "Create and revoke a temporary Blob URL for an explicit local GST return download.";
 export type OffscreenFiledReturnStageResult =
   { status: "staged" } | { status: "failed"; errorCategory?: string };
+export type OffscreenFiledReturnZipResult =
+  | { status: "created"; blobUrl: string; zipEntryCount: number }
+  | { status: "failed"; errorCategory?: string };
+export type OffscreenFiledReturnClearResult =
+  | { status: "cleared" }
+  | {
+      status: "failed";
+      errorCategory?:
+        | "clear-failed"
+        | "offscreen-response-invalid"
+        | "offscreen-unreachable"
+        | "opfs-unavailable";
+    };
 
 let creatingOffscreenDocument: Promise<void> | null = null;
 
@@ -60,11 +74,12 @@ export async function stageOffscreenFiledReturn({
 
 export async function createOffscreenFiledReturnZipUrl(
   ledgerId: string,
-  expected?: {
+  expected: {
     returnType: FiledReturnsReturnType;
-    artifactTypes: FiledReturnsConcreteArtifactType[];
+    entryCount: number;
+    entries: readonly PackOffscreenFiledReturnZipExpectedEntry[];
   },
-): Promise<{ blobUrl: string; zipEntryCount: number } | null> {
+): Promise<OffscreenFiledReturnZipResult> {
   const requestId = createRequestId();
   await ensureOffscreenDocument();
   const response = await browser.runtime.sendMessage({
@@ -73,22 +88,17 @@ export async function createOffscreenFiledReturnZipUrl(
     payload: {
       requestId,
       ledgerId,
-      ...(expected
-        ? {
-            expectedReturnType: expected.returnType,
-            expectedArtifactTypes: expected.artifactTypes,
-          }
-        : {}),
+      expectedReturnType: expected.returnType,
+      expectedEntryCount: expected.entryCount,
+      expectedEntries: [...expected.entries],
     },
   });
-  return isZipResponse(response, requestId)
-    ? { blobUrl: response.blobUrl, zipEntryCount: response.zipEntryCount }
-    : null;
+  return toZipResult(response, requestId);
 }
 
 export async function clearOffscreenFiledReturnLedger(
   ledgerId: string,
-): Promise<"cleared" | "failed"> {
+): Promise<OffscreenFiledReturnClearResult> {
   const requestId = createRequestId();
   try {
     await ensureOffscreenDocument();
@@ -100,13 +110,13 @@ export async function clearOffscreenFiledReturnLedger(
         ledgerId,
       },
     });
-    return isClearedResponse(response, requestId) ? "cleared" : "failed";
+    return toClearResult(response, requestId);
   } catch {
-    return "failed";
+    return { status: "failed", errorCategory: "offscreen-unreachable" };
   }
 }
 
-export async function clearAllOffscreenFiledReturnLedgers(): Promise<"cleared" | "failed"> {
+export async function clearAllOffscreenFiledReturnLedgers(): Promise<OffscreenFiledReturnClearResult> {
   const requestId = createRequestId();
   try {
     await ensureOffscreenDocument();
@@ -115,9 +125,9 @@ export async function clearAllOffscreenFiledReturnLedgers(): Promise<"cleared" |
       target: PACK_OFFSCREEN_BLOB_URL_TARGET,
       payload: { requestId },
     });
-    return isClearedResponse(response, requestId) ? "cleared" : "failed";
+    return toClearResult(response, requestId);
   } catch {
-    return "failed";
+    return { status: "failed", errorCategory: "offscreen-unreachable" };
   }
 }
 
@@ -252,6 +262,27 @@ function isZipResponse(
   );
 }
 
+function toZipResult(response: unknown, requestId: string): OffscreenFiledReturnZipResult {
+  if (isZipResponse(response, requestId)) {
+    return {
+      status: "created",
+      blobUrl: response.blobUrl,
+      zipEntryCount: response.zipEntryCount,
+    };
+  }
+  if (typeof response === "object" && response !== null) {
+    const record = response as Record<string, unknown>;
+    if (
+      record.ok === false &&
+      record.requestId === requestId &&
+      typeof record.errorCategory === "string"
+    ) {
+      return { status: "failed", errorCategory: record.errorCategory };
+    }
+  }
+  return { status: "failed" };
+}
+
 function isClearedResponse(
   response: unknown,
   requestId: string,
@@ -259,6 +290,21 @@ function isClearedResponse(
   if (typeof response !== "object" || response === null) return false;
   const record = response as Record<string, unknown>;
   return record.ok === true && record.requestId === requestId && record.cleared === true;
+}
+
+function toClearResult(response: unknown, requestId: string): OffscreenFiledReturnClearResult {
+  if (isClearedResponse(response, requestId)) return { status: "cleared" };
+  if (typeof response === "object" && response !== null) {
+    const record = response as Record<string, unknown>;
+    if (
+      record.ok === false &&
+      record.requestId === requestId &&
+      (record.errorCategory === "clear-failed" || record.errorCategory === "opfs-unavailable")
+    ) {
+      return { status: "failed", errorCategory: record.errorCategory };
+    }
+  }
+  return { status: "failed", errorCategory: "offscreen-response-invalid" };
 }
 
 function createRequestId(): string {

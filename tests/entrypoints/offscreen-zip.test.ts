@@ -24,6 +24,11 @@ describe("offscreen ZIP writer", () => {
     expect(entries.get("may.xlsx")).toEqual(workbookBytes);
     expect(findEndOfCentralDirectory(zipBytes).entryCount).toBe(2);
     expect(readFirstLocalHeaderDate(zipBytes)).toBeGreaterThan(0);
+    expect(readFirstLocalHeader(zipBytes)).toMatchObject({
+      compressionMethod: 0,
+      crc: crc32(pdfBytes),
+      utf8: true,
+    });
   });
 
   it("preserves simple entry paths without embedding the browser download path", () => {
@@ -37,12 +42,34 @@ describe("offscreen ZIP writer", () => {
     expect([...entries.keys()]).toEqual(["april.pdf", "april.xlsx"]);
     expect([...entries.keys()].some((path) => path.includes("/"))).toBe(false);
   });
+
+  it("rejects absolute and traversal ZIP entry paths", () => {
+    expect(() => createZip([{ path: "/may.pdf", bytes: new Uint8Array([1]) }])).toThrow(
+      "Invalid ZIP entry path.",
+    );
+    expect(() => createZip([{ path: "../may.pdf", bytes: new Uint8Array([1]) }])).toThrow(
+      "Invalid ZIP entry path.",
+    );
+  });
 });
 
 function readFirstLocalHeaderDate(zipBytes: Uint8Array): number {
   const view = new DataView(zipBytes.buffer, zipBytes.byteOffset, zipBytes.byteLength);
   expect(view.getUint32(0, true)).toBe(0x04034b50);
   return view.getUint16(12, true);
+}
+
+function readFirstLocalHeader(zipBytes: Uint8Array): {
+  compressionMethod: number;
+  crc: number;
+  utf8: boolean;
+} {
+  const view = new DataView(zipBytes.buffer, zipBytes.byteOffset, zipBytes.byteLength);
+  return {
+    compressionMethod: view.getUint16(8, true),
+    crc: view.getUint32(14, true),
+    utf8: (view.getUint16(6, true) & 0x0800) !== 0,
+  };
 }
 
 function extractStoredZipEntries(zipBytes: Uint8Array): Map<string, Uint8Array> {
@@ -80,4 +107,15 @@ function findEndOfCentralDirectory(zipBytes: Uint8Array): { entryCount: number }
     return { entryCount: view.getUint16(offset + 10, true) };
   }
   throw new Error("Missing ZIP end of central directory.");
+}
+
+function crc32(bytes: Uint8Array): number {
+  let crc = 0xffffffff;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let index = 0; index < 8; index += 1) {
+      crc = crc & 1 ? 0xedb88320 ^ (crc >>> 1) : crc >>> 1;
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
 }

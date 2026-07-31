@@ -9,8 +9,8 @@ working inside `src/`.
 ```
 src/
   entrypoints/   background.ts, content.ts, options/, popup/  (WXT entrypoints)
-  core/          portal-neutral contracts, manifest, redaction, naming, csv
-  connectors/gst/ everything GST-portal-specific (DOM, hosts, flow, download)
+  core/          portal-neutral contracts, manifest, naming, csv
+  connectors/gst/ GST-specific types, protocol, DOM, hosts, flow, download
   background/    service-worker-side logic used by entrypoints/background.ts
   extension/     manifest-policy.ts (permissions/CSP source of truth), version.ts
   styles/        global.css
@@ -18,27 +18,28 @@ src/
 
 ## core vs connectors/gst boundary
 
-`src/core` must stay portal-neutral: contracts (`contracts.ts`), manifest
-building (`manifest.ts`), redaction (`redaction.ts`), naming, CSV, filed-returns
-_shape_ types (`filed-returns-artifacts.ts`, `filed-returns-return-types.ts`,
-`filed-returns-scope.ts`). Nothing in `core` may import from
-`connectors/gst` or know about GST DOM structure, GST hosts, or GST-specific
-copy. This is what lets a second connector be added later without touching
-`core`.
+`src/core` must stay portal-neutral: generic contracts (`contracts.ts`),
+manifest building (`manifest.ts`), naming, and CSV. Nothing in `core` may import
+from `connectors/gst` or know about GST return types, periods, artifact shapes,
+DOM structure, hosts, messages, or copy. This keeps a second connector from
+inheriting GST assumptions.
 
 `src/connectors/gst` holds everything that only makes sense for the GST
-portal: host allowlisting (`hosts.ts`), DOM scraping/observation
+portal: filed-return contracts and validators (`filed-returns-contracts.ts`,
+`filed-returns-{artifacts,return-types,scope}.ts`, `messages.ts`,
+`offscreen-blob-url.ts`), artifact-byte validation
+(`filed-return-artifact-bytes.ts`), host allowlisting (`hosts.ts`), DOM scraping/observation
 (`filed-returns-dom.ts`, `filed-returns-observer.ts`), portal navigation and
-download triggering (`filed-returns-navigator.ts`,
-`filed-returns-download.ts`, `filed-returns-direct-download*.ts`), filter/
+download validation (`filed-returns-navigator.ts`,
+`filed-returns-download-{candidates,target}.ts`), filter/
 search state (`filed-returns-filter-*.ts`, `filed-returns-search-state.ts`),
 and the flow/planner glue (`filed-returns-flow.ts`, `planner.ts`). If you're
 touching selectors, GST URL shapes, or portal copy, it belongs here — not in
 `core`, not in `background/`.
 
 `src/background` is the service-worker-side orchestration layer that calls
-into `connectors/gst` (via message passing to the content script) and
-`core` (contracts, manifest). It owns ledger/state persistence
+into `connectors/gst` (via message passing to the content script) and uses
+`core` only for portal-neutral contracts and manifest generation. It owns ledger/state persistence
 (`filed-returns-full-fiscal-year-ledger.ts`, `-recovery.ts`, `-validation.ts`,
 `-summary.ts`), the active-run guard (`filed-returns-active-run.ts`), and
 download correlation/observation (`download-correlation.ts`,
@@ -51,7 +52,7 @@ adding a new one — check the anti-bloat checklist in root `AGENTS.md` first.
 
 - `entrypoints/background.ts` — the MV3 service worker. Single
   `browser.runtime.onMessage` switch (`PackMessage` union from
-  `core/messages.ts`) dispatching to `background/*` functions. Owns the
+  `connectors/gst/messages.ts`) dispatching to `background/*` functions. Owns the
   storage-key constants (`PACK_LOCAL_STORAGE_KEYS`,
   `PACK_SESSION_STORAGE_KEYS`) and content-script injection/ping logic
   (`ensureContentScript`, `pingContentScript`). Local storage is restricted to
@@ -65,7 +66,8 @@ adding a new one — check the anti-bloat checklist in root `AGENTS.md` first.
 - `entrypoints/options/` and `entrypoints/popup/` — React UI (`main.tsx` +
   `index.html`, popup also has `components.tsx` and `flow-summary.ts`). These
   talk to the background worker only via `browser.runtime.sendMessage` with
-  `PackMessage`s, never by importing `connectors/gst` directly.
+  `PackMessage`s. They may import connector-owned message, scope, and
+  presentation types, but never portal DOM or navigation implementations.
 
 ## Manifest policy is the single source of truth
 
@@ -100,11 +102,12 @@ to get subtly wrong:
 
 - A download must always be traceable to an explicit target (fiscal year,
   period, return type, action/run id) — see `DownloadTarget` /
-  `FiledReturnsDownloadTarget` in `core/contracts.ts`. A generic "click the
+  `FiledReturnsDownloadTarget` in
+  `connectors/gst/filed-returns-contracts.ts`. A generic "click the
   visible download button" is never sufficient evidence on its own.
-- A click is never completion. `background/download-observer.ts` correlates
-  `chrome.downloads.onCreated`/`onChanged` events against the expected target
-  (`download-correlation.ts`) before calling anything `"completed"`. Unknown
+- A click is never completion. `background/download-observer.ts` observes the
+  exact `downloadId` through `chrome.downloads.search` and `onChanged` before
+  calling anything `"completed"`. Unknown
   fileSize/zero-byte/interrupted/ambiguous downloads must resolve to
   `"failed"` or `"not-observed"`, which callers turn into `blocked` /
   `download-unconfirmed` states — never silently into `"downloaded"`.

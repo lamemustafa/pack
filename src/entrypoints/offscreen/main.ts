@@ -1,11 +1,16 @@
 import { browser } from "wxt/browser";
+import type {
+  PackOffscreenBlobUrlMessage,
+  PackOffscreenBlobUrlResponse,
+} from "../../connectors/gst/offscreen-blob-url";
 import {
+  isCanonicalFiledReturnZipEntryName,
+  isCanonicalFiledReturnsLedgerId,
   isPackOffscreenBlobUrlMessage,
-  type PackOffscreenBlobUrlMessage,
-  type PackOffscreenBlobUrlResponse,
-} from "../../core/offscreen-blob-url";
-import type { FiledReturnsConcreteArtifactType } from "../../core/filed-returns-artifacts";
-import type { FiledReturnsReturnType } from "../../core/filed-returns-return-types";
+} from "../../connectors/gst/filed-returns-offscreen-validation";
+import type { FiledReturnsConcreteArtifactType } from "../../connectors/gst/filed-returns-artifacts";
+import type { FiledReturnsReturnType } from "../../connectors/gst/filed-returns-return-types";
+import { FILED_RETURNS_MONTHS } from "../../connectors/gst/filed-returns-scope";
 import { createZip, type ZipEntry } from "./zip";
 import {
   dataUrlChunksToDecoded,
@@ -15,6 +20,10 @@ import {
 } from "./filed-return-data-url";
 
 const blobUrlsByRequest = new Map<string, string>();
+const MAX_ZIP_INPUT_BYTES = 100 * 1024 * 1024;
+const FILED_RETURN_PERIOD_ORDER = new Map(
+  FILED_RETURNS_MONTHS.map((period, index) => [period.toLowerCase(), index]),
+);
 type StagedFiledReturnPayload = {
   artifactType: FiledReturnsConcreteArtifactType;
   ledgerId: string;
@@ -23,8 +32,8 @@ type StagedFiledReturnPayload = {
   zipPath: string;
 };
 
-browser.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
-  if (!isPackOffscreenBlobUrlMessage(message)) return false;
+browser.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
+  if (!isTrustedOffscreenSender(sender) || !isPackOffscreenBlobUrlMessage(message)) return false;
 
   void handleMessage(message)
     .then((response) => sendResponse(response))
@@ -47,6 +56,13 @@ async function handleMessage(
   if (message.type === "PACK_OFFSCREEN_CREATE_FILED_RETURN_ZIP") {
     try {
       const directory = await getLedgerDirectory(message.payload.ledgerId, false);
+      if ((await stagedZipInputByteLength(directory)) > MAX_ZIP_INPUT_BYTES) {
+        return {
+          ok: false,
+          requestId: message.payload.requestId,
+          errorCategory: "zip-too-large",
+        };
+      }
       const entries = await readZipEntries(directory);
       if (entries.length === 0) {
         return {
@@ -56,13 +72,11 @@ async function handleMessage(
         };
       }
       const expectedReturnType = message.payload.expectedReturnType;
-      const expectedArtifactTypes = message.payload.expectedArtifactTypes;
+      const expectedEntryCount = message.payload.expectedEntryCount;
+      const expectedEntries = message.payload.expectedEntries;
       if (
-        expectedReturnType &&
-        expectedArtifactTypes &&
-        !entries.every((entry) =>
-          isExpectedZipEntry(entry, expectedArtifactTypes, expectedReturnType),
-        )
+        entries.length !== expectedEntryCount ||
+        !matchesExpectedZipEntryPlan(entries, expectedEntries, expectedReturnType)
       ) {
         return {
           ok: false,
@@ -165,7 +179,7 @@ async function getLedgerDirectory(
 ): Promise<FileSystemDirectoryHandle> {
   const root = await navigator.storage.getDirectory();
   const packs = await root.getDirectoryHandle("filed-return-packs", { create });
-  return packs.getDirectoryHandle(safeDirectorySegment(ledgerId), { create });
+  return packs.getDirectoryHandle(canonicalLedgerDirectoryName(ledgerId), { create });
 }
 
 async function stageFiledReturnDataUrl(
@@ -215,7 +229,7 @@ async function clearLedgerDirectory(ledgerId: string): Promise<void> {
   try {
     const root = await navigator.storage.getDirectory();
     const packs = await root.getDirectoryHandle("filed-return-packs", { create: false });
-    await packs.removeEntry(safeDirectorySegment(ledgerId), { recursive: true });
+    await packs.removeEntry(canonicalLedgerDirectoryName(ledgerId), { recursive: true });
   } catch (error) {
     if (isNotFoundError(error)) return;
     throw error;
@@ -243,33 +257,63 @@ async function getLedgerFileHandle(
   zipPath: string,
   create: boolean,
 ): Promise<FileSystemFileHandle> {
-  return directory.getFileHandle(safeZipEntryFilename(zipPath), { create });
+  if (!isCanonicalFiledReturnZipEntryName(zipPath)) throw new Error("Invalid ZIP entry name.");
+  return directory.getFileHandle(zipPath, { create });
 }
 
-function safeZipEntryFilename(zipPath: string): string {
-  const fileName = zipPath.split("/").at(-1);
-  if (!fileName) throw new Error("Missing filename.");
-  return fileName;
-}
-
-function isExpectedZipEntry(
-  entry: ZipEntry,
-  expectedArtifactTypes: readonly FiledReturnsConcreteArtifactType[],
+function matchesExpectedZipEntryPlan(
+  entries: readonly ZipEntry[],
+  expectedEntries: readonly {
+    artifactType: FiledReturnsConcreteArtifactType;
+    entryNames: readonly string[];
+  }[],
   expectedReturnType: FiledReturnsReturnType,
 ): boolean {
-  const artifactType = artifactTypeFromZipPath(entry.path);
-  return (
-    artifactType !== null &&
-    expectedArtifactTypes.includes(artifactType) &&
-    isExpectedFiledReturnBytesForReturnType(entry.bytes, artifactType, expectedReturnType)
-  );
+  if (entries.length !== expectedEntries.length) return false;
+  // Staged entries are read back in canonical ZIP order, which is independent of the caller's
+  // artifact-acquisition order. Bind each entry to exactly one unconsumed plan slot so a correct
+  // artifact set is never rejected for slot ordering alone, while an extra, missing, duplicate, or
+  // type-swapped file still leaves a slot unmatched.
+  const unmatchedSlots = new Set(expectedEntries.keys());
+  for (const entry of entries) {
+    const slotIndex = [...unmatchedSlots].find((index) => {
+      const expectedSlot = expectedEntries[index];
+      return (
+        expectedSlot !== undefined &&
+        expectedSlot.entryNames.includes(entry.path) &&
+        artifactTypeFromZipPath(entry.path) === expectedSlot.artifactType &&
+        isExpectedFiledReturnBytesForReturnType(
+          entry.bytes,
+          expectedSlot.artifactType,
+          expectedReturnType,
+        )
+      );
+    });
+    if (slotIndex === undefined) return false;
+    unmatchedSlots.delete(slotIndex);
+  }
+  return unmatchedSlots.size === 0;
 }
 
 function artifactTypeFromZipPath(zipPath: string): FiledReturnsConcreteArtifactType | null {
   const lowerPath = zipPath.toLowerCase();
   if (lowerPath.endsWith(".pdf")) return "PDF";
   if (lowerPath.endsWith(".xls") || lowerPath.endsWith(".xlsx")) return "EXCEL";
+  if (lowerPath.endsWith(".json")) return "JSON";
   return null;
+}
+
+async function stagedZipInputByteLength(directory: FileSystemDirectoryHandle): Promise<number> {
+  let total = 0;
+  for await (const [, handle] of directory.entries()) {
+    if (handle.kind === "directory") {
+      total += await stagedZipInputByteLength(handle);
+    } else {
+      total += (await handle.getFile()).size;
+    }
+    if (total > MAX_ZIP_INPUT_BYTES) return total;
+  }
+  return total;
 }
 
 async function readZipEntries(
@@ -288,11 +332,34 @@ async function readZipEntries(
       bytes: new Uint8Array(await file.arrayBuffer()),
     });
   }
-  return entries.sort((left, right) => left.path.localeCompare(right.path));
+  return entries.sort(compareFiledReturnZipEntries);
 }
 
-function safeDirectorySegment(input: string): string {
-  return input.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120);
+function compareFiledReturnZipEntries(left: ZipEntry, right: ZipEntry): number {
+  const leftPeriodOrder = filedReturnZipPeriodOrder(left.path);
+  const rightPeriodOrder = filedReturnZipPeriodOrder(right.path);
+  if (leftPeriodOrder !== rightPeriodOrder) return leftPeriodOrder - rightPeriodOrder;
+  const leftArtifactOrder = artifactTypeFromZipPath(left.path) === "PDF" ? 0 : 1;
+  const rightArtifactOrder = artifactTypeFromZipPath(right.path) === "PDF" ? 0 : 1;
+  if (leftArtifactOrder !== rightArtifactOrder) return leftArtifactOrder - rightArtifactOrder;
+  return left.path.localeCompare(right.path);
+}
+
+function filedReturnZipPeriodOrder(path: string): number {
+  const fileName = path.split("/").at(-1)?.toLowerCase() ?? "";
+  const extensionIndex = fileName.indexOf(".");
+  if (extensionIndex < 1) return FILED_RETURNS_MONTHS.length;
+  const period = fileName.slice(0, extensionIndex).replace(/-(summary|details|data)$/, "");
+  return FILED_RETURN_PERIOD_ORDER.get(period) ?? FILED_RETURNS_MONTHS.length;
+}
+
+function isTrustedOffscreenSender(sender: Browser.runtime.MessageSender): boolean {
+  return sender.id === browser.runtime.id && sender.tab === undefined;
+}
+
+function canonicalLedgerDirectoryName(ledgerId: string): string {
+  if (!isCanonicalFiledReturnsLedgerId(ledgerId)) throw new Error("Invalid ledger ID.");
+  return ledgerId.replace(":", "_");
 }
 
 function hasStorageDirectoryApi(): boolean {

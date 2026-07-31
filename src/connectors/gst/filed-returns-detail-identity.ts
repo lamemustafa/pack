@@ -1,7 +1,10 @@
-import type { FiledReturnsReturnType } from "../../core/filed-returns-return-types";
 import { normaliseText } from "./filed-returns-dom";
 import { canonicalFiledReturnsMonth } from "./filed-returns-months";
 import { filedReturnDescriptor } from "./filed-returns-return-descriptors";
+import {
+  FILED_RETURNS_RETURN_TYPES,
+  type FiledReturnsReturnType,
+} from "./filed-returns-return-types";
 
 export interface FiledReturnsDetailIdentity {
   financialYear: string | null;
@@ -15,13 +18,46 @@ export function extractFiledReturnsDetailIdentity(
   returnType?: FiledReturnsReturnType,
 ): FiledReturnsDetailIdentity {
   const text = getDetailIdentityText(documentRef, returnType);
+  return detailIdentityFromText(
+    text,
+    extractDetailReturnType(text, returnType, documentRef.defaultView?.location.pathname),
+  );
+}
+
+export function extractScopedFiledReturnsDetailIdentity(
+  downloadControl: HTMLElement,
+  pathname: string,
+): FiledReturnsDetailIdentity | null {
+  const scopedRoot = findDetailIdentityRoot(downloadControl);
+  if (!scopedRoot) return null;
+  const text = readElementText(scopedRoot);
+  return scopedDetailIdentityFromText(text, pathname);
+}
+
+function detailIdentityFromText(
+  text: string,
+  detectedReturnType: FiledReturnsReturnType | null,
+): FiledReturnsDetailIdentity {
   const period = extractDetailTaxPeriod(text);
   const financialYear = extractDetailFinancialYear(text);
-  const detectedReturnType = extractDetailReturnType(
-    text,
-    returnType,
-    documentRef.defaultView?.location.pathname,
+  return createDetailIdentity(financialYear, period, detectedReturnType);
+}
+
+function scopedDetailIdentityFromText(text: string, pathname: string): FiledReturnsDetailIdentity {
+  const periods = extractDetailTaxPeriods(text);
+  const financialYears = extractDetailFinancialYears(text);
+  return createDetailIdentity(
+    financialYears.length === 1 ? (financialYears[0] ?? null) : null,
+    periods.length === 1 ? (periods[0] ?? null) : null,
+    extractPathDerivedReturnType(pathname),
   );
+}
+
+function createDetailIdentity(
+  financialYear: string | null,
+  period: string | null,
+  detectedReturnType: FiledReturnsReturnType | null,
+): FiledReturnsDetailIdentity {
   return {
     financialYear,
     period,
@@ -50,6 +86,18 @@ function extractDetailTaxPeriod(text: string): string | null {
   return canonicalFiledReturnsMonth(match[1]);
 }
 
+function extractDetailTaxPeriods(text: string): string[] {
+  const matches = normaliseText(text).matchAll(
+    new RegExp("\\b(?:(?:return|tax)\\s*period|month)\\b\\s*(?:[-:]\\s*)?([a-z]+)\\b", "gi"),
+  );
+  const periods = new Set<string>();
+  for (const match of matches) {
+    const period = canonicalFiledReturnsMonth(match[1]);
+    if (period) periods.add(period);
+  }
+  return [...periods];
+}
+
 function extractDetailFinancialYear(text: string): string | null {
   const normalised = normaliseText(text);
   const match =
@@ -57,6 +105,30 @@ function extractDetailFinancialYear(text: string): string | null {
       normalised,
     );
   if (!match?.[1]) return null;
+
+  const startYear = Number(match[1]);
+  const endYearText = match[2] ?? match[3] ?? match[4];
+  if (!endYearText) return null;
+  const endYear = endYearText.length === 4 ? Number(endYearText.slice(2)) : Number(endYearText);
+  if (endYear !== (startYear + 1) % 100) return null;
+  return `${match[1]}-${String(endYear).padStart(2, "0")}`;
+}
+
+function extractDetailFinancialYears(text: string): string[] {
+  const normalised = normaliseText(text);
+  const matches = normalised.matchAll(
+    /\b(?:financial\s*year|fy)\b\s*(?:[-:]\s*)?(20\d{2})(?:\s*[-/]\s*(\d{2}|\d{4})|\s+(\d{2})|(\d{2}))\b/gi,
+  );
+  const financialYears = new Set<string>();
+  for (const match of matches) {
+    const financialYear = canonicalFinancialYear(match);
+    if (financialYear) financialYears.add(financialYear);
+  }
+  return [...financialYears];
+}
+
+function canonicalFinancialYear(match: RegExpMatchArray): string | null {
+  if (!match[1]) return null;
 
   const startYear = Number(match[1]);
   const endYearText = match[2] ?? match[3] ?? match[4];
@@ -80,6 +152,13 @@ function extractDetailReturnType(
   if (/\bgstr[\s-]?3b\b/i.test(text)) return "GSTR-3B";
   if (/\bgstr[\s-]?1\b/i.test(text)) return "GSTR-1";
   return null;
+}
+
+function extractPathDerivedReturnType(pathname: string): FiledReturnsReturnType | null {
+  const matches = FILED_RETURNS_RETURN_TYPES.filter((returnType) =>
+    filedReturnDescriptor(returnType).detailRoutePattern.test(pathname),
+  );
+  return matches.length === 1 ? (matches[0] ?? null) : null;
 }
 
 function getDetailIdentityText(documentRef: Document, returnType?: FiledReturnsReturnType): string {
@@ -131,7 +210,7 @@ function findDetailIdentityRoot(downloadControl: HTMLElement): HTMLElement | nul
     }
     current = current.parentElement;
   }
-  return downloadControl.ownerDocument.body;
+  return null;
 }
 
 function readElementText(element: Element | null | undefined): string {

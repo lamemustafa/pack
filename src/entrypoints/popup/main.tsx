@@ -8,6 +8,7 @@ import { ScopeForm, ScopeFormAction } from "./components";
 import { canRetryFullFiscalYearZipWithoutPortal } from "./flow-summary";
 import { hasInlinePrimaryAction, InlineStatus } from "./inline-status";
 import { PackSummary } from "./pack-summary";
+import { LastRunDiagnostics } from "./last-run-diagnostics";
 import { getPopupPresentationState, type PopupPresentationState } from "./presentation-state";
 import { RecoveryActions, hasRecoveryActions } from "./recovery-actions";
 import { usePackPopupController } from "./use-pack-popup-controller";
@@ -21,10 +22,15 @@ function App() {
     popup.context,
     displaySummary,
     popup.effectiveBusy,
+    popup.actionError,
   );
   const portalIndependentZipRetry = canRetryFullFiscalYearZipWithoutPortal(displaySummary);
+  const terminalSummary = Boolean(
+    displaySummary &&
+    ["complete", "partial", "blocked", "cancelled"].includes(displaySummary.status),
+  );
   const showBuilder =
-    (popup.context?.supported === true || portalIndependentZipRetry) &&
+    (popup.context?.supported === true || portalIndependentZipRetry || terminalSummary) &&
     !["loading", "unsupported", "session-expired"].includes(presentation.kind);
   const statusOwnsPrimaryAction = hasInlinePrimaryAction(presentation, displaySummary);
 
@@ -103,11 +109,12 @@ function App() {
 
       <footer className="fineprint" aria-label="Pack privacy boundary">
         <span>Local only · GST login and PDFs stay on your device.</span>
-        <span className="fineprint-links">
+        <div className="fineprint-links">
+          <LastRunDiagnostics summary={popup.lastRunSummary} />
           <a href="https://pack.complyeaze.com/privacy" target="_blank" rel="noreferrer">
-            Details
+            Privacy
           </a>
-        </span>
+        </div>
       </footer>
     </main>
   );
@@ -129,19 +136,9 @@ function ContextState({
       </div>
       <div className="context-state-content">
         <p className="context-state-kicker">GST Portal status</p>
-        <h2>
-          {isChecking
-            ? "Checking this tab"
-            : isSessionExpired
-              ? "Sign in again on the GST Portal"
-              : "Open the GST Portal to use Pack"}
-        </h2>
+        <h2>{isChecking ? "Checking this tab" : status.title}</h2>
         <p>
-          {isChecking
-            ? "Checking for a supported GST Portal page in this browser."
-            : isSessionExpired
-              ? "Your GST Portal session appears to have expired. Sign in there, then reopen Pack."
-              : "Navigate to the filed returns page. Pack will detect the supported page automatically."}
+          {isChecking ? "Checking for a supported GST Portal page in this browser." : status.body}
         </p>
         {!isChecking ? (
           <button

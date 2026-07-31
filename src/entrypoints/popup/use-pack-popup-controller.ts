@@ -1,27 +1,25 @@
 import React from "react";
 import { browser } from "wxt/browser";
+import type { PortalContext, PortalObservation } from "../../core/contracts";
 import type {
   FiledReturnsDownloadScope,
   FiledReturnsFlowSummary,
-  PortalContext,
-  PortalObservation,
-} from "../../core/contracts";
+} from "../../connectors/gst/filed-returns-contracts";
 import type {
   FullFiscalYearTargetRecoveryPayload,
   PackMessage,
   PackMessageResponse,
-} from "../../core/messages";
+} from "../../connectors/gst/messages";
 import {
   DEFAULT_FILED_RETURNS_DOWNLOAD_SCOPE,
   normaliseFiledReturnsScope,
-} from "../../core/filed-returns-scope";
+} from "../../connectors/gst/filed-returns-scope";
 import {
   getFiledReturnsCompletionStatus,
   getFiledReturnsSummaryHeading,
   getScopeMatchedFiledReturnsSummary,
   hasUnresolvedFiledReturnsRecovery,
 } from "./flow-summary";
-
 export function usePackPopupController() {
   const [status, setStatus] = React.useState("Loading Pack context...");
   const [scope, setScopeState] = React.useState<FiledReturnsDownloadScope>(
@@ -33,58 +31,75 @@ export function usePackPopupController() {
   const [filedReturnsFlowSummary, setFiledReturnsFlowSummary] =
     React.useState<FiledReturnsFlowSummary | null>(null);
   const [busy, setBusy] = React.useState<string | null>(null);
-
+  const [actionError, setActionError] = React.useState<string | null>(null);
+  const showActionError = React.useCallback((message: string) => {
+    setActionError(message);
+    setStatus(message);
+  }, []);
   React.useEffect(() => {
     void Promise.all([
       sendPackMessage({ type: "PACK_GET_CONTEXT" }),
       sendPackMessage({ type: "PACK_GET_FILED_RETURNS_OBSERVATION" }),
       sendPackMessage({ type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" }),
-    ]).then(([contextResponse, observationResponse, summaryResponse]) => {
-      if (observationResponse.ok && "observation" in observationResponse) {
-        setFiledReturnsObservation(observationResponse.observation);
-      }
-      if (summaryResponse.ok && "flowSummary" in summaryResponse) {
-        const flowSummary = summaryResponse.flowSummary;
-        setFiledReturnsFlowSummary(flowSummary);
-        if (flowSummary) setScopeState(flowSummary.scope);
-      }
+    ])
+      .then(([contextResponse, observationResponse, summaryResponse]) => {
+        if (observationResponse.ok && "observation" in observationResponse) {
+          setFiledReturnsObservation(observationResponse.observation);
+        }
+        if (summaryResponse.ok && "flowSummary" in summaryResponse) {
+          const flowSummary = summaryResponse.flowSummary;
+          setFiledReturnsFlowSummary(flowSummary);
+          if (flowSummary) setScopeState(flowSummary.scope);
+        }
 
-      if (contextResponse.ok && "context" in contextResponse) {
-        setContext(contextResponse.context);
-        setStatus(
-          contextResponse.context?.supported
-            ? "GST context detected."
-            : "Pack is dormant until you start an action.",
-        );
+        if (contextResponse.ok && "context" in contextResponse) {
+          setContext(contextResponse.context);
+          setStatus(
+            contextResponse.context?.supported
+              ? "GST context detected."
+              : "Pack is dormant until you start an action.",
+          );
+        } else {
+          showActionError(contextResponse.ok ? "Unexpected Pack response." : contextResponse.error);
+        }
+      })
+      .catch(() => showActionError("Pack could not read the current GST Portal state. Try again."));
+  }, [showActionError]);
+
+  const applyFlowResponse = React.useCallback(
+    (response: PackMessageResponse) => {
+      if (response.ok && "flowStep" in response) {
+        setActionError(null);
+        setStatus(response.flowStep.safeMessage);
+        if ("flowSummary" in response && response.flowSummary) {
+          setFiledReturnsFlowSummary(response.flowSummary);
+          setScopeState(response.flowSummary.scope);
+        }
+        if ("observation" in response) {
+          setFiledReturnsObservation(response.observation);
+        }
       } else {
-        setStatus(contextResponse.ok ? "Unexpected Pack response." : contextResponse.error);
+        showActionError(
+          response.ok ? "Unexpected Pack response." : (response.safeMessage ?? response.error),
+        );
       }
-    });
-  }, []);
+    },
+    [showActionError],
+  );
 
-  const applyFlowResponse = React.useCallback((response: PackMessageResponse) => {
-    if (response.ok && "flowStep" in response) {
-      setStatus(response.flowStep.safeMessage);
-      if ("flowSummary" in response && response.flowSummary) {
-        setFiledReturnsFlowSummary(response.flowSummary);
-        setScopeState(response.flowSummary.scope);
+  const withBusy = React.useCallback(
+    async (name: string, action: () => Promise<void>) => {
+      setBusy(name);
+      try {
+        await action();
+      } catch {
+        showActionError("Pack could not reach the background service. Try the action again.");
+      } finally {
+        setBusy(null);
       }
-      if ("observation" in response) {
-        setFiledReturnsObservation(response.observation);
-      }
-    } else {
-      setStatus(response.ok ? "Unexpected Pack response." : response.error);
-    }
-  }, []);
-
-  const withBusy = React.useCallback(async (name: string, action: () => Promise<void>) => {
-    setBusy(name);
-    try {
-      await action();
-    } finally {
-      setBusy(null);
-    }
-  }, []);
+    },
+    [showActionError],
+  );
 
   const startFiledReturnsFlow = React.useCallback(async () => {
     await withBusy("start-filed-returns-flow", async () => {
@@ -100,13 +115,16 @@ export function usePackPopupController() {
     await withBusy("acknowledge-interrupted-run", async () => {
       const response = await sendPackMessage({ type: "PACK_ACKNOWLEDGE_INTERRUPTED_RUN" });
       if (response.ok && "flowStep" in response) {
+        setActionError(null);
         setStatus(response.flowStep.safeMessage);
         setFiledReturnsFlowSummary(null);
       } else {
-        setStatus(response.ok ? "Unexpected Pack response." : response.error);
+        showActionError(
+          response.ok ? "Unexpected Pack response." : (response.safeMessage ?? response.error),
+        );
       }
     });
-  }, [withBusy]);
+  }, [showActionError, withBusy]);
 
   const retryFiledReturnsTarget = React.useCallback(async () => {
     const recoveryScope = filedReturnsFlowSummary?.scope;
@@ -122,12 +140,12 @@ export function usePackPopupController() {
   }, [applyFlowResponse, filedReturnsFlowSummary?.scope, withBusy]);
 
   const resolveUnconfirmedDownload = React.useCallback(
-    async (resolution: "downloaded" | "cancelled") => {
+    async (resolution: "manually-observed" | "cancelled") => {
       const recoveryScope = filedReturnsFlowSummary?.scope;
       if (!recoveryScope) return;
 
       await withBusy(
-        resolution === "downloaded"
+        resolution === "manually-observed"
           ? "resolve-unconfirmed-download"
           : "cancel-unconfirmed-download",
         async () => {
@@ -232,13 +250,14 @@ export function usePackPopupController() {
     ? getFiledReturnsSummaryHeading(scope, scopedFlowSummary)
     : null;
   const effectiveBusy = scopedFlowSummary?.status === "complete" ? null : busy;
-
   return {
     acknowledgeInterruptedRun,
+    actionError,
     completionStatus,
     context,
     effectiveBusy,
     filedReturnsObservation,
+    lastRunSummary: filedReturnsFlowSummary,
     recoverySummary,
     resolveFullFiscalYearTarget,
     resolveUnconfirmedDownload,

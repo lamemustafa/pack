@@ -71,33 +71,7 @@ describe("extension package verifier", () => {
     expect(result.output).toContain("debugger");
   });
 
-  it("accepts debugger only for an explicitly allowed local GSTR-1 package", async () => {
-    const outputDir = await createValidPackage();
-    const manifestPath = path.join(outputDir, "manifest.json");
-    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
-      permissions: string[];
-    };
-    await writeFile(
-      manifestPath,
-      `${JSON.stringify(
-        {
-          ...manifest,
-          permissions: [...manifest.permissions, "debugger"],
-        },
-        null,
-        2,
-      )}\n`,
-    );
-
-    const result = await runVerifier(outputDir, {
-      PACK_ALLOW_LOCAL_GSTR1_DEBUGGER: "1",
-    });
-
-    expect(result.status).toBe(0);
-    expect(result.output).toContain("Pack WXT extension package verification passed.");
-  });
-
-  it("rejects optional debugger even for the local GSTR-1 package verifier", async () => {
+  it("rejects optional debugger permission", async () => {
     const outputDir = await createValidPackage();
     const manifestPath = path.join(outputDir, "manifest.json");
     const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<string, unknown>;
@@ -154,7 +128,7 @@ describe("extension package verifier", () => {
     await writePackageFile(
       outputDir,
       "assets/leak.js",
-      "console.log('27ABCDE1234F1Z5 ABCDE1234F /Users/example/Downloads/gstr3b.pdf');",
+      "console.log('00XXXXX0000X0Z0 XXXXX0000X /Users/example/Downloads/gstr3b.pdf');",
     );
 
     const result = await runVerifier(outputDir);
@@ -173,7 +147,7 @@ describe("extension package verifier", () => {
       `${JSON.stringify(
         {
           ...manifest,
-          version_name: "/Users/example/Downloads/27ABCDE1234F1Z5",
+          version_name: "/Users/example/Downloads/00XXXXX0000X0Z0",
         },
         null,
         2,
@@ -189,7 +163,7 @@ describe("extension package verifier", () => {
 
   it("rejects sensitive policy markers in packaged filenames", async () => {
     const outputDir = await createValidPackage();
-    await writePackageFile(outputDir, "assets/27ABCDE1234F1Z5.js", "const packLocalOnly = true;");
+    await writePackageFile(outputDir, "assets/00XXXXX0000X0Z0.js", "const packLocalOnly = true;");
 
     const result = await runVerifier(outputDir);
 
@@ -252,7 +226,7 @@ describe("extension package verifier", () => {
           policy: {
             redaction: {
               patterns: [
-                { id: "gstin", pattern: "\\b\\d{2}[A-Z]{5}\\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]\\b" },
+                { id: "gstin", pattern: "\\b\\d{2}[A-Z]{5}\\d{4}[A-Z][0-9A-Z]Z[0-9A-Z]\\b" },
                 { id: "pan", pattern: "\\b[A-Z]{5}\\d{4}[A-Z]\\b" },
                 { id: "openai-secret", pattern: "\\bsk-(?:proj-)?[A-Za-z0-9_-]+\\b" },
                 { id: "cookie-header", pattern: "\\b(cookie|authorization)\\s*[:=]\\s*[^\\s;]+" },

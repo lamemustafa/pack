@@ -1,10 +1,6 @@
 import type { PortalNavigationResult } from "../../core/contracts";
-import {
-  activateElement,
-  getClickableElements,
-  isVisible,
-  toNavigationCandidateInput,
-} from "./filed-returns-navigation-dom";
+import { activateElement, isVisible } from "./filed-returns-dom";
+import { getNavigationElements, toNavigationCandidateInput } from "./filed-returns-navigation-dom";
 import { scoreFiledReturnsNavigationCandidate } from "./filed-returns-navigation-candidates";
 
 export function clickBestHiddenFiledReturnsMenuCandidate(
@@ -13,7 +9,7 @@ export function clickBestHiddenFiledReturnsMenuCandidate(
   scanStage: string,
   prefixSignals: readonly string[],
 ): PortalNavigationResult | null {
-  const candidates = getClickableElements(documentRef, { includeHidden: true })
+  const candidates = getNavigationElements(documentRef, { includeHidden: true })
     .filter((element) => !isVisible(element))
     .map((element) => ({
       element,

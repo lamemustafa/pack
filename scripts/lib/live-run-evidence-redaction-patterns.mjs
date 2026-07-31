@@ -1,5 +1,5 @@
 export const LIVE_RUN_SENSITIVE_PATTERN_DEFINITIONS = [
-  { id: "gstin", pattern: "\\b\\d{2}[A-Z]{5}\\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]\\b", flags: "i" },
+  { id: "gstin", pattern: "\\b\\d{2}[A-Z]{5}\\d{4}[A-Z][0-9A-Z]Z[0-9A-Z]\\b", flags: "i" },
   { id: "pan", pattern: "\\b[A-Z]{5}\\d{4}[A-Z]\\b", flags: "i" },
   { id: "arn", pattern: "\\b[A-Z]{2}\\d{13}\\b", flags: "i" },
   {

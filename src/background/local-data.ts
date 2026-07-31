@@ -1,19 +1,22 @@
 import { browser } from "wxt/browser";
-import type { PackMessageResponse } from "../core/messages";
-import { readActiveFiledReturnsRunSummary } from "./filed-returns-active-run";
+import type { FiledReturnsFullFiscalYearLedger } from "../connectors/gst/filed-returns-contracts";
+import type { PackMessageResponse } from "../connectors/gst/messages";
+import {
+  readActiveFiledReturnsRunStorageState,
+  runFiledReturnsOperationCriticalSection,
+} from "./filed-returns-active-run";
 import {
   isFullFiscalYearLedger,
   recoverableFullFiscalYearLedgerId,
 } from "./filed-returns-full-fiscal-year-ledger";
-import {
-  discardAllFiledReturnsStaging,
-  discardFullFiscalYearFiledReturnsZip,
-  discardSinglePeriodFiledReturnsZip,
-} from "./filed-returns-full-fiscal-year-zip";
+import { discardFullFiscalYearFiledReturnsZip } from "./filed-returns-full-fiscal-year-zip";
+import { discardSinglePeriodFiledReturnsZip } from "./filed-returns-single-period-zip";
+import { discardAllFiledReturnsStaging } from "./filed-returns-staged-zip";
 import {
   InvalidSinglePeriodStagingRecordError,
   readSinglePeriodStagingRecord,
 } from "./filed-returns-artifact-progress";
+import { hasArtifactAcquisitionCheckpoint } from "./artifact-acquisition-state";
 import { readCurrentFiledReturnsTargetReviewSummary } from "./filed-returns-target-review";
 
 export interface PackLocalDataDeps {
@@ -26,6 +29,12 @@ export interface PackLocalDataDeps {
 }
 
 export async function clearPackLocalDataWithRecoveryGuard(
+  deps: PackLocalDataDeps,
+): Promise<PackMessageResponse> {
+  return runFiledReturnsOperationCriticalSection(() => clearPackLocalDataWithinOperation(deps));
+}
+
+async function clearPackLocalDataWithinOperation(
   deps: PackLocalDataDeps,
 ): Promise<PackMessageResponse> {
   if (await hasUnresolvedFiledReturnsRecoveryState(deps)) {
@@ -61,8 +70,8 @@ export async function clearPackLocalDataWithRecoveryGuard(
   requiresBroadStagingClear ||= ledger !== null && !fullFiscalYearLedgerId;
 
   if (requiresBroadStagingClear) {
-    const clearSignal = await discardAllFiledReturnsStaging();
-    if (clearSignal !== "filed-returns-opfs-cleared") {
+    const clearSignals = await discardAllFiledReturnsStaging();
+    if (!clearSignals.includes("filed-returns-opfs-cleared")) {
       return {
         ok: false,
         error:
@@ -70,8 +79,8 @@ export async function clearPackLocalDataWithRecoveryGuard(
       };
     }
   } else if (singlePeriodStaging) {
-    const clearSignal = await discardSinglePeriodFiledReturnsZip(singlePeriodStaging.ledgerId);
-    if (clearSignal !== "single-period-opfs-cleared") {
+    const clearSignals = await discardSinglePeriodFiledReturnsZip(singlePeriodStaging.ledgerId);
+    if (!clearSignals.includes("single-period-opfs-cleared")) {
       return {
         ok: false,
         error:
@@ -80,8 +89,8 @@ export async function clearPackLocalDataWithRecoveryGuard(
     }
   }
   if (!requiresBroadStagingClear && fullFiscalYearLedgerId) {
-    const clearSignal = await discardFullFiscalYearFiledReturnsZip(fullFiscalYearLedgerId);
-    if (clearSignal !== "full-fiscal-year-opfs-cleared") {
+    const clearSignals = await discardFullFiscalYearFiledReturnsZip(fullFiscalYearLedgerId);
+    if (!clearSignals.includes("full-fiscal-year-opfs-cleared")) {
       return {
         ok: false,
         error:
@@ -96,22 +105,34 @@ export async function clearPackLocalDataWithRecoveryGuard(
 }
 
 async function hasUnresolvedFiledReturnsRecoveryState(deps: PackLocalDataDeps): Promise<boolean> {
-  const activeRunSummary = await readActiveFiledReturnsRunSummary({
+  const activeRunState = await readActiveFiledReturnsRunStorageState({
     storageKeys: { activeRun: deps.storageKeys.activeRun },
   });
-  if (activeRunSummary) return true;
+  // A malformed marker cannot be acknowledged safely, so Clear local Pack data is
+  // its explicit recovery path. Only a valid active lease blocks local-data removal.
+  if (activeRunState.state === "valid") return true;
 
   const targetReviewSummary = await readCurrentFiledReturnsTargetReviewSummary({
     storageKeys: { targetReview: deps.storageKeys.targetReview },
   });
   if (targetReviewSummary) return true;
 
+  // Direct portal artifact actions have their own session-only recovery record.
+  // Clearing it would discard the exact target/download ownership that prevents
+  // a later start from repeating an externally visible download.
+  if (await hasArtifactAcquisitionCheckpoint()) return true;
+
   const ledger = await readLocalValue<unknown>(deps.storageKeys.fullFiscalYearLedger);
-  return isFullFiscalYearLedger(ledger) && isUnresolvedFullFiscalYearLedger(ledger);
+  if (!isFullFiscalYearLedger(ledger)) return false;
+  return hasUnresolvedZipState(ledger) || isUnresolvedFullFiscalYearLedger(ledger);
 }
 
-function isUnresolvedFullFiscalYearLedger(ledger: unknown): boolean {
-  if (!isFullFiscalYearLedger(ledger)) return false;
+function hasUnresolvedZipState(ledger: FiledReturnsFullFiscalYearLedger): boolean {
+  if (ledger.zipDownloadAttempt !== undefined) return true;
+  return ledger.zipPhase !== undefined && ledger.zipPhase !== "cleaned";
+}
+
+function isUnresolvedFullFiscalYearLedger(ledger: FiledReturnsFullFiscalYearLedger): boolean {
   if (ledger.status === "complete" || ledger.status === "cancelled") return false;
   return ledger.targets.some((target) =>
     ["pending", "running", "download-unconfirmed", "blocked", "failed"].includes(target.status),

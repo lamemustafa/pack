@@ -1,6 +1,9 @@
-import type { FiledReturnsDownloadScope, FiledReturnsFlowSummary } from "../../core/contracts";
-import { normaliseFiledReturnsArtifactType } from "../../core/filed-returns-artifacts";
-import { FULL_FISCAL_YEAR_PERIOD } from "../../core/filed-returns-scope";
+import type {
+  FiledReturnsDownloadScope,
+  FiledReturnsFlowSummary,
+} from "../../connectors/gst/filed-returns-contracts";
+import { normaliseFiledReturnsArtifactType } from "../../connectors/gst/filed-returns-artifacts";
+import { FULL_FISCAL_YEAR_PERIOD } from "../../connectors/gst/filed-returns-scope";
 
 export function hasUnresolvedFiledReturnsTargetReview(
   summary: FiledReturnsFlowSummary | null,
@@ -31,10 +34,34 @@ export function canRetryFullFiscalYearZipWithoutPortal(
   if (!signals.has("full-fiscal-year-opfs-retained")) return false;
   return (
     signals.has("full-fiscal-year-final-zip-retry") ||
+    signals.has("full-fiscal-year-final-zip-manual-review") ||
     signals.has("full-fiscal-year-local-cleanup-retry") ||
     signals.has("full-fiscal-year-zip-export-pending") ||
     signals.has("full-fiscal-year-zip-phase:download-started") ||
+    signals.has("full-fiscal-year-zip-phase:download-intent-persisted") ||
+    signals.has("full-fiscal-year-zip-phase:download-observing") ||
     signals.has("full-fiscal-year-zip-phase:export-retry-pending")
+  );
+}
+
+export function isAmbiguousFullFiscalYearZipHandoff(
+  summary: FiledReturnsFlowSummary | null | undefined,
+): boolean {
+  if (!summary || summary.scope.period !== FULL_FISCAL_YEAR_PERIOD) return false;
+  const signals = new Set(summary.flowStep.safeSignals);
+  return (
+    summary.flowStep.state === "download-unconfirmed" &&
+    (signals.has("full-fiscal-year-zip-download-unconfirmed") ||
+      signals.has("full-fiscal-year-zip-phase:download-started"))
+  );
+}
+
+export function hasPersistedFullFiscalYearZipDownloadId(
+  summary: FiledReturnsFlowSummary | null | undefined,
+): boolean {
+  return Boolean(
+    isAmbiguousFullFiscalYearZipHandoff(summary) &&
+    summary?.flowStep.safeSignals.includes("full-fiscal-year-zip-phase:download-observing"),
   );
 }
 
@@ -51,7 +78,9 @@ export function getFiledReturnsCompletionStatus(
     matchedSummary.flowStep.state === "download-unconfirmed" &&
     matchedSummary.flowStep.safeSignals.includes("full-fiscal-year-zip-download-unconfirmed")
   ) {
-    return `FY ${matchedSummary.scope.financialYear} ${matchedSummary.scope.returnType} prepared. ${periodCount} of ${totalPeriods} periods reconciled; retry the final ZIP save.`;
+    return hasPersistedFullFiscalYearZipDownloadId(matchedSummary)
+      ? `FY ${matchedSummary.scope.financialYear} ${matchedSummary.scope.returnType} prepared. ${periodCount} of ${totalPeriods} periods reconciled; check the saved final ZIP status.`
+      : `FY ${matchedSummary.scope.financialYear} ${matchedSummary.scope.returnType} prepared. ${periodCount} of ${totalPeriods} periods reconciled; check Browser Downloads before retrying the final ZIP.`;
   }
   if (matchedSummary.status === "complete") {
     return `FY ${matchedSummary.scope.financialYear} ${matchedSummary.scope.returnType} complete. ${periodCount} of ${totalPeriods} ${periodCount === 1 ? "period" : "periods"} reconciled.`;

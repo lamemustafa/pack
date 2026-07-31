@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { FiledReturnsFlowSummary, PortalContext } from "../../src/core/contracts";
-import { FULL_FISCAL_YEAR_PERIOD } from "../../src/core/filed-returns-scope";
+import type { PortalContext } from "../../src/core/contracts";
+import type { FiledReturnsFlowSummary } from "../../src/connectors/gst/filed-returns-contracts";
+import { FULL_FISCAL_YEAR_PERIOD } from "../../src/connectors/gst/filed-returns-scope";
 import { getPopupPresentationState } from "../../src/entrypoints/popup/presentation-state";
 
 describe("popup presentation state", () => {
@@ -25,11 +26,42 @@ describe("popup presentation state", () => {
     expect(state.body).toContain("filed returns");
   });
 
-  it("does not let a previous blocked run mask an unsupported active tab", () => {
+  it("renders a blocked run message on an unsupported active tab", () => {
     const state = getPopupPresentationState(unsupportedContext(), blockedSummary(), null);
 
-    expect(state.kind).toBe("unsupported");
-    expect(state.title).toBe("Ready when you are");
+    expect(state.kind).toBe("blocked");
+    expect(state.body).toBeTruthy();
+  });
+
+  it.each([
+    completeSummary(),
+    unavailableSummary(),
+    partialSummary(),
+    blockedSummary(),
+    cancelledSummary(),
+  ])("renders a non-empty message for terminal %s state on an unsupported tab", (summary) => {
+    const state = getPopupPresentationState(unsupportedContext(), summary, null);
+
+    expect(state.body.trim()).not.toBe("");
+    expect(state.title.trim()).not.toBe("");
+  });
+
+  it("renders the cross-origin blocked step's user-facing message", () => {
+    const state = getPopupPresentationState(
+      unsupportedContext(),
+      {
+        ...blockedSummary(),
+        flowStep: {
+          ...blockedSummary().flowStep,
+          safeSignals: ["wrong-origin-open-returns-dashboard"],
+          safeMessage: "Open Returns Dashboard in the GST Portal, then press Start again.",
+        },
+      },
+      null,
+    );
+
+    expect(state.kind).toBe("blocked");
+    expect(state.body).toContain("May");
   });
 
   it("keeps retained final-ZIP recovery actionable on an unsupported tab", () => {
@@ -67,6 +99,21 @@ describe("popup presentation state", () => {
       kind: "ready",
       title: "Ready for a new download",
       tone: "ready",
+    });
+  });
+
+  it("renders a caught background failure instead of leaving the prior presentation visible", () => {
+    expect(
+      getPopupPresentationState(
+        supportedContext(),
+        null,
+        null,
+        "Pack stopped while handling this action. Try again.",
+      ),
+    ).toMatchObject({
+      body: "Pack stopped while handling this action. Try again.",
+      kind: "error",
+      title: "Pack could not finish that action",
     });
   });
 });

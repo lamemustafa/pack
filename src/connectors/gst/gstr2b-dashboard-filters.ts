@@ -1,13 +1,13 @@
-import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "../../core/contracts";
+import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "./filed-returns-contracts";
+import { delay } from "../../core/time";
 import {
   activateElement,
-  delay,
   dispatchChange,
   matchesAcceptedText,
   normaliseText,
 } from "./filed-returns-dom";
 import { acceptedFiledReturnsMonthTexts } from "./filed-returns-months";
-import { findGstr2bDashboardControl } from "./gstr2b-dashboard-view";
+import { findReturnDashboardControl } from "./gstr2b-dashboard-view";
 import {
   diagnoseReturnDashboardControls,
   findReturnDashboardControls,
@@ -40,15 +40,29 @@ export async function selectGstr2bReturnDashboardFiltersAndSearch(
   scopeId: string,
   safeSignals: readonly string[],
 ): Promise<PortalFlowStepResult | null> {
-  const diagnosticSignals = diagnoseReturnDashboardControls(documentRef);
+  return selectReturnDashboardFiltersAndSearch(documentRef, scope, scopeId, safeSignals);
+}
+
+export async function selectReturnDashboardFiltersAndSearch(
+  documentRef: Document,
+  scope: FiledReturnsDownloadScope,
+  scopeId: string,
+  safeSignals: readonly string[],
+): Promise<PortalFlowStepResult | null> {
+  const signalPrefix = dashboardSignalPrefix(scope);
+  const diagnosticSignals = diagnoseReturnDashboardControls(
+    documentRef,
+    signalPrefix,
+    scope.returnType !== "GSTR-1",
+  );
   let controls = findReturnDashboardControls(documentRef);
   if (!controls) {
-    const viewControl = findGstr2bDashboardControl(documentRef, "view");
+    const viewControl = findReturnDashboardControl(documentRef, scope.returnType, "view");
     if (viewControl && hasSettledDashboardSearchForScope(documentRef, scope, viewControl)) {
       return null;
     }
     if (viewControl && hasExpiredUnchangedDashboardSearch(documentRef, scope, viewControl)) {
-      return unchangedDashboardViewRecovery(scopeId, safeSignals, diagnosticSignals);
+      return unchangedDashboardViewRecovery(scope, scopeId, safeSignals, diagnosticSignals);
     }
 
     const searchPending = hasRecentDashboardSearch(documentRef, scope);
@@ -57,22 +71,22 @@ export async function selectGstr2bReturnDashboardFiltersAndSearch(
       connectorId: "gst",
       scopeId,
       state: "clicked",
-      safeSignals: [
-        ...safeSignals,
-        ...diagnosticSignals,
-        ...(searchPending
-          ? ["gstr2b-return-dashboard-search-results-pending"]
+      safeSignals: uniqueSignals(
+        safeSignals,
+        diagnosticSignals,
+        searchPending
+          ? [`${signalPrefix}-return-dashboard-search-results-pending`]
           : viewControl
-            ? ["gstr2b-dashboard-view-unscoped"]
-            : []),
-      ],
+            ? [`${signalPrefix}-dashboard-view-unscoped`]
+            : [],
+      ),
       safeMessage:
         "Pack recognized the GST Return Dashboard and is waiting for target-bound dashboard controls to render. Diagnostic signals: " +
         diagnosticSignals.join(", "),
     };
   }
 
-  const viewControl = findGstr2bDashboardControl(documentRef, "view");
+  const viewControl = findReturnDashboardControl(documentRef, scope.returnType, "view");
   if (
     viewControl &&
     hasSettledDashboardSearchForScope(documentRef, scope, viewControl) &&
@@ -87,9 +101,9 @@ export async function selectGstr2bReturnDashboardFiltersAndSearch(
       clearGstr2bDashboardSearchPending(documentRef);
       await delay(DASHBOARD_FIELD_SETTLE_DELAY_MS);
       controls = findReturnDashboardControls(documentRef) ?? controls;
-      return gstr2bDashboardSelectionInProgress(scopeId, safeSignals, diagnosticSignals, [
+      return dashboardSelectionInProgress(scope, scopeId, safeSignals, diagnosticSignals, [
         "financial-year-selected",
-        ...selectedDashboardFilterSignals(controls),
+        ...dashboardFilterDiagnosticSignals(controls, signalPrefix),
       ]);
     }
   }
@@ -99,9 +113,9 @@ export async function selectGstr2bReturnDashboardFiltersAndSearch(
     if (quarterSelected) {
       clearGstr2bDashboardSearchPending(documentRef);
       controls = await waitForReturnDashboardPeriodOptions(documentRef, scope, controls);
-      return gstr2bDashboardSelectionInProgress(scopeId, safeSignals, diagnosticSignals, [
+      return dashboardSelectionInProgress(scope, scopeId, safeSignals, diagnosticSignals, [
         "quarter-selected",
-        ...selectedDashboardFilterSignals(controls),
+        ...dashboardFilterDiagnosticSignals(controls, signalPrefix),
       ]);
     }
   }
@@ -115,21 +129,21 @@ export async function selectGstr2bReturnDashboardFiltersAndSearch(
       clearGstr2bDashboardSearchPending(documentRef);
       await delay(DASHBOARD_FIELD_SETTLE_DELAY_MS);
       controls = findReturnDashboardControls(documentRef) ?? controls;
-      return gstr2bDashboardSelectionInProgress(scopeId, safeSignals, diagnosticSignals, [
+      return dashboardSelectionInProgress(scope, scopeId, safeSignals, diagnosticSignals, [
         "period-selected",
-        ...selectedDashboardFilterSignals(controls),
+        ...dashboardFilterDiagnosticSignals(controls, signalPrefix),
       ]);
     }
   }
 
   if (!dashboardFiltersMatch(scope, controls.year, controls.quarter, controls.period)) {
-    return gstr2bDashboardSelectionInProgress(scopeId, safeSignals, diagnosticSignals, [
-      ...selectedDashboardFilterSignals(controls),
+    return dashboardSelectionInProgress(scope, scopeId, safeSignals, diagnosticSignals, [
+      ...dashboardFilterDiagnosticSignals(controls, signalPrefix),
     ]);
   }
 
   if (viewControl && hasExpiredUnchangedDashboardSearch(documentRef, scope, viewControl)) {
-    return unchangedDashboardViewRecovery(scopeId, safeSignals, diagnosticSignals);
+    return unchangedDashboardViewRecovery(scope, scopeId, safeSignals, diagnosticSignals);
   }
 
   if (hasRecentDashboardSearch(documentRef, scope)) {
@@ -137,15 +151,14 @@ export async function selectGstr2bReturnDashboardFiltersAndSearch(
       connectorId: "gst",
       scopeId,
       state: "clicked",
-      safeSignals: [
-        ...safeSignals,
-        ...diagnosticSignals,
-        "gstr2b-return-dashboard-filters-selected",
-        ...selectedDashboardFilterSignals(controls),
-        "gstr2b-return-dashboard-search-results-pending",
-      ],
-      safeMessage:
-        "Pack already searched the GSTR-2B return dashboard for this period and is waiting for the GST Portal results to finish rendering.",
+      safeSignals: uniqueSignals(
+        safeSignals,
+        diagnosticSignals,
+        [`${signalPrefix}-return-dashboard-filters-selected`],
+        dashboardFilterDiagnosticSignals(controls, signalPrefix),
+        [`${signalPrefix}-return-dashboard-search-results-pending`],
+      ),
+      safeMessage: `Pack already searched the ${scope.returnType} return dashboard for this period and is waiting for the GST Portal results to finish rendering.`,
     };
   }
 
@@ -155,37 +168,35 @@ export async function selectGstr2bReturnDashboardFiltersAndSearch(
     connectorId: "gst",
     scopeId,
     state: "clicked",
-    safeSignals: [
-      ...safeSignals,
-      ...diagnosticSignals,
-      "gstr2b-return-dashboard-filters-selected",
-      ...selectedDashboardFilterSignals(controls),
-      "search-clicked",
-    ],
-    safeMessage: "Pack selected the GSTR-2B return dashboard filters and clicked Search.",
+    safeSignals: uniqueSignals(
+      safeSignals,
+      diagnosticSignals,
+      [`${signalPrefix}-return-dashboard-filters-selected`],
+      dashboardFilterDiagnosticSignals(controls, signalPrefix),
+      ["search-clicked"],
+    ),
+    safeMessage: `Pack selected the ${scope.returnType} return dashboard filters and clicked Search.`,
   };
 }
 
 function unchangedDashboardViewRecovery(
+  scope: FiledReturnsDownloadScope,
   scopeId: string,
   safeSignals: readonly string[],
   diagnosticSignals: readonly string[],
 ): PortalFlowStepResult {
+  const signalPrefix = dashboardSignalPrefix(scope);
   return {
     connectorId: "gst",
     scopeId,
     state: "user-action-required",
-    safeSignals: [
-      ...safeSignals,
-      ...diagnosticSignals,
-      "gstr2b-dashboard-view-unchanged-after-search",
-    ],
-    safeMessage:
-      "The GST Portal did not refresh the visible GSTR-2B View result after Search, so Pack could not prove that it belongs to the selected period.",
+    safeSignals: uniqueSignals(safeSignals, diagnosticSignals, [
+      `${signalPrefix}-dashboard-view-unchanged-after-search`,
+    ]),
+    safeMessage: `The GST Portal did not refresh the visible ${scope.returnType} View result after Search, so Pack could not prove that it belongs to the selected period.`,
     userAction: {
       type: "NAVIGATE_TO_SUPPORTED_PAGE",
-      message:
-        "Open the selected GSTR-2B View manually, then start Pack again from the GSTR-2B summary page.",
+      message: `Open the selected ${scope.returnType} View manually, then start Pack again from that return page.`,
       canResume: true,
     },
   };
@@ -203,25 +214,44 @@ export function isReturnDashboardRoute(documentRef: Document): boolean {
   return /\/returns\/auth\/dashboard\/?$/i.test(pathname);
 }
 
-function gstr2bDashboardSelectionInProgress(
+function dashboardSelectionInProgress(
+  scope: FiledReturnsDownloadScope,
   scopeId: string,
   safeSignals: readonly string[],
   diagnosticSignals: readonly string[],
   selectionSignals: readonly string[],
 ): PortalFlowStepResult {
+  const signalPrefix = dashboardSignalPrefix(scope);
+  const selectedSignalPrefix = `${signalPrefix}-dashboard-selected-`;
   return {
     connectorId: "gst",
     scopeId,
     state: "clicked",
-    safeSignals: [
-      ...safeSignals,
-      ...diagnosticSignals,
-      "gstr2b-return-dashboard-filter-selection-in-progress",
-      ...selectionSignals,
-    ],
-    safeMessage:
-      "Pack selected part of the GSTR-2B return dashboard filters and is waiting for the GST portal to finish updating them.",
+    safeSignals: uniqueSignals(
+      safeSignals,
+      diagnosticSignals.filter((signal) => !signal.startsWith(selectedSignalPrefix)),
+      [`${signalPrefix}-return-dashboard-filter-selection-in-progress`],
+      selectionSignals,
+    ),
+    safeMessage: `Pack selected part of the ${scope.returnType} return dashboard filters and is waiting for the GST portal to finish updating them.`,
   };
+}
+
+function dashboardSignalPrefix(scope: FiledReturnsDownloadScope): "gstr1" | "gstr2b" | "gstr3b" {
+  if (scope.returnType === "GSTR-1") return "gstr1";
+  if (scope.returnType === "GSTR-2B") return "gstr2b";
+  return "gstr3b";
+}
+
+function dashboardFilterDiagnosticSignals(
+  controls: ReturnDashboardControls,
+  signalPrefix: "gstr1" | "gstr2b" | "gstr3b",
+): string[] {
+  return signalPrefix === "gstr1" ? [] : selectedDashboardFilterSignals(controls, signalPrefix);
+}
+
+function uniqueSignals(...groups: ReadonlyArray<readonly string[]>): string[] {
+  return Array.from(new Set(groups.flat()));
 }
 
 function hasRecentDashboardSearch(
@@ -333,7 +363,7 @@ function findDashboardResultRoot(viewControl: HTMLElement): HTMLElement {
 }
 
 function dashboardSearchScope(scope: FiledReturnsDownloadScope): string {
-  return `${normaliseText(scope.financialYear)}:${normaliseText(scope.period)}`;
+  return `${normaliseText(scope.returnType)}:${normaliseText(scope.financialYear)}:${normaliseText(scope.period)}`;
 }
 
 async function waitForReturnDashboardPeriodOptions(

@@ -10,3 +10,7 @@ graphify-out/
 .env.*
 !.env.example
 pnpm-debug.log*
+
+# Lane-scoped working specs (contain local paths; findings live in PORTAL_INTEGRATION_FINDINGS.md)
+docs/*_SPEC.md
+!docs/ACQUISITION_REWRITE_SPEC.md

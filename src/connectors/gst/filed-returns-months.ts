@@ -1,4 +1,4 @@
-import type { FiledReturnsDownloadScope } from "../../core/contracts";
+import type { FiledReturnsDownloadScope } from "./filed-returns-contracts";
 
 export const FILED_RETURNS_MONTHS = [
   "April",

@@ -1,4 +1,4 @@
-import type { FiledReturnsDownloadScope } from "../../core/contracts";
+import type { FiledReturnsDownloadScope } from "./filed-returns-contracts";
 import { matchesAcceptedText } from "./filed-returns-dom";
 import { acceptedFiledReturnsPeriodTexts } from "./filed-returns-months";
 

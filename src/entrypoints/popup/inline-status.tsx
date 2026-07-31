@@ -1,7 +1,11 @@
-import type { FiledReturnsFlowSummary } from "../../core/contracts";
-import { FULL_FISCAL_YEAR_PERIOD } from "../../core/filed-returns-scope";
+import type { FiledReturnsFlowSummary } from "../../connectors/gst/filed-returns-contracts";
+import { FULL_FISCAL_YEAR_PERIOD } from "../../connectors/gst/filed-returns-scope";
 import type { PopupPresentationState } from "./presentation-state";
 import { RunProgress } from "./run-summary";
+import {
+  hasPersistedFullFiscalYearZipDownloadId,
+  isAmbiguousFullFiscalYearZipHandoff,
+} from "./flow-summary";
 
 export interface InlineStatusProps {
   busy: string | null;
@@ -95,10 +99,16 @@ function getInlineStatusCopy(
   if (presentation.kind === "complete") {
     const periods = summary?.completedPeriods.length ?? 0;
     const isFullYear = summary?.scope.period === FULL_FISCAL_YEAR_PERIOD;
+    const filenameOverridden =
+      summary?.flowStep.safeSignals.includes("download-filename-overridden") ||
+      summary?.flowStep.safeSignals.includes("zip-download-filename-overridden");
     return {
-      body: isFullYear
-        ? `${periods} periods saved as one ZIP.`
-        : "The selected file was saved by your browser.",
+      body: filenameOverridden
+        ? (summary?.flowStep.safeMessage ??
+          "The browser changed the saved filename. Check browser Downloads.")
+        : isFullYear
+          ? `${periods} periods saved as one ZIP.`
+          : "The selected file was saved by your browser.",
       icon: "✓",
       title: "Download complete",
       tone: "success",
@@ -113,6 +123,14 @@ function getInlineStatusCopy(
     };
   }
   if (presentation.kind === "partial") {
+    if (summary?.flowStep.safeMessage) {
+      return {
+        body: summary.flowStep.safeMessage,
+        icon: "!",
+        title: "Download partly complete",
+        tone: "warning",
+      };
+    }
     const completed = summary?.completedPeriods.length ?? 0;
     const total = summary?.totalPeriods ?? completed;
     return {
@@ -124,15 +142,34 @@ function getInlineStatusCopy(
       tone: "warning",
     };
   }
+  if (presentation.kind === "blocked" && isAmbiguousFullFiscalYearZipHandoff(summary)) {
+    const exactIdSaved = hasPersistedFullFiscalYearZipDownloadId(summary);
+    return {
+      body:
+        summary?.flowStep.safeMessage ??
+        (exactIdSaved
+          ? "Pack saved the browser download ID for the final ZIP. Check that exact download before starting another ZIP."
+          : "The final ZIP may already have started. Check Browser Downloads before retrying it."),
+      icon: "!",
+      title: exactIdSaved ? "Check final ZIP status" : "Check Browser Downloads",
+      tone: "warning",
+    };
+  }
   if (presentation.kind === "blocked" && summary?.currentPeriod) {
     const signals = new Set(summary.flowStep.safeSignals);
     const needsTargetReview = signals.has("filed-returns-target-review-required");
     const needsFullFiscalYearRecovery = Boolean(summary.fullFiscalYearRecovery);
+    const canReconcileTarget = signals.has("filed-returns-download-reconciliation-required");
+    const canRetryTargetCleanup = signals.has("filed-returns-target-local-cleanup-required");
     return {
       body: needsTargetReview
-        ? signals.has("single-period-zip-incomplete")
-          ? `Resolve ${summary.currentPeriod} before choosing another period. Retry the selected files from a signed-in GST Portal tab, or open More run controls to cancel and reset.`
-          : `Resolve ${summary.currentPeriod} before choosing another period. Retry it, or open More run controls to mark it reviewed after checking Browser Downloads, or cancel and reset.`
+        ? canReconcileTarget
+          ? `Resolve ${summary.currentPeriod} before choosing another period. Finish or cancel any open Save dialog, then reconcile the exact browser download.`
+          : canRetryTargetCleanup
+            ? `Resolve ${summary.currentPeriod} before choosing another period. Retry the local cleanup; Pack will not click the GST Portal again.`
+            : signals.has("single-period-zip-incomplete")
+              ? `Resolve ${summary.currentPeriod} before choosing another period. Open More run controls to discard the saved state and start the selected files again, or cancel and reset.`
+              : `Resolve ${summary.currentPeriod} before choosing another period. Check Browser Downloads, then open More run controls to record a manual observation, explicitly start fresh, or cancel and reset.`
         : needsFullFiscalYearRecovery
           ? getFullFiscalYearRecoveryBody(summary.currentPeriod, signals)
           : summary.flowStep.safeMessage,
@@ -147,7 +184,7 @@ function getInlineStatusCopy(
   }
   if (presentation.kind === "error") {
     return {
-      body: "Reopen the filed-return page on the GST Portal, then retry.",
+      body: presentation.body,
       icon: "!",
       title: "Pack could not confirm the download",
       tone: "warning",
@@ -187,7 +224,13 @@ export function getInlinePrimaryAction(
     };
   }
   if (signals.has("filed-returns-target-review-required") && summary.currentPeriod) {
-    return { label: `Retry ${summary.currentPeriod}`, onClick: actions.onRetryTarget };
+    if (signals.has("filed-returns-download-reconciliation-required")) {
+      return { label: "Reconcile browser download", onClick: actions.onRetryTarget };
+    }
+    if (signals.has("filed-returns-target-local-cleanup-required")) {
+      return { label: "Retry local cleanup", onClick: actions.onRetryTarget };
+    }
+    return null;
   }
   if (presentation.kind === "blocked" && summary.currentPeriod) {
     return { label: `Retry ${summary.currentPeriod}`, onClick: actions.onRestartTarget };

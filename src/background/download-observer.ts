@@ -1,19 +1,15 @@
+import type { UserActionRequired } from "../core/contracts";
 import type {
   BrowserDownloadSafeEvidence,
-  PortalDownloadTriggerResult,
   PortalFlowStepResult,
-  UserActionRequired,
-} from "../core/contracts";
-import {
-  isExpectedDownloadCandidate,
-  isPotentialDownloadCandidate,
-  type DownloadObservationContext,
-} from "./download-correlation";
+} from "../connectors/gst/filed-returns-contracts";
+import type { DownloadObservationContext } from "./download-correlation";
+import { beginLiveFiledReturnsDownloadObservation } from "./filed-returns-durable-download-reconciler";
 import {
   completedObservation,
+  downloadInProgress,
   downloadNotObserved,
   failedObservation,
-  shouldSettleUnconfirmed,
 } from "./download-observer-results";
 
 const DEFAULT_DOWNLOAD_WAIT_MS = 30_000;
@@ -31,7 +27,11 @@ export interface SafeDownloadObservation {
 
 export interface DownloadCreatedItem {
   id: number;
+  byExtensionId?: string | undefined;
+  incognito?: boolean | undefined;
   state?: string | undefined;
+  danger?: string | undefined;
+  exists?: boolean | undefined;
   error?: string | undefined;
   bytesReceived?: number | undefined;
   fileSize?: number | undefined;
@@ -60,14 +60,8 @@ interface DownloadEvent<T> {
 }
 
 export interface DownloadObservationApi {
-  onCreated: DownloadEvent<DownloadCreatedItem>;
   onChanged: DownloadEvent<DownloadDelta>;
   search(query: DownloadSearchQuery): Promise<DownloadCreatedItem[]>;
-}
-
-export interface ActiveDownloadObservation {
-  promise: Promise<SafeDownloadObservation>;
-  stop(): void;
 }
 
 export async function observeBrowserDownloadById(
@@ -83,13 +77,19 @@ export async function observeBrowserDownloadById(
 
   return new Promise<SafeDownloadObservation>((resolve) => {
     let completedItem: DownloadCreatedItem | undefined = initialItem;
-    let completedCheckInFlight = false;
-    let lastUnconfirmedObservation: SafeDownloadObservation | null = null;
+    let completedCheckPromise: Promise<void> | null = null;
+    let lastUnconfirmedObservation: SafeDownloadObservation | null =
+      initialItem?.state === "in_progress" ? downloadInProgress() : null;
     let recheckId: ReturnType<typeof globalThis.setTimeout> | null = null;
     let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
     let settled = false;
+    // Claim this exact ID for the duration of inline observation so the global
+    // durable listener does not reconcile the same download concurrently, and
+    // release it on settle so a later terminal event is reconciled durably.
+    const endLiveObservation = beginLiveFiledReturnsDownloadObservation(downloadId);
 
     const cleanup = () => {
+      endLiveObservation();
       downloads.onChanged.removeListener(onChanged);
       if (recheckId) globalThis.clearTimeout(recheckId);
       recheckId = null;
@@ -128,19 +128,32 @@ export async function observeBrowserDownloadById(
         }
         if (latestItem?.state === "interrupted") {
           settle(failedObservation(latestItem.error));
+          return;
         }
+        if (latestItem?.state === "in_progress") lastUnconfirmedObservation = downloadInProgress();
       })
       .catch(() => undefined);
-    timeoutId = globalThis.setTimeout(() => {
-      settle(lastUnconfirmedObservation ?? downloadNotObserved());
-    }, timeoutMs);
+    timeoutId = globalThis.setTimeout(() => void settleFromFinalSearch(), timeoutMs);
 
-    async function checkCompletedDownload(fallbackItem = completedItem) {
-      if (settled || completedCheckInFlight) return;
-      completedCheckInFlight = true;
+    function checkCompletedDownload(fallbackItem = completedItem): Promise<void> {
+      if (settled) return Promise.resolve();
+      if (completedCheckPromise) return completedCheckPromise;
       completedItem = fallbackItem;
+      const checkPromise = evaluateCompletedDownload(fallbackItem);
+      completedCheckPromise = checkPromise;
+      void checkPromise.then(
+        () => {
+          if (completedCheckPromise === checkPromise) completedCheckPromise = null;
+        },
+        () => {
+          if (completedCheckPromise === checkPromise) completedCheckPromise = null;
+        },
+      );
+      return checkPromise;
+    }
+
+    async function evaluateCompletedDownload(fallbackItem = completedItem) {
       const observation = await completedObservation(downloads, downloadId, context, fallbackItem);
-      completedCheckInFlight = false;
       if (settled) return;
       if (!shouldRecheckCompletedDownload(observation)) {
         settle(observation);
@@ -153,6 +166,28 @@ export async function observeBrowserDownloadById(
         void checkCompletedDownload();
       }, COMPLETED_DOWNLOAD_RECHECK_MS);
     }
+
+    async function settleFromFinalSearch() {
+      if (settled) return;
+      const inFlightCheck = completedCheckPromise;
+      if (inFlightCheck) await inFlightCheck;
+      if (settled) return;
+      const [latestItem] = await downloads.search({ id: downloadId }).catch(() => []);
+      if (settled) return;
+      if (latestItem?.state === "complete") {
+        settle(await completedObservation(downloads, downloadId, context, latestItem));
+        return;
+      }
+      if (latestItem?.state === "interrupted") {
+        settle(failedObservation(latestItem.error));
+        return;
+      }
+      if (latestItem?.state === "in_progress") {
+        settle(downloadInProgress());
+        return;
+      }
+      settle(lastUnconfirmedObservation ?? downloadNotObserved());
+    }
   });
 }
 
@@ -160,129 +195,15 @@ function shouldRecheckCompletedDownload(observation: SafeDownloadObservation): b
   return (
     observation.state === "not-observed" &&
     observation.safeSignals.some((signal) =>
-      ["browser-download-search-missing", "browser-download-size-unknown"].includes(signal),
+      [
+        "browser-download-search-missing",
+        "browser-download-state-unconfirmed",
+        "browser-download-size-unknown",
+        "browser-download-danger-unknown",
+        "browser-download-danger-pending",
+      ].includes(signal),
     )
   );
-}
-
-export function observeNextBrowserDownload(
-  downloads: DownloadObservationApi,
-  contextOrTimeoutMs?: DownloadObservationContext | number,
-  maybeTimeoutMs = DEFAULT_DOWNLOAD_WAIT_MS,
-): ActiveDownloadObservation {
-  const context =
-    typeof contextOrTimeoutMs === "number" || contextOrTimeoutMs === undefined
-      ? null
-      : contextOrTimeoutMs;
-  const timeoutMs = typeof contextOrTimeoutMs === "number" ? contextOrTimeoutMs : maybeTimeoutMs;
-  const candidateItems = new Map<number, DownloadCreatedItem>();
-  let lastUnconfirmedObservation: SafeDownloadObservation | null = null;
-  let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
-  let settled = false;
-  let resolveObservation: (observation: SafeDownloadObservation) => void = () => undefined;
-
-  const promise = new Promise<SafeDownloadObservation>((resolve) => {
-    resolveObservation = resolve;
-  });
-
-  const cleanup = () => {
-    downloads.onCreated.removeListener(onCreated);
-    downloads.onChanged.removeListener(onChanged);
-    if (timeoutId) globalThis.clearTimeout(timeoutId);
-    timeoutId = null;
-  };
-
-  const settle = (observation: SafeDownloadObservation) => {
-    if (settled) return;
-    settled = true;
-    cleanup();
-    resolveObservation(observation);
-  };
-
-  const stop = () => {
-    settle({
-      state: "not-observed",
-      safeSignals: ["browser-download-observation-stopped"],
-      safeMessage:
-        "Pack stopped waiting for a browser download because the GST portal moved to another step.",
-    });
-  };
-
-  const resolveCreatedItem = async (item: DownloadCreatedItem) => {
-    if (context && !isPotentialDownloadCandidate(item, context)) return;
-    if (item.state === "complete") {
-      const observation = await completedObservation(downloads, item.id, context, item);
-      handleCompletedObservation(observation);
-      return;
-    }
-    if (item.state === "interrupted") {
-      await handleInterruptedCandidate(item, item.error);
-    }
-  };
-
-  function onCreated(item: DownloadCreatedItem) {
-    if (context && !isPotentialDownloadCandidate(item, context)) return;
-    candidateItems.set(item.id, item);
-    void resolveCreatedItem(item);
-  }
-
-  function onChanged(delta: DownloadDelta) {
-    if (!candidateItems.has(delta.id)) return;
-    if (delta.state?.current === "complete") {
-      void completedObservation(downloads, delta.id, context, candidateItems.get(delta.id)).then(
-        handleCompletedObservation,
-      );
-      return;
-    }
-    if (delta.state?.current === "interrupted") {
-      void handleInterruptedCandidate(candidateItems.get(delta.id), delta.error?.current);
-    }
-  }
-
-  downloads.onCreated.addListener(onCreated);
-  downloads.onChanged.addListener(onChanged);
-  timeoutId = globalThis.setTimeout(() => {
-    settle(lastUnconfirmedObservation ?? downloadNotObserved());
-  }, timeoutMs);
-
-  return { promise, stop };
-
-  function handleCompletedObservation(observation: SafeDownloadObservation) {
-    if (observation.state !== "not-observed") {
-      settle(observation);
-      return;
-    }
-
-    lastUnconfirmedObservation = observation;
-    if (!context || shouldSettleUnconfirmed(observation)) settle(observation);
-  }
-
-  async function handleInterruptedCandidate(
-    fallbackItem: DownloadCreatedItem | undefined,
-    errorCode?: string,
-  ) {
-    if (!context || !fallbackItem) {
-      settle(failedObservation(errorCode));
-      return;
-    }
-    const [searchItem] = await downloads.search({ id: fallbackItem.id }).catch(() => []);
-    const item = { ...fallbackItem, ...searchItem };
-    if (isExpectedDownloadCandidate(item, context)) {
-      settle(failedObservation(errorCode));
-      return;
-    }
-    lastUnconfirmedObservation = {
-      state: "not-observed",
-      safeSignals: ["browser-download-created", "browser-download-correlation-rejected"],
-      safeMessage:
-        "Pack saw a browser download event, but it did not match the expected filed-return PDF.",
-      userAction: {
-        type: "RETRY_PORTAL_GENERATION",
-        message: "Retry the filed-return download from the GST Portal detail page.",
-        canResume: true,
-      },
-    };
-  }
 }
 
 export function mergeFlowStepWithDownloadObservation(
@@ -302,28 +223,6 @@ export function mergeFlowStepWithDownloadObservation(
     ...step,
     state: observation.state === "failed" ? "blocked" : "download-unconfirmed",
     safeSignals: [...step.safeSignals, ...observation.safeSignals],
-    safeMessage: observation.safeMessage,
-    ...(observation.userAction ? { userAction: observation.userAction } : {}),
-  };
-}
-
-export function mergeDownloadTriggerWithDownloadObservation(
-  trigger: PortalDownloadTriggerResult,
-  observation: SafeDownloadObservation,
-): PortalDownloadTriggerResult {
-  if (observation.state === "completed") {
-    return {
-      ...trigger,
-      state: "downloaded",
-      safeSignals: [...trigger.safeSignals, ...observation.safeSignals],
-      safeMessage: observation.safeMessage,
-    };
-  }
-
-  return {
-    ...trigger,
-    state: observation.state === "failed" ? "blocked" : "download-unconfirmed",
-    safeSignals: [...trigger.safeSignals, ...observation.safeSignals],
     safeMessage: observation.safeMessage,
     ...(observation.userAction ? { userAction: observation.userAction } : {}),
   };

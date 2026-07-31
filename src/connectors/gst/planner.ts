@@ -77,8 +77,8 @@ export function createSyntheticGstResults(plan: DownloadPlan, now = new Date()):
         status: "not-filed",
         completedAt: now.toISOString(),
         portalMetadata: {
-          filingStatus: "Not filed",
-          ...(target.period ? { taxPeriod: target.period } : {}),
+          status: "Not filed",
+          ...(target.period ? { period: target.period } : {}),
         },
       };
     }
@@ -124,8 +124,8 @@ export function createSyntheticGstResults(plan: DownloadPlan, now = new Date()):
         integrityState: "not-computed",
       },
       portalMetadata: {
-        filingStatus: "Filed",
-        ...(target.period ? { taxPeriod: target.period } : {}),
+        status: "Filed",
+        ...(target.period ? { period: target.period } : {}),
       },
     };
   });

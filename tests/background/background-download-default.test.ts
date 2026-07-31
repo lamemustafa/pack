@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getFiledReturnsFullFiscalYearPeriods } from "../../src/core/filed-returns-scope";
-import type { PackMessage, PackMessageResponse } from "../../src/core/messages";
-import { observeBrowserDownloadById } from "../../src/background/download-observer";
+import { PACK_CONTENT_REQUEST_ENVELOPE_TYPE } from "../../src/connectors/gst/messages";
+import { type FiledReturnsMonth } from "../../src/connectors/gst/filed-returns-scope";
+import type { PackMessage, PackMessageResponse } from "../../src/connectors/gst/messages";
 
 const browserMocks = vi.hoisted(() => {
   let messageListener:
@@ -11,9 +11,17 @@ const browserMocks = vi.hoisted(() => {
         sendResponse: (response: PackMessageResponse) => void,
       ) => boolean | undefined)
     | null = null;
+  let localStorageState: Record<string, unknown> = {};
+  let sessionStorageState: Record<string, unknown> = {};
 
   return {
     getMessageListener: () => messageListener,
+    resetLocalStorage: () => {
+      localStorageState = {};
+    },
+    resetSessionStorage: () => {
+      sessionStorageState = {};
+    },
     downloads: {
       download: vi.fn(async () => 481),
     },
@@ -105,26 +113,91 @@ const browserMocks = vi.hoisted(() => {
       }),
     },
     scripting: {
-      executeScript: vi.fn(async (details: { args?: [{ actionId?: string }] }) => [
-        {
-          result: {
-            actionId: details.args?.[0]?.actionId ?? "action-captured",
-            dataUrl: `data:application/pdf;base64,${globalThis.btoa("%PDF-1.7 synthetic\n%%EOF\n")}`,
-            safeSignals: ["portal-blob-captured", "native-blob-click-suppressed"],
-          },
+      executeScript: vi.fn(
+        async (details: { args?: [{ actionId?: string; signalPrefix?: string }] }) => {
+          const signalPrefix = details.args?.[0]?.signalPrefix ?? "filed-gstr3b";
+          return [
+            {
+              result: {
+                capturedDownloadRequest: {
+                  actionId: details.args?.[0]?.actionId ?? "action-captured",
+                  dataUrl: `data:application/pdf;base64,${globalThis.btoa("%PDF-1.7 synthetic\n%%EOF\n")}`,
+                  safeSignals: [
+                    `${signalPrefix}-portal-blob-captured`,
+                    `${signalPrefix}-native-blob-click-suppressed`,
+                    `${signalPrefix}-main-world-capture`,
+                  ],
+                },
+                safeFailureSignals: [],
+              },
+            },
+          ];
         },
-      ]),
+      ),
     },
     storage: {
       local: {
-        get: vi.fn(async () => ({})),
-        remove: vi.fn(async () => undefined),
-        set: vi.fn(async () => undefined),
+        get: vi.fn(async (keys?: string | string[] | Record<string, unknown>) => {
+          if (typeof keys === "string") {
+            return keys in localStorageState ? { [keys]: localStorageState[keys] } : {};
+          }
+          if (Array.isArray(keys)) {
+            return Object.fromEntries(
+              keys
+                .filter((key) => key in localStorageState)
+                .map((key) => [key, localStorageState[key]]),
+            );
+          }
+          if (keys && typeof keys === "object") {
+            return Object.fromEntries(
+              Object.entries(keys).map(([key, fallback]) => [
+                key,
+                key in localStorageState ? localStorageState[key] : fallback,
+              ]),
+            );
+          }
+          return { ...localStorageState };
+        }),
+        remove: vi.fn(async (keys: string | string[]) => {
+          for (const key of Array.isArray(keys) ? keys : [keys]) {
+            delete localStorageState[key];
+          }
+        }),
+        set: vi.fn(async (values: Record<string, unknown>) => {
+          Object.assign(localStorageState, values);
+        }),
         setAccessLevel: vi.fn(async () => undefined),
       },
       session: {
-        get: vi.fn(async () => ({})),
-        set: vi.fn(async () => undefined),
+        get: vi.fn(async (keys?: string | string[] | Record<string, unknown>) => {
+          if (typeof keys === "string") {
+            return keys in sessionStorageState ? { [keys]: sessionStorageState[keys] } : {};
+          }
+          if (Array.isArray(keys)) {
+            return Object.fromEntries(
+              keys
+                .filter((key) => key in sessionStorageState)
+                .map((key) => [key, sessionStorageState[key]]),
+            );
+          }
+          if (keys && typeof keys === "object") {
+            return Object.fromEntries(
+              Object.entries(keys).map(([key, fallback]) => [
+                key,
+                key in sessionStorageState ? sessionStorageState[key] : fallback,
+              ]),
+            );
+          }
+          return { ...sessionStorageState };
+        }),
+        remove: vi.fn(async (keys: string | string[]) => {
+          for (const key of Array.isArray(keys) ? keys : [keys]) {
+            delete sessionStorageState[key];
+          }
+        }),
+        set: vi.fn(async (values: Record<string, unknown>) => {
+          Object.assign(sessionStorageState, values);
+        }),
       },
     },
     tabs: {
@@ -161,14 +234,12 @@ vi.mock("../../src/background/download-observer", () => ({
     state: "completed",
     safeSignals: ["browser-download-completed", "browser-download-non-empty"],
     safeMessage: "Completed.",
-  })),
-  observeNextBrowserDownload: vi.fn(() => ({
-    promise: Promise.resolve({
-      state: "completed",
-      safeSignals: ["browser-download-completed", "browser-download-non-empty"],
-      safeMessage: "Completed.",
-    }),
-    stop: vi.fn(),
+    safeEvidence: {
+      byteCountClass: "non-empty",
+      downloadId: 481,
+      mimeClass: "pdf",
+      urlClass: "blob",
+    },
   })),
   mergeFlowStepWithDownloadObservation: vi.fn((step, observation) =>
     observation.state === "completed"
@@ -188,22 +259,71 @@ vi.mock("../../src/background/download-observer", () => ({
   ),
 }));
 
-vi.mock("../../src/background/download-filename-suggester", () => ({
-  suggestNextBrowserDownloadFilename: vi.fn(() => ({ stop: vi.fn() })),
-}));
-
 describe("background filed returns download defaults", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
     vi.useRealTimers();
+    browserMocks.resetLocalStorage();
+    browserMocks.resetSessionStorage();
     vi.stubGlobal("defineBackground", (entrypoint: () => void) => {
       entrypoint();
       return entrypoint;
     });
   });
 
-  it("prefers target-bound portal capture over the unreliable direct request", async () => {
+  it("preserves an answered offscreen clear failure category", async () => {
+    browserMocks.runtime.sendMessage.mockImplementationOnce(async (message: unknown) => {
+      if (
+        typeof message === "object" &&
+        message !== null &&
+        "payload" in message &&
+        typeof message.payload === "object" &&
+        message.payload !== null &&
+        "requestId" in message.payload
+      ) {
+        return {
+          ok: false,
+          requestId: message.payload.requestId,
+          errorCategory: "clear-failed",
+        } as never;
+      }
+      return { ok: false, errorCategory: "invalid-message" } as never;
+    });
+    const { clearOffscreenFiledReturnLedger } =
+      await import("../../src/background/offscreen-blob-url");
+
+    await expect(
+      clearOffscreenFiledReturnLedger("single-period:synthetic-clear-test"),
+    ).resolves.toEqual({ status: "failed", errorCategory: "clear-failed" });
+  });
+
+  it("distinguishes unreachable offscreen clear communication", async () => {
+    browserMocks.runtime.sendMessage.mockRejectedValueOnce(new Error("synthetic unreachable"));
+    const { clearAllOffscreenFiledReturnLedgers } =
+      await import("../../src/background/offscreen-blob-url");
+
+    await expect(clearAllOffscreenFiledReturnLedgers()).resolves.toEqual({
+      status: "failed",
+      errorCategory: "offscreen-unreachable",
+    });
+  });
+
+  it("distinguishes an invalid answered offscreen clear response", async () => {
+    browserMocks.runtime.sendMessage.mockResolvedValueOnce({
+      ok: false,
+      errorCategory: "invalid-message",
+    } as never);
+    const { clearAllOffscreenFiledReturnLedgers } =
+      await import("../../src/background/offscreen-blob-url");
+
+    await expect(clearAllOffscreenFiledReturnLedgers()).resolves.toEqual({
+      status: "failed",
+      errorCategory: "offscreen-response-invalid",
+    });
+  });
+
+  it("uses the authenticated-page GSTR-3B acquisition request instead of legacy capture", async () => {
     browserMocks.tabs.sendMessage.mockImplementation(async (_tabId, message: PackMessage) => {
       message = unwrapContentRequest(message);
       if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3") {
@@ -219,27 +339,10 @@ describe("background filed returns download defaults", () => {
         } satisfies PackMessageResponse;
       }
 
-      if (message.type === "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3") {
+      if (message.type === "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34") {
         return {
-          ok: true,
-          mainWorldCaptureRequest: {
-            actionId: message.payload.actionId,
-            controlAttribute: "data-pack-download-action-id",
-            controlId: message.payload.actionId,
-            maxBytes: 10_000_000,
-            signalPrefix: "filed-gstr3b",
-          },
-          downloadTrigger: {
-            connectorId: "gst",
-            scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
-            state: "clicked",
-            safeSignals: [
-              "filed-return-download-clicked",
-              "filed-gstr3b-download-clicked",
-              "filed-gstr3b-portal-blob-download-captured",
-            ],
-            safeMessage: "Captured.",
-          },
+          ok: false,
+          error: "CONTENT_SCRIPT_UNAVAILABLE",
         } satisfies PackMessageResponse;
       }
 
@@ -260,29 +363,124 @@ describe("background filed returns download defaults", () => {
     expect(response).toMatchObject({
       ok: true,
       flowStep: {
-        state: "downloaded",
-        safeSignals: expect.arrayContaining([
-          "filed-gstr3b-extension-download-started",
-          "browser-download-completed",
-        ]),
+        state: "blocked",
+        safeSignals: ["artifact-acquisition-failed", "artifact-response-missing"],
       },
     });
-    expect(browserMocks.downloads.download).toHaveBeenCalledWith(
-      expect.objectContaining({
-        conflictAction: "uniquify",
-        filename: "complyeaze-pack/gst/2026-27/gstr-3b/may.pdf",
-        saveAs: false,
-      }),
-    );
+    expect(browserMocks.downloads.download).not.toHaveBeenCalled();
     expect(sentActionMessageTypes()).toEqual([
       "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
-      "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
+      "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34",
     ]);
   });
 
-  it("stages full-fiscal-year monthly targets and exports one zip", async () => {
+  it("returns a safe source when an unexpected background failure occurs", async () => {
+    browserMocks.storage.local.get.mockRejectedValueOnce(
+      new Error("sensitive portal URL and local path must not escape"),
+    );
+    await import("../../src/entrypoints/background");
+
+    const response = await sendBackgroundMessage({ type: "PACK_GET_LAST_MANIFEST" });
+
+    expect(response).toEqual({
+      ok: false,
+      error: "BACKGROUND_MESSAGE_HANDLER_FAILED",
+      safeMessage: "Pack stopped while handling the local manifest request. Try the action again.",
+      safeSite: "background-message-handler:last-manifest",
+    });
+    if (response.ok) throw new Error("expected a safe background failure");
+    expect(response.safeMessage).not.toContain("portal URL");
+    expect(response.safeMessage).not.toContain("local path");
+  });
+
+  it("persists and returns a terminal GSTR-2B mismatch summary to the popup", async () => {
+    browserMocks.tabs.query.mockResolvedValueOnce([
+      {
+        active: true,
+        id: 17,
+        url: "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
+        windowId: 1,
+      },
+    ]);
+    browserMocks.tabs.sendMessage.mockImplementation(async (_tabId, message: PackMessage) => {
+      message = unwrapContentRequest(message);
+      if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3") {
+        return {
+          ok: true,
+          flowStep: {
+            connectorId: "gst",
+            scopeId: "gst-gstr2b-private-v0",
+            state: "ready",
+            safeSignals: [
+              "download-gstr2b-summary-pdf",
+              "download-gstr2b-details-excel",
+              "filed-gstr2b-download-ready",
+            ],
+            safeMessage: "GSTR-2B download controls appear ready.",
+          },
+        } satisfies PackMessageResponse;
+      }
+      if (message.type === "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34") {
+        return {
+          ok: true,
+          artifact: {
+            ok: false,
+            reason: "target-period-mismatch",
+            requestId: "synthetic-request",
+            safeSignals: [],
+          },
+        } satisfies PackMessageResponse;
+      }
+      return { ok: false, error: "Unexpected message." } satisfies PackMessageResponse;
+    });
+
+    await import("../../src/entrypoints/background");
+
+    const response = await sendBackgroundMessage({
+      type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",
+      payload: { financialYear: "2026-27", period: "April", returnType: "GSTR-2B" },
+    });
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "blocked",
+        safeSignals: expect.arrayContaining([
+          "artifact-acquisition-failed",
+          "artifact-target-period-mismatch",
+        ]),
+        safeMessage:
+          "The GST Portal returned artifact data for a different requested return period.",
+      },
+      flowSummary: { status: "blocked" },
+    });
+    expect(browserMocks.storage.session.set).toHaveBeenCalledWith({
+      "pack:last-filed-returns-flow-summary": expect.objectContaining({
+        status: "blocked",
+        flowStep: expect.objectContaining({
+          safeSignals: expect.arrayContaining([
+            "artifact-acquisition-failed",
+            "artifact-target-period-mismatch",
+          ]),
+        }),
+      }),
+    });
+
+    await expect(
+      sendBackgroundMessage({ type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" }),
+    ).resolves.toMatchObject({
+      ok: true,
+      flowSummary: {
+        status: "blocked",
+        flowStep: {
+          safeMessage: expect.stringMatching(/\S/),
+        },
+      },
+    });
+  });
+
+  it("blocks a full-fiscal-year GSTR-3B request before it can start legacy targets", async () => {
     const financialYear = "2026-27";
-    const periods = getFiledReturnsFullFiscalYearPeriods(financialYear);
     browserMocks.tabs.sendMessage.mockImplementation(async (_tabId, message: PackMessage) => {
       message = unwrapContentRequest(message);
       if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3") {
@@ -305,23 +503,22 @@ describe("background filed returns download defaults", () => {
       if (message.type === "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3") {
         return {
           ok: true,
-          mainWorldCaptureRequest: {
-            actionId: message.payload.actionId,
-            controlAttribute: "data-pack-download-action-id",
-            controlId: message.payload.actionId,
-            maxBytes: 10_000_000,
-            signalPrefix: "filed-gstr3b",
-          },
           downloadTrigger: {
             connectorId: "gst",
             scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
             state: "clicked",
-            safeSignals: [
-              "filed-return-download-clicked",
-              "filed-gstr3b-download-clicked",
-              "filed-gstr3b-portal-blob-download-captured",
-            ],
-            safeMessage: "Captured.",
+            safeSignals: ["filed-gstr3b-download-clicked"],
+            safeMessage: "Clicked.",
+          },
+          mainWorldCaptureRequest: {
+            actionId: message.payload.actionId,
+            asyncBlobBinding: "action-xhr-non-artifact-to-pdf",
+            controlAttribute: "data-pack-gstr2b-capture-action",
+            controlId: `capture-${message.payload.period.toLowerCase()}`,
+            maxBytes: 36 * 1024 * 1024,
+            signalPrefix: "filed-gstr3b",
+            targetBinding: testCaptureBinding(message.payload, "PDF"),
+            timeoutMs: 30_000,
           },
         } satisfies PackMessageResponse;
       }
@@ -343,124 +540,12 @@ describe("background filed returns download defaults", () => {
     expect(response).toMatchObject({
       ok: true,
       flowStep: {
-        state: "downloaded",
-        safeSignals: expect.arrayContaining([
-          "full-fiscal-year-complete",
-          "full-fiscal-year-opfs-cleared",
-          "full-fiscal-year-zip-downloaded",
-        ]),
-      },
-      flowSummary: {
-        completedPeriods: periods,
-        status: "complete",
-        totalPeriods: periods.length,
-      },
-    });
-    expect(browserMocks.downloads.download).toHaveBeenCalledTimes(1);
-    expect(browserMocks.downloads.download).toHaveBeenCalledWith({
-      conflictAction: "uniquify",
-      filename: `gstr-3b-${financialYear.toLowerCase()}-full-year.zip`,
-      saveAs: false,
-      url: "blob:chrome-extension://pack/full-year.zip",
-    });
-    expect(observeBrowserDownloadById).toHaveBeenCalledWith(
-      browserMocks.downloads,
-      481,
-      expect.objectContaining({
-        expectedFileExtensions: [".zip"],
-        trustedDownloadIds: new Set([481]),
-      }),
-      45 * 1000,
-    );
-    expect(browserMocks.runtime.sendMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: "PACK_OFFSCREEN_CLEAR_FILED_RETURN_LEDGER",
-        payload: expect.objectContaining({
-          ledgerId: expect.any(String),
-        }),
-      }),
-    );
-    periods.forEach((period) => {
-      expect(browserMocks.runtime.sendMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: "PACK_OFFSCREEN_STAGE_FILED_RETURN",
-          payload: expect.objectContaining({
-            zipPath: `${period.toLowerCase()}.pdf`,
-          }),
-        }),
-      );
-    });
-    expect(sentActionMessageTypes()).toEqual([
-      ...periods.flatMap(() => [
-        "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
-        "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
-      ]),
-    ]);
-  });
-
-  it("does not use the GSTR-3B direct-download resolver for GSTR-2B", async () => {
-    browserMocks.tabs.sendMessage.mockImplementation(async (_tabId, message: PackMessage) => {
-      message = unwrapContentRequest(message);
-      if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3") {
-        return {
-          ok: true,
-          flowStep: {
-            connectorId: "gst",
-            scopeId: "gst-gstr2b-private-v0",
-            state: "ready",
-            safeSignals: [
-              "gstr2b-summary-route",
-              "gstr2b-download-ready",
-              "filed-return-download-ready",
-            ],
-            safeMessage: "Ready.",
-          },
-        } satisfies PackMessageResponse;
-      }
-
-      if (message.type === "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3") {
-        return {
-          ok: true,
-          downloadTrigger: {
-            connectorId: "gst",
-            scopeId: "gst-gstr2b-private-v0",
-            state: "clicked",
-            safeSignals: ["gstr2b-download-clicked", "gstr2b-portal-blob-download-clicked"],
-            safeMessage: "Clicked.",
-          },
-        } satisfies PackMessageResponse;
-      }
-
-      return { ok: false, error: "Unexpected message." } satisfies PackMessageResponse;
-    });
-
-    await import("../../src/entrypoints/background");
-
-    const response = await sendBackgroundMessage({
-      type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",
-      payload: {
-        artifactType: "EXCEL",
-        financialYear: "2026-27",
-        period: "May",
-        returnType: "GSTR-2B",
-      },
-    });
-
-    expect(response).toMatchObject({
-      ok: true,
-      flowStep: {
-        state: "downloaded",
-        safeSignals: expect.arrayContaining([
-          "gstr2b-portal-blob-download-clicked",
-          "browser-download-completed",
-        ]),
+        state: "blocked",
+        safeSignals: ["gstr3b-full-fiscal-year-acquisition-not-wired"],
       },
     });
     expect(browserMocks.downloads.download).not.toHaveBeenCalled();
-    expect(sentActionMessageTypes()).toEqual([
-      "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
-      "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
-    ]);
+    expect(sentActionMessageTypes()).toEqual([]);
   });
 
   it("builds the options-page synthetic demo manifest without starting downloads by default", async () => {
@@ -609,6 +694,23 @@ describe("background filed returns download defaults", () => {
   });
 });
 
+function testCaptureBinding(
+  target: Extract<
+    PackMessage,
+    { type: "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3" }
+  >["payload"],
+  artifactType: "PDF" | "EXCEL",
+) {
+  return {
+    artifactType,
+    controlTextDigest: "1234abcd",
+    financialYear: target.financialYear,
+    pathnameDigest: "abcd1234",
+    period: target.period as FiledReturnsMonth,
+    returnType: target.returnType,
+  };
+}
+
 async function sendBackgroundMessage(message: PackMessage): Promise<PackMessageResponse> {
   const listener = browserMocks.getMessageListener();
   if (!listener) throw new Error("background listener was not registered");
@@ -633,7 +735,7 @@ function unwrapContentRequest(message: unknown): PackMessage {
     message &&
     typeof message === "object" &&
     "type" in message &&
-    message.type === "PACK_CONTENT_REQUEST_V31" &&
+    message.type === PACK_CONTENT_REQUEST_ENVELOPE_TYPE &&
     "payload" in message &&
     message.payload &&
     typeof message.payload === "object"

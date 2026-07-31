@@ -64,6 +64,22 @@ outside store-facing claims until exact-ZIP clean-profile evidence,
 restart/resume evidence, and privacy-review evidence are recorded for the
 release.
 
+The current source build correlates a download to its target through one
+fail-closed evidence rule set, and that rule set is shared rather than
+return-type gated: the single-period GSTR-3B, GSTR-1 and GSTR-2B flows use it,
+as do the selected-file and full-year ZIP paths. It can accept completion only
+on an exact browser-download ID match that is complete, non-empty, and
+classified safe by the browser; interrupted, zero-byte, unknown-size,
+still-scanning, browser-rejected and unconfirmed downloads settle as unobserved
+and route to target review rather than to a retry.
+
+A separate and much narrower class covers a _portal-created_ Blob download.
+`target-bound-portal-click-blob` is limited to a single-period GSTR-3B PDF with
+an exact action and browser-download match, and is disabled for GSTR-1, GSTR-2B,
+selected-file ZIP/OPFS staging and every full-year flow — those flows correlate
+their own extension-created downloads by exact ID instead. Neither path is live
+or store-facing evidence.
+
 ## Install
 
 ### Chrome Web Store
@@ -154,9 +170,9 @@ ComplyEaze Pack uses WXT, Vite, React, and TypeScript.
 - `src/entrypoints/content.ts`: passive GST context detection.
 - `src/entrypoints/popup`: React popup.
 - `src/entrypoints/options`: React options page.
-- `src/core`: portal-neutral contracts, manifest, naming, CSV, and messages.
-- `src/connectors/gst`: GST-specific detection, filed-return navigation,
-  download triggering, and local demo data.
+- `src/core`: portal-neutral contracts, manifest, naming, and CSV.
+- `src/connectors/gst`: GST-specific contracts and messages, detection,
+  filed-return navigation, download triggering, and local demo data.
 - `src/extension/manifest-policy.ts`: canonical extension metadata, permissions,
   host allow-list, CSP, homepage, and icons.
 - `scripts/verify-extension-package.mjs`: built-package policy verification.
@@ -179,12 +195,21 @@ Pack uses Chrome extension storage only inside the current browser profile.
 - `pack:full-fiscal-year-ledger`: local-only full fiscal year run status with
   financial year, period, return type, target status, safe messages/signals,
   attempts, and timestamps only;
-- `pack:single-period-staging`: a short-lived opaque local ledger identifier used
-  to clear locally staged combined-download artifacts without storing filenames
-  or GST Portal metadata;
+- `pack:single-period-staging`: a short-lived local recovery ledger for a
+  selected-file ZIP. It stores an opaque ledger identifier, canonical scope
+  (financial year, period, return type and selected artifacts), per-artifact
+  safe status/diagnostics, the exact browser download ID during ZIP handoff,
+  revisions and timestamps. It does not store filenames, raw URLs, local paths,
+  portal HTML or taxpayer identifiers;
 - `pack:filed-returns-target-review`: local-only single-period unresolved
-  download review state with financial year, period, return type, safe
-  messages/signals, and timestamps only;
+  download review state with a canonical target identifier and scope, safe
+  messages/signals, revisions and timestamps. Recovery state may also store the
+  attempt kind/phase, request and bounded candidate-window timestamps, an opaque
+  `actionId`, the exact numeric browser `downloadId`, opaque staging-ledger or
+  selected-file checkpoint identifiers/revisions, and sanitized endpoint/path,
+  MIME, byte-count, status and error classes. It never stores the raw filename,
+  local path, URL/referrer, GSTIN/PAN, taxpayer name, portal HTML, credentials,
+  cookies, tokens or artifact bytes;
 - `pack:last-manifest`: the last local demo archive manifest summary. The live
   GST download path does not write a live manifest in this alpha.
 
@@ -194,7 +219,17 @@ Pack uses Chrome extension storage only inside the current browser profile.
 - `pack:last-filed-returns-observation`: the latest safe filed-returns page
   observation;
 - `pack:last-filed-returns-flow-summary`: the latest temporary filed-return flow
-  status.
+  status;
+- `pack:last-gst-tab-id`: the browser tab ID of the most recent supported GST
+  Portal tab, so a run can find its tab again without scanning every tab. A tab
+  ID is a per-session integer assigned by the browser and carries no page, URL
+  or taxpayer information.
+- `pack.artifact-acquisition.v2.*`: a per-target, session-only recovery
+  checkpoint for a direct artifact action. It contains the requested financial
+  year, period, return/artifact type, opaque request ID, checkpoint state and,
+  after browser creation, the exact numeric download ID. It contains no raw
+  filename, local path, URL/referrer, portal response, taxpayer identifier,
+  credential, cookie, token or artifact bytes.
 
 The Options page "Clear local Pack data" control removes the local keys above
 and clears Pack session storage. Pack does not store GST Portal credentials,

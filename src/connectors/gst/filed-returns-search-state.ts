@@ -1,5 +1,5 @@
-import type { FiledReturnsDownloadScope } from "../../core/contracts";
-import { normaliseFiledReturnsArtifactType } from "../../core/filed-returns-artifacts";
+import type { FiledReturnsDownloadScope } from "./filed-returns-contracts";
+import { normaliseFiledReturnsArtifactType } from "./filed-returns-artifacts";
 import { normaliseText } from "./filed-returns-dom";
 
 interface FiledReturnsSearchAttempt {

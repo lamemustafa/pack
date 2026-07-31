@@ -1,11 +1,11 @@
-import { browser } from "wxt/browser";
-import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "../core/contracts";
-import type { PackMessageResponse } from "../core/messages";
-import {
-  filedReturnDescriptor,
-  filedReturnScopedSignal,
-} from "../connectors/gst/filed-returns-return-descriptors";
+import type {
+  FiledReturnsDownloadScope,
+  PortalFlowStepResult,
+} from "../connectors/gst/filed-returns-contracts";
+import type { PackMessageResponse } from "../connectors/gst/messages";
+import { filedReturnScopedSignal } from "../connectors/gst/filed-returns-return-descriptors";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
+import { persistCanonicalFiledReturnsObservation } from "./filed-returns-observation-state";
 
 export const FLOW_STEP_SETTLE_MS = 150;
 export const DETAIL_SUMMARY_MODAL_SETTLE_MS = 60;
@@ -50,20 +50,6 @@ export function isFiledReturnDownloadReady(
   );
 }
 
-export function shouldAttemptDirectDownloadFromDetailRoute(
-  step: PortalFlowStepResult,
-  scope: FiledReturnsDownloadScope,
-  deps: FiledReturnsFlowRunnerDeps,
-): boolean {
-  return Boolean(
-    deps.preferDirectDownload &&
-    filedReturnDescriptor(scope.returnType).supportsDirectDownload &&
-    step.safeSignals.includes("gstr-3b-detail-route") &&
-    !step.safeSignals.includes("detail-summary-modal") &&
-    hasDirectDownloadReadySignal(step, scope),
-  );
-}
-
 export function getResultRowNavigationSettleMs(deps: FiledReturnsFlowRunnerDeps): number {
   return deps.timings?.resultRowNavigationSettleMs ?? RESULT_ROW_NAVIGATION_SETTLE_MS;
 }
@@ -93,8 +79,10 @@ export function extractActivePeriod(step: PortalFlowStepResult): string | null {
   return null;
 }
 
-export function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
+export function extractActiveFinancialYear(step: PortalFlowStepResult): string | null {
+  const prefix = "filed-return-detail-financial-year:";
+  const signal = step.safeSignals.find((candidate) => candidate.startsWith(prefix));
+  return signal ? signal.slice(prefix.length) : null;
 }
 
 export async function persistFlowResponse(
@@ -102,27 +90,18 @@ export async function persistFlowResponse(
   deps: FiledReturnsFlowRunnerDeps,
 ) {
   if ("observation" in response && response.observation) {
-    await browser.storage.session.set({
-      [deps.storageKeys.observation]: response.observation,
-    });
+    await persistCanonicalFiledReturnsObservation(
+      deps.storageKeys.observation,
+      response.observation,
+    );
   }
-}
-
-function hasDirectDownloadReadySignal(
-  step: PortalFlowStepResult,
-  scope: FiledReturnsDownloadScope,
-): boolean {
-  return (
-    isFiledReturnDownloadReady(step, scope) ||
-    (step.safeSignals.includes(`filed-return-detail-period:${scope.period}`) &&
-      step.safeSignals.includes(`filed-return-detail-financial-year:${scope.financialYear}`))
-  );
 }
 
 function isFiledReturnDetailNavigationStep(step: PortalFlowStepResult): boolean {
   return (
     step.safeSignals.includes("filed-return-result-view-clicked") ||
     step.safeSignals.includes("filed-return-api-result-posted") ||
+    step.safeSignals.includes("gstr1-dashboard-view-clicked") ||
     step.safeSignals.includes("gstr2b-dashboard-view-clicked")
   );
 }
@@ -132,6 +111,7 @@ function isPortalNavigationStep(step: PortalFlowStepResult): boolean {
     [
       "filed-returns-candidate-clicked",
       "filed-return-detail-back-clicked",
+      "filed-gstr1-scope-switch-navigation",
       "filed-returns-page-settling",
       "filed-return-search-results-pending",
       "filed-gstr1-controls-pending",

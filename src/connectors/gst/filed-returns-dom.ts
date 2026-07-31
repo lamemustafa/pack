@@ -1,4 +1,4 @@
-const CLICKABLE_SELECTOR = [
+export const CLICKABLE_CONTROL_SELECTOR = [
   "a",
   "button",
   "[role='button']",
@@ -9,13 +9,36 @@ const CLICKABLE_SELECTOR = [
 ].join(",");
 
 export function getClickableElements(root: ParentNode): HTMLElement[] {
-  return Array.from(root.querySelectorAll(CLICKABLE_SELECTOR)).filter((element) =>
+  return Array.from(root.querySelectorAll(CLICKABLE_CONTROL_SELECTOR)).filter((element) =>
     isHtmlElement(root, element),
   );
 }
 
+export function isPlainFormActionInput(element: HTMLElement): boolean {
+  return (
+    element.matches("input[type='button'],input[type='submit']") &&
+    !element.matches("[role='button'],[ng-click],[data-ng-click]")
+  );
+}
+
+export function getActionableExactSearchControls(root: ParentNode): HTMLElement[] {
+  return getClickableElements(root).filter(
+    (element) => isActionablePortalControl(element) && hasExactSearchText(element),
+  );
+}
+
+export function findUniqueActionableExactSearchControl(root: ParentNode): HTMLElement | null {
+  const matches = getActionableExactSearchControls(root);
+  return matches.length === 1 ? (matches[0] ?? null) : null;
+}
+
 export function activateElement(element: HTMLElement) {
   element.scrollIntoView?.({ block: "center", inline: "center" });
+  dispatchPointerSequence(element);
+  clickPortalElement(element);
+}
+
+export function dispatchPointerSequence(element: HTMLElement): void {
   const MouseEventConstructor = element.ownerDocument.defaultView?.MouseEvent;
   if (MouseEventConstructor) {
     for (const type of ["pointerover", "mouseover", "mouseenter", "pointerdown", "mousedown"]) {
@@ -28,16 +51,6 @@ export function activateElement(element: HTMLElement) {
       );
     }
   }
-  clickPortalElement(element);
-}
-
-export function scheduleElementActivation(element: HTMLElement): void {
-  const view = element.ownerDocument.defaultView;
-  if (view) {
-    view.setTimeout(() => activateElement(element), 0);
-    return;
-  }
-  globalThis.setTimeout(() => activateElement(element), 0);
 }
 
 export function clickPortalElement(element: HTMLElement): void {
@@ -110,20 +123,73 @@ export function matchesAcceptedText(text: string, acceptedTexts: readonly string
   });
 }
 
-export function isVisible(element: HTMLElement): boolean {
+export function isVisible(
+  element: HTMLElement,
+  options: { requireRenderedBox?: boolean } = {},
+): boolean {
+  if (element.hidden) return false;
   const view = element.ownerDocument.defaultView;
   const style = view?.getComputedStyle(element);
   if (style && (style.display === "none" || style.visibility === "hidden")) return false;
   const rect = element.getBoundingClientRect();
-  return rect.width > 0 || rect.height > 0 || Boolean(element.offsetParent);
+  const hasRenderedBox = rect.width > 0 || rect.height > 0;
+  return options.requireRenderedBox
+    ? hasRenderedBox
+    : hasRenderedBox || Boolean(element.offsetParent);
 }
 
-export function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
+export function isActionablePortalControl(element: HTMLElement): boolean {
+  if (!element.isConnected) return false;
+  const view = element.ownerDocument.defaultView;
+  let current: HTMLElement | null = element;
+  while (current) {
+    if (
+      current.matches(":disabled") ||
+      current.hidden ||
+      current.classList.contains("disabled") ||
+      current.hasAttribute("inert") ||
+      normaliseText(current.getAttribute("aria-hidden") ?? "") === "true" ||
+      normaliseText(current.getAttribute("aria-disabled") ?? "") === "true"
+    ) {
+      return false;
+    }
+
+    const style = view?.getComputedStyle(current);
+    if (
+      style &&
+      (style.display === "none" ||
+        style.visibility === "hidden" ||
+        style.visibility === "collapse" ||
+        style.opacity === "0" ||
+        style.pointerEvents === "none")
+    ) {
+      return false;
+    }
+
+    current = current.parentElement;
+  }
+
+  return true;
 }
 
 function normaliseComparable(value: string): string {
   return normaliseText(value).replace(/[^a-z0-9]/g, "");
+}
+
+function hasExactSearchText(element: HTMLElement): boolean {
+  const HTMLInputElementConstructor = element.ownerDocument.defaultView?.HTMLInputElement;
+  const inputValue =
+    HTMLInputElementConstructor && element instanceof HTMLInputElementConstructor
+      ? element.value
+      : "";
+  const textCandidates = [
+    element.innerText || "",
+    element.textContent || "",
+    inputValue,
+    element.getAttribute("aria-label") ?? "",
+    element.getAttribute("title") ?? "",
+  ];
+  return textCandidates.some((text) => normaliseText(text) === "search");
 }
 
 function containsComparableWithoutNumericPrefixCollision(

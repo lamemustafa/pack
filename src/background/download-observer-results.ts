@@ -1,9 +1,9 @@
+import type { UserActionRequired } from "../core/contracts";
 import type {
   BrowserDownloadSafeEvidence,
   FiledReturnsDownloadByteCountClass,
   FiledReturnsDownloadMimeClass,
-  UserActionRequired,
-} from "../core/contracts";
+} from "../connectors/gst/filed-returns-contracts";
 import {
   isExpectedDownloadCandidate,
   type DownloadObservationContext,
@@ -17,17 +17,31 @@ import type {
 export async function completedObservation(
   downloads: Pick<DownloadObservationApi, "search">,
   downloadId: number,
-  context: DownloadObservationContext | null = null,
+  context: DownloadObservationContext,
   fallbackItem?: DownloadCreatedItem,
 ): Promise<SafeDownloadObservation> {
   const { failed: searchFailed, items } = await safeDownloadSearch(downloads, downloadId);
   if (searchFailed) return unconfirmedObservation("browser-download-search-unavailable");
   const [searchItem] = items;
+  if (!searchItem) return unconfirmedObservation("browser-download-search-missing");
+  if (searchItem.state === "interrupted") return failedObservation(searchItem.error);
+  if (searchItem.state !== "complete") {
+    return unconfirmedObservation("browser-download-state-unconfirmed");
+  }
   const item = mergeDownloadEvidence(fallbackItem, searchItem);
   if (!item) return unconfirmedObservation("browser-download-search-missing");
-  if (context && !isExpectedDownloadCandidate(item, context)) {
+  if (!isExpectedDownloadCandidate(item, context)) {
     return unconfirmedObservation("browser-download-correlation-rejected");
   }
+  // Chrome documents DownloadItem.exists as eventual metadata: search() only
+  // starts a throttled filesystem check and can return the previous value. A
+  // completed, exact-ID, target-correlated, safe, non-empty download is the
+  // durable proof; treating a stale `false` as retry permission can duplicate
+  // the externally visible download action.
+  const danger = classifyDownloadDanger(item);
+  if (danger === "unknown") return unconfirmedObservation("browser-download-danger-unknown");
+  if (danger === "pending") return unconfirmedObservation("browser-download-danger-pending");
+  if (danger === "rejected") return rejectedDangerObservation();
   const knownSize = firstKnownSize(item);
 
   if (knownSize === null) return unconfirmedObservation("browser-download-size-unknown");
@@ -37,7 +51,7 @@ export async function completedObservation(
       state: "failed",
       safeSignals: ["browser-download-completed", "browser-download-zero-bytes"],
       safeMessage:
-        "The browser reported a filed-return PDF download, but the file appears to be empty. Retry from the GST Portal detail page.",
+        "The browser reported a filed-return download, but the file appears to be empty. Retry from the GST Portal detail page.",
       userAction: retryPortalGenerationAction(),
       safeEvidence: safeEvidenceForDownload(downloadId, item, "zero"),
     };
@@ -52,8 +66,59 @@ export async function completedObservation(
       ...(knownSize > 0 ? ["browser-download-non-empty"] : []),
     ],
     safeMessage:
-      "The browser reported that the filed-return PDF download completed. Check the local downloads folder for the GST Portal PDF.",
+      "The browser reported that the filed-return download completed. Check the local downloads folder for the GST Portal file.",
     safeEvidence: safeEvidenceForDownload(downloadId, item, "non-empty"),
+  };
+}
+
+export type DownloadDangerClassification = "unknown" | "pending" | "rejected" | "safe";
+
+/**
+ * The single source of truth for whether a completed browser download is safe
+ * enough to count as positive evidence. Every path that can mark a target
+ * complete must derive its decision from this, not restate it: the artifact
+ * delivery path previously accepted `state: "complete"` with a non-empty byte
+ * count and never consulted `danger`, so a browser-blocked file could be
+ * reported as saved.
+ */
+export function classifyDownloadDanger(item: {
+  danger?: string | undefined;
+}): DownloadDangerClassification {
+  if (!item.danger) return "unknown";
+  if (isPendingDangerClassification(item.danger)) return "pending";
+  if (hasRejectedDangerClassification(item)) return "rejected";
+  return "safe";
+}
+
+function hasRejectedDangerClassification(item: { danger?: string | undefined }): boolean {
+  return typeof item.danger !== "string" || !["safe", "deepScannedSafe"].includes(item.danger);
+}
+
+function isPendingDangerClassification(danger: string): boolean {
+  return [
+    "asyncScanning",
+    "asyncLocalPasswordScanning",
+    "promptForScanning",
+    "promptForLocalPasswordScanning",
+  ].includes(danger);
+}
+
+function rejectedDangerObservation(): SafeDownloadObservation {
+  return {
+    state: "failed",
+    safeSignals: [
+      "browser-download-created",
+      "browser-download-completed",
+      "browser-download-danger-rejected",
+    ],
+    safeMessage:
+      "The browser did not classify this filed-return download as safe, so Pack did not mark the target complete. Review the item in browser Downloads before deciding whether to retry.",
+    userAction: {
+      type: "NAVIGATE_TO_SUPPORTED_PAGE",
+      message:
+        "Review the browser download warning. Cancel the unresolved Pack target before starting another download.",
+      canResume: true,
+    },
   };
 }
 
@@ -62,7 +127,7 @@ export function unconfirmedObservation(signal: string): SafeDownloadObservation 
     state: "not-observed",
     safeSignals: ["browser-download-created", signal],
     safeMessage:
-      "Pack saw a browser download event, but could not prove it was a non-empty filed-return PDF from the GST Portal. Retry from the GST Portal detail page.",
+      "Pack saw a browser download event, but could not prove it was a non-empty filed-return file from the GST Portal. Retry from the GST Portal detail page.",
     userAction: retryPortalGenerationAction(),
   };
 }
@@ -81,6 +146,24 @@ export function downloadNotObserved(): SafeDownloadObservation {
   };
 }
 
+export function downloadInProgress(): SafeDownloadObservation {
+  return {
+    state: "not-observed",
+    safeSignals: [
+      "browser-download-created",
+      "browser-download-in-progress",
+      "browser-download-save-dialog-may-be-open",
+    ],
+    safeMessage:
+      "The exact browser download is still in progress. Finish or cancel the browser Save dialog, then ask Pack to reconcile the saved download.",
+    userAction: {
+      type: "RETRY_PORTAL_GENERATION",
+      message: "Finish or cancel the Save dialog, then reconcile the saved browser download.",
+      canResume: true,
+    },
+  };
+}
+
 export function failedObservation(errorCode?: string): SafeDownloadObservation {
   return {
     state: "failed",
@@ -90,7 +173,7 @@ export function failedObservation(errorCode?: string): SafeDownloadObservation {
       ...(errorCode ? [`browser-download-error-${normaliseSignal(errorCode)}`] : []),
     ],
     safeMessage:
-      "The browser started the filed-return PDF download but reported that it was interrupted. Check browser download permissions and retry.",
+      "The browser started the filed-return download but reported that it was interrupted. Check browser download permissions and retry.",
     userAction: {
       type: "ALLOW_MULTIPLE_DOWNLOADS",
       message: "Allow browser downloads for the GST Portal, then start the Pack download again.",
@@ -99,22 +182,16 @@ export function failedObservation(errorCode?: string): SafeDownloadObservation {
   };
 }
 
-export function shouldSettleUnconfirmed(observation: SafeDownloadObservation): boolean {
-  return !observation.safeSignals.some((signal) =>
-    [
-      "browser-download-correlation-rejected",
-      "browser-download-search-missing",
-      "browser-download-search-unavailable",
-    ].includes(signal),
-  );
-}
-
 function firstKnownSize(item: DownloadCreatedItem | undefined): number | null {
-  const knownSizes = [item?.fileSize, item?.totalBytes, item?.bytesReceived].filter(
+  const fileSize = item?.fileSize;
+  if (typeof fileSize === "number" && Number.isFinite(fileSize) && fileSize >= 0) {
+    return fileSize;
+  }
+  const transferSizes = [item?.totalBytes, item?.bytesReceived].filter(
     (value): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0,
   );
-  if (knownSizes.length === 0) return null;
-  return Math.max(...knownSizes);
+  if (transferSizes.length === 0) return null;
+  return Math.max(...transferSizes);
 }
 
 function safeEvidenceForDownload(
@@ -190,11 +267,11 @@ function mergeDownloadEvidence(
 ): DownloadCreatedItem | undefined {
   if (!fallbackItem) return searchItem;
   if (!searchItem) return fallbackItem;
-  return {
-    ...fallbackItem,
-    ...searchItem,
-    startTime: searchItem.startTime ?? fallbackItem.startTime,
-  };
+  return Object.assign(
+    {},
+    fallbackItem,
+    Object.fromEntries(Object.entries(searchItem).filter(([, value]) => value !== undefined)),
+  ) as DownloadCreatedItem;
 }
 
 function retryPortalGenerationAction(): UserActionRequired {

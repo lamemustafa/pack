@@ -1,27 +1,52 @@
-import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "../core/contracts";
-import type { PackMessageResponse } from "../core/messages";
+import type {
+  FiledReturnsDownloadScope,
+  PortalFlowStepResult,
+} from "../connectors/gst/filed-returns-contracts";
+import { delay } from "../core/time";
+import type { PackMessageResponse } from "../connectors/gst/messages";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
+import {
+  concreteFiledReturnsArtifactTypes,
+  normaliseFiledReturnsArtifactType,
+} from "../connectors/gst/filed-returns-artifacts";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
 import { getRequiredGstTab } from "./filed-returns-active-tab";
+import {
+  clickReturnsDashboardAnchorFromTab,
+  verifyCurrentContentScriptFromTab,
+} from "./gst-tab-context";
 import { runDownloadStepWithRetry } from "./filed-returns-flow-messaging";
 import {
-  delay,
+  extractActiveFinancialYear,
   extractActivePeriod,
   getFlowStepSettleMs,
   getResultRowNavigationSettleMs,
   isFiledReturnDownloadReady,
   maxFlowStepsFor,
   persistFlowResponse,
-  shouldAttemptDirectDownloadFromDetailRoute,
   shouldContinueFlow,
 } from "./filed-returns-flow-runner-utils";
-import { triggerSelectedArtifacts } from "./filed-returns-selected-artifacts";
+import {
+  preflightSelectedArtifactsRecovery,
+  triggerSelectedArtifacts,
+} from "./filed-returns-selected-artifacts";
 import {
   detailStepLimitReachedMessage,
   searchStepLimitReachedMessage,
   toStepLimitReachedFlowStep,
 } from "./filed-returns-step-limit";
 import { withPersistedSinglePeriodSummary } from "./filed-returns-single-period-summary";
+import { reconcileArtifactAcquisitionCheckpoint } from "./artifact-acquisition-state";
+import {
+  explainIncompleteGstr1PeriodMismatchRecovery,
+  pendingGstr1PeriodMismatchRecoveryStep,
+  stopNonConvergingReturnTypeMismatchRecovery,
+  stopNonConvergingGstr1PeriodMismatchRecovery,
+  updateReturnTypeMismatchRecovery,
+  updateGstr1PeriodMismatchRecovery,
+  type Gstr1PeriodMismatchRecovery,
+  type ReturnTypeMismatchRecovery,
+} from "./filed-returns-gstr1-period-mismatch-recovery";
 
 const MAIN_WORLD_FILTER_SEARCH_SETTLE_MS = 1_000;
 
@@ -31,6 +56,51 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
   options: { persistSinglePeriodSummary?: boolean } = {},
 ): Promise<PackMessageResponse> {
   const shouldPersistSinglePeriodSummary = options.persistSinglePeriodSummary !== false;
+  // Every direct-artifact return type checkpoints its acquisition, so every one
+  // of them must reconcile that checkpoint before starting again. Limiting this
+  // to GSTR-3B let a GSTR-1 or GSTR-2B start overwrite a live checkpoint with a
+  // fresh intent and repeat a download that may already have succeeded.
+  // Checkpoints are keyed per concrete artifact type, so a composite selection
+  // has to reconcile each one rather than the composite scope.
+  for (const artifactType of concreteFiledReturnsArtifactTypes(
+    normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType),
+  )) {
+    const acquisitionRecovery = await reconcileArtifactAcquisitionCheckpoint({
+      artifactType,
+      financialYear: scope.financialYear,
+      period: scope.period,
+      returnType: scope.returnType,
+    });
+    if (acquisitionRecovery.state === "needs-review") {
+      return {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: filedReturnScopeId(scope.returnType),
+          state: "blocked",
+          safeSignals: acquisitionRecovery.safeSignals,
+          safeMessage:
+            "Pack found an interrupted artifact download and will not repeat the target automatically.",
+          userAction: {
+            type: "RETRY_PORTAL_GENERATION",
+            message: "Check the exact browser download before starting again.",
+            canResume: true,
+          },
+        },
+      };
+    }
+  }
+  const recoveryResponse = await preflightSelectedArtifactsRecovery({ deps, scope });
+  if (recoveryResponse) {
+    return recoveryResponse.ok && "flowStep" in recoveryResponse
+      ? withPersistedSinglePeriodSummary(
+          scope,
+          recoveryResponse,
+          deps,
+          shouldPersistSinglePeriodSummary,
+        )
+      : recoveryResponse;
+  }
   const activeTab = await getRequiredGstTab(deps.getActiveGstTab);
   if (!activeTab) {
     return withPersistedSinglePeriodSummary(
@@ -57,7 +127,104 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
     );
   }
 
-  return runSinglePeriodSteps(scope, deps, activeTab.tab.id, shouldPersistSinglePeriodSummary);
+  if (scope.returnType === "GSTR-3B" && !isReturnsOrigin(activeTab.tab.url)) {
+    const portalNavigation = await (
+      deps.openReturnsDashboardWithPortalAnchor ?? clickReturnsDashboardAnchorFromTab
+    )(activeTab.tab.id);
+    if (!portalNavigation) {
+      return blockedWrongOriginResponse(
+        scope,
+        deps,
+        shouldPersistSinglePeriodSummary,
+        "unavailable",
+      );
+    }
+    if (portalNavigation !== "clicked") {
+      return blockedWrongOriginResponse(
+        scope,
+        deps,
+        shouldPersistSinglePeriodSummary,
+        portalNavigation,
+      );
+    }
+    if (!(await waitForReturnsOrigin(activeTab.tab.id, deps))) {
+      return blockedWrongOriginResponse(scope, deps, shouldPersistSinglePeriodSummary, "timeout");
+    }
+    const contentScriptReady = await (
+      deps.verifyReturnsOriginContentScript ?? verifyCurrentContentScriptFromTab
+    )(activeTab.tab.id);
+    if (!contentScriptReady) {
+      return blockedWrongOriginResponse(
+        scope,
+        deps,
+        shouldPersistSinglePeriodSummary,
+        "unavailable",
+      );
+    }
+  }
+
+  return runSinglePeriodSteps(
+    scope,
+    { ...deps, portalTabIncognito: activeTab.tab.incognito === true },
+    activeTab.tab.id,
+    shouldPersistSinglePeriodSummary,
+  );
+}
+
+async function blockedWrongOriginResponse(
+  scope: FiledReturnsDownloadScope,
+  deps: FiledReturnsFlowRunnerDeps,
+  shouldPersistSinglePeriodSummary: boolean,
+  reason: "ambiguous" | "not-found" | "timeout" | "unavailable",
+): Promise<PackMessageResponse> {
+  return withPersistedSinglePeriodSummary(
+    scope,
+    {
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: filedReturnScopeId("GSTR-3B"),
+        state: "blocked",
+        safeSignals: ["wrong-origin-open-returns-dashboard", `returns-dashboard-anchor-${reason}`],
+        safeMessage:
+          reason === "ambiguous"
+            ? "Pack found more than one matching Returns Dashboard link and will not choose one."
+            : reason === "timeout"
+              ? "Pack clicked the GST Portal Returns Dashboard link but the portal did not finish opening it in time."
+              : "Pack needs the GST Portal Returns Dashboard before it can acquire filed GSTR-3B.",
+        userAction: {
+          type: "NAVIGATE_TO_SUPPORTED_PAGE",
+          message:
+            "Open Services > Returns > Returns Dashboard in the GST Portal, then press Start again.",
+          canResume: true,
+        },
+      },
+    },
+    deps,
+    shouldPersistSinglePeriodSummary,
+  );
+}
+
+async function waitForReturnsOrigin(
+  tabId: number,
+  deps: FiledReturnsFlowRunnerDeps,
+): Promise<boolean> {
+  const timeoutMs = deps.timings?.returnsDashboardNavigationTimeoutMs ?? 15_000;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const activeTab = await getRequiredGstTab(deps.getActiveGstTab);
+    if (activeTab?.tab.id === tabId && isReturnsOrigin(activeTab.tab.url)) return true;
+    await delay(250);
+  }
+  return false;
+}
+
+function isReturnsOrigin(url: string | undefined): boolean {
+  try {
+    return new URL(url ?? "").origin === "https://return.gst.gov.in";
+  } catch {
+    return false;
+  }
 }
 
 async function runSinglePeriodSteps(
@@ -68,7 +235,10 @@ async function runSinglePeriodSteps(
 ): Promise<PackMessageResponse> {
   let lastStep: PortalFlowStepResult | null = null;
   let activePeriod: string | null = null;
+  let activeFinancialYear: string | null = null;
   let mainWorldFilterAttempted = false;
+  let mismatchRecovery: Gstr1PeriodMismatchRecovery | null = null;
+  let returnTypeMismatchRecovery: ReturnTypeMismatchRecovery | null = null;
   for (let attempt = 0; attempt < maxFlowStepsFor(scope); attempt += 1) {
     const response = await runScopedDownloadStepWithRetry(deps, tabId, scope);
     if (!response.ok || !("flowStep" in response)) {
@@ -78,31 +248,47 @@ async function runSinglePeriodSteps(
     await persistFlowResponse(response, deps);
     lastStep = response.flowStep;
     activePeriod = extractActivePeriod(lastStep) ?? activePeriod;
-
-    if (
-      lastStep.safeSignals.includes("filed-gstr1-result-view-user-action-required") &&
-      deps.clickGstr1ResultViewWithDebugger
-    ) {
-      const debuggerStep = await deps.clickGstr1ResultViewWithDebugger(tabId, scope);
-      const debuggerResponse = { ok: true as const, flowStep: debuggerStep };
-      await persistFlowResponse(debuggerResponse, deps);
-      lastStep = debuggerStep;
-      if (!shouldContinueFlow(debuggerStep)) {
-        return withPersistedSinglePeriodSummary(
-          scope,
-          debuggerResponse,
-          deps,
-          shouldPersistSinglePeriodSummary,
-        );
-      }
-      await delay(getFlowStepSettleMs(debuggerStep, deps));
-      continue;
+    activeFinancialYear = extractActiveFinancialYear(lastStep) ?? activeFinancialYear;
+    mismatchRecovery = updateGstr1PeriodMismatchRecovery(mismatchRecovery, scope, lastStep);
+    const mismatchRecoveryStop = stopNonConvergingGstr1PeriodMismatchRecovery(
+      scope,
+      response,
+      mismatchRecovery,
+    );
+    if (mismatchRecoveryStop) {
+      return withPersistedSinglePeriodSummary(
+        scope,
+        mismatchRecoveryStop,
+        deps,
+        shouldPersistSinglePeriodSummary,
+      );
+    }
+    returnTypeMismatchRecovery = updateReturnTypeMismatchRecovery(
+      returnTypeMismatchRecovery,
+      scope,
+      lastStep,
+    );
+    const returnTypeMismatchRecoveryStop = stopNonConvergingReturnTypeMismatchRecovery(
+      scope,
+      response,
+      returnTypeMismatchRecovery,
+    );
+    if (returnTypeMismatchRecoveryStop) {
+      return withPersistedSinglePeriodSummary(
+        scope,
+        returnTypeMismatchRecoveryStop,
+        deps,
+        shouldPersistSinglePeriodSummary,
+      );
     }
 
     if (lastStep.safeSignals.includes("filed-return-api-result-posted")) {
       return waitForDetailReadyThenTrigger({
         activePeriod,
+        activeFinancialYear,
         deps,
+        mismatchRecovery,
+        returnTypeMismatchRecovery,
         shouldPersistSinglePeriodSummary,
         scope,
         tabId,
@@ -111,12 +297,16 @@ async function runSinglePeriodSteps(
 
     if (
       lastStep.safeSignals.includes("filed-return-result-view-clicked") ||
+      lastStep.safeSignals.includes("gstr1-dashboard-view-clicked") ||
       lastStep.safeSignals.includes("gstr2b-dashboard-view-clicked")
     ) {
       if (shouldWaitForDetailReadyAfterResultNavigation(scope)) {
         return waitForDetailReadyThenTrigger({
           activePeriod,
+          activeFinancialYear,
           deps,
+          mismatchRecovery,
+          returnTypeMismatchRecovery,
           shouldPersistSinglePeriodSummary,
           scope,
           tabId,
@@ -127,6 +317,7 @@ async function runSinglePeriodSteps(
 
       return triggerSinglePeriodDownloadAndPersistSummary({
         activePeriod,
+        activeFinancialYear,
         deps,
         shouldPersistSinglePeriodSummary,
         scope,
@@ -137,6 +328,7 @@ async function runSinglePeriodSteps(
     if (isFiledReturnDownloadReady(lastStep, scope)) {
       return triggerSinglePeriodDownloadAndPersistSummary({
         activePeriod,
+        activeFinancialYear,
         deps,
         shouldPersistSinglePeriodSummary,
         scope,
@@ -175,10 +367,21 @@ async function runSinglePeriodSteps(
       await clearUnsubmittedMainWorldSearch(deps, tabId, scope);
     }
 
+    const mismatchRecoveryPending = pendingGstr1PeriodMismatchRecoveryStep(
+      scope,
+      lastStep,
+      mismatchRecovery,
+    );
+    if (mismatchRecoveryPending) {
+      lastStep = mismatchRecoveryPending;
+      await delay(getFlowStepSettleMs(lastStep, deps));
+      continue;
+    }
+
     if (!shouldContinueFlow(lastStep)) {
       return withPersistedSinglePeriodSummary(
         scope,
-        response,
+        explainIncompleteGstr1PeriodMismatchRecovery(scope, response, mismatchRecovery),
         deps,
         shouldPersistSinglePeriodSummary,
       );
@@ -186,17 +389,21 @@ async function runSinglePeriodSteps(
     await delay(getFlowStepSettleMs(lastStep, deps));
   }
 
+  const stepLimitResponse: Extract<
+    PackMessageResponse,
+    { ok: true; flowStep: PortalFlowStepResult }
+  > = {
+    ok: true,
+    flowStep: toStepLimitReachedFlowStep(scope, lastStep, {
+      safeSignal: "flow-step-limit-reached",
+      safeMessage: searchStepLimitReachedMessage(scope),
+      userActionMessage:
+        "Wait for the GST Portal result page to finish loading, then click Start download again.",
+    }),
+  };
   return withPersistedSinglePeriodSummary(
     scope,
-    {
-      ok: true,
-      flowStep: toStepLimitReachedFlowStep(scope, lastStep, {
-        safeSignal: "flow-step-limit-reached",
-        safeMessage: searchStepLimitReachedMessage(scope),
-        userActionMessage:
-          "Wait for the GST Portal result page to finish loading, then click Start download again.",
-      }),
-    },
+    explainIncompleteGstr1PeriodMismatchRecovery(scope, stepLimitResponse, mismatchRecovery),
     deps,
     shouldPersistSinglePeriodSummary,
   );
@@ -219,18 +426,26 @@ async function clearUnsubmittedMainWorldSearch(
 
 async function waitForDetailReadyThenTrigger({
   activePeriod,
+  activeFinancialYear,
   deps,
+  mismatchRecovery: initialMismatchRecovery,
+  returnTypeMismatchRecovery: initialReturnTypeMismatchRecovery,
   shouldPersistSinglePeriodSummary,
   scope,
   tabId,
 }: {
   activePeriod: string | null;
+  activeFinancialYear: string | null;
   deps: FiledReturnsFlowRunnerDeps;
+  mismatchRecovery: Gstr1PeriodMismatchRecovery | null;
+  returnTypeMismatchRecovery: ReturnTypeMismatchRecovery | null;
   shouldPersistSinglePeriodSummary: boolean;
   scope: FiledReturnsDownloadScope;
   tabId: number;
 }): Promise<PackMessageResponse> {
   let lastStep: PortalFlowStepResult | null = null;
+  let mismatchRecovery = initialMismatchRecovery;
+  let returnTypeMismatchRecovery = initialReturnTypeMismatchRecovery;
 
   for (let attempt = 0; attempt < maxFlowStepsFor(scope); attempt += 1) {
     const response = await runScopedDownloadStepWithRetry(deps, tabId, scope);
@@ -241,10 +456,44 @@ async function waitForDetailReadyThenTrigger({
     await persistFlowResponse(response, deps);
     lastStep = response.flowStep;
     activePeriod = extractActivePeriod(lastStep) ?? activePeriod;
+    activeFinancialYear = extractActiveFinancialYear(lastStep) ?? activeFinancialYear;
+    mismatchRecovery = updateGstr1PeriodMismatchRecovery(mismatchRecovery, scope, lastStep);
+    const mismatchRecoveryStop = stopNonConvergingGstr1PeriodMismatchRecovery(
+      scope,
+      response,
+      mismatchRecovery,
+    );
+    if (mismatchRecoveryStop) {
+      return withPersistedSinglePeriodSummary(
+        scope,
+        mismatchRecoveryStop,
+        deps,
+        shouldPersistSinglePeriodSummary,
+      );
+    }
+    returnTypeMismatchRecovery = updateReturnTypeMismatchRecovery(
+      returnTypeMismatchRecovery,
+      scope,
+      lastStep,
+    );
+    const returnTypeMismatchRecoveryStop = stopNonConvergingReturnTypeMismatchRecovery(
+      scope,
+      response,
+      returnTypeMismatchRecovery,
+    );
+    if (returnTypeMismatchRecoveryStop) {
+      return withPersistedSinglePeriodSummary(
+        scope,
+        returnTypeMismatchRecoveryStop,
+        deps,
+        shouldPersistSinglePeriodSummary,
+      );
+    }
 
     if (isFiledReturnDownloadReady(lastStep, scope)) {
       return triggerSinglePeriodDownloadAndPersistSummary({
         activePeriod,
+        activeFinancialYear,
         deps,
         shouldPersistSinglePeriodSummary,
         scope,
@@ -252,20 +501,21 @@ async function waitForDetailReadyThenTrigger({
       });
     }
 
-    if (shouldAttemptDirectDownloadFromDetailRoute(lastStep, scope, deps)) {
-      return triggerSinglePeriodDownloadAndPersistSummary({
-        activePeriod,
-        deps,
-        shouldPersistSinglePeriodSummary,
-        scope,
-        tabId,
-      });
+    const mismatchRecoveryPending = pendingGstr1PeriodMismatchRecoveryStep(
+      scope,
+      lastStep,
+      mismatchRecovery,
+    );
+    if (mismatchRecoveryPending) {
+      lastStep = mismatchRecoveryPending;
+      await delay(getFlowStepSettleMs(lastStep, deps));
+      continue;
     }
 
     if (!shouldContinueFlow(lastStep)) {
       return withPersistedSinglePeriodSummary(
         scope,
-        response,
+        explainIncompleteGstr1PeriodMismatchRecovery(scope, response, mismatchRecovery),
         deps,
         shouldPersistSinglePeriodSummary,
       );
@@ -273,17 +523,21 @@ async function waitForDetailReadyThenTrigger({
     await delay(getFlowStepSettleMs(lastStep, deps));
   }
 
+  const stepLimitResponse: Extract<
+    PackMessageResponse,
+    { ok: true; flowStep: PortalFlowStepResult }
+  > = {
+    ok: true,
+    flowStep: toStepLimitReachedFlowStep(scope, lastStep, {
+      safeSignal: "detail-ready-step-limit-reached",
+      safeMessage: detailStepLimitReachedMessage(scope),
+      userActionMessage:
+        "Wait for the filed-return detail page to finish loading, then click Start download again.",
+    }),
+  };
   return withPersistedSinglePeriodSummary(
     scope,
-    {
-      ok: true,
-      flowStep: toStepLimitReachedFlowStep(scope, lastStep, {
-        safeSignal: "detail-ready-step-limit-reached",
-        safeMessage: detailStepLimitReachedMessage(scope),
-        userActionMessage:
-          "Wait for the filed-return detail page to finish loading, then click Start download again.",
-      }),
-    },
+    explainIncompleteGstr1PeriodMismatchRecovery(scope, stepLimitResponse, mismatchRecovery),
     deps,
     shouldPersistSinglePeriodSummary,
   );
@@ -302,12 +556,14 @@ function runScopedDownloadStepWithRetry(
 
 async function triggerSinglePeriodDownloadAndPersistSummary({
   activePeriod,
+  activeFinancialYear,
   deps,
   shouldPersistSinglePeriodSummary,
   scope,
   tabId,
 }: {
   activePeriod: string | null;
+  activeFinancialYear: string | null;
   deps: FiledReturnsFlowRunnerDeps;
   shouldPersistSinglePeriodSummary: boolean;
   scope: FiledReturnsDownloadScope;
@@ -315,6 +571,7 @@ async function triggerSinglePeriodDownloadAndPersistSummary({
 }): Promise<PackMessageResponse> {
   const response = await triggerSelectedArtifacts({
     activePeriod,
+    activeFinancialYear,
     deps,
     scope,
     tabId,

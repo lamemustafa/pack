@@ -1,4 +1,4 @@
-import type { PackMessageResponse } from "../core/messages";
+import type { PackMessageResponse } from "../connectors/gst/messages";
 
 const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
 

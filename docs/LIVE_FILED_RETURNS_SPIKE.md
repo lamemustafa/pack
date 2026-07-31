@@ -61,19 +61,27 @@ not a public launch path.
   targets only the explicit portal-rendered `DOWNLOAD FILED GSTR-3B` control
   and rejects system-generated PDF links, save/submit/proceed/continue controls
   and generic navigation actions.
-- Browser download evidence: Pack now arms a local `chrome.downloads` observer
-  before the final filed-GSTR-3B click. A run is considered completed only when
-  the browser reports a completed non-empty download; a mere portal-button click
-  is reported as unconfirmed and asks the user to allow downloads/retry.
+- Browser download evidence: Pack binds the final portal control to the explicit
+  target, captures only the artifact produced by that action, starts an
+  extension-owned local download and observes the exact returned browser
+  download id. A run is considered completed only when the browser reports a
+  completed non-empty file; a mere portal-button click remains unconfirmed.
+- Target-bound portal-created evidence: the source-build alpha has one narrower
+  path for a single-period GSTR-3B PDF when the exact action delegates the
+  portal-created Blob download instead of returning captured bytes. Pack accepts
+  only one browser candidate bound to the action window, selected period, PDF
+  type and active-profile mode, then observes that exact browser download id.
+  This path is disabled for GSTR-1, GSTR-2B, selected-file ZIP staging and all
+  full-year work. It is an implementation class, not a live or Store-facing
+  success claim.
 - GSTR-2B handling: Pack routes `GSTR-2B` to the GST Portal's separate
   `gstr2b.gst.gov.in` summary page and targets only the explicit
   `DOWNLOAD GSTR-2B SUMMARY (PDF)` and `DOWNLOAD GSTR-2B DETAILS (EXCEL)`
-  controls. Unlike the reviewed GSTR-3B direct PDF endpoint, the public GSTR-2B
-  bundle generates PDF/Excel as page-side blob downloads from authenticated API
-  data. Pack therefore does not synthesize a direct URL for GSTR-2B. If the
-  browser does not report a completed download after the blob download click,
-  Pack records the artifact as unconfirmed and warns that Brave/Chrome's
-  ask-where-to-save dialog may still be open.
+  controls. The public GSTR-2B bundle generates PDF/Excel as page-side blob
+  downloads from authenticated API data. Pack does not synthesize or replay a
+  protected download URL. If action-bound capture and exact-id browser evidence
+  cannot prove completion, Pack records the artifact as unconfirmed and does
+  not click the portal control a second time.
 - Extension-reload recovery: if Brave/Chrome reloads the extension while a GST
   tab is already open, the popup can inject Pack's packaged content script back
   into that active GST tab and refresh the safe observation without reloading the
@@ -239,9 +247,7 @@ Pack should reach filed returns through one of these paths:
   `Return Dashboard` > `View Filed Returns`;
 - user-driven portal navigation: `Services > Returns > View Filed Returns`;
 - extension-driven DOM navigation that clicks the portal-rendered menu item
-  after the user is already authenticated;
-- future synthetic API replay only after the required request shape is observed
-  from a legitimate portal page/action.
+  after the user is already authenticated.
 
 ## Private live observation steps
 
@@ -295,57 +301,45 @@ inside the active portal page with `fetch(..., { credentials: "same-origin" })`
 and portal storage/form navigation; Pack must not copy, store, log or transmit
 GST cookies, session tokens, raw headers or taxpayer-specific response bodies.
 
-Synthetic direct-download replay remains an engineering experiment only. It may
-be tried locally from an authenticated portal page after a legitimate user action
-reveals the final request shape, but it is not a v0 production path unless it can
-preserve the same privacy boundary and avoid durable credential/session capture.
+Historical direct-endpoint probe/replay experiments are retired. Their protected
+request paths are intentionally omitted from this document and must not be
+pasted, replayed, logged, stored, or reconstructed from live portal traffic.
+Those experiments did not establish a safe, reliable path and are not release
+evidence.
 
-The redacted final filed GSTR-3B detail-page request family observed after the
-portal-rendered download action is:
+The current source-build candidate contains a narrower GSTR-3B browser-download
+path: after Pack verifies the visible filed target, it creates one reviewed,
+target-bound browser request without a preflight probe, portal capture, copied
+headers, generated filename, or retained URL. Completion remains fail-closed on
+the exact browser download ID plus completed, non-empty PDF MIME evidence. This
+path has no live acceptance evidence yet and must not be presented as Store or
+release readiness.
 
-```text
-GET /returns/auth/api/gstr3b/getgenpdf?rtn_prd=MMYYYY
-GET /returns/auth/api/gstr3b/taxpayble?rtn_prd=MMYYYY
-```
+The established capture path is action-bound capture of the artifact produced by the
+portal-rendered download action. It must match the explicit Pack action and
+target, validate the transient artifact locally, and require correlated
+`chrome.downloads` completed/non-empty evidence. Pack must not retain artifact
+bytes beyond the bounded in-memory or temporary local OPFS staging required for
+an explicit selected-file ZIP and its recovery/cleanup lifecycle. It must not
+expose those bytes, copied cookies, headers, raw protected URLs, local
+filenames, or local paths.
 
-`MMYYYY` is derived from the user-selected return period and financial year.
-Pack must not document, log or store the raw protected URL from a taxpayer
-session. Any direct-download experiment must construct the path from the local
-target, run only on the authenticated returns-domain GSTR-3B detail route,
-verify that the visible detail page matches the target financial year and
-period, and bind the request to Pack's local action id before attempting
-anything networked.
+The current source-build alpha also recognises one fail-closed
+`target-bound-portal-click-blob` evidence class. It applies only to a
+single-period GSTR-3B PDF after the exact target action delegates a
+portal-created Blob download and strict transient browser metadata yields one
+matching candidate. Completion still requires the exact numeric browser
+download id plus completed, non-empty PDF evidence. This class is excluded from
+GSTR-1, GSTR-2B, selected-file ZIP/OPFS staging and full-year flows. An ordinary
+or ambiguous portal click remains unconfirmed.
 
-The safe replay boundary is header-level and URL-only: browser-managed
-credentials only, no copied cookies or headers, no raw response body reads, no
-filenames or local paths in logs, and success only through Pack's existing
-correlated `chrome.downloads` completed/non-empty evidence. Live Brave testing
-showed that the reviewed protected URL can expose an HTML response instead of
-the filed PDF. The current direct path therefore probes the response metadata
-inside the authenticated GST page context and only hands the reviewed GST URL to
-the browser download manager when the endpoint does not contradict a PDF
-download. Pack must not store, log, upload, or document PDF bytes, copied
-cookies, headers, raw protected URLs, local filenames, or local paths.
-
-Live experiment result: constructing the final PDF endpoint and handing it to
-`chrome.downloads.download` from the extension is not currently a safe default.
-In Brave, the extension-owned download request reached the browser download
-pipeline but produced an access-denied save prompt rather than the filed PDF.
-This suggests the GST endpoint is sensitive to request initiator/context beyond
-the session cookies available to the browser profile. Keep the production path
-as portal-owned navigation plus the portal-rendered `DOWNLOAD FILED GSTR-3B`
-click, with the direct endpoint helpers retained only as private research
-scaffolding.
-
-2026-06-30 update: Pack now tries the reviewed direct browser-download path
-before the portal-owned click because the portal click path can block single
-period and full-fiscal-year runs behind a native Save dialog. This does not
-promote direct-download compatibility to a release claim. Keep the Chrome/Brave
-live QA gate open until an authorised clean-profile run proves that the
-target-bound direct path completes the same filed GSTR-3B PDF without
-persisting cookies, headers, PDF bytes, raw URLs, local filenames, or paths. If
-that live gate fails, treat it as a runtime blocker and keep the portal-click
-fallback constrained to the existing target-bound observer/review path.
+2026-06-30 historical update: Pack temporarily tried a broader direct
+browser-download path before the portal-owned click. That implementation and
+its fallback are not production behavior. The current narrow candidate must be
+tested in Chrome and Brave from an authorized live portal session before it can
+replace action-bound capture as a supported route. A plain or ambiguous portal
+click remains unconfirmed evidence and must route to explicit target review; it
+must not trigger a second click or a guessed retry.
 
 2026-07-01 live Brave result: after reloading the unpacked extension into an
 already-authenticated Brave profile, Pack completed the selected single-month
@@ -391,12 +385,13 @@ just whether a browser download event appeared. Pack records this through a
 sanitized `filed-return-download-path` diagnostic attached to the filed-return
 flow step. The diagnostic is limited to:
 
-- local action id;
+- opaque local action id;
 - return type, financial year, period and artifact type;
 - reviewed endpoint class;
-- path class: extension direct, portal click, or portal click after direct
-  fallback, combined with a redacted URL-scheme class such as `https`, `blob`,
-  `data` or `unknown`;
+- path class: action-bound captured portal request, the narrowly scoped
+  `target-bound-portal-click-blob` class, one browser-managed
+  `extension-direct-*` request, or an unconfirmed portal click, combined with a
+  redacted URL-scheme class such as `https`, `blob`, `data` or `unknown`;
 - browser download id, MIME class, byte-count class and error category when the
   browser exposes those as safe metadata.
 
@@ -404,22 +399,44 @@ The diagnostic must not include raw URLs, query strings, headers, cookies,
 tokens, filenames, local paths, GSTIN/PAN, taxpayer names, portal HTML, response
 bodies or PDF/XLS bytes. Phase 0 acceptance requires clean Chrome, clean Brave
 and the real profile where the native Save dialog appeared, with "Ask where to
-save each file" tested on and off. If GSTR-3B direct downloads pass this matrix,
-the next decision is whether a GSTR-3B-only V0 cut is acceptable or whether Pack
-must continue into GSTR-1 PDF/Excel endpoint discovery before claiming
-full-year dialog-free support.
+save each file" tested on and off. If GSTR-3B action-bound capture passes this
+matrix, the next decision is whether a GSTR-3B-only V0 cut is acceptable or
+whether Pack must continue GSTR-1 PDF/Excel capture verification before
+claiming full-year dialog-free support.
+
+While a single-period result is unresolved, the local
+`pack:filed-returns-target-review` record may retain the canonical target
+identifier and scope, safe messages/signals, recovery attempt kind/phase,
+request and bounded candidate-window timestamps, an opaque `actionId`, the
+exact numeric browser `downloadId`, opaque staging-ledger or selected-file
+checkpoint identifiers/revisions, and sanitized endpoint/path, MIME,
+byte-count, status and error classes needed for fail-closed recovery. It never
+retains a raw filename, local path, URL/referrer, GSTIN/PAN, taxpayer name,
+portal HTML, credential, cookie, token or artifact bytes. The exact browser id
+is local correlation state; it is not copied into shareable live-evidence JSON,
+and the runtime action id is replaced there with a neutral `ACTION-*` alias.
 
 ## Transient artifact-byte boundary
 
-Pack may handle filed-return PDF/XLS bytes only as transient in-memory data for
-an explicit user-started, target-bound local download. The service worker owns
-the byte path: it injects a one-shot `chrome.scripting.executeScript` function
-into the active GST tab's main world, clicks only the previously marked target
-control, receives the generated blob as the script result, validates MIME, size
-and file magic, creates a bundled offscreen document for a temporary extension
-Blob URL, starts `chrome.downloads.download({ saveAs: false })`, waits for the
-terminal browser-download state, revokes the Blob URL, closes the offscreen
-document, and then drops the bytes.
+Pack may handle filed-return PDF/XLS bytes only for an explicit user-started,
+target-bound local download. A single-artifact handoff is transient in memory.
+Selected-file ZIP and full-fiscal-year export may additionally use temporary
+local OPFS staging so a service-worker restart can resume from a durable
+checkpoint or safely clean up the same exact run. If the worker stops after an
+artifact is staged but before its durable staged checkpoint, Pack fails closed:
+it does not replay that portal action, and the user must explicitly discard the
+interrupted run before starting it again. Pack clears staging only after the
+exact ZIP download is confirmed and the durable cleanup checkpoint succeeds, or
+after an explicit discard completes its cleanup.
+
+The service worker owns the byte path: it injects a one-shot
+`chrome.scripting.executeScript` function into the active GST tab's main world,
+clicks only the previously marked target control, receives the generated blob
+as the script result, validates MIME, size and file magic, creates a bundled
+offscreen document for a temporary extension Blob URL, starts
+`chrome.downloads.download({ saveAs: false })`, waits for the terminal
+browser-download state, revokes the Blob URL, closes the offscreen document,
+and then drops in-memory bytes.
 
 Raw artifact bytes must not be sent through page-observable `postMessage`,
 runtime messages from content scripts, extension storage, IndexedDB, Cache
@@ -679,9 +696,9 @@ raw portal HTML, cookies, headers, tokens, OTPs, or CAPTCHA data were retained.
   report before broad public launch.
 - Complete counsel review of the live GST Portal terms, product copy and store
   distribution model.
-- Keep synthetic endpoint replay out of v0 until the exact portal request shape
-  is captured from a legitimate user action and can be replayed without reading
-  credentials, cookies or raw tax response bodies.
+- Protected live endpoint replay is retired. Synthetic fixtures may model
+  request shapes only in offline tests; they must never become a portal
+  navigation or download path.
 
 ## 2026-06-20 in-app browser finding
 

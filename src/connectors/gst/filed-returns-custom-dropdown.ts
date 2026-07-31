@@ -1,6 +1,8 @@
+import { delay } from "../../core/time";
 import {
+  CLICKABLE_CONTROL_SELECTOR,
   activateElement,
-  delay,
+  getActionableExactSearchControls,
   isHtmlElement,
   isVisible,
   matchesAcceptedText,
@@ -48,27 +50,27 @@ export async function selectCustomOptionNearLabel(
 }
 
 export function findFiledReturnsFilterRoot(documentRef: Document): HTMLElement | null {
-  const candidates: Array<{ element: HTMLElement; score: number }> = [];
-  for (const searchButton of getClickableSearchButtons(documentRef)) {
+  const formCandidates = new Set<HTMLElement>();
+  const fallbackCandidates = new Set<HTMLElement>();
+  for (const searchButton of getActionableExactSearchControls(documentRef)) {
+    const form = searchButton.closest<HTMLElement>("form");
+    if (form && hasFiledReturnsFilterLabels(form)) {
+      formCandidates.add(form);
+      continue;
+    }
+
     let current: HTMLElement | null = searchButton;
     for (let depth = 0; current && depth < 8; depth += 1) {
-      const text = normaliseText(current.innerText || current.textContent || "");
-      if (
-        /financial\s+year/i.test(text) &&
-        /return\s+filing\s+period/i.test(text) &&
-        /return\s+type/i.test(text)
-      ) {
-        candidates.push({
-          element: current,
-          score: (current.tagName.toLowerCase() === "form" ? -1_000 : 0) + text.length,
-        });
+      if (hasFiledReturnsFilterLabels(current)) {
+        fallbackCandidates.add(current);
         break;
       }
       current = current.parentElement;
     }
   }
 
-  return candidates.sort((left, right) => left.score - right.score)[0]?.element ?? null;
+  const candidates = formCandidates.size > 0 ? formCandidates : fallbackCandidates;
+  return candidates.size === 1 ? (Array.from(candidates)[0] ?? null) : null;
 }
 
 export function findFieldRoot(root: ParentNode, labelPattern: RegExp): HTMLElement | null {
@@ -99,35 +101,22 @@ export function findFieldRoot(root: ParentNode, labelPattern: RegExp): HTMLEleme
 }
 
 export function getCustomDropdownControls(root: ParentNode): HTMLElement[] {
-  const selector = [
-    "button",
-    "[role='button']",
+  const extraSelector = [
     "[aria-haspopup]",
-    "[ng-click]",
-    "[data-ng-click]",
     ".select2-choice",
     ".ui-select-match",
     ".chosen-single",
     ".dropdown-toggle",
   ].join(",");
+  const selector = [CLICKABLE_CONTROL_SELECTOR, extraSelector].join(",");
 
-  return Array.from(root.querySelectorAll(selector)).filter((element) =>
-    isHtmlElement(root, element),
+  return Array.from(root.querySelectorAll(selector)).filter(
+    (element): element is HTMLElement =>
+      isHtmlElement(root, element) &&
+      (!element.matches("a,input[type='button'],input[type='submit']") ||
+        element.matches("[role='button'],[ng-click],[data-ng-click]") ||
+        element.matches(extraSelector)),
   );
-}
-
-function getClickableSearchButtons(documentRef: Document): HTMLElement[] {
-  const selector = [
-    "button",
-    "a",
-    "[role='button']",
-    "input[type='button']",
-    "input[type='submit']",
-  ].join(",");
-
-  return Array.from(documentRef.querySelectorAll(selector))
-    .filter((element): element is HTMLElement => isHtmlElement(documentRef, element))
-    .filter((element) => /^search$/i.test(normaliseText(readElementText(element))));
 }
 
 function readElementText(element: Element): string {
@@ -145,6 +134,15 @@ function readElementText(element: Element): string {
   ]
     .filter(Boolean)
     .join(" ");
+}
+
+function hasFiledReturnsFilterLabels(element: HTMLElement): boolean {
+  const text = normaliseText(element.innerText || element.textContent || "");
+  return (
+    /financial\s+year/i.test(text) &&
+    /return\s+filing\s+period/i.test(text) &&
+    /return\s+type/i.test(text)
+  );
 }
 
 async function waitForFieldTextMatch(

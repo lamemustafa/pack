@@ -335,7 +335,7 @@ function createDownloadEvidenceRows({
       : [artifactType === "PDF_AND_EXCEL" ? "PDF" : artifactType];
   return Array.from({ length: targetCount }, (_, targetIndex) =>
     concreteArtifacts.map((concreteArtifact, artifactIndex) => ({
-      actionId: `manual-entry-required-${targetIndex * concreteArtifacts.length + artifactIndex + 1}`,
+      actionId: `ACTION-${targetIndex * concreteArtifacts.length + artifactIndex + 1}`,
       returnType,
       artifactType: concreteArtifact,
       financialYear,

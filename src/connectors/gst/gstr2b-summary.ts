@@ -1,8 +1,5 @@
-import type {
-  FiledReturnsDownloadScope,
-  PortalDownloadTriggerResult,
-  PortalFlowStepResult,
-} from "../../core/contracts";
+import type { PortalDownloadTriggerResult } from "../../core/contracts";
+import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "./filed-returns-contracts";
 import {
   activateElement,
   getClickableElements,

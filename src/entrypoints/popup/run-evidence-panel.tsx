@@ -1,4 +1,5 @@
-import type { FiledReturnsFlowSummary, PortalObservation } from "../../core/contracts";
+import type { PortalObservation } from "../../core/contracts";
+import type { FiledReturnsFlowSummary } from "../../connectors/gst/filed-returns-contracts";
 import { DiagnosticSignals, RunProgress, hasDiagnosticSignals } from "./run-summary";
 
 export function RunEvidencePanel({
