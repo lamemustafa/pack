@@ -65,10 +65,13 @@ restart/resume evidence, and privacy-review evidence are recorded for the
 release.
 
 The current source build also contains a fail-closed portal-created download
-correlation path for a single-period GSTR-3B PDF only. It can accept completion
-only after the explicit target action and an exact, non-empty browser-download
-match. This path is not used for GSTR-1, GSTR-2B, selected-file ZIP staging, or
-full-year work, and its presence is not live or store-facing evidence.
+correlation path. It can accept completion only after the explicit target action
+and an exact, non-empty browser-download match; interrupted, zero-byte,
+unknown-size, and still-unconfirmed downloads settle as unobserved and route to
+target review rather than to a retry. The path is shared rather than return-type
+gated: the single-period GSTR-3B, GSTR-1, and GSTR-2B flows use it, as do the
+selected-file and full-year ZIP paths. Its presence is not live or store-facing
+evidence.
 
 ## Install
 
