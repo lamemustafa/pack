@@ -557,6 +557,49 @@ describe("filed returns target review", () => {
     expect(durableSummary?.flowStep.safeMessage).not.toContain("could not verify");
   });
 
+  it("keeps a cleanup-without-download review unresolved after staging is cleared", async () => {
+    const scope = {
+      artifactType: "PDF_AND_EXCEL" as const,
+      financialYear: "2025-26",
+      period: "March",
+      returnType: "GSTR-2B" as const,
+    };
+    const review = {
+      ...intentOnlyZipReview(scope),
+      safeSignals: ["single-period-zip-download-unconfirmed", "single-period-opfs-clear-failed"],
+    };
+    const localValues: Record<string, unknown> = {
+      "pack:single-period-staging": intentBundleLedger(scope),
+      "target-review": review,
+    };
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      typeof key === "string" && Object.hasOwn(localValues, key) ? { [key]: localValues[key] } : {},
+    );
+    browserMocks.storage.local.set.mockImplementation(async (values) => {
+      Object.assign(localValues, values);
+    });
+    browserMocks.storage.local.remove.mockImplementation(async (keys) => {
+      for (const key of Array.isArray(keys) ? keys : [keys]) delete localValues[key];
+    });
+    zipMocks.discardSinglePeriodFiledReturnsZip.mockResolvedValue(["single-period-opfs-cleared"]);
+
+    const response = await retryCompletedSinglePeriodZipCleanup(scope, {
+      storageKeys: { completion: "completion", targetReview: "target-review" },
+    });
+
+    expect(response).toMatchObject({
+      flowStep: { state: "user-action-required" },
+      flowSummary: { completedPeriods: [], status: "blocked" },
+    });
+    expect(localValues["target-review"]).toMatchObject({
+      safeSignals: expect.arrayContaining([
+        "single-period-opfs-cleanup-completed",
+        "single-period-zip-cleanup-without-download",
+      ]),
+    });
+    expect(localValues["completion"]).toBeUndefined();
+  });
+
   it("does not treat completed cleanup checkpoints as a cleanup failure", () => {
     expect(
       canonicalDurableSummaryMessage(

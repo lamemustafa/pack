@@ -18,19 +18,23 @@ const scope = {
 };
 
 describe("GSTR-3B artifact acquisition recovery", () => {
-  it("keeps an unresolved checkpoint blocked with its explicit recovery action", async () => {
+  it("keeps an interrupted checkpoint blocked without repeating the portal action", async () => {
     mocks.reconcileArtifactAcquisitionCheckpoint.mockResolvedValue({
       state: "needs-review",
-      safeSignals: ["artifact-acquisition-download-unreconciled"],
+      safeSignals: ["artifact-acquisition-download-interrupted"],
     });
+    const getActiveGstTab = vi.fn();
 
-    const response = await startSinglePeriodFiledReturnsDownloadFlow(scope, {} as never);
+    const response = await startSinglePeriodFiledReturnsDownloadFlow(scope, {
+      getActiveGstTab,
+    } as never);
 
     expect(mocks.reconcileArtifactAcquisitionCheckpoint).toHaveBeenCalledWith(scope);
+    expect(getActiveGstTab).not.toHaveBeenCalled();
     expect(response).toMatchObject({
       flowStep: {
         state: "blocked",
-        safeSignals: ["artifact-acquisition-download-unreconciled"],
+        safeSignals: ["artifact-acquisition-download-interrupted"],
         userAction: { type: "RETRY_PORTAL_GENERATION", canResume: true },
       },
     });

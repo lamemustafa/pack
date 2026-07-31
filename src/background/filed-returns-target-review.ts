@@ -393,6 +393,26 @@ export async function retryCompletedSinglePeriodZipCleanup(
     }
 
     const cancelled = review.safeSignals.includes("single-period-zip-cancel-cleanup-failed");
+    const completedDownload = hasConfirmedSinglePeriodZipDownloadEvidence(review.safeSignals);
+    if (!cancelled && !completedDownload) {
+      const unresolvedReview: FiledReturnsTargetReview = {
+        ...review,
+        revision: targetReviewRevision(review) + 1,
+        safeSignals: uniqueSafeSignals([
+          ...review.safeSignals.filter((signal) => !isResolvedSinglePeriodCleanupSignal(signal)),
+          "single-period-opfs-cleanup-completed",
+          "single-period-zip-cleanup-without-download",
+          ...cleanup.safeSignals,
+        ]),
+        safeMessage:
+          "Pack cleared temporary selected-file staging, but no exact browser download completion was recorded.",
+        updatedAt: (deps.now?.() ?? new Date()).toISOString(),
+      };
+      const parsedReview = parseFiledReturnsTargetReview(unresolvedReview);
+      if (!parsedReview) return responseForFiledReturnsTargetReview(review);
+      await browser.storage.local.set({ [key]: parsedReview });
+      return responseForFiledReturnsTargetReview(parsedReview);
+    }
     const flowStep: PortalFlowStepResult = {
       connectorId: "gst",
       scopeId: filedReturnScopeId(scope.returnType),
@@ -924,17 +944,23 @@ function requiresTargetReview(step: PortalFlowStepResult): boolean {
 }
 
 function hasSinglePeriodCleanupFailure(safeSignals: readonly string[]): boolean {
-  return safeSignals.some((signal) =>
-    [
-      "single-period-opfs-clear-failed",
-      "single-period-cleanup-checkpoint-failed",
-      "single-period-bundle-ledger-malformed",
-      "single-period-bundle-scope-conflict",
-      "single-period-bundle-revision-conflict",
-      "single-period-bundle-state-read-failed",
-      "single-period-zip-cancel-cleanup-failed",
-    ].includes(signal),
-  );
+  return safeSignals.some(isSinglePeriodCleanupFailureSignal);
+}
+
+function isSinglePeriodCleanupFailureSignal(signal: string): boolean {
+  return [
+    "single-period-opfs-clear-failed",
+    "single-period-cleanup-checkpoint-failed",
+    "single-period-bundle-ledger-malformed",
+    "single-period-bundle-scope-conflict",
+    "single-period-bundle-revision-conflict",
+    "single-period-bundle-state-read-failed",
+    "single-period-zip-cancel-cleanup-failed",
+  ].includes(signal);
+}
+
+function isResolvedSinglePeriodCleanupSignal(signal: string): boolean {
+  return signal === "single-period-opfs-retained" || isSinglePeriodCleanupFailureSignal(signal);
 }
 
 function uniqueSafeSignals(safeSignals: readonly string[]): string[] {

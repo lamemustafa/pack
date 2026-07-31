@@ -6,6 +6,10 @@ import {
 } from "../connectors/gst/filed-returns-artifacts";
 
 const KEY_PREFIX = "pack.artifact-acquisition.v2";
+const MALFORMED_ARTIFACT_ACQUISITION_CHECKPOINT_SENTINEL = {
+  schemaVersion: "1.0",
+  state: "malformed",
+} as const;
 
 export type ArtifactAcquisitionTarget = Pick<
   FiledReturnsDownloadScope,
@@ -91,8 +95,20 @@ export async function reconcileArtifactAcquisitionCheckpoint(
 ): Promise<{ state: "retry-safe" } | { state: "needs-review"; safeSignals: string[] }> {
   const key = artifactAcquisitionCheckpointKey(target);
   const stored = await browser.storage.session.get(key);
-  const checkpoint = stored[key] as ArtifactAcquisitionCheckpoint | undefined;
-  if (!checkpoint || typeof checkpoint.requestId !== "string") return { state: "retry-safe" };
+  const storedCheckpoint = stored[key];
+  if (storedCheckpoint === undefined || storedCheckpoint === null) return { state: "retry-safe" };
+  if (isMalformedArtifactAcquisitionCheckpointSentinel(storedCheckpoint)) {
+    return { state: "needs-review", safeSignals: ["artifact-acquisition-checkpoint-malformed"] };
+  }
+  if (!isArtifactAcquisitionCheckpoint(storedCheckpoint)) {
+    // Keep a minimal sentinel instead of deleting untrusted recovery metadata:
+    // it may be the only evidence that a target-bound browser action started.
+    await browser.storage.session.set({
+      [key]: MALFORMED_ARTIFACT_ACQUISITION_CHECKPOINT_SENTINEL,
+    });
+    return { state: "needs-review", safeSignals: ["artifact-acquisition-checkpoint-malformed"] };
+  }
+  const checkpoint = storedCheckpoint;
   if (checkpoint.state === "intent" || !Number.isSafeInteger(checkpoint.downloadId)) {
     return { state: "needs-review", safeSignals: ["artifact-acquisition-start-unreconciled"] };
   }
@@ -118,12 +134,30 @@ export async function reconcileArtifactAcquisitionCheckpoint(
         safeSignals: ["artifact-acquisition-download-completed-unpersisted"],
       };
     }
-    await browser.storage.session.remove(key);
-    return { state: "retry-safe" };
+    return {
+      state: "needs-review",
+      safeSignals: ["artifact-acquisition-download-interrupted"],
+    };
   } catch {
     return {
       state: "needs-review",
       safeSignals: ["artifact-acquisition-download-search-unavailable"],
     };
   }
+}
+
+function isArtifactAcquisitionCheckpoint(input: unknown): input is ArtifactAcquisitionCheckpoint {
+  if (!input || typeof input !== "object") return false;
+  const checkpoint = input as Partial<ArtifactAcquisitionCheckpoint>;
+  return typeof checkpoint.requestId === "string" && checkpoint.requestId.length > 0;
+}
+
+function isMalformedArtifactAcquisitionCheckpointSentinel(input: unknown): boolean {
+  if (!input || typeof input !== "object") return false;
+  const value = input as Record<string, unknown>;
+  return (
+    Object.keys(value).length === 2 &&
+    value.schemaVersion === MALFORMED_ARTIFACT_ACQUISITION_CHECKPOINT_SENTINEL.schemaVersion &&
+    value.state === MALFORMED_ARTIFACT_ACQUISITION_CHECKPOINT_SENTINEL.state
+  );
 }

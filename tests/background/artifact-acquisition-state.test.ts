@@ -168,6 +168,37 @@ describe("artifact acquisition checkpoint", () => {
     });
   });
 
+  it("retains an interrupted download checkpoint instead of permitting another portal action", async () => {
+    await persistArtifactAcquisitionDownloadId({
+      ...MAY_PDF,
+      downloadId: 9,
+      requestId: "request-interrupted",
+      state: "download-observing",
+    });
+    mocks.browser.downloads.search.mockResolvedValue([{ id: 9, state: "interrupted" }]);
+
+    await expect(reconcileArtifactAcquisitionCheckpoint(MAY_PDF)).resolves.toEqual({
+      state: "needs-review",
+      safeSignals: ["artifact-acquisition-download-interrupted"],
+    });
+    expect(mocks.session[artifactAcquisitionCheckpointKey(MAY_PDF)]).toEqual(
+      expect.objectContaining({ downloadId: 9, state: "download-observing" }),
+    );
+  });
+
+  it("replaces malformed checkpoint metadata with a fail-closed session sentinel", async () => {
+    mocks.session[artifactAcquisitionCheckpointKey(MAY_PDF)] = { state: "download-observing" };
+
+    await expect(reconcileArtifactAcquisitionCheckpoint(MAY_PDF)).resolves.toEqual({
+      state: "needs-review",
+      safeSignals: ["artifact-acquisition-checkpoint-malformed"],
+    });
+    expect(mocks.session[artifactAcquisitionCheckpointKey(MAY_PDF)]).toEqual({
+      schemaVersion: "1.0",
+      state: "malformed",
+    });
+  });
+
   it("clears only the terminal request's own target checkpoint", async () => {
     await persistArtifactAcquisitionIntent({ ...MAY_PDF, requestId: "request-may" });
     await persistArtifactAcquisitionIntent({ ...JUNE_PDF, requestId: "request-june" });

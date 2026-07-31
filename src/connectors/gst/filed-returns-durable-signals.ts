@@ -291,6 +291,7 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "single-period-opfs-retained",
   "single-period-opfs-staged",
   "single-period-zip-cancel-cleanup-failed",
+  "single-period-zip-cleanup-without-download",
   "single-period-zip-download-reconciliation-required",
   "single-period-zip-download-started",
   "single-period-zip-downloaded",
@@ -479,7 +480,9 @@ const ARTIFACT_FAILURE_SIGNALS = new Set([
   // routes an interrupted acquisition to review is rejected by
   // parseDurableFiledReturnsSignals and dropped, which is the one case the
   // recovery path exists to handle.
+  "artifact-acquisition-checkpoint-malformed",
   "artifact-acquisition-start-unreconciled",
+  "artifact-acquisition-download-interrupted",
   "artifact-acquisition-download-unconfirmed",
   "artifact-acquisition-download-unreconciled",
   "artifact-acquisition-download-search-unavailable",
