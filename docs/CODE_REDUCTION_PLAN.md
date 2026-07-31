@@ -22,6 +22,28 @@ apparent hits on `filed-returns-download` were prefix collisions with `-download
 **497 src lines** plus their test files. `src/extension/manifest-policy.ts` also reports zero src
 importers but is consumed by `wxt.config.ts`; it is alive.
 
+### Measured outcome, 2026-07-31 — and what the scan could not see
+
+All four were deleted in `de7551a`. Re-running the scan at head found **two modules that the audit
+could not have reported, because that deletion created them**:
+
+| Lines | Module                                                  | Its only src importer at audit time                         |
+| ----- | ------------------------------------------------------- | ----------------------------------------------------------- |
+| 101   | `src/background/filed-returns-download-result.ts`       | `filed-returns-single-artifact-download-completion.ts` (§1) |
+| 68    | `src/connectors/gst/filed-returns-detail-page-guard.ts` | `filed-returns-download.ts` (§1)                            |
+
+Each was reachable only through a module that was itself dead, so deleting §1 orphaned both. Both
+now have exactly one importer: their own test file, which still passes. Reachability is a property
+of the import graph, not of a file, so a single-pass scan is invalidated by its own remediation.
+**Run this scan to a fixed point** — delete, re-scan, repeat until a pass finds nothing.
+
+Before deleting either, note the distinction that makes this safe:
+`filed-returns-detail-page-guard.ts` classified pages from body text and was superseded by the
+route-based classification now live in `filed-returns-observer-signals.ts`. It is genuinely
+redundant. Had no replacement existed, the identical evidence would instead have meant a
+target-binding guard that is tested but never called — a live defect, not dead code. Confirm the
+replacement exists before treating an orphaned guard as removable.
+
 ## 2. Thirteen clickable-selector definitions — the highest-value fix
 
 `src/connectors/gst` contains thirteen separate definitions of "which elements are clickable", each
@@ -85,10 +107,17 @@ consolidated into three. Only **27 lines — 2% — proved redundant**; the rema
 logic that had merely been split across files. Module count fell 11 → 8 and the cluster fell
 3,694 → 3,662 lines.
 
+**Re-measured 2026-07-31 at head.** The cluster is now 8 modules / 3,026 lines. The further 636-line
+fall is entirely relocation, not reduction: `-zip.ts` went 914 → 278 when the shared ZIP export was
+split out into `filed-returns-staged-zip.ts` (454 lines) and
+`filed-returns-single-period-zip.ts` (200 lines). That extracted module is used by the _verified_
+single-period path as well as by full-year, which is the useful part — the largest single piece of
+the unexecuted cluster is now shared with code that is known to work.
+
 This falsifies the expectation that the cluster was the largest available lever for line
 reduction. It is not bloated with duplication; it is simply a large amount of real code for a
 feature that has never run. The same caveat should be assumed for §4 below: expect relocation, not
-reduction. The remaining question about this cluster is a product one — whether 3,662 lines of
+reduction. The remaining question about this cluster is a product one — whether 3,026 lines of
 unexecuted machinery should exist before the feature is proven — not a refactoring one.
 
 The risk is concrete rather than theoretical: `-zip.ts` also serves the single-period ZIP export
