@@ -109,22 +109,26 @@ describe("durable filed-return download reconciler", () => {
 
   it("persists an extension-owned created download that arrives before the caller has its ID", async () => {
     const fixture = downloadsWithState("complete");
-    const persistDownloadId = vi.fn(async () => true);
+    let currentReview: FiledReturnsTargetReview = {
+      ...review,
+      downloadAttempt: {
+        actionId: review.downloadAttempt.actionId,
+        artifactType: "PDF",
+        kind: "single-artifact",
+        phase: "download-intent-persisted",
+        requestedAt: review.downloadAttempt.requestedAt,
+      },
+    };
+    const persistDownloadId = vi.fn(async () => {
+      currentReview = review;
+      return true;
+    });
     const reconcile = vi.fn(async () => undefined);
     const dispose = installFiledReturnsDurableDownloadReconciler(fixture.downloads, {
       extensionId: "pack-id",
       persistDownloadId,
       reconcile,
-      readCurrentReview: async () => ({
-        ...review,
-        downloadAttempt: {
-          actionId: review.downloadAttempt.actionId,
-          artifactType: "PDF",
-          kind: "single-artifact",
-          phase: "download-intent-persisted",
-          requestedAt: review.downloadAttempt.requestedAt,
-        },
-      }),
+      readCurrentReview: async () => currentReview,
       storageKeys: {},
     });
     await Promise.resolve();
@@ -140,8 +144,51 @@ describe("durable filed-return download reconciler", () => {
     expect(persistDownloadId).toHaveBeenCalledWith(expect.anything(), 41);
     reconcile.mockClear();
     fixture.emit({ id: 41, state: { current: "complete" } });
+    await vi.waitFor(() => expect(reconcile).toHaveBeenCalledWith(review));
+    dispose();
+  });
+
+  it("reconciles a terminal event that arrived while its exact ID was persisting", async () => {
+    const fixture = downloadsWithState("complete");
+    let currentReview: FiledReturnsTargetReview = {
+      ...review,
+      downloadAttempt: {
+        actionId: review.downloadAttempt.actionId,
+        artifactType: "PDF",
+        kind: "single-artifact",
+        phase: "download-intent-persisted",
+        requestedAt: review.downloadAttempt.requestedAt,
+      },
+    };
+    let resolvePersist!: (value: boolean) => void;
+    const persistDownloadId = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolvePersist = resolve;
+        }),
+    );
+    const reconcile = vi.fn(async () => undefined);
+    const dispose = installFiledReturnsDurableDownloadReconciler(fixture.downloads, {
+      extensionId: "pack-id",
+      persistDownloadId,
+      readCurrentReview: async () => currentReview,
+      reconcile,
+      storageKeys: {},
+    });
     await Promise.resolve();
-    expect(reconcile).not.toHaveBeenCalled();
+    reconcile.mockClear();
+
+    fixture.emitCreated({
+      byExtensionId: "pack-id",
+      id: 41,
+      startTime: "2026-07-26T00:00:01.000Z",
+    });
+    await Promise.resolve();
+    fixture.emit({ id: 41, state: { current: "complete" } });
+    currentReview = review;
+    resolvePersist(true);
+
+    await vi.waitFor(() => expect(reconcile).toHaveBeenCalledWith(review));
     dispose();
   });
 

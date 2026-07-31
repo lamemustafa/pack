@@ -53,15 +53,24 @@ describe("downloadAcquiredArtifact", () => {
   );
 
   it.each([
-    ["interrupted", 12, "interrupted"],
-    ["complete", 0, "empty"],
-  ] as const)("fails %s downloads without completing", async (state, bytesReceived, reason) => {
-    downloads.search.mockResolvedValueOnce([{ id: 9, state, bytesReceived }] as never);
-    await expect(downloadAcquiredArtifact(input(), deps())).resolves.toMatchObject({
-      ok: false,
-      reason,
-    });
-  });
+    ["interrupted", 12, "safe", "interrupted"],
+    ["complete", 0, "safe", "empty"],
+    // Danger is resolved before size, matching the shared observer: a
+    // browser-blocked or still-scanning item is not evidence of a saved file
+    // whatever its byte count says.
+    ["complete", 12, undefined, "danger-unconfirmed"],
+    ["complete", 12, "asyncScanning", "danger-unconfirmed"],
+    ["complete", 12, "dangerousFile", "danger-rejected"],
+  ] as const)(
+    "fails %s downloads (danger %s) without completing",
+    async (state, bytesReceived, danger, reason) => {
+      downloads.search.mockResolvedValueOnce([{ id: 9, state, bytesReceived, danger }] as never);
+      await expect(downloadAcquiredArtifact(input(), deps())).resolves.toMatchObject({
+        ok: false,
+        reason,
+      });
+    },
+  );
 
   it("fails closed after a checkpoint callback failure without treating its download as unstarted", async () => {
     const onStartCheckpointFailed = vi.fn(async () => undefined);
@@ -238,11 +247,15 @@ function deps(overrides: Parameters<typeof downloadAcquiredArtifact>[1] = {}) {
   } as Parameters<typeof downloadAcquiredArtifact>[1];
 }
 
-function matchingItem(filename = input().filename) {
+function matchingItem(filename = input().filename, danger = "safe") {
+  // Chrome always classifies a completed DownloadItem, so a fixture without
+  // `danger` models a state the browser does not produce. Delivery treats an
+  // unclassified item as unproven, exactly as the shared observer does.
   return {
     id: 9,
     state: "complete",
     bytesReceived: 12,
+    danger,
     filename: `/synthetic/Downloads/${filename}`,
   };
 }

@@ -5,6 +5,10 @@ import type {
 import { delay } from "../core/time";
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
+import {
+  concreteFiledReturnsArtifactTypes,
+  normaliseFiledReturnsArtifactType,
+} from "../connectors/gst/filed-returns-artifacts";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
 import { getRequiredGstTab } from "./filed-returns-active-tab";
 import {
@@ -52,14 +56,27 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
   options: { persistSinglePeriodSummary?: boolean } = {},
 ): Promise<PackMessageResponse> {
   const shouldPersistSinglePeriodSummary = options.persistSinglePeriodSummary !== false;
-  if (scope.returnType === "GSTR-3B") {
-    const acquisitionRecovery = await reconcileArtifactAcquisitionCheckpoint(scope);
+  // Every direct-artifact return type checkpoints its acquisition, so every one
+  // of them must reconcile that checkpoint before starting again. Limiting this
+  // to GSTR-3B let a GSTR-1 or GSTR-2B start overwrite a live checkpoint with a
+  // fresh intent and repeat a download that may already have succeeded.
+  // Checkpoints are keyed per concrete artifact type, so a composite selection
+  // has to reconcile each one rather than the composite scope.
+  for (const artifactType of concreteFiledReturnsArtifactTypes(
+    normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType),
+  )) {
+    const acquisitionRecovery = await reconcileArtifactAcquisitionCheckpoint({
+      artifactType,
+      financialYear: scope.financialYear,
+      period: scope.period,
+      returnType: scope.returnType,
+    });
     if (acquisitionRecovery.state === "needs-review") {
       return {
         ok: true,
         flowStep: {
           connectorId: "gst",
-          scopeId: filedReturnScopeId("GSTR-3B"),
+          scopeId: filedReturnScopeId(scope.returnType),
           state: "blocked",
           safeSignals: acquisitionRecovery.safeSignals,
           safeMessage:

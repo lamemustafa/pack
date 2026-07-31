@@ -185,8 +185,7 @@ export async function triggerAndObserveFiledReturnDownload({
           });
           retainCheckpointForRecovery =
             !delivery.ok &&
-            (delivery.reason === "checkpoint-failed" ||
-              (delivery.reason === "timeout" && checkpointHasDownloadId));
+            shouldRetainArtifactAcquisitionCheckpoint(delivery, checkpointHasDownloadId);
           return delivery.ok
             ? {
                 ok: true,
@@ -265,8 +264,7 @@ export async function triggerAndObserveFiledReturnDownload({
           });
           retainCheckpointForRecovery =
             !acquired.ok &&
-            (acquired.reason === "checkpoint-failed" ||
-              (acquired.reason === "timeout" && checkpointHasDownloadId));
+            shouldRetainArtifactAcquisitionCheckpoint(acquired, checkpointHasDownloadId);
           return acquired.ok
             ? {
                 ok: true,
@@ -306,6 +304,19 @@ export async function triggerAndObserveFiledReturnDownload({
     }
   }
   return artifactFailureResponse("unsupported-target", [], "GSTR-3B");
+}
+
+function shouldRetainArtifactAcquisitionCheckpoint(
+  delivery: { ok: false; reason: string },
+  checkpointHasDownloadId: boolean,
+): boolean {
+  if (delivery.reason === "checkpoint-failed") return true;
+  // The browser already created an exact-ID item for these outcomes. It may
+  // settle as safe later, but it must not be forgotten and repeated first.
+  return (
+    checkpointHasDownloadId &&
+    ["timeout", "danger-unconfirmed", "danger-rejected"].includes(delivery.reason)
+  );
 }
 
 function artifactFilename(
@@ -466,9 +477,7 @@ async function triggerPageGeneratedSinglePeriodArtifact(
       return pageGeneratedArtifactDispatchFailure(returnType, "StateInvalid");
     }
     retainCheckpointForRecovery =
-      !acquired.ok &&
-      (acquired.reason === "checkpoint-failed" ||
-        (acquired.reason === "timeout" && checkpointHasDownloadId));
+      !acquired.ok && shouldRetainArtifactAcquisitionCheckpoint(acquired, checkpointHasDownloadId);
     return acquired.ok
       ? {
           ok: true,

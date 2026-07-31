@@ -117,7 +117,7 @@ describe("artifact acquisition checkpoint", () => {
     });
   });
 
-  it("clears a checkpoint once its browser download has a known terminal outcome", async () => {
+  it("keeps a completed-but-unpersisted download checkpoint in review", async () => {
     await persistArtifactAcquisitionDownloadId({
       ...MAY_PDF,
       downloadId: 9,
@@ -129,9 +129,12 @@ describe("artifact acquisition checkpoint", () => {
     ]);
 
     await expect(reconcileArtifactAcquisitionCheckpoint(MAY_PDF)).resolves.toEqual({
-      state: "retry-safe",
+      state: "needs-review",
+      safeSignals: ["artifact-acquisition-download-completed-unpersisted"],
     });
-    expect(mocks.session).toEqual({});
+    expect(mocks.session[artifactAcquisitionCheckpointKey(MAY_PDF)]).toEqual(
+      expect.objectContaining({ downloadId: 9, state: "download-observing" }),
+    );
   });
 
   it("keeps a checkpoint with an unresolvable download ID in needs-review", async () => {

@@ -39,6 +39,8 @@ const scope = {
   returnType: "GSTR-3B" as const,
 };
 
+const RETAINED_TERMINAL_DELIVERY_FAILURES = ["danger-unconfirmed", "danger-rejected"] as const;
+
 describe("GSTR-3B artifact acquisition checkpoint cleanup", () => {
   beforeEach(() => {
     for (const key of Object.keys(mocks.session)) delete mocks.session[key];
@@ -133,28 +135,78 @@ describe("GSTR-3B artifact acquisition checkpoint cleanup", () => {
     );
   });
 
-  it.each(Object.keys(ARTIFACT_FAILURE_MESSAGES))(
-    "clears the PDF checkpoint after terminal %s acquisition failure",
+  it.each(
+    Object.keys(ARTIFACT_FAILURE_MESSAGES).filter(
+      (reason) => !RETAINED_TERMINAL_DELIVERY_FAILURES.includes(reason as never),
+    ),
+  )("clears the PDF checkpoint after terminal %s acquisition failure", async (reason) => {
+    mocks.acquireGstr3bPdfAfterPreflight.mockImplementationOnce(async (input) => {
+      await input.onStarted?.(92);
+      return { ok: false, reason, safeSignals: [] };
+    });
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "May",
+      artifactType: "PDF",
+      deps: {
+        sendMessageToTabWithInjection: vi.fn(async () => preparedPdf()),
+        storageKeys: {},
+      },
+      scope,
+      tabId: 17,
+    });
+
+    expect(response).toMatchObject({ flowStep: { state: "blocked" } });
+    expect(mocks.session).toEqual({});
+  });
+
+  it.each(RETAINED_TERMINAL_DELIVERY_FAILURES)(
+    "retains the JSON checkpoint after a completed browser download is %s",
     async (reason) => {
-      mocks.acquireGstr3bPdfAfterPreflight.mockImplementationOnce(async (input) => {
-        await input.onStarted?.(92);
+      mocks.downloadAcquiredArtifact.mockImplementationOnce(async (input) => {
+        await input.onStarted?.(91);
         return { ok: false, reason, safeSignals: [] };
       });
-      const response = await triggerAndObserveFiledReturnDownload({
+      const target = { ...scope, artifactType: "JSON" as const };
+
+      await triggerAndObserveFiledReturnDownload({
         activePeriod: "May",
-        artifactType: "PDF",
+        artifactType: "JSON",
         deps: {
-          sendMessageToTabWithInjection: vi.fn(async () => preparedPdf()),
+          sendMessageToTabWithInjection: vi.fn(async () => acquiredJson()),
           storageKeys: {},
         },
-        scope,
+        scope: target,
         tabId: 17,
       });
 
-      expect(response).toMatchObject({ flowStep: { state: "blocked" } });
-      expect(mocks.session).toEqual({});
+      expect(mocks.session[artifactAcquisitionCheckpointKey(target)]).toEqual(
+        expect.objectContaining({ downloadId: 91, state: "download-observing" }),
+      );
     },
   );
+
+  it("retains the GSTR-2B direct-artifact checkpoint after an unconfirmed browser download", async () => {
+    mocks.downloadAcquiredArtifact.mockImplementationOnce(async (input) => {
+      await input.onStarted?.(93);
+      return { ok: false, reason: "danger-unconfirmed", safeSignals: [] };
+    });
+    const target = { ...scope, artifactType: "JSON" as const, returnType: "GSTR-2B" as const };
+
+    await triggerAndObserveFiledReturnDownload({
+      activePeriod: "May",
+      artifactType: "JSON",
+      deps: {
+        sendMessageToTabWithInjection: vi.fn(async () => acquiredJson()),
+        storageKeys: {},
+      },
+      scope: target,
+      tabId: 17,
+    });
+
+    expect(mocks.session[artifactAcquisitionCheckpointKey(target)]).toEqual(
+      expect.objectContaining({ downloadId: 93, state: "download-observing" }),
+    );
+  });
 
   it("retains the PDF checkpoint when Pack times out before the download outcome is known", async () => {
     mocks.acquireGstr3bPdfAfterPreflight.mockImplementationOnce(async (input) => {

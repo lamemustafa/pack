@@ -38,11 +38,10 @@ export async function completedObservation(
   // completed, exact-ID, target-correlated, safe, non-empty download is the
   // durable proof; treating a stale `false` as retry permission can duplicate
   // the externally visible download action.
-  if (!item.danger) return unconfirmedObservation("browser-download-danger-unknown");
-  if (isPendingDangerClassification(item.danger)) {
-    return unconfirmedObservation("browser-download-danger-pending");
-  }
-  if (hasRejectedDangerClassification(item)) return rejectedDangerObservation();
+  const danger = classifyDownloadDanger(item);
+  if (danger === "unknown") return unconfirmedObservation("browser-download-danger-unknown");
+  if (danger === "pending") return unconfirmedObservation("browser-download-danger-pending");
+  if (danger === "rejected") return rejectedDangerObservation();
   const knownSize = firstKnownSize(item);
 
   if (knownSize === null) return unconfirmedObservation("browser-download-size-unknown");
@@ -72,7 +71,26 @@ export async function completedObservation(
   };
 }
 
-function hasRejectedDangerClassification(item: DownloadCreatedItem): boolean {
+export type DownloadDangerClassification = "unknown" | "pending" | "rejected" | "safe";
+
+/**
+ * The single source of truth for whether a completed browser download is safe
+ * enough to count as positive evidence. Every path that can mark a target
+ * complete must derive its decision from this, not restate it: the artifact
+ * delivery path previously accepted `state: "complete"` with a non-empty byte
+ * count and never consulted `danger`, so a browser-blocked file could be
+ * reported as saved.
+ */
+export function classifyDownloadDanger(item: {
+  danger?: string | undefined;
+}): DownloadDangerClassification {
+  if (!item.danger) return "unknown";
+  if (isPendingDangerClassification(item.danger)) return "pending";
+  if (hasRejectedDangerClassification(item)) return "rejected";
+  return "safe";
+}
+
+function hasRejectedDangerClassification(item: { danger?: string | undefined }): boolean {
   return typeof item.danger !== "string" || !["safe", "deepScannedSafe"].includes(item.danger);
 }
 

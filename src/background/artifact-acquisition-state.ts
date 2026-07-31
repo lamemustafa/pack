@@ -80,6 +80,17 @@ export async function reconcileArtifactAcquisitionCheckpoint(
     if (item?.state === "in_progress" || !item?.state) {
       return { state: "needs-review", safeSignals: ["artifact-acquisition-download-unreconciled"] };
     }
+    // A terminal `complete` item means the externally visible download already
+    // happened; the worker simply stopped before persisting that success.
+    // Clearing the checkpoint here would hand the next start a clean slate and
+    // repeat a download that already succeeded, so route it to review instead.
+    // Only a genuinely interrupted download is safe to retry.
+    if (item.state === "complete") {
+      return {
+        state: "needs-review",
+        safeSignals: ["artifact-acquisition-download-completed-unpersisted"],
+      };
+    }
     await browser.storage.session.remove(key);
     return { state: "retry-safe" };
   } catch {

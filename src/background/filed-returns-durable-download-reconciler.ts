@@ -34,15 +34,18 @@ export interface DurableDownloadReconcilerDeps extends FiledReturnsTargetReviewD
 
 const liveInlineObservationIds = new Set<number>();
 const extensionOwnedCreationIds = new Set<number>();
+const terminalChangesAwaitingPersistence = new Set<number>();
 
 /** Keeps the global listener from racing the flow that already owns this exact ID. */
 export function beginLiveFiledReturnsDownloadObservation(downloadId: number): () => void {
   if (!Number.isSafeInteger(downloadId) || downloadId < 0) return () => undefined;
   extensionOwnedCreationIds.delete(downloadId);
+  terminalChangesAwaitingPersistence.delete(downloadId);
   liveInlineObservationIds.add(downloadId);
   return () => {
     liveInlineObservationIds.delete(downloadId);
     extensionOwnedCreationIds.delete(downloadId);
+    terminalChangesAwaitingPersistence.delete(downloadId);
   };
 }
 
@@ -109,11 +112,13 @@ export function installFiledReturnsDurableDownloadReconciler(
   };
 
   const onChanged = (delta: DownloadDelta) => {
-    if (
-      !isTerminalDownloadState(delta.state?.current) ||
-      liveInlineObservationIds.has(delta.id) ||
-      extensionOwnedCreationIds.has(delta.id)
-    ) {
+    if (!isTerminalDownloadState(delta.state?.current) || liveInlineObservationIds.has(delta.id))
+      return;
+    if (extensionOwnedCreationIds.has(delta.id)) {
+      // A complete event can arrive between onCreated and the persisted exact
+      // ID. Remember it and reconcile immediately after persistence instead of
+      // dropping the terminal evidence forever.
+      terminalChangesAwaitingPersistence.add(delta.id);
       return;
     }
     void reconcile().catch(() => undefined);
@@ -121,9 +126,19 @@ export function installFiledReturnsDurableDownloadReconciler(
 
   const onCreated = (item: DownloadCreatedItem) => {
     if (liveInlineObservationIds.has(item.id)) return;
+    terminalChangesAwaitingPersistence.delete(item.id);
     extensionOwnedCreationIds.add(item.id);
-    void persistExtensionOwnedDownloadId(item, deps).then((persisted) => {
-      if (!persisted) extensionOwnedCreationIds.delete(item.id);
+    // Suppression must cover only the gap between creation and persistence.
+    // Holding a *persisted* ID suppressed strands its late terminal event: an
+    // extension-owned ZIP left in a Save dialog past the inline observation
+    // timeout completes with nothing listening, and nothing else releases the
+    // ID, so reconciliation waited for a worker restart. Inline observers that
+    // still own an ID register in liveInlineObservationIds instead.
+    void persistExtensionOwnedDownloadId(item, deps).finally(() => {
+      extensionOwnedCreationIds.delete(item.id);
+      if (terminalChangesAwaitingPersistence.delete(item.id)) {
+        void reconcile().catch(() => undefined);
+      }
     });
   };
 

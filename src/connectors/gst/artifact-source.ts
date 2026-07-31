@@ -14,6 +14,7 @@ import { extractScopedFiledReturnsDetailIdentity } from "./filed-returns-detail-
 import { filedReturnDetailIdentityMatchesScope } from "./filed-returns-detail-navigation";
 import { resolveVisibleFiledReturnDownloadCandidates } from "./filed-returns-download-candidates";
 import { verifyFiledReturnsDownloadTarget } from "./filed-returns-download-target";
+import { verifyVisibleGstr2bSummaryScope } from "./gstr2b-summary";
 
 const GSTR3B_GET_GEN_PDF_PATH = "/returns/auth/api/gstr3b/getgenpdf";
 const GST_RETURNS_ORIGIN = "https://return.gst.gov.in";
@@ -41,7 +42,9 @@ export type ArtifactFailureReason =
   | "empty"
   | "too-large"
   | "generation-timeout"
-  | "page-period-mismatch";
+  | "page-period-mismatch"
+  | "danger-unconfirmed"
+  | "danger-rejected";
 
 export const ARTIFACT_FAILURE_MESSAGES = {
   "unsupported-target": "Pack cannot acquire that filed-return artifact.",
@@ -66,6 +69,10 @@ export const ARTIFACT_FAILURE_MESSAGES = {
     "The GST Portal did not finish generating the filed-return artifact in time.",
   "page-period-mismatch":
     "The visible GST Portal page does not match the requested financial year and period.",
+  "danger-unconfirmed":
+    "The browser has not classified this filed-return download as safe, so Pack did not mark the target saved. Check browser Downloads before retrying.",
+  "danger-rejected":
+    "The browser did not classify this filed-return download as safe, so Pack did not mark the target saved. Review the item in browser Downloads before deciding whether to retry.",
 } satisfies Record<ArtifactFailureReason, string>;
 
 export function artifactFailureMessage(reason: ArtifactFailureReason): string {
@@ -250,6 +257,21 @@ async function acquireGstr2bArtifact(
   const controls = resolvePageArtifactControls(documentRef, descriptor.controlText);
   if (controls.length !== 1 || !controls[0])
     return failed(request, "control-not-found", ["target-period-verified"]);
+  // The preflight above validated the fetched JSON, not the page. The summary
+  // tab can change period while that request is in flight, so re-verify the
+  // visible scope immediately before arming the generic control — otherwise a
+  // newly visible period's artifact is saved under the requested target's name.
+  const visibleScopeGuard = verifyVisibleGstr2bSummaryScope(documentRef, {
+    financialYear: request.financialYear,
+    period: request.period,
+    returnType: "GSTR-2B",
+  });
+  if (visibleScopeGuard) {
+    return failed(request, "page-period-mismatch", [
+      "target-period-verified",
+      "page-target-unverified",
+    ]);
+  }
   controls[0].setAttribute("data-pack-artifact-request", request.requestId);
   return {
     ok: true,

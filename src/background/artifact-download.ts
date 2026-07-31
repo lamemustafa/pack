@@ -7,10 +7,18 @@ import {
 import { installPackDownloadFilenameReassertion } from "./pack-download-filename-reassertion";
 import type { PackDownloadFilenameReservation } from "./pack-download-filename-reassertion";
 import { isRequestedFilenameOverridden } from "./download-filename-comparison";
+import { classifyDownloadDanger } from "./download-observer-results";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
-type DownloadFailure = "checkpoint-failed" | "start-rejected" | "interrupted" | "empty" | "timeout";
+type DownloadFailure =
+  | "checkpoint-failed"
+  | "start-rejected"
+  | "interrupted"
+  | "empty"
+  | "timeout"
+  | "danger-unconfirmed"
+  | "danger-rejected";
 export type ArtifactDownloadResult =
   | {
       ok: true;
@@ -127,6 +135,24 @@ function awaitCompletion(
           if (item.state === "interrupted")
             return finish({ ok: false, reason: "interrupted", safeSignals: [] });
           if (item.state === "complete") {
+            // A completed, non-empty item is not proof on its own. The shared
+            // observer refuses to treat an unclassified, still-scanning or
+            // browser-rejected download as evidence, and this path must make
+            // the same call from the same predicate rather than restate it.
+            const danger = classifyDownloadDanger(item);
+            if (danger !== "safe") {
+              return finish({
+                ok: false,
+                reason: danger === "rejected" ? "danger-rejected" : "danger-unconfirmed",
+                safeSignals: [
+                  danger === "rejected"
+                    ? "browser-download-danger-rejected"
+                    : danger === "pending"
+                      ? "browser-download-danger-pending"
+                      : "browser-download-danger-unknown",
+                ],
+              });
+            }
             const bytes = Math.max(
               item.bytesReceived ?? 0,
               item.fileSize ?? 0,

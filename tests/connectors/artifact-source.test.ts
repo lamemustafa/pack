@@ -210,6 +210,23 @@ describe("GSTR-2B artifact acquisition", () => {
     },
   );
 
+  it.each(["PDF", "EXCEL"] as const)(
+    "arms no GSTR-2B %s control when the visible period moved while the preflight was in flight",
+    async (artifactType) => {
+      // The preflight fetch validates the requested period's JSON, but the
+      // summary tab can change period while that request is in flight. Arming
+      // the generic control then would save another period's artifact under the
+      // requested target's name.
+      const { documentRef } = gstr2bPage(gstr2bJson("042024"), 200, undefined, {
+        financialYear: "2024-25",
+        period: "May",
+      });
+      const result = await acquireFiledReturnArtifact(documentRef, { ...request, artifactType });
+      expect(result).toMatchObject({ ok: false, reason: "page-period-mismatch" });
+      expect(documentRef.querySelectorAll("[data-pack-artifact-request]").length).toBe(0);
+    },
+  );
+
   it("fails closed on HTTP failure or a non-summary page", async () => {
     const denied = gstr2bPage("{}", 500);
     await expect(acquireFiledReturnArtifact(denied.documentRef, request)).resolves.toMatchObject({
@@ -508,10 +525,22 @@ function gstr2bPage(
   body: string,
   status = 200,
   url = "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
+  visible: { financialYear: string; period: string } = {
+    financialYear: "2024-25",
+    period: "April",
+  },
 ) {
+  // A real GSTR-2B summary page carries labelled period identity; the armed
+  // control is only target-bound because that identity is checked immediately
+  // before arming. The quarter aside is decoy text that must not be read as
+  // period evidence.
   const dom = new JSDOM(
     `<body>
       <a>Downloads</a>
+      <h1>GSTR-2B</h1>
+      <p>Financial Year - ${visible.financialYear}</p>
+      <p>Return Period - ${visible.period}</p>
+      <aside>Quarter 1: April May June</aside>
       <button>View/Download Certificates</button>
       <button>DOWNLOAD ADVISORY</button>
       <button>E-INVOICE DOWNLOAD HISTORY</button>

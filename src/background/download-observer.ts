@@ -4,6 +4,7 @@ import type {
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
 import type { DownloadObservationContext } from "./download-correlation";
+import { beginLiveFiledReturnsDownloadObservation } from "./filed-returns-durable-download-reconciler";
 import {
   completedObservation,
   downloadInProgress,
@@ -82,8 +83,13 @@ export async function observeBrowserDownloadById(
     let recheckId: ReturnType<typeof globalThis.setTimeout> | null = null;
     let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
     let settled = false;
+    // Claim this exact ID for the duration of inline observation so the global
+    // durable listener does not reconcile the same download concurrently, and
+    // release it on settle so a later terminal event is reconciled durably.
+    const endLiveObservation = beginLiveFiledReturnsDownloadObservation(downloadId);
 
     const cleanup = () => {
+      endLiveObservation();
       downloads.onChanged.removeListener(onChanged);
       if (recheckId) globalThis.clearTimeout(recheckId);
       recheckId = null;

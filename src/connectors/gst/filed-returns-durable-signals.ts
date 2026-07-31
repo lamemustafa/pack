@@ -474,6 +474,16 @@ const SCOPED_RETURN_SIGNAL_SUFFIXES = new Set([
 const ARTIFACT_FAILURE_SIGNALS = new Set([
   "artifact-acquisition-failed",
   "artifact-filed-gstr1-excel-no-details-available",
+  // Artifact-acquisition recovery exists to survive service-worker death, so
+  // its outcomes must be persistable. Without these the blocked summary that
+  // routes an interrupted acquisition to review is rejected by
+  // parseDurableFiledReturnsSignals and dropped, which is the one case the
+  // recovery path exists to handle.
+  "artifact-acquisition-start-unreconciled",
+  "artifact-acquisition-download-unconfirmed",
+  "artifact-acquisition-download-unreconciled",
+  "artifact-acquisition-download-search-unavailable",
+  "artifact-acquisition-download-completed-unpersisted",
   ...Object.keys(ARTIFACT_FAILURE_MESSAGES).map((reason) => `artifact-${reason}`),
 ]);
 

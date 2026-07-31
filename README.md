@@ -64,14 +64,21 @@ outside store-facing claims until exact-ZIP clean-profile evidence,
 restart/resume evidence, and privacy-review evidence are recorded for the
 release.
 
-The current source build also contains a fail-closed portal-created download
-correlation path. It can accept completion only after the explicit target action
-and an exact, non-empty browser-download match; interrupted, zero-byte,
-unknown-size, and still-unconfirmed downloads settle as unobserved and route to
-target review rather than to a retry. The path is shared rather than return-type
-gated: the single-period GSTR-3B, GSTR-1, and GSTR-2B flows use it, as do the
-selected-file and full-year ZIP paths. Its presence is not live or store-facing
-evidence.
+The current source build correlates a download to its target through one
+fail-closed evidence rule set, and that rule set is shared rather than
+return-type gated: the single-period GSTR-3B, GSTR-1 and GSTR-2B flows use it,
+as do the selected-file and full-year ZIP paths. It can accept completion only
+on an exact browser-download ID match that is complete, non-empty, and
+classified safe by the browser; interrupted, zero-byte, unknown-size,
+still-scanning, browser-rejected and unconfirmed downloads settle as unobserved
+and route to target review rather than to a retry.
+
+A separate and much narrower class covers a _portal-created_ Blob download.
+`target-bound-portal-click-blob` is limited to a single-period GSTR-3B PDF with
+an exact action and browser-download match, and is disabled for GSTR-1, GSTR-2B,
+selected-file ZIP/OPFS staging and every full-year flow — those flows correlate
+their own extension-created downloads by exact ID instead. Neither path is live
+or store-facing evidence.
 
 ## Install
 
@@ -212,7 +219,11 @@ Pack uses Chrome extension storage only inside the current browser profile.
 - `pack:last-filed-returns-observation`: the latest safe filed-returns page
   observation;
 - `pack:last-filed-returns-flow-summary`: the latest temporary filed-return flow
-  status.
+  status;
+- `pack:last-gst-tab-id`: the browser tab ID of the most recent supported GST
+  Portal tab, so a run can find its tab again without scanning every tab. A tab
+  ID is a per-session integer assigned by the browser and carries no page, URL
+  or taxpayer information.
 
 The Options page "Clear local Pack data" control removes the local keys above
 and clears Pack session storage. Pack does not store GST Portal credentials,
