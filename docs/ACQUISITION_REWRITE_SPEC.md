@@ -189,7 +189,7 @@ Hard rules:
   any portal text. `safeSignals` are enum-like category strings only.
 - **Never** return `ok: true` without passing §6 validation.
 - Fail closed. Any unexpected shape → `ok: false` with the nearest reason. Never guess.
-- Guard page identity **before** acquiring: origin `https://return.gst.gov.in` and the
+- Guard page identity **before** acquiring: the reviewed Returns origin and
   pathname must match the expected detail page. Reuse `detectFiledReturnDetailPage`.
 
 ### 5.2 Preflight target binding (replaces DOM fingerprinting)

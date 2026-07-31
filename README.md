@@ -224,6 +224,12 @@ Pack uses Chrome extension storage only inside the current browser profile.
   Portal tab, so a run can find its tab again without scanning every tab. A tab
   ID is a per-session integer assigned by the browser and carries no page, URL
   or taxpayer information.
+- `pack.artifact-acquisition.v2.*`: a per-target, session-only recovery
+  checkpoint for a direct artifact action. It contains the requested financial
+  year, period, return/artifact type, opaque request ID, checkpoint state and,
+  after browser creation, the exact numeric download ID. It contains no raw
+  filename, local path, URL/referrer, portal response, taxpayer identifier,
+  credential, cookie, token or artifact bytes.
 
 The Options page "Clear local Pack data" control removes the local keys above
 and clears Pack session storage. Pack does not store GST Portal credentials,
