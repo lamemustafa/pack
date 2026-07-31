@@ -8,7 +8,6 @@ import {
   DEFAULT_SCOPE,
   createDocument,
   createGstDocument,
-  createGstr2bSummaryDocument,
   makeLayoutVisible,
   stubFiledReturnsApi,
 } from "./filed-returns-flow.test-helpers";
@@ -179,9 +178,15 @@ describe("filed returns flow — navigation and routing", () => {
     ["GSTR-1", "GSTR-2B", "return-dashboard"],
     ["GSTR-3B", "GSTR-1", "return-dashboard"],
     ["GSTR-3B", "GSTR-2B", "return-dashboard"],
+    ["GSTR-2B", "GSTR-1", "return-dashboard"],
+    ["GSTR-2B", "GSTR-3B", "filed-returns"],
   ] as const)(
-    "leaves a %s page before starting a %s run",
+    "leaves a visible %s page for the requested %s destination",
     async (visibleReturnType, returnType, expectedNavigation) => {
+      const visibleUrl =
+        visibleReturnType === "GSTR-2B"
+          ? "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary"
+          : `https://return.gst.gov.in/returns/auth/${visibleReturnType === "GSTR-1" ? "gstr1" : "gstr3b"}`;
       const documentRef = createGstDocument(
         `<main>
           <h1>Filed ${visibleReturnType}</h1>
@@ -191,7 +196,7 @@ describe("filed returns flow — navigation and routing", () => {
             <a data-return-dashboard href="/returns/auth/dashboard">Return Dashboard</a>
           </nav>
         </main>`,
-        `https://return.gst.gov.in/returns/auth/${visibleReturnType === "GSTR-1" ? "gstr1" : "gstr3b"}`,
+        visibleUrl,
       );
       makeLayoutVisible(documentRef);
       const clicked = { filedReturns: 0, returnDashboard: 0 };
@@ -225,39 +230,6 @@ describe("filed returns flow — navigation and routing", () => {
           ? { filedReturns: 1, returnDashboard: 0 }
           : { filedReturns: 0, returnDashboard: 1 },
       );
-    },
-  );
-
-  it.each(["GSTR-1", "GSTR-3B"] as const)(
-    "preserves the GSTR-2B summary exit before starting a %s run",
-    async (returnType) => {
-      const documentRef = createGstr2bSummaryDocument(`
-        <nav>
-          <a data-return-dashboard href="/returns/auth/dashboard">Return Dashboard</a>
-        </nav>
-      `);
-      let dashboardClicked = 0;
-      documentRef.querySelector("[data-return-dashboard]")?.addEventListener("click", (event) => {
-        event.preventDefault();
-        dashboardClicked += 1;
-      });
-
-      const result = await runFiledReturnsDownloadStep(documentRef, {
-        artifactType: "PDF",
-        financialYear: "2026-27",
-        period: "May",
-        returnType,
-      });
-
-      expect(result.state).toBe("clicked");
-      expect(result.safeSignals).toEqual(
-        expect.arrayContaining([
-          FILED_RETURN_ROUTE_MISMATCH_SIGNALS["GSTR-2B"],
-          "return-dashboard-candidate-clicked",
-        ]),
-      );
-      expect(result.safeMessage).toMatch(new RegExp(`filed ${returnType}`));
-      expect(dashboardClicked).toBe(1);
     },
   );
 

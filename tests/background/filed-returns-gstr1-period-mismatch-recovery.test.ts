@@ -168,11 +168,11 @@ describe("GSTR-1 period-mismatch recovery", () => {
     expect(flowMocks.triggerSelectedArtifacts).not.toHaveBeenCalled();
   });
 
-  it("stops a repeated cross-return navigation before the flow-step limit", async () => {
-    const scope = { ...SCOPE, returnType: "GSTR-3B" as const };
+  it("persists a terminal stop when GSTR-2B-to-GSTR-1 navigation does not converge", async () => {
+    const scope = SCOPE;
     const deps = createDeps(async () =>
       step(
-        [FILED_RETURN_ROUTE_MISMATCH_SIGNALS["GSTR-1"], "filed-returns-candidate-clicked"],
+        [FILED_RETURN_ROUTE_MISMATCH_SIGNALS["GSTR-2B"], "return-dashboard-candidate-clicked"],
         "clicked",
         "Pack is leaving the mismatched synthetic return page.",
         filedReturnScopeId(scope.returnType),
@@ -185,7 +185,7 @@ describe("GSTR-1 period-mismatch recovery", () => {
       flowStep: {
         state: "user-action-required",
         safeSignals: expect.arrayContaining([
-          FILED_RETURN_ROUTE_MISMATCH_SIGNALS["GSTR-1"],
+          FILED_RETURN_ROUTE_MISMATCH_SIGNALS["GSTR-2B"],
           RETURN_TYPE_MISMATCH_RECOVERY_STOPPED_SIGNAL,
         ]),
         userAction: { type: "NAVIGATE_TO_SUPPORTED_PAGE", canResume: true },
@@ -196,8 +196,14 @@ describe("GSTR-1 period-mismatch recovery", () => {
       MAX_GSTR1_PERIOD_MISMATCH_RECOVERY_ATTEMPTS + 1,
     );
     expect(response.flowStep.safeSignals).not.toContain("flow-step-limit-reached");
+    expect(response.flowStep.safeMessage).toContain("GSTR-2B");
     expect(response.flowStep.safeMessage).toContain("GSTR-1");
-    expect(response.flowStep.safeMessage).toContain("GSTR-3B");
+    expect(browserMocks.session.completion).toMatchObject({
+      flowStep: {
+        state: "user-action-required",
+        safeMessage: response.flowStep.safeMessage,
+      },
+    });
     expect(flowMocks.triggerSelectedArtifacts).not.toHaveBeenCalled();
   });
 
