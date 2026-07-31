@@ -264,7 +264,47 @@ describe("filed returns target review", () => {
         }),
       ).resolves.toEqual({ state: "malformed" });
     }
-    expect(browserMocks.storage.local.remove).toHaveBeenCalledTimes(4);
+    const malformedWrites = browserMocks.storage.local.set.mock.calls
+      .map(([values]) => values["target-review"])
+      .filter(
+        (value): value is { schemaVersion: string; state: string } =>
+          typeof value === "object" &&
+          value !== null &&
+          (value as { state?: unknown }).state === "malformed",
+      );
+    expect(malformedWrites).toEqual([
+      { schemaVersion: "1.0", state: "malformed" },
+      { schemaVersion: "1.0", state: "malformed" },
+      { schemaVersion: "1.0", state: "malformed" },
+      { schemaVersion: "1.0", state: "malformed" },
+    ]);
+    expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
+  });
+
+  it("replaces malformed recovery metadata before returning the fail-closed response", async () => {
+    const localValues: Record<string, unknown> = {
+      "target-review": {
+        unexpectedPortalText: "Synthetic Taxpayer GSTIN 00XXXXX0000X0Z0",
+      },
+    };
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      typeof key === "string" && Object.hasOwn(localValues, key) ? { [key]: localValues[key] } : {},
+    );
+    browserMocks.storage.local.set.mockImplementation(async (values) => {
+      Object.assign(localValues, values);
+    });
+
+    const response = await resolveUnconfirmedFiledReturnsDownload(
+      { financialYear: "2025-26", period: "March", returnType: "GSTR-3B" },
+      "cancelled",
+      { storageKeys: { targetReview: "target-review" } },
+    );
+
+    expect(localValues["target-review"]).toEqual({ schemaVersion: "1.0", state: "malformed" });
+    expect(response).toMatchObject({
+      flowStep: { safeSignals: ["filed-returns-target-review-malformed"], state: "blocked" },
+    });
+    expect(JSON.stringify(response)).not.toContain("00XXXXX0000X0Z0");
   });
 
   it("retains bounded per-artifact evidence through restart and cleanup review updates", async () => {

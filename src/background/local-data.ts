@@ -16,6 +16,7 @@ import {
   InvalidSinglePeriodStagingRecordError,
   readSinglePeriodStagingRecord,
 } from "./filed-returns-artifact-progress";
+import { hasArtifactAcquisitionCheckpoint } from "./artifact-acquisition-state";
 import { readCurrentFiledReturnsTargetReviewSummary } from "./filed-returns-target-review";
 
 export interface PackLocalDataDeps {
@@ -115,6 +116,11 @@ async function hasUnresolvedFiledReturnsRecoveryState(deps: PackLocalDataDeps): 
     storageKeys: { targetReview: deps.storageKeys.targetReview },
   });
   if (targetReviewSummary) return true;
+
+  // Direct portal artifact actions have their own session-only recovery record.
+  // Clearing it would discard the exact target/download ownership that prevents
+  // a later start from repeating an externally visible download.
+  if (await hasArtifactAcquisitionCheckpoint()) return true;
 
   const ledger = await readLocalValue<unknown>(deps.storageKeys.fullFiscalYearLedger);
   if (!isFullFiscalYearLedger(ledger)) return false;

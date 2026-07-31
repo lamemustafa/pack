@@ -459,7 +459,8 @@ describe("GSTR-2B all-format selection", () => {
     });
   });
 
-  it("exports successes as partial and names the missing artifact reason", async () => {
+  it("routes an ambiguous acquisition failure to review instead of exporting a partial ZIP", async () => {
+    bundleMocks.persistSinglePeriodBundleArtifactUnavailable.mockResolvedValueOnce(null as never);
     mocks.triggerAndObserveFiledReturnDownload
       .mockResolvedValueOnce(downloaded("PDF"))
       .mockResolvedValueOnce(blocked("EXCEL"))
@@ -485,11 +486,11 @@ describe("GSTR-2B all-format selection", () => {
 
     expect(response).toMatchObject({
       flowStep: {
-        state: "partial",
-        safeMessage: expect.stringContaining("EXCEL (artifact-generation-timeout)"),
+        state: "blocked",
+        safeSignals: expect.arrayContaining(["artifact-generation-timeout"]),
       },
     });
-    expect(bundleMocks.exportSinglePeriodFiledReturnsZip).toHaveBeenCalledOnce();
+    expect(bundleMocks.exportSinglePeriodFiledReturnsZip).not.toHaveBeenCalled();
   });
 });
 

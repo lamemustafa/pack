@@ -302,6 +302,26 @@ describe("single-period bundle ledger", () => {
     ).toBeNull();
   });
 
+  it("keeps an enumerated acquisition failure in review rather than marking it unavailable", () => {
+    const initial = requiredLedger();
+    const running = markSinglePeriodBundleArtifactRunning(initial, "PDF", PDF_RUNNING_AT)!;
+
+    expect(
+      markSinglePeriodBundleArtifactUnavailable(
+        running,
+        "PDF",
+        {
+          connectorId: "gst",
+          safeMessage: "The portal action did not settle in time.",
+          safeSignals: ["artifact-generation-timeout"],
+          scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
+          state: "blocked",
+        },
+        PDF_STAGED_AT,
+      ),
+    ).toBeNull();
+  });
+
   it("durably checkpoints final ZIP intent, exact ID, and cleanup without paths", async () => {
     const ready = await persistBothArtifacts();
     const intent = await persistSinglePeriodBundleZipIntent(

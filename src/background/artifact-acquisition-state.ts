@@ -25,6 +25,12 @@ export function artifactAcquisitionCheckpointKey(target: ArtifactAcquisitionTarg
     .join(".");
 }
 
+/** True when session recovery still owns a target-bound artifact action. */
+export async function hasArtifactAcquisitionCheckpoint(): Promise<boolean> {
+  const values = await browser.storage.session.get();
+  return Object.keys(values).some((key) => key.startsWith(`${KEY_PREFIX}.`));
+}
+
 export async function persistArtifactAcquisitionIntent(
   input: Omit<ArtifactAcquisitionCheckpoint, "state" | "downloadId">,
 ): Promise<void> {

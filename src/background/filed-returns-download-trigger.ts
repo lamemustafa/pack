@@ -314,14 +314,23 @@ function shouldRetainArtifactAcquisitionCheckpoint(
   delivery: { ok: false; reason: string },
   checkpointHasDownloadId: boolean,
 ): boolean {
-  if (delivery.reason === "checkpoint-failed") return true;
+  // A portal generation timeout happens after Pack armed the target-bound
+  // control but before it can prove the browser action quiesced. Keep the
+  // intent so the next start routes it through recovery review instead of
+  // repeating the portal action.
+  if (["checkpoint-failed", "generation-timeout"].includes(delivery.reason)) return true;
   // The browser already created an exact-ID item for these outcomes. It may
   // settle as safe later, but it must not be forgotten and repeated first.
   return (
     checkpointHasDownloadId &&
-    ["timeout", "search-unavailable", "danger-unconfirmed", "danger-rejected"].includes(
-      delivery.reason,
-    )
+    [
+      "timeout",
+      "search-unavailable",
+      "danger-unconfirmed",
+      "danger-rejected",
+      "interrupted",
+      "empty",
+    ].includes(delivery.reason)
   );
 }
 

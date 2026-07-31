@@ -59,6 +59,11 @@ interface PersistFiledReturnsTargetReviewOptions {
 
 let targetReviewMutationCriticalSection = Promise.resolve();
 
+const MALFORMED_TARGET_REVIEW_SENTINEL = {
+  schemaVersion: "1.0",
+  state: "malformed",
+} as const;
+
 export async function readFiledReturnsTargetReview(
   scope: FiledReturnsDownloadScope,
   deps: FiledReturnsTargetReviewDeps,
@@ -942,8 +947,13 @@ async function readTargetReviewStorageStateByKey(
   const values = await browser.storage.local.get(key);
   const stored = values[key];
   if (stored === undefined || stored === null) return { state: "missing" };
+  if (isMalformedTargetReviewSentinel(stored)) return { state: "malformed" };
   const review = parseFiledReturnsTargetReview(stored);
-  return review ? { review, state: "valid" } : { state: "malformed" };
+  if (review) return { review, state: "valid" };
+  // Do not retain unvalidated recovery metadata. The sentinel preserves the
+  // fail-closed state until the user explicitly clears local Pack data.
+  await browser.storage.local.set({ [key]: MALFORMED_TARGET_REVIEW_SENTINEL });
+  return { state: "malformed" };
 }
 
 async function readCanonicalTargetReviewStorageStateByKey(
@@ -953,9 +963,13 @@ async function readCanonicalTargetReviewStorageStateByKey(
     const values = await browser.storage.local.get(key);
     const stored = values[key];
     if (stored === undefined || stored === null) return { state: "missing" };
+    if (isMalformedTargetReviewSentinel(stored)) return { state: "malformed" };
     const review = parseFiledReturnsTargetReview(stored);
     if (!review) {
-      await browser.storage.local.remove(key);
+      // Replace, rather than delete, untrusted metadata. A subsequent start
+      // must remain blocked until the user chooses the explicit clear-data
+      // recovery action.
+      await browser.storage.local.set({ [key]: MALFORMED_TARGET_REVIEW_SENTINEL });
       return { state: "malformed" };
     }
     if (!hasEquivalentJsonValue(stored, review)) {
@@ -963,6 +977,16 @@ async function readCanonicalTargetReviewStorageStateByKey(
     }
     return { review, state: "valid" };
   });
+}
+
+function isMalformedTargetReviewSentinel(input: unknown): boolean {
+  if (!input || typeof input !== "object") return false;
+  const value = input as Record<string, unknown>;
+  return (
+    hasOnlyKeys(value, ["schemaVersion", "state"]) &&
+    value.schemaVersion === MALFORMED_TARGET_REVIEW_SENTINEL.schemaVersion &&
+    value.state === MALFORMED_TARGET_REVIEW_SENTINEL.state
+  );
 }
 
 function hasEquivalentJsonValue(left: unknown, right: unknown): boolean {

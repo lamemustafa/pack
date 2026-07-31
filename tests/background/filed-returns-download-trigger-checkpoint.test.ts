@@ -48,6 +48,9 @@ const scope = {
 const RETAINED_TERMINAL_DELIVERY_FAILURES = [
   "danger-unconfirmed",
   "danger-rejected",
+  "empty",
+  "generation-timeout",
+  "interrupted",
   "search-unavailable",
 ] as const;
 
@@ -76,8 +79,29 @@ describe("GSTR-3B artifact acquisition checkpoint cleanup", () => {
     },
   );
 
-  it.each(["start-rejected", "interrupted", "empty"] as const)(
-    "clears the JSON checkpoint after terminal %s delivery failure",
+  it("clears the JSON checkpoint when the browser rejects its start", async () => {
+    mocks.downloadAcquiredArtifact.mockImplementationOnce(async () => ({
+      ok: false,
+      reason: "start-rejected",
+      safeSignals: [],
+    }));
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "May",
+      artifactType: "JSON",
+      deps: {
+        sendMessageToTabWithInjection: vi.fn(async () => acquiredJson()),
+        storageKeys: {},
+      },
+      scope: { ...scope, artifactType: "JSON" },
+      tabId: 17,
+    });
+
+    expect(response).toMatchObject({ flowStep: { state: "blocked" } });
+    expect(mocks.session).toEqual({});
+  });
+
+  it.each(["interrupted", "empty"] as const)(
+    "retains the JSON checkpoint after terminal %s delivery failure with an exact ID",
     async (reason) => {
       mocks.downloadAcquiredArtifact.mockImplementationOnce(async (input) => {
         await input.onStarted?.(91);
@@ -95,7 +119,9 @@ describe("GSTR-3B artifact acquisition checkpoint cleanup", () => {
       });
 
       expect(response).toMatchObject({ flowStep: { state: "blocked" } });
-      expect(mocks.session).toEqual({});
+      expect(
+        mocks.session[artifactAcquisitionCheckpointKey({ ...scope, artifactType: "JSON" })],
+      ).toEqual(expect.objectContaining({ downloadId: 91, state: "download-observing" }));
     },
   );
 

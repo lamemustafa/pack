@@ -20,12 +20,7 @@ import {
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import { isValidFiledReturnsDownloadDiagnosticState } from "./filed-returns-download-diagnostic-state";
 import { PACK_LOCAL_STORAGE_KEYS } from "./storage-keys";
-import { ARTIFACT_FAILURE_MESSAGES } from "../connectors/gst/artifact-source";
-
-const MISSING_ARTIFACT_REASONS = new Set([
-  "artifact-filed-gstr1-excel-no-details-available",
-  ...Object.keys(ARTIFACT_FAILURE_MESSAGES).map((reason) => `artifact-${reason}`),
-]);
+const MISSING_ARTIFACT_REASONS = new Set(["artifact-filed-gstr1-excel-no-details-available"]);
 
 const LEDGER_KEYS = [
   "artifactPlan",

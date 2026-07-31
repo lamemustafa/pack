@@ -138,6 +138,26 @@ describe("Pack local data clearing", () => {
     );
   });
 
+  it("refuses local-data clearing while a direct artifact checkpoint still owns recovery", async () => {
+    browserMocks.storage.session.get.mockResolvedValue({
+      "pack.artifact-acquisition.v2.GSTR-3B.2025-26.May.PDF": {
+        requestId: "opaque-request",
+        state: "download-observing",
+      },
+    });
+    const background = await import("../../src/entrypoints/background");
+
+    const response = await background.clearPackLocalData();
+
+    expect(response).toEqual({
+      ok: false,
+      error:
+        "Pack has unresolved filed-return recovery state. Cancel or resolve the run before clearing local data.",
+    });
+    expect(browserMocks.storage.session.clear).not.toHaveBeenCalled();
+    expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
+  });
+
   it("refuses broad local-data clearing while a full-year recovery target is unresolved", async () => {
     browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
       key === "pack:full-fiscal-year-ledger"
