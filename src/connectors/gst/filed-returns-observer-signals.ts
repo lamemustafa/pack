@@ -10,9 +10,7 @@ export function detectSafeSignals(text: string, hints: FiledReturnsObservationHi
   if (isGstr1DetailRoute(hints)) signals.push("gstr-1-detail-route");
   if (isGstr1SummaryRoute(hints)) signals.push("gstr-1-summary-route");
   if (isGstr2bSummaryRoute(hints)) signals.push("gstr2b-summary-route", "gstr-2b");
-  if (/view filed returns|filed returns/.test(text) || signals.includes("filed-returns-route")) {
-    signals.push("filed-returns-heading");
-  }
+  if (signals.includes("filed-returns-route")) signals.push("filed-returns-heading");
   if (signals.includes("gstr-3b-detail-route")) signals.push("filed-returns-heading");
   if (signals.includes("gstr-1-detail-route")) signals.push("filed-returns-heading", "gstr-1");
   if (signals.includes("gstr-1-summary-route")) signals.push("filed-returns-heading", "gstr-1");
