@@ -1,0 +1,4 @@
+# pnpm dependency patches are literal unified diffs. Their context lines for
+# blank source lines are a single space, so `git diff --check` must not treat
+# that required trailing whitespace as an error.
+patches/*.patch -whitespace
