@@ -979,8 +979,11 @@ describe("filed returns flow — filter selection and API search", () => {
       const result = await resultPromise;
 
       expect(result.state).toBe("clicked");
+      // The fallback completes the visible selection and searches; it does not
+      // stop at an in-progress step. Asserting the signals it actually emits
+      // keeps this test proof that the fallback ran, not that it stalled.
       expect(result.safeSignals).toEqual(
-        expect.arrayContaining(["filed-return-filter-selection-in-progress"]),
+        expect.arrayContaining(["filed-return-filters-selected", "search-clicked"]),
       );
       expect(searchClicked).toBe(1);
     } finally {
@@ -1018,8 +1021,11 @@ describe("filed returns flow — filter selection and API search", () => {
       const result = await resultPromise;
 
       expect(result.state).toBe("clicked");
+      // The fallback completes the visible selection and searches; it does not
+      // stop at an in-progress step. Asserting the signals it actually emits
+      // keeps this test proof that the fallback ran, not that it stalled.
       expect(result.safeSignals).toEqual(
-        expect.arrayContaining(["filed-return-filter-selection-in-progress"]),
+        expect.arrayContaining(["filed-return-filters-selected", "search-clicked"]),
       );
       expect(searchClicked).toBe(1);
     } finally {
