@@ -5,7 +5,10 @@ import type {
   FiledReturnsFullFiscalYearTargetStatus,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
-import { normaliseFiledReturnsArtifactType } from "../connectors/gst/filed-returns-artifacts";
+import {
+  concreteFiledReturnsArtifactTypes,
+  normaliseFiledReturnsArtifactType,
+} from "../connectors/gst/filed-returns-artifacts";
 import { filedReturnsScopeId } from "../connectors/gst/filed-returns-return-types";
 import {
   FILED_RETURNS_MONTHS,
@@ -173,12 +176,31 @@ function isConsistentCompleteSummary({
     (isSelectedArtifactBundle
       ? flowStep.safeSignals.includes("single-period-zip-downloaded")
       : true) &&
-    hasPositiveFiledReturnsDownloadEvidence(
+    (hasPositiveFiledReturnsDownloadEvidence(
       flowStep,
       scope,
       flowStep.safeSignals,
       isSelectedArtifactBundle ? "single-period" : null,
-    )
+    ) ||
+      hasExactArtifactAcquisitionReconciliationEvidence(scope, flowStep.safeSignals))
+  );
+}
+
+function hasExactArtifactAcquisitionReconciliationEvidence(
+  scope: FiledReturnsDownloadScope,
+  safeSignals: readonly string[],
+): boolean {
+  const expectedArtifactCount = concreteFiledReturnsArtifactTypes(
+    normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType),
+  ).length;
+  const downloadIds = safeSignals.filter((signal) => /^browser-download-id:\d{1,10}$/.test(signal));
+  return (
+    safeSignals.includes("artifact-acquisition-download-reconciled") &&
+    safeSignals.includes("browser-download-created") &&
+    safeSignals.includes("browser-download-completed") &&
+    safeSignals.includes("browser-download-non-empty") &&
+    downloadIds.length === expectedArtifactCount &&
+    new Set(downloadIds).size === expectedArtifactCount
   );
 }
 

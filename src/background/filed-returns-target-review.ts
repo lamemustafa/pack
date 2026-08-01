@@ -10,7 +10,10 @@ import {
   concreteFiledReturnsArtifactTypes,
   normaliseFiledReturnsArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
-import { clearArtifactAcquisitionCheckpoints } from "./artifact-acquisition-state";
+import {
+  clearArtifactAcquisitionCheckpoints,
+  clearArtifactAcquisitionCheckpointsAfterPersistedSummary,
+} from "./artifact-acquisition-state";
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import {
   canonicalDurableTargetStatus,
@@ -318,8 +321,46 @@ export async function resolveUnconfirmedFiledReturnsDownload(
     }
 
     if (hasArtifactAcquisitionRecoverySignal(review.safeSignals)) {
-      const checkpointsCleared = await clearArtifactAcquisitionCheckpoints(review.scope);
-      if (!checkpointsCleared) {
+      const cancellation = await clearArtifactAcquisitionCheckpoints(review.scope);
+      if (cancellation.state === "completed") {
+        const flowStep: PortalFlowStepResult = {
+          connectorId: "gst",
+          scopeId: filedReturnScopeId(scope.returnType),
+          state: "downloaded",
+          safeSignals: uniqueSafeSignals([
+            "artifact-acquisition-download-reconciled",
+            "browser-download-created",
+            "browser-download-completed",
+            "browser-download-non-empty",
+            ...cancellation.evidence.map(({ downloadId }) => `browser-download-id:${downloadId}`),
+          ]),
+          safeMessage:
+            "Pack reconciled this target from exact browser download evidence without repeating a portal action.",
+          ...copyFiledReturnsDownloadDiagnosticState(review),
+        };
+        const flowSummary: FiledReturnsFlowSummary = {
+          scope: canonicalTargetReviewScope(scope),
+          status: "complete",
+          completedPeriods: [scope.period],
+          currentPeriod: scope.period,
+          totalPeriods: 1,
+          updatedAt: (deps.now?.() ?? new Date()).toISOString(),
+          flowStep,
+        };
+        const durableSummary = await persistResolvedTargetReviewSummary(flowSummary, deps);
+        if (!durableSummary) return responseForFiledReturnsTargetReview(review);
+        await clearArtifactAcquisitionCheckpointsAfterPersistedSummary(
+          review.scope,
+          cancellation.evidence,
+        );
+        await browser.storage.local.remove(key);
+        return {
+          ok: true,
+          flowStep: durableSummary.flowStep,
+          flowSummary: durableSummary,
+        };
+      }
+      if (cancellation.state === "blocked") {
         const clearFailureReview: FiledReturnsTargetReview = {
           ...review,
           revision: targetReviewRevision(review) + 1,

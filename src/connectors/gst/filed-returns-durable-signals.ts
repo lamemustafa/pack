@@ -488,6 +488,7 @@ const ARTIFACT_FAILURE_SIGNALS = new Set([
   "artifact-acquisition-download-unreconciled",
   "artifact-acquisition-download-search-unavailable",
   "artifact-acquisition-download-completed-unpersisted",
+  "artifact-acquisition-download-reconciled",
   ...Object.keys(ARTIFACT_FAILURE_MESSAGES).map((reason) => `artifact-${reason}`),
 ]);
 
