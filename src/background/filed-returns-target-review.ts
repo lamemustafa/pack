@@ -30,7 +30,10 @@ import {
   isValidFiledReturnsDownloadDiagnosticState,
   mergeFiledReturnsDownloadDiagnosticState,
 } from "./filed-returns-download-diagnostic-state";
-import { persistCanonicalFiledReturnsFlowSummary } from "./filed-returns-session-summary";
+import {
+  persistCanonicalFiledReturnsFlowSummary,
+  readCanonicalFiledReturnsFlowSummary,
+} from "./filed-returns-session-summary";
 import {
   cleanupSinglePeriodBundleStaging,
   type SinglePeriodBundleCleanupResult,
@@ -264,6 +267,33 @@ export async function resolveUnconfirmedFiledReturnsDownload(
       return noTargetReviewResponse(scope);
     }
     const review = state.review;
+    const persistedArtifactCompletion = await readPersistedArtifactAcquisitionCompletion(
+      scope,
+      deps,
+    );
+    if (
+      resolution === "cancelled" &&
+      persistedArtifactCompletion &&
+      hasArtifactAcquisitionRecoverySignal(review.safeSignals)
+    ) {
+      // The canonical session summary is the durable completion marker. A
+      // service-worker stop can leave the local review behind after checkpoint
+      // cleanup; never replace that completed target with a cancellation.
+      const cancellation = await clearArtifactAcquisitionCheckpoints(review.scope);
+      if (cancellation.state === "blocked") return responseForFiledReturnsTargetReview(review);
+      if (cancellation.state === "completed") {
+        await clearArtifactAcquisitionCheckpointsAfterPersistedSummary(
+          review.scope,
+          cancellation.evidence,
+        );
+      }
+      await browser.storage.local.remove(key);
+      return {
+        ok: true,
+        flowStep: persistedArtifactCompletion.flowStep,
+        flowSummary: persistedArtifactCompletion,
+      };
+    }
     const hasCleanupFailure = hasSinglePeriodCleanupFailure(review.safeSignals);
     if (hasCleanupFailure && resolution !== "cancelled") {
       return responseForFiledReturnsTargetReview(review);
@@ -520,6 +550,22 @@ export async function persistResolvedTargetReviewSummary(
   const key = deps.storageKeys.completion;
   if (!key) return null;
   return persistCanonicalFiledReturnsFlowSummary(key, flowSummary);
+}
+
+async function readPersistedArtifactAcquisitionCompletion(
+  scope: FiledReturnsDownloadScope,
+  deps: FiledReturnsTargetReviewDeps,
+): Promise<FiledReturnsFlowSummary | null> {
+  const key = deps.storageKeys.completion;
+  if (!key) return null;
+  const summary = await readCanonicalFiledReturnsFlowSummary(key);
+  return summary &&
+    summary.status === "complete" &&
+    sameExactFiledReturnsScope(summary.scope, scope) &&
+    summary.flowStep.state === "downloaded" &&
+    summary.flowStep.safeSignals.includes("artifact-acquisition-download-reconciled")
+    ? summary
+    : null;
 }
 
 function parseFiledReturnsTargetReview(input: unknown): FiledReturnsTargetReview | null {
@@ -1132,6 +1178,19 @@ function sameFiledReturnsScope(
     left.period === right.period &&
     left.returnType === right.returnType &&
     artifactSelectionsOverlap(left, right)
+  );
+}
+
+function sameExactFiledReturnsScope(
+  left: FiledReturnsDownloadScope,
+  right: FiledReturnsDownloadScope,
+): boolean {
+  return (
+    left.financialYear === right.financialYear &&
+    left.period === right.period &&
+    left.returnType === right.returnType &&
+    normaliseFiledReturnsArtifactType(left.returnType, left.artifactType) ===
+      normaliseFiledReturnsArtifactType(right.returnType, right.artifactType)
   );
 }
 

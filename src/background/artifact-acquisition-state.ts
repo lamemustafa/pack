@@ -225,7 +225,7 @@ export async function clearArtifactAcquisitionCheckpointsAfterPersistedSummary(
     if (
       matchingEvidence &&
       isArtifactAcquisitionCheckpoint(checkpoint) &&
-      checkpoint.state === "download-observing" &&
+      (checkpoint.state === "download-observing" || checkpoint.state === "download-unconfirmed") &&
       checkpoint.requestId === matchingEvidence.requestId &&
       checkpoint.downloadId === matchingEvidence.downloadId
     ) {

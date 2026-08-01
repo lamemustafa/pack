@@ -527,6 +527,21 @@ describe("artifact acquisition checkpoint", () => {
     );
   });
 
+  it("clears a reconciled unconfirmed download after its summary is durable", async () => {
+    await persistArtifactAcquisitionUnconfirmedDownload({
+      ...MAY_PDF,
+      downloadId: 9,
+      requestId: "request-may-pdf",
+      state: "download-unconfirmed",
+    });
+
+    await clearArtifactAcquisitionCheckpointsAfterPersistedSummary(MAY_PDF, [
+      { artifactType: "PDF", downloadId: 9, requestId: "request-may-pdf" },
+    ]);
+
+    expect(mocks.session[artifactAcquisitionCheckpointKey(MAY_PDF)]).toBeUndefined();
+  });
+
   it("does not clear a replacement checkpoint after a recovered summary persists", async () => {
     await persistArtifactAcquisitionDownloadId({
       ...MAY_PDF,

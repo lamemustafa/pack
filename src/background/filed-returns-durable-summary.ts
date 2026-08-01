@@ -171,18 +171,22 @@ function isConsistentCompleteSummary({
   }
   const artifactType = normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType);
   const isSelectedArtifactBundle = artifactType === "PDF_AND_EXCEL";
+  const hasExactArtifactReconciliation = hasExactArtifactAcquisitionReconciliationEvidence(
+    scope,
+    flowStep.safeSignals,
+  );
   return (
     flowStep.state === "downloaded" &&
-    (isSelectedArtifactBundle
-      ? flowStep.safeSignals.includes("single-period-zip-downloaded")
-      : true) &&
-    (hasPositiveFiledReturnsDownloadEvidence(
-      flowStep,
-      scope,
-      flowStep.safeSignals,
-      isSelectedArtifactBundle ? "single-period" : null,
-    ) ||
-      hasExactArtifactAcquisitionReconciliationEvidence(scope, flowStep.safeSignals))
+    (hasExactArtifactReconciliation ||
+      ((isSelectedArtifactBundle
+        ? flowStep.safeSignals.includes("single-period-zip-downloaded")
+        : true) &&
+        hasPositiveFiledReturnsDownloadEvidence(
+          flowStep,
+          scope,
+          flowStep.safeSignals,
+          isSelectedArtifactBundle ? "single-period" : null,
+        )))
   );
 }
 
