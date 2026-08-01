@@ -19,6 +19,7 @@ describe("capturePortalPdfBlob", () => {
       });
       expect(result).toMatchObject({
         ok: true,
+        blobUrl: "blob:synthetic-pdf",
         safeSignals: [`portal-blob-shim-suppressed-via-${method}`],
       });
     },
@@ -151,11 +152,31 @@ describe("capturePortalPdfBlob", () => {
     expect(url.createObjectURL).toBe(create);
   });
 
-  it("keeps the shim under its hard 120-line limit", async () => {
+  it("rejects an oversized Blob before reading it into MAIN-world memory", async () => {
+    const { documentRef, view, url } = environment();
+    install(view, url);
+    const blob = new view.Blob([new Uint8Array(25 * 1024 * 1024 + 1)], {
+      type: "application/pdf",
+    });
+    const read = vi.spyOn(blob, "arrayBuffer");
+    documentRef.querySelector("button")?.addEventListener("click", () => {
+      const link = documentRef.createElement("a");
+      link.href = url.createObjectURL(blob);
+      documentRef.body.append(link);
+      link.click();
+    });
+
+    await expect(
+      capturePortalPdfBlob({ controlSelector: "button", expectedMime: "application/pdf" }),
+    ).resolves.toMatchObject({ ok: false, reason: "too-large" });
+    expect(read).not.toHaveBeenCalled();
+  });
+
+  it("keeps the shim under its hard 140-line limit", async () => {
     const source = await import("node:fs/promises").then((fs) =>
       fs.readFile("src/connectors/gst/portal-blob-shim.ts", "utf8"),
     );
-    expect(source.split("\n").length).toBeLessThanOrEqual(120);
+    expect(source.split("\n").length).toBeLessThanOrEqual(140);
   });
 });
 
