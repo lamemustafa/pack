@@ -482,12 +482,18 @@ const ARTIFACT_FAILURE_SIGNALS = new Set([
   // recovery path exists to handle.
   "artifact-acquisition-checkpoint-malformed",
   "artifact-acquisition-checkpoint-clear-failed",
+  // Marks a completion rebuilt from the review's own durable marker after the
+  // browser session ended between persisting the summary and removing the
+  // review. The exact download IDs lived in the cleared session checkpoints, so
+  // this records that the completion is restored rather than re-observed.
+  "artifact-acquisition-completion-restored",
   "artifact-acquisition-start-unreconciled",
   "artifact-acquisition-download-interrupted",
   "artifact-acquisition-download-unconfirmed",
   "artifact-acquisition-download-unreconciled",
   "artifact-acquisition-download-search-unavailable",
   "artifact-acquisition-download-completed-unpersisted",
+  "artifact-acquisition-download-reconciled",
   ...Object.keys(ARTIFACT_FAILURE_MESSAGES).map((reason) => `artifact-${reason}`),
 ]);
 

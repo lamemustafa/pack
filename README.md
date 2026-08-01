@@ -212,7 +212,10 @@ Pack uses Chrome extension storage only inside the current browser profile.
   messages/signals, revisions and timestamps. Recovery state may also store the
   attempt kind/phase, request and bounded candidate-window timestamps, an opaque
   `actionId`, the exact numeric browser `downloadId`, opaque staging-ledger or
-  selected-file checkpoint identifiers/revisions, and sanitized endpoint/path,
+  selected-file checkpoint identifiers/revisions, and an opaque per-artifact
+  request-identity set, each paired with the exact numeric browser `downloadId`
+  it was reconciled from, only while binding a just-persisted artifact-reconciled
+  completion to pending review removal, and sanitized endpoint/path,
   MIME, byte-count, status and error classes. It never stores the raw filename,
   local path, URL/referrer, GSTIN/PAN, taxpayer name, portal HTML, credentials,
   cookies, tokens or artifact bytes;
@@ -225,15 +228,21 @@ Pack uses Chrome extension storage only inside the current browser profile.
 - `pack:last-filed-returns-observation`: the latest safe filed-returns page
   observation;
 - `pack:last-filed-returns-flow-summary`: the latest temporary filed-return flow
-  status;
+  status. An artifact-reconciled completion may additionally retain the same
+  opaque per-artifact request-identity set, each paired with its exact numeric
+  browser `downloadId`, solely to prevent a later same-scope acquisition from
+  inheriting that prior completion and to let an interrupted completion be
+  restored with the evidence it was first proved by;
 - `pack:last-gst-tab-id`: the browser tab ID of the most recent supported GST
   Portal tab, so a run can find its tab again without scanning every tab. A tab
   ID is a per-session integer assigned by the browser and carries no page, URL
   or taxpayer information.
 - `pack.artifact-acquisition.v2.*`: a per-target, session-only recovery
   checkpoint for a direct artifact action. It contains the requested financial
-  year, period, return/artifact type, opaque request ID, checkpoint state and,
-  after browser creation, the exact numeric download ID. It contains no raw
+  year, period, return/artifact type, opaque request ID, checkpoint state, and
+  an `armedAt` timestamp used only to correlate a browser download created
+  after that direct action. After browser creation it also contains the exact
+  numeric download ID. It contains no raw
   filename, local path, URL/referrer, portal response, taxpayer identifier,
   credential, cookie, token or artifact bytes.
 

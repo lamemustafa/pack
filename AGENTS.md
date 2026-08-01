@@ -92,6 +92,13 @@ and release metadata separately. Open PRs as draft. Never amend or rebase a push
 Before claiming readiness, run `pnpm review:gate` and disposition every automated finding as fixed
 with evidence, stale with evidence, rejected with evidence, or a linked follow-up.
 
+**The PR body is gated, not decorative.** `Review gate` fails the PR unless the body carries the
+sections `evaluatePullRequestBody` in `scripts/check-pr-review-gate.mjs` requires. Build the body
+from `.github/PULL_REQUEST_TEMPLATE.md`, which already contains every one of them; the list is not
+repeated here because a second copy would drift from the first, which is the failure this file
+spends most of its length warning about. `gh pr create --body` bypasses the template silently, so a
+body written from scratch fails the gate. Four consecutive PRs were blocked this way.
+
 ## Boundaries
 
 ### Never

@@ -104,6 +104,7 @@ describe("filed-return durable signal contract", () => {
       "artifact-acquisition-checkpoint-malformed",
       "artifact-acquisition-checkpoint-clear-failed",
       "artifact-acquisition-download-interrupted",
+      "artifact-acquisition-download-reconciled",
     ];
     expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);
     expect(signals.every(isDurableFiledReturnsSignal)).toBe(true);
