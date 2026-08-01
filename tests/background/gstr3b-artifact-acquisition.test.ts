@@ -30,6 +30,7 @@ describe("GSTR-3B page-generated acquisition", () => {
         result: {
           ok: true,
           base64: Buffer.from(bytes).toString("base64"),
+          blobUrl: "blob:synthetic/gstr3b",
           safeSignals: ["portal-blob-shim-suppressed-via-dispatchEvent"],
         },
       },
@@ -73,6 +74,7 @@ describe("GSTR-3B page-generated acquisition", () => {
         result: {
           ok: true,
           base64: Buffer.from("<html>synthetic denial</html>").toString("base64"),
+          blobUrl: "blob:synthetic/gstr3b",
           safeSignals: [],
         },
       },
@@ -102,6 +104,7 @@ describe("GSTR-2B page-generated acquisition", () => {
         result: {
           ok: true,
           base64: Buffer.from(bytes).toString("base64"),
+          blobUrl: "blob:synthetic/gstr2b",
           safeSignals: ["portal-blob-shim-suppressed-via-dispatchEvent"],
         },
       },

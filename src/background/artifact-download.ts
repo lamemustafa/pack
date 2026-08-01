@@ -8,6 +8,7 @@ import { installPackDownloadFilenameReassertion } from "./pack-download-filename
 import type { PackDownloadFilenameReservation } from "./pack-download-filename-reassertion";
 import { isRequestedFilenameOverridden } from "./download-filename-comparison";
 import { classifyDownloadDanger } from "./download-observer-results";
+import { extensionBlobUrlFingerprint } from "./filed-returns-durable-download-reconciler";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
@@ -100,17 +101,35 @@ export async function downloadAcquiredArtifact(
   }
 }
 
-export function installPortalBlobDownloadSafetyNet(tabId: number): () => void {
-  const listener = (item: { id: number; tabId?: number; url?: string }) => {
-    if (item.tabId === tabId && item.url?.startsWith("blob:")) {
-      void browser.downloads
-        .cancel(item.id)
-        .then(() => browser.downloads.erase({ id: item.id }))
-        .catch(() => undefined);
+export function installPortalBlobDownloadSafetyNet(tabId: number): {
+  bind(blobUrl: unknown): Promise<void>;
+  remove(): void;
+} {
+  let expectedFingerprint: string | null = null;
+  const candidates = new Map<number, { id: number; tabId?: number; url?: string }>();
+  const handle = async (item: { id: number; tabId?: number; url?: string }) => {
+    if (item.tabId !== tabId || !item.url?.startsWith("blob:")) return;
+    if (!expectedFingerprint) return void candidates.set(item.id, item);
+    if ((await extensionBlobUrlFingerprint(item.url)) !== expectedFingerprint) return;
+    candidates.delete(item.id);
+    try {
+      await browser.downloads.cancel(item.id);
+    } finally {
+      await browser.downloads.erase({ id: item.id });
     }
   };
+  const listener = (item: { id: number; tabId?: number; url?: string }) =>
+    void handle(item).catch(() => undefined);
   browser.downloads.onCreated.addListener(listener);
-  return () => browser.downloads.onCreated.removeListener(listener);
+  return {
+    async bind(blobUrl) {
+      if (typeof blobUrl !== "string" || !blobUrl.startsWith("blob:")) return;
+      expectedFingerprint = await extensionBlobUrlFingerprint(blobUrl);
+      if (!expectedFingerprint) return;
+      for (const candidate of candidates.values()) void handle(candidate).catch(() => undefined);
+    },
+    remove: () => browser.downloads.onCreated.removeListener(listener),
+  };
 }
 
 function awaitCompletion(
