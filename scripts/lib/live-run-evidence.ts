@@ -208,6 +208,18 @@ export function validateLiveRunEvidence(input: unknown): LiveRunEvidenceValidati
     "artifactType",
     errors,
   );
+  // A standalone JSON selection is acquired by the direct same-origin fetch in
+  // filed-returns-download-trigger.ts, whose success flow step carries no
+  // downloadDiagnostic at all — for either return type. Nothing the runtime
+  // retains can back a passing claim about it, so refuse rather than certify.
+  // JSON acquired as part of an all-formats selection is staged and does retain
+  // a diagnostic, so those rows stay valid; only the standalone selection is
+  // unbackable.
+  if (input.artifactType === "JSON" && input.outcome === "pass") {
+    errors.push(
+      "artifactType JSON cannot record a pass outcome: the standalone JSON path retains no download diagnostic, so no evidence can back it. Record the run as blocked, or capture JSON as part of an all-formats selection.",
+    );
+  }
   requirePattern(input.financialYear, FINANCIAL_YEAR, "financialYear", errors);
   requireOneOf(input.period, PERIODS, "period", errors);
   requireOneOf(input.scenario, ["single-period", "full-year"], "scenario", errors);

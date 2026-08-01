@@ -226,47 +226,34 @@ describe("live run evidence", () => {
     }
   });
 
-  it("accepts standalone GSTR-2B JSON evidence metadata", () => {
-    expect(
-      validateLiveRunEvidence({
-        ...createValidEvidence(),
-        returnType: "GSTR-2B",
-        artifactType: "JSON",
-        downloadEvidence: [
-          {
-            ...createValidEvidence().downloadEvidence[0],
-            artifactType: "JSON",
-            returnType: "GSTR-2B",
-            endpointClass: "gstr2b-portal-blob-captured-download",
-            downloadPathClass: "captured-portal-request-data",
-          },
-        ],
-      }),
-    ).toMatchObject({ ok: true });
-  });
-
-  it("rejects passing standalone GSTR-3B JSON evidence, which nothing can back", () => {
-    // The direct GSTR-3B JSON fetch attaches no download diagnostic and the
-    // canonical endpoint-class rule admits no GSTR-3B/JSON pairing, so the only
-    // truthful class is `unknown` — which passing evidence forbids. Accepting a
-    // blob-captured class instead would certify a path that does not exist.
-    expect(
-      validateLiveRunEvidence({
-        ...createValidEvidence(),
-        returnType: "GSTR-3B",
-        artifactType: "JSON",
-        downloadEvidence: [
-          {
-            ...createValidEvidence().downloadEvidence[0],
-            artifactType: "JSON",
-            returnType: "GSTR-3B",
-            endpointClass: "gstr3b-portal-blob-captured-download",
-            downloadPathClass: "captured-portal-request-data",
-          },
-        ],
-      }),
-    ).toMatchObject({ ok: false });
-  });
+  it.each(["GSTR-2B", "GSTR-3B"] as const)(
+    "rejects passing standalone %s JSON evidence, which nothing can back",
+    (returnType) => {
+      // A standalone JSON selection is acquired by the direct same-origin fetch,
+      // whose success flow step carries no downloadDiagnostic for either return
+      // type. The schema admitting an endpoint class is not the runtime
+      // producing one, and it is the runtime that has to back the claim.
+      expect(
+        validateLiveRunEvidence({
+          ...createValidEvidence(),
+          returnType,
+          artifactType: "JSON",
+          downloadEvidence: [
+            {
+              ...createValidEvidence().downloadEvidence[0],
+              artifactType: "JSON",
+              returnType,
+              endpointClass:
+                returnType === "GSTR-2B"
+                  ? "gstr2b-portal-blob-captured-download"
+                  : "gstr3b-portal-blob-captured-download",
+              downloadPathClass: "captured-portal-request-data",
+            },
+          ],
+        }),
+      ).toMatchObject({ ok: false });
+    },
+  );
 
   it("accepts captured GSTR-3B endpoint evidence metadata", () => {
     expect(

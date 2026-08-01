@@ -66,15 +66,17 @@ try {
   if (!supportsFiledReturnsArtifactType(returnType, artifactType)) {
     throw new Error("--artifact-type is not supported for --return-type.");
   }
-  if (returnType === "GSTR-3B" && artifactType === "JSON" && outcome === "pass") {
-    // Refuse rather than emit evidence nothing can back. GSTR-3B portal data is
-    // acquired by a direct authenticated same-origin fetch that attaches no
-    // download diagnostic, and the canonical endpoint-class rule admits no
-    // GSTR-3B/JSON pairing, so the only truthful class is `unknown` — which
-    // shareable pass evidence forbids. Passing evidence for this artifact
-    // becomes expressible once the runtime retains a diagnostic for that path.
+  if (artifactType === "JSON" && outcome === "pass") {
+    // Refuse rather than emit evidence nothing can back. A standalone JSON
+    // selection is acquired by a direct authenticated same-origin fetch whose
+    // success flow step attaches no download diagnostic, for GSTR-3B and
+    // GSTR-2B alike. Only JSON captured as part of an all-formats selection is
+    // staged and retains one. An earlier revision of this guard covered GSTR-3B
+    // only, on the reasoning that the canonical endpoint-class rule rejects that
+    // pairing while admitting GSTR-2B — but the schema admitting a class is not
+    // the runtime producing it, and it is the runtime that has to back a claim.
     throw new Error(
-      "Passing GSTR-3B JSON evidence is not supported: the direct JSON fetch path retains no download diagnostic, so no endpoint class can back it. Record this run as blocked, or add runtime diagnostic support first.",
+      "Passing standalone JSON evidence is not supported: the direct JSON fetch path retains no download diagnostic, so nothing can back it. Record this run as blocked, or capture JSON as part of an all-formats selection.",
     );
   }
   if (scenario === "full-year" && period !== "FULL_FISCAL_YEAR") {
