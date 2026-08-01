@@ -9,8 +9,13 @@ import {
   type FiledReturnsConcreteArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
 import { parseDurableFiledReturnsScope } from "../connectors/gst/filed-returns-durable-status";
+import { isCanonicalFiledReturnsActionId } from "../connectors/gst/filed-returns-operation-id";
 import { isExpectedDownloadCandidate } from "./download-correlation";
-import { classifyDownloadDanger, firstKnownSize } from "./download-observer-results";
+import {
+  classifyDownloadDanger,
+  completedObservation,
+  firstKnownSize,
+} from "./download-observer-results";
 
 /**
  * Canonical prefix for the per-target session checkpoint family. Exported so the
@@ -178,10 +183,15 @@ export async function clearArtifactAcquisitionCheckpoints(
       if (
         !isArtifactAcquisitionCheckpoint(checkpoint) ||
         !checkpointOwnsTarget(checkpoint, target) ||
+        !isCanonicalFiledReturnsActionId(checkpoint.requestId) ||
+        !armedAtFromCheckpoint(checkpoint) ||
         typeof checkpoint.downloadId !== "number" ||
         !Number.isSafeInteger(checkpoint.downloadId) ||
         checkpoint.downloadId < 0
       ) {
+        await browser.storage.session.set({
+          [key]: MALFORMED_ARTIFACT_ACQUISITION_CHECKPOINT_SENTINEL,
+        });
         return { state: "blocked" };
       }
       const downloadId = checkpoint.downloadId;
@@ -334,11 +344,15 @@ export async function inspectArtifactAcquisitionCheckpoint(
   const artifactType = target.artifactType ?? "PDF";
   const downloadId = checkpoint.downloadId;
   if (
-    !isFiledReturnsConcreteArtifactType(artifactType) ||
-    checkpoint.state === "intent" ||
-    typeof downloadId !== "number" ||
-    !Number.isSafeInteger(downloadId)
+    !isCanonicalFiledReturnsActionId(checkpoint.requestId) ||
+    !armedAtFromCheckpoint(checkpoint)
   ) {
+    await browser.storage.session.set({
+      [key]: MALFORMED_ARTIFACT_ACQUISITION_CHECKPOINT_SENTINEL,
+    });
+    return { state: "needs-review", safeSignals: ["artifact-acquisition-checkpoint-malformed"] };
+  }
+  if (checkpoint.state === "intent") {
     return { state: "needs-review", safeSignals: ["artifact-acquisition-start-unreconciled"] };
   }
   if (checkpoint.state === "download-unconfirmed") {
@@ -347,33 +361,42 @@ export async function inspectArtifactAcquisitionCheckpoint(
       safeSignals: ["artifact-acquisition-download-unconfirmed"],
     };
   }
+  if (
+    !isFiledReturnsConcreteArtifactType(artifactType) ||
+    typeof downloadId !== "number" ||
+    !Number.isSafeInteger(downloadId) ||
+    downloadId < 0 ||
+    !armedAtFromCheckpoint(checkpoint)
+  ) {
+    await browser.storage.session.set({
+      [key]: MALFORMED_ARTIFACT_ACQUISITION_CHECKPOINT_SENTINEL,
+    });
+    return { state: "needs-review", safeSignals: ["artifact-acquisition-checkpoint-malformed"] };
+  }
   try {
     const [item] = await browser.downloads.search({ id: downloadId });
     if (item?.state === "in_progress" || !item?.state) {
       return { state: "needs-review", safeSignals: ["artifact-acquisition-download-unreconciled"] };
     }
     if (item.state === "complete") {
-      const armedAt = armedAtFromCheckpoint(checkpoint);
-      if (
-        !armedAt ||
-        !isExpectedDownloadCandidate(item, {
-          armedAt: new Date(armedAt),
+      const observation = await completedObservation(
+        browser.downloads,
+        downloadId,
+        {
+          armedAt: new Date(armedAtFromCheckpoint(checkpoint)!),
           expectedFileExtensions: [filedReturnsArtifactExtension(artifactType)],
           expectedMimeTypes: filedReturnsArtifactMimeTypes(artifactType),
           trustedDownloadIds: new Set([downloadId]),
-        }) ||
-        classifyDownloadDanger(item) !== "safe"
+        },
+        item,
+      );
+      if (
+        observation.state !== "completed" ||
+        observation.safeEvidence?.downloadId !== downloadId
       ) {
         return {
           state: "needs-review",
-          safeSignals: ["artifact-acquisition-download-completed-unpersisted"],
-        };
-      }
-      const size = firstKnownSize(item);
-      if (size === null || size === 0) {
-        return {
-          state: "needs-review",
-          safeSignals: ["artifact-acquisition-download-completed-unpersisted"],
+          safeSignals: observation.safeSignals,
         };
       }
       return {
@@ -452,11 +475,14 @@ function checkpointMatchesTarget(
 function isArtifactAcquisitionCheckpoint(input: unknown): input is ArtifactAcquisitionCheckpoint {
   if (!input || typeof input !== "object") return false;
   const checkpoint = input as Partial<ArtifactAcquisitionCheckpoint>;
-  return (
-    typeof checkpoint.armedAt === "string" &&
-    typeof checkpoint.requestId === "string" &&
-    checkpoint.requestId.length > 0
-  );
+  if (typeof checkpoint.armedAt !== "string" || typeof checkpoint.requestId !== "string") {
+    return false;
+  }
+  if (!["intent", "download-observing", "download-unconfirmed"].includes(checkpoint.state ?? "")) {
+    return false;
+  }
+  if (checkpoint.state === "intent") return checkpoint.downloadId === undefined;
+  return typeof checkpoint.downloadId === "number";
 }
 
 function armedAtFromCheckpoint(input: unknown): string | null {

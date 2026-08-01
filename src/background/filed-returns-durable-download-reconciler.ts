@@ -13,6 +13,7 @@ import { persistFiledReturnsTargetDownloadId } from "./filed-returns-target-down
 import { persistArtifactAcquisitionCompletion } from "./filed-returns-artifact-acquisition-completion";
 import {
   clearFiledReturnsTargetReview,
+  markFiledReturnsTargetReviewArtifactAcquisitionCompletion,
   readCurrentFiledReturnsTargetReview,
   persistFiledReturnsTargetReview,
   type FiledReturnsTargetReviewDeps,
@@ -138,13 +139,21 @@ async function reconcileArtifactAcquisitionCheckpoints(
     if (inspection.state === "retry-safe") continue;
     handled = true;
     if (inspection.state === "completed") {
+      const marker = await markFiledReturnsTargetReviewArtifactAcquisitionCompletion(
+        target,
+        [inspection.evidence],
+        deps,
+      );
+      if (marker.state === "blocked") continue;
       const summary = await persistArtifactAcquisitionCompletion(
         deps.storageKeys.completion,
         target,
         [inspection.evidence],
         deps.now?.() ?? new Date(),
       );
-      if (summary) await clearMatchingTargetReview(target, deps);
+      if (summary && marker.state === "marked") {
+        await clearFiledReturnsTargetReview(target, deps, marker.review.revision ?? 1);
+      }
       continue;
     }
     await persistFiledReturnsTargetReview(
@@ -173,26 +182,6 @@ function artifactAcquisitionReviewStep(
       canResume: true,
     },
   };
-}
-
-async function clearMatchingTargetReview(
-  target: FiledReturnsDownloadScope,
-  deps: DurableDownloadReconcilerDeps,
-): Promise<void> {
-  const review = await (deps.readCurrentReview
-    ? deps.readCurrentReview()
-    : readCurrentFiledReturnsTargetReview(deps));
-  if (!review || !sameScope(review.scope, target)) return;
-  await clearFiledReturnsTargetReview(target, deps, review.revision ?? 1);
-}
-
-function sameScope(left: FiledReturnsDownloadScope, right: FiledReturnsDownloadScope): boolean {
-  return (
-    left.returnType === right.returnType &&
-    left.financialYear === right.financialYear &&
-    left.period === right.period &&
-    (left.artifactType ?? "PDF") === (right.artifactType ?? "PDF")
-  );
 }
 
 export function installFiledReturnsDurableDownloadReconciler(

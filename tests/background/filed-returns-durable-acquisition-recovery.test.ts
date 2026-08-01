@@ -41,6 +41,11 @@ import {
   persistArtifactAcquisitionDownloadId,
 } from "../../src/background/artifact-acquisition-state";
 import { reconcileTerminalFiledReturnsDownload } from "../../src/background/filed-returns-durable-download-reconciler";
+import { filedReturnScopeId } from "../../src/connectors/gst/filed-returns-return-descriptors";
+import {
+  persistFiledReturnsTargetReview,
+  resolveUnconfirmedFiledReturnsDownload,
+} from "../../src/background/filed-returns-target-review";
 
 const completionKey = "pack:last-filed-returns-flow-summary";
 const targetReviewKey = "pack:filed-returns-target-review";
@@ -174,5 +179,102 @@ describe("durable acquisition checkpoint recovery", () => {
       safeSignals: ["artifact-acquisition-checkpoint-malformed"],
       status: "download-unconfirmed",
     });
+  });
+
+  it("fails closed on an unrecognised checkpoint state even when its download is otherwise safe", async () => {
+    const key = artifactAcquisitionCheckpointKey(target);
+    mocks.session[key] = {
+      ...target,
+      armedAt: new Date().toISOString(),
+      downloadId: 231,
+      requestId,
+      state: "forward-version-state",
+    };
+    mocks.browser.downloads.search.mockResolvedValue([
+      {
+        danger: "safe",
+        fileSize: 40_108,
+        id: 231,
+        mime: "application/pdf",
+        startTime: new Date(Date.now() + 1_000).toISOString(),
+        state: "complete",
+      },
+    ]);
+
+    await expect(
+      reconcileTerminalFiledReturnsDownload(
+        { search: mocks.browser.downloads.search },
+        durableDeps(),
+      ),
+    ).resolves.toBe(true);
+
+    expect(mocks.browser.downloads.search).not.toHaveBeenCalled();
+    expect(mocks.session[key]).toEqual({ schemaVersion: "1.0", state: "malformed" });
+    expect(mocks.session[completionKey]).toBeUndefined();
+    expect(mocks.local[targetReviewKey]).toMatchObject({
+      safeSignals: ["artifact-acquisition-checkpoint-malformed"],
+      status: "download-unconfirmed",
+    });
+  });
+
+  it("keeps a marked review recoverable if cleanup stops after completion persistence", async () => {
+    await persistFiledReturnsTargetReview(
+      target,
+      {
+        connectorId: "gst",
+        scopeId: filedReturnScopeId(target.returnType),
+        state: "blocked",
+        safeMessage: "Pack retained unresolved artifact download recovery.",
+        safeSignals: ["artifact-acquisition-download-unreconciled"],
+        userAction: {
+          canResume: true,
+          message: "Review or cancel this target before starting another portal action.",
+          type: "RETRY_PORTAL_GENERATION",
+        },
+      },
+      durableDeps(),
+    );
+    await persistArtifactAcquisitionDownloadId({
+      ...target,
+      downloadId: 231,
+      requestId,
+      state: "download-observing",
+    });
+    mocks.browser.downloads.search.mockResolvedValue([
+      {
+        danger: "safe",
+        fileSize: 40_108,
+        id: 231,
+        mime: "application/pdf",
+        startTime: new Date(Date.now() + 1_000).toISOString(),
+        state: "complete",
+      },
+    ]);
+    mocks.browser.storage.local.remove.mockRejectedValueOnce(
+      new Error("Synthetic worker stop after completion persistence."),
+    );
+
+    await expect(
+      reconcileTerminalFiledReturnsDownload(
+        { search: mocks.browser.downloads.search },
+        durableDeps(),
+      ),
+    ).rejects.toThrow("Synthetic worker stop after completion persistence.");
+
+    expect(mocks.session[completionKey]).toMatchObject({ status: "complete" });
+    expect(mocks.session[artifactAcquisitionCheckpointKey(target)]).toBeUndefined();
+    expect(mocks.local[targetReviewKey]).toMatchObject({
+      artifactAcquisitionCompletion: [{ artifactType: "PDF", downloadId: 231, requestId }],
+      status: "download-unconfirmed",
+    });
+
+    const response = await resolveUnconfirmedFiledReturnsDownload(
+      target,
+      "cancelled",
+      durableDeps(),
+    );
+
+    expect(response).toMatchObject({ flowSummary: { status: "complete" }, ok: true });
+    expect(mocks.local[targetReviewKey]).toBeUndefined();
   });
 });

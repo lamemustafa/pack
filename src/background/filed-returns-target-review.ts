@@ -13,6 +13,7 @@ import {
 import {
   clearArtifactAcquisitionCheckpoints,
   clearArtifactAcquisitionCheckpointsAfterPersistedSummary,
+  type ArtifactAcquisitionCompletionEvidence,
 } from "./artifact-acquisition-state";
 import { persistArtifactAcquisitionCompletion } from "./filed-returns-artifact-acquisition-completion";
 import type { PackMessageResponse } from "../connectors/gst/messages";
@@ -252,6 +253,42 @@ export async function clearFiledReturnsTargetReview(
     }
     await browser.storage.local.remove(key);
     return true;
+  });
+}
+
+/**
+ * Marks a matching local review before session-only completion persistence can
+ * clear its checkpoint. The local review outlives session storage, so it must
+ * never remain able to contradict a completion the session record has proved.
+ */
+export async function markFiledReturnsTargetReviewArtifactAcquisitionCompletion(
+  scope: FiledReturnsDownloadScope,
+  evidence: readonly ArtifactAcquisitionCompletionEvidence[],
+  deps: FiledReturnsTargetReviewDeps,
+): Promise<
+  { state: "absent" } | { review: FiledReturnsTargetReview; state: "marked" } | { state: "blocked" }
+> {
+  const key = deps.storageKeys.targetReview;
+  if (!key) return { state: "absent" };
+  return runTargetReviewMutationCriticalSection(async () => {
+    const storageState = await readTargetReviewStorageStateByKey(key);
+    if (storageState.state === "missing") return { state: "absent" };
+    if (storageState.state === "malformed") return { state: "blocked" };
+    if (!sameFiledReturnsScope(storageState.review.scope, scope)) return { state: "absent" };
+    const markedReview = {
+      ...storageState.review,
+      artifactAcquisitionCompletion: evidence.map(({ artifactType, downloadId, requestId }) => ({
+        artifactType,
+        downloadId,
+        requestId,
+      })),
+      revision: targetReviewRevision(storageState.review) + 1,
+      updatedAt: (deps.now?.() ?? new Date()).toISOString(),
+    } satisfies FiledReturnsTargetReview;
+    const parsedReview = parseFiledReturnsTargetReview(markedReview);
+    if (!parsedReview) return { state: "blocked" };
+    await browser.storage.local.set({ [key]: parsedReview });
+    return { review: parsedReview, state: "marked" };
   });
 }
 
