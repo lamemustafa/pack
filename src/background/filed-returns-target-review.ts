@@ -10,7 +10,10 @@ import {
   concreteFiledReturnsArtifactTypes,
   normaliseFiledReturnsArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
-import { clearArtifactAcquisitionCheckpoints } from "./artifact-acquisition-state";
+import {
+  clearArtifactAcquisitionCheckpoints,
+  clearArtifactAcquisitionCheckpointsAfterPersistedSummary,
+} from "./artifact-acquisition-state";
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import {
   canonicalDurableTargetStatus,
@@ -27,7 +30,11 @@ import {
   isValidFiledReturnsDownloadDiagnosticState,
   mergeFiledReturnsDownloadDiagnosticState,
 } from "./filed-returns-download-diagnostic-state";
-import { persistCanonicalFiledReturnsFlowSummary } from "./filed-returns-session-summary";
+import {
+  persistCanonicalFiledReturnsFlowSummary,
+  readCanonicalFiledReturnsFlowSummary,
+} from "./filed-returns-session-summary";
+import { parseArtifactAcquisitionCompletion } from "./filed-returns-durable-summary";
 import {
   cleanupSinglePeriodBundleStaging,
   type SinglePeriodBundleCleanupResult,
@@ -261,6 +268,34 @@ export async function resolveUnconfirmedFiledReturnsDownload(
       return noTargetReviewResponse(scope);
     }
     const review = state.review;
+    const persistedArtifactCompletion = await readPersistedArtifactAcquisitionCompletion(
+      scope,
+      review,
+      deps,
+    );
+    if (
+      resolution === "cancelled" &&
+      persistedArtifactCompletion &&
+      hasArtifactAcquisitionRecoverySignal(review.safeSignals)
+    ) {
+      // The canonical session summary is the durable completion marker. A
+      // service-worker stop can leave the local review behind after checkpoint
+      // cleanup; never replace that completed target with a cancellation.
+      const cancellation = await clearArtifactAcquisitionCheckpoints(review.scope);
+      if (cancellation.state === "blocked") return responseForFiledReturnsTargetReview(review);
+      if (cancellation.state === "completed") {
+        await clearArtifactAcquisitionCheckpointsAfterPersistedSummary(
+          review.scope,
+          cancellation.evidence,
+        );
+      }
+      await browser.storage.local.remove(key);
+      return {
+        ok: true,
+        flowStep: persistedArtifactCompletion.flowStep,
+        flowSummary: persistedArtifactCompletion,
+      };
+    }
     const hasCleanupFailure = hasSinglePeriodCleanupFailure(review.safeSignals);
     if (hasCleanupFailure && resolution !== "cancelled") {
       return responseForFiledReturnsTargetReview(review);
@@ -318,8 +353,63 @@ export async function resolveUnconfirmedFiledReturnsDownload(
     }
 
     if (hasArtifactAcquisitionRecoverySignal(review.safeSignals)) {
-      const checkpointsCleared = await clearArtifactAcquisitionCheckpoints(review.scope);
-      if (!checkpointsCleared) {
+      const cancellation = await clearArtifactAcquisitionCheckpoints(review.scope);
+      if (cancellation.state === "completed") {
+        const artifactAcquisitionCompletion = cancellation.evidence.map(
+          ({ artifactType, downloadId, requestId }) => ({
+            artifactType,
+            downloadId,
+            requestId,
+          }),
+        );
+        const markedReview: FiledReturnsTargetReview = {
+          ...review,
+          artifactAcquisitionCompletion,
+          revision: targetReviewRevision(review) + 1,
+          updatedAt: (deps.now?.() ?? new Date()).toISOString(),
+        };
+        const parsedMarkedReview = parseFiledReturnsTargetReview(markedReview);
+        if (!parsedMarkedReview) return responseForFiledReturnsTargetReview(review);
+        await browser.storage.local.set({ [key]: parsedMarkedReview });
+        const flowStep: PortalFlowStepResult = {
+          connectorId: "gst",
+          scopeId: filedReturnScopeId(scope.returnType),
+          state: "downloaded",
+          safeSignals: uniqueSafeSignals([
+            "artifact-acquisition-download-reconciled",
+            "browser-download-created",
+            "browser-download-completed",
+            "browser-download-non-empty",
+            ...cancellation.evidence.map(({ downloadId }) => `browser-download-id:${downloadId}`),
+          ]),
+          safeMessage:
+            "Pack reconciled this target from exact browser download evidence without repeating a portal action.",
+          ...copyFiledReturnsDownloadDiagnosticState(review),
+        };
+        const flowSummary: FiledReturnsFlowSummary = {
+          artifactAcquisitionCompletion,
+          scope: canonicalTargetReviewScope(scope),
+          status: "complete",
+          completedPeriods: [scope.period],
+          currentPeriod: scope.period,
+          totalPeriods: 1,
+          updatedAt: (deps.now?.() ?? new Date()).toISOString(),
+          flowStep,
+        };
+        const durableSummary = await persistResolvedTargetReviewSummary(flowSummary, deps);
+        if (!durableSummary) return responseForFiledReturnsTargetReview(review);
+        await clearArtifactAcquisitionCheckpointsAfterPersistedSummary(
+          review.scope,
+          cancellation.evidence,
+        );
+        await browser.storage.local.remove(key);
+        return {
+          ok: true,
+          flowStep: durableSummary.flowStep,
+          flowSummary: durableSummary,
+        };
+      }
+      if (cancellation.state === "blocked") {
         const clearFailureReview: FiledReturnsTargetReview = {
           ...review,
           revision: targetReviewRevision(review) + 1,
@@ -336,6 +426,55 @@ export async function resolveUnconfirmedFiledReturnsDownload(
         await browser.storage.local.set({ [key]: parsedReview });
         return responseForFiledReturnsTargetReview(parsedReview);
       }
+    }
+
+    // The review is the durable half of this transition. Chrome clears
+    // storage.session on disable, reload, update and browser restart while
+    // storage.local survives, so a restart between marking the review and
+    // removing it destroys the session summary and the checkpoints but leaves
+    // the marker. Reaching the cancellation path then records a target that
+    // demonstrably downloaded as `cancelled`.
+    //
+    // The marker is bound to this review's own acquisition identities, so it
+    // cannot be inherited by a later run. Restore the completion instead. The
+    // exact download IDs were corroborating detail held in the cleared
+    // checkpoints; their absence is recorded rather than fabricated.
+    const durableCompletion = review.artifactAcquisitionCompletion;
+    if (durableCompletion && durableCompletion.length > 0) {
+      const restoredStep: PortalFlowStepResult = {
+        connectorId: "gst",
+        scopeId: filedReturnScopeId(scope.returnType),
+        state: "downloaded",
+        safeSignals: uniqueSafeSignals([
+          "artifact-acquisition-download-reconciled",
+          "artifact-acquisition-completion-restored",
+          "browser-download-created",
+          "browser-download-completed",
+          "browser-download-non-empty",
+          ...durableCompletion.map(({ downloadId }) => `browser-download-id:${downloadId}`),
+        ]),
+        safeMessage:
+          "Pack restored this target's reconciled completion after the browser session ended mid-cleanup. No portal action was repeated.",
+        ...copyFiledReturnsDownloadDiagnosticState(review),
+      };
+      const restoredSummary: FiledReturnsFlowSummary = {
+        artifactAcquisitionCompletion: durableCompletion,
+        scope: canonicalTargetReviewScope(scope),
+        status: "complete",
+        completedPeriods: [scope.period],
+        currentPeriod: scope.period,
+        totalPeriods: 1,
+        updatedAt: (deps.now?.() ?? new Date()).toISOString(),
+        flowStep: restoredStep,
+      };
+      const durableRestored = await persistResolvedTargetReviewSummary(restoredSummary, deps);
+      if (!durableRestored) return responseForFiledReturnsTargetReview(review);
+      await browser.storage.local.remove(key);
+      return {
+        ok: true,
+        flowStep: durableRestored.flowStep,
+        flowSummary: durableRestored,
+      };
     }
 
     await browser.storage.local.remove(key);
@@ -481,11 +620,33 @@ export async function persistResolvedTargetReviewSummary(
   return persistCanonicalFiledReturnsFlowSummary(key, flowSummary);
 }
 
+async function readPersistedArtifactAcquisitionCompletion(
+  scope: FiledReturnsDownloadScope,
+  review: FiledReturnsTargetReview,
+  deps: FiledReturnsTargetReviewDeps,
+): Promise<FiledReturnsFlowSummary | null> {
+  const key = deps.storageKeys.completion;
+  if (!key) return null;
+  const summary = await readCanonicalFiledReturnsFlowSummary(key);
+  return summary &&
+    summary.status === "complete" &&
+    sameExactFiledReturnsScope(summary.scope, scope) &&
+    summary.flowStep.state === "downloaded" &&
+    summary.flowStep.safeSignals.includes("artifact-acquisition-download-reconciled") &&
+    sameArtifactAcquisitionCompletion(
+      summary.artifactAcquisitionCompletion,
+      review.artifactAcquisitionCompletion,
+    )
+    ? summary
+    : null;
+}
+
 function parseFiledReturnsTargetReview(input: unknown): FiledReturnsTargetReview | null {
   if (!input || typeof input !== "object") return null;
   const review = input as Partial<FiledReturnsTargetReview> & Record<string, unknown>;
   if (
     !hasOnlyKeys(review, [
+      "artifactAcquisitionCompletion",
       "downloadAttempt",
       "downloadDiagnostic",
       "downloadDiagnostics",
@@ -517,6 +678,13 @@ function parseFiledReturnsTargetReview(input: unknown): FiledReturnsTargetReview
   const scope = parseDurableFiledReturnsScope(review.scope, false);
   if (!scope) return null;
   if (review.targetId !== createTargetId(scope)) return null;
+  const artifactAcquisitionCompletion = parseArtifactAcquisitionCompletion(
+    review.artifactAcquisitionCompletion,
+    scope,
+  );
+  if (review.artifactAcquisitionCompletion !== undefined && !artifactAcquisitionCompletion) {
+    return null;
+  }
   const durableStatus = parseDurableTargetStatus(scope, "target-review", review.safeSignals);
   if (!durableStatus) return null;
   if (
@@ -554,8 +722,25 @@ function parseFiledReturnsTargetReview(input: unknown): FiledReturnsTargetReview
     ...durableStatus,
     revision,
     scope,
+    ...(artifactAcquisitionCompletion ? { artifactAcquisitionCompletion } : {}),
     ...(singlePeriodBundleCheckpoint ? { singlePeriodBundleCheckpoint } : {}),
   } as FiledReturnsTargetReview;
+}
+
+function sameArtifactAcquisitionCompletion(
+  left: FiledReturnsFlowSummary["artifactAcquisitionCompletion"],
+  right: FiledReturnsTargetReview["artifactAcquisitionCompletion"],
+): boolean {
+  return (
+    left !== undefined &&
+    right !== undefined &&
+    left.length === right.length &&
+    left.every(
+      (entry, index) =>
+        entry.artifactType === right[index]?.artifactType &&
+        entry.requestId === right[index]?.requestId,
+    )
+  );
 }
 
 function parseSinglePeriodBundleCheckpoint(
@@ -1091,6 +1276,19 @@ function sameFiledReturnsScope(
     left.period === right.period &&
     left.returnType === right.returnType &&
     artifactSelectionsOverlap(left, right)
+  );
+}
+
+function sameExactFiledReturnsScope(
+  left: FiledReturnsDownloadScope,
+  right: FiledReturnsDownloadScope,
+): boolean {
+  return (
+    left.financialYear === right.financialYear &&
+    left.period === right.period &&
+    left.returnType === right.returnType &&
+    normaliseFiledReturnsArtifactType(left.returnType, left.artifactType) ===
+      normaliseFiledReturnsArtifactType(right.returnType, right.artifactType)
   );
 }
 
