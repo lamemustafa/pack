@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type * as FilenameReassertionModule from "../../src/background/pack-download-filename-reassertion";
 import type { FiledReturnsFullFiscalYearLedger } from "../../src/connectors/gst/filed-returns-contracts";
 import {
+  concreteFiledReturnsArtifactTypesForSelection,
+  type FiledReturnsConcreteArtifactType,
+} from "../../src/connectors/gst/filed-returns-artifacts";
+import {
   SINGLE_PERIOD_CLEANUP_CHECKPOINT_FAILURE_STAGES,
   SinglePeriodCleanupCheckpointError,
   singlePeriodCleanupCheckpointFailureSignal,
@@ -135,6 +139,32 @@ describe("filed-return ZIP filename reassertion", () => {
     expect(mocks.reservation.bind).toHaveBeenCalledWith(91);
     expect(mocks.reservation.release).toHaveBeenCalledOnce();
     expect(result.safeSignals).not.toContain("zip-download-filename-overridden");
+  });
+
+  it("uses the canonical GSTR-2B all-formats artifact set for full-fiscal-year ZIP entries", async () => {
+    const expectedArtifacts = concreteFiledReturnsArtifactTypesForSelection(
+      "GSTR-2B",
+      "PDF_AND_EXCEL",
+    );
+    mocks.createOffscreenFiledReturnZipUrl.mockResolvedValueOnce({
+      status: "created",
+      blobUrl: "blob:pack-owned/gstr2b-full-year-zip",
+      zipEntryCount: expectedArtifacts.length,
+    });
+
+    const result = await exportFullFiscalYearZip(
+      gstr2bAllFormatsFullYearLedger(expectedArtifacts),
+      completeStep(),
+    );
+
+    expect(result.state).toBe("downloaded");
+    const [, request] = mocks.createOffscreenFiledReturnZipUrl.mock.calls[0]!;
+    expect(request.entryCount).toBe(expectedArtifacts.length);
+    expect(
+      request.entries.map(
+        (entry: { artifactType: FiledReturnsConcreteArtifactType }) => entry.artifactType,
+      ),
+    ).toEqual(expectedArtifacts);
   });
 
   it("emits the bounded OPFS clear category for selected ZIP cleanup failure", async () => {
@@ -374,6 +404,32 @@ function fullYearLedger(): FiledReturnsFullFiscalYearLedger {
         safeSignals: ["full-fiscal-year-opfs-staged:PDF"],
         safeMessage: "Synthetic target staged.",
         updatedAt: "2026-04-01T00:00:00.000Z",
+      },
+    ],
+  };
+}
+
+function gstr2bAllFormatsFullYearLedger(
+  artifactTypes: readonly FiledReturnsConcreteArtifactType[],
+): FiledReturnsFullFiscalYearLedger {
+  const ledger = fullYearLedger();
+  return {
+    ...ledger,
+    scope: {
+      artifactType: "PDF_AND_EXCEL",
+      financialYear: "2026-27",
+      period: "ALL",
+      returnType: "GSTR-2B",
+    },
+    targets: [
+      {
+        ...ledger.targets[0]!,
+        targetId: "GSTR-2B:2026-27:April:PDF_AND_EXCEL",
+        artifactType: "PDF_AND_EXCEL",
+        returnType: "GSTR-2B",
+        safeSignals: artifactTypes.map(
+          (artifactType) => `full-fiscal-year-opfs-staged:${artifactType}`,
+        ),
       },
     ],
   };

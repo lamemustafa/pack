@@ -4,7 +4,10 @@ import type {
   FiledReturnsFlowSummary,
   PortalFlowStepResult,
 } from "../../src/connectors/gst/filed-returns-contracts";
-import type { FiledReturnsConcreteArtifactType } from "../../src/connectors/gst/filed-returns-artifacts";
+import {
+  concreteFiledReturnsArtifactTypesForSelection,
+  type FiledReturnsConcreteArtifactType,
+} from "../../src/connectors/gst/filed-returns-artifacts";
 import type { PackMessageResponse } from "../../src/connectors/gst/messages";
 
 type SyntheticBundleArtifact = {
@@ -168,6 +171,11 @@ import {
   preflightSelectedArtifactsRecovery,
   triggerSelectedArtifacts,
 } from "../../src/background/filed-returns-selected-artifacts";
+
+const gstr2bAllFormatsArtifacts = concreteFiledReturnsArtifactTypesForSelection(
+  "GSTR-2B",
+  "PDF_AND_EXCEL",
+);
 
 describe("GSTR-2B all-format selection", () => {
   beforeEach(() => {
@@ -419,9 +427,9 @@ describe("GSTR-2B all-format selection", () => {
 
   it("stages PDF, Excel, and JSON, then exports one ZIP", async () => {
     mocks.triggerAndObserveFiledReturnDownload
-      .mockResolvedValueOnce(downloaded("PDF"))
-      .mockResolvedValueOnce(downloaded("EXCEL"))
-      .mockResolvedValueOnce(downloaded("JSON"));
+      .mockResolvedValueOnce(downloaded(gstr2bAllFormatsArtifacts[0]!))
+      .mockResolvedValueOnce(downloaded(gstr2bAllFormatsArtifacts[1]!))
+      .mockResolvedValueOnce(downloaded(gstr2bAllFormatsArtifacts[2]!));
 
     const response = await triggerSelectedArtifacts({
       activePeriod: "June",
@@ -443,7 +451,7 @@ describe("GSTR-2B all-format selection", () => {
 
     expect(
       mocks.triggerAndObserveFiledReturnDownload.mock.calls.map(([input]) => input.artifactType),
-    ).toEqual(["PDF", "EXCEL", "JSON"]);
+    ).toEqual(gstr2bAllFormatsArtifacts);
     expect(
       mocks.triggerAndObserveFiledReturnDownload.mock.calls.map(
         ([input]) => input.deps.stageCapturedDownloads,
