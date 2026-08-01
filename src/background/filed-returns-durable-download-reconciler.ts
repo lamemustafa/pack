@@ -1,6 +1,7 @@
 import { browser } from "wxt/browser";
 import type {
   FiledReturnsDownloadScope,
+  FiledReturnsFlowSummary,
   FiledReturnsTargetReview,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
@@ -19,7 +20,6 @@ import {
   type FiledReturnsTargetReviewDeps,
 } from "./filed-returns-target-review";
 import {
-  markFiledReturnsRunRecoveryBlocked,
   readActiveFiledReturnsRunStorageState,
   resolveFiledReturnsRunForRecoveredCompletion,
 } from "./filed-returns-active-run";
@@ -61,6 +61,43 @@ const terminalChangesAwaitingPersistence = new Set<number>();
 const pendingExtensionDownloadUrls = new Set<string>();
 
 /**
+ * A checkpoint scan could not read session state. This is deliberately an
+ * in-memory diagnostic: the active lease remains unchanged and the next scan
+ * may continue normally without a user clearing Pack data.
+ */
+export class ArtifactAcquisitionCheckpointReadFailure extends Error {
+  constructor(readonly scope: FiledReturnsDownloadScope) {
+    super("Pack could not read temporary artifact recovery state.");
+    this.name = "ArtifactAcquisitionCheckpointReadFailure";
+  }
+}
+
+export function artifactAcquisitionCheckpointReadFailureSummary(
+  scope: FiledReturnsDownloadScope,
+  now = new Date(),
+): FiledReturnsFlowSummary {
+  return {
+    scope,
+    status: "blocked",
+    completedPeriods: [],
+    updatedAt: now.toISOString(),
+    flowStep: {
+      connectorId: "gst",
+      scopeId: filedReturnScopeId(scope.returnType),
+      state: "blocked",
+      safeSignals: ["artifact-acquisition-checkpoint-read-unavailable"],
+      safeMessage:
+        "Pack could not read temporary download recovery state and did not repeat this target.",
+      userAction: {
+        type: "RETRY_PORTAL_GENERATION",
+        message: "Check Downloads, then reopen Pack. The next recovery scan will try again safely.",
+        canResume: false,
+      },
+    },
+  };
+}
+
+/**
  * Produces a non-reversible local correlation value for an extension Blob URL.
  * The raw URL stays in memory only; the selected-ZIP recovery checkpoint stores
  * this digest so a restarted MV3 worker can still match its onCreated event.
@@ -89,6 +126,12 @@ export function beginLiveFiledReturnsDownloadObservation(downloadId: number): ()
     extensionOwnedCreationIds.delete(downloadId);
     terminalChangesAwaitingPersistence.delete(downloadId);
   };
+}
+
+export function isLiveFiledReturnsDownloadObservation(downloadId: number): boolean {
+  return (
+    Number.isSafeInteger(downloadId) && downloadId >= 0 && liveInlineObservationIds.has(downloadId)
+  );
 }
 
 /** Registers one extension Blob URL for the brief onCreated-to-ID-persistence gap. */
@@ -145,7 +188,10 @@ async function reconcileArtifactAcquisitionCheckpoints(
   const checkpoints = await readArtifactAcquisitionCheckpointTargets().catch(() => null);
   if (!checkpoints) return reconcileArtifactAcquisitionCheckpointReadFailure(deps);
   for (const { key, target } of checkpoints) {
-    const inspection = await inspectArtifactAcquisitionCheckpoint(target, key);
+    const inspection = await inspectArtifactAcquisitionCheckpoint(target, key, {
+      isLiveDownloadObservation: isLiveFiledReturnsDownloadObservation,
+    });
+    if (inspection.state === "live-owned") continue;
     if (inspection.state === "retry-safe") continue;
     handled = true;
     if (inspection.state === "completed") {
@@ -180,9 +226,9 @@ async function reconcileArtifactAcquisitionCheckpoints(
 }
 
 /**
- * A failed session read is retained ownership that could not be inspected, not
- * an empty acquisition scan. The surviving local lease keeps its duplicate-run
- * guard; the matching local review makes the reason visible to the user.
+ * A failed session read is not an empty acquisition scan. It must reach the
+ * caller as a transient diagnostic, while leaving the durable lease and review
+ * records untouched so a later successful scan has the normal exit path.
  */
 async function reconcileArtifactAcquisitionCheckpointReadFailure(
   deps: DurableDownloadReconcilerDeps,
@@ -194,17 +240,8 @@ async function reconcileArtifactAcquisitionCheckpointReadFailure(
     },
     ...(deps.now ? { now: deps.now } : {}),
   }).catch(() => null);
-  if (activeRun?.state !== "valid") return true;
-
-  await persistFiledReturnsTargetReview(
-    activeRun.run.scope,
-    artifactAcquisitionReviewStep(activeRun.run.scope, [
-      "artifact-acquisition-checkpoint-read-unavailable",
-    ]),
-    deps,
-  ).catch(() => undefined);
-  await markFiledReturnsRunRecoveryBlocked(activeRun.run.scope, deps);
-  return true;
+  if (activeRun?.state !== "valid") return false;
+  throw new ArtifactAcquisitionCheckpointReadFailure(activeRun.run.scope);
 }
 
 function artifactAcquisitionReviewStep(

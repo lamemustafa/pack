@@ -112,7 +112,7 @@ describe("filed returns active run recovery", () => {
     expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
   });
 
-  it("does not acknowledge a checkpoint-read failure lease because it still prevents a duplicate action", async () => {
+  it("normalizes a legacy checkpoint-read lease so its interrupted run can be acknowledged", async () => {
     browserMocks.storage.local.get.mockResolvedValue({
       "active-run": { ...ACTIVE_RUN, status: "recovery-blocked" },
     });
@@ -124,12 +124,11 @@ describe("filed returns active run recovery", () => {
 
     expect(response).toMatchObject({
       flowStep: {
-        safeSignals: ["artifact-acquisition-checkpoint-read-unavailable"],
-        userAction: { canResume: false },
+        safeSignals: ["filed-returns-run-acknowledged"],
+        userAction: { canResume: true },
       },
-      flowSummary: { status: "blocked" },
     });
-    expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
+    expect(browserMocks.storage.local.remove).toHaveBeenCalledWith("active-run");
   });
 
   it("renews the active run lease without changing the scope", async () => {

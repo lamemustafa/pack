@@ -3,7 +3,6 @@ import type {
   FiledReturnsFlowSummary,
   FiledReturnsFullFiscalYearLedger,
 } from "../connectors/gst/filed-returns-contracts";
-import { normaliseFiledReturnsArtifactType } from "../connectors/gst/filed-returns-artifacts";
 import { isFullFiscalYearScope } from "../connectors/gst/filed-returns-scope";
 import { readActiveFiledReturnsRunSummary } from "./filed-returns-active-run";
 import { readCanonicalFiledReturnsFlowSummary } from "./filed-returns-session-summary";
@@ -37,20 +36,6 @@ export async function readCurrentFiledReturnsFlowSummary(
     ...(deps.now ? { now: deps.now } : {}),
   });
 
-  // A local active-run lease deliberately blocks a duplicate action while
-  // session checkpoint ownership cannot be read. Surface the matching durable
-  // review's reason without clearing that guard; every other active lease keeps
-  // its normal precedence.
-  if (
-    activeRunSummary &&
-    targetReviewSummary &&
-    sameExactFiledReturnsScope(activeRunSummary.scope, targetReviewSummary.scope) &&
-    targetReviewSummary.flowStep.safeSignals.includes(
-      "artifact-acquisition-checkpoint-read-unavailable",
-    )
-  ) {
-    return targetReviewSummary;
-  }
   if (activeRunSummary) return activeRunSummary;
   if (targetReviewSummary) return targetReviewSummary;
 
@@ -124,19 +109,6 @@ function flowSummaryTimestampMs(summary: FiledReturnsFlowSummary): number {
   const timestamp = summary.completedAt ?? summary.updatedAt;
   if (!timestamp) return Number.NaN;
   return Date.parse(timestamp);
-}
-
-function sameExactFiledReturnsScope(
-  left: FiledReturnsFlowSummary["scope"],
-  right: FiledReturnsFlowSummary["scope"],
-): boolean {
-  return (
-    left.financialYear === right.financialYear &&
-    left.period === right.period &&
-    left.returnType === right.returnType &&
-    normaliseFiledReturnsArtifactType(left.returnType, left.artifactType) ===
-      normaliseFiledReturnsArtifactType(right.returnType, right.artifactType)
-  );
 }
 
 async function readLocalValue<T>(key: string): Promise<T | null> {

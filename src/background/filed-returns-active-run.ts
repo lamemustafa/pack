@@ -42,7 +42,7 @@ export interface ActiveFiledReturnsRun {
   runId: string;
   revision: number;
   scope: FiledReturnsDownloadScope;
-  status: "running" | "recovery-blocked";
+  status: "running";
   leaseUpdatedAt: string;
 }
 
@@ -94,48 +94,10 @@ export async function releaseFiledReturnsRun(
   await runFiledReturnsOperationCriticalSection(async () => {
     const values = await browser.storage.local.get(key);
     const storedRun = activeRunStorageState(values[key], deps.now?.() ?? new Date());
-    if (
-      storedRun.state === "valid" &&
-      storedRun.run.runId === run.runId &&
-      storedRun.run.status === "running"
-    ) {
+    if (storedRun.state === "valid" && storedRun.run.runId === run.runId) {
       await browser.storage.local.remove(key);
     }
   });
-}
-
-/**
- * Retains the existing duplicate-action lease when checkpoint storage cannot
- * be read. The bounded status is rendered as a reason-specific blocked state;
- * it is not a completion state and cannot be acknowledged away.
- */
-export async function markFiledReturnsRunRecoveryBlocked(
-  scope: FiledReturnsDownloadScope,
-  deps: FiledReturnsActiveRunDeps,
-): Promise<{ state: "absent" | "marked" | "blocked" }> {
-  const key = deps.storageKeys.activeRun;
-  if (!key) return { state: "absent" };
-
-  try {
-    return await runFiledReturnsOperationCriticalSection(async () => {
-      const values = await browser.storage.local.get(key);
-      const storedRun = activeRunStorageState(values[key], deps.now?.() ?? new Date());
-      if (storedRun.state === "missing") return { state: "absent" };
-      if (storedRun.state === "malformed") return { state: "blocked" };
-      if (!sameExactFiledReturnsScope(storedRun.run.scope, scope)) return { state: "absent" };
-      if (storedRun.run.status === "recovery-blocked") return { state: "marked" };
-      await browser.storage.local.set({
-        [key]: {
-          ...storedRun.run,
-          revision: storedRun.run.revision + 1,
-          status: "recovery-blocked",
-        } satisfies ActiveFiledReturnsRun,
-      });
-      return { state: "marked" };
-    });
-  } catch {
-    return { state: "blocked" };
-  }
 }
 
 /**
@@ -247,7 +209,7 @@ export async function acknowledgeInterruptedFiledReturnsRun(
           };
     }
     const run = storedRun.run;
-    if (run.status === "recovery-blocked" || !isInterruptedRun(run, now)) {
+    if (!isInterruptedRun(run, now)) {
       return activeRunResponse(run, now);
     }
 
@@ -309,7 +271,9 @@ function parseActiveRun(input: unknown, now: Date): ActiveFiledReturnsRun | null
     runId: run.runId,
     schemaVersion: "1.0",
     scope,
-    status: run.status,
+    // Round-three recovery-blocked records are normalized on read, so an
+    // interrupted legacy lease regains the normal acknowledgement exit path.
+    status: "running",
   };
 }
 
@@ -377,7 +341,7 @@ function isCanonicalTimestamp(input: unknown): input is string {
 
 function activeRunResponse(run: ActiveFiledReturnsRun, now: Date): PackMessageResponse {
   const interrupted = isInterruptedRun(run, now);
-  const flowStep = activeRunStep(interrupted, run.scope.returnType, run.status);
+  const flowStep = activeRunStep(interrupted, run.scope.returnType);
   return {
     ok: true,
     flowStep,
@@ -388,11 +352,11 @@ function activeRunResponse(run: ActiveFiledReturnsRun, now: Date): PackMessageRe
 function activeRunSummary(
   run: ActiveFiledReturnsRun,
   now: Date,
-  flowStep = activeRunStep(isInterruptedRun(run, now), run.scope.returnType, run.status),
+  flowStep = activeRunStep(isInterruptedRun(run, now), run.scope.returnType),
 ): FiledReturnsFlowSummary {
   return {
     scope: run.scope,
-    status: run.status === "recovery-blocked" || isInterruptedRun(run, now) ? "blocked" : "running",
+    status: isInterruptedRun(run, now) ? "blocked" : "running",
     completedPeriods: [],
     updatedAt: run.leaseUpdatedAt,
     flowStep,
@@ -495,23 +459,7 @@ function acknowledgedRunResponse(run?: ActiveFiledReturnsRun): PackMessageRespon
 function activeRunStep(
   interrupted: boolean,
   returnType: FiledReturnsDownloadScope["returnType"] = "GSTR-3B",
-  status: ActiveFiledReturnsRun["status"] = "running",
 ): PortalFlowStepResult {
-  if (status === "recovery-blocked") {
-    return {
-      connectorId: "gst",
-      scopeId: filedReturnScopeId(returnType),
-      state: "blocked",
-      safeSignals: ["artifact-acquisition-checkpoint-read-unavailable"],
-      safeMessage:
-        "Pack could not read retained download recovery state and will not repeat this target automatically.",
-      userAction: {
-        type: "RETRY_PORTAL_GENERATION",
-        message: "Use Clear local Pack data only after checking browser Downloads.",
-        canResume: false,
-      },
-    };
-  }
   return {
     connectorId: "gst",
     scopeId: filedReturnScopeId(returnType),

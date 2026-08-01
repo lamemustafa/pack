@@ -45,6 +45,8 @@ import {
   persistCanonicalGstPortalContext,
 } from "../background/gst-context-state";
 import {
+  ArtifactAcquisitionCheckpointReadFailure,
+  artifactAcquisitionCheckpointReadFailureSummary,
   installFiledReturnsDurableDownloadReconciler,
   reconcileTerminalFiledReturnsDownload,
 } from "../background/filed-returns-durable-download-reconciler";
@@ -229,16 +231,26 @@ async function handleMessage(
           )),
       };
     }
-    case "PACK_GET_FILED_RETURNS_FLOW_SUMMARY":
-      await reconcileTerminalFiledReturnsDownload(browser.downloads, {
-        storageKeys: filedReturnsStorageKeys(),
-      }).catch(() => undefined);
+    case "PACK_GET_FILED_RETURNS_FLOW_SUMMARY": {
+      let transientRecoverySummary = null;
+      try {
+        await reconcileTerminalFiledReturnsDownload(browser.downloads, {
+          storageKeys: filedReturnsStorageKeys(),
+        });
+      } catch (error) {
+        if (error instanceof ArtifactAcquisitionCheckpointReadFailure) {
+          transientRecoverySummary = artifactAcquisitionCheckpointReadFailureSummary(error.scope);
+        }
+      }
       return {
         ok: true,
-        flowSummary: await readCurrentFiledReturnsFlowSummary({
-          storageKeys: filedReturnsStorageKeys(),
-        }),
+        flowSummary:
+          transientRecoverySummary ??
+          (await readCurrentFiledReturnsFlowSummary({
+            storageKeys: filedReturnsStorageKeys(),
+          })),
       };
+    }
     case "PACK_GET_ACTIVE_FILED_RETURNS_RUN":
       return {
         ok: true,

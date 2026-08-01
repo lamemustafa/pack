@@ -41,8 +41,11 @@ import {
   persistArtifactAcquisitionDownloadId,
   reconcileArtifactAcquisitionCheckpoint,
 } from "../../src/background/artifact-acquisition-state";
-import { reconcileTerminalFiledReturnsDownload } from "../../src/background/filed-returns-durable-download-reconciler";
-import { readCurrentFiledReturnsFlowSummary } from "../../src/background/filed-returns-current-state";
+import {
+  ArtifactAcquisitionCheckpointReadFailure,
+  beginLiveFiledReturnsDownloadObservation,
+  reconcileTerminalFiledReturnsDownload,
+} from "../../src/background/filed-returns-durable-download-reconciler";
 import { acquireFiledReturnsRun } from "../../src/background/filed-returns-active-run";
 import { filedReturnScopeId } from "../../src/connectors/gst/filed-returns-return-descriptors";
 import {
@@ -238,7 +241,7 @@ describe("durable acquisition checkpoint recovery", () => {
     });
   });
 
-  it("fails closed when a discovered checkpoint key decodes to a target but is not that target's canonical key", async () => {
+  it("lets cancellation clear a noncanonical checkpoint sentinel so a later scan has no review to recreate", async () => {
     const canonicalKey = artifactAcquisitionCheckpointKey(target);
     const noncanonicalKey = canonicalKey.replace(".2026-27.", ".%32%30%32%36-27.");
     mocks.session[noncanonicalKey] = {
@@ -257,12 +260,81 @@ describe("durable acquisition checkpoint recovery", () => {
     ).resolves.toBe(true);
 
     expect(mocks.browser.downloads.search).not.toHaveBeenCalled();
-    expect(mocks.session[canonicalKey]).toBeUndefined();
-    expect(mocks.session[noncanonicalKey]).toEqual({ schemaVersion: "1.0", state: "malformed" });
+    expect(mocks.session[canonicalKey]).toEqual({ schemaVersion: "1.0", state: "malformed" });
+    expect(mocks.session[noncanonicalKey]).toBeUndefined();
     expect(mocks.local[targetReviewKey]).toMatchObject({
       safeSignals: ["artifact-acquisition-checkpoint-malformed"],
       status: "download-unconfirmed",
     });
+
+    await expect(
+      resolveUnconfirmedFiledReturnsDownload(target, "cancelled", durableDeps()),
+    ).resolves.toMatchObject({ ok: true });
+    expect(mocks.session[canonicalKey]).toBeUndefined();
+    expect(mocks.local[targetReviewKey]).toBeUndefined();
+
+    await expect(
+      reconcileTerminalFiledReturnsDownload(
+        { search: mocks.browser.downloads.search },
+        durableDeps(),
+      ),
+    ).resolves.toBe(false);
+    expect(mocks.local[targetReviewKey]).toBeUndefined();
+  });
+
+  it("clears a noncanonical source key left when sentinel conversion is interrupted", async () => {
+    const canonicalKey = artifactAcquisitionCheckpointKey(target);
+    const noncanonicalKey = canonicalKey.replace(".2026-27.", ".%32%30%32%36-27.");
+    mocks.session[noncanonicalKey] = {
+      ...target,
+      armedAt: new Date().toISOString(),
+      downloadId: 231,
+      requestId,
+      state: "download-observing",
+    };
+    mocks.browser.storage.session.remove.mockRejectedValueOnce(
+      new Error("Synthetic worker stop after canonical sentinel write."),
+    );
+
+    await expect(
+      reconcileTerminalFiledReturnsDownload(
+        { search: mocks.browser.downloads.search },
+        durableDeps(),
+      ),
+    ).rejects.toThrow("Synthetic worker stop after canonical sentinel write.");
+    expect(mocks.session[canonicalKey]).toEqual({ schemaVersion: "1.0", state: "malformed" });
+    expect(mocks.session[noncanonicalKey]).toMatchObject({ downloadId: 231 });
+
+    await persistFiledReturnsTargetReview(
+      target,
+      {
+        connectorId: "gst",
+        scopeId: filedReturnScopeId(target.returnType),
+        state: "blocked",
+        safeMessage: "Pack retained malformed artifact recovery for review.",
+        safeSignals: ["artifact-acquisition-checkpoint-malformed"],
+        userAction: {
+          canResume: true,
+          message: "Review or cancel this target before starting another portal action.",
+          type: "RETRY_PORTAL_GENERATION",
+        },
+      },
+      durableDeps(),
+    );
+
+    await expect(
+      resolveUnconfirmedFiledReturnsDownload(target, "cancelled", durableDeps()),
+    ).resolves.toMatchObject({ ok: true });
+    expect(mocks.session[canonicalKey]).toBeUndefined();
+    expect(mocks.session[noncanonicalKey]).toBeUndefined();
+
+    await expect(
+      reconcileTerminalFiledReturnsDownload(
+        { search: mocks.browser.downloads.search },
+        durableDeps(),
+      ),
+    ).resolves.toBe(false);
+    expect(mocks.local[targetReviewKey]).toBeUndefined();
   });
 
   it("retains exact checkpoint ownership if the worker stops after resolving its active run but before summary persistence", async () => {
@@ -423,25 +495,24 @@ describe("durable acquisition checkpoint recovery", () => {
     });
   });
 
-  it("surfaces an unavailable startup checkpoint scan even when another target owns the review record", async () => {
+  it("surfaces a transient checkpoint-read diagnostic and lets the next successful scan finish without sticky recovery state", async () => {
     persistActiveRun();
-    const otherTarget = { ...target, period: "April" };
-    await persistFiledReturnsTargetReview(
-      otherTarget,
+    await persistArtifactAcquisitionDownloadId({
+      ...target,
+      downloadId: 231,
+      requestId,
+      state: "download-observing",
+    });
+    mocks.browser.downloads.search.mockResolvedValue([
       {
-        connectorId: "gst",
-        scopeId: filedReturnScopeId(otherTarget.returnType),
-        state: "blocked",
-        safeMessage: "Pack retained another target for review.",
-        safeSignals: ["artifact-acquisition-download-unreconciled"],
-        userAction: {
-          canResume: true,
-          message: "Review or cancel this target before starting another portal action.",
-          type: "RETRY_PORTAL_GENERATION",
-        },
+        danger: "safe",
+        fileSize: 40_108,
+        id: 231,
+        mime: "application/pdf",
+        startTime: new Date(Date.now() + 1_000).toISOString(),
+        state: "complete",
       },
-      durableDeps(),
-    );
+    ]);
     mocks.browser.storage.session.get.mockRejectedValueOnce(
       new Error("Synthetic session storage read failure."),
     );
@@ -451,31 +522,67 @@ describe("durable acquisition checkpoint recovery", () => {
         { search: mocks.browser.downloads.search },
         durableDeps(),
       ),
-    ).resolves.toBe(true);
+    ).rejects.toBeInstanceOf(ArtifactAcquisitionCheckpointReadFailure);
 
     expect(mocks.browser.downloads.search).not.toHaveBeenCalled();
-    expect(mocks.browser.storage.local.set).toHaveBeenCalledWith({
-      [activeRunKey]: expect.objectContaining({ status: "recovery-blocked" }),
-    });
-    expect(mocks.local[activeRunKey]).toMatchObject({ status: "recovery-blocked" });
-    expect(mocks.local[targetReviewKey]).toMatchObject({
-      scope: otherTarget,
-    });
+    expect(mocks.local[activeRunKey]).toMatchObject({ status: "running" });
+    expect(mocks.local[targetReviewKey]).toBeUndefined();
+
     await expect(
-      readCurrentFiledReturnsFlowSummary({
-        storageKeys: {
-          activeRun: activeRunKey,
-          completion: completionKey,
-          fullFiscalYearLedger: "pack:full-fiscal-year-ledger",
-          targetReview: targetReviewKey,
-        },
-      }),
-    ).resolves.toMatchObject({
-      flowStep: {
-        safeSignals: expect.arrayContaining(["artifact-acquisition-checkpoint-read-unavailable"]),
-      },
-      status: "blocked",
+      reconcileTerminalFiledReturnsDownload(
+        { search: mocks.browser.downloads.search },
+        durableDeps(),
+      ),
+    ).resolves.toBe(true);
+    expect(mocks.local[activeRunKey]).toBeUndefined();
+    expect(mocks.local[targetReviewKey]).toBeUndefined();
+    expect(mocks.session[artifactAcquisitionCheckpointKey(target)]).toBeUndefined();
+    expect(mocks.session[completionKey]).toMatchObject({ status: "complete" });
+  });
+
+  it("leaves a live inline observer as the sole owner until its exact download completes", async () => {
+    persistActiveRun();
+    await persistArtifactAcquisitionDownloadId({
+      ...target,
+      downloadId: 231,
+      requestId,
+      state: "download-observing",
     });
+    mocks.browser.downloads.search.mockResolvedValue([
+      {
+        danger: "safe",
+        fileSize: 40_108,
+        id: 231,
+        mime: "application/pdf",
+        startTime: new Date(Date.now() + 1_000).toISOString(),
+        state: "complete",
+      },
+    ]);
+    const endLiveObservation = beginLiveFiledReturnsDownloadObservation(231);
+
+    await expect(
+      reconcileTerminalFiledReturnsDownload(
+        { search: mocks.browser.downloads.search },
+        durableDeps(),
+      ),
+    ).resolves.toBe(false);
+    expect(mocks.local[targetReviewKey]).toBeUndefined();
+    expect(mocks.local[activeRunKey]).toMatchObject({ status: "running" });
+    expect(mocks.session[artifactAcquisitionCheckpointKey(target)]).toMatchObject({
+      downloadId: 231,
+    });
+
+    endLiveObservation();
+    await expect(
+      reconcileTerminalFiledReturnsDownload(
+        { search: mocks.browser.downloads.search },
+        durableDeps(),
+      ),
+    ).resolves.toBe(true);
+    expect(mocks.local[targetReviewKey]).toBeUndefined();
+    expect(mocks.local[activeRunKey]).toBeUndefined();
+    expect(mocks.session[artifactAcquisitionCheckpointKey(target)]).toBeUndefined();
+    expect(mocks.session[completionKey]).toMatchObject({ status: "complete" });
   });
 
   it("keeps a marked review recoverable if cleanup stops after completion persistence", async () => {

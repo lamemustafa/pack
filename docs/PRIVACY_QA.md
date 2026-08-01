@@ -51,10 +51,10 @@ For each release candidate:
   must reject this class outside that exact scope.
 - Confirm `pack:active-filed-returns-run`, when present, contains only the
   selected financial year, period, return type, artifact type, run ID,
-  revision, a bounded `running` or `recovery-blocked` status, and lease
-  timestamp needed to prevent overlapping local runs. The recovery-blocked
-  state adds no browser evidence or portal data and remains until explicit safe
-  recovery.
+  revision, the bounded `running` status for new writes, and lease timestamp
+  needed to prevent overlapping local runs. An older `recovery-blocked` lease
+  may be normalized on read during upgrade. A temporary recovery-read diagnostic
+  adds no browser evidence or portal data and is not persisted.
 - Confirm `pack:filed-returns-target-review`, when present, contains only the
   canonical target identifier/scope, unresolved status, safe signals/messages,
   revision and timestamps needed to block implicit retry. Recovery may
