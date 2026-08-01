@@ -131,10 +131,10 @@ popup selection
 
 Properties:
 
-- **No native Save sheet, ever.** `saveAs: false` on an extension-initiated download
-  bypasses the file chooser regardless of the user's "ask where to save each file"
-  preference. **The test machine has that preference ON** — so during live QA, _a visible
-  save dialog means suppression failed_. Treat it as a hard failure signal.
+- `saveAs: false` does not override the browser profile's "ask where to save each file"
+  preference. With that preference enabled, each extension-initiated artifact download opens a
+  native Save dialog: N artifacts mean N dialogs. Archive bundling is therefore a functional
+  requirement when Pack must reduce a multi-artifact selection to one native dialog.
 - Bytes are in memory, so **ZIP bundling works** — a product requirement, and the reason
   passive observation of the page's own download is not sufficient.
 - Retry is safe and idempotent → "ambiguous outcome → manual review" collapses to
@@ -190,7 +190,8 @@ Hard rules:
 - **Never** return `ok: true` without passing §6 validation.
 - Fail closed. Any unexpected shape → `ok: false` with the nearest reason. Never guess.
 - Guard page identity **before** acquiring: the reviewed Returns origin and
-  pathname must match the expected detail page. Reuse `detectFiledReturnDetailPage`.
+  pathname must match the expected detail page through the route-based classification in
+  `filed-returns-observer-signals.ts`.
 
 ### 5.2 Preflight target binding (replaces DOM fingerprinting)
 
@@ -517,9 +518,10 @@ Plus the `pack-security-reviewer` and `pack-privacy-reviewer` subagents.
 
 ## 13. Acceptance criteria
 
-1. A filed GSTR-3B PDF for a selected FY + period downloads end to end with **zero** user
-   interaction after Start and **zero** native Save dialogs — on a machine where Chrome's
-   "ask where to save each file" is **ON**.
+1. A filed GSTR-3B PDF for a selected FY + period downloads end to end with its one required
+   native Save dialog when Chrome's "ask where to save each file" preference is **ON**. A
+   multi-artifact request is bundled before download so it produces one dialog rather than one
+   per artifact.
 2. The saved PDF is byte-identical to the portal's own download (~40 KB, `%PDF-`, _Final
    GSTR-3B_ watermark). **No PDF-composition code exists anywhere in the tree** (§1).
 3. The JSON artifact is byte-identical to the raw `getgenpdf` response body.
