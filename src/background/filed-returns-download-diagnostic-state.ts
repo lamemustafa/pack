@@ -4,6 +4,7 @@ import type {
 } from "../connectors/gst/filed-returns-contracts";
 import {
   concreteFiledReturnsArtifactTypes,
+  concreteFiledReturnsArtifactTypesForSelection,
   normaliseFiledReturnsArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
 import { isCanonicalFiledReturnsActionId } from "../connectors/gst/filed-returns-operation-id";
@@ -304,10 +305,7 @@ function isPositiveArtifactDiagnostic(
 }
 
 function selectedArtifactTypes(binding: DiagnosticBinding) {
-  const artifactType = normaliseFiledReturnsArtifactType(binding.returnType, binding.artifactType);
-  return binding.returnType === "GSTR-2B" && artifactType === "PDF_AND_EXCEL"
-    ? (["PDF", "EXCEL", "JSON"] as const)
-    : concreteFiledReturnsArtifactTypes(artifactType);
+  return concreteFiledReturnsArtifactTypesForSelection(binding.returnType, binding.artifactType);
 }
 
 function sameDownloadDiagnostic(

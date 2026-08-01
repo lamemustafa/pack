@@ -3,9 +3,8 @@ import type {
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
 import {
-  concreteFiledReturnsArtifactTypes,
+  concreteFiledReturnsArtifactTypesForSelection,
   type FiledReturnsConcreteArtifactType,
-  normaliseFiledReturnsArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
 import {
   SinglePeriodCleanupCheckpointError,
@@ -125,12 +124,7 @@ function isValidSinglePeriodZipEntryPlan(
   entryPlan: SinglePeriodFiledReturnsZipEntryPlan,
 ): boolean {
   const selectedArtifactTypes: FiledReturnsConcreteArtifactType[] =
-    scope.returnType === "GSTR-2B" &&
-    normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType) === "PDF_AND_EXCEL"
-      ? ["PDF", "EXCEL", "JSON"]
-      : concreteFiledReturnsArtifactTypes(
-          normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType),
-        );
+    concreteFiledReturnsArtifactTypesForSelection(scope.returnType, scope.artifactType);
   const unavailableArtifactTypes = [...entryPlan.unavailableArtifactTypes];
   const expectedArtifactTypes = [...entryPlan.artifactTypes];
   if (
