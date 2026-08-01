@@ -10,7 +10,7 @@ export type ArtifactValidationResult =
 
 const MIN_PDF_BYTES = 1024;
 const MIN_JSON_BYTES = 100;
-const MAX_ARTIFACT_BYTES = 25 * 1024 * 1024;
+export const MAX_ARTIFACT_BYTES = 25 * 1024 * 1024;
 const PDF_MAGIC = [0x25, 0x50, 0x44, 0x46, 0x2d];
 const XLSX_MAGIC = [0x50, 0x4b];
 
