@@ -4,9 +4,11 @@ import {
   concreteFiledReturnsArtifactTypes,
   filedReturnsArtifactExtension,
   filedReturnsArtifactMimeTypes,
+  isFiledReturnsConcreteArtifactType,
   normaliseFiledReturnsArtifactType,
   type FiledReturnsConcreteArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
+import { parseDurableFiledReturnsScope } from "../connectors/gst/filed-returns-durable-status";
 import { isExpectedDownloadCandidate } from "./download-correlation";
 import { classifyDownloadDanger, firstKnownSize } from "./download-observer-results";
 
@@ -42,6 +44,11 @@ export type ArtifactAcquisitionCompletionEvidence = {
   requestId: string;
 };
 
+export type ArtifactAcquisitionCheckpointInspection =
+  | { state: "retry-safe" }
+  | { evidence: ArtifactAcquisitionCompletionEvidence; state: "completed" }
+  | { state: "needs-review"; safeSignals: string[] };
+
 export function artifactAcquisitionCheckpointKey(target: ArtifactAcquisitionTarget): string {
   const artifactType = target.artifactType ?? "PDF";
   return [KEY_PREFIX, target.returnType, target.financialYear, target.period, artifactType]
@@ -53,6 +60,23 @@ export function artifactAcquisitionCheckpointKey(target: ArtifactAcquisitionTarg
 export async function hasArtifactAcquisitionCheckpoint(): Promise<boolean> {
   const values = await browser.storage.session.get();
   return Object.keys(values).some((key) => key.startsWith(`${KEY_PREFIX}.`));
+}
+
+/**
+ * Lists every checkpoint target still owned by this browser session. Startup
+ * recovery uses the key as its target boundary, then inspects the record before
+ * it can act on the browser download ID inside it.
+ */
+export async function readArtifactAcquisitionCheckpointTargets(): Promise<
+  ArtifactAcquisitionTarget[]
+> {
+  const values = await browser.storage.session.get();
+  const targets = new Map<string, ArtifactAcquisitionTarget>();
+  for (const key of Object.keys(values)) {
+    const target = artifactAcquisitionTargetFromKey(key);
+    if (target) targets.set(key, target);
+  }
+  return [...targets.values()];
 }
 
 export async function persistArtifactAcquisitionIntent(
@@ -267,6 +291,24 @@ export async function readArtifactAcquisitionCompletionEvidence(
 export async function reconcileArtifactAcquisitionCheckpoint(
   target: ArtifactAcquisitionTarget,
 ): Promise<{ state: "retry-safe" } | { state: "needs-review"; safeSignals: string[] }> {
+  const inspection = await inspectArtifactAcquisitionCheckpoint(target);
+  if (inspection.state !== "completed") return inspection;
+  // A foreground start must never repeat a download that startup recovery has
+  // not yet persisted. The durable reconciler is the sole owner of turning
+  // completed evidence into a completion summary.
+  return {
+    state: "needs-review",
+    safeSignals: ["artifact-acquisition-download-completed-unpersisted"],
+  };
+}
+
+/**
+ * Inspects one exact-ID checkpoint without changing it. This is shared by
+ * foreground guards and startup recovery so safe-completion proof cannot drift.
+ */
+export async function inspectArtifactAcquisitionCheckpoint(
+  target: ArtifactAcquisitionTarget,
+): Promise<ArtifactAcquisitionCheckpointInspection> {
   const key = artifactAcquisitionCheckpointKey(target);
   const stored = await browser.storage.session.get(key);
   const storedCheckpoint = stored[key];
@@ -283,7 +325,20 @@ export async function reconcileArtifactAcquisitionCheckpoint(
     return { state: "needs-review", safeSignals: ["artifact-acquisition-checkpoint-malformed"] };
   }
   const checkpoint = storedCheckpoint;
-  if (checkpoint.state === "intent" || !Number.isSafeInteger(checkpoint.downloadId)) {
+  if (!checkpointMatchesTarget(checkpoint, target)) {
+    await browser.storage.session.set({
+      [key]: MALFORMED_ARTIFACT_ACQUISITION_CHECKPOINT_SENTINEL,
+    });
+    return { state: "needs-review", safeSignals: ["artifact-acquisition-checkpoint-malformed"] };
+  }
+  const artifactType = target.artifactType ?? "PDF";
+  const downloadId = checkpoint.downloadId;
+  if (
+    !isFiledReturnsConcreteArtifactType(artifactType) ||
+    checkpoint.state === "intent" ||
+    typeof downloadId !== "number" ||
+    !Number.isSafeInteger(downloadId)
+  ) {
     return { state: "needs-review", safeSignals: ["artifact-acquisition-start-unreconciled"] };
   }
   if (checkpoint.state === "download-unconfirmed") {
@@ -293,19 +348,41 @@ export async function reconcileArtifactAcquisitionCheckpoint(
     };
   }
   try {
-    const [item] = await browser.downloads.search({ id: checkpoint.downloadId });
+    const [item] = await browser.downloads.search({ id: downloadId });
     if (item?.state === "in_progress" || !item?.state) {
       return { state: "needs-review", safeSignals: ["artifact-acquisition-download-unreconciled"] };
     }
-    // A terminal `complete` item means the externally visible download already
-    // happened; the worker simply stopped before persisting that success.
-    // Clearing the checkpoint here would hand the next start a clean slate and
-    // repeat a download that already succeeded, so route it to review instead.
-    // Only a genuinely interrupted download is safe to retry.
     if (item.state === "complete") {
+      const armedAt = armedAtFromCheckpoint(checkpoint);
+      if (
+        !armedAt ||
+        !isExpectedDownloadCandidate(item, {
+          armedAt: new Date(armedAt),
+          expectedFileExtensions: [filedReturnsArtifactExtension(artifactType)],
+          expectedMimeTypes: filedReturnsArtifactMimeTypes(artifactType),
+          trustedDownloadIds: new Set([downloadId]),
+        }) ||
+        classifyDownloadDanger(item) !== "safe"
+      ) {
+        return {
+          state: "needs-review",
+          safeSignals: ["artifact-acquisition-download-completed-unpersisted"],
+        };
+      }
+      const size = firstKnownSize(item);
+      if (size === null || size === 0) {
+        return {
+          state: "needs-review",
+          safeSignals: ["artifact-acquisition-download-completed-unpersisted"],
+        };
+      }
       return {
-        state: "needs-review",
-        safeSignals: ["artifact-acquisition-download-completed-unpersisted"],
+        state: "completed",
+        evidence: {
+          artifactType,
+          downloadId,
+          requestId: checkpoint.requestId,
+        },
       };
     }
     return {
@@ -317,6 +394,29 @@ export async function reconcileArtifactAcquisitionCheckpoint(
       state: "needs-review",
       safeSignals: ["artifact-acquisition-download-search-unavailable"],
     };
+  }
+}
+
+function artifactAcquisitionTargetFromKey(key: string): ArtifactAcquisitionTarget | null {
+  if (!key.startsWith(`${KEY_PREFIX}.`)) return null;
+  const encodedParts = key.slice(`${KEY_PREFIX}.`.length).split(".");
+  if (encodedParts.length !== 4) return null;
+  try {
+    const [returnType, financialYear, period, artifactType] = encodedParts.map(decodeURIComponent);
+    const scope = parseDurableFiledReturnsScope(
+      { artifactType, financialYear, period, returnType },
+      false,
+    );
+    return scope && isFiledReturnsConcreteArtifactType(scope.artifactType)
+      ? {
+          artifactType: scope.artifactType,
+          financialYear: scope.financialYear,
+          period: scope.period,
+          returnType: scope.returnType,
+        }
+      : null;
+  } catch {
+    return null;
   }
 }
 
@@ -333,6 +433,15 @@ function checkpointOwnsTarget(
 ): boolean {
   return (
     (checkpoint.state === "download-observing" || checkpoint.state === "download-unconfirmed") &&
+    checkpointMatchesTarget(checkpoint, target)
+  );
+}
+
+function checkpointMatchesTarget(
+  checkpoint: ArtifactAcquisitionCheckpoint,
+  target: ArtifactAcquisitionTarget,
+): boolean {
+  return (
     checkpoint.returnType === target.returnType &&
     checkpoint.financialYear === target.financialYear &&
     checkpoint.period === target.period &&

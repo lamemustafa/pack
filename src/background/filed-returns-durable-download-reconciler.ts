@@ -1,11 +1,23 @@
 import { browser } from "wxt/browser";
-import type { FiledReturnsTargetReview } from "../connectors/gst/filed-returns-contracts";
+import type {
+  FiledReturnsDownloadScope,
+  FiledReturnsTargetReview,
+  PortalFlowStepResult,
+} from "../connectors/gst/filed-returns-contracts";
+import {
+  inspectArtifactAcquisitionCheckpoint,
+  readArtifactAcquisitionCheckpointTargets,
+} from "./artifact-acquisition-state";
 import type { DownloadCreatedItem, DownloadDelta } from "./download-observer";
 import { persistFiledReturnsTargetDownloadId } from "./filed-returns-target-download-attempt";
+import { persistArtifactAcquisitionCompletion } from "./filed-returns-artifact-acquisition-completion";
 import {
+  clearFiledReturnsTargetReview,
   readCurrentFiledReturnsTargetReview,
+  persistFiledReturnsTargetReview,
   type FiledReturnsTargetReviewDeps,
 } from "./filed-returns-target-review";
+import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import { reconcileFiledReturnsTargetDownload } from "./filed-returns-target-download-recovery";
 import { PACK_LOCAL_STORAGE_KEYS, PACK_SESSION_STORAGE_KEYS } from "./storage-keys";
 
@@ -86,6 +98,15 @@ export async function reconcileTerminalFiledReturnsDownload(
   downloads: Pick<DurableDownloadReconcilerDownloads, "search">,
   deps: DurableDownloadReconcilerDeps,
 ): Promise<boolean> {
+  const reviewReconciled = await reconcileCurrentTargetReview(downloads, deps);
+  const acquisitionReconciled = await reconcileArtifactAcquisitionCheckpoints(deps);
+  return reviewReconciled || acquisitionReconciled;
+}
+
+async function reconcileCurrentTargetReview(
+  downloads: Pick<DurableDownloadReconcilerDownloads, "search">,
+  deps: DurableDownloadReconcilerDeps,
+): Promise<boolean> {
   const review = await (deps.readCurrentReview
     ? deps.readCurrentReview()
     : readCurrentFiledReturnsTargetReview(deps));
@@ -99,6 +120,79 @@ export async function reconcileTerminalFiledReturnsDownload(
     ? deps.reconcile(review)
     : reconcileFiledReturnsTargetDownload(review, deps));
   return true;
+}
+
+/**
+ * Rebuilds a completion from an acquisition checkpoint when the MV3 worker
+ * died while the browser's native Save dialog kept the exact download alive.
+ * Unproven checkpoints deliberately remain in session and are surfaced through
+ * target review; this function never retries or cancels a browser action.
+ */
+async function reconcileArtifactAcquisitionCheckpoints(
+  deps: DurableDownloadReconcilerDeps,
+): Promise<boolean> {
+  let handled = false;
+  const targets = await readArtifactAcquisitionCheckpointTargets().catch(() => []);
+  for (const target of targets) {
+    const inspection = await inspectArtifactAcquisitionCheckpoint(target);
+    if (inspection.state === "retry-safe") continue;
+    handled = true;
+    if (inspection.state === "completed") {
+      const summary = await persistArtifactAcquisitionCompletion(
+        deps.storageKeys.completion,
+        target,
+        [inspection.evidence],
+        deps.now?.() ?? new Date(),
+      );
+      if (summary) await clearMatchingTargetReview(target, deps);
+      continue;
+    }
+    await persistFiledReturnsTargetReview(
+      target,
+      artifactAcquisitionReviewStep(target, inspection.safeSignals),
+      deps,
+    );
+  }
+  return handled;
+}
+
+function artifactAcquisitionReviewStep(
+  scope: FiledReturnsDownloadScope,
+  safeSignals: string[],
+): PortalFlowStepResult {
+  return {
+    connectorId: "gst",
+    scopeId: filedReturnScopeId(scope.returnType),
+    state: "blocked",
+    safeSignals,
+    safeMessage:
+      "Pack retained unresolved artifact download recovery and will not repeat the target automatically.",
+    userAction: {
+      type: "RETRY_PORTAL_GENERATION",
+      message: "Review or cancel this target before starting another portal action.",
+      canResume: true,
+    },
+  };
+}
+
+async function clearMatchingTargetReview(
+  target: FiledReturnsDownloadScope,
+  deps: DurableDownloadReconcilerDeps,
+): Promise<void> {
+  const review = await (deps.readCurrentReview
+    ? deps.readCurrentReview()
+    : readCurrentFiledReturnsTargetReview(deps));
+  if (!review || !sameScope(review.scope, target)) return;
+  await clearFiledReturnsTargetReview(target, deps, review.revision ?? 1);
+}
+
+function sameScope(left: FiledReturnsDownloadScope, right: FiledReturnsDownloadScope): boolean {
+  return (
+    left.returnType === right.returnType &&
+    left.financialYear === right.financialYear &&
+    left.period === right.period &&
+    (left.artifactType ?? "PDF") === (right.artifactType ?? "PDF")
+  );
 }
 
 export function installFiledReturnsDurableDownloadReconciler(

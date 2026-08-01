@@ -14,6 +14,7 @@ import {
   clearArtifactAcquisitionCheckpoints,
   clearArtifactAcquisitionCheckpointsAfterPersistedSummary,
 } from "./artifact-acquisition-state";
+import { persistArtifactAcquisitionCompletion } from "./filed-returns-artifact-acquisition-completion";
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import {
   canonicalDurableTargetStatus,
@@ -371,37 +372,14 @@ export async function resolveUnconfirmedFiledReturnsDownload(
         const parsedMarkedReview = parseFiledReturnsTargetReview(markedReview);
         if (!parsedMarkedReview) return responseForFiledReturnsTargetReview(review);
         await browser.storage.local.set({ [key]: parsedMarkedReview });
-        const flowStep: PortalFlowStepResult = {
-          connectorId: "gst",
-          scopeId: filedReturnScopeId(scope.returnType),
-          state: "downloaded",
-          safeSignals: uniqueSafeSignals([
-            "artifact-acquisition-download-reconciled",
-            "browser-download-created",
-            "browser-download-completed",
-            "browser-download-non-empty",
-            ...cancellation.evidence.map(({ downloadId }) => `browser-download-id:${downloadId}`),
-          ]),
-          safeMessage:
-            "Pack reconciled this target from exact browser download evidence without repeating a portal action.",
-          ...copyFiledReturnsDownloadDiagnosticState(review),
-        };
-        const flowSummary: FiledReturnsFlowSummary = {
-          artifactAcquisitionCompletion,
-          scope: canonicalTargetReviewScope(scope),
-          status: "complete",
-          completedPeriods: [scope.period],
-          currentPeriod: scope.period,
-          totalPeriods: 1,
-          updatedAt: (deps.now?.() ?? new Date()).toISOString(),
-          flowStep,
-        };
-        const durableSummary = await persistResolvedTargetReviewSummary(flowSummary, deps);
-        if (!durableSummary) return responseForFiledReturnsTargetReview(review);
-        await clearArtifactAcquisitionCheckpointsAfterPersistedSummary(
+        const durableSummary = await persistArtifactAcquisitionCompletion(
+          deps.storageKeys.completion,
           review.scope,
           cancellation.evidence,
+          deps.now?.() ?? new Date(),
+          copyFiledReturnsDownloadDiagnosticState(review),
         );
+        if (!durableSummary) return responseForFiledReturnsTargetReview(review);
         await browser.storage.local.remove(key);
         return {
           ok: true,
