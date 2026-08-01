@@ -10,6 +10,7 @@ import {
   concreteFiledReturnsArtifactTypes,
   normaliseFiledReturnsArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
+import { clearArtifactAcquisitionCheckpoints } from "./artifact-acquisition-state";
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import {
   canonicalDurableTargetStatus,
@@ -316,6 +317,27 @@ export async function resolveUnconfirmedFiledReturnsDownload(
       return responseForFiledReturnsTargetReview(parsedReview);
     }
 
+    if (hasArtifactAcquisitionRecoverySignal(review.safeSignals)) {
+      const checkpointsCleared = await clearArtifactAcquisitionCheckpoints(review.scope);
+      if (!checkpointsCleared) {
+        const clearFailureReview: FiledReturnsTargetReview = {
+          ...review,
+          revision: targetReviewRevision(review) + 1,
+          safeSignals: uniqueSafeSignals([
+            ...review.safeSignals,
+            "artifact-acquisition-checkpoint-clear-failed",
+          ]),
+          safeMessage:
+            "Pack could not clear retained artifact recovery state. It will not start another portal action automatically.",
+          updatedAt: (deps.now?.() ?? new Date()).toISOString(),
+        };
+        const parsedReview = parseFiledReturnsTargetReview(clearFailureReview);
+        if (!parsedReview) return malformedTargetReviewResponse(scope);
+        await browser.storage.local.set({ [key]: parsedReview });
+        return responseForFiledReturnsTargetReview(parsedReview);
+      }
+    }
+
     await browser.storage.local.remove(key);
     const flowStep: PortalFlowStepResult = {
       connectorId: "gst",
@@ -393,6 +415,26 @@ export async function retryCompletedSinglePeriodZipCleanup(
     }
 
     const cancelled = review.safeSignals.includes("single-period-zip-cancel-cleanup-failed");
+    const completedDownload = hasConfirmedSinglePeriodZipDownloadEvidence(review.safeSignals);
+    if (!cancelled && !completedDownload) {
+      const unresolvedReview: FiledReturnsTargetReview = {
+        ...review,
+        revision: targetReviewRevision(review) + 1,
+        safeSignals: uniqueSafeSignals([
+          ...review.safeSignals.filter((signal) => !isResolvedSinglePeriodCleanupSignal(signal)),
+          "single-period-opfs-cleanup-completed",
+          "single-period-zip-cleanup-without-download",
+          ...cleanup.safeSignals,
+        ]),
+        safeMessage:
+          "Pack cleared temporary selected-file staging, but no exact browser download completion was recorded.",
+        updatedAt: (deps.now?.() ?? new Date()).toISOString(),
+      };
+      const parsedReview = parseFiledReturnsTargetReview(unresolvedReview);
+      if (!parsedReview) return responseForFiledReturnsTargetReview(review);
+      await browser.storage.local.set({ [key]: parsedReview });
+      return responseForFiledReturnsTargetReview(parsedReview);
+    }
     const flowStep: PortalFlowStepResult = {
       connectorId: "gst",
       scopeId: filedReturnScopeId(scope.returnType),
@@ -784,6 +826,7 @@ function targetReviewStep(review: FiledReturnsTargetReview): PortalFlowStepResul
               ].includes(signal) || signal.endsWith("-main-world-capture-timeout"),
           )
         : []),
+      ...review.safeSignals.filter((signal) => signal.startsWith("artifact-acquisition-")),
       ...(hasSinglePeriodCleanupFailure(review.safeSignals)
         ? ["filed-returns-target-local-cleanup-required"]
         : []),
@@ -830,6 +873,10 @@ function targetReviewDiagnosticSignals(safeSignals: readonly string[]): string[]
       signal.endsWith("-main-world-capture-timeout") ||
       signal.endsWith("-target-bound-native-blob-click-delegated"),
   );
+}
+
+function hasArtifactAcquisitionRecoverySignal(safeSignals: readonly string[]): boolean {
+  return safeSignals.some((signal) => signal.startsWith("artifact-acquisition-"));
 }
 
 const TARGET_REVIEW_BROWSER_DIAGNOSTIC_SIGNALS = new Set([
@@ -907,6 +954,7 @@ function requiresTargetReview(step: PortalFlowStepResult): boolean {
   if (hasSinglePeriodCleanupFailure(step.safeSignals)) return true;
   if (step.safeSignals.includes("single-period-bundle-artifact-review-required")) return true;
   if (step.safeSignals.includes("filed-return-durable-status-rejected")) return true;
+  if (hasArtifactAcquisitionRecoverySignal(step.safeSignals)) return true;
   if (step.safeSignals.includes("filed-gstr1-excel-no-details-available")) return false;
   return (
     step.state === "download-unconfirmed" ||
@@ -924,17 +972,23 @@ function requiresTargetReview(step: PortalFlowStepResult): boolean {
 }
 
 function hasSinglePeriodCleanupFailure(safeSignals: readonly string[]): boolean {
-  return safeSignals.some((signal) =>
-    [
-      "single-period-opfs-clear-failed",
-      "single-period-cleanup-checkpoint-failed",
-      "single-period-bundle-ledger-malformed",
-      "single-period-bundle-scope-conflict",
-      "single-period-bundle-revision-conflict",
-      "single-period-bundle-state-read-failed",
-      "single-period-zip-cancel-cleanup-failed",
-    ].includes(signal),
-  );
+  return safeSignals.some(isSinglePeriodCleanupFailureSignal);
+}
+
+function isSinglePeriodCleanupFailureSignal(signal: string): boolean {
+  return [
+    "single-period-opfs-clear-failed",
+    "single-period-cleanup-checkpoint-failed",
+    "single-period-bundle-ledger-malformed",
+    "single-period-bundle-scope-conflict",
+    "single-period-bundle-revision-conflict",
+    "single-period-bundle-state-read-failed",
+    "single-period-zip-cancel-cleanup-failed",
+  ].includes(signal);
+}
+
+function isResolvedSinglePeriodCleanupSignal(signal: string): boolean {
+  return signal === "single-period-opfs-retained" || isSinglePeriodCleanupFailureSignal(signal);
 }
 
 function uniqueSafeSignals(safeSignals: readonly string[]): string[] {
