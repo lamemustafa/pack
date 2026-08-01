@@ -318,7 +318,12 @@ function shouldRetainArtifactAcquisitionCheckpoint(
   // control but before it can prove the browser action quiesced. Keep the
   // intent so the next start routes it through recovery review instead of
   // repeating the portal action.
-  if (["checkpoint-failed", "generation-timeout"].includes(delivery.reason)) return true;
+  if (
+    ["checkpoint-failed", "generation-timeout", "main-world-execution-failed"].includes(
+      delivery.reason,
+    )
+  )
+    return true;
   // The browser already created an exact-ID item for these outcomes. It may
   // settle as safe later, but it must not be forgotten and repeated first.
   return (

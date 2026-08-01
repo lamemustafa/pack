@@ -83,6 +83,9 @@ describe("filed-return JSON main-world acquisition", () => {
       returnPeriod: string;
       returnType: "GSTR-3B" | "GSTR-2B";
     }) => Promise<unknown>;
+    const rebuiltMainWorldFunction = new Function(
+      `"use strict"; return (${executeMainWorld.toString()});`,
+    )() as typeof executeMainWorld;
     const [mainWorldInput] = mainWorldInjection.args;
     const encode = vi.fn();
     vi.stubGlobal("btoa", encode);
@@ -92,7 +95,7 @@ describe("filed-return JSON main-world acquisition", () => {
     );
     vi.stubGlobal("location", { origin: "https://return.gst.gov.in" });
     try {
-      await expect(executeMainWorld(mainWorldInput)).resolves.toEqual({
+      await expect(rebuiltMainWorldFunction(mainWorldInput)).resolves.toEqual({
         ok: false,
         reason: "too-large",
       });
@@ -126,6 +129,29 @@ describe("filed-return JSON main-world acquisition", () => {
     ).resolves.toEqual({ ok: false, reason: "target-period-mismatch", safeSignals: [] });
     expect(mocks.downloadAcquiredArtifact).not.toHaveBeenCalled();
   });
+
+  it.each(["missing result", "rejected execution"])(
+    "reports %s as a MAIN-world execution failure rather than an endpoint failure",
+    async (scenario) => {
+      if (scenario === "missing result")
+        vi.mocked(browser.scripting.executeScript).mockResolvedValue([] as never);
+      else
+        vi.mocked(browser.scripting.executeScript).mockRejectedValue(
+          new Error("synthetic rejection"),
+        );
+
+      await expect(
+        acquireFiledReturnJsonInMainWorld({
+          filename: "synthetic.json",
+          requestId: "main-world-failure",
+          returnPeriod: "062026",
+          returnType: "GSTR-3B",
+          tabId: 17,
+        }),
+      ).resolves.toEqual({ ok: false, reason: "main-world-execution-failed", safeSignals: [] });
+      expect(mocks.downloadAcquiredArtifact).not.toHaveBeenCalled();
+    },
+  );
 
   it("hands validated JSON to a worker-owned local stager when one is supplied", async () => {
     vi.mocked(browser.scripting.executeScript).mockResolvedValue([

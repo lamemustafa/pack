@@ -1,6 +1,10 @@
 import { browser } from "wxt/browser";
 import { validateArtifactBytes } from "../connectors/gst/artifact-validation";
-import { capturePortalPdfBlob } from "../connectors/gst/portal-blob-shim";
+import {
+  capturePortalPdfBlob,
+  MAX_PORTAL_BLOB_BYTES,
+  type PortalBlobShimResult,
+} from "../connectors/gst/portal-blob-shim";
 import { installPortalBlobDownloadSafetyNet } from "./artifact-download";
 
 const MIME_TYPES = {
@@ -22,27 +26,33 @@ export async function acquirePageGeneratedArtifact(input: {
 > {
   const safetyNet = installPortalBlobDownloadSafetyNet(input.tabId);
   try {
-    const [injection] = await browser.scripting.executeScript({
-      args: [
-        {
-          controlSelector: `[data-pack-artifact-request="${input.requestId}"]`,
-          expectedMime: MIME_TYPES[input.artifactType],
-          expectedTarget: {
-            financialYear: input.financialYear,
-            period: input.period,
-            returnType: input.returnType,
+    let captured: PortalBlobShimResult | undefined;
+    try {
+      const [injection] = await browser.scripting.executeScript({
+        args: [
+          {
+            controlSelector: `[data-pack-artifact-request="${input.requestId}"]`,
+            expectedMime: MIME_TYPES[input.artifactType],
+            maxPortalBlobBytes: MAX_PORTAL_BLOB_BYTES,
+            expectedTarget: {
+              financialYear: input.financialYear,
+              period: input.period,
+              returnType: input.returnType,
+            },
           },
-        },
-      ],
-      func: capturePortalPdfBlob,
-      target: { tabId: input.tabId },
-      world: "MAIN",
-    });
-    const captured = injection?.result;
+        ],
+        func: capturePortalPdfBlob,
+        target: { tabId: input.tabId },
+        world: "MAIN",
+      });
+      captured = injection?.result as PortalBlobShimResult | undefined;
+    } catch {
+      return { ok: false, reason: "main-world-execution-failed", safeSignals: [] };
+    }
     if (!captured?.ok)
       return {
         ok: false,
-        reason: captured?.reason ?? "generation-timeout",
+        reason: captured?.reason ?? "main-world-execution-failed",
         safeSignals: captured?.safeSignals ?? [],
       };
     await safetyNet.bind(captured.blobUrl);

@@ -7,12 +7,42 @@ function selectFilters(scope: Parameters<typeof selectFiledReturnsFiltersInMainW
   return selectFiledReturnsFiltersInMainWorld(scope, CLICKABLE_CONTROL_SELECTOR);
 }
 
+function rebuildInMainWorld<T extends (...args: never[]) => unknown>(func: T): T {
+  return new Function(`"use strict"; return (${func.toString()});`)() as T;
+}
+
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
 describe("main-world filed-return filter selection", () => {
+  it("survives Chrome's serialized MAIN-world function boundary", async () => {
+    vi.useFakeTimers();
+    const windowRef = new JSDOM(`<main>${gstr1FilterFields()}<button>Search</button></main>`)
+      .window;
+    const browserGlobals = windowRef as unknown as {
+      Event: typeof Event;
+      HTMLSelectElement: typeof HTMLSelectElement;
+    };
+    vi.stubGlobal("window", windowRef);
+    vi.stubGlobal("document", windowRef.document);
+    vi.stubGlobal("Event", browserGlobals.Event);
+    vi.stubGlobal("HTMLSelectElement", browserGlobals.HTMLSelectElement);
+    const executeInMainWorld = rebuildInMainWorld(selectFiledReturnsFiltersInMainWorld);
+
+    const outcome = executeInMainWorld(
+      { financialYear: "2026-27", period: "May", returnType: "GSTR-1" },
+      CLICKABLE_CONTROL_SELECTOR,
+    );
+    await vi.runAllTimersAsync();
+
+    await expect(outcome).resolves.toMatchObject({
+      state: "searched",
+      safeSignals: expect.arrayContaining(["main-world-search-clicked"]),
+    });
+  });
+
   it("selects GSTR-1 filing period and month despite unrelated page instructions", async () => {
     const windowRef = new JSDOM(`
       <main>

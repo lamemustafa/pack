@@ -1,6 +1,10 @@
 import { browser } from "wxt/browser";
 import { validateArtifactBytes } from "../connectors/gst/artifact-validation";
-import { capturePortalPdfBlob } from "../connectors/gst/portal-blob-shim";
+import {
+  capturePortalPdfBlob,
+  MAX_PORTAL_BLOB_BYTES,
+  type PortalBlobShimResult,
+} from "../connectors/gst/portal-blob-shim";
 import { downloadAcquiredArtifact, installPortalBlobDownloadSafetyNet } from "./artifact-download";
 
 export async function acquireGstr3bPdfAfterPreflight(input: {
@@ -22,27 +26,33 @@ export async function acquireGstr3bPdfAfterPreflight(input: {
 > {
   const safetyNet = installPortalBlobDownloadSafetyNet(input.tabId);
   try {
-    const [injection] = await browser.scripting.executeScript({
-      args: [
-        {
-          controlSelector: `[data-pack-artifact-request="${input.requestId}"]`,
-          expectedMime: "application/pdf",
-          expectedTarget: {
-            financialYear: input.financialYear,
-            period: input.period,
-            returnType: "GSTR-3B",
+    let captured: PortalBlobShimResult | undefined;
+    try {
+      const [injection] = await browser.scripting.executeScript({
+        args: [
+          {
+            controlSelector: `[data-pack-artifact-request="${input.requestId}"]`,
+            expectedMime: "application/pdf",
+            maxPortalBlobBytes: MAX_PORTAL_BLOB_BYTES,
+            expectedTarget: {
+              financialYear: input.financialYear,
+              period: input.period,
+              returnType: "GSTR-3B",
+            },
           },
-        },
-      ],
-      func: capturePortalPdfBlob,
-      target: { tabId: input.tabId },
-      world: "MAIN",
-    });
-    const captured = injection?.result;
+        ],
+        func: capturePortalPdfBlob,
+        target: { tabId: input.tabId },
+        world: "MAIN",
+      });
+      captured = injection?.result as PortalBlobShimResult | undefined;
+    } catch {
+      return { ok: false, reason: "main-world-execution-failed", safeSignals: [] };
+    }
     if (!captured?.ok) {
       return {
         ok: false,
-        reason: captured?.reason ?? "generation-timeout",
+        reason: captured?.reason ?? "main-world-execution-failed",
         safeSignals: captured?.safeSignals ?? [],
       };
     }

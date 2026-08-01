@@ -50,6 +50,7 @@ const RETAINED_TERMINAL_DELIVERY_FAILURES = [
   "danger-rejected",
   "empty",
   "generation-timeout",
+  "main-world-execution-failed",
   "interrupted",
   "search-unavailable",
 ] as const;
@@ -168,6 +169,29 @@ describe("GSTR-3B artifact acquisition checkpoint cleanup", () => {
 
     expect(mocks.session[artifactAcquisitionCheckpointKey(target)]).toEqual(
       expect.objectContaining({ downloadId: 91, state: "download-unconfirmed" }),
+    );
+  });
+
+  it("retains the PDF intent when MAIN-world execution cannot be proven", async () => {
+    mocks.acquireGstr3bPdfAfterPreflight.mockResolvedValueOnce({
+      ok: false,
+      reason: "main-world-execution-failed",
+      safeSignals: [],
+    });
+
+    await triggerAndObserveFiledReturnDownload({
+      activePeriod: "May",
+      artifactType: "PDF",
+      deps: {
+        sendMessageToTabWithInjection: vi.fn(async () => preparedPdf()),
+        storageKeys: {},
+      },
+      scope,
+      tabId: 17,
+    });
+
+    expect(mocks.session[artifactAcquisitionCheckpointKey(scope)]).toEqual(
+      expect.objectContaining({ state: "intent" }),
     );
   });
 
