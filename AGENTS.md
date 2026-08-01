@@ -92,6 +92,16 @@ and release metadata separately. Open PRs as draft. Never amend or rebase a push
 Before claiming readiness, run `pnpm review:gate` and disposition every automated finding as fixed
 with evidence, stale with evidence, rejected with evidence, or a linked follow-up.
 
+**The PR body is gated, not decorative.** `Review gate` fails the PR unless the body contains all
+of `Pack Workflow Preflight`, `Privacy And Data-Flow Impact`, `Sensitive Surface Review`,
+`Verification`, `PR Review Follow-Up` and `pnpm workflow:preflight`. That list is owned by
+`scripts/check-pr-review-gate.mjs` — read it there rather than trusting this sentence, and start
+from `.github/pull_request_template.md`, which already contains every section. `gh pr create --body`
+bypasses the template silently, so a body written from scratch will fail. This is worth stating
+because it fails _late_: the gate reports unresolved threads first, so a missing section only
+surfaces after every review comment is resolved, and it reads as a code problem when it is not.
+Four consecutive PRs were blocked this way.
+
 ## Boundaries
 
 ### Never
