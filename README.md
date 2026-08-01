@@ -190,8 +190,11 @@ Pack uses Chrome extension storage only inside the current browser profile.
 
 - `pack:install`: install/update metadata with product version, install
   timestamp, and `localOnly: true`;
-- `pack:active-filed-returns-run`: a short-lived local run lease used to prevent
-  overlapping filed-return downloads in the same browser profile;
+- `pack:active-filed-returns-run`: a local run lease used to prevent overlapping
+  filed-return downloads in the same browser profile. Its bounded status is
+  either `running` or `recovery-blocked`; the latter retains the same lease when
+  Pack cannot read temporary download recovery state, until explicit safe
+  recovery. It stores no added evidence or portal data;
 - `pack:full-fiscal-year-ledger`: local-only full fiscal year run status with
   ledger, schema, plan, connector and extension-version identifiers; financial
   year, period, return type and artifact type; target status, safe

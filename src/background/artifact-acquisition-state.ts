@@ -54,6 +54,11 @@ export type ArtifactAcquisitionCheckpointInspection =
   | { evidence: ArtifactAcquisitionCompletionEvidence; state: "completed" }
   | { state: "needs-review"; safeSignals: string[] };
 
+export type ArtifactAcquisitionCheckpointTarget = {
+  key: string;
+  target: ArtifactAcquisitionTarget;
+};
+
 export function artifactAcquisitionCheckpointKey(target: ArtifactAcquisitionTarget): string {
   const artifactType = target.artifactType ?? "PDF";
   return [KEY_PREFIX, target.returnType, target.financialYear, target.period, artifactType]
@@ -73,13 +78,13 @@ export async function hasArtifactAcquisitionCheckpoint(): Promise<boolean> {
  * it can act on the browser download ID inside it.
  */
 export async function readArtifactAcquisitionCheckpointTargets(): Promise<
-  ArtifactAcquisitionTarget[]
+  ArtifactAcquisitionCheckpointTarget[]
 > {
   const values = await browser.storage.session.get();
-  const targets = new Map<string, ArtifactAcquisitionTarget>();
+  const targets = new Map<string, ArtifactAcquisitionCheckpointTarget>();
   for (const key of Object.keys(values)) {
     const target = artifactAcquisitionTargetFromKey(key);
-    if (target) targets.set(key, target);
+    if (target) targets.set(key, { key, target });
   }
   return [...targets.values()];
 }
@@ -318,10 +323,17 @@ export async function reconcileArtifactAcquisitionCheckpoint(
  */
 export async function inspectArtifactAcquisitionCheckpoint(
   target: ArtifactAcquisitionTarget,
+  discoveredKey = artifactAcquisitionCheckpointKey(target),
 ): Promise<ArtifactAcquisitionCheckpointInspection> {
   const key = artifactAcquisitionCheckpointKey(target);
-  const stored = await browser.storage.session.get(key);
-  const storedCheckpoint = stored[key];
+  if (discoveredKey !== key) {
+    await browser.storage.session.set({
+      [discoveredKey]: MALFORMED_ARTIFACT_ACQUISITION_CHECKPOINT_SENTINEL,
+    });
+    return { state: "needs-review", safeSignals: ["artifact-acquisition-checkpoint-malformed"] };
+  }
+  const stored = await browser.storage.session.get(discoveredKey);
+  const storedCheckpoint = stored[discoveredKey];
   if (storedCheckpoint === undefined || storedCheckpoint === null) return { state: "retry-safe" };
   if (isMalformedArtifactAcquisitionCheckpointSentinel(storedCheckpoint)) {
     return { state: "needs-review", safeSignals: ["artifact-acquisition-checkpoint-malformed"] };

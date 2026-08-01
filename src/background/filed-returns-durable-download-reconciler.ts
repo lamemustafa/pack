@@ -18,6 +18,11 @@ import {
   persistFiledReturnsTargetReview,
   type FiledReturnsTargetReviewDeps,
 } from "./filed-returns-target-review";
+import {
+  markFiledReturnsRunRecoveryBlocked,
+  readActiveFiledReturnsRunStorageState,
+  resolveFiledReturnsRunForRecoveredCompletion,
+} from "./filed-returns-active-run";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import { reconcileFiledReturnsTargetDownload } from "./filed-returns-target-download-recovery";
 import { PACK_LOCAL_STORAGE_KEYS, PACK_SESSION_STORAGE_KEYS } from "./storage-keys";
@@ -38,7 +43,11 @@ export interface DurableDownloadReconcilerDownloads {
   search(query: { id: number }): Promise<DownloadCreatedItem[]>;
 }
 
-export interface DurableDownloadReconcilerDeps extends FiledReturnsTargetReviewDeps {
+export interface DurableDownloadReconcilerDeps extends Omit<
+  FiledReturnsTargetReviewDeps,
+  "storageKeys"
+> {
+  storageKeys: FiledReturnsTargetReviewDeps["storageKeys"] & { activeRun?: string };
   extensionId?: string;
   persistDownloadId?: (review: FiledReturnsTargetReview, downloadId: number) => Promise<boolean>;
   readCurrentReview?: () => Promise<FiledReturnsTargetReview | null>;
@@ -133,9 +142,10 @@ async function reconcileArtifactAcquisitionCheckpoints(
   deps: DurableDownloadReconcilerDeps,
 ): Promise<boolean> {
   let handled = false;
-  const targets = await readArtifactAcquisitionCheckpointTargets().catch(() => []);
-  for (const target of targets) {
-    const inspection = await inspectArtifactAcquisitionCheckpoint(target);
+  const checkpoints = await readArtifactAcquisitionCheckpointTargets().catch(() => null);
+  if (!checkpoints) return reconcileArtifactAcquisitionCheckpointReadFailure(deps);
+  for (const { key, target } of checkpoints) {
+    const inspection = await inspectArtifactAcquisitionCheckpoint(target, key);
     if (inspection.state === "retry-safe") continue;
     handled = true;
     if (inspection.state === "completed") {
@@ -144,7 +154,11 @@ async function reconcileArtifactAcquisitionCheckpoints(
         [inspection.evidence],
         deps,
       );
-      if (marker.state === "blocked") continue;
+      if (marker.state === "blocked" || (marker.state === "absent" && deps.storageKeys.activeRun)) {
+        continue;
+      }
+      const activeRun = await resolveFiledReturnsRunForRecoveredCompletion(target, deps);
+      if (activeRun.state === "blocked") continue;
       const summary = await persistArtifactAcquisitionCompletion(
         deps.storageKeys.completion,
         target,
@@ -163,6 +177,34 @@ async function reconcileArtifactAcquisitionCheckpoints(
     );
   }
   return handled;
+}
+
+/**
+ * A failed session read is retained ownership that could not be inspected, not
+ * an empty acquisition scan. The surviving local lease keeps its duplicate-run
+ * guard; the matching local review makes the reason visible to the user.
+ */
+async function reconcileArtifactAcquisitionCheckpointReadFailure(
+  deps: DurableDownloadReconcilerDeps,
+): Promise<boolean> {
+  if (!deps.storageKeys.activeRun) return false;
+  const activeRun = await readActiveFiledReturnsRunStorageState({
+    storageKeys: {
+      activeRun: deps.storageKeys.activeRun,
+    },
+    ...(deps.now ? { now: deps.now } : {}),
+  }).catch(() => null);
+  if (activeRun?.state !== "valid") return true;
+
+  await persistFiledReturnsTargetReview(
+    activeRun.run.scope,
+    artifactAcquisitionReviewStep(activeRun.run.scope, [
+      "artifact-acquisition-checkpoint-read-unavailable",
+    ]),
+    deps,
+  ).catch(() => undefined);
+  await markFiledReturnsRunRecoveryBlocked(activeRun.run.scope, deps);
+  return true;
 }
 
 function artifactAcquisitionReviewStep(
@@ -188,6 +230,7 @@ export function installFiledReturnsDurableDownloadReconciler(
   downloads?: DurableDownloadReconcilerDownloads,
   deps: DurableDownloadReconcilerDeps = {
     storageKeys: {
+      activeRun: PACK_LOCAL_STORAGE_KEYS.activeFiledReturnsRun,
       completion: PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary,
       targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview,
     },

@@ -4,7 +4,10 @@ import type {
   FiledReturnsFlowSummary,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
-import { isFiledReturnsArtifactType } from "../connectors/gst/filed-returns-artifacts";
+import {
+  isFiledReturnsArtifactType,
+  normaliseFiledReturnsArtifactType,
+} from "../connectors/gst/filed-returns-artifacts";
 import { isFiledReturnsReturnType } from "../connectors/gst/filed-returns-return-types";
 import {
   FILED_RETURNS_MONTHS,
@@ -39,7 +42,7 @@ export interface ActiveFiledReturnsRun {
   runId: string;
   revision: number;
   scope: FiledReturnsDownloadScope;
-  status: "running";
+  status: "running" | "recovery-blocked";
   leaseUpdatedAt: string;
 }
 
@@ -91,10 +94,76 @@ export async function releaseFiledReturnsRun(
   await runFiledReturnsOperationCriticalSection(async () => {
     const values = await browser.storage.local.get(key);
     const storedRun = activeRunStorageState(values[key], deps.now?.() ?? new Date());
-    if (storedRun.state === "valid" && storedRun.run.runId === run.runId) {
+    if (
+      storedRun.state === "valid" &&
+      storedRun.run.runId === run.runId &&
+      storedRun.run.status === "running"
+    ) {
       await browser.storage.local.remove(key);
     }
   });
+}
+
+/**
+ * Retains the existing duplicate-action lease when checkpoint storage cannot
+ * be read. The bounded status is rendered as a reason-specific blocked state;
+ * it is not a completion state and cannot be acknowledged away.
+ */
+export async function markFiledReturnsRunRecoveryBlocked(
+  scope: FiledReturnsDownloadScope,
+  deps: FiledReturnsActiveRunDeps,
+): Promise<{ state: "absent" | "marked" | "blocked" }> {
+  const key = deps.storageKeys.activeRun;
+  if (!key) return { state: "absent" };
+
+  try {
+    return await runFiledReturnsOperationCriticalSection(async () => {
+      const values = await browser.storage.local.get(key);
+      const storedRun = activeRunStorageState(values[key], deps.now?.() ?? new Date());
+      if (storedRun.state === "missing") return { state: "absent" };
+      if (storedRun.state === "malformed") return { state: "blocked" };
+      if (!sameExactFiledReturnsScope(storedRun.run.scope, scope)) return { state: "absent" };
+      if (storedRun.run.status === "recovery-blocked") return { state: "marked" };
+      await browser.storage.local.set({
+        [key]: {
+          ...storedRun.run,
+          revision: storedRun.run.revision + 1,
+          status: "recovery-blocked",
+        } satisfies ActiveFiledReturnsRun,
+      });
+      return { state: "marked" };
+    });
+  } catch {
+    return { state: "blocked" };
+  }
+}
+
+/**
+ * Removes the surviving lease that describes the exact target whose browser
+ * completion has already been proved. This happens before session-only
+ * completion persistence, so the current-state reader cannot prefer an
+ * interrupted lease over the recovered result after checkpoint cleanup.
+ */
+export async function resolveFiledReturnsRunForRecoveredCompletion(
+  scope: FiledReturnsDownloadScope,
+  deps: FiledReturnsActiveRunDeps,
+): Promise<{ state: "absent" | "resolved" | "blocked" }> {
+  const key = deps.storageKeys.activeRun;
+  if (!key) return { state: "absent" };
+
+  try {
+    return await runFiledReturnsOperationCriticalSection(async () => {
+      const values = await browser.storage.local.get(key);
+      const storedRun = activeRunStorageState(values[key], deps.now?.() ?? new Date());
+      if (storedRun.state === "missing") return { state: "absent" };
+      if (storedRun.state === "malformed") return { state: "blocked" };
+      if (!sameExactFiledReturnsScope(storedRun.run.scope, scope)) return { state: "absent" };
+      await browser.storage.local.remove(key);
+      return { state: "resolved" };
+    });
+  } catch {
+    return { state: "blocked" };
+  }
 }
 
 export function startFiledReturnsRunLeaseRenewal(
@@ -117,7 +186,13 @@ export async function renewFiledReturnsRunLease(
   await runFiledReturnsOperationCriticalSection(async () => {
     const values = await browser.storage.local.get(key);
     const storedRun = activeRunStorageState(values[key], deps.now?.() ?? new Date());
-    if (storedRun.state !== "valid" || storedRun.run.runId !== run.runId) return;
+    if (
+      storedRun.state !== "valid" ||
+      storedRun.run.runId !== run.runId ||
+      storedRun.run.status !== "running"
+    ) {
+      return;
+    }
 
     await browser.storage.local.set({
       [key]: {
@@ -172,7 +247,9 @@ export async function acknowledgeInterruptedFiledReturnsRun(
           };
     }
     const run = storedRun.run;
-    if (!isInterruptedRun(run, now)) return activeRunResponse(run, now);
+    if (run.status === "recovery-blocked" || !isInterruptedRun(run, now)) {
+      return activeRunResponse(run, now);
+    }
 
     await browser.storage.local.remove(key);
     return acknowledgedRunResponse(run);
@@ -222,7 +299,7 @@ function parseActiveRun(input: unknown, now: Date): ActiveFiledReturnsRun | null
   if (!isCanonicalFiledReturnsRunId(run.runId)) return null;
   const revision = run.revision;
   if (typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 1) return null;
-  if (run.status !== "running") return null;
+  if (run.status !== "running" && run.status !== "recovery-blocked") return null;
   if (!isCanonicalTimestamp(run.leaseUpdatedAt)) return null;
   const scope = parseActiveRunScope(run.scope, now);
   if (!scope) return null;
@@ -232,7 +309,7 @@ function parseActiveRun(input: unknown, now: Date): ActiveFiledReturnsRun | null
     runId: run.runId,
     schemaVersion: "1.0",
     scope,
-    status: "running",
+    status: run.status,
   };
 }
 
@@ -300,7 +377,7 @@ function isCanonicalTimestamp(input: unknown): input is string {
 
 function activeRunResponse(run: ActiveFiledReturnsRun, now: Date): PackMessageResponse {
   const interrupted = isInterruptedRun(run, now);
-  const flowStep = activeRunStep(interrupted, run.scope.returnType);
+  const flowStep = activeRunStep(interrupted, run.scope.returnType, run.status);
   return {
     ok: true,
     flowStep,
@@ -311,11 +388,11 @@ function activeRunResponse(run: ActiveFiledReturnsRun, now: Date): PackMessageRe
 function activeRunSummary(
   run: ActiveFiledReturnsRun,
   now: Date,
-  flowStep = activeRunStep(isInterruptedRun(run, now), run.scope.returnType),
+  flowStep = activeRunStep(isInterruptedRun(run, now), run.scope.returnType, run.status),
 ): FiledReturnsFlowSummary {
   return {
     scope: run.scope,
-    status: isInterruptedRun(run, now) ? "blocked" : "running",
+    status: run.status === "recovery-blocked" || isInterruptedRun(run, now) ? "blocked" : "running",
     completedPeriods: [],
     updatedAt: run.leaseUpdatedAt,
     flowStep,
@@ -371,6 +448,19 @@ function isInterruptedRun(run: ActiveFiledReturnsRun, now: Date): boolean {
   return now.getTime() - Date.parse(run.leaseUpdatedAt) > ACTIVE_RUN_REVIEW_MS;
 }
 
+function sameExactFiledReturnsScope(
+  left: FiledReturnsDownloadScope,
+  right: FiledReturnsDownloadScope,
+): boolean {
+  return (
+    left.financialYear === right.financialYear &&
+    left.period === right.period &&
+    left.returnType === right.returnType &&
+    normaliseFiledReturnsArtifactType(left.returnType, left.artifactType) ===
+      normaliseFiledReturnsArtifactType(right.returnType, right.artifactType)
+  );
+}
+
 function acknowledgedRunResponse(run?: ActiveFiledReturnsRun): PackMessageResponse {
   const flowStep: PortalFlowStepResult = {
     connectorId: "gst",
@@ -405,7 +495,23 @@ function acknowledgedRunResponse(run?: ActiveFiledReturnsRun): PackMessageRespon
 function activeRunStep(
   interrupted: boolean,
   returnType: FiledReturnsDownloadScope["returnType"] = "GSTR-3B",
+  status: ActiveFiledReturnsRun["status"] = "running",
 ): PortalFlowStepResult {
+  if (status === "recovery-blocked") {
+    return {
+      connectorId: "gst",
+      scopeId: filedReturnScopeId(returnType),
+      state: "blocked",
+      safeSignals: ["artifact-acquisition-checkpoint-read-unavailable"],
+      safeMessage:
+        "Pack could not read retained download recovery state and will not repeat this target automatically.",
+      userAction: {
+        type: "RETRY_PORTAL_GENERATION",
+        message: "Use Clear local Pack data only after checking browser Downloads.",
+        canResume: false,
+      },
+    };
+  }
   return {
     connectorId: "gst",
     scopeId: filedReturnScopeId(returnType),
