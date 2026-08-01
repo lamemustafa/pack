@@ -122,6 +122,14 @@ export interface FiledReturnsTargetReview {
 
 export interface FiledReturnsArtifactAcquisitionCompletion {
   artifactType: FiledReturnsConcreteArtifactType;
+  /**
+   * The exact browser download this artifact was reconciled from. Carried on the
+   * marker so a completion interrupted before review removal can be restored
+   * with the same evidence it was first proved by, rather than a weaker claim:
+   * the checkpoints holding these IDs live in storage.session and do not survive
+   * a browser restart or extension update, while the review does.
+   */
+  downloadId: number;
   requestId: string;
 }
 

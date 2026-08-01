@@ -65,8 +65,11 @@ For each release candidate:
   bytes. Shareable evidence must replace the runtime action id with a neutral
   `ACTION-*` alias and omit the browser download id.
 - Confirm an artifact-reconciled target review may retain an ordered set of
-  opaque per-artifact request identifiers only while it binds its completed
-  summary to pending review removal. The matching session flow summary may retain
+  opaque per-artifact request identifiers, each paired with the exact numeric
+  browser download ID it was reconciled from, only while it binds its completed
+  summary to pending review removal. The download ID is carried here because the
+  session checkpoints holding it do not survive a browser restart or extension
+  update, while this review does. The matching session flow summary may retain
   the same set for that one completion marker. Neither record may retain a raw
   filename, local path, URL/referrer, GSTIN/PAN, taxpayer name, portal HTML,
   credential, cookie, token, or artifact bytes.

@@ -147,7 +147,12 @@ export function parseDurableFiledReturnsFlowSummary(
   };
 }
 
-function parseArtifactAcquisitionCompletion(
+/**
+ * The single owner of the acquisition-completion marker shape. Exported because
+ * the target-review reader validates the same records: two copies of this rule
+ * drifted apart the moment `downloadId` was added to the marker.
+ */
+export function parseArtifactAcquisitionCompletion(
   input: unknown,
   scope: FiledReturnsDownloadScope,
 ): FiledReturnsFlowSummary["artifactAcquisitionCompletion"] | null {
@@ -160,14 +165,21 @@ function parseArtifactAcquisitionCompletion(
     if (!entry || typeof entry !== "object") return null;
     const value = entry as Record<string, unknown>;
     if (
-      !hasOnlyKeys(value, ["artifactType", "requestId"]) ||
+      !hasOnlyKeys(value, ["artifactType", "downloadId", "requestId"]) ||
       !isFiledReturnsConcreteArtifactType(value.artifactType) ||
       value.artifactType !== expectedArtifacts[index] ||
+      typeof value.downloadId !== "number" ||
+      !Number.isSafeInteger(value.downloadId) ||
+      value.downloadId < 0 ||
       !isCanonicalFiledReturnsActionId(value.requestId)
     ) {
       return null;
     }
-    return { artifactType: value.artifactType, requestId: value.requestId };
+    return {
+      artifactType: value.artifactType,
+      downloadId: value.downloadId,
+      requestId: value.requestId,
+    };
   });
   return completion.some((entry) => entry === null)
     ? null

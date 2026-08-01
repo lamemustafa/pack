@@ -213,7 +213,8 @@ Pack uses Chrome extension storage only inside the current browser profile.
   attempt kind/phase, request and bounded candidate-window timestamps, an opaque
   `actionId`, the exact numeric browser `downloadId`, opaque staging-ledger or
   selected-file checkpoint identifiers/revisions, and an opaque per-artifact
-  request-identity set only while binding a just-persisted artifact-reconciled
+  request-identity set, each paired with the exact numeric browser `downloadId`
+  it was reconciled from, only while binding a just-persisted artifact-reconciled
   completion to pending review removal, and sanitized endpoint/path,
   MIME, byte-count, status and error classes. It never stores the raw filename,
   local path, URL/referrer, GSTIN/PAN, taxpayer name, portal HTML, credentials,
@@ -228,8 +229,10 @@ Pack uses Chrome extension storage only inside the current browser profile.
   observation;
 - `pack:last-filed-returns-flow-summary`: the latest temporary filed-return flow
   status. An artifact-reconciled completion may additionally retain the same
-  opaque per-artifact request-identity set solely to prevent a later same-scope
-  acquisition from inheriting that prior completion;
+  opaque per-artifact request-identity set, each paired with its exact numeric
+  browser `downloadId`, solely to prevent a later same-scope acquisition from
+  inheriting that prior completion and to let an interrupted completion be
+  restored with the evidence it was first proved by;
 - `pack:last-gst-tab-id`: the browser tab ID of the most recent supported GST
   Portal tab, so a run can find its tab again without scanning every tab. A tab
   ID is a per-session integer assigned by the browser and carries no page, URL
