@@ -11,8 +11,68 @@ import {
   SINGLE_PERIOD_CLEANUP_CHECKPOINT_FAILURE_STAGES,
   singlePeriodCleanupCheckpointFailureSignal,
 } from "../../src/connectors/gst/single-period-cleanup-checkpoint";
+import { scoreFiledReturnDownloadCandidate } from "../../src/connectors/gst/filed-returns-download-candidates";
+import { scoreFiledReturnsSummaryModalDismissalCandidate } from "../../src/connectors/gst/filed-returns-navigation-candidates";
 
 describe("filed-return durable signal contract", () => {
+  it("keeps every live classifier signal inside the durable allow-list", () => {
+    // parseDurableFiledReturnsSignals fails closed: one unrecognised signal
+    // rejects the whole persisted summary. These two classifiers are live —
+    // filed-returns-download-candidates.ts and filed-returns-summary-overlay.ts
+    // call them in production — so any signal they gain must be added to the
+    // allow-list in the same change or recovery records silently vanish.
+    //
+    // This assertion previously lived in a case that also exercised the orphaned
+    // detail-page guard. That guard is deleted; the contract for these live
+    // classifiers is not, and is kept here on its own.
+    const emitted = new Set<string>();
+    const collect = (signals: readonly string[]) => {
+      for (const signal of signals) emitted.add(signal);
+    };
+
+    for (const scored of [
+      scoreFiledReturnDownloadCandidate(
+        { text: "DOWNLOAD FILED GSTR-3B SYSTEM GENERATED SAVE" },
+        "GSTR-3B",
+      ),
+      scoreFiledReturnDownloadCandidate({ text: "DOWNLOAD FILED GSTR-1 PDF SAVE EXCEL" }, "GSTR-1"),
+      scoreFiledReturnDownloadCandidate({ text: "DOWNLOAD PDF" }, "GSTR-1"),
+      scoreFiledReturnDownloadCandidate(
+        { text: "DOWNLOAD DETAILS E-INVOICES EXCEL PDF SAVE" },
+        "GSTR-1",
+        "EXCEL",
+      ),
+      scoreFiledReturnDownloadCandidate(
+        { text: "DOWNLOAD GSTR-2B SUMMARY PDF SAVE EXCEL" },
+        "GSTR-2B",
+      ),
+      scoreFiledReturnDownloadCandidate(
+        { text: "DOWNLOAD GSTR-2B DETAILS E-INVOICES EXCEL PDF SAVE" },
+        "GSTR-2B",
+        "EXCEL",
+      ),
+      scoreFiledReturnDownloadCandidate({ text: "GSTR-1" }, "GSTR-1"),
+    ]) {
+      collect(scored.safeSignals);
+    }
+
+    collect(
+      scoreFiledReturnsSummaryModalDismissalCandidate({
+        ariaLabel: "Close",
+        className: "close",
+        text: "",
+      }).safeSignals,
+    );
+    collect(scoreFiledReturnsSummaryModalDismissalCandidate({ text: "x" }).safeSignals);
+    collect(scoreFiledReturnsSummaryModalDismissalCandidate({ text: "Download" }).safeSignals);
+
+    const signals = [...emitted];
+    expect(signals.length).toBeGreaterThanOrEqual(20);
+    expect(signals.filter((signal) => !isDurableFiledReturnsSignal(signal))).toEqual([]);
+    const representative = signals.slice(0, 32);
+    expect(parseDurableFiledReturnsSignals(representative)).toEqual(representative);
+  });
+
   it("accepts only bounded OPFS clear error categories", () => {
     for (const prefix of ["filed-returns", "full-fiscal-year", "single-period"]) {
       expect(isDurableFiledReturnsSignal(`${prefix}-opfs-clear-error:clear-failed`)).toBe(true);
