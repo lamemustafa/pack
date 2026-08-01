@@ -125,7 +125,9 @@ describe("live run evidence", () => {
       );
     expect(invalidGstr3bArtifact.ok).toBe(false);
     if (!invalidGstr3bArtifact.ok)
-      expect(invalidGstr3bArtifact.errors).toContain("GSTR-3B evidence must use artifactType PDF");
+      expect(invalidGstr3bArtifact.errors).toContain(
+        "artifactType is not supported for returnType",
+      );
     expect(invalidFullYearPeriod.ok).toBe(false);
     if (!invalidFullYearPeriod.ok)
       expect(invalidFullYearPeriod.errors).toContain(
@@ -134,7 +136,7 @@ describe("live run evidence", () => {
     expect(validGstr1Combined).toMatchObject({ ok: true });
   });
 
-  it("requires both concrete artifacts for every downloaded combined period", () => {
+  it("requires every selected concrete artifact for each downloaded combined period", () => {
     const pdfOnly = createValidEvidence().downloadEvidence[0];
     const result = validateLiveRunEvidence({
       ...createValidEvidence(),
@@ -156,12 +158,34 @@ describe("live run evidence", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.errors).toContain(
-        "pass combined evidence must include PDF and EXCEL for each downloaded period",
+        "pass evidence must include PDF, EXCEL for each downloaded period",
       );
     }
   });
 
-  it("accepts redacted GSTR-2B PDF and Excel evidence metadata", () => {
+  it("requires and accepts PDF, Excel, and JSON GSTR-2B all-formats evidence metadata", () => {
+    const pdfAndExcelOnly = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      returnType: "GSTR-2B",
+      artifactType: "PDF_AND_EXCEL",
+      downloadEvidence: [
+        {
+          ...createValidEvidence().downloadEvidence[0],
+          actionId: "ACTION-1",
+          returnType: "GSTR-2B",
+          endpointClass: "gstr2b-portal-blob-captured-download",
+          downloadPathClass: "captured-portal-request-data",
+        },
+        {
+          ...createValidEvidence().downloadEvidence[0],
+          actionId: "ACTION-2",
+          artifactType: "EXCEL",
+          returnType: "GSTR-2B",
+          endpointClass: "gstr2b-portal-blob-captured-download",
+          downloadPathClass: "captured-portal-request-data",
+        },
+      ],
+    });
     expect(
       validateLiveRunEvidence({
         ...createValidEvidence(),
@@ -183,9 +207,47 @@ describe("live run evidence", () => {
             endpointClass: "gstr2b-portal-blob-captured-download",
             downloadPathClass: "captured-portal-request-data",
           },
+          {
+            ...createValidEvidence().downloadEvidence[0],
+            actionId: "ACTION-3",
+            artifactType: "JSON",
+            returnType: "GSTR-2B",
+            endpointClass: "gstr2b-portal-blob-captured-download",
+            downloadPathClass: "captured-portal-request-data",
+          },
         ],
       }),
     ).toMatchObject({ ok: true });
+    expect(pdfAndExcelOnly.ok).toBe(false);
+    if (!pdfAndExcelOnly.ok) {
+      expect(pdfAndExcelOnly.errors).toContain(
+        "pass evidence must include PDF, EXCEL, JSON for each downloaded period",
+      );
+    }
+  });
+
+  it("accepts standalone JSON evidence metadata for GSTR-2B and GSTR-3B", () => {
+    for (const returnType of ["GSTR-2B", "GSTR-3B"] as const) {
+      expect(
+        validateLiveRunEvidence({
+          ...createValidEvidence(),
+          returnType,
+          artifactType: "JSON",
+          downloadEvidence: [
+            {
+              ...createValidEvidence().downloadEvidence[0],
+              artifactType: "JSON",
+              returnType,
+              endpointClass:
+                returnType === "GSTR-2B"
+                  ? "gstr2b-portal-blob-captured-download"
+                  : "gstr3b-portal-blob-captured-download",
+              downloadPathClass: "captured-portal-request-data",
+            },
+          ],
+        }),
+      ).toMatchObject({ ok: true });
+    }
   });
 
   it("accepts captured GSTR-3B endpoint evidence metadata", () => {

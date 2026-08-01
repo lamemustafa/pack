@@ -74,6 +74,10 @@ For a one-month or full-year exploratory run, record:
 - browser name/version and clean-profile confirmation;
 - subject alias such as `SUBJECT-A`, never GSTIN/PAN/name;
 - return type, artifact type, financial year, and period scope;
+- one alias-only download-evidence row per concrete selected artifact. A passing
+  GSTR-2B `PDF_AND_EXCEL` selection must show PDF, Excel, and portal-data JSON
+  for every downloaded period; standalone GSTR-2B and GSTR-3B JSON selections
+  each use one JSON row;
 - scenario: `single-period` or `full-year`;
 - outcome counts: eligible targets, downloaded, not filed, manually observed,
   blocked, failed, duplicates;

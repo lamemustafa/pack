@@ -1,7 +1,7 @@
 export type LiveRunScenario = "single-period" | "full-year";
 export type LiveRunOutcome = "pass" | "blocked" | "failed";
 export type LiveRunReturnType = "GSTR-3B" | "GSTR-1" | "GSTR-2B";
-export type LiveRunArtifactType = "PDF" | "EXCEL" | "PDF_AND_EXCEL";
+export type LiveRunArtifactType = "PDF" | "JSON" | "EXCEL" | "PDF_AND_EXCEL";
 export type LiveRunDownloadPathClass =
   | "portal-click-https"
   | "portal-click-blob"
@@ -64,7 +64,7 @@ export interface LiveRunEvidence {
 export interface LiveRunDownloadEvidence {
   actionId: string;
   returnType: LiveRunReturnType;
-  artifactType: "PDF" | "EXCEL";
+  artifactType: "PDF" | "JSON" | "EXCEL";
   financialYear: string;
   period: string;
   endpointClass: LiveRunEndpointClass;

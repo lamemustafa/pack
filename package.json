@@ -44,7 +44,7 @@
     "verify:clean": "node scripts/assert-clean-worktree.mjs",
     "review:gate": "node scripts/check-pr-review-gate.mjs",
     "validate:evidence": "node scripts/validate-live-run-evidence.mjs",
-    "evidence:template": "node scripts/create-live-run-evidence-template.mjs",
+    "evidence:template": "node --experimental-strip-types scripts/create-live-run-evidence-template.mjs",
     "verify:local": "pnpm install --frozen-lockfile && node scripts/run-dependency-audit.mjs && wxt prepare && prettier --check . && eslint . --max-warnings 0 && tsc --noEmit && vitest run && wxt build && node scripts/verify-extension-package.mjs .output/chrome-mv3 && git diff --check",
     "verify": "pnpm verify:local",
     "verify:release": "pnpm verify:local && pnpm verify:clean && wxt zip && node scripts/verify-extension-zip.mjs",

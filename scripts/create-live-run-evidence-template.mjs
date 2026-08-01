@@ -4,8 +4,15 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { readdirSync } from "node:fs";
 import path from "node:path";
 
+const {
+  FILED_RETURNS_ARTIFACT_TYPES,
+  concreteFiledReturnsArtifactTypesForSelection,
+  supportsFiledReturnsArtifactType,
+} = await import("../src/connectors/gst/filed-returns-artifacts.ts");
+const { validateLiveRunEvidence } = await import("./lib/live-run-evidence.ts");
+
 const RETURN_TYPES = ["GSTR-3B", "GSTR-1", "GSTR-2B"];
-const ARTIFACT_TYPES = ["PDF", "EXCEL", "PDF_AND_EXCEL"];
+const ARTIFACT_TYPES = FILED_RETURNS_ARTIFACT_TYPES;
 const MONTHS = [
   "April",
   "May",
@@ -56,8 +63,8 @@ try {
   const outcome = options.outcome ?? "blocked";
   requireOneOfValue(outcome, OUTCOMES, "outcome");
 
-  if (returnType === "GSTR-3B" && artifactType !== "PDF") {
-    throw new Error("GSTR-3B evidence must use --artifact-type PDF.");
+  if (!supportsFiledReturnsArtifactType(returnType, artifactType)) {
+    throw new Error("--artifact-type is not supported for --return-type.");
   }
   if (scenario === "full-year" && period !== "FULL_FISCAL_YEAR") {
     throw new Error("Full-year evidence must use --period FULL_FISCAL_YEAR.");
@@ -178,6 +185,11 @@ try {
       containsScreenshotOrVideo: false,
     },
   };
+
+  const validation = validateLiveRunEvidence(evidence);
+  if (!validation.ok) {
+    throw new Error(`Generated evidence is not shareable: ${validation.errors.join("; ")}`);
+  }
 
   const output = `${JSON.stringify(evidence, null, 2)}\n`;
   if (options.output) {
@@ -329,10 +341,7 @@ function createDownloadEvidenceRows({
   zipSha256,
 }) {
   const targetCount = outcome === "pass" ? counts.downloaded : 1;
-  const concreteArtifacts =
-    outcome === "pass" && artifactType === "PDF_AND_EXCEL"
-      ? ["PDF", "EXCEL"]
-      : [artifactType === "PDF_AND_EXCEL" ? "PDF" : artifactType];
+  const concreteArtifacts = concreteFiledReturnsArtifactTypesForSelection(returnType, artifactType);
   return Array.from({ length: targetCount }, (_, targetIndex) =>
     concreteArtifacts.map((concreteArtifact, artifactIndex) => ({
       actionId: `ACTION-${targetIndex * concreteArtifacts.length + artifactIndex + 1}`,

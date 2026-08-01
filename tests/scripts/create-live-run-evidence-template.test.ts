@@ -7,6 +7,7 @@ import { validateLiveRunEvidence } from "../../scripts/lib/live-run-evidence";
 
 const rootDir = process.cwd();
 const scriptPath = path.join(rootDir, "scripts", "create-live-run-evidence-template.mjs");
+const scriptArgs = ["--experimental-strip-types", scriptPath];
 const stableArgs = [
   "--source-commit",
   "0123456789abcdef0123456789abcdef01234567",
@@ -64,7 +65,7 @@ describe("live evidence template generator", () => {
     const failed = spawnSync(
       process.execPath,
       [
-        scriptPath,
+        ...scriptArgs,
         "--return-type",
         "GSTR-1",
         "--artifact-type",
@@ -130,6 +131,98 @@ describe("live evidence template generator", () => {
     expect(
       new Set(evidence.downloadEvidence.map((row: { actionId: string }) => row.actionId)).size,
     ).toBe(24);
+  });
+
+  it("creates one JSON row beside PDF and Excel for passing GSTR-2B all-formats evidence", () => {
+    const evidence = runTemplate([
+      "--return-type",
+      "GSTR-2B",
+      "--artifact-type",
+      "PDF_AND_EXCEL",
+      "--financial-year",
+      "2025-26",
+      "--period",
+      "FULL_FISCAL_YEAR",
+      "--outcome",
+      "pass",
+      "--clean-test-profile",
+      "--human-verified-account",
+      "--human-verified-periods",
+      "--all-files-non-empty",
+      "--service-worker-restart-resume-checked",
+      "--browser-restart-resume-checked",
+      "--clear-local-data-checked",
+      "--browser-summary-captured",
+      ...stableArgs,
+    ]);
+
+    expect(validateLiveRunEvidence(evidence)).toMatchObject({ ok: true });
+    expect(evidence.downloadEvidence).toHaveLength(36);
+    const artifactsByPeriod = new Map<string, Set<string>>();
+    for (const row of evidence.downloadEvidence) {
+      const artifacts = artifactsByPeriod.get(row.period) ?? new Set<string>();
+      artifacts.add(row.artifactType);
+      artifactsByPeriod.set(row.period, artifacts);
+    }
+    expect(artifactsByPeriod.size).toBe(12);
+    for (const artifacts of artifactsByPeriod.values()) {
+      expect([...artifacts].sort()).toEqual(["EXCEL", "JSON", "PDF"]);
+    }
+  });
+
+  it("creates standalone GSTR-2B and GSTR-3B JSON evidence templates", () => {
+    for (const returnType of ["GSTR-2B", "GSTR-3B"]) {
+      const evidence = runTemplate([
+        "--return-type",
+        returnType,
+        "--artifact-type",
+        "JSON",
+        "--financial-year",
+        "2025-26",
+        "--period",
+        "April",
+        "--outcome",
+        "pass",
+        "--clean-test-profile",
+        "--human-verified-account",
+        "--human-verified-periods",
+        "--all-files-non-empty",
+        "--clear-local-data-checked",
+        "--browser-summary-captured",
+        ...stableArgs,
+      ]);
+
+      expect(validateLiveRunEvidence(evidence)).toMatchObject({ ok: true });
+      expect(evidence.downloadEvidence).toHaveLength(1);
+      expect(evidence.downloadEvidence[0]).toMatchObject({ artifactType: "JSON", returnType });
+    }
+  });
+
+  it("rejects a non-neutral subject alias before emitting the evidence template", () => {
+    const failed = spawnSync(
+      process.execPath,
+      [
+        ...scriptArgs,
+        "--return-type",
+        "GSTR-2B",
+        "--artifact-type",
+        "JSON",
+        "--financial-year",
+        "2025-26",
+        "--period",
+        "April",
+        "--subject-alias",
+        "not-an-alias",
+        ...stableArgs,
+      ],
+      {
+        cwd: rootDir,
+        encoding: "utf8",
+      },
+    );
+
+    expect(failed.status).toBe(1);
+    expect(failed.stderr).toContain("subjectAlias must be a neutral SUBJECT-* alias");
   });
 
   it("does not fabricate download rows when every passing target was not filed", () => {
@@ -212,7 +305,7 @@ describe("live evidence template generator", () => {
     const failed = spawnSync(
       process.execPath,
       [
-        scriptPath,
+        ...scriptArgs,
         "--return-type",
         "GSTR-1",
         "--artifact-type",
@@ -254,7 +347,7 @@ describe("live evidence template generator", () => {
       execFileSync(
         process.execPath,
         [
-          scriptPath,
+          ...scriptArgs,
           "--return-type",
           "GSTR-1",
           "--artifact-type",
@@ -284,7 +377,7 @@ describe("live evidence template generator", () => {
 
 function runTemplate(args: string[]) {
   return JSON.parse(
-    execFileSync(process.execPath, [scriptPath, ...args], {
+    execFileSync(process.execPath, [...scriptArgs, ...args], {
       cwd: rootDir,
       encoding: "utf8",
     }),
