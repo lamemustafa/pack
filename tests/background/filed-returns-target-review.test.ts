@@ -20,30 +20,43 @@ import {
   markSinglePeriodBundleZipIntent,
 } from "../../src/background/filed-returns-single-period-bundle-ledger";
 
-const browserMocks = vi.hoisted(() => ({
-  storage: {
-    local: {
-      get: vi.fn(async (_key?: unknown): Promise<Record<string, unknown>> => {
-        void _key;
-        return {};
-      }),
-      remove: vi.fn(async (_key?: unknown) => {
-        void _key;
-      }),
-      set: vi.fn(async (_values: Record<string, unknown>) => {
-        void _values;
-      }),
+const browserMocks = vi.hoisted(() => {
+  const sessionValues: Record<string, unknown> = {};
+  return {
+    storage: {
+      local: {
+        get: vi.fn(async (_key?: unknown): Promise<Record<string, unknown>> => {
+          void _key;
+          return {};
+        }),
+        remove: vi.fn(async (_key?: unknown) => {
+          void _key;
+        }),
+        set: vi.fn(async (_values: Record<string, unknown>) => {
+          void _values;
+        }),
+      },
+      session: {
+        values: sessionValues,
+        get: vi.fn(async (key: string) =>
+          Object.hasOwn(sessionValues, key) ? { [key]: sessionValues[key] } : {},
+        ),
+        remove: vi.fn(async (key: string) => {
+          delete sessionValues[key];
+        }),
+        set: vi.fn(async (values: Record<string, unknown>) => {
+          Object.assign(sessionValues, values);
+        }),
+      },
     },
-    session: {
-      set: vi.fn(async () => undefined),
-    },
-  },
-}));
+  };
+});
 const zipMocks = vi.hoisted(() => ({
   discardSinglePeriodFiledReturnsZip: vi.fn(async () => ["single-period-opfs-cleared"]),
 }));
 const acquisitionMocks = vi.hoisted(() => ({
   clearArtifactAcquisitionCheckpoints: vi.fn(),
+  clearArtifactAcquisitionCheckpointsAfterPersistedSummary: vi.fn(),
 }));
 
 vi.mock("wxt/browser", () => ({
@@ -63,9 +76,14 @@ describe("filed returns target review", () => {
       void _values;
     });
     browserMocks.storage.local.remove.mockResolvedValue(undefined);
-    browserMocks.storage.session.set.mockResolvedValue(undefined);
+    for (const key of Object.keys(browserMocks.storage.session.values)) {
+      delete browserMocks.storage.session.values[key];
+    }
     zipMocks.discardSinglePeriodFiledReturnsZip.mockResolvedValue(["single-period-opfs-cleared"]);
-    acquisitionMocks.clearArtifactAcquisitionCheckpoints.mockResolvedValue(true);
+    acquisitionMocks.clearArtifactAcquisitionCheckpoints.mockResolvedValue({ state: "cleared" });
+    acquisitionMocks.clearArtifactAcquisitionCheckpointsAfterPersistedSummary.mockResolvedValue(
+      undefined,
+    );
   });
 
   it("records a manual observation without completing or clearing the unresolved target", async () => {
@@ -170,6 +188,69 @@ describe("filed returns target review", () => {
     expect(response.flowStep.safeSignals).not.toContain("single-period-zip-downloaded");
   });
 
+  it("persists an evidenced acquisition reconciliation as complete and removes its target review", async () => {
+    const scope = {
+      artifactType: "PDF" as const,
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-3B" as const,
+    };
+    const localValues: Record<string, unknown> = {
+      "target-review": {
+        revision: 1,
+        safeMessage: "Pack retained unresolved artifact recovery.",
+        safeSignals: ["artifact-acquisition-download-completed-unpersisted"],
+        schemaVersion: "1.0",
+        scope,
+        status: "download-unconfirmed",
+        targetId: "GSTR-3B:2025-26:May",
+        updatedAt: "2026-08-01T00:00:00.000Z",
+      },
+    };
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      typeof key === "string" && Object.hasOwn(localValues, key) ? { [key]: localValues[key] } : {},
+    );
+    browserMocks.storage.local.set.mockImplementation(async (values: Record<string, unknown>) => {
+      Object.assign(localValues, values);
+    });
+    browserMocks.storage.local.remove.mockImplementation(async (keys: unknown) => {
+      for (const key of Array.isArray(keys) ? keys : [keys]) {
+        if (typeof key === "string") delete localValues[key];
+      }
+    });
+    acquisitionMocks.clearArtifactAcquisitionCheckpoints.mockResolvedValue({
+      state: "completed",
+      evidence: [{ artifactType: "PDF", downloadId: 9, requestId: "request-may-pdf" }],
+    });
+
+    await resolveUnconfirmedFiledReturnsDownload(scope, "cancelled", {
+      storageKeys: { completion: "completion", targetReview: "target-review" },
+      now: () => new Date("2026-08-01T00:00:05.000Z"),
+    });
+
+    expect(
+      parseDurableFiledReturnsFlowSummary(browserMocks.storage.session.values.completion),
+    ).toMatchObject({
+      completedPeriods: ["May"],
+      flowStep: {
+        safeSignals: expect.arrayContaining([
+          "artifact-acquisition-download-reconciled",
+          "browser-download-completed",
+          "browser-download-id:9",
+          "browser-download-non-empty",
+        ]),
+        state: "downloaded",
+      },
+      status: "complete",
+    });
+    expect(localValues["target-review"]).toBeUndefined();
+    expect(
+      acquisitionMocks.clearArtifactAcquisitionCheckpointsAfterPersistedSummary,
+    ).toHaveBeenCalledWith(scope, [
+      { artifactType: "PDF", downloadId: 9, requestId: "request-may-pdf" },
+    ]);
+  });
+
   it("keeps retained acquisition recovery blocked when an exact download cannot be cancelled", async () => {
     const scope = {
       artifactType: "PDF" as const,
@@ -188,7 +269,7 @@ describe("filed returns target review", () => {
       updatedAt: "2026-08-01T00:00:00.000Z",
     };
     browserMocks.storage.local.get.mockResolvedValue({ "target-review": review });
-    acquisitionMocks.clearArtifactAcquisitionCheckpoints.mockResolvedValue(false);
+    acquisitionMocks.clearArtifactAcquisitionCheckpoints.mockResolvedValue({ state: "blocked" });
 
     const response = await resolveUnconfirmedFiledReturnsDownload(scope, "cancelled", {
       storageKeys: { completion: "completion", targetReview: "target-review" },
