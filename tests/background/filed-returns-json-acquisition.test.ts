@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { browser } from "wxt/browser";
+import { MAX_ARTIFACT_BYTES } from "../../src/connectors/gst/artifact-validation";
 
 const mocks = vi.hoisted(() => ({
   downloadAcquiredArtifact: vi.fn(),
@@ -50,7 +51,13 @@ describe("filed-return JSON main-world acquisition", () => {
 
     expect(browser.scripting.executeScript).toHaveBeenCalledWith(
       expect.objectContaining({
-        args: [{ returnPeriod: "062026", returnType: "GSTR-3B" }],
+        args: [
+          {
+            maxArtifactBytes: MAX_ARTIFACT_BYTES,
+            returnPeriod: "062026",
+            returnType: "GSTR-3B",
+          },
+        ],
         target: { tabId: 17 },
         world: "MAIN",
       }),
@@ -61,6 +68,38 @@ describe("filed-return JSON main-world acquisition", () => {
         mimeType: "application/json",
       }),
     );
+
+    const [injection] = vi.mocked(browser.scripting.executeScript).mock.calls[0] ?? [];
+    const mainWorldInjection = injection as unknown as {
+      args: [{ maxArtifactBytes: number; returnPeriod: string; returnType: "GSTR-3B" | "GSTR-2B" }];
+      func: (input: {
+        maxArtifactBytes: number;
+        returnPeriod: string;
+        returnType: "GSTR-3B" | "GSTR-2B";
+      }) => Promise<unknown>;
+    };
+    const executeMainWorld = mainWorldInjection.func as (input: {
+      maxArtifactBytes: number;
+      returnPeriod: string;
+      returnType: "GSTR-3B" | "GSTR-2B";
+    }) => Promise<unknown>;
+    const [mainWorldInput] = mainWorldInjection.args;
+    const encode = vi.fn();
+    vi.stubGlobal("btoa", encode);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(new Uint8Array(MAX_ARTIFACT_BYTES + 1))),
+    );
+    vi.stubGlobal("location", { origin: "https://return.gst.gov.in" });
+    try {
+      await expect(executeMainWorld(mainWorldInput)).resolves.toEqual({
+        ok: false,
+        reason: "too-large",
+      });
+      expect(encode).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("fails closed when the worker receives JSON for another return period", async () => {
