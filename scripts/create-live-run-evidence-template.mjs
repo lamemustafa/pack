@@ -66,6 +66,17 @@ try {
   if (!supportsFiledReturnsArtifactType(returnType, artifactType)) {
     throw new Error("--artifact-type is not supported for --return-type.");
   }
+  if (returnType === "GSTR-3B" && artifactType === "JSON" && outcome === "pass") {
+    // Refuse rather than emit evidence nothing can back. GSTR-3B portal data is
+    // acquired by a direct authenticated same-origin fetch that attaches no
+    // download diagnostic, and the canonical endpoint-class rule admits no
+    // GSTR-3B/JSON pairing, so the only truthful class is `unknown` — which
+    // shareable pass evidence forbids. Passing evidence for this artifact
+    // becomes expressible once the runtime retains a diagnostic for that path.
+    throw new Error(
+      "Passing GSTR-3B JSON evidence is not supported: the direct JSON fetch path retains no download diagnostic, so no endpoint class can back it. Record this run as blocked, or add runtime diagnostic support first.",
+    );
+  }
   if (scenario === "full-year" && period !== "FULL_FISCAL_YEAR") {
     throw new Error("Full-year evidence must use --period FULL_FISCAL_YEAR.");
   }
@@ -321,6 +332,14 @@ function collectLimitations(input, { checks, outcome, profile, scenario }) {
 }
 
 function defaultEndpointClass(returnType, artifactType) {
+  // GSTR-3B portal data (JSON) has no endpoint class the runtime can back: its
+  // direct same-origin fetch path attaches no download diagnostic, and the
+  // canonical `isFiledReturnsEndpointClassForArtifact` admits no GSTR-3B/JSON
+  // pairing. `unknown` is the only truthful default; naming a blob-captured
+  // class let the generator emit passing evidence nothing could support.
+  // GSTR-2B JSON is different and is left alone — the canonical rule does admit
+  // it with the GSTR-2B blob-captured class.
+  if (returnType === "GSTR-3B" && artifactType === "JSON") return "unknown";
   if (returnType === "GSTR-3B") return "gstr3b-portal-blob-captured-download";
   if (returnType === "GSTR-1" && artifactType === "EXCEL") {
     return "gstr1-excel-portal-blob-captured-download";

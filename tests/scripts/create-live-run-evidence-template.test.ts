@@ -170,8 +170,8 @@ describe("live evidence template generator", () => {
     }
   });
 
-  it("creates standalone GSTR-2B and GSTR-3B JSON evidence templates", () => {
-    for (const returnType of ["GSTR-2B", "GSTR-3B"]) {
+  it("creates a standalone GSTR-2B JSON evidence template", () => {
+    for (const returnType of ["GSTR-2B"]) {
       const evidence = runTemplate([
         "--return-type",
         returnType,
@@ -196,6 +196,43 @@ describe("live evidence template generator", () => {
       expect(evidence.downloadEvidence).toHaveLength(1);
       expect(evidence.downloadEvidence[0]).toMatchObject({ artifactType: "JSON", returnType });
     }
+  });
+
+  it("refuses passing GSTR-3B JSON evidence the runtime cannot back", () => {
+    // The direct GSTR-3B JSON fetch attaches no download diagnostic, and the
+    // canonical endpoint-class rule admits no GSTR-3B/JSON pairing, so the only
+    // truthful class is `unknown` — which shareable pass evidence forbids.
+    // Emitting a blob-captured class instead would certify a path that does not
+    // exist, which is worse than refusing.
+    const failed = spawnSync(
+      process.execPath,
+      [
+        ...scriptArgs,
+        "--return-type",
+        "GSTR-3B",
+        "--artifact-type",
+        "JSON",
+        "--financial-year",
+        "2025-26",
+        "--period",
+        "April",
+        "--outcome",
+        "pass",
+        "--clean-test-profile",
+        "--human-verified-account",
+        "--human-verified-periods",
+        "--all-files-non-empty",
+        "--clear-local-data-checked",
+        "--browser-summary-captured",
+        ...stableArgs,
+      ],
+      { encoding: "utf8" },
+    );
+
+    expect(failed.status).not.toBe(0);
+    expect(`${failed.stderr}${failed.stdout}`).toContain(
+      "Passing GSTR-3B JSON evidence is not supported",
+    );
   });
 
   it("rejects a non-neutral subject alias before emitting the evidence template", () => {

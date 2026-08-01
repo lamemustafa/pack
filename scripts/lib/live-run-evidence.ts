@@ -430,15 +430,17 @@ function validateDownloadEndpointPathConsistency(
 }
 
 function isSupportedLiveRunEvidenceEndpoint(entry: LiveRunDownloadEvidence): boolean {
-  return (
-    (entry.returnType === "GSTR-3B" &&
-      entry.artifactType === "JSON" &&
-      entry.endpointClass === "gstr3b-portal-blob-captured-download") ||
-    isFiledReturnsEndpointClassForArtifact(
-      entry.endpointClass,
-      entry.returnType,
-      entry.artifactType,
-    )
+  // Defer entirely to the canonical predicate. The exception that used to sit
+  // here accepted `gstr3b-portal-blob-captured-download` for GSTR-3B JSON, a
+  // pairing the canonical rule rejects and the runtime never produces: the
+  // direct JSON fetch path attaches no diagnostic at all. Evidence for a JSON
+  // artifact therefore carries `unknown`, which the canonical predicate already
+  // admits. A local exception here could only ever certify something the
+  // runtime cannot back.
+  return isFiledReturnsEndpointClassForArtifact(
+    entry.endpointClass,
+    entry.returnType,
+    entry.artifactType,
   );
 }
 
