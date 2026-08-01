@@ -12,6 +12,7 @@ type JsonAcquisitionResult =
       safeSignals: string[];
     }
   | { ok: false; reason: string; safeSignals: string[] };
+type MainWorldJsonCaptureResult = { ok: true; base64: string } | { ok: false; reason: string };
 
 export async function acquireFiledReturnJsonInMainWorld(input: {
   deliver?: (input: { base64: string; mimeType: string }) => Promise<JsonAcquisitionResult>;
@@ -23,6 +24,7 @@ export async function acquireFiledReturnJsonInMainWorld(input: {
   returnType: JsonReturnType;
   tabId: number;
 }): Promise<JsonAcquisitionResult> {
+  let captured: MainWorldJsonCaptureResult | undefined;
   try {
     const [injection] = await browser.scripting.executeScript({
       args: [
@@ -36,17 +38,30 @@ export async function acquireFiledReturnJsonInMainWorld(input: {
       target: { tabId: input.tabId },
       world: "MAIN",
     });
-    const captured = injection?.result;
-    if (!captured?.ok) {
-      return { ok: false, reason: captured?.reason ?? "endpoint-unavailable", safeSignals: [] };
+    captured = injection?.result as MainWorldJsonCaptureResult | undefined;
+  } catch {
+    return { ok: false, reason: "main-world-execution-failed", safeSignals: [] };
+  }
+  if (!captured?.ok) {
+    return {
+      ok: false,
+      reason: captured?.reason ?? "main-world-execution-failed",
+      safeSignals: [],
+    };
+  }
+  const bytes = Uint8Array.from(atob(captured.base64), (value) => value.charCodeAt(0));
+  const validation = validateArtifactBytes(bytes, "JSON", input.returnPeriod, input.returnType);
+  if (!validation.ok) return { ok: false, reason: validation.reason, safeSignals: [] };
+  if (input.deliver) {
+    try {
+      return await input.deliver({ base64: captured.base64, mimeType: validation.mimeType });
+    } catch {
+      return { ok: false, reason: "delivery-unconfirmed", safeSignals: [] };
     }
-    const bytes = Uint8Array.from(atob(captured.base64), (value) => value.charCodeAt(0));
-    const validation = validateArtifactBytes(bytes, "JSON", input.returnPeriod, input.returnType);
-    if (!validation.ok) return { ok: false, reason: validation.reason, safeSignals: [] };
-    if (input.deliver) {
-      return input.deliver({ base64: captured.base64, mimeType: validation.mimeType });
-    }
-    const delivery = await downloadAcquiredArtifact({
+  }
+  let delivery;
+  try {
+    delivery = await downloadAcquiredArtifact({
       requestId: input.requestId,
       base64: captured.base64,
       filename: input.filename,
@@ -56,16 +71,16 @@ export async function acquireFiledReturnJsonInMainWorld(input: {
         ? { onStartCheckpointFailed: input.onStartCheckpointFailed }
         : {}),
     });
-    return delivery.ok
-      ? {
-          ok: true,
-          safeSignals: [...delivery.safeSignals, "extension-download-complete"],
-          ...(delivery.safeMessage ? { safeMessage: delivery.safeMessage } : {}),
-        }
-      : { ok: false, reason: delivery.reason, safeSignals: delivery.safeSignals };
   } catch {
-    return { ok: false, reason: "endpoint-unavailable", safeSignals: [] };
+    return { ok: false, reason: "delivery-unconfirmed", safeSignals: [] };
   }
+  return delivery.ok
+    ? {
+        ok: true,
+        safeSignals: [...delivery.safeSignals, "extension-download-complete"],
+        ...(delivery.safeMessage ? { safeMessage: delivery.safeMessage } : {}),
+      }
+    : { ok: false, reason: delivery.reason, safeSignals: delivery.safeSignals };
 }
 
 /**

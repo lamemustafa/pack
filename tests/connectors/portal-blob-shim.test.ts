@@ -110,6 +110,26 @@ describe("capturePortalPdfBlob", () => {
     ).resolves.toMatchObject({ ok: true, safeSignals: ["portal-blob-shim-suppressed-via-click"] });
   });
 
+  it("survives Chrome's serialized MAIN-world function boundary", async () => {
+    const { documentRef, view, url } = environment();
+    install(view, url);
+    documentRef.body.innerHTML = `
+      <section><h1>GSTR-3B Monthly Return</h1> <p>Tax Period: April</p>
+      <p>Financial Year: 2024-25</p><button>Download</button></section>`;
+    documentRef
+      .querySelector("button")
+      ?.addEventListener("click", () => savePdf(documentRef, view, "click"));
+
+    const executeInMainWorld = rebuildInMainWorld(capturePortalPdfBlob);
+    await expect(
+      executeInMainWorld({
+        controlSelector: "button",
+        expectedMime: "application/pdf",
+        expectedTarget: { financialYear: "2024-25", period: "April", returnType: "GSTR-3B" },
+      }),
+    ).resolves.toMatchObject({ ok: true, safeSignals: ["portal-blob-shim-suppressed-via-click"] });
+  });
+
   it("restores every wrapped member and never patches unrelated APIs", async () => {
     const { documentRef, view, url } = environment();
     install(view, url);
@@ -220,4 +240,8 @@ function saveBlob(
   documentRef.body.append(link);
   if (method === "click") link.click();
   else link.dispatchEvent(new view.MouseEvent("click"));
+}
+
+function rebuildInMainWorld<T extends (...args: never[]) => unknown>(func: T): T {
+  return new Function(`"use strict"; return (${func.toString()});`)() as T;
 }

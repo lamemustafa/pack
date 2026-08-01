@@ -91,6 +91,22 @@ describe("GSTR-3B page-generated acquisition", () => {
     ).resolves.toMatchObject({ ok: false, reason: "unexpected-content" });
     expect(mocks.downloadAcquiredArtifact).not.toHaveBeenCalled();
   });
+
+  it("distinguishes an absent MAIN-world result from portal generation timeout", async () => {
+    mocks.executeScript.mockResolvedValue([]);
+
+    await expect(
+      acquireGstr3bPdfAfterPreflight({
+        financialYear: "2024-25",
+        filename: "synthetic.pdf",
+        period: "April",
+        requestId: "missing-main-world-result",
+        returnPeriod: "042024",
+        tabId: 17,
+      }),
+    ).resolves.toMatchObject({ ok: false, reason: "main-world-execution-failed" });
+    expect(mocks.downloadAcquiredArtifact).not.toHaveBeenCalled();
+  });
 });
 
 describe("GSTR-2B page-generated acquisition", () => {
@@ -167,6 +183,23 @@ describe("GSTR-2B page-generated acquisition", () => {
         ],
       }),
     );
+    expect(mocks.downloadAcquiredArtifact).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when MAIN-world execution rejects", async () => {
+    mocks.executeScript.mockRejectedValue(new Error("synthetic execution rejection"));
+
+    await expect(
+      acquirePageGeneratedArtifact({
+        artifactType: "PDF",
+        financialYear: "2024-25",
+        period: "April",
+        requestId: "rejected-main-world-execution",
+        returnPeriod: "042024",
+        returnType: "GSTR-1",
+        tabId: 17,
+      }),
+    ).resolves.toMatchObject({ ok: false, reason: "main-world-execution-failed" });
     expect(mocks.downloadAcquiredArtifact).not.toHaveBeenCalled();
   });
 });

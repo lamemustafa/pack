@@ -251,6 +251,22 @@ export async function triggerSelectedArtifacts({
       }
       return response;
     }
+    if (
+      singlePeriodBundleLedger &&
+      response.flowStep.safeSignals.includes("artifact-delivery-unconfirmed")
+    ) {
+      const reviewLedger = await persistSinglePeriodBundleArtifactReview(
+        singlePeriodBundleLedger,
+        artifactType,
+        response.flowStep,
+        deps.now?.() ?? new Date(),
+      );
+      return persistAmbiguousSinglePeriodBundleResponse(
+        reviewLedger ?? singlePeriodBundleLedger,
+        deps,
+        response.flowStep,
+      );
+    }
     if (response.flowStep.state !== "downloaded") {
       if (singlePeriodBundleLedger) {
         const unavailableLedger = await persistSinglePeriodBundleArtifactUnavailable(

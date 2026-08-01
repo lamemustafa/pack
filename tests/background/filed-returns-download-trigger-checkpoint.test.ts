@@ -49,7 +49,9 @@ const RETAINED_TERMINAL_DELIVERY_FAILURES = [
   "danger-unconfirmed",
   "danger-rejected",
   "empty",
+  "delivery-unconfirmed",
   "generation-timeout",
+  "main-world-execution-failed",
   "interrupted",
   "search-unavailable",
 ] as const;
@@ -58,6 +60,11 @@ describe("GSTR-3B artifact acquisition checkpoint cleanup", () => {
   beforeEach(() => {
     for (const key of Object.keys(mocks.session)) delete mocks.session[key];
     vi.clearAllMocks();
+    mocks.browser.storage.session.set.mockImplementation(
+      async (values: Record<string, unknown>) => {
+        return Object.assign(mocks.session, values);
+      },
+    );
   });
 
   it.each(Object.keys(ARTIFACT_FAILURE_MESSAGES))(
@@ -85,6 +92,27 @@ describe("GSTR-3B artifact acquisition checkpoint cleanup", () => {
       reason: "start-rejected",
       safeSignals: [],
     }));
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "May",
+      artifactType: "JSON",
+      deps: {
+        sendMessageToTabWithInjection: vi.fn(async () => acquiredJson()),
+        storageKeys: {},
+      },
+      scope: { ...scope, artifactType: "JSON" },
+      tabId: 17,
+    });
+
+    expect(response).toMatchObject({ flowStep: { state: "blocked" } });
+    expect(mocks.session).toEqual({});
+  });
+
+  it("clears the JSON checkpoint when MAIN-world execution fails before any browser action", async () => {
+    mocks.acquireFiledReturnJsonInMainWorld.mockResolvedValueOnce({
+      ok: false,
+      reason: "main-world-execution-failed",
+      safeSignals: [],
+    });
     const response = await triggerAndObserveFiledReturnDownload({
       activePeriod: "May",
       artifactType: "JSON",
@@ -168,6 +196,129 @@ describe("GSTR-3B artifact acquisition checkpoint cleanup", () => {
 
     expect(mocks.session[artifactAcquisitionCheckpointKey(target)]).toEqual(
       expect.objectContaining({ downloadId: 91, state: "download-unconfirmed" }),
+    );
+  });
+
+  it("retains the exact JSON download ID when both checkpoint writes report rejection after committing", async () => {
+    let checkpointWrites = 0;
+    mocks.browser.storage.session.set.mockImplementation(
+      async (values: Record<string, unknown>) => {
+        const stored = Object.assign(mocks.session, values);
+        checkpointWrites += 1;
+        if (checkpointWrites > 1) throw new Error("synthetic checkpoint storage rejection");
+        return stored;
+      },
+    );
+    mocks.downloadAcquiredArtifact.mockImplementationOnce(async (input) => {
+      try {
+        await input.onStarted?.(91);
+      } catch {
+        try {
+          await input.onStartCheckpointFailed?.(91);
+        } catch {
+          // A response may reject after Chrome persisted the exact ID.
+        }
+      }
+      return { ok: false, reason: "checkpoint-failed", safeSignals: [] };
+    });
+    const target = { ...scope, artifactType: "JSON" as const };
+
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "May",
+      artifactType: "JSON",
+      deps: {
+        sendMessageToTabWithInjection: vi.fn(async () => acquiredJson()),
+        storageKeys: {},
+      },
+      scope: target,
+      tabId: 17,
+    });
+
+    expect(response).toMatchObject({
+      flowStep: { safeMessage: expect.any(String), state: "blocked" },
+    });
+    expect(mocks.session[artifactAcquisitionCheckpointKey(target)]).toEqual(
+      expect.objectContaining({ downloadId: 91, state: "download-unconfirmed" }),
+    );
+  });
+
+  it("retains the JSON intent when neither checkpoint write commits", async () => {
+    let checkpointWrites = 0;
+    mocks.browser.storage.session.set.mockImplementation(
+      async (values: Record<string, unknown>) => {
+        checkpointWrites += 1;
+        if (checkpointWrites > 1) throw new Error("synthetic checkpoint storage rejection");
+        return Object.assign(mocks.session, values);
+      },
+    );
+    mocks.downloadAcquiredArtifact.mockImplementationOnce(async (input) => {
+      try {
+        await input.onStarted?.(91);
+      } catch {
+        await input.onStartCheckpointFailed?.(91).catch(() => undefined);
+      }
+      return { ok: false, reason: "checkpoint-failed", safeSignals: [] };
+    });
+    const target = { ...scope, artifactType: "JSON" as const };
+
+    await triggerAndObserveFiledReturnDownload({
+      activePeriod: "May",
+      artifactType: "JSON",
+      deps: {
+        sendMessageToTabWithInjection: vi.fn(async () => acquiredJson()),
+        storageKeys: {},
+      },
+      scope: target,
+      tabId: 17,
+    });
+
+    expect(mocks.session[artifactAcquisitionCheckpointKey(target)]).toEqual(
+      expect.objectContaining({ state: "intent" }),
+    );
+  });
+
+  it("renders a blocked user-visible result for an unconfirmed direct JSON delivery", async () => {
+    mocks.acquireFiledReturnJsonInMainWorld.mockResolvedValueOnce({
+      ok: false,
+      reason: "delivery-unconfirmed",
+      safeSignals: [],
+    });
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "May",
+      artifactType: "JSON",
+      deps: {
+        sendMessageToTabWithInjection: vi.fn(async () => acquiredJson()),
+        storageKeys: {},
+      },
+      scope: { ...scope, artifactType: "JSON" },
+      tabId: 17,
+    });
+
+    expect(response).toMatchObject({
+      flowStep: { safeMessage: expect.any(String), state: "blocked" },
+    });
+  });
+
+  it("retains the page-generated PDF intent when MAIN-world execution cannot be proven", async () => {
+    mocks.acquireGstr3bPdfAfterPreflight.mockResolvedValueOnce({
+      ok: false,
+      reason: "main-world-execution-failed",
+      safeSignals: [],
+    });
+
+    await triggerAndObserveFiledReturnDownload({
+      activePeriod: "May",
+      artifactType: "PDF",
+      deps: {
+        sendMessageToTabWithInjection: vi.fn(async () => preparedPdf()),
+        storageKeys: {},
+      },
+      scope,
+      tabId: 17,
+    });
+
+    expect(mocks.session[artifactAcquisitionCheckpointKey(scope)]).toEqual(
+      expect.objectContaining({ state: "intent" }),
     );
   });
 

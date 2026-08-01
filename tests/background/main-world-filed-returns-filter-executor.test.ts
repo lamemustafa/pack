@@ -1,3 +1,4 @@
+import { readdir, readFile } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
 import { browser } from "wxt/browser";
 import { selectFiledReturnsFiltersInMainWorldForTab } from "../../src/background/main-world-filed-returns-filter-executor";
@@ -12,6 +13,26 @@ vi.mock("wxt/browser", () => ({
 }));
 
 describe("main-world filed-return filter executor", () => {
+  it("requires a serialization guard for every MAIN-world injected function", async () => {
+    const files = (await readdir("src", { recursive: true })).filter(
+      (file): file is string => typeof file === "string" && file.endsWith(".ts"),
+    );
+    const functions = (
+      await Promise.all(files.map((file) => readFile(`src/${file}`, "utf8")))
+    ).flatMap((source) =>
+      Array.from(source.matchAll(/func:\s*(\w+),\s*target:[\s\S]{0,120}?world:\s*"MAIN"/g)).map(
+        ([, func]) => func,
+      ),
+    );
+
+    expect(functions.sort()).toEqual([
+      "capturePortalPdfBlob",
+      "capturePortalPdfBlob",
+      "fetchFiledReturnJsonInMainWorld",
+      "selectFiledReturnsFiltersInMainWorld",
+    ]);
+  });
+
   it("returns only the validated control-state outcome from the page", async () => {
     vi.mocked(browser.scripting.executeScript).mockResolvedValue([
       {

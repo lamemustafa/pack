@@ -2,9 +2,10 @@ export type PortalBlobShimInput = {
   controlSelector: string;
   expectedMime: string;
   expectedTarget?: { financialYear: string; period: string; returnType: string };
+  maxPortalBlobBytes?: number;
   timeoutMs?: number;
 };
-const MAX_PORTAL_BLOB_BYTES = 25 * 1024 * 1024;
+export const MAX_PORTAL_BLOB_BYTES = 25 * 1024 * 1024;
 export type PortalBlobShimResult =
   | { ok: true; base64: string; blobUrl: string; safeSignals: string[] }
   | {
@@ -18,6 +19,9 @@ export type PortalBlobShimResult =
       safeSignals: string[];
     };
 export function capturePortalPdfBlob(input: PortalBlobShimInput): Promise<PortalBlobShimResult> {
+  // chrome.scripting serializes only this function, so every value it needs
+  // must be in its args or defined inside this body.
+  const maxPortalBlobBytes = input.maxPortalBlobBytes ?? 25 * 1024 * 1024;
   const anchor = HTMLAnchorElement.prototype;
   const originalDispatch = anchor.dispatchEvent;
   const originalClick = anchor.click;
@@ -44,7 +48,7 @@ export function capturePortalPdfBlob(input: PortalBlobShimInput): Promise<Portal
     const signal = (method: "dispatchEvent" | "click") => {
       if (!blob || !blobUrl) return;
       const capturedBlobUrl = blobUrl;
-      if (blob.size > MAX_PORTAL_BLOB_BYTES)
+      if (blob.size > maxPortalBlobBytes)
         return finish({ ok: false, reason: "too-large", safeSignals: [] });
       void blob.arrayBuffer().then(
         (buffer) =>
@@ -81,6 +85,39 @@ export function capturePortalPdfBlob(input: PortalBlobShimInput): Promise<Portal
     };
     const control = document.querySelector<HTMLElement>(input.controlSelector);
     if (!control) return finish({ ok: false, reason: "control-not-found", safeSignals: [] });
+    const controlHasVisibleTarget = (
+      candidate: HTMLElement,
+      expected: NonNullable<PortalBlobShimInput["expectedTarget"]>,
+    ): boolean => {
+      let current: HTMLElement | null = candidate;
+      const escape = (value: string) =>
+        [...value]
+          .map((character) =>
+            "\\.^$*+?()[]{}|".includes(character) ? `\\${character}` : character,
+          )
+          .join("");
+      while (current && current !== candidate.ownerDocument.body) {
+        const text = (current.textContent ?? "").replace(/\s+/g, " ").trim();
+        if (
+          /\b(?:(?:return|tax)\s*period|month)\b/i.test(text) &&
+          /\b(?:financial\s*year|fy)\b/i.test(text) &&
+          new RegExp(`\\b${escape(expected.returnType).replace("-", "[\\s-]?")}\\b`, "i").test(
+            text,
+          ) &&
+          new RegExp(
+            `\\b(?:(?:return|tax)\\s*period|month)\\b\\s*(?:[-:]\\s*)?${escape(expected.period)}\\b`,
+            "i",
+          ).test(text) &&
+          new RegExp(
+            `\\b(?:financial\\s*year|fy)\\b\\s*(?:[-:]\\s*)?${escape(expected.financialYear)}`,
+            "i",
+          ).test(text)
+        )
+          return true;
+        current = current.parentElement;
+      }
+      return false;
+    };
     if (input.expectedTarget && !controlHasVisibleTarget(control, input.expectedTarget)) {
       return finish({
         ok: false,
@@ -98,31 +135,4 @@ export function capturePortalPdfBlob(input: PortalBlobShimInput): Promise<Portal
       finish({ ok: false, reason: "unexpected-content", safeSignals: [] });
     }
   }).finally(restore);
-}
-
-function controlHasVisibleTarget(
-  control: HTMLElement,
-  expected: NonNullable<PortalBlobShimInput["expectedTarget"]>,
-): boolean {
-  let current: HTMLElement | null = control;
-  const escape = (value: string) => value.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&");
-  while (current && current !== control.ownerDocument.body) {
-    const text = (current.textContent ?? "").replace(/\s+/g, " ").trim();
-    if (
-      /\b(?:(?:return|tax)\s*period|month)\b/i.test(text) &&
-      /\b(?:financial\s*year|fy)\b/i.test(text) &&
-      new RegExp(`\\b${escape(expected.returnType).replace("-", "[\\s-]?")}\\b`, "i").test(text) &&
-      new RegExp(
-        `\\b(?:(?:return|tax)\\s*period|month)\\b\\s*(?:[-:]\\s*)?${escape(expected.period)}\\b`,
-        "i",
-      ).test(text) &&
-      new RegExp(
-        `\\b(?:financial\\s*year|fy)\\b\\s*(?:[-:]\\s*)?${escape(expected.financialYear)}`,
-        "i",
-      ).test(text)
-    )
-      return true;
-    current = current.parentElement;
-  }
-  return false;
 }

@@ -83,6 +83,9 @@ describe("filed-return JSON main-world acquisition", () => {
       returnPeriod: string;
       returnType: "GSTR-3B" | "GSTR-2B";
     }) => Promise<unknown>;
+    const rebuiltMainWorldFunction = new Function(
+      `"use strict"; return (${executeMainWorld.toString()});`,
+    )() as typeof executeMainWorld;
     const [mainWorldInput] = mainWorldInjection.args;
     const encode = vi.fn();
     vi.stubGlobal("btoa", encode);
@@ -92,7 +95,7 @@ describe("filed-return JSON main-world acquisition", () => {
     );
     vi.stubGlobal("location", { origin: "https://return.gst.gov.in" });
     try {
-      await expect(executeMainWorld(mainWorldInput)).resolves.toEqual({
+      await expect(rebuiltMainWorldFunction(mainWorldInput)).resolves.toEqual({
         ok: false,
         reason: "too-large",
       });
@@ -127,6 +130,29 @@ describe("filed-return JSON main-world acquisition", () => {
     expect(mocks.downloadAcquiredArtifact).not.toHaveBeenCalled();
   });
 
+  it.each(["missing result", "rejected execution"])(
+    "reports %s as a MAIN-world execution failure rather than an endpoint failure",
+    async (scenario) => {
+      if (scenario === "missing result")
+        vi.mocked(browser.scripting.executeScript).mockResolvedValue([] as never);
+      else
+        vi.mocked(browser.scripting.executeScript).mockRejectedValue(
+          new Error("synthetic rejection"),
+        );
+
+      await expect(
+        acquireFiledReturnJsonInMainWorld({
+          filename: "synthetic.json",
+          requestId: "main-world-failure",
+          returnPeriod: "062026",
+          returnType: "GSTR-3B",
+          tabId: 17,
+        }),
+      ).resolves.toEqual({ ok: false, reason: "main-world-execution-failed", safeSignals: [] });
+      expect(mocks.downloadAcquiredArtifact).not.toHaveBeenCalled();
+    },
+  );
+
   it("hands validated JSON to a worker-owned local stager when one is supplied", async () => {
     vi.mocked(browser.scripting.executeScript).mockResolvedValue([
       {
@@ -157,5 +183,62 @@ describe("filed-return JSON main-world acquisition", () => {
 
     expect(deliver).toHaveBeenCalledWith(expect.objectContaining({ mimeType: "application/json" }));
     expect(mocks.downloadAcquiredArtifact).not.toHaveBeenCalled();
+  });
+
+  it("returns a terminal safe failure when worker-owned local staging rejects", async () => {
+    vi.mocked(browser.scripting.executeScript).mockResolvedValue([
+      {
+        result: {
+          ok: true,
+          base64: base64Json({
+            data: { rtnprd: "062026", padding: "x".repeat(100) },
+            status: 1,
+          }),
+        },
+      },
+    ] as never);
+    const deliver = vi.fn(async () => {
+      throw new Error("synthetic local staging rejection");
+    });
+
+    await expect(
+      acquireFiledReturnJsonInMainWorld({
+        deliver,
+        filename: "synthetic.json",
+        requestId: "synthetic-request",
+        returnPeriod: "062026",
+        returnType: "GSTR-2B",
+        tabId: 17,
+      }),
+    ).resolves.toEqual({ ok: false, reason: "delivery-unconfirmed", safeSignals: [] });
+
+    expect(mocks.downloadAcquiredArtifact).not.toHaveBeenCalled();
+  });
+
+  it("returns a terminal safe failure when direct offscreen delivery rejects", async () => {
+    vi.mocked(browser.scripting.executeScript).mockResolvedValue([
+      {
+        result: {
+          ok: true,
+          base64: base64Json({
+            data: { rtnprd: "062026", padding: "x".repeat(100) },
+            status: 1,
+          }),
+        },
+      },
+    ] as never);
+    mocks.downloadAcquiredArtifact.mockRejectedValueOnce(
+      new Error("synthetic offscreen delivery rejection"),
+    );
+
+    await expect(
+      acquireFiledReturnJsonInMainWorld({
+        filename: "synthetic.json",
+        requestId: "synthetic-request",
+        returnPeriod: "062026",
+        returnType: "GSTR-2B",
+        tabId: 17,
+      }),
+    ).resolves.toEqual({ ok: false, reason: "delivery-unconfirmed", safeSignals: [] });
   });
 });
