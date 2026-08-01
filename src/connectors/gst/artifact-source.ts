@@ -42,6 +42,7 @@ export type ArtifactFailureReason =
   | "empty"
   | "too-large"
   | "generation-timeout"
+  | "delivery-unconfirmed"
   | "main-world-execution-failed"
   | "search-unavailable"
   | "page-period-mismatch"
@@ -69,6 +70,8 @@ export const ARTIFACT_FAILURE_MESSAGES = {
   "too-large": "The GST Portal returned an artifact that exceeds Pack's safe local size limit.",
   "generation-timeout":
     "The GST Portal did not finish generating the filed-return artifact in time.",
+  "delivery-unconfirmed":
+    "Pack could not confirm local delivery of the verified filed-return artifact, so it did not mark the target saved.",
   "main-world-execution-failed":
     "Pack could not run the verified GST Portal artifact action, so it did not mark the target saved.",
   "search-unavailable":

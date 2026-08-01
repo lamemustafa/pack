@@ -96,7 +96,11 @@ const bundleMocks = vi.hoisted(() => {
   };
   return {
     clearSinglePeriodBundleLedger: vi.fn(async () => true),
-    persistSinglePeriodBundleArtifactReview: vi.fn(async (ledger: SyntheticBundleLedger) => ledger),
+    persistSinglePeriodBundleArtifactReview: vi.fn(async (ledger: SyntheticBundleLedger) => ({
+      ...ledger,
+      phase: "artifact-review" as const,
+      revision: ledger.revision + 1,
+    })),
     persistSinglePeriodBundleArtifactRunning: vi.fn(
       async (ledger: SyntheticBundleLedger, artifactType: FiledReturnsConcreteArtifactType) =>
         transition(ledger, artifactType, "running"),
@@ -500,6 +504,45 @@ describe("GSTR-2B all-format selection", () => {
     });
     expect(bundleMocks.exportSinglePeriodFiledReturnsZip).not.toHaveBeenCalled();
   });
+
+  it("retains a rejected staged JSON delivery for recovery instead of leaving it untracked", async () => {
+    mocks.triggerAndObserveFiledReturnDownload.mockImplementation(
+      async ({ artifactType }: { artifactType: FiledReturnsConcreteArtifactType }) =>
+        artifactType === "JSON"
+          ? blocked("JSON", "artifact-delivery-unconfirmed")
+          : downloaded(artifactType),
+    );
+
+    await triggerSelectedArtifacts({
+      activePeriod: "June",
+      deps: {
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "ledger",
+          observation: "observation",
+        },
+      } as never,
+      scope: {
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2026-27",
+        period: "June",
+        returnType: "GSTR-2B",
+      },
+      tabId: 17,
+    });
+
+    expect(bundleMocks.persistSinglePeriodBundleArtifactReview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        artifacts: expect.arrayContaining([
+          expect.objectContaining({ artifactType: "JSON", status: "running" }),
+        ]),
+      }),
+      "JSON",
+      expect.objectContaining({ safeSignals: ["artifact-delivery-unconfirmed"] }),
+      expect.any(Date),
+    );
+    expect(bundleMocks.persistSinglePeriodBundleArtifactUnavailable).not.toHaveBeenCalled();
+  });
 });
 
 function downloaded(artifactType: string) {
@@ -519,14 +562,14 @@ function downloaded(artifactType: string) {
   };
 }
 
-function blocked(artifactType: string) {
+function blocked(artifactType: string, safeSignal = "artifact-generation-timeout") {
   return {
     ok: true,
     flowStep: {
       connectorId: "gst",
       scopeId: "gst-gstr2b-private-v0",
       state: "blocked",
-      safeSignals: ["artifact-generation-timeout"],
+      safeSignals: [safeSignal],
       safeMessage: `${artifactType} failed.`,
     },
   };

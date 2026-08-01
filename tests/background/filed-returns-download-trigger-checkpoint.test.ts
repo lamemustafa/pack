@@ -101,6 +101,27 @@ describe("GSTR-3B artifact acquisition checkpoint cleanup", () => {
     expect(mocks.session).toEqual({});
   });
 
+  it("clears the JSON checkpoint when MAIN-world execution fails before any browser action", async () => {
+    mocks.acquireFiledReturnJsonInMainWorld.mockResolvedValueOnce({
+      ok: false,
+      reason: "main-world-execution-failed",
+      safeSignals: [],
+    });
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "May",
+      artifactType: "JSON",
+      deps: {
+        sendMessageToTabWithInjection: vi.fn(async () => acquiredJson()),
+        storageKeys: {},
+      },
+      scope: { ...scope, artifactType: "JSON" },
+      tabId: 17,
+    });
+
+    expect(response).toMatchObject({ flowStep: { state: "blocked" } });
+    expect(mocks.session).toEqual({});
+  });
+
   it.each(["interrupted", "empty"] as const)(
     "retains the JSON checkpoint after terminal %s delivery failure with an exact ID",
     async (reason) => {
@@ -172,7 +193,7 @@ describe("GSTR-3B artifact acquisition checkpoint cleanup", () => {
     );
   });
 
-  it("retains the PDF intent when MAIN-world execution cannot be proven", async () => {
+  it("retains the page-generated PDF intent when MAIN-world execution cannot be proven", async () => {
     mocks.acquireGstr3bPdfAfterPreflight.mockResolvedValueOnce({
       ok: false,
       reason: "main-world-execution-failed",

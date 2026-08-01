@@ -184,4 +184,34 @@ describe("filed-return JSON main-world acquisition", () => {
     expect(deliver).toHaveBeenCalledWith(expect.objectContaining({ mimeType: "application/json" }));
     expect(mocks.downloadAcquiredArtifact).not.toHaveBeenCalled();
   });
+
+  it("returns a terminal safe failure when worker-owned local staging rejects", async () => {
+    vi.mocked(browser.scripting.executeScript).mockResolvedValue([
+      {
+        result: {
+          ok: true,
+          base64: base64Json({
+            data: { rtnprd: "062026", padding: "x".repeat(100) },
+            status: 1,
+          }),
+        },
+      },
+    ] as never);
+    const deliver = vi.fn(async () => {
+      throw new Error("synthetic local staging rejection");
+    });
+
+    await expect(
+      acquireFiledReturnJsonInMainWorld({
+        deliver,
+        filename: "synthetic.json",
+        requestId: "synthetic-request",
+        returnPeriod: "062026",
+        returnType: "GSTR-2B",
+        tabId: 17,
+      }),
+    ).resolves.toEqual({ ok: false, reason: "delivery-unconfirmed", safeSignals: [] });
+
+    expect(mocks.downloadAcquiredArtifact).not.toHaveBeenCalled();
+  });
 });

@@ -159,6 +159,7 @@ export async function triggerAndObserveFiledReturnDownload({
         };
         await persistArtifactAcquisitionIntent({ ...checkpointTarget, requestId });
         let checkpointHasDownloadId = false;
+        let externallyVisibleActionMayHaveOccurred = false;
         let retainCheckpointForRecovery = false;
         try {
           const delivery = await acquireFiledReturnJsonInMainWorld({
@@ -175,6 +176,7 @@ export async function triggerAndObserveFiledReturnDownload({
                 state: "download-observing",
               });
               checkpointHasDownloadId = true;
+              externallyVisibleActionMayHaveOccurred = true;
             },
             onStartCheckpointFailed: async (downloadId) => {
               await persistArtifactAcquisitionUnconfirmedDownload({
@@ -183,11 +185,15 @@ export async function triggerAndObserveFiledReturnDownload({
                 requestId,
                 state: "download-unconfirmed",
               });
+              externallyVisibleActionMayHaveOccurred = true;
             },
           });
           retainCheckpointForRecovery =
             delivery.ok ||
-            shouldRetainArtifactAcquisitionCheckpoint(delivery, checkpointHasDownloadId);
+            shouldRetainArtifactAcquisitionCheckpoint(delivery, {
+              checkpointHasDownloadId,
+              externallyVisibleActionMayHaveOccurred,
+            });
           return delivery.ok
             ? {
                 ok: true,
@@ -239,6 +245,7 @@ export async function triggerAndObserveFiledReturnDownload({
         };
         await persistArtifactAcquisitionIntent({ ...checkpointTarget, requestId });
         let checkpointHasDownloadId = false;
+        const externallyVisibleActionMayHaveOccurred = true;
         let retainCheckpointForRecovery = false;
         try {
           const acquired = await acquireGstr3bPdfAfterPreflight({
@@ -268,7 +275,10 @@ export async function triggerAndObserveFiledReturnDownload({
           });
           retainCheckpointForRecovery =
             acquired.ok ||
-            shouldRetainArtifactAcquisitionCheckpoint(acquired, checkpointHasDownloadId);
+            shouldRetainArtifactAcquisitionCheckpoint(acquired, {
+              checkpointHasDownloadId,
+              externallyVisibleActionMayHaveOccurred,
+            });
           return acquired.ok
             ? {
                 ok: true,
@@ -312,8 +322,12 @@ export async function triggerAndObserveFiledReturnDownload({
 
 function shouldRetainArtifactAcquisitionCheckpoint(
   delivery: { ok: false; reason: string },
-  checkpointHasDownloadId: boolean,
+  input: {
+    checkpointHasDownloadId: boolean;
+    externallyVisibleActionMayHaveOccurred: boolean;
+  },
 ): boolean {
+  if (!input.externallyVisibleActionMayHaveOccurred) return false;
   // A portal generation timeout happens after Pack armed the target-bound
   // control but before it can prove the browser action quiesced. Keep the
   // intent so the next start routes it through recovery review instead of
@@ -327,7 +341,7 @@ function shouldRetainArtifactAcquisitionCheckpoint(
   // The browser already created an exact-ID item for these outcomes. It may
   // settle as safe later, but it must not be forgotten and repeated first.
   return (
-    checkpointHasDownloadId &&
+    input.checkpointHasDownloadId &&
     [
       "timeout",
       "search-unavailable",
@@ -446,6 +460,8 @@ async function triggerPageGeneratedSinglePeriodArtifact(
     await persistArtifactAcquisitionIntent({ ...checkpointTarget, requestId });
   }
   let checkpointHasDownloadId = false;
+  let externallyVisibleActionMayHaveOccurred =
+    artifact.state === "ready" && (artifactType === "PDF" || artifactType === "EXCEL");
   let retainCheckpointForRecovery = false;
   try {
     const callbacks = {
@@ -457,6 +473,7 @@ async function triggerPageGeneratedSinglePeriodArtifact(
           state: "download-observing",
         });
         checkpointHasDownloadId = true;
+        externallyVisibleActionMayHaveOccurred = true;
       },
       onStartCheckpointFailed: async (downloadId: number) => {
         await persistArtifactAcquisitionUnconfirmedDownload({
@@ -465,6 +482,7 @@ async function triggerPageGeneratedSinglePeriodArtifact(
           requestId,
           state: "download-unconfirmed",
         });
+        externallyVisibleActionMayHaveOccurred = true;
       },
     };
     const acquired =
@@ -525,7 +543,11 @@ async function triggerPageGeneratedSinglePeriodArtifact(
     }
     retainCheckpointForRecovery =
       tracksBrowserDownload &&
-      (acquired.ok || shouldRetainArtifactAcquisitionCheckpoint(acquired, checkpointHasDownloadId));
+      (acquired.ok ||
+        shouldRetainArtifactAcquisitionCheckpoint(acquired, {
+          checkpointHasDownloadId,
+          externallyVisibleActionMayHaveOccurred,
+        }));
     return acquired.ok
       ? {
           ok: true,

@@ -53,7 +53,11 @@ export async function acquireFiledReturnJsonInMainWorld(input: {
   const validation = validateArtifactBytes(bytes, "JSON", input.returnPeriod, input.returnType);
   if (!validation.ok) return { ok: false, reason: validation.reason, safeSignals: [] };
   if (input.deliver) {
-    return input.deliver({ base64: captured.base64, mimeType: validation.mimeType });
+    try {
+      return await input.deliver({ base64: captured.base64, mimeType: validation.mimeType });
+    } catch {
+      return { ok: false, reason: "delivery-unconfirmed", safeSignals: [] };
+    }
   }
   const delivery = await downloadAcquiredArtifact({
     requestId: input.requestId,
