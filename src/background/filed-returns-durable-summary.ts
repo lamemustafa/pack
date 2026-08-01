@@ -7,8 +7,10 @@ import type {
 } from "../connectors/gst/filed-returns-contracts";
 import {
   concreteFiledReturnsArtifactTypes,
+  isFiledReturnsConcreteArtifactType,
   normaliseFiledReturnsArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
+import { isCanonicalFiledReturnsActionId } from "../connectors/gst/filed-returns-operation-id";
 import { filedReturnsScopeId } from "../connectors/gst/filed-returns-return-types";
 import {
   FILED_RETURNS_MONTHS,
@@ -29,6 +31,7 @@ import {
 } from "./filed-returns-download-diagnostic-state";
 
 const SUMMARY_KEYS = [
+  "artifactAcquisitionCompletion",
   "completedAt",
   "completedPeriods",
   "currentPeriod",
@@ -90,6 +93,13 @@ export function parseDurableFiledReturnsFlowSummary(
   if (!scope || !summary.status || !SUMMARY_STATUSES.has(summary.status)) return null;
   const completedPeriods = parsePeriods(summary.completedPeriods);
   if (!completedPeriods || !isOptionalCount(summary.totalPeriods)) return null;
+  const artifactAcquisitionCompletion = parseArtifactAcquisitionCompletion(
+    summary.artifactAcquisitionCompletion,
+    scope,
+  );
+  if (summary.artifactAcquisitionCompletion !== undefined && !artifactAcquisitionCompletion) {
+    return null;
+  }
   if (!isOptionalCurrentPeriod(summary.currentPeriod, scope)) return null;
   if (!isOptionalCanonicalTimestamp(summary.completedAt)) return null;
   if (!isOptionalCanonicalTimestamp(summary.updatedAt)) return null;
@@ -103,6 +113,13 @@ export function parseDurableFiledReturnsFlowSummary(
     summary.currentPeriod,
   );
   if (!flowStep) return null;
+  if (
+    artifactAcquisitionCompletion &&
+    (summary.status !== "complete" ||
+      !flowStep.safeSignals.includes("artifact-acquisition-download-reconciled"))
+  ) {
+    return null;
+  }
   if (
     summary.status === "complete" &&
     !isConsistentCompleteSummary({
@@ -119,6 +136,7 @@ export function parseDurableFiledReturnsFlowSummary(
   return {
     scope,
     status: summary.status,
+    ...(artifactAcquisitionCompletion ? { artifactAcquisitionCompletion } : {}),
     ...(summary.completedAt ? { completedAt: summary.completedAt } : {}),
     ...(summary.updatedAt ? { updatedAt: summary.updatedAt } : {}),
     completedPeriods,
@@ -127,6 +145,33 @@ export function parseDurableFiledReturnsFlowSummary(
     ...(recovery ? { fullFiscalYearRecovery: recovery } : {}),
     flowStep,
   };
+}
+
+function parseArtifactAcquisitionCompletion(
+  input: unknown,
+  scope: FiledReturnsDownloadScope,
+): FiledReturnsFlowSummary["artifactAcquisitionCompletion"] | null {
+  if (!Array.isArray(input)) return null;
+  const expectedArtifacts = concreteFiledReturnsArtifactTypes(
+    normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType),
+  );
+  if (input.length !== expectedArtifacts.length) return null;
+  const completion = input.map((entry, index) => {
+    if (!entry || typeof entry !== "object") return null;
+    const value = entry as Record<string, unknown>;
+    if (
+      !hasOnlyKeys(value, ["artifactType", "requestId"]) ||
+      !isFiledReturnsConcreteArtifactType(value.artifactType) ||
+      value.artifactType !== expectedArtifacts[index] ||
+      !isCanonicalFiledReturnsActionId(value.requestId)
+    ) {
+      return null;
+    }
+    return { artifactType: value.artifactType, requestId: value.requestId };
+  });
+  return completion.some((entry) => entry === null)
+    ? null
+    : (completion as NonNullable<FiledReturnsFlowSummary["artifactAcquisitionCompletion"]>);
 }
 
 function isConsistentCompleteSummary({

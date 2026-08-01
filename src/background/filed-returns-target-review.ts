@@ -1,5 +1,6 @@
 import { browser } from "wxt/browser";
 import type {
+  FiledReturnsArtifactAcquisitionCompletion,
   FiledReturnsDownloadScope,
   FiledReturnsFlowSummary,
   FiledReturnsTargetDownloadAttempt,
@@ -8,8 +9,10 @@ import type {
 } from "../connectors/gst/filed-returns-contracts";
 import {
   concreteFiledReturnsArtifactTypes,
+  isFiledReturnsConcreteArtifactType,
   normaliseFiledReturnsArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
+import { isCanonicalFiledReturnsActionId } from "../connectors/gst/filed-returns-operation-id";
 import {
   clearArtifactAcquisitionCheckpoints,
   clearArtifactAcquisitionCheckpointsAfterPersistedSummary,
@@ -269,6 +272,7 @@ export async function resolveUnconfirmedFiledReturnsDownload(
     const review = state.review;
     const persistedArtifactCompletion = await readPersistedArtifactAcquisitionCompletion(
       scope,
+      review,
       deps,
     );
     if (
@@ -353,6 +357,21 @@ export async function resolveUnconfirmedFiledReturnsDownload(
     if (hasArtifactAcquisitionRecoverySignal(review.safeSignals)) {
       const cancellation = await clearArtifactAcquisitionCheckpoints(review.scope);
       if (cancellation.state === "completed") {
+        const artifactAcquisitionCompletion = cancellation.evidence.map(
+          ({ artifactType, requestId }) => ({
+            artifactType,
+            requestId,
+          }),
+        );
+        const markedReview: FiledReturnsTargetReview = {
+          ...review,
+          artifactAcquisitionCompletion,
+          revision: targetReviewRevision(review) + 1,
+          updatedAt: (deps.now?.() ?? new Date()).toISOString(),
+        };
+        const parsedMarkedReview = parseFiledReturnsTargetReview(markedReview);
+        if (!parsedMarkedReview) return responseForFiledReturnsTargetReview(review);
+        await browser.storage.local.set({ [key]: parsedMarkedReview });
         const flowStep: PortalFlowStepResult = {
           connectorId: "gst",
           scopeId: filedReturnScopeId(scope.returnType),
@@ -369,6 +388,7 @@ export async function resolveUnconfirmedFiledReturnsDownload(
           ...copyFiledReturnsDownloadDiagnosticState(review),
         };
         const flowSummary: FiledReturnsFlowSummary = {
+          artifactAcquisitionCompletion,
           scope: canonicalTargetReviewScope(scope),
           status: "complete",
           completedPeriods: [scope.period],
@@ -554,6 +574,7 @@ export async function persistResolvedTargetReviewSummary(
 
 async function readPersistedArtifactAcquisitionCompletion(
   scope: FiledReturnsDownloadScope,
+  review: FiledReturnsTargetReview,
   deps: FiledReturnsTargetReviewDeps,
 ): Promise<FiledReturnsFlowSummary | null> {
   const key = deps.storageKeys.completion;
@@ -563,7 +584,11 @@ async function readPersistedArtifactAcquisitionCompletion(
     summary.status === "complete" &&
     sameExactFiledReturnsScope(summary.scope, scope) &&
     summary.flowStep.state === "downloaded" &&
-    summary.flowStep.safeSignals.includes("artifact-acquisition-download-reconciled")
+    summary.flowStep.safeSignals.includes("artifact-acquisition-download-reconciled") &&
+    sameArtifactAcquisitionCompletion(
+      summary.artifactAcquisitionCompletion,
+      review.artifactAcquisitionCompletion,
+    )
     ? summary
     : null;
 }
@@ -573,6 +598,7 @@ function parseFiledReturnsTargetReview(input: unknown): FiledReturnsTargetReview
   const review = input as Partial<FiledReturnsTargetReview> & Record<string, unknown>;
   if (
     !hasOnlyKeys(review, [
+      "artifactAcquisitionCompletion",
       "downloadAttempt",
       "downloadDiagnostic",
       "downloadDiagnostics",
@@ -604,6 +630,13 @@ function parseFiledReturnsTargetReview(input: unknown): FiledReturnsTargetReview
   const scope = parseDurableFiledReturnsScope(review.scope, false);
   if (!scope) return null;
   if (review.targetId !== createTargetId(scope)) return null;
+  const artifactAcquisitionCompletion = parseArtifactAcquisitionCompletion(
+    review.artifactAcquisitionCompletion,
+    scope,
+  );
+  if (review.artifactAcquisitionCompletion !== undefined && !artifactAcquisitionCompletion) {
+    return null;
+  }
   const durableStatus = parseDurableTargetStatus(scope, "target-review", review.safeSignals);
   if (!durableStatus) return null;
   if (
@@ -641,8 +674,52 @@ function parseFiledReturnsTargetReview(input: unknown): FiledReturnsTargetReview
     ...durableStatus,
     revision,
     scope,
+    ...(artifactAcquisitionCompletion ? { artifactAcquisitionCompletion } : {}),
     ...(singlePeriodBundleCheckpoint ? { singlePeriodBundleCheckpoint } : {}),
   } as FiledReturnsTargetReview;
+}
+
+function parseArtifactAcquisitionCompletion(
+  input: unknown,
+  scope: FiledReturnsDownloadScope,
+): FiledReturnsArtifactAcquisitionCompletion[] | null {
+  if (!Array.isArray(input)) return null;
+  const expectedArtifacts = concreteFiledReturnsArtifactTypes(
+    normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType),
+  );
+  if (input.length !== expectedArtifacts.length) return null;
+  const completion = input.map((entry, index) => {
+    if (!entry || typeof entry !== "object") return null;
+    const value = entry as Record<string, unknown>;
+    if (
+      !hasOnlyKeys(value, ["artifactType", "requestId"]) ||
+      !isFiledReturnsConcreteArtifactType(value.artifactType) ||
+      value.artifactType !== expectedArtifacts[index] ||
+      !isCanonicalFiledReturnsActionId(value.requestId)
+    ) {
+      return null;
+    }
+    return { artifactType: value.artifactType, requestId: value.requestId };
+  });
+  return completion.some((entry) => entry === null)
+    ? null
+    : (completion as FiledReturnsArtifactAcquisitionCompletion[]);
+}
+
+function sameArtifactAcquisitionCompletion(
+  left: FiledReturnsFlowSummary["artifactAcquisitionCompletion"],
+  right: FiledReturnsTargetReview["artifactAcquisitionCompletion"],
+): boolean {
+  return (
+    left !== undefined &&
+    right !== undefined &&
+    left.length === right.length &&
+    left.every(
+      (entry, index) =>
+        entry.artifactType === right[index]?.artifactType &&
+        entry.requestId === right[index]?.requestId,
+    )
+  );
 }
 
 function parseSinglePeriodBundleCheckpoint(

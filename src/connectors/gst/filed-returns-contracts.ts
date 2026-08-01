@@ -99,6 +99,8 @@ export type FiledReturnsTargetDownloadAttempt =
     };
 
 export interface FiledReturnsTargetReview {
+  /** Exact opaque request identities for a completion that is awaiting review removal. */
+  artifactAcquisitionCompletion?: FiledReturnsArtifactAcquisitionCompletion[];
   downloadAttempt?: FiledReturnsTargetDownloadAttempt;
   downloadDiagnostic?: FiledReturnsDownloadDiagnostic;
   downloadDiagnostics?: FiledReturnsDownloadDiagnostic[];
@@ -116,6 +118,11 @@ export interface FiledReturnsTargetReview {
   safeSignals: string[];
   safeMessage: string;
   updatedAt: string;
+}
+
+export interface FiledReturnsArtifactAcquisitionCompletion {
+  artifactType: FiledReturnsConcreteArtifactType;
+  requestId: string;
 }
 
 export type FiledReturnsDownloadEndpointClass =
@@ -241,6 +248,8 @@ export interface FiledReturnsFullFiscalYearLedger {
 }
 
 export interface FiledReturnsFlowSummary {
+  /** Binds an artifact-reconciled completion to the acquisition that produced it. */
+  artifactAcquisitionCompletion?: FiledReturnsArtifactAcquisitionCompletion[];
   scope: FiledReturnsDownloadScope;
   status: "complete" | "running" | "partial" | "blocked" | "cancelled";
   completedAt?: string;

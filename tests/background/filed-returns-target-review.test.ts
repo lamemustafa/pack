@@ -220,7 +220,13 @@ describe("filed returns target review", () => {
     });
     acquisitionMocks.clearArtifactAcquisitionCheckpoints.mockResolvedValue({
       state: "completed",
-      evidence: [{ artifactType: "PDF", downloadId: 9, requestId: "request-may-pdf" }],
+      evidence: [
+        {
+          artifactType: "PDF",
+          downloadId: 9,
+          requestId: "11111111-1111-4111-8111-111111111111",
+        },
+      ],
     });
 
     await resolveUnconfirmedFiledReturnsDownload(scope, "cancelled", {
@@ -247,7 +253,11 @@ describe("filed returns target review", () => {
     expect(
       acquisitionMocks.clearArtifactAcquisitionCheckpointsAfterPersistedSummary,
     ).toHaveBeenCalledWith(scope, [
-      { artifactType: "PDF", downloadId: 9, requestId: "request-may-pdf" },
+      {
+        artifactType: "PDF",
+        downloadId: 9,
+        requestId: "11111111-1111-4111-8111-111111111111",
+      },
     ]);
   });
 
@@ -283,7 +293,13 @@ describe("filed returns target review", () => {
     });
     acquisitionMocks.clearArtifactAcquisitionCheckpoints.mockResolvedValueOnce({
       state: "completed",
-      evidence: [{ artifactType: "PDF", downloadId: 9, requestId: "request-may-pdf" }],
+      evidence: [
+        {
+          artifactType: "PDF",
+          downloadId: 9,
+          requestId: "11111111-1111-4111-8111-111111111111",
+        },
+      ],
     });
     acquisitionMocks.clearArtifactAcquisitionCheckpointsAfterPersistedSummary.mockRejectedValueOnce(
       new Error("simulated worker stop after checkpoint cleanup"),
@@ -295,10 +311,26 @@ describe("filed returns target review", () => {
       }),
     ).rejects.toThrow("simulated worker stop after checkpoint cleanup");
 
-    expect(localValues["target-review"]).toBeDefined();
+    expect(localValues["target-review"]).toMatchObject({
+      artifactAcquisitionCompletion: [
+        {
+          artifactType: "PDF",
+          requestId: "11111111-1111-4111-8111-111111111111",
+        },
+      ],
+    });
     expect(
       parseDurableFiledReturnsFlowSummary(browserMocks.storage.session.values.completion),
-    ).toMatchObject({ status: "complete", completedPeriods: ["May"] });
+    ).toMatchObject({
+      artifactAcquisitionCompletion: [
+        {
+          artifactType: "PDF",
+          requestId: "11111111-1111-4111-8111-111111111111",
+        },
+      ],
+      status: "complete",
+      completedPeriods: ["May"],
+    });
 
     acquisitionMocks.clearArtifactAcquisitionCheckpoints.mockResolvedValueOnce({
       state: "cleared",
@@ -315,6 +347,88 @@ describe("filed returns target review", () => {
     expect(
       parseDurableFiledReturnsFlowSummary(browserMocks.storage.session.values.completion),
     ).toMatchObject({ status: "complete", completedPeriods: ["May"] });
+  });
+
+  it("records a new same-scope cancellation instead of returning an earlier acquisition completion", async () => {
+    const scope = {
+      artifactType: "PDF" as const,
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-3B" as const,
+    };
+    const localValues: Record<string, unknown> = {
+      "target-review": {
+        revision: 1,
+        safeMessage: "Pack retained unresolved artifact recovery.",
+        safeSignals: ["artifact-acquisition-download-completed-unpersisted"],
+        schemaVersion: "1.0",
+        scope,
+        status: "download-unconfirmed",
+        targetId: "GSTR-3B:2025-26:May",
+        updatedAt: "2026-08-01T00:00:00.000Z",
+      },
+    };
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      typeof key === "string" && Object.hasOwn(localValues, key) ? { [key]: localValues[key] } : {},
+    );
+    browserMocks.storage.local.set.mockImplementation(async (values: Record<string, unknown>) => {
+      Object.assign(localValues, values);
+    });
+    browserMocks.storage.local.remove.mockImplementation(async (keys: unknown) => {
+      for (const key of Array.isArray(keys) ? keys : [keys]) {
+        if (typeof key === "string") delete localValues[key];
+      }
+    });
+    acquisitionMocks.clearArtifactAcquisitionCheckpoints.mockResolvedValueOnce({
+      state: "completed",
+      evidence: [
+        {
+          artifactType: "PDF",
+          downloadId: 9,
+          requestId: "11111111-1111-4111-8111-111111111111",
+        },
+      ],
+    });
+
+    await resolveUnconfirmedFiledReturnsDownload(scope, "cancelled", {
+      storageKeys: { completion: "completion", targetReview: "target-review" },
+    });
+
+    expect(
+      parseDurableFiledReturnsFlowSummary(browserMocks.storage.session.values.completion),
+    ).toMatchObject({
+      artifactAcquisitionCompletion: [
+        {
+          artifactType: "PDF",
+          requestId: "11111111-1111-4111-8111-111111111111",
+        },
+      ],
+      status: "complete",
+    });
+
+    localValues["target-review"] = {
+      revision: 1,
+      safeMessage: "Pack retained a new unresolved artifact recovery.",
+      safeSignals: ["artifact-acquisition-download-interrupted"],
+      schemaVersion: "1.0",
+      scope,
+      status: "download-unconfirmed",
+      targetId: "GSTR-3B:2025-26:May",
+      updatedAt: "2026-08-01T00:01:00.000Z",
+    };
+
+    const response = await resolveUnconfirmedFiledReturnsDownload(scope, "cancelled", {
+      storageKeys: { completion: "completion", targetReview: "target-review" },
+    });
+
+    expect(response).toMatchObject({
+      flowStep: { state: "user-action-required" },
+      flowSummary: { completedPeriods: [], status: "cancelled" },
+    });
+    expect(localValues["target-review"]).toBeUndefined();
+    expect(
+      parseDurableFiledReturnsFlowSummary(browserMocks.storage.session.values.completion),
+    ).toMatchObject({ completedPeriods: [], status: "cancelled" });
   });
 
   it("accepts exact PDF and Excel reconciliation without selected-file ZIP evidence", async () => {
@@ -350,8 +464,16 @@ describe("filed returns target review", () => {
     acquisitionMocks.clearArtifactAcquisitionCheckpoints.mockResolvedValue({
       state: "completed",
       evidence: [
-        { artifactType: "PDF", downloadId: 9, requestId: "request-may-pdf" },
-        { artifactType: "EXCEL", downloadId: 10, requestId: "request-may-excel" },
+        {
+          artifactType: "PDF",
+          downloadId: 9,
+          requestId: "11111111-1111-4111-8111-111111111111",
+        },
+        {
+          artifactType: "EXCEL",
+          downloadId: 10,
+          requestId: "22222222-2222-4222-8222-222222222222",
+        },
       ],
     });
 
