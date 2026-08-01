@@ -6,7 +6,11 @@ import type {
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
 import { persistCanonicalFiledReturnsFlowSummary } from "./filed-returns-session-summary";
-import { clearArtifactAcquisitionCheckpointsAfterPersistedSummary } from "./artifact-acquisition-state";
+import {
+  clearArtifactAcquisitionCheckpointsAfterPersistedSummary,
+  readArtifactAcquisitionCompletionEvidence,
+  type ArtifactAcquisitionCompletionEvidence,
+} from "./artifact-acquisition-state";
 
 export async function withPersistedSinglePeriodSummary(
   scope: FiledReturnsDownloadScope,
@@ -15,27 +19,40 @@ export async function withPersistedSinglePeriodSummary(
   shouldPersistSinglePeriodSummary: boolean,
 ): Promise<PackMessageResponse> {
   if (!shouldPersistSinglePeriodSummary) return response;
+  const checkpointEvidence =
+    response.flowStep.state === "downloaded"
+      ? await readArtifactAcquisitionCompletionEvidence(scope)
+      : [];
   if (response.flowSummary) {
     const flowSummary = await persistProvidedSinglePeriodSummary(response.flowSummary, deps);
-    if (flowSummary) return responseAfterPersistedSummary(scope, response, flowSummary);
+    if (flowSummary)
+      return responseAfterPersistedSummary(scope, response, flowSummary, checkpointEvidence);
     const responseWithoutSummary = { ...response };
     delete responseWithoutSummary.flowSummary;
     const reconstructedSummary = await persistSinglePeriodSummary(scope, response.flowStep, deps);
     return reconstructedSummary
-      ? responseAfterPersistedSummary(scope, responseWithoutSummary, reconstructedSummary)
+      ? responseAfterPersistedSummary(
+          scope,
+          responseWithoutSummary,
+          reconstructedSummary,
+          checkpointEvidence,
+        )
       : responseWithoutSummary;
   }
   const flowSummary = await persistSinglePeriodSummary(scope, response.flowStep, deps);
-  return flowSummary ? responseAfterPersistedSummary(scope, response, flowSummary) : response;
+  return flowSummary
+    ? responseAfterPersistedSummary(scope, response, flowSummary, checkpointEvidence)
+    : response;
 }
 
 async function responseAfterPersistedSummary(
   scope: FiledReturnsDownloadScope,
   response: Extract<PackMessageResponse, { ok: true; flowStep: PortalFlowStepResult }>,
   flowSummary: FiledReturnsFlowSummary,
+  checkpointEvidence: readonly ArtifactAcquisitionCompletionEvidence[],
 ): Promise<PackMessageResponse> {
   if (response.flowStep.state === "downloaded") {
-    await clearArtifactAcquisitionCheckpointsAfterPersistedSummary(scope);
+    await clearArtifactAcquisitionCheckpointsAfterPersistedSummary(scope, checkpointEvidence);
   }
   return { ...response, flowSummary };
 }

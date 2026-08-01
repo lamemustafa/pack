@@ -5,7 +5,12 @@ import type {
   FiledReturnsFullFiscalYearTargetStatus,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
-import { normaliseFiledReturnsArtifactType } from "../connectors/gst/filed-returns-artifacts";
+import {
+  concreteFiledReturnsArtifactTypes,
+  isFiledReturnsConcreteArtifactType,
+  normaliseFiledReturnsArtifactType,
+} from "../connectors/gst/filed-returns-artifacts";
+import { isCanonicalFiledReturnsActionId } from "../connectors/gst/filed-returns-operation-id";
 import { filedReturnsScopeId } from "../connectors/gst/filed-returns-return-types";
 import {
   FILED_RETURNS_MONTHS,
@@ -26,6 +31,7 @@ import {
 } from "./filed-returns-download-diagnostic-state";
 
 const SUMMARY_KEYS = [
+  "artifactAcquisitionCompletion",
   "completedAt",
   "completedPeriods",
   "currentPeriod",
@@ -87,6 +93,13 @@ export function parseDurableFiledReturnsFlowSummary(
   if (!scope || !summary.status || !SUMMARY_STATUSES.has(summary.status)) return null;
   const completedPeriods = parsePeriods(summary.completedPeriods);
   if (!completedPeriods || !isOptionalCount(summary.totalPeriods)) return null;
+  const artifactAcquisitionCompletion = parseArtifactAcquisitionCompletion(
+    summary.artifactAcquisitionCompletion,
+    scope,
+  );
+  if (summary.artifactAcquisitionCompletion !== undefined && !artifactAcquisitionCompletion) {
+    return null;
+  }
   if (!isOptionalCurrentPeriod(summary.currentPeriod, scope)) return null;
   if (!isOptionalCanonicalTimestamp(summary.completedAt)) return null;
   if (!isOptionalCanonicalTimestamp(summary.updatedAt)) return null;
@@ -100,6 +113,13 @@ export function parseDurableFiledReturnsFlowSummary(
     summary.currentPeriod,
   );
   if (!flowStep) return null;
+  if (
+    artifactAcquisitionCompletion &&
+    (summary.status !== "complete" ||
+      !flowStep.safeSignals.includes("artifact-acquisition-download-reconciled"))
+  ) {
+    return null;
+  }
   if (
     summary.status === "complete" &&
     !isConsistentCompleteSummary({
@@ -116,6 +136,7 @@ export function parseDurableFiledReturnsFlowSummary(
   return {
     scope,
     status: summary.status,
+    ...(artifactAcquisitionCompletion ? { artifactAcquisitionCompletion } : {}),
     ...(summary.completedAt ? { completedAt: summary.completedAt } : {}),
     ...(summary.updatedAt ? { updatedAt: summary.updatedAt } : {}),
     completedPeriods,
@@ -124,6 +145,45 @@ export function parseDurableFiledReturnsFlowSummary(
     ...(recovery ? { fullFiscalYearRecovery: recovery } : {}),
     flowStep,
   };
+}
+
+/**
+ * The single owner of the acquisition-completion marker shape. Exported because
+ * the target-review reader validates the same records: two copies of this rule
+ * drifted apart the moment `downloadId` was added to the marker.
+ */
+export function parseArtifactAcquisitionCompletion(
+  input: unknown,
+  scope: FiledReturnsDownloadScope,
+): FiledReturnsFlowSummary["artifactAcquisitionCompletion"] | null {
+  if (!Array.isArray(input)) return null;
+  const expectedArtifacts = concreteFiledReturnsArtifactTypes(
+    normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType),
+  );
+  if (input.length !== expectedArtifacts.length) return null;
+  const completion = input.map((entry, index) => {
+    if (!entry || typeof entry !== "object") return null;
+    const value = entry as Record<string, unknown>;
+    if (
+      !hasOnlyKeys(value, ["artifactType", "downloadId", "requestId"]) ||
+      !isFiledReturnsConcreteArtifactType(value.artifactType) ||
+      value.artifactType !== expectedArtifacts[index] ||
+      typeof value.downloadId !== "number" ||
+      !Number.isSafeInteger(value.downloadId) ||
+      value.downloadId < 0 ||
+      !isCanonicalFiledReturnsActionId(value.requestId)
+    ) {
+      return null;
+    }
+    return {
+      artifactType: value.artifactType,
+      downloadId: value.downloadId,
+      requestId: value.requestId,
+    };
+  });
+  return completion.some((entry) => entry === null)
+    ? null
+    : (completion as NonNullable<FiledReturnsFlowSummary["artifactAcquisitionCompletion"]>);
 }
 
 function isConsistentCompleteSummary({
@@ -168,17 +228,40 @@ function isConsistentCompleteSummary({
   }
   const artifactType = normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType);
   const isSelectedArtifactBundle = artifactType === "PDF_AND_EXCEL";
+  const hasExactArtifactReconciliation = hasExactArtifactAcquisitionReconciliationEvidence(
+    scope,
+    flowStep.safeSignals,
+  );
   return (
     flowStep.state === "downloaded" &&
-    (isSelectedArtifactBundle
-      ? flowStep.safeSignals.includes("single-period-zip-downloaded")
-      : true) &&
-    hasPositiveFiledReturnsDownloadEvidence(
-      flowStep,
-      scope,
-      flowStep.safeSignals,
-      isSelectedArtifactBundle ? "single-period" : null,
-    )
+    (hasExactArtifactReconciliation ||
+      ((isSelectedArtifactBundle
+        ? flowStep.safeSignals.includes("single-period-zip-downloaded")
+        : true) &&
+        hasPositiveFiledReturnsDownloadEvidence(
+          flowStep,
+          scope,
+          flowStep.safeSignals,
+          isSelectedArtifactBundle ? "single-period" : null,
+        )))
+  );
+}
+
+function hasExactArtifactAcquisitionReconciliationEvidence(
+  scope: FiledReturnsDownloadScope,
+  safeSignals: readonly string[],
+): boolean {
+  const expectedArtifactCount = concreteFiledReturnsArtifactTypes(
+    normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType),
+  ).length;
+  const downloadIds = safeSignals.filter((signal) => /^browser-download-id:\d{1,10}$/.test(signal));
+  return (
+    safeSignals.includes("artifact-acquisition-download-reconciled") &&
+    safeSignals.includes("browser-download-created") &&
+    safeSignals.includes("browser-download-completed") &&
+    safeSignals.includes("browser-download-non-empty") &&
+    downloadIds.length === expectedArtifactCount &&
+    new Set(downloadIds).size === expectedArtifactCount
   );
 }
 

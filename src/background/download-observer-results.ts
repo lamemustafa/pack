@@ -182,7 +182,11 @@ export function failedObservation(errorCode?: string): SafeDownloadObservation {
   };
 }
 
-function firstKnownSize(item: DownloadCreatedItem | undefined): number | null {
+/**
+ * The single owner of browser-reported download size precedence. Recovery paths
+ * use this with classifyDownloadDanger instead of duplicating observer rules.
+ */
+export function firstKnownSize(item: DownloadCreatedItem | undefined): number | null {
   const fileSize = item?.fileSize;
   if (typeof fileSize === "number" && Number.isFinite(fileSize) && fileSize >= 0) {
     return fileSize;

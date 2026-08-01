@@ -20,30 +20,43 @@ import {
   markSinglePeriodBundleZipIntent,
 } from "../../src/background/filed-returns-single-period-bundle-ledger";
 
-const browserMocks = vi.hoisted(() => ({
-  storage: {
-    local: {
-      get: vi.fn(async (_key?: unknown): Promise<Record<string, unknown>> => {
-        void _key;
-        return {};
-      }),
-      remove: vi.fn(async (_key?: unknown) => {
-        void _key;
-      }),
-      set: vi.fn(async (_values: Record<string, unknown>) => {
-        void _values;
-      }),
+const browserMocks = vi.hoisted(() => {
+  const sessionValues: Record<string, unknown> = {};
+  return {
+    storage: {
+      local: {
+        get: vi.fn(async (_key?: unknown): Promise<Record<string, unknown>> => {
+          void _key;
+          return {};
+        }),
+        remove: vi.fn(async (_key?: unknown) => {
+          void _key;
+        }),
+        set: vi.fn(async (_values: Record<string, unknown>) => {
+          void _values;
+        }),
+      },
+      session: {
+        values: sessionValues,
+        get: vi.fn(async (key: string) =>
+          Object.hasOwn(sessionValues, key) ? { [key]: sessionValues[key] } : {},
+        ),
+        remove: vi.fn(async (key: string) => {
+          delete sessionValues[key];
+        }),
+        set: vi.fn(async (values: Record<string, unknown>) => {
+          Object.assign(sessionValues, values);
+        }),
+      },
     },
-    session: {
-      set: vi.fn(async () => undefined),
-    },
-  },
-}));
+  };
+});
 const zipMocks = vi.hoisted(() => ({
   discardSinglePeriodFiledReturnsZip: vi.fn(async () => ["single-period-opfs-cleared"]),
 }));
 const acquisitionMocks = vi.hoisted(() => ({
   clearArtifactAcquisitionCheckpoints: vi.fn(),
+  clearArtifactAcquisitionCheckpointsAfterPersistedSummary: vi.fn(),
 }));
 
 vi.mock("wxt/browser", () => ({
@@ -63,9 +76,14 @@ describe("filed returns target review", () => {
       void _values;
     });
     browserMocks.storage.local.remove.mockResolvedValue(undefined);
-    browserMocks.storage.session.set.mockResolvedValue(undefined);
+    for (const key of Object.keys(browserMocks.storage.session.values)) {
+      delete browserMocks.storage.session.values[key];
+    }
     zipMocks.discardSinglePeriodFiledReturnsZip.mockResolvedValue(["single-period-opfs-cleared"]);
-    acquisitionMocks.clearArtifactAcquisitionCheckpoints.mockResolvedValue(true);
+    acquisitionMocks.clearArtifactAcquisitionCheckpoints.mockResolvedValue({ state: "cleared" });
+    acquisitionMocks.clearArtifactAcquisitionCheckpointsAfterPersistedSummary.mockResolvedValue(
+      undefined,
+    );
   });
 
   it("records a manual observation without completing or clearing the unresolved target", async () => {
@@ -170,6 +188,379 @@ describe("filed returns target review", () => {
     expect(response.flowStep.safeSignals).not.toContain("single-period-zip-downloaded");
   });
 
+  it("persists an evidenced acquisition reconciliation as complete and removes its target review", async () => {
+    const scope = {
+      artifactType: "PDF" as const,
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-3B" as const,
+    };
+    const localValues: Record<string, unknown> = {
+      "target-review": {
+        revision: 1,
+        safeMessage: "Pack retained unresolved artifact recovery.",
+        safeSignals: ["artifact-acquisition-download-completed-unpersisted"],
+        schemaVersion: "1.0",
+        scope,
+        status: "download-unconfirmed",
+        targetId: "GSTR-3B:2025-26:May",
+        updatedAt: "2026-08-01T00:00:00.000Z",
+      },
+    };
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      typeof key === "string" && Object.hasOwn(localValues, key) ? { [key]: localValues[key] } : {},
+    );
+    browserMocks.storage.local.set.mockImplementation(async (values: Record<string, unknown>) => {
+      Object.assign(localValues, values);
+    });
+    browserMocks.storage.local.remove.mockImplementation(async (keys: unknown) => {
+      for (const key of Array.isArray(keys) ? keys : [keys]) {
+        if (typeof key === "string") delete localValues[key];
+      }
+    });
+    acquisitionMocks.clearArtifactAcquisitionCheckpoints.mockResolvedValue({
+      state: "completed",
+      evidence: [
+        {
+          artifactType: "PDF",
+          downloadId: 9,
+          requestId: "11111111-1111-4111-8111-111111111111",
+        },
+      ],
+    });
+
+    await resolveUnconfirmedFiledReturnsDownload(scope, "cancelled", {
+      storageKeys: { completion: "completion", targetReview: "target-review" },
+      now: () => new Date("2026-08-01T00:00:05.000Z"),
+    });
+
+    expect(
+      parseDurableFiledReturnsFlowSummary(browserMocks.storage.session.values.completion),
+    ).toMatchObject({
+      completedPeriods: ["May"],
+      flowStep: {
+        safeSignals: expect.arrayContaining([
+          "artifact-acquisition-download-reconciled",
+          "browser-download-completed",
+          "browser-download-id:9",
+          "browser-download-non-empty",
+        ]),
+        state: "downloaded",
+      },
+      status: "complete",
+    });
+    expect(localValues["target-review"]).toBeUndefined();
+    expect(
+      acquisitionMocks.clearArtifactAcquisitionCheckpointsAfterPersistedSummary,
+    ).toHaveBeenCalledWith(scope, [
+      {
+        artifactType: "PDF",
+        downloadId: 9,
+        requestId: "11111111-1111-4111-8111-111111111111",
+      },
+    ]);
+  });
+
+  it("keeps a persisted acquisition completion when cleanup finishes before review removal", async () => {
+    const scope = {
+      artifactType: "PDF" as const,
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-3B" as const,
+    };
+    const localValues: Record<string, unknown> = {
+      "target-review": {
+        revision: 1,
+        safeMessage: "Pack retained unresolved artifact recovery.",
+        safeSignals: ["artifact-acquisition-download-completed-unpersisted"],
+        schemaVersion: "1.0",
+        scope,
+        status: "download-unconfirmed",
+        targetId: "GSTR-3B:2025-26:May",
+        updatedAt: "2026-08-01T00:00:00.000Z",
+      },
+    };
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      typeof key === "string" && Object.hasOwn(localValues, key) ? { [key]: localValues[key] } : {},
+    );
+    browserMocks.storage.local.set.mockImplementation(async (values: Record<string, unknown>) => {
+      Object.assign(localValues, values);
+    });
+    browserMocks.storage.local.remove.mockImplementation(async (keys: unknown) => {
+      for (const key of Array.isArray(keys) ? keys : [keys]) {
+        if (typeof key === "string") delete localValues[key];
+      }
+    });
+    acquisitionMocks.clearArtifactAcquisitionCheckpoints.mockResolvedValueOnce({
+      state: "completed",
+      evidence: [
+        {
+          artifactType: "PDF",
+          downloadId: 9,
+          requestId: "11111111-1111-4111-8111-111111111111",
+        },
+      ],
+    });
+    acquisitionMocks.clearArtifactAcquisitionCheckpointsAfterPersistedSummary.mockRejectedValueOnce(
+      new Error("simulated worker stop after checkpoint cleanup"),
+    );
+
+    await expect(
+      resolveUnconfirmedFiledReturnsDownload(scope, "cancelled", {
+        storageKeys: { completion: "completion", targetReview: "target-review" },
+      }),
+    ).rejects.toThrow("simulated worker stop after checkpoint cleanup");
+
+    expect(localValues["target-review"]).toMatchObject({
+      artifactAcquisitionCompletion: [
+        {
+          artifactType: "PDF",
+          downloadId: 9,
+          requestId: "11111111-1111-4111-8111-111111111111",
+        },
+      ],
+    });
+    expect(
+      parseDurableFiledReturnsFlowSummary(browserMocks.storage.session.values.completion),
+    ).toMatchObject({
+      artifactAcquisitionCompletion: [
+        {
+          artifactType: "PDF",
+          downloadId: 9,
+          requestId: "11111111-1111-4111-8111-111111111111",
+        },
+      ],
+      status: "complete",
+      completedPeriods: ["May"],
+    });
+
+    acquisitionMocks.clearArtifactAcquisitionCheckpoints.mockResolvedValueOnce({
+      state: "cleared",
+    });
+    const response = await resolveUnconfirmedFiledReturnsDownload(scope, "cancelled", {
+      storageKeys: { completion: "completion", targetReview: "target-review" },
+    });
+
+    expect(response).toMatchObject({
+      flowSummary: { status: "complete", completedPeriods: ["May"] },
+      flowStep: { state: "downloaded" },
+    });
+    expect(localValues["target-review"]).toBeUndefined();
+    expect(
+      parseDurableFiledReturnsFlowSummary(browserMocks.storage.session.values.completion),
+    ).toMatchObject({ status: "complete", completedPeriods: ["May"] });
+  });
+
+  it("restores completion from the durable marker when a browser restart cleared the session summary", async () => {
+    // Chrome clears storage.session on disable, reload, update and browser
+    // restart while storage.local survives. A restart between marking the review
+    // and removing it destroys the session summary and the checkpoints but
+    // leaves the marker, and the cancellation path would otherwise record a
+    // target that demonstrably downloaded as cancelled.
+    const scope = {
+      artifactType: "PDF" as const,
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-3B" as const,
+    };
+    const localValues: Record<string, unknown> = {
+      "target-review": {
+        artifactAcquisitionCompletion: [
+          { artifactType: "PDF", downloadId: 9, requestId: "11111111-1111-4111-8111-111111111111" },
+        ],
+        revision: 2,
+        safeMessage: "Pack retained unresolved artifact recovery.",
+        safeSignals: ["artifact-acquisition-download-completed-unpersisted"],
+        schemaVersion: "1.0",
+        scope,
+        status: "download-unconfirmed",
+        targetId: "GSTR-3B:2025-26:May",
+        updatedAt: "2026-08-01T00:00:00.000Z",
+      },
+    };
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      typeof key === "string" && Object.hasOwn(localValues, key) ? { [key]: localValues[key] } : {},
+    );
+    browserMocks.storage.local.set.mockImplementation(async (values: Record<string, unknown>) => {
+      Object.assign(localValues, values);
+    });
+    browserMocks.storage.local.remove.mockImplementation(async (keys: unknown) => {
+      for (const key of Array.isArray(keys) ? keys : [keys]) {
+        if (typeof key === "string") delete localValues[key];
+      }
+    });
+    // The restart cleared both of these.
+    delete browserMocks.storage.session.values.completion;
+    acquisitionMocks.clearArtifactAcquisitionCheckpoints.mockResolvedValueOnce({
+      state: "cleared",
+    });
+
+    const response = await resolveUnconfirmedFiledReturnsDownload(scope, "cancelled", {
+      storageKeys: { completion: "completion", targetReview: "target-review" },
+    });
+
+    expect(response).toMatchObject({
+      flowSummary: { status: "complete", completedPeriods: ["May"] },
+      flowStep: { state: "downloaded" },
+    });
+    expect(response).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining(["artifact-acquisition-completion-restored"]),
+      },
+    });
+    expect(localValues["target-review"]).toBeUndefined();
+    expect(
+      parseDurableFiledReturnsFlowSummary(browserMocks.storage.session.values.completion),
+    ).toMatchObject({
+      artifactAcquisitionCompletion: [
+        { artifactType: "PDF", downloadId: 9, requestId: "11111111-1111-4111-8111-111111111111" },
+      ],
+      status: "complete",
+    });
+  });
+
+  it("records a new same-scope cancellation instead of returning an earlier acquisition completion", async () => {
+    const scope = {
+      artifactType: "PDF" as const,
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-3B" as const,
+    };
+    const localValues: Record<string, unknown> = {
+      "target-review": {
+        revision: 1,
+        safeMessage: "Pack retained unresolved artifact recovery.",
+        safeSignals: ["artifact-acquisition-download-completed-unpersisted"],
+        schemaVersion: "1.0",
+        scope,
+        status: "download-unconfirmed",
+        targetId: "GSTR-3B:2025-26:May",
+        updatedAt: "2026-08-01T00:00:00.000Z",
+      },
+    };
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      typeof key === "string" && Object.hasOwn(localValues, key) ? { [key]: localValues[key] } : {},
+    );
+    browserMocks.storage.local.set.mockImplementation(async (values: Record<string, unknown>) => {
+      Object.assign(localValues, values);
+    });
+    browserMocks.storage.local.remove.mockImplementation(async (keys: unknown) => {
+      for (const key of Array.isArray(keys) ? keys : [keys]) {
+        if (typeof key === "string") delete localValues[key];
+      }
+    });
+    acquisitionMocks.clearArtifactAcquisitionCheckpoints.mockResolvedValueOnce({
+      state: "completed",
+      evidence: [
+        {
+          artifactType: "PDF",
+          downloadId: 9,
+          requestId: "11111111-1111-4111-8111-111111111111",
+        },
+      ],
+    });
+
+    await resolveUnconfirmedFiledReturnsDownload(scope, "cancelled", {
+      storageKeys: { completion: "completion", targetReview: "target-review" },
+    });
+
+    expect(
+      parseDurableFiledReturnsFlowSummary(browserMocks.storage.session.values.completion),
+    ).toMatchObject({
+      artifactAcquisitionCompletion: [
+        {
+          artifactType: "PDF",
+          downloadId: 9,
+          requestId: "11111111-1111-4111-8111-111111111111",
+        },
+      ],
+      status: "complete",
+    });
+
+    localValues["target-review"] = {
+      revision: 1,
+      safeMessage: "Pack retained a new unresolved artifact recovery.",
+      safeSignals: ["artifact-acquisition-download-interrupted"],
+      schemaVersion: "1.0",
+      scope,
+      status: "download-unconfirmed",
+      targetId: "GSTR-3B:2025-26:May",
+      updatedAt: "2026-08-01T00:01:00.000Z",
+    };
+
+    const response = await resolveUnconfirmedFiledReturnsDownload(scope, "cancelled", {
+      storageKeys: { completion: "completion", targetReview: "target-review" },
+    });
+
+    expect(response).toMatchObject({
+      flowStep: { state: "user-action-required" },
+      flowSummary: { completedPeriods: [], status: "cancelled" },
+    });
+    expect(localValues["target-review"]).toBeUndefined();
+    expect(
+      parseDurableFiledReturnsFlowSummary(browserMocks.storage.session.values.completion),
+    ).toMatchObject({ completedPeriods: [], status: "cancelled" });
+  });
+
+  it("accepts exact PDF and Excel reconciliation without selected-file ZIP evidence", async () => {
+    const scope = {
+      artifactType: "PDF_AND_EXCEL" as const,
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-2B" as const,
+    };
+    const localValues: Record<string, unknown> = {
+      "target-review": {
+        revision: 1,
+        safeMessage: "Pack retained unresolved artifact recovery.",
+        safeSignals: ["artifact-acquisition-download-completed-unpersisted"],
+        schemaVersion: "1.0",
+        scope,
+        status: "download-unconfirmed",
+        targetId: "GSTR-2B:2025-26:May:PDF_AND_EXCEL",
+        updatedAt: "2026-08-01T00:00:00.000Z",
+      },
+    };
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      typeof key === "string" && Object.hasOwn(localValues, key) ? { [key]: localValues[key] } : {},
+    );
+    browserMocks.storage.local.set.mockImplementation(async (values: Record<string, unknown>) => {
+      Object.assign(localValues, values);
+    });
+    browserMocks.storage.local.remove.mockImplementation(async (keys: unknown) => {
+      for (const key of Array.isArray(keys) ? keys : [keys]) {
+        if (typeof key === "string") delete localValues[key];
+      }
+    });
+    acquisitionMocks.clearArtifactAcquisitionCheckpoints.mockResolvedValue({
+      state: "completed",
+      evidence: [
+        {
+          artifactType: "PDF",
+          downloadId: 9,
+          requestId: "11111111-1111-4111-8111-111111111111",
+        },
+        {
+          artifactType: "EXCEL",
+          downloadId: 10,
+          requestId: "22222222-2222-4222-8222-222222222222",
+        },
+      ],
+    });
+
+    const response = await resolveUnconfirmedFiledReturnsDownload(scope, "cancelled", {
+      storageKeys: { completion: "completion", targetReview: "target-review" },
+    });
+
+    expect(response).toMatchObject({
+      flowSummary: { status: "complete", completedPeriods: ["May"] },
+      flowStep: {
+        safeSignals: expect.not.arrayContaining(["single-period-zip-downloaded"]),
+        state: "downloaded",
+      },
+    });
+  });
+
   it("keeps retained acquisition recovery blocked when an exact download cannot be cancelled", async () => {
     const scope = {
       artifactType: "PDF" as const,
@@ -188,7 +579,7 @@ describe("filed returns target review", () => {
       updatedAt: "2026-08-01T00:00:00.000Z",
     };
     browserMocks.storage.local.get.mockResolvedValue({ "target-review": review });
-    acquisitionMocks.clearArtifactAcquisitionCheckpoints.mockResolvedValue(false);
+    acquisitionMocks.clearArtifactAcquisitionCheckpoints.mockResolvedValue({ state: "blocked" });
 
     const response = await resolveUnconfirmedFiledReturnsDownload(scope, "cancelled", {
       storageKeys: { completion: "completion", targetReview: "target-review" },
