@@ -42,11 +42,15 @@ const browserMocks = vi.hoisted(() => ({
 const zipMocks = vi.hoisted(() => ({
   discardSinglePeriodFiledReturnsZip: vi.fn(async () => ["single-period-opfs-cleared"]),
 }));
+const acquisitionMocks = vi.hoisted(() => ({
+  clearArtifactAcquisitionCheckpoints: vi.fn(),
+}));
 
 vi.mock("wxt/browser", () => ({
   browser: browserMocks,
 }));
 vi.mock("../../src/background/filed-returns-single-period-zip", () => zipMocks);
+vi.mock("../../src/background/artifact-acquisition-state", () => acquisitionMocks);
 
 describe("filed returns target review", () => {
   beforeEach(() => {
@@ -61,6 +65,7 @@ describe("filed returns target review", () => {
     browserMocks.storage.local.remove.mockResolvedValue(undefined);
     browserMocks.storage.session.set.mockResolvedValue(undefined);
     zipMocks.discardSinglePeriodFiledReturnsZip.mockResolvedValue(["single-period-opfs-cleared"]);
+    acquisitionMocks.clearArtifactAcquisitionCheckpoints.mockResolvedValue(true);
   });
 
   it("records a manual observation without completing or clearing the unresolved target", async () => {
@@ -124,6 +129,88 @@ describe("filed returns target review", () => {
     expect(browserMocks.storage.session.set).not.toHaveBeenCalled();
   });
 
+  it("cancels retained acquisition recovery without marking the target downloaded", async () => {
+    const scope = {
+      artifactType: "PDF_AND_EXCEL" as const,
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-2B" as const,
+    };
+    const localValues: Record<string, unknown> = {
+      "target-review": {
+        revision: 1,
+        safeMessage: "Pack retained unresolved artifact recovery.",
+        safeSignals: ["artifact-acquisition-download-interrupted"],
+        schemaVersion: "1.0",
+        scope,
+        status: "download-unconfirmed",
+        targetId: "GSTR-2B:2025-26:May:PDF_AND_EXCEL",
+        updatedAt: "2026-08-01T00:00:00.000Z",
+      },
+    };
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      typeof key === "string" && Object.hasOwn(localValues, key) ? { [key]: localValues[key] } : {},
+    );
+    browserMocks.storage.local.remove.mockImplementation(async (keys) => {
+      for (const key of Array.isArray(keys) ? keys : [keys]) delete localValues[key];
+    });
+
+    const response = await resolveUnconfirmedFiledReturnsDownload(scope, "cancelled", {
+      storageKeys: { completion: "completion", targetReview: "target-review" },
+    });
+
+    expect(acquisitionMocks.clearArtifactAcquisitionCheckpoints).toHaveBeenCalledWith(scope);
+    expect(localValues["target-review"]).toBeUndefined();
+    expect(response).toMatchObject({
+      flowStep: { state: "user-action-required" },
+      flowSummary: { completedPeriods: [], status: "cancelled" },
+    });
+    if (!response.ok || !("flowStep" in response))
+      throw new Error("Expected a target resolution step.");
+    expect(response.flowStep.safeSignals).not.toContain("single-period-zip-downloaded");
+  });
+
+  it("keeps retained acquisition recovery blocked when an exact download cannot be cancelled", async () => {
+    const scope = {
+      artifactType: "PDF" as const,
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-3B" as const,
+    };
+    const review = {
+      revision: 1,
+      safeMessage: "Pack retained unresolved artifact recovery.",
+      safeSignals: ["artifact-acquisition-download-unreconciled"],
+      schemaVersion: "1.0",
+      scope,
+      status: "download-unconfirmed",
+      targetId: "GSTR-3B:2025-26:May",
+      updatedAt: "2026-08-01T00:00:00.000Z",
+    };
+    browserMocks.storage.local.get.mockResolvedValue({ "target-review": review });
+    acquisitionMocks.clearArtifactAcquisitionCheckpoints.mockResolvedValue(false);
+
+    const response = await resolveUnconfirmedFiledReturnsDownload(scope, "cancelled", {
+      storageKeys: { completion: "completion", targetReview: "target-review" },
+    });
+
+    expect(response).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining([
+          "artifact-acquisition-download-unreconciled",
+          "artifact-acquisition-checkpoint-clear-failed",
+        ]),
+        state: "user-action-required",
+      },
+    });
+    expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
+    expect(browserMocks.storage.local.set).toHaveBeenCalledWith({
+      "target-review": expect.objectContaining({
+        safeSignals: expect.arrayContaining(["artifact-acquisition-checkpoint-clear-failed"]),
+      }),
+    });
+  });
+
   it("does not persist optional GSTR-1 Excel no-details as a timeout review", async () => {
     const summary = await persistFiledReturnsTargetReview(
       {
@@ -147,6 +234,45 @@ describe("filed returns target review", () => {
 
     expect(summary).toBeNull();
     expect(browserMocks.storage.local.set).not.toHaveBeenCalled();
+  });
+
+  it("persists retained artifact acquisition recovery as a resolvable target review", async () => {
+    const scope = {
+      artifactType: "PDF" as const,
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-3B" as const,
+    };
+
+    const summary = await persistFiledReturnsTargetReview(
+      scope,
+      {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        safeMessage: "Pack retained unresolved artifact download recovery.",
+        safeSignals: ["artifact-acquisition-download-interrupted"],
+        state: "blocked",
+      },
+      { storageKeys: { targetReview: "target-review" } },
+    );
+
+    expect(summary).toMatchObject({
+      completedPeriods: [],
+      flowStep: {
+        safeSignals: expect.arrayContaining([
+          "filed-returns-target-review-required",
+          "artifact-acquisition-download-interrupted",
+        ]),
+        state: "user-action-required",
+      },
+      status: "blocked",
+    });
+    expect(browserMocks.storage.local.set).toHaveBeenCalledWith({
+      "target-review": expect.objectContaining({
+        safeSignals: ["artifact-acquisition-download-interrupted"],
+        status: "download-unconfirmed",
+      }),
+    });
   });
 
   it("persists browser danger rejection for explicit target review", async () => {
@@ -555,6 +681,49 @@ describe("filed returns target review", () => {
       },
     });
     expect(durableSummary?.flowStep.safeMessage).not.toContain("could not verify");
+  });
+
+  it("keeps a cleanup-without-download review unresolved after staging is cleared", async () => {
+    const scope = {
+      artifactType: "PDF_AND_EXCEL" as const,
+      financialYear: "2025-26",
+      period: "March",
+      returnType: "GSTR-2B" as const,
+    };
+    const review = {
+      ...intentOnlyZipReview(scope),
+      safeSignals: ["single-period-zip-download-unconfirmed", "single-period-opfs-clear-failed"],
+    };
+    const localValues: Record<string, unknown> = {
+      "pack:single-period-staging": intentBundleLedger(scope),
+      "target-review": review,
+    };
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      typeof key === "string" && Object.hasOwn(localValues, key) ? { [key]: localValues[key] } : {},
+    );
+    browserMocks.storage.local.set.mockImplementation(async (values) => {
+      Object.assign(localValues, values);
+    });
+    browserMocks.storage.local.remove.mockImplementation(async (keys) => {
+      for (const key of Array.isArray(keys) ? keys : [keys]) delete localValues[key];
+    });
+    zipMocks.discardSinglePeriodFiledReturnsZip.mockResolvedValue(["single-period-opfs-cleared"]);
+
+    const response = await retryCompletedSinglePeriodZipCleanup(scope, {
+      storageKeys: { completion: "completion", targetReview: "target-review" },
+    });
+
+    expect(response).toMatchObject({
+      flowStep: { state: "user-action-required" },
+      flowSummary: { completedPeriods: [], status: "blocked" },
+    });
+    expect(localValues["target-review"]).toMatchObject({
+      safeSignals: expect.arrayContaining([
+        "single-period-opfs-cleanup-completed",
+        "single-period-zip-cleanup-without-download",
+      ]),
+    });
+    expect(localValues["completion"]).toBeUndefined();
   });
 
   it("does not treat completed cleanup checkpoints as a cleanup failure", () => {

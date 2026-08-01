@@ -9,6 +9,7 @@ import {
   concreteFiledReturnsArtifactTypes,
   normaliseFiledReturnsArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
+import { persistFiledReturnsTargetReview } from "./filed-returns-target-review";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
 import { getRequiredGstTab } from "./filed-returns-active-tab";
 import {
@@ -62,6 +63,7 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
   // fresh intent and repeat a download that may already have succeeded.
   // Checkpoints are keyed per concrete artifact type, so a composite selection
   // has to reconcile each one rather than the composite scope.
+  const acquisitionRecoverySignals: string[] = [];
   for (const artifactType of concreteFiledReturnsArtifactTypes(
     normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType),
   )) {
@@ -72,23 +74,27 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
       returnType: scope.returnType,
     });
     if (acquisitionRecovery.state === "needs-review") {
-      return {
-        ok: true,
-        flowStep: {
-          connectorId: "gst",
-          scopeId: filedReturnScopeId(scope.returnType),
-          state: "blocked",
-          safeSignals: acquisitionRecovery.safeSignals,
-          safeMessage:
-            "Pack found an interrupted artifact download and will not repeat the target automatically.",
-          userAction: {
-            type: "RETRY_PORTAL_GENERATION",
-            message: "Check the exact browser download before starting again.",
-            canResume: true,
-          },
-        },
-      };
+      acquisitionRecoverySignals.push(...acquisitionRecovery.safeSignals);
     }
+  }
+  if (acquisitionRecoverySignals.length > 0) {
+    const flowStep: PortalFlowStepResult = {
+      connectorId: "gst",
+      scopeId: filedReturnScopeId(scope.returnType),
+      state: "blocked",
+      safeSignals: [...new Set(acquisitionRecoverySignals)],
+      safeMessage:
+        "Pack retained unresolved artifact download recovery and will not repeat the target automatically.",
+      userAction: {
+        type: "RETRY_PORTAL_GENERATION",
+        message: "Review or cancel this target before starting another portal action.",
+        canResume: true,
+      },
+    };
+    const flowSummary = await persistFiledReturnsTargetReview(scope, flowStep, deps);
+    return flowSummary
+      ? { ok: true, flowStep: flowSummary.flowStep, flowSummary }
+      : { ok: true, flowStep };
   }
   const recoveryResponse = await preflightSelectedArtifactsRecovery({ deps, scope });
   if (recoveryResponse) {
