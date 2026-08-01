@@ -1,5 +1,5 @@
 import { browser } from "wxt/browser";
-import { validateArtifactBytes } from "../connectors/gst/artifact-validation";
+import { MAX_ARTIFACT_BYTES, validateArtifactBytes } from "../connectors/gst/artifact-validation";
 import type { FiledReturnsDownloadDiagnostic } from "../connectors/gst/filed-returns-contracts";
 import { downloadAcquiredArtifact } from "./artifact-download";
 
@@ -25,7 +25,13 @@ export async function acquireFiledReturnJsonInMainWorld(input: {
 }): Promise<JsonAcquisitionResult> {
   try {
     const [injection] = await browser.scripting.executeScript({
-      args: [{ returnPeriod: input.returnPeriod, returnType: input.returnType }],
+      args: [
+        {
+          maxArtifactBytes: MAX_ARTIFACT_BYTES,
+          returnPeriod: input.returnPeriod,
+          returnType: input.returnType,
+        },
+      ],
       func: fetchFiledReturnJsonInMainWorld,
       target: { tabId: input.tabId },
       world: "MAIN",
@@ -68,6 +74,7 @@ export async function acquireFiledReturnJsonInMainWorld(input: {
  * storage path may carry the returned portal bytes.
  */
 async function fetchFiledReturnJsonInMainWorld(input: {
+  maxArtifactBytes: number;
   returnPeriod: string;
   returnType: JsonReturnType;
 }): Promise<{ ok: true; base64: string } | { ok: false; reason: string }> {
@@ -103,6 +110,7 @@ async function fetchFiledReturnJsonInMainWorld(input: {
     };
   }
   const bytes = new Uint8Array(await response.arrayBuffer());
+  if (bytes.byteLength > input.maxArtifactBytes) return { ok: false, reason: "too-large" };
   let binary = "";
   for (let offset = 0; offset < bytes.byteLength; offset += 0x8000) {
     binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));

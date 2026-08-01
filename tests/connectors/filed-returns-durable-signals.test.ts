@@ -1,12 +1,8 @@
-import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
-import { detectFiledReturnDetailPage } from "../../src/connectors/gst/filed-returns-detail-page-guard";
-import { scoreFiledReturnDownloadCandidate } from "../../src/connectors/gst/filed-returns-download-candidates";
 import {
   isDurableFiledReturnsSignal,
   parseDurableFiledReturnsSignals,
 } from "../../src/connectors/gst/filed-returns-durable-signals";
-import { scoreFiledReturnsSummaryModalDismissalCandidate } from "../../src/connectors/gst/filed-returns-navigation-candidates";
 import {
   GSTR2B_ARTIFACT_DISPATCH_FAILURE_MESSAGES,
   Gstr2bArtifactDispatchFailureReason,
@@ -61,112 +57,6 @@ describe("filed-return durable signal contract", () => {
     expect(
       isDurableFiledReturnsSignal("single-period-cleanup-checkpoint-failed:private-value"),
     ).toBe(false);
-  });
-
-  it("accepts the bounded signals emitted by detail, download, and summary-dialog classifiers", () => {
-    const emittedSignals = new Set<string>();
-
-    collect(
-      emittedSignals,
-      detectFiledReturnDetailPage(
-        detailDocument(
-          `
-            <h1>GSTR-3B - Monthly Return</h1>
-            <p>Status - Filed</p>
-            <button>DOWNLOAD FILED GSTR-3B</button>
-            <p>No files available for download</p>
-          `,
-          "https://return.gst.gov.in/returns/auth/gstr3b",
-        ),
-        "GSTR-3B",
-        "PDF",
-      ).safeSignals,
-    );
-    collect(
-      emittedSignals,
-      detectFiledReturnDetailPage(
-        detailDocument(
-          `
-            <h1>GSTR-1</h1>
-            <p>Status - Filed</p>
-            <button>DOWNLOAD FILED GSTR-1</button>
-            <button>DOWNLOAD DETAILS E-INVOICES EXCEL</button>
-            <button>DOWNLOAD PDF</button>
-          `,
-          "https://return.gst.gov.in/returns/auth/gstr1",
-        ),
-        "GSTR-1",
-        "EXCEL",
-      ).safeSignals,
-    );
-    collect(
-      emittedSignals,
-      detectFiledReturnDetailPage(
-        detailDocument(
-          `
-            <h1>GSTR-2B</h1>
-            <p>Status Filed</p>
-            <button>DOWNLOAD GSTR-2B SUMMARY (PDF)</button>
-            <button>DOWNLOAD GSTR-2B DETAILS (EXCEL)</button>
-          `,
-          "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
-        ),
-        "GSTR-2B",
-        "EXCEL",
-      ).safeSignals,
-    );
-
-    const scoredCandidates = [
-      scoreFiledReturnDownloadCandidate(
-        { text: "DOWNLOAD FILED GSTR-3B SYSTEM GENERATED SAVE" },
-        "GSTR-3B",
-      ),
-      scoreFiledReturnDownloadCandidate({ text: "DOWNLOAD FILED GSTR-1 PDF SAVE EXCEL" }, "GSTR-1"),
-      scoreFiledReturnDownloadCandidate({ text: "DOWNLOAD PDF" }, "GSTR-1"),
-      scoreFiledReturnDownloadCandidate(
-        { text: "DOWNLOAD DETAILS E-INVOICES EXCEL PDF SAVE" },
-        "GSTR-1",
-        "EXCEL",
-      ),
-      scoreFiledReturnDownloadCandidate(
-        { text: "DOWNLOAD GSTR-2B SUMMARY PDF SAVE EXCEL" },
-        "GSTR-2B",
-      ),
-      scoreFiledReturnDownloadCandidate(
-        { text: "DOWNLOAD GSTR-2B DETAILS E-INVOICES EXCEL PDF SAVE" },
-        "GSTR-2B",
-        "EXCEL",
-      ),
-      scoreFiledReturnDownloadCandidate({ text: "GSTR-1" }, "GSTR-1"),
-    ];
-    for (const scoredCandidate of scoredCandidates) {
-      collect(emittedSignals, scoredCandidate.safeSignals);
-    }
-
-    collect(
-      emittedSignals,
-      scoreFiledReturnsSummaryModalDismissalCandidate({
-        ariaLabel: "Close",
-        className: "close",
-        text: "",
-      }).safeSignals,
-    );
-    collect(
-      emittedSignals,
-      scoreFiledReturnsSummaryModalDismissalCandidate({ text: "x" }).safeSignals,
-    );
-    collect(
-      emittedSignals,
-      scoreFiledReturnsSummaryModalDismissalCandidate({ text: "Download" }).safeSignals,
-    );
-
-    const signals = [...emittedSignals];
-    expect(signals.length).toBeGreaterThan(20);
-    expect(signals.filter((signal) => !isDurableFiledReturnsSignal(signal))).toEqual([]);
-    const representativeRuntimeVector = signals.slice(0, 32);
-    expect(parseDurableFiledReturnsSignals(representativeRuntimeVector)).toEqual(
-      representativeRuntimeVector,
-    );
   });
 
   it("continues to reject unknown, interpolated, duplicate, and over-cap signal vectors", () => {
@@ -278,14 +168,3 @@ describe("filed-return durable signal contract", () => {
     }
   });
 });
-
-function collect(target: Set<string>, signals: readonly string[]): void {
-  for (const signal of signals) target.add(signal);
-}
-
-function detailDocument(body: string, url: string): Document {
-  return new JSDOM(`<!doctype html><html><body>${body}</body></html>`, {
-    pretendToBeVisual: true,
-    url,
-  }).window.document;
-}

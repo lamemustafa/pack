@@ -1,5 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DownloadObservationContext } from "../../src/background/download-correlation";
+
+const mocks = vi.hoisted(() => ({
+  beginLiveFiledReturnsDownloadObservation: vi.fn(() => vi.fn()),
+}));
+
+vi.mock("../../src/background/filed-returns-durable-download-reconciler", () => ({
+  beginLiveFiledReturnsDownloadObservation: mocks.beginLiveFiledReturnsDownloadObservation,
+}));
+
 import {
   mergeFlowStepWithDownloadObservation,
   observeBrowserDownloadById,
@@ -14,6 +23,7 @@ const STARTED_AT = "2026-06-24T10:00:02.000Z";
 describe("exact-ID download observer", () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    mocks.beginLiveFiledReturnsDownloadObservation.mockClear();
   });
 
   afterEach(() => {
@@ -49,9 +59,17 @@ describe("exact-ID download observer", () => {
 
   it("subscribes and rechecks so a fast completion between searches is not missed", async () => {
     const changed = createEvent<DownloadDelta>();
+    const setupOrder: string[] = [];
+    mocks.beginLiveFiledReturnsDownloadObservation.mockImplementationOnce(() => {
+      setupOrder.push("claim");
+      return vi.fn();
+    });
     const search = vi
       .fn()
-      .mockResolvedValueOnce([{ id: 9, state: "in_progress" }])
+      .mockImplementationOnce(async () => {
+        setupOrder.push("search");
+        return [{ id: 9, state: "in_progress" }];
+      })
       .mockResolvedValue([
         completedItem(9, {
           filename: "artifact.pdf",
@@ -66,6 +84,7 @@ describe("exact-ID download observer", () => {
       safeSignals: expect.arrayContaining(["browser-download-id:9"]),
     });
     expect(search).toHaveBeenCalledTimes(3);
+    expect(setupOrder[0]).toBe("claim");
   });
 
   it("ignores other change events and settles from the exact id change", async () => {

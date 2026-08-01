@@ -70,8 +70,12 @@ export async function observeBrowserDownloadById(
   context: DownloadObservationContext,
   timeoutMs = DEFAULT_DOWNLOAD_WAIT_MS,
 ): Promise<SafeDownloadObservation> {
+  // Claim before the first async search: a ZIP can reach a terminal state while
+  // that search is pending, and the durable listener must not reconcile it.
+  const endLiveObservation = beginLiveFiledReturnsDownloadObservation(downloadId);
   const [initialItem] = await downloads.search({ id: downloadId }).catch(() => []);
   if (initialItem?.state === "interrupted") {
+    endLiveObservation();
     return failedObservation(initialItem.error);
   }
 
@@ -83,11 +87,6 @@ export async function observeBrowserDownloadById(
     let recheckId: ReturnType<typeof globalThis.setTimeout> | null = null;
     let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
     let settled = false;
-    // Claim this exact ID for the duration of inline observation so the global
-    // durable listener does not reconcile the same download concurrently, and
-    // release it on settle so a later terminal event is reconciled durably.
-    const endLiveObservation = beginLiveFiledReturnsDownloadObservation(downloadId);
-
     const cleanup = () => {
       endLiveObservation();
       downloads.onChanged.removeListener(onChanged);
