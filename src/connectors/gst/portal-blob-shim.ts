@@ -4,12 +4,17 @@ export type PortalBlobShimInput = {
   expectedTarget?: { financialYear: string; period: string; returnType: string };
   timeoutMs?: number;
 };
+const MAX_PORTAL_BLOB_BYTES = 25 * 1024 * 1024;
 export type PortalBlobShimResult =
-  | { ok: true; base64: string; safeSignals: string[] }
+  | { ok: true; base64: string; blobUrl: string; safeSignals: string[] }
   | {
       ok: false;
       reason:
-        "control-not-found" | "generation-timeout" | "page-period-mismatch" | "unexpected-content";
+        | "control-not-found"
+        | "generation-timeout"
+        | "page-period-mismatch"
+        | "too-large"
+        | "unexpected-content";
       safeSignals: string[];
     };
 export function capturePortalPdfBlob(input: PortalBlobShimInput): Promise<PortalBlobShimResult> {
@@ -37,12 +42,16 @@ export function capturePortalPdfBlob(input: PortalBlobShimInput): Promise<Portal
       resolve(result);
     };
     const signal = (method: "dispatchEvent" | "click") => {
-      if (!blob) return;
+      if (!blob || !blobUrl) return;
+      const capturedBlobUrl = blobUrl;
+      if (blob.size > MAX_PORTAL_BLOB_BYTES)
+        return finish({ ok: false, reason: "too-large", safeSignals: [] });
       void blob.arrayBuffer().then(
         (buffer) =>
           finish({
             ok: true,
             base64: toBase64(new Uint8Array(buffer)),
+            blobUrl: capturedBlobUrl,
             safeSignals: [`portal-blob-shim-suppressed-via-${method}`],
           }),
         () => finish({ ok: false, reason: "unexpected-content", safeSignals: [] }),

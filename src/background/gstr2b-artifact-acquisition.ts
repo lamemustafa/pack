@@ -20,7 +20,7 @@ export async function acquirePageGeneratedArtifact(input: {
   | { ok: true; bytes: Uint8Array; mimeType: string; safeSignals: string[] }
   | { ok: false; reason: string; safeSignals: string[] }
 > {
-  const removeSafetyNet = installPortalBlobDownloadSafetyNet(input.tabId);
+  const safetyNet = installPortalBlobDownloadSafetyNet(input.tabId);
   try {
     const [injection] = await browser.scripting.executeScript({
       args: [
@@ -45,6 +45,7 @@ export async function acquirePageGeneratedArtifact(input: {
         reason: captured?.reason ?? "generation-timeout",
         safeSignals: captured?.safeSignals ?? [],
       };
+    await safetyNet.bind(captured.blobUrl);
     const bytes = Uint8Array.from(atob(captured.base64), (value) => value.charCodeAt(0));
     const validation = validateArtifactBytes(
       bytes,
@@ -55,6 +56,6 @@ export async function acquirePageGeneratedArtifact(input: {
     if (!validation.ok) return { ok: false, reason: validation.reason, safeSignals: [] };
     return { ok: true, bytes, mimeType: validation.mimeType, safeSignals: captured.safeSignals };
   } finally {
-    removeSafetyNet();
+    safetyNet.remove();
   }
 }

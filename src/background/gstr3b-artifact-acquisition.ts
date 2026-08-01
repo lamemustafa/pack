@@ -20,7 +20,7 @@ export async function acquireGstr3bPdfAfterPreflight(input: {
       safeSignals: string[];
     }
 > {
-  const removeSafetyNet = installPortalBlobDownloadSafetyNet(input.tabId);
+  const safetyNet = installPortalBlobDownloadSafetyNet(input.tabId);
   try {
     const [injection] = await browser.scripting.executeScript({
       args: [
@@ -46,6 +46,7 @@ export async function acquireGstr3bPdfAfterPreflight(input: {
         safeSignals: captured?.safeSignals ?? [],
       };
     }
+    await safetyNet.bind(captured.blobUrl);
     const bytes = Uint8Array.from(atob(captured.base64), (value) => value.charCodeAt(0));
     const validation = validateArtifactBytes(bytes, "PDF", input.returnPeriod);
     if (!validation.ok) return { ok: false, reason: validation.reason, safeSignals: [] };
@@ -71,6 +72,6 @@ export async function acquireGstr3bPdfAfterPreflight(input: {
         }
       : { ok: false, reason: delivery.reason, safeSignals: delivery.safeSignals };
   } finally {
-    removeSafetyNet();
+    safetyNet.remove();
   }
 }
