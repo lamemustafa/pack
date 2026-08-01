@@ -59,16 +59,21 @@ export async function acquireFiledReturnJsonInMainWorld(input: {
       return { ok: false, reason: "delivery-unconfirmed", safeSignals: [] };
     }
   }
-  const delivery = await downloadAcquiredArtifact({
-    requestId: input.requestId,
-    base64: captured.base64,
-    filename: input.filename,
-    mimeType: validation.mimeType,
-    ...(input.onStarted ? { onStarted: input.onStarted } : {}),
-    ...(input.onStartCheckpointFailed
-      ? { onStartCheckpointFailed: input.onStartCheckpointFailed }
-      : {}),
-  });
+  let delivery;
+  try {
+    delivery = await downloadAcquiredArtifact({
+      requestId: input.requestId,
+      base64: captured.base64,
+      filename: input.filename,
+      mimeType: validation.mimeType,
+      ...(input.onStarted ? { onStarted: input.onStarted } : {}),
+      ...(input.onStartCheckpointFailed
+        ? { onStartCheckpointFailed: input.onStartCheckpointFailed }
+        : {}),
+    });
+  } catch {
+    return { ok: false, reason: "delivery-unconfirmed", safeSignals: [] };
+  }
   return delivery.ok
     ? {
         ok: true,

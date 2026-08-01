@@ -214,4 +214,31 @@ describe("filed-return JSON main-world acquisition", () => {
 
     expect(mocks.downloadAcquiredArtifact).not.toHaveBeenCalled();
   });
+
+  it("returns a terminal safe failure when direct offscreen delivery rejects", async () => {
+    vi.mocked(browser.scripting.executeScript).mockResolvedValue([
+      {
+        result: {
+          ok: true,
+          base64: base64Json({
+            data: { rtnprd: "062026", padding: "x".repeat(100) },
+            status: 1,
+          }),
+        },
+      },
+    ] as never);
+    mocks.downloadAcquiredArtifact.mockRejectedValueOnce(
+      new Error("synthetic offscreen delivery rejection"),
+    );
+
+    await expect(
+      acquireFiledReturnJsonInMainWorld({
+        filename: "synthetic.json",
+        requestId: "synthetic-request",
+        returnPeriod: "062026",
+        returnType: "GSTR-2B",
+        tabId: 17,
+      }),
+    ).resolves.toEqual({ ok: false, reason: "delivery-unconfirmed", safeSignals: [] });
+  });
 });

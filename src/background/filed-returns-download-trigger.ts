@@ -169,23 +169,24 @@ export async function triggerAndObserveFiledReturnDownload({
             returnType: "GSTR-3B",
             tabId,
             onStarted: async (downloadId) => {
+              checkpointHasDownloadId = true;
+              externallyVisibleActionMayHaveOccurred = true;
               await persistArtifactAcquisitionDownloadId({
                 ...checkpointTarget,
                 downloadId,
                 requestId,
                 state: "download-observing",
               });
-              checkpointHasDownloadId = true;
-              externallyVisibleActionMayHaveOccurred = true;
             },
             onStartCheckpointFailed: async (downloadId) => {
+              checkpointHasDownloadId = true;
+              externallyVisibleActionMayHaveOccurred = true;
               await persistArtifactAcquisitionUnconfirmedDownload({
                 ...checkpointTarget,
                 downloadId,
                 requestId,
                 state: "download-unconfirmed",
               });
-              externallyVisibleActionMayHaveOccurred = true;
             },
           });
           retainCheckpointForRecovery =
@@ -256,15 +257,16 @@ export async function triggerAndObserveFiledReturnDownload({
             returnPeriod,
             tabId,
             onStarted: async (downloadId) => {
+              checkpointHasDownloadId = true;
               await persistArtifactAcquisitionDownloadId({
                 ...checkpointTarget,
                 downloadId,
                 requestId,
                 state: "download-observing",
               });
-              checkpointHasDownloadId = true;
             },
             onStartCheckpointFailed: async (downloadId) => {
+              checkpointHasDownloadId = true;
               await persistArtifactAcquisitionUnconfirmedDownload({
                 ...checkpointTarget,
                 downloadId,
@@ -333,9 +335,12 @@ function shouldRetainArtifactAcquisitionCheckpoint(
   // intent so the next start routes it through recovery review instead of
   // repeating the portal action.
   if (
-    ["checkpoint-failed", "generation-timeout", "main-world-execution-failed"].includes(
-      delivery.reason,
-    )
+    [
+      "checkpoint-failed",
+      "delivery-unconfirmed",
+      "generation-timeout",
+      "main-world-execution-failed",
+    ].includes(delivery.reason)
   )
     return true;
   // The browser already created an exact-ID item for these outcomes. It may
@@ -466,23 +471,24 @@ async function triggerPageGeneratedSinglePeriodArtifact(
   try {
     const callbacks = {
       onStarted: async (downloadId: number) => {
+        checkpointHasDownloadId = true;
+        externallyVisibleActionMayHaveOccurred = true;
         await persistArtifactAcquisitionDownloadId({
           ...checkpointTarget,
           downloadId,
           requestId,
           state: "download-observing",
         });
-        checkpointHasDownloadId = true;
-        externallyVisibleActionMayHaveOccurred = true;
       },
       onStartCheckpointFailed: async (downloadId: number) => {
+        checkpointHasDownloadId = true;
+        externallyVisibleActionMayHaveOccurred = true;
         await persistArtifactAcquisitionUnconfirmedDownload({
           ...checkpointTarget,
           downloadId,
           requestId,
           state: "download-unconfirmed",
         });
-        externallyVisibleActionMayHaveOccurred = true;
       },
     };
     const acquired =
@@ -619,13 +625,18 @@ async function deliverValidatedArtifact({
 > {
   const staging = deps.stageCapturedDownloads;
   if (staging) {
-    const result = await stageOffscreenFiledReturn({
-      artifactType,
-      dataUrl: `data:${mimeType};base64,${base64}`,
-      ledgerId: staging.ledgerId,
-      returnType,
-      zipPath: safeFiledReturnZipEntryPath(scope, artifactType),
-    });
+    let result;
+    try {
+      result = await stageOffscreenFiledReturn({
+        artifactType,
+        dataUrl: `data:${mimeType};base64,${base64}`,
+        ledgerId: staging.ledgerId,
+        returnType,
+        zipPath: safeFiledReturnZipEntryPath(scope, artifactType),
+      });
+    } catch {
+      return { ok: false, reason: "delivery-unconfirmed", safeSignals };
+    }
     return result.status === "staged"
       ? {
           ok: true,
@@ -638,13 +649,18 @@ async function deliverValidatedArtifact({
         }
       : { ok: false, reason: result.errorCategory ?? "stage-failed", safeSignals };
   }
-  const delivery = await downloadAcquiredArtifact({
-    base64,
-    filename,
-    mimeType,
-    requestId,
-    ...callbacks,
-  });
+  let delivery;
+  try {
+    delivery = await downloadAcquiredArtifact({
+      base64,
+      filename,
+      mimeType,
+      requestId,
+      ...callbacks,
+    });
+  } catch {
+    return { ok: false, reason: "delivery-unconfirmed", safeSignals };
+  }
   return delivery.ok
     ? {
         ok: true,

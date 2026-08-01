@@ -60,16 +60,21 @@ export async function acquireGstr3bPdfAfterPreflight(input: {
     const bytes = Uint8Array.from(atob(captured.base64), (value) => value.charCodeAt(0));
     const validation = validateArtifactBytes(bytes, "PDF", input.returnPeriod);
     if (!validation.ok) return { ok: false, reason: validation.reason, safeSignals: [] };
-    const delivery = await downloadAcquiredArtifact({
-      requestId: input.requestId,
-      base64: captured.base64,
-      filename: input.filename,
-      mimeType: validation.mimeType,
-      ...(input.onStarted ? { onStarted: input.onStarted } : {}),
-      ...(input.onStartCheckpointFailed
-        ? { onStartCheckpointFailed: input.onStartCheckpointFailed }
-        : {}),
-    });
+    let delivery;
+    try {
+      delivery = await downloadAcquiredArtifact({
+        requestId: input.requestId,
+        base64: captured.base64,
+        filename: input.filename,
+        mimeType: validation.mimeType,
+        ...(input.onStarted ? { onStarted: input.onStarted } : {}),
+        ...(input.onStartCheckpointFailed
+          ? { onStartCheckpointFailed: input.onStartCheckpointFailed }
+          : {}),
+      });
+    } catch {
+      return { ok: false, reason: "delivery-unconfirmed", safeSignals: [] };
+    }
     return delivery.ok
       ? {
           ok: true,
