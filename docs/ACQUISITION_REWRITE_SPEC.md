@@ -189,9 +189,21 @@ Hard rules:
   any portal text. `safeSignals` are enum-like category strings only.
 - **Never** return `ok: true` without passing §6 validation.
 - Fail closed. Any unexpected shape → `ok: false` with the nearest reason. Never guess.
-- Guard page identity **before** acquiring: the reviewed Returns origin and
-  pathname must match the expected detail page through the route-based classification in
-  `filed-returns-observer-signals.ts`.
+- Guard page identity **before** acquiring, using the guard that actually sits on the
+  acquisition path for that return type:
+  - **GSTR-3B** — `verifyFiledReturnsDownloadTarget`, which checks origin, financial year,
+    period, return type, action identity and visible page identity together, and fails the
+    request with `page-period-mismatch` before any fetch.
+  - **GSTR-1** — the exact expected pathname, then `gstr1PageTargetMismatchSignals` against the
+    resolved control immediately before arming it.
+  - **GSTR-2B** — the exact summary pathname, then `verifyVisibleGstr2bSummaryScope` immediately
+    before arming, because the preflight validates fetched JSON rather than the visible page and
+    the tab can change period while that request is in flight.
+
+  `filed-returns-observer-signals.ts` is **not** on this path — its only importers are
+  `filed-returns-observer.ts` and `filed-returns-return-type-navigation.ts`. It classifies routes
+  for observation and navigation, and cannot enforce financial year, period, or visible-page
+  identity. Naming it here pointed future changes at code that cannot do the job.
 
 ### 5.2 Preflight target binding (replaces DOM fingerprinting)
 
