@@ -4,7 +4,7 @@ import type {
   FiledReturnsFullFiscalYearTarget,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
-import { concreteFiledReturnsArtifactTypes } from "../connectors/gst/filed-returns-artifacts";
+import { concreteFiledReturnsArtifactTypesForSelection } from "../connectors/gst/filed-returns-artifacts";
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import { getFiledReturnsFullFiscalYearPeriods } from "../connectors/gst/filed-returns-scope";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
@@ -59,7 +59,10 @@ export function requireFullFiscalYearArtifactsStaged(
 ): PortalFlowStepResult {
   if (flowStep.state !== "downloaded") return flowStep;
   const signals = new Set(flowStep.safeSignals);
-  const missingArtifactTypes = selectedArtifactTypes(scope).filter(
+  const missingArtifactTypes = concreteFiledReturnsArtifactTypesForSelection(
+    scope.returnType,
+    scope.artifactType,
+  ).filter(
     (artifactType) =>
       !signals.has(`${FULL_YEAR_STAGED_SIGNAL_PREFIX}${artifactType}`) &&
       !signals.has(`filed-return-artifact-unavailable:${artifactType}`),
@@ -99,12 +102,6 @@ function remainingArtifactTypeForTarget(
   if (pdfDone && !excelDone) return "EXCEL";
   if (excelDone && !pdfDone) return "PDF";
   return target.artifactType;
-}
-
-function selectedArtifactTypes(scope: FiledReturnsDownloadScope) {
-  return scope.returnType === "GSTR-2B" && scope.artifactType === "PDF_AND_EXCEL"
-    ? (["PDF", "EXCEL", "JSON"] as const)
-    : concreteFiledReturnsArtifactTypes(scope.artifactType);
 }
 
 export function createFullFiscalYearCleanupPendingState(

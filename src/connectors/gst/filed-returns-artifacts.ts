@@ -50,6 +50,17 @@ export function concreteFiledReturnsArtifactTypes(
   return ["PDF"];
 }
 
+export function concreteFiledReturnsArtifactTypesForSelection(
+  returnType: FiledReturnsReturnType,
+  artifactType: FiledReturnsArtifactType | undefined,
+): FiledReturnsConcreteArtifactType[] {
+  const selectedArtifactType = normaliseFiledReturnsArtifactType(returnType, artifactType);
+  if (returnType === "GSTR-2B" && selectedArtifactType === "PDF_AND_EXCEL") {
+    return ["PDF", "EXCEL", "JSON"];
+  }
+  return concreteFiledReturnsArtifactTypes(selectedArtifactType);
+}
+
 export function filedReturnsArtifactLabel(
   artifactType: FiledReturnsArtifactType,
   returnType?: FiledReturnsReturnType,

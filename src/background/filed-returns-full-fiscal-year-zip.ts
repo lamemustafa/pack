@@ -1,13 +1,9 @@
 import { browser } from "wxt/browser";
 import type {
-  FiledReturnsDownloadScope,
   FiledReturnsFullFiscalYearLedger,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
-import {
-  concreteFiledReturnsArtifactTypes,
-  type FiledReturnsConcreteArtifactType,
-} from "../connectors/gst/filed-returns-artifacts";
+import { concreteFiledReturnsArtifactTypesForSelection } from "../connectors/gst/filed-returns-artifacts";
 import type { PackOffscreenFiledReturnZipExpectedEntry } from "../connectors/gst/offscreen-blob-url";
 import {
   type DownloadCreatedItem,
@@ -244,7 +240,10 @@ function fullFiscalYearStagingRequirement(ledger: FiledReturnsFullFiscalYearLedg
   for (const target of ledger.targets) {
     if (target.status === "not-filed") continue;
     const signals = new Set(target.safeSignals);
-    for (const artifactType of selectedArtifactTypesForScope(target)) {
+    for (const artifactType of concreteFiledReturnsArtifactTypesForSelection(
+      target.returnType,
+      target.artifactType,
+    )) {
       if (signals.has(`filed-return-artifact-unavailable:${artifactType}`)) continue;
       expectedEntries.push(
         ...filedReturnsZipExpectedEntries(
@@ -267,12 +266,4 @@ function fullFiscalYearStagingRequirement(ledger: FiledReturnsFullFiscalYearLedg
     expectedEntries,
     missingArtifactCount,
   };
-}
-
-function selectedArtifactTypesForScope(
-  scope: Pick<FiledReturnsDownloadScope, "artifactType" | "returnType">,
-): FiledReturnsConcreteArtifactType[] {
-  return scope.returnType === "GSTR-2B" && scope.artifactType === "PDF_AND_EXCEL"
-    ? ["PDF", "EXCEL", "JSON"]
-    : concreteFiledReturnsArtifactTypes(scope.artifactType);
 }

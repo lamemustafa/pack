@@ -9,6 +9,7 @@ import type {
   FiledReturnsFullFiscalYearLedger,
   PortalFlowStepResult,
 } from "../../src/connectors/gst/filed-returns-contracts";
+import { concreteFiledReturnsArtifactTypesForSelection } from "../../src/connectors/gst/filed-returns-artifacts";
 import {
   canCompleteFullFiscalYearLedger,
   createFullFiscalYearLedger,
@@ -27,8 +28,42 @@ import {
   targetStatusFromFlowStep,
 } from "../../src/background/filed-returns-full-fiscal-year";
 import { responseForExistingLedger } from "../../src/background/filed-returns-full-fiscal-year-run-state";
+import { requireFullFiscalYearArtifactsStaged } from "../../src/background/filed-returns-full-fiscal-year-staging";
 
 describe("full fiscal year ledger", () => {
+  it("requires the canonical GSTR-2B all-formats artifact set before staging succeeds", () => {
+    const expectedArtifacts = concreteFiledReturnsArtifactTypesForSelection(
+      "GSTR-2B",
+      "PDF_AND_EXCEL",
+    );
+    const result = requireFullFiscalYearArtifactsStaged(
+      {
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2026-27",
+        period: "April",
+        returnType: "GSTR-2B",
+      },
+      {
+        connectorId: "gst",
+        scopeId: "synthetic-gstr2b-all-formats",
+        state: "downloaded",
+        safeMessage: "Synthetic artifacts staged.",
+        safeSignals: expectedArtifacts
+          .slice(0, -1)
+          .map((artifactType) => `full-fiscal-year-opfs-staged:${artifactType}`),
+      },
+    );
+
+    expect(result.state).toBe("blocked");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining(
+        expectedArtifacts
+          .slice(-1)
+          .map((artifactType) => `full-fiscal-year-artifact-not-staged:${artifactType}`),
+      ),
+    );
+  });
+
   it("does not select later targets while an unconfirmed download needs acknowledgement", () => {
     const ledger = createLedger([
       ["April", "download-unconfirmed"],

@@ -5,8 +5,12 @@ import {
   isFiledReturnsEndpointPathPair,
   isPortalClickDownloadPath,
   isTargetBoundPortalClickDownloadPath,
-} from "../../src/connectors/gst/filed-returns-download-diagnostic-compatibility";
-import { LIVE_RUN_SENSITIVE_PATTERNS } from "./live-run-evidence-redaction";
+} from "../../src/connectors/gst/filed-returns-download-diagnostic-compatibility.ts";
+import {
+  concreteFiledReturnsArtifactTypesForSelection,
+  supportsFiledReturnsArtifactType,
+} from "../../src/connectors/gst/filed-returns-artifacts.ts";
+import { LIVE_RUN_SENSITIVE_PATTERNS } from "./live-run-evidence-redaction.ts";
 import type {
   LiveRunEvidence,
   LiveRunEvidenceChecks,
@@ -198,7 +202,24 @@ export function validateLiveRunEvidence(input: unknown): LiveRunEvidenceValidati
     message: "subjectAlias must be a neutral SUBJECT-* alias",
   });
   requireOneOf(input.returnType, ["GSTR-3B", "GSTR-1", "GSTR-2B"], "returnType", errors);
-  requireOneOf(input.artifactType, ["PDF", "EXCEL", "PDF_AND_EXCEL"], "artifactType", errors);
+  requireOneOf(
+    input.artifactType,
+    ["PDF", "JSON", "EXCEL", "PDF_AND_EXCEL"],
+    "artifactType",
+    errors,
+  );
+  // A standalone JSON selection is acquired by the direct same-origin fetch in
+  // filed-returns-download-trigger.ts, whose success flow step carries no
+  // downloadDiagnostic at all — for either return type. Nothing the runtime
+  // retains can back a passing claim about it, so refuse rather than certify.
+  // JSON acquired as part of an all-formats selection is staged and does retain
+  // a diagnostic, so those rows stay valid; only the standalone selection is
+  // unbackable.
+  if (input.artifactType === "JSON" && input.outcome === "pass") {
+    errors.push(
+      "artifactType JSON cannot record a pass outcome: the standalone JSON path retains no download diagnostic, so no evidence can back it. Record the run as blocked, or capture JSON as part of an all-formats selection.",
+    );
+  }
   requirePattern(input.financialYear, FINANCIAL_YEAR, "financialYear", errors);
   requireOneOf(input.period, PERIODS, "period", errors);
   requireOneOf(input.scenario, ["single-period", "full-year"], "scenario", errors);
@@ -255,7 +276,7 @@ function validateDownloadEvidence(
     );
     requireOneOf(
       entry.artifactType,
-      ["PDF", "EXCEL"],
+      ["PDF", "JSON", "EXCEL"],
       `downloadEvidence[${index}].artifactType`,
       errors,
     );
@@ -345,21 +366,33 @@ function validatePassDownloadEvidenceReconciliation(
   if (actionIds.size !== downloadedEntries.length) {
     errors.push("pass evidence cannot reuse a downloaded actionId");
   }
-  if (evidence.artifactType === "PDF_AND_EXCEL") {
-    const artifactsByPeriod = new Map<string, Set<string>>();
-    downloadedEntries.forEach((entry) => {
-      if (typeof entry.period !== "string" || typeof entry.artifactType !== "string") return;
-      const artifacts = artifactsByPeriod.get(entry.period) ?? new Set<string>();
-      artifacts.add(entry.artifactType);
-      artifactsByPeriod.set(entry.period, artifacts);
-    });
-    if (
-      Array.from(artifactsByPeriod.values()).some(
-        (artifacts) => !artifacts.has("PDF") || !artifacts.has("EXCEL"),
-      )
-    ) {
-      errors.push("pass combined evidence must include PDF and EXCEL for each downloaded period");
-    }
+  const expectedArtifactTypes = expectedConcreteArtifactTypes(evidence);
+  if (
+    expectedArtifactTypes.length > 0 &&
+    downloadedEntries.some(
+      (entry) =>
+        typeof entry.artifactType !== "string" ||
+        !expectedArtifactTypes.includes(entry.artifactType),
+    )
+  ) {
+    errors.push("pass evidence must not include an artifact outside the selected artifact type");
+  }
+  const artifactsByPeriod = new Map<string, Set<string>>();
+  downloadedEntries.forEach((entry) => {
+    if (typeof entry.period !== "string" || typeof entry.artifactType !== "string") return;
+    const artifacts = artifactsByPeriod.get(entry.period) ?? new Set<string>();
+    artifacts.add(entry.artifactType);
+    artifactsByPeriod.set(entry.period, artifacts);
+  });
+  if (
+    expectedArtifactTypes.length > 0 &&
+    Array.from(artifactsByPeriod.values()).some((artifacts) =>
+      expectedArtifactTypes.some((artifactType) => !artifacts.has(artifactType)),
+    )
+  ) {
+    errors.push(
+      `pass evidence must include ${expectedArtifactTypes.join(", ")} for each downloaded period`,
+    );
   }
   if (
     entries.some(
@@ -398,13 +431,7 @@ function validateDownloadEndpointPathConsistency(
   ) {
     errors.push(`downloadEvidence[${index}] plain portal-click evidence cannot confirm a download`);
   }
-  if (
-    !isFiledReturnsEndpointClassForArtifact(
-      typedEntry.endpointClass,
-      typedEntry.returnType,
-      typedEntry.artifactType,
-    )
-  ) {
+  if (!isSupportedLiveRunEvidenceEndpoint(typedEntry)) {
     errors.push(
       `downloadEvidence[${index}].endpointClass does not match returnType and artifactType`,
     );
@@ -412,6 +439,21 @@ function validateDownloadEndpointPathConsistency(
   if (!isFiledReturnsEndpointPathPair(typedEntry.endpointClass, typedEntry.downloadPathClass)) {
     errors.push(`downloadEvidence[${index}].endpointClass is inconsistent with downloadPathClass`);
   }
+}
+
+function isSupportedLiveRunEvidenceEndpoint(entry: LiveRunDownloadEvidence): boolean {
+  // Defer entirely to the canonical predicate. The exception that used to sit
+  // here accepted `gstr3b-portal-blob-captured-download` for GSTR-3B JSON, a
+  // pairing the canonical rule rejects and the runtime never produces: the
+  // direct JSON fetch path attaches no diagnostic at all. Evidence for a JSON
+  // artifact therefore carries `unknown`, which the canonical predicate already
+  // admits. A local exception here could only ever certify something the
+  // runtime cannot back.
+  return isFiledReturnsEndpointClassForArtifact(
+    entry.endpointClass,
+    entry.returnType,
+    entry.artifactType,
+  );
 }
 
 function validateTargetBoundPortalClickScope(
@@ -452,11 +494,12 @@ function validateDownloadScopeConsistency(
   if (evidence.scenario === "single-period" && entry.period !== evidence.period) {
     errors.push(`downloadEvidence[${index}].period must match single-period evidence period`);
   }
-  if (evidence.artifactType === "PDF" && entry.artifactType !== "PDF") {
-    errors.push(`downloadEvidence[${index}].artifactType must match PDF evidence`);
-  }
-  if (evidence.artifactType === "EXCEL" && entry.artifactType !== "EXCEL") {
-    errors.push(`downloadEvidence[${index}].artifactType must match EXCEL evidence`);
+  const expectedArtifactTypes = expectedConcreteArtifactTypes(evidence);
+  if (
+    expectedArtifactTypes.length > 0 &&
+    !expectedArtifactTypes.includes(entry.artifactType ?? "")
+  ) {
+    errors.push(`downloadEvidence[${index}].artifactType must match the selected artifact type`);
   }
 }
 
@@ -508,8 +551,15 @@ function validateBuildIdentity(input: Record<string, unknown>, errors: string[])
 }
 
 function validateScopeConsistency(input: Record<string, unknown>, errors: string[]): void {
-  if (input.returnType === "GSTR-3B" && input.artifactType !== "PDF") {
-    errors.push("GSTR-3B evidence must use artifactType PDF");
+  if (
+    typeof input.returnType === "string" &&
+    typeof input.artifactType === "string" &&
+    !supportsFiledReturnsArtifactType(
+      input.returnType as LiveRunEvidence["returnType"],
+      input.artifactType as LiveRunEvidence["artifactType"],
+    )
+  ) {
+    errors.push("artifactType is not supported for returnType");
   }
   if (input.scenario === "full-year" && input.period !== "FULL_FISCAL_YEAR") {
     errors.push("full-year evidence must use period FULL_FISCAL_YEAR");
@@ -517,6 +567,21 @@ function validateScopeConsistency(input: Record<string, unknown>, errors: string
   if (input.scenario === "single-period" && input.period === "FULL_FISCAL_YEAR") {
     errors.push("single-period evidence must use a month period");
   }
+}
+
+function expectedConcreteArtifactTypes(evidence: Record<string, unknown>): string[] {
+  if (
+    typeof evidence.returnType !== "string" ||
+    typeof evidence.artifactType !== "string" ||
+    !["GSTR-3B", "GSTR-1", "GSTR-2B"].includes(evidence.returnType) ||
+    !["PDF", "JSON", "EXCEL", "PDF_AND_EXCEL"].includes(evidence.artifactType)
+  ) {
+    return [];
+  }
+  return concreteFiledReturnsArtifactTypesForSelection(
+    evidence.returnType as LiveRunEvidence["returnType"],
+    evidence.artifactType as LiveRunEvidence["artifactType"],
+  );
 }
 
 function validateCounts(input: unknown, outcome: unknown, errors: string[]): void {

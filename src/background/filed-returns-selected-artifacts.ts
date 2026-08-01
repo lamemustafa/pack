@@ -7,8 +7,7 @@ import { delay } from "../core/time";
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import { SinglePeriodCleanupCheckpointError } from "../connectors/gst/single-period-cleanup-checkpoint";
 import {
-  concreteFiledReturnsArtifactTypes,
-  normaliseFiledReturnsArtifactType,
+  concreteFiledReturnsArtifactTypesForSelection,
   type FiledReturnsConcreteArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
@@ -72,7 +71,10 @@ export async function preflightSelectedArtifactsRecovery({
   deps: FiledReturnsFlowRunnerDeps;
   scope: FiledReturnsDownloadScope;
 }): Promise<PackMessageResponse | null> {
-  const artifactTypes = selectedArtifactTypes(scope);
+  const artifactTypes = concreteFiledReturnsArtifactTypesForSelection(
+    scope.returnType,
+    scope.artifactType,
+  );
   const compatibleDurableSinglePeriodBundle =
     artifactTypes.length > 1 && !deps.stageCapturedDownloads;
 
@@ -125,7 +127,10 @@ export async function triggerSelectedArtifacts({
   scope: FiledReturnsDownloadScope;
   tabId: number;
 }): Promise<PackMessageResponse> {
-  const artifactTypes = selectedArtifactTypes(scope);
+  const artifactTypes = concreteFiledReturnsArtifactTypesForSelection(
+    scope.returnType,
+    scope.artifactType,
+  );
   const usesDurableSinglePeriodBundle = artifactTypes.length > 1 && !deps.stageCapturedDownloads;
   let singlePeriodBundleLedger: SinglePeriodBundleLedger | null = null;
   if (usesDurableSinglePeriodBundle) {
@@ -544,16 +549,6 @@ export async function triggerSelectedArtifacts({
     flowStep: zipFlowStep,
     ...(flowSummary ? { flowSummary } : {}),
   };
-}
-
-function selectedArtifactTypes(
-  scope: FiledReturnsDownloadScope,
-): FiledReturnsConcreteArtifactType[] {
-  const selected = normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType);
-  if (scope.returnType === "GSTR-2B" && selected === "PDF_AND_EXCEL") {
-    return ["PDF", "EXCEL", "JSON"];
-  }
-  return concreteFiledReturnsArtifactTypes(selected);
 }
 
 function withArtifactOutcome(

@@ -4,8 +4,15 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { readdirSync } from "node:fs";
 import path from "node:path";
 
+const {
+  FILED_RETURNS_ARTIFACT_TYPES,
+  concreteFiledReturnsArtifactTypesForSelection,
+  supportsFiledReturnsArtifactType,
+} = await import("../src/connectors/gst/filed-returns-artifacts.ts");
+const { validateLiveRunEvidence } = await import("./lib/live-run-evidence.ts");
+
 const RETURN_TYPES = ["GSTR-3B", "GSTR-1", "GSTR-2B"];
-const ARTIFACT_TYPES = ["PDF", "EXCEL", "PDF_AND_EXCEL"];
+const ARTIFACT_TYPES = FILED_RETURNS_ARTIFACT_TYPES;
 const MONTHS = [
   "April",
   "May",
@@ -56,8 +63,21 @@ try {
   const outcome = options.outcome ?? "blocked";
   requireOneOfValue(outcome, OUTCOMES, "outcome");
 
-  if (returnType === "GSTR-3B" && artifactType !== "PDF") {
-    throw new Error("GSTR-3B evidence must use --artifact-type PDF.");
+  if (!supportsFiledReturnsArtifactType(returnType, artifactType)) {
+    throw new Error("--artifact-type is not supported for --return-type.");
+  }
+  if (artifactType === "JSON" && outcome === "pass") {
+    // Refuse rather than emit evidence nothing can back. A standalone JSON
+    // selection is acquired by a direct authenticated same-origin fetch whose
+    // success flow step attaches no download diagnostic, for GSTR-3B and
+    // GSTR-2B alike. Only JSON captured as part of an all-formats selection is
+    // staged and retains one. An earlier revision of this guard covered GSTR-3B
+    // only, on the reasoning that the canonical endpoint-class rule rejects that
+    // pairing while admitting GSTR-2B — but the schema admitting a class is not
+    // the runtime producing it, and it is the runtime that has to back a claim.
+    throw new Error(
+      "Passing standalone JSON evidence is not supported: the direct JSON fetch path retains no download diagnostic, so nothing can back it. Record this run as blocked, or capture JSON as part of an all-formats selection.",
+    );
   }
   if (scenario === "full-year" && period !== "FULL_FISCAL_YEAR") {
     throw new Error("Full-year evidence must use --period FULL_FISCAL_YEAR.");
@@ -178,6 +198,11 @@ try {
       containsScreenshotOrVideo: false,
     },
   };
+
+  const validation = validateLiveRunEvidence(evidence);
+  if (!validation.ok) {
+    throw new Error(`Generated evidence is not shareable: ${validation.errors.join("; ")}`);
+  }
 
   const output = `${JSON.stringify(evidence, null, 2)}\n`;
   if (options.output) {
@@ -309,6 +334,14 @@ function collectLimitations(input, { checks, outcome, profile, scenario }) {
 }
 
 function defaultEndpointClass(returnType, artifactType) {
+  // GSTR-3B portal data (JSON) has no endpoint class the runtime can back: its
+  // direct same-origin fetch path attaches no download diagnostic, and the
+  // canonical `isFiledReturnsEndpointClassForArtifact` admits no GSTR-3B/JSON
+  // pairing. `unknown` is the only truthful default; naming a blob-captured
+  // class let the generator emit passing evidence nothing could support.
+  // GSTR-2B JSON is different and is left alone — the canonical rule does admit
+  // it with the GSTR-2B blob-captured class.
+  if (returnType === "GSTR-3B" && artifactType === "JSON") return "unknown";
   if (returnType === "GSTR-3B") return "gstr3b-portal-blob-captured-download";
   if (returnType === "GSTR-1" && artifactType === "EXCEL") {
     return "gstr1-excel-portal-blob-captured-download";
@@ -329,10 +362,7 @@ function createDownloadEvidenceRows({
   zipSha256,
 }) {
   const targetCount = outcome === "pass" ? counts.downloaded : 1;
-  const concreteArtifacts =
-    outcome === "pass" && artifactType === "PDF_AND_EXCEL"
-      ? ["PDF", "EXCEL"]
-      : [artifactType === "PDF_AND_EXCEL" ? "PDF" : artifactType];
+  const concreteArtifacts = concreteFiledReturnsArtifactTypesForSelection(returnType, artifactType);
   return Array.from({ length: targetCount }, (_, targetIndex) =>
     concreteArtifacts.map((concreteArtifact, artifactIndex) => ({
       actionId: `ACTION-${targetIndex * concreteArtifacts.length + artifactIndex + 1}`,

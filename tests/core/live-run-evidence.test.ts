@@ -5,6 +5,7 @@ import {
   validateLiveRunEvidenceJson,
   type LiveRunEvidence,
 } from "../../scripts/lib/live-run-evidence";
+import { concreteFiledReturnsArtifactTypesForSelection } from "../../src/connectors/gst/filed-returns-artifacts";
 
 describe("live run evidence", () => {
   it("accepts a redacted full-year evidence summary", () => {
@@ -125,7 +126,9 @@ describe("live run evidence", () => {
       );
     expect(invalidGstr3bArtifact.ok).toBe(false);
     if (!invalidGstr3bArtifact.ok)
-      expect(invalidGstr3bArtifact.errors).toContain("GSTR-3B evidence must use artifactType PDF");
+      expect(invalidGstr3bArtifact.errors).toContain(
+        "artifactType is not supported for returnType",
+      );
     expect(invalidFullYearPeriod.ok).toBe(false);
     if (!invalidFullYearPeriod.ok)
       expect(invalidFullYearPeriod.errors).toContain(
@@ -134,7 +137,7 @@ describe("live run evidence", () => {
     expect(validGstr1Combined).toMatchObject({ ok: true });
   });
 
-  it("requires both concrete artifacts for every downloaded combined period", () => {
+  it("requires every selected concrete artifact for each downloaded combined period", () => {
     const pdfOnly = createValidEvidence().downloadEvidence[0];
     const result = validateLiveRunEvidence({
       ...createValidEvidence(),
@@ -156,37 +159,74 @@ describe("live run evidence", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.errors).toContain(
-        "pass combined evidence must include PDF and EXCEL for each downloaded period",
+        "pass evidence must include PDF, EXCEL for each downloaded period",
       );
     }
   });
 
-  it("accepts redacted GSTR-2B PDF and Excel evidence metadata", () => {
+  it("requires and accepts PDF, Excel, and JSON GSTR-2B all-formats evidence metadata", () => {
+    const expectedArtifacts = concreteFiledReturnsArtifactTypesForSelection(
+      "GSTR-2B",
+      "PDF_AND_EXCEL",
+    );
+    const evidenceRows = expectedArtifacts.map((artifactType, index) => ({
+      ...createValidEvidence().downloadEvidence[0],
+      actionId: `ACTION-${index + 1}`,
+      artifactType,
+      returnType: "GSTR-2B" as const,
+      endpointClass: "gstr2b-portal-blob-captured-download" as const,
+      downloadPathClass: "captured-portal-request-data" as const,
+    }));
+    const missingArtifact = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      returnType: "GSTR-2B",
+      artifactType: "PDF_AND_EXCEL",
+      downloadEvidence: evidenceRows.slice(0, -1),
+    });
     expect(
       validateLiveRunEvidence({
         ...createValidEvidence(),
         returnType: "GSTR-2B",
         artifactType: "PDF_AND_EXCEL",
-        downloadEvidence: [
-          {
-            ...createValidEvidence().downloadEvidence[0],
-            actionId: "ACTION-1",
-            returnType: "GSTR-2B",
-            endpointClass: "gstr2b-portal-blob-captured-download",
-            downloadPathClass: "captured-portal-request-data",
-          },
-          {
-            ...createValidEvidence().downloadEvidence[0],
-            actionId: "ACTION-2",
-            artifactType: "EXCEL",
-            returnType: "GSTR-2B",
-            endpointClass: "gstr2b-portal-blob-captured-download",
-            downloadPathClass: "captured-portal-request-data",
-          },
-        ],
+        downloadEvidence: evidenceRows,
       }),
     ).toMatchObject({ ok: true });
+    expect(missingArtifact.ok).toBe(false);
+    if (!missingArtifact.ok) {
+      expect(missingArtifact.errors).toContain(
+        `pass evidence must include ${expectedArtifacts.join(", ")} for each downloaded period`,
+      );
+    }
   });
+
+  it.each(["GSTR-2B", "GSTR-3B"] as const)(
+    "rejects passing standalone %s JSON evidence, which nothing can back",
+    (returnType) => {
+      // A standalone JSON selection is acquired by the direct same-origin fetch,
+      // whose success flow step carries no downloadDiagnostic for either return
+      // type. The schema admitting an endpoint class is not the runtime
+      // producing one, and it is the runtime that has to back the claim.
+      expect(
+        validateLiveRunEvidence({
+          ...createValidEvidence(),
+          returnType,
+          artifactType: "JSON",
+          downloadEvidence: [
+            {
+              ...createValidEvidence().downloadEvidence[0],
+              artifactType: "JSON",
+              returnType,
+              endpointClass:
+                returnType === "GSTR-2B"
+                  ? "gstr2b-portal-blob-captured-download"
+                  : "gstr3b-portal-blob-captured-download",
+              downloadPathClass: "captured-portal-request-data",
+            },
+          ],
+        }),
+      ).toMatchObject({ ok: false });
+    },
+  );
 
   it("accepts captured GSTR-3B endpoint evidence metadata", () => {
     expect(
