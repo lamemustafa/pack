@@ -36,6 +36,23 @@ describe("filed-return durable signal contract", () => {
     ]);
   });
 
+  it("retains the cleanup-without-download recovery marker", () => {
+    expect(isDurableFiledReturnsSignal("single-period-zip-cleanup-without-download")).toBe(true);
+    expect(parseDurableFiledReturnsSignals(["single-period-zip-cleanup-without-download"])).toEqual(
+      ["single-period-zip-cleanup-without-download"],
+    );
+  });
+
+  it("retains artifact acquisition recovery signals", () => {
+    const signals = [
+      "artifact-acquisition-checkpoint-malformed",
+      "artifact-acquisition-checkpoint-clear-failed",
+      "artifact-acquisition-download-interrupted",
+    ];
+    expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);
+    expect(signals.every(isDurableFiledReturnsSignal)).toBe(true);
+  });
+
   it("retains categorical artifact page-identity diagnostics", () => {
     const signals = [
       "target-period-verified",
