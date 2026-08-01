@@ -232,8 +232,10 @@ Pack uses Chrome extension storage only inside the current browser profile.
   or taxpayer information.
 - `pack.artifact-acquisition.v2.*`: a per-target, session-only recovery
   checkpoint for a direct artifact action. It contains the requested financial
-  year, period, return/artifact type, opaque request ID, checkpoint state and,
-  after browser creation, the exact numeric download ID. It contains no raw
+  year, period, return/artifact type, opaque request ID, checkpoint state, and
+  an `armedAt` timestamp used only to correlate a browser download created
+  after that direct action. After browser creation it also contains the exact
+  numeric download ID. It contains no raw
   filename, local path, URL/referrer, portal response, taxpayer identifier,
   credential, cookie, token or artifact bytes.
 

@@ -64,6 +64,12 @@ For each release candidate:
   GSTIN/PAN, taxpayer name, portal HTML, credential, cookie, token or artifact
   bytes. Shareable evidence must replace the runtime action id with a neutral
   `ACTION-*` alias and omit the browser download id.
+- Confirm each session-only `pack.artifact-acquisition.v2.*` checkpoint contains
+  only its requested target scope, opaque request ID, state, exact numeric
+  browser download ID after creation, and the `armedAt` timestamp used only to
+  correlate a candidate created after the direct artifact action. It must never
+  retain a raw filename, local path, URL/referrer, GSTIN/PAN, taxpayer name,
+  portal HTML, credential, cookie, token, or artifact bytes.
 - Confirm `pack:full-fiscal-year-ledger`, when present, satisfies the two runtime
   validators that own its shape, rather than a field list restated here:
   - `isFullFiscalYearLedger` in
