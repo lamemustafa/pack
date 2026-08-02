@@ -68,9 +68,8 @@ For each release candidate:
   recovery-internal marker may retain an opaque request identity and exact
   numeric browser download ID after the reconciler proves completion. Only the
   reconciler consumes this marker to rebuild a temporary session summary after
-  session loss, including before a popup or matching Start request. It never
-  proves ZIP delivery. It remains only until Clear local Pack data or extension
-  removal.
+  session loss. It never proves ZIP delivery. It remains only until Clear local
+  Pack data or extension removal.
   Neither record may retain a raw filename,
   local path, URL/referrer, GSTIN/PAN, taxpayer name, portal HTML, credential,
   cookie, token, or artifact bytes.

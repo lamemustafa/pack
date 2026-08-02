@@ -43,8 +43,9 @@ import {
   persistArtifactAcquisitionDownloadId,
   reconcileArtifactAcquisitionCheckpoint,
 } from "../../src/background/artifact-acquisition-state";
+import { acknowledgeInterruptedFiledReturnsRun } from "../../src/background/filed-returns-active-run";
 import { reconcileTerminalFiledReturnsDownload } from "../../src/background/filed-returns-durable-download-reconciler";
-import { startFiledReturnsDownloadFlow } from "../../src/background/filed-returns-flow-runner";
+import { clearPackLocalDataWithRecoveryGuard } from "../../src/background/local-data";
 import { filedReturnScopeId } from "../../src/connectors/gst/filed-returns-return-descriptors";
 import {
   artifactAcquisitionCompletionMarkerKey,
@@ -136,7 +137,6 @@ describe("durable acquisition checkpoint recovery", () => {
       status: "complete",
     });
     expect(mocks.session[artifactAcquisitionCheckpointKey(target)]).toBeUndefined();
-    expect(mocks.local[activeRunKey]).toBeUndefined();
     expect(mocks.local[targetReviewKey]).toBeUndefined();
     await expect(
       readArtifactAcquisitionCompletionMarker(target, durableDeps()),
@@ -146,6 +146,10 @@ describe("durable acquisition checkpoint recovery", () => {
       },
       state: "valid",
     });
+    await expect(
+      acknowledgeInterruptedFiledReturnsRun({ storageKeys: { activeRun: activeRunKey } }),
+    ).resolves.toMatchObject({ ok: true });
+    expect(mocks.local[activeRunKey]).toBeUndefined();
   });
 
   it("does not release a live non-interrupted lease while recovery persists proof", async () => {
@@ -233,7 +237,7 @@ describe("durable acquisition checkpoint recovery", () => {
     ).rejects.toThrow("Synthetic worker stop before checkpoint cleanup.");
 
     expect(mocks.session[completionKey]).toMatchObject({ status: "complete" });
-    expect(mocks.local[activeRunKey]).toBeUndefined();
+    expect(mocks.local[activeRunKey]).toMatchObject({ runId: "filed-returns-run-m0abc123" });
     expect(mocks.session[artifactAcquisitionCheckpointKey(target)]).toMatchObject({
       downloadId: 231,
       requestId,
@@ -269,7 +273,7 @@ describe("durable acquisition checkpoint recovery", () => {
     ).rejects.toThrow("Synthetic worker stop before summary persistence.");
 
     expect(mocks.session[completionKey]).toBeUndefined();
-    expect(mocks.local[activeRunKey]).toBeUndefined();
+    expect(mocks.local[activeRunKey]).toMatchObject({ runId: "filed-returns-run-m0abc123" });
     expect(mocks.session[artifactAcquisitionCheckpointKey(target)]).toMatchObject({
       downloadId: 231,
       requestId,
@@ -310,7 +314,7 @@ describe("durable acquisition checkpoint recovery", () => {
     expect(mocks.local[targetReviewKey]).toBeUndefined();
   });
 
-  it("blocks a malformed durable marker before a start can repeat its portal action", async () => {
+  it("treats a malformed durable marker as absent and clears it without recreating review", async () => {
     mocks.local[artifactAcquisitionCompletionMarkerKey(targetReviewKey, target)] = {
       schemaVersion: "forward-version",
     };
@@ -320,26 +324,58 @@ describe("durable acquisition checkpoint recovery", () => {
         { search: mocks.browser.downloads.search },
         durableDeps(),
       ),
+    ).resolves.toBe(false);
+    expect(mocks.local[targetReviewKey]).toBeUndefined();
+
+    await expect(
+      clearPackLocalDataWithRecoveryGuard({
+        clearableLocalStorageKeys: [],
+        storageKeys: {
+          activeRun: activeRunKey,
+          fullFiscalYearLedger: "pack:full-fiscal-year-ledger",
+          targetReview: targetReviewKey,
+        },
+      }),
+    ).resolves.toEqual({ ok: true, cleared: true });
+    expect(
+      mocks.local[artifactAcquisitionCompletionMarkerKey(targetReviewKey, target)],
+    ).toBeUndefined();
+
+    await expect(
+      reconcileTerminalFiledReturnsDownload(
+        { search: mocks.browser.downloads.search },
+        durableDeps(),
+      ),
+    ).resolves.toBe(false);
+    expect(mocks.local[targetReviewKey]).toBeUndefined();
+  });
+
+  it("does not release a later interrupted same-scope run from retained older proof", async () => {
+    await persistArtifactAcquisitionCompletionMarker(
+      target,
+      [{ artifactType: "PDF", downloadId: 231, requestId }],
+      durableDeps(),
+    );
+    persistActiveRun(target, "filed-returns-run-later123");
+    await persistArtifactAcquisitionDownloadId({
+      ...target,
+      downloadId: 232,
+      requestId: juneRequestId,
+      state: "download-observing",
+    });
+
+    await expect(
+      reconcileTerminalFiledReturnsDownload(
+        { search: mocks.browser.downloads.search },
+        durableDeps(),
+      ),
     ).resolves.toBe(true);
 
-    expect(mocks.local[targetReviewKey]).toMatchObject({
-      safeMessage: expect.any(String),
-      safeSignals: expect.arrayContaining(["artifact-acquisition-download-unreconciled"]),
+    expect(mocks.local[activeRunKey]).toMatchObject({ runId: "filed-returns-run-later123" });
+    expect(mocks.session[artifactAcquisitionCheckpointKey(target)]).toMatchObject({
+      downloadId: 232,
+      requestId: juneRequestId,
     });
-
-    const getActiveGstTab = vi.fn();
-    await expect(
-      startFiledReturnsDownloadFlow(target, {
-        getActiveGstTab,
-        storageKeys: durableDeps().storageKeys,
-      } as never),
-    ).resolves.toMatchObject({
-      flowStep: {
-        state: "user-action-required",
-        safeMessage: expect.any(String),
-      },
-    });
-    expect(getActiveGstTab).not.toHaveBeenCalled();
   });
 
   it("keeps two proved targets in separate durable completion markers", async () => {

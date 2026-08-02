@@ -2,9 +2,7 @@ import { browser } from "wxt/browser";
 import type {
   FiledReturnsDownloadScope,
   FiledReturnsTargetReview,
-  PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
-import { concreteFiledReturnsArtifactTypesForSelection } from "../connectors/gst/filed-returns-artifacts";
 import {
   inspectArtifactAcquisitionCheckpoint,
   readArtifactAcquisitionCheckpointTargets,
@@ -12,26 +10,15 @@ import {
 } from "./artifact-acquisition-state";
 import type { DownloadCreatedItem, DownloadDelta } from "./download-observer";
 import { persistFiledReturnsTargetDownloadId } from "./filed-returns-target-download-attempt";
-import {
-  artifactAcquisitionCompletionFlowStep,
-  persistArtifactAcquisitionCompletion,
-} from "./filed-returns-artifact-acquisition-completion";
+import { persistArtifactAcquisitionCompletion } from "./filed-returns-artifact-acquisition-completion";
 import {
   clearFiledReturnsTargetReview,
   persistArtifactAcquisitionCompletionMarker,
-  persistFiledReturnsTargetReview,
   markFiledReturnsTargetReviewArtifactAcquisitionCompletion,
-  readArtifactAcquisitionCompletionMarker,
   readArtifactAcquisitionCompletionMarkers,
   readCurrentFiledReturnsTargetReview,
   type FiledReturnsTargetReviewDeps,
 } from "./filed-returns-target-review";
-import {
-  type ActiveFiledReturnsRun,
-  isInterruptedFiledReturnsRun,
-  releaseFiledReturnsRun,
-  snapshotFiledReturnsRunForRecoveredCompletion,
-} from "./filed-returns-active-run";
 import { reconcileFiledReturnsTargetDownload } from "./filed-returns-target-download-recovery";
 import { PACK_LOCAL_STORAGE_KEYS, PACK_SESSION_STORAGE_KEYS } from "./storage-keys";
 
@@ -150,7 +137,6 @@ async function reconcileArtifactAcquisitionCheckpoints(
   deps: DurableDownloadReconcilerDeps,
 ): Promise<boolean> {
   let handled = false;
-  const recoveredRuns = new Map<string, ActiveFiledReturnsRun>();
   const provedCheckpoints: Array<{
     evidence: ArtifactAcquisitionCompletionEvidence;
     marker: Awaited<ReturnType<typeof markFiledReturnsTargetReviewArtifactAcquisitionCompletion>>;
@@ -158,19 +144,14 @@ async function reconcileArtifactAcquisitionCheckpoints(
   }> = [];
   const markerStates = await readArtifactAcquisitionCompletionMarkers(deps);
   const markerStatesByTarget = new Map(
-    markerStates.map((marker) => [artifactAcquisitionTargetId(marker.scope), marker]),
+    markerStates
+      .filter((marker) => marker.state.state === "valid")
+      .map((marker) => [artifactAcquisitionTargetId(marker.scope), marker]),
   );
-  for (const marker of markerStates) {
-    if (marker.state.state !== "malformed") continue;
-    await persistMalformedArtifactAcquisitionMarkerReview(marker.scope, deps);
-    handled = true;
-  }
   for (const marker of markerStates) {
     if (marker.state.state !== "valid") continue;
     const evidence = marker.state.review.artifactAcquisitionCompletion;
     if (!evidence) continue;
-    const owningRun = await snapshotFiledReturnsRunForRecoveredCompletion(marker.scope, deps);
-    if (owningRun) recoveredRuns.set(owningRun.runId, owningRun);
     const reviewMarker = await markFiledReturnsTargetReviewArtifactAcquisitionCompletion(
       marker.scope,
       evidence,
@@ -181,8 +162,6 @@ async function reconcileArtifactAcquisitionCheckpoints(
   const checkpoints = await readArtifactAcquisitionCheckpointTargets().catch(() => []);
   for (const { target } of checkpoints) {
     if (markerStatesByTarget.has(artifactAcquisitionTargetId(target))) continue;
-    const owningRun = await snapshotFiledReturnsRunForRecoveredCompletion(target, deps);
-    if (owningRun) recoveredRuns.set(owningRun.runId, owningRun);
     const inspection = await inspectArtifactAcquisitionCheckpoint(target, {
       preserveMalformed: false,
     });
@@ -200,14 +179,6 @@ async function reconcileArtifactAcquisitionCheckpoints(
     );
     provedCheckpoints.push({ evidence: inspection.evidence, marker, target });
   }
-  for (const run of recoveredRuns.values()) {
-    if (
-      isInterruptedFiledReturnsRun(run, deps.now?.() ?? new Date()) &&
-      (await hasDurableCompletionForActiveRun(run, deps))
-    ) {
-      await releaseFiledReturnsRun(run, deps);
-    }
-  }
   for (const { evidence, marker, target } of provedCheckpoints) {
     const summary = await persistArtifactAcquisitionCompletion(
       deps.storageKeys.completion,
@@ -221,60 +192,6 @@ async function reconcileArtifactAcquisitionCheckpoints(
     handled = true;
   }
   return handled;
-}
-
-async function hasDurableCompletionForActiveRun(
-  run: ActiveFiledReturnsRun,
-  deps: DurableDownloadReconcilerDeps,
-): Promise<boolean> {
-  const artifactTypes = concreteFiledReturnsArtifactTypesForSelection(
-    run.scope.returnType,
-    run.scope.artifactType,
-  );
-  const markers = await Promise.all(
-    artifactTypes.map((artifactType) =>
-      readArtifactAcquisitionCompletionMarker(
-        {
-          artifactType,
-          financialYear: run.scope.financialYear,
-          period: run.scope.period,
-          returnType: run.scope.returnType,
-        } satisfies FiledReturnsDownloadScope,
-        deps,
-      ),
-    ),
-  );
-  if (markers.some((marker) => marker.state === "malformed")) return false;
-  const evidence = markers.flatMap((marker) =>
-    marker.state === "valid" ? (marker.review.artifactAcquisitionCompletion ?? []) : [],
-  );
-  return Boolean(artifactAcquisitionCompletionFlowStep(run.scope, evidence));
-}
-
-async function persistMalformedArtifactAcquisitionMarkerReview(
-  scope: FiledReturnsDownloadScope,
-  deps: DurableDownloadReconcilerDeps,
-): Promise<void> {
-  await persistFiledReturnsTargetReview(scope, malformedArtifactAcquisitionMarkerStep(scope), deps);
-}
-
-function malformedArtifactAcquisitionMarkerStep(
-  scope: FiledReturnsDownloadScope,
-): PortalFlowStepResult {
-  return {
-    connectorId: "gst",
-    scopeId: `gst-filed-returns-${scope.returnType.toLowerCase()}-private-v0`,
-    state: "blocked",
-    safeSignals: ["artifact-acquisition-download-unreconciled"],
-    safeMessage:
-      "Pack found damaged durable download proof and cannot verify whether this filed-return action already completed.",
-    userAction: {
-      type: "RETRY_PORTAL_GENERATION",
-      message:
-        "Check browser Downloads, then use Clear local Pack data before starting another portal action.",
-      canResume: false,
-    },
-  };
 }
 
 function artifactAcquisitionTargetId(scope: FiledReturnsDownloadScope): string {

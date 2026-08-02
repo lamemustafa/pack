@@ -4,11 +4,7 @@ import type {
   FiledReturnsFlowSummary,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
-import {
-  concreteFiledReturnsArtifactTypesForSelection,
-  isFiledReturnsConcreteArtifactType,
-  isFiledReturnsArtifactType,
-} from "../connectors/gst/filed-returns-artifacts";
+import { isFiledReturnsArtifactType } from "../connectors/gst/filed-returns-artifacts";
 import { isFiledReturnsReturnType } from "../connectors/gst/filed-returns-return-types";
 import {
   FILED_RETURNS_MONTHS,
@@ -99,46 +95,6 @@ export async function releaseFiledReturnsRun(
       await browser.storage.local.remove(key);
     }
   });
-}
-
-/**
- * Captures only the current lease whose selected artifacts include this exact
- * recovered target. Callers must use
- * releaseFiledReturnsRun with this snapshot so a later same-scope run cannot
- * be released by recovery for an earlier checkpoint.
- */
-export async function snapshotFiledReturnsRunForRecoveredCompletion(
-  scope: FiledReturnsDownloadScope,
-  deps: FiledReturnsActiveRunDeps,
-): Promise<ActiveFiledReturnsRun | null> {
-  try {
-    const state = await readActiveFiledReturnsRunStorageState(deps);
-    return state.state === "valid" && activeRunOwnsRecoveredArtifact(state.run, scope)
-      ? state.run
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-export function activeRunOwnsRecoveredArtifact(
-  run: ActiveFiledReturnsRun,
-  target: FiledReturnsDownloadScope,
-): boolean {
-  if (
-    run.scope.financialYear !== target.financialYear ||
-    run.scope.period !== target.period ||
-    run.scope.returnType !== target.returnType
-  ) {
-    return false;
-  }
-  return (
-    isFiledReturnsConcreteArtifactType(target.artifactType) &&
-    concreteFiledReturnsArtifactTypesForSelection(
-      run.scope.returnType,
-      run.scope.artifactType,
-    ).includes(target.artifactType)
-  );
 }
 
 export function startFiledReturnsRunLeaseRenewal(

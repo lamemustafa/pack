@@ -215,9 +215,9 @@ Pack uses Chrome extension storage only inside the current browser profile.
   recovery records. After exact completion is proved, the reconciler may retain
   an opaque request identity and exact numeric browser `downloadId` before it
   writes the temporary session summary. Only that reconciler consumes the
-  record after session loss and may rebuild a completion summary before a popup
-  or matching Start request. It never proves ZIP delivery. Records are removed
-  only by Clear local Pack data or extension removal.
+  record after session loss and may rebuild a completion summary. It never proves
+  ZIP delivery. Records are removed only by Clear local Pack data or extension
+  removal.
   The base target-review record may also store the attempt kind/phase, request
   and bounded candidate-window
   timestamps, an opaque `actionId`, the exact numeric browser `downloadId`,
