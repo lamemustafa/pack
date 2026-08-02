@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PACK_CONTENT_REQUEST_ENVELOPE_TYPE } from "../../src/connectors/gst/messages";
 import { type FiledReturnsMonth } from "../../src/connectors/gst/filed-returns-scope";
 import type { PackMessage, PackMessageResponse } from "../../src/connectors/gst/messages";
+import { persistArtifactAcquisitionCompletionMarker } from "../../src/background/filed-returns-target-review";
 
 const browserMocks = vi.hoisted(() => {
   let messageListener:
@@ -24,6 +25,7 @@ const browserMocks = vi.hoisted(() => {
     },
     downloads: {
       download: vi.fn(async () => 481),
+      search: vi.fn(async () => []),
     },
     offscreen: {
       closeDocument: vi.fn(async () => undefined),
@@ -372,6 +374,44 @@ describe("background filed returns download defaults", () => {
       "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
       "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34",
     ]);
+  });
+
+  it("returns a same-target reconciled completion instead of repeating its portal action", async () => {
+    const scope = {
+      artifactType: "PDF" as const,
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-3B" as const,
+    };
+    await expect(
+      persistArtifactAcquisitionCompletionMarker(
+        scope,
+        [
+          {
+            artifactType: "PDF",
+            downloadId: 481,
+            requestId: "00000000-0000-4000-8000-000000000001",
+          },
+        ],
+        { storageKeys: { targetReview: "pack:filed-returns-target-review" } },
+      ),
+    ).resolves.toMatchObject({ state: "persisted" });
+
+    await import("../../src/entrypoints/background");
+
+    await expect(
+      sendBackgroundMessage({
+        type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",
+        payload: scope,
+      }),
+    ).resolves.toMatchObject({
+      flowStep: { state: "downloaded" },
+      flowSummary: {
+        artifactAcquisitionCompletion: [{ artifactType: "PDF", downloadId: 481 }],
+        status: "complete",
+      },
+    });
+    expect(sentActionMessageTypes()).toEqual([]);
   });
 
   it("returns a safe source when an unexpected background failure occurs", async () => {

@@ -65,15 +65,13 @@ For each release candidate:
   bytes. Shareable evidence must replace the runtime action id with a neutral
   `ACTION-*` alias and omit the browser download id.
 - Confirm each `pack:filed-returns-target-review:completion:*` scoped
-  artifact-reconciled target-review completion marker may retain an ordered set
-  of opaque per-artifact request identifiers, each paired with the exact numeric
-  browser download ID it was reconciled from. The marker is the durable
-  per-target recovery proof after session checkpoints and the temporary flow
-  summary are cleared; it remains only until Clear local Pack data or extension
-  removal. This marker is direct single-artifact browser-delivery proof only;
-  selected-files and fiscal-year ZIP delivery must stage artifacts and complete
-  their own browser ZIP handoff. The matching session flow summary may retain the
-  current UI result. Neither record may retain a raw filename,
+  recovery-internal marker may retain an opaque request identity and exact
+  numeric browser download ID after the reconciler proves completion. Only the
+  reconciler consumes this marker to rebuild a temporary session summary after
+  session loss, including before a popup or matching Start request. It never
+  proves ZIP delivery. It remains only until Clear local Pack data or extension
+  removal.
+  Neither record may retain a raw filename,
   local path, URL/referrer, GSTIN/PAN, taxpayer name, portal HTML, credential,
   cookie, token, or artifact bytes.
 - Confirm each session-only `pack.artifact-acquisition.v2.*` checkpoint contains

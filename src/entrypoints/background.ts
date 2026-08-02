@@ -7,6 +7,7 @@ import {
   readActiveFiledReturnsRunSummary,
 } from "../background/filed-returns-active-run";
 import { readCurrentFiledReturnsFlowSummary } from "../background/filed-returns-current-state";
+import { sameFiledReturnsScope } from "../background/filed-returns-full-fiscal-year-ledger";
 import {
   resolveFullFiscalYearTargetFlow,
   resolveUnconfirmedFiledReturnsDownloadFlow,
@@ -267,8 +268,16 @@ async function handleMessage(
         filedReturnsFlowRunnerDeps(),
       );
     case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
+      {
+        const recovered = await reconciledFiledReturnsStartResponse(message.payload);
+        if (recovered) return recovered;
+      }
       return startFiledReturnsDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
     case "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW":
+      {
+        const recovered = await reconciledFiledReturnsStartResponse(message.payload.scope);
+        if (recovered) return recovered;
+      }
       return startFreshFiledReturnsDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
     case "PACK_START_SYNTHETIC_DEMO":
       return startSyntheticDemo({
@@ -336,4 +345,19 @@ export async function clearPackLocalData(): Promise<PackMessageResponse> {
 async function readLocalValue<T>(key: string): Promise<T | null> {
   const values = await browser.storage.local.get(key);
   return (values[key] as T | undefined) ?? null;
+}
+
+async function reconciledFiledReturnsStartResponse(
+  scope: Parameters<typeof startFiledReturnsDownloadFlow>[0],
+): Promise<PackMessageResponse | null> {
+  const reconciled = await reconcileTerminalFiledReturnsDownload(browser.downloads, {
+    storageKeys: filedReturnsStorageKeys(),
+  }).catch(() => false);
+  if (!reconciled) return null;
+  const flowSummary = await readCurrentFiledReturnsFlowSummary({
+    storageKeys: filedReturnsStorageKeys(),
+  });
+  return flowSummary && sameFiledReturnsScope(flowSummary.scope, scope)
+    ? { ok: true, flowStep: flowSummary.flowStep, flowSummary }
+    : null;
 }

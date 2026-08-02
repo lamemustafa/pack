@@ -212,13 +212,12 @@ Pack uses Chrome extension storage only inside the current browser profile.
   download review state with a canonical target identifier and scope, safe
   messages/signals, revisions and timestamps;
 - `pack:filed-returns-target-review:completion:*`: local-only scoped per-target
-  completion markers. They may retain an opaque per-artifact request-identity
-  set, each paired with the exact numeric browser `downloadId` it was reconciled
-  from, after exact completion is proved. Those markers survive session storage
-  loss and are removed only by Clear local Pack data or extension removal.
-  A marker is direct single-artifact browser-delivery proof only; it does not
-  represent selected-files or fiscal-year ZIP delivery, which must stage
-  artifacts and complete their own browser ZIP handoff.
+  recovery records. After exact completion is proved, the reconciler may retain
+  an opaque request identity and exact numeric browser `downloadId` before it
+  writes the temporary session summary. Only that reconciler consumes the
+  record after session loss and may rebuild a completion summary before a popup
+  or matching Start request. It never proves ZIP delivery. Records are removed
+  only by Clear local Pack data or extension removal.
   The base target-review record may also store the attempt kind/phase, request
   and bounded candidate-window
   timestamps, an opaque `actionId`, the exact numeric browser `downloadId`,
@@ -237,9 +236,7 @@ Pack uses Chrome extension storage only inside the current browser profile.
   observation;
 - `pack:last-filed-returns-flow-summary`: the latest temporary filed-return flow
   status. It may repeat the same opaque per-artifact request-identity set and
-  exact numeric browser `downloadId` for the current UI result; the durable
-  per-target completion marker above remains the recovery proof if session
-  storage is cleared;
+  exact numeric browser `downloadId` for the current UI result;
 - `pack:last-gst-tab-id`: the browser tab ID of the most recent supported GST
   Portal tab, so a run can find its tab again without scanning every tab. A tab
   ID is a per-session integer assigned by the browser and carries no page, URL

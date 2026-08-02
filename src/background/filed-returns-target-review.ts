@@ -15,10 +15,7 @@ import {
   clearArtifactAcquisitionCheckpointsAfterPersistedSummary,
   type ArtifactAcquisitionCompletionEvidence,
 } from "./artifact-acquisition-state";
-import {
-  artifactAcquisitionCompletionFlowStep,
-  persistArtifactAcquisitionCompletion,
-} from "./filed-returns-artifact-acquisition-completion";
+import { persistArtifactAcquisitionCompletion } from "./filed-returns-artifact-acquisition-completion";
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import {
   canonicalDurableTargetStatus,
@@ -59,6 +56,12 @@ export interface FiledReturnsTargetReviewDeps {
 }
 
 export type FiledReturnsTargetReviewStorageState =
+  | { state: "missing" }
+  | { state: "malformed" }
+  | { review: FiledReturnsTargetReview; state: "valid" };
+
+/** The reconciler is the sole reader of these recovery-internal records. */
+export type ArtifactAcquisitionCompletionMarkerStorageState =
   | { state: "missing" }
   | { state: "malformed" }
   | { review: FiledReturnsTargetReview; state: "valid" };
@@ -367,35 +370,43 @@ export async function persistArtifactAcquisitionCompletionMarker(
 export async function readArtifactAcquisitionCompletionMarker(
   scope: FiledReturnsDownloadScope,
   deps: FiledReturnsTargetReviewDeps,
-): Promise<FiledReturnsTargetReview | null> {
+): Promise<ArtifactAcquisitionCompletionMarkerStorageState> {
   const targetReviewKey = deps.storageKeys.targetReview;
-  if (!targetReviewKey) return null;
+  if (!targetReviewKey) return { state: "missing" };
   const state = await readTargetReviewStorageStateByKey(
     artifactAcquisitionCompletionMarkerKey(targetReviewKey, scope),
   );
-  return state.state === "valid" && sameExactFiledReturnsScope(state.review.scope, scope)
-    ? state.review
-    : null;
+  if (state.state !== "valid") return state;
+  return sameExactFiledReturnsScope(state.review.scope, scope) &&
+    state.review.artifactAcquisitionCompletion?.length
+    ? { review: state.review, state: "valid" }
+    : { state: "malformed" };
 }
 
-export async function readLatestArtifactAcquisitionCompletionMarker(
+export async function readArtifactAcquisitionCompletionMarkers(
   deps: FiledReturnsTargetReviewDeps,
-): Promise<FiledReturnsTargetReview | null> {
+): Promise<
+  Array<{
+    scope: FiledReturnsDownloadScope;
+    state: ArtifactAcquisitionCompletionMarkerStorageState;
+  }>
+> {
   const targetReviewKey = deps.storageKeys.targetReview;
-  if (!targetReviewKey) return null;
+  if (!targetReviewKey) return [];
   const values = await browser.storage.local.get();
   const prefix = `${targetReviewKey}:completion:`;
-  const markers = Object.entries(values)
-    .filter(([key]) => key.startsWith(prefix))
-    .flatMap(([key, value]) => {
-      const review = parseFiledReturnsTargetReview(value);
-      return review?.artifactAcquisitionCompletion?.length &&
-        key === artifactAcquisitionCompletionMarkerKey(targetReviewKey, review.scope)
-        ? [review]
-        : [];
-    })
-    .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
-  return markers[0] ?? null;
+  const scopes = Object.keys(values)
+    .filter((key) => key.startsWith(prefix))
+    .flatMap((key) => {
+      const scope = artifactAcquisitionCompletionMarkerScopeFromKey(targetReviewKey, key);
+      return scope ? [scope] : [];
+    });
+  return Promise.all(
+    scopes.map(async (scope) => ({
+      scope,
+      state: await readArtifactAcquisitionCompletionMarker(scope, deps),
+    })),
+  );
 }
 
 export async function clearArtifactAcquisitionCompletionMarkers(
@@ -409,25 +420,34 @@ export async function clearArtifactAcquisitionCompletionMarkers(
   if (keys.length > 0) await browser.storage.local.remove(keys);
 }
 
-export function summaryFromArtifactAcquisitionCompletionMarker(
-  review: FiledReturnsTargetReview,
-): FiledReturnsFlowSummary | null {
-  const evidence = review.artifactAcquisitionCompletion;
-  if (!evidence || evidence.length === 0) return null;
-  const scope = canonicalTargetReviewScope(review.scope);
-  const flowStep = artifactAcquisitionCompletionFlowStep(scope, evidence);
-  if (!flowStep) return null;
-  return {
-    artifactAcquisitionCompletion: evidence,
-    completedAt: review.updatedAt,
-    completedPeriods: [scope.period],
-    currentPeriod: scope.period,
-    flowStep,
-    scope,
-    status: "complete",
-    totalPeriods: 1,
-    updatedAt: review.updatedAt,
-  };
+function artifactAcquisitionCompletionMarkerScopeFromKey(
+  targetReviewKey: string,
+  key: string,
+): FiledReturnsDownloadScope | null {
+  const prefix = `${targetReviewKey}:completion:`;
+  if (!key.startsWith(prefix)) return null;
+  const encodedTargetId = key.slice(prefix.length);
+  try {
+    const targetId = decodeURIComponent(encodedTargetId);
+    if (encodeURIComponent(targetId) !== encodedTargetId) return null;
+    const parts = targetId.split(":");
+    if (parts.length !== 3 && parts.length !== 4) return null;
+    const [returnType, financialYear, period, artifactType] = parts;
+    const scope = parseDurableFiledReturnsScope(
+      {
+        ...(artifactType ? { artifactType } : {}),
+        financialYear,
+        period,
+        returnType,
+      },
+      false,
+    );
+    return scope && artifactAcquisitionCompletionMarkerKey(targetReviewKey, scope) === key
+      ? scope
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function resolveUnconfirmedFiledReturnsDownload(
@@ -444,40 +464,6 @@ export async function resolveUnconfirmedFiledReturnsDownload(
       return noTargetReviewResponse(scope);
     }
     const review = state.review;
-    if (resolution === "cancelled") {
-      const durableMarkers = await readDurableArtifactAcquisitionMarkers(scope, deps);
-      if (durableMarkers.evidence.length > 0 && durableMarkers.unprovedTargets.length === 0) {
-        const response = responseForDurableArtifactAcquisitionMarkers(
-          scope,
-          durableMarkers.evidence,
-          deps,
-        );
-        await browser.storage.local.remove(key);
-        return response ?? cancelledCompositeArtifactAcquisitionResponse(scope, review, deps, true);
-      }
-      if (durableMarkers.evidence.length > 0 && durableMarkers.unprovedTargets.length > 0) {
-        for (const target of durableMarkers.unprovedTargets) {
-          const cancellation = await clearArtifactAcquisitionCheckpoints(target);
-          if (cancellation.state !== "cleared") {
-            return responseForFiledReturnsTargetReview({
-              ...review,
-              safeSignals: uniqueSafeSignals([
-                ...review.safeSignals,
-                "artifact-acquisition-checkpoint-clear-failed",
-              ]),
-              safeMessage:
-                "Pack kept this review because it could not safely cancel the unproved artifact. Check browser Downloads, then retry or use Clear local Pack data.",
-            });
-          }
-        }
-        // Only the unproved concrete checkpoints were cancelled. The proved
-        // component marker remains local so its exact completion cannot be
-        // repeated, while removing the composite base review re-enables Clear
-        // local Pack data.
-        await browser.storage.local.remove(key);
-        return cancelledCompositeArtifactAcquisitionResponse(scope, review, deps);
-      }
-    }
     const persistedArtifactCompletion = await readPersistedArtifactAcquisitionCompletion(
       scope,
       review,
@@ -613,60 +599,6 @@ export async function resolveUnconfirmedFiledReturnsDownload(
         await browser.storage.local.set({ [key]: parsedReview });
         return responseForFiledReturnsTargetReview(parsedReview);
       }
-    }
-
-    // The review is the durable half of this transition. Chrome clears
-    // storage.session on disable, reload, update and browser restart while
-    // storage.local survives, so a restart between marking the review and
-    // removing it destroys the session summary and the checkpoints but leaves
-    // the marker. Reaching the cancellation path then records a target that
-    // demonstrably downloaded as `cancelled`.
-    //
-    // The marker is bound to this review's own acquisition identities, so it
-    // cannot be inherited by a later run. Restore the completion instead. The
-    // exact download IDs were corroborating detail held in the cleared
-    // checkpoints; their absence is recorded rather than fabricated.
-    const durableCompletion = review.artifactAcquisitionCompletion;
-    if (durableCompletion && durableCompletion.length > 0) {
-      const reconciledStep = artifactAcquisitionCompletionFlowStep(
-        scope,
-        durableCompletion,
-        copyFiledReturnsDownloadDiagnosticState(review),
-      );
-      if (!reconciledStep) {
-        return responseForFiledReturnsTargetReview({
-          ...review,
-          safeMessage:
-            "Pack retained direct artifact proof, but the selected-files ZIP remains unproved. No portal action was retried.",
-        });
-      }
-      const restoredStep: PortalFlowStepResult = {
-        ...reconciledStep,
-        safeSignals: uniqueSafeSignals([
-          ...reconciledStep.safeSignals,
-          "artifact-acquisition-completion-restored",
-        ]),
-        safeMessage:
-          "Pack restored this target's reconciled completion after the browser session ended mid-cleanup. No portal action was repeated.",
-      };
-      const restoredSummary: FiledReturnsFlowSummary = {
-        artifactAcquisitionCompletion: durableCompletion,
-        scope: canonicalTargetReviewScope(scope),
-        status: "complete",
-        completedPeriods: [scope.period],
-        currentPeriod: scope.period,
-        totalPeriods: 1,
-        updatedAt: (deps.now?.() ?? new Date()).toISOString(),
-        flowStep: restoredStep,
-      };
-      const durableRestored = await persistResolvedTargetReviewSummary(restoredSummary, deps);
-      if (!durableRestored) return responseForFiledReturnsTargetReview(review);
-      await browser.storage.local.remove(key);
-      return {
-        ok: true,
-        flowStep: durableRestored.flowStep,
-        flowSummary: durableRestored,
-      };
     }
 
     await browser.storage.local.remove(key);
@@ -831,81 +763,6 @@ async function readPersistedArtifactAcquisitionCompletion(
     )
     ? summary
     : null;
-}
-
-async function readDurableArtifactAcquisitionMarkers(
-  scope: FiledReturnsDownloadScope,
-  deps: FiledReturnsTargetReviewDeps,
-): Promise<{
-  evidence: ArtifactAcquisitionCompletionEvidence[];
-  unprovedTargets: FiledReturnsDownloadScope[];
-}> {
-  const evidence: ArtifactAcquisitionCompletionEvidence[] = [];
-  const unprovedTargets: FiledReturnsDownloadScope[] = [];
-  for (const artifactType of concreteFiledReturnsArtifactTypesForSelection(
-    scope.returnType,
-    scope.artifactType,
-  )) {
-    const target = { ...scope, artifactType };
-    const marker = await readArtifactAcquisitionCompletionMarker(target, deps);
-    if (!marker?.artifactAcquisitionCompletion?.length) {
-      unprovedTargets.push(target);
-      continue;
-    }
-    evidence.push(...marker.artifactAcquisitionCompletion);
-  }
-  return { evidence, unprovedTargets };
-}
-
-function responseForDurableArtifactAcquisitionMarkers(
-  scope: FiledReturnsDownloadScope,
-  evidence: readonly ArtifactAcquisitionCompletionEvidence[],
-  deps: FiledReturnsTargetReviewDeps,
-): PackMessageResponse | null {
-  const flowStep = artifactAcquisitionCompletionFlowStep(scope, evidence);
-  if (!flowStep) return null;
-  return {
-    ok: true,
-    flowStep,
-    flowSummary: {
-      artifactAcquisitionCompletion: [...evidence],
-      completedPeriods: [scope.period],
-      currentPeriod: scope.period,
-      flowStep,
-      scope: canonicalTargetReviewScope(scope),
-      status: "complete",
-      totalPeriods: 1,
-      updatedAt: (deps.now?.() ?? new Date()).toISOString(),
-    },
-  };
-}
-
-async function cancelledCompositeArtifactAcquisitionResponse(
-  scope: FiledReturnsDownloadScope,
-  review: FiledReturnsTargetReview,
-  deps: FiledReturnsTargetReviewDeps,
-  selectedFilesZipUnproved = false,
-): Promise<PackMessageResponse> {
-  const flowStep: PortalFlowStepResult = {
-    connectorId: "gst",
-    scopeId: filedReturnScopeId(scope.returnType),
-    state: "user-action-required",
-    safeSignals: ["filed-returns-target-cancelled"],
-    safeMessage: selectedFilesZipUnproved
-      ? "Pack retained exact direct artifact proof, but the selected-files ZIP remains unproved. No portal action was retried."
-      : "Pack cancelled the unproved artifact and retained the exact proof for the completed artifact. No portal action was retried.",
-    ...copyFiledReturnsDownloadDiagnosticState(review),
-  };
-  const flowSummary: FiledReturnsFlowSummary = {
-    scope: canonicalTargetReviewScope(scope),
-    status: "cancelled",
-    completedPeriods: [],
-    totalPeriods: 1,
-    updatedAt: (deps.now?.() ?? new Date()).toISOString(),
-    flowStep,
-  };
-  await persistResolvedTargetReviewSummary(flowSummary, deps);
-  return { ok: true, flowStep, flowSummary };
 }
 
 function parseFiledReturnsTargetReview(input: unknown): FiledReturnsTargetReview | null {

@@ -222,7 +222,7 @@ export async function acknowledgeInterruptedFiledReturnsRun(
           };
     }
     const run = storedRun.run;
-    if (!isInterruptedRun(run, now)) {
+    if (!isInterruptedFiledReturnsRun(run, now)) {
       return activeRunResponse(run, now);
     }
 
@@ -353,7 +353,7 @@ function isCanonicalTimestamp(input: unknown): input is string {
 }
 
 function activeRunResponse(run: ActiveFiledReturnsRun, now: Date): PackMessageResponse {
-  const interrupted = isInterruptedRun(run, now);
+  const interrupted = isInterruptedFiledReturnsRun(run, now);
   const flowStep = activeRunStep(interrupted, run.scope.returnType);
   return {
     ok: true,
@@ -365,11 +365,11 @@ function activeRunResponse(run: ActiveFiledReturnsRun, now: Date): PackMessageRe
 function activeRunSummary(
   run: ActiveFiledReturnsRun,
   now: Date,
-  flowStep = activeRunStep(isInterruptedRun(run, now), run.scope.returnType),
+  flowStep = activeRunStep(isInterruptedFiledReturnsRun(run, now), run.scope.returnType),
 ): FiledReturnsFlowSummary {
   return {
     scope: run.scope,
-    status: isInterruptedRun(run, now) ? "blocked" : "running",
+    status: isInterruptedFiledReturnsRun(run, now) ? "blocked" : "running",
     completedPeriods: [],
     updatedAt: run.leaseUpdatedAt,
     flowStep,
@@ -421,7 +421,7 @@ function malformedActiveRunStep(
   };
 }
 
-function isInterruptedRun(run: ActiveFiledReturnsRun, now: Date): boolean {
+export function isInterruptedFiledReturnsRun(run: ActiveFiledReturnsRun, now: Date): boolean {
   return now.getTime() - Date.parse(run.leaseUpdatedAt) > ACTIVE_RUN_REVIEW_MS;
 }
 

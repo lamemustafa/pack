@@ -135,7 +135,7 @@ describe("full fiscal-year recovery", () => {
     });
   });
 
-  it("blocks an all-formats direct-marker result until the fiscal-year artifacts are staged", async () => {
+  it("stages a full-year all-formats target before progressing to ZIP export", async () => {
     const now = new Date("2026-06-24T00:00:00.000Z");
     const scope = {
       artifactType: "PDF_AND_EXCEL" as const,
@@ -150,13 +150,23 @@ describe("full fiscal-year recovery", () => {
         scopeId: "gst-gstr2b-private-v0",
         state: "downloaded" as const,
         safeSignals: [
-          "artifact-acquisition-download-reconciled",
           "filed-return-artifact-downloaded:PDF",
           "filed-return-artifact-downloaded:EXCEL",
+          "filed-return-artifact-downloaded:JSON",
+          "full-fiscal-year-opfs-staged:PDF",
+          "full-fiscal-year-opfs-staged:EXCEL",
+          "full-fiscal-year-opfs-staged:JSON",
         ],
-        safeMessage: "Pack confirmed direct artifact downloads.",
+        safeMessage: "Pack staged the selected artifacts for the fiscal-year ZIP.",
       },
     }));
+    zipMocks.exportFullFiscalYearZip.mockResolvedValue({
+      connectorId: "gst",
+      scopeId: "gst-gstr2b-private-v0",
+      state: "download-unconfirmed",
+      safeSignals: ["browser-download-not-observed"],
+      safeMessage: "Pack started ZIP delivery but needs exact browser download confirmation.",
+    });
 
     const response = await startFullFiscalYearDownloadFlow(
       scope,
@@ -164,19 +174,19 @@ describe("full fiscal-year recovery", () => {
       runSinglePeriod,
     );
 
-    expect(runSinglePeriod).toHaveBeenCalledOnce();
+    expect(runSinglePeriod).toHaveBeenCalled();
+    expect(runSinglePeriod).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        stageCapturedDownloads: expect.objectContaining({ bundleKind: "full-fiscal-year" }),
+      }),
+      { persistSinglePeriodSummary: false },
+    );
+    expect(zipMocks.exportFullFiscalYearZip).toHaveBeenCalledOnce();
     expect(response).toMatchObject({
       flowStep: {
-        state: "blocked",
-        safeSignals: expect.arrayContaining([
-          "full-fiscal-year-artifact-staging-incomplete",
-          "full-fiscal-year-artifact-not-staged:PDF",
-        ]),
-        safeMessage:
-          "Pack observed the portal download, but could not stage every required file for the fiscal-year zip.",
-      },
-      flowSummary: {
-        fullFiscalYearRecovery: { targetStatus: "blocked" },
+        state: "download-unconfirmed",
+        safeSignals: expect.arrayContaining(["browser-download-not-observed"]),
       },
     });
   });

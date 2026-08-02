@@ -1,16 +1,12 @@
 import type {
   FiledReturnsDownloadScope,
-  FiledReturnsFlowSummary,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
 import { delay } from "../core/time";
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import { concreteFiledReturnsArtifactTypesForSelection } from "../connectors/gst/filed-returns-artifacts";
-import {
-  persistFiledReturnsTargetReview,
-  readArtifactAcquisitionCompletionMarker,
-} from "./filed-returns-target-review";
+import { persistFiledReturnsTargetReview } from "./filed-returns-target-review";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
 import { getRequiredGstTab } from "./filed-returns-active-tab";
 import {
@@ -39,7 +35,6 @@ import {
 } from "./filed-returns-step-limit";
 import { withPersistedSinglePeriodSummary } from "./filed-returns-single-period-summary";
 import { reconcileArtifactAcquisitionCheckpoint } from "./artifact-acquisition-state";
-import { artifactAcquisitionCompletionFlowStep } from "./filed-returns-artifact-acquisition-completion";
 import {
   explainIncompleteGstr1PeriodMismatchRecovery,
   pendingGstr1PeriodMismatchRecoveryStep,
@@ -70,13 +65,6 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
     scope.returnType,
     scope.artifactType,
   );
-  // A direct marker proves one browser file reached the user. It deliberately
-  // cannot stand in for a selected-files or fiscal-year ZIP: those modes must
-  // stage their artifacts and hand the ZIP to the browser in this run.
-  const supportsDirectSingleArtifactDelivery = concreteArtifactTypes.length === 1;
-  const durableCompletions = [] as NonNullable<
-    FiledReturnsFlowSummary["artifactAcquisitionCompletion"]
-  >;
   for (const artifactType of concreteArtifactTypes) {
     const concreteScope = {
       artifactType,
@@ -84,47 +72,10 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
       period: scope.period,
       returnType: scope.returnType,
     } as const;
-    const durableMarker = supportsDirectSingleArtifactDelivery
-      ? await readArtifactAcquisitionCompletionMarker(concreteScope, {
-          storageKeys: {
-            ...(deps.storageKeys?.targetReview
-              ? { targetReview: deps.storageKeys.targetReview }
-              : {}),
-          },
-          ...(deps.now ? { now: deps.now } : {}),
-        })
-      : null;
-    if (durableMarker?.artifactAcquisitionCompletion) {
-      durableCompletions.push(...durableMarker.artifactAcquisitionCompletion);
-      continue;
-    }
     const acquisitionRecovery = await reconcileArtifactAcquisitionCheckpoint(concreteScope);
     if (acquisitionRecovery.state === "needs-review") {
       acquisitionRecoverySignals.push(...acquisitionRecovery.safeSignals);
     }
-  }
-  if (
-    supportsDirectSingleArtifactDelivery &&
-    durableCompletions.length === concreteArtifactTypes.length
-  ) {
-    const flowStep = artifactAcquisitionCompletionFlowStep(scope, durableCompletions);
-    if (flowStep) {
-      const now = deps.now?.() ?? new Date();
-      const flowSummary: FiledReturnsFlowSummary = {
-        artifactAcquisitionCompletion: durableCompletions,
-        completedAt: now.toISOString(),
-        completedPeriods: [scope.period],
-        currentPeriod: scope.period,
-        flowStep,
-        scope,
-        status: "complete",
-        totalPeriods: 1,
-      };
-      return { ok: true, flowStep, flowSummary };
-    }
-  }
-  if (durableCompletions.length > 0) {
-    acquisitionRecoverySignals.push("artifact-acquisition-download-unreconciled");
   }
   if (acquisitionRecoverySignals.length > 0) {
     const flowStep: PortalFlowStepResult = {

@@ -2,6 +2,7 @@ import { browser } from "wxt/browser";
 import type {
   FiledReturnsDownloadScope,
   FiledReturnsTargetReview,
+  PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
 import { concreteFiledReturnsArtifactTypesForSelection } from "../connectors/gst/filed-returns-artifacts";
 import {
@@ -18,13 +19,16 @@ import {
 import {
   clearFiledReturnsTargetReview,
   persistArtifactAcquisitionCompletionMarker,
+  persistFiledReturnsTargetReview,
   markFiledReturnsTargetReviewArtifactAcquisitionCompletion,
   readArtifactAcquisitionCompletionMarker,
+  readArtifactAcquisitionCompletionMarkers,
   readCurrentFiledReturnsTargetReview,
   type FiledReturnsTargetReviewDeps,
 } from "./filed-returns-target-review";
 import {
   type ActiveFiledReturnsRun,
+  isInterruptedFiledReturnsRun,
   releaseFiledReturnsRun,
   snapshotFiledReturnsRunForRecoveredCompletion,
 } from "./filed-returns-active-run";
@@ -152,8 +156,31 @@ async function reconcileArtifactAcquisitionCheckpoints(
     marker: Awaited<ReturnType<typeof markFiledReturnsTargetReviewArtifactAcquisitionCompletion>>;
     target: FiledReturnsDownloadScope;
   }> = [];
+  const markerStates = await readArtifactAcquisitionCompletionMarkers(deps);
+  const markerStatesByTarget = new Map(
+    markerStates.map((marker) => [artifactAcquisitionTargetId(marker.scope), marker]),
+  );
+  for (const marker of markerStates) {
+    if (marker.state.state !== "malformed") continue;
+    await persistMalformedArtifactAcquisitionMarkerReview(marker.scope, deps);
+    handled = true;
+  }
+  for (const marker of markerStates) {
+    if (marker.state.state !== "valid") continue;
+    const evidence = marker.state.review.artifactAcquisitionCompletion;
+    if (!evidence) continue;
+    const owningRun = await snapshotFiledReturnsRunForRecoveredCompletion(marker.scope, deps);
+    if (owningRun) recoveredRuns.set(owningRun.runId, owningRun);
+    const reviewMarker = await markFiledReturnsTargetReviewArtifactAcquisitionCompletion(
+      marker.scope,
+      evidence,
+      deps,
+    );
+    provedCheckpoints.push({ evidence: evidence[0]!, marker: reviewMarker, target: marker.scope });
+  }
   const checkpoints = await readArtifactAcquisitionCheckpointTargets().catch(() => []);
   for (const { target } of checkpoints) {
+    if (markerStatesByTarget.has(artifactAcquisitionTargetId(target))) continue;
     const owningRun = await snapshotFiledReturnsRunForRecoveredCompletion(target, deps);
     if (owningRun) recoveredRuns.set(owningRun.runId, owningRun);
     const inspection = await inspectArtifactAcquisitionCheckpoint(target, {
@@ -174,7 +201,10 @@ async function reconcileArtifactAcquisitionCheckpoints(
     provedCheckpoints.push({ evidence: inspection.evidence, marker, target });
   }
   for (const run of recoveredRuns.values()) {
-    if (await hasDurableCompletionForActiveRun(run, deps)) {
+    if (
+      isInterruptedFiledReturnsRun(run, deps.now?.() ?? new Date()) &&
+      (await hasDurableCompletionForActiveRun(run, deps))
+    ) {
       await releaseFiledReturnsRun(run, deps);
     }
   }
@@ -214,8 +244,43 @@ async function hasDurableCompletionForActiveRun(
       ),
     ),
   );
-  const evidence = markers.flatMap((marker) => marker?.artifactAcquisitionCompletion ?? []);
+  if (markers.some((marker) => marker.state === "malformed")) return false;
+  const evidence = markers.flatMap((marker) =>
+    marker.state === "valid" ? (marker.review.artifactAcquisitionCompletion ?? []) : [],
+  );
   return Boolean(artifactAcquisitionCompletionFlowStep(run.scope, evidence));
+}
+
+async function persistMalformedArtifactAcquisitionMarkerReview(
+  scope: FiledReturnsDownloadScope,
+  deps: DurableDownloadReconcilerDeps,
+): Promise<void> {
+  await persistFiledReturnsTargetReview(scope, malformedArtifactAcquisitionMarkerStep(scope), deps);
+}
+
+function malformedArtifactAcquisitionMarkerStep(
+  scope: FiledReturnsDownloadScope,
+): PortalFlowStepResult {
+  return {
+    connectorId: "gst",
+    scopeId: `gst-filed-returns-${scope.returnType.toLowerCase()}-private-v0`,
+    state: "blocked",
+    safeSignals: ["artifact-acquisition-download-unreconciled"],
+    safeMessage:
+      "Pack found damaged durable download proof and cannot verify whether this filed-return action already completed.",
+    userAction: {
+      type: "RETRY_PORTAL_GENERATION",
+      message:
+        "Check browser Downloads, then use Clear local Pack data before starting another portal action.",
+      canResume: false,
+    },
+  };
+}
+
+function artifactAcquisitionTargetId(scope: FiledReturnsDownloadScope): string {
+  return [scope.returnType, scope.financialYear, scope.period, scope.artifactType ?? "PDF"].join(
+    ":",
+  );
 }
 
 export function installFiledReturnsDurableDownloadReconciler(
