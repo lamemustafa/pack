@@ -57,20 +57,35 @@ export async function readCurrentFiledReturnsFlowSummary(
 
   if (isFullFiscalYearLedger(ledger)) return summariseFullFiscalYearLedger(ledger, deps.now?.());
 
-  if (completionSummary && !isUnbackedFullFiscalYearCompletion(completionSummary)) {
-    return completionSummary;
-  }
-
   const durableMarker = await readLatestArtifactAcquisitionCompletionMarker({
     storageKeys: { targetReview: deps.storageKeys.targetReview },
     ...(deps.now ? { now: deps.now } : {}),
   });
   const durableMarkerSummary = durableMarker
-    ? summaryFromArtifactAcquisitionCompletionMarker(durableMarker, deps.now?.() ?? new Date())
+    ? summaryFromArtifactAcquisitionCompletionMarker(durableMarker)
     : null;
+  if (
+    durableMarkerSummary &&
+    isNewerDurableMarkerSummary(durableMarkerSummary, completionSummary)
+  ) {
+    return durableMarkerSummary;
+  }
+
+  if (completionSummary && !isUnbackedFullFiscalYearCompletion(completionSummary)) {
+    return completionSummary;
+  }
   if (durableMarkerSummary) return durableMarkerSummary;
 
   return null;
+}
+
+function isNewerDurableMarkerSummary(
+  durableMarkerSummary: FiledReturnsFlowSummary,
+  completionSummary: FiledReturnsFlowSummary | null,
+): boolean {
+  const markerTime = Date.parse(durableMarkerSummary.updatedAt ?? "");
+  const sessionTime = Date.parse(completionSummary?.updatedAt ?? "");
+  return Number.isFinite(markerTime) && (!Number.isFinite(sessionTime) || markerTime > sessionTime);
 }
 
 function isUnbackedFullFiscalYearCompletion(

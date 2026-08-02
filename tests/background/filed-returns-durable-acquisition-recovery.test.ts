@@ -22,6 +22,9 @@ const mocks = vi.hoisted(() => {
           set: vi.fn(async (values: Record<string, unknown>) => Object.assign(local, values)),
         },
         session: {
+          clear: vi.fn(async () => {
+            for (const key of Object.keys(session)) delete session[key];
+          }),
           get: vi.fn(async (keys?: string | string[]) => read(session, keys)),
           remove: vi.fn(async (keys: string | string[]) => remove(session, keys)),
           set: vi.fn(async (values: Record<string, unknown>) => Object.assign(session, values)),
@@ -41,6 +44,7 @@ import {
   reconcileArtifactAcquisitionCheckpoint,
 } from "../../src/background/artifact-acquisition-state";
 import { reconcileTerminalFiledReturnsDownload } from "../../src/background/filed-returns-durable-download-reconciler";
+import { clearPackLocalDataWithRecoveryGuard } from "../../src/background/local-data";
 import { filedReturnScopeId } from "../../src/connectors/gst/filed-returns-return-descriptors";
 import {
   artifactAcquisitionCompletionMarkerKey,
@@ -63,7 +67,6 @@ const target = {
 const requestId = "00000000-0000-4000-8000-000000000001";
 const juneTarget = { ...target, period: "June" };
 const juneRequestId = "00000000-0000-4000-8000-000000000002";
-const compositeScope = { ...target, artifactType: "PDF_AND_EXCEL" as const };
 
 function durableDeps() {
   return {
@@ -415,24 +418,23 @@ describe("durable acquisition checkpoint recovery", () => {
   });
 
   it("does not clear a proved composite component when cancelling its unresolved selection", async () => {
-    await persistArtifactAcquisitionDownloadId({
-      ...target,
-      downloadId: 231,
-      requestId,
-      state: "download-observing",
-    });
+    const gstr2bPdfTarget = { ...target, returnType: "GSTR-2B" as const };
+    const gstr2bCompositeScope = {
+      ...gstr2bPdfTarget,
+      artifactType: "PDF_AND_EXCEL" as const,
+    };
     await expect(
       persistArtifactAcquisitionCompletionMarker(
-        target,
+        gstr2bPdfTarget,
         [{ artifactType: "PDF", downloadId: 231, requestId }],
         durableDeps(),
       ),
     ).resolves.toMatchObject({ state: "persisted" });
     await persistFiledReturnsTargetReview(
-      compositeScope,
+      gstr2bCompositeScope,
       {
         connectorId: "gst",
-        scopeId: filedReturnScopeId(compositeScope.returnType),
+        scopeId: filedReturnScopeId(gstr2bCompositeScope.returnType),
         state: "blocked",
         safeMessage: "Pack retained unresolved artifact download recovery.",
         safeSignals: ["artifact-acquisition-download-unreconciled"],
@@ -445,12 +447,31 @@ describe("durable acquisition checkpoint recovery", () => {
       durableDeps(),
     );
 
-    await resolveUnconfirmedFiledReturnsDownload(compositeScope, "cancelled", durableDeps());
-
-    expect(mocks.session[artifactAcquisitionCheckpointKey(target)]).toMatchObject({
-      downloadId: 231,
-      requestId,
+    await expect(
+      resolveUnconfirmedFiledReturnsDownload(gstr2bCompositeScope, "cancelled", durableDeps()),
+    ).resolves.toMatchObject({
+      flowStep: {
+        safeMessage:
+          "Pack cancelled the unproved artifact and retained the exact proof for the completed artifact. No portal action was retried.",
+      },
+      flowSummary: { status: "cancelled" },
     });
-    expect(mocks.browser.downloads.search).not.toHaveBeenCalled();
+
+    await expect(
+      readArtifactAcquisitionCompletionMarker(gstr2bPdfTarget, durableDeps()),
+    ).resolves.toMatchObject({
+      artifactAcquisitionCompletion: [{ artifactType: "PDF", downloadId: 231, requestId }],
+    });
+    expect(mocks.local[targetReviewKey]).toBeUndefined();
+    await expect(
+      clearPackLocalDataWithRecoveryGuard({
+        clearableLocalStorageKeys: [],
+        storageKeys: {
+          activeRun: activeRunKey,
+          fullFiscalYearLedger: "pack:full-fiscal-year-ledger",
+          targetReview: targetReviewKey,
+        },
+      }),
+    ).resolves.toEqual({ ok: true, cleared: true });
   });
 });

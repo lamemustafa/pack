@@ -109,7 +109,10 @@ describe("durable filed-return current state", () => {
           requestId: "00000000-0000-4000-8000-000000000001",
         },
       ],
-      { storageKeys: { targetReview: "target-review" } },
+      {
+        now: () => new Date("2026-06-24T00:00:00.000Z"),
+        storageKeys: { targetReview: "target-review" },
+      },
     );
     storage.session.completion = singlePeriodSummary({
       currentPeriod: "July",
@@ -118,10 +121,43 @@ describe("durable filed-return current state", () => {
         period: "July",
         returnType: "GSTR-3B",
       },
+      updatedAt: "2026-06-24T00:01:00.000Z",
     });
 
     await expect(readCurrentFiledReturnsFlowSummary(deps)).resolves.toMatchObject({
       scope: { period: "July" },
+    });
+  });
+
+  it("returns durable marker proof when a worker stop leaves an older session summary", async () => {
+    const scope = {
+      artifactType: "PDF" as const,
+      financialYear: "2026-27",
+      period: "June",
+      returnType: "GSTR-3B" as const,
+    };
+    storage.session.completion = singlePeriodSummary({
+      updatedAt: "2026-06-24T00:00:00.000Z",
+    });
+    await persistArtifactAcquisitionCompletionMarker(
+      scope,
+      [
+        {
+          artifactType: "PDF",
+          downloadId: 9,
+          requestId: "00000000-0000-4000-8000-000000000001",
+        },
+      ],
+      {
+        now: () => new Date("2026-06-24T00:01:00.000Z"),
+        storageKeys: { targetReview: "target-review" },
+      },
+    );
+
+    await expect(readCurrentFiledReturnsFlowSummary(deps)).resolves.toMatchObject({
+      artifactAcquisitionCompletion: [{ artifactType: "PDF", downloadId: 9 }],
+      scope,
+      status: "complete",
     });
   });
 
