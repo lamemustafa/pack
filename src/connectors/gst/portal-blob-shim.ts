@@ -83,12 +83,71 @@ export function capturePortalPdfBlob(input: PortalBlobShimInput): Promise<Portal
       }
       originalClick.call(this);
     };
-    const control = document.querySelector<HTMLElement>(input.controlSelector);
+    const controls = document.querySelectorAll<HTMLElement>(input.controlSelector);
+    const control = controls.length === 1 ? controls[0] : null;
     if (!control) return finish({ ok: false, reason: "control-not-found", safeSignals: [] });
-    const controlHasVisibleTarget = (
+    const hasExpectedTarget = (
       candidate: HTMLElement,
       expected: NonNullable<PortalBlobShimInput["expectedTarget"]>,
     ): boolean => {
+      if (expected.returnType === "GSTR-2B") {
+        const comparable = (value: string) =>
+          value
+            .replace(/\s+/g, " ")
+            .trim()
+            .toLowerCase()
+            .replace(/[^a-z0-9]/g, "");
+        const label = (prefix: string, pattern: RegExp) => {
+          const snapshot = document.evaluate(
+            `//div/span[not(*) and starts-with(normalize-space(), '${prefix}')]`,
+            document,
+            null,
+            7,
+            null,
+          );
+          const matches = Array.from({ length: snapshot.snapshotLength }, (_, index) =>
+            snapshot.snapshotItem(index),
+          ).filter((element): element is HTMLElement => {
+            if (!element || element.nodeType !== 1) return false;
+            const labelElement = element as HTMLElement;
+            let current: HTMLElement | null = labelElement;
+            while (current) {
+              const style = current.ownerDocument.defaultView?.getComputedStyle(current);
+              if (
+                !style ||
+                style.display === "none" ||
+                style.visibility !== "visible" ||
+                Number(style.opacity) === 0
+              )
+                return false;
+              current = current.parentElement;
+            }
+            return (
+              labelElement.isConnected &&
+              labelElement.children.length === 0 &&
+              !labelElement.closest("[inert], [aria-hidden='true'], [aria-disabled='true']") &&
+              labelElement.getBoundingClientRect().width > 0 &&
+              labelElement.getBoundingClientRect().height > 0 &&
+              pattern.test(labelElement.innerText || "")
+            );
+          });
+          const value = matches[0]?.innerText.match(pattern)?.[1]?.trim() ?? null;
+          return matches.length === 1 && value ? value : null;
+        };
+        const labelledYear = label(
+          "Financial Year -",
+          /^Financial Year\s*-\s*([0-9]{4}\s*-\s*[0-9]{2})$/i,
+        );
+        const labelledPeriod = label("Return Period -", /^Return Period\s*-\s*([a-z]+)$/i);
+        return Boolean(
+          location.origin === "https://gstr2b.gst.gov.in" &&
+          /^\/gstr2b\/auth\/gstr2b\/summary\/?$/i.test(location.pathname) &&
+          labelledYear &&
+          labelledPeriod &&
+          comparable(labelledYear) === comparable(expected.financialYear) &&
+          comparable(labelledPeriod) === comparable(expected.period),
+        );
+      }
       let current: HTMLElement | null = candidate;
       const escape = (value: string) =>
         [...value]
@@ -118,7 +177,7 @@ export function capturePortalPdfBlob(input: PortalBlobShimInput): Promise<Portal
       }
       return false;
     };
-    if (input.expectedTarget && !controlHasVisibleTarget(control, input.expectedTarget)) {
+    if (input.expectedTarget && !hasExpectedTarget(control, input.expectedTarget)) {
       return finish({
         ok: false,
         reason: "page-period-mismatch",
