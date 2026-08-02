@@ -171,7 +171,6 @@ describe("full fiscal-year recovery", () => {
         safeSignals: expect.arrayContaining([
           "full-fiscal-year-artifact-staging-incomplete",
           "full-fiscal-year-artifact-not-staged:PDF",
-          "full-fiscal-year-artifact-not-staged:EXCEL",
         ]),
         safeMessage:
           "Pack observed the portal download, but could not stage every required file for the fiscal-year zip.",

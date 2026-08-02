@@ -6,10 +6,7 @@ import type {
 import { delay } from "../core/time";
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
-import {
-  concreteFiledReturnsArtifactTypes,
-  normaliseFiledReturnsArtifactType,
-} from "../connectors/gst/filed-returns-artifacts";
+import { concreteFiledReturnsArtifactTypesForSelection } from "../connectors/gst/filed-returns-artifacts";
 import {
   persistFiledReturnsTargetReview,
   readArtifactAcquisitionCompletionMarker,
@@ -69,8 +66,9 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
   // Checkpoints are keyed per concrete artifact type, so a composite selection
   // has to reconcile each one rather than the composite scope.
   const acquisitionRecoverySignals: string[] = [];
-  const concreteArtifactTypes = concreteFiledReturnsArtifactTypes(
-    normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType),
+  const concreteArtifactTypes = concreteFiledReturnsArtifactTypesForSelection(
+    scope.returnType,
+    scope.artifactType,
   );
   // A direct marker proves one browser file reached the user. It deliberately
   // cannot stand in for a selected-files or fiscal-year ZIP: those modes must
@@ -110,18 +108,20 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
     durableCompletions.length === concreteArtifactTypes.length
   ) {
     const flowStep = artifactAcquisitionCompletionFlowStep(scope, durableCompletions);
-    const now = deps.now?.() ?? new Date();
-    const flowSummary: FiledReturnsFlowSummary = {
-      artifactAcquisitionCompletion: durableCompletions,
-      completedAt: now.toISOString(),
-      completedPeriods: [scope.period],
-      currentPeriod: scope.period,
-      flowStep,
-      scope,
-      status: "complete",
-      totalPeriods: 1,
-    };
-    return { ok: true, flowStep, flowSummary };
+    if (flowStep) {
+      const now = deps.now?.() ?? new Date();
+      const flowSummary: FiledReturnsFlowSummary = {
+        artifactAcquisitionCompletion: durableCompletions,
+        completedAt: now.toISOString(),
+        completedPeriods: [scope.period],
+        currentPeriod: scope.period,
+        flowStep,
+        scope,
+        status: "complete",
+        totalPeriods: 1,
+      };
+      return { ok: true, flowStep, flowSummary };
+    }
   }
   if (durableCompletions.length > 0) {
     acquisitionRecoverySignals.push("artifact-acquisition-download-unreconciled");

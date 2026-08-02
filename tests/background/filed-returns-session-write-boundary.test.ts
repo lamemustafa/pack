@@ -546,6 +546,7 @@ function completeSelectedArtifactBundleSummary(includeZipSignal: boolean) {
   const diagnostics = [
     selectedArtifactDiagnostic("PDF", "action-12345678-pdf"),
     selectedArtifactDiagnostic("EXCEL", "action-12345678-excel"),
+    selectedArtifactDiagnostic("JSON", "action-12345678-json"),
   ];
   return {
     scope: {
@@ -568,16 +569,18 @@ function completeSelectedArtifactBundleSummary(includeZipSignal: boolean) {
         "single-period-opfs-staged:PDF",
         "filed-return-artifact-downloaded:EXCEL",
         "single-period-opfs-staged:EXCEL",
+        "filed-return-artifact-downloaded:JSON",
+        "single-period-opfs-staged:JSON",
         ...(includeZipSignal ? ["single-period-zip-downloaded"] : []),
       ],
       safeMessage: "Synthetic supplied portal prose.",
-      downloadDiagnostic: diagnostics[1],
+      downloadDiagnostic: diagnostics.at(-1),
       downloadDiagnostics: diagnostics,
     },
   };
 }
 
-function selectedArtifactDiagnostic(artifactType: "PDF" | "EXCEL", actionId: string) {
+function selectedArtifactDiagnostic(artifactType: "PDF" | "EXCEL" | "JSON", actionId: string) {
   return {
     schemaVersion: "1.0",
     eventType: "filed-return-download-path",
@@ -587,7 +590,7 @@ function selectedArtifactDiagnostic(artifactType: "PDF" | "EXCEL", actionId: str
     downloadPathClass: "captured-portal-request-data",
     endpointClass: "gstr2b-portal-blob-captured-download",
     financialYear: "2025-26",
-    mimeClass: artifactType === "PDF" ? "pdf" : "spreadsheet",
+    mimeClass: artifactType === "PDF" ? "pdf" : artifactType === "JSON" ? "json" : "spreadsheet",
     period: "May",
     returnType: "GSTR-2B",
     status: "downloaded",

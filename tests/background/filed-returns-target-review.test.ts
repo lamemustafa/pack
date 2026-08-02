@@ -502,7 +502,7 @@ describe("filed returns target review", () => {
     ).toMatchObject({ completedPeriods: [], status: "cancelled" });
   });
 
-  it("accepts exact PDF and Excel reconciliation without selected-file ZIP evidence", async () => {
+  it("keeps direct PDF and Excel evidence unproved for a selected-file ZIP", async () => {
     const scope = {
       artifactType: "PDF_AND_EXCEL" as const,
       financialYear: "2025-26",
@@ -553,10 +553,10 @@ describe("filed returns target review", () => {
     });
 
     expect(response).toMatchObject({
-      flowSummary: { status: "complete", completedPeriods: ["May"] },
+      flowSummary: { status: "blocked", completedPeriods: [] },
       flowStep: {
         safeSignals: expect.not.arrayContaining(["single-period-zip-downloaded"]),
-        state: "downloaded",
+        state: "user-action-required",
       },
     });
   });

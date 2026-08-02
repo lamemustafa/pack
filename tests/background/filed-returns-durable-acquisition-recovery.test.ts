@@ -378,9 +378,10 @@ describe("durable acquisition checkpoint recovery", () => {
     });
   });
 
-  it("releases a composite lease only after every selected artifact has durable proof", async () => {
+  it("does not release a composite lease from direct component proof without ZIP delivery", async () => {
     const gstr2bPdfTarget = { ...target, returnType: "GSTR-2B" as const };
     const gstr2bExcelTarget = { ...gstr2bPdfTarget, artifactType: "EXCEL" as const };
+    const gstr2bJsonTarget = { ...gstr2bPdfTarget, artifactType: "JSON" as const };
     const gstr2bCompositeScope = {
       ...gstr2bPdfTarget,
       artifactType: "PDF_AND_EXCEL" as const,
@@ -398,8 +399,16 @@ describe("durable acquisition checkpoint recovery", () => {
       requestId: juneRequestId,
       state: "download-observing",
     });
+    await persistArtifactAcquisitionDownloadId({
+      ...gstr2bJsonTarget,
+      downloadId: 233,
+      requestId: "00000000-0000-4000-8000-000000000003",
+      state: "download-observing",
+    });
     mocks.browser.downloads.search.mockImplementation(async ({ id }) => [
-      completedDownload(id, id === 232 ? "EXCEL" : "PDF"),
+      id === 233
+        ? { ...completedDownload(id), mime: "application/json" }
+        : completedDownload(id, id === 232 ? "EXCEL" : "PDF"),
     ]);
 
     await expect(
@@ -409,11 +418,19 @@ describe("durable acquisition checkpoint recovery", () => {
       ),
     ).resolves.toBe(true);
 
-    expect(mocks.local[activeRunKey]).toBeUndefined();
+    expect(mocks.local[activeRunKey]).toMatchObject({
+      scope: gstr2bCompositeScope,
+      status: "running",
+    });
     await expect(
       readArtifactAcquisitionCompletionMarker(gstr2bExcelTarget, durableDeps()),
     ).resolves.toMatchObject({
       artifactAcquisitionCompletion: [{ artifactType: "EXCEL", downloadId: 232 }],
+    });
+    await expect(
+      readArtifactAcquisitionCompletionMarker(gstr2bJsonTarget, durableDeps()),
+    ).resolves.toMatchObject({
+      artifactAcquisitionCompletion: [{ artifactType: "JSON", downloadId: 233 }],
     });
   });
 
@@ -473,5 +490,66 @@ describe("durable acquisition checkpoint recovery", () => {
         },
       }),
     ).resolves.toEqual({ ok: true, cleared: true });
+  });
+
+  it("does not report a selected-files ZIP complete when every direct component has a marker", async () => {
+    const gstr2bPdfTarget = { ...target, returnType: "GSTR-2B" as const };
+    const gstr2bExcelTarget = { ...gstr2bPdfTarget, artifactType: "EXCEL" as const };
+    const gstr2bJsonTarget = { ...gstr2bPdfTarget, artifactType: "JSON" as const };
+    const gstr2bCompositeScope = {
+      ...gstr2bPdfTarget,
+      artifactType: "PDF_AND_EXCEL" as const,
+    };
+    for (const [scope, artifactType, downloadId, markerRequestId] of [
+      [gstr2bPdfTarget, "PDF", 231, requestId],
+      [gstr2bExcelTarget, "EXCEL", 232, juneRequestId],
+      [gstr2bJsonTarget, "JSON", 233, "00000000-0000-4000-8000-000000000003"],
+    ] as const) {
+      await expect(
+        persistArtifactAcquisitionCompletionMarker(
+          scope,
+          [{ artifactType, downloadId, requestId: markerRequestId }],
+          durableDeps(),
+        ),
+      ).resolves.toMatchObject({ state: "persisted" });
+    }
+    await persistFiledReturnsTargetReview(
+      gstr2bCompositeScope,
+      {
+        connectorId: "gst",
+        scopeId: filedReturnScopeId(gstr2bCompositeScope.returnType),
+        state: "blocked",
+        safeMessage: "Pack retained unresolved artifact download recovery.",
+        safeSignals: ["artifact-acquisition-download-unreconciled"],
+        userAction: {
+          canResume: true,
+          message: "Review or cancel this target before starting another portal action.",
+          type: "RETRY_PORTAL_GENERATION",
+        },
+      },
+      durableDeps(),
+    );
+
+    await expect(
+      resolveUnconfirmedFiledReturnsDownload(gstr2bCompositeScope, "cancelled", durableDeps()),
+    ).resolves.toMatchObject({
+      flowStep: {
+        state: "user-action-required",
+        safeMessage:
+          "Pack retained exact direct artifact proof, but the selected-files ZIP remains unproved. No portal action was retried.",
+      },
+      flowSummary: { status: "cancelled" },
+    });
+
+    for (const scope of [gstr2bPdfTarget, gstr2bExcelTarget, gstr2bJsonTarget]) {
+      await expect(
+        readArtifactAcquisitionCompletionMarker(scope, durableDeps()),
+      ).resolves.toMatchObject({
+        artifactAcquisitionCompletion: [
+          expect.objectContaining({ artifactType: scope.artifactType }),
+        ],
+      });
+    }
+    expect(mocks.local[targetReviewKey]).toBeUndefined();
   });
 });

@@ -91,17 +91,16 @@ export function requireFullFiscalYearArtifactsStaged(
 function remainingArtifactTypeForTarget(
   target: FiledReturnsFullFiscalYearTarget,
 ): FiledReturnsDownloadScope["artifactType"] | undefined {
-  if (target.artifactType !== "PDF_AND_EXCEL") return target.artifactType;
   const signals = new Set(target.safeSignals);
-  const pdfDone =
-    signals.has(`${FULL_YEAR_STAGED_SIGNAL_PREFIX}PDF`) ||
-    signals.has("filed-return-artifact-unavailable:PDF");
-  const excelDone =
-    signals.has(`${FULL_YEAR_STAGED_SIGNAL_PREFIX}EXCEL`) ||
-    signals.has("filed-return-artifact-unavailable:EXCEL");
-  if (pdfDone && !excelDone) return "EXCEL";
-  if (excelDone && !pdfDone) return "PDF";
-  return target.artifactType;
+  const remainingArtifactType = concreteFiledReturnsArtifactTypesForSelection(
+    target.returnType,
+    target.artifactType,
+  ).find(
+    (artifactType) =>
+      !signals.has(`${FULL_YEAR_STAGED_SIGNAL_PREFIX}${artifactType}`) &&
+      !signals.has(`filed-return-artifact-unavailable:${artifactType}`),
+  );
+  return remainingArtifactType ?? target.artifactType;
 }
 
 export function createFullFiscalYearCleanupPendingState(

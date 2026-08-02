@@ -6,7 +6,7 @@ import type {
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
 import {
-  concreteFiledReturnsArtifactTypes,
+  concreteFiledReturnsArtifactTypesForSelection,
   isFiledReturnsConcreteArtifactType,
   normaliseFiledReturnsArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
@@ -157,8 +157,9 @@ export function parseArtifactAcquisitionCompletion(
   scope: FiledReturnsDownloadScope,
 ): FiledReturnsFlowSummary["artifactAcquisitionCompletion"] | null {
   if (!Array.isArray(input)) return null;
-  const expectedArtifacts = concreteFiledReturnsArtifactTypes(
-    normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType),
+  const expectedArtifacts = concreteFiledReturnsArtifactTypesForSelection(
+    scope.returnType,
+    scope.artifactType,
   );
   if (input.length !== expectedArtifacts.length) return null;
   const completion = input.map((entry, index) => {
@@ -251,8 +252,9 @@ function hasExactArtifactAcquisitionReconciliationEvidence(
   scope: FiledReturnsDownloadScope,
   safeSignals: readonly string[],
 ): boolean {
-  const expectedArtifactCount = concreteFiledReturnsArtifactTypes(
-    normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType),
+  const expectedArtifactCount = concreteFiledReturnsArtifactTypesForSelection(
+    scope.returnType,
+    scope.artifactType,
   ).length;
   const downloadIds = safeSignals.filter((signal) => /^browser-download-id:\d{1,10}$/.test(signal));
   return (

@@ -2,11 +2,7 @@ import type {
   FiledReturnsDownloadDiagnostic,
   FiledReturnsDownloadScope,
 } from "../connectors/gst/filed-returns-contracts";
-import {
-  concreteFiledReturnsArtifactTypes,
-  concreteFiledReturnsArtifactTypesForSelection,
-  normaliseFiledReturnsArtifactType,
-} from "../connectors/gst/filed-returns-artifacts";
+import { concreteFiledReturnsArtifactTypesForSelection } from "../connectors/gst/filed-returns-artifacts";
 import { isCanonicalFiledReturnsActionId } from "../connectors/gst/filed-returns-operation-id";
 import {
   isFiledReturnsEndpointClassForArtifact,
@@ -142,8 +138,9 @@ export function hasPositiveFiledReturnsDownloadEvidence(
 ): boolean {
   if (!isValidFiledReturnsDownloadDiagnosticState(input, binding)) return false;
   const diagnostics = diagnosticsFromState(input);
-  const expectedArtifacts = concreteFiledReturnsArtifactTypes(
-    normaliseFiledReturnsArtifactType(binding.returnType, binding.artifactType),
+  const expectedArtifacts = concreteFiledReturnsArtifactTypesForSelection(
+    binding.returnType,
+    binding.artifactType,
   );
   let positiveArtifactCount = 0;
 

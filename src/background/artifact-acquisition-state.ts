@@ -1,11 +1,10 @@
 import { browser } from "wxt/browser";
 import type { FiledReturnsDownloadScope } from "../connectors/gst/filed-returns-contracts";
 import {
-  concreteFiledReturnsArtifactTypes,
+  concreteFiledReturnsArtifactTypesForSelection,
   filedReturnsArtifactExtension,
   filedReturnsArtifactMimeTypes,
   isFiledReturnsConcreteArtifactType,
-  normaliseFiledReturnsArtifactType,
   type FiledReturnsConcreteArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
 import { parseDurableFiledReturnsScope } from "../connectors/gst/filed-returns-durable-status";
@@ -159,8 +158,9 @@ export type ArtifactCheckpointCancellation =
 export async function clearArtifactAcquisitionCheckpoints(
   scope: FiledReturnsDownloadScope,
 ): Promise<ArtifactCheckpointCancellation> {
-  const targets = concreteFiledReturnsArtifactTypes(
-    normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType),
+  const targets = concreteFiledReturnsArtifactTypesForSelection(
+    scope.returnType,
+    scope.artifactType,
   ).map(
     (artifactType) =>
       ({ ...scope, artifactType }) as ArtifactAcquisitionTarget & {
@@ -252,8 +252,9 @@ export async function clearArtifactAcquisitionCheckpointsAfterPersistedSummary(
   scope: FiledReturnsDownloadScope,
   evidence: readonly ArtifactAcquisitionCompletionEvidence[],
 ): Promise<void> {
-  for (const artifactType of concreteFiledReturnsArtifactTypes(
-    normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType),
+  for (const artifactType of concreteFiledReturnsArtifactTypesForSelection(
+    scope.returnType,
+    scope.artifactType,
   )) {
     const target = { ...scope, artifactType };
     const key = artifactAcquisitionCheckpointKey(target);
@@ -277,8 +278,9 @@ export async function readArtifactAcquisitionCompletionEvidence(
   scope: FiledReturnsDownloadScope,
 ): Promise<ArtifactAcquisitionCompletionEvidence[]> {
   const evidence: ArtifactAcquisitionCompletionEvidence[] = [];
-  for (const artifactType of concreteFiledReturnsArtifactTypes(
-    normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType),
+  for (const artifactType of concreteFiledReturnsArtifactTypesForSelection(
+    scope.returnType,
+    scope.artifactType,
   )) {
     const target = { ...scope, artifactType } as ArtifactAcquisitionTarget;
     const key = artifactAcquisitionCheckpointKey(target);

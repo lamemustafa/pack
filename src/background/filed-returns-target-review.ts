@@ -7,7 +7,7 @@ import type {
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
 import {
-  concreteFiledReturnsArtifactTypes,
+  concreteFiledReturnsArtifactTypesForSelection,
   normaliseFiledReturnsArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
 import {
@@ -415,12 +415,14 @@ export function summaryFromArtifactAcquisitionCompletionMarker(
   const evidence = review.artifactAcquisitionCompletion;
   if (!evidence || evidence.length === 0) return null;
   const scope = canonicalTargetReviewScope(review.scope);
+  const flowStep = artifactAcquisitionCompletionFlowStep(scope, evidence);
+  if (!flowStep) return null;
   return {
     artifactAcquisitionCompletion: evidence,
     completedAt: review.updatedAt,
     completedPeriods: [scope.period],
     currentPeriod: scope.period,
-    flowStep: artifactAcquisitionCompletionFlowStep(scope, evidence),
+    flowStep,
     scope,
     status: "complete",
     totalPeriods: 1,
@@ -445,10 +447,13 @@ export async function resolveUnconfirmedFiledReturnsDownload(
     if (resolution === "cancelled") {
       const durableMarkers = await readDurableArtifactAcquisitionMarkers(scope, deps);
       if (durableMarkers.evidence.length > 0 && durableMarkers.unprovedTargets.length === 0) {
-        // A stale composite base review must not hide completion once every
-        // concrete artifact already has its own durable proof marker.
+        const response = responseForDurableArtifactAcquisitionMarkers(
+          scope,
+          durableMarkers.evidence,
+          deps,
+        );
         await browser.storage.local.remove(key);
-        return responseForDurableArtifactAcquisitionMarkers(scope, durableMarkers.evidence, deps);
+        return response ?? cancelledCompositeArtifactAcquisitionResponse(scope, review, deps, true);
       }
       if (durableMarkers.evidence.length > 0 && durableMarkers.unprovedTargets.length > 0) {
         for (const target of durableMarkers.unprovedTargets) {
@@ -623,21 +628,26 @@ export async function resolveUnconfirmedFiledReturnsDownload(
     // checkpoints; their absence is recorded rather than fabricated.
     const durableCompletion = review.artifactAcquisitionCompletion;
     if (durableCompletion && durableCompletion.length > 0) {
+      const reconciledStep = artifactAcquisitionCompletionFlowStep(
+        scope,
+        durableCompletion,
+        copyFiledReturnsDownloadDiagnosticState(review),
+      );
+      if (!reconciledStep) {
+        return responseForFiledReturnsTargetReview({
+          ...review,
+          safeMessage:
+            "Pack retained direct artifact proof, but the selected-files ZIP remains unproved. No portal action was retried.",
+        });
+      }
       const restoredStep: PortalFlowStepResult = {
-        connectorId: "gst",
-        scopeId: filedReturnScopeId(scope.returnType),
-        state: "downloaded",
+        ...reconciledStep,
         safeSignals: uniqueSafeSignals([
-          "artifact-acquisition-download-reconciled",
+          ...reconciledStep.safeSignals,
           "artifact-acquisition-completion-restored",
-          "browser-download-created",
-          "browser-download-completed",
-          "browser-download-non-empty",
-          ...durableCompletion.map(({ downloadId }) => `browser-download-id:${downloadId}`),
         ]),
         safeMessage:
           "Pack restored this target's reconciled completion after the browser session ended mid-cleanup. No portal action was repeated.",
-        ...copyFiledReturnsDownloadDiagnosticState(review),
       };
       const restoredSummary: FiledReturnsFlowSummary = {
         artifactAcquisitionCompletion: durableCompletion,
@@ -832,8 +842,9 @@ async function readDurableArtifactAcquisitionMarkers(
 }> {
   const evidence: ArtifactAcquisitionCompletionEvidence[] = [];
   const unprovedTargets: FiledReturnsDownloadScope[] = [];
-  for (const artifactType of concreteFiledReturnsArtifactTypes(
-    normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType),
+  for (const artifactType of concreteFiledReturnsArtifactTypesForSelection(
+    scope.returnType,
+    scope.artifactType,
   )) {
     const target = { ...scope, artifactType };
     const marker = await readArtifactAcquisitionCompletionMarker(target, deps);
@@ -850,8 +861,9 @@ function responseForDurableArtifactAcquisitionMarkers(
   scope: FiledReturnsDownloadScope,
   evidence: readonly ArtifactAcquisitionCompletionEvidence[],
   deps: FiledReturnsTargetReviewDeps,
-): PackMessageResponse {
+): PackMessageResponse | null {
   const flowStep = artifactAcquisitionCompletionFlowStep(scope, evidence);
+  if (!flowStep) return null;
   return {
     ok: true,
     flowStep,
@@ -872,14 +884,16 @@ async function cancelledCompositeArtifactAcquisitionResponse(
   scope: FiledReturnsDownloadScope,
   review: FiledReturnsTargetReview,
   deps: FiledReturnsTargetReviewDeps,
+  selectedFilesZipUnproved = false,
 ): Promise<PackMessageResponse> {
   const flowStep: PortalFlowStepResult = {
     connectorId: "gst",
     scopeId: filedReturnScopeId(scope.returnType),
     state: "user-action-required",
     safeSignals: ["filed-returns-target-cancelled"],
-    safeMessage:
-      "Pack cancelled the unproved artifact and retained the exact proof for the completed artifact. No portal action was retried.",
+    safeMessage: selectedFilesZipUnproved
+      ? "Pack retained exact direct artifact proof, but the selected-files ZIP remains unproved. No portal action was retried."
+      : "Pack cancelled the unproved artifact and retained the exact proof for the completed artifact. No portal action was retried.",
     ...copyFiledReturnsDownloadDiagnosticState(review),
   };
   const flowSummary: FiledReturnsFlowSummary = {
@@ -1549,11 +1563,13 @@ function artifactSelectionsOverlap(
   left: FiledReturnsDownloadScope,
   right: FiledReturnsDownloadScope,
 ): boolean {
-  const leftArtifacts = concreteFiledReturnsArtifactTypes(
-    normaliseFiledReturnsArtifactType(left.returnType, left.artifactType),
+  const leftArtifacts = concreteFiledReturnsArtifactTypesForSelection(
+    left.returnType,
+    left.artifactType,
   );
-  const rightArtifacts = concreteFiledReturnsArtifactTypes(
-    normaliseFiledReturnsArtifactType(right.returnType, right.artifactType),
+  const rightArtifacts = concreteFiledReturnsArtifactTypesForSelection(
+    right.returnType,
+    right.artifactType,
   );
   return leftArtifacts.some((artifactType) => rightArtifacts.includes(artifactType));
 }

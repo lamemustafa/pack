@@ -144,6 +144,10 @@ describe("GSTR-3B artifact acquisition recovery", () => {
       ...compositeScope,
       artifactType: "EXCEL",
     });
+    expect(mocks.reconcileArtifactAcquisitionCheckpoint).toHaveBeenNthCalledWith(3, {
+      ...compositeScope,
+      artifactType: "JSON",
+    });
     expect(mocks.persistFiledReturnsTargetReview).toHaveBeenCalledWith(
       compositeScope,
       expect.objectContaining({
@@ -202,6 +206,10 @@ describe("GSTR-3B artifact acquisition recovery", () => {
       ...compositeScope,
       artifactType: "EXCEL",
     });
+    expect(mocks.reconcileArtifactAcquisitionCheckpoint).toHaveBeenNthCalledWith(3, {
+      ...compositeScope,
+      artifactType: "JSON",
+    });
     expect(mocks.preflightSelectedArtifactsRecovery).toHaveBeenCalledWith({
       deps: expect.anything(),
       scope: compositeScope,
@@ -214,5 +222,34 @@ describe("GSTR-3B artifact acquisition recovery", () => {
           "Pack still needs to stage the selected artifacts and hand off their ZIP before this selection is complete.",
       },
     });
+  });
+
+  it("reconciles a retained all-formats JSON checkpoint before the portal can repeat it", async () => {
+    const compositeScope = {
+      ...scope,
+      artifactType: "PDF_AND_EXCEL" as const,
+      returnType: "GSTR-2B" as const,
+    };
+    mocks.reconcileArtifactAcquisitionCheckpoint
+      .mockResolvedValueOnce({ state: "retry-safe" })
+      .mockResolvedValueOnce({ state: "retry-safe" })
+      .mockResolvedValueOnce({
+        state: "needs-review",
+        safeSignals: ["artifact-acquisition-download-unreconciled"],
+      });
+
+    const response = await startSinglePeriodFiledReturnsDownloadFlow(compositeScope, {} as never);
+
+    expect(mocks.reconcileArtifactAcquisitionCheckpoint).toHaveBeenNthCalledWith(3, {
+      ...compositeScope,
+      artifactType: "JSON",
+    });
+    expect(mocks.persistFiledReturnsTargetReview).toHaveBeenCalledWith(
+      compositeScope,
+      expect.objectContaining({ safeSignals: ["artifact-acquisition-download-unreconciled"] }),
+      expect.anything(),
+    );
+    expect(mocks.preflightSelectedArtifactsRecovery).not.toHaveBeenCalled();
+    expect(response).toMatchObject({ flowStep: { state: "user-action-required" } });
   });
 });

@@ -5,10 +5,9 @@ import type {
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
 import {
-  concreteFiledReturnsArtifactTypes,
+  concreteFiledReturnsArtifactTypesForSelection,
   isFiledReturnsConcreteArtifactType,
   isFiledReturnsArtifactType,
-  normaliseFiledReturnsArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
 import { isFiledReturnsReturnType } from "../connectors/gst/filed-returns-return-types";
 import {
@@ -135,8 +134,9 @@ export function activeRunOwnsRecoveredArtifact(
   }
   return (
     isFiledReturnsConcreteArtifactType(target.artifactType) &&
-    concreteFiledReturnsArtifactTypes(
-      normaliseFiledReturnsArtifactType(run.scope.returnType, run.scope.artifactType),
+    concreteFiledReturnsArtifactTypesForSelection(
+      run.scope.returnType,
+      run.scope.artifactType,
     ).includes(target.artifactType)
   );
 }

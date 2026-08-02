@@ -4,6 +4,7 @@ import type {
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
+import { concreteFiledReturnsArtifactTypesForSelection } from "../connectors/gst/filed-returns-artifacts";
 import {
   clearArtifactAcquisitionCheckpointsAfterPersistedSummary,
   type ArtifactAcquisitionCompletionEvidence,
@@ -14,7 +15,18 @@ export function artifactAcquisitionCompletionFlowStep(
   scope: FiledReturnsDownloadScope,
   evidence: readonly ArtifactAcquisitionCompletionEvidence[],
   diagnosticState: Pick<PortalFlowStepResult, "downloadDiagnostic" | "downloadDiagnostics"> = {},
-): PortalFlowStepResult {
+): PortalFlowStepResult | null {
+  const selectedArtifactTypes = concreteFiledReturnsArtifactTypesForSelection(
+    scope.returnType,
+    scope.artifactType,
+  );
+  if (
+    selectedArtifactTypes.length !== 1 ||
+    evidence.length !== 1 ||
+    evidence[0]?.artifactType !== selectedArtifactTypes[0]
+  ) {
+    return null;
+  }
   return {
     connectorId: "gst",
     scopeId: filedReturnScopeId(scope.returnType),
@@ -42,6 +54,7 @@ export async function persistArtifactAcquisitionCompletion(
 ): Promise<FiledReturnsFlowSummary | null> {
   if (!completionKey) return null;
   const flowStep = artifactAcquisitionCompletionFlowStep(scope, evidence, diagnosticState);
+  if (!flowStep) return null;
   const summary = await persistCanonicalFiledReturnsFlowSummary(completionKey, {
     artifactAcquisitionCompletion: evidence.map(({ artifactType, downloadId, requestId }) => ({
       artifactType,

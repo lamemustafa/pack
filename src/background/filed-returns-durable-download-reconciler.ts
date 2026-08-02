@@ -3,10 +3,7 @@ import type {
   FiledReturnsDownloadScope,
   FiledReturnsTargetReview,
 } from "../connectors/gst/filed-returns-contracts";
-import {
-  concreteFiledReturnsArtifactTypes,
-  normaliseFiledReturnsArtifactType,
-} from "../connectors/gst/filed-returns-artifacts";
+import { concreteFiledReturnsArtifactTypesForSelection } from "../connectors/gst/filed-returns-artifacts";
 import {
   inspectArtifactAcquisitionCheckpoint,
   readArtifactAcquisitionCheckpointTargets,
@@ -14,7 +11,10 @@ import {
 } from "./artifact-acquisition-state";
 import type { DownloadCreatedItem, DownloadDelta } from "./download-observer";
 import { persistFiledReturnsTargetDownloadId } from "./filed-returns-target-download-attempt";
-import { persistArtifactAcquisitionCompletion } from "./filed-returns-artifact-acquisition-completion";
+import {
+  artifactAcquisitionCompletionFlowStep,
+  persistArtifactAcquisitionCompletion,
+} from "./filed-returns-artifact-acquisition-completion";
 import {
   clearFiledReturnsTargetReview,
   persistArtifactAcquisitionCompletionMarker,
@@ -197,8 +197,9 @@ async function hasDurableCompletionForActiveRun(
   run: ActiveFiledReturnsRun,
   deps: DurableDownloadReconcilerDeps,
 ): Promise<boolean> {
-  const artifactTypes = concreteFiledReturnsArtifactTypes(
-    normaliseFiledReturnsArtifactType(run.scope.returnType, run.scope.artifactType),
+  const artifactTypes = concreteFiledReturnsArtifactTypesForSelection(
+    run.scope.returnType,
+    run.scope.artifactType,
   );
   const markers = await Promise.all(
     artifactTypes.map((artifactType) =>
@@ -213,7 +214,8 @@ async function hasDurableCompletionForActiveRun(
       ),
     ),
   );
-  return markers.every((marker) => marker?.artifactAcquisitionCompletion?.length);
+  const evidence = markers.flatMap((marker) => marker?.artifactAcquisitionCompletion ?? []);
+  return Boolean(artifactAcquisitionCompletionFlowStep(run.scope, evidence));
 }
 
 export function installFiledReturnsDurableDownloadReconciler(

@@ -317,6 +317,13 @@ describe("artifact acquisition checkpoint", () => {
       requestId: actionId(13),
       state: "download-observing",
     });
+    await persistArtifactAcquisitionDownloadId({
+      ...MAY_COMPOSITE,
+      artifactType: "JSON",
+      downloadId: 11,
+      requestId: actionId(14),
+      state: "download-observing",
+    });
     mocks.browser.downloads.search.mockResolvedValue([{ state: "interrupted" }]);
 
     await expect(clearArtifactAcquisitionCheckpoints(MAY_COMPOSITE)).resolves.toEqual({
@@ -328,6 +335,9 @@ describe("artifact acquisition checkpoint", () => {
     ).toBeUndefined();
     expect(
       mocks.session[artifactAcquisitionCheckpointKey({ ...MAY_COMPOSITE, artifactType: "EXCEL" })],
+    ).toBeUndefined();
+    expect(
+      mocks.session[artifactAcquisitionCheckpointKey({ ...MAY_COMPOSITE, artifactType: "JSON" })],
     ).toBeUndefined();
     await expect(
       reconcileArtifactAcquisitionCheckpoint({ ...MAY_COMPOSITE, artifactType: "PDF" }),
@@ -352,7 +362,16 @@ describe("artifact acquisition checkpoint", () => {
       requestId: actionId(15),
       state: "download-observing",
     });
+    await persistArtifactAcquisitionDownloadId({
+      ...MAY_COMPOSITE,
+      artifactType: "JSON",
+      downloadId: 11,
+      requestId: actionId(16),
+      state: "download-observing",
+    });
     mocks.browser.downloads.search
+      .mockResolvedValueOnce([{ state: "in_progress" }])
+      .mockResolvedValueOnce([{ state: "interrupted" }])
       .mockResolvedValueOnce([{ state: "in_progress" }])
       .mockResolvedValueOnce([{ state: "interrupted" }])
       .mockResolvedValueOnce([{ state: "in_progress" }])
@@ -365,12 +384,14 @@ describe("artifact acquisition checkpoint", () => {
 
     expect(mocks.browser.downloads.cancel).toHaveBeenNthCalledWith(1, 9);
     expect(mocks.browser.downloads.cancel).toHaveBeenNthCalledWith(2, 10);
+    expect(mocks.browser.downloads.cancel).toHaveBeenNthCalledWith(3, 11);
   });
 
   it("reconciles every expected artifact only from distinct safe, non-empty exact downloads", async () => {
     for (const [artifactType, downloadId, requestId] of [
       ["PDF", 9, actionId(16)],
       ["EXCEL", 10, actionId(17)],
+      ["JSON", 11, actionId(18)],
     ] as const) {
       await persistArtifactAcquisitionDownloadId({
         ...MAY_COMPOSITE,
@@ -388,7 +409,9 @@ describe("artifact acquisition checkpoint", () => {
         mime:
           id === 9
             ? "application/pdf"
-            : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            : id === 10
+              ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              : "application/json",
         startTime: new Date(Date.now() + 1_000).toISOString(),
         state: "complete",
       },
@@ -399,6 +422,7 @@ describe("artifact acquisition checkpoint", () => {
       evidence: [
         { artifactType: "PDF", downloadId: 9, requestId: actionId(16) },
         { artifactType: "EXCEL", downloadId: 10, requestId: actionId(17) },
+        { artifactType: "JSON", downloadId: 11, requestId: actionId(18) },
       ],
     });
     expect(mocks.browser.downloads.cancel).not.toHaveBeenCalled();
