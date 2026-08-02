@@ -481,7 +481,6 @@ const ARTIFACT_FAILURE_SIGNALS = new Set([
   // parseDurableFiledReturnsSignals and dropped, which is the one case the
   // recovery path exists to handle.
   "artifact-acquisition-checkpoint-malformed",
-  "artifact-acquisition-checkpoint-read-unavailable",
   "artifact-acquisition-checkpoint-clear-failed",
   // Marks a completion rebuilt from the review's own durable marker after the
   // browser session ended between persisting the summary and removing the

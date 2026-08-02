@@ -33,7 +33,6 @@ type DurableMessageKey =
   | "partial"
   | "target-cancelled"
   | "target-completion-pending-summary"
-  | "target-checkpoint-read-unavailable"
   | "target-cleanup-blocked"
   | "target-downloaded"
   | "target-downloaded-cleanup-blocked"
@@ -199,9 +198,6 @@ function messageKeyForTarget(
   if (signals.includes("artifact-acquisition-completion-pending-summary")) {
     return "target-completion-pending-summary";
   }
-  if (signals.includes("artifact-acquisition-checkpoint-read-unavailable")) {
-    return "target-checkpoint-read-unavailable";
-  }
   if (signals.includes("full-fiscal-year-restaging-required")) return "target-restaging";
   if (signals.includes("full-fiscal-year-target-retry-approved")) return "target-retry-approved";
   if (signals.includes("filed-returns-target-manually-observed")) return "target-manually-observed";
@@ -305,8 +301,6 @@ function renderDurableMessage(key: DurableMessageKey, scope: FiledReturnsDownloa
     "target-cancelled": `Pack cancelled the unresolved filed-return target for ${period}.`,
     "target-completion-pending-summary":
       "Pack proved this browser download and is safely finishing its local recovery record.",
-    "target-checkpoint-read-unavailable":
-      "Pack could not read retained download recovery state, so it will not repeat this target automatically.",
     "target-cleanup-blocked":
       "Pack cannot complete this review while temporary selected-file staging remains uncleared.",
     "target-downloaded": `Pack confirmed the filed-return download for ${period}.`,

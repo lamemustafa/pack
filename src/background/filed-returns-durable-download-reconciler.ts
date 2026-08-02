@@ -1,10 +1,5 @@
 import { browser } from "wxt/browser";
-import type {
-  FiledReturnsDownloadScope,
-  FiledReturnsFlowSummary,
-  FiledReturnsTargetReview,
-  PortalFlowStepResult,
-} from "../connectors/gst/filed-returns-contracts";
+import type { FiledReturnsTargetReview } from "../connectors/gst/filed-returns-contracts";
 import {
   inspectArtifactAcquisitionCheckpoint,
   readArtifactAcquisitionCheckpointTargets,
@@ -16,14 +11,9 @@ import {
   clearFiledReturnsTargetReview,
   markFiledReturnsTargetReviewArtifactAcquisitionCompletion,
   readCurrentFiledReturnsTargetReview,
-  persistFiledReturnsTargetReview,
   type FiledReturnsTargetReviewDeps,
 } from "./filed-returns-target-review";
-import {
-  readActiveFiledReturnsRunStorageState,
-  resolveFiledReturnsRunForRecoveredCompletion,
-} from "./filed-returns-active-run";
-import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
+import { resolveFiledReturnsRunForRecoveredCompletion } from "./filed-returns-active-run";
 import { reconcileFiledReturnsTargetDownload } from "./filed-returns-target-download-recovery";
 import { PACK_LOCAL_STORAGE_KEYS, PACK_SESSION_STORAGE_KEYS } from "./storage-keys";
 
@@ -61,43 +51,6 @@ const terminalChangesAwaitingPersistence = new Set<number>();
 const pendingExtensionDownloadUrls = new Set<string>();
 
 /**
- * A checkpoint scan could not read session state. This is deliberately an
- * in-memory diagnostic: the active lease remains unchanged and the next scan
- * may continue normally without a user clearing Pack data.
- */
-export class ArtifactAcquisitionCheckpointReadFailure extends Error {
-  constructor(readonly scope: FiledReturnsDownloadScope) {
-    super("Pack could not read temporary artifact recovery state.");
-    this.name = "ArtifactAcquisitionCheckpointReadFailure";
-  }
-}
-
-export function artifactAcquisitionCheckpointReadFailureSummary(
-  scope: FiledReturnsDownloadScope,
-  now = new Date(),
-): FiledReturnsFlowSummary {
-  return {
-    scope,
-    status: "blocked",
-    completedPeriods: [],
-    updatedAt: now.toISOString(),
-    flowStep: {
-      connectorId: "gst",
-      scopeId: filedReturnScopeId(scope.returnType),
-      state: "blocked",
-      safeSignals: ["artifact-acquisition-checkpoint-read-unavailable"],
-      safeMessage:
-        "Pack could not read temporary download recovery state and did not repeat this target.",
-      userAction: {
-        type: "RETRY_PORTAL_GENERATION",
-        message: "Check Downloads, then reopen Pack. The next recovery scan will try again safely.",
-        canResume: false,
-      },
-    },
-  };
-}
-
-/**
  * Produces a non-reversible local correlation value for an extension Blob URL.
  * The raw URL stays in memory only; the selected-ZIP recovery checkpoint stores
  * this digest so a restarted MV3 worker can still match its onCreated event.
@@ -126,12 +79,6 @@ export function beginLiveFiledReturnsDownloadObservation(downloadId: number): ()
     extensionOwnedCreationIds.delete(downloadId);
     terminalChangesAwaitingPersistence.delete(downloadId);
   };
-}
-
-export function isLiveFiledReturnsDownloadObservation(downloadId: number): boolean {
-  return (
-    Number.isSafeInteger(downloadId) && downloadId >= 0 && liveInlineObservationIds.has(downloadId)
-  );
 }
 
 /** Registers one extension Blob URL for the brief onCreated-to-ID-persistence gap. */
@@ -178,89 +125,39 @@ async function reconcileCurrentTargetReview(
 /**
  * Rebuilds a completion from an acquisition checkpoint when the MV3 worker
  * died while the browser's native Save dialog kept the exact download alive.
- * Unproven checkpoints deliberately remain in session and are surfaced through
- * target review; this function never retries or cancels a browser action.
+ * It only upgrades fully proved completions; all other checkpoints remain for
+ * the existing next-run guard to surface without scanner-side state changes.
  */
 async function reconcileArtifactAcquisitionCheckpoints(
   deps: DurableDownloadReconcilerDeps,
 ): Promise<boolean> {
   let handled = false;
-  const checkpoints = await readArtifactAcquisitionCheckpointTargets().catch(() => null);
-  if (!checkpoints) return reconcileArtifactAcquisitionCheckpointReadFailure(deps);
-  for (const { key, target } of checkpoints) {
-    const inspection = await inspectArtifactAcquisitionCheckpoint(target, key, {
-      isLiveDownloadObservation: isLiveFiledReturnsDownloadObservation,
+  const checkpoints = await readArtifactAcquisitionCheckpointTargets().catch(() => []);
+  for (const { target } of checkpoints) {
+    const inspection = await inspectArtifactAcquisitionCheckpoint(target, {
+      preserveMalformed: false,
     });
-    if (inspection.state === "live-owned") continue;
-    if (inspection.state === "retry-safe") continue;
-    handled = true;
-    if (inspection.state === "completed") {
-      const marker = await markFiledReturnsTargetReviewArtifactAcquisitionCompletion(
-        target,
-        [inspection.evidence],
-        deps,
-      );
-      if (marker.state === "blocked" || (marker.state === "absent" && deps.storageKeys.activeRun)) {
-        continue;
-      }
-      const activeRun = await resolveFiledReturnsRunForRecoveredCompletion(target, deps);
-      if (activeRun.state === "blocked") continue;
-      const summary = await persistArtifactAcquisitionCompletion(
-        deps.storageKeys.completion,
-        target,
-        [inspection.evidence],
-        deps.now?.() ?? new Date(),
-      );
-      if (summary && marker.state === "marked") {
-        await clearFiledReturnsTargetReview(target, deps, marker.review.revision ?? 1);
-      }
-      continue;
-    }
-    await persistFiledReturnsTargetReview(
+    if (inspection.state !== "completed") continue;
+    const marker = await markFiledReturnsTargetReviewArtifactAcquisitionCompletion(
       target,
-      artifactAcquisitionReviewStep(target, inspection.safeSignals),
+      [inspection.evidence],
       deps,
     );
+    if (marker.state === "blocked") continue;
+    const activeRun = await resolveFiledReturnsRunForRecoveredCompletion(target, deps);
+    if (activeRun.state === "blocked") continue;
+    const summary = await persistArtifactAcquisitionCompletion(
+      deps.storageKeys.completion,
+      target,
+      [inspection.evidence],
+      deps.now?.() ?? new Date(),
+    );
+    if (summary && marker.state === "marked") {
+      await clearFiledReturnsTargetReview(target, deps, marker.review.revision ?? 1);
+    }
+    handled = true;
   }
   return handled;
-}
-
-/**
- * A failed session read is not an empty acquisition scan. It must reach the
- * caller as a transient diagnostic, while leaving the durable lease and review
- * records untouched so a later successful scan has the normal exit path.
- */
-async function reconcileArtifactAcquisitionCheckpointReadFailure(
-  deps: DurableDownloadReconcilerDeps,
-): Promise<boolean> {
-  if (!deps.storageKeys.activeRun) return false;
-  const activeRun = await readActiveFiledReturnsRunStorageState({
-    storageKeys: {
-      activeRun: deps.storageKeys.activeRun,
-    },
-    ...(deps.now ? { now: deps.now } : {}),
-  }).catch(() => null);
-  if (activeRun?.state !== "valid") return false;
-  throw new ArtifactAcquisitionCheckpointReadFailure(activeRun.run.scope);
-}
-
-function artifactAcquisitionReviewStep(
-  scope: FiledReturnsDownloadScope,
-  safeSignals: string[],
-): PortalFlowStepResult {
-  return {
-    connectorId: "gst",
-    scopeId: filedReturnScopeId(scope.returnType),
-    state: "blocked",
-    safeSignals,
-    safeMessage:
-      "Pack retained unresolved artifact download recovery and will not repeat the target automatically.",
-    userAction: {
-      type: "RETRY_PORTAL_GENERATION",
-      message: "Review or cancel this target before starting another portal action.",
-      canResume: true,
-    },
-  };
 }
 
 export function installFiledReturnsDurableDownloadReconciler(

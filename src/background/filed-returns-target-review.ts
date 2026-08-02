@@ -272,29 +272,7 @@ export async function markFiledReturnsTargetReviewArtifactAcquisitionCompletion(
   if (!key) return { state: "absent" };
   return runTargetReviewMutationCriticalSection(async () => {
     const storageState = await readTargetReviewStorageStateByKey(key);
-    if (storageState.state === "missing") {
-      const durableStatus = canonicalDurableTargetStatus(scope, "target-review", [
-        "artifact-acquisition-completion-pending-summary",
-      ]);
-      const markedReview = {
-        artifactAcquisitionCompletion: evidence.map(({ artifactType, downloadId, requestId }) => ({
-          artifactType,
-          downloadId,
-          requestId,
-        })),
-        revision: 1,
-        schemaVersion: "1.0",
-        scope: canonicalTargetReviewScope(scope),
-        status: "download-unconfirmed",
-        targetId: createTargetId(scope),
-        ...durableStatus,
-        updatedAt: (deps.now?.() ?? new Date()).toISOString(),
-      } satisfies FiledReturnsTargetReview;
-      const parsedReview = parseFiledReturnsTargetReview(markedReview);
-      if (!parsedReview) return { state: "blocked" };
-      await browser.storage.local.set({ [key]: parsedReview });
-      return { review: parsedReview, state: "marked" };
-    }
+    if (storageState.state === "missing") return { state: "absent" };
     if (storageState.state === "malformed") return { state: "blocked" };
     // This single local record is already protecting a different target. It
     // cannot carry this target's completion proof, so the caller must retain

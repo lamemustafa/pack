@@ -152,7 +152,7 @@ describe("artifact acquisition checkpoint", () => {
 
     expect(mocks.browser.downloads.search).not.toHaveBeenCalled();
     expect(mocks.browser.downloads.cancel).not.toHaveBeenCalled();
-    expect(mocks.session[key]).toEqual({ schemaVersion: "1.0", state: "malformed" });
+    expect(mocks.session[key]).toMatchObject({ requestId: "noncanonical-request-id" });
   });
 
   it("keeps a completed-but-unpersisted download checkpoint in review", async () => {

@@ -31,12 +31,12 @@ export async function readCurrentFiledReturnsFlowSummary(
     storageKeys: { activeRun: deps.storageKeys.activeRun },
     ...(deps.now ? { now: deps.now } : {}),
   });
+  if (activeRunSummary) return activeRunSummary;
+
   const targetReviewSummary = await readCurrentFiledReturnsTargetReviewSummary({
     storageKeys: { targetReview: deps.storageKeys.targetReview },
     ...(deps.now ? { now: deps.now } : {}),
   });
-
-  if (activeRunSummary) return activeRunSummary;
   if (targetReviewSummary) return targetReviewSummary;
 
   const ledger = await readLocalValue<unknown>(deps.storageKeys.fullFiscalYearLedger);

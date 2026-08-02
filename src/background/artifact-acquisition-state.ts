@@ -51,13 +51,8 @@ export type ArtifactAcquisitionCompletionEvidence = {
 
 export type ArtifactAcquisitionCheckpointInspection =
   | { state: "retry-safe" }
-  | { state: "live-owned" }
   | { evidence: ArtifactAcquisitionCompletionEvidence; state: "completed" }
   | { state: "needs-review"; safeSignals: string[] };
-
-export interface ArtifactAcquisitionCheckpointInspectionOptions {
-  isLiveDownloadObservation?: (downloadId: number) => boolean;
-}
 
 export type ArtifactAcquisitionCheckpointTarget = {
   key: string;
@@ -89,7 +84,9 @@ export async function readArtifactAcquisitionCheckpointTargets(): Promise<
   const targets = new Map<string, ArtifactAcquisitionCheckpointTarget>();
   for (const key of Object.keys(values)) {
     const target = artifactAcquisitionTargetFromKey(key);
-    if (target) targets.set(key, { key, target });
+    if (target && key === artifactAcquisitionCheckpointKey(target)) {
+      targets.set(key, { key, target });
+    }
   }
   return [...targets.values()];
 }
@@ -173,18 +170,7 @@ export async function clearArtifactAcquisitionCheckpoints(
   const keys = targets.map((target) => artifactAcquisitionCheckpointKey(target));
   const completedEvidence: ArtifactAcquisitionCompletionEvidence[] = [];
   try {
-    const stored = await browser.storage.session.get();
-    const noncanonicalTargetKeys = Object.keys(stored).flatMap((storedKey) => {
-      const storedTarget = artifactAcquisitionTargetFromKey(storedKey);
-      if (
-        !storedTarget ||
-        storedKey === artifactAcquisitionCheckpointKey(storedTarget) ||
-        !targets.some((target) => sameArtifactAcquisitionTarget(target, storedTarget))
-      ) {
-        return [];
-      }
-      return [storedKey];
-    });
+    const stored = await browser.storage.session.get(keys);
     for (const target of targets) {
       const key = artifactAcquisitionCheckpointKey(target);
       const checkpoint = stored[key];
@@ -210,9 +196,6 @@ export async function clearArtifactAcquisitionCheckpoints(
         !Number.isSafeInteger(checkpoint.downloadId) ||
         checkpoint.downloadId < 0
       ) {
-        await browser.storage.session.set({
-          [key]: MALFORMED_ARTIFACT_ACQUISITION_CHECKPOINT_SENTINEL,
-        });
         return { state: "blocked" };
       }
       const downloadId = checkpoint.downloadId;
@@ -257,11 +240,7 @@ export async function clearArtifactAcquisitionCheckpoints(
     ) {
       return { state: "completed", evidence: completedEvidence };
     }
-    // Explicit cancellation is the exit path for a malformed discovered key.
-    // Include every decoded same-target alias, not only a sentinel: an earlier
-    // worker can stop after writing the canonical sentinel and before removing
-    // the untrusted source key.
-    await browser.storage.session.remove([...keys, ...noncanonicalTargetKeys]);
+    await browser.storage.session.remove(keys);
     return { state: "cleared" };
   } catch {
     return { state: "blocked" };
@@ -327,7 +306,6 @@ export async function reconcileArtifactAcquisitionCheckpoint(
   target: ArtifactAcquisitionTarget,
 ): Promise<{ state: "retry-safe" } | { state: "needs-review"; safeSignals: string[] }> {
   const inspection = await inspectArtifactAcquisitionCheckpoint(target);
-  if (inspection.state === "live-owned") return { state: "retry-safe" };
   if (inspection.state !== "completed") return inspection;
   // A foreground start must never repeat a download that startup recovery has
   // not yet persisted. The durable reconciler is the sole owner of turning
@@ -339,24 +317,17 @@ export async function reconcileArtifactAcquisitionCheckpoint(
 }
 
 /**
- * Inspects one exact-ID checkpoint without changing it. This is shared by
- * foreground guards and startup recovery so safe-completion proof cannot drift.
+ * Inspects one exact-ID checkpoint for the foreground guard and startup
+ * scanner. The scanner opts out of malformed-record preservation because only
+ * the foreground guard owns unproven checkpoint recovery.
  */
 export async function inspectArtifactAcquisitionCheckpoint(
   target: ArtifactAcquisitionTarget,
-  discoveredKey = artifactAcquisitionCheckpointKey(target),
-  options: ArtifactAcquisitionCheckpointInspectionOptions = {},
+  options: { preserveMalformed?: boolean } = {},
 ): Promise<ArtifactAcquisitionCheckpointInspection> {
   const key = artifactAcquisitionCheckpointKey(target);
-  if (discoveredKey !== key) {
-    await browser.storage.session.set({
-      [key]: MALFORMED_ARTIFACT_ACQUISITION_CHECKPOINT_SENTINEL,
-    });
-    await browser.storage.session.remove(discoveredKey);
-    return { state: "needs-review", safeSignals: ["artifact-acquisition-checkpoint-malformed"] };
-  }
-  const stored = await browser.storage.session.get(discoveredKey);
-  const storedCheckpoint = stored[discoveredKey];
+  const stored = await browser.storage.session.get(key);
+  const storedCheckpoint = stored[key];
   if (storedCheckpoint === undefined || storedCheckpoint === null) return { state: "retry-safe" };
   if (isMalformedArtifactAcquisitionCheckpointSentinel(storedCheckpoint)) {
     return { state: "needs-review", safeSignals: ["artifact-acquisition-checkpoint-malformed"] };
@@ -364,16 +335,20 @@ export async function inspectArtifactAcquisitionCheckpoint(
   if (!isArtifactAcquisitionCheckpoint(storedCheckpoint)) {
     // Keep a minimal sentinel instead of deleting untrusted recovery metadata:
     // it may be the only evidence that a target-bound browser action started.
-    await browser.storage.session.set({
-      [key]: MALFORMED_ARTIFACT_ACQUISITION_CHECKPOINT_SENTINEL,
-    });
+    if (options.preserveMalformed !== false) {
+      await browser.storage.session.set({
+        [key]: MALFORMED_ARTIFACT_ACQUISITION_CHECKPOINT_SENTINEL,
+      });
+    }
     return { state: "needs-review", safeSignals: ["artifact-acquisition-checkpoint-malformed"] };
   }
   const checkpoint = storedCheckpoint;
   if (!checkpointMatchesTarget(checkpoint, target)) {
-    await browser.storage.session.set({
-      [key]: MALFORMED_ARTIFACT_ACQUISITION_CHECKPOINT_SENTINEL,
-    });
+    if (options.preserveMalformed !== false) {
+      await browser.storage.session.set({
+        [key]: MALFORMED_ARTIFACT_ACQUISITION_CHECKPOINT_SENTINEL,
+      });
+    }
     return { state: "needs-review", safeSignals: ["artifact-acquisition-checkpoint-malformed"] };
   }
   const artifactType = target.artifactType ?? "PDF";
@@ -382,18 +357,12 @@ export async function inspectArtifactAcquisitionCheckpoint(
     !isCanonicalFiledReturnsActionId(checkpoint.requestId) ||
     !armedAtFromCheckpoint(checkpoint)
   ) {
-    await browser.storage.session.set({
-      [key]: MALFORMED_ARTIFACT_ACQUISITION_CHECKPOINT_SENTINEL,
-    });
+    if (options.preserveMalformed !== false) {
+      await browser.storage.session.set({
+        [key]: MALFORMED_ARTIFACT_ACQUISITION_CHECKPOINT_SENTINEL,
+      });
+    }
     return { state: "needs-review", safeSignals: ["artifact-acquisition-checkpoint-malformed"] };
-  }
-  if (
-    typeof downloadId === "number" &&
-    Number.isSafeInteger(downloadId) &&
-    downloadId >= 0 &&
-    options.isLiveDownloadObservation?.(downloadId)
-  ) {
-    return { state: "live-owned" };
   }
   if (checkpoint.state === "intent") {
     return { state: "needs-review", safeSignals: ["artifact-acquisition-start-unreconciled"] };
@@ -411,9 +380,11 @@ export async function inspectArtifactAcquisitionCheckpoint(
     downloadId < 0 ||
     !armedAtFromCheckpoint(checkpoint)
   ) {
-    await browser.storage.session.set({
-      [key]: MALFORMED_ARTIFACT_ACQUISITION_CHECKPOINT_SENTINEL,
-    });
+    if (options.preserveMalformed !== false) {
+      await browser.storage.session.set({
+        [key]: MALFORMED_ARTIFACT_ACQUISITION_CHECKPOINT_SENTINEL,
+      });
+    }
     return { state: "needs-review", safeSignals: ["artifact-acquisition-checkpoint-malformed"] };
   }
   try {
@@ -512,18 +483,6 @@ function checkpointMatchesTarget(
     checkpoint.financialYear === target.financialYear &&
     checkpoint.period === target.period &&
     (checkpoint.artifactType ?? "PDF") === (target.artifactType ?? "PDF")
-  );
-}
-
-function sameArtifactAcquisitionTarget(
-  left: ArtifactAcquisitionTarget,
-  right: ArtifactAcquisitionTarget,
-): boolean {
-  return (
-    left.returnType === right.returnType &&
-    left.financialYear === right.financialYear &&
-    left.period === right.period &&
-    (left.artifactType ?? "PDF") === (right.artifactType ?? "PDF")
   );
 }
 
