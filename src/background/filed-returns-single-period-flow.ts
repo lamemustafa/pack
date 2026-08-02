@@ -74,7 +74,14 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
     } as const;
     const acquisitionRecovery = await reconcileArtifactAcquisitionCheckpoint(concreteScope);
     if (acquisitionRecovery.state === "needs-review") {
-      acquisitionRecoverySignals.push(...acquisitionRecovery.safeSignals);
+      // The inspection state is the canonical admission decision. Preserve its
+      // specific reason, then retain the existing generic acquisition signal so
+      // the target-review persistence and cancellation paths own every
+      // needs-review result without duplicating observer-signal names here.
+      acquisitionRecoverySignals.push(
+        "artifact-acquisition-download-unreconciled",
+        ...acquisitionRecovery.safeSignals,
+      );
     }
   }
   if (acquisitionRecoverySignals.length > 0) {

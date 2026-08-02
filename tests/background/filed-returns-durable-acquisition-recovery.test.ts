@@ -45,8 +45,13 @@ import {
 } from "../../src/background/artifact-acquisition-state";
 import { acknowledgeInterruptedFiledReturnsRun } from "../../src/background/filed-returns-active-run";
 import { reconcileTerminalFiledReturnsDownload } from "../../src/background/filed-returns-durable-download-reconciler";
+import { clearPackLocalDataWithRecoveryGuard } from "../../src/background/local-data";
+import { startSinglePeriodFiledReturnsDownloadFlow } from "../../src/background/filed-returns-single-period-flow";
 import { filedReturnScopeId } from "../../src/connectors/gst/filed-returns-return-descriptors";
-import { persistFiledReturnsTargetReview } from "../../src/background/filed-returns-target-review";
+import {
+  persistFiledReturnsTargetReview,
+  resolveUnconfirmedFiledReturnsDownload,
+} from "../../src/background/filed-returns-target-review";
 import type { FiledReturnsDownloadScope } from "../../src/connectors/gst/filed-returns-contracts";
 
 const completionKey = "pack:last-filed-returns-flow-summary";
@@ -259,6 +264,106 @@ describe("durable acquisition checkpoint recovery", () => {
       requestId,
     });
   });
+
+  it("retains proved target B when target A owns the singleton review", async () => {
+    await persistFiledReturnsTargetReview(
+      juneTarget,
+      {
+        connectorId: "gst",
+        scopeId: filedReturnScopeId(juneTarget.returnType),
+        state: "blocked",
+        safeMessage: "Pack retained unresolved artifact download recovery.",
+        safeSignals: ["artifact-acquisition-download-unreconciled"],
+        userAction: {
+          canResume: true,
+          message: "Review or cancel this target before starting another portal action.",
+          type: "RETRY_PORTAL_GENERATION",
+        },
+      },
+      durableDeps(),
+    );
+    await persistArtifactAcquisitionDownloadId({
+      ...target,
+      downloadId: 231,
+      requestId,
+      state: "download-observing",
+    });
+    mocks.browser.downloads.search.mockResolvedValue([completedDownload()]);
+
+    await expect(
+      reconcileTerminalFiledReturnsDownload(
+        { search: mocks.browser.downloads.search },
+        durableDeps(),
+      ),
+    ).resolves.toBe(false);
+
+    expect(mocks.session[completionKey]).toBeUndefined();
+    expect(mocks.session[artifactAcquisitionCheckpointKey(target)]).toMatchObject({
+      downloadId: 231,
+      requestId,
+      state: "download-observing",
+    });
+    expect(mocks.local[targetReviewKey]).toMatchObject({ scope: juneTarget });
+  });
+
+  it.each([
+    ["correlation mismatch", { mime: "text/plain" }, "browser-download-correlation-rejected"],
+    ["danger unknown", { danger: undefined }, "browser-download-danger-unknown"],
+    ["danger pending", { danger: "asyncScanning" }, "browser-download-danger-pending"],
+    ["zero bytes", { fileSize: 0 }, "browser-download-zero-bytes"],
+  ] as const)(
+    "makes a %s checkpoint rejection cancellable through the existing target review",
+    async (_label, observationOverrides, expectedSignal) => {
+      await persistArtifactAcquisitionDownloadId({
+        ...target,
+        downloadId: 231,
+        requestId,
+        state: "download-observing",
+      });
+      mocks.browser.downloads.search.mockResolvedValue([
+        { ...completedDownload(), ...observationOverrides },
+      ]);
+
+      const response = await startSinglePeriodFiledReturnsDownloadFlow(
+        target,
+        durableDeps() as never,
+      );
+
+      expect(response).toMatchObject({
+        flowStep: {
+          safeSignals: expect.arrayContaining([
+            "artifact-acquisition-download-unreconciled",
+            expectedSignal,
+          ]),
+          state: "user-action-required",
+        },
+      });
+      expect(mocks.local[targetReviewKey]).toMatchObject({
+        safeSignals: expect.arrayContaining([
+          "artifact-acquisition-download-unreconciled",
+          expectedSignal,
+        ]),
+      });
+
+      mocks.browser.downloads.search.mockResolvedValue([{ id: 231, state: "interrupted" }]);
+      await expect(
+        resolveUnconfirmedFiledReturnsDownload(target, "cancelled", durableDeps()),
+      ).resolves.toMatchObject({ flowSummary: { status: "cancelled" } });
+      expect(mocks.session[artifactAcquisitionCheckpointKey(target)]).toBeUndefined();
+      expect(mocks.local[targetReviewKey]).toBeUndefined();
+
+      await expect(
+        clearPackLocalDataWithRecoveryGuard({
+          clearableLocalStorageKeys: [],
+          storageKeys: {
+            activeRun: activeRunKey,
+            fullFiscalYearLedger: "pack:full-fiscal-year-ledger",
+            targetReview: targetReviewKey,
+          },
+        }),
+      ).resolves.toEqual({ cleared: true, ok: true });
+    },
+  );
 
   it("does not complete a checkpoint whose record does not own its target", async () => {
     const key = artifactAcquisitionCheckpointKey(target);

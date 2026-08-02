@@ -69,7 +69,12 @@ describe("GSTR-3B artifact acquisition recovery", () => {
     expect(mocks.reconcileArtifactAcquisitionCheckpoint).toHaveBeenCalledWith(scope);
     expect(mocks.persistFiledReturnsTargetReview).toHaveBeenCalledWith(
       scope,
-      expect.objectContaining({ safeSignals: ["artifact-acquisition-download-interrupted"] }),
+      expect.objectContaining({
+        safeSignals: [
+          "artifact-acquisition-download-unreconciled",
+          "artifact-acquisition-download-interrupted",
+        ],
+      }),
       expect.anything(),
     );
     expect(getActiveGstTab).not.toHaveBeenCalled();
@@ -119,6 +124,7 @@ describe("GSTR-3B artifact acquisition recovery", () => {
       compositeScope,
       expect.objectContaining({
         safeSignals: [
+          "artifact-acquisition-download-unreconciled",
           "artifact-acquisition-download-interrupted",
           "artifact-acquisition-download-unconfirmed",
         ],

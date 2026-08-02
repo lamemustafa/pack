@@ -151,6 +151,7 @@ async function reconcileArtifactAcquisitionCheckpoints(
       [inspection.evidence],
       deps,
     );
+    if (marker.state === "blocked") continue;
     provedCheckpoints.push({ evidence: inspection.evidence, marker, target });
   }
   for (const { evidence, marker, target } of provedCheckpoints) {
