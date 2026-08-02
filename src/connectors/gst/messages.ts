@@ -12,6 +12,7 @@ import type {
   FiledReturnsDownloadTarget,
   PortalFlowStepResult,
 } from "./filed-returns-contracts";
+import type { Gstr3bPdfDiagnosticProbe } from "./gstr3b-pdf-diagnostic-probe";
 import type { ArtifactRequest, ArtifactFailureReason } from "./artifact-source";
 import {
   FULL_FISCAL_YEAR_PERIOD,
@@ -57,6 +58,7 @@ export type PackMessage =
   | { type: "PACK_GET_CONTEXT" }
   | { type: "PACK_GET_FILED_RETURNS_OBSERVATION" }
   | { type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" }
+  | { type: "PACK_GET_GSTR3B_PDF_DIAGNOSTIC_PROBE" }
   | { type: "PACK_GET_ACTIVE_FILED_RETURNS_RUN" }
   | { type: "PACK_ACKNOWLEDGE_INTERRUPTED_RUN" }
   | { type: "PACK_RETRY_FILED_RETURNS_TARGET"; payload: FiledReturnsDownloadScope }
@@ -158,6 +160,7 @@ export type PackMessageResponse =
       observation?: PortalObservation | null;
     }
   | { ok: true; flowSummary: FiledReturnsFlowSummary | null }
+  | { ok: true; gstr3bPdfDiagnosticProbe: Gstr3bPdfDiagnosticProbe }
   | { ok: true; manifest: ArchiveManifest | null }
   | { ok: true; downloaded: number; manifest: ArchiveManifest }
   | { ok: true; downloadPromptProbe: DownloadPromptProbeResult }
@@ -231,6 +234,7 @@ export function isPackMessage(
       );
     case "PACK_GET_FILED_RETURNS_OBSERVATION":
     case "PACK_GET_FILED_RETURNS_FLOW_SUMMARY":
+    case "PACK_GET_GSTR3B_PDF_DIAGNOSTIC_PROBE":
     case "PACK_GET_ACTIVE_FILED_RETURNS_RUN":
     case "PACK_ACKNOWLEDGE_INTERRUPTED_RUN":
     case "PACK_REFRESH_FILED_RETURNS_OBSERVATION":

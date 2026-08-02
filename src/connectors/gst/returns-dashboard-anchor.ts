@@ -18,7 +18,25 @@ export function clickReturnsDashboardAnchor(
     },
   );
   if (matches.length === 0) return "not-found";
-  if (matches.length !== 1) return "ambiguous";
-  matches[0]?.click();
+  const visibleMatches = matches.filter(isVisibleAndActionable);
+  if (visibleMatches.length === 0) return "not-found";
+  if (visibleMatches.length !== 1) return "ambiguous";
+  visibleMatches[0]?.click();
   return "clicked";
+}
+
+function isVisibleAndActionable(element: HTMLElement): boolean {
+  if (element.hidden || element.closest("[inert]")) return false;
+  const style = element.ownerDocument.defaultView?.getComputedStyle(element);
+  if (!style) return false;
+  if (
+    style.display === "none" ||
+    style.visibility !== "visible" ||
+    style.opacity === "0" ||
+    style.pointerEvents === "none"
+  ) {
+    return false;
+  }
+  const rect = element.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
 }

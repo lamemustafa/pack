@@ -96,3 +96,10 @@ This log records live diagnostic findings that constrain Pack's local, target-bo
     phrase "View Filed Returns" appears as a link label — rather than from the route, so the flow
     believed it had already arrived and stopped navigating. Page classification derives from the
     route only. Treat these labels as navigation candidates, never as evidence of arrival.
+
+21. Observed in authorised manual QA: a Services Dashboard page exposed two portal-owned anchors
+    that resolved to the same Returns Dashboard destination. Exactly one was visibly actionable;
+    the other was hidden. Exact-target navigation must filter hidden controls before applying its
+    uniqueness guard: click exactly one visible candidate, and fail closed for zero or multiple
+    visible candidates. The observation and implementation record only structural counts; no portal
+    markup, control text, full URL, query string, or session material is retained.

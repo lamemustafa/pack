@@ -92,6 +92,13 @@ describe("filed-return durable signal contract", () => {
     ]);
   });
 
+  it("persists bounded Returns Dashboard preflight failures", () => {
+    const signals = ["wrong-origin-open-returns-dashboard", "returns-dashboard-anchor-ambiguous"];
+
+    expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);
+    expect(isDurableFiledReturnsSignal("returns-dashboard-anchor-private-value")).toBe(false);
+  });
+
   it("retains the cleanup-without-download recovery marker", () => {
     expect(isDurableFiledReturnsSignal("single-period-zip-cleanup-without-download")).toBe(true);
     expect(parseDurableFiledReturnsSignals(["single-period-zip-cleanup-without-download"])).toEqual(

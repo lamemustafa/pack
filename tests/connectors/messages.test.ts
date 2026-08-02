@@ -188,6 +188,16 @@ describe("message boundary", () => {
     ).toBe(true);
     expect(isPackMessage({ type: "PACK_GET_FILED_RETURNS_OBSERVATION" })).toBe(true);
     expect(isPackMessage({ type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" })).toBe(true);
+    expect(isPackMessage({ type: "PACK_GET_GSTR3B_PDF_DIAGNOSTIC_PROBE" })).toBe(true);
+    expect(isPackMessage({ type: "PACK_GET_GSTR3B_PDF_DIAGNOSTIC_PROBE", payload: null })).toBe(
+      false,
+    );
+    expect(
+      isPackMessage({
+        type: "PACK_GET_GSTR3B_PDF_DIAGNOSTIC_PROBE",
+        payload: { extra: true },
+      }),
+    ).toBe(false);
     expect(isPackMessage({ type: "PACK_GET_ACTIVE_FILED_RETURNS_RUN" })).toBe(true);
     expect(isPackMessage({ type: "PACK_ACKNOWLEDGE_INTERRUPTED_RUN" })).toBe(true);
     expect(isPackMessage({ type: "PACK_PING" })).toBe(true);
