@@ -5,10 +5,7 @@ import type {
 import { delay } from "../core/time";
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
-import {
-  concreteFiledReturnsArtifactTypes,
-  normaliseFiledReturnsArtifactType,
-} from "../connectors/gst/filed-returns-artifacts";
+import { concreteFiledReturnsArtifactTypesForSelection } from "../connectors/gst/filed-returns-artifacts";
 import { persistFiledReturnsTargetReview } from "./filed-returns-target-review";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
 import { getRequiredGstTab } from "./filed-returns-active-tab";
@@ -64,17 +61,27 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
   // Checkpoints are keyed per concrete artifact type, so a composite selection
   // has to reconcile each one rather than the composite scope.
   const acquisitionRecoverySignals: string[] = [];
-  for (const artifactType of concreteFiledReturnsArtifactTypes(
-    normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType),
-  )) {
-    const acquisitionRecovery = await reconcileArtifactAcquisitionCheckpoint({
+  const concreteArtifactTypes = concreteFiledReturnsArtifactTypesForSelection(
+    scope.returnType,
+    scope.artifactType,
+  );
+  for (const artifactType of concreteArtifactTypes) {
+    const concreteScope = {
       artifactType,
       financialYear: scope.financialYear,
       period: scope.period,
       returnType: scope.returnType,
-    });
+    } as const;
+    const acquisitionRecovery = await reconcileArtifactAcquisitionCheckpoint(concreteScope);
     if (acquisitionRecovery.state === "needs-review") {
-      acquisitionRecoverySignals.push(...acquisitionRecovery.safeSignals);
+      // The inspection state is the canonical admission decision. Preserve its
+      // specific reason, then retain the existing generic acquisition signal so
+      // the target-review persistence and cancellation paths own every
+      // needs-review result without duplicating observer-signal names here.
+      acquisitionRecoverySignals.push(
+        "artifact-acquisition-download-unreconciled",
+        ...acquisitionRecovery.safeSignals,
+      );
     }
   }
   if (acquisitionRecoverySignals.length > 0) {

@@ -53,7 +53,11 @@ export async function readCurrentFiledReturnsFlowSummary(
 
   if (isFullFiscalYearLedger(ledger)) return summariseFullFiscalYearLedger(ledger, deps.now?.());
 
-  return isUnbackedFullFiscalYearCompletion(completionSummary) ? null : completionSummary;
+  if (completionSummary && !isUnbackedFullFiscalYearCompletion(completionSummary)) {
+    return completionSummary;
+  }
+
+  return null;
 }
 
 function isUnbackedFullFiscalYearCompletion(

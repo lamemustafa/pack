@@ -134,7 +134,7 @@ describe("full fiscal year ledger", () => {
     ]);
   });
 
-  it("retains PDF evidence when a combined target retries Excel after restart", () => {
+  it("retains component evidence across an all-formats target recovery", () => {
     const initial = createLedger([["April", "pending"]], {
       artifactType: "PDF_AND_EXCEL",
       returnType: "GSTR-2B",
@@ -142,6 +142,7 @@ describe("full fiscal year ledger", () => {
     const targetId = initial.targets[0]!.targetId;
     const pdf = targetDiagnostic("PDF", "action-m0abc123-pdf00001");
     const excel = targetDiagnostic("EXCEL", "action-m0abc123-excel001");
+    const json = targetDiagnostic("JSON", "action-m0abc123-json0001");
     const afterPdf = markFullFiscalYearTargetTerminal(
       initial,
       targetId,
@@ -154,18 +155,25 @@ describe("full fiscal year ledger", () => {
       targetId,
       new Date("2026-06-24T00:02:00.000Z"),
     );
-    const complete = markFullFiscalYearTargetTerminal(
+    const afterExcel = markFullFiscalYearTargetTerminal(
       restarted,
       targetId,
-      "downloaded",
-      diagnosticStep(excel, "downloaded"),
+      "blocked",
+      diagnosticStep(excel, "blocked"),
       new Date("2026-06-24T00:03:00.000Z"),
+    );
+    const complete = markFullFiscalYearTargetTerminal(
+      markFullFiscalYearTargetRunning(afterExcel, targetId, new Date("2026-06-24T00:04:00.000Z")),
+      targetId,
+      "downloaded",
+      diagnosticStep(json, "downloaded"),
+      new Date("2026-06-24T00:05:00.000Z"),
     );
 
     expect(complete.targets[0]).toMatchObject({
       status: "downloaded",
-      downloadDiagnostic: excel,
-      downloadDiagnostics: [pdf, excel],
+      downloadDiagnostic: json,
+      downloadDiagnostics: [pdf, excel, json],
     });
     expect(isFullFiscalYearLedger(complete)).toBe(true);
   });
@@ -173,6 +181,7 @@ describe("full fiscal year ledger", () => {
   it("accepts legacy singular diagnostics and rejects malformed combined evidence", () => {
     const pdf = targetDiagnostic("PDF", "action-m0abc123-pdf00001");
     const excel = targetDiagnostic("EXCEL", "action-m0abc123-excel001");
+    const json = targetDiagnostic("JSON", "action-m0abc123-json0001");
     const legacyLedger = createLedger([["April", "downloaded"]], {
       artifactType: "PDF",
       returnType: "GSTR-2B",
@@ -191,8 +200,8 @@ describe("full fiscal year ledger", () => {
       targets: [
         {
           ...ledger.targets[0]!,
-          downloadDiagnostic: excel,
-          downloadDiagnostics: [pdf, excel],
+          downloadDiagnostic: json,
+          downloadDiagnostics: [pdf, excel, json],
         },
       ],
     };
@@ -215,7 +224,7 @@ describe("full fiscal year ledger", () => {
           {
             ...combined.targets[0]!,
             downloadDiagnostic: { ...excel, actionId: pdf.actionId },
-            downloadDiagnostics: [pdf, { ...excel, actionId: pdf.actionId }],
+            downloadDiagnostics: [pdf, excel, { ...json, actionId: pdf.actionId }],
           },
         ],
       }),
@@ -226,8 +235,8 @@ describe("full fiscal year ledger", () => {
         targets: [
           {
             ...combined.targets[0]!,
-            downloadDiagnostic: { ...excel, rawUrl: "synthetic-forbidden" },
-            downloadDiagnostics: [pdf, { ...excel, rawUrl: "synthetic-forbidden" }],
+            downloadDiagnostic: { ...json, rawUrl: "synthetic-forbidden" },
+            downloadDiagnostics: [pdf, excel, { ...json, rawUrl: "synthetic-forbidden" }],
           },
         ],
       }),
@@ -238,8 +247,8 @@ describe("full fiscal year ledger", () => {
         targets: [
           {
             ...combined.targets[0]!,
-            downloadDiagnostic: { ...excel, period: "May" },
-            downloadDiagnostics: [pdf, { ...excel, period: "May" }],
+            downloadDiagnostic: { ...json, period: "May" },
+            downloadDiagnostics: [pdf, excel, { ...json, period: "May" }],
           },
         ],
       }),
@@ -907,11 +916,10 @@ function positiveTargetEvidence(
   returnType: FiledReturnsFullFiscalYearLedger["scope"]["returnType"],
   artifactType: NonNullable<FiledReturnsFullFiscalYearLedger["scope"]["artifactType"]>,
 ) {
-  const artifactTypes: Array<"PDF" | "JSON" | "EXCEL"> =
-    artifactType === "PDF_AND_EXCEL" ? (["PDF", "EXCEL"] as const) : [artifactType];
+  const artifactTypes = concreteFiledReturnsArtifactTypesForSelection(returnType, artifactType);
   const diagnostics = artifactTypes.map((concreteArtifactType, index) => {
     const periodIndex = FILED_RETURNS_MONTHS.indexOf(period);
-    const actionIndex = periodIndex * 2 + index + 1;
+    const actionIndex = periodIndex * 3 + index + 1;
     return {
       schemaVersion: "1.0" as const,
       eventType: "filed-return-download-path" as const,
@@ -930,7 +938,12 @@ function positiveTargetEvidence(
       artifactType: concreteArtifactType,
       downloadPathClass: "captured-portal-request-data" as const,
       status: "downloaded" as const,
-      mimeClass: concreteArtifactType === "PDF" ? ("pdf" as const) : ("spreadsheet" as const),
+      mimeClass:
+        concreteArtifactType === "PDF"
+          ? ("pdf" as const)
+          : concreteArtifactType === "JSON"
+            ? ("json" as const)
+            : ("spreadsheet" as const),
       byteCountClass: "non-empty" as const,
     } satisfies FiledReturnsDownloadDiagnostic;
   });
@@ -951,7 +964,7 @@ function positiveTargetEvidence(
 }
 
 function targetDiagnostic(
-  artifactType: "PDF" | "EXCEL",
+  artifactType: "PDF" | "EXCEL" | "JSON",
   actionId: string,
 ): FiledReturnsDownloadDiagnostic {
   return {
@@ -964,9 +977,9 @@ function targetDiagnostic(
     endpointClass: "gstr2b-portal-blob-captured-download",
     artifactType,
     downloadPathClass: "captured-portal-request-blob",
-    downloadId: artifactType === "PDF" ? 41 : 42,
+    downloadId: artifactType === "PDF" ? 41 : artifactType === "EXCEL" ? 42 : 43,
     status: "downloaded",
-    mimeClass: artifactType === "PDF" ? "pdf" : "spreadsheet",
+    mimeClass: artifactType === "PDF" ? "pdf" : artifactType === "JSON" ? "json" : "spreadsheet",
     byteCountClass: "non-empty",
   };
 }

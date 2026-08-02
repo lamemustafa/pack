@@ -108,8 +108,6 @@ async function hasUnresolvedFiledReturnsRecoveryState(deps: PackLocalDataDeps): 
   const activeRunState = await readActiveFiledReturnsRunStorageState({
     storageKeys: { activeRun: deps.storageKeys.activeRun },
   });
-  // A malformed marker cannot be acknowledged safely, so Clear local Pack data is
-  // its explicit recovery path. Only a valid active lease blocks local-data removal.
   if (activeRunState.state === "valid") return true;
 
   const targetReviewSummary = await readCurrentFiledReturnsTargetReviewSummary({

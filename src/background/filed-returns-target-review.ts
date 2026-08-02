@@ -7,13 +7,15 @@ import type {
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
 import {
-  concreteFiledReturnsArtifactTypes,
+  concreteFiledReturnsArtifactTypesForSelection,
   normaliseFiledReturnsArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
 import {
   clearArtifactAcquisitionCheckpoints,
   clearArtifactAcquisitionCheckpointsAfterPersistedSummary,
+  type ArtifactAcquisitionCompletionEvidence,
 } from "./artifact-acquisition-state";
+import { persistArtifactAcquisitionCompletion } from "./filed-returns-artifact-acquisition-completion";
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import {
   canonicalDurableTargetStatus,
@@ -254,6 +256,50 @@ export async function clearFiledReturnsTargetReview(
   });
 }
 
+/**
+ * Marks a matching local review before session-only completion persistence can
+ * clear its checkpoint. The local review outlives session storage, so it must
+ * never remain able to contradict a completion the session record has proved.
+ */
+export async function markFiledReturnsTargetReviewArtifactAcquisitionCompletion(
+  scope: FiledReturnsDownloadScope,
+  evidence: readonly ArtifactAcquisitionCompletionEvidence[],
+  deps: FiledReturnsTargetReviewDeps,
+): Promise<
+  { state: "absent" } | { review: FiledReturnsTargetReview; state: "marked" } | { state: "blocked" }
+> {
+  const key = deps.storageKeys.targetReview;
+  if (!key) return { state: "absent" };
+  return runTargetReviewMutationCriticalSection(async () => {
+    const storageState = await readTargetReviewStorageStateByKey(key);
+    if (storageState.state === "missing") return { state: "absent" };
+    if (storageState.state === "malformed") return { state: "blocked" };
+    // This single local record is already protecting a different target. It
+    // cannot carry this target's completion proof, so the caller must retain
+    // the matching active lease and session checkpoint rather than creating a
+    // transition window with no durable B-scope guard.
+    if (!sameFiledReturnsScope(storageState.review.scope, scope)) return { state: "blocked" };
+    const markedReview = {
+      ...storageState.review,
+      artifactAcquisitionCompletion: evidence.map(({ artifactType, downloadId, requestId }) => ({
+        artifactType,
+        downloadId,
+        requestId,
+      })),
+      revision: targetReviewRevision(storageState.review) + 1,
+      safeSignals: uniqueSafeSignals([
+        ...storageState.review.safeSignals,
+        "artifact-acquisition-completion-pending-summary",
+      ]),
+      updatedAt: (deps.now?.() ?? new Date()).toISOString(),
+    } satisfies FiledReturnsTargetReview;
+    const parsedReview = parseFiledReturnsTargetReview(markedReview);
+    if (!parsedReview) return { state: "blocked" };
+    await browser.storage.local.set({ [key]: parsedReview });
+    return { review: parsedReview, state: "marked" };
+  });
+}
+
 export async function resolveUnconfirmedFiledReturnsDownload(
   scope: FiledReturnsDownloadScope,
   resolution: "manually-observed" | "cancelled",
@@ -371,37 +417,14 @@ export async function resolveUnconfirmedFiledReturnsDownload(
         const parsedMarkedReview = parseFiledReturnsTargetReview(markedReview);
         if (!parsedMarkedReview) return responseForFiledReturnsTargetReview(review);
         await browser.storage.local.set({ [key]: parsedMarkedReview });
-        const flowStep: PortalFlowStepResult = {
-          connectorId: "gst",
-          scopeId: filedReturnScopeId(scope.returnType),
-          state: "downloaded",
-          safeSignals: uniqueSafeSignals([
-            "artifact-acquisition-download-reconciled",
-            "browser-download-created",
-            "browser-download-completed",
-            "browser-download-non-empty",
-            ...cancellation.evidence.map(({ downloadId }) => `browser-download-id:${downloadId}`),
-          ]),
-          safeMessage:
-            "Pack reconciled this target from exact browser download evidence without repeating a portal action.",
-          ...copyFiledReturnsDownloadDiagnosticState(review),
-        };
-        const flowSummary: FiledReturnsFlowSummary = {
-          artifactAcquisitionCompletion,
-          scope: canonicalTargetReviewScope(scope),
-          status: "complete",
-          completedPeriods: [scope.period],
-          currentPeriod: scope.period,
-          totalPeriods: 1,
-          updatedAt: (deps.now?.() ?? new Date()).toISOString(),
-          flowStep,
-        };
-        const durableSummary = await persistResolvedTargetReviewSummary(flowSummary, deps);
-        if (!durableSummary) return responseForFiledReturnsTargetReview(review);
-        await clearArtifactAcquisitionCheckpointsAfterPersistedSummary(
+        const durableSummary = await persistArtifactAcquisitionCompletion(
+          deps.storageKeys.completion,
           review.scope,
           cancellation.evidence,
+          deps.now?.() ?? new Date(),
+          copyFiledReturnsDownloadDiagnosticState(review),
         );
+        if (!durableSummary) return responseForFiledReturnsTargetReview(review);
         await browser.storage.local.remove(key);
         return {
           ok: true,
@@ -426,55 +449,6 @@ export async function resolveUnconfirmedFiledReturnsDownload(
         await browser.storage.local.set({ [key]: parsedReview });
         return responseForFiledReturnsTargetReview(parsedReview);
       }
-    }
-
-    // The review is the durable half of this transition. Chrome clears
-    // storage.session on disable, reload, update and browser restart while
-    // storage.local survives, so a restart between marking the review and
-    // removing it destroys the session summary and the checkpoints but leaves
-    // the marker. Reaching the cancellation path then records a target that
-    // demonstrably downloaded as `cancelled`.
-    //
-    // The marker is bound to this review's own acquisition identities, so it
-    // cannot be inherited by a later run. Restore the completion instead. The
-    // exact download IDs were corroborating detail held in the cleared
-    // checkpoints; their absence is recorded rather than fabricated.
-    const durableCompletion = review.artifactAcquisitionCompletion;
-    if (durableCompletion && durableCompletion.length > 0) {
-      const restoredStep: PortalFlowStepResult = {
-        connectorId: "gst",
-        scopeId: filedReturnScopeId(scope.returnType),
-        state: "downloaded",
-        safeSignals: uniqueSafeSignals([
-          "artifact-acquisition-download-reconciled",
-          "artifact-acquisition-completion-restored",
-          "browser-download-created",
-          "browser-download-completed",
-          "browser-download-non-empty",
-          ...durableCompletion.map(({ downloadId }) => `browser-download-id:${downloadId}`),
-        ]),
-        safeMessage:
-          "Pack restored this target's reconciled completion after the browser session ended mid-cleanup. No portal action was repeated.",
-        ...copyFiledReturnsDownloadDiagnosticState(review),
-      };
-      const restoredSummary: FiledReturnsFlowSummary = {
-        artifactAcquisitionCompletion: durableCompletion,
-        scope: canonicalTargetReviewScope(scope),
-        status: "complete",
-        completedPeriods: [scope.period],
-        currentPeriod: scope.period,
-        totalPeriods: 1,
-        updatedAt: (deps.now?.() ?? new Date()).toISOString(),
-        flowStep: restoredStep,
-      };
-      const durableRestored = await persistResolvedTargetReviewSummary(restoredSummary, deps);
-      if (!durableRestored) return responseForFiledReturnsTargetReview(review);
-      await browser.storage.local.remove(key);
-      return {
-        ok: true,
-        flowStep: durableRestored.flowStep,
-        flowSummary: durableRestored,
-      };
     }
 
     await browser.storage.local.remove(key);
@@ -729,7 +703,7 @@ function parseFiledReturnsTargetReview(input: unknown): FiledReturnsTargetReview
 
 function sameArtifactAcquisitionCompletion(
   left: FiledReturnsFlowSummary["artifactAcquisitionCompletion"],
-  right: FiledReturnsTargetReview["artifactAcquisitionCompletion"],
+  right: readonly ArtifactAcquisitionCompletionEvidence[] | undefined,
 ): boolean {
   return (
     left !== undefined &&
@@ -1296,11 +1270,13 @@ function artifactSelectionsOverlap(
   left: FiledReturnsDownloadScope,
   right: FiledReturnsDownloadScope,
 ): boolean {
-  const leftArtifacts = concreteFiledReturnsArtifactTypes(
-    normaliseFiledReturnsArtifactType(left.returnType, left.artifactType),
+  const leftArtifacts = concreteFiledReturnsArtifactTypesForSelection(
+    left.returnType,
+    left.artifactType,
   );
-  const rightArtifacts = concreteFiledReturnsArtifactTypes(
-    normaliseFiledReturnsArtifactType(right.returnType, right.artifactType),
+  const rightArtifacts = concreteFiledReturnsArtifactTypesForSelection(
+    right.returnType,
+    right.artifactType,
   );
   return leftArtifacts.some((artifactType) => rightArtifacts.includes(artifactType));
 }

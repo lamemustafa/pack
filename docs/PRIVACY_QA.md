@@ -51,28 +51,24 @@ For each release candidate:
   must reject this class outside that exact scope.
 - Confirm `pack:active-filed-returns-run`, when present, contains only the
   selected financial year, period, return type, artifact type, run ID,
-  revision, status, and lease timestamp needed to prevent overlapping local
-  runs.
+  revision, the bounded `running` status for new writes, and lease timestamp
+  needed to prevent overlapping local runs.
 - Confirm `pack:filed-returns-target-review`, when present, contains only the
   canonical target identifier/scope, unresolved status, safe signals/messages,
   revision and timestamps needed to block implicit retry. Recovery may
   additionally retain the attempt kind/phase, request and bounded
   candidate-window timestamps, an opaque `actionId`, an opaque staging-ledger
   or selected-file checkpoint identifier/revision, the exact numeric browser
-  `downloadId`, and sanitized endpoint/path, MIME, byte-count, status and error
-  classes. It must never retain a raw filename, local path, URL/referrer,
+  `downloadId`, and, while finalizing a proven artifact completion, a
+  per-artifact set of artifact type, exact numeric browser download ID and
+  opaque request ID, plus sanitized endpoint/path, MIME, byte-count, status and
+  error classes. It must never retain a raw filename, local path, URL/referrer,
   GSTIN/PAN, taxpayer name, portal HTML, credential, cookie, token or artifact
   bytes. Shareable evidence must replace the runtime action id with a neutral
   `ACTION-*` alias and omit the browser download id.
-- Confirm an artifact-reconciled target review may retain an ordered set of
-  opaque per-artifact request identifiers, each paired with the exact numeric
-  browser download ID it was reconciled from, only while it binds its completed
-  summary to pending review removal. The download ID is carried here because the
-  session checkpoints holding it do not survive a browser restart or extension
-  update, while this review does. The matching session flow summary may retain
-  the same set for that one completion marker. Neither record may retain a raw
-  filename, local path, URL/referrer, GSTIN/PAN, taxpayer name, portal HTML,
-  credential, cookie, token, or artifact bytes.
+  Neither record may retain a raw filename,
+  local path, URL/referrer, GSTIN/PAN, taxpayer name, portal HTML, credential,
+  cookie, token, or artifact bytes.
 - Confirm each session-only `pack.artifact-acquisition.v2.*` checkpoint contains
   only its requested target scope, opaque request ID, state, exact numeric
   browser download ID after creation, and the `armedAt` timestamp used only to

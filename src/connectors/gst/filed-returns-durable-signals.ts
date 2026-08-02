@@ -487,6 +487,7 @@ const ARTIFACT_FAILURE_SIGNALS = new Set([
   // review. The exact download IDs lived in the cleared session checkpoints, so
   // this records that the completion is restored rather than re-observed.
   "artifact-acquisition-completion-restored",
+  "artifact-acquisition-completion-pending-summary",
   "artifact-acquisition-start-unreconciled",
   "artifact-acquisition-download-interrupted",
   "artifact-acquisition-download-unconfirmed",

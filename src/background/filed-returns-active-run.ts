@@ -117,7 +117,13 @@ export async function renewFiledReturnsRunLease(
   await runFiledReturnsOperationCriticalSection(async () => {
     const values = await browser.storage.local.get(key);
     const storedRun = activeRunStorageState(values[key], deps.now?.() ?? new Date());
-    if (storedRun.state !== "valid" || storedRun.run.runId !== run.runId) return;
+    if (
+      storedRun.state !== "valid" ||
+      storedRun.run.runId !== run.runId ||
+      storedRun.run.status !== "running"
+    ) {
+      return;
+    }
 
     await browser.storage.local.set({
       [key]: {
@@ -172,7 +178,9 @@ export async function acknowledgeInterruptedFiledReturnsRun(
           };
     }
     const run = storedRun.run;
-    if (!isInterruptedRun(run, now)) return activeRunResponse(run, now);
+    if (!isInterruptedFiledReturnsRun(run, now)) {
+      return activeRunResponse(run, now);
+    }
 
     await browser.storage.local.remove(key);
     return acknowledgedRunResponse(run);
@@ -222,7 +230,7 @@ function parseActiveRun(input: unknown, now: Date): ActiveFiledReturnsRun | null
   if (!isCanonicalFiledReturnsRunId(run.runId)) return null;
   const revision = run.revision;
   if (typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 1) return null;
-  if (run.status !== "running") return null;
+  if (run.status !== "running" && run.status !== "recovery-blocked") return null;
   if (!isCanonicalTimestamp(run.leaseUpdatedAt)) return null;
   const scope = parseActiveRunScope(run.scope, now);
   if (!scope) return null;
@@ -232,6 +240,8 @@ function parseActiveRun(input: unknown, now: Date): ActiveFiledReturnsRun | null
     runId: run.runId,
     schemaVersion: "1.0",
     scope,
+    // Round-three recovery-blocked records are normalized on read, so an
+    // interrupted legacy lease regains the normal acknowledgement exit path.
     status: "running",
   };
 }
@@ -299,7 +309,7 @@ function isCanonicalTimestamp(input: unknown): input is string {
 }
 
 function activeRunResponse(run: ActiveFiledReturnsRun, now: Date): PackMessageResponse {
-  const interrupted = isInterruptedRun(run, now);
+  const interrupted = isInterruptedFiledReturnsRun(run, now);
   const flowStep = activeRunStep(interrupted, run.scope.returnType);
   return {
     ok: true,
@@ -311,11 +321,11 @@ function activeRunResponse(run: ActiveFiledReturnsRun, now: Date): PackMessageRe
 function activeRunSummary(
   run: ActiveFiledReturnsRun,
   now: Date,
-  flowStep = activeRunStep(isInterruptedRun(run, now), run.scope.returnType),
+  flowStep = activeRunStep(isInterruptedFiledReturnsRun(run, now), run.scope.returnType),
 ): FiledReturnsFlowSummary {
   return {
     scope: run.scope,
-    status: isInterruptedRun(run, now) ? "blocked" : "running",
+    status: isInterruptedFiledReturnsRun(run, now) ? "blocked" : "running",
     completedPeriods: [],
     updatedAt: run.leaseUpdatedAt,
     flowStep,
@@ -367,7 +377,7 @@ function malformedActiveRunStep(
   };
 }
 
-function isInterruptedRun(run: ActiveFiledReturnsRun, now: Date): boolean {
+export function isInterruptedFiledReturnsRun(run: ActiveFiledReturnsRun, now: Date): boolean {
   return now.getTime() - Date.parse(run.leaseUpdatedAt) > ACTIVE_RUN_REVIEW_MS;
 }
 

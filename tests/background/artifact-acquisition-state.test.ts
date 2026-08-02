@@ -56,6 +56,10 @@ const MAY_COMPOSITE = {
   returnType: "GSTR-2B" as const,
 };
 
+function actionId(index: number): string {
+  return `00000000-0000-4000-8000-${index.toString().padStart(12, "0")}`;
+}
+
 describe("artifact acquisition checkpoint", () => {
   beforeEach(() => {
     for (const key of Object.keys(mocks.session)) delete mocks.session[key];
@@ -66,7 +70,7 @@ describe("artifact acquisition checkpoint", () => {
     await persistArtifactAcquisitionDownloadId({
       ...MAY_PDF,
       downloadId: 9,
-      requestId: "request-may-pdf",
+      requestId: actionId(1),
       state: "download-observing",
     });
 
@@ -83,7 +87,7 @@ describe("artifact acquisition checkpoint", () => {
     await persistArtifactAcquisitionDownloadId({
       ...MAY_PDF,
       downloadId: 9,
-      requestId: "request-may-pdf",
+      requestId: actionId(7),
       state: "download-observing",
     });
     mocks.browser.downloads.search.mockResolvedValue([]);
@@ -98,7 +102,7 @@ describe("artifact acquisition checkpoint", () => {
     await persistArtifactAcquisitionDownloadId({
       ...MAY_PDF,
       downloadId: 9,
-      requestId: "request-default-pdf",
+      requestId: actionId(2),
       state: "download-observing",
     });
     mocks.browser.downloads.search.mockResolvedValue([]);
@@ -110,7 +114,7 @@ describe("artifact acquisition checkpoint", () => {
   });
 
   it("blocks an intent-only checkpoint because a start may have escaped persistence", async () => {
-    await persistArtifactAcquisitionIntent({ ...MAY_PDF, requestId: "request-intent" });
+    await persistArtifactAcquisitionIntent({ ...MAY_PDF, requestId: actionId(8) });
 
     await expect(reconcileArtifactAcquisitionCheckpoint(MAY_PDF)).resolves.toEqual({
       state: "needs-review",
@@ -122,7 +126,7 @@ describe("artifact acquisition checkpoint", () => {
     await persistArtifactAcquisitionUnconfirmedDownload({
       ...MAY_PDF,
       downloadId: 9,
-      requestId: "request-unconfirmed",
+      requestId: actionId(9),
       state: "download-unconfirmed",
     });
 
@@ -132,11 +136,30 @@ describe("artifact acquisition checkpoint", () => {
     });
   });
 
+  it("fails closed without cancelling an unconfirmed checkpoint with a noncanonical action ID", async () => {
+    const key = artifactAcquisitionCheckpointKey(MAY_PDF);
+    mocks.session[key] = {
+      ...MAY_PDF,
+      armedAt: new Date().toISOString(),
+      downloadId: 9,
+      requestId: "noncanonical-request-id",
+      state: "download-unconfirmed",
+    };
+
+    await expect(clearArtifactAcquisitionCheckpoints(MAY_PDF)).resolves.toEqual({
+      state: "blocked",
+    });
+
+    expect(mocks.browser.downloads.search).not.toHaveBeenCalled();
+    expect(mocks.browser.downloads.cancel).not.toHaveBeenCalled();
+    expect(mocks.session[key]).toMatchObject({ requestId: "noncanonical-request-id" });
+  });
+
   it("keeps a completed-but-unpersisted download checkpoint in review", async () => {
     await persistArtifactAcquisitionDownloadId({
       ...MAY_PDF,
       downloadId: 9,
-      requestId: "request-complete",
+      requestId: actionId(3),
       state: "download-observing",
     });
     mocks.browser.downloads.search.mockResolvedValue([
@@ -145,18 +168,72 @@ describe("artifact acquisition checkpoint", () => {
 
     await expect(reconcileArtifactAcquisitionCheckpoint(MAY_PDF)).resolves.toEqual({
       state: "needs-review",
-      safeSignals: ["artifact-acquisition-download-completed-unpersisted"],
+      safeSignals: ["browser-download-created", "browser-download-correlation-rejected"],
     });
     expect(mocks.session[artifactAcquisitionCheckpointKey(MAY_PDF)]).toEqual(
       expect.objectContaining({ downloadId: 9, state: "download-observing" }),
     );
   });
 
+  it("preserves the shared observer reason when completed download proof is rejected", async () => {
+    for (const [index, item, safeSignals] of [
+      [
+        20,
+        { danger: "safe", fileSize: 4, id: 9, mime: "text/plain" },
+        ["browser-download-created", "browser-download-correlation-rejected"],
+      ],
+      [
+        21,
+        { fileSize: 4, id: 9, mime: "application/pdf" },
+        ["browser-download-created", "browser-download-danger-unknown"],
+      ],
+      [
+        22,
+        { danger: "asyncScanning", fileSize: 4, id: 9, mime: "application/pdf" },
+        ["browser-download-created", "browser-download-danger-pending"],
+      ],
+      [
+        23,
+        { danger: "uncommon", fileSize: 4, id: 9, mime: "application/pdf" },
+        [
+          "browser-download-created",
+          "browser-download-completed",
+          "browser-download-danger-rejected",
+        ],
+      ],
+      [
+        24,
+        { danger: "safe", id: 9, mime: "application/pdf" },
+        ["browser-download-created", "browser-download-size-unknown"],
+      ],
+      [
+        25,
+        { danger: "safe", fileSize: 0, id: 9, mime: "application/pdf" },
+        ["browser-download-completed", "browser-download-zero-bytes"],
+      ],
+    ] as const) {
+      await persistArtifactAcquisitionDownloadId({
+        ...MAY_PDF,
+        downloadId: 9,
+        requestId: actionId(index),
+        state: "download-observing",
+      });
+      mocks.browser.downloads.search.mockResolvedValue([
+        { ...item, startTime: new Date(Date.now() + 1_000).toISOString(), state: "complete" },
+      ]);
+
+      await expect(reconcileArtifactAcquisitionCheckpoint(MAY_PDF)).resolves.toEqual({
+        state: "needs-review",
+        safeSignals,
+      });
+    }
+  });
+
   it("keeps a checkpoint with an unresolvable download ID in needs-review", async () => {
     await persistArtifactAcquisitionDownloadId({
       ...MAY_PDF,
       downloadId: 9,
-      requestId: "request-unavailable",
+      requestId: actionId(4),
       state: "download-observing",
     });
     mocks.browser.downloads.search.mockRejectedValue(new Error("downloads unavailable"));
@@ -171,7 +248,7 @@ describe("artifact acquisition checkpoint", () => {
     await persistArtifactAcquisitionDownloadId({
       ...MAY_PDF,
       downloadId: 9,
-      requestId: "request-in-progress",
+      requestId: actionId(5),
       state: "download-observing",
     });
     mocks.browser.downloads.search.mockResolvedValue([{ id: 9, state: "in_progress" }]);
@@ -186,7 +263,7 @@ describe("artifact acquisition checkpoint", () => {
     await persistArtifactAcquisitionDownloadId({
       ...MAY_PDF,
       downloadId: 9,
-      requestId: "request-interrupted",
+      requestId: actionId(6),
       state: "download-observing",
     });
     mocks.browser.downloads.search.mockResolvedValue([{ id: 9, state: "interrupted" }]);
@@ -214,14 +291,14 @@ describe("artifact acquisition checkpoint", () => {
   });
 
   it("clears only the terminal request's own target checkpoint", async () => {
-    await persistArtifactAcquisitionIntent({ ...MAY_PDF, requestId: "request-may" });
-    await persistArtifactAcquisitionIntent({ ...JUNE_PDF, requestId: "request-june" });
+    await persistArtifactAcquisitionIntent({ ...MAY_PDF, requestId: actionId(10) });
+    await persistArtifactAcquisitionIntent({ ...JUNE_PDF, requestId: actionId(11) });
 
-    await clearArtifactAcquisitionCheckpoint(MAY_PDF, "request-may");
+    await clearArtifactAcquisitionCheckpoint(MAY_PDF, actionId(10));
 
     expect(mocks.session[artifactAcquisitionCheckpointKey(MAY_PDF)]).toBeUndefined();
     expect(mocks.session[artifactAcquisitionCheckpointKey(JUNE_PDF)]).toEqual(
-      expect.objectContaining({ requestId: "request-june" }),
+      expect.objectContaining({ requestId: actionId(11) }),
     );
   });
 
@@ -230,14 +307,21 @@ describe("artifact acquisition checkpoint", () => {
       ...MAY_COMPOSITE,
       artifactType: "PDF",
       downloadId: 9,
-      requestId: "request-may-pdf",
+      requestId: actionId(12),
       state: "download-observing",
     });
     await persistArtifactAcquisitionDownloadId({
       ...MAY_COMPOSITE,
       artifactType: "EXCEL",
       downloadId: 10,
-      requestId: "request-may-excel",
+      requestId: actionId(13),
+      state: "download-observing",
+    });
+    await persistArtifactAcquisitionDownloadId({
+      ...MAY_COMPOSITE,
+      artifactType: "JSON",
+      downloadId: 11,
+      requestId: actionId(14),
       state: "download-observing",
     });
     mocks.browser.downloads.search.mockResolvedValue([{ state: "interrupted" }]);
@@ -252,6 +336,9 @@ describe("artifact acquisition checkpoint", () => {
     expect(
       mocks.session[artifactAcquisitionCheckpointKey({ ...MAY_COMPOSITE, artifactType: "EXCEL" })],
     ).toBeUndefined();
+    expect(
+      mocks.session[artifactAcquisitionCheckpointKey({ ...MAY_COMPOSITE, artifactType: "JSON" })],
+    ).toBeUndefined();
     await expect(
       reconcileArtifactAcquisitionCheckpoint({ ...MAY_COMPOSITE, artifactType: "PDF" }),
     ).resolves.toEqual({ state: "retry-safe" });
@@ -265,17 +352,26 @@ describe("artifact acquisition checkpoint", () => {
       ...MAY_COMPOSITE,
       artifactType: "PDF",
       downloadId: 9,
-      requestId: "request-may-pdf",
+      requestId: actionId(14),
       state: "download-observing",
     });
     await persistArtifactAcquisitionDownloadId({
       ...MAY_COMPOSITE,
       artifactType: "EXCEL",
       downloadId: 10,
-      requestId: "request-may-excel",
+      requestId: actionId(15),
+      state: "download-observing",
+    });
+    await persistArtifactAcquisitionDownloadId({
+      ...MAY_COMPOSITE,
+      artifactType: "JSON",
+      downloadId: 11,
+      requestId: actionId(16),
       state: "download-observing",
     });
     mocks.browser.downloads.search
+      .mockResolvedValueOnce([{ state: "in_progress" }])
+      .mockResolvedValueOnce([{ state: "interrupted" }])
       .mockResolvedValueOnce([{ state: "in_progress" }])
       .mockResolvedValueOnce([{ state: "interrupted" }])
       .mockResolvedValueOnce([{ state: "in_progress" }])
@@ -288,12 +384,14 @@ describe("artifact acquisition checkpoint", () => {
 
     expect(mocks.browser.downloads.cancel).toHaveBeenNthCalledWith(1, 9);
     expect(mocks.browser.downloads.cancel).toHaveBeenNthCalledWith(2, 10);
+    expect(mocks.browser.downloads.cancel).toHaveBeenNthCalledWith(3, 11);
   });
 
   it("reconciles every expected artifact only from distinct safe, non-empty exact downloads", async () => {
     for (const [artifactType, downloadId, requestId] of [
-      ["PDF", 9, "request-may-pdf"],
-      ["EXCEL", 10, "request-may-excel"],
+      ["PDF", 9, actionId(16)],
+      ["EXCEL", 10, actionId(17)],
+      ["JSON", 11, actionId(18)],
     ] as const) {
       await persistArtifactAcquisitionDownloadId({
         ...MAY_COMPOSITE,
@@ -311,7 +409,9 @@ describe("artifact acquisition checkpoint", () => {
         mime:
           id === 9
             ? "application/pdf"
-            : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            : id === 10
+              ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              : "application/json",
         startTime: new Date(Date.now() + 1_000).toISOString(),
         state: "complete",
       },
@@ -320,8 +420,9 @@ describe("artifact acquisition checkpoint", () => {
     await expect(clearArtifactAcquisitionCheckpoints(MAY_COMPOSITE)).resolves.toEqual({
       state: "completed",
       evidence: [
-        { artifactType: "PDF", downloadId: 9, requestId: "request-may-pdf" },
-        { artifactType: "EXCEL", downloadId: 10, requestId: "request-may-excel" },
+        { artifactType: "PDF", downloadId: 9, requestId: actionId(16) },
+        { artifactType: "EXCEL", downloadId: 10, requestId: actionId(17) },
+        { artifactType: "JSON", downloadId: 11, requestId: actionId(18) },
       ],
     });
     expect(mocks.browser.downloads.cancel).not.toHaveBeenCalled();
@@ -335,7 +436,7 @@ describe("artifact acquisition checkpoint", () => {
       ...MAY_COMPOSITE,
       artifactType: "PDF",
       downloadId: 9,
-      requestId: "request-may-pdf",
+      requestId: actionId(18),
       state: "download-observing",
     });
     mocks.browser.downloads.search.mockResolvedValue([
@@ -358,7 +459,7 @@ describe("artifact acquisition checkpoint", () => {
     await persistArtifactAcquisitionDownloadId({
       ...MAY_PDF,
       downloadId: 9,
-      requestId: "request-may-pdf",
+      requestId: actionId(19),
       state: "download-observing",
     });
     mocks.browser.downloads.search.mockResolvedValue([
@@ -396,7 +497,7 @@ describe("artifact acquisition checkpoint", () => {
     await persistArtifactAcquisitionDownloadId({
       ...MAY_PDF,
       downloadId: 9,
-      requestId: "request-may-pdf",
+      requestId: actionId(26),
       state: "download-observing",
     });
     mocks.browser.downloads.search.mockResolvedValue([
@@ -419,7 +520,7 @@ describe("artifact acquisition checkpoint", () => {
     await persistArtifactAcquisitionDownloadId({
       ...MAY_PDF,
       downloadId: 9,
-      requestId: "request-may-pdf",
+      requestId: actionId(27),
       state: "download-observing",
     });
     mocks.browser.downloads.search.mockResolvedValue([
@@ -485,7 +586,7 @@ describe("artifact acquisition checkpoint", () => {
       ...MAY_COMPOSITE,
       artifactType: "EXCEL",
       downloadId: 10,
-      requestId: "request-may-excel",
+      requestId: actionId(28),
       state: "download-observing",
     });
     mocks.browser.downloads.search.mockResolvedValue([{ state: "complete" }]);
@@ -507,18 +608,18 @@ describe("artifact acquisition checkpoint", () => {
     await persistArtifactAcquisitionDownloadId({
       ...MAY_PDF,
       downloadId: 9,
-      requestId: "request-may-pdf",
+      requestId: actionId(29),
       state: "download-observing",
     });
     await persistArtifactAcquisitionUnconfirmedDownload({
       ...MAY_JSON,
       downloadId: 10,
-      requestId: "request-may-json",
+      requestId: actionId(30),
       state: "download-unconfirmed",
     });
 
     await clearArtifactAcquisitionCheckpointsAfterPersistedSummary(MAY_PDF, [
-      { artifactType: "PDF", downloadId: 9, requestId: "request-may-pdf" },
+      { artifactType: "PDF", downloadId: 9, requestId: actionId(29) },
     ]);
 
     expect(mocks.session[artifactAcquisitionCheckpointKey(MAY_PDF)]).toBeUndefined();
@@ -531,12 +632,12 @@ describe("artifact acquisition checkpoint", () => {
     await persistArtifactAcquisitionUnconfirmedDownload({
       ...MAY_PDF,
       downloadId: 9,
-      requestId: "request-may-pdf",
+      requestId: actionId(31),
       state: "download-unconfirmed",
     });
 
     await clearArtifactAcquisitionCheckpointsAfterPersistedSummary(MAY_PDF, [
-      { artifactType: "PDF", downloadId: 9, requestId: "request-may-pdf" },
+      { artifactType: "PDF", downloadId: 9, requestId: actionId(31) },
     ]);
 
     expect(mocks.session[artifactAcquisitionCheckpointKey(MAY_PDF)]).toBeUndefined();
@@ -546,16 +647,16 @@ describe("artifact acquisition checkpoint", () => {
     await persistArtifactAcquisitionDownloadId({
       ...MAY_PDF,
       downloadId: 10,
-      requestId: "request-replacement",
+      requestId: actionId(32),
       state: "download-observing",
     });
 
     await clearArtifactAcquisitionCheckpointsAfterPersistedSummary(MAY_PDF, [
-      { artifactType: "PDF", downloadId: 9, requestId: "request-original" },
+      { artifactType: "PDF", downloadId: 9, requestId: actionId(33) },
     ]);
 
     expect(mocks.session[artifactAcquisitionCheckpointKey(MAY_PDF)]).toEqual(
-      expect.objectContaining({ downloadId: 10, requestId: "request-replacement" }),
+      expect.objectContaining({ downloadId: 10, requestId: actionId(32) }),
     );
   });
 });

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   reconcileArtifactAcquisitionCheckpoint: vi.fn(),
   persistFiledReturnsTargetReview: vi.fn(),
+  preflightSelectedArtifactsRecovery: vi.fn(),
 }));
 
 vi.mock("../../src/background/artifact-acquisition-state", () => ({
@@ -10,6 +11,10 @@ vi.mock("../../src/background/artifact-acquisition-state", () => ({
 }));
 vi.mock("../../src/background/filed-returns-target-review", () => ({
   persistFiledReturnsTargetReview: mocks.persistFiledReturnsTargetReview,
+}));
+vi.mock("../../src/background/filed-returns-selected-artifacts", () => ({
+  preflightSelectedArtifactsRecovery: mocks.preflightSelectedArtifactsRecovery,
+  triggerSelectedArtifacts: vi.fn(),
 }));
 
 import { startSinglePeriodFiledReturnsDownloadFlow } from "../../src/background/filed-returns-single-period-flow";
@@ -47,6 +52,7 @@ describe("GSTR-3B artifact acquisition recovery", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.persistFiledReturnsTargetReview.mockResolvedValue(persistedReview);
+    mocks.preflightSelectedArtifactsRecovery.mockResolvedValue(null);
   });
 
   it("keeps an interrupted checkpoint blocked without repeating the portal action", async () => {
@@ -63,7 +69,12 @@ describe("GSTR-3B artifact acquisition recovery", () => {
     expect(mocks.reconcileArtifactAcquisitionCheckpoint).toHaveBeenCalledWith(scope);
     expect(mocks.persistFiledReturnsTargetReview).toHaveBeenCalledWith(
       scope,
-      expect.objectContaining({ safeSignals: ["artifact-acquisition-download-interrupted"] }),
+      expect.objectContaining({
+        safeSignals: [
+          "artifact-acquisition-download-unreconciled",
+          "artifact-acquisition-download-interrupted",
+        ],
+      }),
       expect.anything(),
     );
     expect(getActiveGstTab).not.toHaveBeenCalled();
@@ -105,15 +116,103 @@ describe("GSTR-3B artifact acquisition recovery", () => {
       ...compositeScope,
       artifactType: "EXCEL",
     });
+    expect(mocks.reconcileArtifactAcquisitionCheckpoint).toHaveBeenNthCalledWith(3, {
+      ...compositeScope,
+      artifactType: "JSON",
+    });
     expect(mocks.persistFiledReturnsTargetReview).toHaveBeenCalledWith(
       compositeScope,
       expect.objectContaining({
         safeSignals: [
+          "artifact-acquisition-download-unreconciled",
           "artifact-acquisition-download-interrupted",
           "artifact-acquisition-download-unconfirmed",
         ],
       }),
       expect.anything(),
     );
+  });
+
+  it("continues selected-files staging after all concrete checkpoint checks clear", async () => {
+    const compositeScope = {
+      ...scope,
+      artifactType: "PDF_AND_EXCEL" as const,
+      returnType: "GSTR-2B" as const,
+    };
+    mocks.reconcileArtifactAcquisitionCheckpoint.mockResolvedValue({ state: "none" });
+    mocks.preflightSelectedArtifactsRecovery.mockResolvedValue({
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-gstr2b-private-v0",
+        state: "user-action-required",
+        safeSignals: ["single-period-opfs-staging-required"],
+        safeMessage:
+          "Pack still needs to stage the selected artifacts and hand off their ZIP before this selection is complete.",
+        userAction: {
+          type: "RETRY_PORTAL_GENERATION",
+          message: "Start the selected-files download to stage the artifacts and save the ZIP.",
+          canResume: true,
+        },
+      },
+    });
+
+    const response = await startSinglePeriodFiledReturnsDownloadFlow(compositeScope, {} as never, {
+      persistSinglePeriodSummary: false,
+    });
+
+    expect(mocks.reconcileArtifactAcquisitionCheckpoint).toHaveBeenNthCalledWith(1, {
+      ...compositeScope,
+      artifactType: "PDF",
+    });
+    expect(mocks.reconcileArtifactAcquisitionCheckpoint).toHaveBeenNthCalledWith(2, {
+      ...compositeScope,
+      artifactType: "EXCEL",
+    });
+    expect(mocks.reconcileArtifactAcquisitionCheckpoint).toHaveBeenNthCalledWith(3, {
+      ...compositeScope,
+      artifactType: "JSON",
+    });
+    expect(mocks.preflightSelectedArtifactsRecovery).toHaveBeenCalledWith({
+      deps: expect.anything(),
+      scope: compositeScope,
+    });
+    expect(response).toMatchObject({
+      flowStep: {
+        state: "user-action-required",
+        safeSignals: ["single-period-opfs-staging-required"],
+        safeMessage:
+          "Pack still needs to stage the selected artifacts and hand off their ZIP before this selection is complete.",
+      },
+    });
+  });
+
+  it("reconciles a retained all-formats JSON checkpoint before the portal can repeat it", async () => {
+    const compositeScope = {
+      ...scope,
+      artifactType: "PDF_AND_EXCEL" as const,
+      returnType: "GSTR-2B" as const,
+    };
+    mocks.reconcileArtifactAcquisitionCheckpoint
+      .mockResolvedValueOnce({ state: "retry-safe" })
+      .mockResolvedValueOnce({ state: "retry-safe" })
+      .mockResolvedValueOnce({
+        state: "needs-review",
+        safeSignals: ["artifact-acquisition-download-unreconciled"],
+      });
+
+    const response = await startSinglePeriodFiledReturnsDownloadFlow(compositeScope, {} as never);
+
+    expect(mocks.reconcileArtifactAcquisitionCheckpoint).toHaveBeenNthCalledWith(3, {
+      ...compositeScope,
+      artifactType: "JSON",
+    });
+    expect(mocks.persistFiledReturnsTargetReview).toHaveBeenCalledWith(
+      compositeScope,
+      expect.objectContaining({ safeSignals: ["artifact-acquisition-download-unreconciled"] }),
+      expect.anything(),
+    );
+    expect(mocks.preflightSelectedArtifactsRecovery).not.toHaveBeenCalled();
+    expect(response).toMatchObject({ flowStep: { state: "user-action-required" } });
   });
 });

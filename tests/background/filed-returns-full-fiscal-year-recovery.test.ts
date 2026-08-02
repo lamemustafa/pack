@@ -135,6 +135,62 @@ describe("full fiscal-year recovery", () => {
     });
   });
 
+  it("stages a full-year all-formats target before progressing to ZIP export", async () => {
+    const now = new Date("2026-06-24T00:00:00.000Z");
+    const scope = {
+      artifactType: "PDF_AND_EXCEL" as const,
+      financialYear: "2026-27",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-2B" as const,
+    };
+    const runSinglePeriod = vi.fn(async () => ({
+      ok: true as const,
+      flowStep: {
+        connectorId: "gst" as const,
+        scopeId: "gst-gstr2b-private-v0",
+        state: "downloaded" as const,
+        safeSignals: [
+          "filed-return-artifact-downloaded:PDF",
+          "filed-return-artifact-downloaded:EXCEL",
+          "filed-return-artifact-downloaded:JSON",
+          "full-fiscal-year-opfs-staged:PDF",
+          "full-fiscal-year-opfs-staged:EXCEL",
+          "full-fiscal-year-opfs-staged:JSON",
+        ],
+        safeMessage: "Pack staged the selected artifacts for the fiscal-year ZIP.",
+      },
+    }));
+    zipMocks.exportFullFiscalYearZip.mockResolvedValue({
+      connectorId: "gst",
+      scopeId: "gst-gstr2b-private-v0",
+      state: "download-unconfirmed",
+      safeSignals: ["browser-download-not-observed"],
+      safeMessage: "Pack started ZIP delivery but needs exact browser download confirmation.",
+    });
+
+    const response = await startFullFiscalYearDownloadFlow(
+      scope,
+      { ...recoveryDeps(), now: () => now } as never,
+      runSinglePeriod,
+    );
+
+    expect(runSinglePeriod).toHaveBeenCalled();
+    expect(runSinglePeriod).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        stageCapturedDownloads: expect.objectContaining({ bundleKind: "full-fiscal-year" }),
+      }),
+      { persistSinglePeriodSummary: false },
+    );
+    expect(zipMocks.exportFullFiscalYearZip).toHaveBeenCalledOnce();
+    expect(response).toMatchObject({
+      flowStep: {
+        state: "download-unconfirmed",
+        safeSignals: expect.arrayContaining(["browser-download-not-observed"]),
+      },
+    });
+  });
+
   it("resets one recoverable target for retry and clears legacy single-period review state", async () => {
     mockLocalStorageGet({
       "full-year-ledger": createRecoveryLedger({ revision: 2 }),

@@ -1,8 +1,19 @@
 import { browser } from "wxt/browser";
-import type { FiledReturnsTargetReview } from "../connectors/gst/filed-returns-contracts";
+import type {
+  FiledReturnsDownloadScope,
+  FiledReturnsTargetReview,
+} from "../connectors/gst/filed-returns-contracts";
+import {
+  inspectArtifactAcquisitionCheckpoint,
+  readArtifactAcquisitionCheckpointTargets,
+  type ArtifactAcquisitionCompletionEvidence,
+} from "./artifact-acquisition-state";
 import type { DownloadCreatedItem, DownloadDelta } from "./download-observer";
 import { persistFiledReturnsTargetDownloadId } from "./filed-returns-target-download-attempt";
+import { persistArtifactAcquisitionCompletion } from "./filed-returns-artifact-acquisition-completion";
 import {
+  clearFiledReturnsTargetReview,
+  markFiledReturnsTargetReviewArtifactAcquisitionCompletion,
   readCurrentFiledReturnsTargetReview,
   type FiledReturnsTargetReviewDeps,
 } from "./filed-returns-target-review";
@@ -25,7 +36,11 @@ export interface DurableDownloadReconcilerDownloads {
   search(query: { id: number }): Promise<DownloadCreatedItem[]>;
 }
 
-export interface DurableDownloadReconcilerDeps extends FiledReturnsTargetReviewDeps {
+export interface DurableDownloadReconcilerDeps extends Omit<
+  FiledReturnsTargetReviewDeps,
+  "storageKeys"
+> {
+  storageKeys: FiledReturnsTargetReviewDeps["storageKeys"] & { activeRun?: string };
   extensionId?: string;
   persistDownloadId?: (review: FiledReturnsTargetReview, downloadId: number) => Promise<boolean>;
   readCurrentReview?: () => Promise<FiledReturnsTargetReview | null>;
@@ -86,6 +101,15 @@ export async function reconcileTerminalFiledReturnsDownload(
   downloads: Pick<DurableDownloadReconcilerDownloads, "search">,
   deps: DurableDownloadReconcilerDeps,
 ): Promise<boolean> {
+  const reviewReconciled = await reconcileCurrentTargetReview(downloads, deps);
+  const acquisitionReconciled = await reconcileArtifactAcquisitionCheckpoints(deps);
+  return reviewReconciled || acquisitionReconciled;
+}
+
+async function reconcileCurrentTargetReview(
+  downloads: Pick<DurableDownloadReconcilerDownloads, "search">,
+  deps: DurableDownloadReconcilerDeps,
+): Promise<boolean> {
   const review = await (deps.readCurrentReview
     ? deps.readCurrentReview()
     : readCurrentFiledReturnsTargetReview(deps));
@@ -101,15 +125,63 @@ export async function reconcileTerminalFiledReturnsDownload(
   return true;
 }
 
+/**
+ * Rebuilds a completion from an acquisition checkpoint when the MV3 worker
+ * died while the browser's native Save dialog kept the exact download alive.
+ * It only upgrades fully proved completions; all other checkpoints remain for
+ * the existing next-run guard to surface without scanner-side state changes.
+ */
+async function reconcileArtifactAcquisitionCheckpoints(
+  deps: DurableDownloadReconcilerDeps,
+): Promise<boolean> {
+  let handled = false;
+  const provedCheckpoints: Array<{
+    evidence: ArtifactAcquisitionCompletionEvidence;
+    marker: Awaited<ReturnType<typeof markFiledReturnsTargetReviewArtifactAcquisitionCompletion>>;
+    target: FiledReturnsDownloadScope;
+  }> = [];
+  const checkpoints = await readArtifactAcquisitionCheckpointTargets().catch(() => []);
+  for (const { target } of checkpoints) {
+    const inspection = await inspectArtifactAcquisitionCheckpoint(target, {
+      preserveMalformed: false,
+    });
+    if (inspection.state !== "completed") continue;
+    const marker = await markFiledReturnsTargetReviewArtifactAcquisitionCompletion(
+      target,
+      [inspection.evidence],
+      deps,
+    );
+    if (marker.state === "blocked") continue;
+    provedCheckpoints.push({ evidence: inspection.evidence, marker, target });
+  }
+  for (const { evidence, marker, target } of provedCheckpoints) {
+    const summary = await persistArtifactAcquisitionCompletion(
+      deps.storageKeys.completion,
+      target,
+      [evidence],
+      deps.now?.() ?? new Date(),
+    );
+    if (summary && marker.state === "marked") {
+      await clearFiledReturnsTargetReview(target, deps, marker.review.revision ?? 1);
+    }
+    handled = true;
+  }
+  return handled;
+}
+
 export function installFiledReturnsDurableDownloadReconciler(
   downloads?: DurableDownloadReconcilerDownloads,
   deps: DurableDownloadReconcilerDeps = {
     storageKeys: {
+      activeRun: PACK_LOCAL_STORAGE_KEYS.activeFiledReturnsRun,
       completion: PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary,
       targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview,
     },
   },
 ): () => void {
+  void removeLegacyArtifactAcquisitionCompletionMarkers(deps.storageKeys.targetReview).catch(
+    () => undefined,
+  );
   const downloadApi =
     downloads ?? (browser.downloads as unknown as DurableDownloadReconcilerDownloads | undefined);
   if (
@@ -168,6 +240,16 @@ export function installFiledReturnsDurableDownloadReconciler(
     downloadApi.onChanged.removeListener(onChanged);
     downloadApi.onCreated?.removeListener(onCreated);
   };
+}
+
+async function removeLegacyArtifactAcquisitionCompletionMarkers(
+  targetReviewKey: string | undefined,
+): Promise<void> {
+  if (!targetReviewKey) return;
+  const values = await browser.storage.local.get();
+  const prefix = `${targetReviewKey}:completion:`;
+  const keys = Object.keys(values).filter((key) => key.startsWith(prefix));
+  if (keys.length > 0) await browser.storage.local.remove(keys);
 }
 
 async function claimPendingExtensionDownload(

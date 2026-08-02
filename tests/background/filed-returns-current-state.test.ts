@@ -12,7 +12,12 @@ vi.mock("wxt/browser", () => ({
   browser: {
     storage: {
       local: {
-        get: vi.fn(async (key: string) => ({ [key]: storage.local[key] })),
+        get: vi.fn(async (key?: string | string[]) => {
+          if (key === undefined) return { ...storage.local };
+          const keys = Array.isArray(key) ? key : [key];
+          return Object.fromEntries(keys.map((entry) => [entry, storage.local[entry]]));
+        }),
+        set: vi.fn(async (values: Record<string, unknown>) => Object.assign(storage.local, values)),
       },
       session: {
         get: vi.fn(async (key: string) => ({ [key]: storage.session[key] })),
