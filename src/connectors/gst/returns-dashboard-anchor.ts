@@ -1,3 +1,5 @@
+import { isActionablePortalControl } from "./filed-returns-dom";
+
 export type ReturnsDashboardAnchorNavigation = "clicked" | "not-found" | "ambiguous";
 
 const RETURNS_ORIGIN = "https://return.gst.gov.in";
@@ -26,17 +28,10 @@ export function clickReturnsDashboardAnchor(
 }
 
 function isVisibleAndActionable(element: HTMLElement): boolean {
-  if (element.hidden || element.closest("[inert]")) return false;
+  if (!isActionablePortalControl(element)) return false;
   const style = element.ownerDocument.defaultView?.getComputedStyle(element);
   if (!style) return false;
-  if (
-    style.display === "none" ||
-    style.visibility !== "visible" ||
-    style.opacity === "0" ||
-    style.pointerEvents === "none"
-  ) {
-    return false;
-  }
+  if (style.visibility !== "visible") return false;
   const rect = element.getBoundingClientRect();
   return rect.width > 0 && rect.height > 0;
 }

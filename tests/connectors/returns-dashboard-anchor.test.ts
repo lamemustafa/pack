@@ -79,14 +79,16 @@ describe("Returns Dashboard portal anchor", () => {
     expect(visibleClick).toHaveBeenCalledOnce();
   });
 
-  it("excludes portal-disabled duplicates before choosing the visible anchor", () => {
+  it("excludes portal-disabled descendants before choosing the visible anchor", () => {
     const documentRef = page(`
-      <a href="https://return.gst.gov.in/returns/auth/dashboard" style="pointer-events: none">Disabled</a>
+      <div style="opacity: 0"><a href="https://return.gst.gov.in/returns/auth/dashboard">Transparent parent</a></div>
+      <div style="pointer-events: none"><a href="https://return.gst.gov.in/returns/auth/dashboard">Disabled parent</a></div>
+      <div aria-hidden="true"><a href="https://return.gst.gov.in/returns/auth/dashboard">Hidden parent</a></div>
       <div inert><a href="https://return.gst.gov.in/returns/auth/dashboard">Inert</a></div>
       <a href="https://return.gst.gov.in/returns/auth/dashboard">Visible</a>
     `);
     const anchors = Array.from(documentRef.querySelectorAll<HTMLAnchorElement>("a"));
-    const visibleClick = vi.spyOn(anchors[2]!, "click");
+    const visibleClick = vi.spyOn(anchors[4]!, "click");
 
     expect(clickReturnsDashboardAnchor(documentRef)).toBe("clicked");
     expect(visibleClick).toHaveBeenCalledOnce();
