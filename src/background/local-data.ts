@@ -17,7 +17,10 @@ import {
   readSinglePeriodStagingRecord,
 } from "./filed-returns-artifact-progress";
 import { hasArtifactAcquisitionCheckpoint } from "./artifact-acquisition-state";
-import { readCurrentFiledReturnsTargetReviewSummary } from "./filed-returns-target-review";
+import {
+  clearArtifactAcquisitionCompletionMarkers,
+  readCurrentFiledReturnsTargetReviewSummary,
+} from "./filed-returns-target-review";
 
 export interface PackLocalDataDeps {
   clearableLocalStorageKeys: readonly string[];
@@ -100,6 +103,9 @@ async function clearPackLocalDataWithinOperation(
   }
 
   await browser.storage.session.clear();
+  await clearArtifactAcquisitionCompletionMarkers({
+    storageKeys: { targetReview: deps.storageKeys.targetReview },
+  });
   await browser.storage.local.remove([...deps.clearableLocalStorageKeys]);
   return { ok: true, cleared: true };
 }

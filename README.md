@@ -210,13 +210,17 @@ Pack uses Chrome extension storage only inside the current browser profile.
   portal HTML or taxpayer identifiers;
 - `pack:filed-returns-target-review`: local-only single-period unresolved
   download review state with a canonical target identifier and scope, safe
-  messages/signals, revisions and timestamps. Recovery state may also store the
-  attempt kind/phase, request and bounded candidate-window timestamps, an opaque
-  `actionId`, the exact numeric browser `downloadId`, opaque staging-ledger or
-  selected-file checkpoint identifiers/revisions, and an opaque per-artifact
-  request-identity set, each paired with the exact numeric browser `downloadId`
-  it was reconciled from, only while binding a just-persisted artifact-reconciled
-  completion to pending review removal, and sanitized endpoint/path,
+  messages/signals, revisions and timestamps;
+- `pack:filed-returns-target-review:completion:*`: local-only scoped per-target
+  completion markers. They may retain an opaque per-artifact request-identity
+  set, each paired with the exact numeric browser `downloadId` it was reconciled
+  from, after exact completion is proved. Those markers survive session storage
+  loss and are removed only by Clear local Pack data or extension removal.
+  The base target-review record may also store the attempt kind/phase, request
+  and bounded candidate-window
+  timestamps, an opaque `actionId`, the exact numeric browser `downloadId`,
+  opaque staging-ledger or selected-file checkpoint identifiers/revisions, and
+  sanitized endpoint/path,
   MIME, byte-count, status and error classes. It never stores the raw filename,
   local path, URL/referrer, GSTIN/PAN, taxpayer name, portal HTML, credentials,
   cookies, tokens or artifact bytes;
@@ -229,11 +233,10 @@ Pack uses Chrome extension storage only inside the current browser profile.
 - `pack:last-filed-returns-observation`: the latest safe filed-returns page
   observation;
 - `pack:last-filed-returns-flow-summary`: the latest temporary filed-return flow
-  status. An artifact-reconciled completion may additionally retain the same
-  opaque per-artifact request-identity set, each paired with its exact numeric
-  browser `downloadId`, solely to prevent a later same-scope acquisition from
-  inheriting that prior completion and to let an interrupted completion be
-  restored with the evidence it was first proved by;
+  status. It may repeat the same opaque per-artifact request-identity set and
+  exact numeric browser `downloadId` for the current UI result; the durable
+  per-target completion marker above remains the recovery proof if session
+  storage is cleared;
 - `pack:last-gst-tab-id`: the browser tab ID of the most recent supported GST
   Portal tab, so a run can find its tab again without scanning every tab. A tab
   ID is a per-session integer assigned by the browser and carries no page, URL

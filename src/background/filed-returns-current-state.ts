@@ -12,6 +12,10 @@ import {
   sameFiledReturnsScope,
 } from "./filed-returns-full-fiscal-year-ledger";
 import { readCurrentFiledReturnsTargetReviewSummary } from "./filed-returns-target-review";
+import {
+  readLatestArtifactAcquisitionCompletionMarker,
+  summaryFromArtifactAcquisitionCompletionMarker,
+} from "./filed-returns-target-review";
 
 export interface FiledReturnsCurrentStateDeps {
   storageKeys: {
@@ -53,7 +57,20 @@ export async function readCurrentFiledReturnsFlowSummary(
 
   if (isFullFiscalYearLedger(ledger)) return summariseFullFiscalYearLedger(ledger, deps.now?.());
 
-  return isUnbackedFullFiscalYearCompletion(completionSummary) ? null : completionSummary;
+  if (completionSummary && !isUnbackedFullFiscalYearCompletion(completionSummary)) {
+    return completionSummary;
+  }
+
+  const durableMarker = await readLatestArtifactAcquisitionCompletionMarker({
+    storageKeys: { targetReview: deps.storageKeys.targetReview },
+    ...(deps.now ? { now: deps.now } : {}),
+  });
+  const durableMarkerSummary = durableMarker
+    ? summaryFromArtifactAcquisitionCompletionMarker(durableMarker, deps.now?.() ?? new Date())
+    : null;
+  if (durableMarkerSummary) return durableMarkerSummary;
+
+  return null;
 }
 
 function isUnbackedFullFiscalYearCompletion(

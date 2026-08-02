@@ -1,5 +1,6 @@
 import type {
   FiledReturnsDownloadScope,
+  FiledReturnsFlowSummary,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
 import { delay } from "../core/time";
@@ -9,7 +10,10 @@ import {
   concreteFiledReturnsArtifactTypes,
   normaliseFiledReturnsArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
-import { persistFiledReturnsTargetReview } from "./filed-returns-target-review";
+import {
+  persistFiledReturnsTargetReview,
+  readArtifactAcquisitionCompletionMarker,
+} from "./filed-returns-target-review";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
 import { getRequiredGstTab } from "./filed-returns-active-tab";
 import {
@@ -38,6 +42,7 @@ import {
 } from "./filed-returns-step-limit";
 import { withPersistedSinglePeriodSummary } from "./filed-returns-single-period-summary";
 import { reconcileArtifactAcquisitionCheckpoint } from "./artifact-acquisition-state";
+import { artifactAcquisitionCompletionFlowStep } from "./filed-returns-artifact-acquisition-completion";
 import {
   explainIncompleteGstr1PeriodMismatchRecovery,
   pendingGstr1PeriodMismatchRecoveryStep,
@@ -64,18 +69,51 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
   // Checkpoints are keyed per concrete artifact type, so a composite selection
   // has to reconcile each one rather than the composite scope.
   const acquisitionRecoverySignals: string[] = [];
-  for (const artifactType of concreteFiledReturnsArtifactTypes(
+  const concreteArtifactTypes = concreteFiledReturnsArtifactTypes(
     normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType),
-  )) {
-    const acquisitionRecovery = await reconcileArtifactAcquisitionCheckpoint({
+  );
+  const durableCompletions = [] as NonNullable<
+    FiledReturnsFlowSummary["artifactAcquisitionCompletion"]
+  >;
+  for (const artifactType of concreteArtifactTypes) {
+    const concreteScope = {
       artifactType,
       financialYear: scope.financialYear,
       period: scope.period,
       returnType: scope.returnType,
+    } as const;
+    const durableMarker = await readArtifactAcquisitionCompletionMarker(concreteScope, {
+      storageKeys: {
+        ...(deps.storageKeys?.targetReview ? { targetReview: deps.storageKeys.targetReview } : {}),
+      },
+      ...(deps.now ? { now: deps.now } : {}),
     });
+    if (durableMarker?.artifactAcquisitionCompletion) {
+      durableCompletions.push(...durableMarker.artifactAcquisitionCompletion);
+      continue;
+    }
+    const acquisitionRecovery = await reconcileArtifactAcquisitionCheckpoint(concreteScope);
     if (acquisitionRecovery.state === "needs-review") {
       acquisitionRecoverySignals.push(...acquisitionRecovery.safeSignals);
     }
+  }
+  if (durableCompletions.length === concreteArtifactTypes.length) {
+    const flowStep = artifactAcquisitionCompletionFlowStep(scope, durableCompletions);
+    const now = deps.now?.() ?? new Date();
+    const flowSummary: FiledReturnsFlowSummary = {
+      artifactAcquisitionCompletion: durableCompletions,
+      completedAt: now.toISOString(),
+      completedPeriods: [scope.period],
+      currentPeriod: scope.period,
+      flowStep,
+      scope,
+      status: "complete",
+      totalPeriods: 1,
+    };
+    return { ok: true, flowStep, flowSummary };
+  }
+  if (durableCompletions.length > 0) {
+    acquisitionRecoverySignals.push("artifact-acquisition-download-unreconciled");
   }
   if (acquisitionRecoverySignals.length > 0) {
     const flowStep: PortalFlowStepResult = {

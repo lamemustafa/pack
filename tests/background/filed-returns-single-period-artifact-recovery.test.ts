@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   reconcileArtifactAcquisitionCheckpoint: vi.fn(),
   persistFiledReturnsTargetReview: vi.fn(),
+  readArtifactAcquisitionCompletionMarker: vi.fn(),
 }));
 
 vi.mock("../../src/background/artifact-acquisition-state", () => ({
@@ -10,6 +11,7 @@ vi.mock("../../src/background/artifact-acquisition-state", () => ({
 }));
 vi.mock("../../src/background/filed-returns-target-review", () => ({
   persistFiledReturnsTargetReview: mocks.persistFiledReturnsTargetReview,
+  readArtifactAcquisitionCompletionMarker: mocks.readArtifactAcquisitionCompletionMarker,
 }));
 
 import { startSinglePeriodFiledReturnsDownloadFlow } from "../../src/background/filed-returns-single-period-flow";
@@ -47,6 +49,37 @@ describe("GSTR-3B artifact acquisition recovery", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.persistFiledReturnsTargetReview.mockResolvedValue(persistedReview);
+    mocks.readArtifactAcquisitionCompletionMarker.mockResolvedValue(null);
+  });
+
+  it("returns the durable completion without repeating a proved single target", async () => {
+    mocks.readArtifactAcquisitionCompletionMarker.mockResolvedValue({
+      artifactAcquisitionCompletion: [
+        {
+          artifactType: "PDF",
+          downloadId: 9,
+          requestId: "00000000-0000-4000-8000-000000000001",
+        },
+      ],
+    });
+    const getActiveGstTab = vi.fn();
+
+    const response = await startSinglePeriodFiledReturnsDownloadFlow(scope, {
+      getActiveGstTab,
+      now: () => new Date("2026-08-02T00:00:00.000Z"),
+      storageKeys: { targetReview: "target-review" },
+    } as never);
+
+    expect(mocks.reconcileArtifactAcquisitionCheckpoint).not.toHaveBeenCalled();
+    expect(mocks.persistFiledReturnsTargetReview).not.toHaveBeenCalled();
+    expect(getActiveGstTab).not.toHaveBeenCalled();
+    expect(response).toMatchObject({
+      flowStep: { state: "downloaded" },
+      flowSummary: {
+        artifactAcquisitionCompletion: [{ artifactType: "PDF", downloadId: 9 }],
+        status: "complete",
+      },
+    });
   });
 
   it("keeps an interrupted checkpoint blocked without repeating the portal action", async () => {

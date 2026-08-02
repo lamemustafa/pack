@@ -5,6 +5,8 @@ import type {
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
 import {
+  concreteFiledReturnsArtifactTypes,
+  isFiledReturnsConcreteArtifactType,
   isFiledReturnsArtifactType,
   normaliseFiledReturnsArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
@@ -101,31 +103,42 @@ export async function releaseFiledReturnsRun(
 }
 
 /**
- * Removes the surviving lease that describes the exact target whose browser
- * completion has already been proved. This happens before session-only
- * completion persistence, so the current-state reader cannot prefer an
- * interrupted lease over the recovered result after checkpoint cleanup.
+ * Captures only the current lease whose selected artifacts include this exact
+ * recovered target. Callers must use
+ * releaseFiledReturnsRun with this snapshot so a later same-scope run cannot
+ * be released by recovery for an earlier checkpoint.
  */
-export async function resolveFiledReturnsRunForRecoveredCompletion(
+export async function snapshotFiledReturnsRunForRecoveredCompletion(
   scope: FiledReturnsDownloadScope,
   deps: FiledReturnsActiveRunDeps,
-): Promise<{ state: "absent" | "resolved" | "blocked" }> {
-  const key = deps.storageKeys.activeRun;
-  if (!key) return { state: "absent" };
-
+): Promise<ActiveFiledReturnsRun | null> {
   try {
-    return await runFiledReturnsOperationCriticalSection(async () => {
-      const values = await browser.storage.local.get(key);
-      const storedRun = activeRunStorageState(values[key], deps.now?.() ?? new Date());
-      if (storedRun.state === "missing") return { state: "absent" };
-      if (storedRun.state === "malformed") return { state: "blocked" };
-      if (!sameExactFiledReturnsScope(storedRun.run.scope, scope)) return { state: "absent" };
-      await browser.storage.local.remove(key);
-      return { state: "resolved" };
-    });
+    const state = await readActiveFiledReturnsRunStorageState(deps);
+    return state.state === "valid" && activeRunOwnsRecoveredArtifact(state.run, scope)
+      ? state.run
+      : null;
   } catch {
-    return { state: "blocked" };
+    return null;
   }
+}
+
+export function activeRunOwnsRecoveredArtifact(
+  run: ActiveFiledReturnsRun,
+  target: FiledReturnsDownloadScope,
+): boolean {
+  if (
+    run.scope.financialYear !== target.financialYear ||
+    run.scope.period !== target.period ||
+    run.scope.returnType !== target.returnType
+  ) {
+    return false;
+  }
+  return (
+    isFiledReturnsConcreteArtifactType(target.artifactType) &&
+    concreteFiledReturnsArtifactTypes(
+      normaliseFiledReturnsArtifactType(run.scope.returnType, run.scope.artifactType),
+    ).includes(target.artifactType)
+  );
 }
 
 export function startFiledReturnsRunLeaseRenewal(
@@ -410,19 +423,6 @@ function malformedActiveRunStep(
 
 function isInterruptedRun(run: ActiveFiledReturnsRun, now: Date): boolean {
   return now.getTime() - Date.parse(run.leaseUpdatedAt) > ACTIVE_RUN_REVIEW_MS;
-}
-
-function sameExactFiledReturnsScope(
-  left: FiledReturnsDownloadScope,
-  right: FiledReturnsDownloadScope,
-): boolean {
-  return (
-    left.financialYear === right.financialYear &&
-    left.period === right.period &&
-    left.returnType === right.returnType &&
-    normaliseFiledReturnsArtifactType(left.returnType, left.artifactType) ===
-      normaliseFiledReturnsArtifactType(right.returnType, right.artifactType)
-  );
 }
 
 function acknowledgedRunResponse(run?: ActiveFiledReturnsRun): PackMessageResponse {

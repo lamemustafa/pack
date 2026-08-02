@@ -64,15 +64,16 @@ For each release candidate:
   GSTIN/PAN, taxpayer name, portal HTML, credential, cookie, token or artifact
   bytes. Shareable evidence must replace the runtime action id with a neutral
   `ACTION-*` alias and omit the browser download id.
-- Confirm an artifact-reconciled target review may retain an ordered set of
-  opaque per-artifact request identifiers, each paired with the exact numeric
-  browser download ID it was reconciled from, only while it binds its completed
-  summary to pending review removal. The download ID is carried here because the
-  session checkpoints holding it do not survive a browser restart or extension
-  update, while this review does. The matching session flow summary may retain
-  the same set for that one completion marker. Neither record may retain a raw
-  filename, local path, URL/referrer, GSTIN/PAN, taxpayer name, portal HTML,
-  credential, cookie, token, or artifact bytes.
+- Confirm each `pack:filed-returns-target-review:completion:*` scoped
+  artifact-reconciled target-review completion marker may retain an ordered set
+  of opaque per-artifact request identifiers, each paired with the exact numeric
+  browser download ID it was reconciled from. The marker is the durable
+  per-target recovery proof after session checkpoints and the temporary flow
+  summary are cleared; it remains only until Clear local Pack data or extension
+  removal. The matching session flow summary may retain the same set for the
+  current UI result. Neither record may retain a raw filename,
+  local path, URL/referrer, GSTIN/PAN, taxpayer name, portal HTML, credential,
+  cookie, token, or artifact bytes.
 - Confirm each session-only `pack.artifact-acquisition.v2.*` checkpoint contains
   only its requested target scope, opaque request ID, state, exact numeric
   browser download ID after creation, and the `armedAt` timestamp used only to

@@ -1,19 +1,33 @@
 import { browser } from "wxt/browser";
-import type { FiledReturnsTargetReview } from "../connectors/gst/filed-returns-contracts";
+import type {
+  FiledReturnsDownloadScope,
+  FiledReturnsTargetReview,
+} from "../connectors/gst/filed-returns-contracts";
+import {
+  concreteFiledReturnsArtifactTypes,
+  normaliseFiledReturnsArtifactType,
+} from "../connectors/gst/filed-returns-artifacts";
 import {
   inspectArtifactAcquisitionCheckpoint,
   readArtifactAcquisitionCheckpointTargets,
+  type ArtifactAcquisitionCompletionEvidence,
 } from "./artifact-acquisition-state";
 import type { DownloadCreatedItem, DownloadDelta } from "./download-observer";
 import { persistFiledReturnsTargetDownloadId } from "./filed-returns-target-download-attempt";
 import { persistArtifactAcquisitionCompletion } from "./filed-returns-artifact-acquisition-completion";
 import {
   clearFiledReturnsTargetReview,
+  persistArtifactAcquisitionCompletionMarker,
   markFiledReturnsTargetReviewArtifactAcquisitionCompletion,
+  readArtifactAcquisitionCompletionMarker,
   readCurrentFiledReturnsTargetReview,
   type FiledReturnsTargetReviewDeps,
 } from "./filed-returns-target-review";
-import { resolveFiledReturnsRunForRecoveredCompletion } from "./filed-returns-active-run";
+import {
+  type ActiveFiledReturnsRun,
+  releaseFiledReturnsRun,
+  snapshotFiledReturnsRunForRecoveredCompletion,
+} from "./filed-returns-active-run";
 import { reconcileFiledReturnsTargetDownload } from "./filed-returns-target-download-recovery";
 import { PACK_LOCAL_STORAGE_KEYS, PACK_SESSION_STORAGE_KEYS } from "./storage-keys";
 
@@ -132,24 +146,43 @@ async function reconcileArtifactAcquisitionCheckpoints(
   deps: DurableDownloadReconcilerDeps,
 ): Promise<boolean> {
   let handled = false;
+  const recoveredRuns = new Map<string, ActiveFiledReturnsRun>();
+  const provedCheckpoints: Array<{
+    evidence: ArtifactAcquisitionCompletionEvidence;
+    marker: Awaited<ReturnType<typeof markFiledReturnsTargetReviewArtifactAcquisitionCompletion>>;
+    target: FiledReturnsDownloadScope;
+  }> = [];
   const checkpoints = await readArtifactAcquisitionCheckpointTargets().catch(() => []);
   for (const { target } of checkpoints) {
+    const owningRun = await snapshotFiledReturnsRunForRecoveredCompletion(target, deps);
+    if (owningRun) recoveredRuns.set(owningRun.runId, owningRun);
     const inspection = await inspectArtifactAcquisitionCheckpoint(target, {
       preserveMalformed: false,
     });
     if (inspection.state !== "completed") continue;
+    const durableMarker = await persistArtifactAcquisitionCompletionMarker(
+      target,
+      [inspection.evidence],
+      deps,
+    );
+    if (durableMarker.state !== "persisted") continue;
     const marker = await markFiledReturnsTargetReviewArtifactAcquisitionCompletion(
       target,
       [inspection.evidence],
       deps,
     );
-    if (marker.state === "blocked") continue;
-    const activeRun = await resolveFiledReturnsRunForRecoveredCompletion(target, deps);
-    if (activeRun.state === "blocked") continue;
+    provedCheckpoints.push({ evidence: inspection.evidence, marker, target });
+  }
+  for (const run of recoveredRuns.values()) {
+    if (await hasDurableCompletionForActiveRun(run, deps)) {
+      await releaseFiledReturnsRun(run, deps);
+    }
+  }
+  for (const { evidence, marker, target } of provedCheckpoints) {
     const summary = await persistArtifactAcquisitionCompletion(
       deps.storageKeys.completion,
       target,
-      [inspection.evidence],
+      [evidence],
       deps.now?.() ?? new Date(),
     );
     if (summary && marker.state === "marked") {
@@ -158,6 +191,29 @@ async function reconcileArtifactAcquisitionCheckpoints(
     handled = true;
   }
   return handled;
+}
+
+async function hasDurableCompletionForActiveRun(
+  run: ActiveFiledReturnsRun,
+  deps: DurableDownloadReconcilerDeps,
+): Promise<boolean> {
+  const artifactTypes = concreteFiledReturnsArtifactTypes(
+    normaliseFiledReturnsArtifactType(run.scope.returnType, run.scope.artifactType),
+  );
+  const markers = await Promise.all(
+    artifactTypes.map((artifactType) =>
+      readArtifactAcquisitionCompletionMarker(
+        {
+          artifactType,
+          financialYear: run.scope.financialYear,
+          period: run.scope.period,
+          returnType: run.scope.returnType,
+        } satisfies FiledReturnsDownloadScope,
+        deps,
+      ),
+    ),
+  );
+  return markers.every((marker) => marker?.artifactAcquisitionCompletion?.length);
 }
 
 export function installFiledReturnsDurableDownloadReconciler(

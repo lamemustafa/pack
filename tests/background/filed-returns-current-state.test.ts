@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { readCurrentFiledReturnsFlowSummary } from "../../src/background/filed-returns-current-state";
 import { parseDurableFiledReturnsFlowSummary } from "../../src/background/filed-returns-durable-summary";
 import { parseDurableFiledReturnsSignals } from "../../src/connectors/gst/filed-returns-durable-signals";
+import {
+  artifactAcquisitionCompletionMarkerKey,
+  persistArtifactAcquisitionCompletionMarker,
+} from "../../src/background/filed-returns-target-review";
 
 const storage = vi.hoisted(() => ({
   local: {} as Record<string, unknown>,
@@ -12,7 +16,12 @@ vi.mock("wxt/browser", () => ({
   browser: {
     storage: {
       local: {
-        get: vi.fn(async (key: string) => ({ [key]: storage.local[key] })),
+        get: vi.fn(async (key?: string | string[]) => {
+          if (key === undefined) return { ...storage.local };
+          const keys = Array.isArray(key) ? key : [key];
+          return Object.fromEntries(keys.map((entry) => [entry, storage.local[entry]]));
+        }),
+        set: vi.fn(async (values: Record<string, unknown>) => Object.assign(storage.local, values)),
       },
       session: {
         get: vi.fn(async (key: string) => ({ [key]: storage.session[key] })),
@@ -54,6 +63,91 @@ describe("durable filed-return current state", () => {
     expect(summary?.flowStep.safeMessage).not.toContain("Synthetic Taxpayer");
     expect(JSON.stringify(storage.session.completion)).not.toContain("00XXXXX0000X0Z0");
     expect(JSON.stringify(storage.session.completion)).not.toContain("Synthetic Taxpayer");
+  });
+
+  it("returns a durable per-target completion after the temporary session summary is gone", async () => {
+    const scope = {
+      artifactType: "PDF" as const,
+      financialYear: "2026-27",
+      period: "June",
+      returnType: "GSTR-3B" as const,
+    };
+    await expect(
+      persistArtifactAcquisitionCompletionMarker(
+        scope,
+        [
+          {
+            artifactType: "PDF",
+            downloadId: 9,
+            requestId: "00000000-0000-4000-8000-000000000001",
+          },
+        ],
+        { storageKeys: { targetReview: "target-review" } },
+      ),
+    ).resolves.toMatchObject({ state: "persisted" });
+
+    await expect(readCurrentFiledReturnsFlowSummary(deps)).resolves.toMatchObject({
+      artifactAcquisitionCompletion: [{ artifactType: "PDF", downloadId: 9 }],
+      scope,
+      status: "complete",
+    });
+  });
+
+  it("prefers a newer session summary over a retained marker for another target", async () => {
+    const markerScope = {
+      artifactType: "PDF" as const,
+      financialYear: "2026-27",
+      period: "June",
+      returnType: "GSTR-3B" as const,
+    };
+    await persistArtifactAcquisitionCompletionMarker(
+      markerScope,
+      [
+        {
+          artifactType: "PDF",
+          downloadId: 9,
+          requestId: "00000000-0000-4000-8000-000000000001",
+        },
+      ],
+      { storageKeys: { targetReview: "target-review" } },
+    );
+    storage.session.completion = singlePeriodSummary({
+      currentPeriod: "July",
+      scope: {
+        financialYear: "2026-27",
+        period: "July",
+        returnType: "GSTR-3B",
+      },
+    });
+
+    await expect(readCurrentFiledReturnsFlowSummary(deps)).resolves.toMatchObject({
+      scope: { period: "July" },
+    });
+  });
+
+  it("does not surface a valid completion marker stored under a noncanonical key", async () => {
+    const scope = {
+      artifactType: "PDF" as const,
+      financialYear: "2026-27",
+      period: "June",
+      returnType: "GSTR-3B" as const,
+    };
+    await persistArtifactAcquisitionCompletionMarker(
+      scope,
+      [
+        {
+          artifactType: "PDF",
+          downloadId: 9,
+          requestId: "00000000-0000-4000-8000-000000000001",
+        },
+      ],
+      { storageKeys: { targetReview: "target-review" } },
+    );
+    const canonicalKey = artifactAcquisitionCompletionMarkerKey("target-review", scope);
+    storage.local["target-review:completion:noncanonical"] = storage.local[canonicalKey];
+    delete storage.local[canonicalKey];
+
+    await expect(readCurrentFiledReturnsFlowSummary(deps)).resolves.toBeNull();
   });
 
   it("rejects unknown, duplicate, excess, and structurally malformed session summaries", async () => {
