@@ -1,4 +1,8 @@
-import { isActionablePortalControl } from "./filed-returns-dom";
+import { isGstAuthLandingRoute } from "./detect";
+import {
+  isActionablePortalControl,
+  isSemanticallyEnabledPortalControl,
+} from "./filed-returns-dom";
 
 export type ReturnsDashboardAnchorNavigation = "clicked" | "not-found" | "ambiguous";
 
@@ -21,7 +25,21 @@ export function clickReturnsDashboardAnchor(
   );
   if (matches.length === 0) return "not-found";
   const visibleMatches = matches.filter(isVisibleAndActionable);
-  if (visibleMatches.length === 0) return "not-found";
+  if (visibleMatches.length === 0) {
+    const uniqueMatch = matches[0];
+    const location = documentRef.defaultView?.location;
+    if (
+      matches.length === 1 &&
+      uniqueMatch &&
+      location &&
+      isGstAuthLandingRoute(location) &&
+      isSemanticallyEnabledPortalControl(uniqueMatch)
+    ) {
+      uniqueMatch.click();
+      return "clicked";
+    }
+    return "not-found";
+  }
   if (visibleMatches.length !== 1) return "ambiguous";
   visibleMatches[0]?.click();
   return "clicked";

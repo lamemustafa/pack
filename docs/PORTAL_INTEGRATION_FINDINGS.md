@@ -103,3 +103,10 @@ This log records live diagnostic findings that constrain Pack's local, target-bo
     uniqueness guard: click exactly one visible candidate, and fail closed for zero or multiple
     visible candidates. The observation and implementation record only structural counts; no portal
     markup, control text, full URL, query string, or session material is retained.
+
+22. The canonical post-login landing can expose one exact portal-owned Returns Dashboard target
+    without a rendered box, while its visible navigation surface exposes no equivalent candidate.
+    Preserve that unique target-bound portal click only on the canonical landing route and only
+    when the anchor has no semantic disabled state. All other pages, and every duplicate-target
+    case, require exactly one rendered and enabled target; a click still requires the subsequent
+    origin transition before Pack starts any acquisition work.

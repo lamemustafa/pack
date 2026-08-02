@@ -57,6 +57,34 @@ describe("Returns Dashboard portal anchor", () => {
     ).toBe("not-found");
   });
 
+  it("preserves the unique hidden portal target on the canonical auth landing", () => {
+    const documentRef = page(
+      '<a href="https://return.gst.gov.in/returns/auth/dashboard" style="display: none">Hidden</a>',
+    );
+    const dashboard = documentRef.querySelector<HTMLAnchorElement>("a")!;
+    const click = vi.spyOn(dashboard, "click");
+
+    expect(clickReturnsDashboardAnchor(documentRef)).toBe("clicked");
+    expect(click).toHaveBeenCalledOnce();
+  });
+
+  it("does not use the hidden-target fallback outside the canonical auth landing", () => {
+    const documentRef = page(
+      '<a href="https://return.gst.gov.in/returns/auth/dashboard" style="display: none">Hidden</a>',
+      "https://services.gst.gov.in/services/auth/dashboard",
+    );
+
+    expect(clickReturnsDashboardAnchor(documentRef)).toBe("not-found");
+  });
+
+  it("does not use the hidden-target fallback for a semantically disabled target", () => {
+    const documentRef = page(`
+      <div inert><a href="https://return.gst.gov.in/returns/auth/dashboard">Hidden</a></div>
+    `);
+
+    expect(clickReturnsDashboardAnchor(documentRef)).toBe("not-found");
+  });
+
   it("fails closed when visibility cannot be determined", () => {
     const documentRef = page(
       '<a href="https://return.gst.gov.in/returns/auth/dashboard">Indeterminate</a>',
@@ -95,9 +123,9 @@ describe("Returns Dashboard portal anchor", () => {
   });
 });
 
-function page(body: string): Document {
+function page(body: string, url = "https://services.gst.gov.in/services/auth/fowelcome"): Document {
   const documentRef = new JSDOM(`<body>${body}</body>`, {
-    url: "https://services.gst.gov.in/services/auth/fowelcome",
+    url,
   }).window.document;
   for (const element of documentRef.querySelectorAll<HTMLElement>("a")) {
     vi.spyOn(element, "getBoundingClientRect").mockReturnValue({

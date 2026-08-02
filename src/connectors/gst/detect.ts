@@ -1,5 +1,5 @@
 import type { PortalContext } from "../../core/contracts";
-import { SUPPORTED_GST_ORIGINS } from "./constants";
+import { GST_SERVICES_ORIGIN, SUPPORTED_GST_ORIGINS } from "./constants";
 
 const RETURN_PATH_HINTS = [/\/returns\//i, /\/return\//i, /\/gst-ret/i, /\/services\/returns/i];
 const GST_AUTH_LANDING_PATH_HINTS = [/\/services\/auth\/fowelcome$/i];
@@ -41,12 +41,11 @@ export function detectGstPortalContext(
   }
 
   const isReturnPage = RETURN_PATH_HINTS.some((pattern) => pattern.test(locationLike.pathname));
+  const isAuthLandingRoute = isGstAuthLandingRoute(locationLike);
   const isAuthLandingPage =
-    GST_AUTH_LANDING_PATH_HINTS.some((pattern) => pattern.test(locationLike.pathname)) &&
-    !AUTHENTICATED_WELCOME_MARKERS.some((pattern) => pattern.test(visibleText));
+    isAuthLandingRoute && !AUTHENTICATED_WELCOME_MARKERS.some((pattern) => pattern.test(visibleText));
   const isAuthenticatedWelcomePage =
-    GST_AUTH_LANDING_PATH_HINTS.some((pattern) => pattern.test(locationLike.pathname)) &&
-    !isAuthLandingPage;
+    isAuthLandingRoute && !isAuthLandingPage;
   const isReturnsHubPage = GST_RETURNS_HUB_PATH_HINTS.some((pattern) =>
     pattern.test(locationLike.pathname),
   );
@@ -104,4 +103,12 @@ export function detectGstPortalContext(
       canResume: true,
     },
   };
+}
+
+/** Matches only the portal's canonical post-login landing route. */
+export function isGstAuthLandingRoute(locationLike: Pick<Location, "origin" | "pathname">): boolean {
+  return (
+    locationLike.origin === GST_SERVICES_ORIGIN &&
+    GST_AUTH_LANDING_PATH_HINTS.some((pattern) => pattern.test(locationLike.pathname))
+  );
 }

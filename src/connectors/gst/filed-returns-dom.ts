@@ -139,6 +139,32 @@ export function isVisible(
 }
 
 export function isActionablePortalControl(element: HTMLElement): boolean {
+  if (!isSemanticallyEnabledPortalControl(element)) return false;
+  const view = element.ownerDocument.defaultView;
+  let current: HTMLElement | null = element;
+  while (current) {
+    const style = view?.getComputedStyle(current);
+    if (
+      style &&
+      (style.display === "none" ||
+        style.visibility === "hidden" ||
+        style.visibility === "collapse")
+    ) {
+      return false;
+    }
+
+    current = current.parentElement;
+  }
+
+  return true;
+}
+
+/**
+ * Rejects disabled portal state without requiring the control to be rendered.
+ * Use this only where a route-specific protocol permits an existing hidden
+ * portal control; ordinary navigation must use isActionablePortalControl.
+ */
+export function isSemanticallyEnabledPortalControl(element: HTMLElement): boolean {
   if (!element.isConnected) return false;
   const view = element.ownerDocument.defaultView;
   let current: HTMLElement | null = element;
@@ -157,10 +183,7 @@ export function isActionablePortalControl(element: HTMLElement): boolean {
     const style = view?.getComputedStyle(current);
     if (
       style &&
-      (style.display === "none" ||
-        style.visibility === "hidden" ||
-        style.visibility === "collapse" ||
-        style.opacity === "0" ||
+      (style.opacity === "0" ||
         style.pointerEvents === "none")
     ) {
       return false;
