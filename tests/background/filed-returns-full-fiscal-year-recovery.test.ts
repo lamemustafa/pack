@@ -135,6 +135,53 @@ describe("full fiscal-year recovery", () => {
     });
   });
 
+  it("blocks an all-formats direct-marker result until the fiscal-year artifacts are staged", async () => {
+    const now = new Date("2026-06-24T00:00:00.000Z");
+    const scope = {
+      artifactType: "PDF_AND_EXCEL" as const,
+      financialYear: "2026-27",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-2B" as const,
+    };
+    const runSinglePeriod = vi.fn(async () => ({
+      ok: true as const,
+      flowStep: {
+        connectorId: "gst" as const,
+        scopeId: "gst-gstr2b-private-v0",
+        state: "downloaded" as const,
+        safeSignals: [
+          "artifact-acquisition-download-reconciled",
+          "filed-return-artifact-downloaded:PDF",
+          "filed-return-artifact-downloaded:EXCEL",
+        ],
+        safeMessage: "Pack confirmed direct artifact downloads.",
+      },
+    }));
+
+    const response = await startFullFiscalYearDownloadFlow(
+      scope,
+      { ...recoveryDeps(), now: () => now } as never,
+      runSinglePeriod,
+    );
+
+    expect(runSinglePeriod).toHaveBeenCalledOnce();
+    expect(response).toMatchObject({
+      flowStep: {
+        state: "blocked",
+        safeSignals: expect.arrayContaining([
+          "full-fiscal-year-artifact-staging-incomplete",
+          "full-fiscal-year-artifact-not-staged:PDF",
+          "full-fiscal-year-artifact-not-staged:EXCEL",
+        ]),
+        safeMessage:
+          "Pack observed the portal download, but could not stage every required file for the fiscal-year zip.",
+      },
+      flowSummary: {
+        fullFiscalYearRecovery: { targetStatus: "blocked" },
+      },
+    });
+  });
+
   it("resets one recoverable target for retry and clears legacy single-period review state", async () => {
     mockLocalStorageGet({
       "full-year-ledger": createRecoveryLedger({ revision: 2 }),

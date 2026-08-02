@@ -70,7 +70,9 @@ For each release candidate:
   browser download ID it was reconciled from. The marker is the durable
   per-target recovery proof after session checkpoints and the temporary flow
   summary are cleared; it remains only until Clear local Pack data or extension
-  removal. The matching session flow summary may retain the same set for the
+  removal. This marker is direct single-artifact browser-delivery proof only;
+  selected-files and fiscal-year ZIP delivery must stage artifacts and complete
+  their own browser ZIP handoff. The matching session flow summary may retain the
   current UI result. Neither record may retain a raw filename,
   local path, URL/referrer, GSTIN/PAN, taxpayer name, portal HTML, credential,
   cookie, token, or artifact bytes.

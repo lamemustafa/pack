@@ -72,6 +72,10 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
   const concreteArtifactTypes = concreteFiledReturnsArtifactTypes(
     normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType),
   );
+  // A direct marker proves one browser file reached the user. It deliberately
+  // cannot stand in for a selected-files or fiscal-year ZIP: those modes must
+  // stage their artifacts and hand the ZIP to the browser in this run.
+  const supportsDirectSingleArtifactDelivery = concreteArtifactTypes.length === 1;
   const durableCompletions = [] as NonNullable<
     FiledReturnsFlowSummary["artifactAcquisitionCompletion"]
   >;
@@ -82,12 +86,16 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
       period: scope.period,
       returnType: scope.returnType,
     } as const;
-    const durableMarker = await readArtifactAcquisitionCompletionMarker(concreteScope, {
-      storageKeys: {
-        ...(deps.storageKeys?.targetReview ? { targetReview: deps.storageKeys.targetReview } : {}),
-      },
-      ...(deps.now ? { now: deps.now } : {}),
-    });
+    const durableMarker = supportsDirectSingleArtifactDelivery
+      ? await readArtifactAcquisitionCompletionMarker(concreteScope, {
+          storageKeys: {
+            ...(deps.storageKeys?.targetReview
+              ? { targetReview: deps.storageKeys.targetReview }
+              : {}),
+          },
+          ...(deps.now ? { now: deps.now } : {}),
+        })
+      : null;
     if (durableMarker?.artifactAcquisitionCompletion) {
       durableCompletions.push(...durableMarker.artifactAcquisitionCompletion);
       continue;
@@ -97,7 +105,10 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
       acquisitionRecoverySignals.push(...acquisitionRecovery.safeSignals);
     }
   }
-  if (durableCompletions.length === concreteArtifactTypes.length) {
+  if (
+    supportsDirectSingleArtifactDelivery &&
+    durableCompletions.length === concreteArtifactTypes.length
+  ) {
     const flowStep = artifactAcquisitionCompletionFlowStep(scope, durableCompletions);
     const now = deps.now?.() ?? new Date();
     const flowSummary: FiledReturnsFlowSummary = {

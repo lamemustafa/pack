@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   reconcileArtifactAcquisitionCheckpoint: vi.fn(),
   persistFiledReturnsTargetReview: vi.fn(),
   readArtifactAcquisitionCompletionMarker: vi.fn(),
+  preflightSelectedArtifactsRecovery: vi.fn(),
 }));
 
 vi.mock("../../src/background/artifact-acquisition-state", () => ({
@@ -12,6 +13,10 @@ vi.mock("../../src/background/artifact-acquisition-state", () => ({
 vi.mock("../../src/background/filed-returns-target-review", () => ({
   persistFiledReturnsTargetReview: mocks.persistFiledReturnsTargetReview,
   readArtifactAcquisitionCompletionMarker: mocks.readArtifactAcquisitionCompletionMarker,
+}));
+vi.mock("../../src/background/filed-returns-selected-artifacts", () => ({
+  preflightSelectedArtifactsRecovery: mocks.preflightSelectedArtifactsRecovery,
+  triggerSelectedArtifacts: vi.fn(),
 }));
 
 import { startSinglePeriodFiledReturnsDownloadFlow } from "../../src/background/filed-returns-single-period-flow";
@@ -50,6 +55,7 @@ describe("GSTR-3B artifact acquisition recovery", () => {
     vi.clearAllMocks();
     mocks.persistFiledReturnsTargetReview.mockResolvedValue(persistedReview);
     mocks.readArtifactAcquisitionCompletionMarker.mockResolvedValue(null);
+    mocks.preflightSelectedArtifactsRecovery.mockResolvedValue(null);
   });
 
   it("returns the durable completion without repeating a proved single target", async () => {
@@ -148,5 +154,65 @@ describe("GSTR-3B artifact acquisition recovery", () => {
       }),
       expect.anything(),
     );
+  });
+
+  it("does not treat direct component markers as a delivered selected-files ZIP", async () => {
+    const compositeScope = {
+      ...scope,
+      artifactType: "PDF_AND_EXCEL" as const,
+      returnType: "GSTR-2B" as const,
+    };
+    mocks.readArtifactAcquisitionCompletionMarker.mockResolvedValue({
+      artifactAcquisitionCompletion: [
+        {
+          artifactType: "PDF",
+          downloadId: 9,
+          requestId: "00000000-0000-4000-8000-000000000001",
+        },
+      ],
+    });
+    mocks.reconcileArtifactAcquisitionCheckpoint.mockResolvedValue({ state: "none" });
+    mocks.preflightSelectedArtifactsRecovery.mockResolvedValue({
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-gstr2b-private-v0",
+        state: "user-action-required",
+        safeSignals: ["single-period-opfs-staging-required"],
+        safeMessage:
+          "Pack still needs to stage the selected artifacts and hand off their ZIP before this selection is complete.",
+        userAction: {
+          type: "RETRY_PORTAL_GENERATION",
+          message: "Start the selected-files download to stage the artifacts and save the ZIP.",
+          canResume: true,
+        },
+      },
+    });
+
+    const response = await startSinglePeriodFiledReturnsDownloadFlow(compositeScope, {} as never, {
+      persistSinglePeriodSummary: false,
+    });
+
+    expect(mocks.readArtifactAcquisitionCompletionMarker).not.toHaveBeenCalled();
+    expect(mocks.reconcileArtifactAcquisitionCheckpoint).toHaveBeenNthCalledWith(1, {
+      ...compositeScope,
+      artifactType: "PDF",
+    });
+    expect(mocks.reconcileArtifactAcquisitionCheckpoint).toHaveBeenNthCalledWith(2, {
+      ...compositeScope,
+      artifactType: "EXCEL",
+    });
+    expect(mocks.preflightSelectedArtifactsRecovery).toHaveBeenCalledWith({
+      deps: expect.anything(),
+      scope: compositeScope,
+    });
+    expect(response).toMatchObject({
+      flowStep: {
+        state: "user-action-required",
+        safeSignals: ["single-period-opfs-staging-required"],
+        safeMessage:
+          "Pack still needs to stage the selected artifacts and hand off their ZIP before this selection is complete.",
+      },
+    });
   });
 });

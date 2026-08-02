@@ -216,6 +216,9 @@ Pack uses Chrome extension storage only inside the current browser profile.
   set, each paired with the exact numeric browser `downloadId` it was reconciled
   from, after exact completion is proved. Those markers survive session storage
   loss and are removed only by Clear local Pack data or extension removal.
+  A marker is direct single-artifact browser-delivery proof only; it does not
+  represent selected-files or fiscal-year ZIP delivery, which must stage
+  artifacts and complete their own browser ZIP handoff.
   The base target-review record may also store the attempt kind/phase, request
   and bounded candidate-window
   timestamps, an opaque `actionId`, the exact numeric browser `downloadId`,
