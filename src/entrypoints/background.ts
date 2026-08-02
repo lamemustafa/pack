@@ -7,7 +7,6 @@ import {
   readActiveFiledReturnsRunSummary,
 } from "../background/filed-returns-active-run";
 import { readCurrentFiledReturnsFlowSummary } from "../background/filed-returns-current-state";
-import { readGstr3bPdfDiagnosticProbe } from "../background/gstr3b-pdf-diagnostic-probe";
 import {
   resolveFullFiscalYearTargetFlow,
   resolveUnconfirmedFiledReturnsDownloadFlow,
@@ -240,16 +239,6 @@ async function handleMessage(
           storageKeys: filedReturnsStorageKeys(),
         }),
       };
-    case "PACK_GET_GSTR3B_PDF_DIAGNOSTIC_PROBE":
-      if (!isExtensionPageSender(sender)) {
-        return { ok: false, error: "Diagnostic probe unavailable." };
-      }
-      return {
-        ok: true,
-        gstr3bPdfDiagnosticProbe: await readGstr3bPdfDiagnosticProbe(
-          PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary,
-        ),
-      };
     case "PACK_GET_ACTIVE_FILED_RETURNS_RUN":
       return {
         ok: true,
@@ -303,10 +292,6 @@ async function handleMessage(
   }
 
   return { ok: false, error: "Unsupported Pack message." };
-}
-
-function isExtensionPageSender(sender: Browser.runtime.MessageSender): boolean {
-  return sender.id === browser.runtime.id && sender.tab === undefined;
 }
 
 function isFiledReturnsObservationEnvelope(input: unknown): boolean {

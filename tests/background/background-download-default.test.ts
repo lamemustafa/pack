@@ -25,9 +25,6 @@ const browserMocks = vi.hoisted(() => {
     resetSessionStorage: () => {
       sessionStorageState = {};
     },
-    setSessionStorage: (values: Record<string, unknown>) => {
-      Object.assign(sessionStorageState, values);
-    },
     downloads: {
       download: vi.fn(async () => 481),
     },
@@ -409,105 +406,6 @@ describe("background filed returns download defaults", () => {
     if (response.ok) throw new Error("expected a safe background failure");
     expect(response.safeMessage).not.toContain("portal URL");
     expect(response.safeMessage).not.toContain("local path");
-  });
-
-  it("returns a redacted diagnostic probe only to an extension page without mutating storage", async () => {
-    browserMocks.setSessionStorage({
-      "pack:last-filed-returns-flow-summary": {
-        scope: {
-          financialYear: "2026-27",
-          period: "April",
-          returnType: "GSTR-3B",
-        },
-        status: "complete",
-        completedAt: "2026-08-02T00:00:00.000Z",
-        completedPeriods: ["April"],
-        currentPeriod: "April",
-        totalPeriods: 1,
-        artifactAcquisitionCompletion: [
-          {
-            artifactType: "PDF",
-            downloadId: 71,
-            requestId: "00000000-0000-4000-8000-000000000001",
-          },
-        ],
-        flowStep: {
-          connectorId: "gst",
-          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
-          state: "downloaded",
-          safeSignals: [
-            "artifact-acquisition-download-reconciled",
-            "browser-download-created",
-            "browser-download-completed",
-            "browser-download-non-empty",
-            "browser-download-id:71",
-          ],
-          safeMessage: "Sensitive message.",
-        },
-      },
-    });
-    await import("../../src/entrypoints/background");
-
-    const response = await sendBackgroundMessage({ type: "PACK_GET_GSTR3B_PDF_DIAGNOSTIC_PROBE" });
-
-    expect(response).toEqual({
-      ok: true,
-      gstr3bPdfDiagnosticProbe: {
-        attempt: "present",
-        outcome: "confirmed",
-        reasonClass: "exact-download-confirmed",
-        evidence: {
-          exactDownloadObserved: true,
-          terminalComplete: true,
-          nonEmpty: true,
-          browserSafe: true,
-        },
-      },
-    });
-    for (const forbiddenValue of [
-      "2026-27",
-      "April",
-      "00000000-0000-4000-8000-000000000001",
-      "gst-filed-returns-gstr3b-pdf-private-v0",
-      "browser-download-id:71",
-      "Sensitive message.",
-      "71",
-    ]) {
-      expect(JSON.stringify(response)).not.toContain(forbiddenValue);
-    }
-    expect(browserMocks.storage.local.set).not.toHaveBeenCalled();
-    expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
-    expect(browserMocks.storage.session.set).not.toHaveBeenCalled();
-    expect(browserMocks.storage.session.remove).not.toHaveBeenCalled();
-    expect(browserMocks.downloads.download).not.toHaveBeenCalled();
-    expect(browserMocks.tabs.sendMessage).not.toHaveBeenCalled();
-    expect(browserMocks.scripting.executeScript).not.toHaveBeenCalled();
-
-    const listener = browserMocks.getMessageListener();
-    if (!listener) throw new Error("background listener was not registered");
-    const sessionReadsBeforeDeniedSender = browserMocks.storage.session.get.mock.calls.length;
-    const contentScriptResponse = await new Promise<PackMessageResponse>((resolve) => {
-      listener(
-        { type: "PACK_GET_GSTR3B_PDF_DIAGNOSTIC_PROBE" },
-        {
-          id: browserMocks.runtime.id,
-          tab: { id: 99 } as Browser.tabs.Tab,
-        } satisfies Browser.runtime.MessageSender,
-        resolve,
-      );
-    });
-    expect(contentScriptResponse).toEqual({ ok: false, error: "Diagnostic probe unavailable." });
-    expect(browserMocks.storage.session.get).toHaveBeenCalledTimes(sessionReadsBeforeDeniedSender);
-
-    const foreignSenderResponse = await new Promise<PackMessageResponse>((resolve) => {
-      listener(
-        { type: "PACK_GET_GSTR3B_PDF_DIAGNOSTIC_PROBE" },
-        { id: "foreign-extension" } satisfies Browser.runtime.MessageSender,
-        resolve,
-      );
-    });
-    expect(foreignSenderResponse).toEqual({ ok: false, error: "Diagnostic probe unavailable." });
-    expect(browserMocks.storage.session.get).toHaveBeenCalledTimes(sessionReadsBeforeDeniedSender);
   });
 
   it("persists and returns a terminal GSTR-2B mismatch summary to the popup", async () => {

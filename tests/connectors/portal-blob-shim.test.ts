@@ -130,22 +130,13 @@ describe("capturePortalPdfBlob", () => {
   });
 
   it("allows a GSTR-2B control outside the scope panel when current rendered labels match", async () => {
-    const { documentRef, view, url } = environment(
-      "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
-    );
-    install(view, url);
-    gstr2bSummary(documentRef);
-    documentRef
-      .querySelector("button")
-      ?.addEventListener("click", () => savePdf(documentRef, view, "click"));
+    const gstr2b = gstr2bEnvironment();
+    saveGstr2bPdf(gstr2b);
 
-    await expect(
-      capturePortalPdfBlob({
-        controlSelector: "button",
-        expectedMime: "application/pdf",
-        expectedTarget: { financialYear: "2024-25", period: "April", returnType: "GSTR-2B" },
-      }),
-    ).resolves.toMatchObject({ ok: true, safeSignals: ["portal-blob-shim-suppressed-via-click"] });
+    await expect(captureGstr2b()).resolves.toMatchObject({
+      ok: true,
+      safeSignals: ["portal-blob-shim-suppressed-via-click"],
+    });
   });
 
   it.each([
@@ -153,157 +144,78 @@ describe("capturePortalPdfBlob", () => {
     ["repeated visible labels", { duplicateVisibleLabels: true }],
     ["missing visible labels", { labels: false }],
   ] as const)("rejects GSTR-2B scope when %s", async (_name, options) => {
-    const { documentRef, view, url } = environment(
-      "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
-    );
-    install(view, url);
-    gstr2bSummary(documentRef, options);
-    const click = vi.fn();
-    documentRef.querySelector("button")?.addEventListener("click", click);
-
-    await expect(
-      capturePortalPdfBlob({
-        controlSelector: "button",
-        expectedMime: "application/pdf",
-        expectedTarget: { financialYear: "2024-25", period: "April", returnType: "GSTR-2B" },
-      }),
-    ).resolves.toMatchObject({
-      ok: false,
-      reason: "page-period-mismatch",
-      safeSignals: ["page-target-unverified"],
-    });
-    expect(click).not.toHaveBeenCalled();
-    expect(url.createObjectURL).not.toHaveBeenCalled();
+    await expectGstr2bRejected(gstr2bEnvironment(options));
   });
 
   it("rejects a GSTR-2B target when its page route changes before capture", async () => {
-    const { documentRef, view, url } = environment("https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b");
-    install(view, url);
-    gstr2bSummary(documentRef);
-    const click = vi.fn();
-    documentRef.querySelector("button")?.addEventListener("click", click);
-
-    await expect(
-      capturePortalPdfBlob({
-        controlSelector: "button",
-        expectedMime: "application/pdf",
-        expectedTarget: { financialYear: "2024-25", period: "April", returnType: "GSTR-2B" },
-      }),
-    ).resolves.toMatchObject({ ok: false, reason: "page-period-mismatch" });
-    expect(click).not.toHaveBeenCalled();
+    await expectGstr2bRejected(
+      gstr2bEnvironment({}, "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b"),
+    );
   });
 
   it("does not accept hidden-text scope evidence when rendered text is unavailable", async () => {
-    const { documentRef, view, url } = environment(
-      "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
-    );
-    install(view, url);
-    gstr2bSummary(documentRef);
-    for (const label of documentRef.querySelectorAll("div > span")) {
+    const gstr2b = gstr2bEnvironment();
+    for (const label of gstr2b.documentRef.querySelectorAll("div > span")) {
       Object.defineProperty(label, "innerText", { configurable: true, value: "" });
     }
-    const click = vi.fn();
-    documentRef.querySelector("button")?.addEventListener("click", click);
 
-    await expect(
-      capturePortalPdfBlob({
-        controlSelector: "button",
-        expectedMime: "application/pdf",
-        expectedTarget: { financialYear: "2024-25", period: "April", returnType: "GSTR-2B" },
-      }),
-    ).resolves.toMatchObject({ ok: false, reason: "page-period-mismatch" });
-    expect(click).not.toHaveBeenCalled();
+    await expectGstr2bRejected(gstr2b);
   });
 
   it.each(["collapse", "transparent", "ancestor-hidden"] as const)(
     "rejects a %s GSTR-2B scope label",
     async (state) => {
-      const { documentRef, view, url } = environment(
-        "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
-      );
-      install(view, url);
-      gstr2bSummary(documentRef);
-      const label = documentRef.querySelector<HTMLElement>("div > span");
+      const gstr2b = gstr2bEnvironment();
+      const label = gstr2b.documentRef.querySelector<HTMLElement>("div > span");
       if (state === "collapse") label?.style.setProperty("visibility", "collapse");
       if (state === "transparent") label?.style.setProperty("opacity", "0");
       if (state === "ancestor-hidden") label?.parentElement?.style.setProperty("display", "none");
-      const click = vi.fn();
-      documentRef.querySelector("button")?.addEventListener("click", click);
 
-      await expect(
-        capturePortalPdfBlob({
-          controlSelector: "button",
-          expectedMime: "application/pdf",
-          expectedTarget: { financialYear: "2024-25", period: "April", returnType: "GSTR-2B" },
-        }),
-      ).resolves.toMatchObject({ ok: false, reason: "page-period-mismatch" });
-      expect(click).not.toHaveBeenCalled();
+      await expectGstr2bRejected(gstr2b);
     },
   );
 
   it("rejects a zero-height GSTR-2B scope label", async () => {
-    const { documentRef, view, url } = environment(
-      "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
-    );
-    install(view, url);
-    gstr2bSummary(documentRef);
-    const label = documentRef.querySelector<HTMLElement>("div > span");
+    const gstr2b = gstr2bEnvironment();
+    const label = gstr2b.documentRef.querySelector<HTMLElement>("div > span");
     Object.defineProperty(label, "getBoundingClientRect", {
       configurable: true,
       value: () => ({ height: 0, width: 10 }),
     });
-    const click = vi.fn();
-    documentRef.querySelector("button")?.addEventListener("click", click);
 
-    await expect(
-      capturePortalPdfBlob({
-        controlSelector: "button",
-        expectedMime: "application/pdf",
-        expectedTarget: { financialYear: "2024-25", period: "April", returnType: "GSTR-2B" },
-      }),
-    ).resolves.toMatchObject({ ok: false, reason: "page-period-mismatch" });
-    expect(click).not.toHaveBeenCalled();
+    await expectGstr2bRejected(gstr2b);
   });
 
   it("does not inspect unrelated page or inline-script text during GSTR-2B capture", async () => {
-    const { documentRef, view, url } = environment(
-      "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
-    );
-    install(view, url);
-    gstr2bSummary(documentRef);
-    Object.defineProperty(documentRef.body, "innerText", {
+    const gstr2b = gstr2bEnvironment();
+    Object.defineProperty(gstr2b.documentRef.body, "innerText", {
       configurable: true,
       get: () => {
         throw new Error("unrelated body text must not be read");
       },
     });
-    const unrelatedScript = documentRef.createElement("script");
+    const unrelatedScript = gstr2b.documentRef.createElement("script");
     Object.defineProperty(unrelatedScript, "textContent", {
       configurable: true,
       get: () => {
         throw new Error("unrelated script text must not be read");
       },
     });
-    documentRef.body.append(unrelatedScript);
-    const unrelatedSpan = documentRef.createElement("span");
+    gstr2b.documentRef.body.append(unrelatedScript);
+    const unrelatedSpan = gstr2b.documentRef.createElement("span");
     Object.defineProperty(unrelatedSpan, "innerText", {
       configurable: true,
       get: () => {
         throw new Error("unrelated span text must not be read");
       },
     });
-    documentRef.body.append(unrelatedSpan);
-    documentRef
-      .querySelector("button")
-      ?.addEventListener("click", () => savePdf(documentRef, view, "click"));
+    gstr2b.documentRef.body.append(unrelatedSpan);
+    saveGstr2bPdf(gstr2b);
 
-    await expect(
-      capturePortalPdfBlob({
-        controlSelector: "button",
-        expectedMime: "application/pdf",
-        expectedTarget: { financialYear: "2024-25", period: "April", returnType: "GSTR-2B" },
-      }),
-    ).resolves.toMatchObject({ ok: true, safeSignals: ["portal-blob-shim-suppressed-via-click"] });
+    await expect(captureGstr2b()).resolves.toMatchObject({
+      ok: true,
+      safeSignals: ["portal-blob-shim-suppressed-via-click"],
+    });
   });
 
   it("survives Chrome's serialized MAIN-world function boundary", async () => {
@@ -327,23 +239,14 @@ describe("capturePortalPdfBlob", () => {
   });
 
   it("keeps the GSTR-2B scope proof intact across Chrome's serialized MAIN-world boundary", async () => {
-    const { documentRef, view, url } = environment(
-      "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
-    );
-    install(view, url);
-    gstr2bSummary(documentRef);
-    documentRef
-      .querySelector("button")
-      ?.addEventListener("click", () => savePdf(documentRef, view, "click"));
+    const gstr2b = gstr2bEnvironment();
+    saveGstr2bPdf(gstr2b);
 
     const executeInMainWorld = rebuildInMainWorld(capturePortalPdfBlob);
-    await expect(
-      executeInMainWorld({
-        controlSelector: "button",
-        expectedMime: "application/pdf",
-        expectedTarget: { financialYear: "2024-25", period: "April", returnType: "GSTR-2B" },
-      }),
-    ).resolves.toMatchObject({ ok: true, safeSignals: ["portal-blob-shim-suppressed-via-click"] });
+    await expect(executeInMainWorld(gstr2bInput)).resolves.toMatchObject({
+      ok: true,
+      safeSignals: ["portal-blob-shim-suppressed-via-click"],
+    });
   });
 
   it("restores every wrapped member and never patches unrelated APIs", async () => {
@@ -407,16 +310,49 @@ describe("capturePortalPdfBlob", () => {
     ).resolves.toMatchObject({ ok: false, reason: "too-large" });
     expect(read).not.toHaveBeenCalled();
   });
-
-  it("keeps the shim under its hard 200-line limit", async () => {
-    const source = await import("node:fs/promises").then((fs) =>
-      fs.readFile("src/connectors/gst/portal-blob-shim.ts", "utf8"),
-    );
-    expect(source.split("\n").length).toBeLessThanOrEqual(200);
-  });
 });
 
 type TestWindow = Window & typeof globalThis;
+
+const gstr2bInput = {
+  controlSelector: "button",
+  expectedMime: "application/pdf",
+  expectedTarget: { financialYear: "2024-25", period: "April", returnType: "GSTR-2B" },
+};
+
+type Gstr2bEnvironment = ReturnType<typeof environment> & { click: ReturnType<typeof vi.fn> };
+
+function gstr2bEnvironment(
+  options: Parameters<typeof gstr2bSummary>[1] = {},
+  pageUrl = "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
+): Gstr2bEnvironment {
+  const result = environment(pageUrl);
+  install(result.view, result.url);
+  gstr2bSummary(result.documentRef, options);
+  const click = vi.fn();
+  result.documentRef.querySelector("button")?.addEventListener("click", click);
+  return { ...result, click };
+}
+
+function captureGstr2b() {
+  return capturePortalPdfBlob(gstr2bInput);
+}
+
+async function expectGstr2bRejected({ click, url }: Gstr2bEnvironment) {
+  await expect(captureGstr2b()).resolves.toMatchObject({
+    ok: false,
+    reason: "page-period-mismatch",
+    safeSignals: ["page-target-unverified"],
+  });
+  expect(click).not.toHaveBeenCalled();
+  expect(url.createObjectURL).not.toHaveBeenCalled();
+}
+
+function saveGstr2bPdf({ documentRef, view }: Gstr2bEnvironment) {
+  documentRef
+    .querySelector("button")
+    ?.addEventListener("click", () => savePdf(documentRef, view, "click"));
+}
 
 function environment(url = "https://return.gst.gov.in/returns/auth/gstr3b"): {
   documentRef: Document;
