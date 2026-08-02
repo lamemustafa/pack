@@ -19,6 +19,9 @@ const browserMocks = vi.hoisted(() => {
     resetLocalStorage: () => {
       localStorageState = {};
     },
+    setLocalStorage: (values: Record<string, unknown>) => {
+      Object.assign(localStorageState, values);
+    },
     resetSessionStorage: () => {
       sessionStorageState = {};
     },
@@ -272,6 +275,18 @@ describe("background filed returns download defaults", () => {
     });
   });
 
+  it("removes legacy durable completion markers when the worker starts", async () => {
+    const legacyKey = "pack:filed-returns-target-review:completion:legacy";
+    browserMocks.setLocalStorage({ [legacyKey]: { opaque: "legacy" } });
+
+    await import("../../src/entrypoints/background");
+
+    await vi.waitFor(() =>
+      expect(browserMocks.storage.local.remove).toHaveBeenCalledWith([legacyKey]),
+    );
+    await expect(browserMocks.storage.local.get()).resolves.toEqual({});
+  });
+
   it("preserves an answered offscreen clear failure category", async () => {
     browserMocks.runtime.sendMessage.mockImplementationOnce(async (message: unknown) => {
       if (
@@ -375,10 +390,10 @@ describe("background filed returns download defaults", () => {
   });
 
   it("returns a safe source when an unexpected background failure occurs", async () => {
+    await import("../../src/entrypoints/background");
     browserMocks.storage.local.get.mockRejectedValueOnce(
       new Error("sensitive portal URL and local path must not escape"),
     );
-    await import("../../src/entrypoints/background");
 
     const response = await sendBackgroundMessage({ type: "PACK_GET_LAST_MANIFEST" });
 

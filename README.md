@@ -211,16 +211,12 @@ Pack uses Chrome extension storage only inside the current browser profile.
 - `pack:filed-returns-target-review`: local-only single-period unresolved
   download review state with a canonical target identifier and scope, safe
   messages/signals, revisions and timestamps;
-- `pack:filed-returns-target-review:completion:*`: local-only scoped per-target
-  recovery records. After exact completion is proved, the reconciler may retain
-  an opaque request identity and exact numeric browser `downloadId` before it
-  writes the temporary session summary. Only that reconciler consumes the
-  record after session loss and may rebuild a completion summary. It never proves
-  ZIP delivery. Records are removed only by Clear local Pack data or extension
-  removal.
   The base target-review record may also store the attempt kind/phase, request
   and bounded candidate-window
   timestamps, an opaque `actionId`, the exact numeric browser `downloadId`,
+  and, while a proven artifact completion is being finalized, a per-artifact
+  set of artifact type, exact numeric browser download ID and opaque request
+  ID,
   opaque staging-ledger or selected-file checkpoint identifiers/revisions, and
   sanitized endpoint/path,
   MIME, byte-count, status and error classes. It never stores the raw filename,

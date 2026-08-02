@@ -45,15 +45,8 @@ import {
 } from "../../src/background/artifact-acquisition-state";
 import { acknowledgeInterruptedFiledReturnsRun } from "../../src/background/filed-returns-active-run";
 import { reconcileTerminalFiledReturnsDownload } from "../../src/background/filed-returns-durable-download-reconciler";
-import { clearPackLocalDataWithRecoveryGuard } from "../../src/background/local-data";
 import { filedReturnScopeId } from "../../src/connectors/gst/filed-returns-return-descriptors";
-import {
-  artifactAcquisitionCompletionMarkerKey,
-  persistArtifactAcquisitionCompletionMarker,
-  persistFiledReturnsTargetReview,
-  readArtifactAcquisitionCompletionMarker,
-  resolveUnconfirmedFiledReturnsDownload,
-} from "../../src/background/filed-returns-target-review";
+import { persistFiledReturnsTargetReview } from "../../src/background/filed-returns-target-review";
 import type { FiledReturnsDownloadScope } from "../../src/connectors/gst/filed-returns-contracts";
 
 const completionKey = "pack:last-filed-returns-flow-summary";
@@ -138,14 +131,6 @@ describe("durable acquisition checkpoint recovery", () => {
     });
     expect(mocks.session[artifactAcquisitionCheckpointKey(target)]).toBeUndefined();
     expect(mocks.local[targetReviewKey]).toBeUndefined();
-    await expect(
-      readArtifactAcquisitionCompletionMarker(target, durableDeps()),
-    ).resolves.toMatchObject({
-      review: {
-        artifactAcquisitionCompletion: [{ artifactType: "PDF", downloadId: 231, requestId }],
-      },
-      state: "valid",
-    });
     await expect(
       acknowledgeInterruptedFiledReturnsRun({ storageKeys: { activeRun: activeRunKey } }),
     ).resolves.toMatchObject({ ok: true });
@@ -242,11 +227,6 @@ describe("durable acquisition checkpoint recovery", () => {
       downloadId: 231,
       requestId,
     });
-    expect(
-      mocks.local[artifactAcquisitionCompletionMarkerKey(targetReviewKey, target)],
-    ).toMatchObject({
-      artifactAcquisitionCompletion: [{ artifactType: "PDF", downloadId: 231, requestId }],
-    });
     expect(mocks.local[targetReviewKey]).toMatchObject({
       artifactAcquisitionCompletion: [{ artifactType: "PDF", downloadId: 231, requestId }],
     });
@@ -278,15 +258,6 @@ describe("durable acquisition checkpoint recovery", () => {
       downloadId: 231,
       requestId,
     });
-    for (const key of Object.keys(mocks.session)) delete mocks.session[key];
-    await expect(
-      readArtifactAcquisitionCompletionMarker(target, durableDeps()),
-    ).resolves.toMatchObject({
-      review: {
-        artifactAcquisitionCompletion: [{ artifactType: "PDF", downloadId: 231, requestId }],
-      },
-      state: "valid",
-    });
   });
 
   it("does not complete a checkpoint whose record does not own its target", async () => {
@@ -314,71 +285,7 @@ describe("durable acquisition checkpoint recovery", () => {
     expect(mocks.local[targetReviewKey]).toBeUndefined();
   });
 
-  it("treats a malformed durable marker as absent and clears it without recreating review", async () => {
-    mocks.local[artifactAcquisitionCompletionMarkerKey(targetReviewKey, target)] = {
-      schemaVersion: "forward-version",
-    };
-
-    await expect(
-      reconcileTerminalFiledReturnsDownload(
-        { search: mocks.browser.downloads.search },
-        durableDeps(),
-      ),
-    ).resolves.toBe(false);
-    expect(mocks.local[targetReviewKey]).toBeUndefined();
-
-    await expect(
-      clearPackLocalDataWithRecoveryGuard({
-        clearableLocalStorageKeys: [],
-        storageKeys: {
-          activeRun: activeRunKey,
-          fullFiscalYearLedger: "pack:full-fiscal-year-ledger",
-          targetReview: targetReviewKey,
-        },
-      }),
-    ).resolves.toEqual({ ok: true, cleared: true });
-    expect(
-      mocks.local[artifactAcquisitionCompletionMarkerKey(targetReviewKey, target)],
-    ).toBeUndefined();
-
-    await expect(
-      reconcileTerminalFiledReturnsDownload(
-        { search: mocks.browser.downloads.search },
-        durableDeps(),
-      ),
-    ).resolves.toBe(false);
-    expect(mocks.local[targetReviewKey]).toBeUndefined();
-  });
-
-  it("does not release a later interrupted same-scope run from retained older proof", async () => {
-    await persistArtifactAcquisitionCompletionMarker(
-      target,
-      [{ artifactType: "PDF", downloadId: 231, requestId }],
-      durableDeps(),
-    );
-    persistActiveRun(target, "filed-returns-run-later123");
-    await persistArtifactAcquisitionDownloadId({
-      ...target,
-      downloadId: 232,
-      requestId: juneRequestId,
-      state: "download-observing",
-    });
-
-    await expect(
-      reconcileTerminalFiledReturnsDownload(
-        { search: mocks.browser.downloads.search },
-        durableDeps(),
-      ),
-    ).resolves.toBe(true);
-
-    expect(mocks.local[activeRunKey]).toMatchObject({ runId: "filed-returns-run-later123" });
-    expect(mocks.session[artifactAcquisitionCheckpointKey(target)]).toMatchObject({
-      downloadId: 232,
-      requestId: juneRequestId,
-    });
-  });
-
-  it("keeps two proved targets in separate durable completion markers", async () => {
+  it("clears each independently proved checkpoint", async () => {
     await persistArtifactAcquisitionDownloadId({
       ...target,
       downloadId: 231,
@@ -400,81 +307,8 @@ describe("durable acquisition checkpoint recovery", () => {
       ),
     ).resolves.toBe(true);
 
-    expect(
-      mocks.local[artifactAcquisitionCompletionMarkerKey(targetReviewKey, target)],
-    ).toMatchObject({
-      artifactAcquisitionCompletion: [{ artifactType: "PDF", downloadId: 231, requestId }],
-    });
-    expect(
-      mocks.local[artifactAcquisitionCompletionMarkerKey(targetReviewKey, juneTarget)],
-    ).toMatchObject({
-      artifactAcquisitionCompletion: [
-        { artifactType: "PDF", downloadId: 232, requestId: juneRequestId },
-      ],
-    });
     expect(mocks.session[artifactAcquisitionCheckpointKey(target)]).toBeUndefined();
     expect(mocks.session[artifactAcquisitionCheckpointKey(juneTarget)]).toBeUndefined();
-  });
-
-  it("does not clear a checkpoint when its durable completion marker cannot be written", async () => {
-    await persistArtifactAcquisitionDownloadId({
-      ...target,
-      downloadId: 231,
-      requestId,
-      state: "download-observing",
-    });
-    mocks.browser.downloads.search.mockResolvedValue([completedDownload()]);
-    mocks.browser.storage.local.set.mockRejectedValueOnce(
-      new Error("Synthetic local storage failure."),
-    );
-
-    await expect(
-      reconcileTerminalFiledReturnsDownload(
-        { search: mocks.browser.downloads.search },
-        durableDeps(),
-      ),
-    ).rejects.toThrow("Synthetic local storage failure.");
-
-    expect(mocks.session[artifactAcquisitionCheckpointKey(target)]).toMatchObject({
-      downloadId: 231,
-      requestId,
-    });
-    await expect(readArtifactAcquisitionCompletionMarker(target, durableDeps())).resolves.toEqual({
-      state: "missing",
-    });
-  });
-
-  it("retains durable proof and a replacement same-scope lease across a recovery race", async () => {
-    persistActiveRun();
-    await persistArtifactAcquisitionDownloadId({
-      ...target,
-      downloadId: 231,
-      requestId,
-      state: "download-observing",
-    });
-    mocks.browser.downloads.search.mockImplementation(async () => {
-      // The scanner already captured the old lease before it asks Chrome for
-      // completion proof. A newly acquired same-scope lease must survive.
-      persistActiveRun(target, "filed-returns-run-rpl12345", new Date());
-      return [completedDownload()];
-    });
-
-    await expect(
-      reconcileTerminalFiledReturnsDownload(
-        { search: mocks.browser.downloads.search },
-        durableDeps(),
-      ),
-    ).resolves.toBe(true);
-
-    expect(mocks.local[activeRunKey]).toMatchObject({ runId: "filed-returns-run-rpl12345" });
-    await expect(
-      readArtifactAcquisitionCompletionMarker(target, durableDeps()),
-    ).resolves.toMatchObject({
-      review: {
-        artifactAcquisitionCompletion: [{ artifactType: "PDF", downloadId: 231, requestId }],
-      },
-      state: "valid",
-    });
   });
 
   it("does not release a composite lease from direct component proof without ZIP delivery", async () => {
@@ -521,82 +355,5 @@ describe("durable acquisition checkpoint recovery", () => {
       scope: gstr2bCompositeScope,
       status: "running",
     });
-    await expect(
-      readArtifactAcquisitionCompletionMarker(gstr2bExcelTarget, durableDeps()),
-    ).resolves.toMatchObject({
-      review: {
-        artifactAcquisitionCompletion: [{ artifactType: "EXCEL", downloadId: 232 }],
-      },
-      state: "valid",
-    });
-    await expect(
-      readArtifactAcquisitionCompletionMarker(gstr2bJsonTarget, durableDeps()),
-    ).resolves.toMatchObject({
-      review: {
-        artifactAcquisitionCompletion: [{ artifactType: "JSON", downloadId: 233 }],
-      },
-      state: "valid",
-    });
-  });
-
-  it("does not report a selected-files ZIP complete when direct component markers exist", async () => {
-    const gstr2bPdfTarget = { ...target, returnType: "GSTR-2B" as const };
-    const gstr2bExcelTarget = { ...gstr2bPdfTarget, artifactType: "EXCEL" as const };
-    const gstr2bJsonTarget = { ...gstr2bPdfTarget, artifactType: "JSON" as const };
-    const gstr2bCompositeScope = {
-      ...gstr2bPdfTarget,
-      artifactType: "PDF_AND_EXCEL" as const,
-    };
-    for (const [scope, artifactType, downloadId, markerRequestId] of [
-      [gstr2bPdfTarget, "PDF", 231, requestId],
-      [gstr2bExcelTarget, "EXCEL", 232, juneRequestId],
-      [gstr2bJsonTarget, "JSON", 233, "00000000-0000-4000-8000-000000000003"],
-    ] as const) {
-      await expect(
-        persistArtifactAcquisitionCompletionMarker(
-          scope,
-          [{ artifactType, downloadId, requestId: markerRequestId }],
-          durableDeps(),
-        ),
-      ).resolves.toMatchObject({ state: "persisted" });
-    }
-    await persistFiledReturnsTargetReview(
-      gstr2bCompositeScope,
-      {
-        connectorId: "gst",
-        scopeId: filedReturnScopeId(gstr2bCompositeScope.returnType),
-        state: "blocked",
-        safeMessage: "Pack retained unresolved artifact download recovery.",
-        safeSignals: ["artifact-acquisition-download-unreconciled"],
-        userAction: {
-          canResume: true,
-          message: "Review or cancel this target before starting another portal action.",
-          type: "RETRY_PORTAL_GENERATION",
-        },
-      },
-      durableDeps(),
-    );
-
-    await expect(
-      resolveUnconfirmedFiledReturnsDownload(gstr2bCompositeScope, "cancelled", durableDeps()),
-    ).resolves.toMatchObject({
-      flowStep: {
-        state: "user-action-required",
-        safeMessage:
-          "Pack cancelled the unresolved filed-return target. No portal click was retried.",
-      },
-      flowSummary: { status: "cancelled" },
-    });
-
-    for (const scope of [gstr2bPdfTarget, gstr2bExcelTarget, gstr2bJsonTarget]) {
-      expect(
-        mocks.local[artifactAcquisitionCompletionMarkerKey(targetReviewKey, scope)],
-      ).toMatchObject({
-        artifactAcquisitionCompletion: [
-          expect.objectContaining({ artifactType: scope.artifactType }),
-        ],
-      });
-    }
-    expect(mocks.local[targetReviewKey]).toBeUndefined();
   });
 });

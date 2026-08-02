@@ -138,23 +138,6 @@ describe("Pack local data clearing", () => {
     );
   });
 
-  it("removes every scoped durable completion marker with Clear local Pack data", async () => {
-    const markerKey = "pack:filed-returns-target-review:completion:GSTR-3B%3A2026-27%3AMay%3APDF";
-    browserMocks.storage.local.get.mockImplementation(async (key?: unknown) =>
-      key === undefined ? { [markerKey]: { opaque: "marker" } } : {},
-    );
-    const background = await import("../../src/entrypoints/background");
-
-    const response = await background.clearPackLocalData();
-
-    expect(response).toEqual({ ok: true, cleared: true });
-    expect(browserMocks.storage.local.remove).toHaveBeenNthCalledWith(1, [markerKey]);
-    expect(browserMocks.storage.local.remove).toHaveBeenNthCalledWith(
-      2,
-      background.PACK_CLEARABLE_LOCAL_STORAGE_KEYS,
-    );
-  });
-
   it("refuses local-data clearing while a direct artifact checkpoint still owns recovery", async () => {
     browserMocks.storage.session.get.mockResolvedValue({
       "pack.artifact-acquisition.v2.GSTR-3B.2025-26.May.PDF": {

@@ -13,9 +13,7 @@ import { persistFiledReturnsTargetDownloadId } from "./filed-returns-target-down
 import { persistArtifactAcquisitionCompletion } from "./filed-returns-artifact-acquisition-completion";
 import {
   clearFiledReturnsTargetReview,
-  persistArtifactAcquisitionCompletionMarker,
   markFiledReturnsTargetReviewArtifactAcquisitionCompletion,
-  readArtifactAcquisitionCompletionMarkers,
   readCurrentFiledReturnsTargetReview,
   type FiledReturnsTargetReviewDeps,
 } from "./filed-returns-target-review";
@@ -142,36 +140,12 @@ async function reconcileArtifactAcquisitionCheckpoints(
     marker: Awaited<ReturnType<typeof markFiledReturnsTargetReviewArtifactAcquisitionCompletion>>;
     target: FiledReturnsDownloadScope;
   }> = [];
-  const markerStates = await readArtifactAcquisitionCompletionMarkers(deps);
-  const markerStatesByTarget = new Map(
-    markerStates
-      .filter((marker) => marker.state.state === "valid")
-      .map((marker) => [artifactAcquisitionTargetId(marker.scope), marker]),
-  );
-  for (const marker of markerStates) {
-    if (marker.state.state !== "valid") continue;
-    const evidence = marker.state.review.artifactAcquisitionCompletion;
-    if (!evidence) continue;
-    const reviewMarker = await markFiledReturnsTargetReviewArtifactAcquisitionCompletion(
-      marker.scope,
-      evidence,
-      deps,
-    );
-    provedCheckpoints.push({ evidence: evidence[0]!, marker: reviewMarker, target: marker.scope });
-  }
   const checkpoints = await readArtifactAcquisitionCheckpointTargets().catch(() => []);
   for (const { target } of checkpoints) {
-    if (markerStatesByTarget.has(artifactAcquisitionTargetId(target))) continue;
     const inspection = await inspectArtifactAcquisitionCheckpoint(target, {
       preserveMalformed: false,
     });
     if (inspection.state !== "completed") continue;
-    const durableMarker = await persistArtifactAcquisitionCompletionMarker(
-      target,
-      [inspection.evidence],
-      deps,
-    );
-    if (durableMarker.state !== "persisted") continue;
     const marker = await markFiledReturnsTargetReviewArtifactAcquisitionCompletion(
       target,
       [inspection.evidence],
@@ -194,12 +168,6 @@ async function reconcileArtifactAcquisitionCheckpoints(
   return handled;
 }
 
-function artifactAcquisitionTargetId(scope: FiledReturnsDownloadScope): string {
-  return [scope.returnType, scope.financialYear, scope.period, scope.artifactType ?? "PDF"].join(
-    ":",
-  );
-}
-
 export function installFiledReturnsDurableDownloadReconciler(
   downloads?: DurableDownloadReconcilerDownloads,
   deps: DurableDownloadReconcilerDeps = {
@@ -210,6 +178,9 @@ export function installFiledReturnsDurableDownloadReconciler(
     },
   },
 ): () => void {
+  void removeLegacyArtifactAcquisitionCompletionMarkers(deps.storageKeys.targetReview).catch(
+    () => undefined,
+  );
   const downloadApi =
     downloads ?? (browser.downloads as unknown as DurableDownloadReconcilerDownloads | undefined);
   if (
@@ -268,6 +239,16 @@ export function installFiledReturnsDurableDownloadReconciler(
     downloadApi.onChanged.removeListener(onChanged);
     downloadApi.onCreated?.removeListener(onCreated);
   };
+}
+
+async function removeLegacyArtifactAcquisitionCompletionMarkers(
+  targetReviewKey: string | undefined,
+): Promise<void> {
+  if (!targetReviewKey) return;
+  const values = await browser.storage.local.get();
+  const prefix = `${targetReviewKey}:completion:`;
+  const keys = Object.keys(values).filter((key) => key.startsWith(prefix));
+  if (keys.length > 0) await browser.storage.local.remove(keys);
 }
 
 async function claimPendingExtensionDownload(

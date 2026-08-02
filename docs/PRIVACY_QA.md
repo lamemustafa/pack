@@ -59,17 +59,13 @@ For each release candidate:
   additionally retain the attempt kind/phase, request and bounded
   candidate-window timestamps, an opaque `actionId`, an opaque staging-ledger
   or selected-file checkpoint identifier/revision, the exact numeric browser
-  `downloadId`, and sanitized endpoint/path, MIME, byte-count, status and error
-  classes. It must never retain a raw filename, local path, URL/referrer,
+  `downloadId`, and, while finalizing a proven artifact completion, a
+  per-artifact set of artifact type, exact numeric browser download ID and
+  opaque request ID, plus sanitized endpoint/path, MIME, byte-count, status and
+  error classes. It must never retain a raw filename, local path, URL/referrer,
   GSTIN/PAN, taxpayer name, portal HTML, credential, cookie, token or artifact
   bytes. Shareable evidence must replace the runtime action id with a neutral
   `ACTION-*` alias and omit the browser download id.
-- Confirm each `pack:filed-returns-target-review:completion:*` scoped
-  recovery-internal marker may retain an opaque request identity and exact
-  numeric browser download ID after the reconciler proves completion. Only the
-  reconciler consumes this marker to rebuild a temporary session summary after
-  session loss. It never proves ZIP delivery. It remains only until Clear local
-  Pack data or extension removal.
   Neither record may retain a raw filename,
   local path, URL/referrer, GSTIN/PAN, taxpayer name, portal HTML, credential,
   cookie, token, or artifact bytes.

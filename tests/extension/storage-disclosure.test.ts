@@ -41,12 +41,4 @@ describe("README extension storage disclosure", () => {
       `README.md must disclose the ${PACK_ARTIFACT_ACQUISITION_KEY_PREFIX} checkpoint family`,
     ).toContain(PACK_ARTIFACT_ACQUISITION_KEY_PREFIX);
   });
-
-  it("documents the generated artifact-acquisition completion marker family", async () => {
-    const storageSection = await readStorageSection();
-    expect(
-      storageSection,
-      "README.md must disclose the scoped acquisition completion marker family",
-    ).toContain("pack:filed-returns-target-review:completion:*");
-  });
 });
