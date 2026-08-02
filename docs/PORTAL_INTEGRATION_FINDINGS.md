@@ -110,3 +110,9 @@ This log records live diagnostic findings that constrain Pack's local, target-bo
     when the anchor has no semantic disabled state. All other pages, and every duplicate-target
     case, require exactly one rendered and enabled target; a click still requires the subsequent
     origin transition before Pack starts any acquisition work.
+
+23. A filed-return summary can render the current scope identity outside the download action's
+    ancestor chain. The final-click guard must therefore bind the already armed, unique portal
+    control to the exact route and a unique pair of rendered scope labels—not to broad page text,
+    inline portal state, or a layout-specific control ancestor. Missing, duplicate, hidden,
+    inert, transparent, collapsed, or zero-area label evidence fails closed before the click.
