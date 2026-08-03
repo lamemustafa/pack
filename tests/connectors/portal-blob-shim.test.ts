@@ -225,7 +225,7 @@ describe("capturePortalPdfBlob", () => {
     await expectGstr2bControlRejected(
       gstr2b,
       "control-not-actionable",
-      "capture-control-not-actionable",
+      "gstr2b-capture-control-not-actionable",
     );
   });
 
@@ -238,7 +238,7 @@ describe("capturePortalPdfBlob", () => {
     await expectGstr2bControlRejected(
       gstr2b,
       "control-artifact-mismatch",
-      "capture-control-artifact-mismatch",
+      "gstr2b-capture-control-artifact-mismatch",
     );
   });
 
@@ -252,7 +252,7 @@ describe("capturePortalPdfBlob", () => {
     await expectGstr2bControlRejected(
       gstr2b,
       "control-artifact-mismatch",
-      "capture-control-artifact-mismatch",
+      "gstr2b-capture-control-artifact-mismatch",
     );
   });
 
@@ -478,7 +478,7 @@ async function expectGstr2bRejected({ alternateClick, click, url }: Gstr2bEnviro
 async function expectGstr2bControlRejected(
   { alternateClick, click, url }: Gstr2bEnvironment,
   reason: "control-artifact-mismatch" | "control-not-actionable",
-  safeSignal: "capture-control-artifact-mismatch" | "capture-control-not-actionable",
+  safeSignal: "gstr2b-capture-control-artifact-mismatch" | "gstr2b-capture-control-not-actionable",
 ) {
   await expect(captureGstr2b()).resolves.toMatchObject({
     ok: false,

@@ -127,6 +127,17 @@ describe("filed-return durable signal contract", () => {
     expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);
   });
 
+  it("retains final GSTR-2B capture-control rejections", () => {
+    const signals = [
+      "gstr2b-capture-control-not-actionable",
+      "gstr2b-capture-control-artifact-mismatch",
+    ];
+
+    expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);
+    expect(isDurableFiledReturnsSignal("capture-control-not-actionable")).toBe(false);
+    expect(isDurableFiledReturnsSignal("capture-control-artifact-mismatch")).toBe(false);
+  });
+
   it("retains the categorical GSTR-1 visible-scope mismatch marker", () => {
     expect(parseDurableFiledReturnsSignals(["filed-gstr1-visible-scope-mismatch"])).toEqual([
       "filed-gstr1-visible-scope-mismatch",

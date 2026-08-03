@@ -93,11 +93,11 @@ export function capturePortalPdfBlob(input: PortalBlobShimInput): Promise<Portal
     const gstr2bControlRejection = (candidate: HTMLElement) => {
       const notActionable = {
         reason: "control-not-actionable" as const,
-        safeSignal: "capture-control-not-actionable",
+        safeSignal: "gstr2b-capture-control-not-actionable",
       };
       const artifactMismatch = {
         reason: "control-artifact-mismatch" as const,
-        safeSignal: "capture-control-artifact-mismatch",
+        safeSignal: "gstr2b-capture-control-artifact-mismatch",
       };
       if (!candidate.isConnected) return notActionable;
       let current: HTMLElement | null = candidate;
