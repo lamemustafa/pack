@@ -8,7 +8,10 @@ import { installPackDownloadFilenameReassertion } from "./pack-download-filename
 import type { PackDownloadFilenameReservation } from "./pack-download-filename-reassertion";
 import { isRequestedFilenameOverridden } from "./download-filename-comparison";
 import { classifyDownloadDanger } from "./download-observer-results";
-import { extensionBlobUrlFingerprint } from "./filed-returns-durable-download-reconciler";
+import {
+  beginLiveFiledReturnsDownloadObservation,
+  extensionBlobUrlFingerprint,
+} from "./filed-returns-durable-download-reconciler";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
@@ -82,18 +85,27 @@ export async function downloadAcquiredArtifact(
     } catch {
       return { ok: false, reason: "start-rejected", safeSignals: [] };
     }
+    // The foreground flow owns this exact ID until its completion observer has
+    // persisted the terminal result. The durable scanner must leave that
+    // checkpoint alone; if the worker stops, the claim disappears but the
+    // checkpoint remains for the next-start guard.
+    const endLiveObservation = beginLiveFiledReturnsDownloadObservation(downloadId);
     try {
-      await input.onStarted?.(downloadId);
-    } catch {
       try {
-        await input.onStartCheckpointFailed?.(downloadId);
+        await input.onStarted?.(downloadId);
       } catch {
-        // Keep the original intent checkpoint for fail-closed recovery.
+        try {
+          await input.onStartCheckpointFailed?.(downloadId);
+        } catch {
+          // Keep the original intent checkpoint for fail-closed recovery.
+        }
+        await awaitCompletion(deps.downloads, downloadId, input.filename, deps.timeoutMs);
+        return { ok: false, reason: "checkpoint-failed", safeSignals: [] };
       }
-      await awaitCompletion(deps.downloads, downloadId, input.filename, deps.timeoutMs);
-      return { ok: false, reason: "checkpoint-failed", safeSignals: [] };
+      return await awaitCompletion(deps.downloads, downloadId, input.filename, deps.timeoutMs);
+    } finally {
+      endLiveObservation();
     }
-    return await awaitCompletion(deps.downloads, downloadId, input.filename, deps.timeoutMs);
   } finally {
     filenameReservation?.release();
     if (blobUrl) await deps.revokeOffscreenBlobUrl(blobUrl);

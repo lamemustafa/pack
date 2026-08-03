@@ -390,7 +390,7 @@ describe("durable acquisition checkpoint recovery", () => {
     expect(mocks.local[targetReviewKey]).toBeUndefined();
   });
 
-  it("clears each independently proved checkpoint", async () => {
+  it("clears independently proved checkpoints across separate scans", async () => {
     await persistArtifactAcquisitionDownloadId({
       ...target,
       downloadId: 231,
@@ -413,6 +413,15 @@ describe("durable acquisition checkpoint recovery", () => {
     ).resolves.toBe(true);
 
     expect(mocks.session[artifactAcquisitionCheckpointKey(target)]).toBeUndefined();
+    expect(mocks.session[artifactAcquisitionCheckpointKey(juneTarget)]).toBeDefined();
+
+    await expect(
+      reconcileTerminalFiledReturnsDownload(
+        { search: mocks.browser.downloads.search },
+        durableDeps(),
+      ),
+    ).resolves.toBe(true);
+
     expect(mocks.session[artifactAcquisitionCheckpointKey(juneTarget)]).toBeUndefined();
   });
 

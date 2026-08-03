@@ -1,12 +1,8 @@
 import { browser } from "wxt/browser";
-import type {
-  FiledReturnsDownloadScope,
-  FiledReturnsTargetReview,
-} from "../connectors/gst/filed-returns-contracts";
+import type { FiledReturnsTargetReview } from "../connectors/gst/filed-returns-contracts";
 import {
   inspectArtifactAcquisitionCheckpoint,
   readArtifactAcquisitionCheckpointTargets,
-  type ArtifactAcquisitionCompletionEvidence,
 } from "./artifact-acquisition-state";
 import type { DownloadCreatedItem, DownloadDelta } from "./download-observer";
 import { persistFiledReturnsTargetDownloadId } from "./filed-returns-target-download-attempt";
@@ -134,12 +130,6 @@ async function reconcileCurrentTargetReview(
 async function reconcileArtifactAcquisitionCheckpoints(
   deps: DurableDownloadReconcilerDeps,
 ): Promise<boolean> {
-  let handled = false;
-  const provedCheckpoints: Array<{
-    evidence: ArtifactAcquisitionCompletionEvidence;
-    marker: Awaited<ReturnType<typeof markFiledReturnsTargetReviewArtifactAcquisitionCompletion>>;
-    target: FiledReturnsDownloadScope;
-  }> = [];
   const checkpoints = await readArtifactAcquisitionCheckpointTargets().catch(() => []);
   for (const { target } of checkpoints) {
     const inspection = await inspectArtifactAcquisitionCheckpoint(target, {
@@ -152,21 +142,21 @@ async function reconcileArtifactAcquisitionCheckpoints(
       deps,
     );
     if (marker.state === "blocked") continue;
-    provedCheckpoints.push({ evidence: inspection.evidence, marker, target });
-  }
-  for (const { evidence, marker, target } of provedCheckpoints) {
     const summary = await persistArtifactAcquisitionCompletion(
       deps.storageKeys.completion,
       target,
-      [evidence],
+      [inspection.evidence],
       deps.now?.() ?? new Date(),
     );
     if (summary && marker.state === "marked") {
       await clearFiledReturnsTargetReview(target, deps, marker.review.revision ?? 1);
     }
-    handled = true;
+    // The session summary is a single-target proof. Stop after one completed
+    // checkpoint so another target retains its checkpoint until a later scan
+    // can persist its own proof rather than overwriting it here.
+    return true;
   }
-  return handled;
+  return false;
 }
 
 export function installFiledReturnsDurableDownloadReconciler(
