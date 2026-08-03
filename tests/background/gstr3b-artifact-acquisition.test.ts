@@ -142,6 +142,7 @@ describe("GSTR-2B page-generated acquisition", () => {
           expect.objectContaining({
             expectedControlText: "DOWNLOAD GSTR-2B DETAILS (EXCEL)",
             expectedMime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            expectedPeriodTexts: ["April", "Apr"],
             expectedTarget: {
               financialYear: "2024-25",
               period: "April",

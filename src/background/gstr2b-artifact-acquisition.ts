@@ -9,6 +9,7 @@ import {
   GSTR1_PAGE_GENERATED_ARTIFACTS,
   GSTR2B_PAGE_GENERATED_ARTIFACTS,
 } from "../connectors/gst/portal-artifact-endpoints";
+import { acceptedFiledReturnsMonthTexts } from "../connectors/gst/filed-returns-months";
 import { installPortalBlobDownloadSafetyNet } from "./artifact-download";
 
 export async function acquirePageGeneratedArtifact(input: {
@@ -36,7 +37,10 @@ export async function acquirePageGeneratedArtifact(input: {
           {
             controlSelector: `[data-pack-artifact-request="${input.requestId}"]`,
             ...(input.returnType === "GSTR-2B"
-              ? { expectedControlText: artifact.controlText }
+              ? {
+                  expectedControlText: artifact.controlText,
+                  expectedPeriodTexts: acceptedFiledReturnsMonthTexts(input.period),
+                }
               : {}),
             expectedMime: artifact.expectedMime,
             maxPortalBlobBytes: MAX_PORTAL_BLOB_BYTES,

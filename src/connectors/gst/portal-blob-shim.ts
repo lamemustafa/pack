@@ -2,6 +2,7 @@ export type PortalBlobShimInput = {
   controlSelector: string;
   expectedControlText?: string;
   expectedMime: string;
+  expectedPeriodTexts?: readonly string[];
   expectedTarget?: { financialYear: string; period: string; returnType: string };
   maxPortalBlobBytes?: number;
   timeoutMs?: number;
@@ -195,7 +196,12 @@ export function capturePortalPdfBlob(input: PortalBlobShimInput): Promise<Portal
           labelledYear &&
           labelledPeriod &&
           comparable(labelledYear) === comparable(expected.financialYear) &&
-          comparable(labelledPeriod) === comparable(expected.period),
+          Boolean(
+            input.expectedPeriodTexts?.length &&
+            input.expectedPeriodTexts.some(
+              (period) => comparable(labelledPeriod) === comparable(period),
+            ),
+          ),
         );
       }
       let current: HTMLElement | null = candidate;

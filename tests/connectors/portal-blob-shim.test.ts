@@ -140,6 +140,42 @@ describe("capturePortalPdfBlob", () => {
     expect(gstr2b.alternateClick).not.toHaveBeenCalled();
   });
 
+  it("allows a canonical abbreviated GSTR-2B return period", async () => {
+    const gstr2b = gstr2bEnvironment({ period: "Sep" });
+    saveGstr2bPdf(gstr2b);
+
+    await expect(captureGstr2b(["September", "Sep", "Sept"])).resolves.toMatchObject({
+      ok: true,
+      safeSignals: ["portal-blob-shim-suppressed-via-click"],
+    });
+  });
+
+  it("does not fall back to an unbound GSTR-2B period when canonical aliases are absent", async () => {
+    const gstr2b = gstr2bEnvironment();
+
+    await expect(capturePortalPdfBlob(gstr2bInput)).resolves.toMatchObject({
+      ok: false,
+      reason: "page-period-mismatch",
+      safeSignals: ["page-target-unverified"],
+    });
+    expect(gstr2b.click).not.toHaveBeenCalled();
+    expect(gstr2b.alternateClick).not.toHaveBeenCalled();
+    expect(gstr2b.url.createObjectURL).not.toHaveBeenCalled();
+  });
+
+  it("does not fall back to an unbound GSTR-2B period when canonical aliases are empty", async () => {
+    const gstr2b = gstr2bEnvironment();
+
+    await expect(captureGstr2b([])).resolves.toMatchObject({
+      ok: false,
+      reason: "page-period-mismatch",
+      safeSignals: ["page-target-unverified"],
+    });
+    expect(gstr2b.click).not.toHaveBeenCalled();
+    expect(gstr2b.alternateClick).not.toHaveBeenCalled();
+    expect(gstr2b.url.createObjectURL).not.toHaveBeenCalled();
+  });
+
   it("does not click either GSTR-2B action when the request marker is ambiguous", async () => {
     const gstr2b = gstr2bEnvironment();
     gstr2b.documentRef
@@ -310,7 +346,9 @@ describe("capturePortalPdfBlob", () => {
     saveGstr2bPdf(gstr2b);
 
     const executeInMainWorld = rebuildInMainWorld(capturePortalPdfBlob);
-    await expect(executeInMainWorld(gstr2bInput)).resolves.toMatchObject({
+    await expect(
+      executeInMainWorld({ ...gstr2bInput, expectedPeriodTexts: ["April", "Apr"] }),
+    ).resolves.toMatchObject({
       ok: true,
       safeSignals: ["portal-blob-shim-suppressed-via-click"],
     });
@@ -408,8 +446,8 @@ function gstr2bEnvironment(
   return { ...result, alternateClick, click };
 }
 
-function captureGstr2b() {
-  return capturePortalPdfBlob(gstr2bInput);
+function captureGstr2b(expectedPeriodTexts = ["April", "Apr"]) {
+  return capturePortalPdfBlob({ ...gstr2bInput, expectedPeriodTexts });
 }
 
 async function expectGstr2bRejected({ alternateClick, click, url }: Gstr2bEnvironment) {
