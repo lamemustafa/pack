@@ -43,9 +43,9 @@ export function detectGstPortalContext(
   const isReturnPage = RETURN_PATH_HINTS.some((pattern) => pattern.test(locationLike.pathname));
   const isAuthLandingRoute = isGstAuthLandingRoute(locationLike);
   const isAuthLandingPage =
-    isAuthLandingRoute && !AUTHENTICATED_WELCOME_MARKERS.some((pattern) => pattern.test(visibleText));
-  const isAuthenticatedWelcomePage =
-    isAuthLandingRoute && !isAuthLandingPage;
+    isAuthLandingRoute &&
+    !AUTHENTICATED_WELCOME_MARKERS.some((pattern) => pattern.test(visibleText));
+  const isAuthenticatedWelcomePage = isAuthLandingRoute && !isAuthLandingPage;
   const isReturnsHubPage = GST_RETURNS_HUB_PATH_HINTS.some((pattern) =>
     pattern.test(locationLike.pathname),
   );
@@ -106,7 +106,9 @@ export function detectGstPortalContext(
 }
 
 /** Matches only the portal's canonical post-login landing route. */
-export function isGstAuthLandingRoute(locationLike: Pick<Location, "origin" | "pathname">): boolean {
+export function isGstAuthLandingRoute(
+  locationLike: Pick<Location, "origin" | "pathname">,
+): boolean {
   return (
     locationLike.origin === GST_SERVICES_ORIGIN &&
     GST_AUTH_LANDING_PATH_HINTS.some((pattern) => pattern.test(locationLike.pathname))

@@ -1,8 +1,5 @@
 import { isGstAuthLandingRoute } from "./detect";
-import {
-  isActionablePortalControl,
-  isSemanticallyEnabledPortalControl,
-} from "./filed-returns-dom";
+import { isActionablePortalControl, isSemanticallyEnabledPortalControl } from "./filed-returns-dom";
 
 export type ReturnsDashboardAnchorNavigation = "clicked" | "not-found" | "ambiguous";
 

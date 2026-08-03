@@ -146,9 +146,7 @@ export function isActionablePortalControl(element: HTMLElement): boolean {
     const style = view?.getComputedStyle(current);
     if (
       style &&
-      (style.display === "none" ||
-        style.visibility === "hidden" ||
-        style.visibility === "collapse")
+      (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse")
     ) {
       return false;
     }
@@ -181,11 +179,7 @@ export function isSemanticallyEnabledPortalControl(element: HTMLElement): boolea
     }
 
     const style = view?.getComputedStyle(current);
-    if (
-      style &&
-      (style.opacity === "0" ||
-        style.pointerEvents === "none")
-    ) {
+    if (style && (style.opacity === "0" || style.pointerEvents === "none")) {
       return false;
     }
 
