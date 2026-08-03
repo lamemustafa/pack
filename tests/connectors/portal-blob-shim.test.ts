@@ -137,6 +137,73 @@ describe("capturePortalPdfBlob", () => {
       ok: true,
       safeSignals: ["portal-blob-shim-suppressed-via-click"],
     });
+    expect(gstr2b.alternateClick).not.toHaveBeenCalled();
+  });
+
+  it("does not click either GSTR-2B action when the request marker is ambiguous", async () => {
+    const gstr2b = gstr2bEnvironment();
+    gstr2b.documentRef
+      .querySelectorAll("button")[1]
+      ?.setAttribute("data-pack-artifact-request", "synthetic-request");
+
+    await expectGstr2bAmbiguous(gstr2b);
+  });
+
+  it.each([
+    ["hidden", (control: HTMLElement) => control.style.setProperty("display", "none")],
+    ["disabled", (control: HTMLElement) => control.setAttribute("aria-disabled", "true")],
+    ["inert", (control: HTMLElement) => control.setAttribute("inert", "")],
+    ["transparent", (control: HTMLElement) => control.style.setProperty("opacity", "0")],
+    [
+      "pointer-disabled",
+      (control: HTMLElement) => control.style.setProperty("pointer-events", "none"),
+    ],
+    [
+      "zero-area",
+      (control: HTMLElement) =>
+        Object.defineProperty(control, "getBoundingClientRect", {
+          configurable: true,
+          value: () => ({ height: 0, width: 0 }),
+        }),
+    ],
+  ] as const)("does not click a %s GSTR-2B control after it was armed", async (_name, mutate) => {
+    const gstr2b = gstr2bEnvironment();
+    const control = gstr2b.documentRef.querySelector<HTMLElement>(gstr2bInput.controlSelector);
+    if (!control) throw new Error("Synthetic GSTR-2B control missing.");
+    mutate(control);
+
+    await expectGstr2bControlRejected(
+      gstr2b,
+      "control-not-actionable",
+      "capture-control-not-actionable",
+    );
+  });
+
+  it("does not click a GSTR-2B control whose artifact identity changed after it was armed", async () => {
+    const gstr2b = gstr2bEnvironment();
+    const control = gstr2b.documentRef.querySelector<HTMLElement>(gstr2bInput.controlSelector);
+    if (!control) throw new Error("Synthetic GSTR-2B control missing.");
+    control.textContent = "DOWNLOAD GSTR-2B DETAILS (EXCEL)";
+
+    await expectGstr2bControlRejected(
+      gstr2b,
+      "control-artifact-mismatch",
+      "capture-control-artifact-mismatch",
+    );
+  });
+
+  it("does not accept hidden GSTR-2B artifact text as a final action identity", async () => {
+    const gstr2b = gstr2bEnvironment();
+    const control = gstr2b.documentRef.querySelector<HTMLElement>(gstr2bInput.controlSelector);
+    if (!control) throw new Error("Synthetic GSTR-2B control missing.");
+    control.innerHTML = "<span hidden>DOWNLOAD GSTR-2B SUMMARY (PDF)</span>";
+    Object.defineProperty(control, "innerText", { configurable: true, value: "" });
+
+    await expectGstr2bControlRejected(
+      gstr2b,
+      "control-artifact-mismatch",
+      "capture-control-artifact-mismatch",
+    );
   });
 
   it.each([
@@ -155,7 +222,7 @@ describe("capturePortalPdfBlob", () => {
 
   it("does not accept hidden-text scope evidence when rendered text is unavailable", async () => {
     const gstr2b = gstr2bEnvironment();
-    for (const label of gstr2b.documentRef.querySelectorAll("div > span")) {
+    for (const label of gstr2bScopeLabels(gstr2b.documentRef)) {
       Object.defineProperty(label, "innerText", { configurable: true, value: "" });
     }
 
@@ -166,7 +233,7 @@ describe("capturePortalPdfBlob", () => {
     "rejects a %s GSTR-2B scope label",
     async (state) => {
       const gstr2b = gstr2bEnvironment();
-      const label = gstr2b.documentRef.querySelector<HTMLElement>("div > span");
+      const label = gstr2bScopeLabels(gstr2b.documentRef)[0];
       if (state === "collapse") label?.style.setProperty("visibility", "collapse");
       if (state === "transparent") label?.style.setProperty("opacity", "0");
       if (state === "ancestor-hidden") label?.parentElement?.style.setProperty("display", "none");
@@ -177,7 +244,7 @@ describe("capturePortalPdfBlob", () => {
 
   it("rejects a zero-height GSTR-2B scope label", async () => {
     const gstr2b = gstr2bEnvironment();
-    const label = gstr2b.documentRef.querySelector<HTMLElement>("div > span");
+    const label = gstr2bScopeLabels(gstr2b.documentRef)[0];
     Object.defineProperty(label, "getBoundingClientRect", {
       configurable: true,
       value: () => ({ height: 0, width: 10 }),
@@ -315,12 +382,17 @@ describe("capturePortalPdfBlob", () => {
 type TestWindow = Window & typeof globalThis;
 
 const gstr2bInput = {
-  controlSelector: "button",
+  controlSelector: '[data-pack-artifact-request="synthetic-request"]',
+  expectedControlText: "DOWNLOAD GSTR-2B SUMMARY (PDF)",
   expectedMime: "application/pdf",
   expectedTarget: { financialYear: "2024-25", period: "April", returnType: "GSTR-2B" },
+  timeoutMs: 0,
 };
 
-type Gstr2bEnvironment = ReturnType<typeof environment> & { click: ReturnType<typeof vi.fn> };
+type Gstr2bEnvironment = ReturnType<typeof environment> & {
+  alternateClick: ReturnType<typeof vi.fn>;
+  click: ReturnType<typeof vi.fn>;
+};
 
 function gstr2bEnvironment(
   options: Parameters<typeof gstr2bSummary>[1] = {},
@@ -330,28 +402,61 @@ function gstr2bEnvironment(
   install(result.view, result.url);
   gstr2bSummary(result.documentRef, options);
   const click = vi.fn();
-  result.documentRef.querySelector("button")?.addEventListener("click", click);
-  return { ...result, click };
+  result.documentRef.querySelector(gstr2bInput.controlSelector)?.addEventListener("click", click);
+  const alternateClick = vi.fn();
+  result.documentRef.querySelectorAll("button")[1]?.addEventListener("click", alternateClick);
+  return { ...result, alternateClick, click };
 }
 
 function captureGstr2b() {
   return capturePortalPdfBlob(gstr2bInput);
 }
 
-async function expectGstr2bRejected({ click, url }: Gstr2bEnvironment) {
+async function expectGstr2bRejected({ alternateClick, click, url }: Gstr2bEnvironment) {
   await expect(captureGstr2b()).resolves.toMatchObject({
     ok: false,
     reason: "page-period-mismatch",
     safeSignals: ["page-target-unverified"],
   });
   expect(click).not.toHaveBeenCalled();
+  expect(alternateClick).not.toHaveBeenCalled();
+  expect(url.createObjectURL).not.toHaveBeenCalled();
+}
+
+async function expectGstr2bControlRejected(
+  { alternateClick, click, url }: Gstr2bEnvironment,
+  reason: "control-artifact-mismatch" | "control-not-actionable",
+  safeSignal: "capture-control-artifact-mismatch" | "capture-control-not-actionable",
+) {
+  await expect(captureGstr2b()).resolves.toMatchObject({
+    ok: false,
+    reason,
+    safeSignals: [safeSignal],
+  });
+  expect(click).not.toHaveBeenCalled();
+  expect(alternateClick).not.toHaveBeenCalled();
+  expect(url.createObjectURL).not.toHaveBeenCalled();
+}
+
+async function expectGstr2bAmbiguous({ alternateClick, click, url }: Gstr2bEnvironment) {
+  await expect(captureGstr2b()).resolves.toMatchObject({
+    ok: false,
+    reason: "control-not-found",
+    safeSignals: [],
+  });
+  expect(click).not.toHaveBeenCalled();
+  expect(alternateClick).not.toHaveBeenCalled();
   expect(url.createObjectURL).not.toHaveBeenCalled();
 }
 
 function saveGstr2bPdf({ documentRef, view }: Gstr2bEnvironment) {
   documentRef
-    .querySelector("button")
+    .querySelector(gstr2bInput.controlSelector)
     ?.addEventListener("click", () => savePdf(documentRef, view, "click"));
+}
+
+function gstr2bScopeLabels(documentRef: Document): HTMLElement[] {
+  return Array.from(documentRef.querySelectorAll<HTMLElement>("main > section > div > span"));
 }
 
 function environment(url = "https://return.gst.gov.in/returns/auth/gstr3b"): {
@@ -386,28 +491,48 @@ function gstr2bSummary(
 ) {
   const period = options.period ?? "April";
   documentRef.body.innerHTML = `
-    <section>
-      <h1>GSTR-2B</h1>
-      ${
-        options.labels === false
-          ? ""
-          : `<div><span>Financial Year - 2024-25</span></div>
-             <div><span>Return Period - ${period}</span></div>`
-      }
-      ${
-        options.duplicateVisibleLabels
-          ? `<div><span>Financial Year - 2024-25</span></div>
-             <div><span>Return Period - ${period}</span></div>`
-          : ""
-      }
-    </section>
-    <section><button>DOWNLOAD GSTR-2B SUMMARY (PDF)</button></section>`;
+    <main>
+      <nav>Dashboard / Returns / GSTR-2B</nav>
+      <aside aria-hidden="true">
+        <div><span>Financial Year - 2023-24</span></div>
+        <div><span>Return Period - March</span></div>
+      </aside>
+      <section>
+        <h1>GSTR-2B</h1>
+        ${
+          options.labels === false
+            ? ""
+            : `<div><span>Financial Year - 2024-25</span></div>
+               <div><span>Return Period - ${period}</span></div>`
+        }
+        ${
+          options.duplicateVisibleLabels
+            ? `<div><span>Financial Year - 2024-25</span></div>
+               <div><span>Return Period - ${period}</span></div>`
+            : ""
+        }
+      </section>
+      <section>
+        <button data-pack-artifact-request="synthetic-request">DOWNLOAD GSTR-2B SUMMARY (PDF)</button>
+        <button>DOWNLOAD GSTR-2B DETAILS (EXCEL)</button>
+      </section>
+    </main>`;
   for (const label of documentRef.querySelectorAll<HTMLElement>("div > span")) {
     Object.defineProperty(label, "innerText", {
       configurable: true,
       get: () => label.textContent || "",
     });
     Object.defineProperty(label, "getBoundingClientRect", {
+      configurable: true,
+      value: () => ({ height: 10, width: 10 }),
+    });
+  }
+  for (const control of documentRef.querySelectorAll<HTMLElement>("button")) {
+    Object.defineProperty(control, "innerText", {
+      configurable: true,
+      get: () => control.textContent || "",
+    });
+    Object.defineProperty(control, "getBoundingClientRect", {
       configurable: true,
       value: () => ({ height: 10, width: 10 }),
     });

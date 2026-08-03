@@ -5,12 +5,11 @@ import {
   MAX_PORTAL_BLOB_BYTES,
   type PortalBlobShimResult,
 } from "../connectors/gst/portal-blob-shim";
+import {
+  GSTR1_PAGE_GENERATED_ARTIFACTS,
+  GSTR2B_PAGE_GENERATED_ARTIFACTS,
+} from "../connectors/gst/portal-artifact-endpoints";
 import { installPortalBlobDownloadSafetyNet } from "./artifact-download";
-
-const MIME_TYPES = {
-  EXCEL: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  PDF: "application/pdf",
-} as const;
 
 export async function acquirePageGeneratedArtifact(input: {
   artifactType: "PDF" | "EXCEL";
@@ -25,6 +24,10 @@ export async function acquirePageGeneratedArtifact(input: {
   | { ok: false; reason: string; safeSignals: string[] }
 > {
   const safetyNet = installPortalBlobDownloadSafetyNet(input.tabId);
+  const artifact =
+    input.returnType === "GSTR-2B"
+      ? GSTR2B_PAGE_GENERATED_ARTIFACTS[input.artifactType]
+      : GSTR1_PAGE_GENERATED_ARTIFACTS[input.artifactType];
   try {
     let captured: PortalBlobShimResult | undefined;
     try {
@@ -32,7 +35,10 @@ export async function acquirePageGeneratedArtifact(input: {
         args: [
           {
             controlSelector: `[data-pack-artifact-request="${input.requestId}"]`,
-            expectedMime: MIME_TYPES[input.artifactType],
+            ...(input.returnType === "GSTR-2B"
+              ? { expectedControlText: artifact.controlText }
+              : {}),
+            expectedMime: artifact.expectedMime,
             maxPortalBlobBytes: MAX_PORTAL_BLOB_BYTES,
             expectedTarget: {
               financialYear: input.financialYear,
