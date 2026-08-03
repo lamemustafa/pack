@@ -186,10 +186,10 @@ export function capturePortalPdfBlob(input: PortalBlobShimInput): Promise<Portal
           return matches.length === 1 && value ? value : null;
         };
         const labelledYear = label(
-          "Financial Year -",
-          /^Financial Year\s*-\s*([0-9]{4}\s*-\s*[0-9]{2})$/i,
+          "Financial Year",
+          /^Financial Year\s*[-:]\s*([0-9]{4}\s*-\s*[0-9]{2})$/i,
         );
-        const labelledPeriod = label("Return Period -", /^Return Period\s*-\s*([a-z]+)$/i);
+        const labelledPeriod = label("Return Period", /^Return Period\s*[-:]\s*([a-z]+)$/i);
         return Boolean(
           location.origin === "https://gstr2b.gst.gov.in" &&
           /^\/gstr2b\/auth\/gstr2b\/summary\/?$/i.test(location.pathname) &&

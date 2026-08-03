@@ -150,6 +150,20 @@ describe("capturePortalPdfBlob", () => {
     });
   });
 
+  it("allows colon-delimited GSTR-2B scope labels", async () => {
+    const gstr2b = gstr2bEnvironment({ labelDelimiter: ":" });
+    saveGstr2bPdf(gstr2b);
+
+    await expect(captureGstr2b()).resolves.toMatchObject({
+      ok: true,
+      safeSignals: ["portal-blob-shim-suppressed-via-click"],
+    });
+  });
+
+  it("rejects mismatched colon-delimited GSTR-2B scope labels", async () => {
+    await expectGstr2bRejected(gstr2bEnvironment({ labelDelimiter: ":", period: "May" }));
+  });
+
   it("does not fall back to an unbound GSTR-2B period when canonical aliases are absent", async () => {
     const gstr2b = gstr2bEnvironment();
 
@@ -523,10 +537,12 @@ function gstr2bSummary(
   documentRef: Document,
   options: {
     duplicateVisibleLabels?: boolean;
+    labelDelimiter?: "-" | ":";
     labels?: boolean;
     period?: string;
   } = {},
 ) {
+  const labelDelimiter = options.labelDelimiter ?? "-";
   const period = options.period ?? "April";
   documentRef.body.innerHTML = `
     <main>
@@ -540,8 +556,8 @@ function gstr2bSummary(
         ${
           options.labels === false
             ? ""
-            : `<div><span>Financial Year - 2024-25</span></div>
-               <div><span>Return Period - ${period}</span></div>`
+            : `<div><span>Financial Year ${labelDelimiter} 2024-25</span></div>
+               <div><span>Return Period ${labelDelimiter} ${period}</span></div>`
         }
         ${
           options.duplicateVisibleLabels
