@@ -131,6 +131,76 @@ describe("filed-return session write boundary", () => {
     expect(storage.session[COMPLETION_KEY]).toBeDefined();
   });
 
+  it("persists a popup-readable GSTR-3B Returns Dashboard preflight block", async () => {
+    const response = await withPersistedSinglePeriodSummary(
+      {
+        artifactType: "PDF",
+        financialYear: "2026-27",
+        period: "April",
+        returnType: "GSTR-3B",
+      },
+      {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+          state: "blocked",
+          safeSignals: [
+            "wrong-origin-open-returns-dashboard",
+            "returns-dashboard-anchor-ambiguous",
+          ],
+          safeMessage: "Synthetic Returns Dashboard preflight block.",
+        },
+      },
+      deps,
+      true,
+    );
+
+    expect(response).toMatchObject({
+      flowSummary: {
+        status: "blocked",
+        flowStep: {
+          safeSignals: [
+            "wrong-origin-open-returns-dashboard",
+            "returns-dashboard-anchor-ambiguous",
+          ],
+        },
+      },
+    });
+    expect(storage.session[COMPLETION_KEY]).toBeDefined();
+  });
+
+  it("persists a popup-readable final GSTR-2B capture rejection", async () => {
+    const scope = {
+      artifactType: "PDF" as const,
+      financialYear: "2026-27",
+      period: "April",
+      returnType: "GSTR-2B" as const,
+    };
+    const response = await withPersistedSinglePeriodSummary(
+      scope,
+      {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: filedReturnsScopeId(scope.returnType),
+          state: "blocked",
+          safeSignals: ["gstr2b-capture-control-not-actionable"],
+          safeMessage: "Pack could not verify the selected GSTR-2B download action.",
+        },
+      },
+      deps,
+      true,
+    );
+
+    expect(response).toHaveProperty("flowSummary.flowStep.safeSignals", [
+      "gstr2b-capture-control-not-actionable",
+    ]);
+    await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+      flowStep: { safeSignals: ["gstr2b-capture-control-not-actionable"] },
+    });
+  });
+
   it("allows only scoped captured-download start signals at the durable boundary", () => {
     expect(isDurableFiledReturnsSignal("filed-gstr1-extension-download-started")).toBe(true);
     expect(isDurableFiledReturnsSignal("filed-gstr2b-extension-download-started")).toBe(true);

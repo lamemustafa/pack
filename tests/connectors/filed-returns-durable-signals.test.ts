@@ -92,6 +92,13 @@ describe("filed-return durable signal contract", () => {
     ]);
   });
 
+  it("persists bounded Returns Dashboard preflight failures", () => {
+    const signals = ["wrong-origin-open-returns-dashboard", "returns-dashboard-anchor-ambiguous"];
+
+    expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);
+    expect(isDurableFiledReturnsSignal("returns-dashboard-anchor-private-value")).toBe(false);
+  });
+
   it("retains the cleanup-without-download recovery marker", () => {
     expect(isDurableFiledReturnsSignal("single-period-zip-cleanup-without-download")).toBe(true);
     expect(parseDurableFiledReturnsSignals(["single-period-zip-cleanup-without-download"])).toEqual(
@@ -118,6 +125,17 @@ describe("filed-return durable signal contract", () => {
     ];
 
     expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);
+  });
+
+  it("retains final GSTR-2B capture-control rejections", () => {
+    const signals = [
+      "gstr2b-capture-control-not-actionable",
+      "gstr2b-capture-control-artifact-mismatch",
+    ];
+
+    expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);
+    expect(isDurableFiledReturnsSignal("capture-control-not-actionable")).toBe(false);
+    expect(isDurableFiledReturnsSignal("capture-control-artifact-mismatch")).toBe(false);
   });
 
   it("retains the categorical GSTR-1 visible-scope mismatch marker", () => {

@@ -1,13 +1,15 @@
 import type { PortalConnectorDescriptor } from "../../core/contracts";
 import { PACK_PRODUCT_VERSION } from "../../extension/version";
 
+export const GST_SERVICES_ORIGIN = "https://services.gst.gov.in";
+
 export const GST_CONNECTOR_DESCRIPTOR: PortalConnectorDescriptor = {
   id: "gst",
   version: PACK_PRODUCT_VERSION,
   displayName: "GST Portal",
   supportedOrigins: [
     "https://www.gst.gov.in",
-    "https://services.gst.gov.in",
+    GST_SERVICES_ORIGIN,
     "https://return.gst.gov.in",
     "https://gstr2b.gst.gov.in",
   ],

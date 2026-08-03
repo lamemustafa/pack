@@ -96,3 +96,23 @@ This log records live diagnostic findings that constrain Pack's local, target-bo
     phrase "View Filed Returns" appears as a link label — rather than from the route, so the flow
     believed it had already arrived and stopped navigating. Page classification derives from the
     route only. Treat these labels as navigation candidates, never as evidence of arrival.
+
+21. Observed in authorised manual QA: a Services Dashboard page exposed two portal-owned anchors
+    that resolved to the same Returns Dashboard destination. Exactly one was visibly actionable;
+    the other was hidden. Exact-target navigation must filter hidden controls before applying its
+    uniqueness guard: click exactly one visible candidate, and fail closed for zero or multiple
+    visible candidates. The observation and implementation record only structural counts; no portal
+    markup, control text, full URL, query string, or session material is retained.
+
+22. The canonical post-login landing can expose one exact portal-owned Returns Dashboard target
+    without a rendered box, while its visible navigation surface exposes no equivalent candidate.
+    Preserve that unique target-bound portal click only on the canonical landing route and only
+    when the anchor has no semantic disabled state. All other pages, and every duplicate-target
+    case, require exactly one rendered and enabled target; a click still requires the subsequent
+    origin transition before Pack starts any acquisition work.
+
+23. A filed-return summary can render the current scope identity outside the download action's
+    ancestor chain. The final-click guard must therefore bind the already armed, unique portal
+    control to the exact route and a unique pair of rendered scope labels—not to broad page text,
+    inline portal state, or a layout-specific control ancestor. Missing, duplicate, hidden,
+    inert, transparent, collapsed, or zero-area label evidence fails closed before the click.

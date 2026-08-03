@@ -31,6 +31,8 @@ export type ArtifactRequest = {
 export type ArtifactFailureReason =
   | "unsupported-target"
   | "wrong-page"
+  | "control-artifact-mismatch"
+  | "control-not-actionable"
   | "control-not-found"
   | "preflight-failed"
   | "response-missing"
@@ -53,6 +55,10 @@ export const ARTIFACT_FAILURE_MESSAGES = {
   "unsupported-target": "Pack cannot acquire that filed-return artifact.",
   "wrong-page":
     "Pack can acquire this artifact only from the matching authenticated GST Portal page.",
+  "control-artifact-mismatch":
+    "The selected GST Portal action no longer matches the requested artifact. Check the page, then retry.",
+  "control-not-actionable":
+    "The selected GST Portal action is no longer available to use. Check the page, then retry.",
   "control-not-found":
     "Pack could not find exactly one verified artifact control on the authenticated GST Portal page.",
   "preflight-failed": "The GST Portal did not accept Pack's artifact preflight request.",
