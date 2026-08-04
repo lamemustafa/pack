@@ -393,7 +393,10 @@ describe("inline filed-return recovery status", () => {
     expect(onRestartTarget).not.toHaveBeenCalled();
   });
 
-  it("does not offer reconciliation for intent-only artifact recovery", () => {
+  it.each([
+    ["intent-only", "artifact-acquisition-start-unreconciled"],
+    ["malformed", "artifact-acquisition-checkpoint-malformed"],
+  ] as const)("does not offer reconciliation for %s artifact recovery", (_kind, recoverySignal) => {
     const targetReviewSummary: FiledReturnsFlowSummary = {
       ...blockedSummary,
       flowStep: {
@@ -401,7 +404,7 @@ describe("inline filed-return recovery status", () => {
         state: "download-unconfirmed",
         safeSignals: [
           "filed-returns-target-review-required",
-          "artifact-acquisition-start-unreconciled",
+          recoverySignal,
           "artifact-acquisition-download-unreconciled",
         ],
       },

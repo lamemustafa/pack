@@ -209,29 +209,35 @@ describe("popup full-year recovery actions", () => {
     expect(markup).not.toContain("Retry this period");
   });
 
-  it("keeps intent-only artifact recovery cancellable without a reconciliation action", () => {
-    const summary = targetReviewSummary();
-    summary.flowStep.safeSignals.push(
-      "artifact-acquisition-start-unreconciled",
-      "artifact-acquisition-download-unreconciled",
-    );
-    const markup = renderToStaticMarkup(
-      createElement(RecoveryActions, {
-        busy: null,
-        portalReady: true,
-        summary,
-        onStartFresh: () => undefined,
-        onAcknowledgeInterruptedRun: () => undefined,
-        onRetryFullFiscalYearTarget: () => undefined,
-        onRetryTarget: () => undefined,
-        onResolveFullFiscalYearTarget: () => undefined,
-        onResolveTarget: () => undefined,
-      }),
-    );
+  it.each([
+    ["intent-only", "artifact-acquisition-start-unreconciled"],
+    ["malformed", "artifact-acquisition-checkpoint-malformed"],
+  ] as const)(
+    "keeps %s artifact recovery cancellable without a reconciliation action",
+    (_kind, recoverySignal) => {
+      const summary = targetReviewSummary();
+      summary.flowStep.safeSignals.push(
+        recoverySignal,
+        "artifact-acquisition-download-unreconciled",
+      );
+      const markup = renderToStaticMarkup(
+        createElement(RecoveryActions, {
+          busy: null,
+          portalReady: true,
+          summary,
+          onStartFresh: () => undefined,
+          onAcknowledgeInterruptedRun: () => undefined,
+          onRetryFullFiscalYearTarget: () => undefined,
+          onRetryTarget: () => undefined,
+          onResolveFullFiscalYearTarget: () => undefined,
+          onResolveTarget: () => undefined,
+        }),
+      );
 
-    expect(markup).not.toContain("Reconcile browser download");
-    expect(markup).toContain("Cancel and reset");
-  });
+      expect(markup).not.toContain("Reconcile browser download");
+      expect(markup).toContain("Cancel and reset");
+    },
+  );
 
   it("keeps local-only cleanup available without labeling it as a portal retry", () => {
     const summary = targetReviewSummary();

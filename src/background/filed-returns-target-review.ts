@@ -440,14 +440,16 @@ export async function resolveUnconfirmedFiledReturnsDownload(
       const [artifactType] = artifacts;
       if (artifacts.length === 1 && artifactType) {
         const inspection = await inspectArtifactAcquisitionCheckpoint({ ...scope, artifactType });
-        if (inspection.state === "retry-safe") {
-          // A browser restart clears the session-only checkpoint and summary but
-          // retains this parser-validated local completion marker. Restore it
-          // before a cancellation can replace the completed target.
+        if (inspection.state === "completed" || inspection.state === "retry-safe") {
+          // A worker stop can retain the completed checkpoint, while a browser
+          // restart clears it. In either case, restore this parser-validated
+          // local completion marker before cancellation can replace the target.
           const restoredCompletion = await persistArtifactAcquisitionCompletion(
             deps.storageKeys.completion,
             scope,
-            review.artifactAcquisitionCompletion,
+            inspection.state === "completed"
+              ? [inspection.evidence]
+              : review.artifactAcquisitionCompletion,
             deps.now?.() ?? new Date(),
             copyFiledReturnsDownloadDiagnosticState(review),
           );
