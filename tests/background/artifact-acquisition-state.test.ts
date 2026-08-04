@@ -125,6 +125,21 @@ describe("artifact acquisition checkpoint", () => {
     expect(mocks.session[secondKey]).toEqual({ untrusted: true });
   });
 
+  it("binds and clears a malformed checkpoint key beyond the old arbitrary limit", async () => {
+    const key = `${PACK_ARTIFACT_ACQUISITION_KEY_PREFIX}.${"x".repeat(600)}`;
+    mocks.session[key] = { untrusted: true };
+
+    const reference = await createMalformedArtifactAcquisitionCheckpointReference(key);
+
+    const referenceValue = Object.entries(mocks.session).find(([storedKey]) =>
+      storedKey.startsWith("pack.artifact-acquisition-review.v1."),
+    )?.[1];
+    expect(referenceValue).toEqual({ keyDigest: expect.stringMatching(/^[a-f0-9]{64}$/) });
+    expect(JSON.stringify(referenceValue)).not.toContain(key);
+    await expect(clearMalformedArtifactAcquisitionCheckpoint(reference!)).resolves.toBe(true);
+    expect(mocks.session[key]).toBeUndefined();
+  });
+
   it("keeps an unresolved download bound to its exact May PDF target", async () => {
     await persistArtifactAcquisitionDownloadId({
       ...MAY_PDF,

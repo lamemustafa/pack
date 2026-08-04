@@ -354,6 +354,7 @@ describe("inline filed-return recovery status", () => {
   it.each([
     "filed-returns-download-reconciliation-required",
     "artifact-acquisition-download-completed-unpersisted",
+    "artifact-acquisition-download-unreconciled",
   ])("labels %s as reconciliation", (signal) => {
     const targetReviewSummary: FiledReturnsFlowSummary = {
       ...blockedSummary,

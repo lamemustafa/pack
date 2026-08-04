@@ -23,9 +23,13 @@ import {
  * test driven only by those objects cannot see it.
  */
 export const PACK_ARTIFACT_ACQUISITION_KEY_PREFIX = "pack.artifact-acquisition.v2";
+/** Session-only mapping that binds a malformed checkpoint to an opaque review reference. */
+export const PACK_MALFORMED_ARTIFACT_ACQUISITION_REVIEW_REFERENCE_KEY_PREFIX =
+  "pack.artifact-acquisition-review.v1";
 
 const KEY_PREFIX = PACK_ARTIFACT_ACQUISITION_KEY_PREFIX;
-const MALFORMED_REVIEW_REFERENCE_KEY_PREFIX = "pack.artifact-acquisition-review.v1";
+const MALFORMED_REVIEW_REFERENCE_KEY_PREFIX =
+  PACK_MALFORMED_ARTIFACT_ACQUISITION_REVIEW_REFERENCE_KEY_PREFIX;
 const MALFORMED_ARTIFACT_ACQUISITION_CHECKPOINT_SENTINEL = {
   schemaVersion: "1.0",
   state: "malformed",
@@ -103,10 +107,12 @@ export async function createMalformedArtifactAcquisitionCheckpointReference(
   key: string,
 ): Promise<string | null> {
   if (!isArtifactAcquisitionCheckpointStorageKey(key)) return null;
+  const keyDigest = await malformedCheckpointKeyDigest(key);
+  if (!keyDigest) return null;
   const reference = createMalformedCheckpointReference();
   try {
     await browser.storage.session.set({
-      [malformedCheckpointReferenceStorageKey(reference)]: { key },
+      [malformedCheckpointReferenceStorageKey(reference)]: { keyDigest },
     });
     return reference;
   } catch {
@@ -121,18 +127,33 @@ export async function clearMalformedArtifactAcquisitionCheckpoint(
   try {
     const referenceKey = malformedCheckpointReferenceStorageKey(reference);
     const values = await browser.storage.session.get(referenceKey);
-    const checkpointKey = malformedCheckpointKeyFromReference(values[referenceKey]);
+    const keyDigest = malformedCheckpointKeyDigestFromReference(values[referenceKey]);
     // storage.session is cleared with the checkpoint itself. The durable review
     // can therefore be safely cancelled when its session-only binding is gone.
-    if (!checkpointKey) {
+    if (!keyDigest) {
       await browser.storage.session.remove(referenceKey);
       return true;
     }
-    const value = (await browser.storage.session.get(checkpointKey))[checkpointKey];
-    if (value === undefined) {
+    const allValues = await browser.storage.session.get();
+    const checkpointKeys = Object.keys(allValues).filter(isArtifactAcquisitionCheckpointStorageKey);
+    const candidates = await Promise.all(
+      checkpointKeys.map(async (key) => ({
+        key,
+        keyDigest: await malformedCheckpointKeyDigest(key),
+      })),
+    );
+    if (candidates.some((candidate) => !candidate.keyDigest)) return false;
+    const matchingKeys = candidates
+      .filter((candidate) => candidate.keyDigest === keyDigest)
+      .map((candidate) => candidate.key);
+    if (matchingKeys.length === 0) {
       await browser.storage.session.remove(referenceKey);
       return true;
     }
+    if (matchingKeys.length !== 1) return false;
+    const [checkpointKey] = matchingKeys;
+    if (!checkpointKey) return false;
+    const value = allValues[checkpointKey];
     const target = checkpointTargetFromKey(checkpointKey);
     if (
       target &&
@@ -344,7 +365,7 @@ function checkpointTarget(input: {
 }
 
 function isArtifactAcquisitionCheckpointStorageKey(key: unknown): key is string {
-  return typeof key === "string" && key.startsWith(`${KEY_PREFIX}.`) && key.length <= 500;
+  return typeof key === "string" && key.startsWith(`${KEY_PREFIX}.`);
 }
 
 function malformedCheckpointReferenceStorageKey(reference: string): string {
@@ -357,10 +378,19 @@ function createMalformedCheckpointReference(): string {
   return `malformed-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function malformedCheckpointKeyFromReference(value: unknown): string | null {
+function malformedCheckpointKeyDigestFromReference(value: unknown): string | null {
   if (!value || typeof value !== "object") return null;
-  const key = (value as { key?: unknown }).key;
-  return isArtifactAcquisitionCheckpointStorageKey(key) ? key : null;
+  const keyDigest = (value as { keyDigest?: unknown }).keyDigest;
+  return typeof keyDigest === "string" && /^[a-f0-9]{64}$/.test(keyDigest) ? keyDigest : null;
+}
+
+async function malformedCheckpointKeyDigest(key: string): Promise<string | null> {
+  try {
+    const digest = await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(key));
+    return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  } catch {
+    return null;
+  }
 }
 
 function isArtifactAcquisitionIntent(

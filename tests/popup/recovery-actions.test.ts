@@ -187,6 +187,7 @@ describe("popup full-year recovery actions", () => {
   it.each([
     "filed-returns-download-reconciliation-required",
     "artifact-acquisition-download-completed-unpersisted",
+    "artifact-acquisition-download-unreconciled",
   ])("labels %s as reconciliation, not retry", (signal) => {
     const summary = targetReviewSummary();
     summary.flowStep.safeSignals.push(signal);
