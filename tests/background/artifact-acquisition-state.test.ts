@@ -26,10 +26,13 @@ const mocks = vi.hoisted(() => {
 vi.mock("wxt/browser", () => ({ browser: mocks.browser }));
 
 import {
+  PACK_ARTIFACT_ACQUISITION_KEY_PREFIX,
   artifactAcquisitionCheckpointKey,
   clearArtifactAcquisitionCheckpoint,
   clearArtifactAcquisitionCheckpoints,
   clearArtifactAcquisitionCheckpointsAfterPersistedSummary,
+  clearMalformedArtifactAcquisitionCheckpoint,
+  createMalformedArtifactAcquisitionCheckpointReference,
   readArtifactAcquisitionCheckpoints,
   persistArtifactAcquisitionDownloadId,
   persistArtifactAcquisitionIntent,
@@ -99,6 +102,29 @@ describe("artifact acquisition checkpoint", () => {
     ]);
   });
 
+  it("surfaces unsupported key selections as an exact malformed record", async () => {
+    const key = `${PACK_ARTIFACT_ACQUISITION_KEY_PREFIX}.GSTR-3B.2025-99.May.PDF`;
+    mocks.session[key] = { schemaVersion: "1.0", state: "malformed" };
+
+    await expect(readArtifactAcquisitionCheckpoints()).resolves.toEqual([
+      { key, state: "malformed" },
+    ]);
+  });
+
+  it("removes only the explicitly reviewed malformed record", async () => {
+    const firstKey = `${PACK_ARTIFACT_ACQUISITION_KEY_PREFIX}.bad-one`;
+    const secondKey = `${PACK_ARTIFACT_ACQUISITION_KEY_PREFIX}.bad-two`;
+    mocks.session[firstKey] = { untrusted: true };
+    mocks.session[secondKey] = { untrusted: true };
+
+    const firstReference = await createMalformedArtifactAcquisitionCheckpointReference(firstKey);
+    expect(firstReference).toMatch(/^[a-zA-Z0-9-]+$/);
+    await expect(clearMalformedArtifactAcquisitionCheckpoint(firstReference!)).resolves.toBe(true);
+
+    expect(mocks.session[firstKey]).toBeUndefined();
+    expect(mocks.session[secondKey]).toEqual({ untrusted: true });
+  });
+
   it("keeps an unresolved download bound to its exact May PDF target", async () => {
     await persistArtifactAcquisitionDownloadId({
       ...MAY_PDF,
@@ -136,6 +162,17 @@ describe("artifact acquisition checkpoint", () => {
       state: "needs-review",
       safeSignals: ["artifact-acquisition-start-unreconciled"],
     });
+  });
+
+  it("discards an intent-only checkpoint only during explicit cancellation", async () => {
+    await persistArtifactAcquisitionIntent({ ...MAY_PDF, requestId: actionId(80) });
+
+    await expect(
+      clearArtifactAcquisitionCheckpoints(MAY_PDF, { discardIntent: true }),
+    ).resolves.toEqual({ state: "cleared" });
+    expect(mocks.session[artifactAcquisitionCheckpointKey(MAY_PDF)]).toBeUndefined();
+    expect(mocks.browser.downloads.search).not.toHaveBeenCalled();
+    expect(mocks.browser.downloads.cancel).not.toHaveBeenCalled();
   });
 
   it("blocks a download whose correlation checkpoint could not be persisted", async () => {

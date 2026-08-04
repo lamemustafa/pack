@@ -49,6 +49,7 @@ import {
 import { startSinglePeriodFiledReturnsDownloadFlow } from "./filed-returns-single-period-flow";
 import { reconcileFiledReturnsTargetDownload } from "./filed-returns-target-download-recovery";
 import {
+  createMalformedArtifactAcquisitionCheckpointReference,
   readArtifactAcquisitionCheckpoints,
   reconcileArtifactAcquisitionCheckpoint,
 } from "./artifact-acquisition-state";
@@ -115,65 +116,64 @@ export async function startFiledReturnsDownloadFlow(
     return responseForFiledReturnsTargetReview(targetReviewState.review);
   }
 
-  const retainedArtifactRecovery = await surfaceRetainedArtifactAcquisitionReview(scope, deps);
-  if (retainedArtifactRecovery) return retainedArtifactRecovery;
-
-  if (isFullFiscalYearScope(scope)) {
-    const malformedLedger = await readMalformedLedgerState(deps.storageKeys.fullFiscalYearLedger);
-    if (malformedLedger) {
-      const flowStep: PortalFlowStepResult = {
-        connectorId: "gst",
-        scopeId: "gst-filed-returns-private-v0",
-        state: "blocked",
-        safeSignals: [
-          "full-fiscal-year-ledger-malformed",
-          ...(malformedLedger.recoverableLedgerId ? ["full-fiscal-year-opfs-retained"] : []),
-        ],
-        safeMessage:
-          "Pack found damaged fiscal-year recovery metadata and cannot verify whether local staging remains.",
-        userAction: {
-          type: "RETRY_PORTAL_GENERATION",
-          message:
-            "Use Clear local Pack data to remove the retained staging before starting again.",
-          canResume: false,
-        },
-      };
-      return {
-        ok: true,
-        flowStep,
-        flowSummary: {
-          scope,
-          status: "blocked",
-          completedPeriods: [],
-          totalPeriods: 12,
-          flowStep,
-        },
-      };
-    }
-    const existingLedger = await readLedger(deps.storageKeys.fullFiscalYearLedger);
-    const replaceableCompletedLedger =
-      existingLedger?.status === "complete" &&
-      canCompleteFullFiscalYearLedger(existingLedger) &&
-      !hasRetainedFullFiscalYearStaging(existingLedger);
-    if (
-      existingLedger &&
-      !sameFiledReturnsScope(existingLedger.scope, scope) &&
-      !replaceableCompletedLedger
-    ) {
-      const existingLedgerResponse = responseForExistingLedger(
-        existingLedger,
-        deps.now?.() ?? new Date(),
-        { blockRetainedStaging: true },
-      );
-      if (existingLedgerResponse) return existingLedgerResponse;
-    }
-  }
-
   const activeRun = await acquireFiledReturnsRun(scope, deps);
   if ("response" in activeRun) return activeRun.response;
 
   const stopLeaseRenewal = startFiledReturnsRunLeaseRenewal(activeRun.run, deps);
   try {
+    const retainedArtifactRecovery = await surfaceRetainedArtifactAcquisitionReview(scope, deps);
+    if (retainedArtifactRecovery) return retainedArtifactRecovery;
+
+    if (isFullFiscalYearScope(scope)) {
+      const malformedLedger = await readMalformedLedgerState(deps.storageKeys.fullFiscalYearLedger);
+      if (malformedLedger) {
+        const flowStep: PortalFlowStepResult = {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-private-v0",
+          state: "blocked",
+          safeSignals: [
+            "full-fiscal-year-ledger-malformed",
+            ...(malformedLedger.recoverableLedgerId ? ["full-fiscal-year-opfs-retained"] : []),
+          ],
+          safeMessage:
+            "Pack found damaged fiscal-year recovery metadata and cannot verify whether local staging remains.",
+          userAction: {
+            type: "RETRY_PORTAL_GENERATION",
+            message:
+              "Use Clear local Pack data to remove the retained staging before starting again.",
+            canResume: false,
+          },
+        };
+        return {
+          ok: true,
+          flowStep,
+          flowSummary: {
+            scope,
+            status: "blocked",
+            completedPeriods: [],
+            totalPeriods: 12,
+            flowStep,
+          },
+        };
+      }
+      const existingLedger = await readLedger(deps.storageKeys.fullFiscalYearLedger);
+      const replaceableCompletedLedger =
+        existingLedger?.status === "complete" &&
+        canCompleteFullFiscalYearLedger(existingLedger) &&
+        !hasRetainedFullFiscalYearStaging(existingLedger);
+      if (
+        existingLedger &&
+        !sameFiledReturnsScope(existingLedger.scope, scope) &&
+        !replaceableCompletedLedger
+      ) {
+        const existingLedgerResponse = responseForExistingLedger(
+          existingLedger,
+          deps.now?.() ?? new Date(),
+          { blockRetainedStaging: true },
+        );
+        if (existingLedgerResponse) return existingLedgerResponse;
+      }
+    }
     if (isFullFiscalYearScope(scope)) {
       return startFullFiscalYearDownloadFlow(
         scope,
@@ -301,7 +301,24 @@ async function surfaceRetainedArtifactAcquisitionReview(
       ? { ok: true, flowStep: summary.flowStep, flowSummary: summary }
       : { ok: true, flowStep };
   }
-  if (!checkpoints.some((checkpoint) => checkpoint.state === "malformed")) return null;
+  const malformedCheckpoint = checkpoints.find((checkpoint) => checkpoint.state === "malformed");
+  if (!malformedCheckpoint || malformedCheckpoint.state !== "malformed") return null;
+  const malformedCheckpointReference = await createMalformedArtifactAcquisitionCheckpointReference(
+    malformedCheckpoint.key,
+  );
+  if (!malformedCheckpointReference) {
+    return {
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-private-v0",
+        state: "blocked",
+        safeSignals: ["artifact-acquisition-malformed-reference-unavailable"],
+        safeMessage:
+          "Pack found malformed retained artifact recovery but could not prepare its local review safely.",
+      },
+    };
+  }
   const flowStep: PortalFlowStepResult = {
     connectorId: "gst",
     scopeId: "gst-filed-returns-private-v0",
@@ -315,7 +332,9 @@ async function surfaceRetainedArtifactAcquisitionReview(
       canResume: true,
     },
   };
-  const summary = await persistFiledReturnsTargetReview(requestedScope, flowStep, deps);
+  const summary = await persistFiledReturnsTargetReview(requestedScope, flowStep, deps, {
+    artifactAcquisitionMalformedCheckpointReference: malformedCheckpointReference,
+  });
   return summary
     ? { ok: true, flowStep: summary.flowStep, flowSummary: summary }
     : { ok: true, flowStep };
@@ -392,6 +411,12 @@ export async function startFreshFiledReturnsDownloadFlow(
       const remainingTargetReview = await readCurrentFiledReturnsTargetReview(deps);
       if (remainingTargetReview) return responseForFiledReturnsTargetReview(remainingTargetReview);
     }
+
+    const retainedArtifactRecovery = await surfaceRetainedArtifactAcquisitionReview(
+      payload.scope,
+      deps,
+    );
+    if (retainedArtifactRecovery) return retainedArtifactRecovery;
 
     if (isFullFiscalYearScope(payload.scope)) {
       return startFullFiscalYearDownloadFlow(

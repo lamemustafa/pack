@@ -13,7 +13,7 @@ import {
 import {
   clearArtifactAcquisitionCheckpoints,
   clearArtifactAcquisitionCheckpointsAfterPersistedSummary,
-  clearMalformedArtifactAcquisitionCheckpoints,
+  clearMalformedArtifactAcquisitionCheckpoint,
   inspectArtifactAcquisitionCheckpoint,
   type ArtifactAcquisitionCompletionEvidence,
 } from "./artifact-acquisition-state";
@@ -63,6 +63,7 @@ export type FiledReturnsTargetReviewStorageState =
   | { review: FiledReturnsTargetReview; state: "valid" };
 
 interface PersistFiledReturnsTargetReviewOptions {
+  artifactAcquisitionMalformedCheckpointReference?: string;
   downloadAttempt?: FiledReturnsTargetDownloadAttempt;
   singlePeriodBundleCheckpoint?: NonNullable<
     FiledReturnsTargetReview["singlePeriodBundleCheckpoint"]
@@ -150,7 +151,18 @@ export async function persistFiledReturnsTargetReview(
         ? uniqueSafeSignals([...flowStep.safeSignals, "filed-return-download-diagnostics-rejected"])
         : flowStep.safeSignals,
     );
+    const malformedCheckpointReference = durableStatus.safeSignals.includes(
+      "artifact-acquisition-checkpoint-malformed",
+    )
+      ? (options.artifactAcquisitionMalformedCheckpointReference ??
+        existingReview?.artifactAcquisitionMalformedCheckpointReference)
+      : undefined;
     const review = {
+      ...(malformedCheckpointReference
+        ? {
+            artifactAcquisitionMalformedCheckpointReference: malformedCheckpointReference,
+          }
+        : {}),
       ...(options.downloadAttempt
         ? { downloadAttempt: options.downloadAttempt }
         : existingReview?.downloadAttempt
@@ -464,12 +476,16 @@ export async function resolveUnconfirmedFiledReturnsDownload(
     if (hasArtifactAcquisitionRecoverySignal(review.safeSignals)) {
       if (
         review.safeSignals.includes("artifact-acquisition-checkpoint-malformed") &&
-        !(await clearMalformedArtifactAcquisitionCheckpoints())
+        review.artifactAcquisitionMalformedCheckpointReference &&
+        !(await clearMalformedArtifactAcquisitionCheckpoint(
+          review.artifactAcquisitionMalformedCheckpointReference,
+        ))
       ) {
         return responseForFiledReturnsTargetReview(review);
       }
       const cancellation = await clearArtifactAcquisitionCheckpoints(review.scope, {
         discardCompleted: true,
+        discardIntent: true,
       });
       if (cancellation.state === "blocked") {
         const clearFailureReview: FiledReturnsTargetReview = {
@@ -660,6 +676,7 @@ function parseFiledReturnsTargetReview(input: unknown): FiledReturnsTargetReview
   if (
     !hasOnlyKeys(review, [
       "artifactAcquisitionCompletion",
+      "artifactAcquisitionMalformedCheckpointReference",
       "downloadAttempt",
       "downloadDiagnostic",
       "downloadDiagnostics",
@@ -698,8 +715,22 @@ function parseFiledReturnsTargetReview(input: unknown): FiledReturnsTargetReview
   if (review.artifactAcquisitionCompletion !== undefined && !artifactAcquisitionCompletion) {
     return null;
   }
+  const malformedCheckpointReference = review.artifactAcquisitionMalformedCheckpointReference;
+  if (
+    malformedCheckpointReference !== undefined &&
+    (!isBoundedString(malformedCheckpointReference, 1, 120) ||
+      !/^[a-zA-Z0-9-]+$/.test(malformedCheckpointReference))
+  ) {
+    return null;
+  }
   const durableStatus = parseDurableTargetStatus(scope, "target-review", review.safeSignals);
   if (!durableStatus) return null;
+  if (
+    malformedCheckpointReference &&
+    !durableStatus.safeSignals.includes("artifact-acquisition-checkpoint-malformed")
+  ) {
+    return null;
+  }
   if (
     review.downloadAttempt !== undefined &&
     (!isFiledReturnsTargetDownloadAttempt(review.downloadAttempt) ||
@@ -736,6 +767,9 @@ function parseFiledReturnsTargetReview(input: unknown): FiledReturnsTargetReview
     revision,
     scope,
     ...(artifactAcquisitionCompletion ? { artifactAcquisitionCompletion } : {}),
+    ...(malformedCheckpointReference
+      ? { artifactAcquisitionMalformedCheckpointReference: malformedCheckpointReference }
+      : {}),
     ...(singlePeriodBundleCheckpoint ? { singlePeriodBundleCheckpoint } : {}),
   } as FiledReturnsTargetReview;
 }

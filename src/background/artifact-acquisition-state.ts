@@ -8,7 +8,7 @@ import {
   type FiledReturnsConcreteArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
 import { isCanonicalFiledReturnsActionId } from "../connectors/gst/filed-returns-operation-id";
-import { isFiledReturnsReturnType } from "../connectors/gst/filed-returns-return-types";
+import { parseDurableFiledReturnsScope } from "../connectors/gst/filed-returns-durable-status";
 import { isExpectedDownloadCandidate } from "./download-correlation";
 import {
   classifyDownloadDanger,
@@ -25,6 +25,7 @@ import {
 export const PACK_ARTIFACT_ACQUISITION_KEY_PREFIX = "pack.artifact-acquisition.v2";
 
 const KEY_PREFIX = PACK_ARTIFACT_ACQUISITION_KEY_PREFIX;
+const MALFORMED_REVIEW_REFERENCE_KEY_PREFIX = "pack.artifact-acquisition-review.v1";
 const MALFORMED_ARTIFACT_ACQUISITION_CHECKPOINT_SENTINEL = {
   schemaVersion: "1.0",
   state: "malformed",
@@ -54,7 +55,7 @@ export type ArtifactAcquisitionCheckpointInspection =
   | { state: "needs-review"; safeSignals: string[] };
 
 export type RetainedArtifactAcquisitionCheckpoint =
-  { state: "malformed" } | { state: "target"; target: ArtifactAcquisitionTarget };
+  { key: string; state: "malformed" } | { state: "target"; target: ArtifactAcquisitionTarget };
 
 export function artifactAcquisitionCheckpointKey(target: ArtifactAcquisitionTarget): string {
   const artifactType = target.artifactType ?? "PDF";
@@ -83,7 +84,7 @@ export async function readArtifactAcquisitionCheckpoints(): Promise<
     if (!key.startsWith(`${KEY_PREFIX}.`)) continue;
     const target = checkpointTargetFromKey(key);
     if (!target) {
-      retained.push({ state: "malformed" });
+      retained.push({ key, state: "malformed" });
       continue;
     }
     // Keep a canonical-key target recoverable even when the value is malformed
@@ -94,20 +95,53 @@ export async function readArtifactAcquisitionCheckpoints(): Promise<
   return retained;
 }
 
-/** Removes only malformed prefix records after the user explicitly cancels recovery. */
-export async function clearMalformedArtifactAcquisitionCheckpoints(): Promise<boolean> {
+/**
+ * Keeps an unparseable checkpoint key in session storage while a durable review
+ * holds only an opaque reference to it.
+ */
+export async function createMalformedArtifactAcquisitionCheckpointReference(
+  key: string,
+): Promise<string | null> {
+  if (!isArtifactAcquisitionCheckpointStorageKey(key)) return null;
+  const reference = createMalformedCheckpointReference();
   try {
-    const values = await browser.storage.session.get();
-    const keys = Object.entries(values).flatMap(([key, value]) => {
-      if (!key.startsWith(`${KEY_PREFIX}.`)) return [];
-      const target = checkpointTargetFromKey(key);
-      return target &&
-        isArtifactAcquisitionCheckpoint(value) &&
-        checkpointMatchesTarget(value, target)
-        ? []
-        : [key];
+    await browser.storage.session.set({
+      [malformedCheckpointReferenceStorageKey(reference)]: { key },
     });
-    if (keys.length > 0) await browser.storage.session.remove(keys);
+    return reference;
+  } catch {
+    return null;
+  }
+}
+
+/** Removes the one malformed checkpoint bound to an explicit review. */
+export async function clearMalformedArtifactAcquisitionCheckpoint(
+  reference: string,
+): Promise<boolean> {
+  try {
+    const referenceKey = malformedCheckpointReferenceStorageKey(reference);
+    const values = await browser.storage.session.get(referenceKey);
+    const checkpointKey = malformedCheckpointKeyFromReference(values[referenceKey]);
+    // storage.session is cleared with the checkpoint itself. The durable review
+    // can therefore be safely cancelled when its session-only binding is gone.
+    if (!checkpointKey) {
+      await browser.storage.session.remove(referenceKey);
+      return true;
+    }
+    const value = (await browser.storage.session.get(checkpointKey))[checkpointKey];
+    if (value === undefined) {
+      await browser.storage.session.remove(referenceKey);
+      return true;
+    }
+    const target = checkpointTargetFromKey(checkpointKey);
+    if (
+      target &&
+      isArtifactAcquisitionCheckpoint(value) &&
+      checkpointMatchesTarget(value, target)
+    ) {
+      return false;
+    }
+    await browser.storage.session.remove([checkpointKey, referenceKey]);
     return true;
   } catch {
     return false;
@@ -181,7 +215,7 @@ export type ArtifactCheckpointCancellation =
 
 export async function clearArtifactAcquisitionCheckpoints(
   scope: FiledReturnsDownloadScope,
-  options: { discardCompleted?: boolean } = {},
+  options: { discardCompleted?: boolean; discardIntent?: boolean } = {},
 ): Promise<ArtifactCheckpointCancellation> {
   const targets = concreteFiledReturnsArtifactTypesForSelection(
     scope.returnType,
@@ -212,6 +246,10 @@ export async function clearArtifactAcquisitionCheckpoints(
       // cancelling an ID that may have appeared in the malformed input it
       // replaced.
       if (isMalformedArtifactAcquisitionCheckpointSentinel(checkpoint)) continue;
+      if (isArtifactAcquisitionIntent(checkpoint, target)) {
+        if (!options.discardIntent) return { state: "blocked" };
+        continue;
+      }
       if (
         !isArtifactAcquisitionCheckpoint(checkpoint) ||
         !checkpointOwnsTarget(checkpoint, target) ||
@@ -293,35 +331,49 @@ function checkpointTarget(input: {
   period?: unknown;
   returnType?: unknown;
 }): ArtifactAcquisitionTarget | null {
-  if (
-    !isFiledReturnsReturnType(input.returnType) ||
-    !isFiledReturnsConcreteArtifactType(input.artifactType) ||
-    typeof input.financialYear !== "string" ||
-    !/^\d{4}-\d{2}$/.test(input.financialYear) ||
-    typeof input.period !== "string" ||
-    ![
-      "April",
-      "May",
-      "June",
-      "July",
-      "August",
-      "September",
-      "October",
-      "November",
-      "December",
-      "January",
-      "February",
-      "March",
-    ].includes(input.period)
-  ) {
+  const scope = parseDurableFiledReturnsScope(input, false);
+  if (!scope || !isFiledReturnsConcreteArtifactType(scope.artifactType)) {
     return null;
   }
   return {
-    artifactType: input.artifactType,
-    financialYear: input.financialYear,
-    period: input.period,
-    returnType: input.returnType,
+    artifactType: scope.artifactType,
+    financialYear: scope.financialYear,
+    period: scope.period,
+    returnType: scope.returnType,
   };
+}
+
+function isArtifactAcquisitionCheckpointStorageKey(key: unknown): key is string {
+  return typeof key === "string" && key.startsWith(`${KEY_PREFIX}.`) && key.length <= 500;
+}
+
+function malformedCheckpointReferenceStorageKey(reference: string): string {
+  return `${MALFORMED_REVIEW_REFERENCE_KEY_PREFIX}.${reference}`;
+}
+
+function createMalformedCheckpointReference(): string {
+  const randomId = globalThis.crypto?.randomUUID?.();
+  if (randomId) return randomId;
+  return `malformed-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function malformedCheckpointKeyFromReference(value: unknown): string | null {
+  if (!value || typeof value !== "object") return null;
+  const key = (value as { key?: unknown }).key;
+  return isArtifactAcquisitionCheckpointStorageKey(key) ? key : null;
+}
+
+function isArtifactAcquisitionIntent(
+  checkpoint: unknown,
+  target: ArtifactAcquisitionTarget,
+): checkpoint is ArtifactAcquisitionCheckpoint {
+  return (
+    isArtifactAcquisitionCheckpoint(checkpoint) &&
+    checkpoint.state === "intent" &&
+    checkpointMatchesTarget(checkpoint, target) &&
+    isCanonicalFiledReturnsActionId(checkpoint.requestId) &&
+    Boolean(armedAtFromCheckpoint(checkpoint))
+  );
 }
 
 /** Clears completed exact-ID ownership only after the matching summary is durable. */
