@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildReleaseOutputs,
   resolveReleaseTargetBranch,
+  runReleasePlease,
   serializeGitHubOutput,
 } from "../../scripts/run-release-please.mjs";
 
