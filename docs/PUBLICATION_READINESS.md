@@ -156,8 +156,9 @@ stable-release claims.
       offered return/artifact selection as exercised or as explicitly expected
       fail-closed/not applicable when it cannot reach an acquisition checkpoint.
       For each acquisition-capable selection, cover service-worker restart,
-      browser restart, interrupted download, and a retained checkpoint whose
-      browser record is no longer available. A resumed path must not repeat a
+      browser restart, interrupted download, cancellation/discard and its
+      cleanup outcome, and a retained checkpoint whose browser record is no
+      longer available. A resumed path must not repeat a
       completed target; an unproven path must remain non-complete until retry
       or cancellation. Manual observation may be recorded only as an explicit
       non-completing action that still requires retry before ZIP staging. Record
