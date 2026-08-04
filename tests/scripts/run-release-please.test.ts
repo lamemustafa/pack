@@ -70,47 +70,38 @@ describe("Release Please workflow wrapper", () => {
     ).toBe("1.x");
   });
 
-  it("uses the release-please GitHub and manifest contracts without contacting GitHub", async () => {
-    const github = { repository: { defaultBranch: "master" } };
+  it("uses the installed release-please GitHub and manifest contracts without contacting GitHub", async () => {
     const createReleases = vi
       .fn()
       .mockResolvedValue([{ path: ".", tagName: "v0.1.1", version: "0.1.1" }]);
     const createPullRequests = vi.fn().mockResolvedValue([{ number: 123 }]);
-    const createGitHub = vi.spyOn(releasePlease.GitHub, "create").mockResolvedValue(github);
-    const fromManifest = vi
-      .spyOn(releasePlease.Manifest, "fromManifest")
-      .mockResolvedValueOnce({ createReleases })
-      .mockResolvedValueOnce({ createPullRequests });
+    const getFileContentsOnBranch = vi
+      .spyOn(releasePlease.GitHub.prototype, "getFileContentsOnBranch")
+      .mockImplementation(async (path: string) => ({
+        parsedContent: JSON.stringify(
+          path === "release-please-config.json"
+            ? { packages: { ".": { "release-type": "node" } } }
+            : { ".": "0.1.0" },
+        ),
+      }));
+    const releaseManifest = vi
+      .spyOn(releasePlease.Manifest.prototype, "createReleases")
+      .mockImplementation(createReleases);
+    const pullRequestManifest = vi
+      .spyOn(releasePlease.Manifest.prototype, "createPullRequests")
+      .mockImplementation(createPullRequests);
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
     try {
       const outputs = await runReleasePlease({
         GITHUB_REPOSITORY: "lamemustafa/pack",
         RELEASE_PLEASE_TOKEN: "test-token",
+        RELEASE_PLEASE_TARGET_BRANCH: "master",
       });
 
-      expect(createGitHub).toHaveBeenCalledWith({
-        apiUrl: "https://api.github.com",
-        defaultBranch: undefined,
-        graphqlUrl: "https://api.github.com",
-        owner: "lamemustafa",
-        repo: "pack",
-        token: "test-token",
-      });
-      expect(fromManifest).toHaveBeenNthCalledWith(
-        1,
-        github,
-        "master",
-        "release-please-config.json",
-        ".release-please-manifest.json",
-      );
-      expect(fromManifest).toHaveBeenNthCalledWith(
-        2,
-        github,
-        "master",
-        "release-please-config.json",
-        ".release-please-manifest.json",
-      );
+      expect(getFileContentsOnBranch).toHaveBeenCalledTimes(4);
+      expect(getFileContentsOnBranch).toHaveBeenCalledWith("release-please-config.json", "master");
+      expect(getFileContentsOnBranch).toHaveBeenCalledWith(".release-please-manifest.json", "master");
       expect(createReleases).toHaveBeenCalledOnce();
       expect(createPullRequests).toHaveBeenCalledOnce();
       expect(outputs).toMatchObject({
@@ -120,8 +111,9 @@ describe("Release Please workflow wrapper", () => {
       });
     } finally {
       log.mockRestore();
-      fromManifest.mockRestore();
-      createGitHub.mockRestore();
+      pullRequestManifest.mockRestore();
+      releaseManifest.mockRestore();
+      getFileContentsOnBranch.mockRestore();
     }
   });
 });
