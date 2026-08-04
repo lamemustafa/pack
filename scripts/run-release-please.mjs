@@ -11,8 +11,8 @@ const DEFAULT_MANIFEST_FILE = ".release-please-manifest.json";
 const DEFAULT_GITHUB_API_URL = "https://api.github.com";
 const DEFAULT_GITHUB_GRAPHQL_URL = "https://api.github.com";
 
-export async function runReleasePlease(env = process.env, dependencies = releasePlease) {
-  const { GitHub, Manifest, VERSION } = dependencies;
+export async function runReleasePlease(env = process.env) {
+  const { GitHub, Manifest, VERSION } = releasePlease;
   const token = env.RELEASE_PLEASE_TOKEN || env.GITHUB_TOKEN || env.GH_TOKEN;
   const repoUrl = env.GITHUB_REPOSITORY;
   if (!token) throw new Error("Missing RELEASE_PLEASE_TOKEN, GITHUB_TOKEN, or GH_TOKEN.");
