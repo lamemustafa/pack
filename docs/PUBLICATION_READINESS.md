@@ -158,9 +158,10 @@ stable-release claims.
       For each acquisition-capable selection, cover service-worker restart,
       browser restart, interrupted download, and a retained checkpoint whose
       browser record is no longer available. A resumed path must not repeat a
-      completed target; an unproven path must remain non-complete until an
-      explicit permitted user resolution (retry, cancellation, or manual
-      observation). Record category/state summaries only—never raw portal URLs,
+      completed target; an unproven path must remain non-complete until retry
+      or cancellation. Manual observation may be recorded only as an explicit
+      non-completing action that still requires retry before ZIP staging. Record
+      category/state summaries only—never raw portal URLs,
       filenames, download IDs, page or DOM text, local paths, or taxpayer/session
       data.
 - [ ] Action-bound capture is tested in clean Chrome and Brave profiles plus the
