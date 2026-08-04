@@ -86,10 +86,11 @@ describe("Release Please workflow wrapper", () => {
     const createPullRequests = vi.fn().mockResolvedValue([{ number: 123 }]);
     const getFileContentsOnBranch = vi
       .spyOn(releasePlease.GitHub.prototype, "getFileContentsOnBranch")
-      .mockImplementation(async (path: string) => {
+      .mockImplementation(async (...args: unknown[]) => {
+        const [path] = args;
         if (path === "release-please-config.json") return { parsedContent: configContents };
         if (path === ".release-please-manifest.json") return { parsedContent: manifestContents };
-        throw new Error(`Unexpected release-please file request: ${path}`);
+        throw new Error(`Unexpected release-please file request: ${String(path)}`);
       });
     const releaseManifest = vi
       .spyOn(releasePlease.Manifest.prototype, "createReleases")
@@ -107,10 +108,7 @@ describe("Release Please workflow wrapper", () => {
       });
 
       expect(getFileContentsOnBranch).toHaveBeenCalledTimes(4);
-      expect(getFileContentsOnBranch).toHaveBeenCalledWith(
-        "release-please-config.json",
-        "master",
-      );
+      expect(getFileContentsOnBranch).toHaveBeenCalledWith("release-please-config.json", "master");
       expect(getFileContentsOnBranch).toHaveBeenCalledWith(
         ".release-please-manifest.json",
         "master",
