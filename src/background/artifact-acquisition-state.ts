@@ -7,7 +7,6 @@ import {
   isFiledReturnsConcreteArtifactType,
   type FiledReturnsConcreteArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
-import { parseDurableFiledReturnsScope } from "../connectors/gst/filed-returns-durable-status";
 import { isCanonicalFiledReturnsActionId } from "../connectors/gst/filed-returns-operation-id";
 import { isExpectedDownloadCandidate } from "./download-correlation";
 import {
@@ -53,11 +52,6 @@ export type ArtifactAcquisitionCheckpointInspection =
   | { evidence: ArtifactAcquisitionCompletionEvidence; state: "completed" }
   | { state: "needs-review"; safeSignals: string[] };
 
-export type ArtifactAcquisitionCheckpointTarget = {
-  key: string;
-  target: ArtifactAcquisitionTarget;
-};
-
 export function artifactAcquisitionCheckpointKey(target: ArtifactAcquisitionTarget): string {
   const artifactType = target.artifactType ?? "PDF";
   return [KEY_PREFIX, target.returnType, target.financialYear, target.period, artifactType]
@@ -69,25 +63,6 @@ export function artifactAcquisitionCheckpointKey(target: ArtifactAcquisitionTarg
 export async function hasArtifactAcquisitionCheckpoint(): Promise<boolean> {
   const values = await browser.storage.session.get();
   return Object.keys(values).some((key) => key.startsWith(`${KEY_PREFIX}.`));
-}
-
-/**
- * Lists every checkpoint target still owned by this browser session. Startup
- * recovery uses the key as its target boundary, then inspects the record before
- * it can act on the browser download ID inside it.
- */
-export async function readArtifactAcquisitionCheckpointTargets(): Promise<
-  ArtifactAcquisitionCheckpointTarget[]
-> {
-  const values = await browser.storage.session.get();
-  const targets = new Map<string, ArtifactAcquisitionCheckpointTarget>();
-  for (const key of Object.keys(values)) {
-    const target = artifactAcquisitionTargetFromKey(key);
-    if (target && key === artifactAcquisitionCheckpointKey(target)) {
-      targets.set(key, { key, target });
-    }
-  }
-  return [...targets.values()];
 }
 
 export async function persistArtifactAcquisitionIntent(
@@ -309,9 +284,8 @@ export async function reconcileArtifactAcquisitionCheckpoint(
 ): Promise<{ state: "retry-safe" } | { state: "needs-review"; safeSignals: string[] }> {
   const inspection = await inspectArtifactAcquisitionCheckpoint(target);
   if (inspection.state !== "completed") return inspection;
-  // A foreground start must never repeat a download that startup recovery has
-  // not yet persisted. The durable reconciler is the sole owner of turning
-  // completed evidence into a completion summary.
+  // A foreground start must never repeat a download whose exact-ID evidence
+  // has not yet been resolved by its target-scoped recovery path.
   return {
     state: "needs-review",
     safeSignals: ["artifact-acquisition-download-completed-unpersisted"],
@@ -319,9 +293,8 @@ export async function reconcileArtifactAcquisitionCheckpoint(
 }
 
 /**
- * Inspects one exact-ID checkpoint for the foreground guard and startup
- * scanner. The scanner opts out of malformed-record preservation because only
- * the foreground guard owns unproven checkpoint recovery.
+ * Inspects one exact-ID checkpoint for the foreground guard, which owns every
+ * unproven checkpoint recovery and preserves malformed records for review.
  */
 export async function inspectArtifactAcquisitionCheckpoint(
   target: ArtifactAcquisitionTarget,
@@ -433,29 +406,6 @@ export async function inspectArtifactAcquisitionCheckpoint(
       state: "needs-review",
       safeSignals: ["artifact-acquisition-download-search-unavailable"],
     };
-  }
-}
-
-function artifactAcquisitionTargetFromKey(key: string): ArtifactAcquisitionTarget | null {
-  if (!key.startsWith(`${KEY_PREFIX}.`)) return null;
-  const encodedParts = key.slice(`${KEY_PREFIX}.`.length).split(".");
-  if (encodedParts.length !== 4) return null;
-  try {
-    const [returnType, financialYear, period, artifactType] = encodedParts.map(decodeURIComponent);
-    const scope = parseDurableFiledReturnsScope(
-      { artifactType, financialYear, period, returnType },
-      false,
-    );
-    return scope && isFiledReturnsConcreteArtifactType(scope.artifactType)
-      ? {
-          artifactType: scope.artifactType,
-          financialYear: scope.financialYear,
-          period: scope.period,
-          returnType: scope.returnType,
-        }
-      : null;
-  } catch {
-    return null;
   }
 }
 

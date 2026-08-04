@@ -114,31 +114,13 @@ describe("downloadAcquiredArtifact", () => {
     expect(close).toHaveBeenCalledOnce();
   });
 
-  it("keeps the direct artifact observer live until its checkpointed completion settles", async () => {
-    let resolveStarted!: () => void;
-    const endObservation = vi.fn();
-    durableObserverMocks.beginLiveFiledReturnsDownloadObservation.mockReturnValueOnce(
-      endObservation,
-    );
-    const result = downloadAcquiredArtifact(
-      {
-        ...input(),
-        onStarted: () =>
-          new Promise<void>((resolve) => {
-            resolveStarted = resolve;
-          }),
-      },
-      deps(),
-    );
+  it("does not register direct artifacts with the global observer registry", async () => {
+    await expect(downloadAcquiredArtifact(input(), deps())).resolves.toMatchObject({
+      ok: true,
+      downloadId: 9,
+    });
 
-    await vi.waitFor(() =>
-      expect(durableObserverMocks.beginLiveFiledReturnsDownloadObservation).toHaveBeenCalledWith(9),
-    );
-    expect(endObservation).not.toHaveBeenCalled();
-
-    resolveStarted();
-    await expect(result).resolves.toMatchObject({ ok: true, downloadId: 9 });
-    expect(endObservation).toHaveBeenCalledOnce();
+    expect(durableObserverMocks.beginLiveFiledReturnsDownloadObservation).not.toHaveBeenCalled();
   });
 
   it("ignores a different downloadId and times out after one start", async () => {
