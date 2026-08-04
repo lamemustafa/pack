@@ -100,8 +100,14 @@ describe("Release Please workflow wrapper", () => {
       });
 
       expect(getFileContentsOnBranch).toHaveBeenCalledTimes(4);
-      expect(getFileContentsOnBranch).toHaveBeenCalledWith("release-please-config.json", "master");
-      expect(getFileContentsOnBranch).toHaveBeenCalledWith(".release-please-manifest.json", "master");
+      expect(getFileContentsOnBranch).toHaveBeenCalledWith(
+        "release-please-config.json",
+        "master",
+      );
+      expect(getFileContentsOnBranch).toHaveBeenCalledWith(
+        ".release-please-manifest.json",
+        "master",
+      );
       expect(createReleases).toHaveBeenCalledOnce();
       expect(createPullRequests).toHaveBeenCalledOnce();
       expect(outputs).toMatchObject({
