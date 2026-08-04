@@ -428,6 +428,39 @@ export async function resolveUnconfirmedFiledReturnsDownload(
         flowSummary: persistedArtifactCompletion,
       };
     }
+    if (
+      resolution === "cancelled" &&
+      review.artifactAcquisitionCompletion &&
+      hasArtifactAcquisitionRecoverySignal(review.safeSignals)
+    ) {
+      const artifacts = concreteFiledReturnsArtifactTypesForSelection(
+        scope.returnType,
+        scope.artifactType,
+      );
+      const [artifactType] = artifacts;
+      if (artifacts.length === 1 && artifactType) {
+        const inspection = await inspectArtifactAcquisitionCheckpoint({ ...scope, artifactType });
+        if (inspection.state === "retry-safe") {
+          // A browser restart clears the session-only checkpoint and summary but
+          // retains this parser-validated local completion marker. Restore it
+          // before a cancellation can replace the completed target.
+          const restoredCompletion = await persistArtifactAcquisitionCompletion(
+            deps.storageKeys.completion,
+            scope,
+            review.artifactAcquisitionCompletion,
+            deps.now?.() ?? new Date(),
+            copyFiledReturnsDownloadDiagnosticState(review),
+          );
+          if (!restoredCompletion) return responseForFiledReturnsTargetReview(review);
+          await browser.storage.local.remove(key);
+          return {
+            ok: true,
+            flowStep: restoredCompletion.flowStep,
+            flowSummary: restoredCompletion,
+          };
+        }
+      }
+    }
     const hasCleanupFailure = hasSinglePeriodCleanupFailure(review.safeSignals);
     if (hasCleanupFailure && resolution !== "cancelled") {
       return responseForFiledReturnsTargetReview(review);
