@@ -8,6 +8,7 @@ import {
   type FiledReturnsConcreteArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
 import { isCanonicalFiledReturnsActionId } from "../connectors/gst/filed-returns-operation-id";
+import { isFiledReturnsReturnType } from "../connectors/gst/filed-returns-return-types";
 import { isExpectedDownloadCandidate } from "./download-correlation";
 import {
   classifyDownloadDanger,
@@ -52,6 +53,9 @@ export type ArtifactAcquisitionCheckpointInspection =
   | { evidence: ArtifactAcquisitionCompletionEvidence; state: "completed" }
   | { state: "needs-review"; safeSignals: string[] };
 
+export type RetainedArtifactAcquisitionCheckpoint =
+  { state: "malformed" } | { state: "target"; target: ArtifactAcquisitionTarget };
+
 export function artifactAcquisitionCheckpointKey(target: ArtifactAcquisitionTarget): string {
   const artifactType = target.artifactType ?? "PDF";
   return [KEY_PREFIX, target.returnType, target.financialYear, target.period, artifactType]
@@ -63,6 +67,51 @@ export function artifactAcquisitionCheckpointKey(target: ArtifactAcquisitionTarg
 export async function hasArtifactAcquisitionCheckpoint(): Promise<boolean> {
   const values = await browser.storage.session.get();
   return Object.keys(values).some((key) => key.startsWith(`${KEY_PREFIX}.`));
+}
+
+/**
+ * Lists structurally valid retained targets without inspecting or changing their
+ * browser downloads. The flow runner uses this to surface the original target
+ * before it accepts a different one.
+ */
+export async function readArtifactAcquisitionCheckpoints(): Promise<
+  RetainedArtifactAcquisitionCheckpoint[]
+> {
+  const values = await browser.storage.session.get();
+  const retained: RetainedArtifactAcquisitionCheckpoint[] = [];
+  for (const [key] of Object.entries(values)) {
+    if (!key.startsWith(`${KEY_PREFIX}.`)) continue;
+    const target = checkpointTargetFromKey(key);
+    if (!target) {
+      retained.push({ state: "malformed" });
+      continue;
+    }
+    // Keep a canonical-key target recoverable even when the value is malformed
+    // or describes another target: inspection will convert that exact record to
+    // a sentinel and keep the resulting target review fail-closed.
+    retained.push({ state: "target", target });
+  }
+  return retained;
+}
+
+/** Removes only malformed prefix records after the user explicitly cancels recovery. */
+export async function clearMalformedArtifactAcquisitionCheckpoints(): Promise<boolean> {
+  try {
+    const values = await browser.storage.session.get();
+    const keys = Object.entries(values).flatMap(([key, value]) => {
+      if (!key.startsWith(`${KEY_PREFIX}.`)) return [];
+      const target = checkpointTargetFromKey(key);
+      return target &&
+        isArtifactAcquisitionCheckpoint(value) &&
+        checkpointMatchesTarget(value, target)
+        ? []
+        : [key];
+    });
+    if (keys.length > 0) await browser.storage.session.remove(keys);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function persistArtifactAcquisitionIntent(
@@ -132,6 +181,7 @@ export type ArtifactCheckpointCancellation =
 
 export async function clearArtifactAcquisitionCheckpoints(
   scope: FiledReturnsDownloadScope,
+  options: { discardCompleted?: boolean } = {},
 ): Promise<ArtifactCheckpointCancellation> {
   const targets = concreteFiledReturnsArtifactTypesForSelection(
     scope.returnType,
@@ -213,6 +263,10 @@ export async function clearArtifactAcquisitionCheckpoints(
       completedEvidence.length === targets.length &&
       new Set(completedEvidence.map(({ downloadId }) => downloadId)).size === targets.length
     ) {
+      if (options.discardCompleted) {
+        await browser.storage.session.remove(keys);
+        return { state: "cleared" };
+      }
       return { state: "completed", evidence: completedEvidence };
     }
     await browser.storage.session.remove(keys);
@@ -220,6 +274,54 @@ export async function clearArtifactAcquisitionCheckpoints(
   } catch {
     return { state: "blocked" };
   }
+}
+
+function checkpointTargetFromKey(key: string): ArtifactAcquisitionTarget | null {
+  const encodedParts = key.slice(`${KEY_PREFIX}.`.length).split(".");
+  if (encodedParts.length !== 4) return null;
+  try {
+    const [returnType, financialYear, period, artifactType] = encodedParts.map(decodeURIComponent);
+    return checkpointTarget({ artifactType, financialYear, period, returnType });
+  } catch {
+    return null;
+  }
+}
+
+function checkpointTarget(input: {
+  artifactType?: unknown;
+  financialYear?: unknown;
+  period?: unknown;
+  returnType?: unknown;
+}): ArtifactAcquisitionTarget | null {
+  if (
+    !isFiledReturnsReturnType(input.returnType) ||
+    !isFiledReturnsConcreteArtifactType(input.artifactType) ||
+    typeof input.financialYear !== "string" ||
+    !/^\d{4}-\d{2}$/.test(input.financialYear) ||
+    typeof input.period !== "string" ||
+    ![
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December",
+      "January",
+      "February",
+      "March",
+    ].includes(input.period)
+  ) {
+    return null;
+  }
+  return {
+    artifactType: input.artifactType,
+    financialYear: input.financialYear,
+    period: input.period,
+    returnType: input.returnType,
+  };
 }
 
 /** Clears completed exact-ID ownership only after the matching summary is durable. */

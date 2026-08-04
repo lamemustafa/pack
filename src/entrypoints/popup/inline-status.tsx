@@ -159,7 +159,10 @@ function getInlineStatusCopy(
     const signals = new Set(summary.flowStep.safeSignals);
     const needsTargetReview = signals.has("filed-returns-target-review-required");
     const needsFullFiscalYearRecovery = Boolean(summary.fullFiscalYearRecovery);
-    const canReconcileTarget = signals.has("filed-returns-download-reconciliation-required");
+    const canReconcileTarget =
+      signals.has("filed-returns-download-reconciliation-required") ||
+      (summary.scope.artifactType !== "PDF_AND_EXCEL" &&
+        signals.has("artifact-acquisition-download-completed-unpersisted"));
     const canRetryTargetCleanup = signals.has("filed-returns-target-local-cleanup-required");
     return {
       body: needsTargetReview
@@ -224,7 +227,11 @@ export function getInlinePrimaryAction(
     };
   }
   if (signals.has("filed-returns-target-review-required") && summary.currentPeriod) {
-    if (signals.has("filed-returns-download-reconciliation-required")) {
+    if (
+      signals.has("filed-returns-download-reconciliation-required") ||
+      (summary.scope.artifactType !== "PDF_AND_EXCEL" &&
+        signals.has("artifact-acquisition-download-completed-unpersisted"))
+    ) {
       return { label: "Reconcile browser download", onClick: actions.onRetryTarget };
     }
     if (signals.has("filed-returns-target-local-cleanup-required")) {

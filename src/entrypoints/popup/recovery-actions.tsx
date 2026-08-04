@@ -32,7 +32,10 @@ export function RecoveryActions({
   const canManuallyResolveTarget =
     !signals.has("single-period-zip-incomplete") &&
     !signals.has("filed-returns-target-manually-observed");
-  const canReconcileTarget = signals.has("filed-returns-download-reconciliation-required");
+  const canReconcileTarget =
+    signals.has("filed-returns-download-reconciliation-required") ||
+    (summary.scope.artifactType !== "PDF_AND_EXCEL" &&
+      signals.has("artifact-acquisition-download-completed-unpersisted"));
   const canRetryTargetCleanup = signals.has("filed-returns-target-local-cleanup-required");
   const retryDisabled = busy !== null || !portalReady;
   return (

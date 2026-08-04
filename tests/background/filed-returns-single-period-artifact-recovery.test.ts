@@ -90,21 +90,16 @@ describe("GSTR-3B artifact acquisition recovery", () => {
     });
   });
 
-  it("persists all concrete checkpoint signals for a composite selection", async () => {
+  it("surfaces the first retained concrete checkpoint for a composite selection", async () => {
     const compositeScope = {
       ...scope,
       artifactType: "PDF_AND_EXCEL" as const,
       returnType: "GSTR-2B" as const,
     };
-    mocks.reconcileArtifactAcquisitionCheckpoint
-      .mockResolvedValueOnce({
-        state: "needs-review",
-        safeSignals: ["artifact-acquisition-download-interrupted"],
-      })
-      .mockResolvedValueOnce({
-        state: "needs-review",
-        safeSignals: ["artifact-acquisition-download-unconfirmed"],
-      });
+    mocks.reconcileArtifactAcquisitionCheckpoint.mockResolvedValueOnce({
+      state: "needs-review",
+      safeSignals: ["artifact-acquisition-download-interrupted"],
+    });
 
     await startSinglePeriodFiledReturnsDownloadFlow(compositeScope, {} as never);
 
@@ -112,21 +107,12 @@ describe("GSTR-3B artifact acquisition recovery", () => {
       ...compositeScope,
       artifactType: "PDF",
     });
-    expect(mocks.reconcileArtifactAcquisitionCheckpoint).toHaveBeenNthCalledWith(2, {
-      ...compositeScope,
-      artifactType: "EXCEL",
-    });
-    expect(mocks.reconcileArtifactAcquisitionCheckpoint).toHaveBeenNthCalledWith(3, {
-      ...compositeScope,
-      artifactType: "JSON",
-    });
     expect(mocks.persistFiledReturnsTargetReview).toHaveBeenCalledWith(
-      compositeScope,
+      { ...compositeScope, artifactType: "PDF" },
       expect.objectContaining({
         safeSignals: [
           "artifact-acquisition-download-unreconciled",
           "artifact-acquisition-download-interrupted",
-          "artifact-acquisition-download-unconfirmed",
         ],
       }),
       expect.anything(),
@@ -208,7 +194,7 @@ describe("GSTR-3B artifact acquisition recovery", () => {
       artifactType: "JSON",
     });
     expect(mocks.persistFiledReturnsTargetReview).toHaveBeenCalledWith(
-      compositeScope,
+      { ...compositeScope, artifactType: "JSON" },
       expect.objectContaining({ safeSignals: ["artifact-acquisition-download-unreconciled"] }),
       expect.anything(),
     );

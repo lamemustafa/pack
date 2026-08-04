@@ -30,6 +30,7 @@ import {
   clearArtifactAcquisitionCheckpoint,
   clearArtifactAcquisitionCheckpoints,
   clearArtifactAcquisitionCheckpointsAfterPersistedSummary,
+  readArtifactAcquisitionCheckpoints,
   persistArtifactAcquisitionDownloadId,
   persistArtifactAcquisitionIntent,
   persistArtifactAcquisitionUnconfirmedDownload,
@@ -81,6 +82,21 @@ describe("artifact acquisition checkpoint", () => {
       state: "retry-safe",
     });
     expect(mocks.browser.downloads.search).not.toHaveBeenCalled();
+  });
+
+  it("enumerates by canonical key so a mismatched value remains fail-closed", async () => {
+    const key = artifactAcquisitionCheckpointKey(MAY_PDF);
+    mocks.session[key] = {
+      ...MAY_PDF,
+      armedAt: new Date().toISOString(),
+      artifactType: "JSON",
+      requestId: actionId(1),
+      state: "intent",
+    };
+
+    await expect(readArtifactAcquisitionCheckpoints()).resolves.toEqual([
+      { state: "target", target: MAY_PDF },
+    ]);
   });
 
   it("keeps an unresolved download bound to its exact May PDF target", async () => {
@@ -429,6 +445,46 @@ describe("artifact acquisition checkpoint", () => {
     expect(
       mocks.session[artifactAcquisitionCheckpointKey({ ...MAY_COMPOSITE, artifactType: "PDF" })],
     ).toEqual(expect.objectContaining({ downloadId: 9 }));
+  });
+
+  it("explicitly discards completed composite checkpoint ownership without claiming a ZIP", async () => {
+    for (const [artifactType, downloadId, requestId] of [
+      ["PDF", 9, actionId(29)],
+      ["EXCEL", 10, actionId(30)],
+      ["JSON", 11, actionId(31)],
+    ] as const) {
+      await persistArtifactAcquisitionDownloadId({
+        ...MAY_COMPOSITE,
+        artifactType,
+        downloadId,
+        requestId,
+        state: "download-observing",
+      });
+    }
+    mocks.browser.downloads.search.mockImplementation(async ({ id }: { id: number }) => [
+      {
+        danger: "safe",
+        fileSize: 2048,
+        id,
+        mime:
+          id === 9
+            ? "application/pdf"
+            : id === 10
+              ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              : "application/json",
+        startTime: new Date(Date.now() + 1_000).toISOString(),
+        state: "complete",
+      },
+    ]);
+
+    await expect(
+      clearArtifactAcquisitionCheckpoints(MAY_COMPOSITE, { discardCompleted: true }),
+    ).resolves.toEqual({ state: "cleared" });
+    for (const artifactType of ["PDF", "EXCEL", "JSON"] as const) {
+      expect(
+        mocks.session[artifactAcquisitionCheckpointKey({ ...MAY_COMPOSITE, artifactType })],
+      ).toBeUndefined();
+    }
   });
 
   it("clears rather than completes a composite with only part-evidenced downloads", async () => {

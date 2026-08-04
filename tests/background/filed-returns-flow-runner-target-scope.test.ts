@@ -7,6 +7,9 @@ import type * as FiledReturnsTargetReviewModule from "../../src/background/filed
 
 const mocks = vi.hoisted(() => ({
   readCurrentFiledReturnsTargetReviewStorageState: vi.fn(),
+  persistFiledReturnsTargetReview: vi.fn(),
+  readArtifactAcquisitionCheckpoints: vi.fn(),
+  reconcileArtifactAcquisitionCheckpoint: vi.fn(),
   responseForFiledReturnsTargetReview: vi.fn(() => ({
     ok: true as const,
     flowStep: {
@@ -34,6 +37,11 @@ vi.mock("../../src/background/filed-returns-target-review", async (importOrigina
   readCurrentFiledReturnsTargetReviewStorageState:
     mocks.readCurrentFiledReturnsTargetReviewStorageState,
   responseForFiledReturnsTargetReview: mocks.responseForFiledReturnsTargetReview,
+  persistFiledReturnsTargetReview: mocks.persistFiledReturnsTargetReview,
+}));
+vi.mock("../../src/background/artifact-acquisition-state", () => ({
+  readArtifactAcquisitionCheckpoints: mocks.readArtifactAcquisitionCheckpoints,
+  reconcileArtifactAcquisitionCheckpoint: mocks.reconcileArtifactAcquisitionCheckpoint,
 }));
 vi.mock("../../src/background/filed-returns-single-period-flow", () => ({
   startSinglePeriodFiledReturnsDownloadFlow: mocks.startSinglePeriodFiledReturnsDownloadFlow,
@@ -55,13 +63,14 @@ describe("filed returns retained target scoping", () => {
       state: "valid",
       review: { scope: retainedScope } as FiledReturnsTargetReview,
     });
+    mocks.readArtifactAcquisitionCheckpoints.mockResolvedValue([]);
   });
 
   it.each([
     ["GSTR-1 PDF", { artifactType: "PDF", returnType: "GSTR-1" }],
     ["GSTR-3B PDF", { artifactType: "PDF", returnType: "GSTR-3B" }],
     ["GSTR-2B JSON", { artifactType: "JSON", returnType: "GSTR-2B" }],
-  ] as const)("does not let a retained GSTR-2B review shadow %s", async (_label, target) => {
+  ] as const)("blocks %s until a retained GSTR-2B review is resolved", async (_label, target) => {
     const scope = {
       ...target,
       financialYear: "2026-27",
@@ -72,11 +81,9 @@ describe("filed returns retained target scoping", () => {
       storageKeys: {},
     } as never);
 
-    expect(mocks.startSinglePeriodFiledReturnsDownloadFlow).toHaveBeenCalledWith(
-      scope,
-      expect.anything(),
-    );
-    expect(response).toMatchObject({ flowStep: { safeSignals: ["new-target-started"] } });
+    expect(mocks.responseForFiledReturnsTargetReview).toHaveBeenCalledOnce();
+    expect(mocks.startSinglePeriodFiledReturnsDownloadFlow).not.toHaveBeenCalled();
+    expect(response).toMatchObject({ flowStep: { safeSignals: ["retained-gstr2b-review"] } });
   });
 
   it("keeps the retained review bound to its own GSTR-2B bundle target", async () => {
@@ -87,5 +94,87 @@ describe("filed returns retained target scoping", () => {
     expect(mocks.responseForFiledReturnsTargetReview).toHaveBeenCalledOnce();
     expect(mocks.startSinglePeriodFiledReturnsDownloadFlow).not.toHaveBeenCalled();
     expect(response).toMatchObject({ flowStep: { safeSignals: ["retained-gstr2b-review"] } });
+  });
+
+  it("surfaces a retained exact checkpoint before accepting a different target", async () => {
+    const checkpointTarget = {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-3B",
+    } as const satisfies FiledReturnsDownloadScope;
+    mocks.readCurrentFiledReturnsTargetReviewStorageState.mockResolvedValue({ state: "missing" });
+    mocks.readArtifactAcquisitionCheckpoints.mockResolvedValue([
+      { state: "target", target: checkpointTarget },
+    ]);
+    mocks.reconcileArtifactAcquisitionCheckpoint.mockResolvedValue({
+      state: "needs-review",
+      safeSignals: ["artifact-acquisition-download-completed-unpersisted"],
+    });
+    mocks.persistFiledReturnsTargetReview.mockResolvedValue({
+      completedPeriods: [],
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "user-action-required",
+        safeSignals: ["filed-returns-target-review-required"],
+        safeMessage: "Synthetic retained checkpoint.",
+      },
+      scope: checkpointTarget,
+      status: "blocked",
+      totalPeriods: 1,
+    });
+
+    const response = await startFiledReturnsDownloadFlow({ ...checkpointTarget, period: "June" }, {
+      storageKeys: {},
+    } as never);
+
+    expect(mocks.persistFiledReturnsTargetReview).toHaveBeenCalledWith(
+      checkpointTarget,
+      expect.objectContaining({
+        safeSignals: expect.arrayContaining([
+          "artifact-acquisition-download-completed-unpersisted",
+        ]),
+      }),
+      expect.anything(),
+    );
+    expect(mocks.startSinglePeriodFiledReturnsDownloadFlow).not.toHaveBeenCalled();
+    expect(response).toMatchObject({ flowSummary: { scope: checkpointTarget, status: "blocked" } });
+  });
+
+  it("blocks a malformed retained checkpoint instead of starting another target", async () => {
+    const requestedScope = {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "June",
+      returnType: "GSTR-3B",
+    } as const satisfies FiledReturnsDownloadScope;
+    mocks.readCurrentFiledReturnsTargetReviewStorageState.mockResolvedValue({ state: "missing" });
+    mocks.readArtifactAcquisitionCheckpoints.mockResolvedValue([{ state: "malformed" }]);
+    mocks.persistFiledReturnsTargetReview.mockResolvedValue({
+      completedPeriods: [],
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "user-action-required",
+        safeSignals: ["filed-returns-target-review-required"],
+        safeMessage: "Synthetic malformed checkpoint.",
+      },
+      scope: requestedScope,
+      status: "blocked",
+      totalPeriods: 1,
+    });
+
+    const response = await startFiledReturnsDownloadFlow(requestedScope, {
+      storageKeys: {},
+    } as never);
+
+    expect(mocks.persistFiledReturnsTargetReview).toHaveBeenCalledWith(
+      requestedScope,
+      expect.objectContaining({ safeSignals: ["artifact-acquisition-checkpoint-malformed"] }),
+      expect.anything(),
+    );
+    expect(mocks.startSinglePeriodFiledReturnsDownloadFlow).not.toHaveBeenCalled();
+    expect(response).toMatchObject({ flowSummary: { status: "blocked" } });
   });
 });

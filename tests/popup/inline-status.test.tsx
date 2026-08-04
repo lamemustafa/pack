@@ -351,16 +351,16 @@ describe("inline filed-return recovery status", () => {
     expect(onRestartTarget).not.toHaveBeenCalled();
   });
 
-  it("labels an exact-ID target action as reconciliation", () => {
+  it.each([
+    "filed-returns-download-reconciliation-required",
+    "artifact-acquisition-download-completed-unpersisted",
+  ])("labels %s as reconciliation", (signal) => {
     const targetReviewSummary: FiledReturnsFlowSummary = {
       ...blockedSummary,
       flowStep: {
         ...blockedSummary.flowStep,
         state: "download-unconfirmed",
-        safeSignals: [
-          "filed-returns-target-review-required",
-          "filed-returns-download-reconciliation-required",
-        ],
+        safeSignals: ["filed-returns-target-review-required", signal],
       },
     };
     const onRestartTarget = vi.fn();

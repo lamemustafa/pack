@@ -184,9 +184,12 @@ describe("popup full-year recovery actions", () => {
     expect(markup).not.toContain("Retry local cleanup");
   });
 
-  it("labels exact-ID target recovery as reconciliation, not retry", () => {
+  it.each([
+    "filed-returns-download-reconciliation-required",
+    "artifact-acquisition-download-completed-unpersisted",
+  ])("labels %s as reconciliation, not retry", (signal) => {
     const summary = targetReviewSummary();
-    summary.flowStep.safeSignals.push("filed-returns-download-reconciliation-required");
+    summary.flowStep.safeSignals.push(signal);
     const markup = renderToStaticMarkup(
       createElement(RecoveryActions, {
         busy: null,

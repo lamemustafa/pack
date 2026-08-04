@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   persistFiledReturnsTargetReview,
+  reconcileRetainedArtifactAcquisition,
   readCurrentFiledReturnsTargetReviewStorageState,
   resolveUnconfirmedFiledReturnsDownload,
   retryCompletedSinglePeriodZipCleanup,
@@ -57,6 +58,8 @@ const zipMocks = vi.hoisted(() => ({
 const acquisitionMocks = vi.hoisted(() => ({
   clearArtifactAcquisitionCheckpoints: vi.fn(),
   clearArtifactAcquisitionCheckpointsAfterPersistedSummary: vi.fn(),
+  clearMalformedArtifactAcquisitionCheckpoints: vi.fn(),
+  inspectArtifactAcquisitionCheckpoint: vi.fn(),
 }));
 
 vi.mock("wxt/browser", () => ({
@@ -84,6 +87,7 @@ describe("filed returns target review", () => {
     acquisitionMocks.clearArtifactAcquisitionCheckpointsAfterPersistedSummary.mockResolvedValue(
       undefined,
     );
+    acquisitionMocks.clearMalformedArtifactAcquisitionCheckpoints.mockResolvedValue(true);
   });
 
   it("records a manual observation without completing or clearing the unresolved target", async () => {
@@ -177,7 +181,9 @@ describe("filed returns target review", () => {
       storageKeys: { completion: "completion", targetReview: "target-review" },
     });
 
-    expect(acquisitionMocks.clearArtifactAcquisitionCheckpoints).toHaveBeenCalledWith(scope);
+    expect(acquisitionMocks.clearArtifactAcquisitionCheckpoints).toHaveBeenCalledWith(scope, {
+      discardCompleted: true,
+    });
     expect(localValues["target-review"]).toBeUndefined();
     expect(response).toMatchObject({
       flowStep: { state: "user-action-required" },
@@ -188,7 +194,7 @@ describe("filed returns target review", () => {
     expect(response.flowStep.safeSignals).not.toContain("single-period-zip-downloaded");
   });
 
-  it("persists an evidenced acquisition reconciliation as complete and removes its target review", async () => {
+  it("reconciles an evidenced acquisition completion without repeating its portal action", async () => {
     const scope = {
       artifactType: "PDF" as const,
       financialYear: "2025-26",
@@ -218,21 +224,21 @@ describe("filed returns target review", () => {
         if (typeof key === "string") delete localValues[key];
       }
     });
-    acquisitionMocks.clearArtifactAcquisitionCheckpoints.mockResolvedValue({
+    acquisitionMocks.inspectArtifactAcquisitionCheckpoint.mockResolvedValue({
       state: "completed",
-      evidence: [
-        {
-          artifactType: "PDF",
-          downloadId: 9,
-          requestId: "11111111-1111-4111-8111-111111111111",
-        },
-      ],
+      evidence: {
+        artifactType: "PDF",
+        downloadId: 9,
+        requestId: "11111111-1111-4111-8111-111111111111",
+      },
     });
 
-    await resolveUnconfirmedFiledReturnsDownload(scope, "cancelled", {
+    const response = await reconcileRetainedArtifactAcquisition(scope, {
       storageKeys: { completion: "completion", targetReview: "target-review" },
       now: () => new Date("2026-08-01T00:00:05.000Z"),
     });
+
+    expect(response).toMatchObject({ flowSummary: { status: "complete" } });
 
     expect(
       parseDurableFiledReturnsFlowSummary(browserMocks.storage.session.values.completion),
@@ -291,22 +297,20 @@ describe("filed returns target review", () => {
         if (typeof key === "string") delete localValues[key];
       }
     });
-    acquisitionMocks.clearArtifactAcquisitionCheckpoints.mockResolvedValueOnce({
+    acquisitionMocks.inspectArtifactAcquisitionCheckpoint.mockResolvedValueOnce({
       state: "completed",
-      evidence: [
-        {
-          artifactType: "PDF",
-          downloadId: 9,
-          requestId: "11111111-1111-4111-8111-111111111111",
-        },
-      ],
+      evidence: {
+        artifactType: "PDF",
+        downloadId: 9,
+        requestId: "11111111-1111-4111-8111-111111111111",
+      },
     });
     acquisitionMocks.clearArtifactAcquisitionCheckpointsAfterPersistedSummary.mockRejectedValueOnce(
       new Error("simulated worker stop after checkpoint cleanup"),
     );
 
     await expect(
-      resolveUnconfirmedFiledReturnsDownload(scope, "cancelled", {
+      reconcileRetainedArtifactAcquisition(scope, {
         storageKeys: { completion: "completion", targetReview: "target-review" },
       }),
     ).rejects.toThrow("simulated worker stop after checkpoint cleanup");
@@ -381,18 +385,16 @@ describe("filed returns target review", () => {
         if (typeof key === "string") delete localValues[key];
       }
     });
-    acquisitionMocks.clearArtifactAcquisitionCheckpoints.mockResolvedValueOnce({
+    acquisitionMocks.inspectArtifactAcquisitionCheckpoint.mockResolvedValueOnce({
       state: "completed",
-      evidence: [
-        {
-          artifactType: "PDF",
-          downloadId: 9,
-          requestId: "11111111-1111-4111-8111-111111111111",
-        },
-      ],
+      evidence: {
+        artifactType: "PDF",
+        downloadId: 9,
+        requestId: "11111111-1111-4111-8111-111111111111",
+      },
     });
 
-    await resolveUnconfirmedFiledReturnsDownload(scope, "cancelled", {
+    await reconcileRetainedArtifactAcquisition(scope, {
       storageKeys: { completion: "completion", targetReview: "target-review" },
     });
 
@@ -464,32 +466,21 @@ describe("filed returns target review", () => {
         if (typeof key === "string") delete localValues[key];
       }
     });
-    acquisitionMocks.clearArtifactAcquisitionCheckpoints.mockResolvedValue({
-      state: "completed",
-      evidence: [
-        {
-          artifactType: "PDF",
-          downloadId: 9,
-          requestId: "11111111-1111-4111-8111-111111111111",
-        },
-        {
-          artifactType: "EXCEL",
-          downloadId: 10,
-          requestId: "22222222-2222-4222-8222-222222222222",
-        },
-      ],
-    });
+    acquisitionMocks.clearArtifactAcquisitionCheckpoints.mockResolvedValue({ state: "cleared" });
 
     const response = await resolveUnconfirmedFiledReturnsDownload(scope, "cancelled", {
       storageKeys: { completion: "completion", targetReview: "target-review" },
     });
 
     expect(response).toMatchObject({
-      flowSummary: { status: "blocked", completedPeriods: [] },
+      flowSummary: { status: "cancelled", completedPeriods: [] },
       flowStep: {
-        safeSignals: expect.not.arrayContaining(["single-period-zip-downloaded"]),
+        safeSignals: expect.arrayContaining(["filed-returns-target-cancelled"]),
         state: "user-action-required",
       },
+    });
+    expect(acquisitionMocks.clearArtifactAcquisitionCheckpoints).toHaveBeenCalledWith(scope, {
+      discardCompleted: true,
     });
   });
 
