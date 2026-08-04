@@ -377,6 +377,17 @@ describe("artifact acquisition checkpoint", () => {
     });
   });
 
+  it("treats a present null checkpoint as malformed instead of retry-safe", async () => {
+    const key = artifactAcquisitionCheckpointKey(MAY_PDF);
+    mocks.session[key] = null;
+
+    await expect(reconcileArtifactAcquisitionCheckpoint(MAY_PDF)).resolves.toEqual({
+      state: "needs-review",
+      safeSignals: ["artifact-acquisition-checkpoint-malformed"],
+    });
+    expect(mocks.session[key]).toEqual({ schemaVersion: "1.0", state: "malformed" });
+  });
+
   it("clears only the terminal request's own target checkpoint", async () => {
     await persistArtifactAcquisitionIntent({ ...MAY_PDF, requestId: actionId(10) });
     await persistArtifactAcquisitionIntent({ ...JUNE_PDF, requestId: actionId(11) });

@@ -488,7 +488,7 @@ export async function inspectArtifactAcquisitionCheckpoint(
   const key = artifactAcquisitionCheckpointKey(target);
   const stored = await browser.storage.session.get(key);
   const storedCheckpoint = stored[key];
-  if (storedCheckpoint === undefined || storedCheckpoint === null) return { state: "retry-safe" };
+  if (storedCheckpoint === undefined) return { state: "retry-safe" };
   if (isMalformedArtifactAcquisitionCheckpointSentinel(storedCheckpoint)) {
     return { state: "needs-review", safeSignals: ["artifact-acquisition-checkpoint-malformed"] };
   }

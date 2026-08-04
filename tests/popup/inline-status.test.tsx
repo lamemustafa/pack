@@ -393,6 +393,29 @@ describe("inline filed-return recovery status", () => {
     expect(onRestartTarget).not.toHaveBeenCalled();
   });
 
+  it("offers reconciliation for an observing selected-file ZIP", () => {
+    const targetReviewSummary: FiledReturnsFlowSummary = {
+      ...blockedSummary,
+      scope: { ...blockedSummary.scope, artifactType: "PDF_AND_EXCEL" },
+      flowStep: {
+        ...blockedSummary.flowStep,
+        state: "download-unconfirmed",
+        safeSignals: [
+          "filed-returns-target-review-required",
+          "filed-returns-download-reconciliation-required",
+        ],
+      },
+    };
+    const action = getInlinePrimaryAction(blockedPresentation, targetReviewSummary, {
+      onOpenPortal: vi.fn(),
+      onRestartTarget: vi.fn(),
+      onRetryFullFiscalYearTarget: vi.fn(),
+      onRetryTarget: vi.fn(),
+    });
+
+    expect(action?.label).toBe("Reconcile browser download");
+  });
+
   it.each([
     ["intent-only", "artifact-acquisition-start-unreconciled"],
     ["malformed", "artifact-acquisition-checkpoint-malformed"],

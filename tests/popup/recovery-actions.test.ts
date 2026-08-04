@@ -209,6 +209,28 @@ describe("popup full-year recovery actions", () => {
     expect(markup).not.toContain("Retry this period");
   });
 
+  it("offers reconciliation for an observing selected-file ZIP", () => {
+    const summary = targetReviewSummary();
+    summary.scope.artifactType = "PDF_AND_EXCEL";
+    summary.flowStep.safeSignals.push("filed-returns-download-reconciliation-required");
+    const markup = renderToStaticMarkup(
+      createElement(RecoveryActions, {
+        busy: null,
+        portalReady: true,
+        summary,
+        onStartFresh: () => undefined,
+        onAcknowledgeInterruptedRun: () => undefined,
+        onRetryFullFiscalYearTarget: () => undefined,
+        onRetryTarget: () => undefined,
+        onResolveFullFiscalYearTarget: () => undefined,
+        onResolveTarget: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain("Reconcile browser download");
+    expect(markup).not.toContain("Retry this period");
+  });
+
   it.each([
     ["intent-only", "artifact-acquisition-start-unreconciled"],
     ["malformed", "artifact-acquisition-checkpoint-malformed"],
