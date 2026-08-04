@@ -4,14 +4,15 @@ import { pathToFileURL } from "node:url";
 import { randomUUID } from "node:crypto";
 
 const require = createRequire(import.meta.url);
-const { GitHub, Manifest, VERSION } = require("release-please");
+const releasePlease = require("release-please");
 
 const DEFAULT_CONFIG_FILE = "release-please-config.json";
 const DEFAULT_MANIFEST_FILE = ".release-please-manifest.json";
 const DEFAULT_GITHUB_API_URL = "https://api.github.com";
 const DEFAULT_GITHUB_GRAPHQL_URL = "https://api.github.com";
 
-export async function runReleasePlease(env = process.env) {
+export async function runReleasePlease(env = process.env, dependencies = releasePlease) {
+  const { GitHub, Manifest, VERSION } = dependencies;
   const token = env.RELEASE_PLEASE_TOKEN || env.GITHUB_TOKEN || env.GH_TOKEN;
   const repoUrl = env.GITHUB_REPOSITORY;
   if (!token) throw new Error("Missing RELEASE_PLEASE_TOKEN, GITHUB_TOKEN, or GH_TOKEN.");

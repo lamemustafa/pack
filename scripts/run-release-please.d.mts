@@ -1,4 +1,7 @@
-export function runReleasePlease(env?: NodeJS.ProcessEnv): Promise<Record<string, string>>;
+export function runReleasePlease(
+  env?: NodeJS.ProcessEnv,
+  dependencies?: unknown,
+): Promise<Record<string, string>>;
 
 export function buildReleaseOutputs(
   releases: Array<Record<string, unknown>>,

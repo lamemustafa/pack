@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   buildReleaseOutputs,
@@ -63,5 +63,66 @@ describe("Release Please workflow wrapper", () => {
         "master",
       ),
     ).toBe("1.x");
+  });
+
+  it("uses the release-please GitHub and manifest contracts without contacting GitHub", async () => {
+    const github = { repository: { defaultBranch: "master" } };
+    const createReleases = vi
+      .fn()
+      .mockResolvedValue([{ path: ".", tagName: "v0.1.1", version: "0.1.1" }]);
+    const createPullRequests = vi.fn().mockResolvedValue([{ number: 123 }]);
+    const dependencies = {
+      GitHub: { create: vi.fn().mockResolvedValue(github) },
+      Manifest: {
+        fromManifest: vi
+          .fn()
+          .mockResolvedValueOnce({ createReleases })
+          .mockResolvedValueOnce({ createPullRequests }),
+      },
+      VERSION: "test-version",
+    };
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    try {
+      const outputs = await runReleasePlease(
+        {
+          GITHUB_REPOSITORY: "lamemustafa/pack",
+          RELEASE_PLEASE_TOKEN: "test-token",
+        },
+        dependencies,
+      );
+
+      expect(dependencies.GitHub.create).toHaveBeenCalledWith({
+        apiUrl: "https://api.github.com",
+        defaultBranch: undefined,
+        graphqlUrl: "https://api.github.com",
+        owner: "lamemustafa",
+        repo: "pack",
+        token: "test-token",
+      });
+      expect(dependencies.Manifest.fromManifest).toHaveBeenNthCalledWith(
+        1,
+        github,
+        "master",
+        "release-please-config.json",
+        ".release-please-manifest.json",
+      );
+      expect(dependencies.Manifest.fromManifest).toHaveBeenNthCalledWith(
+        2,
+        github,
+        "master",
+        "release-please-config.json",
+        ".release-please-manifest.json",
+      );
+      expect(createReleases).toHaveBeenCalledOnce();
+      expect(createPullRequests).toHaveBeenCalledOnce();
+      expect(outputs).toMatchObject({
+        pr: JSON.stringify({ number: 123 }),
+        prs_created: "true",
+        release_created: "true",
+      });
+    } finally {
+      log.mockRestore();
+    }
   });
 });
