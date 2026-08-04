@@ -71,7 +71,7 @@
     "globals": "^17.7.0",
     "jsdom": "^29.0.0",
     "prettier": "^3.9.6",
-    "release-please": "17.10.1",
+    "release-please": "17.11.1",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.65.0",
     "vitest": "^4.1.10",
