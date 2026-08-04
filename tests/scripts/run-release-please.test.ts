@@ -1,10 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   buildReleaseOutputs,
   resolveReleaseTargetBranch,
+  runReleasePlease,
   serializeGitHubOutput,
 } from "../../scripts/run-release-please.mjs";
+
+const require = createRequire(import.meta.url);
+const releasePlease = require("release-please");
 
 describe("Release Please workflow wrapper", () => {
   it("emits root release outputs compatible with release-please-action", () => {
@@ -63,5 +69,62 @@ describe("Release Please workflow wrapper", () => {
         "master",
       ),
     ).toBe("1.x");
+  });
+
+  it("uses the installed release-please GitHub and manifest contracts without contacting GitHub", async () => {
+    const configContents = await readFile(
+      new URL("../../release-please-config.json", import.meta.url),
+      "utf8",
+    );
+    const manifestContents = await readFile(
+      new URL("../../.release-please-manifest.json", import.meta.url),
+      "utf8",
+    );
+    const createReleases = vi
+      .fn()
+      .mockResolvedValue([{ path: ".", tagName: "v0.1.1", version: "0.1.1" }]);
+    const createPullRequests = vi.fn().mockResolvedValue([{ number: 123 }]);
+    const getFileContentsOnBranch = vi
+      .spyOn(releasePlease.GitHub.prototype, "getFileContentsOnBranch")
+      .mockImplementation(async (...args: unknown[]) => {
+        const [path] = args;
+        if (path === "release-please-config.json") return { parsedContent: configContents };
+        if (path === ".release-please-manifest.json") return { parsedContent: manifestContents };
+        throw new Error(`Unexpected release-please file request: ${String(path)}`);
+      });
+    const releaseManifest = vi
+      .spyOn(releasePlease.Manifest.prototype, "createReleases")
+      .mockImplementation(createReleases);
+    const pullRequestManifest = vi
+      .spyOn(releasePlease.Manifest.prototype, "createPullRequests")
+      .mockImplementation(createPullRequests);
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    try {
+      const outputs = await runReleasePlease({
+        GITHUB_REPOSITORY: "lamemustafa/pack",
+        RELEASE_PLEASE_TOKEN: "test-token",
+        RELEASE_PLEASE_TARGET_BRANCH: "master",
+      });
+
+      expect(getFileContentsOnBranch).toHaveBeenCalledTimes(4);
+      expect(getFileContentsOnBranch).toHaveBeenCalledWith("release-please-config.json", "master");
+      expect(getFileContentsOnBranch).toHaveBeenCalledWith(
+        ".release-please-manifest.json",
+        "master",
+      );
+      expect(createReleases).toHaveBeenCalledOnce();
+      expect(createPullRequests).toHaveBeenCalledOnce();
+      expect(outputs).toMatchObject({
+        pr: JSON.stringify({ number: 123 }),
+        prs_created: "true",
+        release_created: "true",
+      });
+    } finally {
+      log.mockRestore();
+      pullRequestManifest.mockRestore();
+      releaseManifest.mockRestore();
+      getFileContentsOnBranch.mockRestore();
+    }
   });
 });
