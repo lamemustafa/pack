@@ -437,7 +437,9 @@ describe("filed returns target review", () => {
         if (typeof key === "string") delete localValues[key];
       }
     });
-    acquisitionMocks.inspectArtifactAcquisitionCheckpoint.mockResolvedValue({ state: "retry-safe" });
+    acquisitionMocks.inspectArtifactAcquisitionCheckpoint.mockResolvedValue({
+      state: "retry-safe",
+    });
 
     const response = await reconcileRetainedArtifactAcquisition(scope, {
       storageKeys: { completion: "completion", targetReview: "target-review" },
