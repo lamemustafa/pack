@@ -332,12 +332,55 @@ describe("message boundary", () => {
     ).toBe(true);
     expect(
       isPackMessage({
+        type: "PACK_RETRY_FILED_RETURNS_TARGET",
+        payload: {
+          financialYear: "2025-26",
+          period: FULL_FISCAL_YEAR_PERIOD,
+          returnType: "GSTR-3B",
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isPackMessage({
         type: "PACK_RESOLVE_UNCONFIRMED_DOWNLOAD",
         payload: {
           resolution: "manually-observed",
           scope: {
             financialYear: "2025-26",
             period: "March",
+            returnType: "GSTR-3B",
+          },
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isPackMessage({
+        type: "PACK_RESOLVE_UNCONFIRMED_DOWNLOAD",
+        payload: {
+          resolution: "cancelled",
+          scope: {
+            financialYear: "2025-26",
+            period: FULL_FISCAL_YEAR_PERIOD,
+            returnType: "GSTR-3B",
+          },
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isPackMessage({
+        type: "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW",
+        payload: {
+          recovery: {
+            kind: "target-review",
+            scope: {
+              financialYear: "2025-26",
+              period: FULL_FISCAL_YEAR_PERIOD,
+              returnType: "GSTR-3B",
+            },
+          },
+          scope: {
+            financialYear: "2025-26",
+            period: FULL_FISCAL_YEAR_PERIOD,
             returnType: "GSTR-3B",
           },
         },

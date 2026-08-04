@@ -199,6 +199,28 @@ describe("artifact acquisition checkpoint", () => {
     expect(mocks.browser.downloads.cancel).not.toHaveBeenCalled();
   });
 
+  it("discards a missing exact download only during explicit cancellation", async () => {
+    const key = artifactAcquisitionCheckpointKey(MAY_PDF);
+    await persistArtifactAcquisitionDownloadId({
+      ...MAY_PDF,
+      downloadId: 9,
+      requestId: actionId(81),
+      state: "download-observing",
+    });
+    mocks.browser.downloads.search.mockResolvedValue([]);
+
+    await expect(clearArtifactAcquisitionCheckpoints(MAY_PDF)).resolves.toEqual({
+      state: "blocked",
+    });
+    expect(mocks.session[key]).toEqual(expect.objectContaining({ downloadId: 9 }));
+
+    await expect(
+      clearArtifactAcquisitionCheckpoints(MAY_PDF, { discardMissing: true }),
+    ).resolves.toEqual({ state: "cleared" });
+    expect(mocks.session[key]).toBeUndefined();
+    expect(mocks.browser.downloads.cancel).not.toHaveBeenCalled();
+  });
+
   it("reconciles an exact unconfirmed checkpoint when its browser download completes", async () => {
     await persistArtifactAcquisitionUnconfirmedDownload({
       ...MAY_PDF,

@@ -185,6 +185,7 @@ describe("filed returns target review", () => {
     expect(acquisitionMocks.clearArtifactAcquisitionCheckpoints).toHaveBeenCalledWith(scope, {
       discardCompleted: true,
       discardIntent: true,
+      discardMissing: true,
     });
     expect(localValues["target-review"]).toBeUndefined();
     expect(response).toMatchObject({
@@ -196,11 +197,11 @@ describe("filed returns target review", () => {
     expect(response.flowStep.safeSignals).not.toContain("single-period-zip-downloaded");
   });
 
-  it("cancels only the malformed checkpoint bound to the reviewed target", async () => {
+  it("cancels a full-year malformed checkpoint only through its bound review", async () => {
     const scope = {
       artifactType: "PDF" as const,
       financialYear: "2025-26",
-      period: "May",
+      period: FULL_FISCAL_YEAR_PERIOD,
       returnType: "GSTR-3B" as const,
     };
     const malformedCheckpointReference = "synthetic-malformed-reference";
@@ -213,7 +214,7 @@ describe("filed returns target review", () => {
         schemaVersion: "1.0",
         scope,
         status: "download-unconfirmed",
-        targetId: "GSTR-3B:2025-26:May",
+        targetId: "GSTR-3B:2025-26:FULL_FISCAL_YEAR",
         updatedAt: "2026-08-01T00:00:00.000Z",
       },
     };
@@ -234,6 +235,7 @@ describe("filed returns target review", () => {
     expect(acquisitionMocks.clearArtifactAcquisitionCheckpoints).toHaveBeenCalledWith(scope, {
       discardCompleted: true,
       discardIntent: true,
+      discardMissing: true,
     });
   });
 
@@ -653,6 +655,7 @@ describe("filed returns target review", () => {
     expect(acquisitionMocks.clearArtifactAcquisitionCheckpoints).toHaveBeenCalledWith(scope, {
       discardCompleted: true,
       discardIntent: true,
+      discardMissing: true,
     });
   });
 

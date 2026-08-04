@@ -236,7 +236,7 @@ export type ArtifactCheckpointCancellation =
 
 export async function clearArtifactAcquisitionCheckpoints(
   scope: FiledReturnsDownloadScope,
-  options: { discardCompleted?: boolean; discardIntent?: boolean } = {},
+  options: { discardCompleted?: boolean; discardIntent?: boolean; discardMissing?: boolean } = {},
 ): Promise<ArtifactCheckpointCancellation> {
   const targets = concreteFiledReturnsArtifactTypesForSelection(
     scope.returnType,
@@ -284,7 +284,11 @@ export async function clearArtifactAcquisitionCheckpoints(
       }
       const downloadId = checkpoint.downloadId;
       const [download] = await browser.downloads.search({ id: downloadId });
-      if (!download?.state) return { state: "blocked" };
+      if (!download) {
+        if (!options.discardMissing) return { state: "blocked" };
+        continue;
+      }
+      if (!download.state) return { state: "blocked" };
       if (download.state === "complete") {
         const armedAt = armedAtFromCheckpoint(checkpoint);
         if (

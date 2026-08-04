@@ -532,6 +532,7 @@ export async function resolveUnconfirmedFiledReturnsDownload(
       const cancellation = await clearArtifactAcquisitionCheckpoints(review.scope, {
         discardCompleted: true,
         discardIntent: true,
+        discardMissing: true,
       });
       if (cancellation.state === "blocked") {
         const clearFailureReview: FiledReturnsTargetReview = {
