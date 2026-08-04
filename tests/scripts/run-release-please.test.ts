@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { describe, expect, it, vi } from "vitest";
 
@@ -71,19 +72,25 @@ describe("Release Please workflow wrapper", () => {
   });
 
   it("uses the installed release-please GitHub and manifest contracts without contacting GitHub", async () => {
+    const configContents = await readFile(
+      new URL("../../release-please-config.json", import.meta.url),
+      "utf8",
+    );
+    const manifestContents = await readFile(
+      new URL("../../.release-please-manifest.json", import.meta.url),
+      "utf8",
+    );
     const createReleases = vi
       .fn()
       .mockResolvedValue([{ path: ".", tagName: "v0.1.1", version: "0.1.1" }]);
     const createPullRequests = vi.fn().mockResolvedValue([{ number: 123 }]);
     const getFileContentsOnBranch = vi
       .spyOn(releasePlease.GitHub.prototype, "getFileContentsOnBranch")
-      .mockImplementation(async (path: string) => ({
-        parsedContent: JSON.stringify(
-          path === "release-please-config.json"
-            ? { packages: { ".": { "release-type": "node" } } }
-            : { ".": "0.1.0" },
-        ),
-      }));
+      .mockImplementation(async (path: string) => {
+        if (path === "release-please-config.json") return { parsedContent: configContents };
+        if (path === ".release-please-manifest.json") return { parsedContent: manifestContents };
+        throw new Error(`Unexpected release-please file request: ${path}`);
+      });
     const releaseManifest = vi
       .spyOn(releasePlease.Manifest.prototype, "createReleases")
       .mockImplementation(createReleases);
