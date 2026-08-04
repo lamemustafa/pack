@@ -9,6 +9,7 @@ import {
 import { persistFiledReturnsTargetDownloadId } from "../../src/background/filed-returns-target-download-attempt";
 import { parseDurableFiledReturnsFlowSummary } from "../../src/background/filed-returns-durable-summary";
 import { canonicalDurableSummaryMessage } from "../../src/connectors/gst/filed-returns-durable-status";
+import { FULL_FISCAL_YEAR_PERIOD } from "../../src/connectors/gst/filed-returns-scope";
 import type {
   FiledReturnsDownloadDiagnostic,
   FiledReturnsDownloadScope,
@@ -662,6 +663,56 @@ describe("filed returns target review", () => {
       artifactAcquisitionMalformedCheckpointReference: malformedCheckpointReference,
     });
     expect(Object.values(storedReview ?? {})).not.toContain(rawMalformedSessionKey);
+  });
+
+  it("persists a malformed-only full-year review so it can be explicitly cancelled", async () => {
+    const scope = {
+      artifactType: "PDF" as const,
+      financialYear: "2025-26",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-3B" as const,
+    };
+
+    const summary = await persistFiledReturnsTargetReview(
+      scope,
+      {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-private-v0",
+        safeMessage: "Pack retained malformed artifact recovery.",
+        safeSignals: ["artifact-acquisition-checkpoint-malformed"],
+        state: "blocked",
+      },
+      { storageKeys: { targetReview: "target-review" } },
+      { artifactAcquisitionMalformedCheckpointReference: "safe-opaque-reference" },
+    );
+
+    expect(summary).toMatchObject({
+      scope,
+      status: "blocked",
+      flowStep: { safeSignals: expect.arrayContaining(["filed-returns-target-review-required"]) },
+    });
+  });
+
+  it("does not widen full-year target reviews beyond malformed recovery", async () => {
+    const summary = await persistFiledReturnsTargetReview(
+      {
+        artifactType: "PDF",
+        financialYear: "2025-26",
+        period: FULL_FISCAL_YEAR_PERIOD,
+        returnType: "GSTR-3B",
+      },
+      {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-private-v0",
+        safeMessage: "Pack could not confirm the browser download.",
+        safeSignals: ["browser-download-not-observed"],
+        state: "download-unconfirmed",
+      },
+      { storageKeys: { targetReview: "target-review" } },
+    );
+
+    expect(summary).toBeNull();
+    expect(browserMocks.storage.local.set).not.toHaveBeenCalled();
   });
 
   it("persists browser danger rejection for explicit target review", async () => {

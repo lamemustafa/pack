@@ -340,7 +340,8 @@ function checkpointTargetFromKey(key: string): ArtifactAcquisitionTarget | null 
   if (encodedParts.length !== 4) return null;
   try {
     const [returnType, financialYear, period, artifactType] = encodedParts.map(decodeURIComponent);
-    return checkpointTarget({ artifactType, financialYear, period, returnType });
+    const target = checkpointTarget({ artifactType, financialYear, period, returnType });
+    return target && artifactAcquisitionCheckpointKey(target) === key ? target : null;
   } catch {
     return null;
   }
@@ -525,12 +526,6 @@ export async function inspectArtifactAcquisitionCheckpoint(
   }
   if (checkpoint.state === "intent") {
     return { state: "needs-review", safeSignals: ["artifact-acquisition-start-unreconciled"] };
-  }
-  if (checkpoint.state === "download-unconfirmed") {
-    return {
-      state: "needs-review",
-      safeSignals: ["artifact-acquisition-download-unconfirmed"],
-    };
   }
   if (
     !isFiledReturnsConcreteArtifactType(artifactType) ||

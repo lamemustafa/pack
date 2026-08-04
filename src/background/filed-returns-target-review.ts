@@ -25,6 +25,7 @@ import {
   parseDurableFiledReturnsScope,
   parseDurableTargetStatus,
 } from "../connectors/gst/filed-returns-durable-status";
+import { isFullFiscalYearScope } from "../connectors/gst/filed-returns-scope";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import { isCanonicalSinglePeriodLedgerId } from "../connectors/gst/filed-returns-ledger-id";
 import { readSinglePeriodStagingRecord } from "./filed-returns-artifact-progress";
@@ -705,16 +706,6 @@ function parseFiledReturnsTargetReview(input: unknown): FiledReturnsTargetReview
   }
   if (!isBoundedString(review.targetId, 1, 120)) return null;
   if (review.status !== "download-unconfirmed") return null;
-  const scope = parseDurableFiledReturnsScope(review.scope, false);
-  if (!scope) return null;
-  if (review.targetId !== createTargetId(scope)) return null;
-  const artifactAcquisitionCompletion = parseArtifactAcquisitionCompletion(
-    review.artifactAcquisitionCompletion,
-    scope,
-  );
-  if (review.artifactAcquisitionCompletion !== undefined && !artifactAcquisitionCompletion) {
-    return null;
-  }
   const malformedCheckpointReference = review.artifactAcquisitionMalformedCheckpointReference;
   if (
     malformedCheckpointReference !== undefined &&
@@ -723,8 +714,28 @@ function parseFiledReturnsTargetReview(input: unknown): FiledReturnsTargetReview
   ) {
     return null;
   }
+  const scope = parseDurableFiledReturnsScope(review.scope, Boolean(malformedCheckpointReference));
+  if (!scope || review.targetId !== createTargetId(scope)) return null;
+  const artifactAcquisitionCompletion = parseArtifactAcquisitionCompletion(
+    review.artifactAcquisitionCompletion,
+    scope,
+  );
+  if (review.artifactAcquisitionCompletion !== undefined && !artifactAcquisitionCompletion) {
+    return null;
+  }
   const durableStatus = parseDurableTargetStatus(scope, "target-review", review.safeSignals);
   if (!durableStatus) return null;
+  if (
+    isFullFiscalYearScope(scope) &&
+    (!malformedCheckpointReference ||
+      scope.completedPeriods !== undefined ||
+      artifactAcquisitionCompletion ||
+      review.downloadAttempt !== undefined ||
+      review.singlePeriodBundleCheckpoint !== undefined ||
+      !durableStatus.safeSignals.includes("artifact-acquisition-checkpoint-malformed"))
+  ) {
+    return null;
+  }
   if (
     malformedCheckpointReference &&
     !durableStatus.safeSignals.includes("artifact-acquisition-checkpoint-malformed")

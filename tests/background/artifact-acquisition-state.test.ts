@@ -111,6 +111,15 @@ describe("artifact acquisition checkpoint", () => {
     ]);
   });
 
+  it("surfaces decodable noncanonical keys as exact malformed records", async () => {
+    const key = `${PACK_ARTIFACT_ACQUISITION_KEY_PREFIX}.%47STR-3B.2025-26.May.PDF`;
+    mocks.session[key] = { schemaVersion: "1.0", state: "malformed" };
+
+    await expect(readArtifactAcquisitionCheckpoints()).resolves.toEqual([
+      { key, state: "malformed" },
+    ]);
+  });
+
   it("removes only the explicitly reviewed malformed record", async () => {
     const firstKey = `${PACK_ARTIFACT_ACQUISITION_KEY_PREFIX}.bad-one`;
     const secondKey = `${PACK_ARTIFACT_ACQUISITION_KEY_PREFIX}.bad-two`;
@@ -190,17 +199,27 @@ describe("artifact acquisition checkpoint", () => {
     expect(mocks.browser.downloads.cancel).not.toHaveBeenCalled();
   });
 
-  it("blocks a download whose correlation checkpoint could not be persisted", async () => {
+  it("reconciles an exact unconfirmed checkpoint when its browser download completes", async () => {
     await persistArtifactAcquisitionUnconfirmedDownload({
       ...MAY_PDF,
       downloadId: 9,
       requestId: actionId(9),
       state: "download-unconfirmed",
     });
+    mocks.browser.downloads.search.mockResolvedValue([
+      {
+        danger: "safe",
+        fileSize: 4_096,
+        id: 9,
+        mime: "application/pdf",
+        startTime: new Date(Date.now() + 1_000).toISOString(),
+        state: "complete",
+      },
+    ]);
 
     await expect(reconcileArtifactAcquisitionCheckpoint(MAY_PDF)).resolves.toEqual({
       state: "needs-review",
-      safeSignals: ["artifact-acquisition-download-unconfirmed"],
+      safeSignals: ["artifact-acquisition-download-completed-unpersisted"],
     });
   });
 
