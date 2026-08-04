@@ -393,6 +393,31 @@ describe("inline filed-return recovery status", () => {
     expect(onRestartTarget).not.toHaveBeenCalled();
   });
 
+  it("does not offer reconciliation for intent-only artifact recovery", () => {
+    const targetReviewSummary: FiledReturnsFlowSummary = {
+      ...blockedSummary,
+      flowStep: {
+        ...blockedSummary.flowStep,
+        state: "download-unconfirmed",
+        safeSignals: [
+          "filed-returns-target-review-required",
+          "artifact-acquisition-start-unreconciled",
+          "artifact-acquisition-download-unreconciled",
+        ],
+      },
+    };
+    const onRetryTarget = vi.fn();
+    const action = getInlinePrimaryAction(blockedPresentation, targetReviewSummary, {
+      onOpenPortal: vi.fn(),
+      onRestartTarget: vi.fn(),
+      onRetryFullFiscalYearTarget: vi.fn(),
+      onRetryTarget,
+    });
+
+    expect(action).toBeNull();
+    expect(onRetryTarget).not.toHaveBeenCalled();
+  });
+
   it("does not advertise manual completion for an incomplete selected-file ZIP", () => {
     const targetReviewSummary: FiledReturnsFlowSummary = {
       ...blockedSummary,

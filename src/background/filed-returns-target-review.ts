@@ -347,26 +347,36 @@ export async function reconcileRetainedArtifactAcquisition(
       ...scope,
       artifactType,
     });
-    if (inspection.state !== "completed") return responseForFiledReturnsTargetReview(review);
+    const evidence =
+      inspection.state === "completed"
+        ? [inspection.evidence]
+        : inspection.state === "retry-safe"
+          ? review.artifactAcquisitionCompletion
+          : undefined;
+    if (!evidence) return responseForFiledReturnsTargetReview(review);
 
-    const markedReview: FiledReturnsTargetReview = {
-      ...review,
-      artifactAcquisitionCompletion: [inspection.evidence],
-      revision: targetReviewRevision(review) + 1,
-      updatedAt: (deps.now?.() ?? new Date()).toISOString(),
-    };
-    const parsedMarkedReview = parseFiledReturnsTargetReview(markedReview);
-    if (!parsedMarkedReview) return responseForFiledReturnsTargetReview(review);
-    await browser.storage.local.set({ [key]: parsedMarkedReview });
+    let completionReview = review;
+    if (inspection.state === "completed") {
+      const markedReview: FiledReturnsTargetReview = {
+        ...review,
+        artifactAcquisitionCompletion: evidence,
+        revision: targetReviewRevision(review) + 1,
+        updatedAt: (deps.now?.() ?? new Date()).toISOString(),
+      };
+      const parsedMarkedReview = parseFiledReturnsTargetReview(markedReview);
+      if (!parsedMarkedReview) return responseForFiledReturnsTargetReview(review);
+      await browser.storage.local.set({ [key]: parsedMarkedReview });
+      completionReview = parsedMarkedReview;
+    }
 
     const durableSummary = await persistArtifactAcquisitionCompletion(
       deps.storageKeys.completion,
       scope,
-      [inspection.evidence],
+      evidence,
       deps.now?.() ?? new Date(),
       copyFiledReturnsDownloadDiagnosticState(review),
     );
-    if (!durableSummary) return responseForFiledReturnsTargetReview(parsedMarkedReview);
+    if (!durableSummary) return responseForFiledReturnsTargetReview(completionReview);
     await browser.storage.local.remove(key);
     return {
       ok: true,

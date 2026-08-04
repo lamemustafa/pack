@@ -398,6 +398,58 @@ describe("filed returns target review", () => {
     ).toMatchObject({ status: "complete", completedPeriods: ["May"] });
   });
 
+  it("restores marked completion after session-only recovery is lost", async () => {
+    const scope = {
+      artifactType: "PDF" as const,
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-3B" as const,
+    };
+    const evidence = {
+      artifactType: "PDF" as const,
+      downloadId: 9,
+      requestId: "11111111-1111-4111-8111-111111111111",
+    };
+    const localValues: Record<string, unknown> = {
+      "target-review": {
+        artifactAcquisitionCompletion: [evidence],
+        revision: 2,
+        safeMessage: "Pack retained unresolved artifact recovery.",
+        safeSignals: [
+          "artifact-acquisition-download-completed-unpersisted",
+          "artifact-acquisition-completion-pending-summary",
+        ],
+        schemaVersion: "1.0",
+        scope,
+        status: "download-unconfirmed",
+        targetId: "GSTR-3B:2025-26:May",
+        updatedAt: "2026-08-01T00:00:00.000Z",
+      },
+    };
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      typeof key === "string" && Object.hasOwn(localValues, key) ? { [key]: localValues[key] } : {},
+    );
+    browserMocks.storage.local.set.mockImplementation(async (values: Record<string, unknown>) => {
+      Object.assign(localValues, values);
+    });
+    browserMocks.storage.local.remove.mockImplementation(async (keys: unknown) => {
+      for (const key of Array.isArray(keys) ? keys : [keys]) {
+        if (typeof key === "string") delete localValues[key];
+      }
+    });
+    acquisitionMocks.inspectArtifactAcquisitionCheckpoint.mockResolvedValue({ state: "retry-safe" });
+
+    const response = await reconcileRetainedArtifactAcquisition(scope, {
+      storageKeys: { completion: "completion", targetReview: "target-review" },
+    });
+
+    expect(response).toMatchObject({ flowSummary: { status: "complete" } });
+    expect(localValues["target-review"]).toBeUndefined();
+    expect(
+      parseDurableFiledReturnsFlowSummary(browserMocks.storage.session.values.completion),
+    ).toMatchObject({ artifactAcquisitionCompletion: [evidence], status: "complete" });
+  });
+
   it("records a new same-scope cancellation instead of returning an earlier acquisition completion", async () => {
     const scope = {
       artifactType: "PDF" as const,
