@@ -152,6 +152,14 @@ stable-release claims.
       cookies, credentials, OTP, or CAPTCHA data.
 - [ ] Authorised live full fiscal year run reconciles every eligible target as
       downloaded, positively not filed, blocked, or failed in the local ledger.
+- [ ] Authorised live full fiscal year recovery matrix covers every currently
+      offered return/artifact selection and its restart/cancellation
+      transitions: service-worker restart, browser restart, interrupted
+      download, and a retained checkpoint whose browser record is no longer
+      available. A resumed path must not repeat a completed target; an
+      unproven path must remain blocked until explicit cancellation. Record
+      category/state summaries only—never raw portal URLs, filenames, download
+      IDs, page or DOM text, local paths, or taxpayer/session data.
 - [ ] Action-bound capture is tested in clean Chrome and Brave profiles plus the
       real profile where the native Save dialog appeared, with "Ask where to
       save each file" on and off, existing filename collisions, and
