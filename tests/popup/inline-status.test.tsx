@@ -351,16 +351,17 @@ describe("inline filed-return recovery status", () => {
     expect(onRestartTarget).not.toHaveBeenCalled();
   });
 
-  it("labels an exact-ID target action as reconciliation", () => {
+  it.each([
+    "filed-returns-download-reconciliation-required",
+    "artifact-acquisition-download-completed-unpersisted",
+    "artifact-acquisition-download-unreconciled",
+  ])("labels %s as reconciliation", (signal) => {
     const targetReviewSummary: FiledReturnsFlowSummary = {
       ...blockedSummary,
       flowStep: {
         ...blockedSummary.flowStep,
         state: "download-unconfirmed",
-        safeSignals: [
-          "filed-returns-target-review-required",
-          "filed-returns-download-reconciliation-required",
-        ],
+        safeSignals: ["filed-returns-target-review-required", signal],
       },
     };
     const onRestartTarget = vi.fn();
@@ -390,6 +391,57 @@ describe("inline filed-return recovery status", () => {
     expect(markup).not.toContain("Retry May");
     expect(onRetryTarget).toHaveBeenCalledOnce();
     expect(onRestartTarget).not.toHaveBeenCalled();
+  });
+
+  it("offers reconciliation for an observing selected-file ZIP", () => {
+    const targetReviewSummary: FiledReturnsFlowSummary = {
+      ...blockedSummary,
+      scope: { ...blockedSummary.scope, artifactType: "PDF_AND_EXCEL" },
+      flowStep: {
+        ...blockedSummary.flowStep,
+        state: "download-unconfirmed",
+        safeSignals: [
+          "filed-returns-target-review-required",
+          "filed-returns-download-reconciliation-required",
+        ],
+      },
+    };
+    const action = getInlinePrimaryAction(blockedPresentation, targetReviewSummary, {
+      onOpenPortal: vi.fn(),
+      onRestartTarget: vi.fn(),
+      onRetryFullFiscalYearTarget: vi.fn(),
+      onRetryTarget: vi.fn(),
+    });
+
+    expect(action?.label).toBe("Reconcile browser download");
+  });
+
+  it.each([
+    ["intent-only", "artifact-acquisition-start-unreconciled"],
+    ["malformed", "artifact-acquisition-checkpoint-malformed"],
+  ] as const)("does not offer reconciliation for %s artifact recovery", (_kind, recoverySignal) => {
+    const targetReviewSummary: FiledReturnsFlowSummary = {
+      ...blockedSummary,
+      flowStep: {
+        ...blockedSummary.flowStep,
+        state: "download-unconfirmed",
+        safeSignals: [
+          "filed-returns-target-review-required",
+          recoverySignal,
+          "artifact-acquisition-download-unreconciled",
+        ],
+      },
+    };
+    const onRetryTarget = vi.fn();
+    const action = getInlinePrimaryAction(blockedPresentation, targetReviewSummary, {
+      onOpenPortal: vi.fn(),
+      onRestartTarget: vi.fn(),
+      onRetryFullFiscalYearTarget: vi.fn(),
+      onRetryTarget,
+    });
+
+    expect(action).toBeNull();
+    expect(onRetryTarget).not.toHaveBeenCalled();
   });
 
   it("does not advertise manual completion for an incomplete selected-file ZIP", () => {

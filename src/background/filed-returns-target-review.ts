@@ -13,6 +13,8 @@ import {
 import {
   clearArtifactAcquisitionCheckpoints,
   clearArtifactAcquisitionCheckpointsAfterPersistedSummary,
+  clearMalformedArtifactAcquisitionCheckpoint,
+  inspectArtifactAcquisitionCheckpoint,
   type ArtifactAcquisitionCompletionEvidence,
 } from "./artifact-acquisition-state";
 import { persistArtifactAcquisitionCompletion } from "./filed-returns-artifact-acquisition-completion";
@@ -23,6 +25,7 @@ import {
   parseDurableFiledReturnsScope,
   parseDurableTargetStatus,
 } from "../connectors/gst/filed-returns-durable-status";
+import { isFullFiscalYearScope } from "../connectors/gst/filed-returns-scope";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import { isCanonicalSinglePeriodLedgerId } from "../connectors/gst/filed-returns-ledger-id";
 import { readSinglePeriodStagingRecord } from "./filed-returns-artifact-progress";
@@ -61,6 +64,7 @@ export type FiledReturnsTargetReviewStorageState =
   | { review: FiledReturnsTargetReview; state: "valid" };
 
 interface PersistFiledReturnsTargetReviewOptions {
+  artifactAcquisitionMalformedCheckpointReference?: string;
   downloadAttempt?: FiledReturnsTargetDownloadAttempt;
   singlePeriodBundleCheckpoint?: NonNullable<
     FiledReturnsTargetReview["singlePeriodBundleCheckpoint"]
@@ -148,7 +152,18 @@ export async function persistFiledReturnsTargetReview(
         ? uniqueSafeSignals([...flowStep.safeSignals, "filed-return-download-diagnostics-rejected"])
         : flowStep.safeSignals,
     );
+    const malformedCheckpointReference = durableStatus.safeSignals.includes(
+      "artifact-acquisition-checkpoint-malformed",
+    )
+      ? (options.artifactAcquisitionMalformedCheckpointReference ??
+        existingReview?.artifactAcquisitionMalformedCheckpointReference)
+      : undefined;
     const review = {
+      ...(malformedCheckpointReference
+        ? {
+            artifactAcquisitionMalformedCheckpointReference: malformedCheckpointReference,
+          }
+        : {}),
       ...(options.downloadAttempt
         ? { downloadAttempt: options.downloadAttempt }
         : existingReview?.downloadAttempt
@@ -300,6 +315,77 @@ export async function markFiledReturnsTargetReviewArtifactAcquisitionCompletion(
   });
 }
 
+/** Reconciles one exact completed artifact checkpoint without repeating its portal click. */
+export async function reconcileRetainedArtifactAcquisition(
+  scope: FiledReturnsDownloadScope,
+  deps: FiledReturnsTargetReviewDeps,
+): Promise<PackMessageResponse | null> {
+  const key = deps.storageKeys.targetReview;
+  if (!key) return null;
+  return runTargetReviewMutationCriticalSection(async () => {
+    const state = await readTargetReviewStorageStateByKey(key);
+    if (
+      state.state !== "valid" ||
+      !sameFiledReturnsScope(state.review.scope, scope) ||
+      !hasArtifactAcquisitionRecoverySignal(state.review.safeSignals)
+    ) {
+      return null;
+    }
+    const review = state.review;
+    const artifacts = concreteFiledReturnsArtifactTypesForSelection(
+      scope.returnType,
+      scope.artifactType,
+    );
+    // Selected-file ZIPs are not proof of their independent component files.
+    // New recovery reviews are always concrete; retain legacy composite reviews
+    // for explicit cancellation rather than claiming their aggregate complete.
+    if (artifacts.length !== 1) return responseForFiledReturnsTargetReview(review);
+    const [artifactType] = artifacts;
+    if (!artifactType) return responseForFiledReturnsTargetReview(review);
+
+    const inspection = await inspectArtifactAcquisitionCheckpoint({
+      ...scope,
+      artifactType,
+    });
+    const evidence =
+      inspection.state === "completed"
+        ? [inspection.evidence]
+        : inspection.state === "retry-safe"
+          ? review.artifactAcquisitionCompletion
+          : undefined;
+    if (!evidence) return responseForFiledReturnsTargetReview(review);
+
+    let completionReview = review;
+    if (inspection.state === "completed") {
+      const markedReview: FiledReturnsTargetReview = {
+        ...review,
+        artifactAcquisitionCompletion: evidence,
+        revision: targetReviewRevision(review) + 1,
+        updatedAt: (deps.now?.() ?? new Date()).toISOString(),
+      };
+      const parsedMarkedReview = parseFiledReturnsTargetReview(markedReview);
+      if (!parsedMarkedReview) return responseForFiledReturnsTargetReview(review);
+      await browser.storage.local.set({ [key]: parsedMarkedReview });
+      completionReview = parsedMarkedReview;
+    }
+
+    const durableSummary = await persistArtifactAcquisitionCompletion(
+      deps.storageKeys.completion,
+      scope,
+      evidence,
+      deps.now?.() ?? new Date(),
+      copyFiledReturnsDownloadDiagnosticState(review),
+    );
+    if (!durableSummary) return responseForFiledReturnsTargetReview(completionReview);
+    await browser.storage.local.remove(key);
+    return {
+      ok: true,
+      flowStep: durableSummary.flowStep,
+      flowSummary: durableSummary,
+    };
+  });
+}
+
 export async function resolveUnconfirmedFiledReturnsDownload(
   scope: FiledReturnsDownloadScope,
   resolution: "manually-observed" | "cancelled",
@@ -341,6 +427,41 @@ export async function resolveUnconfirmedFiledReturnsDownload(
         flowStep: persistedArtifactCompletion.flowStep,
         flowSummary: persistedArtifactCompletion,
       };
+    }
+    if (
+      resolution === "cancelled" &&
+      review.artifactAcquisitionCompletion &&
+      hasArtifactAcquisitionRecoverySignal(review.safeSignals)
+    ) {
+      const artifacts = concreteFiledReturnsArtifactTypesForSelection(
+        scope.returnType,
+        scope.artifactType,
+      );
+      const [artifactType] = artifacts;
+      if (artifacts.length === 1 && artifactType) {
+        const inspection = await inspectArtifactAcquisitionCheckpoint({ ...scope, artifactType });
+        if (inspection.state === "completed" || inspection.state === "retry-safe") {
+          // A worker stop can retain the completed checkpoint, while a browser
+          // restart clears it. In either case, restore this parser-validated
+          // local completion marker before cancellation can replace the target.
+          const restoredCompletion = await persistArtifactAcquisitionCompletion(
+            deps.storageKeys.completion,
+            scope,
+            inspection.state === "completed"
+              ? [inspection.evidence]
+              : review.artifactAcquisitionCompletion,
+            deps.now?.() ?? new Date(),
+            copyFiledReturnsDownloadDiagnosticState(review),
+          );
+          if (!restoredCompletion) return responseForFiledReturnsTargetReview(review);
+          await browser.storage.local.remove(key);
+          return {
+            ok: true,
+            flowStep: restoredCompletion.flowStep,
+            flowSummary: restoredCompletion,
+          };
+        }
+      }
     }
     const hasCleanupFailure = hasSinglePeriodCleanupFailure(review.safeSignals);
     if (hasCleanupFailure && resolution !== "cancelled") {
@@ -399,39 +520,20 @@ export async function resolveUnconfirmedFiledReturnsDownload(
     }
 
     if (hasArtifactAcquisitionRecoverySignal(review.safeSignals)) {
-      const cancellation = await clearArtifactAcquisitionCheckpoints(review.scope);
-      if (cancellation.state === "completed") {
-        const artifactAcquisitionCompletion = cancellation.evidence.map(
-          ({ artifactType, downloadId, requestId }) => ({
-            artifactType,
-            downloadId,
-            requestId,
-          }),
-        );
-        const markedReview: FiledReturnsTargetReview = {
-          ...review,
-          artifactAcquisitionCompletion,
-          revision: targetReviewRevision(review) + 1,
-          updatedAt: (deps.now?.() ?? new Date()).toISOString(),
-        };
-        const parsedMarkedReview = parseFiledReturnsTargetReview(markedReview);
-        if (!parsedMarkedReview) return responseForFiledReturnsTargetReview(review);
-        await browser.storage.local.set({ [key]: parsedMarkedReview });
-        const durableSummary = await persistArtifactAcquisitionCompletion(
-          deps.storageKeys.completion,
-          review.scope,
-          cancellation.evidence,
-          deps.now?.() ?? new Date(),
-          copyFiledReturnsDownloadDiagnosticState(review),
-        );
-        if (!durableSummary) return responseForFiledReturnsTargetReview(review);
-        await browser.storage.local.remove(key);
-        return {
-          ok: true,
-          flowStep: durableSummary.flowStep,
-          flowSummary: durableSummary,
-        };
+      if (
+        review.safeSignals.includes("artifact-acquisition-checkpoint-malformed") &&
+        review.artifactAcquisitionMalformedCheckpointReference &&
+        !(await clearMalformedArtifactAcquisitionCheckpoint(
+          review.artifactAcquisitionMalformedCheckpointReference,
+        ))
+      ) {
+        return responseForFiledReturnsTargetReview(review);
       }
+      const cancellation = await clearArtifactAcquisitionCheckpoints(review.scope, {
+        discardCompleted: true,
+        discardIntent: true,
+        discardMissing: true,
+      });
       if (cancellation.state === "blocked") {
         const clearFailureReview: FiledReturnsTargetReview = {
           ...review,
@@ -621,6 +723,7 @@ function parseFiledReturnsTargetReview(input: unknown): FiledReturnsTargetReview
   if (
     !hasOnlyKeys(review, [
       "artifactAcquisitionCompletion",
+      "artifactAcquisitionMalformedCheckpointReference",
       "downloadAttempt",
       "downloadDiagnostic",
       "downloadDiagnostics",
@@ -649,9 +752,16 @@ function parseFiledReturnsTargetReview(input: unknown): FiledReturnsTargetReview
   }
   if (!isBoundedString(review.targetId, 1, 120)) return null;
   if (review.status !== "download-unconfirmed") return null;
-  const scope = parseDurableFiledReturnsScope(review.scope, false);
-  if (!scope) return null;
-  if (review.targetId !== createTargetId(scope)) return null;
+  const malformedCheckpointReference = review.artifactAcquisitionMalformedCheckpointReference;
+  if (
+    malformedCheckpointReference !== undefined &&
+    (!isBoundedString(malformedCheckpointReference, 1, 120) ||
+      !/^[a-zA-Z0-9-]+$/.test(malformedCheckpointReference))
+  ) {
+    return null;
+  }
+  const scope = parseDurableFiledReturnsScope(review.scope, Boolean(malformedCheckpointReference));
+  if (!scope || review.targetId !== createTargetId(scope)) return null;
   const artifactAcquisitionCompletion = parseArtifactAcquisitionCompletion(
     review.artifactAcquisitionCompletion,
     scope,
@@ -661,6 +771,23 @@ function parseFiledReturnsTargetReview(input: unknown): FiledReturnsTargetReview
   }
   const durableStatus = parseDurableTargetStatus(scope, "target-review", review.safeSignals);
   if (!durableStatus) return null;
+  if (
+    isFullFiscalYearScope(scope) &&
+    (!malformedCheckpointReference ||
+      scope.completedPeriods !== undefined ||
+      artifactAcquisitionCompletion ||
+      review.downloadAttempt !== undefined ||
+      review.singlePeriodBundleCheckpoint !== undefined ||
+      !durableStatus.safeSignals.includes("artifact-acquisition-checkpoint-malformed"))
+  ) {
+    return null;
+  }
+  if (
+    malformedCheckpointReference &&
+    !durableStatus.safeSignals.includes("artifact-acquisition-checkpoint-malformed")
+  ) {
+    return null;
+  }
   if (
     review.downloadAttempt !== undefined &&
     (!isFiledReturnsTargetDownloadAttempt(review.downloadAttempt) ||
@@ -697,6 +824,9 @@ function parseFiledReturnsTargetReview(input: unknown): FiledReturnsTargetReview
     revision,
     scope,
     ...(artifactAcquisitionCompletion ? { artifactAcquisitionCompletion } : {}),
+    ...(malformedCheckpointReference
+      ? { artifactAcquisitionMalformedCheckpointReference: malformedCheckpointReference }
+      : {}),
     ...(singlePeriodBundleCheckpoint ? { singlePeriodBundleCheckpoint } : {}),
   } as FiledReturnsTargetReview;
 }

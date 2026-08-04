@@ -184,8 +184,34 @@ describe("popup full-year recovery actions", () => {
     expect(markup).not.toContain("Retry local cleanup");
   });
 
-  it("labels exact-ID target recovery as reconciliation, not retry", () => {
+  it.each([
+    "filed-returns-download-reconciliation-required",
+    "artifact-acquisition-download-completed-unpersisted",
+    "artifact-acquisition-download-unreconciled",
+  ])("labels %s as reconciliation, not retry", (signal) => {
     const summary = targetReviewSummary();
+    summary.flowStep.safeSignals.push(signal);
+    const markup = renderToStaticMarkup(
+      createElement(RecoveryActions, {
+        busy: null,
+        portalReady: true,
+        summary,
+        onStartFresh: () => undefined,
+        onAcknowledgeInterruptedRun: () => undefined,
+        onRetryFullFiscalYearTarget: () => undefined,
+        onRetryTarget: () => undefined,
+        onResolveFullFiscalYearTarget: () => undefined,
+        onResolveTarget: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain("Reconcile browser download");
+    expect(markup).not.toContain("Retry this period");
+  });
+
+  it("offers reconciliation for an observing selected-file ZIP", () => {
+    const summary = targetReviewSummary();
+    summary.scope.artifactType = "PDF_AND_EXCEL";
     summary.flowStep.safeSignals.push("filed-returns-download-reconciliation-required");
     const markup = renderToStaticMarkup(
       createElement(RecoveryActions, {
@@ -204,6 +230,36 @@ describe("popup full-year recovery actions", () => {
     expect(markup).toContain("Reconcile browser download");
     expect(markup).not.toContain("Retry this period");
   });
+
+  it.each([
+    ["intent-only", "artifact-acquisition-start-unreconciled"],
+    ["malformed", "artifact-acquisition-checkpoint-malformed"],
+  ] as const)(
+    "keeps %s artifact recovery cancellable without a reconciliation action",
+    (_kind, recoverySignal) => {
+      const summary = targetReviewSummary();
+      summary.flowStep.safeSignals.push(
+        recoverySignal,
+        "artifact-acquisition-download-unreconciled",
+      );
+      const markup = renderToStaticMarkup(
+        createElement(RecoveryActions, {
+          busy: null,
+          portalReady: true,
+          summary,
+          onStartFresh: () => undefined,
+          onAcknowledgeInterruptedRun: () => undefined,
+          onRetryFullFiscalYearTarget: () => undefined,
+          onRetryTarget: () => undefined,
+          onResolveFullFiscalYearTarget: () => undefined,
+          onResolveTarget: () => undefined,
+        }),
+      );
+
+      expect(markup).not.toContain("Reconcile browser download");
+      expect(markup).toContain("Cancel and reset");
+    },
+  );
 
   it("keeps local-only cleanup available without labeling it as a portal retry", () => {
     const summary = targetReviewSummary();

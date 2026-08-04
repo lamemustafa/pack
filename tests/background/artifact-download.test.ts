@@ -1,4 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
+
+const durableObserverMocks = vi.hoisted(() => ({
+  beginLiveFiledReturnsDownloadObservation: vi.fn(() => vi.fn()),
+}));
+
+vi.mock("../../src/background/filed-returns-durable-download-reconciler", () => ({
+  beginLiveFiledReturnsDownloadObservation:
+    durableObserverMocks.beginLiveFiledReturnsDownloadObservation,
+  extensionBlobUrlFingerprint: vi.fn(),
+}));
+
 import { downloadAcquiredArtifact } from "../../src/background/artifact-download";
 
 const listeners = new Set<(delta: { id: number }) => void>();
@@ -101,6 +112,15 @@ describe("downloadAcquiredArtifact", () => {
     expect(onStartCheckpointFailed).toHaveBeenCalledWith(9);
     expect(revoke).toHaveBeenCalledWith("blob:extension");
     expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("does not register direct artifacts with the global observer registry", async () => {
+    await expect(downloadAcquiredArtifact(input(), deps())).resolves.toMatchObject({
+      ok: true,
+      downloadId: 9,
+    });
+
+    expect(durableObserverMocks.beginLiveFiledReturnsDownloadObservation).not.toHaveBeenCalled();
   });
 
   it("ignores a different downloadId and times out after one start", async () => {

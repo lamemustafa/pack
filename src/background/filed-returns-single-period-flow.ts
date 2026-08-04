@@ -60,7 +60,6 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
   // fresh intent and repeat a download that may already have succeeded.
   // Checkpoints are keyed per concrete artifact type, so a composite selection
   // has to reconcile each one rather than the composite scope.
-  const acquisitionRecoverySignals: string[] = [];
   const concreteArtifactTypes = concreteFiledReturnsArtifactTypesForSelection(
     scope.returnType,
     scope.artifactType,
@@ -74,34 +73,32 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
     } as const;
     const acquisitionRecovery = await reconcileArtifactAcquisitionCheckpoint(concreteScope);
     if (acquisitionRecovery.state === "needs-review") {
-      // The inspection state is the canonical admission decision. Preserve its
-      // specific reason, then retain the existing generic acquisition signal so
-      // the target-review persistence and cancellation paths own every
-      // needs-review result without duplicating observer-signal names here.
-      acquisitionRecoverySignals.push(
-        "artifact-acquisition-download-unreconciled",
-        ...acquisitionRecovery.safeSignals,
-      );
+      // A composite selection has independent browser actions. Surface the
+      // first retained concrete artifact, rather than assigning PDF/Excel/JSON
+      // evidence to the selected-file ZIP scope.
+      const flowStep: PortalFlowStepResult = {
+        connectorId: "gst",
+        scopeId: filedReturnScopeId(scope.returnType),
+        state: "blocked",
+        safeSignals: Array.from(
+          new Set([
+            "artifact-acquisition-download-unreconciled",
+            ...acquisitionRecovery.safeSignals,
+          ]),
+        ),
+        safeMessage:
+          "Pack retained unresolved artifact download recovery and will not repeat the target automatically.",
+        userAction: {
+          type: "RETRY_PORTAL_GENERATION",
+          message: "Review or cancel this target before starting another portal action.",
+          canResume: true,
+        },
+      };
+      const flowSummary = await persistFiledReturnsTargetReview(concreteScope, flowStep, deps);
+      return flowSummary
+        ? { ok: true, flowStep: flowSummary.flowStep, flowSummary }
+        : { ok: true, flowStep };
     }
-  }
-  if (acquisitionRecoverySignals.length > 0) {
-    const flowStep: PortalFlowStepResult = {
-      connectorId: "gst",
-      scopeId: filedReturnScopeId(scope.returnType),
-      state: "blocked",
-      safeSignals: [...new Set(acquisitionRecoverySignals)],
-      safeMessage:
-        "Pack retained unresolved artifact download recovery and will not repeat the target automatically.",
-      userAction: {
-        type: "RETRY_PORTAL_GENERATION",
-        message: "Review or cancel this target before starting another portal action.",
-        canResume: true,
-      },
-    };
-    const flowSummary = await persistFiledReturnsTargetReview(scope, flowStep, deps);
-    return flowSummary
-      ? { ok: true, flowStep: flowSummary.flowStep, flowSummary }
-      : { ok: true, flowStep };
   }
   const recoveryResponse = await preflightSelectedArtifactsRecovery({ deps, scope });
   if (recoveryResponse) {

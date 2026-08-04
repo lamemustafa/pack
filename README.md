@@ -218,6 +218,7 @@ Pack uses Chrome extension storage only inside the current browser profile.
   set of artifact type, exact numeric browser download ID and opaque request
   ID,
   opaque staging-ledger or selected-file checkpoint identifiers/revisions, and
+  a bounded opaque reference for one malformed session-only artifact checkpoint,
   sanitized endpoint/path,
   MIME, byte-count, status and error classes. It never stores the raw filename,
   local path, URL/referrer, GSTIN/PAN, taxpayer name, portal HTML, credentials,
@@ -245,6 +246,12 @@ Pack uses Chrome extension storage only inside the current browser profile.
   numeric download ID. It contains no raw
   filename, local path, URL/referrer, portal response, taxpayer identifier,
   credential, cookie, token or artifact bytes.
+- `pack.artifact-acquisition-review.v1.*`: a short-lived, session-only mapping
+  from an opaque review reference to a fixed-format digest of one malformed
+  artifact-checkpoint key. It lets explicit cancellation remove only that
+  exact checkpoint without copying its raw key into a new stored value; the
+  mapping is never copied into the durable target review and is cleared with
+  session storage.
 
 The Options page "Clear local Pack data" control removes the local keys above
 and clears Pack session storage. Pack does not store GST Portal credentials,

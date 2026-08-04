@@ -26,10 +26,14 @@ const mocks = vi.hoisted(() => {
 vi.mock("wxt/browser", () => ({ browser: mocks.browser }));
 
 import {
+  PACK_ARTIFACT_ACQUISITION_KEY_PREFIX,
   artifactAcquisitionCheckpointKey,
   clearArtifactAcquisitionCheckpoint,
   clearArtifactAcquisitionCheckpoints,
   clearArtifactAcquisitionCheckpointsAfterPersistedSummary,
+  clearMalformedArtifactAcquisitionCheckpoint,
+  createMalformedArtifactAcquisitionCheckpointReference,
+  readArtifactAcquisitionCheckpoints,
   persistArtifactAcquisitionDownloadId,
   persistArtifactAcquisitionIntent,
   persistArtifactAcquisitionUnconfirmedDownload,
@@ -83,6 +87,68 @@ describe("artifact acquisition checkpoint", () => {
     expect(mocks.browser.downloads.search).not.toHaveBeenCalled();
   });
 
+  it("enumerates by canonical key so a mismatched value remains fail-closed", async () => {
+    const key = artifactAcquisitionCheckpointKey(MAY_PDF);
+    mocks.session[key] = {
+      ...MAY_PDF,
+      armedAt: new Date().toISOString(),
+      artifactType: "JSON",
+      requestId: actionId(1),
+      state: "intent",
+    };
+
+    await expect(readArtifactAcquisitionCheckpoints()).resolves.toEqual([
+      { state: "target", target: MAY_PDF },
+    ]);
+  });
+
+  it("surfaces unsupported key selections as an exact malformed record", async () => {
+    const key = `${PACK_ARTIFACT_ACQUISITION_KEY_PREFIX}.GSTR-3B.2025-99.May.PDF`;
+    mocks.session[key] = { schemaVersion: "1.0", state: "malformed" };
+
+    await expect(readArtifactAcquisitionCheckpoints()).resolves.toEqual([
+      { key, state: "malformed" },
+    ]);
+  });
+
+  it("surfaces decodable noncanonical keys as exact malformed records", async () => {
+    const key = `${PACK_ARTIFACT_ACQUISITION_KEY_PREFIX}.%47STR-3B.2025-26.May.PDF`;
+    mocks.session[key] = { schemaVersion: "1.0", state: "malformed" };
+
+    await expect(readArtifactAcquisitionCheckpoints()).resolves.toEqual([
+      { key, state: "malformed" },
+    ]);
+  });
+
+  it("removes only the explicitly reviewed malformed record", async () => {
+    const firstKey = `${PACK_ARTIFACT_ACQUISITION_KEY_PREFIX}.bad-one`;
+    const secondKey = `${PACK_ARTIFACT_ACQUISITION_KEY_PREFIX}.bad-two`;
+    mocks.session[firstKey] = { untrusted: true };
+    mocks.session[secondKey] = { untrusted: true };
+
+    const firstReference = await createMalformedArtifactAcquisitionCheckpointReference(firstKey);
+    expect(firstReference).toMatch(/^[a-zA-Z0-9-]+$/);
+    await expect(clearMalformedArtifactAcquisitionCheckpoint(firstReference!)).resolves.toBe(true);
+
+    expect(mocks.session[firstKey]).toBeUndefined();
+    expect(mocks.session[secondKey]).toEqual({ untrusted: true });
+  });
+
+  it("binds and clears a malformed checkpoint key beyond the old arbitrary limit", async () => {
+    const key = `${PACK_ARTIFACT_ACQUISITION_KEY_PREFIX}.${"x".repeat(600)}`;
+    mocks.session[key] = { untrusted: true };
+
+    const reference = await createMalformedArtifactAcquisitionCheckpointReference(key);
+
+    const referenceValue = Object.entries(mocks.session).find(([storedKey]) =>
+      storedKey.startsWith("pack.artifact-acquisition-review.v1."),
+    )?.[1];
+    expect(referenceValue).toEqual({ keyDigest: expect.stringMatching(/^[a-f0-9]{64}$/) });
+    expect(JSON.stringify(referenceValue)).not.toContain(key);
+    await expect(clearMalformedArtifactAcquisitionCheckpoint(reference!)).resolves.toBe(true);
+    expect(mocks.session[key]).toBeUndefined();
+  });
+
   it("keeps an unresolved download bound to its exact May PDF target", async () => {
     await persistArtifactAcquisitionDownloadId({
       ...MAY_PDF,
@@ -122,17 +188,60 @@ describe("artifact acquisition checkpoint", () => {
     });
   });
 
-  it("blocks a download whose correlation checkpoint could not be persisted", async () => {
+  it("discards an intent-only checkpoint only during explicit cancellation", async () => {
+    await persistArtifactAcquisitionIntent({ ...MAY_PDF, requestId: actionId(80) });
+
+    await expect(
+      clearArtifactAcquisitionCheckpoints(MAY_PDF, { discardIntent: true }),
+    ).resolves.toEqual({ state: "cleared" });
+    expect(mocks.session[artifactAcquisitionCheckpointKey(MAY_PDF)]).toBeUndefined();
+    expect(mocks.browser.downloads.search).not.toHaveBeenCalled();
+    expect(mocks.browser.downloads.cancel).not.toHaveBeenCalled();
+  });
+
+  it("discards a missing exact download only during explicit cancellation", async () => {
+    const key = artifactAcquisitionCheckpointKey(MAY_PDF);
+    await persistArtifactAcquisitionDownloadId({
+      ...MAY_PDF,
+      downloadId: 9,
+      requestId: actionId(81),
+      state: "download-observing",
+    });
+    mocks.browser.downloads.search.mockResolvedValue([]);
+
+    await expect(clearArtifactAcquisitionCheckpoints(MAY_PDF)).resolves.toEqual({
+      state: "blocked",
+    });
+    expect(mocks.session[key]).toEqual(expect.objectContaining({ downloadId: 9 }));
+
+    await expect(
+      clearArtifactAcquisitionCheckpoints(MAY_PDF, { discardMissing: true }),
+    ).resolves.toEqual({ state: "cleared" });
+    expect(mocks.session[key]).toBeUndefined();
+    expect(mocks.browser.downloads.cancel).not.toHaveBeenCalled();
+  });
+
+  it("reconciles an exact unconfirmed checkpoint when its browser download completes", async () => {
     await persistArtifactAcquisitionUnconfirmedDownload({
       ...MAY_PDF,
       downloadId: 9,
       requestId: actionId(9),
       state: "download-unconfirmed",
     });
+    mocks.browser.downloads.search.mockResolvedValue([
+      {
+        danger: "safe",
+        fileSize: 4_096,
+        id: 9,
+        mime: "application/pdf",
+        startTime: new Date(Date.now() + 1_000).toISOString(),
+        state: "complete",
+      },
+    ]);
 
     await expect(reconcileArtifactAcquisitionCheckpoint(MAY_PDF)).resolves.toEqual({
       state: "needs-review",
-      safeSignals: ["artifact-acquisition-download-unconfirmed"],
+      safeSignals: ["artifact-acquisition-download-completed-unpersisted"],
     });
   });
 
@@ -290,6 +399,17 @@ describe("artifact acquisition checkpoint", () => {
     });
   });
 
+  it("treats a present null checkpoint as malformed instead of retry-safe", async () => {
+    const key = artifactAcquisitionCheckpointKey(MAY_PDF);
+    mocks.session[key] = null;
+
+    await expect(reconcileArtifactAcquisitionCheckpoint(MAY_PDF)).resolves.toEqual({
+      state: "needs-review",
+      safeSignals: ["artifact-acquisition-checkpoint-malformed"],
+    });
+    expect(mocks.session[key]).toEqual({ schemaVersion: "1.0", state: "malformed" });
+  });
+
   it("clears only the terminal request's own target checkpoint", async () => {
     await persistArtifactAcquisitionIntent({ ...MAY_PDF, requestId: actionId(10) });
     await persistArtifactAcquisitionIntent({ ...JUNE_PDF, requestId: actionId(11) });
@@ -429,6 +549,46 @@ describe("artifact acquisition checkpoint", () => {
     expect(
       mocks.session[artifactAcquisitionCheckpointKey({ ...MAY_COMPOSITE, artifactType: "PDF" })],
     ).toEqual(expect.objectContaining({ downloadId: 9 }));
+  });
+
+  it("explicitly discards completed composite checkpoint ownership without claiming a ZIP", async () => {
+    for (const [artifactType, downloadId, requestId] of [
+      ["PDF", 9, actionId(29)],
+      ["EXCEL", 10, actionId(30)],
+      ["JSON", 11, actionId(31)],
+    ] as const) {
+      await persistArtifactAcquisitionDownloadId({
+        ...MAY_COMPOSITE,
+        artifactType,
+        downloadId,
+        requestId,
+        state: "download-observing",
+      });
+    }
+    mocks.browser.downloads.search.mockImplementation(async ({ id }: { id: number }) => [
+      {
+        danger: "safe",
+        fileSize: 2048,
+        id,
+        mime:
+          id === 9
+            ? "application/pdf"
+            : id === 10
+              ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              : "application/json",
+        startTime: new Date(Date.now() + 1_000).toISOString(),
+        state: "complete",
+      },
+    ]);
+
+    await expect(
+      clearArtifactAcquisitionCheckpoints(MAY_COMPOSITE, { discardCompleted: true }),
+    ).resolves.toEqual({ state: "cleared" });
+    for (const artifactType of ["PDF", "EXCEL", "JSON"] as const) {
+      expect(
+        mocks.session[artifactAcquisitionCheckpointKey({ ...MAY_COMPOSITE, artifactType })],
+      ).toBeUndefined();
+    }
   });
 
   it("clears rather than completes a composite with only part-evidenced downloads", async () => {

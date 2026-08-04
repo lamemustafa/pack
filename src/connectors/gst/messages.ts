@@ -241,9 +241,7 @@ export function isPackMessage(
     case "PACK_CONTENT_OPEN_RETURNS_DASHBOARD_V34":
       return input.payload === undefined;
     case "PACK_RETRY_FILED_RETURNS_TARGET":
-      return (
-        isFiledReturnsStartScope(input.payload) && input.payload.period !== FULL_FISCAL_YEAR_PERIOD
-      );
+      return isFiledReturnsStartScope(input.payload);
     case "PACK_RETRY_FULL_FISCAL_YEAR_TARGET":
       return isFullFiscalYearTargetRecoveryPayload(input.payload);
     case "PACK_RESOLVE_UNCONFIRMED_DOWNLOAD":
@@ -343,7 +341,7 @@ function isUnconfirmedDownloadResolution(input: unknown): input is {
 } {
   if (!isRecord(input) || !hasOnlyKeys(input, ["scope", "resolution"])) return false;
   if (input.resolution !== "manually-observed" && input.resolution !== "cancelled") return false;
-  return isFiledReturnsStartScope(input.scope) && input.scope.period !== FULL_FISCAL_YEAR_PERIOD;
+  return isFiledReturnsStartScope(input.scope);
 }
 function isFiledReturnsFreshStartPayload(input: unknown): input is FiledReturnsFreshStartPayload {
   if (
@@ -357,8 +355,7 @@ function isFiledReturnsFreshStartPayload(input: unknown): input is FiledReturnsF
   if (input.recovery.kind === "target-review") {
     return (
       hasOnlyKeys(input.recovery, ["kind", "scope"]) &&
-      isFiledReturnsStartScope(input.recovery.scope) &&
-      input.recovery.scope.period !== FULL_FISCAL_YEAR_PERIOD
+      isFiledReturnsStartScope(input.recovery.scope)
     );
   }
   return (

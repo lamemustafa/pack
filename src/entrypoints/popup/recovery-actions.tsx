@@ -1,5 +1,9 @@
 import type { FiledReturnsFlowSummary } from "../../connectors/gst/filed-returns-contracts";
-import { DiagnosticSignals, hasDiagnosticSignals } from "./run-summary";
+import {
+  canReconcileFiledReturnsTarget,
+  DiagnosticSignals,
+  hasDiagnosticSignals,
+} from "./run-summary";
 
 export interface RecoveryActionsProps {
   busy: string | null;
@@ -32,7 +36,7 @@ export function RecoveryActions({
   const canManuallyResolveTarget =
     !signals.has("single-period-zip-incomplete") &&
     !signals.has("filed-returns-target-manually-observed");
-  const canReconcileTarget = signals.has("filed-returns-download-reconciliation-required");
+  const canReconcileTarget = canReconcileFiledReturnsTarget(summary);
   const canRetryTargetCleanup = signals.has("filed-returns-target-local-cleanup-required");
   const retryDisabled = busy !== null || !portalReady;
   return (

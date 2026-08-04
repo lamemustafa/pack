@@ -6,7 +6,10 @@ import {
   PACK_LOCAL_STORAGE_KEYS,
   PACK_SESSION_STORAGE_KEYS,
 } from "../../src/background/storage-keys";
-import { PACK_ARTIFACT_ACQUISITION_KEY_PREFIX } from "../../src/background/artifact-acquisition-state";
+import {
+  PACK_ARTIFACT_ACQUISITION_KEY_PREFIX,
+  PACK_MALFORMED_ARTIFACT_ACQUISITION_REVIEW_REFERENCE_KEY_PREFIX,
+} from "../../src/background/artifact-acquisition-state";
 
 async function readStorageSection(): Promise<string> {
   const readme = await readFile(path.join(process.cwd(), "README.md"), "utf8");
@@ -30,7 +33,7 @@ describe("README extension storage disclosure", () => {
     }
   });
 
-  it("documents the generated artifact-acquisition checkpoint family", async () => {
+  it("documents generated artifact-acquisition storage families", async () => {
     // This family is built from a prefix rather than listed in the key objects,
     // so the assertion above cannot see it: deleting its README entry would
     // otherwise leave this suite green. The inventory claim is exhaustiveness,
@@ -40,5 +43,9 @@ describe("README extension storage disclosure", () => {
       storageSection,
       `README.md must disclose the ${PACK_ARTIFACT_ACQUISITION_KEY_PREFIX} checkpoint family`,
     ).toContain(PACK_ARTIFACT_ACQUISITION_KEY_PREFIX);
+    expect(
+      storageSection,
+      `README.md must disclose the ${PACK_MALFORMED_ARTIFACT_ACQUISITION_REVIEW_REFERENCE_KEY_PREFIX} reference family`,
+    ).toContain(PACK_MALFORMED_ARTIFACT_ACQUISITION_REVIEW_REFERENCE_KEY_PREFIX);
   });
 });

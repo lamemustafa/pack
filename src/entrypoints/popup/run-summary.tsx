@@ -30,6 +30,33 @@ export function hasDiagnosticSignals(summary: FiledReturnsFlowSummary): boolean 
   return summary.flowStep.safeSignals.some(isDownloadDiagnosticSignal);
 }
 
+/** Whether retry can inspect a retained exact-ID artifact download without a portal click. */
+export function canReconcileFiledReturnsTarget(summary: FiledReturnsFlowSummary): boolean {
+  const signals = summary.flowStep.safeSignals;
+  if (
+    summary.scope.artifactType === "PDF_AND_EXCEL" &&
+    !signals.includes("filed-returns-download-reconciliation-required")
+  ) {
+    return false;
+  }
+  if (
+    signals.includes("artifact-acquisition-start-unreconciled") ||
+    signals.includes("artifact-acquisition-checkpoint-malformed")
+  ) {
+    return false;
+  }
+  return signals.some((signal) =>
+    [
+      "filed-returns-download-reconciliation-required",
+      "artifact-acquisition-download-completed-unpersisted",
+      "artifact-acquisition-download-interrupted",
+      "artifact-acquisition-download-search-unavailable",
+      "artifact-acquisition-download-unconfirmed",
+      "artifact-acquisition-download-unreconciled",
+    ].includes(signal),
+  );
+}
+
 function isDownloadDiagnosticSignal(signal: string): boolean {
   return (
     signal.includes("blob-capture") ||

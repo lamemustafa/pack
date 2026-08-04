@@ -101,6 +101,8 @@ export type FiledReturnsTargetDownloadAttempt =
 export interface FiledReturnsTargetReview {
   /** Exact opaque request identities for a completion that is awaiting review removal. */
   artifactAcquisitionCompletion?: FiledReturnsArtifactAcquisitionCompletion[];
+  /** Opaque reference to one malformed session checkpoint being reviewed. */
+  artifactAcquisitionMalformedCheckpointReference?: string;
   downloadAttempt?: FiledReturnsTargetDownloadAttempt;
   downloadDiagnostic?: FiledReturnsDownloadDiagnostic;
   downloadDiagnostics?: FiledReturnsDownloadDiagnostic[];

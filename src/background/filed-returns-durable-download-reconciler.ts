@@ -1,19 +1,8 @@
 import { browser } from "wxt/browser";
-import type {
-  FiledReturnsDownloadScope,
-  FiledReturnsTargetReview,
-} from "../connectors/gst/filed-returns-contracts";
-import {
-  inspectArtifactAcquisitionCheckpoint,
-  readArtifactAcquisitionCheckpointTargets,
-  type ArtifactAcquisitionCompletionEvidence,
-} from "./artifact-acquisition-state";
+import type { FiledReturnsTargetReview } from "../connectors/gst/filed-returns-contracts";
 import type { DownloadCreatedItem, DownloadDelta } from "./download-observer";
 import { persistFiledReturnsTargetDownloadId } from "./filed-returns-target-download-attempt";
-import { persistArtifactAcquisitionCompletion } from "./filed-returns-artifact-acquisition-completion";
 import {
-  clearFiledReturnsTargetReview,
-  markFiledReturnsTargetReviewArtifactAcquisitionCompletion,
   readCurrentFiledReturnsTargetReview,
   type FiledReturnsTargetReviewDeps,
 } from "./filed-returns-target-review";
@@ -92,7 +81,7 @@ export function beginPendingExtensionDownloadUrl(url: string): () => void {
 }
 
 /**
- * Reconciles only a previously persisted exact browser download ID. It is safe
+ * Reconciles only a persisted target-review download ID. It is safe
  * to call at service-worker start, when the popup asks for current state, and
  * for terminal downloads.onChanged events. In-progress downloads are deliberately
  * left untouched so a native Save dialog can remain open as long as the user needs.
@@ -101,9 +90,7 @@ export async function reconcileTerminalFiledReturnsDownload(
   downloads: Pick<DurableDownloadReconcilerDownloads, "search">,
   deps: DurableDownloadReconcilerDeps,
 ): Promise<boolean> {
-  const reviewReconciled = await reconcileCurrentTargetReview(downloads, deps);
-  const acquisitionReconciled = await reconcileArtifactAcquisitionCheckpoints(deps);
-  return reviewReconciled || acquisitionReconciled;
+  return reconcileCurrentTargetReview(downloads, deps);
 }
 
 async function reconcileCurrentTargetReview(
@@ -123,50 +110,6 @@ async function reconcileCurrentTargetReview(
     ? deps.reconcile(review)
     : reconcileFiledReturnsTargetDownload(review, deps));
   return true;
-}
-
-/**
- * Rebuilds a completion from an acquisition checkpoint when the MV3 worker
- * died while the browser's native Save dialog kept the exact download alive.
- * It only upgrades fully proved completions; all other checkpoints remain for
- * the existing next-run guard to surface without scanner-side state changes.
- */
-async function reconcileArtifactAcquisitionCheckpoints(
-  deps: DurableDownloadReconcilerDeps,
-): Promise<boolean> {
-  let handled = false;
-  const provedCheckpoints: Array<{
-    evidence: ArtifactAcquisitionCompletionEvidence;
-    marker: Awaited<ReturnType<typeof markFiledReturnsTargetReviewArtifactAcquisitionCompletion>>;
-    target: FiledReturnsDownloadScope;
-  }> = [];
-  const checkpoints = await readArtifactAcquisitionCheckpointTargets().catch(() => []);
-  for (const { target } of checkpoints) {
-    const inspection = await inspectArtifactAcquisitionCheckpoint(target, {
-      preserveMalformed: false,
-    });
-    if (inspection.state !== "completed") continue;
-    const marker = await markFiledReturnsTargetReviewArtifactAcquisitionCompletion(
-      target,
-      [inspection.evidence],
-      deps,
-    );
-    if (marker.state === "blocked") continue;
-    provedCheckpoints.push({ evidence: inspection.evidence, marker, target });
-  }
-  for (const { evidence, marker, target } of provedCheckpoints) {
-    const summary = await persistArtifactAcquisitionCompletion(
-      deps.storageKeys.completion,
-      target,
-      [evidence],
-      deps.now?.() ?? new Date(),
-    );
-    if (summary && marker.state === "marked") {
-      await clearFiledReturnsTargetReview(target, deps, marker.review.revision ?? 1);
-    }
-    handled = true;
-  }
-  return handled;
 }
 
 export function installFiledReturnsDurableDownloadReconciler(

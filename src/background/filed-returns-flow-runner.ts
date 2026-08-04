@@ -9,6 +9,7 @@ import type {
   PackMessageResponse,
 } from "../connectors/gst/messages";
 import { isFullFiscalYearScope } from "../connectors/gst/filed-returns-scope";
+import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import {
   acquireFiledReturnsRun,
   releaseFiledReturnsRun,
@@ -39,12 +40,19 @@ import {
   readFiledReturnsTargetReview,
   readCurrentFiledReturnsTargetReview,
   readCurrentFiledReturnsTargetReviewStorageState,
+  reconcileRetainedArtifactAcquisition,
   retryCompletedSinglePeriodZipCleanup,
   resolveUnconfirmedFiledReturnsDownload,
   responseForFiledReturnsTargetReview,
+  persistFiledReturnsTargetReview,
 } from "./filed-returns-target-review";
 import { startSinglePeriodFiledReturnsDownloadFlow } from "./filed-returns-single-period-flow";
 import { reconcileFiledReturnsTargetDownload } from "./filed-returns-target-download-recovery";
+import {
+  createMalformedArtifactAcquisitionCheckpointReference,
+  readArtifactAcquisitionCheckpoints,
+  reconcileArtifactAcquisitionCheckpoint,
+} from "./artifact-acquisition-state";
 
 export type { ActiveGstTab } from "./filed-returns-active-tab";
 
@@ -104,62 +112,8 @@ export async function startFiledReturnsDownloadFlow(
 ): Promise<PackMessageResponse> {
   const targetReviewState = await readCurrentFiledReturnsTargetReviewStorageState(deps);
   if (targetReviewState.state === "malformed") return malformedTargetReviewResponse(scope);
-  if (
-    targetReviewState.state === "valid" &&
-    sameFiledReturnsScope(targetReviewState.review.scope, scope)
-  ) {
+  if (targetReviewState.state === "valid") {
     return responseForFiledReturnsTargetReview(targetReviewState.review);
-  }
-
-  if (isFullFiscalYearScope(scope)) {
-    const malformedLedger = await readMalformedLedgerState(deps.storageKeys.fullFiscalYearLedger);
-    if (malformedLedger) {
-      const flowStep: PortalFlowStepResult = {
-        connectorId: "gst",
-        scopeId: "gst-filed-returns-private-v0",
-        state: "blocked",
-        safeSignals: [
-          "full-fiscal-year-ledger-malformed",
-          ...(malformedLedger.recoverableLedgerId ? ["full-fiscal-year-opfs-retained"] : []),
-        ],
-        safeMessage:
-          "Pack found damaged fiscal-year recovery metadata and cannot verify whether local staging remains.",
-        userAction: {
-          type: "RETRY_PORTAL_GENERATION",
-          message:
-            "Use Clear local Pack data to remove the retained staging before starting again.",
-          canResume: false,
-        },
-      };
-      return {
-        ok: true,
-        flowStep,
-        flowSummary: {
-          scope,
-          status: "blocked",
-          completedPeriods: [],
-          totalPeriods: 12,
-          flowStep,
-        },
-      };
-    }
-    const existingLedger = await readLedger(deps.storageKeys.fullFiscalYearLedger);
-    const replaceableCompletedLedger =
-      existingLedger?.status === "complete" &&
-      canCompleteFullFiscalYearLedger(existingLedger) &&
-      !hasRetainedFullFiscalYearStaging(existingLedger);
-    if (
-      existingLedger &&
-      !sameFiledReturnsScope(existingLedger.scope, scope) &&
-      !replaceableCompletedLedger
-    ) {
-      const existingLedgerResponse = responseForExistingLedger(
-        existingLedger,
-        deps.now?.() ?? new Date(),
-        { blockRetainedStaging: true },
-      );
-      if (existingLedgerResponse) return existingLedgerResponse;
-    }
   }
 
   const activeRun = await acquireFiledReturnsRun(scope, deps);
@@ -167,6 +121,59 @@ export async function startFiledReturnsDownloadFlow(
 
   const stopLeaseRenewal = startFiledReturnsRunLeaseRenewal(activeRun.run, deps);
   try {
+    const retainedArtifactRecovery = await surfaceRetainedArtifactAcquisitionReview(scope, deps);
+    if (retainedArtifactRecovery) return retainedArtifactRecovery;
+
+    if (isFullFiscalYearScope(scope)) {
+      const malformedLedger = await readMalformedLedgerState(deps.storageKeys.fullFiscalYearLedger);
+      if (malformedLedger) {
+        const flowStep: PortalFlowStepResult = {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-private-v0",
+          state: "blocked",
+          safeSignals: [
+            "full-fiscal-year-ledger-malformed",
+            ...(malformedLedger.recoverableLedgerId ? ["full-fiscal-year-opfs-retained"] : []),
+          ],
+          safeMessage:
+            "Pack found damaged fiscal-year recovery metadata and cannot verify whether local staging remains.",
+          userAction: {
+            type: "RETRY_PORTAL_GENERATION",
+            message:
+              "Use Clear local Pack data to remove the retained staging before starting again.",
+            canResume: false,
+          },
+        };
+        return {
+          ok: true,
+          flowStep,
+          flowSummary: {
+            scope,
+            status: "blocked",
+            completedPeriods: [],
+            totalPeriods: 12,
+            flowStep,
+          },
+        };
+      }
+      const existingLedger = await readLedger(deps.storageKeys.fullFiscalYearLedger);
+      const replaceableCompletedLedger =
+        existingLedger?.status === "complete" &&
+        canCompleteFullFiscalYearLedger(existingLedger) &&
+        !hasRetainedFullFiscalYearStaging(existingLedger);
+      if (
+        existingLedger &&
+        !sameFiledReturnsScope(existingLedger.scope, scope) &&
+        !replaceableCompletedLedger
+      ) {
+        const existingLedgerResponse = responseForExistingLedger(
+          existingLedger,
+          deps.now?.() ?? new Date(),
+          { blockRetainedStaging: true },
+        );
+        if (existingLedgerResponse) return existingLedgerResponse;
+      }
+    }
     if (isFullFiscalYearScope(scope)) {
       return startFullFiscalYearDownloadFlow(
         scope,
@@ -234,6 +241,8 @@ export async function retryFiledReturnsTargetDownloadFlow(
     }
     const cleanupResponse = await retryCompletedSinglePeriodZipCleanup(scope, deps);
     if (cleanupResponse) return cleanupResponse;
+    const artifactAcquisitionResponse = await reconcileRetainedArtifactAcquisition(scope, deps);
+    if (artifactAcquisitionResponse) return artifactAcquisitionResponse;
     const reconciliation = await reconcileFiledReturnsTargetDownload(targetReview, deps);
     if (reconciliation.state === "handled") return reconciliation.response;
     const retrySafeReview = await readFiledReturnsTargetReview(scope, deps);
@@ -262,6 +271,73 @@ export async function retryFiledReturnsTargetDownloadFlow(
     stopLeaseRenewal();
     await releaseFiledReturnsRun(activeRun.run, deps);
   }
+}
+
+async function surfaceRetainedArtifactAcquisitionReview(
+  requestedScope: FiledReturnsDownloadScope,
+  deps: FiledReturnsFlowRunnerDeps,
+): Promise<PackMessageResponse | null> {
+  const checkpoints = await readArtifactAcquisitionCheckpoints();
+  for (const checkpoint of checkpoints) {
+    if (checkpoint.state === "malformed") continue;
+    const { target } = checkpoint;
+    const inspection = await reconcileArtifactAcquisitionCheckpoint(target);
+    if (inspection.state !== "needs-review") continue;
+    const flowStep: PortalFlowStepResult = {
+      connectorId: "gst",
+      scopeId: filedReturnScopeId(target.returnType),
+      state: "blocked",
+      safeSignals: ["artifact-acquisition-download-unreconciled", ...inspection.safeSignals],
+      safeMessage:
+        "Pack retained an exact browser download for a different target and will not start another portal action until it is resolved.",
+      userAction: {
+        type: "RETRY_PORTAL_GENERATION",
+        message: "Review or cancel the saved target before starting another portal action.",
+        canResume: true,
+      },
+    };
+    const summary = await persistFiledReturnsTargetReview(target, flowStep, deps);
+    return summary
+      ? { ok: true, flowStep: summary.flowStep, flowSummary: summary }
+      : { ok: true, flowStep };
+  }
+  const malformedCheckpoint = checkpoints.find((checkpoint) => checkpoint.state === "malformed");
+  if (!malformedCheckpoint || malformedCheckpoint.state !== "malformed") return null;
+  const malformedCheckpointReference = await createMalformedArtifactAcquisitionCheckpointReference(
+    malformedCheckpoint.key,
+  );
+  if (!malformedCheckpointReference) {
+    return {
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-private-v0",
+        state: "blocked",
+        safeSignals: ["artifact-acquisition-malformed-reference-unavailable"],
+        safeMessage:
+          "Pack found malformed retained artifact recovery but could not prepare its local review safely.",
+      },
+    };
+  }
+  const flowStep: PortalFlowStepResult = {
+    connectorId: "gst",
+    scopeId: "gst-filed-returns-private-v0",
+    state: "blocked",
+    safeSignals: ["artifact-acquisition-checkpoint-malformed"],
+    safeMessage:
+      "Pack found malformed retained artifact recovery and will not start another portal action until you cancel it.",
+    userAction: {
+      type: "RETRY_PORTAL_GENERATION",
+      message: "Cancel the saved recovery before starting another portal action.",
+      canResume: true,
+    },
+  };
+  const summary = await persistFiledReturnsTargetReview(requestedScope, flowStep, deps, {
+    artifactAcquisitionMalformedCheckpointReference: malformedCheckpointReference,
+  });
+  return summary
+    ? { ok: true, flowStep: summary.flowStep, flowSummary: summary }
+    : { ok: true, flowStep };
 }
 
 export async function resolveUnconfirmedFiledReturnsDownloadFlow(
@@ -335,6 +411,12 @@ export async function startFreshFiledReturnsDownloadFlow(
       const remainingTargetReview = await readCurrentFiledReturnsTargetReview(deps);
       if (remainingTargetReview) return responseForFiledReturnsTargetReview(remainingTargetReview);
     }
+
+    const retainedArtifactRecovery = await surfaceRetainedArtifactAcquisitionReview(
+      payload.scope,
+      deps,
+    );
+    if (retainedArtifactRecovery) return retainedArtifactRecovery;
 
     if (isFullFiscalYearScope(payload.scope)) {
       return startFullFiscalYearDownloadFlow(

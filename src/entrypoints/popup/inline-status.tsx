@@ -1,7 +1,7 @@
 import type { FiledReturnsFlowSummary } from "../../connectors/gst/filed-returns-contracts";
 import { FULL_FISCAL_YEAR_PERIOD } from "../../connectors/gst/filed-returns-scope";
 import type { PopupPresentationState } from "./presentation-state";
-import { RunProgress } from "./run-summary";
+import { canReconcileFiledReturnsTarget, RunProgress } from "./run-summary";
 import {
   hasPersistedFullFiscalYearZipDownloadId,
   isAmbiguousFullFiscalYearZipHandoff,
@@ -159,7 +159,7 @@ function getInlineStatusCopy(
     const signals = new Set(summary.flowStep.safeSignals);
     const needsTargetReview = signals.has("filed-returns-target-review-required");
     const needsFullFiscalYearRecovery = Boolean(summary.fullFiscalYearRecovery);
-    const canReconcileTarget = signals.has("filed-returns-download-reconciliation-required");
+    const canReconcileTarget = canReconcileFiledReturnsTarget(summary);
     const canRetryTargetCleanup = signals.has("filed-returns-target-local-cleanup-required");
     return {
       body: needsTargetReview
@@ -224,7 +224,7 @@ export function getInlinePrimaryAction(
     };
   }
   if (signals.has("filed-returns-target-review-required") && summary.currentPeriod) {
-    if (signals.has("filed-returns-download-reconciliation-required")) {
+    if (canReconcileFiledReturnsTarget(summary)) {
       return { label: "Reconcile browser download", onClick: actions.onRetryTarget };
     }
     if (signals.has("filed-returns-target-local-cleanup-required")) {
