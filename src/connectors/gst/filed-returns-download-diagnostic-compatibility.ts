@@ -33,9 +33,12 @@ export function isFiledReturnsEndpointClassForArtifact(
       endpointClass === "gstr1-excel-portal-blob-captured-download"
     );
   }
+  if (returnType === "GSTR-2B" && artifactType === "JSON") {
+    return endpointClass === "gstr2b-main-world-json-captured-download";
+  }
   return (
     returnType === "GSTR-2B" &&
-    (artifactType === "PDF" || artifactType === "JSON" || artifactType === "EXCEL") &&
+    (artifactType === "PDF" || artifactType === "EXCEL") &&
     (endpointClass === "filed-return-portal-rendered-download" ||
       endpointClass === "gstr2b-portal-blob-captured-download")
   );

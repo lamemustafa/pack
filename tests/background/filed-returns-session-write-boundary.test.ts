@@ -252,6 +252,58 @@ describe("filed-return session write boundary", () => {
     expect(storage.session[checkpointKey]).toBeUndefined();
   });
 
+  it("persists a GSTR-2B JSON capture before clearing its exact-ID checkpoint", async () => {
+    const scope = {
+      artifactType: "JSON" as const,
+      financialYear: "2026-27",
+      period: "April",
+      returnType: "GSTR-2B" as const,
+    };
+    const actionId = "00000000-0000-4000-8000-000000000094";
+    const checkpointKey = artifactAcquisitionCheckpointKey(scope);
+    storage.session[checkpointKey] = {
+      ...scope,
+      armedAt: "2026-08-05T08:00:00.000Z",
+      downloadId: 94,
+      requestId: actionId,
+      state: "download-observing",
+    };
+
+    const response = await withPersistedSinglePeriodSummary(
+      scope,
+      {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: filedReturnsScopeId(scope.returnType),
+          state: "downloaded",
+          safeSignals: ["target-period-verified"],
+          safeMessage: "Pack saved the portal-produced GSTR-2B data JSON.",
+          downloadDiagnostic: {
+            actionId,
+            artifactType: "JSON",
+            byteCountClass: "non-empty",
+            downloadId: 94,
+            downloadPathClass: "captured-portal-request-unknown",
+            endpointClass: "gstr2b-main-world-json-captured-download",
+            eventType: "filed-return-download-path",
+            financialYear: scope.financialYear,
+            mimeClass: "json",
+            period: scope.period,
+            returnType: scope.returnType,
+            schemaVersion: "1.0",
+            status: "downloaded",
+          },
+        },
+      },
+      deps,
+      true,
+    );
+
+    expect(response).toMatchObject({ flowSummary: { status: "complete" } });
+    expect(storage.session[checkpointKey]).toBeUndefined();
+  });
+
   it("persists a restart-safe GSTR-1 Return Dashboard navigation failure", async () => {
     const response = await withPersistedSinglePeriodSummary(
       {
@@ -820,7 +872,10 @@ function selectedArtifactDiagnostic(artifactType: "PDF" | "EXCEL" | "JSON", acti
     artifactType,
     byteCountClass: "non-empty",
     downloadPathClass: "captured-portal-request-data",
-    endpointClass: "gstr2b-portal-blob-captured-download",
+    endpointClass:
+      artifactType === "JSON"
+        ? "gstr2b-main-world-json-captured-download"
+        : "gstr2b-portal-blob-captured-download",
     financialYear: "2025-26",
     mimeClass: artifactType === "PDF" ? "pdf" : artifactType === "JSON" ? "json" : "spreadsheet",
     period: "May",

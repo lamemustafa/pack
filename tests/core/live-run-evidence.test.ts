@@ -174,7 +174,10 @@ describe("live run evidence", () => {
       actionId: `ACTION-${index + 1}`,
       artifactType,
       returnType: "GSTR-2B" as const,
-      endpointClass: "gstr2b-portal-blob-captured-download" as const,
+      endpointClass:
+        artifactType === "JSON"
+          ? ("gstr2b-main-world-json-captured-download" as const)
+          : ("gstr2b-portal-blob-captured-download" as const),
       downloadPathClass: "captured-portal-request-data" as const,
     }));
     const missingArtifact = validateLiveRunEvidence({
@@ -200,31 +203,29 @@ describe("live run evidence", () => {
   });
 
   it.each(["GSTR-2B", "GSTR-3B"] as const)(
-    "rejects passing standalone %s JSON evidence, which nothing can back",
+    "accepts passing standalone %s JSON evidence backed by exact download proof",
     (returnType) => {
-      // A standalone JSON selection is acquired by the direct same-origin fetch,
-      // whose success flow step carries no downloadDiagnostic for either return
-      // type. The schema admitting an endpoint class is not the runtime
-      // producing one, and it is the runtime that has to back the claim.
-      expect(
-        validateLiveRunEvidence({
-          ...createValidEvidence(),
-          returnType,
-          artifactType: "JSON",
-          downloadEvidence: [
-            {
-              ...createValidEvidence().downloadEvidence[0],
-              artifactType: "JSON",
-              returnType,
-              endpointClass:
-                returnType === "GSTR-2B"
-                  ? "gstr2b-portal-blob-captured-download"
-                  : "gstr3b-portal-blob-captured-download",
-              downloadPathClass: "captured-portal-request-data",
-            },
-          ],
-        }),
-      ).toMatchObject({ ok: false });
+      // A standalone JSON selection is acquired by a direct same-origin fetch,
+      // whose validated delivery carries the exact browser download identity.
+      const result = validateLiveRunEvidence({
+        ...createValidEvidence(),
+        returnType,
+        artifactType: "JSON",
+        downloadEvidence: [
+          {
+            ...createValidEvidence().downloadEvidence[0],
+            artifactType: "JSON",
+            returnType,
+            endpointClass:
+              returnType === "GSTR-2B"
+                ? "gstr2b-main-world-json-captured-download"
+                : "gstr3b-main-world-json-captured-download",
+            downloadPathClass: "captured-portal-request-data",
+          },
+        ],
+      });
+
+      expect(result.ok, result.ok ? undefined : result.errors.join("\n")).toBe(true);
     },
   );
 

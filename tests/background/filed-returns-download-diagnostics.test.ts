@@ -77,4 +77,28 @@ describe("filed-return download diagnostics", () => {
       ),
     ).toBe(false);
   });
+
+  it("accepts GSTR-2B JSON only through its MAIN-world capture class", () => {
+    expect(
+      isFiledReturnsEndpointClassForArtifact(
+        "gstr2b-main-world-json-captured-download",
+        "GSTR-2B",
+        "JSON",
+      ),
+    ).toBe(true);
+    expect(
+      isFiledReturnsEndpointClassForArtifact(
+        "gstr2b-portal-blob-captured-download",
+        "GSTR-2B",
+        "JSON",
+      ),
+    ).toBe(false);
+    expect(
+      isFiledReturnsEndpointClassForArtifact(
+        "filed-return-portal-rendered-download",
+        "GSTR-2B",
+        "JSON",
+      ),
+    ).toBe(false);
+  });
 });

@@ -145,6 +145,7 @@ export type FiledReturnsDownloadEndpointClass =
   | "gstr1-pdf-portal-blob-captured-download"
   | "gstr1-excel-portal-blob-captured-download"
   | "gstr2b-portal-blob-captured-download"
+  | "gstr2b-main-world-json-captured-download"
   | "filed-return-portal-rendered-download"
   | "unknown";
 

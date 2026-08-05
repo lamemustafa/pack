@@ -171,43 +171,37 @@ describe("live evidence template generator", () => {
   });
 
   it.each(["GSTR-2B", "GSTR-3B"])(
-    "refuses passing standalone %s JSON evidence the runtime cannot back",
+    "creates passing standalone %s JSON evidence with its runtime-backed class",
     (returnType) => {
-      // A standalone JSON selection is acquired by the direct same-origin fetch,
-      // whose success flow step attaches no download diagnostic — for GSTR-2B and
-      // GSTR-3B alike. Only JSON captured inside an all-formats selection is
-      // staged and retains one, which is why the all-formats case above still
-      // passes. Emitting a blob-captured class here would certify a path that
-      // does not exist, which is worse than refusing.
-      const failed = spawnSync(
-        process.execPath,
-        [
-          ...scriptArgs,
-          "--return-type",
-          returnType,
-          "--artifact-type",
-          "JSON",
-          "--financial-year",
-          "2025-26",
-          "--period",
-          "April",
-          "--outcome",
-          "pass",
-          "--clean-test-profile",
-          "--human-verified-account",
-          "--human-verified-periods",
-          "--all-files-non-empty",
-          "--clear-local-data-checked",
-          "--browser-summary-captured",
-          ...stableArgs,
-        ],
-        { encoding: "utf8" },
-      );
+      const evidence = runTemplate([
+        "--return-type",
+        returnType,
+        "--artifact-type",
+        "JSON",
+        "--financial-year",
+        "2025-26",
+        "--period",
+        "April",
+        "--outcome",
+        "pass",
+        "--clean-test-profile",
+        "--human-verified-account",
+        "--human-verified-periods",
+        "--all-files-non-empty",
+        "--clear-local-data-checked",
+        "--browser-summary-captured",
+        ...stableArgs,
+      ]);
 
-      expect(failed.status).not.toBe(0);
-      expect(`${failed.stderr}${failed.stdout}`).toContain(
-        "Passing standalone JSON evidence is not supported",
-      );
+      expect(validateLiveRunEvidence(evidence)).toMatchObject({ ok: true });
+      expect(evidence.downloadEvidence).toEqual([
+        expect.objectContaining({
+          endpointClass:
+            returnType === "GSTR-2B"
+              ? "gstr2b-main-world-json-captured-download"
+              : "gstr3b-main-world-json-captured-download",
+        }),
+      ]);
     },
   );
 

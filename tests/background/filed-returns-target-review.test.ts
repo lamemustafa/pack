@@ -1677,7 +1677,10 @@ function diagnostic(
     returnType: "GSTR-2B",
     financialYear: "2025-26",
     period: "March",
-    endpointClass: "gstr2b-portal-blob-captured-download",
+    endpointClass:
+      artifactType === "JSON"
+        ? "gstr2b-main-world-json-captured-download"
+        : "gstr2b-portal-blob-captured-download",
     artifactType,
     downloadPathClass: "captured-portal-request-blob",
     downloadId: artifactType === "PDF" ? 41 : artifactType === "JSON" ? 43 : 42,

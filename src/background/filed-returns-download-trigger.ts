@@ -493,22 +493,18 @@ async function triggerPageGeneratedSinglePeriodArtifact(
     const acquired =
       returnType === "GSTR-2B" && artifactType === "JSON" && artifact.state === "ready"
         ? await acquireFiledReturnJsonInMainWorld({
-            ...(deps.stageCapturedDownloads
-              ? {
-                  deliver: ({ base64, mimeType }) =>
-                    deliverValidatedArtifact({
-                      artifactType,
-                      base64,
-                      callbacks,
-                      deps,
-                      filename: artifactFilename(scope, artifactType),
-                      mimeType,
-                      requestId,
-                      returnType,
-                      scope,
-                    }),
-                }
-              : {}),
+            deliver: ({ base64, mimeType }) =>
+              deliverValidatedArtifact({
+                artifactType,
+                base64,
+                callbacks,
+                deps,
+                filename: artifactFilename(scope, artifactType),
+                mimeType,
+                requestId,
+                returnType,
+                scope,
+              }),
             filename: artifactFilename(scope, "JSON"),
             onStartCheckpointFailed: callbacks.onStartCheckpointFailed,
             onStarted: callbacks.onStarted,
@@ -745,7 +741,9 @@ function capturedArtifactDiagnostic(
         : "spreadsheet";
   const endpointClass =
     scope.returnType === "GSTR-2B"
-      ? "gstr2b-portal-blob-captured-download"
+      ? artifactType === "JSON"
+        ? "gstr2b-main-world-json-captured-download"
+        : "gstr2b-portal-blob-captured-download"
       : artifactType === "EXCEL"
         ? "gstr1-excel-portal-blob-captured-download"
         : "gstr1-pdf-portal-blob-captured-download";

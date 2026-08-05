@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PackMessageResponse } from "../../src/connectors/gst/messages";
+import type { acquireFiledReturnJsonInMainWorld } from "../../src/background/filed-returns-json-acquisition";
+
+type JsonAcquisitionInput = Parameters<typeof acquireFiledReturnJsonInMainWorld>[0];
 
 const captureMocks = vi.hoisted(() => ({
   acquireGstr3bPdfAfterPreflight: vi.fn(async () => ({
@@ -13,12 +16,16 @@ const captureMocks = vi.hoisted(() => ({
     mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     safeSignals: [] as string[],
   })),
-  acquireFiledReturnJsonInMainWorld: vi.fn(async () => ({
-    downloadId: 91,
-    ok: true as const,
-    safeMessage: undefined as string | undefined,
-    safeSignals: [] as string[],
-  })),
+  acquireFiledReturnJsonInMainWorld: vi.fn(async (input: JsonAcquisitionInput) =>
+    input.deliver
+      ? input.deliver({ base64: "e30=", mimeType: "application/json" })
+      : {
+          downloadId: 91,
+          ok: true as const,
+          safeMessage: undefined as string | undefined,
+          safeSignals: [] as string[],
+        },
+  ),
   downloadAcquiredArtifact: vi.fn(async () => ({
     ok: true as const,
     downloadId: 91,
@@ -540,7 +547,7 @@ describe("GSTR-2B artifact acquisition dispatch", () => {
   );
 
   it("writes GSTR-2B portal data with its data suffix", async () => {
-    await triggerAndObserveFiledReturnDownload({
+    const response = await triggerAndObserveFiledReturnDownload({
       activePeriod: "June",
       artifactType: "JSON",
       deps: {
@@ -563,8 +570,22 @@ describe("GSTR-2B artifact acquisition dispatch", () => {
     });
 
     expect(captureMocks.acquireFiledReturnJsonInMainWorld).toHaveBeenCalledWith(
-      expect.objectContaining({ filename: "ComplyEaze-Pack/2026-27/GSTR-2B/June-data.json" }),
+      expect.objectContaining({
+        deliver: expect.any(Function),
+        filename: "ComplyEaze-Pack/2026-27/GSTR-2B/June-data.json",
+      }),
     );
+    expect(response).toMatchObject({
+      flowStep: {
+        downloadDiagnostic: {
+          artifactType: "JSON",
+          downloadId: 91,
+          endpointClass: "gstr2b-main-world-json-captured-download",
+          mimeClass: "json",
+        },
+        state: "downloaded",
+      },
+    });
   });
 
   it("keeps GSTR-2B JSON inside a selected-file staging handoff", async () => {
