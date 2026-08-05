@@ -378,8 +378,8 @@ path. Trace every caller. **No compatibility shims. No deprecation stubs.**
 GSTR-1 and GSTR-2B have migrated: both protected flows genuinely still call it. Retain any
 other listed module with a legitimate GSTR-1 or GSTR-2B caller and report that caller. This
 lane must instead sever GSTR-3B completely from legacy capture: no GSTR-3B PDF, JSON, or
-period may reach it. A GSTR-3B full-fiscal-year request is blocked with
-`gstr3b-full-fiscal-year-acquisition-not-wired`; it must not fall back or loop.
+period may reach it. A GSTR-3B full-fiscal-year request expands into validated per-period
+OPFS staging and must not fall back or loop.
 
 ```
 src/background/main-world-capture-executor.ts                      (229 → replaced by a thin arm/inject helper)
@@ -486,9 +486,9 @@ Delete tests for deleted modules. Add:
   filed GSTR-1 details (which use a third async generate-then-poll mechanism). GSTR-1 needs
   artifact-identity diagnostics first. **Do not add a GSTR-1 descriptor.**
 - **GSTR-2B.** Leave the existing 2B flow untouched.
-- **ZIP / full-fiscal-year.** The architecture supports it; wiring it is the next lane. Until
-  then, a GSTR-3B full-fiscal-year request is blocked rather than falling back to legacy
-  capture.
+- **ZIP / full-fiscal-year.** GSTR-3B uses the existing per-period ledger, validated OPFS
+  staging, and final ZIP path. Source-level checks do not qualify an authenticated portal run
+  or browser/service-worker restart recovery; those require the separate live-evidence gate.
 - **`chrome.debugger`.** Premise falsified (§0). The staged deletion of
   `gstr1-debugger-view.ts` was correct; do not reinstate it.
 - **Any new permission.** Net delta must be zero: `downloads`, `offscreen`, `scripting`,
