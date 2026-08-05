@@ -29,11 +29,44 @@ import {
   persistArtifactAcquisitionUnconfirmedDownload,
 } from "./artifact-acquisition-state";
 import {
+  persistFiledReturnsTargetDownloadId,
+  persistFiledReturnsTargetDownloadIntent,
+} from "./filed-returns-target-download-attempt";
+import {
   gstr3bFullFiscalYearAcquisitionNotWiredStep,
   isGstr3bFullFiscalYearAcquisitionScope,
 } from "./gstr3b-artifact-acquisition-block";
 
 type FlowStepResponse = Extract<PackMessageResponse, { ok: true; flowStep: PortalFlowStepResult }>;
+
+async function persistSingleArtifactRecoveryIntent(
+  scope: FiledReturnsDownloadScope,
+  artifactType: FiledReturnsConcreteArtifactType,
+  actionId: string,
+  deps: FiledReturnsFlowMessagingDeps,
+): Promise<boolean> {
+  if (!deps.storageKeys.targetReview || deps.stageCapturedDownloads) return true;
+  return persistFiledReturnsTargetDownloadIntent(
+    scope,
+    {
+      actionId,
+      artifactType,
+      kind: "single-artifact",
+      phase: "download-intent-persisted",
+      requestedAt: (deps.now?.() ?? new Date()).toISOString(),
+    },
+    deps,
+  );
+}
+
+async function persistSingleArtifactRecoveryDownloadId(
+  scope: FiledReturnsDownloadScope,
+  downloadId: number,
+  deps: FiledReturnsFlowMessagingDeps,
+): Promise<boolean> {
+  if (!deps.storageKeys.targetReview || deps.stageCapturedDownloads) return true;
+  return persistFiledReturnsTargetDownloadId(scope, downloadId, deps);
+}
 
 export enum Gstr2bArtifactDispatchFailureReason {
   ContentUnavailable = "gstr2b-artifact-content-unavailable",
@@ -461,6 +494,19 @@ async function triggerPageGeneratedSinglePeriodArtifact(
   // download needs this exact-ID checkpoint for recovery.
   const tracksBrowserDownload = !deps.stageCapturedDownloads;
   if (tracksBrowserDownload) {
+    if (!(await persistSingleArtifactRecoveryIntent(scope, artifactType, requestId, deps))) {
+      return {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: filedReturnScopeId(returnType),
+          state: "blocked",
+          safeSignals: ["filed-return-download-id-persist-failed"],
+          safeMessage:
+            "Pack could not save the exact browser-download recovery checkpoint, so it did not start the download.",
+        },
+      };
+    }
     await persistArtifactAcquisitionIntent({ ...checkpointTarget, requestId });
   }
   let checkpointHasDownloadId = false;
@@ -478,6 +524,9 @@ async function triggerPageGeneratedSinglePeriodArtifact(
           requestId,
           state: "download-observing",
         });
+        if (!(await persistSingleArtifactRecoveryDownloadId(scope, downloadId, deps))) {
+          throw new Error("single-artifact download ID checkpoint failed");
+        }
       },
       onStartCheckpointFailed: async (downloadId: number) => {
         checkpointHasDownloadId = true;

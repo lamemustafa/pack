@@ -11,6 +11,10 @@ import {
   readArtifactAcquisitionCompletionEvidence,
   type ArtifactAcquisitionCompletionEvidence,
 } from "./artifact-acquisition-state";
+import {
+  clearFiledReturnsTargetReview,
+  readFiledReturnsTargetReview,
+} from "./filed-returns-target-review";
 
 export async function withPersistedSinglePeriodSummary(
   scope: FiledReturnsDownloadScope,
@@ -26,7 +30,7 @@ export async function withPersistedSinglePeriodSummary(
   if (response.flowSummary) {
     const flowSummary = await persistProvidedSinglePeriodSummary(response.flowSummary, deps);
     if (flowSummary)
-      return responseAfterPersistedSummary(scope, response, flowSummary, checkpointEvidence);
+      return responseAfterPersistedSummary(scope, response, flowSummary, checkpointEvidence, deps);
     const responseWithoutSummary = { ...response };
     delete responseWithoutSummary.flowSummary;
     const reconstructedSummary = await persistSinglePeriodSummary(scope, response.flowStep, deps);
@@ -36,12 +40,13 @@ export async function withPersistedSinglePeriodSummary(
           responseWithoutSummary,
           reconstructedSummary,
           checkpointEvidence,
+          deps,
         )
       : responseWithoutSummary;
   }
   const flowSummary = await persistSinglePeriodSummary(scope, response.flowStep, deps);
   return flowSummary
-    ? responseAfterPersistedSummary(scope, response, flowSummary, checkpointEvidence)
+    ? responseAfterPersistedSummary(scope, response, flowSummary, checkpointEvidence, deps)
     : response;
 }
 
@@ -50,9 +55,21 @@ async function responseAfterPersistedSummary(
   response: Extract<PackMessageResponse, { ok: true; flowStep: PortalFlowStepResult }>,
   flowSummary: FiledReturnsFlowSummary,
   checkpointEvidence: readonly ArtifactAcquisitionCompletionEvidence[],
+  deps: FiledReturnsFlowRunnerDeps,
 ): Promise<PackMessageResponse> {
   if (response.flowStep.state === "downloaded") {
     await clearArtifactAcquisitionCheckpointsAfterPersistedSummary(scope, checkpointEvidence);
+    const review = await readFiledReturnsTargetReview(scope, deps);
+    const attempt = review?.downloadAttempt;
+    const diagnostic = response.flowStep.downloadDiagnostic;
+    if (
+      attempt?.kind === "single-artifact" &&
+      attempt.phase === "download-observing" &&
+      diagnostic?.actionId === attempt.actionId &&
+      diagnostic.downloadId === attempt.downloadId
+    ) {
+      await clearFiledReturnsTargetReview(scope, deps, review!.revision ?? 1);
+    }
   }
   return { ...response, flowSummary };
 }
