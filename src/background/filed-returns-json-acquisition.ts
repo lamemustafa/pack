@@ -7,6 +7,7 @@ type JsonReturnType = "GSTR-3B" | "GSTR-2B";
 type JsonAcquisitionResult =
   | {
       ok: true;
+      downloadId?: number;
       downloadDiagnostic?: FiledReturnsDownloadDiagnostic;
       safeMessage?: string;
       safeSignals: string[];
@@ -77,7 +78,8 @@ export async function acquireFiledReturnJsonInMainWorld(input: {
   return delivery.ok
     ? {
         ok: true,
-        safeSignals: [...delivery.safeSignals, "extension-download-complete"],
+        downloadId: delivery.downloadId,
+        safeSignals: delivery.safeSignals,
         ...(delivery.safeMessage ? { safeMessage: delivery.safeMessage } : {}),
       }
     : { ok: false, reason: delivery.reason, safeSignals: delivery.safeSignals };

@@ -21,6 +21,7 @@ import { toPortalReturnPeriod } from "../connectors/gst/filed-returns-return-per
 import { downloadAcquiredArtifact } from "./artifact-download";
 import { stageOffscreenFiledReturn } from "./offscreen-blob-url";
 import { safeFiledReturnZipEntryPath } from "./filed-returns-download-filename";
+import { withFiledReturnsDownloadDiagnostic } from "./filed-returns-download-diagnostics";
 import {
   clearArtifactAcquisitionCheckpoint,
   persistArtifactAcquisitionDownloadId,
@@ -198,18 +199,15 @@ export async function triggerAndObserveFiledReturnDownload({
           return delivery.ok
             ? {
                 ok: true,
-                flowStep: {
-                  connectorId: "gst",
-                  scopeId: filedReturnScopeId("GSTR-3B"),
-                  state: "downloaded",
-                  safeSignals: [
-                    ...response.artifact.safeSignals,
-                    ...delivery.safeSignals,
-                    "extension-download-complete",
-                  ],
+                flowStep: directCapturedArtifactFlowStep({
+                  artifactType,
+                  downloadId: delivery.downloadId,
+                  requestId,
                   safeMessage:
                     delivery.safeMessage ?? "Pack saved the portal-produced GSTR-3B data JSON.",
-                },
+                  safeSignals: [...response.artifact.safeSignals, ...delivery.safeSignals],
+                  scope,
+                }),
               }
             : {
                 ok: true,
@@ -284,14 +282,15 @@ export async function triggerAndObserveFiledReturnDownload({
           return acquired.ok
             ? {
                 ok: true,
-                flowStep: {
-                  connectorId: "gst",
-                  scopeId: filedReturnScopeId("GSTR-3B"),
-                  state: "downloaded",
-                  safeSignals: acquired.safeSignals,
+                flowStep: directCapturedArtifactFlowStep({
+                  artifactType,
+                  downloadId: acquired.downloadId,
+                  requestId,
                   safeMessage:
                     acquired.safeMessage ?? "Pack saved the portal-produced filed GSTR-3B PDF.",
-                },
+                  safeSignals: acquired.safeSignals,
+                  scope,
+                }),
               }
             : {
                 ok: true,
@@ -645,7 +644,7 @@ async function deliverValidatedArtifact({
             `${staging.bundleKind}-opfs-staged`,
             `${staging.bundleKind}-opfs-staged:${artifactType}`,
           ],
-          downloadDiagnostic: stagedArtifactDiagnostic(scope, artifactType, mimeType, requestId),
+          downloadDiagnostic: capturedArtifactDiagnostic(scope, artifactType, mimeType, requestId),
         }
       : { ok: false, reason: result.errorCategory ?? "stage-failed", safeSignals };
   }
@@ -664,7 +663,14 @@ async function deliverValidatedArtifact({
   return delivery.ok
     ? {
         ok: true,
-        safeSignals: [...safeSignals, ...delivery.safeSignals, "extension-download-complete"],
+        downloadDiagnostic: capturedArtifactDiagnostic(
+          scope,
+          artifactType,
+          mimeType,
+          requestId,
+          delivery.downloadId,
+        ),
+        safeSignals: [...safeSignals, ...delivery.safeSignals],
         ...(delivery.safeMessage ? { safeMessage: delivery.safeMessage } : {}),
       }
     : {
@@ -674,11 +680,62 @@ async function deliverValidatedArtifact({
       };
 }
 
-function stagedArtifactDiagnostic(
+function directCapturedArtifactFlowStep({
+  artifactType,
+  downloadId,
+  requestId,
+  safeMessage,
+  safeSignals,
+  scope,
+}: {
+  artifactType: "PDF" | "JSON";
+  downloadId: number | undefined;
+  requestId: string;
+  safeMessage: string;
+  safeSignals: string[];
+  scope: FiledReturnsDownloadScope;
+}): PortalFlowStepResult {
+  if (typeof downloadId !== "number" || !Number.isSafeInteger(downloadId) || downloadId < 0) {
+    return {
+      connectorId: "gst",
+      scopeId: filedReturnScopeId(scope.returnType),
+      state: "blocked",
+      safeSignals: [...safeSignals, "artifact-acquisition-failed", "artifact-delivery-unconfirmed"],
+      safeMessage:
+        "Pack could not retain the exact browser download identity, so it did not mark this target complete.",
+    };
+  }
+  return withFiledReturnsDownloadDiagnostic({
+    attemptClass: "captured-portal-request",
+    flowStep: {
+      connectorId: "gst",
+      scopeId: filedReturnScopeId(scope.returnType),
+      state: "downloaded",
+      safeSignals,
+      safeMessage,
+    },
+    safeEvidence: {
+      byteCountClass: "non-empty",
+      downloadId,
+      mimeClass: artifactType === "PDF" ? "pdf" : "json",
+      urlClass: "unknown",
+    },
+    target: {
+      actionId: requestId,
+      artifactType,
+      financialYear: scope.financialYear,
+      period: scope.period,
+      returnType: scope.returnType,
+    },
+  });
+}
+
+function capturedArtifactDiagnostic(
   scope: FiledReturnsDownloadScope,
   artifactType: FiledReturnsConcreteArtifactType,
   mimeType: string,
   actionId: string,
+  downloadId?: number,
 ): FiledReturnsDownloadDiagnostic {
   const mimeClass =
     mimeType === "application/pdf"
@@ -696,7 +753,9 @@ function stagedArtifactDiagnostic(
     actionId,
     artifactType,
     byteCountClass: "non-empty",
-    downloadPathClass: "captured-portal-request-data",
+    ...(downloadId === undefined
+      ? { downloadPathClass: "captured-portal-request-data" as const }
+      : { downloadId, downloadPathClass: "captured-portal-request-unknown" as const }),
     endpointClass,
     eventType: "filed-return-download-path",
     financialYear: scope.financialYear,

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FiledReturnsFlowRunnerDeps } from "../../src/background/filed-returns-flow-runner";
 import { persistFlowResponse } from "../../src/background/filed-returns-flow-runner-utils";
+import { artifactAcquisitionCheckpointKey } from "../../src/background/artifact-acquisition-state";
 import { persistSummary } from "../../src/background/filed-returns-full-fiscal-year-run-state";
 import {
   persistCanonicalFiledReturnsFlowSummary,
@@ -88,6 +89,63 @@ describe("filed-return session write boundary", () => {
       ),
     ).resolves.toBeNull();
     expect(storage.session[COMPLETION_KEY]).toBeUndefined();
+  });
+
+  it("persists a direct exact-ID completion before clearing its acquisition checkpoint", async () => {
+    const scope = {
+      artifactType: "PDF" as const,
+      financialYear: "2026-27",
+      period: "April",
+      returnType: "GSTR-3B" as const,
+    };
+    const actionId = "00000000-0000-4000-8000-000000000091";
+    const checkpointKey = artifactAcquisitionCheckpointKey(scope);
+    storage.session[checkpointKey] = {
+      ...scope,
+      armedAt: "2026-08-05T08:00:00.000Z",
+      downloadId: 91,
+      requestId: actionId,
+      state: "download-observing",
+    };
+
+    const response = await withPersistedSinglePeriodSummary(
+      scope,
+      {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: filedReturnsScopeId(scope.returnType),
+          state: "downloaded",
+          safeSignals: ["target-period-verified"],
+          safeMessage: "Pack saved the selected filed return.",
+          downloadDiagnostic: {
+            actionId,
+            artifactType: "PDF",
+            byteCountClass: "non-empty",
+            downloadId: 91,
+            downloadPathClass: "captured-portal-request-unknown",
+            endpointClass: "gstr3b-portal-blob-captured-download",
+            eventType: "filed-return-download-path",
+            financialYear: scope.financialYear,
+            mimeClass: "pdf",
+            period: scope.period,
+            returnType: scope.returnType,
+            schemaVersion: "1.0",
+            status: "downloaded",
+          },
+        },
+      },
+      deps,
+      true,
+    );
+
+    expect(response).toMatchObject({
+      flowSummary: {
+        flowStep: { downloadDiagnostic: { downloadId: 91 } },
+        status: "complete",
+      },
+    });
+    expect(storage.session[checkpointKey]).toBeUndefined();
   });
 
   it("persists a restart-safe GSTR-1 Return Dashboard navigation failure", async () => {
