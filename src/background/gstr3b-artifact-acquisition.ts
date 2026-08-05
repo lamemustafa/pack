@@ -17,7 +17,7 @@ export async function acquireGstr3bPdfAfterPreflight(input: {
   onStarted?: (downloadId: number) => Promise<void>;
   onStartCheckpointFailed?: (downloadId: number) => Promise<void>;
 }): Promise<
-  | { ok: true; safeMessage?: string; safeSignals: string[] }
+  | { ok: true; downloadId: number; safeMessage?: string; safeSignals: string[] }
   | {
       ok: false;
       reason: string;
@@ -78,11 +78,8 @@ export async function acquireGstr3bPdfAfterPreflight(input: {
     return delivery.ok
       ? {
           ok: true,
-          safeSignals: [
-            ...captured.safeSignals,
-            ...delivery.safeSignals,
-            "extension-download-complete",
-          ],
+          downloadId: delivery.downloadId,
+          safeSignals: [...captured.safeSignals, ...delivery.safeSignals],
           ...(delivery.safeMessage ? { safeMessage: delivery.safeMessage } : {}),
         }
       : { ok: false, reason: delivery.reason, safeSignals: delivery.safeSignals };

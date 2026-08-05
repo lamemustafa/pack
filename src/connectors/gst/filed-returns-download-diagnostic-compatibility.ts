@@ -18,6 +18,9 @@ export function isFiledReturnsEndpointClassForArtifact(
       endpointClass === "gstr3b-browser-managed-direct-download"
     );
   }
+  if (returnType === "GSTR-3B" && artifactType === "JSON") {
+    return endpointClass === "gstr3b-main-world-json-captured-download";
+  }
   if (returnType === "GSTR-1" && artifactType === "PDF") {
     return (
       endpointClass === "gstr1-pdf-portal-rendered-download" ||
@@ -30,9 +33,12 @@ export function isFiledReturnsEndpointClassForArtifact(
       endpointClass === "gstr1-excel-portal-blob-captured-download"
     );
   }
+  if (returnType === "GSTR-2B" && artifactType === "JSON") {
+    return endpointClass === "gstr2b-main-world-json-captured-download";
+  }
   return (
     returnType === "GSTR-2B" &&
-    (artifactType === "PDF" || artifactType === "JSON" || artifactType === "EXCEL") &&
+    (artifactType === "PDF" || artifactType === "EXCEL") &&
     (endpointClass === "filed-return-portal-rendered-download" ||
       endpointClass === "gstr2b-portal-blob-captured-download")
   );
@@ -49,7 +55,7 @@ export function isFiledReturnsEndpointPathPair(
   if (downloadPathClass.startsWith("extension-direct-")) {
     return endpointClass === "gstr3b-browser-managed-direct-download";
   }
-  return endpointClass.includes("portal-blob-captured-download")
+  return endpointClass.includes("captured-download")
     ? downloadPathClass.startsWith("captured-portal-request-")
     : endpointClass.includes("portal-rendered-download") &&
         downloadPathClass.startsWith("portal-click-");

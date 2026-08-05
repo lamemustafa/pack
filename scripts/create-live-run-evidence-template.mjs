@@ -66,19 +66,6 @@ try {
   if (!supportsFiledReturnsArtifactType(returnType, artifactType)) {
     throw new Error("--artifact-type is not supported for --return-type.");
   }
-  if (artifactType === "JSON" && outcome === "pass") {
-    // Refuse rather than emit evidence nothing can back. A standalone JSON
-    // selection is acquired by a direct authenticated same-origin fetch whose
-    // success flow step attaches no download diagnostic, for GSTR-3B and
-    // GSTR-2B alike. Only JSON captured as part of an all-formats selection is
-    // staged and retains one. An earlier revision of this guard covered GSTR-3B
-    // only, on the reasoning that the canonical endpoint-class rule rejects that
-    // pairing while admitting GSTR-2B — but the schema admitting a class is not
-    // the runtime producing it, and it is the runtime that has to back a claim.
-    throw new Error(
-      "Passing standalone JSON evidence is not supported: the direct JSON fetch path retains no download diagnostic, so nothing can back it. Record this run as blocked, or capture JSON as part of an all-formats selection.",
-    );
-  }
   if (scenario === "full-year" && period !== "FULL_FISCAL_YEAR") {
     throw new Error("Full-year evidence must use --period FULL_FISCAL_YEAR.");
   }
@@ -334,19 +321,17 @@ function collectLimitations(input, { checks, outcome, profile, scenario }) {
 }
 
 function defaultEndpointClass(returnType, artifactType) {
-  // GSTR-3B portal data (JSON) has no endpoint class the runtime can back: its
-  // direct same-origin fetch path attaches no download diagnostic, and the
-  // canonical `isFiledReturnsEndpointClassForArtifact` admits no GSTR-3B/JSON
-  // pairing. `unknown` is the only truthful default; naming a blob-captured
-  // class let the generator emit passing evidence nothing could support.
-  // GSTR-2B JSON is different and is left alone — the canonical rule does admit
-  // it with the GSTR-2B blob-captured class.
-  if (returnType === "GSTR-3B" && artifactType === "JSON") return "unknown";
+  if (returnType === "GSTR-3B" && artifactType === "JSON") {
+    return "gstr3b-main-world-json-captured-download";
+  }
   if (returnType === "GSTR-3B") return "gstr3b-portal-blob-captured-download";
   if (returnType === "GSTR-1" && artifactType === "EXCEL") {
     return "gstr1-excel-portal-blob-captured-download";
   }
   if (returnType === "GSTR-1") return "gstr1-pdf-portal-blob-captured-download";
+  if (returnType === "GSTR-2B" && artifactType === "JSON") {
+    return "gstr2b-main-world-json-captured-download";
+  }
   if (returnType === "GSTR-2B") return "gstr2b-portal-blob-captured-download";
   return "unknown";
 }

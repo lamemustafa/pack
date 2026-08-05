@@ -312,6 +312,97 @@ describe("filed returns target review", () => {
     ]);
   });
 
+  it("replaces a dead reconciliation action after an extension reload expires session proof", async () => {
+    const scope = {
+      artifactType: "PDF" as const,
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-1" as const,
+    };
+    const localValues: Record<string, unknown> = {
+      "target-review": {
+        revision: 1,
+        safeMessage: "Pack retained unresolved artifact recovery.",
+        safeSignals: ["artifact-acquisition-download-unreconciled"],
+        schemaVersion: "1.0",
+        scope,
+        status: "download-unconfirmed",
+        targetId: "GSTR-1:2025-26:May",
+        updatedAt: "2026-08-01T00:00:00.000Z",
+      },
+    };
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      typeof key === "string" && Object.hasOwn(localValues, key) ? { [key]: localValues[key] } : {},
+    );
+    browserMocks.storage.local.set.mockImplementation(async (values: Record<string, unknown>) => {
+      Object.assign(localValues, values);
+    });
+    browserMocks.storage.local.remove.mockImplementation(async (keys: unknown) => {
+      for (const key of Array.isArray(keys) ? keys : [keys]) {
+        if (typeof key === "string") delete localValues[key];
+      }
+    });
+    acquisitionMocks.inspectArtifactAcquisitionCheckpoint.mockResolvedValue({
+      state: "retry-safe",
+    });
+
+    const response = await reconcileRetainedArtifactAcquisition(scope, {
+      storageKeys: { completion: "completion", targetReview: "target-review" },
+      now: () => new Date("2026-08-01T00:00:05.000Z"),
+    });
+
+    expect(response).toMatchObject({
+      flowSummary: {
+        flowStep: {
+          safeSignals: expect.arrayContaining(["artifact-acquisition-session-proof-expired"]),
+        },
+        status: "blocked",
+      },
+    });
+    expect(localValues["target-review"]).toMatchObject({
+      revision: 2,
+      safeSignals: expect.arrayContaining(["artifact-acquisition-session-proof-expired"]),
+    });
+    expect(browserMocks.storage.session.values.completion).toBeUndefined();
+  });
+
+  it("does not revise a target review again after marking session proof expired", async () => {
+    const scope = {
+      artifactType: "PDF" as const,
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-1" as const,
+    };
+    const review = {
+      revision: 2,
+      safeMessage: "Pack could not verify the browser download for May.",
+      safeSignals: [
+        "artifact-acquisition-download-unreconciled",
+        "artifact-acquisition-session-proof-expired",
+      ],
+      schemaVersion: "1.0",
+      scope,
+      status: "download-unconfirmed",
+      targetId: "GSTR-1:2025-26:May",
+      updatedAt: "2026-08-01T00:00:05.000Z",
+    };
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      key === "target-review" ? { [key]: review } : {},
+    );
+    acquisitionMocks.inspectArtifactAcquisitionCheckpoint.mockResolvedValue({
+      state: "retry-safe",
+    });
+
+    const response = await reconcileRetainedArtifactAcquisition(scope, {
+      storageKeys: { completion: "completion", targetReview: "target-review" },
+    });
+
+    expect(response).toMatchObject({
+      flowSummary: { flowStep: { safeSignals: expect.arrayContaining(review.safeSignals) } },
+    });
+    expect(browserMocks.storage.local.set).not.toHaveBeenCalled();
+  });
+
   it("keeps a persisted acquisition completion when cleanup finishes before review removal", async () => {
     const scope = {
       artifactType: "PDF" as const,
@@ -1677,7 +1768,10 @@ function diagnostic(
     returnType: "GSTR-2B",
     financialYear: "2025-26",
     period: "March",
-    endpointClass: "gstr2b-portal-blob-captured-download",
+    endpointClass:
+      artifactType === "JSON"
+        ? "gstr2b-main-world-json-captured-download"
+        : "gstr2b-portal-blob-captured-download",
     artifactType,
     downloadPathClass: "captured-portal-request-blob",
     downloadId: artifactType === "PDF" ? 41 : artifactType === "JSON" ? 43 : 42,

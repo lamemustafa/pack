@@ -112,6 +112,7 @@ describe("filed-return durable signal contract", () => {
       "artifact-acquisition-checkpoint-clear-failed",
       "artifact-acquisition-download-interrupted",
       "artifact-acquisition-download-reconciled",
+      "artifact-acquisition-session-proof-expired",
     ];
     expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);
     expect(signals.every(isDurableFiledReturnsSignal)).toBe(true);
@@ -125,6 +126,13 @@ describe("filed-return durable signal contract", () => {
     ];
 
     expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);
+  });
+
+  it("retains categorical page-generated artifact readiness evidence", () => {
+    const signals = ["page-generated-pdf-ready", "page-generated-excel-ready"];
+
+    expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);
+    expect(isDurableFiledReturnsSignal("page-generated-private-value-ready")).toBe(false);
   });
 
   it("retains final GSTR-2B capture-control rejections", () => {

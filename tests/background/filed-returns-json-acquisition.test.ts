@@ -37,7 +37,12 @@ describe("filed-return JSON main-world acquisition", () => {
         },
       },
     ] as never);
-    mocks.downloadAcquiredArtifact.mockResolvedValue({ ok: true, safeSignals: ["synthetic"] });
+    mocks.downloadAcquiredArtifact.mockResolvedValue({
+      bytesReceived: 128,
+      downloadId: 91,
+      ok: true,
+      safeSignals: ["synthetic"],
+    });
 
     await expect(
       acquireFiledReturnJsonInMainWorld({
@@ -47,7 +52,11 @@ describe("filed-return JSON main-world acquisition", () => {
         returnType: "GSTR-3B",
         tabId: 17,
       }),
-    ).resolves.toEqual({ ok: true, safeSignals: ["synthetic", "extension-download-complete"] });
+    ).resolves.toEqual({
+      downloadId: 91,
+      ok: true,
+      safeSignals: ["synthetic"],
+    });
 
     expect(browser.scripting.executeScript).toHaveBeenCalledWith(
       expect.objectContaining({

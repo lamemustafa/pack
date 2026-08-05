@@ -65,7 +65,9 @@ export function RecoveryActions({
         ) : null}
         {needsTargetReview ? (
           <>
-            <p className="muted">Why Pack paused: {summary.flowStep.safeMessage}</p>
+            <p className="muted">
+              Why Pack paused: {targetReviewRecoveryMessage(summary, signals)}
+            </p>
             {hasDiagnosticSignals(summary) ? (
               <details className="diagnostic-details">
                 <summary>Safe diagnostics</summary>
@@ -182,6 +184,16 @@ export function RecoveryActions({
       </div>
     </details>
   );
+}
+
+function targetReviewRecoveryMessage(
+  summary: FiledReturnsFlowSummary,
+  signals: ReadonlySet<string>,
+): string {
+  if (signals.has("artifact-acquisition-session-proof-expired")) {
+    return "The extension reload cleared Pack's temporary exact-download proof. Check Browser Downloads, then start fresh or cancel and reset.";
+  }
+  return summary.flowStep.safeMessage;
 }
 
 export function hasRecoveryActions(summary: FiledReturnsFlowSummary | null): boolean {

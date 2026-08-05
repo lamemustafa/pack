@@ -31,7 +31,7 @@ describe("GSTR-3B page-generated acquisition", () => {
           ok: true,
           base64: Buffer.from(bytes).toString("base64"),
           blobUrl: "blob:synthetic/gstr3b",
-          safeSignals: ["portal-blob-shim-suppressed-via-dispatchEvent"],
+          safeSignals: ["filed-gstr3b-portal-blob-download-captured"],
         },
       },
     ]);
@@ -50,7 +50,11 @@ describe("GSTR-3B page-generated acquisition", () => {
         returnPeriod: "042024",
         tabId: 17,
       }),
-    ).resolves.toMatchObject({ ok: true });
+    ).resolves.toEqual({
+      downloadId: 9,
+      ok: true,
+      safeSignals: ["filed-gstr3b-portal-blob-download-captured"],
+    });
     expect(mocks.executeScript).toHaveBeenCalledWith(
       expect.objectContaining({
         args: [

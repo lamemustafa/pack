@@ -54,7 +54,9 @@ export async function persistFiledReturnsTargetDownloadId(
     if (intent.phase !== "download-intent-persisted") return null;
     const diagnosticState = diagnosticSource
       ? mergeFiledReturnsDownloadDiagnosticState(review, diagnosticSource, scope)
-      : copyFiledReturnsDownloadDiagnosticState(review);
+      : review.downloadDiagnostic || review.downloadDiagnostics
+        ? copyFiledReturnsDownloadDiagnosticState(review)
+        : {};
     if (!diagnosticState) return null;
     return {
       ...review,

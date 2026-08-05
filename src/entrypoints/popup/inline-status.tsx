@@ -163,13 +163,15 @@ function getInlineStatusCopy(
     const canRetryTargetCleanup = signals.has("filed-returns-target-local-cleanup-required");
     return {
       body: needsTargetReview
-        ? canReconcileTarget
-          ? `Resolve ${summary.currentPeriod} before choosing another period. Finish or cancel any open Save dialog, then reconcile the exact browser download.`
-          : canRetryTargetCleanup
-            ? `Resolve ${summary.currentPeriod} before choosing another period. Retry the local cleanup; Pack will not click the GST Portal again.`
-            : signals.has("single-period-zip-incomplete")
-              ? `Resolve ${summary.currentPeriod} before choosing another period. Open More run controls to discard the saved state and start the selected files again, or cancel and reset.`
-              : `Resolve ${summary.currentPeriod} before choosing another period. Check Browser Downloads, then open More run controls to record a manual observation, explicitly start fresh, or cancel and reset.`
+        ? signals.has("artifact-acquisition-session-proof-expired")
+          ? `Pack cannot reconcile ${summary.currentPeriod} after the extension reload cleared its temporary exact-download proof. Check Browser Downloads, then start fresh or cancel and reset.`
+          : canReconcileTarget
+            ? `Resolve ${summary.currentPeriod} before choosing another period. Finish or cancel any open Save dialog, then reconcile the exact browser download.`
+            : canRetryTargetCleanup
+              ? `Resolve ${summary.currentPeriod} before choosing another period. Retry the local cleanup; Pack will not click the GST Portal again.`
+              : signals.has("single-period-zip-incomplete")
+                ? `Resolve ${summary.currentPeriod} before choosing another period. Open More run controls to discard the saved state and start the selected files again, or cancel and reset.`
+                : `Resolve ${summary.currentPeriod} before choosing another period. Check Browser Downloads, then open More run controls to record a manual observation, explicitly start fresh, or cancel and reset.`
         : needsFullFiscalYearRecovery
           ? getFullFiscalYearRecoveryBody(summary.currentPeriod, signals)
           : summary.flowStep.safeMessage,

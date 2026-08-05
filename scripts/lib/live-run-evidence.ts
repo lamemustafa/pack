@@ -122,11 +122,13 @@ const DOWNLOAD_EVIDENCE_KEYS = [
 const DOWNLOAD_ENDPOINT_CLASSES = [
   "gstr3b-portal-rendered-download",
   "gstr3b-portal-blob-captured-download",
+  "gstr3b-main-world-json-captured-download",
   "gstr1-pdf-portal-rendered-download",
   "gstr1-excel-portal-rendered-download",
   "gstr1-pdf-portal-blob-captured-download",
   "gstr1-excel-portal-blob-captured-download",
   "gstr2b-portal-blob-captured-download",
+  "gstr2b-main-world-json-captured-download",
   "filed-return-portal-rendered-download",
   "unknown",
 ] as const;
@@ -208,18 +210,6 @@ export function validateLiveRunEvidence(input: unknown): LiveRunEvidenceValidati
     "artifactType",
     errors,
   );
-  // A standalone JSON selection is acquired by the direct same-origin fetch in
-  // filed-returns-download-trigger.ts, whose success flow step carries no
-  // downloadDiagnostic at all — for either return type. Nothing the runtime
-  // retains can back a passing claim about it, so refuse rather than certify.
-  // JSON acquired as part of an all-formats selection is staged and does retain
-  // a diagnostic, so those rows stay valid; only the standalone selection is
-  // unbackable.
-  if (input.artifactType === "JSON" && input.outcome === "pass") {
-    errors.push(
-      "artifactType JSON cannot record a pass outcome: the standalone JSON path retains no download diagnostic, so no evidence can back it. Record the run as blocked, or capture JSON as part of an all-formats selection.",
-    );
-  }
   requirePattern(input.financialYear, FINANCIAL_YEAR, "financialYear", errors);
   requireOneOf(input.period, PERIODS, "period", errors);
   requireOneOf(input.scenario, ["single-period", "full-year"], "scenario", errors);
@@ -442,13 +432,8 @@ function validateDownloadEndpointPathConsistency(
 }
 
 function isSupportedLiveRunEvidenceEndpoint(entry: LiveRunDownloadEvidence): boolean {
-  // Defer entirely to the canonical predicate. The exception that used to sit
-  // here accepted `gstr3b-portal-blob-captured-download` for GSTR-3B JSON, a
-  // pairing the canonical rule rejects and the runtime never produces: the
-  // direct JSON fetch path attaches no diagnostic at all. Evidence for a JSON
-  // artifact therefore carries `unknown`, which the canonical predicate already
-  // admits. A local exception here could only ever certify something the
-  // runtime cannot back.
+  // Defer entirely to the canonical predicate so evidence can only describe a
+  // return/artifact acquisition path the runtime itself produces.
   return isFiledReturnsEndpointClassForArtifact(
     entry.endpointClass,
     entry.returnType,

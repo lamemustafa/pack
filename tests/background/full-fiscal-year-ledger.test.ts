@@ -931,7 +931,9 @@ function positiveTargetEvidence(
         returnType === "GSTR-3B"
           ? ("gstr3b-portal-blob-captured-download" as const)
           : returnType === "GSTR-2B"
-            ? ("gstr2b-portal-blob-captured-download" as const)
+            ? concreteArtifactType === "JSON"
+              ? ("gstr2b-main-world-json-captured-download" as const)
+              : ("gstr2b-portal-blob-captured-download" as const)
             : concreteArtifactType === "PDF"
               ? ("gstr1-pdf-portal-blob-captured-download" as const)
               : ("gstr1-excel-portal-blob-captured-download" as const),
@@ -974,7 +976,10 @@ function targetDiagnostic(
     returnType: "GSTR-2B",
     financialYear: "2026-27",
     period: "April",
-    endpointClass: "gstr2b-portal-blob-captured-download",
+    endpointClass:
+      artifactType === "JSON"
+        ? "gstr2b-main-world-json-captured-download"
+        : "gstr2b-portal-blob-captured-download",
     artifactType,
     downloadPathClass: "captured-portal-request-blob",
     downloadId: artifactType === "PDF" ? 41 : artifactType === "EXCEL" ? 42 : 43,

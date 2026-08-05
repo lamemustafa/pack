@@ -9,6 +9,7 @@ import {
   canManuallyObserveFullFiscalYearTarget,
   RecoveryActions,
 } from "../../src/entrypoints/popup/recovery-actions";
+import { canReconcileFiledReturnsTarget } from "../../src/entrypoints/popup/run-summary";
 import { RunEvidencePanel } from "../../src/entrypoints/popup/run-evidence-panel";
 
 describe("popup full-year recovery actions", () => {
@@ -207,6 +208,35 @@ describe("popup full-year recovery actions", () => {
 
     expect(markup).toContain("Reconcile browser download");
     expect(markup).not.toContain("Retry this period");
+  });
+
+  it("removes reconciliation after an extension reload expires session-only proof", () => {
+    const summary = targetReviewSummary();
+    summary.flowStep.safeSignals.push(
+      "artifact-acquisition-download-unreconciled",
+      "artifact-acquisition-session-proof-expired",
+    );
+
+    expect(canReconcileFiledReturnsTarget(summary)).toBe(false);
+
+    const markup = renderToStaticMarkup(
+      createElement(RecoveryActions, {
+        busy: null,
+        portalReady: true,
+        summary,
+        onAcknowledgeInterruptedRun: () => undefined,
+        onRetryFullFiscalYearTarget: () => undefined,
+        onRetryTarget: () => undefined,
+        onResolveFullFiscalYearTarget: () => undefined,
+        onResolveTarget: () => undefined,
+        onStartFresh: () => undefined,
+      }),
+    );
+
+    expect(markup).not.toContain("Reconcile browser download");
+    expect(markup).toContain("extension reload cleared Pack&#x27;s temporary exact-download proof");
+    expect(markup).toContain("Discard saved state and start selected download");
+    expect(markup).toContain("Cancel and reset");
   });
 
   it("offers reconciliation for an observing selected-file ZIP", () => {

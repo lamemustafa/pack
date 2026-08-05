@@ -1089,7 +1089,10 @@ function bundleDiagnostic(artifactType: "PDF" | "JSON" | "EXCEL"): FiledReturnsD
     artifactType,
     byteCountClass: "non-empty",
     downloadPathClass: "captured-portal-request-data",
-    endpointClass: "gstr2b-portal-blob-captured-download",
+    endpointClass:
+      artifactType === "JSON"
+        ? "gstr2b-main-world-json-captured-download"
+        : "gstr2b-portal-blob-captured-download",
     eventType: "filed-return-download-path",
     financialYear: ZIP_SCOPE.financialYear,
     mimeClass: artifactType === "PDF" ? "pdf" : artifactType === "JSON" ? "json" : "spreadsheet",

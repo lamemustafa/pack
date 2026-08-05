@@ -535,7 +535,9 @@ function diagnostic(
         ? artifactType === "PDF"
           ? "gstr1-pdf-portal-blob-captured-download"
           : "gstr1-excel-portal-blob-captured-download"
-        : "gstr2b-portal-blob-captured-download",
+        : artifactType === "JSON"
+          ? "gstr2b-main-world-json-captured-download"
+          : "gstr2b-portal-blob-captured-download",
     eventType: "filed-return-download-path",
     financialYear: scope.financialYear,
     mimeClass: artifactType === "PDF" ? "pdf" : artifactType === "JSON" ? "json" : "spreadsheet",
