@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { PACK_CONTENT_REQUEST_ENVELOPE_TYPE } from "../../src/connectors/gst/messages";
-import { type FiledReturnsMonth } from "../../src/connectors/gst/filed-returns-scope";
+import {
+  PACK_CONTENT_REQUEST_ENVELOPE_TYPE,
+  PACK_CONTENT_SCRIPT_PROTOCOL_VERSION,
+} from "../../src/connectors/gst/messages";
 import type { PackMessage, PackMessageResponse } from "../../src/connectors/gst/messages";
 
 const browserMocks = vi.hoisted(() => {
@@ -375,6 +377,8 @@ describe("background filed returns download defaults", () => {
       },
     });
 
+    if (!response.ok) throw new Error(response.error);
+
     expect(response).toMatchObject({
       ok: true,
       flowStep: {
@@ -494,10 +498,17 @@ describe("background filed returns download defaults", () => {
     });
   });
 
-  it("blocks a full-fiscal-year GSTR-3B request before it can start legacy targets", async () => {
+  it("starts full-fiscal-year GSTR-3B acquisition without legacy downloads", async () => {
     const financialYear = "2026-27";
     browserMocks.tabs.sendMessage.mockImplementation(async (_tabId, message: PackMessage) => {
       message = unwrapContentRequest(message);
+      if (message.type === "PACK_CONTENT_PING_V2") {
+        return {
+          ok: true,
+          context: null,
+          contentScriptVersion: PACK_CONTENT_SCRIPT_PROTOCOL_VERSION,
+        } satisfies PackMessageResponse;
+      }
       if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3") {
         return {
           ok: true,
@@ -514,30 +525,17 @@ describe("background filed returns download defaults", () => {
           },
         } satisfies PackMessageResponse;
       }
-
-      if (message.type === "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3") {
+      if (message.type === "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34") {
         return {
           ok: true,
-          downloadTrigger: {
-            connectorId: "gst",
-            scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
-            state: "clicked",
-            safeSignals: ["filed-gstr3b-download-clicked"],
-            safeMessage: "Clicked.",
-          },
-          mainWorldCaptureRequest: {
-            actionId: message.payload.actionId,
-            asyncBlobBinding: "action-xhr-non-artifact-to-pdf",
-            controlAttribute: "data-pack-gstr2b-capture-action",
-            controlId: `capture-${message.payload.period.toLowerCase()}`,
-            maxBytes: 36 * 1024 * 1024,
-            signalPrefix: "filed-gstr3b",
-            targetBinding: testCaptureBinding(message.payload, "PDF"),
-            timeoutMs: 30_000,
+          artifact: {
+            ok: false,
+            reason: "generation-timeout",
+            requestId: message.payload.requestId,
+            safeSignals: [],
           },
         } satisfies PackMessageResponse;
       }
-
       return { ok: false, error: "Unexpected message." } satisfies PackMessageResponse;
     });
 
@@ -552,15 +550,18 @@ describe("background filed returns download defaults", () => {
       },
     });
 
+    if (!response.ok) throw new Error(response.error);
+
     expect(response).toMatchObject({
       ok: true,
       flowStep: {
         state: "blocked",
-        safeSignals: ["gstr3b-full-fiscal-year-acquisition-not-wired"],
+        safeSignals: expect.arrayContaining(["artifact-generation-timeout"]),
       },
     });
     expect(browserMocks.downloads.download).not.toHaveBeenCalled();
-    expect(sentActionMessageTypes()).toEqual([]);
+    expect(sentActionMessageTypes()).toContain("PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34");
+    expect(sentActionMessageTypes()).not.toContain("PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3");
   });
 
   it("builds the options-page synthetic demo manifest without starting downloads by default", async () => {
@@ -708,23 +709,6 @@ describe("background filed returns download defaults", () => {
     );
   });
 });
-
-function testCaptureBinding(
-  target: Extract<
-    PackMessage,
-    { type: "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3" }
-  >["payload"],
-  artifactType: "PDF" | "EXCEL",
-) {
-  return {
-    artifactType,
-    controlTextDigest: "1234abcd",
-    financialYear: target.financialYear,
-    pathnameDigest: "abcd1234",
-    period: target.period as FiledReturnsMonth,
-    returnType: target.returnType,
-  };
-}
 
 async function sendBackgroundMessage(message: PackMessage): Promise<PackMessageResponse> {
   const listener = browserMocks.getMessageListener();

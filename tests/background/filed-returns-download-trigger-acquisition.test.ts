@@ -1,11 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PackMessageResponse } from "../../src/connectors/gst/messages";
 import type { acquireFiledReturnJsonInMainWorld } from "../../src/background/filed-returns-json-acquisition";
+import type { acquireGstr3bPdfAfterPreflight } from "../../src/background/gstr3b-artifact-acquisition";
 
 type JsonAcquisitionInput = Parameters<typeof acquireFiledReturnJsonInMainWorld>[0];
+type Gstr3bPdfAcquisitionInput = Parameters<typeof acquireGstr3bPdfAfterPreflight>[0];
+type Gstr3bPdfAcquisitionResult = ReturnType<typeof acquireGstr3bPdfAfterPreflight>;
 
 const captureMocks = vi.hoisted(() => ({
-  acquireGstr3bPdfAfterPreflight: vi.fn(async () => ({
+  acquireGstr3bPdfAfterPreflight: vi.fn<
+    (input: Gstr3bPdfAcquisitionInput) => Gstr3bPdfAcquisitionResult
+  >(async () => ({
     downloadId: 91,
     ok: true as const,
     safeSignals: [] as string[],
@@ -71,7 +76,6 @@ vi.mock("../../src/background/offscreen-blob-url", () => ({
   stageOffscreenFiledReturn: captureMocks.stageOffscreenFiledReturn,
 }));
 
-import { Gstr3bArtifactAcquisitionBlockReason } from "../../src/background/gstr3b-artifact-acquisition-block";
 import {
   ARTIFACT_FAILURE_MESSAGES,
   type ArtifactFailureReason,
@@ -83,36 +87,15 @@ import {
   Gstr2bArtifactDispatchFailureReason,
   triggerAndObserveFiledReturnDownload,
 } from "../../src/background/filed-returns-download-trigger";
-import { startFullFiscalYearDownloadFlow } from "../../src/background/filed-returns-full-fiscal-year";
 import { withPersistedSinglePeriodSummary } from "../../src/background/filed-returns-single-period-summary";
 import { FILED_RETURNS_RETURN_TYPES } from "../../src/connectors/gst/filed-returns-return-types";
 
 const ARTIFACT_ACQUISITION_RETURN_TYPES = FILED_RETURNS_RETURN_TYPES;
 
 describe("GSTR-3B artifact acquisition dispatch", () => {
-  it("blocks the full-year runner before it can expand GSTR-3B into legacy monthly targets", async () => {
-    const runSinglePeriod = vi.fn();
-
-    const response = await startFullFiscalYearDownloadFlow(
-      { financialYear: "2025-26", period: "FULL_FISCAL_YEAR", returnType: "GSTR-3B" },
-      {} as never,
-      runSinglePeriod,
-    );
-
-    expect(response).toMatchObject({
-      flowStep: {
-        state: "blocked",
-        safeSignals: [Gstr3bArtifactAcquisitionBlockReason.FullFiscalYearNotWired],
-      },
-    });
-    expect(runSinglePeriod).not.toHaveBeenCalled();
-  });
-
   it.each([
     ["April", "PDF"],
     ["March", "JSON"],
-    ["ALL", "PDF"],
-    ["ALL", "JSON"],
   ] as const)("never sends GSTR-3B %s %s through legacy capture", async (period, artifactType) => {
     const sendMessageToTabWithInjection = vi.fn(
       async () =>
@@ -128,23 +111,19 @@ describe("GSTR-3B artifact acquisition dispatch", () => {
     );
 
     const response = await triggerAndObserveFiledReturnDownload({
-      activePeriod: period === "ALL" ? null : period,
+      activePeriod: period,
       artifactType,
       deps: { sendMessageToTabWithInjection, storageKeys: {} },
       scope: { financialYear: "2025-26", period, returnType: "GSTR-3B" },
       tabId: 17,
     });
 
-    if (period === "ALL") {
-      expect(response).toMatchObject({
-        flowStep: {
-          state: "blocked",
-          safeSignals: [Gstr3bArtifactAcquisitionBlockReason.FullFiscalYearNotWired],
-        },
-      });
-      expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
-      return;
-    }
+    expect(response).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining(["artifact-generation-timeout"]),
+        state: "blocked",
+      },
+    });
     expect(sendMessageToTabWithInjection).toHaveBeenCalledWith(
       17,
       expect.objectContaining({ type: "PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34" }),
@@ -153,6 +132,128 @@ describe("GSTR-3B artifact acquisition dispatch", () => {
       17,
       expect.objectContaining({ type: "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3" }),
     );
+  });
+
+  it.each(["PDF", "JSON"] as const)(
+    "blocks raw full-year GSTR-3B %s acquisition before it can create an artifact download",
+    async (artifactType) => {
+      vi.clearAllMocks();
+      const sendMessageToTabWithInjection = vi.fn();
+
+      const response = await triggerAndObserveFiledReturnDownload({
+        activePeriod: null,
+        artifactType,
+        deps: { sendMessageToTabWithInjection, storageKeys: {} },
+        scope: { financialYear: "2026-27", period: "ALL", returnType: "GSTR-3B" },
+        tabId: 17,
+      });
+
+      expect(response).toMatchObject({
+        flowStep: {
+          safeSignals: expect.arrayContaining(["gstr3b-full-fiscal-year-acquisition-not-wired"]),
+          state: "blocked",
+        },
+      });
+      expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
+      expect(captureMocks.downloadAcquiredArtifact).not.toHaveBeenCalled();
+    },
+  );
+
+  it("stages a GSTR-3B PDF for a full-year ZIP without creating an artifact download", async () => {
+    vi.clearAllMocks();
+    captureMocks.acquireGstr3bPdfAfterPreflight.mockImplementationOnce(async (input) => {
+      if (!input.deliver) throw new Error("expected staged delivery");
+      return input.deliver({ base64: "JVBERi0xLjc=", mimeType: "application/pdf" });
+    });
+
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "June",
+      artifactType: "PDF",
+      deps: {
+        sendMessageToTabWithInjection: vi.fn(
+          async (_tabId, message) =>
+            ({
+              ok: true,
+              artifact: {
+                ok: true,
+                state: "ready",
+                requestId: message.payload.requestId,
+                safeSignals: ["target-period-verified"],
+              },
+            }) as PackMessageResponse,
+        ),
+        stageCapturedDownloads: {
+          bundleKind: "full-fiscal-year",
+          ledgerId: "full-fiscal-year:12345678-test",
+        },
+        storageKeys: {},
+      },
+      scope: { financialYear: "2026-27", period: "June", returnType: "GSTR-3B" },
+      tabId: 17,
+    });
+
+    expect(captureMocks.stageOffscreenFiledReturn).toHaveBeenCalledOnce();
+    expect(captureMocks.downloadAcquiredArtifact).not.toHaveBeenCalled();
+    expect(captureMocks.persistArtifactAcquisitionIntent).not.toHaveBeenCalled();
+    expect(captureMocks.clearArtifactAcquisitionCheckpoint).not.toHaveBeenCalled();
+    expect(response).toMatchObject({
+      flowStep: {
+        downloadDiagnostic: {
+          endpointClass: "gstr3b-portal-blob-captured-download",
+        },
+        safeSignals: expect.arrayContaining([
+          "full-fiscal-year-opfs-staged",
+          "full-fiscal-year-opfs-staged:PDF",
+        ]),
+        state: "downloaded",
+      },
+    });
+  });
+
+  it("stages GSTR-3B JSON for a full-year ZIP without creating an artifact download", async () => {
+    vi.clearAllMocks();
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "June",
+      artifactType: "JSON",
+      deps: {
+        sendMessageToTabWithInjection: vi.fn(
+          async (_tabId, message) =>
+            ({
+              ok: true,
+              artifact: {
+                ok: true,
+                state: "ready",
+                requestId: message.payload.requestId,
+                safeSignals: ["target-period-verified"],
+              },
+            }) as PackMessageResponse,
+        ),
+        stageCapturedDownloads: {
+          bundleKind: "full-fiscal-year",
+          ledgerId: "full-fiscal-year:12345678-test",
+        },
+        storageKeys: {},
+      },
+      scope: { financialYear: "2026-27", period: "June", returnType: "GSTR-3B" },
+      tabId: 17,
+    });
+
+    expect(captureMocks.stageOffscreenFiledReturn).toHaveBeenCalledOnce();
+    expect(captureMocks.downloadAcquiredArtifact).not.toHaveBeenCalled();
+    expect(captureMocks.persistArtifactAcquisitionIntent).not.toHaveBeenCalled();
+    expect(captureMocks.clearArtifactAcquisitionCheckpoint).not.toHaveBeenCalled();
+    expect(response).toMatchObject({
+      flowStep: {
+        downloadDiagnostic: {
+          endpointClass: "gstr3b-main-world-json-captured-download",
+        },
+        safeSignals: expect.arrayContaining([
+          "full-fiscal-year-opfs-staged",
+          "full-fiscal-year-opfs-staged:JSON",
+        ]),
+        state: "downloaded",
+      },
+    });
   });
 
   it.each(

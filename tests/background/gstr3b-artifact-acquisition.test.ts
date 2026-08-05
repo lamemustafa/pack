@@ -96,6 +96,45 @@ describe("GSTR-3B page-generated acquisition", () => {
     expect(mocks.downloadAcquiredArtifact).not.toHaveBeenCalled();
   });
 
+  it("hands validated PDF bytes to a caller-supplied staged delivery without starting a download", async () => {
+    const bytes = new Uint8Array(1024);
+    bytes.set(new TextEncoder().encode("%PDF-1.7"));
+    const deliver = vi.fn(async () => ({
+      ok: true as const,
+      safeSignals: ["full-fiscal-year-opfs-staged:PDF"],
+    }));
+    mocks.executeScript.mockResolvedValue([
+      {
+        result: {
+          ok: true,
+          base64: Buffer.from(bytes).toString("base64"),
+          blobUrl: "blob:synthetic/gstr3b",
+          safeSignals: ["filed-gstr3b-portal-blob-download-captured"],
+        },
+      },
+    ]);
+
+    await expect(
+      acquireGstr3bPdfAfterPreflight({
+        deliver,
+        financialYear: "2024-25",
+        filename: "Pack/2024-25/April/GSTR-3B.pdf",
+        period: "April",
+        requestId: "request-staged",
+        returnPeriod: "042024",
+        tabId: 17,
+      }),
+    ).resolves.toEqual({
+      ok: true,
+      safeSignals: [
+        "filed-gstr3b-portal-blob-download-captured",
+        "full-fiscal-year-opfs-staged:PDF",
+      ],
+    });
+    expect(deliver).toHaveBeenCalledWith(expect.objectContaining({ mimeType: "application/pdf" }));
+    expect(mocks.downloadAcquiredArtifact).not.toHaveBeenCalled();
+  });
+
   it("distinguishes an absent MAIN-world result from portal generation timeout", async () => {
     mocks.executeScript.mockResolvedValue([]);
 

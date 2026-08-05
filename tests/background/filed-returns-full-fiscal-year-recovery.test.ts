@@ -135,34 +135,27 @@ describe("full fiscal-year recovery", () => {
     });
   });
 
-  it("stages a full-year all-formats target before progressing to ZIP export", async () => {
+  it("stages GSTR-3B targets before progressing to one ZIP export", async () => {
     const now = new Date("2026-06-24T00:00:00.000Z");
     const scope = {
-      artifactType: "PDF_AND_EXCEL" as const,
+      artifactType: "PDF" as const,
       financialYear: "2026-27",
       period: FULL_FISCAL_YEAR_PERIOD,
-      returnType: "GSTR-2B" as const,
+      returnType: "GSTR-3B" as const,
     };
     const runSinglePeriod = vi.fn(async () => ({
       ok: true as const,
       flowStep: {
         connectorId: "gst" as const,
-        scopeId: "gst-gstr2b-private-v0",
+        scopeId: "gst-gstr3b-private-v0",
         state: "downloaded" as const,
-        safeSignals: [
-          "filed-return-artifact-downloaded:PDF",
-          "filed-return-artifact-downloaded:EXCEL",
-          "filed-return-artifact-downloaded:JSON",
-          "full-fiscal-year-opfs-staged:PDF",
-          "full-fiscal-year-opfs-staged:EXCEL",
-          "full-fiscal-year-opfs-staged:JSON",
-        ],
+        safeSignals: ["filed-return-artifact-downloaded:PDF", "full-fiscal-year-opfs-staged:PDF"],
         safeMessage: "Pack staged the selected artifacts for the fiscal-year ZIP.",
       },
     }));
     zipMocks.exportFullFiscalYearZip.mockResolvedValue({
       connectorId: "gst",
-      scopeId: "gst-gstr2b-private-v0",
+      scopeId: "gst-gstr3b-private-v0",
       state: "download-unconfirmed",
       safeSignals: ["browser-download-not-observed"],
       safeMessage: "Pack started ZIP delivery but needs exact browser download confirmation.",
