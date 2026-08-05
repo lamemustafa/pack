@@ -5,10 +5,6 @@ import type {
 } from "../connectors/gst/filed-returns-contracts";
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import { getFiledReturnsFullFiscalYearPeriods } from "../connectors/gst/filed-returns-scope";
-import {
-  gstr3bFullFiscalYearAcquisitionNotWiredStep,
-  isGstr3bFullFiscalYearAcquisitionScope,
-} from "./gstr3b-artifact-acquisition-block";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
 import {
   canCompleteFullFiscalYearLedger,
@@ -76,9 +72,6 @@ export async function startFullFiscalYearDownloadFlow(
   runSinglePeriod: SinglePeriodRunner,
   options: { allowExistingLedgerResume?: boolean } = {},
 ): Promise<PackMessageResponse> {
-  if (isGstr3bFullFiscalYearAcquisitionScope(scope)) {
-    return { ok: true, flowStep: gstr3bFullFiscalYearAcquisitionNotWiredStep() };
-  }
   const now = deps.now?.() ?? new Date();
   const plannedPeriods = getFiledReturnsFullFiscalYearPeriods(scope.financialYear, now);
   let existingLedger = await readLedger(deps.storageKeys.fullFiscalYearLedger);

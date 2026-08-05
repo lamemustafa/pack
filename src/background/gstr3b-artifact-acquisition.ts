@@ -1,5 +1,6 @@
 import { browser } from "wxt/browser";
 import { validateArtifactBytes } from "../connectors/gst/artifact-validation";
+import type { FiledReturnsDownloadDiagnostic } from "../connectors/gst/filed-returns-contracts";
 import {
   capturePortalPdfBlob,
   MAX_PORTAL_BLOB_BYTES,
@@ -7,7 +8,18 @@ import {
 } from "../connectors/gst/portal-blob-shim";
 import { downloadAcquiredArtifact, installPortalBlobDownloadSafetyNet } from "./artifact-download";
 
+type Gstr3bPdfDeliveryResult =
+  | {
+      ok: true;
+      downloadDiagnostic?: FiledReturnsDownloadDiagnostic;
+      downloadId?: number;
+      safeMessage?: string;
+      safeSignals: string[];
+    }
+  | { ok: false; reason: string; safeSignals: string[] };
+
 export async function acquireGstr3bPdfAfterPreflight(input: {
+  deliver?: (input: { base64: string; mimeType: string }) => Promise<Gstr3bPdfDeliveryResult>;
   financialYear: string;
   tabId: number;
   requestId: string;
@@ -16,14 +28,7 @@ export async function acquireGstr3bPdfAfterPreflight(input: {
   filename: string;
   onStarted?: (downloadId: number) => Promise<void>;
   onStartCheckpointFailed?: (downloadId: number) => Promise<void>;
-}): Promise<
-  | { ok: true; downloadId: number; safeMessage?: string; safeSignals: string[] }
-  | {
-      ok: false;
-      reason: string;
-      safeSignals: string[];
-    }
-> {
+}): Promise<Gstr3bPdfDeliveryResult> {
   const safetyNet = installPortalBlobDownloadSafetyNet(input.tabId);
   try {
     let captured: PortalBlobShimResult | undefined;
@@ -60,6 +65,20 @@ export async function acquireGstr3bPdfAfterPreflight(input: {
     const bytes = Uint8Array.from(atob(captured.base64), (value) => value.charCodeAt(0));
     const validation = validateArtifactBytes(bytes, "PDF", input.returnPeriod);
     if (!validation.ok) return { ok: false, reason: validation.reason, safeSignals: [] };
+    if (input.deliver) {
+      try {
+        const delivery = await input.deliver({
+          base64: captured.base64,
+          mimeType: validation.mimeType,
+        });
+        return {
+          ...delivery,
+          safeSignals: [...captured.safeSignals, ...delivery.safeSignals],
+        };
+      } catch {
+        return { ok: false, reason: "delivery-unconfirmed", safeSignals: [] };
+      }
+    }
     let delivery;
     try {
       delivery = await downloadAcquiredArtifact({
