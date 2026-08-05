@@ -127,6 +127,13 @@ describe("filed-return durable signal contract", () => {
     expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);
   });
 
+  it("retains categorical page-generated artifact readiness evidence", () => {
+    const signals = ["page-generated-pdf-ready", "page-generated-excel-ready"];
+
+    expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);
+    expect(isDurableFiledReturnsSignal("page-generated-private-value-ready")).toBe(false);
+  });
+
   it("retains final GSTR-2B capture-control rejections", () => {
     const signals = [
       "gstr2b-capture-control-not-actionable",

@@ -113,6 +113,8 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "filed-return-portal-click-evidence-unavailable",
   "filed-return-positively-not-filed",
   "filed-return-result-row-ambiguous",
+  "page-generated-excel-ready",
+  "page-generated-pdf-ready",
   "filed-return-result-row-not-found",
   "filed-return-result-view-clicked",
   "filed-return-result-view-not-found",
