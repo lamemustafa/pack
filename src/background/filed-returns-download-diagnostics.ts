@@ -49,7 +49,9 @@ function endpointClassForTarget(
   attemptClass: DownloadAttemptClass,
 ): FiledReturnsDownloadEndpointClass {
   if (target.returnType === "GSTR-3B" && attemptClass === "captured-portal-request") {
-    return "gstr3b-portal-blob-captured-download";
+    return target.artifactType === "JSON"
+      ? "gstr3b-main-world-json-captured-download"
+      : "gstr3b-portal-blob-captured-download";
   }
   if (target.returnType === "GSTR-3B" && attemptClass === "extension-direct") {
     return "gstr3b-browser-managed-direct-download";

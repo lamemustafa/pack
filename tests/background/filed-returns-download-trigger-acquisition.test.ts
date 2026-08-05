@@ -268,6 +268,7 @@ describe("GSTR-3B artifact acquisition dispatch", () => {
           artifactType: "JSON",
           byteCountClass: "non-empty",
           downloadId: 91,
+          endpointClass: "gstr3b-main-world-json-captured-download",
           mimeClass: "json",
           status: "downloaded",
         },

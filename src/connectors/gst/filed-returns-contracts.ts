@@ -138,6 +138,7 @@ export interface FiledReturnsArtifactAcquisitionCompletion {
 export type FiledReturnsDownloadEndpointClass =
   | "gstr3b-portal-rendered-download"
   | "gstr3b-portal-blob-captured-download"
+  | "gstr3b-main-world-json-captured-download"
   | "gstr3b-browser-managed-direct-download"
   | "gstr1-pdf-portal-rendered-download"
   | "gstr1-excel-portal-rendered-download"

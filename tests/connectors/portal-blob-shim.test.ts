@@ -42,7 +42,10 @@ describe("capturePortalPdfBlob", () => {
         controlSelector: "button",
         expectedMime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       }),
-    ).resolves.toMatchObject({ ok: true, safeSignals: ["portal-blob-shim-suppressed-via-click"] });
+    ).resolves.toMatchObject({
+      ok: true,
+      safeSignals: ["portal-blob-shim-suppressed-via-click"],
+    });
   });
 
   it("does not suppress an unrelated anchor and ignores non-matching blobs", async () => {
@@ -107,7 +110,10 @@ describe("capturePortalPdfBlob", () => {
         expectedMime: "application/pdf",
         expectedTarget: { financialYear: "2024-25", period: "April", returnType: "GSTR-3B" },
       }),
-    ).resolves.toMatchObject({ ok: true, safeSignals: ["portal-blob-shim-suppressed-via-click"] });
+    ).resolves.toMatchObject({
+      ok: true,
+      safeSignals: ["filed-gstr3b-portal-blob-download-captured"],
+    });
   });
 
   it("keeps the GSTR-1-style local scope guard despite matching page-wide decoy text", async () => {
@@ -135,7 +141,7 @@ describe("capturePortalPdfBlob", () => {
 
     await expect(captureGstr2b()).resolves.toMatchObject({
       ok: true,
-      safeSignals: ["portal-blob-shim-suppressed-via-click"],
+      safeSignals: ["filed-gstr2b-portal-blob-download-captured"],
     });
     expect(gstr2b.alternateClick).not.toHaveBeenCalled();
   });
@@ -146,7 +152,7 @@ describe("capturePortalPdfBlob", () => {
 
     await expect(captureGstr2b(["September", "Sep", "Sept"])).resolves.toMatchObject({
       ok: true,
-      safeSignals: ["portal-blob-shim-suppressed-via-click"],
+      safeSignals: ["filed-gstr2b-portal-blob-download-captured"],
     });
   });
 
@@ -156,7 +162,7 @@ describe("capturePortalPdfBlob", () => {
 
     await expect(captureGstr2b()).resolves.toMatchObject({
       ok: true,
-      safeSignals: ["portal-blob-shim-suppressed-via-click"],
+      safeSignals: ["filed-gstr2b-portal-blob-download-captured"],
     });
   });
 
@@ -331,7 +337,7 @@ describe("capturePortalPdfBlob", () => {
 
     await expect(captureGstr2b()).resolves.toMatchObject({
       ok: true,
-      safeSignals: ["portal-blob-shim-suppressed-via-click"],
+      safeSignals: ["filed-gstr2b-portal-blob-download-captured"],
     });
   });
 
@@ -352,7 +358,10 @@ describe("capturePortalPdfBlob", () => {
         expectedMime: "application/pdf",
         expectedTarget: { financialYear: "2024-25", period: "April", returnType: "GSTR-3B" },
       }),
-    ).resolves.toMatchObject({ ok: true, safeSignals: ["portal-blob-shim-suppressed-via-click"] });
+    ).resolves.toMatchObject({
+      ok: true,
+      safeSignals: ["filed-gstr3b-portal-blob-download-captured"],
+    });
   });
 
   it("keeps the GSTR-2B scope proof intact across Chrome's serialized MAIN-world boundary", async () => {
@@ -364,7 +373,7 @@ describe("capturePortalPdfBlob", () => {
       executeInMainWorld({ ...gstr2bInput, expectedPeriodTexts: ["April", "Apr"] }),
     ).resolves.toMatchObject({
       ok: true,
-      safeSignals: ["portal-blob-shim-suppressed-via-click"],
+      safeSignals: ["filed-gstr2b-portal-blob-download-captured"],
     });
   });
 

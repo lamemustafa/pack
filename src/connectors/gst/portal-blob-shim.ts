@@ -26,6 +26,22 @@ export function capturePortalPdfBlob(input: PortalBlobShimInput): Promise<Portal
   // chrome.scripting serializes only this function, so every value it needs
   // must be in its args or defined inside this body.
   const maxPortalBlobBytes = input.maxPortalBlobBytes ?? 25 * 1024 * 1024;
+  const portalBlobCaptureSignal = (
+    returnType: string | undefined,
+    method: "dispatchEvent" | "click",
+  ): string => {
+    const prefix =
+      returnType === "GSTR-1"
+        ? "filed-gstr1"
+        : returnType === "GSTR-2B"
+          ? "filed-gstr2b"
+          : returnType === "GSTR-3B"
+            ? "filed-gstr3b"
+            : null;
+    return prefix
+      ? `${prefix}-portal-blob-download-captured`
+      : `portal-blob-shim-suppressed-via-${method}`;
+  };
   const anchor = HTMLAnchorElement.prototype;
   const originalDispatch = anchor.dispatchEvent;
   const originalClick = anchor.click;
@@ -60,7 +76,7 @@ export function capturePortalPdfBlob(input: PortalBlobShimInput): Promise<Portal
             ok: true,
             base64: toBase64(new Uint8Array(buffer)),
             blobUrl: capturedBlobUrl,
-            safeSignals: [`portal-blob-shim-suppressed-via-${method}`],
+            safeSignals: [portalBlobCaptureSignal(input.expectedTarget?.returnType, method)],
           }),
         () => finish({ ok: false, reason: "unexpected-content", safeSignals: [] }),
       );

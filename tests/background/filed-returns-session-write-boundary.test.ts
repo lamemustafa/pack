@@ -148,6 +148,110 @@ describe("filed-return session write boundary", () => {
     expect(storage.session[checkpointKey]).toBeUndefined();
   });
 
+  it("persists a portal-blob captured completion before clearing its checkpoint", async () => {
+    const scope = {
+      artifactType: "PDF" as const,
+      financialYear: "2026-27",
+      period: "April",
+      returnType: "GSTR-3B" as const,
+    };
+    const actionId = "00000000-0000-4000-8000-000000000092";
+    const checkpointKey = artifactAcquisitionCheckpointKey(scope);
+    storage.session[checkpointKey] = {
+      ...scope,
+      armedAt: "2026-08-05T08:00:00.000Z",
+      downloadId: 92,
+      requestId: actionId,
+      state: "download-observing",
+    };
+
+    const response = await withPersistedSinglePeriodSummary(
+      scope,
+      {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: filedReturnsScopeId(scope.returnType),
+          state: "downloaded",
+          safeSignals: ["filed-gstr3b-portal-blob-download-captured"],
+          safeMessage: "Pack saved the selected filed return.",
+          downloadDiagnostic: {
+            actionId,
+            artifactType: "PDF",
+            byteCountClass: "non-empty",
+            downloadId: 92,
+            downloadPathClass: "captured-portal-request-unknown",
+            endpointClass: "gstr3b-portal-blob-captured-download",
+            eventType: "filed-return-download-path",
+            financialYear: scope.financialYear,
+            mimeClass: "pdf",
+            period: scope.period,
+            returnType: scope.returnType,
+            schemaVersion: "1.0",
+            status: "downloaded",
+          },
+        },
+      },
+      deps,
+      true,
+    );
+
+    expect(response).toMatchObject({ flowSummary: { status: "complete" } });
+    expect(storage.session[checkpointKey]).toBeUndefined();
+  });
+
+  it("persists a GSTR-3B JSON capture before clearing its exact-ID checkpoint", async () => {
+    const scope = {
+      artifactType: "JSON" as const,
+      financialYear: "2026-27",
+      period: "April",
+      returnType: "GSTR-3B" as const,
+    };
+    const actionId = "00000000-0000-4000-8000-000000000093";
+    const checkpointKey = artifactAcquisitionCheckpointKey(scope);
+    storage.session[checkpointKey] = {
+      ...scope,
+      armedAt: "2026-08-05T08:00:00.000Z",
+      downloadId: 93,
+      requestId: actionId,
+      state: "download-observing",
+    };
+
+    const response = await withPersistedSinglePeriodSummary(
+      scope,
+      {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: filedReturnsScopeId(scope.returnType),
+          state: "downloaded",
+          safeSignals: ["target-period-verified"],
+          safeMessage: "Pack saved the portal-produced GSTR-3B data JSON.",
+          downloadDiagnostic: {
+            actionId,
+            artifactType: "JSON",
+            byteCountClass: "non-empty",
+            downloadId: 93,
+            downloadPathClass: "captured-portal-request-unknown",
+            endpointClass: "gstr3b-main-world-json-captured-download",
+            eventType: "filed-return-download-path",
+            financialYear: scope.financialYear,
+            mimeClass: "json",
+            period: scope.period,
+            returnType: scope.returnType,
+            schemaVersion: "1.0",
+            status: "downloaded",
+          },
+        },
+      },
+      deps,
+      true,
+    );
+
+    expect(response).toMatchObject({ flowSummary: { status: "complete" } });
+    expect(storage.session[checkpointKey]).toBeUndefined();
+  });
+
   it("persists a restart-safe GSTR-1 Return Dashboard navigation failure", async () => {
     const response = await withPersistedSinglePeriodSummary(
       {
