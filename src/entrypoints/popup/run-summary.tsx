@@ -33,6 +33,7 @@ export function hasDiagnosticSignals(summary: FiledReturnsFlowSummary): boolean 
 /** Whether retry can inspect a retained exact-ID artifact download without a portal click. */
 export function canReconcileFiledReturnsTarget(summary: FiledReturnsFlowSummary): boolean {
   const signals = summary.flowStep.safeSignals;
+  if (signals.includes("artifact-acquisition-session-proof-expired")) return false;
   if (
     summary.scope.artifactType === "PDF_AND_EXCEL" &&
     !signals.includes("filed-returns-download-reconciliation-required")

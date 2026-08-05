@@ -112,6 +112,7 @@ describe("filed-return durable signal contract", () => {
       "artifact-acquisition-checkpoint-clear-failed",
       "artifact-acquisition-download-interrupted",
       "artifact-acquisition-download-reconciled",
+      "artifact-acquisition-session-proof-expired",
     ];
     expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);
     expect(signals.every(isDurableFiledReturnsSignal)).toBe(true);

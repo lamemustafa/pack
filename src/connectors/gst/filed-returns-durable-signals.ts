@@ -495,6 +495,7 @@ const ARTIFACT_FAILURE_SIGNALS = new Set([
   // this records that the completion is restored rather than re-observed.
   "artifact-acquisition-completion-restored",
   "artifact-acquisition-completion-pending-summary",
+  "artifact-acquisition-session-proof-expired",
   "artifact-acquisition-start-unreconciled",
   "artifact-acquisition-download-interrupted",
   "artifact-acquisition-download-unconfirmed",

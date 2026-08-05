@@ -353,7 +353,32 @@ export async function reconcileRetainedArtifactAcquisition(
         : inspection.state === "retry-safe"
           ? review.artifactAcquisitionCompletion
           : undefined;
-    if (!evidence) return responseForFiledReturnsTargetReview(review);
+    if (!evidence) {
+      if (inspection.state !== "retry-safe" || review.artifactAcquisitionCompletion) {
+        return responseForFiledReturnsTargetReview(review);
+      }
+      if (review.safeSignals.includes("artifact-acquisition-session-proof-expired")) {
+        return responseForFiledReturnsTargetReview(review);
+      }
+      // Chrome clears storage.session when an extension is reloaded, while the
+      // local review deliberately survives. The exact browser download ID is
+      // session-only, so a later retry cannot safely recreate the correlation.
+      // Surface that boundary instead of offering a reconciliation action that
+      // can only return this same review.
+      const expiredProofReview: FiledReturnsTargetReview = {
+        ...review,
+        revision: targetReviewRevision(review) + 1,
+        safeSignals: uniqueSafeSignals([
+          ...review.safeSignals,
+          "artifact-acquisition-session-proof-expired",
+        ]),
+        updatedAt: (deps.now?.() ?? new Date()).toISOString(),
+      };
+      const parsedExpiredProofReview = parseFiledReturnsTargetReview(expiredProofReview);
+      if (!parsedExpiredProofReview) return responseForFiledReturnsTargetReview(review);
+      await browser.storage.local.set({ [key]: parsedExpiredProofReview });
+      return responseForFiledReturnsTargetReview(parsedExpiredProofReview);
+    }
 
     let completionReview = review;
     if (inspection.state === "completed") {

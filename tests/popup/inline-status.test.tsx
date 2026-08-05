@@ -393,6 +393,30 @@ describe("inline filed-return recovery status", () => {
     expect(onRestartTarget).not.toHaveBeenCalled();
   });
 
+  it("does not offer reconciliation after an extension reload expires session-only proof", () => {
+    const targetReviewSummary: FiledReturnsFlowSummary = {
+      ...blockedSummary,
+      currentPeriod: "May",
+      flowStep: {
+        ...blockedSummary.flowStep,
+        safeSignals: [
+          "filed-returns-target-review-required",
+          "artifact-acquisition-download-unreconciled",
+          "artifact-acquisition-session-proof-expired",
+        ],
+      },
+    };
+
+    const action = getInlinePrimaryAction(blockedPresentation, targetReviewSummary, {
+      onOpenPortal: vi.fn(),
+      onRestartTarget: vi.fn(),
+      onRetryFullFiscalYearTarget: vi.fn(),
+      onRetryTarget: vi.fn(),
+    });
+
+    expect(action).toBeNull();
+  });
+
   it("offers reconciliation for an observing selected-file ZIP", () => {
     const targetReviewSummary: FiledReturnsFlowSummary = {
       ...blockedSummary,
