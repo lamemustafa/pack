@@ -750,6 +750,38 @@ describe("full fiscal year ledger", () => {
     expect(canCompleteFullFiscalYearLedger(blocked)).toBe(false);
   });
 
+  it("retains fixed GSTR-3B observation signals when a full-year target stops before acquisition", () => {
+    const ledger = createLedger([["April", "pending"]]);
+    const targetId = ledger.targets[0]!.targetId;
+    const terminal = markFullFiscalYearTargetTerminal(
+      ledger,
+      targetId,
+      "blocked",
+      {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "user-action-required",
+        safeSignals: [
+          "gstr-3b-detail-route",
+          "filed-returns-heading",
+          "gstr-3b",
+          "filed",
+          "download",
+          "pdf",
+        ],
+        safeMessage:
+          "Pack is waiting for the GST Portal detail page to expose its download control.",
+      },
+      new Date("2026-06-24T00:01:00.000Z"),
+    );
+
+    expect(terminal.targets[0]).toMatchObject({
+      status: "blocked",
+      safeSignals: expect.arrayContaining(["gstr-3b-detail-route", "gstr-3b"]),
+    });
+    expect(terminal.targets[0]?.safeSignals).not.toContain("filed-return-durable-status-rejected");
+  });
+
   it("validates GSTR-1 full fiscal year ledgers with artifact-specific targets", () => {
     const ledger = createLedger(
       [

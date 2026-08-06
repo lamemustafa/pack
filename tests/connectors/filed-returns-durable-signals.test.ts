@@ -13,8 +13,30 @@ import {
 } from "../../src/connectors/gst/single-period-cleanup-checkpoint";
 import { scoreFiledReturnDownloadCandidate } from "../../src/connectors/gst/filed-returns-download-candidates";
 import { scoreFiledReturnsSummaryModalDismissalCandidate } from "../../src/connectors/gst/filed-returns-navigation-candidates";
+import { detectSafeSignals } from "../../src/connectors/gst/filed-returns-observer-signals";
 
 describe("filed-return durable signal contract", () => {
+  it("keeps live GSTR-3B detail observations persistable for terminal recovery", () => {
+    // The full-year ledger persists the terminal step if the portal stops before
+    // acquisition. These are fixed classifier tokens (not portal text), so the
+    // durable boundary may retain them without widening its privacy surface.
+    const signals = detectSafeSignals("gstr-3b monthly return download filed gstr-3b pdf", {
+      pathname: "/returns/auth/gstr3b",
+    });
+
+    expect(signals).toEqual(
+      expect.arrayContaining([
+        "gstr-3b-detail-route",
+        "gstr-3b",
+        "download-filed-gstr-3b",
+        "filed",
+        "download",
+        "pdf",
+      ]),
+    );
+    expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);
+  });
+
   it("keeps every live classifier signal inside the durable allow-list", () => {
     // parseDurableFiledReturnsSignals fails closed: one unrecognised signal
     // rejects the whole persisted summary. These two classifiers are live —
