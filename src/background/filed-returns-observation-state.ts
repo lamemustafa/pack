@@ -4,6 +4,7 @@ import {
   detectVisibleReturnLabel,
   scopeIdForVisibleReturnLabel,
 } from "../connectors/gst/filed-returns-observer-scope";
+import { FILED_RETURNS_OBSERVATION_SIGNALS } from "../connectors/gst/filed-returns-observer-signals";
 import type {
   FiledReturnsObservation,
   FiledReturnsObservationState,
@@ -37,36 +38,7 @@ const OBSERVATION_SCOPE_IDS = new Set<FiledReturnsObservation["scopeId"]>([
   "gst-gstr2b-private-v0",
 ]);
 
-const OBSERVATION_SIGNALS = new Set([
-  "detail-summary-modal",
-  "download",
-  "download-excel-gstr-1",
-  "download-filed-gstr-1",
-  "download-filed-gstr-3b",
-  "download-gstr2b-details-excel",
-  "download-gstr2b-summary-pdf",
-  "download-pdf-gstr-1",
-  "filed",
-  "filed-gstr1-download-ready",
-  "filed-gstr2b-download-ready",
-  "filed-gstr3b-download-ready",
-  "filed-return-download-ready",
-  "filed-returns-heading",
-  "filed-returns-route",
-  "filter-form",
-  "gstr-1",
-  "gstr-1-detail-route",
-  "gstr-1-summary-route",
-  "gstr-2b",
-  "gstr-3b",
-  "gstr-3b-detail-route",
-  "gstr2b-summary-route",
-  "login",
-  "pdf",
-  "search-action",
-  "view-action",
-  "view-download-column",
-]);
+const OBSERVATION_SIGNALS = new Set<string>(FILED_RETURNS_OBSERVATION_SIGNALS);
 
 const USER_ACTION_TYPES = new Set<UserActionRequired["type"]>([
   "ALLOW_MULTIPLE_DOWNLOADS",

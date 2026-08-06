@@ -2,6 +2,7 @@ import { FILED_RETURNS_MONTHS } from "./filed-returns-scope";
 import type { FiledReturnsReturnType } from "./filed-returns-return-types";
 import { ARTIFACT_FAILURE_MESSAGES } from "./artifact-source";
 import { isSafeDashboardSelectedValue } from "./dashboard-selected-signal-values";
+import { FILED_RETURNS_OBSERVATION_SIGNALS } from "./filed-returns-observer-signals";
 import {
   SINGLE_PERIOD_CLEANUP_CHECKPOINT_FAILURE_STAGES,
   singlePeriodCleanupCheckpointFailureSignal,
@@ -20,6 +21,7 @@ export const FILED_RETURN_ROUTE_MISMATCH_SIGNALS = {
 } as const satisfies Record<FiledReturnsReturnType, string>;
 
 const EXACT_DURABLE_SIGNALS = new Set([
+  ...FILED_RETURNS_OBSERVATION_SIGNALS,
   "browser-download-completed",
   "browser-download-correlation-rejected",
   "browser-download-created",
