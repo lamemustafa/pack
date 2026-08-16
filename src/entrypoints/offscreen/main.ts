@@ -206,15 +206,40 @@ async function stageFiledReturnDataUrl(
 
   try {
     const directory = await getLedgerDirectory(payload.ledgerId, true);
-    const fileHandle = await getLedgerFileHandle(directory, payload.zipPath, true);
+    const fileHandle = await getLedgerFileHandle(
+      directory,
+      payload.zipPath,
+      payload.returnType,
+      true,
+    );
     const writable = await fileHandle.createWritable();
     await writable.write(decoded.blob);
     await writable.close();
+    const stagedBytes = new Uint8Array(await (await fileHandle.getFile()).arrayBuffer());
+    if (
+      stagedBytes.byteLength !== decoded.bytes.byteLength ||
+      !isExpectedFiledReturnBytesForReturnType(
+        stagedBytes,
+        payload.artifactType,
+        payload.returnType,
+      )
+    ) {
+      return {
+        ok: false,
+        requestId: payload.requestId,
+        errorCategory: "stage-failed",
+      };
+    }
     return {
       ok: true,
       requestId: payload.requestId,
       staged: true,
       byteCountClass: "non-empty",
+      byteCount: stagedBytes.byteLength,
+      artifactType: payload.artifactType,
+      ledgerId: payload.ledgerId,
+      returnType: payload.returnType,
+      zipPath: payload.zipPath,
     };
   } catch {
     return {
@@ -255,9 +280,12 @@ function isNotFoundError(error: unknown): boolean {
 async function getLedgerFileHandle(
   directory: FileSystemDirectoryHandle,
   zipPath: string,
+  returnType: FiledReturnsReturnType,
   create: boolean,
 ): Promise<FileSystemFileHandle> {
-  if (!isCanonicalFiledReturnZipEntryName(zipPath)) throw new Error("Invalid ZIP entry name.");
+  if (!isCanonicalFiledReturnZipEntryName(zipPath, returnType)) {
+    throw new Error("Invalid ZIP entry name.");
+  }
   return directory.getFileHandle(zipPath, { create });
 }
 
@@ -349,7 +377,7 @@ function filedReturnZipPeriodOrder(path: string): number {
   const fileName = path.split("/").at(-1)?.toLowerCase() ?? "";
   const extensionIndex = fileName.indexOf(".");
   if (extensionIndex < 1) return FILED_RETURNS_MONTHS.length;
-  const period = fileName.slice(0, extensionIndex).replace(/-(summary|details|data)$/, "");
+  const period = fileName.slice(0, extensionIndex).replace(/-(summary|details|data|return)$/, "");
   return FILED_RETURN_PERIOD_ORDER.get(period) ?? FILED_RETURNS_MONTHS.length;
 }
 

@@ -14,6 +14,7 @@ import {
   DEFAULT_FILED_RETURNS_DOWNLOAD_SCOPE,
   normaliseFiledReturnsScope,
 } from "../../connectors/gst/filed-returns-scope";
+import { PACK_SESSION_STORAGE_KEYS } from "../../background/storage-keys";
 import {
   getFiledReturnsCompletionStatus,
   getFiledReturnsSummaryHeading,
@@ -65,6 +66,27 @@ export function usePackPopupController() {
       })
       .catch(() => showActionError("Pack could not read the current GST Portal state. Try again."));
   }, [showActionError]);
+
+  React.useEffect(() => {
+    const onChanged = (
+      changes: Record<string, Browser.storage.StorageChange>,
+      areaName: string,
+    ) => {
+      if (
+        areaName !== "session" ||
+        !changes[PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary]?.newValue
+      ) {
+        return;
+      }
+      void sendPackMessage({ type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" }).then((response) => {
+        if (!response.ok || !("flowSummary" in response) || !response.flowSummary) return;
+        setFiledReturnsFlowSummary(response.flowSummary);
+        setScopeState(response.flowSummary.scope);
+      });
+    };
+    browser.storage.onChanged.addListener(onChanged);
+    return () => browser.storage.onChanged.removeListener(onChanged);
+  }, []);
 
   const applyFlowResponse = React.useCallback(
     (response: PackMessageResponse) => {

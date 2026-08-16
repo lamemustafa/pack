@@ -1,5 +1,6 @@
 import { isFiledReturnsConcreteArtifactType } from "./filed-returns-artifacts";
 import type { FiledReturnsConcreteArtifactType } from "./filed-returns-artifacts";
+import type { FiledReturnsReturnType } from "./filed-returns-return-types";
 import { FILED_RETURNS_MONTHS } from "./filed-returns-scope";
 import {
   isPackOffscreenBlobUrlMessageShape,
@@ -18,7 +19,7 @@ export function isPackOffscreenBlobUrlMessage(
   if (input.type === "PACK_OFFSCREEN_STAGE_FILED_RETURN") {
     return (
       isCanonicalFiledReturnsLedgerId(input.payload.ledgerId) &&
-      isCanonicalFiledReturnZipEntryName(input.payload.zipPath) &&
+      isCanonicalFiledReturnZipEntryName(input.payload.zipPath, input.payload.returnType) &&
       artifactTypeFromZipEntryName(input.payload.zipPath) === input.payload.artifactType
     );
   }
@@ -26,7 +27,7 @@ export function isPackOffscreenBlobUrlMessage(
   if (input.type === "PACK_OFFSCREEN_CREATE_FILED_RETURN_ZIP") {
     return (
       isCanonicalFiledReturnsLedgerId(input.payload.ledgerId) &&
-      isExpectedZipEntryPlan(input.payload.expectedEntries) &&
+      isExpectedZipEntryPlan(input.payload.expectedEntries, input.payload.expectedReturnType) &&
       input.payload.expectedEntries.length === input.payload.expectedEntryCount
     );
   }
@@ -38,14 +39,22 @@ export function isPackOffscreenBlobUrlMessage(
   return true;
 }
 
-export function isCanonicalFiledReturnZipEntryName(value: unknown): value is string {
+export function isCanonicalFiledReturnZipEntryName(
+  value: unknown,
+  returnType?: FiledReturnsReturnType,
+): value is string {
   if (typeof value !== "string") return false;
-  const match = /^([a-z]+)(?:-(summary|details|data))?\.(pdf|xls|xlsx|json)$/.exec(value);
-  return Boolean(match && FILED_RETURNS_MONTHS.some((period) => period.toLowerCase() === match[1]));
+  const match = /^([a-z]+)(?:-(summary|details|data|return))?\.(pdf|xls|xlsx|json)$/.exec(value);
+  return Boolean(
+    match &&
+    FILED_RETURNS_MONTHS.some((period) => period.toLowerCase() === match[1]) &&
+    (match[2] !== "return" || (match[3] === "pdf" && returnType === "GSTR-3B")),
+  );
 }
 
 function isExpectedZipEntryPlan(
   input: readonly PackOffscreenFiledReturnZipExpectedEntry[],
+  expectedReturnType: FiledReturnsReturnType,
 ): boolean {
   const entryNames = new Set<string>();
   for (const candidate of input) {
@@ -53,7 +62,7 @@ function isExpectedZipEntryPlan(
       !isFiledReturnsConcreteArtifactType(candidate.artifactType) ||
       candidate.entryNames.some(
         (entryName) =>
-          !isCanonicalFiledReturnZipEntryName(entryName) ||
+          !isCanonicalFiledReturnZipEntryName(entryName, expectedReturnType) ||
           artifactTypeFromZipEntryName(entryName) !== candidate.artifactType ||
           entryNames.has(entryName),
       )

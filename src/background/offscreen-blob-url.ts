@@ -6,6 +6,7 @@ import {
 } from "../connectors/gst/offscreen-blob-url";
 import type { FiledReturnsConcreteArtifactType } from "../connectors/gst/filed-returns-artifacts";
 import type { FiledReturnsReturnType } from "../connectors/gst/filed-returns-return-types";
+import { MAX_ARTIFACT_BYTES } from "../connectors/gst/artifact-validation";
 
 const OFFSCREEN_DOCUMENT_PATH = "offscreen.html";
 const OFFSCREEN_JUSTIFICATION =
@@ -25,6 +26,13 @@ export type OffscreenFiledReturnClearResult =
         | "offscreen-unreachable"
         | "opfs-unavailable";
     };
+
+type StagedReceiptExpectation = {
+  artifactType: FiledReturnsConcreteArtifactType;
+  ledgerId: string;
+  returnType: FiledReturnsReturnType;
+  zipPath: string;
+};
 
 let creatingOffscreenDocument: Promise<void> | null = null;
 
@@ -69,7 +77,7 @@ export async function stageOffscreenFiledReturn({
       zipPath,
     },
   });
-  return toStageResult(response, requestId);
+  return toStageResult(response, requestId, { artifactType, ledgerId, returnType, zipPath });
 }
 
 export async function createOffscreenFiledReturnZipUrl(
@@ -225,14 +233,32 @@ function isBlobUrlResponse(
 function isStagedResponse(
   response: unknown,
   requestId: string,
+  expected: StagedReceiptExpectation,
 ): response is { ok: true; requestId: string; staged: true } {
   if (typeof response !== "object" || response === null) return false;
   const record = response as Record<string, unknown>;
-  return record.ok === true && record.requestId === requestId && record.staged === true;
+  return (
+    record.ok === true &&
+    record.requestId === requestId &&
+    record.staged === true &&
+    record.byteCountClass === "non-empty" &&
+    record.artifactType === expected.artifactType &&
+    record.ledgerId === expected.ledgerId &&
+    record.returnType === expected.returnType &&
+    record.zipPath === expected.zipPath &&
+    typeof record.byteCount === "number" &&
+    Number.isSafeInteger(record.byteCount) &&
+    record.byteCount > 0 &&
+    record.byteCount <= MAX_ARTIFACT_BYTES
+  );
 }
 
-function toStageResult(response: unknown, requestId: string): OffscreenFiledReturnStageResult {
-  if (isStagedResponse(response, requestId)) return { status: "staged" };
+function toStageResult(
+  response: unknown,
+  requestId: string,
+  expected: StagedReceiptExpectation,
+): OffscreenFiledReturnStageResult {
+  if (isStagedResponse(response, requestId, expected)) return { status: "staged" };
   if (typeof response === "object" && response !== null) {
     const record = response as Record<string, unknown>;
     if (

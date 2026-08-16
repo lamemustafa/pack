@@ -2,11 +2,13 @@ import { browser } from "wxt/browser";
 import type { ArchiveManifest } from "../core/contracts";
 import { PACK_PRODUCT_VERSION } from "../extension/version";
 import { isPackMessage, type PackMessageResponse } from "../connectors/gst/messages";
+import { isPackOffscreenBlobUrlMessage } from "../connectors/gst/filed-returns-offscreen-validation";
 import {
   acknowledgeInterruptedFiledReturnsRun,
   readActiveFiledReturnsRunSummary,
 } from "../background/filed-returns-active-run";
 import { readCurrentFiledReturnsFlowSummary } from "../background/filed-returns-current-state";
+import { reconcilePendingFullFiscalYearZipDownload } from "../background/filed-returns-full-fiscal-year";
 import {
   resolveFullFiscalYearTargetFlow,
   resolveUnconfirmedFiledReturnsDownloadFlow,
@@ -68,7 +70,11 @@ const OFFICIAL_URL = "https://pack.complyeaze.com";
 
 export default defineBackground(() => {
   void restrictLocalStorageToTrustedContexts().catch(() => undefined);
-  installFiledReturnsDurableDownloadReconciler();
+  installFiledReturnsDurableDownloadReconciler(undefined, {
+    storageKeys: filedReturnsStorageKeys(),
+    reconcileFullFiscalYearZip: (downloadId) =>
+      reconcilePendingFullFiscalYearZipDownload(downloadId, filedReturnsFlowRunnerDeps()),
+  });
   installPackDownloadFilenameReassertion();
 
   browser.tabs.onActivated.addListener(({ tabId }) => {
@@ -90,6 +96,10 @@ export default defineBackground(() => {
   });
 
   browser.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
+    // runtime.sendMessage broadcasts within the extension. The offscreen document
+    // owns this validated local protocol, so the background must not race its reply.
+    if (isPackOffscreenBlobUrlMessage(message)) return false;
+
     void handleMessage(message, sender)
       .then((response) => sendResponse(response))
       .catch(() =>

@@ -4,7 +4,10 @@ import type {
 } from "../connectors/gst/filed-returns-contracts";
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import { filedReturnScopedSignal } from "../connectors/gst/filed-returns-return-descriptors";
-import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
+import type {
+  FiledReturnsFlowRunnerDeps,
+  FiledReturnsFlowStepCategory,
+} from "./filed-returns-flow-runner";
 import { persistCanonicalFiledReturnsObservation } from "./filed-returns-observation-state";
 
 export const FLOW_STEP_SETTLE_MS = 150;
@@ -70,6 +73,29 @@ export function getFlowStepSettleMs(
   return deps.timings?.flowStepSettleMs ?? FLOW_STEP_SETTLE_MS;
 }
 
+/**
+ * A fixed, portal-text-free classification for in-memory run diagnostics.
+ * Keep the signal families here so delay policy and diagnostic projection do
+ * not independently classify the same portal actions.
+ */
+export function classifyFiledReturnsFlowStep(
+  step: PortalFlowStepResult,
+): FiledReturnsFlowStepCategory {
+  if (isFiledReturnDetailNavigationStep(step)) return "detail-navigation";
+  if (isPortalNavigationStep(step)) return "portal-navigation";
+  if (
+    step.safeSignals.some(
+      (signal) =>
+        signal === "filed-return-download-clicked" ||
+        signal.startsWith("filed-return-artifact-clicked:") ||
+        signal.startsWith("filed-gstr"),
+    )
+  ) {
+    return "artifact-trigger";
+  }
+  return "other";
+}
+
 export function extractActivePeriod(step: PortalFlowStepResult): string | null {
   const prefixes = ["filed-return-result-period:", "filed-return-detail-period:"];
   for (const prefix of prefixes) {
@@ -89,6 +115,12 @@ export async function persistFlowResponse(
   response: Extract<PackMessageResponse, { ok: true }>,
   deps: FiledReturnsFlowRunnerDeps,
 ) {
+  if ("flowStep" in response) {
+    deps.onFlowStepObservation?.({
+      category: classifyFiledReturnsFlowStep(response.flowStep),
+      portalSystemError: response.flowStep.safeSignals.includes("portal-system-error"),
+    });
+  }
   if ("observation" in response && response.observation) {
     await persistCanonicalFiledReturnsObservation(
       deps.storageKeys.observation,

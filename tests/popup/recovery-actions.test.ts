@@ -525,7 +525,9 @@ describe("popup full-year recovery actions", () => {
       }),
     );
 
-    expect(markup).toContain("Create one ZIP for all eligible periods.");
+    expect(markup).toContain(
+      "Keep GST Portal visible in the foreground while Pack creates one ZIP for all eligible periods.",
+    );
     expect(markup).not.toContain("selected GSTR-1 e-invoice details file");
   });
 

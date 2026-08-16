@@ -2,10 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import type { PackMessageResponse } from "../../src/connectors/gst/messages";
 import type { acquireFiledReturnJsonInMainWorld } from "../../src/background/filed-returns-json-acquisition";
 import type { acquireGstr3bPdfAfterPreflight } from "../../src/background/gstr3b-artifact-acquisition";
+import type { stageOffscreenFiledReturn } from "../../src/background/offscreen-blob-url";
+import { parseDurableFiledReturnsSignals } from "../../src/connectors/gst/filed-returns-durable-signals";
 
 type JsonAcquisitionInput = Parameters<typeof acquireFiledReturnJsonInMainWorld>[0];
 type Gstr3bPdfAcquisitionInput = Parameters<typeof acquireGstr3bPdfAfterPreflight>[0];
 type Gstr3bPdfAcquisitionResult = ReturnType<typeof acquireGstr3bPdfAfterPreflight>;
+type StageOffscreenFiledReturnResult = ReturnType<typeof stageOffscreenFiledReturn>;
 
 const captureMocks = vi.hoisted(() => ({
   acquireGstr3bPdfAfterPreflight: vi.fn<
@@ -42,7 +45,9 @@ const captureMocks = vi.hoisted(() => ({
   persistArtifactAcquisitionDownloadId: vi.fn(async () => undefined),
   persistArtifactAcquisitionIntent: vi.fn(async () => undefined),
   persistArtifactAcquisitionUnconfirmedDownload: vi.fn(async () => undefined),
-  stageOffscreenFiledReturn: vi.fn(async () => ({ status: "staged" as const })),
+  stageOffscreenFiledReturn: vi.fn<() => StageOffscreenFiledReturnResult>(async () => ({
+    status: "staged" as const,
+  })),
 }));
 const summaryStorage = vi.hoisted(() => ({
   remove: vi.fn(async () => undefined),
@@ -208,6 +213,63 @@ describe("GSTR-3B artifact acquisition dispatch", () => {
         state: "downloaded",
       },
     });
+  });
+
+  it.each([
+    "blob-url-failed",
+    "invalid-data-url",
+    "opfs-unavailable",
+    "stage-failed",
+    "unexpected-local-stage-category",
+  ])("keeps a full-year GSTR-3B staging failure durable: %s", async (errorCategory) => {
+    vi.clearAllMocks();
+    captureMocks.acquireGstr3bPdfAfterPreflight.mockImplementationOnce(async (input) => {
+      if (!input.deliver) throw new Error("expected staged delivery");
+      return input.deliver({ base64: "JVBERi0xLjc=", mimeType: "application/pdf" });
+    });
+    captureMocks.stageOffscreenFiledReturn.mockResolvedValueOnce({
+      status: "failed",
+      errorCategory,
+    });
+
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "April",
+      artifactType: "PDF",
+      deps: {
+        sendMessageToTabWithInjection: vi.fn(
+          async (_tabId, message) =>
+            ({
+              ok: true,
+              artifact: {
+                ok: true,
+                state: "ready",
+                requestId: message.payload.requestId,
+                safeSignals: ["target-period-verified"],
+              },
+            }) as PackMessageResponse,
+        ),
+        stageCapturedDownloads: {
+          bundleKind: "full-fiscal-year",
+          ledgerId: "full-fiscal-year:12345678-test",
+        },
+        storageKeys: {},
+      },
+      scope: { financialYear: "2025-26", period: "April", returnType: "GSTR-3B" },
+      tabId: 17,
+    });
+
+    if (!response.ok || !("flowStep" in response)) throw new Error("expected flow step");
+    const expectedReason =
+      errorCategory === "unexpected-local-stage-category"
+        ? "offscreen-response-invalid"
+        : errorCategory;
+    expect(response.flowStep).toMatchObject({
+      state: "blocked",
+      safeSignals: expect.arrayContaining([`artifact-${expectedReason}`]),
+    });
+    expect(parseDurableFiledReturnsSignals(response.flowStep.safeSignals)).toEqual(
+      response.flowStep.safeSignals,
+    );
   });
 
   it("stages GSTR-3B JSON for a full-year ZIP without creating an artifact download", async () => {

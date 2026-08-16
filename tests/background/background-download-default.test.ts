@@ -74,11 +74,23 @@ const browserMocks = vi.hoisted(() => {
           message.payload !== null &&
           "requestId" in message.payload
         ) {
+          const payload = message.payload as {
+            artifactType: "PDF" | "JSON" | "EXCEL";
+            ledgerId: string;
+            requestId: string;
+            returnType: "GSTR-1" | "GSTR-2B" | "GSTR-3B";
+            zipPath: string;
+          };
           return {
             ok: true,
-            requestId: message.payload.requestId,
+            requestId: payload.requestId,
             staged: true,
             byteCountClass: "non-empty",
+            byteCount: 128,
+            artifactType: payload.artifactType,
+            ledgerId: payload.ledgerId,
+            returnType: payload.returnType,
+            zipPath: payload.zipPath,
           };
         }
         if (
@@ -287,6 +299,33 @@ describe("background filed returns download defaults", () => {
       expect(browserMocks.storage.local.remove).toHaveBeenCalledWith([legacyKey]),
     );
     await expect(browserMocks.storage.local.get()).resolves.toEqual({});
+  });
+
+  it("leaves validated offscreen staging messages for the offscreen document", async () => {
+    await import("../../src/entrypoints/background");
+    const listener = browserMocks.getMessageListener();
+    if (!listener) throw new Error("background listener was not registered");
+    const sendResponse = vi.fn();
+
+    const handled = listener(
+      {
+        type: "PACK_OFFSCREEN_STAGE_FILED_RETURN",
+        target: "pack-offscreen-blob-url",
+        payload: {
+          requestId: "synthetic-stage-request",
+          ledgerId: "00000000-0000-4000-8000-000000000000",
+          zipPath: "april-return.pdf",
+          returnType: "GSTR-3B",
+          artifactType: "PDF",
+          dataUrl: `data:application/pdf;base64,${globalThis.btoa("%PDF-1.7 synthetic\\n%%EOF\\n")}`,
+        },
+      },
+      { id: browserMocks.runtime.id } satisfies Browser.runtime.MessageSender,
+      sendResponse,
+    );
+
+    expect(handled).toBe(false);
+    expect(sendResponse).not.toHaveBeenCalled();
   });
 
   it("preserves an answered offscreen clear failure category", async () => {
@@ -500,6 +539,7 @@ describe("background filed returns download defaults", () => {
 
   it("starts full-fiscal-year GSTR-3B acquisition without legacy downloads", async () => {
     const financialYear = "2026-27";
+    let flowStepCalls = 0;
     browserMocks.tabs.sendMessage.mockImplementation(async (_tabId, message: PackMessage) => {
       message = unwrapContentRequest(message);
       if (message.type === "PACK_CONTENT_PING_V2") {
@@ -510,18 +550,25 @@ describe("background filed returns download defaults", () => {
         } satisfies PackMessageResponse;
       }
       if (message.type === "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3") {
+        flowStepCalls += 1;
         return {
           ok: true,
           flowStep: {
             connectorId: "gst",
             scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
-            state: "clicked",
-            safeSignals: [
-              "gstr-3b-detail-route",
-              "filed-gstr3b-download-ready",
-              `filed-return-detail-period:${message.payload.period}`,
-            ],
-            safeMessage: "Ready.",
+            state: flowStepCalls === 1 ? "clicked" : "ready",
+            safeSignals:
+              flowStepCalls === 1
+                ? ["filed-return-result-view-clicked"]
+                : [
+                    "gstr-3b-detail-route",
+                    "filed-gstr3b-download-ready",
+                    `filed-return-detail-period:${message.payload.period}`,
+                  ],
+            safeMessage:
+              flowStepCalls === 1
+                ? "Pack opened the selected GSTR-3B result."
+                : "Pack found the selected GSTR-3B detail page.",
           },
         } satisfies PackMessageResponse;
       }
@@ -560,6 +607,7 @@ describe("background filed returns download defaults", () => {
       },
     });
     expect(browserMocks.downloads.download).not.toHaveBeenCalled();
+    expect(flowStepCalls).toBe(2);
     expect(sentActionMessageTypes()).toContain("PACK_CONTENT_ACQUIRE_FILED_RETURN_ARTIFACT_V34");
     expect(sentActionMessageTypes()).not.toContain("PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3");
   });

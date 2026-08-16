@@ -46,8 +46,14 @@ export type ArtifactFailureReason =
   | "generation-timeout"
   | "delivery-unconfirmed"
   | "main-world-execution-failed"
+  | "blob-url-failed"
+  | "invalid-data-url"
+  | "offscreen-response-invalid"
+  | "offscreen-unreachable"
+  | "opfs-unavailable"
   | "search-unavailable"
   | "page-period-mismatch"
+  | "stage-failed"
   | "danger-unconfirmed"
   | "danger-rejected";
 
@@ -80,10 +86,22 @@ export const ARTIFACT_FAILURE_MESSAGES = {
     "Pack could not confirm local delivery of the verified filed-return artifact, so it did not mark the target saved.",
   "main-world-execution-failed":
     "Pack could not run the verified GST Portal artifact action, so it did not mark the target saved.",
+  "blob-url-failed":
+    "Pack could not prepare the verified artifact for local fiscal-year staging, so it did not mark the target saved.",
+  "invalid-data-url":
+    "Pack could not validate the verified artifact for local fiscal-year staging, so it did not mark the target saved.",
+  "offscreen-response-invalid":
+    "Pack could not verify the local fiscal-year staging response, so it did not mark the target saved.",
+  "offscreen-unreachable":
+    "Pack could not reach its local fiscal-year staging worker, so it did not mark the target saved.",
+  "opfs-unavailable":
+    "This browser cannot provide the local storage required to build a fiscal-year ZIP.",
   "search-unavailable":
     "Pack could not confirm the browser download state, so it did not mark the target saved.",
   "page-period-mismatch":
     "The visible GST Portal page does not match the requested financial year and period.",
+  "stage-failed":
+    "Pack could not write the verified artifact to local fiscal-year staging, so it did not mark the target saved.",
   "danger-unconfirmed":
     "The browser has not classified this filed-return download as safe, so Pack did not mark the target saved. Check browser Downloads before retrying.",
   "danger-rejected":

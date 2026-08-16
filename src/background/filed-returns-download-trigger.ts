@@ -759,7 +759,11 @@ async function deliverValidatedArtifact({
           ],
           downloadDiagnostic: capturedArtifactDiagnostic(scope, artifactType, mimeType, requestId),
         }
-      : { ok: false, reason: result.errorCategory ?? "stage-failed", safeSignals };
+      : {
+          ok: false,
+          reason: canonicalStagingFailureReason(result.errorCategory),
+          safeSignals,
+        };
   }
   let delivery;
   try {
@@ -791,6 +795,20 @@ async function deliverValidatedArtifact({
         reason: delivery.reason,
         safeSignals: [...safeSignals, ...delivery.safeSignals],
       };
+}
+
+function canonicalStagingFailureReason(errorCategory: unknown): ArtifactFailureReason {
+  if (
+    errorCategory === "blob-url-failed" ||
+    errorCategory === "invalid-data-url" ||
+    errorCategory === "opfs-unavailable" ||
+    errorCategory === "stage-failed"
+  ) {
+    return errorCategory;
+  }
+  // A stage response is extension-local, but it still crosses a message
+  // boundary. Never convert an unrecognised value into a durable signal.
+  return "offscreen-response-invalid";
 }
 
 function directCapturedArtifactFlowStep({

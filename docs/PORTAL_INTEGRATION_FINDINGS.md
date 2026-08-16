@@ -116,3 +116,10 @@ This log records live diagnostic findings that constrain Pack's local, target-bo
     control to the exact route and a unique pair of rendered scope labels—not to broad page text,
     inline portal state, or a layout-specific control ancestor. Missing, duplicate, hidden,
     inert, transparent, collapsed, or zero-area label evidence fails closed before the click.
+
+24. Observed in authorised manual QA: a full-fiscal-year run can stall when the GST Portal tab or
+    its browser window is backgrounded, then continue only after the portal is visible again and
+    the saved target is explicitly retried. Pack preserves the target-bound recovery state but
+    does not infer that a newly focused GST tab belongs to the same taxpayer or replay a portal
+    action from a focus event. The full-year action therefore tells the operator to keep GST
+    Portal visible in the foreground while Pack moves between periods.

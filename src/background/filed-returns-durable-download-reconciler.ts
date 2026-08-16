@@ -34,6 +34,7 @@ export interface DurableDownloadReconcilerDeps extends Omit<
   persistDownloadId?: (review: FiledReturnsTargetReview, downloadId: number) => Promise<boolean>;
   readCurrentReview?: () => Promise<FiledReturnsTargetReview | null>;
   reconcile?: (review: FiledReturnsTargetReview) => Promise<unknown>;
+  reconcileFullFiscalYearZip?: (downloadId: number) => Promise<boolean>;
 }
 
 const liveInlineObservationIds = new Set<number>();
@@ -138,18 +139,33 @@ export function installFiledReturnsDurableDownloadReconciler(
   }
   let inFlight: Promise<boolean> | null = null;
   let rerunAfterInFlight = false;
+  const terminalDownloadIds = new Set<number>();
 
-  const reconcile = () => {
+  const reconcile = (terminalDownloadId?: number) => {
+    if (terminalDownloadId !== undefined) terminalDownloadIds.add(terminalDownloadId);
     if (inFlight) {
       rerunAfterInFlight = true;
       return inFlight;
     }
-    inFlight = reconcileTerminalFiledReturnsDownload(downloadApi, deps).finally(() => {
-      inFlight = null;
-      if (!rerunAfterInFlight) return;
-      rerunAfterInFlight = false;
-      void reconcile().catch(() => undefined);
-    });
+    const pendingTerminalDownloadIds = Array.from(terminalDownloadIds);
+    terminalDownloadIds.clear();
+    inFlight = Promise.all([
+      reconcileTerminalFiledReturnsDownload(downloadApi, deps),
+      pendingTerminalDownloadIds.length === 0 || !deps.reconcileFullFiscalYearZip
+        ? Promise.resolve(false)
+        : Promise.all(
+            pendingTerminalDownloadIds.map((downloadId) =>
+              deps.reconcileFullFiscalYearZip!(downloadId),
+            ),
+          ).then((results) => results.some(Boolean)),
+    ])
+      .then((results) => results.some(Boolean))
+      .finally(() => {
+        inFlight = null;
+        if (!rerunAfterInFlight) return;
+        rerunAfterInFlight = false;
+        void reconcile().catch(() => undefined);
+      });
     return inFlight;
   };
 
@@ -163,7 +179,7 @@ export function installFiledReturnsDurableDownloadReconciler(
       terminalChangesAwaitingPersistence.add(delta.id);
       return;
     }
-    void reconcile().catch(() => undefined);
+    void reconcile(delta.id).catch(() => undefined);
   };
 
   const onCreated = (item: DownloadCreatedItem) => {
@@ -198,7 +214,7 @@ async function removeLegacyArtifactAcquisitionCompletionMarkers(
 async function claimPendingExtensionDownload(
   item: DownloadCreatedItem,
   deps: DurableDownloadReconcilerDeps,
-  reconcile: () => Promise<boolean>,
+  reconcile: (terminalDownloadId?: number) => Promise<boolean>,
 ): Promise<void> {
   if (!item.url) return;
   const liveMatch = pendingExtensionDownloadUrls.has(item.url);
@@ -229,7 +245,7 @@ async function claimPendingExtensionDownload(
   await persistExtensionOwnedDownloadId(item, deps).finally(() => {
     extensionOwnedCreationIds.delete(item.id);
     if (terminalChangesAwaitingPersistence.delete(item.id)) {
-      void reconcile().catch(() => undefined);
+      void reconcile(item.id).catch(() => undefined);
     }
   });
 }

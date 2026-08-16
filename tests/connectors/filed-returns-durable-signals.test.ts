@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  durableFiledReturnsSignalRejectionReason,
   isDurableFiledReturnsSignal,
   parseDurableFiledReturnsSignals,
 } from "../../src/connectors/gst/filed-returns-durable-signals";
@@ -150,6 +151,21 @@ describe("filed-return durable signal contract", () => {
     expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);
   });
 
+  it("retains only canonical GSTR detail identity projections", () => {
+    const signals = [
+      "filed-return-detail-period:April",
+      "filed-return-detail-financial-year:2025-26",
+      "filed-return-detail-type:GSTR-3B",
+    ];
+
+    expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);
+    expect(isDurableFiledReturnsSignal("filed-return-detail-financial-year:2025-27")).toBe(false);
+    expect(isDurableFiledReturnsSignal("filed-return-detail-financial-year:private-value")).toBe(
+      false,
+    );
+    expect(isDurableFiledReturnsSignal("filed-return-detail-type:private-value")).toBe(false);
+  });
+
   it("retains categorical page-generated artifact readiness evidence", () => {
     const signals = ["page-generated-pdf-ready", "page-generated-excel-ready"];
 
@@ -196,11 +212,36 @@ describe("filed-return durable signal contract", () => {
     expect(isDurableFiledReturnsSignal("gstr3b-detail-route:private-value")).toBe(false);
     expect(isDurableFiledReturnsSignal("text-download-filed-gstr9")).toBe(false);
     expect(parseDurableFiledReturnsSignals(["status-filed", "status-filed"])).toBeNull();
+    expect(durableFiledReturnsSignalRejectionReason(["status-filed", "status-filed"])).toBe(
+      "duplicate",
+    );
+    expect(durableFiledReturnsSignalRejectionReason(["synthetic-portal-option-value"])).toBe(
+      "unknown",
+    );
+    expect(durableFiledReturnsSignalRejectionReason(["filed-return-detail-synthetic-value"])).toBe(
+      "unknown-detail-identity",
+    );
+    expect(durableFiledReturnsSignalRejectionReason(["artifact-synthetic-value"])).toBe(
+      "unknown-artifact",
+    );
+    expect(durableFiledReturnsSignalRejectionReason(["filed-return-synthetic-value"])).toBe(
+      "unknown-flow",
+    );
+    expect(durableFiledReturnsSignalRejectionReason(["gstr3b-synthetic-value"])).toBe(
+      "unknown-navigation",
+    );
+    expect(durableFiledReturnsSignalRejectionReason("not-a-signal-array")).toBe("not-array");
+    expect(durableFiledReturnsSignalRejectionReason(["status-filed", 1])).toBe("non-string");
     expect(
       parseDurableFiledReturnsSignals(
         Array.from({ length: 33 }, (_, index) => `browser-download-id:${index + 1}`),
       ),
     ).toBeNull();
+    expect(
+      durableFiledReturnsSignalRejectionReason(
+        Array.from({ length: 33 }, (_, index) => `browser-download-id:${index + 1}`),
+      ),
+    ).toBe("over-cap");
   });
 
   it("accepts bounded GSTR-1 dashboard recovery signals without persisting selected values", () => {
@@ -224,6 +265,18 @@ describe("filed-return durable signal contract", () => {
     expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);
     expect(isDurableFiledReturnsSignal("gstr1-dashboard-selected-period:april")).toBe(false);
     expect(isDurableFiledReturnsSignal("gstr1-dashboard-selected-year:2026-27")).toBe(false);
+  });
+
+  it("accepts only fixed full-year system-error predecessor categories", () => {
+    const signal = "full-fiscal-year-system-error-preceded-by:detail-navigation";
+
+    expect(parseDurableFiledReturnsSignals(["portal-system-error", signal])).toEqual([
+      "portal-system-error",
+      signal,
+    ]);
+    expect(
+      isDurableFiledReturnsSignal("full-fiscal-year-system-error-preceded-by:private-value"),
+    ).toBe(false);
   });
 
   it("accepts only bounded GSTR-2B dashboard recovery and selected-filter signals", () => {

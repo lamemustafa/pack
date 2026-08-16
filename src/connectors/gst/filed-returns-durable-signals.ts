@@ -10,6 +10,17 @@ import {
 
 const MAX_DURABLE_SIGNAL_COUNT = 32;
 
+export type DurableFiledReturnsSignalRejectionReason =
+  | "duplicate"
+  | "non-string"
+  | "not-array"
+  | "over-cap"
+  | "unknown-artifact"
+  | "unknown-detail-identity"
+  | "unknown-flow"
+  | "unknown-navigation"
+  | "unknown";
+
 export const GSTR1_PERIOD_MISMATCH_RECOVERY_STOPPED_SIGNAL =
   "filed-gstr1-period-mismatch-recovery-stopped";
 export const RETURN_TYPE_MISMATCH_RECOVERY_STOPPED_SIGNAL =
@@ -46,6 +57,7 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "detail-summary-modal-close-control-not-found",
   "detail-summary-modal-dismissed",
   "detail-summary-modal-open",
+  "detail-ready-step-limit-reached",
   "download-excel-gstr1-visible",
   "download-excel-gstr2b-visible",
   "download-filed-gstr1-visible",
@@ -106,6 +118,15 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "filed-return-download-target-mismatch",
   "filed-return-download-trigger-ambiguous",
   "filed-return-durable-status-rejected",
+  "filed-return-durable-status-rejected:duplicate",
+  "filed-return-durable-status-rejected:non-string",
+  "filed-return-durable-status-rejected:not-array",
+  "filed-return-durable-status-rejected:over-cap",
+  "filed-return-durable-status-rejected:unknown-artifact",
+  "filed-return-durable-status-rejected:unknown-detail-identity",
+  "filed-return-durable-status-rejected:unknown-flow",
+  "filed-return-durable-status-rejected:unknown-navigation",
+  "filed-return-durable-status-rejected:unknown",
   "filed-return-filter-bound-result-view-clicked",
   "filed-return-filter-bound-result-view-ready",
   "filed-return-filter-candidate-not-found",
@@ -509,10 +530,40 @@ const ARTIFACT_FAILURE_SIGNALS = new Set([
 ]);
 
 export function parseDurableFiledReturnsSignals(input: unknown): string[] | null {
-  if (!Array.isArray(input) || input.length > MAX_DURABLE_SIGNAL_COUNT) return null;
-  if (!input.every((signal): signal is string => typeof signal === "string")) return null;
-  if (new Set(input).size !== input.length) return null;
-  return input.every(isDurableFiledReturnsSignal) ? [...input] : null;
+  if (durableFiledReturnsSignalRejectionReason(input)) return null;
+  return [...(input as string[])];
+}
+
+export function durableFiledReturnsSignalRejectionReason(
+  input: unknown,
+): DurableFiledReturnsSignalRejectionReason | null {
+  if (!Array.isArray(input)) return "not-array";
+  if (input.length > MAX_DURABLE_SIGNAL_COUNT) return "over-cap";
+  if (!input.every((signal): signal is string => typeof signal === "string")) return "non-string";
+  if (new Set(input).size !== input.length) return "duplicate";
+  const unknownSignal = input.find((signal) => !isDurableFiledReturnsSignal(signal));
+  return unknownSignal ? durableUnknownSignalCategory(unknownSignal) : null;
+}
+
+// This is intentionally a fixed projection: the rejected token is never
+// persisted or rendered. It distinguishes Pack-owned producer families during
+// live recovery without admitting portal-derived text into durable state.
+function durableUnknownSignalCategory(signal: string): DurableFiledReturnsSignalRejectionReason {
+  if (signal.startsWith("filed-return-detail-")) return "unknown-detail-identity";
+  if (
+    /^(?:artifact-|filed-gstr|page-|browser-download|full-fiscal-year-opfs|single-period-opfs)/.test(
+      signal,
+    )
+  ) {
+    return "unknown-artifact";
+  }
+  if (/^(?:filed-return|filed-returns|flow-|detail-ready|main-world)/.test(signal)) {
+    return "unknown-flow";
+  }
+  if (/^(?:gstr|returns-dashboard|wrong-origin|portal-)/.test(signal)) {
+    return "unknown-navigation";
+  }
+  return "unknown";
 }
 
 export function isDurableFiledReturnsSignal(signal: string): boolean {
@@ -536,8 +587,18 @@ export function isDurableFiledReturnsSignal(signal: string): boolean {
   if (stagedArtifact) return true;
   const missingArtifact = /^full-fiscal-year-artifact-not-staged:(PDF|EXCEL)$/.exec(signal);
   if (missingArtifact) return true;
+  const systemErrorPredecessor =
+    /^full-fiscal-year-system-error-preceded-by:(artifact-trigger|detail-navigation|initial|other|portal-navigation)$/.exec(
+      signal,
+    );
+  if (systemErrorPredecessor) return true;
   const periodSignal = /^filed-return-(?:detail|result)-period:([A-Za-z]+)$/.exec(signal);
   if (periodSignal) return FILED_RETURNS_MONTHS.includes(periodSignal[1] as never);
+  const financialYearSignal = /^filed-return-detail-financial-year:(20\d{2})-(\d{2})$/.exec(signal);
+  if (financialYearSignal) {
+    return Number(financialYearSignal[2]) === (Number(financialYearSignal[1]) + 1) % 100;
+  }
+  if (/^filed-return-detail-type:(GSTR-1|GSTR-2B|GSTR-3B)$/.test(signal)) return true;
   const downloadIdSignal = /^browser-download-id:(\d{1,10})$/.exec(signal);
   if (downloadIdSignal) return Number.isSafeInteger(Number(downloadIdSignal[1]));
   const browserError = /^browser-download-error-([a-z0-9-]+)$/.exec(signal);

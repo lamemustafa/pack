@@ -1006,7 +1006,10 @@ describe("filed returns target review", () => {
     const stored = browserMocks.storage.local.set.mock.calls.at(-1)?.[0]?.["target-review"] as
       { safeMessage: string; safeSignals: string[] } | undefined;
     expect(stored).toMatchObject({
-      safeSignals: ["filed-return-durable-status-rejected"],
+      safeSignals: [
+        "filed-return-durable-status-rejected",
+        "filed-return-durable-status-rejected:unknown",
+      ],
     });
     expect(stored?.safeMessage).not.toContain("00XXXXX0000X0Z0");
     expect(stored?.safeMessage).not.toContain("Synthetic Taxpayer");

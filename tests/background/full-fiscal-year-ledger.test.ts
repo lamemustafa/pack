@@ -28,7 +28,10 @@ import {
   targetStatusFromFlowStep,
 } from "../../src/background/filed-returns-full-fiscal-year";
 import { responseForExistingLedger } from "../../src/background/filed-returns-full-fiscal-year-run-state";
-import { requireFullFiscalYearArtifactsStaged } from "../../src/background/filed-returns-full-fiscal-year-staging";
+import {
+  requireFullFiscalYearArtifactsStaged,
+  scopeForFullFiscalYearTarget,
+} from "../../src/background/filed-returns-full-fiscal-year-staging";
 
 describe("full fiscal year ledger", () => {
   it("requires the canonical GSTR-2B all-formats artifact set before staging succeeds", () => {
@@ -62,6 +65,36 @@ describe("full fiscal year ledger", () => {
           .map((artifactType) => `full-fiscal-year-artifact-not-staged:${artifactType}`),
       ),
     );
+  });
+
+  it("keeps a fresh all-formats target intact for its first fiscal-year attempt", () => {
+    const ledger = createLedger([["April", "pending"]], {
+      artifactType: "PDF_AND_EXCEL",
+      returnType: "GSTR-1",
+    });
+
+    expect(scopeForFullFiscalYearTarget(ledger.targets[0]!)).toMatchObject({
+      artifactType: "PDF_AND_EXCEL",
+      period: "April",
+      returnType: "GSTR-1",
+    });
+  });
+
+  it("retries only the missing all-formats artifact after a prior stage", () => {
+    const ledger = createLedger([["April", "blocked"]], {
+      artifactType: "PDF_AND_EXCEL",
+      returnType: "GSTR-1",
+    });
+    ledger.targets[0] = {
+      ...ledger.targets[0]!,
+      safeSignals: ["full-fiscal-year-opfs-staged:PDF"],
+    };
+
+    expect(scopeForFullFiscalYearTarget(ledger.targets[0]!)).toMatchObject({
+      artifactType: "EXCEL",
+      period: "April",
+      returnType: "GSTR-1",
+    });
   });
 
   it("does not select later targets while an unconfirmed download needs acknowledgement", () => {
@@ -745,7 +778,10 @@ describe("full fiscal year ledger", () => {
     expect(blocked.status).toBe("blocked");
     expect(blocked.targets[0]).toMatchObject({
       status: "blocked",
-      safeSignals: ["filed-return-durable-status-rejected"],
+      safeSignals: [
+        "filed-return-durable-status-rejected",
+        "filed-return-durable-status-rejected:unknown",
+      ],
     });
     expect(canCompleteFullFiscalYearLedger(blocked)).toBe(false);
   });
@@ -768,6 +804,7 @@ describe("full fiscal year ledger", () => {
           "filed",
           "download",
           "pdf",
+          "detail-ready-step-limit-reached",
         ],
         safeMessage:
           "Pack is waiting for the GST Portal detail page to expose its download control.",

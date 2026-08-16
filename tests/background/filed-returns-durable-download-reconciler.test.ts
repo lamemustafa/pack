@@ -109,6 +109,26 @@ describe("durable filed-return download reconciler", () => {
     dispose();
   });
 
+  it("passes a terminal ID to the fiscal-year reconciler after inline ownership ends", async () => {
+    const fixture = downloadsWithState("complete");
+    const reconcileFullFiscalYearZip = vi.fn(async () => true);
+    const dispose = installFiledReturnsDurableDownloadReconciler(fixture.downloads, {
+      readCurrentReview: async () => null,
+      reconcileFullFiscalYearZip,
+      storageKeys: {},
+    });
+    await Promise.resolve();
+    reconcileFullFiscalYearZip.mockClear();
+
+    fixture.emit({ id: 41, state: { current: "in_progress" } });
+    await Promise.resolve();
+    expect(reconcileFullFiscalYearZip).not.toHaveBeenCalled();
+
+    fixture.emit({ id: 41, state: { current: "complete" } });
+    await vi.waitFor(() => expect(reconcileFullFiscalYearZip).toHaveBeenCalledWith(41));
+    dispose();
+  });
+
   it("persists an extension-owned created download that arrives before the caller has its ID", async () => {
     const fixture = downloadsWithState("complete");
     let currentReview: FiledReturnsTargetReview = {
@@ -200,6 +220,55 @@ describe("durable filed-return download reconciler", () => {
     resolvePersist(true);
 
     await vi.waitFor(() => expect(reconcile).toHaveBeenCalledWith(review));
+    endPendingDownloadUrl();
+    dispose();
+  });
+
+  it("keeps a full-year terminal ID that arrived while an extension ZIP was persisting", async () => {
+    const fixture = downloadsWithState("complete");
+    let currentReview: FiledReturnsTargetReview = {
+      ...review,
+      downloadAttempt: {
+        actionId: review.downloadAttempt.actionId,
+        artifactType: "PDF",
+        kind: "single-artifact",
+        phase: "download-intent-persisted",
+        requestedAt: review.downloadAttempt.requestedAt,
+      },
+    };
+    let resolvePersist!: (value: boolean) => void;
+    const persistDownloadId = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolvePersist = resolve;
+        }),
+    );
+    const reconcileFullFiscalYearZip = vi.fn(async () => true);
+    const dispose = installFiledReturnsDurableDownloadReconciler(fixture.downloads, {
+      extensionId: "pack-id",
+      persistDownloadId,
+      readCurrentReview: async () => currentReview,
+      reconcileFullFiscalYearZip,
+      storageKeys: {},
+    });
+    await Promise.resolve();
+    reconcileFullFiscalYearZip.mockClear();
+    const endPendingDownloadUrl = beginPendingExtensionDownloadUrl(
+      "blob:chrome-extension://pack-id/zip",
+    );
+
+    fixture.emitCreated({
+      byExtensionId: "pack-id",
+      id: 41,
+      startTime: "2026-07-26T00:00:01.000Z",
+      url: "blob:chrome-extension://pack-id/zip",
+    });
+    fixture.emit({ id: 41, state: { current: "complete" } });
+    await vi.waitFor(() => expect(persistDownloadId).toHaveBeenCalledOnce());
+    currentReview = review;
+    resolvePersist(true);
+
+    await vi.waitFor(() => expect(reconcileFullFiscalYearZip).toHaveBeenCalledWith(41));
     endPendingDownloadUrl();
     dispose();
   });
