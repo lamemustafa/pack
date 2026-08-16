@@ -126,7 +126,7 @@ describe("filed-return ZIP filename reassertion", () => {
       {
         id: 91,
         state: "complete",
-        filename: "/synthetic/Downloads/gstr-3b-2026-27-full-year.zip",
+        filename: "/synthetic/Downloads/ComplyEaze-Pack/2026-27/GSTR-3B/full-year.zip",
       },
     ]);
 
@@ -134,7 +134,7 @@ describe("filed-return ZIP filename reassertion", () => {
 
     expect(mocks.reserve).toHaveBeenCalledWith(
       "blob:pack-owned/full-year-zip",
-      "gstr-3b-2026-27-full-year.zip",
+      "ComplyEaze-Pack/2026-27/GSTR-3B/full-year.zip",
     );
     expect(mocks.reservation.bind).toHaveBeenCalledWith(91);
     expect(mocks.reservation.release).toHaveBeenCalledOnce();

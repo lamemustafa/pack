@@ -33,11 +33,19 @@ export function scopeForFullFiscalYearTarget(
   target: FiledReturnsFullFiscalYearTarget,
 ): FiledReturnsDownloadScope {
   const remainingArtifactType = remainingArtifactTypeForTarget(target);
+  if (remainingArtifactType === undefined) {
+    return {
+      financialYear: target.financialYear,
+      period: target.period,
+      returnType: target.returnType,
+      ...(target.artifactType ? { artifactType: target.artifactType } : {}),
+    };
+  }
   return {
     financialYear: target.financialYear,
     period: target.period,
     returnType: target.returnType,
-    ...(remainingArtifactType ? { artifactType: remainingArtifactType } : {}),
+    artifactType: remainingArtifactType,
   };
 }
 
@@ -92,15 +100,25 @@ function remainingArtifactTypeForTarget(
   target: FiledReturnsFullFiscalYearTarget,
 ): FiledReturnsDownloadScope["artifactType"] | undefined {
   const signals = new Set(target.safeSignals);
-  const remainingArtifactType = concreteFiledReturnsArtifactTypesForSelection(
+  const artifactTypes = concreteFiledReturnsArtifactTypesForSelection(
     target.returnType,
     target.artifactType,
-  ).find(
+  );
+  const hasRetainedArtifactOutcome = artifactTypes.some(
+    (artifactType) =>
+      signals.has(`${FULL_YEAR_STAGED_SIGNAL_PREFIX}${artifactType}`) ||
+      signals.has(`filed-return-artifact-unavailable:${artifactType}`),
+  );
+  if (!hasRetainedArtifactOutcome) return undefined;
+  const remainingArtifactTypes = artifactTypes.filter(
     (artifactType) =>
       !signals.has(`${FULL_YEAR_STAGED_SIGNAL_PREFIX}${artifactType}`) &&
       !signals.has(`filed-return-artifact-unavailable:${artifactType}`),
   );
-  return remainingArtifactType ?? target.artifactType;
+  // The portal exposes no EXCEL-and-JSON-only selection. If more than one
+  // concrete artifact remains, retry the canonical target selection so its
+  // staging guard still verifies the complete outstanding set.
+  return remainingArtifactTypes.length === 1 ? remainingArtifactTypes[0] : target.artifactType;
 }
 
 export function createFullFiscalYearCleanupPendingState(

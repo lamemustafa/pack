@@ -95,6 +95,11 @@ export type PackOffscreenBlobUrlResponse =
       requestId: string;
       staged: true;
       byteCountClass: "non-empty";
+      byteCount: number;
+      artifactType: FiledReturnsConcreteArtifactType;
+      ledgerId: string;
+      returnType: FiledReturnsReturnType;
+      zipPath: string;
     }
   | {
       ok: true;

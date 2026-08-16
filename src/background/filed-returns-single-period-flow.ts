@@ -310,7 +310,7 @@ async function runSinglePeriodSteps(
       lastStep.safeSignals.includes("gstr1-dashboard-view-clicked") ||
       lastStep.safeSignals.includes("gstr2b-dashboard-view-clicked")
     ) {
-      if (shouldWaitForDetailReadyAfterResultNavigation(scope)) {
+      if (shouldWaitForDetailReadyAfterResultNavigation(scope, deps)) {
         return waitForDetailReadyThenTrigger({
           activePeriod,
           activeFinancialYear,
@@ -597,8 +597,12 @@ async function triggerSinglePeriodDownloadAndPersistSummary({
   return response;
 }
 
-function shouldWaitForDetailReadyAfterResultNavigation(scope: FiledReturnsDownloadScope): boolean {
+function shouldWaitForDetailReadyAfterResultNavigation(
+  scope: FiledReturnsDownloadScope,
+  deps: FiledReturnsFlowRunnerDeps,
+): boolean {
   return (
+    deps.stageCapturedDownloads?.bundleKind === "full-fiscal-year" ||
     scope.returnType === "GSTR-1" ||
     scope.returnType === "GSTR-2B" ||
     scope.artifactType === "PDF_AND_EXCEL" ||

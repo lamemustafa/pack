@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  durableFiledReturnsSignalRejectionReason,
   isDurableFiledReturnsSignal,
   parseDurableFiledReturnsSignals,
 } from "../../src/connectors/gst/filed-returns-durable-signals";
@@ -13,8 +14,30 @@ import {
 } from "../../src/connectors/gst/single-period-cleanup-checkpoint";
 import { scoreFiledReturnDownloadCandidate } from "../../src/connectors/gst/filed-returns-download-candidates";
 import { scoreFiledReturnsSummaryModalDismissalCandidate } from "../../src/connectors/gst/filed-returns-navigation-candidates";
+import { detectSafeSignals } from "../../src/connectors/gst/filed-returns-observer-signals";
 
 describe("filed-return durable signal contract", () => {
+  it("keeps live GSTR-3B detail observations persistable for terminal recovery", () => {
+    // The full-year ledger persists the terminal step if the portal stops before
+    // acquisition. These are fixed classifier tokens (not portal text), so the
+    // durable boundary may retain them without widening its privacy surface.
+    const signals = detectSafeSignals("gstr-3b monthly return download filed gstr-3b pdf", {
+      pathname: "/returns/auth/gstr3b",
+    });
+
+    expect(signals).toEqual(
+      expect.arrayContaining([
+        "gstr-3b-detail-route",
+        "gstr-3b",
+        "download-filed-gstr-3b",
+        "filed",
+        "download",
+        "pdf",
+      ]),
+    );
+    expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);
+  });
+
   it("keeps every live classifier signal inside the durable allow-list", () => {
     // parseDurableFiledReturnsSignals fails closed: one unrecognised signal
     // rejects the whole persisted summary. These two classifiers are live —
@@ -128,6 +151,21 @@ describe("filed-return durable signal contract", () => {
     expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);
   });
 
+  it("retains only canonical GSTR detail identity projections", () => {
+    const signals = [
+      "filed-return-detail-period:April",
+      "filed-return-detail-financial-year:2025-26",
+      "filed-return-detail-type:GSTR-3B",
+    ];
+
+    expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);
+    expect(isDurableFiledReturnsSignal("filed-return-detail-financial-year:2025-27")).toBe(false);
+    expect(isDurableFiledReturnsSignal("filed-return-detail-financial-year:private-value")).toBe(
+      false,
+    );
+    expect(isDurableFiledReturnsSignal("filed-return-detail-type:private-value")).toBe(false);
+  });
+
   it("retains categorical page-generated artifact readiness evidence", () => {
     const signals = ["page-generated-pdf-ready", "page-generated-excel-ready"];
 
@@ -174,11 +212,41 @@ describe("filed-return durable signal contract", () => {
     expect(isDurableFiledReturnsSignal("gstr3b-detail-route:private-value")).toBe(false);
     expect(isDurableFiledReturnsSignal("text-download-filed-gstr9")).toBe(false);
     expect(parseDurableFiledReturnsSignals(["status-filed", "status-filed"])).toBeNull();
+    expect(durableFiledReturnsSignalRejectionReason(["status-filed", "status-filed"])).toBe(
+      "duplicate",
+    );
+    expect(durableFiledReturnsSignalRejectionReason(["synthetic-portal-option-value"])).toBe(
+      "unknown",
+    );
+    expect(durableFiledReturnsSignalRejectionReason(["filed-return-detail-synthetic-value"])).toBe(
+      "unknown-detail-identity",
+    );
+    expect(durableFiledReturnsSignalRejectionReason(["artifact-synthetic-value"])).toBe(
+      "unknown-artifact",
+    );
+    expect(durableFiledReturnsSignalRejectionReason(["filed-return-synthetic-value"])).toBe(
+      "unknown-flow",
+    );
+    expect(durableFiledReturnsSignalRejectionReason(["gstr3b-synthetic-value"])).toBe(
+      "unknown-navigation",
+    );
+    expect(durableFiledReturnsSignalRejectionReason("not-a-signal-array")).toBe("not-array");
+    expect(durableFiledReturnsSignalRejectionReason(["status-filed", 1])).toBe("non-string");
+    expect(parseDurableFiledReturnsSignals([""])).toBeNull();
+    expect(durableFiledReturnsSignalRejectionReason([""])).toBe("unknown");
+    const sparseSignals: unknown[] = Array(1);
+    expect(parseDurableFiledReturnsSignals(sparseSignals)).toBeNull();
+    expect(durableFiledReturnsSignalRejectionReason(sparseSignals)).toBe("non-string");
     expect(
       parseDurableFiledReturnsSignals(
         Array.from({ length: 33 }, (_, index) => `browser-download-id:${index + 1}`),
       ),
     ).toBeNull();
+    expect(
+      durableFiledReturnsSignalRejectionReason(
+        Array.from({ length: 33 }, (_, index) => `browser-download-id:${index + 1}`),
+      ),
+    ).toBe("over-cap");
   });
 
   it("accepts bounded GSTR-1 dashboard recovery signals without persisting selected values", () => {
@@ -202,6 +270,18 @@ describe("filed-return durable signal contract", () => {
     expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);
     expect(isDurableFiledReturnsSignal("gstr1-dashboard-selected-period:april")).toBe(false);
     expect(isDurableFiledReturnsSignal("gstr1-dashboard-selected-year:2026-27")).toBe(false);
+  });
+
+  it("accepts only fixed full-year system-error predecessor categories", () => {
+    const signal = "full-fiscal-year-system-error-preceded-by:detail-navigation";
+
+    expect(parseDurableFiledReturnsSignals(["portal-system-error", signal])).toEqual([
+      "portal-system-error",
+      signal,
+    ]);
+    expect(
+      isDurableFiledReturnsSignal("full-fiscal-year-system-error-preceded-by:private-value"),
+    ).toBe(false);
   });
 
   it("accepts only bounded GSTR-2B dashboard recovery and selected-filter signals", () => {

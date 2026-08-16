@@ -191,56 +191,90 @@ export async function triggerAndObserveFiledReturnDownload({
           period: scope.period,
           returnType: scope.returnType,
         };
-        await persistArtifactAcquisitionIntent({ ...checkpointTarget, requestId });
+        const tracksBrowserDownload = !deps.stageCapturedDownloads;
+        if (tracksBrowserDownload) {
+          await persistArtifactAcquisitionIntent({ ...checkpointTarget, requestId });
+        }
         let checkpointHasDownloadId = false;
         let externallyVisibleActionMayHaveOccurred = false;
         let retainCheckpointForRecovery = false;
         try {
           const delivery = await acquireFiledReturnJsonInMainWorld({
+            ...(deps.stageCapturedDownloads
+              ? {
+                  deliver: ({ base64, mimeType }) =>
+                    deliverValidatedArtifact({
+                      artifactType,
+                      base64,
+                      deps,
+                      filename: artifactFilename(scope, "JSON"),
+                      mimeType,
+                      requestId,
+                      returnType: "GSTR-3B",
+                      scope,
+                    }),
+                }
+              : {}),
             filename: artifactFilename(scope, "JSON"),
             requestId,
             returnPeriod,
             returnType: "GSTR-3B",
             tabId,
-            onStarted: async (downloadId) => {
-              checkpointHasDownloadId = true;
-              externallyVisibleActionMayHaveOccurred = true;
-              await persistArtifactAcquisitionDownloadId({
-                ...checkpointTarget,
-                downloadId,
-                requestId,
-                state: "download-observing",
-              });
-            },
-            onStartCheckpointFailed: async (downloadId) => {
-              checkpointHasDownloadId = true;
-              externallyVisibleActionMayHaveOccurred = true;
-              await persistArtifactAcquisitionUnconfirmedDownload({
-                ...checkpointTarget,
-                downloadId,
-                requestId,
-                state: "download-unconfirmed",
-              });
-            },
+            ...(tracksBrowserDownload
+              ? {
+                  onStarted: async (downloadId: number) => {
+                    checkpointHasDownloadId = true;
+                    externallyVisibleActionMayHaveOccurred = true;
+                    await persistArtifactAcquisitionDownloadId({
+                      ...checkpointTarget,
+                      downloadId,
+                      requestId,
+                      state: "download-observing",
+                    });
+                  },
+                  onStartCheckpointFailed: async (downloadId: number) => {
+                    checkpointHasDownloadId = true;
+                    externallyVisibleActionMayHaveOccurred = true;
+                    await persistArtifactAcquisitionUnconfirmedDownload({
+                      ...checkpointTarget,
+                      downloadId,
+                      requestId,
+                      state: "download-unconfirmed",
+                    });
+                  },
+                }
+              : {}),
           });
           retainCheckpointForRecovery =
-            delivery.ok ||
-            shouldRetainArtifactAcquisitionCheckpoint(delivery, {
-              checkpointHasDownloadId,
-              externallyVisibleActionMayHaveOccurred,
-            });
+            tracksBrowserDownload &&
+            (delivery.ok ||
+              shouldRetainArtifactAcquisitionCheckpoint(delivery, {
+                checkpointHasDownloadId,
+                externallyVisibleActionMayHaveOccurred,
+              }));
           return delivery.ok
             ? {
                 ok: true,
-                flowStep: directCapturedArtifactFlowStep({
-                  artifactType,
-                  downloadId: delivery.downloadId,
-                  requestId,
-                  safeMessage:
-                    delivery.safeMessage ?? "Pack saved the portal-produced GSTR-3B data JSON.",
-                  safeSignals: [...response.artifact.safeSignals, ...delivery.safeSignals],
-                  scope,
-                }),
+                flowStep: delivery.downloadDiagnostic
+                  ? {
+                      connectorId: "gst",
+                      scopeId: filedReturnScopeId("GSTR-3B"),
+                      state: "downloaded",
+                      safeSignals: [...response.artifact.safeSignals, ...delivery.safeSignals],
+                      safeMessage:
+                        delivery.safeMessage ??
+                        "Pack staged the portal-produced GSTR-3B data JSON.",
+                      downloadDiagnostic: delivery.downloadDiagnostic,
+                    }
+                  : directCapturedArtifactFlowStep({
+                      artifactType,
+                      downloadId: delivery.downloadId,
+                      requestId,
+                      safeMessage:
+                        delivery.safeMessage ?? "Pack saved the portal-produced GSTR-3B data JSON.",
+                      safeSignals: [...response.artifact.safeSignals, ...delivery.safeSignals],
+                      scope,
+                    }),
               }
             : {
                 ok: true,
@@ -257,7 +291,7 @@ export async function triggerAndObserveFiledReturnDownload({
                 },
               };
         } finally {
-          if (!retainCheckpointForRecovery) {
+          if (tracksBrowserDownload && !retainCheckpointForRecovery) {
             await clearArtifactAcquisitionCheckpoint(checkpointTarget, requestId);
           }
         }
@@ -275,55 +309,89 @@ export async function triggerAndObserveFiledReturnDownload({
           period: scope.period,
           returnType: scope.returnType,
         };
-        await persistArtifactAcquisitionIntent({ ...checkpointTarget, requestId });
+        const tracksBrowserDownload = !deps.stageCapturedDownloads;
+        if (tracksBrowserDownload) {
+          await persistArtifactAcquisitionIntent({ ...checkpointTarget, requestId });
+        }
         let checkpointHasDownloadId = false;
-        const externallyVisibleActionMayHaveOccurred = true;
+        const externallyVisibleActionMayHaveOccurred = tracksBrowserDownload;
         let retainCheckpointForRecovery = false;
         try {
           const acquired = await acquireGstr3bPdfAfterPreflight({
+            ...(deps.stageCapturedDownloads
+              ? {
+                  deliver: ({ base64, mimeType }) =>
+                    deliverValidatedArtifact({
+                      artifactType,
+                      base64,
+                      deps,
+                      filename: artifactFilename(scope, "PDF"),
+                      mimeType,
+                      requestId,
+                      returnType: "GSTR-3B",
+                      scope,
+                    }),
+                }
+              : {}),
             financialYear: scope.financialYear,
             filename: artifactFilename(scope, "PDF"),
             period: scope.period,
             requestId,
             returnPeriod,
             tabId,
-            onStarted: async (downloadId) => {
-              checkpointHasDownloadId = true;
-              await persistArtifactAcquisitionDownloadId({
-                ...checkpointTarget,
-                downloadId,
-                requestId,
-                state: "download-observing",
-              });
-            },
-            onStartCheckpointFailed: async (downloadId) => {
-              checkpointHasDownloadId = true;
-              await persistArtifactAcquisitionUnconfirmedDownload({
-                ...checkpointTarget,
-                downloadId,
-                requestId,
-                state: "download-unconfirmed",
-              });
-            },
+            ...(tracksBrowserDownload
+              ? {
+                  onStarted: async (downloadId: number) => {
+                    checkpointHasDownloadId = true;
+                    await persistArtifactAcquisitionDownloadId({
+                      ...checkpointTarget,
+                      downloadId,
+                      requestId,
+                      state: "download-observing",
+                    });
+                  },
+                  onStartCheckpointFailed: async (downloadId: number) => {
+                    checkpointHasDownloadId = true;
+                    await persistArtifactAcquisitionUnconfirmedDownload({
+                      ...checkpointTarget,
+                      downloadId,
+                      requestId,
+                      state: "download-unconfirmed",
+                    });
+                  },
+                }
+              : {}),
           });
           retainCheckpointForRecovery =
-            acquired.ok ||
-            shouldRetainArtifactAcquisitionCheckpoint(acquired, {
-              checkpointHasDownloadId,
-              externallyVisibleActionMayHaveOccurred,
-            });
+            tracksBrowserDownload &&
+            (acquired.ok ||
+              shouldRetainArtifactAcquisitionCheckpoint(acquired, {
+                checkpointHasDownloadId,
+                externallyVisibleActionMayHaveOccurred,
+              }));
           return acquired.ok
             ? {
                 ok: true,
-                flowStep: directCapturedArtifactFlowStep({
-                  artifactType,
-                  downloadId: acquired.downloadId,
-                  requestId,
-                  safeMessage:
-                    acquired.safeMessage ?? "Pack saved the portal-produced filed GSTR-3B PDF.",
-                  safeSignals: acquired.safeSignals,
-                  scope,
-                }),
+                flowStep: acquired.downloadDiagnostic
+                  ? {
+                      connectorId: "gst",
+                      scopeId: filedReturnScopeId("GSTR-3B"),
+                      state: "downloaded",
+                      safeSignals: acquired.safeSignals,
+                      safeMessage:
+                        acquired.safeMessage ??
+                        "Pack staged the portal-produced filed GSTR-3B PDF.",
+                      downloadDiagnostic: acquired.downloadDiagnostic,
+                    }
+                  : directCapturedArtifactFlowStep({
+                      artifactType,
+                      downloadId: acquired.downloadId,
+                      requestId,
+                      safeMessage:
+                        acquired.safeMessage ?? "Pack saved the portal-produced filed GSTR-3B PDF.",
+                      safeSignals: acquired.safeSignals,
+                      scope,
+                    }),
               }
             : {
                 ok: true,
@@ -340,7 +408,7 @@ export async function triggerAndObserveFiledReturnDownload({
                 },
               };
         } finally {
-          if (!retainCheckpointForRecovery) {
+          if (tracksBrowserDownload && !retainCheckpointForRecovery) {
             await clearArtifactAcquisitionCheckpoint(checkpointTarget, requestId);
           }
         }
@@ -647,7 +715,7 @@ async function deliverValidatedArtifact({
 }: {
   artifactType: FiledReturnsConcreteArtifactType;
   base64: string;
-  callbacks: {
+  callbacks?: {
     onStarted: (downloadId: number) => Promise<void>;
     onStartCheckpointFailed: (downloadId: number) => Promise<void>;
   };
@@ -655,7 +723,7 @@ async function deliverValidatedArtifact({
   filename: string;
   mimeType: string;
   requestId: string;
-  returnType: "GSTR-1" | "GSTR-2B";
+  returnType: FiledReturnsDownloadScope["returnType"];
   scope: FiledReturnsDownloadScope;
   safeSignals?: string[];
 }): Promise<
@@ -691,7 +759,11 @@ async function deliverValidatedArtifact({
           ],
           downloadDiagnostic: capturedArtifactDiagnostic(scope, artifactType, mimeType, requestId),
         }
-      : { ok: false, reason: result.errorCategory ?? "stage-failed", safeSignals };
+      : {
+          ok: false,
+          reason: canonicalStagingFailureReason(result.errorCategory),
+          safeSignals,
+        };
   }
   let delivery;
   try {
@@ -700,7 +772,7 @@ async function deliverValidatedArtifact({
       filename,
       mimeType,
       requestId,
-      ...callbacks,
+      ...(callbacks ?? {}),
     });
   } catch {
     return { ok: false, reason: "delivery-unconfirmed", safeSignals };
@@ -723,6 +795,20 @@ async function deliverValidatedArtifact({
         reason: delivery.reason,
         safeSignals: [...safeSignals, ...delivery.safeSignals],
       };
+}
+
+function canonicalStagingFailureReason(errorCategory: unknown): ArtifactFailureReason {
+  if (
+    errorCategory === "blob-url-failed" ||
+    errorCategory === "invalid-data-url" ||
+    errorCategory === "opfs-unavailable" ||
+    errorCategory === "stage-failed"
+  ) {
+    return errorCategory;
+  }
+  // A stage response is extension-local, but it still crosses a message
+  // boundary. Never convert an unrecognised value into a durable signal.
+  return "offscreen-response-invalid";
 }
 
 function directCapturedArtifactFlowStep({
@@ -789,13 +875,17 @@ function capturedArtifactDiagnostic(
         ? "json"
         : "spreadsheet";
   const endpointClass =
-    scope.returnType === "GSTR-2B"
+    scope.returnType === "GSTR-3B"
       ? artifactType === "JSON"
-        ? "gstr2b-main-world-json-captured-download"
-        : "gstr2b-portal-blob-captured-download"
-      : artifactType === "EXCEL"
-        ? "gstr1-excel-portal-blob-captured-download"
-        : "gstr1-pdf-portal-blob-captured-download";
+        ? "gstr3b-main-world-json-captured-download"
+        : "gstr3b-portal-blob-captured-download"
+      : scope.returnType === "GSTR-2B"
+        ? artifactType === "JSON"
+          ? "gstr2b-main-world-json-captured-download"
+          : "gstr2b-portal-blob-captured-download"
+        : artifactType === "EXCEL"
+          ? "gstr1-excel-portal-blob-captured-download"
+          : "gstr1-pdf-portal-blob-captured-download";
   return {
     actionId,
     artifactType,

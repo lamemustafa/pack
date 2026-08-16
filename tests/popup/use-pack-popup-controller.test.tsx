@@ -6,10 +6,31 @@ import type { PackMessage } from "../../src/connectors/gst/messages";
 
 const mocks = vi.hoisted(() => ({
   sendMessage: vi.fn(),
+  changeListeners: new Set<
+    (changes: Record<string, Browser.storage.StorageChange>, areaName: string) => void
+  >(),
 }));
 
 vi.mock("wxt/browser", () => ({
-  browser: { runtime: { sendMessage: mocks.sendMessage } },
+  browser: {
+    runtime: { sendMessage: mocks.sendMessage },
+    storage: {
+      onChanged: {
+        addListener: (
+          listener: (
+            changes: Record<string, Browser.storage.StorageChange>,
+            areaName: string,
+          ) => void,
+        ) => mocks.changeListeners.add(listener),
+        removeListener: (
+          listener: (
+            changes: Record<string, Browser.storage.StorageChange>,
+            areaName: string,
+          ) => void,
+        ) => mocks.changeListeners.delete(listener),
+      },
+    },
+  },
 }));
 
 import { usePackPopupController } from "../../src/entrypoints/popup/use-pack-popup-controller";
@@ -32,6 +53,7 @@ function Harness({
 describe("popup background failure presentation", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    mocks.changeListeners.clear();
     controller = null;
     const dom = new JSDOM("<div id='root'></div>", { url: "https://extension.test" });
     Object.assign(globalThis, { document: dom.window.document, window: dom.window });
@@ -66,6 +88,61 @@ describe("popup background failure presentation", () => {
     expect(controller?.actionError).toBe(
       "Pack could not reach the background service. Try the action again.",
     );
+    await act(async () => root?.unmount());
+  });
+
+  it("refreshes the visible summary when durable ZIP reconciliation completes", async () => {
+    const completedSummary = {
+      scope: {
+        artifactType: "PDF" as const,
+        financialYear: "2026-27",
+        period: "FULL_FISCAL_YEAR" as const,
+        returnType: "GSTR-3B" as const,
+      },
+      status: "complete" as const,
+      completedPeriods: ["April"],
+      currentPeriod: "April" as const,
+      totalPeriods: 12,
+      updatedAt: "2026-07-26T00:00:00.000Z",
+      flowStep: {
+        connectorId: "gst" as const,
+        scopeId: "gst-gstr3b-private-v0",
+        state: "downloaded" as const,
+        safeSignals: ["browser-download-completed"],
+        safeMessage: "Pack confirmed the final ZIP download.",
+      },
+    };
+    mocks.sendMessage.mockImplementation((message: PackMessage) => {
+      if (message.type === "PACK_GET_CONTEXT") {
+        return Promise.resolve({
+          ok: true,
+          context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
+        });
+      }
+      if (message.type === "PACK_GET_FILED_RETURNS_FLOW_SUMMARY") {
+        return Promise.resolve({ ok: true, flowSummary: completedSummary });
+      }
+      return Promise.resolve({ ok: true });
+    });
+    expect(mocks.changeListeners.size).toBe(1);
+
+    await act(async () => {
+      mocks.changeListeners.forEach((listener) =>
+        listener(
+          { "pack:last-filed-returns-flow-summary": { newValue: completedSummary } },
+          "session",
+        ),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await vi.waitFor(() =>
+      expect(mocks.sendMessage).toHaveBeenCalledWith({
+        type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY",
+      }),
+    );
+    await vi.waitFor(() => expect(controller?.lastRunSummary).toEqual(completedSummary));
     await act(async () => root?.unmount());
   });
 });

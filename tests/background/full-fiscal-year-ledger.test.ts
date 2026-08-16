@@ -28,7 +28,10 @@ import {
   targetStatusFromFlowStep,
 } from "../../src/background/filed-returns-full-fiscal-year";
 import { responseForExistingLedger } from "../../src/background/filed-returns-full-fiscal-year-run-state";
-import { requireFullFiscalYearArtifactsStaged } from "../../src/background/filed-returns-full-fiscal-year-staging";
+import {
+  requireFullFiscalYearArtifactsStaged,
+  scopeForFullFiscalYearTarget,
+} from "../../src/background/filed-returns-full-fiscal-year-staging";
 
 describe("full fiscal year ledger", () => {
   it("requires the canonical GSTR-2B all-formats artifact set before staging succeeds", () => {
@@ -62,6 +65,53 @@ describe("full fiscal year ledger", () => {
           .map((artifactType) => `full-fiscal-year-artifact-not-staged:${artifactType}`),
       ),
     );
+  });
+
+  it("keeps a fresh all-formats target intact for its first fiscal-year attempt", () => {
+    const ledger = createLedger([["April", "pending"]], {
+      artifactType: "PDF_AND_EXCEL",
+      returnType: "GSTR-1",
+    });
+
+    expect(scopeForFullFiscalYearTarget(ledger.targets[0]!)).toMatchObject({
+      artifactType: "PDF_AND_EXCEL",
+      period: "April",
+      returnType: "GSTR-1",
+    });
+  });
+
+  it("retries only the missing all-formats artifact after a prior stage", () => {
+    const ledger = createLedger([["April", "blocked"]], {
+      artifactType: "PDF_AND_EXCEL",
+      returnType: "GSTR-1",
+    });
+    ledger.targets[0] = {
+      ...ledger.targets[0]!,
+      safeSignals: ["full-fiscal-year-opfs-staged:PDF"],
+    };
+
+    expect(scopeForFullFiscalYearTarget(ledger.targets[0]!)).toMatchObject({
+      artifactType: "EXCEL",
+      period: "April",
+      returnType: "GSTR-1",
+    });
+  });
+
+  it("retains the canonical GSTR-2B selection while multiple artifacts remain", () => {
+    const ledger = createLedger([["April", "blocked"]], {
+      artifactType: "PDF_AND_EXCEL",
+      returnType: "GSTR-2B",
+    });
+    ledger.targets[0] = {
+      ...ledger.targets[0]!,
+      safeSignals: ["full-fiscal-year-opfs-staged:PDF"],
+    };
+
+    expect(scopeForFullFiscalYearTarget(ledger.targets[0]!)).toMatchObject({
+      artifactType: "PDF_AND_EXCEL",
+      period: "April",
+      returnType: "GSTR-2B",
+    });
   });
 
   it("does not select later targets while an unconfirmed download needs acknowledgement", () => {
@@ -745,9 +795,75 @@ describe("full fiscal year ledger", () => {
     expect(blocked.status).toBe("blocked");
     expect(blocked.targets[0]).toMatchObject({
       status: "blocked",
-      safeSignals: ["filed-return-durable-status-rejected"],
+      safeSignals: [
+        "filed-return-durable-status-rejected",
+        "filed-return-durable-status-rejected:unknown",
+      ],
     });
     expect(canCompleteFullFiscalYearLedger(blocked)).toBe(false);
+  });
+
+  it("retains fixed GSTR-3B observation signals when a full-year target stops before acquisition", () => {
+    const ledger = createLedger([["April", "pending"]]);
+    const targetId = ledger.targets[0]!.targetId;
+    const terminal = markFullFiscalYearTargetTerminal(
+      ledger,
+      targetId,
+      "blocked",
+      {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "user-action-required",
+        safeSignals: [
+          "gstr-3b-detail-route",
+          "filed-returns-heading",
+          "gstr-3b",
+          "filed",
+          "download",
+          "pdf",
+          "detail-ready-step-limit-reached",
+        ],
+        safeMessage:
+          "Pack is waiting for the GST Portal detail page to expose its download control.",
+      },
+      new Date("2026-06-24T00:01:00.000Z"),
+    );
+
+    expect(terminal.targets[0]).toMatchObject({
+      status: "blocked",
+      safeSignals: expect.arrayContaining(["gstr-3b-detail-route", "gstr-3b"]),
+    });
+    expect(terminal.targets[0]?.safeSignals).not.toContain("filed-return-durable-status-rejected");
+  });
+
+  it("retains a missing JSON staging signal instead of replacing it with a generic rejection", () => {
+    const ledger = createLedger([["April", "pending"]], { artifactType: "JSON" });
+    const targetId = ledger.targets[0]!.targetId;
+    const staged = requireFullFiscalYearArtifactsStaged(
+      {
+        artifactType: "JSON",
+        financialYear: "2026-27",
+        period: "April",
+        returnType: "GSTR-3B",
+      },
+      {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-json-private-v0",
+        state: "downloaded",
+        safeSignals: [],
+        safeMessage: "Pack observed the portal download.",
+      },
+    );
+    const terminal = markFullFiscalYearTargetTerminal(
+      ledger,
+      targetId,
+      "blocked",
+      staged,
+      new Date("2026-06-24T00:01:00.000Z"),
+    );
+
+    expect(terminal.targets[0]?.safeSignals).toContain("full-fiscal-year-artifact-not-staged:JSON");
+    expect(terminal.targets[0]?.safeSignals).not.toContain("filed-return-durable-status-rejected");
   });
 
   it("validates GSTR-1 full fiscal year ledgers with artifact-specific targets", () => {

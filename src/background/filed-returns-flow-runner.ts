@@ -19,6 +19,7 @@ import type { ActiveGstTab } from "./filed-returns-active-tab";
 import type { MainWorldFiledReturnsFilterSelectionOutcome } from "../connectors/gst/main-world-filed-returns-filter-selection";
 import { startFullFiscalYearDownloadFlow } from "./filed-returns-full-fiscal-year";
 import {
+  discardMalformedFullFiscalYearRunForFreshStart,
   prepareFullFiscalYearTargetRetry,
   readFullFiscalYearTargetRecoveryScope,
   resolveFullFiscalYearTarget,
@@ -86,6 +87,8 @@ export interface FiledReturnsFlowRunnerDeps {
   ) => Promise<"clicked" | "not-found" | "ambiguous" | null>;
   verifyReturnsOriginContentScript?: (tabId: number) => Promise<boolean>;
   portalTabIncognito?: boolean;
+  /** Internal fixed projection; it never receives portal-derived flow data. */
+  onFlowStepObservation?: (observation: FiledReturnsFlowStepObservation) => void;
   persistTargetReview?: boolean;
   selectFiltersInMainWorld?: (
     tabId: number,
@@ -104,6 +107,14 @@ export interface FiledReturnsFlowRunnerDeps {
     resultRowNavigationSettleMs?: number;
     targetBoundPortalDownloadWaitMs?: number;
   };
+}
+
+export type FiledReturnsFlowStepCategory =
+  "artifact-trigger" | "detail-navigation" | "other" | "portal-navigation";
+
+export interface FiledReturnsFlowStepObservation {
+  category: FiledReturnsFlowStepCategory;
+  portalSystemError: boolean;
 }
 
 export async function startFiledReturnsDownloadFlow(
@@ -381,12 +392,13 @@ export async function startFreshFiledReturnsDownloadFlow(
   payload: FiledReturnsFreshStartPayload,
   deps: FiledReturnsFlowRunnerDeps,
 ): Promise<PackMessageResponse> {
+  let fullFiscalYearRecoveryFailure: PackMessageResponse | null = null;
   if (payload.recovery.kind === "target-review") {
     const targetReview = await readFiledReturnsTargetReview(payload.recovery.scope, deps);
     if (!targetReview) return noTargetReviewResponse(payload.recovery.scope);
   } else {
     const recoveryScope = await readFullFiscalYearTargetRecoveryScope(payload.recovery, deps);
-    if ("response" in recoveryScope) return recoveryScope.response;
+    if ("response" in recoveryScope) fullFiscalYearRecoveryFailure = recoveryScope.response;
   }
 
   const activeRun = await acquireFiledReturnsRun(payload.scope, deps);
@@ -394,6 +406,14 @@ export async function startFreshFiledReturnsDownloadFlow(
 
   const stopLeaseRenewal = startFiledReturnsRunLeaseRenewal(activeRun.run, deps);
   try {
+    if (payload.recovery.kind === "full-fiscal-year" && fullFiscalYearRecoveryFailure) {
+      const discardedMalformedLedger = await discardMalformedFullFiscalYearRunForFreshStart(
+        { ledgerId: payload.recovery.ledgerId, scope: payload.scope },
+        deps,
+      );
+      if (discardedMalformedLedger.state === "blocked") return discardedMalformedLedger.response;
+      if (discardedMalformedLedger.state !== "discarded") return fullFiscalYearRecoveryFailure;
+    }
     if (payload.recovery.kind === "target-review") {
       const targetReview = await readFiledReturnsTargetReview(payload.recovery.scope, deps);
       if (!targetReview) return noTargetReviewResponse(payload.recovery.scope);
@@ -405,8 +425,10 @@ export async function startFreshFiledReturnsDownloadFlow(
     const discarded =
       payload.recovery.kind === "target-review"
         ? await resolveUnconfirmedFiledReturnsDownload(payload.recovery.scope, "cancelled", deps)
-        : await resolveFullFiscalYearTarget(payload.recovery, "cancelled", deps);
-    if (!isRecoveryDiscarded(discarded)) return discarded;
+        : fullFiscalYearRecoveryFailure
+          ? null
+          : await resolveFullFiscalYearTarget(payload.recovery, "cancelled", deps);
+    if (discarded && !isRecoveryDiscarded(discarded)) return discarded;
     if (payload.recovery.kind === "full-fiscal-year") {
       const remainingTargetReview = await readCurrentFiledReturnsTargetReview(deps);
       if (remainingTargetReview) return responseForFiledReturnsTargetReview(remainingTargetReview);

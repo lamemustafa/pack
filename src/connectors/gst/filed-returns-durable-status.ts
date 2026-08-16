@@ -17,6 +17,7 @@ import { FILED_RETURNS_MONTHS, FULL_FISCAL_YEAR_PERIOD } from "./filed-returns-s
 import {
   FILED_RETURN_ROUTE_MISMATCH_SIGNALS,
   RETURN_TYPE_MISMATCH_RECOVERY_STOPPED_SIGNAL,
+  durableFiledReturnsSignalRejectionReason,
   parseDurableFiledReturnsSignals,
 } from "./filed-returns-durable-signals";
 
@@ -50,8 +51,12 @@ export function canonicalDurableTargetStatus(
 ): { safeMessage: string; safeSignals: string[] } {
   const safeSignals = parseDurableFiledReturnsSignals(inputSignals);
   if (!safeSignals) {
+    const reason = durableFiledReturnsSignalRejectionReason(inputSignals) ?? "unknown";
     return {
-      safeSignals: ["filed-return-durable-status-rejected"],
+      safeSignals: [
+        "filed-return-durable-status-rejected",
+        `filed-return-durable-status-rejected:${reason}`,
+      ],
       safeMessage: renderDurableMessage("durable-status-rejected", scope),
     };
   }

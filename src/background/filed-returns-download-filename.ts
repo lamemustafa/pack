@@ -36,18 +36,22 @@ export function safeFiledReturnZipEntryPath(
 }
 
 export function safeFullFiscalYearZipFilename(scope: FiledReturnsDownloadScope): string {
-  return `${safeFilenameSegment(scope.returnType)}-${safeFilenameSegment(
-    scope.financialYear,
-  )}-full-year.zip`;
+  return [...safeFiledReturnZipDirectory(scope), "full-year.zip"].join("/");
 }
 
 export function safeSinglePeriodZipFilename(scope: FiledReturnsDownloadScope): string {
   return [
+    ...safeFiledReturnZipDirectory(scope),
+    `${safeFilenameSegment(scope.period, false)}.zip`,
+  ].join("/");
+}
+
+function safeFiledReturnZipDirectory(scope: FiledReturnsDownloadScope): string[] {
+  return [
     "ComplyEaze-Pack",
     safeFilenameSegment(scope.financialYear),
     safeFilenameSegment(scope.returnType, false),
-    `${safeFilenameSegment(scope.period, false)}.zip`,
-  ].join("/");
+  ];
 }
 
 function safeFilenameSegment(value: string, lowercase = true): string {

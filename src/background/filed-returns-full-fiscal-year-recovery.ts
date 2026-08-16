@@ -21,6 +21,7 @@ import { normaliseFiledReturnsArtifactType } from "../connectors/gst/filed-retur
 import { filedReturnsScopeId } from "../connectors/gst/filed-returns-return-types";
 import { discardFullFiscalYearFiledReturnsZip } from "./filed-returns-full-fiscal-year-zip";
 import { persistCanonicalFiledReturnsFlowSummary } from "./filed-returns-session-summary";
+import { readMalformedLedgerState } from "./filed-returns-full-fiscal-year-run-state";
 
 const RECOVERABLE_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
   "pending",
@@ -55,6 +56,11 @@ export interface FullFiscalYearTargetRecoveryDeps {
 export type FullFiscalYearTargetRetryResult =
   | { ok: true; ledger: FiledReturnsFullFiscalYearLedger }
   | { ok: false; response: PackMessageResponse };
+
+export type MalformedFullFiscalYearFreshStartDiscardResult =
+  | { state: "discarded" }
+  | { state: "unavailable" }
+  | { state: "blocked"; response: PackMessageResponse };
 
 let recoveryCriticalSection = Promise.resolve();
 
@@ -129,6 +135,51 @@ export async function resolveFullFiscalYearTarget(
     await persistSummary(flowSummary, deps);
     await clearLegacyTargetReview(checked.target, deps);
     return { ok: true, flowStep, flowSummary };
+  });
+}
+
+/**
+ * An explicit fresh start may discard only a malformed saved ledger whose
+ * recoverable opaque ID still matches the recovery control that invoked it.
+ */
+export async function discardMalformedFullFiscalYearRunForFreshStart(
+  payload: { ledgerId: string; scope: FiledReturnsDownloadScope },
+  deps: FullFiscalYearTargetRecoveryDeps,
+): Promise<MalformedFullFiscalYearFreshStartDiscardResult> {
+  return runRecoveryCriticalSection(async () => {
+    const malformed = await readMalformedLedgerState(deps.storageKeys.fullFiscalYearLedger);
+    if (!malformed || malformed.recoverableLedgerId !== payload.ledgerId) {
+      return { state: "unavailable" };
+    }
+
+    const clearSignals = await discardFullFiscalYearFiledReturnsZip(payload.ledgerId);
+    if (!clearSignals.includes("full-fiscal-year-opfs-cleared")) {
+      return {
+        state: "blocked",
+        response: {
+          ok: true,
+          flowStep: {
+            connectorId: "gst",
+            scopeId: filedReturnsScopeId(payload.scope.returnType),
+            state: "blocked",
+            safeSignals: [
+              "full-fiscal-year-run-discard-cleanup-failed",
+              "full-fiscal-year-opfs-retained",
+            ],
+            safeMessage:
+              "Pack could not clear the retained fiscal-year files, so it kept the saved run available for another discard attempt.",
+            userAction: {
+              type: "RETRY_PORTAL_GENERATION",
+              message: "Retry discarding the saved run.",
+              canResume: true,
+            },
+          },
+        },
+      };
+    }
+
+    await browser.storage.local.remove(deps.storageKeys.fullFiscalYearLedger);
+    return { state: "discarded" };
   });
 }
 

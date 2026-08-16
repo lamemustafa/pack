@@ -126,7 +126,8 @@ export function getScopeActionCopy(
     details.push("Includes Excel only when the portal provides it");
   }
   return {
-    summary: "Create one ZIP for all eligible periods.",
+    summary:
+      "Keep GST Portal visible in the foreground while Pack creates one ZIP for all eligible periods.",
     details,
   };
 }

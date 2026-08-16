@@ -3,8 +3,14 @@ import type { FiledReturnsFullFiscalYearLedger } from "../../src/connectors/gst/
 import { FULL_FISCAL_YEAR_PERIOD } from "../../src/connectors/gst/filed-returns-scope";
 import { getFiledReturnsFullFiscalYearPeriods } from "../../src/connectors/gst/filed-returns-scope";
 import { createFullFiscalYearLedger } from "../../src/background/filed-returns-full-fiscal-year-ledger";
-import { startFullFiscalYearDownloadFlow } from "../../src/background/filed-returns-full-fiscal-year";
+import { isFullFiscalYearLedger } from "../../src/background/filed-returns-full-fiscal-year-validation";
 import {
+  reconcilePendingFullFiscalYearZipDownload,
+  reconcilePersistedFullFiscalYearZipDownload,
+  startFullFiscalYearDownloadFlow,
+} from "../../src/background/filed-returns-full-fiscal-year";
+import {
+  discardMalformedFullFiscalYearRunForFreshStart,
   prepareFullFiscalYearTargetRetry,
   resolveFullFiscalYearTarget,
 } from "../../src/background/filed-returns-full-fiscal-year-recovery";
@@ -70,6 +76,59 @@ describe("full fiscal-year recovery", () => {
     expect(browser.storage.local.set).not.toHaveBeenCalled();
   });
 
+  it("discards only the matching malformed ledger for an explicit fresh start", async () => {
+    mockLocalStorageGet({
+      "full-year-ledger": {
+        ledgerId: LEDGER_ID,
+        schemaVersion: "unexpected",
+      },
+    });
+
+    const result = await discardMalformedFullFiscalYearRunForFreshStart(
+      {
+        ledgerId: LEDGER_ID,
+        scope: {
+          artifactType: "PDF",
+          financialYear: "2026-27",
+          period: FULL_FISCAL_YEAR_PERIOD,
+          returnType: "GSTR-3B",
+        },
+      },
+      recoveryDeps(),
+    );
+
+    expect(result).toEqual({ state: "discarded" });
+    expect(zipMocks.discardFullFiscalYearFiledReturnsZip).toHaveBeenCalledWith(LEDGER_ID);
+    expect(browser.storage.local.remove).toHaveBeenCalledWith("full-year-ledger");
+    expect(browser.storage.local.remove).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not discard a malformed ledger for a different recovery control", async () => {
+    mockLocalStorageGet({
+      "full-year-ledger": {
+        ledgerId: LEDGER_ID,
+        schemaVersion: "unexpected",
+      },
+    });
+
+    const result = await discardMalformedFullFiscalYearRunForFreshStart(
+      {
+        ledgerId: "full-fiscal-year-87654321",
+        scope: {
+          artifactType: "PDF",
+          financialYear: "2026-27",
+          period: FULL_FISCAL_YEAR_PERIOD,
+          returnType: "GSTR-3B",
+        },
+      },
+      recoveryDeps(),
+    );
+
+    expect(result).toEqual({ state: "unavailable" });
+    expect(zipMocks.discardFullFiscalYearFiledReturnsZip).not.toHaveBeenCalled();
+    expect(browser.storage.local.remove).not.toHaveBeenCalled();
+  });
+
   it("keeps an uncorrelated final ZIP intent in manual review instead of exporting again", async () => {
     const now = new Date("2026-06-24T00:00:00.000Z");
     const scope = {
@@ -116,6 +175,7 @@ describe("full fiscal-year recovery", () => {
         };
       }),
     };
+    expect(isFullFiscalYearLedger(ledger)).toBe(true);
     mockLocalStorageGet({ "full-year-ledger": ledger });
 
     const response = await startFullFiscalYearDownloadFlow(scope, recoveryDeps() as never, vi.fn());
@@ -135,34 +195,104 @@ describe("full fiscal-year recovery", () => {
     });
   });
 
-  it("stages a full-year all-formats target before progressing to ZIP export", async () => {
+  it("reconciles only the exact persisted full-year ZIP download", async () => {
     const now = new Date("2026-06-24T00:00:00.000Z");
     const scope = {
-      artifactType: "PDF_AND_EXCEL" as const,
+      artifactType: "PDF" as const,
       financialYear: "2026-27",
       period: FULL_FISCAL_YEAR_PERIOD,
-      returnType: "GSTR-2B" as const,
+      returnType: "GSTR-3B" as const,
+    };
+    const baseLedger = createFullFiscalYearLedger(
+      scope,
+      now,
+      getFiledReturnsFullFiscalYearPeriods(scope.financialYear, now),
+    );
+    const ledger: FiledReturnsFullFiscalYearLedger = {
+      ...baseLedger,
+      status: "blocked",
+      zipPhase: "download-observing",
+      zipDownloadAttempt: { downloadId: 41, requestedAt: now.toISOString() },
+      targets: baseLedger.targets.map((target, index) => ({
+        ...target,
+        status: "downloaded" as const,
+        ...canonicalDurableTargetStatus(
+          {
+            artifactType: "PDF",
+            financialYear: target.financialYear,
+            period: target.period,
+            returnType: "GSTR-3B",
+          },
+          "downloaded",
+          ["filed-return-artifact-downloaded:PDF", "full-fiscal-year-opfs-staged:PDF"],
+        ),
+        completedAt: now.toISOString(),
+        downloadDiagnostic: {
+          actionId: `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+          artifactType: "PDF" as const,
+          byteCountClass: "non-empty" as const,
+          downloadPathClass: "captured-portal-request-data" as const,
+          endpointClass: "gstr3b-portal-blob-captured-download" as const,
+          eventType: "filed-return-download-path" as const,
+          financialYear: target.financialYear,
+          mimeClass: "pdf" as const,
+          period: target.period,
+          returnType: "GSTR-3B" as const,
+          schemaVersion: "1.0" as const,
+          status: "downloaded" as const,
+        },
+      })),
+    };
+    expect(isFullFiscalYearLedger(ledger)).toBe(true);
+    mockLocalStorageGet({ "full-year-ledger": ledger });
+    zipMocks.reconcileFullFiscalYearZipDownload.mockResolvedValue({
+      connectorId: "gst",
+      scopeId: "gst-gstr3b-private-v0",
+      state: "downloaded",
+      safeSignals: ["browser-download-completed"],
+      safeMessage: "Pack confirmed the final ZIP download.",
+    });
+
+    await expect(
+      reconcilePendingFullFiscalYearZipDownload(40, recoveryDeps() as never),
+    ).resolves.toBe(false);
+    expect(zipMocks.reconcileFullFiscalYearZipDownload).not.toHaveBeenCalled();
+
+    await expect(
+      reconcilePendingFullFiscalYearZipDownload(41, recoveryDeps() as never),
+    ).resolves.toBe(true);
+    expect(zipMocks.reconcileFullFiscalYearZipDownload).toHaveBeenCalledOnce();
+    expect(zipMocks.discardFullFiscalYearFiledReturnsZip).toHaveBeenCalledWith(ledger.ledgerId);
+    zipMocks.reconcileFullFiscalYearZipDownload.mockClear();
+
+    await expect(
+      reconcilePersistedFullFiscalYearZipDownload(recoveryDeps() as never),
+    ).resolves.toBe(true);
+    expect(zipMocks.reconcileFullFiscalYearZipDownload).toHaveBeenCalledOnce();
+    vi.mocked(browser.storage.local.get).mockImplementation(async () => ({}));
+  });
+
+  it("stages GSTR-3B targets before progressing to one ZIP export", async () => {
+    const now = new Date("2026-06-24T00:00:00.000Z");
+    const scope = {
+      artifactType: "PDF" as const,
+      financialYear: "2026-27",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-3B" as const,
     };
     const runSinglePeriod = vi.fn(async () => ({
       ok: true as const,
       flowStep: {
         connectorId: "gst" as const,
-        scopeId: "gst-gstr2b-private-v0",
+        scopeId: "gst-gstr3b-private-v0",
         state: "downloaded" as const,
-        safeSignals: [
-          "filed-return-artifact-downloaded:PDF",
-          "filed-return-artifact-downloaded:EXCEL",
-          "filed-return-artifact-downloaded:JSON",
-          "full-fiscal-year-opfs-staged:PDF",
-          "full-fiscal-year-opfs-staged:EXCEL",
-          "full-fiscal-year-opfs-staged:JSON",
-        ],
+        safeSignals: ["filed-return-artifact-downloaded:PDF", "full-fiscal-year-opfs-staged:PDF"],
         safeMessage: "Pack staged the selected artifacts for the fiscal-year ZIP.",
       },
     }));
     zipMocks.exportFullFiscalYearZip.mockResolvedValue({
       connectorId: "gst",
-      scopeId: "gst-gstr2b-private-v0",
+      scopeId: "gst-gstr3b-private-v0",
       state: "download-unconfirmed",
       safeSignals: ["browser-download-not-observed"],
       safeMessage: "Pack started ZIP delivery but needs exact browser download confirmation.",
@@ -189,6 +319,146 @@ describe("full fiscal-year recovery", () => {
         safeSignals: expect.arrayContaining(["browser-download-not-observed"]),
       },
     });
+  });
+
+  it("passes a fresh GSTR-1 all-formats target to the period flow without narrowing it", async () => {
+    const now = new Date("2026-06-24T00:00:00.000Z");
+    const scope = {
+      artifactType: "PDF_AND_EXCEL" as const,
+      financialYear: "2026-27",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-1" as const,
+    };
+    const runSinglePeriod = vi.fn(async () => ({
+      ok: true as const,
+      flowStep: {
+        connectorId: "gst" as const,
+        scopeId: "synthetic-gstr1-all-formats",
+        state: "blocked" as const,
+        safeSignals: ["synthetic-stop-before-artifact-acquisition"],
+        safeMessage: "Synthetic stop.",
+      },
+    }));
+
+    await startFullFiscalYearDownloadFlow(
+      scope,
+      { ...recoveryDeps(), now: () => now } as never,
+      runSinglePeriod,
+    );
+
+    expect(runSinglePeriod).toHaveBeenCalledWith(
+      expect.objectContaining({
+        artifactType: "PDF_AND_EXCEL",
+        period: "April",
+        returnType: "GSTR-1",
+      }),
+      expect.anything(),
+      { persistSinglePeriodSummary: false },
+    );
+    expect(zipMocks.exportFullFiscalYearZip).not.toHaveBeenCalled();
+  });
+
+  it("records only the preceding fixed action category when a full-year target reaches a portal system error", async () => {
+    const now = new Date("2026-06-24T00:00:00.000Z");
+    const scope = {
+      artifactType: "PDF_AND_EXCEL" as const,
+      financialYear: "2026-27",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-1" as const,
+    };
+    const runSinglePeriod = vi.fn(async (_scope, deps) => {
+      deps.onFlowStepObservation?.({
+        category: "detail-navigation",
+        portalSystemError: false,
+      });
+      deps.onFlowStepObservation?.({
+        category: "other",
+        portalSystemError: true,
+      });
+      return {
+        ok: true as const,
+        flowStep: {
+          connectorId: "gst" as const,
+          scopeId: "synthetic-gstr1",
+          state: "blocked" as const,
+          safeSignals: ["portal-system-error"],
+          safeMessage: "Synthetic portal system error.",
+        },
+      };
+    });
+
+    const response = await startFullFiscalYearDownloadFlow(
+      scope,
+      { ...recoveryDeps(), now: () => now } as never,
+      runSinglePeriod,
+    );
+
+    expect(response).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining([
+          "portal-system-error",
+          "full-fiscal-year-system-error-preceded-by:detail-navigation",
+        ]),
+      },
+    });
+  });
+
+  it("passes only the unstaged GSTR-1 artifact to a resumed period flow", async () => {
+    const now = new Date("2026-06-24T00:00:00.000Z");
+    const scope = {
+      artifactType: "PDF_AND_EXCEL" as const,
+      financialYear: "2026-27",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-1" as const,
+    };
+    const ledger = createFullFiscalYearLedger(
+      scope,
+      now,
+      getFiledReturnsFullFiscalYearPeriods(scope.financialYear, now),
+    );
+    const firstTarget = ledger.targets[0]!;
+    ledger.status = "running";
+    ledger.targets[0] = {
+      ...firstTarget,
+      safeSignals: canonicalDurableTargetStatus(
+        {
+          artifactType: "PDF_AND_EXCEL",
+          financialYear: firstTarget.financialYear,
+          period: firstTarget.period,
+          returnType: "GSTR-1",
+        },
+        "pending",
+        ["full-fiscal-year-opfs-staged:PDF"],
+      ).safeSignals,
+    };
+    mockLocalStorageGet({ "full-year-ledger": ledger });
+    const runSinglePeriod = vi.fn(async () => ({
+      ok: true as const,
+      flowStep: {
+        connectorId: "gst" as const,
+        scopeId: "synthetic-gstr1-excel-retry",
+        state: "blocked" as const,
+        safeSignals: ["synthetic-stop-before-artifact-acquisition"],
+        safeMessage: "Synthetic stop.",
+      },
+    }));
+
+    await startFullFiscalYearDownloadFlow(
+      scope,
+      { ...recoveryDeps(), now: () => now } as never,
+      runSinglePeriod,
+      { allowExistingLedgerResume: true },
+    );
+
+    expect(runSinglePeriod).toHaveBeenCalledWith(
+      expect.objectContaining({
+        artifactType: "EXCEL",
+        period: "April",
+        returnType: "GSTR-1",
+      }),
+      expect.anything(),
+      { persistSinglePeriodSummary: false },
+    );
   });
 
   it("resets one recoverable target for retry and clears legacy single-period review state", async () => {

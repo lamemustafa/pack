@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { PortalFlowStepResult } from "../../src/connectors/gst/filed-returns-contracts";
 import {
   DETAIL_SUMMARY_MODAL_SETTLE_MS,
@@ -7,9 +7,11 @@ import {
   MAX_GSTR3B_FLOW_STEPS,
   PORTAL_NAVIGATION_SETTLE_MS,
   RESULT_ROW_NAVIGATION_SETTLE_MS,
+  classifyFiledReturnsFlowStep,
   extractActiveFinancialYear,
   getFlowStepSettleMs,
   maxFlowStepsFor,
+  persistFlowResponse,
   shouldContinueFlow,
 } from "../../src/background/filed-returns-flow-runner-utils";
 import type { FiledReturnsFlowRunnerDeps } from "../../src/background/filed-returns-flow-runner";
@@ -33,6 +35,42 @@ const BASE_DEPS: FiledReturnsFlowRunnerDeps = {
 };
 
 describe("filed returns flow runner wait policy", () => {
+  it("projects flow transitions into fixed diagnostic categories", () => {
+    expect(
+      classifyFiledReturnsFlowStep({
+        ...BASE_STEP,
+        safeSignals: ["gstr1-dashboard-view-clicked"],
+      }),
+    ).toBe("detail-navigation");
+    expect(
+      classifyFiledReturnsFlowStep({
+        ...BASE_STEP,
+        safeSignals: ["filed-gstr1-summary-back-clicked"],
+      }),
+    ).toBe("portal-navigation");
+    expect(
+      classifyFiledReturnsFlowStep({
+        ...BASE_STEP,
+        safeSignals: ["filed-return-artifact-clicked:PDF"],
+      }),
+    ).toBe("artifact-trigger");
+    expect(classifyFiledReturnsFlowStep(BASE_STEP)).toBe("other");
+  });
+
+  it("reports only a fixed flow observation without changing persistence", async () => {
+    const onFlowStepObservation = vi.fn();
+
+    await persistFlowResponse(
+      { ok: true, flowStep: BASE_STEP },
+      { ...BASE_DEPS, onFlowStepObservation },
+    );
+
+    expect(onFlowStepObservation).toHaveBeenCalledWith({
+      category: "other",
+      portalSystemError: false,
+    });
+  });
+
   it("extracts the portal-observed financial year for the acquisition boundary", () => {
     expect(
       extractActiveFinancialYear({

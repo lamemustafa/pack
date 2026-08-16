@@ -17,6 +17,7 @@ const TEST_RUNTIME_ID = "pack-extension-test";
 describe("offscreen Blob URL entrypoint", () => {
   let listener: RuntimeListener | null;
   let blobCounter: number;
+  let discardExcelWrites: boolean;
   const revokedBlobUrls: string[] = [];
   const opfsFiles = new Map<string, Blob>();
 
@@ -24,6 +25,7 @@ describe("offscreen Blob URL entrypoint", () => {
     vi.resetModules();
     listener = null;
     blobCounter = 0;
+    discardExcelWrites = false;
     revokedBlobUrls.length = 0;
     opfsFiles.clear();
     vi.spyOn(URL, "createObjectURL").mockImplementation(() => {
@@ -122,6 +124,39 @@ describe("offscreen Blob URL entrypoint", () => {
       },
     };
     expect(isPackOffscreenBlobUrlMessage(validMessage)).toBe(true);
+    expect(
+      isPackOffscreenBlobUrlMessage({
+        ...validMessage,
+        payload: {
+          ...validMessage.payload,
+          artifactType: "PDF",
+          returnType: "GSTR-3B",
+          zipPath: "april-return.pdf",
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isPackOffscreenBlobUrlMessage({
+        ...validMessage,
+        payload: {
+          ...validMessage.payload,
+          artifactType: "PDF",
+          returnType: "GSTR-3B",
+          zipPath: "april-return.xlsx",
+        },
+      }),
+    ).toBe(false);
+    expect(
+      isPackOffscreenBlobUrlMessage({
+        ...validMessage,
+        payload: {
+          ...validMessage.payload,
+          artifactType: "PDF",
+          returnType: "GSTR-2B",
+          zipPath: "april-return.pdf",
+        },
+      }),
+    ).toBe(false);
     expect(
       isPackOffscreenBlobUrlMessage({
         type: "PACK_OFFSCREEN_STAGE_FILED_RETURN",
@@ -292,7 +327,7 @@ describe("offscreen Blob URL entrypoint", () => {
       payload: {
         requestId: "stage-request",
         ledgerId: TEST_LEDGER_ID,
-        zipPath: "may.pdf",
+        zipPath: "may-return.pdf",
         returnType: "GSTR-3B",
         artifactType: "PDF",
         dataUrl: `data:application/pdf;base64,${btoa("%PDF-1.7 staged\n%%EOF\n")}`,
@@ -304,8 +339,13 @@ describe("offscreen Blob URL entrypoint", () => {
       requestId: "stage-request",
       staged: true,
       byteCountClass: "non-empty",
+      byteCount: "%PDF-1.7 staged\n%%EOF\n".length,
+      artifactType: "PDF",
+      ledgerId: TEST_LEDGER_ID,
+      returnType: "GSTR-3B",
+      zipPath: "may-return.pdf",
     });
-    expect(opfsFiles.has(`filed-return-packs/${TEST_LEDGER_ID}/may.pdf`)).toBe(true);
+    expect(opfsFiles.has(`filed-return-packs/${TEST_LEDGER_ID}/may-return.pdf`)).toBe(true);
 
     const zip = await sendOffscreenMessage({
       type: "PACK_OFFSCREEN_CREATE_FILED_RETURN_ZIP",
@@ -315,7 +355,7 @@ describe("offscreen Blob URL entrypoint", () => {
         ledgerId: TEST_LEDGER_ID,
         expectedReturnType: "GSTR-3B",
         expectedEntryCount: 1,
-        expectedEntries: [{ artifactType: "PDF", entryNames: ["may.pdf"] }],
+        expectedEntries: [{ artifactType: "PDF", entryNames: ["may-return.pdf"] }],
       },
     });
 
@@ -343,7 +383,7 @@ describe("offscreen Blob URL entrypoint", () => {
       requestId: "clear-request",
       cleared: true,
     });
-    expect(opfsFiles.has(`filed-return-packs/${TEST_LEDGER_ID}/may.pdf`)).toBe(false);
+    expect(opfsFiles.has(`filed-return-packs/${TEST_LEDGER_ID}/may-return.pdf`)).toBe(false);
   });
 
   it("stages the generated GSTR-2B JSON ZIP entry name without re-encoding its bytes", async () => {
@@ -376,6 +416,94 @@ describe("offscreen Blob URL entrypoint", () => {
     });
 
     expect(zip).toMatchObject({ ok: true, zipEntryCount: 1 });
+  });
+
+  it("rejects a stage receipt when the exact Excel slot does not survive its write", async () => {
+    discardExcelWrites = true;
+    await loadOffscreenEntrypoint();
+
+    const response = await sendOffscreenMessage({
+      type: "PACK_OFFSCREEN_STAGE_FILED_RETURN",
+      target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+      payload: {
+        requestId: "discarded-excel-request",
+        ledgerId: TEST_FULL_YEAR_LEDGER_ID,
+        zipPath: "april-details.xlsx",
+        returnType: "GSTR-1",
+        artifactType: "EXCEL",
+        dataUrl: xlsxDataUrl(createPortalGstr2bWorkbook()),
+      },
+    });
+
+    expect(response).toEqual({
+      ok: false,
+      requestId: "discarded-excel-request",
+      errorCategory: "stage-failed",
+    });
+  });
+
+  it("retains every GSTR-1 full-year PDF and Excel slot before ZIP construction", async () => {
+    await loadOffscreenEntrypoint();
+    const periods = [
+      "april",
+      "may",
+      "june",
+      "july",
+      "august",
+      "september",
+      "october",
+      "november",
+      "december",
+      "january",
+      "february",
+      "march",
+    ];
+    const workbook = xlsxDataUrl(createPortalGstr2bWorkbook());
+    for (const period of periods) {
+      const pdf = await sendOffscreenMessage({
+        type: "PACK_OFFSCREEN_STAGE_FILED_RETURN",
+        target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+        payload: {
+          requestId: `${period}-pdf-request`,
+          ledgerId: TEST_FULL_YEAR_LEDGER_ID,
+          zipPath: `${period}-summary.pdf`,
+          returnType: "GSTR-1",
+          artifactType: "PDF",
+          dataUrl: `data:application/pdf;base64,${btoa(`%PDF-1.7 ${period}\n%%EOF\n`)}`,
+        },
+      });
+      const excel = await sendOffscreenMessage({
+        type: "PACK_OFFSCREEN_STAGE_FILED_RETURN",
+        target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+        payload: {
+          requestId: `${period}-excel-request`,
+          ledgerId: TEST_FULL_YEAR_LEDGER_ID,
+          zipPath: `${period}-details.xlsx`,
+          returnType: "GSTR-1",
+          artifactType: "EXCEL",
+          dataUrl: workbook,
+        },
+      });
+      expect(pdf).toMatchObject({ ok: true, staged: true, artifactType: "PDF" });
+      expect(excel).toMatchObject({ ok: true, staged: true, artifactType: "EXCEL" });
+    }
+
+    const zip = await sendOffscreenMessage({
+      type: "PACK_OFFSCREEN_CREATE_FILED_RETURN_ZIP",
+      target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+      payload: {
+        requestId: "gstr1-full-year-request",
+        ledgerId: TEST_FULL_YEAR_LEDGER_ID,
+        expectedReturnType: "GSTR-1",
+        expectedEntryCount: periods.length * 2,
+        expectedEntries: periods.flatMap((period) => [
+          { artifactType: "PDF" as const, entryNames: [`${period}-summary.pdf`] },
+          { artifactType: "EXCEL" as const, entryNames: [`${period}-details.xlsx`] },
+        ]),
+      },
+    });
+
+    expect(zip).toMatchObject({ ok: true, zipEntryCount: periods.length * 2 });
   });
 
   it("rejects a staged ZIP input larger than 100 MB before creating a Blob URL", async () => {
@@ -720,6 +848,12 @@ describe("offscreen Blob URL entrypoint", () => {
     return new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, 0x00]);
   }
 
+  function xlsxDataUrl(bytes: Uint8Array): string {
+    return `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${btoa(
+      String.fromCharCode(...bytes),
+    )}`;
+  }
+
   async function loadOffscreenEntrypoint() {
     vi.doMock("wxt/browser", () => ({
       browser: {
@@ -760,6 +894,7 @@ describe("offscreen Blob URL entrypoint", () => {
           async createWritable() {
             return {
               async write(data: Blob) {
+                if (discardExcelWrites && path.endsWith(".xlsx")) return;
                 opfsFiles.set(path, data);
               },
               async close() {

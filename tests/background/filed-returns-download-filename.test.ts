@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   safeFiledReturnDownloadFilename,
   safeFiledReturnZipEntryPath,
+  safeFullFiscalYearZipFilename,
   safeSinglePeriodZipFilename,
 } from "../../src/background/filed-returns-download-filename";
 import type { FiledReturnsDownloadScope } from "../../src/connectors/gst/filed-returns-contracts";
@@ -24,6 +25,12 @@ describe("filed returns download filename helpers", () => {
   it("names a selected-artifact archive under the requested return type", () => {
     expect(safeSinglePeriodZipFilename({ ...scope, artifactType: "PDF_AND_EXCEL" })).toBe(
       "ComplyEaze-Pack/2026-27/GSTR-2B/May.zip",
+    );
+  });
+
+  it("names a fiscal-year archive alongside selected-period archives", () => {
+    expect(safeFullFiscalYearZipFilename({ ...scope, period: "Full year" })).toBe(
+      "ComplyEaze-Pack/2026-27/GSTR-2B/full-year.zip",
     );
   });
 });
