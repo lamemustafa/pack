@@ -8,7 +8,10 @@ import {
   readActiveFiledReturnsRunSummary,
 } from "../background/filed-returns-active-run";
 import { readCurrentFiledReturnsFlowSummary } from "../background/filed-returns-current-state";
-import { reconcilePendingFullFiscalYearZipDownload } from "../background/filed-returns-full-fiscal-year";
+import {
+  reconcilePendingFullFiscalYearZipDownload,
+  reconcilePersistedFullFiscalYearZipDownload,
+} from "../background/filed-returns-full-fiscal-year";
 import {
   resolveFullFiscalYearTargetFlow,
   resolveUnconfirmedFiledReturnsDownloadFlow,
@@ -74,6 +77,8 @@ export default defineBackground(() => {
     storageKeys: filedReturnsStorageKeys(),
     reconcileFullFiscalYearZip: (downloadId) =>
       reconcilePendingFullFiscalYearZipDownload(downloadId, filedReturnsFlowRunnerDeps()),
+    reconcilePersistedFullFiscalYearZip: () =>
+      reconcilePersistedFullFiscalYearZipDownload(filedReturnsFlowRunnerDeps()),
   });
   installPackDownloadFilenameReassertion();
 

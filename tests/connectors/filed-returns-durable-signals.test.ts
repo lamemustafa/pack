@@ -232,6 +232,11 @@ describe("filed-return durable signal contract", () => {
     );
     expect(durableFiledReturnsSignalRejectionReason("not-a-signal-array")).toBe("not-array");
     expect(durableFiledReturnsSignalRejectionReason(["status-filed", 1])).toBe("non-string");
+    expect(parseDurableFiledReturnsSignals([""])).toBeNull();
+    expect(durableFiledReturnsSignalRejectionReason([""])).toBe("unknown");
+    const sparseSignals: unknown[] = Array(1);
+    expect(parseDurableFiledReturnsSignals(sparseSignals)).toBeNull();
+    expect(durableFiledReturnsSignalRejectionReason(sparseSignals)).toBe("non-string");
     expect(
       parseDurableFiledReturnsSignals(
         Array.from({ length: 33 }, (_, index) => `browser-download-id:${index + 1}`),

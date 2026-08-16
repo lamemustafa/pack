@@ -97,6 +97,23 @@ describe("full fiscal year ledger", () => {
     });
   });
 
+  it("retains the canonical GSTR-2B selection while multiple artifacts remain", () => {
+    const ledger = createLedger([["April", "blocked"]], {
+      artifactType: "PDF_AND_EXCEL",
+      returnType: "GSTR-2B",
+    });
+    ledger.targets[0] = {
+      ...ledger.targets[0]!,
+      safeSignals: ["full-fiscal-year-opfs-staged:PDF"],
+    };
+
+    expect(scopeForFullFiscalYearTarget(ledger.targets[0]!)).toMatchObject({
+      artifactType: "PDF_AND_EXCEL",
+      period: "April",
+      returnType: "GSTR-2B",
+    });
+  });
+
   it("does not select later targets while an unconfirmed download needs acknowledgement", () => {
     const ledger = createLedger([
       ["April", "download-unconfirmed"],
@@ -816,6 +833,36 @@ describe("full fiscal year ledger", () => {
       status: "blocked",
       safeSignals: expect.arrayContaining(["gstr-3b-detail-route", "gstr-3b"]),
     });
+    expect(terminal.targets[0]?.safeSignals).not.toContain("filed-return-durable-status-rejected");
+  });
+
+  it("retains a missing JSON staging signal instead of replacing it with a generic rejection", () => {
+    const ledger = createLedger([["April", "pending"]], { artifactType: "JSON" });
+    const targetId = ledger.targets[0]!.targetId;
+    const staged = requireFullFiscalYearArtifactsStaged(
+      {
+        artifactType: "JSON",
+        financialYear: "2026-27",
+        period: "April",
+        returnType: "GSTR-3B",
+      },
+      {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-json-private-v0",
+        state: "downloaded",
+        safeSignals: [],
+        safeMessage: "Pack observed the portal download.",
+      },
+    );
+    const terminal = markFullFiscalYearTargetTerminal(
+      ledger,
+      targetId,
+      "blocked",
+      staged,
+      new Date("2026-06-24T00:01:00.000Z"),
+    );
+
+    expect(terminal.targets[0]?.safeSignals).toContain("full-fiscal-year-artifact-not-staged:JSON");
     expect(terminal.targets[0]?.safeSignals).not.toContain("filed-return-durable-status-rejected");
   });
 

@@ -539,10 +539,12 @@ export function durableFiledReturnsSignalRejectionReason(
 ): DurableFiledReturnsSignalRejectionReason | null {
   if (!Array.isArray(input)) return "not-array";
   if (input.length > MAX_DURABLE_SIGNAL_COUNT) return "over-cap";
-  if (!input.every((signal): signal is string => typeof signal === "string")) return "non-string";
+  for (const signal of input) {
+    if (typeof signal !== "string") return "non-string";
+  }
   if (new Set(input).size !== input.length) return "duplicate";
   const unknownSignal = input.find((signal) => !isDurableFiledReturnsSignal(signal));
-  return unknownSignal ? durableUnknownSignalCategory(unknownSignal) : null;
+  return unknownSignal === undefined ? null : durableUnknownSignalCategory(unknownSignal);
 }
 
 // This is intentionally a fixed projection: the rejected token is never
@@ -585,7 +587,7 @@ export function isDurableFiledReturnsSignal(signal: string): boolean {
     signal,
   );
   if (stagedArtifact) return true;
-  const missingArtifact = /^full-fiscal-year-artifact-not-staged:(PDF|EXCEL)$/.exec(signal);
+  const missingArtifact = /^full-fiscal-year-artifact-not-staged:(PDF|JSON|EXCEL)$/.exec(signal);
   if (missingArtifact) return true;
   const systemErrorPredecessor =
     /^full-fiscal-year-system-error-preceded-by:(artifact-trigger|detail-navigation|initial|other|portal-navigation)$/.exec(

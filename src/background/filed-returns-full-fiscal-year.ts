@@ -94,6 +94,28 @@ export async function reconcilePendingFullFiscalYearZipDownload(
   return true;
 }
 
+/**
+ * Reconciles the stored final-ZIP ID after an MV3 restart. This reads only the
+ * exact ID already persisted for the fiscal-year run; it never scans or adopts
+ * an unrelated browser download.
+ */
+export async function reconcilePersistedFullFiscalYearZipDownload(
+  deps: FiledReturnsFlowRunnerDeps,
+): Promise<boolean> {
+  const ledger = await readLedger(deps.storageKeys.fullFiscalYearLedger);
+  const downloadId = ledger?.zipDownloadAttempt?.downloadId;
+  if (
+    !ledger ||
+    ledger.zipPhase !== "download-observing" ||
+    !Number.isSafeInteger(downloadId) ||
+    (downloadId ?? -1) < 0
+  ) {
+    return false;
+  }
+  await reconcilePersistedFullFiscalYearZip(deps, ledger);
+  return true;
+}
+
 export async function startFullFiscalYearDownloadFlow(
   scope: FiledReturnsDownloadScope,
   deps: FiledReturnsFlowRunnerDeps,

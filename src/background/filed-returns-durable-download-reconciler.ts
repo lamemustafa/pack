@@ -35,6 +35,7 @@ export interface DurableDownloadReconcilerDeps extends Omit<
   readCurrentReview?: () => Promise<FiledReturnsTargetReview | null>;
   reconcile?: (review: FiledReturnsTargetReview) => Promise<unknown>;
   reconcileFullFiscalYearZip?: (downloadId: number) => Promise<boolean>;
+  reconcilePersistedFullFiscalYearZip?: () => Promise<boolean>;
 }
 
 const liveInlineObservationIds = new Set<number>();
@@ -141,7 +142,7 @@ export function installFiledReturnsDurableDownloadReconciler(
   let rerunAfterInFlight = false;
   const terminalDownloadIds = new Set<number>();
 
-  const reconcile = (terminalDownloadId?: number) => {
+  const reconcile = (terminalDownloadId?: number, reconcilePersistedFullFiscalYearZip = false) => {
     if (terminalDownloadId !== undefined) terminalDownloadIds.add(terminalDownloadId);
     if (inFlight) {
       rerunAfterInFlight = true;
@@ -158,6 +159,9 @@ export function installFiledReturnsDurableDownloadReconciler(
               deps.reconcileFullFiscalYearZip!(downloadId),
             ),
           ).then((results) => results.some(Boolean)),
+      !reconcilePersistedFullFiscalYearZip || !deps.reconcilePersistedFullFiscalYearZip
+        ? Promise.resolve(false)
+        : deps.reconcilePersistedFullFiscalYearZip(),
     ])
       .then((results) => results.some(Boolean))
       .finally(() => {
@@ -194,7 +198,7 @@ export function installFiledReturnsDurableDownloadReconciler(
 
   downloadApi.onChanged.addListener(onChanged);
   downloadApi.onCreated?.addListener(onCreated);
-  void reconcile().catch(() => undefined);
+  void reconcile(undefined, true).catch(() => undefined);
   return () => {
     downloadApi.onChanged.removeListener(onChanged);
     downloadApi.onCreated?.removeListener(onCreated);

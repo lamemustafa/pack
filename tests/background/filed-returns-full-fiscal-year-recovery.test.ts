@@ -6,6 +6,7 @@ import { createFullFiscalYearLedger } from "../../src/background/filed-returns-f
 import { isFullFiscalYearLedger } from "../../src/background/filed-returns-full-fiscal-year-validation";
 import {
   reconcilePendingFullFiscalYearZipDownload,
+  reconcilePersistedFullFiscalYearZipDownload,
   startFullFiscalYearDownloadFlow,
 } from "../../src/background/filed-returns-full-fiscal-year";
 import {
@@ -262,6 +263,12 @@ describe("full fiscal-year recovery", () => {
     ).resolves.toBe(true);
     expect(zipMocks.reconcileFullFiscalYearZipDownload).toHaveBeenCalledOnce();
     expect(zipMocks.discardFullFiscalYearFiledReturnsZip).toHaveBeenCalledWith(ledger.ledgerId);
+    zipMocks.reconcileFullFiscalYearZipDownload.mockClear();
+
+    await expect(
+      reconcilePersistedFullFiscalYearZipDownload(recoveryDeps() as never),
+    ).resolves.toBe(true);
+    expect(zipMocks.reconcileFullFiscalYearZipDownload).toHaveBeenCalledOnce();
     vi.mocked(browser.storage.local.get).mockImplementation(async () => ({}));
   });
 

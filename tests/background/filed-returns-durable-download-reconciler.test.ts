@@ -129,6 +129,19 @@ describe("durable filed-return download reconciler", () => {
     dispose();
   });
 
+  it("reconciles a persisted fiscal-year ZIP checkpoint when the worker starts", async () => {
+    const fixture = downloadsWithState("in_progress");
+    const reconcilePersistedFullFiscalYearZip = vi.fn(async () => true);
+    const dispose = installFiledReturnsDurableDownloadReconciler(fixture.downloads, {
+      readCurrentReview: async () => null,
+      reconcilePersistedFullFiscalYearZip,
+      storageKeys: {},
+    });
+
+    await vi.waitFor(() => expect(reconcilePersistedFullFiscalYearZip).toHaveBeenCalledOnce());
+    dispose();
+  });
+
   it("persists an extension-owned created download that arrives before the caller has its ID", async () => {
     const fixture = downloadsWithState("complete");
     let currentReview: FiledReturnsTargetReview = {
