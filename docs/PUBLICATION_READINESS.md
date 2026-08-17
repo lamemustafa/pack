@@ -171,13 +171,17 @@ durable full-year, or stable-release claims.
 
 The selection rows are derived from the supported Cartesian product of
 `FILED_RETURNS_RETURN_TYPES` and `FILED_RETURNS_ARTIFACT_TYPES`; a test keeps
-this instrument aligned with those canonical constants. For each
-acquisition-capable selection, record service-worker restart, browser restart,
-interrupted download, cancellation/discard and its cleanup outcome, and a
-retained checkpoint whose browser record is no longer available. A resumed
-path must not repeat a completed target. An unproven path remains non-complete
-until retry or cancellation. Manual observation is only an explicit
-non-completing action and still requires retry before ZIP staging.
+this instrument aligned with those canonical constants. The same test derives
+each row's acquisition capability from
+`supportsFullFiscalYearFiledReturnsRun` and
+`supportsFiledReturnsArtifactType`; the document cannot declare that fact. For
+each row, the final expectation cell's capability claim must agree with the
+derived value. For each acquisition-capable selection, record service-worker
+restart, browser restart, interrupted download, cancellation/discard and its
+cleanup outcome, and a retained checkpoint whose browser record is no longer available. A
+resumed path must not repeat a completed target. An unproven path remains
+non-complete until retry or cancellation. Manual observation is only an
+explicit non-completing action and still requires retry before ZIP staging.
 
 Every cell must match one complete row in this legend. The test renders the
 legend from the same rule table used for validation, so state, reason, date,
@@ -185,15 +189,17 @@ column, and completion semantics cannot drift into an independent vocabulary.
 
 <!-- BEGIN: full-year-recovery-cell-legend -->
 
-| State                     | Date constraint                             | Reason                              | Allowed column           | Completion-eligible |
-| ------------------------- | ------------------------------------------- | ----------------------------------- | ------------------------ | ------------------- |
-| `pass`                    | valid `YYYY-MM-DD`, today or earlier in UTC | none                                | scenario columns         | yes                 |
-| `fail`                    | valid `YYYY-MM-DD`, today or earlier in UTC | none                                | scenario columns         | no                  |
-| `fail-closed-as-expected` | valid `YYYY-MM-DD`, today or earlier in UTC | `expected-fail-closed-boundary`     | any observation column   | yes                 |
-| `not-applicable`          | valid `YYYY-MM-DD`, today or earlier in UTC | `recovery-scenario-not-applicable`  | scenario columns         | yes                 |
-| `not-applicable`          | valid `YYYY-MM-DD`, today or earlier in UTC | `selection-not-acquisition-capable` | final expectation column | yes                 |
-| `not-yet-run`             | `not-recorded`                              | none                                | scenario columns         | no                  |
-| `not-yet-run`             | `not-recorded`                              | `not-recorded`                      | final expectation column | no                  |
+| State                     | Date constraint                             | Reason                              | Allowed column           | Derived row capability    | Recorded capability claim | Completion-eligible |
+| ------------------------- | ------------------------------------------- | ----------------------------------- | ------------------------ | ------------------------- | ------------------------- | ------------------- |
+| `pass`                    | valid `YYYY-MM-DD`, today or earlier in UTC | none                                | scenario columns         | any derived capability    | none                      | yes                 |
+| `fail`                    | valid `YYYY-MM-DD`, today or earlier in UTC | none                                | scenario columns         | any derived capability    | none                      | no                  |
+| `fail-closed-as-expected` | valid `YYYY-MM-DD`, today or earlier in UTC | `expected-fail-closed-boundary`     | scenario columns         | any derived capability    | none                      | yes                 |
+| `fail-closed-as-expected` | valid `YYYY-MM-DD`, today or earlier in UTC | `expected-fail-closed-boundary`     | final expectation column | `acquisition-capable`     | `acquisition-capable`     | yes                 |
+| `not-applicable`          | valid `YYYY-MM-DD`, today or earlier in UTC | `recovery-scenario-not-applicable`  | scenario columns         | `acquisition-capable`     | none                      | no                  |
+| `not-applicable`          | valid `YYYY-MM-DD`, today or earlier in UTC | `recovery-scenario-not-applicable`  | scenario columns         | `not-acquisition-capable` | none                      | yes                 |
+| `not-applicable`          | valid `YYYY-MM-DD`, today or earlier in UTC | `selection-not-acquisition-capable` | final expectation column | `not-acquisition-capable` | `not-acquisition-capable` | yes                 |
+| `not-yet-run`             | `not-recorded`                              | none                                | scenario columns         | any derived capability    | none                      | no                  |
+| `not-yet-run`             | `not-recorded`                              | `not-recorded`                      | final expectation column | any derived capability    | none                      | no                  |
 
 <!-- END: full-year-recovery-cell-legend -->
 
