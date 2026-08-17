@@ -82,6 +82,21 @@ function getFullYearMeta(summary: FiledReturnsFlowSummary | null): string {
     return "Final ZIP may already have started · check Browser Downloads";
   }
   if (signals.has("full-fiscal-year-zip-downloaded")) {
+    if (signals.has("full-fiscal-year-summary-outcomes-only")) {
+      return "One ZIP · outcome-only summary · saved by your browser";
+    }
+    if (signals.has("full-fiscal-year-summary-included")) {
+      const parsedPeriodCount = fixedCountSignal(
+        summary,
+        "full-fiscal-year-summary-parsed-period-count:",
+      );
+      return parsedPeriodCount === null
+        ? "One ZIP · summary included · saved by your browser"
+        : `One ZIP · summary for ${parsedPeriodCount} ${parsedPeriodCount === 1 ? "period" : "periods"} · saved by your browser`;
+    }
+    if (signals.has("full-fiscal-year-summary-failed")) {
+      return "One ZIP · summary unavailable · saved by your browser";
+    }
     return "One ZIP · saved by your browser";
   }
   if (signals.has("full-fiscal-year-no-zip-artifacts")) {
@@ -92,4 +107,10 @@ function getFullYearMeta(summary: FiledReturnsFlowSummary | null): string {
     return "One ZIP · browser download not confirmed";
   }
   return "One ZIP · local browser download";
+}
+
+function fixedCountSignal(summary: FiledReturnsFlowSummary | null, prefix: string): number | null {
+  const signal = summary?.flowStep.safeSignals.find((candidate) => candidate.startsWith(prefix));
+  const value = Number(signal?.slice(prefix.length));
+  return Number.isInteger(value) && value >= 0 && value <= 36 ? value : null;
 }

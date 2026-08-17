@@ -2,6 +2,7 @@ import { isFiledReturnsConcreteArtifactType } from "./filed-returns-artifacts";
 import { isFiledReturnsReturnType } from "./filed-returns-return-types";
 import type { FiledReturnsConcreteArtifactType } from "./filed-returns-artifacts";
 import type { FiledReturnsReturnType } from "./filed-returns-return-types";
+import type { FiledReturnsSummaryPlanEntry } from "./filed-returns-summary-sheet";
 
 export const PACK_OFFSCREEN_BLOB_URL_TARGET = "pack-offscreen-blob-url";
 export const PACK_OFFSCREEN_DATA_URL_MAX_LENGTH = 50 * 1024 * 1024;
@@ -46,6 +47,7 @@ export interface PackOffscreenCreateFiledReturnZipMessage {
     expectedReturnType: FiledReturnsReturnType;
     expectedEntryCount: number;
     expectedEntries: PackOffscreenFiledReturnZipExpectedEntry[];
+    summaryPlan?: FiledReturnsSummaryPlanEntry[];
   };
 }
 
@@ -106,6 +108,9 @@ export type PackOffscreenBlobUrlResponse =
       requestId: string;
       blobUrl: string;
       zipEntryCount: number;
+      artifactEntryCount: number;
+      summaryEntryCount: 0 | 1;
+      summary?: PackOffscreenFiledReturnSummaryResult;
     }
   | {
       ok: true;
@@ -126,6 +131,18 @@ export type PackOffscreenBlobUrlResponse =
         | "zip-empty"
         | "zip-too-large"
         | "zip-failed";
+    };
+
+export type PackOffscreenFiledReturnSummaryResult =
+  | {
+      status: "included";
+      outcomeOnly: boolean;
+      parsedPeriodCount: number;
+      rowCount: number;
+    }
+  | {
+      status: "failed";
+      reasonCategory: "generation-failed" | "too-large";
     };
 
 export function isPackOffscreenBlobUrlMessageShape(
@@ -168,6 +185,7 @@ export function isPackOffscreenBlobUrlMessageShape(
         "expectedReturnType",
         "ledgerId",
         "requestId",
+        "summaryPlan",
       ]) &&
       isBoundedString(input.payload.ledgerId, 1, 120) &&
       isFiledReturnsReturnType(input.payload.expectedReturnType) &&
@@ -176,7 +194,9 @@ export function isPackOffscreenBlobUrlMessageShape(
       expectedEntryCount >= 1 &&
       expectedEntryCount <= 36 &&
       isExpectedZipEntryPlanShape(expectedEntries) &&
-      expectedEntries.length === expectedEntryCount
+      expectedEntries.length === expectedEntryCount &&
+      (input.payload.summaryPlan === undefined ||
+        isFiledReturnsSummaryPlanShape(input.payload.summaryPlan))
     );
   }
   if (input.type === "PACK_OFFSCREEN_CLEAR_FILED_RETURN_LEDGER") {
@@ -195,6 +215,38 @@ export function isPackOffscreenBlobUrlMessageShape(
     );
   }
   return false;
+}
+
+function isFiledReturnsSummaryPlanShape(input: unknown): input is FiledReturnsSummaryPlanEntry[] {
+  if (!Array.isArray(input) || input.length < 1 || input.length > 36) return false;
+  for (const candidate of input) {
+    if (
+      !isRecord(candidate) ||
+      !hasOnlyKeys(candidate, [
+        "artifactType",
+        "entryNames",
+        "outcomeCategory",
+        "period",
+        "returnType",
+      ]) ||
+      !isFiledReturnsConcreteArtifactType(candidate.artifactType) ||
+      !isFiledReturnsReturnType(candidate.returnType) ||
+      !isBoundedString(candidate.period, 3, 12) ||
+      !isSummaryOutcomeCategory(candidate.outcomeCategory) ||
+      !Array.isArray(candidate.entryNames) ||
+      candidate.entryNames.length > 2 ||
+      candidate.entryNames.some((entryName) => !isBoundedString(entryName, 1, 220))
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function isSummaryOutcomeCategory(
+  value: unknown,
+): value is FiledReturnsSummaryPlanEntry["outcomeCategory"] {
+  return value === "staged" || value === "not-filed" || value === "artifact-unavailable";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

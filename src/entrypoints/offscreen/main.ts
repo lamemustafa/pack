@@ -13,6 +13,11 @@ import type { FiledReturnsReturnType } from "../../connectors/gst/filed-returns-
 import { FILED_RETURNS_MONTHS } from "../../connectors/gst/filed-returns-scope";
 import { createZip, type ZipEntry } from "./zip";
 import {
+  buildFiledReturnsSummarySheet,
+  FILED_RETURNS_SUMMARY_SHEET_PATH,
+} from "../../connectors/gst/filed-returns-summary-sheet";
+import type { PackOffscreenFiledReturnSummaryResult } from "../../connectors/gst/offscreen-blob-url";
+import {
   dataUrlChunksToDecoded,
   dataUrlToBlob,
   isExpectedDecodedDataUrlForReturnType,
@@ -21,6 +26,8 @@ import {
 
 const blobUrlsByRequest = new Map<string, string>();
 const MAX_ZIP_INPUT_BYTES = 100 * 1024 * 1024;
+const MAX_SUMMARY_SHEET_BYTES = 5 * 1024 * 1024;
+const MAX_SUMMARY_SOURCE_BYTES = 25 * 1024 * 1024;
 const FILED_RETURN_PERIOD_ORDER = new Map(
   FILED_RETURNS_MONTHS.map((period, index) => [period.toLowerCase(), index]),
 );
@@ -56,7 +63,8 @@ async function handleMessage(
   if (message.type === "PACK_OFFSCREEN_CREATE_FILED_RETURN_ZIP") {
     try {
       const directory = await getLedgerDirectory(message.payload.ledgerId, false);
-      if ((await stagedZipInputByteLength(directory)) > MAX_ZIP_INPUT_BYTES) {
+      const stagedInputBytes = await stagedZipInputByteLength(directory);
+      if (stagedInputBytes > MAX_ZIP_INPUT_BYTES) {
         return {
           ok: false,
           requestId: message.payload.requestId,
@@ -84,7 +92,11 @@ async function handleMessage(
           errorCategory: "zip-invalid-entry",
         };
       }
-      const zipBytes = createZip(entries);
+      const summary = message.payload.summaryPlan
+        ? createSummaryEntry(message.payload.summaryPlan, entries, stagedInputBytes)
+        : null;
+      const archiveEntries = summary?.entry ? [...entries, summary.entry] : entries;
+      const zipBytes = createZip(archiveEntries);
       const zipBuffer = new ArrayBuffer(zipBytes.byteLength);
       new Uint8Array(zipBuffer).set(zipBytes);
       const zipBlob = new Blob([zipBuffer], { type: "application/zip" });
@@ -94,7 +106,10 @@ async function handleMessage(
         ok: true,
         requestId: message.payload.requestId,
         blobUrl,
-        zipEntryCount: entries.length,
+        zipEntryCount: archiveEntries.length,
+        artifactEntryCount: entries.length,
+        summaryEntryCount: summary?.entry ? 1 : 0,
+        ...(summary ? { summary: summary.result } : {}),
       };
     } catch {
       return {
@@ -171,6 +186,54 @@ async function handleMessage(
     requestId: message.payload.requestId,
     blobUrl,
   };
+}
+
+function createSummaryEntry(
+  plan: Parameters<typeof buildFiledReturnsSummarySheet>[0],
+  entries: readonly ZipEntry[],
+  stagedInputBytes: number,
+): { entry?: ZipEntry; result: PackOffscreenFiledReturnSummaryResult } {
+  try {
+    const summarySourcePaths = new Set(
+      plan
+        .filter((entry) => entry.artifactType === "JSON" && entry.outcomeCategory === "staged")
+        .flatMap((entry) => entry.entryNames),
+    );
+    const summarySourceBytes = entries.reduce(
+      (total, entry) => total + (summarySourcePaths.has(entry.path) ? entry.bytes.byteLength : 0),
+      0,
+    );
+    if (summarySourceBytes > MAX_SUMMARY_SOURCE_BYTES) {
+      return { result: { status: "failed", reasonCategory: "too-large" } };
+    }
+    const summary = buildFiledReturnsSummarySheet(plan, entries, MAX_SUMMARY_SHEET_BYTES);
+    const remainingZipBudget = Math.max(0, MAX_ZIP_INPUT_BYTES - stagedInputBytes);
+    if (
+      summary.bytes.byteLength > MAX_SUMMARY_SHEET_BYTES ||
+      summary.bytes.byteLength > remainingZipBudget
+    ) {
+      return { result: { status: "failed", reasonCategory: "too-large" } };
+    }
+    return {
+      entry: { path: FILED_RETURNS_SUMMARY_SHEET_PATH, bytes: summary.bytes },
+      result: {
+        status: "included",
+        outcomeOnly: summary.outcomeOnly,
+        parsedPeriodCount: summary.parsedPeriodCount,
+        rowCount: summary.rowCount,
+      },
+    };
+  } catch (error) {
+    return {
+      result: {
+        status: "failed",
+        reasonCategory:
+          error instanceof Error && error.name === "FiledReturnsSummaryTooLargeError"
+            ? "too-large"
+            : "generation-failed",
+      },
+    };
+  }
 }
 
 async function getLedgerDirectory(

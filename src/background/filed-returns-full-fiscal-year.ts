@@ -417,7 +417,7 @@ async function completeRun(
 
   const cleanupPending = createFullFiscalYearCleanupPendingState(exportLedger, zipStep);
   await persistLedgerAndSummary(deps, cleanupPending.ledger, cleanupPending.step);
-  return finishFullFiscalYearCleanup(deps, cleanupPending.ledger);
+  return finishFullFiscalYearCleanup(deps, cleanupPending.ledger, cleanupPending.step);
 }
 
 async function reconcilePersistedFullFiscalYearZip(
@@ -451,7 +451,7 @@ async function reconcilePersistedFullFiscalYearZip(
   if (zipStep.state === "downloaded") {
     const cleanupPending = createFullFiscalYearCleanupPendingState(ledger, zipStep);
     await persistLedgerAndSummary(deps, cleanupPending.ledger, cleanupPending.step);
-    return finishFullFiscalYearCleanup(deps, cleanupPending.ledger);
+    return finishFullFiscalYearCleanup(deps, cleanupPending.ledger, cleanupPending.step);
   }
 
   if (zipStep.state === "blocked") {

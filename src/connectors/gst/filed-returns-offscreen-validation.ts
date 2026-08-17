@@ -8,6 +8,7 @@ import {
   type PackOffscreenFiledReturnZipExpectedEntry,
 } from "./offscreen-blob-url";
 import { isCanonicalFiledReturnsLedgerId } from "./filed-returns-ledger-id";
+import type { FiledReturnsSummaryPlanEntry } from "./filed-returns-summary-sheet";
 
 export { isCanonicalFiledReturnsLedgerId } from "./filed-returns-ledger-id";
 
@@ -28,7 +29,13 @@ export function isPackOffscreenBlobUrlMessage(
     return (
       isCanonicalFiledReturnsLedgerId(input.payload.ledgerId) &&
       isExpectedZipEntryPlan(input.payload.expectedEntries, input.payload.expectedReturnType) &&
-      input.payload.expectedEntries.length === input.payload.expectedEntryCount
+      input.payload.expectedEntries.length === input.payload.expectedEntryCount &&
+      (input.payload.summaryPlan === undefined ||
+        isSummaryPlan(
+          input.payload.summaryPlan,
+          input.payload.expectedEntries,
+          input.payload.expectedReturnType,
+        ))
     );
   }
 
@@ -37,6 +44,46 @@ export function isPackOffscreenBlobUrlMessage(
   }
 
   return true;
+}
+
+function isSummaryPlan(
+  plan: readonly FiledReturnsSummaryPlanEntry[],
+  expectedEntries: readonly PackOffscreenFiledReturnZipExpectedEntry[],
+  expectedReturnType: FiledReturnsReturnType,
+): boolean {
+  const expectedSlots = new Set(
+    expectedEntries.map((entry) => `${entry.artifactType}:${entry.entryNames.join("|")}`),
+  );
+  const plannedStagedSlots = new Set<string>();
+  const identities = new Set<string>();
+  for (const entry of plan) {
+    const identity = `${entry.period}:${entry.returnType}:${entry.artifactType}`;
+    const staged = entry.outcomeCategory === "staged";
+    const slot = `${entry.artifactType}:${entry.entryNames.join("|")}`;
+    if (
+      identities.has(identity) ||
+      entry.returnType !== expectedReturnType ||
+      !FILED_RETURNS_MONTHS.includes(entry.period) ||
+      (staged && (entry.entryNames.length < 1 || !expectedSlots.has(slot))) ||
+      (staged &&
+        entry.entryNames.some((entryName) => !entryNameMatchesPeriod(entryName, entry.period))) ||
+      (!staged && entry.entryNames.length !== 0) ||
+      (staged && plannedStagedSlots.has(slot))
+    ) {
+      return false;
+    }
+    identities.add(identity);
+    if (staged) plannedStagedSlots.add(slot);
+  }
+  return (
+    plannedStagedSlots.size === expectedSlots.size &&
+    [...expectedSlots].every((slot) => plannedStagedSlots.has(slot))
+  );
+}
+
+function entryNameMatchesPeriod(entryName: string, period: string): boolean {
+  const prefix = period.toLowerCase();
+  return entryName.startsWith(`${prefix}.`) || entryName.startsWith(`${prefix}-`);
 }
 
 export function isCanonicalFiledReturnZipEntryName(
