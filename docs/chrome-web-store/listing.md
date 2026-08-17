@@ -161,9 +161,12 @@ requires disclosure:
 Use the seven generated PNGs under
 [`assets/exports/`](assets/exports/). They are generated from the source SVGs,
 contain synthetic UI only, and exclude GST Portal screenshots, taxpayer data,
-real GST filenames, local paths, and downloaded content. The committed hashes
-pin the reviewed dashboard bytes; regeneration on a host with different installed
-fonts can produce different pixels, so upload the committed hash-matched exports.
+real GST filenames, local paths, and downloaded content. The committed manifest
+binds every generated PNG to the exact source SVG bytes. Regeneration on a host
+with different installed fonts can produce different pixels, so upload only the
+committed hash-matched exports after a maintainer has visually reviewed them for
+the exact submission. The regenerated `v0.5.0` exports have not yet received
+that visual review.
 
 | Dashboard slot     | Export                                                      |
 | ------------------ | ----------------------------------------------------------- |
@@ -176,8 +179,9 @@ fonts can produce different pixels, so upload the committed hash-matched exports
 | Screenshot 4       | `assets/exports/screenshot-options-clear-data-1280x800.png` |
 | Screenshot 5       | `assets/exports/screenshot-reviewer-demo-1280x800.png`      |
 
-The asset filenames, dimensions, source files, and current SHA-256 values are
-recorded in `assets/exports/asset-hashes.json`.
+The asset filenames, dimensions, source files, source SVG SHA-256 values, and
+generated PNG SHA-256 values are recorded in
+`assets/exports/asset-hashes.json`.
 
 ## Dashboard Evidence Boundary
 

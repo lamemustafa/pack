@@ -149,6 +149,9 @@ durable full-year, or stable-release claims.
       `v0.4.0` dashboard update were generated from refreshed source SVGs,
       visually checked, and recorded in
       `docs/chrome-web-store/assets/exports/asset-hashes.json`.
+- [ ] The regenerated Store exports are visually reviewed by a maintainer and
+      bound to the exact `v0.5.0` submission. Source/export hash agreement alone
+      does not satisfy this review.
 - [ ] Upload the generated Store screenshot/promotional PNGs to the Chrome Web
       Store dashboard, then record dashboard image review state for the exact
       submitted release.
