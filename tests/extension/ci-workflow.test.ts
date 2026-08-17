@@ -142,6 +142,13 @@ describe("Pack CI workflow", () => {
     expect(statusWorkflow).toContain("schedule:");
     expect(statusWorkflow).toContain("workflow_dispatch:");
     expect(statusWorkflow).toContain("environment: chrome-web-store-status");
+    expect(statusWorkflow).toContain("id: credentials");
+    expect(statusWorkflow).toContain('if [[ -z "$CWS_SERVICE_ACCOUNT_JSON" ]]');
+    expect(statusWorkflow).toContain('echo "configured=false" >> "$GITHUB_OUTPUT"');
+    expect(statusWorkflow).toContain('echo "configured=true" >> "$GITHUB_OUTPUT"');
+    expect(statusWorkflow).toContain("Chrome Web Store status check skipped");
+    expect(statusWorkflow).toContain("the read-only status check did not run");
+    expect(statusWorkflow).toContain("if: needs.configuration.outputs.configured == 'true'");
     expect(statusWorkflow).toContain("node scripts/check-chrome-web-store-status.mjs");
     expect(statusWorkflow).toContain("CWS_REQUIRE_PUBLISHED");
     expect(statusWorkflow).toContain("CWS_SERVICE_ACCOUNT_JSON");

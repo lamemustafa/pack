@@ -22,8 +22,35 @@ permissions:
   contents: read
 
 jobs:
+  configuration:
+    name: Detect Chrome Web Store status configuration
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    environment: chrome-web-store-status
+    outputs:
+      configured: ${{ steps.credentials.outputs.configured }}
+
+    steps:
+      - name: Detect status credentials
+        id: credentials
+        shell: bash
+        env:
+          CWS_SERVICE_ACCOUNT_JSON: ${{ secrets.CWS_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [[ -z "$CWS_SERVICE_ACCOUNT_JSON" ]]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Chrome Web Store status check skipped because credentials are not configured. See #59."
+            echo "### Chrome Web Store status check skipped" >> "$GITHUB_STEP_SUMMARY"
+            echo "Credentials are not configured, so the read-only status check did not run. See #59." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+
   status:
     name: Check Chrome Web Store status
+    needs: configuration
+    if: needs.configuration.outputs.configured == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment: chrome-web-store-status
