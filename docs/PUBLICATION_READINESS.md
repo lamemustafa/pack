@@ -180,9 +180,14 @@ Use only `pass`, `fail`, `fail-closed-as-expected`, `not-applicable`, or
 `not-yet-run`, followed by `date: YYYY-MM-DD`; use `date: not-recorded` only
 with `not-yet-run`. A reason is required for `fail-closed-as-expected` and
 `not-applicable`, using the final column when the selection cannot reach an
-acquisition checkpoint. Record category and state summaries only. Never record
-raw portal URLs, filenames, download IDs, page or DOM text, local paths, or
-taxpayer/session data in a cell.
+acquisition checkpoint. The value after `reason:` is not free text; use exactly
+one of `selection-not-acquisition-capable`,
+`recovery-scenario-not-applicable`, or `expected-fail-closed-boundary`. Use
+`reason: not-recorded` only with `not-yet-run`. If these categories are
+insufficient, add a category through review before recording the observation.
+No other cell text is permitted, so raw portal URLs, filenames, download IDs,
+page or DOM text, local paths, and taxpayer/session data are unrepresentable in
+the matrix.
 
 <!-- BEGIN: full-year-recovery-matrix -->
 
