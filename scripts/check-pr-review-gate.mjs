@@ -9,13 +9,15 @@ const DEFAULT_GH_RETRY_ATTEMPTS = 6;
 const DEFAULT_GH_RETRY_BACKOFF_MS = 10_000;
 const MAX_GH_RETRY_BACKOFF_MS = 60_000;
 const DEFAULT_PR_FINDING_AUTHOR = "chatgpt-codex-connector";
+// GitHub's live GraphQL API returns this lowercase string for a RESOLVED minimization classifier.
+const RESOLVED_MINIMIZED_REASON = "resolved";
 const ALLOWED_MISSING_HEAD_REVIEW_MARKER = "review-gate:allowed-missing-head-review";
 // Codex uses this shields.io badge markup for findings in both inline threads and PR-level
 // comments, as observed on Pack PRs #126, #142, and #144. Clean reviews and setup notices omit it.
 const CODEX_SEVERITY_BADGE_PATTERN =
   /!\[P[0-3] Badge\]\(https:\/\/img\.shields\.io\/badge\/P[0-3]-[^)\s]+\)/u;
 // gh does not expose structured HTTP/network failure details through execFileSync, so keep the
-// complete stderr and process-signal fallback list here as the single transience classifier.
+// complete stderr and process-error fallback list here as the single transience classifier.
 const TRANSIENT_GH_FAILURE_PATTERNS = [
   /\bHTTP\s+(?:429|500|502|503|504)\b/iu,
   /\b(?:secondary\s+)?rate limit(?:ed|ing)?\b/iu,
@@ -121,7 +123,7 @@ function evaluatePullRequestReviewState(pr) {
   );
   const blockingComments = pr.comments.nodes.filter(
     (comment) =>
-      !comment.isMinimized &&
+      (!comment.isMinimized || comment.minimizedReason !== RESOLVED_MINIMIZED_REASON) &&
       normaliseAuthorLogin(comment.author?.login) === normaliseAuthorLogin(prFindingAuthor) &&
       CODEX_SEVERITY_BADGE_PATTERN.test(comment.body ?? ""),
   );
@@ -328,7 +330,7 @@ function fetchReviewGraphPage() {
     "-F",
     `number=${prNumber}`,
     "-f",
-    "query=query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){body headRefName baseRefName headRepository{nameWithOwner} headRefOid comments(first:100){pageInfo{hasNextPage endCursor} nodes{id url createdAt isMinimized author{login} body}} reviewThreads(first:100){pageInfo{hasNextPage endCursor} nodes{id isResolved isOutdated path line comments(first:1){nodes{url author{login} body}}}} reviews(first:100){pageInfo{hasNextPage endCursor} nodes{state submittedAt url author{login} commit{oid}}}}}}",
+    "query=query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){body headRefName baseRefName headRepository{nameWithOwner} headRefOid comments(first:100){pageInfo{hasNextPage endCursor} nodes{id url createdAt isMinimized minimizedReason author{login} body}} reviewThreads(first:100){pageInfo{hasNextPage endCursor} nodes{id isResolved isOutdated path line comments(first:1){nodes{url author{login} body}}}} reviews(first:100){pageInfo{hasNextPage endCursor} nodes{state submittedAt url author{login} commit{oid}}}}}}",
   ];
   return runJson(commandArgs);
 }
@@ -347,7 +349,7 @@ function fetchCommentsGraphPage(after) {
     "-F",
     `after=${after}`,
     "-f",
-    "query=query($owner:String!,$name:String!,$number:Int!,$after:String!){repository(owner:$owner,name:$name){pullRequest(number:$number){comments(first:100,after:$after){pageInfo{hasNextPage endCursor} nodes{id url createdAt isMinimized author{login} body}}}}}",
+    "query=query($owner:String!,$name:String!,$number:Int!,$after:String!){repository(owner:$owner,name:$name){pullRequest(number:$number){comments(first:100,after:$after){pageInfo{hasNextPage endCursor} nodes{id url createdAt isMinimized minimizedReason author{login} body}}}}}",
   ]);
 }
 
