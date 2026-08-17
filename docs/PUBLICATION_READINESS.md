@@ -108,22 +108,35 @@ durable full-year, or stable-release claims.
 
 ## Chrome Web Store Checklist
 
+Every checked item below records at least one verifiable source path, workflow
+run identifier, or dated observation. Unevidenced claims stay unchecked.
+
 ### Done In Source
 
-- [x] Manifest V3.
-- [x] Exact GST host permission allow-list only.
+- [x] Manifest V3 is asserted by `scripts/verify-extension-browser.mjs`.
+- [x] Exact GST host permission allow-list only, defined in
+      `src/extension/manifest-policy.ts`.
 - [x] No `<all_urls>`, cookies, history, webRequest, debugger/CDP,
-      nativeMessaging, tabs, identity, or externally_connectable in any Pack build.
-- [x] Restrictive extension CSP.
-- [x] No remote executable code allowed by package verifier.
-- [x] No extension analytics SDK.
-- [x] Synthetic reviewer demo exists.
+      nativeMessaging, tabs, identity, or externally_connectable in any Pack
+      build; `scripts/verify-extension-package.mjs` enforces the package boundary.
+- [x] Restrictive extension CSP, defined in
+      `src/extension/manifest-policy.ts`.
+- [x] No remote executable code allowed by
+      `scripts/verify-extension-package.mjs`.
+- [x] No extension analytics SDK; packaged markers are rejected by
+      `scripts/verify-extension-package.mjs`.
+- [x] Synthetic reviewer demo exists in `src/background/synthetic-demo.ts`.
 - [x] Reviewer instructions exist in `docs/CHROME_REVIEWER_TEST.md`.
-- [x] Manifest icons are present in source and verified in the built package.
-- [x] Manifest homepage URL points to `https://pack.complyeaze.com/gst`.
-- [x] Protected Chrome Web Store workflow exists for future release updates.
+- [x] Manifest icons are defined in `src/extension/manifest-policy.ts` and
+      verified in the built package by `scripts/verify-extension-package.mjs`.
+- [x] Manifest homepage URL is defined in
+      `src/extension/manifest-policy.ts` and points to
+      `https://pack.complyeaze.com/gst`.
+- [x] Protected Chrome Web Store workflow exists for future release updates at
+      `.github/workflows/chrome-web-store.yml`.
 - [x] Protected Chrome Web Store status monitor exists for post-submit
-      review/publication checks without upload or publish side effects.
+      review/publication checks without upload or publish side effects at
+      `.github/workflows/chrome-web-store-status.yml`.
 
 ### Must Complete Before Future Store Updates Or Broader Store Claims
 
@@ -297,7 +310,8 @@ data are unrepresentable in the matrix.
 - [ ] Publisher account MFA, recovery, and team access are verified.
 - [ ] Product, engineering, security, privacy/legal, open-source, and release
       manager sign-offs are recorded.
-- [x] Initial Chrome Web Store V0 listing published.
+- [x] Initial Chrome Web Store V0 listing published. The dated 2026-07-06
+      `v0.3.2` publication evidence recorded below is the basis for this item.
 - [x] Protected Chrome Web Store release update submitted through workflow
       dispatch. The `v0.2.1` package was uploaded through GitHub Actions run
       `28542410006` with Chrome Web Store upload state `SUCCEEDED`, publish
@@ -312,13 +326,19 @@ data are unrepresentable in the matrix.
       version `0.3.2`, and visibility `Public`.
 - [x] Record the historical `v0.4.0` package upload. Workflow run `29507382500`
       reported upload state `SUCCEEDED`; that release was not published.
-- [x] Record the `v0.5.0` Chrome Web Store submission. The package is submitted
-      and in review as a draft; approval, publication, and live availability
-      are not claimed.
+- [ ] Record the `v0.5.0` Chrome Web Store submission. The release sequence
+      currently describes the package as submitted and in review as a draft;
+      approval, publication, and live availability are not claimed. Required
+      evidence remains unfilled: `observation-date: not-recorded`;
+      `observed-state: not-recorded`; `observation-location: not-recorded`;
+      `submission-method: not-recorded`; `workflow-run-id: not-recorded` (or
+      `manual; workflow-run-id: none`); and
+      `observer-or-approver: not-recorded`.
 - [x] Add a read-only Chrome Web Store status monitor for submitted packages.
       Scheduled runs use the dedicated `chrome-web-store-status` environment so
       publication/rejection monitoring is not blocked by the protected publishing
-      approval gate.
+      approval gate; the source is
+      `.github/workflows/chrome-web-store-status.yml`.
 - [ ] Record a read-only Chrome Web Store Status run with
       `expected_version=0.5.0` and `require_published=false` while the submitted
       draft is in review, then `require_published=true` only after confirmed

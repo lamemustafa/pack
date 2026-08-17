@@ -17,6 +17,8 @@ const matrixStart = "<!-- BEGIN: full-year-recovery-matrix -->";
 const matrixEnd = "<!-- END: full-year-recovery-matrix -->";
 const legendStart = "<!-- BEGIN: full-year-recovery-cell-legend -->";
 const legendEnd = "<!-- END: full-year-recovery-cell-legend -->";
+const storeChecklistStart = "## Chrome Web Store Checklist";
+const storeChecklistEnd = "## Suggested Store Copy";
 const matrixColumns = [
   "Return type",
   "Artifact type",
@@ -120,6 +122,8 @@ const observationCellRules: readonly ObservationCellRule[] = [
 ];
 const recoveryMatrixCheckboxPattern =
   /^- \[( |x)\] The authorised live full fiscal year recovery matrix below is complete:/m;
+const storeChecklistEvidenceTokenPattern =
+  /`(?:\.github\/|docs\/|scripts\/|src\/|tests\/|wxt\.config\.ts)[^`]*`|\b20\d{2}-\d{2}-\d{2}\b|\b(?:GitHub Actions run|[Ww]orkflow run|Run) `\d{8,}`/;
 
 describe("publication readiness recovery matrix", () => {
   it("keeps status-closeout consumers aligned to the canonical listing version", async () => {
@@ -145,6 +149,23 @@ describe("publication readiness recovery matrix", () => {
 
   it("tracks every canonical offered return and artifact selection once", async () => {
     assertCanonicalSelections(matrixRows(await readRecoveryMatrix()));
+  });
+
+  it("requires every checked Store item to carry a recorded evidence token", async () => {
+    const checkedItems = checklistItems(
+      markedSection(await readPublicationReadiness(), storeChecklistStart, storeChecklistEnd),
+    ).filter((item) => item.checked);
+
+    expect(
+      checkedItems.length,
+      "Store checklist must contain checked evidence items",
+    ).toBeGreaterThan(0);
+    for (const [index, item] of checkedItems.entries()) {
+      expect(
+        storeChecklistEvidenceTokenPattern.test(item.text),
+        `checked Store item ${index + 1} must carry a source, run, or dated evidence token`,
+      ).toBe(true);
+    }
   });
 
   it("renders the matrix legend from the canonical whole-cell rules", async () => {
@@ -403,6 +424,22 @@ function parseMatrixRow(line: string): string[] {
     .split("|")
     .slice(1, -1)
     .map((cell) => cell.trim());
+}
+
+function checklistItems(section: string): Array<{ checked: boolean; text: string }> {
+  const items: Array<{ checked: boolean; text: string }> = [];
+
+  for (const line of section.split("\n")) {
+    const item = line.match(/^- \[([ x])\] (.+)$/);
+    if (item) {
+      items.push({ checked: item[1] === "x", text: item[2] ?? "" });
+    } else if (items.length > 0 && /^ {6}\S/.test(line)) {
+      const current = items[items.length - 1];
+      if (current) current.text += ` ${line.trim()}`;
+    }
+  }
+
+  return items;
 }
 
 function assertCanonicalSelections(rows: string[][]): void {
