@@ -166,8 +166,8 @@ durable full-year, or stable-release claims.
 - [ ] Authorised live full fiscal year run reconciles every eligible target as
       downloaded, positively not filed, blocked, or failed in the local ledger.
 - [ ] The authorised live full fiscal year recovery matrix below is complete:
-      every observation is dated, no cell remains `not-yet-run`, and every
-      `fail-closed-as-expected` or `not-applicable` entry has a reason.
+      every observation matches a completion-eligible row in the cell legend,
+      and every recorded date is valid and no later than the current UTC date.
 
 The selection rows are derived from the supported Cartesian product of
 `FILED_RETURNS_RETURN_TYPES` and `FILED_RETURNS_ARTIFACT_TYPES`; a test keeps
@@ -179,18 +179,28 @@ path must not repeat a completed target. An unproven path remains non-complete
 until retry or cancellation. Manual observation is only an explicit
 non-completing action and still requires retry before ZIP staging.
 
-Use only `pass`, `fail`, `fail-closed-as-expected`, `not-applicable`, or
-`not-yet-run`, followed by `date: YYYY-MM-DD`; use `date: not-recorded` only
-with `not-yet-run`. A reason is required for `fail-closed-as-expected` and
-`not-applicable`, using the final column when the selection cannot reach an
-acquisition checkpoint. The value after `reason:` is not free text; use exactly
-one of `selection-not-acquisition-capable`,
-`recovery-scenario-not-applicable`, or `expected-fail-closed-boundary`. Use
-`reason: not-recorded` only with `not-yet-run`. If these categories are
-insufficient, add a category through review before recording the observation.
-No other cell text is permitted, so raw portal URLs, filenames, download IDs,
-page or DOM text, local paths, and taxpayer/session data are unrepresentable in
-the matrix.
+Every cell must match one complete row in this legend. The test renders the
+legend from the same rule table used for validation, so state, reason, date,
+column, and completion semantics cannot drift into an independent vocabulary.
+
+<!-- BEGIN: full-year-recovery-cell-legend -->
+
+| State                     | Date constraint                             | Reason                              | Allowed column           | Completion-eligible |
+| ------------------------- | ------------------------------------------- | ----------------------------------- | ------------------------ | ------------------- |
+| `pass`                    | valid `YYYY-MM-DD`, today or earlier in UTC | none                                | scenario columns         | yes                 |
+| `fail`                    | valid `YYYY-MM-DD`, today or earlier in UTC | none                                | scenario columns         | no                  |
+| `fail-closed-as-expected` | valid `YYYY-MM-DD`, today or earlier in UTC | `expected-fail-closed-boundary`     | any observation column   | yes                 |
+| `not-applicable`          | valid `YYYY-MM-DD`, today or earlier in UTC | `recovery-scenario-not-applicable`  | scenario columns         | yes                 |
+| `not-applicable`          | valid `YYYY-MM-DD`, today or earlier in UTC | `selection-not-acquisition-capable` | final expectation column | yes                 |
+| `not-yet-run`             | `not-recorded`                              | none                                | scenario columns         | no                  |
+| `not-yet-run`             | `not-recorded`                              | `not-recorded`                      | final expectation column | no                  |
+
+<!-- END: full-year-recovery-cell-legend -->
+
+If these combinations are insufficient, add a rule through review before
+recording the observation. No other cell text is permitted, so raw portal URLs,
+filenames, download IDs, page or DOM text, local paths, and taxpayer/session
+data are unrepresentable in the matrix.
 
 <!-- BEGIN: full-year-recovery-matrix -->
 
