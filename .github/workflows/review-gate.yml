@@ -12,6 +12,8 @@ on:
     types: [submitted, edited, dismissed]
   pull_request_review_comment:
     types: [created, edited, deleted]
+  issue_comment:
+    types: [created, edited, deleted]
 
 permissions:
   contents: read
@@ -20,6 +22,7 @@ permissions:
 jobs:
   review-gate:
     name: Review gate
+    if: github.event_name != 'issue_comment' || github.event.issue.pull_request
     runs-on: ubuntu-latest
     timeout-minutes: 8
 
@@ -30,7 +33,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           EVENT_NAME: ${{ github.event_name }}
-          PR_NUMBER: ${{ github.event.pull_request.number || github.event.inputs.pr }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || github.event.inputs.pr }}
           EVENT_HEAD_REF: ${{ github.event.pull_request.head.ref }}
           EVENT_BASE_REF: ${{ github.event.pull_request.base.ref }}
           EVENT_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
@@ -43,7 +46,7 @@ jobs:
             exit 1
           fi
 
-          if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ] || [ "${EVENT_NAME}" = "issue_comment" ]; then
             mapfile -t pr_metadata < <(
               gh pr view "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" \
                 --json headRefName,baseRefName,headRepository,headRefOid \

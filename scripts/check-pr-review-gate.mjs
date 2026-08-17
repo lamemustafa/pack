@@ -3,31 +3,56 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
+const BLOCKING_STATE_EXIT_CODE = 1;
+const EVALUATION_FAILURE_EXIT_CODE = 2;
+const DEFAULT_GH_RETRY_ATTEMPTS = 6;
+const DEFAULT_GH_RETRY_BACKOFF_MS = 10_000;
+const MAX_GH_RETRY_BACKOFF_MS = 60_000;
+const DEFAULT_PR_FINDING_AUTHOR = "chatgpt-codex-connector";
+const ALLOWED_MISSING_HEAD_REVIEW_MARKER = "review-gate:allowed-missing-head-review";
+// Codex uses this shields.io badge markup for findings in both inline threads and PR-level
+// comments, as observed on Pack PRs #126, #142, and #144. Clean reviews and setup notices omit it.
+const CODEX_SEVERITY_BADGE_PATTERN =
+  /!\[P[0-3] Badge\]\(https:\/\/img\.shields\.io\/badge\/P[0-3]-[^)\s]+\)/u;
+// gh does not expose structured HTTP/network failure details through execFileSync, so keep the
+// complete stderr and process-signal fallback list here as the single transience classifier.
+const TRANSIENT_GH_FAILURE_PATTERNS = [
+  /\bHTTP\s+(?:429|500|502|503|504)\b/iu,
+  /\b(?:secondary\s+)?rate limit(?:ed|ing)?\b/iu,
+  /\b(?:ETIMEDOUT|timeout|timed out|context deadline exceeded|deadline exceeded)\b/iu,
+  /\b(?:ECONNRESET|connection reset)\b/iu,
+  /\b(?:ENOTFOUND|EAI_AGAIN|getaddrinfo|could not resolve host|no such host|temporary failure in name resolution)\b/iu,
+];
+
 const rawArgs = process.argv.slice(2);
 const args = new Set(rawArgs);
 const strictHeadReview = args.has("--strict-head-review");
 const allowMissingHeadReview = args.has("--allow-missing-head-review");
 const waitHeadReviewMs = readNonNegativeIntegerArg("--wait-head-review-ms", 0);
 const pollIntervalMs = readNonNegativeIntegerArg("--poll-interval-ms", 10_000);
+const retryAttempts = readPositiveIntegerArg("--retry-attempts", DEFAULT_GH_RETRY_ATTEMPTS);
+const retryBackoffMs = readNonNegativeIntegerArg("--retry-backoff-ms", DEFAULT_GH_RETRY_BACKOFF_MS);
 const fixturePaths = readFixturePaths();
 const requiredReviewAuthor = readArgValue("--required-review-author");
+const prFindingAuthor = requiredReviewAuthor ?? DEFAULT_PR_FINDING_AUTHOR;
 const expectedHeadOid = readArgValue("--expected-head-oid");
 const explicitRepo = readArgValue("--repo");
 const explicitPr = readArgValue("--pr");
 let fixtureIndex = 0;
-const ALLOWED_MISSING_HEAD_REVIEW_MARKER = "review-gate:allowed-missing-head-review";
 
 const repo =
   explicitRepo ?? runText(["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"]);
 const prNumber = Number(explicitPr ?? runText(["pr", "view", "--json", "number", "-q", ".number"]));
 
-if (!repo || !repo.includes("/")) fail("Could not determine GitHub repo. Pass --repo owner/name.");
+if (!repo || !repo.includes("/"))
+  failEvaluation("Could not determine GitHub repo. Pass --repo owner/name.");
 if (!Number.isInteger(prNumber) || prNumber < 1)
-  fail("Could not determine PR number. Pass --pr <number>.");
+  failEvaluation("Could not determine PR number. Pass --pr <number>.");
 
-const { pr, unresolvedThreads, blockingReviews, headReviews } = await fetchEvaluatedPr();
+const { pr, unresolvedThreads, blockingReviews, blockingComments, headReviews } =
+  await fetchEvaluatedPr();
 const bodyIssues = evaluatePullRequestBody(pr);
-reportBlockingState({ unresolvedThreads, blockingReviews });
+reportBlockingState({ unresolvedThreads, blockingReviews, blockingComments });
 
 const missingHeadReview = strictHeadReview && headReviews.length === 0;
 if (missingHeadReview) {
@@ -43,6 +68,7 @@ if (missingHeadReview) {
 if (
   unresolvedThreads.length > 0 ||
   blockingReviews.length > 0 ||
+  blockingComments.length > 0 ||
   bodyIssues.length > 0 ||
   (missingHeadReview && !allowMissingHeadReview)
 ) {
@@ -50,7 +76,7 @@ if (
     console.error(`PR body workflow/template issues on ${repo}#${prNumber}:`);
     for (const issue of bodyIssues) console.error(`- ${issue}`);
   }
-  process.exit(1);
+  process.exit(BLOCKING_STATE_EXIT_CODE);
 }
 
 const latestReview = pr.reviews.nodes.at(-1);
@@ -67,10 +93,10 @@ async function fetchEvaluatedPr() {
 
   while (true) {
     const result = fetchReviewGraph();
-    const pr = result.data?.repository?.pullRequest;
-    if (!pr) fail(`Could not fetch PR #${prNumber} from ${repo}.`);
+    const pr = result?.data?.repository?.pullRequest;
+    if (!pr) failEvaluation(`Could not fetch PR #${prNumber} from ${repo}.`);
     if (expectedHeadOid && pr.headRefOid !== expectedHeadOid) {
-      fail(
+      failEvaluation(
         `PR head changed while evaluating ${repo}#${prNumber}: expected ${expectedHeadOid}, found ${pr.headRefOid}.`,
       );
     }
@@ -93,6 +119,12 @@ function evaluatePullRequestReviewState(pr) {
   const unresolvedThreads = pr.reviewThreads.nodes.filter(
     (thread) => !thread.isResolved && !thread.isOutdated,
   );
+  const blockingComments = pr.comments.nodes.filter(
+    (comment) =>
+      !comment.isMinimized &&
+      normaliseAuthorLogin(comment.author?.login) === normaliseAuthorLogin(prFindingAuthor) &&
+      CODEX_SEVERITY_BADGE_PATTERN.test(comment.body ?? ""),
+  );
   const authorStates = reduceSubmittedCurrentHeadReviewsByAuthor(pr.reviews.nodes, pr.headRefOid);
   const blockingReviews = Array.from(authorStates.values())
     .map((state) => state.blockingReview)
@@ -105,7 +137,7 @@ function evaluatePullRequestReviewState(pr) {
         !requiredReviewAuthor ||
         normaliseAuthorLogin(review.author?.login) === normaliseAuthorLogin(requiredReviewAuthor),
     );
-  return { unresolvedThreads, blockingReviews, headReviews };
+  return { unresolvedThreads, blockingReviews, blockingComments, headReviews };
 }
 
 function reduceSubmittedCurrentHeadReviewsByAuthor(reviews, headRefOid) {
@@ -206,7 +238,7 @@ function evaluatePullRequestBody(pr) {
   return issues;
 }
 
-function reportBlockingState({ unresolvedThreads, blockingReviews }) {
+function reportBlockingState({ unresolvedThreads, blockingReviews, blockingComments }) {
   if (unresolvedThreads.length > 0) {
     console.error(`Unresolved review threads on ${repo}#${prNumber}:`);
     for (const thread of unresolvedThreads) {
@@ -214,6 +246,17 @@ function reportBlockingState({ unresolvedThreads, blockingReviews }) {
       console.error(`- ${thread.path}:${thread.line ?? "?"} ${comment?.url ?? thread.id}`);
       console.error(`  author: ${comment?.author?.login ?? "unknown"}`);
     }
+  }
+
+  if (blockingComments.length > 0) {
+    console.error(`Unresolved PR-level review findings on ${repo}#${prNumber}:`);
+    for (const comment of blockingComments) {
+      console.error(`- ${comment.url ?? comment.id}`);
+      console.error(`  author: ${comment.author?.login ?? "unknown"}`);
+    }
+    console.error(
+      "Minimize each finding with GitHub Hide → Resolved after dispositioning it to clear the gate.",
+    );
   }
 
   if (blockingReviews.length > 0) {
@@ -233,24 +276,38 @@ function fetchReviewGraph() {
 
 function fetchPaginatedReviewGraph() {
   const merged = fetchReviewGraphPage();
-  const mergedPr = merged.data?.repository?.pullRequest;
+  const mergedPr = merged?.data?.repository?.pullRequest;
   if (!mergedPr) return merged;
+  ensureReviewConnections(mergedPr);
 
   let reviewThreadsPageInfo = mergedPr.reviewThreads.pageInfo;
   while (reviewThreadsPageInfo?.hasNextPage) {
     const page = fetchReviewThreadsGraphPage(reviewThreadsPageInfo.endCursor);
-    const pr = page.data?.repository?.pullRequest;
-    if (!pr) break;
+    const pr = page?.data?.repository?.pullRequest;
+    if (!pr) failEvaluation(`Could not fetch the next review-thread page for ${repo}#${prNumber}.`);
+    ensureReviewConnections(pr);
     mergedPr.reviewThreads.nodes.push(...pr.reviewThreads.nodes);
     reviewThreadsPageInfo = pr.reviewThreads.pageInfo;
     mergedPr.reviewThreads.pageInfo = reviewThreadsPageInfo;
   }
 
+  let commentsPageInfo = mergedPr.comments.pageInfo;
+  while (commentsPageInfo?.hasNextPage) {
+    const page = fetchCommentsGraphPage(commentsPageInfo.endCursor);
+    const pr = page?.data?.repository?.pullRequest;
+    if (!pr) failEvaluation(`Could not fetch the next PR-comment page for ${repo}#${prNumber}.`);
+    ensureReviewConnections(pr);
+    mergedPr.comments.nodes.push(...pr.comments.nodes);
+    commentsPageInfo = pr.comments.pageInfo;
+    mergedPr.comments.pageInfo = commentsPageInfo;
+  }
+
   let reviewsPageInfo = mergedPr.reviews.pageInfo;
   while (reviewsPageInfo?.hasNextPage) {
     const page = fetchReviewsGraphPage(reviewsPageInfo.endCursor);
-    const pr = page.data?.repository?.pullRequest;
-    if (!pr) break;
+    const pr = page?.data?.repository?.pullRequest;
+    if (!pr) failEvaluation(`Could not fetch the next review page for ${repo}#${prNumber}.`);
+    ensureReviewConnections(pr);
     mergedPr.reviews.nodes.push(...pr.reviews.nodes);
     reviewsPageInfo = pr.reviews.pageInfo;
     mergedPr.reviews.pageInfo = reviewsPageInfo;
@@ -271,9 +328,27 @@ function fetchReviewGraphPage() {
     "-F",
     `number=${prNumber}`,
     "-f",
-    "query=query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){body headRefName baseRefName headRepository{nameWithOwner} headRefOid reviewThreads(first:100){pageInfo{hasNextPage endCursor} nodes{id isResolved isOutdated path line comments(first:1){nodes{url author{login} body}}}} reviews(first:100){pageInfo{hasNextPage endCursor} nodes{state submittedAt url author{login} commit{oid}}}}}}",
+    "query=query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){body headRefName baseRefName headRepository{nameWithOwner} headRefOid comments(first:100){pageInfo{hasNextPage endCursor} nodes{id url createdAt isMinimized author{login} body}} reviewThreads(first:100){pageInfo{hasNextPage endCursor} nodes{id isResolved isOutdated path line comments(first:1){nodes{url author{login} body}}}} reviews(first:100){pageInfo{hasNextPage endCursor} nodes{state submittedAt url author{login} commit{oid}}}}}}",
   ];
   return runJson(commandArgs);
+}
+
+function fetchCommentsGraphPage(after) {
+  const [owner, name] = repo.split("/");
+  return runJson([
+    "api",
+    "graphql",
+    "-F",
+    `owner=${owner}`,
+    "-F",
+    `name=${name}`,
+    "-F",
+    `number=${prNumber}`,
+    "-F",
+    `after=${after}`,
+    "-f",
+    "query=query($owner:String!,$name:String!,$number:Int!,$after:String!){repository(owner:$owner,name:$name){pullRequest(number:$number){comments(first:100,after:$after){pageInfo{hasNextPage endCursor} nodes{id url createdAt isMinimized author{login} body}}}}}",
+  ]);
 }
 
 function fetchReviewThreadsGraphPage(after) {
@@ -332,11 +407,15 @@ function mergeReviewGraphPages(pages) {
   const merged = JSON.parse(JSON.stringify(firstPage));
   const mergedPr = merged.data?.repository?.pullRequest;
   if (!mergedPr) return merged;
+  ensureReviewConnections(mergedPr);
   for (const page of remainingPages) {
     const pr = page.data?.repository?.pullRequest;
     if (!pr) continue;
+    ensureReviewConnections(pr);
+    mergedPr.comments.nodes.push(...pr.comments.nodes);
     mergedPr.reviewThreads.nodes.push(...pr.reviewThreads.nodes);
     mergedPr.reviews.nodes.push(...pr.reviews.nodes);
+    mergedPr.comments.pageInfo = pr.comments.pageInfo;
     mergedPr.reviewThreads.pageInfo = pr.reviewThreads.pageInfo;
     mergedPr.reviews.pageInfo = pr.reviews.pageInfo;
   }
@@ -346,9 +425,20 @@ function mergeReviewGraphPages(pages) {
 function annotateReviewHeadRef(result) {
   const pr = result?.data?.repository?.pullRequest;
   if (!pr) return result;
-  pr.reviewThreads.pageInfo ??= { hasNextPage: false, endCursor: null };
-  pr.reviews.pageInfo ??= { hasNextPage: false, endCursor: null };
+  ensureReviewConnections(pr);
   return result;
+}
+
+function ensureReviewConnections(pr) {
+  pr.comments ??= { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } };
+  pr.comments.nodes ??= [];
+  pr.comments.pageInfo ??= { hasNextPage: false, endCursor: null };
+  pr.reviewThreads ??= { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } };
+  pr.reviewThreads.nodes ??= [];
+  pr.reviewThreads.pageInfo ??= { hasNextPage: false, endCursor: null };
+  pr.reviews ??= { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } };
+  pr.reviews.nodes ??= [];
+  pr.reviews.pageInfo ??= { hasNextPage: false, endCursor: null };
 }
 
 function readFixturePaths() {
@@ -367,7 +457,14 @@ function readNonNegativeIntegerArg(name, defaultValue) {
   const rawValue = readArgValue(name);
   if (rawValue === null) return defaultValue;
   const value = Number(rawValue);
-  if (!Number.isInteger(value) || value < 0) fail(`${name} must be a non-negative integer.`);
+  if (!Number.isInteger(value) || value < 0)
+    failEvaluation(`${name} must be a non-negative integer.`);
+  return value;
+}
+
+function readPositiveIntegerArg(name, defaultValue) {
+  const value = readNonNegativeIntegerArg(name, defaultValue);
+  if (value < 1) failEvaluation(`${name} must be a positive integer.`);
   return value;
 }
 
@@ -376,19 +473,67 @@ function normaliseAuthorLogin(login) {
 }
 
 function runText(commandArgs) {
-  return execFileSync("gh", commandArgs, {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  }).trim();
+  for (let attempt = 1; attempt <= retryAttempts; attempt += 1) {
+    try {
+      return execFileSync("gh", commandArgs, {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      }).trim();
+    } catch (error) {
+      const detail = formatGhFailure(error);
+      const transient = isTransientGhFailure(error, detail);
+      if (!transient) {
+        failEvaluation(`GitHub CLI failed without a retryable error: ${detail}`);
+      }
+      if (attempt >= retryAttempts) {
+        failEvaluation(`GitHub CLI evaluation failed after ${retryAttempts} attempts: ${detail}`);
+      }
+
+      const backoff = Math.min(
+        retryBackoffMs * 2 ** Math.min(attempt - 1, 20),
+        MAX_GH_RETRY_BACKOFF_MS,
+      );
+      console.warn(
+        `GitHub CLI transient failure on attempt ${attempt}/${retryAttempts}: ${detail}. Retrying in ${backoff}ms.`,
+      );
+      sleepSync(backoff);
+    }
+  }
+
+  failEvaluation("GitHub CLI evaluation ended without a result.");
 }
 
 function runJson(commandArgs) {
-  return JSON.parse(runText(commandArgs));
+  const output = runText(commandArgs);
+  try {
+    return JSON.parse(output);
+  } catch (error) {
+    failEvaluation(`GitHub CLI returned malformed JSON: ${formatErrorMessage(error)}`);
+  }
 }
 
-function fail(message) {
-  console.error(message);
-  process.exit(1);
+function isTransientGhFailure(error, detail) {
+  const evidence = [error?.code, error?.signal, detail].filter(Boolean).join("\n");
+  return TRANSIENT_GH_FAILURE_PATTERNS.some((pattern) => pattern.test(evidence));
+}
+
+function formatGhFailure(error) {
+  const stderr = String(error?.stderr ?? "").trim();
+  return stderr || formatErrorMessage(error);
+}
+
+function formatErrorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function failEvaluation(message) {
+  console.error(`Review gate could not evaluate: ${message}`);
+  process.exit(EVALUATION_FAILURE_EXIT_CODE);
+}
+
+function sleepSync(ms) {
+  if (ms <= 0) return;
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
 function sleep(ms) {
