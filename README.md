@@ -44,15 +44,21 @@ uploaded `v0.3.2` with upload state `SUCCEEDED`, publish state
 publication email on 2026-07-06 records item ID
 `nfnbhekccajjfgkppolomflaeledoccb`, item name
 `ComplyEaze Pack: GSTR-1/GSTR-3B Downloader`, version `0.3.2`, and visibility
-`Public`. The repository source has since advanced to `v0.4.0`; do not treat
-that newer source release as Store-published until its own Store evidence is
-recorded.
+`Public`. The repository source is now the `v0.5.0` pre-1.0 beta release. It is
+not Store-published evidence: the Store-published package remains `v0.3.2`
+until a newer exact ZIP, Chrome Web Store, and live-evidence record is
+published.
 Live manifest/index/exception-file generation is outside the current alpha.
 Future store updates require the release gates in
 [docs/PUBLICATION_READINESS.md](docs/PUBLICATION_READINESS.md) and
 [docs/RELEASE.md](docs/RELEASE.md).
 Release PR titles use Conventional Commits so Release Please can decide the
 next Pack version from each merge.
+
+The beta's synthetic regression coverage exercises the supported target,
+artifact, and recovery combinations. It is not a claim that every GST Portal
+period or format has authorised live evidence; those broader claims remain
+gated by the recorded publication evidence.
 
 Full fiscal year download is available in source-build alpha as a local
 per-period ledger. It expands the selected financial year into eligible
