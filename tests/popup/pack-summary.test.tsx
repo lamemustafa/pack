@@ -166,6 +166,70 @@ describe("popup pack summary", () => {
     expect(markup).toContain("One ZIP · saved by your browser");
   });
 
+  it("shows only a summary period count and never renders summary contents", () => {
+    const scope = {
+      artifactType: "JSON" as const,
+      financialYear: "2024-25",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-3B" as const,
+    };
+    const summary: FiledReturnsFlowSummary = {
+      scope,
+      status: "complete",
+      completedPeriods: ["April", "May"],
+      totalPeriods: 2,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "downloaded",
+        safeSignals: [
+          "full-fiscal-year-zip-downloaded",
+          "full-fiscal-year-summary-included",
+          "full-fiscal-year-summary-parsed-period-count:2",
+          "full-fiscal-year-summary-row-count:2",
+        ],
+        safeMessage: "Portal content that must stay inside the ZIP: synthetic_private_leaf=999999.",
+      },
+    };
+
+    const markup = renderToStaticMarkup(<PackSummary scope={scope} summary={summary} />);
+
+    expect(markup).toContain("summary for 2 periods");
+    expect(markup).not.toContain("synthetic_private_leaf");
+    expect(markup).not.toContain("999999");
+    expect(markup).not.toContain("row-count");
+  });
+
+  it("shows a fixed unavailable status when the artifact ZIP omitted a failed summary", () => {
+    const scope = {
+      artifactType: "JSON" as const,
+      financialYear: "2024-25",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-3B" as const,
+    };
+    const summary: FiledReturnsFlowSummary = {
+      scope,
+      status: "complete",
+      completedPeriods: ["April"],
+      totalPeriods: 1,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "downloaded",
+        safeSignals: [
+          "full-fiscal-year-zip-downloaded",
+          "full-fiscal-year-summary-failed",
+          "full-fiscal-year-summary-error:generation-failed",
+        ],
+        safeMessage: "A fixed failure reason.",
+      },
+    };
+
+    const markup = renderToStaticMarkup(<PackSummary scope={scope} summary={summary} />);
+
+    expect(markup).toContain("summary unavailable");
+  });
+
   it("does not claim a ZIP was saved when a completed full-year run had no artifacts", () => {
     const scope = {
       artifactType: "PDF" as const,

@@ -19,16 +19,20 @@ describe("offscreen Blob URL entrypoint", () => {
   let blobCounter: number;
   let discardExcelWrites: boolean;
   const revokedBlobUrls: string[] = [];
+  const createdBlobs: Blob[] = [];
   const opfsFiles = new Map<string, Blob>();
 
   beforeEach(() => {
+    vi.doUnmock("../../src/connectors/gst/filed-returns-summary-sheet");
     vi.resetModules();
     listener = null;
     blobCounter = 0;
     discardExcelWrites = false;
     revokedBlobUrls.length = 0;
+    createdBlobs.length = 0;
     opfsFiles.clear();
-    vi.spyOn(URL, "createObjectURL").mockImplementation(() => {
+    vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
+      if (blob instanceof Blob) createdBlobs.push(blob);
       blobCounter += 1;
       return `blob:pack-test/${blobCounter}`;
     });
@@ -224,6 +228,69 @@ describe("offscreen Blob URL entrypoint", () => {
         },
       }),
     ).toBe(true);
+    const summaryMessage = {
+      ...baseMessage,
+      payload: {
+        ...baseMessage.payload,
+        expectedEntries: [
+          { artifactType: "PDF", entryNames: ["may.pdf"] },
+          { artifactType: "PDF", entryNames: ["june.pdf"] },
+        ],
+        summaryPlan: [
+          {
+            artifactType: "PDF",
+            entryNames: ["may.pdf"],
+            outcomeCategory: "staged",
+            period: "May",
+            returnType: "GSTR-1",
+          },
+          {
+            artifactType: "PDF",
+            entryNames: ["june.pdf"],
+            outcomeCategory: "staged",
+            period: "June",
+            returnType: "GSTR-1",
+          },
+        ],
+      },
+    };
+    expect(isPackOffscreenBlobUrlMessage(summaryMessage)).toBe(true);
+    expect(
+      isPackOffscreenBlobUrlMessage({
+        ...summaryMessage,
+        payload: {
+          ...summaryMessage.payload,
+          summaryPlan: [
+            { ...summaryMessage.payload.summaryPlan[0], entryNames: ["june.pdf"] },
+            { ...summaryMessage.payload.summaryPlan[1], entryNames: ["may.pdf"] },
+          ],
+        },
+      }),
+    ).toBe(false);
+    expect(
+      isPackOffscreenBlobUrlMessage({
+        ...summaryMessage,
+        payload: {
+          ...summaryMessage.payload,
+          summaryPlan: [
+            ...summaryMessage.payload.summaryPlan.slice(0, 1),
+            { ...summaryMessage.payload.summaryPlan[1], period: "FULL_FISCAL_YEAR" },
+          ],
+        },
+      }),
+    ).toBe(false);
+    expect(
+      isPackOffscreenBlobUrlMessage({
+        ...summaryMessage,
+        payload: {
+          ...summaryMessage.payload,
+          summaryPlan: summaryMessage.payload.summaryPlan.map((entry) => ({
+            ...entry,
+            outcomeCategory: "not-filed",
+          })),
+        },
+      }),
+    ).toBe(false);
     expect(
       isPackOffscreenBlobUrlMessage({
         ...baseMessage,
@@ -364,6 +431,8 @@ describe("offscreen Blob URL entrypoint", () => {
       requestId: "zip-request",
       blobUrl: "blob:pack-test/1",
       zipEntryCount: 1,
+      artifactEntryCount: 1,
+      summaryEntryCount: 0,
     });
     expect(URL.createObjectURL).toHaveBeenCalledWith(
       expect.objectContaining({ type: "application/zip" }),
@@ -416,6 +485,227 @@ describe("offscreen Blob URL entrypoint", () => {
     });
 
     expect(zip).toMatchObject({ ok: true, zipEntryCount: 1 });
+  });
+
+  it("adds a deterministic portal-key summary to the existing full-year archive", async () => {
+    await loadOffscreenEntrypoint();
+    const portalRows = [
+      {
+        period: "April" as const,
+        path: "april-data.json",
+        value: {
+          status: 1,
+          data: {
+            rtnprd: "042026",
+            surrounding_decoy: { z: "april", a: 10 },
+            entries: [{ value: 900 }],
+            portal_leaf: 11,
+          },
+          chksum: "synthetic-april-checksum",
+        },
+      },
+      {
+        period: "May" as const,
+        path: "may-data.json",
+        value: {
+          status: 1,
+          data: {
+            rtnprd: "052026",
+            surrounding_decoy: { z: "may" },
+            entries: [{ value: 800 }, { value: 700 }],
+            other_portal_leaf: 22,
+          },
+          chksum: "synthetic-may-checksum",
+        },
+      },
+    ];
+    for (const row of portalRows) {
+      const staged = await sendOffscreenMessage({
+        type: "PACK_OFFSCREEN_STAGE_FILED_RETURN",
+        target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+        payload: {
+          requestId: `stage-${row.period.toLowerCase()}-json`,
+          ledgerId: TEST_FULL_YEAR_LEDGER_ID,
+          zipPath: row.path,
+          returnType: "GSTR-2B",
+          artifactType: "JSON",
+          dataUrl: `data:application/json;base64,${btoa(JSON.stringify(row.value))}`,
+        },
+      });
+      expect(staged).toMatchObject({ ok: true, staged: true });
+    }
+
+    const zip = await sendOffscreenMessage({
+      type: "PACK_OFFSCREEN_CREATE_FILED_RETURN_ZIP",
+      target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+      payload: {
+        requestId: "full-year-summary-request",
+        ledgerId: TEST_FULL_YEAR_LEDGER_ID,
+        expectedReturnType: "GSTR-2B",
+        expectedEntryCount: 2,
+        expectedEntries: portalRows.map((row) => ({
+          artifactType: "JSON",
+          entryNames: [row.path],
+        })),
+        summaryPlan: portalRows.map((row) => ({
+          artifactType: "JSON",
+          entryNames: [row.path],
+          outcomeCategory: "staged",
+          period: row.period,
+          returnType: "GSTR-2B",
+        })),
+      },
+    });
+
+    expect(zip).toEqual({
+      ok: true,
+      requestId: "full-year-summary-request",
+      blobUrl: "blob:pack-test/1",
+      zipEntryCount: 3,
+      artifactEntryCount: 2,
+      summaryEntryCount: 1,
+      summary: {
+        status: "included",
+        outcomeOnly: false,
+        parsedPeriodCount: 2,
+        rowCount: 2,
+      },
+    });
+    const entries = await extractStoredZipEntries(createdBlobs[0]!);
+    expect([...entries.keys()]).toEqual([
+      "april-data.json",
+      "may-data.json",
+      "full-year-summary.csv",
+    ]);
+    const summary = new TextDecoder().decode(entries.get("full-year-summary.csv"));
+    expect(summary).toContain(
+      "json:/data/entries,json:/data/other_portal_leaf,json:/data/portal_leaf,json:/data/rtnprd",
+    );
+    expect(summary).toContain("April,GSTR-2B,JSON,parseable-json");
+    expect(summary).toContain("May,GSTR-2B,JSON,parseable-json");
+    expect(summary).not.toContain("900");
+    expect(summary).not.toContain("800");
+    expect(summary).not.toContain("700");
+  });
+
+  it("adds only fixed outcome rows when a full-year run has no parseable JSON", async () => {
+    await loadOffscreenEntrypoint();
+    opfsFiles.set(
+      `filed-return-packs/${TEST_FULL_YEAR_LEDGER_ID}/april-return.pdf`,
+      new Blob(["%PDF-1.7 April\n%%EOF\n"]),
+    );
+
+    const zip = await sendOffscreenMessage({
+      type: "PACK_OFFSCREEN_CREATE_FILED_RETURN_ZIP",
+      target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+      payload: {
+        requestId: "pdf-only-summary-request",
+        ledgerId: TEST_FULL_YEAR_LEDGER_ID,
+        expectedReturnType: "GSTR-3B",
+        expectedEntryCount: 1,
+        expectedEntries: [{ artifactType: "PDF", entryNames: ["april-return.pdf"] }],
+        summaryPlan: [
+          {
+            artifactType: "PDF",
+            entryNames: ["april-return.pdf"],
+            outcomeCategory: "staged",
+            period: "April",
+            returnType: "GSTR-3B",
+          },
+        ],
+      },
+    });
+
+    expect(zip).toMatchObject({
+      ok: true,
+      zipEntryCount: 2,
+      summary: { status: "included", outcomeOnly: true, parsedPeriodCount: 0, rowCount: 1 },
+    });
+    const entries = await extractStoredZipEntries(createdBlobs[0]!);
+    expect(new TextDecoder().decode(entries.get("full-year-summary.csv"))).toContain(
+      "April,GSTR-3B,PDF,non-json-artifact",
+    );
+  });
+
+  it("keeps the artifact ZIP when summary generation throws", async () => {
+    vi.doMock("../../src/connectors/gst/filed-returns-summary-sheet", () => ({
+      FILED_RETURNS_SUMMARY_SHEET_PATH: "full-year-summary.csv",
+      buildFiledReturnsSummarySheet: () => {
+        throw new Error("synthetic taxpayer figure must not escape");
+      },
+    }));
+    await loadOffscreenEntrypoint();
+    opfsFiles.set(
+      `filed-return-packs/${TEST_FULL_YEAR_LEDGER_ID}/april-return.pdf`,
+      new Blob(["%PDF-1.7 April\n%%EOF\n"]),
+    );
+
+    const zip = await sendOffscreenMessage({
+      type: "PACK_OFFSCREEN_CREATE_FILED_RETURN_ZIP",
+      target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+      payload: {
+        requestId: "throwing-summary-request",
+        ledgerId: TEST_FULL_YEAR_LEDGER_ID,
+        expectedReturnType: "GSTR-3B",
+        expectedEntryCount: 1,
+        expectedEntries: [{ artifactType: "PDF", entryNames: ["april-return.pdf"] }],
+        summaryPlan: [
+          {
+            artifactType: "PDF",
+            entryNames: ["april-return.pdf"],
+            outcomeCategory: "staged",
+            period: "April",
+            returnType: "GSTR-3B",
+          },
+        ],
+      },
+    });
+
+    expect(zip).toMatchObject({
+      ok: true,
+      zipEntryCount: 1,
+      summary: { status: "failed", reasonCategory: "generation-failed" },
+    });
+    const entries = await extractStoredZipEntries(createdBlobs[0]!);
+    expect([...entries.keys()]).toEqual(["april-return.pdf"]);
+    expect(JSON.stringify(zip)).not.toContain("synthetic taxpayer figure");
+  });
+
+  it("keeps the artifact ZIP when the derived summary exceeds its local limit", async () => {
+    await loadOffscreenEntrypoint();
+    opfsFiles.set(
+      `filed-return-packs/${TEST_FULL_YEAR_LEDGER_ID}/april-data.json`,
+      new Blob([JSON.stringify({ portal_leaf: "x".repeat(5 * 1024 * 1024) })]),
+    );
+
+    const zip = await sendOffscreenMessage({
+      type: "PACK_OFFSCREEN_CREATE_FILED_RETURN_ZIP",
+      target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+      payload: {
+        requestId: "oversized-summary-request",
+        ledgerId: TEST_FULL_YEAR_LEDGER_ID,
+        expectedReturnType: "GSTR-2B",
+        expectedEntryCount: 1,
+        expectedEntries: [{ artifactType: "JSON", entryNames: ["april-data.json"] }],
+        summaryPlan: [
+          {
+            artifactType: "JSON",
+            entryNames: ["april-data.json"],
+            outcomeCategory: "staged",
+            period: "April",
+            returnType: "GSTR-2B",
+          },
+        ],
+      },
+    });
+
+    expect(zip).toMatchObject({
+      ok: true,
+      zipEntryCount: 1,
+      summary: { status: "failed", reasonCategory: "too-large" },
+    });
+    const entries = await extractStoredZipEntries(createdBlobs[0]!);
+    expect([...entries.keys()]).toEqual(["april-data.json"]);
   });
 
   it("rejects a stage receipt when the exact Excel slot does not survive its write", async () => {
@@ -630,6 +920,8 @@ describe("offscreen Blob URL entrypoint", () => {
       requestId: "exact-combined-request",
       blobUrl: "blob:pack-test/1",
       zipEntryCount: 2,
+      artifactEntryCount: 2,
+      summaryEntryCount: 0,
     });
   });
 
@@ -733,6 +1025,8 @@ describe("offscreen Blob URL entrypoint", () => {
       requestId: "exact-full-year-request",
       blobUrl: "blob:pack-test/1",
       zipEntryCount: 2,
+      artifactEntryCount: 2,
+      summaryEntryCount: 0,
     });
   });
 
@@ -784,6 +1078,8 @@ describe("offscreen Blob URL entrypoint", () => {
       requestId: "exact-full-year-request",
       blobUrl: "blob:pack-test/1",
       zipEntryCount: 2,
+      artifactEntryCount: 2,
+      summaryEntryCount: 0,
     });
   });
 
@@ -939,6 +1235,26 @@ describe("offscreen Blob URL entrypoint", () => {
         }
       },
     } as unknown as FileSystemDirectoryHandle;
+  }
+
+  async function extractStoredZipEntries(blob: Blob): Promise<Map<string, Uint8Array>> {
+    const zipBytes = new Uint8Array(await blob.arrayBuffer());
+    const entries = new Map<string, Uint8Array>();
+    const decoder = new TextDecoder();
+    const view = new DataView(zipBytes.buffer, zipBytes.byteOffset, zipBytes.byteLength);
+    let offset = 0;
+    while (offset + 30 <= zipBytes.byteLength && view.getUint32(offset, true) === 0x04034b50) {
+      const compressedSize = view.getUint32(offset + 18, true);
+      const nameLength = view.getUint16(offset + 26, true);
+      const extraLength = view.getUint16(offset + 28, true);
+      const nameStart = offset + 30;
+      const dataStart = nameStart + nameLength + extraLength;
+      const dataEnd = dataStart + compressedSize;
+      const name = decoder.decode(zipBytes.slice(nameStart, nameStart + nameLength));
+      entries.set(name, zipBytes.slice(dataStart, dataEnd));
+      offset = dataEnd;
+    }
+    return entries;
   }
 
   function directChildren(prefix: string): Map<string, "directory" | "file"> {

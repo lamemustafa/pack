@@ -67,6 +67,7 @@ describe("filed-return ZIP filename reassertion", () => {
       status: "created",
       blobUrl: "blob:pack-owned/zip",
       zipEntryCount: 3,
+      artifactEntryCount: 3,
     });
     mocks.clearOffscreenFiledReturnLedger.mockResolvedValue({ status: "cleared" });
     mocks.observeBrowserDownloadById.mockResolvedValue({
@@ -120,7 +121,14 @@ describe("filed-return ZIP filename reassertion", () => {
     mocks.createOffscreenFiledReturnZipUrl.mockResolvedValueOnce({
       status: "created",
       blobUrl: "blob:pack-owned/full-year-zip",
-      zipEntryCount: 1,
+      zipEntryCount: 2,
+      artifactEntryCount: 1,
+      summary: {
+        status: "included",
+        outcomeOnly: true,
+        parsedPeriodCount: 0,
+        rowCount: 1,
+      },
     });
     mocks.browser.downloads.search.mockResolvedValueOnce([
       {
@@ -139,6 +147,50 @@ describe("filed-return ZIP filename reassertion", () => {
     expect(mocks.reservation.bind).toHaveBeenCalledWith(91);
     expect(mocks.reservation.release).toHaveBeenCalledOnce();
     expect(result.safeSignals).not.toContain("zip-download-filename-overridden");
+    expect(result.safeSignals).toEqual(
+      expect.arrayContaining([
+        "full-fiscal-year-summary-included",
+        "full-fiscal-year-summary-outcomes-only",
+      ]),
+    );
+    expect(mocks.createOffscreenFiledReturnZipUrl).toHaveBeenCalledWith(
+      fullYearLedger().ledgerId,
+      expect.objectContaining({
+        summaryPlan: [
+          expect.objectContaining({
+            artifactType: "PDF",
+            outcomeCategory: "staged",
+            period: "April",
+            returnType: "GSTR-3B",
+          }),
+        ],
+      }),
+    );
+  });
+
+  it("downloads the artifact ZIP and surfaces a fixed reason when summary generation fails", async () => {
+    mocks.createOffscreenFiledReturnZipUrl.mockResolvedValueOnce({
+      status: "created",
+      blobUrl: "blob:pack-owned/full-year-zip",
+      zipEntryCount: 1,
+      artifactEntryCount: 1,
+      summary: { status: "failed", reasonCategory: "generation-failed" },
+    });
+
+    const result = await exportFullFiscalYearZip(fullYearLedger(), completeStep());
+
+    expect(result).toMatchObject({
+      state: "downloaded",
+      safeSignals: expect.arrayContaining([
+        "full-fiscal-year-zip-downloaded",
+        "full-fiscal-year-summary-failed",
+        "full-fiscal-year-summary-error:generation-failed",
+      ]),
+    });
+    expect(result.safeMessage).toContain(
+      "Pack saved the artifact files without a summary because summary generation failed.",
+    );
+    expect(mocks.browser.downloads.download).toHaveBeenCalledOnce();
   });
 
   it("uses the canonical GSTR-2B all-formats artifact set for full-fiscal-year ZIP entries", async () => {
@@ -150,6 +202,7 @@ describe("filed-return ZIP filename reassertion", () => {
       status: "created",
       blobUrl: "blob:pack-owned/gstr2b-full-year-zip",
       zipEntryCount: expectedArtifacts.length,
+      artifactEntryCount: expectedArtifacts.length,
     });
 
     const result = await exportFullFiscalYearZip(

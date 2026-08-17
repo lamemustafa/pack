@@ -166,6 +166,26 @@ describe("filed-return durable signal contract", () => {
     expect(isDurableFiledReturnsSignal("filed-return-detail-type:private-value")).toBe(false);
   });
 
+  it("retains only bounded full-year summary status and counts", () => {
+    const signals = [
+      "full-fiscal-year-summary-included",
+      "full-fiscal-year-summary-outcomes-only",
+      "full-fiscal-year-summary-parsed-period-count:0",
+      "full-fiscal-year-summary-row-count:36",
+      "full-fiscal-year-summary-error:too-large",
+    ];
+
+    expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);
+    expect(isDurableFiledReturnsSignal("full-fiscal-year-summary-parsed-period-count:13")).toBe(
+      false,
+    );
+    expect(isDurableFiledReturnsSignal("full-fiscal-year-summary-row-count:0")).toBe(false);
+    expect(isDurableFiledReturnsSignal("full-fiscal-year-summary-row-count:37")).toBe(false);
+    expect(isDurableFiledReturnsSignal("full-fiscal-year-summary-error:portal-value")).toBe(false);
+    expect(isDurableFiledReturnsSignal("full-fiscal-year-zip-entry-count:37")).toBe(true);
+    expect(isDurableFiledReturnsSignal("full-fiscal-year-zip-entry-count:38")).toBe(false);
+  });
+
   it("retains categorical page-generated artifact readiness evidence", () => {
     const signals = ["page-generated-pdf-ready", "page-generated-excel-ready"];
 
