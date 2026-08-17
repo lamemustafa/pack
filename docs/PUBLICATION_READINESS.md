@@ -1,8 +1,8 @@
 # Publication Readiness
 
 This checklist tracks what remains while ComplyEaze Pack is a public V0 Chrome
-Web Store alpha and before it can make broader public, durable full-year, or
-stable-release claims.
+Web Store alpha and source beta, and before it can make broader public,
+durable full-year, or stable-release claims.
 
 ## Current Decision
 
@@ -26,12 +26,16 @@ stable-release claims.
   2026-07-06 records item ID `nfnbhekccajjfgkppolomflaeledoccb`, item name
   `ComplyEaze Pack: GSTR-1/GSTR-3B Downloader`, version `0.3.2`, and visibility
   `Public`.
-- Repository source has since advanced to `v0.4.0`; the current Store-published
-  package evidence is for `v0.3.2` only. Workflow run `29507382500` built and
-  verified the exact `v0.4.0` package and uploaded it with Store state
-  `SUCCEEDED`, but publish returned HTTP 400 because dashboard requirements
-  were incomplete. The pending ZIP SHA-256 is
+- Repository source is the pre-1.0 `v0.5.0` beta release. The current
+  Store-published package evidence is for `v0.3.2` only. Workflow run
+  `29507382500` built and verified the exact `v0.4.0` package and uploaded it
+  with Store state `SUCCEEDED`, but publish returned HTTP 400 because dashboard
+  requirements were incomplete. The pending ZIP SHA-256 is
   `6ee4be24cafbe15db69275cac4da6b212f3de49b0f747eb9909eed7d293347c6`.
+- The `v0.5.0` beta does not expand Store-facing, durable full-year, or
+  universal live-period/format claims. Synthetic regression coverage of target
+  binding, artifact selection, and recovery is not a substitute for the
+  authorised live-evidence gate below.
 - V0 purpose: download filed GSTR-3B PDFs, GSTR-1 summary PDFs, and optional
   GSTR-1 e-invoice details Excel files locally from the user's active,
   manually authenticated GST Portal session when the GST Portal exposes those
