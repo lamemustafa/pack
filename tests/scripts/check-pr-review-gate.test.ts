@@ -8,6 +8,12 @@ const rootDir = process.cwd();
 const scriptPath = path.join(rootDir, "scripts", "check-pr-review-gate.mjs");
 
 describe("PR review gate", () => {
+  it("fetches the minimization reason on initial and paginated PR comments", () => {
+    const script = readFileSync(scriptPath, "utf8");
+
+    expect(script.match(/isMinimized minimizedReason/g)).toHaveLength(2);
+  });
+
   it("fails when the required reviewer has an unresolved PR-level finding", () => {
     const fixturePath = writeFixture(
       "unresolved-pr-level-finding",
@@ -48,12 +54,12 @@ describe("PR review gate", () => {
     expect(result.stderr).toContain("Minimize each finding");
   });
 
-  it("does not block a minimized PR-level finding", () => {
+  it("does not block a PR-level finding minimized as resolved", () => {
     const fixturePath = writeFixture(
       "minimized-pr-level-finding",
       reviewFixture({
         headRefOid: "head-sha",
-        comments: [prFindingComment({ isMinimized: true })],
+        comments: [prFindingComment({ isMinimized: true, minimizedReason: "resolved" })],
         reviews: [review({ state: "COMMENTED", commit: "head-sha" })],
       }),
     );
@@ -65,6 +71,46 @@ describe("PR review gate", () => {
     );
 
     expect(output).toContain("PR review gate passed");
+  });
+
+  it("blocks a PR-level finding minimized as off-topic", () => {
+    const fixturePath = writeFixture(
+      "off-topic-pr-level-finding",
+      reviewFixture({
+        headRefOid: "head-sha",
+        comments: [prFindingComment({ isMinimized: true, minimizedReason: "off-topic" })],
+        reviews: [review({ state: "COMMENTED", commit: "head-sha" })],
+      }),
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [scriptPath, "--repo", "lamemustafa/pack", "--pr", "14", "--fixture", fixturePath],
+      { cwd: rootDir, encoding: "utf8" },
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Unresolved PR-level review findings");
+  });
+
+  it("blocks a PR-level finding minimized as outdated", () => {
+    const fixturePath = writeFixture(
+      "outdated-pr-level-finding",
+      reviewFixture({
+        headRefOid: "head-sha",
+        comments: [prFindingComment({ isMinimized: true, minimizedReason: "outdated" })],
+        reviews: [review({ state: "COMMENTED", commit: "head-sha" })],
+      }),
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [scriptPath, "--repo", "lamemustafa/pack", "--pr", "14", "--fixture", fixturePath],
+      { cwd: rootDir, encoding: "utf8" },
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Unresolved PR-level review findings");
   });
 
   it("does not treat clean-review notes or setup notices as PR-level findings", () => {
@@ -1138,11 +1184,13 @@ function reviewFixture({
 function prFindingComment({
   id = "comment-1",
   isMinimized = false,
+  minimizedReason = null,
   author = "chatgpt-codex-connector[bot]",
   body = "![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat) Fix this.",
 }: {
   id?: string;
   isMinimized?: boolean;
+  minimizedReason?: string | null;
   author?: string;
   body?: string;
 } = {}) {
@@ -1151,6 +1199,7 @@ function prFindingComment({
     url: `https://github.com/lamemustafa/pack/pull/14#issuecomment-${id}`,
     createdAt: "2026-08-17T12:00:00Z",
     isMinimized,
+    minimizedReason,
     author: { login: author },
     body,
   };

@@ -37,7 +37,7 @@ describe("Pack CI workflow", () => {
     expect(workflow).not.toContain("actions/upload-artifact");
   });
 
-  it("runs a read-only current-head review findings gate", async () => {
+  it("runs the review gate and publishes comment-triggered verdicts on the PR head", async () => {
     const workflow = await readFile(
       path.join(rootDir, ".github", "workflows", "review-gate.yml"),
       "utf8",
@@ -60,7 +60,13 @@ describe("Pack CI workflow", () => {
     expect(workflow).not.toContain("/review-gate");
     expect(workflow).toContain("name: Review findings gate");
     expect(workflow).toContain("name: Review gate");
+    expect(workflow).toContain("name: Publish Review gate verdict");
     expect(workflow).toContain("pull-requests: read");
+    expect(workflow.match(/checks: write/g)).toHaveLength(1);
+    expect(workflow).toContain("permissions:\n  contents: read\n  pull-requests: read\n\njobs:");
+    expect(workflow).toMatch(
+      /publish-pr-head-check:[\s\S]*?permissions:\n\s+contents: read\n\s+checks: write/,
+    );
     expect(workflow).not.toContain("statuses: write");
     expect(workflow).toContain("GH_TOKEN: ${{ github.token }}");
     expect(workflow).toContain("repository: ${{ steps.resolve-pr.outputs.head_repo }}");
@@ -74,6 +80,10 @@ describe("Pack CI workflow", () => {
     expect(workflow).toContain("--wait-head-review-ms 180000");
     expect(workflow).toContain("--allow-missing-head-review");
     expect(workflow).toContain('--expected-head-oid "${{ steps.resolve-pr.outputs.head_sha }}"');
+    expect(workflow).toContain("steps.evaluate.outputs.exit_code || '2'");
+    expect(workflow).toContain("scripts/publish-review-gate-check.mjs");
+    expect(workflow).toContain("PR-head Review gate publication is unavailable for fork");
+    expect(workflow).toContain("needs.review-gate.outputs.head_repo == github.repository");
   });
 
   it("keeps every workflow action reference within the repository selected-actions policy", async () => {
