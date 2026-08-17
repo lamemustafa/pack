@@ -26,12 +26,16 @@ durable full-year, or stable-release claims.
   2026-07-06 records item ID `nfnbhekccajjfgkppolomflaeledoccb`, item name
   `ComplyEaze Pack: GSTR-1/GSTR-3B Downloader`, version `0.3.2`, and visibility
   `Public`.
-- Repository source is the pre-1.0 `v0.5.0` beta release. The current
-  Store-published package evidence is for `v0.3.2` only. Workflow run
-  `29507382500` built and verified the exact `v0.4.0` package and uploaded it
-  with Store state `SUCCEEDED`, but publish returned HTTP 400 because dashboard
-  requirements were incomplete. The pending ZIP SHA-256 is
+- The past `v0.4.0` release workflow run `29507382500` built and verified the
+  exact package and uploaded it with Store state `SUCCEEDED`, but publish
+  returned HTTP 400 because dashboard requirements were incomplete. It was not
+  published. The historical pending ZIP SHA-256 is
   `6ee4be24cafbe15db69275cac4da6b212f3de49b0f747eb9909eed7d293347c6`.
+- Repository source and the GitHub release are the pre-1.0 `v0.5.0` beta,
+  published as a pre-release. The Chrome Web Store package for `v0.5.0` is
+  submitted and in review as a draft; it is not approved, published, or live.
+  `v0.3.2` remains the last confirmed Store publication and the only basis for
+  current Store-published public claims.
 - The `v0.5.0` beta does not expand Store-facing, durable full-year, or
   universal live-period/format claims. Synthetic regression coverage of target
   binding, artifact selection, and recovery is not a substitute for the
@@ -135,17 +139,19 @@ durable full-year, or stable-release claims.
 - [ ] Legal review of live GST Portal terms against exact extension behaviour.
 - [ ] Privacy Policy, Terms, support URL, source URL, and limited-use statement
       are live and accessible without login.
-- [ ] Chrome privacy declarations match the exact final build. For `v0.4.0`,
-      disclose personally identifiable information, financial and payment
-      information, and website content because Chrome counts local processing.
-      Keep authentication information, web history, and user activity
-      unchecked unless runtime behavior changes.
+- [ ] Chrome privacy declarations match the exact final build. Disclose
+      personally identifiable information, financial and payment information,
+      and website content because Chrome counts local processing. Keep
+      authentication information, web history, and user activity unchecked
+      unless runtime behavior changes.
 - [x] Source-controlled Store screenshots and promotional images use only
-      synthetic/redacted data. The seven `v0.4.0` PNG exports were generated
-      from refreshed source SVGs, visually checked, and recorded in
+      synthetic/redacted data. The seven PNG exports prepared for the past
+      `v0.4.0` dashboard update were generated from refreshed source SVGs,
+      visually checked, and recorded in
       `docs/chrome-web-store/assets/exports/asset-hashes.json`.
-- [ ] Upload the generated `v0.4.0` Store screenshot/promotional PNGs to the
-      Chrome Web Store dashboard, then record dashboard image review state.
+- [ ] Upload the generated Store screenshot/promotional PNGs to the Chrome Web
+      Store dashboard, then record dashboard image review state for the exact
+      submitted release.
 - [ ] Exact ZIP tested in a clean Chrome profile.
 - [ ] Exact ZIP tested against the live GSTR-3B and GSTR-1 flows by an
       authorised user.
@@ -156,19 +162,44 @@ durable full-year, or stable-release claims.
       cookies, credentials, OTP, or CAPTCHA data.
 - [ ] Authorised live full fiscal year run reconciles every eligible target as
       downloaded, positively not filed, blocked, or failed in the local ledger.
-- [ ] Authorised live full fiscal year recovery matrix records every currently
-      offered return/artifact selection as exercised or as explicitly expected
-      fail-closed/not applicable when it cannot reach an acquisition checkpoint.
-      For each acquisition-capable selection, cover service-worker restart,
-      browser restart, interrupted download, cancellation/discard and its
-      cleanup outcome, and a retained checkpoint whose browser record is no
-      longer available. A resumed path must not repeat a
-      completed target; an unproven path must remain non-complete until retry
-      or cancellation. Manual observation may be recorded only as an explicit
-      non-completing action that still requires retry before ZIP staging. Record
-      category/state summaries only—never raw portal URLs,
-      filenames, download IDs, page or DOM text, local paths, or taxpayer/session
-      data.
+- [ ] The authorised live full fiscal year recovery matrix below is complete:
+      every observation is dated, no cell remains `not-yet-run`, and every
+      `fail-closed-as-expected` or `not-applicable` entry has a reason.
+
+The selection rows are derived from the supported Cartesian product of
+`FILED_RETURNS_RETURN_TYPES` and `FILED_RETURNS_ARTIFACT_TYPES`; a test keeps
+this instrument aligned with those canonical constants. For each
+acquisition-capable selection, record service-worker restart, browser restart,
+interrupted download, cancellation/discard and its cleanup outcome, and a
+retained checkpoint whose browser record is no longer available. A resumed
+path must not repeat a completed target. An unproven path remains non-complete
+until retry or cancellation. Manual observation is only an explicit
+non-completing action and still requires retry before ZIP staging.
+
+Use only `pass`, `fail`, `fail-closed-as-expected`, `not-applicable`, or
+`not-yet-run`, followed by `date: YYYY-MM-DD`; use `date: not-recorded` only
+with `not-yet-run`. A reason is required for `fail-closed-as-expected` and
+`not-applicable`, using the final column when the selection cannot reach an
+acquisition checkpoint. Record category and state summaries only. Never record
+raw portal URLs, filenames, download IDs, page or DOM text, local paths, or
+taxpayer/session data in a cell.
+
+<!-- BEGIN: full-year-recovery-matrix -->
+
+| Return type | Artifact type | Service-worker restart          | Browser restart                 | Interrupted download            | Cancellation/discard and cleanup | Retained checkpoint; browser record unavailable | Expected fail-closed / not applicable                 |
+| ----------- | ------------- | ------------------------------- | ------------------------------- | ------------------------------- | -------------------------------- | ----------------------------------------------- | ----------------------------------------------------- |
+| GSTR-3B     | PDF           | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
+| GSTR-3B     | JSON          | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
+| GSTR-1      | PDF           | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
+| GSTR-1      | EXCEL         | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
+| GSTR-1      | PDF_AND_EXCEL | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
+| GSTR-2B     | PDF           | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
+| GSTR-2B     | JSON          | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
+| GSTR-2B     | EXCEL         | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
+| GSTR-2B     | PDF_AND_EXCEL | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
+
+<!-- END: full-year-recovery-matrix -->
+
 - [ ] Action-bound capture is tested in clean Chrome and Brave profiles plus the
       real profile where the native Save dialog appeared, with "Ask where to
       save each file" on and off, existing filename collisions, and
@@ -255,16 +286,19 @@ durable full-year, or stable-release claims.
       `nfnbhekccajjfgkppolomflaeledoccb`, item name
       `ComplyEaze Pack: GSTR-1/GSTR-3B Downloader`, item type `extension`,
       version `0.3.2`, and visibility `Public`.
-- [x] Upload the exact `v0.4.0` package. Workflow run `29507382500` reported
-      upload state `SUCCEEDED`; publication remains blocked on dashboard
-      closeout and is not claimed complete.
+- [x] Record the historical `v0.4.0` package upload. Workflow run `29507382500`
+      reported upload state `SUCCEEDED`; that release was not published.
+- [x] Record the `v0.5.0` Chrome Web Store submission. The package is submitted
+      and in review as a draft; approval, publication, and live availability
+      are not claimed.
 - [x] Add a read-only Chrome Web Store status monitor for submitted packages.
       Scheduled runs use the dedicated `chrome-web-store-status` environment so
       publication/rejection monitoring is not blocked by the protected publishing
       approval gate.
 - [ ] Record a read-only Chrome Web Store Status run with
-      `expected_version=0.4.0` and `require_published=false` after dashboard
-      submission, then `require_published=true` after publication. Use
+      `expected_version=0.5.0` and `require_published=false` while the submitted
+      draft is in review, then `require_published=true` only after confirmed
+      publication. Use
       [`docs/chrome-web-store/dashboard-closeout.md`](chrome-web-store/dashboard-closeout.md)
       for the dashboard and read-only status-monitor closeout checklist.
 
@@ -278,10 +312,11 @@ version here.
 
 ## Not Yet Stable Or Broad-Claim Ready Until
 
-The V0 listing exists for Store-published `v0.3.2`, `v0.4.0` is uploaded but not
-yet published, and the source-build alpha
-full-year workflow has maintainer evidence for automatic local downloads after
-user initiation. Pack must not claim stable Chrome Web Store maturity,
+The last confirmed Store publication is `v0.3.2`; the past `v0.4.0` package was
+uploaded but not published, and the `v0.5.0` package is submitted and in review
+as a draft. The source-build alpha full-year workflow has maintainer evidence
+for automatic local downloads after user initiation. Pack must not claim stable
+Chrome Web Store maturity,
 store-facing full-year availability, durable restart-safe full-year support,
 legal approval, live manifest/index/exception output, or broad GST coverage
 until legal review, live public policy URL confirmation, exact-ZIP manual QA,
