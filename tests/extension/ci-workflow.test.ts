@@ -37,35 +37,31 @@ describe("Pack CI workflow", () => {
     expect(workflow).not.toContain("actions/upload-artifact");
   });
 
-  it("runs the review gate and publishes comment-triggered verdicts on the PR head", async () => {
+  it("keeps event gates read-only and reconciles PR-head checks from scheduled trusted code", async () => {
     const workflow = await readFile(
       path.join(rootDir, ".github", "workflows", "review-gate.yml"),
       "utf8",
     );
 
     expect(workflow).toContain("workflow_dispatch:");
-    expect(workflow).toContain("pull_request:");
-    expect(workflow).toContain("pull_request_review:");
-    expect(workflow).toContain("pull_request_review_comment:");
-    expect(workflow).toContain("issue_comment:");
+    expect(workflow).toContain(
+      "pull_request:\n    types: [opened, reopened, synchronize, ready_for_review, edited]",
+    );
+    expect(workflow).toContain("pull_request_review:\n    types: [submitted, edited, dismissed]");
+    expect(workflow).toContain(
+      "pull_request_review_comment:\n    types: [created, edited, deleted]",
+    );
     expect(workflow).not.toContain("pull_request_target:");
-    expect(workflow).not.toContain("schedule:");
-    expect(workflow).toContain(
-      "if: github.event_name != 'issue_comment' || github.event.issue.pull_request",
-    );
-    expect(workflow).toContain("github.event.issue.number");
-    expect(workflow).toContain(
-      '[ "${EVENT_NAME}" = "workflow_dispatch" ] || [ "${EVENT_NAME}" = "issue_comment" ]',
-    );
+    expect(workflow).not.toContain("issue_comment:");
+    expect(workflow).not.toContain("github.event.issue");
+    expect(workflow).toContain('schedule:\n    - cron: "*/15 * * * *"');
     expect(workflow).not.toContain("/review-gate");
-    expect(workflow).toContain("name: Review findings gate");
     expect(workflow).toContain("name: Review gate");
-    expect(workflow).toContain("name: Publish Review gate verdict");
-    expect(workflow).toContain("pull-requests: read");
+    expect(workflow).toContain("if: github.event_name != 'schedule'");
+    expect(workflow).toContain("if: github.event_name == 'schedule'");
     expect(workflow.match(/checks: write/g)).toHaveLength(1);
-    expect(workflow).toContain("permissions:\n  contents: read\n  pull-requests: read\n\njobs:");
     expect(workflow).toMatch(
-      /publish-pr-head-check:[\s\S]*?permissions:\n\s+contents: read\n\s+checks: write/,
+      /scheduled-review-gate:[\s\S]*?permissions:\n\s+contents: read\n\s+pull-requests: read\n\s+checks: write/,
     );
     expect(workflow).not.toContain("statuses: write");
     expect(workflow).toContain("GH_TOKEN: ${{ github.token }}");
@@ -80,10 +76,12 @@ describe("Pack CI workflow", () => {
     expect(workflow).toContain("--wait-head-review-ms 180000");
     expect(workflow).toContain("--allow-missing-head-review");
     expect(workflow).toContain('--expected-head-oid "${{ steps.resolve-pr.outputs.head_sha }}"');
-    expect(workflow).toContain("steps.evaluate.outputs.exit_code || '2'");
     expect(workflow).toContain("scripts/publish-review-gate-check.mjs");
-    expect(workflow).toContain("PR-head Review gate publication is unavailable for fork");
-    expect(workflow).toContain("needs.review-gate.outputs.head_repo == github.repository");
+    expect(workflow).toContain("--reconcile-open-prs");
+    expect(workflow).toContain("--max-prs 25");
+    expect(workflow).toMatch(
+      /scheduled-review-gate:[\s\S]*?ref: \$\{\{ github\.event\.repository\.default_branch \}\}/,
+    );
   });
 
   it("keeps every workflow action reference within the repository selected-actions policy", async () => {

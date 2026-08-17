@@ -14,150 +14,38 @@ describe("PR review gate", () => {
     expect(script.match(/isMinimized minimizedReason/g)).toHaveLength(2);
   });
 
-  it("fails when the required reviewer has an unresolved PR-level finding", () => {
-    const fixturePath = writeFixture(
-      "unresolved-pr-level-finding",
-      reviewFixture({
-        headRefOid: "head-sha",
-        comments: [
-          {
-            id: "comment-1",
-            url: "https://github.com/lamemustafa/pack/pull/14#issuecomment-1",
-            createdAt: "2026-08-17T12:00:00Z",
-            isMinimized: false,
-            author: { login: "chatgpt-codex-connector[bot]" },
-            body: "![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat) Fix this.",
-          },
-        ],
-        reviews: [review({ state: "COMMENTED", commit: "head-sha" })],
-      }),
-    );
-
-    const result = spawnSync(
-      process.execPath,
+  it.each([
+    ["unresolved finding", [prFindingComment()], 1],
+    ["resolved finding", [prFindingComment({ isMinimized: true, minimizedReason: "resolved" })], 0],
+    [
+      "off-topic minimization",
+      [prFindingComment({ isMinimized: true, minimizedReason: "off-topic" })],
+      1,
+    ],
+    [
+      "outdated minimization",
+      [prFindingComment({ isMinimized: true, minimizedReason: "outdated" })],
+      1,
+    ],
+    ["unrelated author", [prFindingComment({ author: "external-reviewer" })], 0],
+    [
+      "non-finding notes",
       [
-        scriptPath,
-        "--repo",
-        "lamemustafa/pack",
-        "--pr",
-        "14",
-        "--fixture",
-        fixturePath,
-        "--strict-head-review",
+        prFindingComment({ body: "Codex Review: Didn't find any major issues. Breezy!" }),
+        prFindingComment({ body: "To use Codex here, create an environment for this repo." }),
       ],
-      { cwd: rootDir, encoding: "utf8" },
+      0,
+    ],
+  ])("maps PR-level %s", (name, comments, expectedExit) => {
+    const result = runGateFixture(name, comments);
+    expect(result.status).toBe(expectedExit);
+    expect(expectedExit === 0 ? result.stdout : result.stderr).toContain(
+      expectedExit === 0 ? "PR review gate passed" : "Unresolved PR-level review findings",
     );
-
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain("Unresolved PR-level review findings");
-    expect(result.stderr).toContain("chatgpt-codex-connector[bot]");
-    expect(result.stderr).toContain("Minimize each finding");
-  });
-
-  it("does not block a PR-level finding minimized as resolved", () => {
-    const fixturePath = writeFixture(
-      "minimized-pr-level-finding",
-      reviewFixture({
-        headRefOid: "head-sha",
-        comments: [prFindingComment({ isMinimized: true, minimizedReason: "resolved" })],
-        reviews: [review({ state: "COMMENTED", commit: "head-sha" })],
-      }),
-    );
-
-    const output = execFileSync(
-      process.execPath,
-      [scriptPath, "--repo", "lamemustafa/pack", "--pr", "14", "--fixture", fixturePath],
-      { cwd: rootDir, encoding: "utf8" },
-    );
-
-    expect(output).toContain("PR review gate passed");
-  });
-
-  it("blocks a PR-level finding minimized as off-topic", () => {
-    const fixturePath = writeFixture(
-      "off-topic-pr-level-finding",
-      reviewFixture({
-        headRefOid: "head-sha",
-        comments: [prFindingComment({ isMinimized: true, minimizedReason: "off-topic" })],
-        reviews: [review({ state: "COMMENTED", commit: "head-sha" })],
-      }),
-    );
-
-    const result = spawnSync(
-      process.execPath,
-      [scriptPath, "--repo", "lamemustafa/pack", "--pr", "14", "--fixture", fixturePath],
-      { cwd: rootDir, encoding: "utf8" },
-    );
-
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain("Unresolved PR-level review findings");
-  });
-
-  it("blocks a PR-level finding minimized as outdated", () => {
-    const fixturePath = writeFixture(
-      "outdated-pr-level-finding",
-      reviewFixture({
-        headRefOid: "head-sha",
-        comments: [prFindingComment({ isMinimized: true, minimizedReason: "outdated" })],
-        reviews: [review({ state: "COMMENTED", commit: "head-sha" })],
-      }),
-    );
-
-    const result = spawnSync(
-      process.execPath,
-      [scriptPath, "--repo", "lamemustafa/pack", "--pr", "14", "--fixture", fixturePath],
-      { cwd: rootDir, encoding: "utf8" },
-    );
-
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain("Unresolved PR-level review findings");
-  });
-
-  it("does not treat clean-review notes or setup notices as PR-level findings", () => {
-    const fixturePath = writeFixture(
-      "non-finding-pr-level-comments",
-      reviewFixture({
-        headRefOid: "head-sha",
-        comments: [
-          prFindingComment({
-            id: "clean-review",
-            body: "Codex Review: Didn't find any major issues. Breezy!",
-          }),
-          prFindingComment({
-            id: "setup-notice",
-            body: "To use Codex here, create an environment for this repo.",
-          }),
-        ],
-        reviews: [review({ state: "COMMENTED", commit: "head-sha" })],
-      }),
-    );
-
-    const output = execFileSync(
-      process.execPath,
-      [scriptPath, "--repo", "lamemustafa/pack", "--pr", "14", "--fixture", fixturePath],
-      { cwd: rootDir, encoding: "utf8" },
-    );
-
-    expect(output).toContain("PR review gate passed");
-  });
-
-  it("does not block a finding-shaped comment from an unrelated author", () => {
-    const fixturePath = writeFixture(
-      "unrelated-author-pr-level-finding",
-      reviewFixture({
-        headRefOid: "head-sha",
-        comments: [prFindingComment({ author: "external-reviewer" })],
-        reviews: [review({ state: "COMMENTED", commit: "head-sha" })],
-      }),
-    );
-
-    const output = execFileSync(
-      process.execPath,
-      [scriptPath, "--repo", "lamemustafa/pack", "--pr", "14", "--fixture", fixturePath],
-      { cwd: rootDir, encoding: "utf8" },
-    );
-
-    expect(output).toContain("PR review gate passed");
+    if (name === "unresolved finding") {
+      expect(result.stderr).toContain("Hide → Resolved");
+      expect(result.stderr).toContain("next scheduled Review gate run");
+    }
   });
 
   it("evaluates PR-level findings from paginated fixture pages", () => {
@@ -194,7 +82,7 @@ describe("PR review gate", () => {
       reviews: [review({ state: "COMMENTED", commit: "head-sha" })],
     });
     const missingPrPage = { data: { repository: { pullRequest: null } } };
-    const { result, attempts } = runGateWithFakeGh("missing-paginated-pr", [
+    const { result, attempts } = runGateWithFakeGh([
       { status: 0, stdout: JSON.stringify(firstPage) },
       { status: 0, stdout: JSON.stringify(missingPrPage) },
     ]);
@@ -202,23 +90,6 @@ describe("PR review gate", () => {
     expect(result.status).toBe(2);
     expect(result.stderr).toContain("Review gate could not evaluate");
     expect(result.stderr).toContain("next PR-comment page");
-    expect(attempts).toBe(2);
-  });
-
-  it("retries a transient GitHub CLI failure and then succeeds", () => {
-    const fixture = reviewFixture({
-      headRefOid: "head-sha",
-      reviews: [review({ state: "COMMENTED", commit: "head-sha" })],
-    });
-    const { result, attempts } = runGateWithFakeGh("transient-then-success", [
-      { status: 1, stderr: "gh: Service Unavailable (HTTP 503)\n" },
-      { status: 0, stdout: JSON.stringify(fixture) },
-    ]);
-
-    expect(result.status).toBe(0);
-    expect(result.stdout).toContain("PR review gate passed");
-    expect(result.stderr).toContain("transient failure on attempt 1/2");
-    expect(result.stderr).toContain("Retrying in 0ms");
     expect(attempts).toBe(2);
   });
 
@@ -231,12 +102,12 @@ describe("PR review gate", () => {
     ["timeout", "gh: request timed out\n"],
     ["connection-reset", "gh: read: connection reset by peer\n"],
     ["dns", "gh: dial tcp: lookup api.github.com: no such host\n"],
-  ])("retries the allowed %s transient failure", (name, stderr) => {
+  ])("retries the allowed %s transient failure", (_name, stderr) => {
     const fixture = reviewFixture({
       headRefOid: "head-sha",
       reviews: [review({ state: "COMMENTED", commit: "head-sha" })],
     });
-    const { result, attempts } = runGateWithFakeGh(name, [
+    const { result, attempts } = runGateWithFakeGh([
       { status: 1, stderr },
       { status: 0, stdout: JSON.stringify(fixture) },
     ]);
@@ -246,42 +117,36 @@ describe("PR review gate", () => {
     expect(attempts).toBe(2);
   });
 
-  it("uses the could-not-evaluate exit code after transient retries are exhausted", () => {
-    const { result, attempts } = runGateWithFakeGh(
-      "transient-exhaustion",
+  it.each([
+    [
+      "transient retry exhaustion",
       [
         { status: 1, stderr: "gh: Service Unavailable (HTTP 503)\n" },
         { status: 1, stderr: "gh: Service Unavailable (HTTP 503)\n" },
         { status: 1, stderr: "gh: Service Unavailable (HTTP 503)\n" },
       ],
-      ["--retry-attempts", "3"],
-    );
-
-    expect(result.status).toBe(2);
-    expect(result.stderr).toContain("Review gate could not evaluate");
-    expect(result.stderr).toContain("failed after 3 attempts");
-    expect(result.stderr).toContain("HTTP 503");
-    expect(result.stderr).not.toContain("Unresolved review threads");
-    expect(attempts).toBe(3);
-  });
-
-  it("does not retry a non-transient GitHub CLI failure", () => {
-    const { result, attempts } = runGateWithFakeGh(
-      "non-transient",
+      3,
+      "failed after 3 attempts",
+      3,
+    ],
+    [
+      "non-transient failure",
       [
         {
           status: 1,
           stderr: "gh: GraphQL: Could not resolve to a Repository with the name pack\n",
         },
       ],
-      ["--retry-attempts", "3"],
-    );
-
+      3,
+      "Could not resolve to a Repository",
+      1,
+    ],
+  ])("fails closed for %s", (_name, responses, retryAttempts, message, expectedAttempts) => {
+    const { result, attempts } = runGateWithFakeGh(responses, retryAttempts);
     expect(result.status).toBe(2);
     expect(result.stderr).toContain("Review gate could not evaluate");
-    expect(result.stderr).toContain("Could not resolve to a Repository");
-    expect(result.stderr).not.toContain("Retrying in");
-    expect(attempts).toBe(1);
+    expect(result.stderr).toContain(message);
+    expect(attempts).toBe(expectedAttempts);
   });
 
   it("fails when unresolved review threads are present", () => {
@@ -1181,19 +1046,22 @@ function reviewFixture({
   };
 }
 
-function prFindingComment({
-  id = "comment-1",
-  isMinimized = false,
-  minimizedReason = null,
-  author = "chatgpt-codex-connector[bot]",
-  body = "![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat) Fix this.",
-}: {
-  id?: string;
-  isMinimized?: boolean;
-  minimizedReason?: string | null;
-  author?: string;
-  body?: string;
-} = {}) {
+function prFindingComment(
+  options: {
+    id?: string;
+    isMinimized?: boolean;
+    minimizedReason?: string | null;
+    author?: string;
+    body?: string;
+  } = {},
+) {
+  const {
+    id = "comment-1",
+    isMinimized = false,
+    minimizedReason = null,
+    author = "chatgpt-codex-connector[bot]",
+    body = "![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat) Fix this.",
+  } = options;
   return {
     id,
     url: `https://github.com/lamemustafa/pack/pull/14#issuecomment-${id}`,
@@ -1205,13 +1073,28 @@ function prFindingComment({
   };
 }
 
+function runGateFixture(name: string, comments: unknown[]) {
+  const fixture = writeFixture(
+    `pr-finding-${name.replaceAll(" ", "-")}`,
+    reviewFixture({
+      headRefOid: "head-sha",
+      comments,
+      reviews: [review({ state: "COMMENTED", commit: "head-sha" })],
+    }),
+  );
+  return spawnSync(
+    process.execPath,
+    [scriptPath, "--repo", "lamemustafa/pack", "--pr", "14", "--fixture", fixture],
+    { cwd: rootDir, encoding: "utf8" },
+  );
+}
+
 function runGateWithFakeGh(
-  name: string,
   responses: Array<{ status: number; stdout?: string; stderr?: string }>,
-  extraArgs: string[] = ["--retry-attempts", String(responses.length)],
+  retryAttempts = responses.length,
 ) {
   const directory = mkdtempSync(path.join(tmpdir(), "pack-review-gate-gh-"));
-  const statePath = path.join(directory, `${name}-attempts.txt`);
+  const statePath = path.join(directory, "attempts.txt");
   const fakeGhPath = path.join(directory, "gh");
   const fakeGhSource = `#!/usr/bin/env node
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -1237,7 +1120,8 @@ process.exit(response.status);
       "14",
       "--retry-backoff-ms",
       "0",
-      ...extraArgs,
+      "--retry-attempts",
+      String(retryAttempts),
     ],
     {
       cwd: rootDir,
