@@ -193,6 +193,60 @@ describe("filed-return ZIP filename reassertion", () => {
     expect(mocks.browser.downloads.download).toHaveBeenCalledOnce();
   });
 
+  it.each([
+    {
+      name: "included",
+      summary: { status: "included", outcomeOnly: false, parsedPeriodCount: 1, rowCount: 1 },
+      expectedSignals: [
+        "full-fiscal-year-summary-included",
+        "full-fiscal-year-summary-parsed-period-count:1",
+        "full-fiscal-year-summary-row-count:1",
+      ],
+    },
+    {
+      name: "outcomes-only",
+      summary: { status: "included", outcomeOnly: true, parsedPeriodCount: 0, rowCount: 1 },
+      expectedSignals: [
+        "full-fiscal-year-summary-included",
+        "full-fiscal-year-summary-outcomes-only",
+        "full-fiscal-year-summary-parsed-period-count:0",
+        "full-fiscal-year-summary-row-count:1",
+      ],
+    },
+    {
+      name: "failed",
+      summary: { status: "failed", reasonCategory: "generation-failed" },
+      expectedSignals: [
+        "full-fiscal-year-summary-failed",
+        "full-fiscal-year-summary-error:generation-failed",
+      ],
+    },
+  ] as const)("passes the $name summary outcome into the pre-download checkpoint", async (test) => {
+    mocks.createOffscreenFiledReturnZipUrl.mockResolvedValueOnce({
+      status: "created",
+      blobUrl: `blob:pack-owned/${test.name}`,
+      zipEntryCount: test.summary.status === "included" ? 2 : 1,
+      artifactEntryCount: 1,
+      summary: test.summary,
+    });
+    const onBeforeDownloadStart = vi.fn(async () => undefined);
+    const onDownloadStarted = vi.fn(async () => undefined);
+
+    const result = await exportFullFiscalYearZip(fullYearLedger(), completeStep(), {
+      onBeforeDownloadStart,
+      onDownloadStarted,
+    });
+
+    expect(result).toMatchObject({
+      state: "downloaded",
+      safeSignals: expect.arrayContaining([...test.expectedSignals]),
+    });
+    expect(onBeforeDownloadStart).toHaveBeenCalledWith(
+      expect.any(Date),
+      expect.objectContaining({ safeSignals: test.expectedSignals }),
+    );
+  });
+
   it("uses the canonical GSTR-2B all-formats artifact set for full-fiscal-year ZIP entries", async () => {
     const expectedArtifacts = concreteFiledReturnsArtifactTypesForSelection(
       "GSTR-2B",

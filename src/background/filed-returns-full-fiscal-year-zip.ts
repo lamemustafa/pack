@@ -6,6 +6,7 @@ import type {
 import { concreteFiledReturnsArtifactTypesForSelection } from "../connectors/gst/filed-returns-artifacts";
 import type { PackOffscreenFiledReturnZipExpectedEntry } from "../connectors/gst/offscreen-blob-url";
 import type { FiledReturnsSummaryPlanEntry } from "../connectors/gst/filed-returns-summary-sheet";
+import type { FiledReturnsSummaryStatus } from "../connectors/gst/filed-returns-summary-status";
 import type { FiledReturnsMonth } from "../connectors/gst/filed-returns-scope";
 import {
   type DownloadCreatedItem,
@@ -29,7 +30,10 @@ import { clearOffscreenFiledReturnLedger, closeOffscreenBlobDocument } from "./o
 const USER_MEDIATED_ZIP_DOWNLOAD_WAIT_MS = 45 * 1000;
 
 interface ZipDownloadCheckpointCallbacks {
-  onBeforeDownloadStart?: (requestedAt: Date) => Promise<void>;
+  onBeforeDownloadStart?: (
+    requestedAt: Date,
+    summaryOutcome: FiledReturnsSummaryStatus,
+  ) => Promise<void>;
   onDownloadStarted?: (downloadId: number) => Promise<void>;
 }
 
@@ -104,7 +108,13 @@ export async function exportFullFiscalYearZip(
     expectedZipEntries: staging.expectedEntries,
     summaryPlan: staging.summaryPlan,
     ...(options.onBeforeDownloadStart
-      ? { onBeforeDownloadStart: options.onBeforeDownloadStart }
+      ? {
+          onBeforeDownloadStart: (
+            requestedAt: Date,
+            _extensionBlobUrlFingerprint: string,
+            summaryOutcome: FiledReturnsSummaryStatus,
+          ) => options.onBeforeDownloadStart!(requestedAt, summaryOutcome),
+        }
       : {}),
     ...(options.onDownloadStarted ? { onDownloadStarted: options.onDownloadStarted } : {}),
   });

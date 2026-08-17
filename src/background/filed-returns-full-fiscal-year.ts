@@ -54,6 +54,7 @@ import {
   markFullFiscalYearZipManualReview,
   markFullFiscalYearZipPhase,
   requireFullFiscalYearArtifactsStaged,
+  restorePersistedFullFiscalYearSummaryOutcome,
   scopeForFullFiscalYearTarget,
 } from "./filed-returns-full-fiscal-year-staging";
 import {
@@ -184,7 +185,11 @@ export async function startFullFiscalYearDownloadFlow(
     // MV3 restart. Keep the staged files and require explicit review/discard;
     // a repeated Start must never infer that the previous ZIP may be replayed.
     const reviewLedger = markFullFiscalYearZipManualReview(sameScopeExistingLedger, now);
-    const reviewStep = fullFiscalYearZipPhaseStep(reviewLedger)!;
+    const reviewStep = await restorePersistedFullFiscalYearSummaryOutcome(
+      deps,
+      sameScopeExistingLedger,
+      fullFiscalYearZipPhaseStep(reviewLedger)!,
+    );
     await persistLedgerAndSummary(deps, reviewLedger, reviewStep);
     return {
       ok: true,
@@ -373,9 +378,14 @@ async function completeRun(
   await persistLedger(deps, readyLedger);
   let exportLedger = readyLedger;
   const zipStep = await exportFullFiscalYearZip(readyLedger, step, {
-    onBeforeDownloadStart: async (requestedAt) => {
+    onBeforeDownloadStart: async (requestedAt, summaryOutcome) => {
       const intentLedger = markFullFiscalYearZipDownloadIntent(exportLedger, requestedAt);
-      const intentStep = fullFiscalYearZipPhaseStep(intentLedger)!;
+      const phaseStep = fullFiscalYearZipPhaseStep(intentLedger)!;
+      const intentStep = {
+        ...phaseStep,
+        safeSignals: Array.from(new Set([...phaseStep.safeSignals, ...summaryOutcome.safeSignals])),
+        safeMessage: [phaseStep.safeMessage, summaryOutcome.safeMessage].filter(Boolean).join(" "),
+      };
       await persistLedgerAndSummary(deps, intentLedger, intentStep);
       exportLedger = intentLedger;
     },
@@ -447,7 +457,11 @@ async function reconcilePersistedFullFiscalYearZip(
   }
   ledger = reconciledLedger;
   const completeStep = completeFullFiscalYearStep(ledger);
-  const zipStep = await reconcileFullFiscalYearZipDownload(ledger, completeStep);
+  const zipStep = await restorePersistedFullFiscalYearSummaryOutcome(
+    deps,
+    ledger,
+    await reconcileFullFiscalYearZipDownload(ledger, completeStep),
+  );
   if (zipStep.state === "downloaded") {
     const cleanupPending = createFullFiscalYearCleanupPendingState(ledger, zipStep);
     await persistLedgerAndSummary(deps, cleanupPending.ledger, cleanupPending.step);

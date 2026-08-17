@@ -344,6 +344,44 @@ export async function finishFullFiscalYearCleanup(
   };
 }
 
+export async function restorePersistedFullFiscalYearSummaryOutcome(
+  deps: FiledReturnsFlowRunnerDeps,
+  ledger: FiledReturnsFullFiscalYearLedger,
+  step: PortalFlowStepResult,
+): Promise<PortalFlowStepResult> {
+  if (!["download-intent-persisted", "download-observing"].includes(ledger.zipPhase ?? "")) {
+    return step;
+  }
+  const requestedAt = ledger.zipDownloadAttempt?.requestedAt;
+  if (!requestedAt) return step;
+  const persistedSummary = await readCanonicalFiledReturnsFlowSummary(deps.storageKeys.completion);
+  const persistedSignals = persistedSummary?.flowStep.safeSignals ?? [];
+  const intentCheckpointMatches =
+    persistedSignals.includes("full-fiscal-year-zip-phase:download-intent-persisted") &&
+    persistedSummary?.updatedAt ===
+      (ledger.zipPhase === "download-intent-persisted" ? ledger.updatedAt : requestedAt);
+  const observingCheckpointMatches =
+    ledger.zipPhase === "download-observing" &&
+    persistedSignals.includes("full-fiscal-year-zip-reconciled-by-id") &&
+    persistedSummary?.updatedAt === ledger.updatedAt;
+  if (
+    !persistedSummary ||
+    !sameFiledReturnsScope(persistedSummary.scope, ledger.scope) ||
+    (!intentCheckpointMatches && !observingCheckpointMatches)
+  ) {
+    return step;
+  }
+  const summarySignals = persistedSummary.flowStep.safeSignals.filter((signal) =>
+    signal.startsWith("full-fiscal-year-summary-"),
+  );
+  if (summarySignals.length === 0) return step;
+  return {
+    ...step,
+    safeSignals: Array.from(new Set([...step.safeSignals, ...summarySignals])),
+    safeMessage: `${step.safeMessage}${filedReturnsSummaryStatusMessage(summarySignals)}`,
+  };
+}
+
 async function fullFiscalYearSummarySignalsForCleanup(
   deps: FiledReturnsFlowRunnerDeps,
   ledger: FiledReturnsFullFiscalYearLedger,

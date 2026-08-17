@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { FiledReturnsFullFiscalYearLedger } from "../../src/connectors/gst/filed-returns-contracts";
+import type {
+  FiledReturnsDownloadScope,
+  FiledReturnsFullFiscalYearLedger,
+} from "../../src/connectors/gst/filed-returns-contracts";
 import { FULL_FISCAL_YEAR_PERIOD } from "../../src/connectors/gst/filed-returns-scope";
 import { getFiledReturnsFullFiscalYearPeriods } from "../../src/connectors/gst/filed-returns-scope";
 import { createFullFiscalYearLedger } from "../../src/background/filed-returns-full-fiscal-year-ledger";
@@ -18,6 +21,12 @@ import { browser } from "wxt/browser";
 import { canonicalDurableTargetStatus } from "../../src/connectors/gst/filed-returns-durable-status";
 import { finishFullFiscalYearCleanup } from "../../src/background/filed-returns-full-fiscal-year-staging";
 import { persistCanonicalFiledReturnsFlowSummary } from "../../src/background/filed-returns-session-summary";
+import { parseDurableFiledReturnsSignals } from "../../src/connectors/gst/filed-returns-durable-signals";
+import type { FiledReturnsSummaryStatus } from "../../src/connectors/gst/filed-returns-summary-status";
+import {
+  fullFiscalYearZipPhaseStep,
+  toFullFiscalYearSummary,
+} from "../../src/background/filed-returns-full-fiscal-year-summary";
 
 const sessionValues = vi.hoisted(() => ({ current: {} as Record<string, unknown> }));
 
@@ -187,6 +196,23 @@ describe("full fiscal-year recovery", () => {
     };
     expect(isFullFiscalYearLedger(ledger)).toBe(true);
     mockLocalStorageGet({ "full-year-ledger": ledger });
+    const staleStep = fullFiscalYearZipPhaseStep(ledger)!;
+    const staleUpdatedAt = "2026-06-23T23:59:59.000Z";
+    await persistCanonicalFiledReturnsFlowSummary(
+      "completion",
+      toFullFiscalYearSummary(
+        { ...ledger, updatedAt: staleUpdatedAt },
+        {
+          ...staleStep,
+          safeSignals: [
+            ...staleStep.safeSignals,
+            "full-fiscal-year-summary-included",
+            "full-fiscal-year-summary-parsed-period-count:1",
+            "full-fiscal-year-summary-row-count:1",
+          ],
+        },
+      ),
+    );
 
     const response = await startFullFiscalYearDownloadFlow(scope, recoveryDeps() as never, vi.fn());
 
@@ -196,6 +222,8 @@ describe("full fiscal-year recovery", () => {
         safeSignals: expect.arrayContaining(["full-fiscal-year-final-zip-manual-review"]),
       },
     });
+    if (!("flowStep" in response)) throw new Error("expected a filed-returns flow response");
+    expect(response.flowStep.safeSignals).not.toContain("full-fiscal-year-summary-included");
     expect(zipMocks.exportFullFiscalYearZip).not.toHaveBeenCalled();
     expect(browser.storage.local.set).toHaveBeenCalledWith({
       "full-year-ledger": expect.objectContaining({
@@ -280,6 +308,129 @@ describe("full fiscal-year recovery", () => {
     ).resolves.toBe(true);
     expect(zipMocks.reconcileFullFiscalYearZipDownload).toHaveBeenCalledOnce();
     vi.mocked(browser.storage.local.get).mockImplementation(async () => ({}));
+  });
+
+  it("retains the summary outcome across repeated observing reconciliation", async () => {
+    const requestedAt = new Date("2017-08-20T00:00:00.000Z");
+    let clock = new Date("2017-08-20T00:01:00.000Z");
+    const scope = {
+      artifactType: "PDF" as const,
+      financialYear: "2017-18",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-3B" as const,
+    };
+    const baseLedger = createFullFiscalYearLedger(
+      scope,
+      requestedAt,
+      getFiledReturnsFullFiscalYearPeriods(scope.financialYear, requestedAt),
+    );
+    const ledger: FiledReturnsFullFiscalYearLedger = {
+      ...baseLedger,
+      status: "blocked",
+      zipPhase: "download-observing",
+      zipDownloadAttempt: { downloadId: 41, requestedAt: requestedAt.toISOString() },
+      targets: baseLedger.targets.map((target, index) => ({
+        ...target,
+        status: "downloaded" as const,
+        ...canonicalDurableTargetStatus({ ...scope, period: target.period }, "downloaded", [
+          "filed-return-artifact-downloaded:PDF",
+          "full-fiscal-year-opfs-staged:PDF",
+        ]),
+        completedAt: requestedAt.toISOString(),
+        downloadDiagnostic: {
+          actionId: `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+          artifactType: "PDF" as const,
+          byteCountClass: "non-empty" as const,
+          downloadPathClass: "captured-portal-request-data" as const,
+          endpointClass: "gstr3b-portal-blob-captured-download" as const,
+          eventType: "filed-return-download-path" as const,
+          financialYear: target.financialYear,
+          mimeClass: "pdf" as const,
+          period: target.period,
+          returnType: "GSTR-3B" as const,
+          schemaVersion: "1.0" as const,
+          status: "downloaded" as const,
+        },
+      })),
+    };
+    const store: Record<string, unknown> = { "full-year-ledger": ledger };
+    vi.mocked(browser.storage.local.get).mockImplementation(async (key: unknown) => {
+      if (typeof key === "string") return { [key]: store[key] };
+      return store;
+    });
+    vi.mocked(browser.storage.local.set).mockImplementation(
+      async (values: Record<string, unknown>) => {
+        Object.assign(store, values);
+      },
+    );
+    const intentLedger = { ...ledger, zipPhase: "download-intent-persisted" as const };
+    const intentStep = fullFiscalYearZipPhaseStep(intentLedger)!;
+    await persistCanonicalFiledReturnsFlowSummary(
+      "completion",
+      toFullFiscalYearSummary(intentLedger, {
+        ...intentStep,
+        safeSignals: [
+          ...intentStep.safeSignals,
+          "full-fiscal-year-summary-included",
+          "full-fiscal-year-summary-parsed-period-count:1",
+          "full-fiscal-year-summary-row-count:4",
+        ],
+      }),
+    );
+    zipMocks.reconcileFullFiscalYearZipDownload
+      .mockResolvedValueOnce({
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "download-unconfirmed",
+        safeSignals: [
+          "full-fiscal-year-zip-download-started",
+          "full-fiscal-year-zip-download-unconfirmed",
+          "full-fiscal-year-zip-reconciled-by-id",
+          "browser-download-in-progress",
+          "full-fiscal-year-opfs-retained",
+        ],
+        safeMessage: "Synthetic exact ZIP download is still in progress.",
+      })
+      .mockResolvedValueOnce({
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "downloaded",
+        safeSignals: [
+          "full-fiscal-year-zip-download-started",
+          "full-fiscal-year-zip-downloaded",
+          "full-fiscal-year-zip-reconciled-by-id",
+          "browser-download-completed",
+          "browser-download-non-empty",
+          "full-fiscal-year-opfs-retained",
+        ],
+        safeMessage: "Synthetic exact ZIP download completed.",
+      });
+
+    const firstRecovery = await startFullFiscalYearDownloadFlow(
+      scope,
+      { ...recoveryDeps(), now: () => clock } as never,
+      vi.fn(),
+    );
+    clock = new Date("2017-08-20T00:02:00.000Z");
+    const secondRecovery = await startFullFiscalYearDownloadFlow(
+      scope,
+      { ...recoveryDeps(), now: () => clock } as never,
+      vi.fn(),
+    );
+
+    for (const recovered of [firstRecovery, secondRecovery]) {
+      expect(recovered).toMatchObject({
+        flowStep: {
+          safeSignals: expect.arrayContaining([
+            "full-fiscal-year-summary-included",
+            "full-fiscal-year-summary-parsed-period-count:1",
+            "full-fiscal-year-summary-row-count:4",
+          ]),
+          safeMessage: expect.stringContaining("portal-key rows for 1 period"),
+        },
+      });
+    }
+    expect(zipMocks.reconcileFullFiscalYearZipDownload).toHaveBeenCalledTimes(2);
   });
 
   it("stages GSTR-3B targets before progressing to one ZIP export", async () => {
@@ -442,6 +593,174 @@ describe("full fiscal-year recovery", () => {
     if (!response.ok || !("flowStep" in response)) throw new Error("Expected flow response.");
     expect(response.flowStep.safeMessage).toContain("portal-key rows for 2 periods");
   });
+
+  it.each([
+    {
+      name: "included",
+      outcome: {
+        safeSignals: [
+          "full-fiscal-year-summary-included",
+          "full-fiscal-year-summary-parsed-period-count:1",
+          "full-fiscal-year-summary-row-count:4",
+        ],
+        safeMessage: "The summary includes portal-key rows for 1 period.",
+      },
+      messageFragment: "portal-key rows for 1 period",
+    },
+    {
+      name: "outcomes-only",
+      outcome: {
+        safeSignals: [
+          "full-fiscal-year-summary-included",
+          "full-fiscal-year-summary-outcomes-only",
+          "full-fiscal-year-summary-parsed-period-count:0",
+          "full-fiscal-year-summary-row-count:4",
+        ],
+        safeMessage:
+          "The summary contains outcome rows only because no parseable portal JSON was available.",
+      },
+      messageFragment: "outcome rows only",
+    },
+    {
+      name: "failed",
+      outcome: {
+        safeSignals: [
+          "full-fiscal-year-summary-failed",
+          "full-fiscal-year-summary-error:generation-failed",
+        ],
+        safeMessage:
+          "Pack saved the artifact files without a summary because summary generation failed.",
+      },
+      messageFragment: "without a summary because summary generation failed",
+    },
+  ])(
+    "restores the $name summary outcome when the worker stops after ZIP download start",
+    async ({ outcome, messageFragment }) => {
+      const now = new Date("2017-08-20T00:00:00.000Z");
+      let clock = now;
+      const scope = {
+        artifactType: "PDF" as const,
+        financialYear: "2017-18",
+        period: FULL_FISCAL_YEAR_PERIOD,
+        returnType: "GSTR-3B" as const,
+      };
+      const store: Record<string, unknown> = {};
+      vi.mocked(browser.storage.local.get).mockImplementation(async (key: unknown) => {
+        if (typeof key === "string") return { [key]: store[key] };
+        return store;
+      });
+      vi.mocked(browser.storage.local.set).mockImplementation(
+        async (values: Record<string, unknown>) => {
+          Object.assign(store, values);
+        },
+      );
+      const browserDownloadStarted = vi.fn();
+      const periods = getFiledReturnsFullFiscalYearPeriods(scope.financialYear, now);
+      const runSinglePeriod = vi.fn(async (targetScope: FiledReturnsDownloadScope) => {
+        const periodIndex = periods.findIndex((period) => period === targetScope.period);
+        return {
+          ok: true as const,
+          flowStep: {
+            connectorId: "gst" as const,
+            scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+            state: "downloaded" as const,
+            safeSignals: [
+              "filed-return-artifact-downloaded:PDF",
+              "full-fiscal-year-opfs-staged:PDF",
+            ],
+            safeMessage: "Synthetic PDF staged.",
+            downloadDiagnostic: {
+              actionId: `00000000-0000-4000-8000-${String(periodIndex + 1).padStart(12, "0")}`,
+              artifactType: "PDF" as const,
+              byteCountClass: "non-empty" as const,
+              downloadPathClass: "captured-portal-request-data" as const,
+              endpointClass: "gstr3b-portal-blob-captured-download" as const,
+              eventType: "filed-return-download-path" as const,
+              financialYear: targetScope.financialYear,
+              mimeClass: "pdf" as const,
+              period: targetScope.period,
+              returnType: "GSTR-3B" as const,
+              schemaVersion: "1.0" as const,
+              status: "downloaded" as const,
+            },
+          },
+        };
+      });
+      zipMocks.exportFullFiscalYearZip.mockImplementationOnce(
+        async (
+          _ledger: FiledReturnsFullFiscalYearLedger,
+          _step: unknown,
+          options: {
+            onBeforeDownloadStart?: (
+              requestedAt: Date,
+              summaryOutcome: FiledReturnsSummaryStatus,
+            ) => Promise<void>;
+            onDownloadStarted?: (downloadId: number) => Promise<void>;
+          },
+        ) => {
+          await options.onBeforeDownloadStart?.(now, outcome);
+          browserDownloadStarted();
+          throw new Error("synthetic worker termination after ZIP download start");
+        },
+      );
+
+      await expect(
+        startFullFiscalYearDownloadFlow(
+          scope,
+          { ...recoveryDeps(), now: () => clock } as never,
+          runSinglePeriod,
+        ),
+      ).rejects.toThrow("synthetic worker termination");
+
+      const checkpoint = sessionValues.current.completion as {
+        flowStep?: { safeSignals?: unknown };
+      };
+      const durableSignals = parseDurableFiledReturnsSignals(checkpoint.flowStep?.safeSignals);
+      expect(durableSignals).toEqual(expect.arrayContaining(outcome.safeSignals));
+      expect(store["full-year-ledger"]).toMatchObject({
+        zipPhase: "download-intent-persisted",
+        zipDownloadAttempt: { requestedAt: now.toISOString() },
+      });
+      expect(isFullFiscalYearLedger(store["full-year-ledger"])).toBe(true);
+      expect(browserDownloadStarted).toHaveBeenCalledOnce();
+
+      clock = new Date("2017-08-20T00:01:00.000Z");
+      const firstRecovery = await startFullFiscalYearDownloadFlow(
+        scope,
+        { ...recoveryDeps(), now: () => clock } as never,
+        vi.fn(),
+      );
+      expect(firstRecovery).toMatchObject({
+        flowStep: {
+          state: "download-unconfirmed",
+          safeSignals: expect.arrayContaining([
+            ...outcome.safeSignals,
+            "full-fiscal-year-final-zip-manual-review",
+          ]),
+          safeMessage: expect.stringContaining(messageFragment),
+        },
+      });
+      clock = new Date("2017-08-20T00:02:00.000Z");
+      const secondRecovery = await startFullFiscalYearDownloadFlow(
+        scope,
+        { ...recoveryDeps(), now: () => clock } as never,
+        vi.fn(),
+      );
+
+      expect(secondRecovery).toMatchObject({
+        flowStep: {
+          state: "download-unconfirmed",
+          safeSignals: expect.arrayContaining([
+            ...outcome.safeSignals,
+            "full-fiscal-year-final-zip-manual-review",
+          ]),
+          safeMessage: expect.stringContaining(messageFragment),
+        },
+      });
+      expect(zipMocks.reconcileFullFiscalYearZipDownload).not.toHaveBeenCalled();
+      expect(zipMocks.exportFullFiscalYearZip).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it("passes a fresh GSTR-1 all-formats target to the period flow without narrowing it", async () => {
     const now = new Date("2026-06-24T00:00:00.000Z");

@@ -6,7 +6,10 @@ import type {
 import type { FiledReturnsConcreteArtifactType } from "../connectors/gst/filed-returns-artifacts";
 import type { PackOffscreenFiledReturnZipExpectedEntry } from "../connectors/gst/offscreen-blob-url";
 import type { FiledReturnsSummaryPlanEntry } from "../connectors/gst/filed-returns-summary-sheet";
-import { filedReturnsSummaryOutcome } from "../connectors/gst/filed-returns-summary-status";
+import {
+  filedReturnsSummaryOutcome,
+  type FiledReturnsSummaryStatus,
+} from "../connectors/gst/filed-returns-summary-status";
 import {
   clearAllOffscreenFiledReturnLedgers,
   closeOffscreenBlobDocument,
@@ -70,7 +73,11 @@ export async function exportStagedFiledReturnsZip({
   expectedZipEntries?: readonly PackOffscreenFiledReturnZipExpectedEntry[];
   expectedZipEntryCount?: number;
   summaryPlan?: readonly FiledReturnsSummaryPlanEntry[];
-  onBeforeDownloadStart?: (requestedAt: Date, extensionBlobUrlFingerprint: string) => Promise<void>;
+  onBeforeDownloadStart?: (
+    requestedAt: Date,
+    extensionBlobUrlFingerprint: string,
+    summaryOutcome: FiledReturnsSummaryStatus,
+  ) => Promise<void>;
   onClearStaging?: (
     outcome: "downloaded" | "not-downloaded",
   ) => Promise<StagedFiledReturnsZipClearResult>;
@@ -173,7 +180,7 @@ export async function exportStagedFiledReturnsZip({
   try {
     const fingerprint = await extensionBlobUrlFingerprint(zip.blobUrl);
     if (!fingerprint) throw new Error("extension Blob URL fingerprint unavailable");
-    await onBeforeDownloadStart?.(armedAt, fingerprint);
+    await onBeforeDownloadStart?.(armedAt, fingerprint, summaryOutcome);
   } catch {
     await revokeOffscreenBlobUrl(zip.blobUrl);
     const stagingClear = onClearStaging ? await onClearStaging("not-downloaded") : null;
