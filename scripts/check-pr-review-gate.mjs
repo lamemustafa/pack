@@ -1,30 +1,19 @@
 #!/usr/bin/env node
 
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import {
+  DEFAULT_GH_RETRY_ATTEMPTS,
+  DEFAULT_GH_RETRY_BACKOFF_MS,
+  runGhText,
+} from "./lib/github-cli-retry.mjs";
 
 const BLOCKING_STATE_EXIT_CODE = 1;
 const EVALUATION_FAILURE_EXIT_CODE = 2;
-const DEFAULT_GH_RETRY_ATTEMPTS = 6;
-const DEFAULT_GH_RETRY_BACKOFF_MS = 10_000;
-const MAX_GH_RETRY_BACKOFF_MS = 60_000;
 const DEFAULT_PR_FINDING_AUTHOR = "chatgpt-codex-connector";
-// GitHub's live GraphQL API returns this lowercase string for a RESOLVED minimization classifier.
 const RESOLVED_MINIMIZED_REASON = "resolved";
 const ALLOWED_MISSING_HEAD_REVIEW_MARKER = "review-gate:allowed-missing-head-review";
-// Codex uses this shields.io badge markup for findings in both inline threads and PR-level
-// comments, as observed on Pack PRs #126, #142, and #144. Clean reviews and setup notices omit it.
 const CODEX_SEVERITY_BADGE_PATTERN =
   /!\[P[0-3] Badge\]\(https:\/\/img\.shields\.io\/badge\/P[0-3]-[^)\s]+\)/u;
-// gh does not expose structured HTTP/network failure details through execFileSync, so keep the
-// complete stderr and process-error fallback list here as the single transience classifier.
-const TRANSIENT_GH_FAILURE_PATTERNS = [
-  /\bHTTP\s+(?:429|500|502|503|504)\b/iu,
-  /\b(?:secondary\s+)?rate limit(?:ed|ing)?\b/iu,
-  /\b(?:ETIMEDOUT|timeout|timed out|context deadline exceeded|deadline exceeded)\b/iu,
-  /\b(?:ECONNRESET|connection reset)\b/iu,
-  /\b(?:ENOTFOUND|EAI_AGAIN|getaddrinfo|could not resolve host|no such host|temporary failure in name resolution)\b/iu,
-];
 
 const rawArgs = process.argv.slice(2);
 const args = new Set(rawArgs);
@@ -257,7 +246,7 @@ function reportBlockingState({ unresolvedThreads, blockingReviews, blockingComme
       console.error(`  author: ${comment.author?.login ?? "unknown"}`);
     }
     console.error(
-      "Minimize each finding with GitHub Hide → Resolved after dispositioning it to clear the gate.",
+      "Minimize each finding with GitHub Hide → Resolved after dispositioning it. The next scheduled Review gate run will clear the check; the change is not immediate.",
     );
   }
 
@@ -475,34 +464,15 @@ function normaliseAuthorLogin(login) {
 }
 
 function runText(commandArgs) {
-  for (let attempt = 1; attempt <= retryAttempts; attempt += 1) {
-    try {
-      return execFileSync("gh", commandArgs, {
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "pipe"],
-      }).trim();
-    } catch (error) {
-      const detail = formatGhFailure(error);
-      const transient = isTransientGhFailure(error, detail);
-      if (!transient) {
-        failEvaluation(`GitHub CLI failed without a retryable error: ${detail}`);
-      }
-      if (attempt >= retryAttempts) {
-        failEvaluation(`GitHub CLI evaluation failed after ${retryAttempts} attempts: ${detail}`);
-      }
-
-      const backoff = Math.min(
-        retryBackoffMs * 2 ** Math.min(attempt - 1, 20),
-        MAX_GH_RETRY_BACKOFF_MS,
-      );
-      console.warn(
-        `GitHub CLI transient failure on attempt ${attempt}/${retryAttempts}: ${detail}. Retrying in ${backoff}ms.`,
-      );
-      sleepSync(backoff);
-    }
+  try {
+    return runGhText(commandArgs, {
+      attempts: retryAttempts,
+      backoffMs: retryBackoffMs,
+      operation: "evaluation",
+    });
+  } catch (error) {
+    failEvaluation(formatErrorMessage(error));
   }
-
-  failEvaluation("GitHub CLI evaluation ended without a result.");
 }
 
 function runJson(commandArgs) {
@@ -514,16 +484,6 @@ function runJson(commandArgs) {
   }
 }
 
-function isTransientGhFailure(error, detail) {
-  const evidence = [error?.code, error?.signal, detail].filter(Boolean).join("\n");
-  return TRANSIENT_GH_FAILURE_PATTERNS.some((pattern) => pattern.test(evidence));
-}
-
-function formatGhFailure(error) {
-  const stderr = String(error?.stderr ?? "").trim();
-  return stderr || formatErrorMessage(error);
-}
-
 function formatErrorMessage(error) {
   return error instanceof Error ? error.message : String(error);
 }
@@ -531,11 +491,6 @@ function formatErrorMessage(error) {
 function failEvaluation(message) {
   console.error(`Review gate could not evaluate: ${message}`);
   process.exit(EVALUATION_FAILURE_EXIT_CODE);
-}
-
-function sleepSync(ms) {
-  if (ms <= 0) return;
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
 function sleep(ms) {

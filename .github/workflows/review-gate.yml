@@ -1,6 +1,8 @@
 name: Review findings gate
 
 on:
+  schedule:
+    - cron: "*/15 * * * *"
   workflow_dispatch:
     inputs:
       pr:
@@ -12,8 +14,6 @@ on:
     types: [submitted, edited, dismissed]
   pull_request_review_comment:
     types: [created, edited, deleted]
-  issue_comment:
-    types: [created, edited, deleted]
 
 permissions:
   contents: read
@@ -22,13 +22,9 @@ permissions:
 jobs:
   review-gate:
     name: Review gate
-    if: github.event_name != 'issue_comment' || github.event.issue.pull_request
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 8
-    outputs:
-      head_repo: ${{ steps.resolve-pr.outputs.head_repo }}
-      head_sha: ${{ steps.resolve-pr.outputs.head_sha }}
-      gate_exit_code: ${{ steps.evaluate.outputs.exit_code || '2' }}
 
     steps:
       - name: Resolve PR metadata
@@ -37,7 +33,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           EVENT_NAME: ${{ github.event_name }}
-          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || github.event.inputs.pr }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.inputs.pr }}
           EVENT_HEAD_REF: ${{ github.event.pull_request.head.ref }}
           EVENT_BASE_REF: ${{ github.event.pull_request.base.ref }}
           EVENT_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
@@ -50,7 +46,7 @@ jobs:
             exit 1
           fi
 
-          if [ "${EVENT_NAME}" = "workflow_dispatch" ] || [ "${EVENT_NAME}" = "issue_comment" ]; then
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
             mapfile -t pr_metadata < <(
               gh pr view "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" \
                 --json headRefName,baseRefName,headRepository,headRefOid \
@@ -79,14 +75,6 @@ jobs:
             echo "head_repo=${head_repo}"
             echo "head_sha=${head_sha}"
           } >> "${GITHUB_OUTPUT}"
-
-      - name: Report fork PR limitation
-        if: >-
-          github.event_name == 'issue_comment' &&
-          steps.resolve-pr.outputs.head_repo != github.repository
-        run: >-
-          echo "::warning::PR-head Review gate publication is unavailable for fork pull requests;
-          this comment-triggered run remains read-only and cannot replace the required check on the fork head."
 
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -118,69 +106,43 @@ jobs:
           --head-repo "${{ steps.resolve-pr.outputs.head_repo }}"
 
       - name: Check current-head review state
-        id: evaluate
-        shell: bash
-        run: |
-          set +e
-          pnpm review:gate -- --repo "${{ github.repository }}" --pr "${{ steps.resolve-pr.outputs.pr }}" \
-            --strict-head-review --required-review-author chatgpt-codex-connector \
-            --wait-head-review-ms 180000 --poll-interval-ms 10000 --allow-missing-head-review \
-            --expected-head-oid "${{ steps.resolve-pr.outputs.head_sha }}"
-          gate_exit_code=$?
-          set -e
-
-          case "${gate_exit_code}" in
-            0|1|2) ;;
-            *)
-              echo "Unexpected review gate exit ${gate_exit_code}; recording could-not-evaluate." >&2
-              gate_exit_code=2
-              ;;
-          esac
-
-          echo "exit_code=${gate_exit_code}" >> "${GITHUB_OUTPUT}"
+        run: >-
+          pnpm review:gate -- --repo "${{ github.repository }}" --pr "${{ steps.resolve-pr.outputs.pr }}"
+          --strict-head-review --required-review-author chatgpt-codex-connector
+          --wait-head-review-ms 180000 --poll-interval-ms 10000 --allow-missing-head-review
+          --expected-head-oid "${{ steps.resolve-pr.outputs.head_sha }}"
         env:
           GH_TOKEN: ${{ github.token }}
 
-      - name: Preserve review gate conclusion
-        if: always()
-        shell: bash
-        env:
-          REVIEW_GATE_EXIT_CODE: ${{ steps.evaluate.outputs.exit_code || '2' }}
-        run: |
-          case "${REVIEW_GATE_EXIT_CODE}" in
-            0) exit 0 ;;
-            1|2) exit "${REVIEW_GATE_EXIT_CODE}" ;;
-            *) exit 2 ;;
-          esac
-
-  publish-pr-head-check:
-    name: Publish Review gate verdict
-    needs: review-gate
-    if: >-
-      always() &&
-      github.event_name == 'issue_comment' &&
-      needs.review-gate.outputs.head_repo == github.repository &&
-      needs.review-gate.outputs.head_sha != ''
+  scheduled-review-gate:
+    name: Reconcile Review gate checks
+    if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 14
     permissions:
       contents: read
+      pull-requests: read
       checks: write
 
     steps:
-      - name: Checkout trusted publisher
+      - name: Checkout trusted default-branch code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 1
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
 
-      - name: Publish verdict on pull request head
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22.13.0
+
+      - name: Reconcile open pull request checks
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
           node scripts/publish-review-gate-check.mjs
           --repo "${{ github.repository }}"
-          --head-sha "${{ needs.review-gate.outputs.head_sha }}"
-          --exit-code "${{ needs.review-gate.outputs.gate_exit_code }}"
+          --reconcile-open-prs
+          --max-prs 25
           --details-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
