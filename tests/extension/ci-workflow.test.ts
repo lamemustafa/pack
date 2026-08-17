@@ -47,10 +47,16 @@ describe("Pack CI workflow", () => {
     expect(workflow).toContain("pull_request:");
     expect(workflow).toContain("pull_request_review:");
     expect(workflow).toContain("pull_request_review_comment:");
+    expect(workflow).toContain("issue_comment:");
     expect(workflow).not.toContain("pull_request_target:");
     expect(workflow).not.toContain("schedule:");
-    expect(workflow).not.toContain("issue_comment:");
-    expect(workflow).not.toContain("github.event.issue");
+    expect(workflow).toContain(
+      "if: github.event_name != 'issue_comment' || github.event.issue.pull_request",
+    );
+    expect(workflow).toContain("github.event.issue.number");
+    expect(workflow).toContain(
+      '[ "${EVENT_NAME}" = "workflow_dispatch" ] || [ "${EVENT_NAME}" = "issue_comment" ]',
+    );
     expect(workflow).not.toContain("/review-gate");
     expect(workflow).toContain("name: Review findings gate");
     expect(workflow).toContain("name: Review gate");
