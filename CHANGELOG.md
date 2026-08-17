@@ -4,6 +4,24 @@ All notable changes to ComplyEaze Pack are documented here.
 
 ## Unreleased
 
+## [0.5.1](https://github.com/lamemustafa/pack/compare/v0.5.0...v0.5.1) (2026-08-17)
+
+
+### Fixes
+
+* **ci:** skip credentialless non-strict scheduled Store status checks with a notice and fail strict dispatches ([#144](https://github.com/lamemustafa/pack/issues/144)) ([1507f53](https://github.com/lamemustafa/pack/commit/1507f5361bd60a6c55de982c5e934f3fbece8b9a))
+
+
+### Documentation
+
+* **readiness:** record the v0.5.0 release state and gate the recovery matrix ([#144](https://github.com/lamemustafa/pack/issues/144)) ([1507f53](https://github.com/lamemustafa/pack/commit/1507f5361bd60a6c55de982c5e934f3fbece8b9a))
+
+
+### Maintenance
+
+* **ci:** consume the Store status tool's service-account or OAuth credential contract ([#144](https://github.com/lamemustafa/pack/issues/144)) ([1507f53](https://github.com/lamemustafa/pack/commit/1507f5361bd60a6c55de982c5e934f3fbece8b9a))
+* **store-assets:** bind checked-in exports to their source SVG digests for verification ([#144](https://github.com/lamemustafa/pack/issues/144)) ([1507f53](https://github.com/lamemustafa/pack/commit/1507f5361bd60a6c55de982c5e934f3fbece8b9a))
+
 ## [0.5.0](https://github.com/lamemustafa/pack/compare/v0.4.0...v0.5.0) (2026-08-17)
 
 
