@@ -26,12 +26,16 @@ durable full-year, or stable-release claims.
   2026-07-06 records item ID `nfnbhekccajjfgkppolomflaeledoccb`, item name
   `ComplyEaze Pack: GSTR-1/GSTR-3B Downloader`, version `0.3.2`, and visibility
   `Public`.
-- Repository source is the pre-1.0 `v0.5.0` beta release. The current
-  Store-published package evidence is for `v0.3.2` only. Workflow run
-  `29507382500` built and verified the exact `v0.4.0` package and uploaded it
-  with Store state `SUCCEEDED`, but publish returned HTTP 400 because dashboard
-  requirements were incomplete. The pending ZIP SHA-256 is
+- The past `v0.4.0` release workflow run `29507382500` built and verified the
+  exact package and uploaded it with Store state `SUCCEEDED`, but publish
+  returned HTTP 400 because dashboard requirements were incomplete. It was not
+  published. The historical pending ZIP SHA-256 is
   `6ee4be24cafbe15db69275cac4da6b212f3de49b0f747eb9909eed7d293347c6`.
+- Repository source and the GitHub release are the pre-1.0 `v0.5.0` beta,
+  published as a pre-release. The Chrome Web Store package for `v0.5.0` is
+  submitted and in review as a draft; it is not approved, published, or live.
+  `v0.3.2` remains the last confirmed Store publication and the only basis for
+  current Store-published public claims.
 - The `v0.5.0` beta does not expand Store-facing, durable full-year, or
   universal live-period/format claims. Synthetic regression coverage of target
   binding, artifact selection, and recovery is not a substitute for the
@@ -104,22 +108,35 @@ durable full-year, or stable-release claims.
 
 ## Chrome Web Store Checklist
 
+Every checked item below records at least one verifiable source path, workflow
+run identifier, or dated observation. Unevidenced claims stay unchecked.
+
 ### Done In Source
 
-- [x] Manifest V3.
-- [x] Exact GST host permission allow-list only.
+- [x] Manifest V3 is asserted by `scripts/verify-extension-browser.mjs`.
+- [x] Exact GST host permission allow-list only, defined in
+      `src/extension/manifest-policy.ts`.
 - [x] No `<all_urls>`, cookies, history, webRequest, debugger/CDP,
-      nativeMessaging, tabs, identity, or externally_connectable in any Pack build.
-- [x] Restrictive extension CSP.
-- [x] No remote executable code allowed by package verifier.
-- [x] No extension analytics SDK.
-- [x] Synthetic reviewer demo exists.
+      nativeMessaging, tabs, identity, or externally_connectable in any Pack
+      build; `scripts/verify-extension-package.mjs` enforces the package boundary.
+- [x] Restrictive extension CSP, defined in
+      `src/extension/manifest-policy.ts`.
+- [x] No remote executable code allowed by
+      `scripts/verify-extension-package.mjs`.
+- [x] No extension analytics SDK; packaged markers are rejected by
+      `scripts/verify-extension-package.mjs`.
+- [x] Synthetic reviewer demo exists in `src/background/synthetic-demo.ts`.
 - [x] Reviewer instructions exist in `docs/CHROME_REVIEWER_TEST.md`.
-- [x] Manifest icons are present in source and verified in the built package.
-- [x] Manifest homepage URL points to `https://pack.complyeaze.com/gst`.
-- [x] Protected Chrome Web Store workflow exists for future release updates.
+- [x] Manifest icons are defined in `src/extension/manifest-policy.ts` and
+      verified in the built package by `scripts/verify-extension-package.mjs`.
+- [x] Manifest homepage URL is defined in
+      `src/extension/manifest-policy.ts` and points to
+      `https://pack.complyeaze.com/gst`.
+- [x] Protected Chrome Web Store workflow exists for future release updates at
+      `.github/workflows/chrome-web-store.yml`.
 - [x] Protected Chrome Web Store status monitor exists for post-submit
-      review/publication checks without upload or publish side effects.
+      review/publication checks without upload or publish side effects at
+      `.github/workflows/chrome-web-store-status.yml`.
 
 ### Must Complete Before Future Store Updates Or Broader Store Claims
 
@@ -135,17 +152,22 @@ durable full-year, or stable-release claims.
 - [ ] Legal review of live GST Portal terms against exact extension behaviour.
 - [ ] Privacy Policy, Terms, support URL, source URL, and limited-use statement
       are live and accessible without login.
-- [ ] Chrome privacy declarations match the exact final build. For `v0.4.0`,
-      disclose personally identifiable information, financial and payment
-      information, and website content because Chrome counts local processing.
-      Keep authentication information, web history, and user activity
-      unchecked unless runtime behavior changes.
+- [ ] Chrome privacy declarations match the exact final build. Disclose
+      personally identifiable information, financial and payment information,
+      and website content because Chrome counts local processing. Keep
+      authentication information, web history, and user activity unchecked
+      unless runtime behavior changes.
 - [x] Source-controlled Store screenshots and promotional images use only
-      synthetic/redacted data. The seven `v0.4.0` PNG exports were generated
-      from refreshed source SVGs, visually checked, and recorded in
+      synthetic/redacted data. The seven PNG exports prepared for the past
+      `v0.4.0` dashboard update were generated from refreshed source SVGs,
+      visually checked, and recorded in
       `docs/chrome-web-store/assets/exports/asset-hashes.json`.
-- [ ] Upload the generated `v0.4.0` Store screenshot/promotional PNGs to the
-      Chrome Web Store dashboard, then record dashboard image review state.
+- [ ] The regenerated Store exports are visually reviewed by a maintainer and
+      bound to the exact `v0.5.0` submission. Source/export hash agreement alone
+      does not satisfy this review.
+- [ ] Upload the generated Store screenshot/promotional PNGs to the Chrome Web
+      Store dashboard, then record dashboard image review state for the exact
+      submitted release.
 - [ ] Exact ZIP tested in a clean Chrome profile.
 - [ ] Exact ZIP tested against the live GSTR-3B and GSTR-1 flows by an
       authorised user.
@@ -156,19 +178,65 @@ durable full-year, or stable-release claims.
       cookies, credentials, OTP, or CAPTCHA data.
 - [ ] Authorised live full fiscal year run reconciles every eligible target as
       downloaded, positively not filed, blocked, or failed in the local ledger.
-- [ ] Authorised live full fiscal year recovery matrix records every currently
-      offered return/artifact selection as exercised or as explicitly expected
-      fail-closed/not applicable when it cannot reach an acquisition checkpoint.
-      For each acquisition-capable selection, cover service-worker restart,
-      browser restart, interrupted download, cancellation/discard and its
-      cleanup outcome, and a retained checkpoint whose browser record is no
-      longer available. A resumed path must not repeat a
-      completed target; an unproven path must remain non-complete until retry
-      or cancellation. Manual observation may be recorded only as an explicit
-      non-completing action that still requires retry before ZIP staging. Record
-      category/state summaries only—never raw portal URLs,
-      filenames, download IDs, page or DOM text, local paths, or taxpayer/session
-      data.
+- [ ] The authorised live full fiscal year recovery matrix below is complete:
+      every observation matches a completion-eligible row in the cell legend,
+      and every recorded date is valid and no later than the current UTC date.
+
+The selection rows are derived from the supported Cartesian product of
+`FILED_RETURNS_RETURN_TYPES` and `FILED_RETURNS_ARTIFACT_TYPES`; a test keeps
+this instrument aligned with those canonical constants. The same test derives
+each row's acquisition capability from
+`supportsFullFiscalYearFiledReturnsRun` and
+`supportsFiledReturnsArtifactType`; the document cannot declare that fact. For
+each row, the final expectation cell's capability claim must agree with the
+derived value. For each acquisition-capable selection, record service-worker
+restart, browser restart, interrupted download, cancellation/discard and its
+cleanup outcome, and a retained checkpoint whose browser record is no longer available. A
+resumed path must not repeat a completed target. An unproven path remains
+non-complete until retry or cancellation. Manual observation is only an
+explicit non-completing action and still requires retry before ZIP staging.
+
+Every cell must match one complete row in this legend. The test renders the
+legend from the same rule table used for validation, so state, reason, date,
+column, and completion semantics cannot drift into an independent vocabulary.
+
+<!-- BEGIN: full-year-recovery-cell-legend -->
+
+| State                     | Date constraint                             | Reason                              | Allowed column           | Derived row capability    | Recorded capability claim | Completion-eligible |
+| ------------------------- | ------------------------------------------- | ----------------------------------- | ------------------------ | ------------------------- | ------------------------- | ------------------- |
+| `pass`                    | valid `YYYY-MM-DD`, today or earlier in UTC | none                                | scenario columns         | any derived capability    | none                      | yes                 |
+| `fail`                    | valid `YYYY-MM-DD`, today or earlier in UTC | none                                | scenario columns         | any derived capability    | none                      | no                  |
+| `fail-closed-as-expected` | valid `YYYY-MM-DD`, today or earlier in UTC | `expected-fail-closed-boundary`     | scenario columns         | any derived capability    | none                      | yes                 |
+| `fail-closed-as-expected` | valid `YYYY-MM-DD`, today or earlier in UTC | `expected-fail-closed-boundary`     | final expectation column | `acquisition-capable`     | `acquisition-capable`     | yes                 |
+| `not-applicable`          | valid `YYYY-MM-DD`, today or earlier in UTC | `recovery-scenario-not-applicable`  | scenario columns         | `acquisition-capable`     | none                      | no                  |
+| `not-applicable`          | valid `YYYY-MM-DD`, today or earlier in UTC | `recovery-scenario-not-applicable`  | scenario columns         | `not-acquisition-capable` | none                      | yes                 |
+| `not-applicable`          | valid `YYYY-MM-DD`, today or earlier in UTC | `selection-not-acquisition-capable` | final expectation column | `not-acquisition-capable` | `not-acquisition-capable` | yes                 |
+| `not-yet-run`             | `not-recorded`                              | none                                | scenario columns         | any derived capability    | none                      | no                  |
+| `not-yet-run`             | `not-recorded`                              | `not-recorded`                      | final expectation column | any derived capability    | none                      | no                  |
+
+<!-- END: full-year-recovery-cell-legend -->
+
+If these combinations are insufficient, add a rule through review before
+recording the observation. No other cell text is permitted, so raw portal URLs,
+filenames, download IDs, page or DOM text, local paths, and taxpayer/session
+data are unrepresentable in the matrix.
+
+<!-- BEGIN: full-year-recovery-matrix -->
+
+| Return type | Artifact type | Service-worker restart          | Browser restart                 | Interrupted download            | Cancellation/discard and cleanup | Retained checkpoint; browser record unavailable | Expected fail-closed / not applicable                 |
+| ----------- | ------------- | ------------------------------- | ------------------------------- | ------------------------------- | -------------------------------- | ----------------------------------------------- | ----------------------------------------------------- |
+| GSTR-3B     | PDF           | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
+| GSTR-3B     | JSON          | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
+| GSTR-1      | PDF           | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
+| GSTR-1      | EXCEL         | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
+| GSTR-1      | PDF_AND_EXCEL | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
+| GSTR-2B     | PDF           | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
+| GSTR-2B     | JSON          | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
+| GSTR-2B     | EXCEL         | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
+| GSTR-2B     | PDF_AND_EXCEL | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
+
+<!-- END: full-year-recovery-matrix -->
+
 - [ ] Action-bound capture is tested in clean Chrome and Brave profiles plus the
       real profile where the native Save dialog appeared, with "Ask where to
       save each file" on and off, existing filename collisions, and
@@ -242,7 +310,8 @@ durable full-year, or stable-release claims.
 - [ ] Publisher account MFA, recovery, and team access are verified.
 - [ ] Product, engineering, security, privacy/legal, open-source, and release
       manager sign-offs are recorded.
-- [x] Initial Chrome Web Store V0 listing published.
+- [x] Initial Chrome Web Store V0 listing published. The dated 2026-07-06
+      `v0.3.2` publication evidence recorded below is the basis for this item.
 - [x] Protected Chrome Web Store release update submitted through workflow
       dispatch. The `v0.2.1` package was uploaded through GitHub Actions run
       `28542410006` with Chrome Web Store upload state `SUCCEEDED`, publish
@@ -255,16 +324,25 @@ durable full-year, or stable-release claims.
       `nfnbhekccajjfgkppolomflaeledoccb`, item name
       `ComplyEaze Pack: GSTR-1/GSTR-3B Downloader`, item type `extension`,
       version `0.3.2`, and visibility `Public`.
-- [x] Upload the exact `v0.4.0` package. Workflow run `29507382500` reported
-      upload state `SUCCEEDED`; publication remains blocked on dashboard
-      closeout and is not claimed complete.
+- [x] Record the historical `v0.4.0` package upload. Workflow run `29507382500`
+      reported upload state `SUCCEEDED`; that release was not published.
+- [ ] Record the `v0.5.0` Chrome Web Store submission. The release sequence
+      currently describes the package as submitted and in review as a draft;
+      approval, publication, and live availability are not claimed. Required
+      evidence remains unfilled: `observation-date: not-recorded`;
+      `observed-state: not-recorded`; `observation-location: not-recorded`;
+      `submission-method: not-recorded`; `workflow-run-id: not-recorded` (or
+      `manual; workflow-run-id: none`); and
+      `observer-or-approver: not-recorded`.
 - [x] Add a read-only Chrome Web Store status monitor for submitted packages.
       Scheduled runs use the dedicated `chrome-web-store-status` environment so
       publication/rejection monitoring is not blocked by the protected publishing
-      approval gate.
+      approval gate; the source is
+      `.github/workflows/chrome-web-store-status.yml`.
 - [ ] Record a read-only Chrome Web Store Status run with
-      `expected_version=0.4.0` and `require_published=false` after dashboard
-      submission, then `require_published=true` after publication. Use
+      `expected_version=0.5.0` and `require_published=false` while the submitted
+      draft is in review, then `require_published=true` only after confirmed
+      publication. Use
       [`docs/chrome-web-store/dashboard-closeout.md`](chrome-web-store/dashboard-closeout.md)
       for the dashboard and read-only status-monitor closeout checklist.
 
@@ -278,10 +356,11 @@ version here.
 
 ## Not Yet Stable Or Broad-Claim Ready Until
 
-The V0 listing exists for Store-published `v0.3.2`, `v0.4.0` is uploaded but not
-yet published, and the source-build alpha
-full-year workflow has maintainer evidence for automatic local downloads after
-user initiation. Pack must not claim stable Chrome Web Store maturity,
+The last confirmed Store publication is `v0.3.2`; the past `v0.4.0` package was
+uploaded but not published, and the `v0.5.0` package is submitted and in review
+as a draft. The source-build alpha full-year workflow has maintainer evidence
+for automatic local downloads after user initiation. Pack must not claim stable
+Chrome Web Store maturity,
 store-facing full-year availability, durable restart-safe full-year support,
 legal approval, live manifest/index/exception output, or broad GST coverage
 until legal review, live public policy URL confirmation, exact-ZIP manual QA,
