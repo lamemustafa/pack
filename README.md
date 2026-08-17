@@ -70,6 +70,19 @@ outside store-facing claims until exact-ZIP clean-profile evidence,
 restart/resume evidence, and privacy-review evidence are recorded for the
 release.
 
+During each full-year ZIP assembly with eligible files, Pack attempts to add
+`full-year-summary.csv` from the staged portal JSON already in that run. When
+created, the CSV keeps the portal's own keys as JSON Pointer columns,
+represents each array by its element count at the array's path without expanding
+its elements, emits every JSON number token as apostrophe-prefixed text with its
+exact portal spelling, prefixes formula-like text with an apostrophe for
+spreadsheet safety, and uses fixed outcome rows when a selected period and
+artifact has no parseable JSON. It never emits a rounded numeric replacement
+and does not label or interpret tax concepts. A run with eligible files but no
+parseable JSON, including a PDF-only run, receives an outcome-only summary. If
+summary generation fails or exceeds its local size limit, Pack still exports
+the artifact ZIP and reports a fixed summary reason.
+
 The current source build correlates a download to its target through one
 fail-closed evidence rule set, and that rule set is shared rather than
 return-type gated: the single-period GSTR-3B, GSTR-1 and GSTR-2B flows use it,
@@ -263,12 +276,14 @@ The Options page "Clear local Pack data" control removes the local keys above
 and clears Pack session storage. Pack does not store GST Portal credentials,
 OTPs, CAPTCHA values, cookies, GSTIN/PAN, taxpayer names, portal HTML, raw
 URLs/referrers, local download paths, filenames, or raw network captures.
-Generated ZIP bytes exist only transiently in memory. Source PDF, spreadsheet
-and acquired portal-data JSON bytes may also be written to the temporary local
-OPFS staging described below; interrupted exports or cleanup failures may retain
-that staging locally across saved-run recovery attempts. Pack removes it only
-after confirmed cleanup or an explicit discard that successfully clears the
-retained staging.
+Generated ZIP bytes and the derived full-year summary CSV exist only
+transiently in extension-controlled memory before browser handoff. The summary
+then persists only as an entry in the user-requested downloaded ZIP; it is not
+separately written to extension storage or OPFS. Source PDF, spreadsheet and
+acquired portal-data JSON bytes may be written to the temporary local OPFS staging described below;
+interrupted exports or cleanup failures may retain that staging locally across
+saved-run recovery attempts. Pack removes artifact staging only after confirmed cleanup
+or an explicit discard that successfully clears the retained staging.
 
 The Options page also includes a foreground File System Access probe for
 Chromium browsers. It runs only after a user click, writes and reads back a

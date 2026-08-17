@@ -44,6 +44,20 @@ For each release candidate:
   recovery attempts until confirmed cleanup or a successful explicit discard.
   Artifact bytes must not be written to extension storage, IndexedDB, Cache
   Storage, diagnostics, logs, telemetry, support bundles, or ComplyEaze systems.
+- Confirm each full-year ZIP assembly with eligible files attempts to add
+  `full-year-summary.csv`, derived locally from staged portal JSON already in
+  that run. When created, the CSV must preserve portal keys as JSON Pointer
+  columns, represent arrays only by element count at the array's path, emit
+  every JSON number token as apostrophe-prefixed text with its exact portal
+  spelling, prefix formula-like text with an apostrophe, use fixed outcome rows
+  where no parseable JSON exists, never emit a rounded replacement, and make no
+  tax or statutory interpretation. The derived CSV must remain an output-only
+  ZIP entry: its bytes may be transient in extension-controlled memory before
+  browser handoff and persist in the user's downloaded ZIP, but never write it
+  separately to OPFS, extension storage, diagnostics, logs,
+  telemetry, support bundles, popup content, or ComplyEaze systems. If summary
+  generation fails or exceeds its local size limit, confirm the artifact ZIP
+  still exports and the popup shows only a fixed categorical reason.
 - Confirm the source-build `target-bound-portal-click-blob` path is enabled only
   for a single-period GSTR-3B PDF after the exact target action and one matching
   browser download candidate. It must remain disabled for GSTR-1, GSTR-2B,
