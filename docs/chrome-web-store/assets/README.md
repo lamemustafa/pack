@@ -1,10 +1,10 @@
 # Chrome Web Store Asset Sources And Exports
 
 These source assets and generated exports are the safe synthetic asset set for
-the `v0.4.0` Chrome Web Store dashboard update. They use the current Pack popup
-visual language as a reference while intentionally excluding real GST Portal
-screenshots and taxpayer data. Store publication is recorded in
-[`../listing.md`](../listing.md); these files remain source-controlled inputs,
+the current Chrome Web Store submission recorded in
+[`../listing.md`](../listing.md). They use the current Pack popup visual
+language as a reference while intentionally excluding real GST Portal
+screenshots and taxpayer data. These files remain source-controlled inputs,
 not dashboard-held proof.
 
 The asset dimensions follow Chrome's official "Supplying Images" guidance:
@@ -50,9 +50,10 @@ dashboard review state in [`../listing.md`](../listing.md).
 ## Generated Exports
 
 `exports/asset-hashes.json` is the authoritative generated inventory. It records
-each PNG's source, exact dimensions, and SHA-256. Re-export and review that
-manifest whenever any source SVG changes; do not duplicate hashes manually in
-this README.
+each PNG's source, the source SVG's SHA-256, the exact dimensions, and the PNG's
+SHA-256. The asset test fails when a source digest no longer matches, so an SVG
+edit must be followed by `pnpm store:assets`. Do not edit the generated manifest
+or duplicate its hashes manually in this README.
 
 For each Store release, keep the exported assets, package upload, privacy
 declarations, reviewer instructions, review result, and publication state tied

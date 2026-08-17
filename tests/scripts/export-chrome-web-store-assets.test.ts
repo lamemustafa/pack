@@ -1,10 +1,14 @@
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { inflateSync } from "node:zlib";
 import { afterEach, describe, expect, it } from "vitest";
-import { assertOpaqueRgbPng } from "../../scripts/export-chrome-web-store-assets.mjs";
+import {
+  assertOpaqueRgbPng,
+  CHROME_WEB_STORE_ASSETS,
+} from "../../scripts/export-chrome-web-store-assets.mjs";
 
 const rootDir = process.cwd();
 const createdDirs: string[] = [];
@@ -26,7 +30,14 @@ describe("Chrome Web Store asset exporter", () => {
     const manifest = JSON.parse(
       await readFile(path.join(exportDir, "asset-hashes.json"), "utf8"),
     ) as {
-      assets: Array<{ file: string; sha256: string; width: number; height: number }>;
+      assets: Array<{
+        file: string;
+        height: number;
+        sha256: string;
+        source: string;
+        sourceSha256: string;
+        width: number;
+      }>;
     };
     expect(manifest.assets).toEqual([
       expect.objectContaining({
@@ -81,6 +92,56 @@ describe("Chrome Web Store asset exporter", () => {
       });
       expect(readPngColorMode(buffer)).toEqual({ bitDepth: 8, colorType: 2 });
       expect(readNonWhitePixelRatio(buffer)).toBeGreaterThan(0.1);
+      const source = await readFile(
+        path.join(rootDir, "docs/chrome-web-store/assets", asset.source),
+      );
+      expect(asset.sourceSha256).toBe(createHash("sha256").update(source).digest("hex"));
+    }
+  });
+
+  it("binds every checked-in export to its current SVG source", async () => {
+    const manifest = JSON.parse(
+      await readFile(
+        path.join(rootDir, "docs/chrome-web-store/assets/exports/asset-hashes.json"),
+        "utf8",
+      ),
+    ) as {
+      assets: Array<{
+        file: string;
+        height: number;
+        sha256: string;
+        source: string;
+        sourceSha256: string;
+        width: number;
+      }>;
+    };
+
+    expect(
+      manifest.assets.map(({ file, height, source, width }) => ({
+        file,
+        height,
+        source,
+        width,
+      })),
+    ).toEqual(CHROME_WEB_STORE_ASSETS);
+
+    for (const asset of manifest.assets) {
+      const source = await readFile(
+        path.join(rootDir, "docs/chrome-web-store/assets", asset.source),
+      );
+      expect(
+        asset.sourceSha256,
+        `${asset.source} changed without regenerating its checked-in export`,
+      ).toBe(createHash("sha256").update(source).digest("hex"));
+
+      const exportedPng = await readFile(
+        path.join(rootDir, "docs/chrome-web-store/assets/exports", asset.file),
+      );
+      expect(
+        createHash("sha256").update(exportedPng).digest("hex"),
+        `${asset.file} does not match its generated manifest digest`,
+      ).toBe(asset.sha256);
+      assertOpaqueRgbPng(exportedPng, asset);
     }
   });
 

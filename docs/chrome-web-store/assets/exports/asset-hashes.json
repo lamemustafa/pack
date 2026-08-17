@@ -6,6 +6,7 @@
       "height": 280,
       "sha256": "8ab52389de440d2c3957922e9dcc0c766a06b767a5933c25ff11d09ed952e54d",
       "source": "small-promo-440x280.svg",
+      "sourceSha256": "5f3995d98f73a0e6258e2768917de4a6e65f9b8f6f7f0ef660ed085066bc190d",
       "width": 440
     },
     {
@@ -13,13 +14,15 @@
       "height": 560,
       "sha256": "6097bf88a0e482234b34b16dff17bdd53e1762a27ea9b6d3f51dc1852aba5c0a",
       "source": "marquee-promo-1400x560.svg",
+      "sourceSha256": "30b4603db304b54aac6e23fff212ef0b86043afbd7e944d962fcf79c0e263863",
       "width": 1400
     },
     {
       "file": "screenshot-local-downloads-1280x800.png",
       "height": 800,
-      "sha256": "4f3c4dbdb163022ba1d78ceb0ad9ff841a8885babf8d68a9ee82cb60be2d8acb",
+      "sha256": "aa9de58498f39d44044881daf4e189893411f833b910f342b36493b4af2f8ba0",
       "source": "screenshot-local-downloads-1280x800.svg",
+      "sourceSha256": "c9428696fcec974161b36d80515d098fb063b9cb963640951e64c01a041e6ec4",
       "width": 1280
     },
     {
@@ -27,6 +30,7 @@
       "height": 800,
       "sha256": "f764fa8cbe44e006ff65dcbdefaa3398b3a6538348fd491c26a670ebebd09bc5",
       "source": "screenshot-gstr3b-summary-pdf-1280x800.svg",
+      "sourceSha256": "b86a46f379c84392c506c5f1124b3d88f4ea006f0aa4eecf6df5b99e8addd18e",
       "width": 1280
     },
     {
@@ -34,6 +38,7 @@
       "height": 800,
       "sha256": "8ae1ff6df21a59fa4d88b85f82d8a785f2d04b0aaaa57ed091368c675856ae8c",
       "source": "screenshot-local-review-state-1280x800.svg",
+      "sourceSha256": "bad727ff699781a3fa39e4e09ccc1f369b5acf7de5af0da2378021a0eaee8f5a",
       "width": 1280
     },
     {
@@ -41,6 +46,7 @@
       "height": 800,
       "sha256": "cb6ed48ac4c38913115b8c24b4869c508926251ca9fbc9ea31f9b20f0c8d7134",
       "source": "screenshot-options-clear-data-1280x800.svg",
+      "sourceSha256": "9c13b9fa072e8fd1cc0e695f44225491711c5f5e97da452891433f83d2df09b0",
       "width": 1280
     },
     {
@@ -48,6 +54,7 @@
       "height": 800,
       "sha256": "a6d66974398fd9053b9199c6e5521740bd3e2b12e2c831b778e19097bef1ef43",
       "source": "screenshot-reviewer-demo-1280x800.svg",
+      "sourceSha256": "a300d88dc294c0684b7cc5d6a89572316a9535096a724a2064359e8e0387f840",
       "width": 1280
     }
   ]

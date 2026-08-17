@@ -10,18 +10,26 @@ Use [`dashboard-closeout.md`](dashboard-closeout.md) for the action sequence.
 ## Current Store State
 
 - Published package: `v0.3.2`.
-- Pending package: `v0.4.0`, source commit
-  `eb21404d274917876fcba20abce09216ce6348f4`.
-- Release asset: `complyeazepack-0.4.0-chrome.zip`.
-- Release asset SHA-256:
-  `6ee4be24cafbe15db69275cac4da6b212f3de49b0f747eb9909eed7d293347c6`.
-- GitHub release: <https://github.com/lamemustafa/pack/releases/tag/v0.4.0>.
-- Workflow run `29507382500` built, tested, verified, zipped, published the
-  prerelease assets, and uploaded the exact ZIP to Chrome Web Store. The Store
-  upload state was `SUCCEEDED`; publish returned HTTP 400 because dashboard
-  requirements were incomplete.
-- The dashboard screenshots supplied on 2026-07-16 show stale GSTR-3B-only
-  copy/assets and a blank required `offscreen` permission justification.
+- Submitted package: `v0.5.0`, source commit
+  `985e9aa91d30e2955c996cd483496ebe92cfeef6`.
+- GitHub pre-release: <https://github.com/lamemustafa/pack/releases/tag/v0.5.0>.
+- Release ZIP SHA-256:
+  `1ecea75998ce69ae79caf8e6d27134516320a527d298ef164543cf87f6c07e62`.
+- Chrome Web Store state: submitted and in review as a draft. It is not
+  approved, published, or live; `v0.3.2` remains the last confirmed Store
+  publication and the basis for Store-published public claims.
+- Historical `v0.4.0` workflow run `29507382500` built, tested, verified, and
+  uploaded that release's exact ZIP with Store upload state `SUCCEEDED`, but
+  publish returned HTTP 400 because dashboard requirements were incomplete.
+  It was not published.
+- The dashboard screenshots supplied on 2026-07-16 are historical `v0.4.0`
+  evidence. They showed stale GSTR-3B-only copy/assets and a blank required
+  `offscreen` permission justification; they do not prove the current draft's
+  dashboard fields.
+
+This section is the canonical source-controlled record for the current Store
+version and review state. Release-readiness and dashboard-closeout documents
+must not claim a newer state than this record.
 
 The Store-supported alpha claims remain GSTR-1 and GSTR-3B single-period
 downloads. Private GSTR-2B and full-fiscal-year workflows are source-build
@@ -153,9 +161,12 @@ requires disclosure:
 Use the seven generated PNGs under
 [`assets/exports/`](assets/exports/). They are generated from the source SVGs,
 contain synthetic UI only, and exclude GST Portal screenshots, taxpayer data,
-real GST filenames, local paths, and downloaded content. The committed hashes
-pin the reviewed dashboard bytes; regeneration on a host with different installed
-fonts can produce different pixels, so upload the committed hash-matched exports.
+real GST filenames, local paths, and downloaded content. The committed manifest
+binds every generated PNG to the exact source SVG bytes. Regeneration on a host
+with different installed fonts can produce different pixels, so upload only the
+committed hash-matched exports after a maintainer has visually reviewed them for
+the exact submission. The regenerated `v0.5.0` exports have not yet received
+that visual review.
 
 | Dashboard slot     | Export                                                      |
 | ------------------ | ----------------------------------------------------------- |
@@ -168,8 +179,9 @@ fonts can produce different pixels, so upload the committed hash-matched exports
 | Screenshot 4       | `assets/exports/screenshot-options-clear-data-1280x800.png` |
 | Screenshot 5       | `assets/exports/screenshot-reviewer-demo-1280x800.png`      |
 
-The asset filenames, dimensions, source files, and current SHA-256 values are
-recorded in `assets/exports/asset-hashes.json`.
+The asset filenames, dimensions, source files, source SVG SHA-256 values, and
+generated PNG SHA-256 values are recorded in
+`assets/exports/asset-hashes.json`.
 
 ## Dashboard Evidence Boundary
 

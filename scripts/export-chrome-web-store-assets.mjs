@@ -7,7 +7,7 @@ import { chromium } from "@playwright/test";
 
 const SOURCE_DIR = path.join("docs", "chrome-web-store", "assets");
 const EXPORT_DIR = path.join(SOURCE_DIR, "exports");
-const ASSETS = [
+export const CHROME_WEB_STORE_ASSETS = [
   {
     file: "small-promo-440x280.png",
     height: 280,
@@ -68,10 +68,10 @@ export async function exportChromeWebStoreAssets({
   const exportedAssets = [];
 
   try {
-    for (const asset of ASSETS) {
+    for (const asset of CHROME_WEB_STORE_ASSETS) {
       const sourcePath = path.join(sourceDir, asset.source);
       const outputPath = path.join(exportDir, asset.file);
-      const svg = await readSvgSource(sourcePath, asset);
+      const { sourceSha256, svg } = await readSvgSource(sourcePath, asset);
 
       const page = await browser.newPage({
         deviceScaleFactor: 1,
@@ -91,6 +91,7 @@ export async function exportChromeWebStoreAssets({
           height: asset.height,
           sha256: sha256(buffer),
           source: asset.source,
+          sourceSha256,
           width: asset.width,
         });
       } finally {
@@ -119,7 +120,8 @@ export async function exportChromeWebStoreAssets({
 }
 
 async function readSvgSource(sourcePath, asset) {
-  const svg = await readFile(sourcePath, "utf8");
+  const source = await readFile(sourcePath);
+  const svg = source.toString("utf8");
   const width = readSvgNumericAttribute(svg, "width", sourcePath);
   const height = readSvgNumericAttribute(svg, "height", sourcePath);
   if (width !== asset.width || height !== asset.height) {
@@ -127,7 +129,7 @@ async function readSvgSource(sourcePath, asset) {
       `${path.basename(sourcePath)} must be ${asset.width}x${asset.height}; got ${width}x${height}.`,
     );
   }
-  return svg;
+  return { sourceSha256: sha256(source), svg };
 }
 
 function readSvgNumericAttribute(svg, attribute, sourcePath) {
