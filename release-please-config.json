@@ -13,6 +13,14 @@
         {
           "type": "generic",
           "path": "src/extension/version.ts"
+        },
+        {
+          "type": "generic",
+          "path": "README.md"
+        },
+        {
+          "type": "generic",
+          "path": "docs/PUBLICATION_READINESS.md"
         }
       ],
       "changelog-sections": [

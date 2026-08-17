@@ -31,9 +31,10 @@ durable full-year, or stable-release claims.
   returned HTTP 400 because dashboard requirements were incomplete. It was not
   published. The historical pending ZIP SHA-256 is
   `6ee4be24cafbe15db69275cac4da6b212f3de49b0f747eb9909eed7d293347c6`.
-- Repository source and the GitHub release are the pre-1.0 `v0.5.0` beta,
-  published as a pre-release. The Chrome Web Store package for `v0.5.0` is
-  submitted and in review as a draft; it is not approved, published, or live.
+- Repository source and the GitHub release are the pre-1.0 `v0.5.1` beta. <!-- x-release-please-version -->
+  It is published as a pre-release.
+  The Chrome Web Store package for `v0.5.0` is submitted and in review as a
+  draft; it is not approved, published, or live.
   `v0.3.2` remains the last confirmed Store publication and the only basis for
   current Store-published public claims.
 - The `v0.5.0` beta does not expand Store-facing, durable full-year, or
