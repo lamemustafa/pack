@@ -1,4 +1,6 @@
-import { readdir, readFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { chmod, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -138,24 +140,154 @@ describe("Pack CI workflow", () => {
       path.join(rootDir, ".github", "workflows", "chrome-web-store-status.yml"),
       "utf8",
     );
+    const publisher = await readFile(
+      path.join(rootDir, "scripts", "publish-chrome-web-store.mjs"),
+      "utf8",
+    );
+    const missingCredentialContract = publisher.match(
+      /"(Missing Chrome Web Store credentials\.[^"]+)"/,
+    )?.[1];
+    const contractCredentialNames = [
+      ...new Set(missingCredentialContract?.match(/CWS_[A-Z_]+/g) ?? []),
+    ];
 
     expect(statusWorkflow).toContain("schedule:");
     expect(statusWorkflow).toContain("workflow_dispatch:");
     expect(statusWorkflow).toContain("environment: chrome-web-store-status");
-    expect(statusWorkflow).toContain("id: credentials");
-    expect(statusWorkflow).toContain('if [[ -z "$CWS_SERVICE_ACCOUNT_JSON" ]]');
-    expect(statusWorkflow).toContain('echo "configured=false" >> "$GITHUB_OUTPUT"');
-    expect(statusWorkflow).toContain('echo "configured=true" >> "$GITHUB_OUTPUT"');
+    expect(statusWorkflow).toContain(
+      'if [[ "$GITHUB_EVENT_NAME" == "schedule" && "$CWS_REQUIRE_PUBLISHED" == "false" ]]',
+    );
+    expect(statusWorkflow).toContain(
+      '[[ "$status_output" == "Missing Chrome Web Store credentials."* ]]',
+    );
+    expect(statusWorkflow).toContain('exit "$status_code"');
     expect(statusWorkflow).toContain("Chrome Web Store status check skipped");
-    expect(statusWorkflow).toContain("the read-only status check did not run");
-    expect(statusWorkflow).toContain("if: needs.configuration.outputs.configured == 'true'");
+    expect(statusWorkflow).toContain("the non-strict scheduled status check did not run");
     expect(statusWorkflow).toContain("node scripts/check-chrome-web-store-status.mjs");
     expect(statusWorkflow).toContain("CWS_REQUIRE_PUBLISHED");
-    expect(statusWorkflow).toContain("CWS_SERVICE_ACCOUNT_JSON");
-    expect(statusWorkflow).not.toContain("CWS_REFRESH_TOKEN");
-    expect(statusWorkflow).not.toContain("CWS_CLIENT_SECRET");
+    expect(contractCredentialNames.length).toBeGreaterThan(0);
+    for (const name of contractCredentialNames) {
+      expect(statusWorkflow).toContain(`${name}: \${{ secrets.${name} }}`);
+    }
     expect(statusWorkflow).not.toContain("scripts/publish-chrome-web-store.mjs");
     expect(statusWorkflow).not.toContain(":publish");
     expect(statusWorkflow).not.toContain(":upload");
   });
+
+  it("skips only an unconfigured non-strict schedule and admits either credential form", async () => {
+    const statusWorkflow = await readFile(
+      path.join(rootDir, ".github", "workflows", "chrome-web-store-status.yml"),
+      "utf8",
+    );
+    const publisher = await readFile(
+      path.join(rootDir, "scripts", "publish-chrome-web-store.mjs"),
+      "utf8",
+    );
+    const missingCredentials = publisher.match(
+      /"(Missing Chrome Web Store credentials\.[^"]+)"/,
+    )?.[1];
+    expect(missingCredentials).toBeTruthy();
+
+    const fixtureDir = await mkdtemp(path.join(tmpdir(), "pack-cws-status-workflow-"));
+    try {
+      const fakeNode = path.join(fixtureDir, "node");
+      await writeFile(
+        fakeNode,
+        `#!/bin/sh
+if [ "$FAKE_CREDENTIAL_FORM" = "service-account" ] && [ -z "$CWS_SERVICE_ACCOUNT_JSON" ]; then exit 9; fi
+if [ "$FAKE_CREDENTIAL_FORM" = "oauth" ] && { [ -z "$CWS_CLIENT_ID" ] || [ -z "$CWS_CLIENT_SECRET" ] || [ -z "$CWS_REFRESH_TOKEN" ]; }; then exit 9; fi
+printf '%s\\n' "$FAKE_NODE_OUTPUT"
+exit "$FAKE_NODE_EXIT"
+`,
+      );
+      await chmod(fakeNode, 0o755);
+
+      const runScript = extractLastWorkflowRunScript(statusWorkflow);
+      const scheduledSummary = path.join(fixtureDir, "scheduled-summary.md");
+      const scheduled = runWorkflowShell(runScript, fixtureDir, {
+        CWS_REQUIRE_PUBLISHED: "false",
+        FAKE_NODE_EXIT: "1",
+        FAKE_NODE_OUTPUT: missingCredentials ?? "",
+        GITHUB_EVENT_NAME: "schedule",
+        GITHUB_STEP_SUMMARY: scheduledSummary,
+      });
+      expect(scheduled.status).toBe(0);
+      expect(await readFile(scheduledSummary, "utf8")).toContain(
+        "the non-strict scheduled status check did not run",
+      );
+
+      const strictDispatch = runWorkflowShell(runScript, fixtureDir, {
+        CWS_REQUIRE_PUBLISHED: "true",
+        FAKE_NODE_EXIT: "1",
+        FAKE_NODE_OUTPUT: missingCredentials ?? "",
+        GITHUB_EVENT_NAME: "workflow_dispatch",
+        GITHUB_STEP_SUMMARY: path.join(fixtureDir, "strict-summary.md"),
+      });
+      expect(strictDispatch.status).toBe(1);
+      expect(strictDispatch.stderr).toContain("Missing Chrome Web Store credentials.");
+
+      const serviceAccount = runWorkflowShell(runScript, fixtureDir, {
+        CWS_REQUIRE_PUBLISHED: "false",
+        CWS_SERVICE_ACCOUNT_JSON: "configured",
+        FAKE_CREDENTIAL_FORM: "service-account",
+        FAKE_NODE_EXIT: "0",
+        FAKE_NODE_OUTPUT: "status-ok",
+        GITHUB_EVENT_NAME: "schedule",
+        GITHUB_STEP_SUMMARY: path.join(fixtureDir, "service-account-summary.md"),
+      });
+      expect(serviceAccount.status).toBe(0);
+
+      const oauth = runWorkflowShell(runScript, fixtureDir, {
+        CWS_CLIENT_ID: "configured",
+        CWS_CLIENT_SECRET: "configured",
+        CWS_REFRESH_TOKEN: "configured",
+        CWS_REQUIRE_PUBLISHED: "false",
+        FAKE_CREDENTIAL_FORM: "oauth",
+        FAKE_NODE_EXIT: "0",
+        FAKE_NODE_OUTPUT: "status-ok",
+        GITHUB_EVENT_NAME: "schedule",
+        GITHUB_STEP_SUMMARY: path.join(fixtureDir, "oauth-summary.md"),
+      });
+      expect(oauth.status).toBe(0);
+    } finally {
+      await rm(fixtureDir, { force: true, recursive: true });
+    }
+  });
 });
+
+function extractLastWorkflowRunScript(workflow: string): string {
+  const marker = "        run: |\n";
+  const start = workflow.lastIndexOf(marker);
+  expect(start).toBeGreaterThanOrEqual(0);
+  const lines = workflow.slice(start + marker.length).split("\n");
+  const script: string[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith("          ")) {
+      script.push(line.slice(10));
+      continue;
+    }
+    if (line === "") {
+      script.push("");
+      continue;
+    }
+    break;
+  }
+
+  return script.join("\n");
+}
+
+function runWorkflowShell(
+  script: string,
+  fixtureDir: string,
+  env: Record<string, string>,
+): ReturnType<typeof spawnSync> {
+  return spawnSync("bash", ["-c", script], {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      ...env,
+      PATH: `${fixtureDir}:${process.env.PATH ?? ""}`,
+    },
+  });
+}

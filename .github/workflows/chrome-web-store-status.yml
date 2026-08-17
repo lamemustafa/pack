@@ -22,35 +22,8 @@ permissions:
   contents: read
 
 jobs:
-  configuration:
-    name: Detect Chrome Web Store status configuration
-    runs-on: ubuntu-latest
-    timeout-minutes: 1
-    environment: chrome-web-store-status
-    outputs:
-      configured: ${{ steps.credentials.outputs.configured }}
-
-    steps:
-      - name: Detect status credentials
-        id: credentials
-        shell: bash
-        env:
-          CWS_SERVICE_ACCOUNT_JSON: ${{ secrets.CWS_SERVICE_ACCOUNT_JSON }}
-        run: |
-          if [[ -z "$CWS_SERVICE_ACCOUNT_JSON" ]]; then
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Chrome Web Store status check skipped because credentials are not configured. See #59."
-            echo "### Chrome Web Store status check skipped" >> "$GITHUB_STEP_SUMMARY"
-            echo "Credentials are not configured, so the read-only status check did not run. See #59." >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-
-          echo "configured=true" >> "$GITHUB_OUTPUT"
-
   status:
     name: Check Chrome Web Store status
-    needs: configuration
-    if: needs.configuration.outputs.configured == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment: chrome-web-store-status
@@ -65,10 +38,34 @@ jobs:
           node-version: 22.13.0
 
       - name: Check Chrome Web Store status
-        run: node scripts/check-chrome-web-store-status.mjs
+        shell: bash
+        run: |
+          set +e
+          status_output="$(node scripts/check-chrome-web-store-status.mjs 2>&1)"
+          status_code=$?
+          set -e
+
+          if [[ $status_code -eq 0 ]]; then
+            printf '%s\n' "$status_output"
+            exit 0
+          fi
+
+          if [[ "$GITHUB_EVENT_NAME" == "schedule" && "$CWS_REQUIRE_PUBLISHED" == "false" ]] &&
+             [[ "$status_output" == "Missing Chrome Web Store credentials."* ]]; then
+            echo "::notice::Chrome Web Store status check skipped because credentials are not configured. See #59."
+            echo "### Chrome Web Store status check skipped" >> "$GITHUB_STEP_SUMMARY"
+            echo "Credentials are not configured, so the non-strict scheduled status check did not run. See #59." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          printf '%s\n' "$status_output" >&2
+          exit "$status_code"
         env:
           CWS_EXTENSION_ID: nfnbhekccajjfgkppolomflaeledoccb
           CWS_EXPECTED_VERSION: ${{ inputs.expected_version }}
           CWS_REQUIRE_PUBLISHED: ${{ inputs.require_published || 'false' }}
           CWS_PUBLISHER_ID: ${{ vars.CWS_PUBLISHER_ID }}
           CWS_SERVICE_ACCOUNT_JSON: ${{ secrets.CWS_SERVICE_ACCOUNT_JSON }}
+          CWS_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          CWS_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
