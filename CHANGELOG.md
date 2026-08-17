@@ -4,6 +4,54 @@ All notable changes to ComplyEaze Pack are documented here.
 
 ## Unreleased
 
+## [0.5.0](https://github.com/lamemustafa/pack/compare/v0.4.0...v0.5.0) (2026-08-17)
+
+
+### Features
+
+* **evidence:** represent GSTR JSON artifacts in filed-return live evidence ([#110](https://github.com/lamemustafa/pack/issues/110)) ([54479aa](https://github.com/lamemustafa/pack/commit/54479aab165bc3d0073da3d1b0fb8e6264396ccc))
+
+
+### Fixes
+
+* **download:** bind portal blob capture and cancellation to the Pack action ([#112](https://github.com/lamemustafa/pack/issues/112)) ([22ae918](https://github.com/lamemustafa/pack/commit/22ae9181458605b5735ca3807c22aa4e67be4a3f))
+* **gst:** bind filed-return acquisition to the requested target ([#96](https://github.com/lamemustafa/pack/issues/96)) ([bf10bf3](https://github.com/lamemustafa/pack/commit/bf10bf3df589aec7b76ffc9d7b5891ea37cab996))
+* **gst:** harden full-year artifact staging ([#142](https://github.com/lamemustafa/pack/issues/142)) ([76916d8](https://github.com/lamemustafa/pack/commit/76916d81fea1d03f737179a01c373e52669cf7df))
+* **gst:** restore returns dashboard and GSTR-2B download ([#125](https://github.com/lamemustafa/pack/issues/125)) ([32a92e7](https://github.com/lamemustafa/pack/commit/32a92e76f27fe32c6034e12de26b299994f19e6a))
+* **injection:** make MAIN-world functions self-contained across the executeScript boundary ([#116](https://github.com/lamemustafa/pack/issues/116)) ([20e7422](https://github.com/lamemustafa/pack/commit/20e74220374f27302e82e256be57c11b25ffde42))
+* **recovery:** keep unproven artifact outcomes in review ([#106](https://github.com/lamemustafa/pack/issues/106)) ([c3c98ea](https://github.com/lamemustafa/pack/commit/c3c98ea50b9c1d78eb863950ce5492d258a30641))
+* **recovery:** persist direct download completion proof ([#135](https://github.com/lamemustafa/pack/issues/135)) ([52c66d8](https://github.com/lamemustafa/pack/commit/52c66d86fe4575a5ce90e29802a0d9948e8cf323))
+* **recovery:** reconcile a cancelled target from exact download evidence ([#113](https://github.com/lamemustafa/pack/issues/113)) ([b7447bb](https://github.com/lamemustafa/pack/commit/b7447bb72c8acf88e87e73df7eab9004aca0acd2))
+* **recovery:** reconcile a completed acquisition checkpoint after worker death ([#117](https://github.com/lamemustafa/pack/issues/117)) ([61b63fd](https://github.com/lamemustafa/pack/commit/61b63fda265c61a9150a4ad7c99e95de7ab76c52))
+* **recovery:** retain acquisition checkpoints ([#126](https://github.com/lamemustafa/pack/issues/126)) ([93171b4](https://github.com/lamemustafa/pack/commit/93171b41a97460d663b5f9b29410af5c466eadcd))
+
+
+### Documentation
+
+* **agent:** align reviewed manifest boundaries ([#82](https://github.com/lamemustafa/pack/issues/82)) ([818ebf7](https://github.com/lamemustafa/pack/commit/818ebf7f4ca6b13ebf92dad9d166fe6fb63be804))
+* **agents:** record that the PR body is gated and where its contract lives ([#114](https://github.com/lamemustafa/pack/issues/114)) ([ff95027](https://github.com/lamemustafa/pack/commit/ff95027d303b49d0fdc093ca1514b28c319ed8f1))
+* **privacy:** disclose full-year ZIP correlation fields and retained JSON bytes ([#105](https://github.com/lamemustafa/pack/issues/105)) ([4fbdd78](https://github.com/lamemustafa/pack/commit/4fbdd78f8d08e2a1b2c4f6837b7aff69c1413bf3))
+* **readiness:** add full-year recovery QA matrix ([#132](https://github.com/lamemustafa/pack/issues/132)) ([9cd0737](https://github.com/lamemustafa/pack/commit/9cd0737d7e46035be639692c00c7b43d821a3813))
+* **readiness:** clarify full-year recovery matrix ([#134](https://github.com/lamemustafa/pack/issues/134)) ([114b80a](https://github.com/lamemustafa/pack/commit/114b80a4b50e4ac524857868f6348212a7c41d08))
+* **store:** refresh v0.4.0 listing assets ([#83](https://github.com/lamemustafa/pack/issues/83)) ([c7d306e](https://github.com/lamemustafa/pack/commit/c7d306ed1acb0920a1d00c785755238c8b78a668))
+
+
+### Tests
+
+* **release:** cover release-please API contract ([#133](https://github.com/lamemustafa/pack/issues/133)) ([155fd54](https://github.com/lamemustafa/pack/commit/155fd547f84b03671da754dc14c7cbe2a35d22dd))
+
+
+### Maintenance
+
+* **deps-dev:** bump @types/chrome from 0.2.2 to 0.2.5 ([#129](https://github.com/lamemustafa/pack/issues/129)) ([371f87a](https://github.com/lamemustafa/pack/commit/371f87a791909eab8852471523e0df9b0aaaf922))
+* **deps-dev:** bump prettier from 3.9.4 to 3.9.6 ([#89](https://github.com/lamemustafa/pack/issues/89)) ([28204b3](https://github.com/lamemustafa/pack/commit/28204b3ed04e0a30754e01517224e97bf9497715))
+* **deps-dev:** bump release-please from 17.10.1 to 17.11.1 ([#128](https://github.com/lamemustafa/pack/issues/128)) ([d2fd677](https://github.com/lamemustafa/pack/commit/d2fd67757e0e20e2c02a3a3024a2f848b31fdd9a))
+* **deps-dev:** bump typescript-eslint from 8.63.0 to 8.65.0 ([#88](https://github.com/lamemustafa/pack/issues/88)) ([a92babd](https://github.com/lamemustafa/pack/commit/a92babdaac68af24933e597e971db6975ffce3f2))
+* **deps:** bump actions/checkout from 7.0.0 to 7.0.1 ([#86](https://github.com/lamemustafa/pack/issues/86)) ([4d4bb4e](https://github.com/lamemustafa/pack/commit/4d4bb4e44ea4061b4c0b4b448cec6ab3ab83d3dd))
+* **deps:** bump actions/setup-node from 6.4.0 to 7.0.0 ([#87](https://github.com/lamemustafa/pack/issues/87)) ([3b8492e](https://github.com/lamemustafa/pack/commit/3b8492ed10dba841307915056593aec7843b0da9))
+* **deps:** consolidate validated updates ([#143](https://github.com/lamemustafa/pack/issues/143)) ([371d8a0](https://github.com/lamemustafa/pack/commit/371d8a028285ac43f8b98dab5abad3ed6b2f6739))
+* **deps:** remediate high severity audit findings ([#94](https://github.com/lamemustafa/pack/issues/94)) ([ae38ce8](https://github.com/lamemustafa/pack/commit/ae38ce8f67a52ad390b923c94323f2eab24694ed))
+
 ## [0.4.0](https://github.com/lamemustafa/pack/compare/v0.3.3...v0.4.0) (2026-07-16)
 
 
