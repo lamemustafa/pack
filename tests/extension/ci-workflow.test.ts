@@ -57,8 +57,14 @@ describe("Pack CI workflow", () => {
     expect(workflow).toContain('schedule:\n    - cron: "*/15 * * * *"');
     expect(workflow).not.toContain("/review-gate");
     expect(workflow).toContain("name: Review gate");
-    expect(workflow).toContain("if: github.event_name != 'schedule'");
-    expect(workflow).toContain("if: github.event_name == 'schedule'");
+    expect(workflow).toContain(
+      "if: >-\n      github.event_name == 'pull_request' ||\n      github.event_name == 'pull_request_review' ||\n      github.event_name == 'pull_request_review_comment'",
+    );
+    expect(workflow).toContain(
+      "if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'",
+    );
+    expect(workflow).not.toContain("github.event.inputs.pr");
+    expect(workflow).not.toContain("EVENT_NAME: ${{ github.event_name }}");
     expect(workflow.match(/checks: write/g)).toHaveLength(1);
     expect(workflow).toMatch(
       /scheduled-review-gate:[\s\S]*?permissions:\n\s+contents: read\n\s+pull-requests: read\n\s+checks: write/,
@@ -78,7 +84,7 @@ describe("Pack CI workflow", () => {
     expect(workflow).toContain('--expected-head-oid "${{ steps.resolve-pr.outputs.head_sha }}"');
     expect(workflow).toContain("scripts/publish-review-gate-check.mjs");
     expect(workflow).toContain("--reconcile-open-prs");
-    expect(workflow).toContain("--max-prs 25");
+    expect(workflow).toContain("--max-prs 4");
     expect(workflow).toMatch(
       /scheduled-review-gate:[\s\S]*?ref: \$\{\{ github\.event\.repository\.default_branch \}\}/,
     );

@@ -13,12 +13,12 @@ describe("PR-head Review gate check publisher", () => {
     [0, "success"],
     [1, "failure"],
     [2, "action_required"],
-  ])("maps exit %i to the %s Review gate conclusion", (exitCode, conclusion) => {
+  ])("maps exit %i to the %s scheduled Review gate conclusion", (exitCode, conclusion) => {
     const { result, calls } = runPublisher(exitCode, [{ status: 0 }]);
     expect(result.status).toBe(0);
     const call = calls[0]?.join(" ") ?? "";
     expect(call).toContain("repos/lamemustafa/pack/check-runs");
-    expect(call).toContain("name=Review gate");
+    expect(call).toContain("name=Review gate (scheduled)");
     expect(call).toContain(`head_sha=${headSha}`);
     expect(call).toContain(`conclusion=${conclusion}`);
   });
@@ -46,7 +46,7 @@ describe("PR-head Review gate check publisher", () => {
       pull(5),
     ];
     const { result, calls } = runScript(
-      ["--reconcile-open-prs", "--max-prs", "1"],
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
       pulls,
       cleanReviewFixture(),
     );
@@ -59,6 +59,24 @@ describe("PR-head Review gate check publisher", () => {
     expect(result.stderr).toContain("schedule cap hit: processing 1 of 2 eligible");
     expect(publications).toHaveLength(1);
     expect(publications[0]).toContain(`head_sha=${headSha}`);
+  });
+
+  it("rotates the capped selection across eligible pull requests", () => {
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "1"],
+      [pull(1), pull(2)],
+      cleanReviewFixture(),
+    );
+    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
+
+    expect(result.status).toBe(0);
+    expect(publication).toContain(`head_sha=${"2".repeat(40)}`);
+  });
+
+  it("preserves the event gate's current-head review wait for scheduled evaluation", () => {
+    const script = readFileSync(scriptPath, "utf8");
+    expect(script).toMatch(/"--wait-head-review-ms",\s*"180000"/u);
+    expect(script).toMatch(/"--poll-interval-ms",\s*"10000"/u);
   });
 });
 
@@ -115,7 +133,14 @@ const calls = existsSync(process.env.FAKE_CALLS) ? JSON.parse(readFileSync(proce
 calls.push(args); writeFileSync(process.env.FAKE_CALLS, JSON.stringify(calls), "utf8");
 const text = args.join(" ");
 if (text.includes("pulls?state=open")) process.stdout.write(process.env.FAKE_PULLS);
-else if (text.includes("graphql")) process.stdout.write(process.env.FAKE_FIXTURE);
+else if (text.includes("graphql")) {
+  const fixture = JSON.parse(process.env.FAKE_FIXTURE);
+  const number = Number(args.find((arg) => arg.startsWith("number="))?.split("=")[1]);
+  const pull = JSON.parse(process.env.FAKE_PULLS).flat().find((item) => item.number === number);
+  fixture.data.repository.pullRequest.headRefOid = pull.head.sha;
+  fixture.data.repository.pullRequest.reviews.nodes[0].commit.oid = pull.head.sha;
+  process.stdout.write(JSON.stringify(fixture));
+}
 else if (text.includes("check-runs")) {
   const attempts = calls.filter((call) => call.includes("repos/lamemustafa/pack/check-runs")).length;
   const responses = JSON.parse(process.env.FAKE_RESPONSES);
@@ -146,6 +171,17 @@ const cleanReviewFixture = () => ({
         headRefName: "tapish-codex/test",
         headRepository: { nameWithOwner: "lamemustafa/pack" },
         headRefOid: headSha,
+        reviews: {
+          nodes: [
+            {
+              state: "COMMENTED",
+              submittedAt: "2026-08-18T00:00:00Z",
+              author: { login: "chatgpt-codex-connector" },
+              commit: { oid: headSha },
+            },
+          ],
+          pageInfo: { hasNextPage: false, endCursor: null },
+        },
       },
     },
   },
