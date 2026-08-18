@@ -37,55 +37,66 @@ describe("Pack CI workflow", () => {
     expect(workflow).not.toContain("actions/upload-artifact");
   });
 
-  it("keeps event gates read-only and reconciles PR-head checks from scheduled trusted code", async () => {
-    const workflow = await readFile(
+  it("isolates PR-head execution from trusted scheduled reconciliation", async () => {
+    const prWorkflow = await readFile(
       path.join(rootDir, ".github", "workflows", "review-gate.yml"),
       "utf8",
     );
+    const trustedWorkflow = await readFile(
+      path.join(rootDir, ".github", "workflows", "review-gate-reconcile.yml"),
+      "utf8",
+    );
 
-    expect(workflow).toContain("workflow_dispatch:");
-    expect(workflow).toContain(
+    expect(prWorkflow).not.toContain("workflow_dispatch:");
+    expect(prWorkflow).not.toContain("schedule:");
+    expect(prWorkflow).toContain(
       "pull_request:\n    types: [opened, reopened, synchronize, ready_for_review, edited]",
     );
-    expect(workflow).toContain("pull_request_review:\n    types: [submitted, edited, dismissed]");
-    expect(workflow).toContain(
+    expect(prWorkflow).toContain("pull_request_review:\n    types: [submitted, edited, dismissed]");
+    expect(prWorkflow).toContain(
       "pull_request_review_comment:\n    types: [created, edited, deleted]",
     );
-    expect(workflow).not.toContain("pull_request_target:");
-    expect(workflow).not.toContain("issue_comment:");
-    expect(workflow).not.toContain("github.event.issue");
-    expect(workflow).toContain('schedule:\n    - cron: "*/15 * * * *"');
-    expect(workflow).not.toContain("/review-gate");
-    expect(workflow).toContain("name: Review gate");
-    expect(workflow).toContain(
-      "if: >-\n      github.event_name == 'pull_request' ||\n      github.event_name == 'pull_request_review' ||\n      github.event_name == 'pull_request_review_comment'",
-    );
-    expect(workflow).toContain(
-      "if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'",
-    );
-    expect(workflow).not.toContain("github.event.inputs.pr");
-    expect(workflow).not.toContain("EVENT_NAME: ${{ github.event_name }}");
-    expect(workflow.match(/checks: write/g)).toHaveLength(1);
-    expect(workflow).toMatch(
+    expect(prWorkflow).not.toContain("pull_request_target:");
+    expect(prWorkflow).not.toContain("issue_comment:");
+    expect(prWorkflow).not.toContain("github.event.issue");
+    expect(prWorkflow).not.toContain("/review-gate");
+    expect(prWorkflow).toContain("name: Review gate");
+    expect(prWorkflow).not.toContain("checks: write");
+    expect(prWorkflow).not.toContain("statuses: write");
+    expect(prWorkflow).toContain("GH_TOKEN: ${{ github.token }}");
+    expect(prWorkflow).toContain("repository: ${{ steps.resolve-pr.outputs.head_repo }}");
+    expect(prWorkflow).toContain("ref: ${{ steps.resolve-pr.outputs.head_sha }}");
+    expect(prWorkflow).toContain("pnpm install --frozen-lockfile");
+    expect(prWorkflow).toContain("pnpm workflow:preflight");
+    expect(prWorkflow).toContain("pnpm review:gate");
+    expect(prWorkflow).toContain("ready_for_review, edited");
+    expect(prWorkflow).toContain("--strict-head-review");
+    expect(prWorkflow).toContain("--required-review-author chatgpt-codex-connector");
+    expect(prWorkflow).toContain("--wait-head-review-ms 180000");
+    expect(prWorkflow).toContain("--allow-missing-head-review");
+    expect(prWorkflow).toContain('--expected-head-oid "${{ steps.resolve-pr.outputs.head_sha }}"');
+
+    expect(trustedWorkflow).toContain("workflow_dispatch:");
+    expect(trustedWorkflow).toContain('schedule:\n    - cron: "*/15 * * * *"');
+    expect(trustedWorkflow).not.toContain("pull_request:");
+    expect(trustedWorkflow).not.toContain("pull_request_review:");
+    expect(trustedWorkflow).not.toContain("pull_request_review_comment:");
+    expect(trustedWorkflow).not.toContain("github.event.inputs.pr");
+    expect(trustedWorkflow).not.toContain("EVENT_NAME: ${{ github.event_name }}");
+    expect(trustedWorkflow.match(/checks: write/g)).toHaveLength(1);
+    expect(trustedWorkflow).toMatch(
       /scheduled-review-gate:[\s\S]*?permissions:\n\s+contents: read\n\s+pull-requests: read\n\s+checks: write/,
     );
-    expect(workflow).not.toContain("statuses: write");
-    expect(workflow).toContain("GH_TOKEN: ${{ github.token }}");
-    expect(workflow).toContain("repository: ${{ steps.resolve-pr.outputs.head_repo }}");
-    expect(workflow).toContain("ref: ${{ steps.resolve-pr.outputs.head_sha }}");
-    expect(workflow).toContain("pnpm install --frozen-lockfile");
-    expect(workflow).toContain("pnpm workflow:preflight");
-    expect(workflow).toContain("pnpm review:gate");
-    expect(workflow).toContain("ready_for_review, edited");
-    expect(workflow).toContain("--strict-head-review");
-    expect(workflow).toContain("--required-review-author chatgpt-codex-connector");
-    expect(workflow).toContain("--wait-head-review-ms 180000");
-    expect(workflow).toContain("--allow-missing-head-review");
-    expect(workflow).toContain('--expected-head-oid "${{ steps.resolve-pr.outputs.head_sha }}"');
-    expect(workflow).toContain("scripts/publish-review-gate-check.mjs");
-    expect(workflow).toContain("--reconcile-open-prs");
-    expect(workflow).toContain("--max-prs 4");
-    expect(workflow).toMatch(
+    expect(trustedWorkflow).not.toContain("statuses: write");
+    expect(trustedWorkflow).toContain("GH_TOKEN: ${{ github.token }}");
+    expect(trustedWorkflow).not.toContain("steps.resolve-pr.outputs");
+    expect(trustedWorkflow).not.toContain("cache:");
+    expect(trustedWorkflow).not.toContain("pnpm install");
+    expect(trustedWorkflow).not.toContain("pnpm workflow:preflight");
+    expect(trustedWorkflow).toContain("scripts/publish-review-gate-check.mjs");
+    expect(trustedWorkflow).toContain("--reconcile-open-prs");
+    expect(trustedWorkflow).toContain("--max-prs 4");
+    expect(trustedWorkflow).toMatch(
       /scheduled-review-gate:[\s\S]*?ref: \$\{\{ github\.event\.repository\.default_branch \}\}/,
     );
   });
