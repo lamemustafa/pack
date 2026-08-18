@@ -49,12 +49,19 @@ For each release candidate:
   locally from staged portal JSON already in that run. The data CSV must keep
   the fixed tidy columns `period`, `return_type`, `artifact`, `outcome`,
   `field_label`, `field_path`, `value_text`, and `value_number`; keep canonical
-  JSON Pointer paths; represent arrays only by element count; expand JSON
-  numbers without rounding into plain decimal numeric cells; preserve strings
+  JSON Pointer paths. Confirm only the configured GSTR-3B summary arrays with
+  at most 64 elements may expand, using the first shared discriminator in the
+  ordered candidate list `ty`, `pos`, and only when every discriminator is
+  non-empty and unique. Expanded paths must use the discriminator value, omit
+  the discriminator field, and emit no count row. Every other array, including
+  every GSTR-1 and GSTR-2B array, must emit one count row whose `outcome` names
+  why it was not expanded. Expand JSON numbers without rounding into plain decimal numeric cells; preserve strings
   and identifiers as text except for the existing apostrophe guard on
   formula-like text; and use fixed outcome rows where no parseable JSON exists.
-  Labels must come only from the return-type map with recorded
-  official-source provenance, with unverified labels left empty. The context
+  Labels must come only from the return-type map with recorded provenance that
+  distinguishes two-period portal-PDF value cross-checks, form-vocabulary and
+  row-order derivations that were not value-matched, and the pre-existing
+  offline-utility mappings; unmapped labels must stay empty. The context
   CSV must contain the format token, run metadata, value/flattening rules, and
   recognized invariant taxpayer identity once; identity must not appear in the
   data CSV. Both derived files must remain output-only ZIP entries: their bytes

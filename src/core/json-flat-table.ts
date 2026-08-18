@@ -1,9 +1,21 @@
 export type FlatJsonLeafValueKind = "number" | "text";
+export type FlatJsonArrayCountReason =
+  | "array-count-not-selected"
+  | "array-count-over-ceiling"
+  | "array-count-no-common-discriminator"
+  | "array-count-duplicate-discriminator";
 
 export interface FlatJsonLeaf {
+  arrayCountReason?: FlatJsonArrayCountReason;
   path: string;
   valueKind: FlatJsonLeafValueKind;
   value: string;
+}
+
+export interface FlatJsonArrayExpansionOptions {
+  discriminatorKeys: readonly string[];
+  eligiblePaths: readonly string[];
+  maxElements: number;
 }
 
 const MAX_JSON_DEPTH = 512;
@@ -18,16 +30,17 @@ export class JsonFlatTableLimitError extends Error {
 
 /**
  * Parses and flattens JSON in one pass so arrays and unused containers are not
- * materialized. Object keys use RFC 6901 JSON Pointer paths. Arrays stay at
- * their own path and become their element count; their contents are validated
- * but never expanded. JSON numbers are expanded to exact plain decimal text
- * without passing through JavaScript's Number type.
+ * materialized. Object keys use RFC 6901 JSON Pointer paths. Configured small
+ * arrays may expand by a shared unique discriminator; every other array stays
+ * at its own path as a count with a reason. JSON numbers are expanded to exact
+ * plain decimal text without passing through JavaScript's Number type.
  */
 export function flattenJsonTextScalarLeaves(
   input: string,
   maxOutputBytes = Number.POSITIVE_INFINITY,
+  arrayExpansion?: FlatJsonArrayExpansionOptions,
 ): FlatJsonLeaf[] {
-  return new FlatJsonParser(input, maxOutputBytes).parse();
+  return new FlatJsonParser(input, maxOutputBytes, arrayExpansion).parse();
 }
 
 export function jsonNumberTokenToPlainDecimal(
@@ -74,9 +87,23 @@ export function jsonNumberTokenToPlainDecimal(
   return plain;
 }
 
+export function flatJsonLeavesApproximateBytes(leaves: readonly FlatJsonLeaf[]): number {
+  const encoder = new TextEncoder();
+  return leaves.reduce(
+    (total, leaf) =>
+      total +
+      encoder.encode(leaf.path).byteLength +
+      encoder.encode(leaf.value).byteLength +
+      (leaf.arrayCountReason ? encoder.encode(leaf.arrayCountReason).byteLength : 0) +
+      4,
+    0,
+  );
+}
+
 class FlatJsonParser {
   private readonly leaves: FlatJsonLeaf[] = [];
   private readonly encoder = new TextEncoder();
+  private readonly eligibleArrayPaths: ReadonlySet<string>;
   private activePathBytes = 0;
   private index = 0;
   private outputBytes = 0;
@@ -84,7 +111,10 @@ class FlatJsonParser {
   constructor(
     private readonly input: string,
     private readonly maxOutputBytes: number,
-  ) {}
+    private readonly arrayExpansion?: FlatJsonArrayExpansionOptions,
+  ) {
+    this.eligibleArrayPaths = new Set(arrayExpansion?.eligiblePaths ?? []);
+  }
 
   parse(): FlatJsonLeaf[] {
     this.parseValue("", true, 0);
@@ -148,18 +178,107 @@ class FlatJsonParser {
 
   private parseArray(path: string, emit: boolean, depth: number): void {
     let elementCount = 0;
+    const elementSpans: Array<readonly [number, number]> = [];
+    const eligible = emit && this.eligibleArrayPaths.has(path);
     this.index += 1;
     this.skipWhitespace();
     if (!this.consume("]")) {
       while (true) {
+        const elementStart = this.index;
         this.parseValue("", false, depth);
         elementCount += 1;
+        if (eligible && elementCount <= (this.arrayExpansion?.maxElements ?? 0)) {
+          elementSpans.push([elementStart, this.index]);
+        }
         this.skipWhitespace();
         if (this.consume("]")) break;
         if (!this.consume(",")) this.fail();
+        this.skipWhitespace();
       }
     }
-    if (emit) this.addLeaf(path, "number", String(elementCount));
+    if (!emit) return;
+    if (!eligible) {
+      this.addArrayCount(path, elementCount, "array-count-not-selected");
+      return;
+    }
+    if (elementCount > (this.arrayExpansion?.maxElements ?? 0)) {
+      this.addArrayCount(path, elementCount, "array-count-over-ceiling");
+      return;
+    }
+    if (elementCount === 0) {
+      this.addArrayCount(path, elementCount, "array-count-no-common-discriminator");
+      return;
+    }
+    const elements: FlatJsonLeaf[][] = [];
+    let retainedElementBytes = 0;
+    for (const [start, end] of elementSpans) {
+      const leaves = new FlatJsonParser(
+        this.input.slice(start, end),
+        this.remainingBytes() - retainedElementBytes,
+      ).parse();
+      retainedElementBytes += flatJsonLeavesApproximateBytes(leaves);
+      if (retainedElementBytes > this.remainingBytes()) this.limit();
+      elements.push(leaves);
+    }
+    const discriminator = this.selectArrayDiscriminator(elements);
+    if (!discriminator) {
+      const hasDuplicateCandidate = this.hasCommonDuplicateDiscriminator(elements);
+      this.addArrayCount(
+        path,
+        elementCount,
+        hasDuplicateCandidate
+          ? "array-count-duplicate-discriminator"
+          : "array-count-no-common-discriminator",
+      );
+      return;
+    }
+    elements.forEach((leaves, index) => {
+      const discriminatorValue = discriminator.values[index]!;
+      const discriminatorBytes = this.encoder.encode(discriminatorValue).byteLength;
+      if (discriminatorBytes * 2 + this.encoder.encode(path).byteLength > this.remainingBytes()) {
+        this.limit();
+      }
+      const elementPath = `${path}/${escapeJsonPointerToken(discriminatorValue)}`;
+      for (const leaf of leaves) {
+        if (leaf.path === discriminator.pointer) continue;
+        this.addLeaf(
+          `${elementPath}${leaf.path}`,
+          leaf.valueKind,
+          leaf.value,
+          leaf.arrayCountReason,
+        );
+      }
+    });
+  }
+
+  private selectArrayDiscriminator(
+    elements: readonly (readonly FlatJsonLeaf[])[],
+  ): { pointer: string; values: string[] } | null {
+    for (const key of this.arrayExpansion?.discriminatorKeys ?? []) {
+      const pointer = `/${escapeJsonPointerToken(key)}`;
+      const values = elements.map((leaves) => discriminatorValue(leaves, pointer));
+      if (values.some((value) => value === null)) continue;
+      const presentValues = values as string[];
+      if (new Set(presentValues).size === presentValues.length) {
+        return { pointer, values: presentValues };
+      }
+    }
+    return null;
+  }
+
+  private hasCommonDuplicateDiscriminator(elements: readonly (readonly FlatJsonLeaf[])[]): boolean {
+    return (this.arrayExpansion?.discriminatorKeys ?? []).some((key) => {
+      const pointer = `/${escapeJsonPointerToken(key)}`;
+      const values = elements.map((leaves) => discriminatorValue(leaves, pointer));
+      return (
+        values.every((value) => value !== null) &&
+        new Set(values as string[]).size !== values.length
+      );
+    });
+  }
+
+  private addArrayCount(path: string, count: number, reason: FlatJsonArrayCountReason): void {
+    this.addLeaf(path, "number", String(count), reason);
   }
 
   private parseString(decode: boolean): string {
@@ -211,12 +330,27 @@ class FlatJsonParser {
     }
   }
 
-  private addLeaf(path: string, valueKind: FlatJsonLeafValueKind, value: string): void {
-    const key = path || "/";
+  private addLeaf(
+    path: string,
+    valueKind: FlatJsonLeafValueKind,
+    value: string,
+    arrayCountReason?: FlatJsonArrayCountReason,
+  ): void {
+    const key = path;
     const valueBytes = this.encoder.encode(value).byteLength;
-    this.outputBytes += this.encoder.encode(key).byteLength + valueBytes + 4;
+    const reasonBytes = arrayCountReason ? this.encoder.encode(arrayCountReason).byteLength : 0;
+    this.outputBytes += this.encoder.encode(key).byteLength + valueBytes + reasonBytes + 4;
     if (this.outputBytes > this.maxOutputBytes) this.limit();
-    this.leaves.push({ path: key, valueKind, value });
+    this.leaves.push({
+      ...(arrayCountReason ? { arrayCountReason } : {}),
+      path: key,
+      valueKind,
+      value,
+    });
+  }
+
+  private remainingBytes(): number {
+    return this.maxOutputBytes - this.outputBytes;
   }
 
   private skipWhitespace(): void {
@@ -240,4 +374,11 @@ class FlatJsonParser {
 
 function escapeJsonPointerToken(value: string): string {
   return value.replace(/~/g, "~0").replace(/\//g, "~1");
+}
+
+function discriminatorValue(leaves: readonly FlatJsonLeaf[], pointer: string): string | null {
+  const leaf = leaves.find((candidate) => candidate.path === pointer);
+  if (!leaf || leaf.arrayCountReason || leaf.value.length === 0) return null;
+  if (leaf.valueKind === "text" && ["true", "false", "null"].includes(leaf.value)) return null;
+  return leaf.value;
 }

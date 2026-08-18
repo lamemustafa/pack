@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  flatJsonLeavesApproximateBytes,
   flattenJsonTextScalarLeaves,
   JsonFlatTableLimitError,
   jsonNumberTokenToPlainDecimal,
@@ -15,15 +16,51 @@ describe("flat JSON leaf extraction", () => {
   });
 
   it("keeps strings as text and arrays as numeric counts at JSON Pointer paths", () => {
-    expect(
-      flattenJsonTextScalarLeaves(
-        '{"identifier":"00042","amount":2.038519331E7,"nested":{"a/b":true},"items":[1,2]}',
-      ),
-    ).toEqual([
+    const leaves = flattenJsonTextScalarLeaves(
+      '{"identifier":"00042","amount":2.038519331E7,"nested":{"a/b":true},"items":[1,2]}',
+    );
+    expect(leaves).toEqual([
       { path: "/identifier", valueKind: "text", value: "00042" },
       { path: "/amount", valueKind: "number", value: "20385193.31" },
       { path: "/nested/a~1b", valueKind: "text", value: "true" },
-      { path: "/items", valueKind: "number", value: "2" },
+      {
+        arrayCountReason: "array-count-not-selected",
+        path: "/items",
+        valueKind: "number",
+        value: "2",
+      },
+    ]);
+    expect(flatJsonLeavesApproximateBytes(leaves.slice(-1))).toBe(35);
+  });
+
+  it("keeps the empty JSON Pointer for a root array distinct from an empty object key", () => {
+    expect(flattenJsonTextScalarLeaves("[1,2]")).toEqual([
+      {
+        arrayCountReason: "array-count-not-selected",
+        path: "",
+        valueKind: "number",
+        value: "2",
+      },
+    ]);
+    expect(flattenJsonTextScalarLeaves('{"":1}')).toEqual([
+      { path: "/", valueKind: "number", value: "1" },
+    ]);
+  });
+
+  it("expands an eligible array with generic discriminator selection and pointer escaping", () => {
+    expect(
+      flattenJsonTextScalarLeaves(
+        '{"items":[{"ty":"A/B","amount":1},{"ty":"C","amount":2}]}',
+        Number.POSITIVE_INFINITY,
+        {
+          discriminatorKeys: ["ty", "pos"],
+          eligiblePaths: ["/items"],
+          maxElements: 2,
+        },
+      ),
+    ).toEqual([
+      { path: "/items/A~1B/amount", valueKind: "number", value: "1" },
+      { path: "/items/C/amount", valueKind: "number", value: "2" },
     ]);
   });
 

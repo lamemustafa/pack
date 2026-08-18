@@ -77,12 +77,20 @@ fixed columns `period`, `return_type`, `artifact`, `outcome`, `field_label`,
 `field_path`, `value_text`, and `value_number`, with one row per period and
 flattened field. JSON numbers are expanded without rounding into plain decimal
 notation in `value_number`; strings and identifiers retain their spelling in
-`value_text` except for the existing apostrophe guard on formula-like text;
-arrays use their element count at the array's JSON Pointer path.
+`value_text` except for the existing apostrophe guard on formula-like text.
+Four configured GSTR-3B summary arrays may expand when they contain at most 64
+elements and every element has a unique, non-empty discriminator selected in
+order from the portal keys `ty` and `pos`. Expanded field paths use that value
+as the element key, omit the discriminator field itself, and do not also emit a
+count. Every other array emits one count at the array's JSON Pointer path, with
+the `outcome` column naming why it was not expanded; GSTR-1 and GSTR-2B arrays
+therefore remain count-only.
 Periods and artifacts without parseable JSON receive fixed outcome rows instead
 of fabricated zeroes. `field_path` remains the canonical identifier, while
 `field_label` is populated only by a partial return-type map whose entries carry
-official-source provenance; unverified labels stay empty.
+recorded provenance. The map distinguishes labels value-cross-checked against
+two portal PDF periods, labels derived only from form vocabulary and row order,
+and the pre-existing offline-utility mappings; unmapped labels stay empty.
 
 The context CSV records the format version, run metadata, flattening and value
 rules, and recognized invariant taxpayer identity once rather than repeating it

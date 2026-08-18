@@ -49,7 +49,7 @@ describe("offscreen full-year summary response validation", () => {
     });
   });
 
-  it("drops mismatched summary metadata while retaining the exact artifact count", async () => {
+  it("rejects mismatched summary metadata before browser download", async () => {
     mocks.runtime.sendMessage.mockImplementationOnce(async (message?: unknown) => ({
       ok: true,
       requestId: requestIdFrom(message),
@@ -67,12 +67,7 @@ describe("offscreen full-year summary response validation", () => {
 
     await expect(
       createOffscreenFiledReturnZipUrl("full-fiscal-year-12345678", request()),
-    ).resolves.toEqual({
-      status: "created",
-      blobUrl: "blob:pack/summary-invalid",
-      zipEntryCount: 3,
-      artifactEntryCount: 1,
-    });
+    ).resolves.toEqual({ status: "failed", errorCategory: "offscreen-response-invalid" });
   });
 
   it("rejects a receipt whose offscreen artifact count does not match the request", async () => {

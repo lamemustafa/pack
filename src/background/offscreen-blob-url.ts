@@ -330,12 +330,15 @@ function toZipResult(
         : undefined;
     const summaryCountMatches =
       response.summaryEntryCount === (summary?.status === "included" ? 2 : 0);
+    if (expected.summaryPlan && (!summary || !summaryCountMatches)) {
+      return { status: "failed", errorCategory: "offscreen-response-invalid" };
+    }
     return {
       status: "created",
       blobUrl: response.blobUrl,
       zipEntryCount: response.zipEntryCount,
       artifactEntryCount: response.artifactEntryCount,
-      ...(summary && summaryCountMatches ? { summary } : {}),
+      ...(summary ? { summary } : {}),
     };
   }
   if (typeof response === "object" && response !== null) {

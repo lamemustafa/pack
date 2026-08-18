@@ -594,6 +594,61 @@ describe("full fiscal-year recovery", () => {
     expect(response.flowStep.safeMessage).toContain("tidy field rows for 2 periods");
   });
 
+  it("does not import a previous same-scope run's summary during cleanup recovery", async () => {
+    const now = new Date("2017-08-20T00:01:00.000Z");
+    const scope = {
+      artifactType: "JSON" as const,
+      financialYear: "2017-18",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-3B" as const,
+    };
+    const periods = getFiledReturnsFullFiscalYearPeriods(scope.financialYear, now);
+    const baseLedger = createFullFiscalYearLedger(scope, now, periods);
+    const cleanupLedger: FiledReturnsFullFiscalYearLedger = {
+      ...baseLedger,
+      status: "blocked",
+      zipPhase: "no-artifacts-cleanup-pending",
+      targets: baseLedger.targets.map((target) => ({
+        ...target,
+        status: "not-filed" as const,
+        safeSignals: ["not-filed"],
+        safeMessage: "Pack did not find a filed return for this period.",
+      })),
+    };
+    await persistCanonicalFiledReturnsFlowSummary("completion", {
+      scope,
+      status: "blocked",
+      updatedAt: "2017-08-20T00:00:00.000Z",
+      completedPeriods: [],
+      totalPeriods: 12,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "blocked",
+        safeSignals: [
+          "full-fiscal-year-summary-included",
+          "full-fiscal-year-summary-parsed-period-count:2",
+          `full-fiscal-year-summary-row-count:${periods.length}`,
+        ],
+        safeMessage: "Synthetic previous-run summary status.",
+      },
+    });
+
+    const response = await finishFullFiscalYearCleanup(
+      { ...recoveryDeps(), now: () => now } as never,
+      cleanupLedger,
+    );
+
+    expect(response).toMatchObject({
+      flowStep: {
+        state: "downloaded",
+        safeSignals: expect.not.arrayContaining(["full-fiscal-year-summary-included"]),
+      },
+    });
+    if (!response.ok || !("flowStep" in response)) throw new Error("Expected flow response.");
+    expect(response.flowStep.safeMessage).not.toContain("summary");
+  });
+
   it.each([
     {
       name: "included",

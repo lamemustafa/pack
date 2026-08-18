@@ -6,12 +6,17 @@ import {
   type CsvCellValue,
 } from "../../core/csv";
 import {
+  flatJsonLeavesApproximateBytes,
   flattenJsonTextScalarLeaves,
   JsonFlatTableLimitError,
   type FlatJsonLeaf,
 } from "../../core/json-flat-table";
 import type { FiledReturnsConcreteArtifactType } from "./filed-returns-artifacts";
 import type { FiledReturnsReturnType } from "./filed-returns-return-types";
+import {
+  filedReturnsSummaryArrayExpansion,
+  MAX_FILED_RETURNS_SUMMARY_ARRAY_EXPANSION_ELEMENTS,
+} from "./filed-returns-summary-arrays";
 import {
   filedReturnsSummaryFieldLabel,
   filedReturnsSummaryIdentityLabel,
@@ -21,10 +26,9 @@ import { FILED_RETURNS_MONTHS, type FiledReturnsMonth } from "./filed-returns-sc
 
 export const FILED_RETURNS_SUMMARY_SHEET_PATH = "full-year-summary.csv";
 export const FILED_RETURNS_SUMMARY_CONTEXT_PATH = "full-year-summary-context.csv";
-export const FILED_RETURNS_SUMMARY_FORMAT_VERSION = "pack-full-year-summary-tidy-v1";
+export const FILED_RETURNS_SUMMARY_FORMAT_VERSION = "pack-full-year-summary-tidy-v2";
 export const MAX_FILED_RETURNS_SUMMARY_ROWS = 100_000;
-export const FILED_RETURNS_SUMMARY_ARRAY_RULE =
-  "Arrays are represented by their element count at the array's JSON Pointer path; array elements are not expanded.";
+export const FILED_RETURNS_SUMMARY_ARRAY_RULE = `Configured return-summary arrays with at most ${MAX_FILED_RETURNS_SUMMARY_ARRAY_EXPANSION_ELEMENTS} elements expand only when every element shares a unique non-empty discriminator selected in order from ty, pos; expanded elements are keyed by the discriminator and emit no count row. Every other array emits one numeric count row whose outcome records why it was not expanded.`;
 export const FILED_RETURNS_SUMMARY_NUMBER_RULE =
   "JSON number tokens are expanded without rounding into plain decimal notation in value_number; spreadsheet software may apply its own numeric precision limits.";
 export const FILED_RETURNS_SUMMARY_TEXT_RULE =
@@ -125,8 +129,9 @@ export function buildFiledReturnsSummarySheet(
       const leaves = flattenJsonTextScalarLeaves(
         new TextDecoder("utf-8", { fatal: true }).decode(entry.bytes),
         remainingFlattenedBytes,
+        filedReturnsSummaryArrayExpansion(planned.returnType),
       );
-      remainingFlattenedBytes -= approximateFlatLeavesBytes(leaves);
+      remainingFlattenedBytes -= flatJsonLeavesApproximateBytes(leaves);
       parsedPeriods.add(planned.period);
       return { planned, leaves, outcome: "parseable-json" };
     } catch (error) {
@@ -152,7 +157,7 @@ export function buildFiledReturnsSummarySheet(
         period: parsed.planned.period,
         return_type: parsed.planned.returnType,
         artifact: parsed.planned.artifactType,
-        outcome: parsed.outcome,
+        outcome: leaf.arrayCountReason ?? parsed.outcome,
         field_label: filedReturnsSummaryFieldLabel(parsed.planned.returnType, leaf.path),
         field_path: leaf.path,
         value_text:
@@ -332,13 +337,4 @@ function compareCodeUnits(left: string, right: string): number {
 
 function sortedUnique(values: readonly string[]): string[] {
   return [...new Set(values)].sort(compareCodeUnits);
-}
-
-function approximateFlatLeavesBytes(leaves: readonly FlatJsonLeaf[]): number {
-  const encoder = new TextEncoder();
-  return leaves.reduce(
-    (total, leaf) =>
-      total + encoder.encode(leaf.path).byteLength + encoder.encode(leaf.value).byteLength + 4,
-    0,
-  );
 }

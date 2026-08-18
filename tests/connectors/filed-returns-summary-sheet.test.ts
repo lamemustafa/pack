@@ -9,6 +9,7 @@ import {
   type FiledReturnsSummaryPlanEntry,
 } from "../../src/connectors/gst/filed-returns-summary-sheet";
 import { FILED_RETURNS_SUMMARY_FIELD_LABELS_BY_RETURN_TYPE } from "../../src/connectors/gst/filed-returns-summary-labels";
+import { MAX_FILED_RETURNS_SUMMARY_ARRAY_EXPANSION_ELEMENTS } from "../../src/connectors/gst/filed-returns-summary-arrays";
 
 describe("filed-return full-year summary sheet", () => {
   it("emits tidy numeric and text rows while moving taxpayer identity into context once", () => {
@@ -31,7 +32,8 @@ describe("filed-return full-year summary sheet", () => {
       return_type: "GSTR-3B",
       artifact: "JSON",
       outcome: "parseable-json",
-      field_label: "Table 3.1(a) Outward taxable supplies — Taxable value",
+      field_label:
+        "Table 3.1(a) Outward taxable supplies (other than zero rated, nil rated and exempted) — Taxable value",
       value_text: "",
       value_number: "20385193.31",
     });
@@ -50,6 +52,7 @@ describe("filed-return full-year summary sheet", () => {
       value_number: "",
     });
     expect(fieldRow(dataRows, "/entries")).toMatchObject({
+      outcome: "array-count-not-selected",
       value_text: "",
       value_number: "2",
     });
@@ -74,6 +77,120 @@ describe("filed-return full-year summary sheet", () => {
       "taxpayer_identity,identity,Taxpayer name,/taxpayer_name,Synthetic Taxpayer Name",
     );
     expect(summary).toMatchObject({ outcomeOnly: false, parsedPeriodCount: 1 });
+  });
+
+  it("expands a small GSTR-3B ITC array by its stable discriminator", () => {
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-3B")],
+      [
+        jsonEntry("april-data.json", {
+          itc_elg: {
+            itc_avl: [
+              { ty: "IMPG", iamt: 11, camt: 12, samt: 13 },
+              { ty: "IMPS", iamt: 21, camt: 22, samt: 23 },
+              { ty: "ISRC", iamt: 31, camt: 32, samt: 33 },
+              { ty: "ISD", iamt: 41, camt: 42, samt: 43 },
+              { ty: "OTH", iamt: 51, camt: 52, samt: 53 },
+            ],
+          },
+          surrounding_decoy: { ignored: "synthetic" },
+        }),
+      ],
+    );
+
+    const rows = parseCsv(new TextDecoder().decode(summary.dataBytes));
+    expect(fieldRow(rows, "/itc_elg/itc_avl/OTH/camt")).toMatchObject({
+      outcome: "parseable-json",
+      field_label: "Table 4(A)(5) All other ITC — Central tax",
+      value_text: "",
+      value_number: "52",
+    });
+    expect(rows.some((row) => row.field_path === "/itc_elg/itc_avl")).toBe(false);
+  });
+
+  it("keeps an over-ceiling eligible array as one count row with a reason", () => {
+    const elements = Array.from(
+      { length: MAX_FILED_RETURNS_SUMMARY_ARRAY_EXPANSION_ELEMENTS + 1 },
+      (_, index) => ({ ty: `T${index}`, camt: index + 1 }),
+    );
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-3B")],
+      [jsonEntry("april-data.json", { itc_elg: { itc_avl: elements } })],
+    );
+    const rows = parseCsv(new TextDecoder().decode(summary.dataBytes));
+
+    expect(fieldRow(rows, "/itc_elg/itc_avl")).toMatchObject({
+      outcome: "array-count-over-ceiling",
+      value_number: String(MAX_FILED_RETURNS_SUMMARY_ARRAY_EXPANSION_ELEMENTS + 1),
+    });
+    expect(rows.some((row) => (row.field_path ?? "").startsWith("/itc_elg/itc_avl/T"))).toBe(false);
+  });
+
+  it("keeps an array without one common discriminator as a named count row", () => {
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-3B")],
+      [
+        jsonEntry("april-data.json", {
+          itc_elg: {
+            itc_rev: [
+              { ty: "RUL", camt: 1 },
+              { pos: "02", camt: 2 },
+            ],
+          },
+        }),
+      ],
+    );
+    const rows = parseCsv(new TextDecoder().decode(summary.dataBytes));
+
+    expect(fieldRow(rows, "/itc_elg/itc_rev")).toMatchObject({
+      outcome: "array-count-no-common-discriminator",
+      value_number: "2",
+    });
+  });
+
+  it("keeps duplicate discriminator values as a named count row", () => {
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-3B")],
+      [
+        jsonEntry("april-data.json", {
+          itc_elg: {
+            itc_inelg: [
+              { ty: "OTH", camt: 1 },
+              { ty: "OTH", camt: 2 },
+            ],
+          },
+        }),
+      ],
+    );
+    const rows = parseCsv(new TextDecoder().decode(summary.dataBytes));
+
+    expect(fieldRow(rows, "/itc_elg/itc_inelg")).toMatchObject({
+      outcome: "array-count-duplicate-discriminator",
+      value_number: "2",
+    });
+  });
+
+  it("expands a small place-of-supply array by its pos discriminator", () => {
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-3B")],
+      [
+        jsonEntry("april-data.json", {
+          inter_sup: {
+            unreg_details: [
+              { pos: "01", txval: 101, iamt: 11 },
+              { pos: "02", txval: 202, iamt: 22 },
+            ],
+          },
+        }),
+      ],
+    );
+    const rows = parseCsv(new TextDecoder().decode(summary.dataBytes));
+
+    expect(fieldRow(rows, "/inter_sup/unreg_details/02/txval")).toMatchObject({
+      outcome: "parseable-json",
+      value_number: "202",
+    });
+    expect(rows.some((row) => row.field_path === "/inter_sup/unreg_details")).toBe(false);
   });
 
   it("keeps the fixed column set across return types and different field sets", () => {
@@ -186,6 +303,15 @@ describe("filed-return full-year summary sheet", () => {
     ).not.toThrow(secret);
   });
 
+  it("fails summary generation when a forbidden field is an ancestor container", () => {
+    expect(() =>
+      buildFiledReturnsSummarySheet(
+        [jsonPlan("April", "april-data.json", "GSTR-2B")],
+        [jsonEntry("april-data.json", { amount: 1, session: { id: "synthetic-sensitive" } })],
+      ),
+    ).toThrow("credential or session field");
+  });
+
   it("bounds retained JSON Pointer paths before descending into wide nested keys", () => {
     const wideKeys = Array.from({ length: 12 }, (_, index) => `${index}-${"k".repeat(180)}`);
     const json = `${wideKeys.map((key) => `{"${key}":`).join("")}"leaf"${"}".repeat(wideKeys.length)}`;
@@ -203,6 +329,11 @@ describe("filed-return full-year summary sheet", () => {
     for (const labels of Object.values(FILED_RETURNS_SUMMARY_FIELD_LABELS_BY_RETURN_TYPE)) {
       for (const entry of Object.values(labels)) {
         expect(entry.label.length).toBeGreaterThan(0);
+        expect([
+          "official-offline-utility",
+          "portal-pdf-value-cross-check-two-periods",
+          "form-vocabulary-and-row-order",
+        ]).toContain(entry.provenance.evidence);
         expect(entry.provenance.officialSource).toContain("GST Portal");
         expect(entry.provenance.officialSourceLocation.length).toBeGreaterThan(0);
         expect(entry.provenance.reviewedOn).toMatch(/^20\d{2}-\d{2}-\d{2}$/);
@@ -213,6 +344,18 @@ describe("filed-return full-year summary sheet", () => {
     ).toBeGreaterThan(0);
     expect(FILED_RETURNS_SUMMARY_FIELD_LABELS_BY_RETURN_TYPE["GSTR-1"]).toEqual({});
     expect(FILED_RETURNS_SUMMARY_FIELD_LABELS_BY_RETURN_TYPE["GSTR-2B"]).toEqual({});
+    expect(
+      FILED_RETURNS_SUMMARY_FIELD_LABELS_BY_RETURN_TYPE["GSTR-3B"]["/itc_elg/itc_avl/OTH/camt"]
+        ?.provenance.evidence,
+    ).toBe("portal-pdf-value-cross-check-two-periods");
+    expect(
+      FILED_RETURNS_SUMMARY_FIELD_LABELS_BY_RETURN_TYPE["GSTR-3B"]["/itc_elg/itc_avl/IMPG/camt"]
+        ?.provenance.evidence,
+    ).toBe("form-vocabulary-and-row-order");
+    expect(
+      FILED_RETURNS_SUMMARY_FIELD_LABELS_BY_RETURN_TYPE["GSTR-3B"]["/sup_details/osup_zero/txval"]
+        ?.provenance.evidence,
+    ).toBe("official-offline-utility");
   });
 });
 

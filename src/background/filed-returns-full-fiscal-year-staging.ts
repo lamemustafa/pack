@@ -393,6 +393,7 @@ async function fullFiscalYearSummarySignalsForCleanup(
   const persistedSummary = await readCanonicalFiledReturnsFlowSummary(deps.storageKeys.completion);
   if (!persistedSummary) return [];
   if (!sameFiledReturnsScope(persistedSummary.scope, ledger.scope)) return [];
+  if (persistedSummary.updatedAt !== ledger.updatedAt) return [];
   return persistedSummary.flowStep.safeSignals.filter((signal) =>
     signal.startsWith("full-fiscal-year-summary-"),
   );
