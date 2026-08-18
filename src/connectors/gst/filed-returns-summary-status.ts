@@ -41,7 +41,7 @@ export function filedReturnsSummaryOutcome(
     ],
     safeMessage: result.outcomeOnly
       ? "The summary contains outcome rows only because no parseable portal JSON was available."
-      : `The summary includes portal-key rows for ${result.parsedPeriodCount} ${result.parsedPeriodCount === 1 ? "period" : "periods"}.`,
+      : `The summary includes tidy field rows for ${result.parsedPeriodCount} ${result.parsedPeriodCount === 1 ? "period" : "periods"}.`,
   };
 }
 
@@ -56,8 +56,8 @@ export function filedReturnsSummaryStatusMessage(signals: readonly string[]): st
     );
     const count = Number(countSignal?.split(":").at(-1));
     return Number.isInteger(count) && count >= 0 && count <= 12
-      ? ` The ZIP summary includes portal-key rows for ${count} ${count === 1 ? "period" : "periods"}.`
-      : " The ZIP includes a portal-key summary.";
+      ? ` The ZIP summary includes tidy field rows for ${count} ${count === 1 ? "period" : "periods"}.`
+      : " The ZIP includes a tidy field summary.";
   }
   if (signalSet.has("full-fiscal-year-summary-failed")) {
     if (signalSet.has("full-fiscal-year-summary-error:too-large")) {

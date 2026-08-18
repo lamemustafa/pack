@@ -277,6 +277,7 @@ function fullFiscalYearStagingRequirement(ledger: FiledReturnsFullFiscalYearLedg
       summaryPlan.push({
         artifactType,
         entryNames: outcomeCategory === "staged" ? expectedEntry.entryNames : [],
+        financialYear: target.financialYear,
         outcomeCategory,
         period: target.period as FiledReturnsMonth,
         returnType: target.returnType,

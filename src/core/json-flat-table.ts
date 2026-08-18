@@ -1,8 +1,13 @@
-import type { CsvCellValue } from "./csv";
+export type FlatJsonLeafValueKind = "number" | "text";
 
-export type FlatJsonRow = Record<string, CsvCellValue>;
+export interface FlatJsonLeaf {
+  path: string;
+  valueKind: FlatJsonLeafValueKind;
+  value: string;
+}
 
 const MAX_JSON_DEPTH = 512;
+const MAX_PLAIN_NUMBER_BYTES = 5 * 1024 * 1024;
 
 export class JsonFlatTableLimitError extends Error {
   constructor() {
@@ -15,18 +20,62 @@ export class JsonFlatTableLimitError extends Error {
  * Parses and flattens JSON in one pass so arrays and unused containers are not
  * materialized. Object keys use RFC 6901 JSON Pointer paths. Arrays stay at
  * their own path and become their element count; their contents are validated
- * but never expanded. Number tokens become apostrophe-prefixed text so their
- * exact portal spelling survives spreadsheet import without JS rounding.
+ * but never expanded. JSON numbers are expanded to exact plain decimal text
+ * without passing through JavaScript's Number type.
  */
 export function flattenJsonTextScalarLeaves(
   input: string,
   maxOutputBytes = Number.POSITIVE_INFINITY,
-): FlatJsonRow {
+): FlatJsonLeaf[] {
   return new FlatJsonParser(input, maxOutputBytes).parse();
 }
 
+export function jsonNumberTokenToPlainDecimal(
+  input: string,
+  maxOutputBytes = MAX_PLAIN_NUMBER_BYTES,
+): string {
+  const match = /^(-?)(0|[1-9]\d*)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/.exec(input);
+  if (!match) throw new SyntaxError("Invalid JSON number token.");
+  const sign = match[1] ?? "";
+  const integerDigits = match[2] ?? "";
+  const fractionalDigits = match[3] ?? "";
+  const exponentText = match[4] ?? "0";
+  if (exponentText.replace(/^[+-]/, "").length > 7) throw new JsonFlatTableLimitError();
+  const exponent = Number(exponentText);
+  if (!Number.isSafeInteger(exponent)) throw new JsonFlatTableLimitError();
+
+  const digits = `${integerDigits}${fractionalDigits}`;
+  const decimalIndex = integerDigits.length + exponent;
+  const estimatedBytes =
+    sign.length +
+    (decimalIndex <= 0
+      ? 2 + -decimalIndex + digits.length
+      : decimalIndex >= digits.length
+        ? decimalIndex
+        : digits.length + 1);
+  const effectiveLimit = Math.min(maxOutputBytes, MAX_PLAIN_NUMBER_BYTES);
+  if (estimatedBytes > effectiveLimit) throw new JsonFlatTableLimitError();
+
+  let integerPart: string;
+  let fractionalPart: string;
+  if (decimalIndex <= 0) {
+    integerPart = "0";
+    fractionalPart = `${"0".repeat(-decimalIndex)}${digits}`;
+  } else if (decimalIndex >= digits.length) {
+    integerPart = `${digits}${"0".repeat(decimalIndex - digits.length)}`;
+    fractionalPart = "";
+  } else {
+    integerPart = digits.slice(0, decimalIndex);
+    fractionalPart = digits.slice(decimalIndex);
+  }
+  integerPart = integerPart.replace(/^0+(?=\d)/, "");
+  const plain = `${sign}${integerPart}${fractionalPart ? `.${fractionalPart}` : ""}`;
+  if (plain.length > effectiveLimit) throw new JsonFlatTableLimitError();
+  return plain;
+}
+
 class FlatJsonParser {
-  private readonly row: FlatJsonRow = {};
+  private readonly leaves: FlatJsonLeaf[] = [];
   private readonly encoder = new TextEncoder();
   private activePathBytes = 0;
   private index = 0;
@@ -37,11 +86,11 @@ class FlatJsonParser {
     private readonly maxOutputBytes: number,
   ) {}
 
-  parse(): FlatJsonRow {
+  parse(): FlatJsonLeaf[] {
     this.parseValue("", true, 0);
     this.skipWhitespace();
     if (this.index !== this.input.length) this.fail();
-    return this.row;
+    return this.leaves;
   }
 
   private parseValue(path: string, emit: boolean, depth: number): void {
@@ -50,14 +99,14 @@ class FlatJsonParser {
     const character = this.input[this.index];
     if (character === '"') {
       const value = this.parseString(emit);
-      if (emit) this.addCell(path, value);
+      if (emit) this.addLeaf(path, "text", value);
       return;
     }
     if (character === "{") return this.parseObject(path, emit, depth + 1);
     if (character === "[") return this.parseArray(path, emit, depth + 1);
-    if (character === "t") return this.parseLiteral("true", true, path, emit);
-    if (character === "f") return this.parseLiteral("false", false, path, emit);
-    if (character === "n") return this.parseLiteral("null", null, path, emit);
+    if (character === "t") return this.parseLiteral("true", path, emit);
+    if (character === "f") return this.parseLiteral("false", path, emit);
+    if (character === "n") return this.parseLiteral("null", path, emit);
     this.parseNumber(path, emit);
   }
 
@@ -110,7 +159,7 @@ class FlatJsonParser {
         if (!this.consume(",")) this.fail();
       }
     }
-    if (emit) this.addCell(path, elementCount);
+    if (emit) this.addLeaf(path, "number", String(elementCount));
   }
 
   private parseString(decode: boolean): string {
@@ -141,10 +190,10 @@ class FlatJsonParser {
     return this.fail();
   }
 
-  private parseLiteral(literal: string, value: boolean | null, path: string, emit: boolean): void {
+  private parseLiteral(literal: string, path: string, emit: boolean): void {
     if (!this.input.startsWith(literal, this.index)) this.fail();
     this.index += literal.length;
-    if (emit) this.addCell(path, value);
+    if (emit) this.addLeaf(path, "text", literal);
   }
 
   private parseNumber(path: string, emit: boolean): void {
@@ -153,15 +202,21 @@ class FlatJsonParser {
     const match = numberToken.exec(this.input);
     if (!match) this.fail();
     this.index = numberToken.lastIndex;
-    if (emit) this.addCell(path, `'${match[0]}`);
+    if (emit) {
+      this.addLeaf(
+        path,
+        "number",
+        jsonNumberTokenToPlainDecimal(match[0], this.maxOutputBytes - this.outputBytes),
+      );
+    }
   }
 
-  private addCell(path: string, value: CsvCellValue): void {
+  private addLeaf(path: string, valueKind: FlatJsonLeafValueKind, value: string): void {
     const key = path || "/";
-    const valueBytes = this.encoder.encode(value === null ? "null" : String(value)).byteLength;
+    const valueBytes = this.encoder.encode(value).byteLength;
     this.outputBytes += this.encoder.encode(key).byteLength + valueBytes + 4;
     if (this.outputBytes > this.maxOutputBytes) this.limit();
-    this.row[key] = value;
+    this.leaves.push({ path: key, valueKind, value });
   }
 
   private skipWhitespace(): void {

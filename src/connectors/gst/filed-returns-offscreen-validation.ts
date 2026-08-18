@@ -1,7 +1,7 @@
 import { isFiledReturnsConcreteArtifactType } from "./filed-returns-artifacts";
 import type { FiledReturnsConcreteArtifactType } from "./filed-returns-artifacts";
 import type { FiledReturnsReturnType } from "./filed-returns-return-types";
-import { FILED_RETURNS_MONTHS } from "./filed-returns-scope";
+import { FILED_RETURNS_MONTHS, isFiledReturnsFinancialYear } from "./filed-returns-scope";
 import {
   isPackOffscreenBlobUrlMessageShape,
   type PackOffscreenBlobUrlMessage,
@@ -56,6 +56,7 @@ function isSummaryPlan(
   );
   const plannedStagedSlots = new Set<string>();
   const identities = new Set<string>();
+  const financialYears = new Set<string>();
   for (const entry of plan) {
     const identity = `${entry.period}:${entry.returnType}:${entry.artifactType}`;
     const staged = entry.outcomeCategory === "staged";
@@ -63,6 +64,7 @@ function isSummaryPlan(
     if (
       identities.has(identity) ||
       entry.returnType !== expectedReturnType ||
+      !isFiledReturnsFinancialYear(entry.financialYear) ||
       !FILED_RETURNS_MONTHS.includes(entry.period) ||
       (staged && (entry.entryNames.length < 1 || !expectedSlots.has(slot))) ||
       (staged &&
@@ -73,9 +75,11 @@ function isSummaryPlan(
       return false;
     }
     identities.add(identity);
+    financialYears.add(entry.financialYear);
     if (staged) plannedStagedSlots.add(slot);
   }
   return (
+    financialYears.size === 1 &&
     plannedStagedSlots.size === expectedSlots.size &&
     [...expectedSlots].every((slot) => plannedStagedSlots.has(slot))
   );

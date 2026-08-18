@@ -6,6 +6,7 @@ import {
   type PackOffscreenFiledReturnSummaryResult,
 } from "../connectors/gst/offscreen-blob-url";
 import type { FiledReturnsSummaryPlanEntry } from "../connectors/gst/filed-returns-summary-sheet";
+import { MAX_FILED_RETURNS_SUMMARY_ROWS } from "../connectors/gst/filed-returns-summary-sheet";
 import type { FiledReturnsConcreteArtifactType } from "../connectors/gst/filed-returns-artifacts";
 import type { FiledReturnsReturnType } from "../connectors/gst/filed-returns-return-types";
 import { MAX_ARTIFACT_BYTES } from "../connectors/gst/artifact-validation";
@@ -308,7 +309,7 @@ function isZipResponse(
     Number.isInteger(record.zipEntryCount) &&
     record.artifactEntryCount === expected.entryCount &&
     (record.summaryEntryCount === 0 ||
-      (record.summaryEntryCount === 1 && expected.summaryPlan !== undefined)) &&
+      (record.summaryEntryCount === 2 && expected.summaryPlan !== undefined)) &&
     record.zipEntryCount === record.artifactEntryCount + record.summaryEntryCount &&
     (expected.summaryPlan !== undefined || record.summary === undefined)
   );
@@ -328,7 +329,7 @@ function toZipResult(
         ? response.summary
         : undefined;
     const summaryCountMatches =
-      response.summaryEntryCount === (summary?.status === "included" ? 1 : 0);
+      response.summaryEntryCount === (summary?.status === "included" ? 2 : 0);
     return {
       status: "created",
       blobUrl: response.blobUrl,
@@ -380,8 +381,9 @@ function isSummaryResult(
       : record.parsedPeriodCount >= 1) &&
     typeof record.rowCount === "number" &&
     Number.isInteger(record.rowCount) &&
-    record.rowCount === plan.length &&
-    record.rowCount >= record.parsedPeriodCount
+    record.rowCount >= plan.length &&
+    record.rowCount >= record.parsedPeriodCount &&
+    record.rowCount <= MAX_FILED_RETURNS_SUMMARY_ROWS
   );
 }
 

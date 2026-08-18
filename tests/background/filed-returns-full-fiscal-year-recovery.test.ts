@@ -426,7 +426,7 @@ describe("full fiscal-year recovery", () => {
             "full-fiscal-year-summary-parsed-period-count:1",
             "full-fiscal-year-summary-row-count:4",
           ]),
-          safeMessage: expect.stringContaining("portal-key rows for 1 period"),
+          safeMessage: expect.stringContaining("tidy field rows for 1 period"),
         },
       });
     }
@@ -530,7 +530,7 @@ describe("full fiscal-year recovery", () => {
       },
     });
     if (!("flowStep" in response)) throw new Error("Expected a filed-return flow response.");
-    expect(response.flowStep.safeMessage).toContain("portal-key rows for 1 period");
+    expect(response.flowStep.safeMessage).toContain("tidy field rows for 1 period");
     const durableWrites = vi.mocked(browser.storage.local.set).mock.calls;
     expect(JSON.stringify(durableWrites)).not.toContain("full-fiscal-year-summary-included");
   });
@@ -591,7 +591,7 @@ describe("full fiscal-year recovery", () => {
       },
     });
     if (!response.ok || !("flowStep" in response)) throw new Error("Expected flow response.");
-    expect(response.flowStep.safeMessage).toContain("portal-key rows for 2 periods");
+    expect(response.flowStep.safeMessage).toContain("tidy field rows for 2 periods");
   });
 
   it.each([
@@ -603,9 +603,9 @@ describe("full fiscal-year recovery", () => {
           "full-fiscal-year-summary-parsed-period-count:1",
           "full-fiscal-year-summary-row-count:4",
         ],
-        safeMessage: "The summary includes portal-key rows for 1 period.",
+        safeMessage: "The summary includes tidy field rows for 1 period.",
       },
-      messageFragment: "portal-key rows for 1 period",
+      messageFragment: "tidy field rows for 1 period",
     },
     {
       name: "outcomes-only",

@@ -45,6 +45,12 @@ const CALENDAR_MONTHS = [
 export type FiledReturnsMonth = (typeof FILED_RETURNS_MONTHS)[number];
 export type FiledReturnsScopePeriod = FiledReturnsMonth | typeof FULL_FISCAL_YEAR_PERIOD;
 
+export function isFiledReturnsFinancialYear(input: unknown): input is string {
+  if (typeof input !== "string") return false;
+  const match = /^20(\d{2})-(\d{2})$/.exec(input);
+  return Boolean(match && Number(match[2]) === (Number(match[1]) + 1) % 100);
+}
+
 export interface FiledReturnsPeriodOption {
   value: FiledReturnsMonth;
   label: string;

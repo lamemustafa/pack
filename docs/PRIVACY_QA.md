@@ -45,18 +45,24 @@ For each release candidate:
   Artifact bytes must not be written to extension storage, IndexedDB, Cache
   Storage, diagnostics, logs, telemetry, support bundles, or ComplyEaze systems.
 - Confirm each full-year ZIP assembly with eligible files attempts to add
-  `full-year-summary.csv`, derived locally from staged portal JSON already in
-  that run. When created, the CSV must preserve portal keys as JSON Pointer
-  columns, represent arrays only by element count at the array's path, emit
-  every JSON number token as apostrophe-prefixed text with its exact portal
-  spelling, prefix formula-like text with an apostrophe, use fixed outcome rows
-  where no parseable JSON exists, never emit a rounded replacement, and make no
-  tax or statutory interpretation. The derived CSV must remain an output-only
-  ZIP entry: its bytes may be transient in extension-controlled memory before
-  browser handoff and persist in the user's downloaded ZIP, but never write it
-  separately to OPFS, extension storage, diagnostics, logs,
-  telemetry, support bundles, popup content, or ComplyEaze systems. If summary
-  generation fails or exceeds its local size limit, confirm the artifact ZIP
+  `full-year-summary.csv` and `full-year-summary-context.csv`, both derived
+  locally from staged portal JSON already in that run. The data CSV must keep
+  the fixed tidy columns `period`, `return_type`, `artifact`, `outcome`,
+  `field_label`, `field_path`, `value_text`, and `value_number`; keep canonical
+  JSON Pointer paths; represent arrays only by element count; expand JSON
+  numbers without rounding into plain decimal numeric cells; preserve strings
+  and identifiers as text except for the existing apostrophe guard on
+  formula-like text; and use fixed outcome rows where no parseable JSON exists.
+  Labels must come only from the return-type map with recorded
+  official-source provenance, with unverified labels left empty. The context
+  CSV must contain the format token, run metadata, value/flattening rules, and
+  recognized invariant taxpayer identity once; identity must not appear in the
+  data CSV. Both derived files must remain output-only ZIP entries: their bytes
+  may be transient in extension-controlled memory before browser handoff and
+  persist in the user's downloaded ZIP, but never write separately to OPFS,
+  extension storage, diagnostics, logs, telemetry, support bundles, popup
+  content, or ComplyEaze systems. If generation fails, identity is inconsistent,
+  or the combined output exceeds its local size limit, confirm the artifact ZIP
   still exports and the popup shows only a fixed categorical reason.
 - Confirm the source-build `target-bound-portal-click-blob` path is enabled only
   for a single-period GSTR-3B PDF after the exact target action and one matching

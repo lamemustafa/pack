@@ -240,6 +240,7 @@ describe("offscreen Blob URL entrypoint", () => {
           {
             artifactType: "PDF",
             entryNames: ["may.pdf"],
+            financialYear: "2026-27",
             outcomeCategory: "staged",
             period: "May",
             returnType: "GSTR-1",
@@ -247,6 +248,7 @@ describe("offscreen Blob URL entrypoint", () => {
           {
             artifactType: "PDF",
             entryNames: ["june.pdf"],
+            financialYear: "2026-27",
             outcomeCategory: "staged",
             period: "June",
             returnType: "GSTR-1",
@@ -487,7 +489,7 @@ describe("offscreen Blob URL entrypoint", () => {
     expect(zip).toMatchObject({ ok: true, zipEntryCount: 1 });
   });
 
-  it("adds a deterministic portal-key summary to the existing full-year archive", async () => {
+  it("adds deterministic tidy data and context files to the existing full-year archive", async () => {
     await loadOffscreenEntrypoint();
     const portalRows = [
       {
@@ -495,6 +497,8 @@ describe("offscreen Blob URL entrypoint", () => {
         path: "april-data.json",
         value: {
           status: 1,
+          gstin: "22AAAAA0000A1Z5",
+          lgnm: "Synthetic Example Taxpayer",
           data: {
             rtnprd: "042026",
             surrounding_decoy: { z: "april", a: 10 },
@@ -509,6 +513,8 @@ describe("offscreen Blob URL entrypoint", () => {
         path: "may-data.json",
         value: {
           status: 1,
+          gstin: "22AAAAA0000A1Z5",
+          lgnm: "Synthetic Example Taxpayer",
           data: {
             rtnprd: "052026",
             surrounding_decoy: { z: "may" },
@@ -550,6 +556,7 @@ describe("offscreen Blob URL entrypoint", () => {
         summaryPlan: portalRows.map((row) => ({
           artifactType: "JSON",
           entryNames: [row.path],
+          financialYear: "2026-27",
           outcomeCategory: "staged",
           period: row.period,
           returnType: "GSTR-2B",
@@ -561,14 +568,14 @@ describe("offscreen Blob URL entrypoint", () => {
       ok: true,
       requestId: "full-year-summary-request",
       blobUrl: "blob:pack-test/1",
-      zipEntryCount: 3,
+      zipEntryCount: 4,
       artifactEntryCount: 2,
-      summaryEntryCount: 1,
+      summaryEntryCount: 2,
       summary: {
         status: "included",
         outcomeOnly: false,
         parsedPeriodCount: 2,
-        rowCount: 2,
+        rowCount: 13,
       },
     });
     const entries = await extractStoredZipEntries(createdBlobs[0]!);
@@ -576,16 +583,24 @@ describe("offscreen Blob URL entrypoint", () => {
       "april-data.json",
       "may-data.json",
       "full-year-summary.csv",
+      "full-year-summary-context.csv",
     ]);
     const summary = new TextDecoder().decode(entries.get("full-year-summary.csv"));
-    expect(summary).toContain(
-      "json:/data/entries,json:/data/other_portal_leaf,json:/data/portal_leaf,json:/data/rtnprd",
+    expect(summary.split("\n")[0]).toBe(
+      "period,return_type,artifact,outcome,field_label,field_path,value_text,value_number",
     );
-    expect(summary).toContain("April,GSTR-2B,JSON,parseable-json");
-    expect(summary).toContain("May,GSTR-2B,JSON,parseable-json");
+    expect(summary).toContain("April,GSTR-2B,JSON,parseable-json,,/data/portal_leaf,,11");
+    expect(summary).toContain("May,GSTR-2B,JSON,parseable-json,,/data/other_portal_leaf,,22");
     expect(summary).not.toContain("900");
     expect(summary).not.toContain("800");
     expect(summary).not.toContain("700");
+    expect(summary).not.toContain("22AAAAA0000A1Z5");
+    expect(summary).not.toContain("Synthetic Example Taxpayer");
+    const context = new TextDecoder().decode(entries.get("full-year-summary-context.csv"));
+    expect(context).toContain("format_version,,,pack-full-year-summary-tidy-v1");
+    expect(context).toContain("financial_year,,,2026-27");
+    expect(context.match(/22AAAAA0000A1Z5/g)).toHaveLength(1);
+    expect(context.match(/Synthetic Example Taxpayer/g)).toHaveLength(1);
   });
 
   it("adds only fixed outcome rows when a full-year run has no parseable JSON", async () => {
@@ -608,6 +623,7 @@ describe("offscreen Blob URL entrypoint", () => {
           {
             artifactType: "PDF",
             entryNames: ["april-return.pdf"],
+            financialYear: "2026-27",
             outcomeCategory: "staged",
             period: "April",
             returnType: "GSTR-3B",
@@ -618,7 +634,7 @@ describe("offscreen Blob URL entrypoint", () => {
 
     expect(zip).toMatchObject({
       ok: true,
-      zipEntryCount: 2,
+      zipEntryCount: 3,
       summary: { status: "included", outcomeOnly: true, parsedPeriodCount: 0, rowCount: 1 },
     });
     const entries = await extractStoredZipEntries(createdBlobs[0]!);
@@ -629,6 +645,7 @@ describe("offscreen Blob URL entrypoint", () => {
 
   it("keeps the artifact ZIP when summary generation throws", async () => {
     vi.doMock("../../src/connectors/gst/filed-returns-summary-sheet", () => ({
+      FILED_RETURNS_SUMMARY_CONTEXT_PATH: "full-year-summary-context.csv",
       FILED_RETURNS_SUMMARY_SHEET_PATH: "full-year-summary.csv",
       buildFiledReturnsSummarySheet: () => {
         throw new Error("synthetic taxpayer figure must not escape");
@@ -653,6 +670,7 @@ describe("offscreen Blob URL entrypoint", () => {
           {
             artifactType: "PDF",
             entryNames: ["april-return.pdf"],
+            financialYear: "2026-27",
             outcomeCategory: "staged",
             period: "April",
             returnType: "GSTR-3B",
@@ -691,6 +709,7 @@ describe("offscreen Blob URL entrypoint", () => {
           {
             artifactType: "JSON",
             entryNames: ["april-data.json"],
+            financialYear: "2026-27",
             outcomeCategory: "staged",
             period: "April",
             returnType: "GSTR-2B",

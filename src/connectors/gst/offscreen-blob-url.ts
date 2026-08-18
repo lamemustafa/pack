@@ -2,6 +2,7 @@ import { isFiledReturnsConcreteArtifactType } from "./filed-returns-artifacts";
 import { isFiledReturnsReturnType } from "./filed-returns-return-types";
 import type { FiledReturnsConcreteArtifactType } from "./filed-returns-artifacts";
 import type { FiledReturnsReturnType } from "./filed-returns-return-types";
+import { isFiledReturnsFinancialYear } from "./filed-returns-scope";
 import type { FiledReturnsSummaryPlanEntry } from "./filed-returns-summary-sheet";
 
 export const PACK_OFFSCREEN_BLOB_URL_TARGET = "pack-offscreen-blob-url";
@@ -109,7 +110,7 @@ export type PackOffscreenBlobUrlResponse =
       blobUrl: string;
       zipEntryCount: number;
       artifactEntryCount: number;
-      summaryEntryCount: 0 | 1;
+      summaryEntryCount: 0 | 2;
       summary?: PackOffscreenFiledReturnSummaryResult;
     }
   | {
@@ -219,18 +220,21 @@ export function isPackOffscreenBlobUrlMessageShape(
 
 function isFiledReturnsSummaryPlanShape(input: unknown): input is FiledReturnsSummaryPlanEntry[] {
   if (!Array.isArray(input) || input.length < 1 || input.length > 36) return false;
+  const financialYears = new Set<string>();
   for (const candidate of input) {
     if (
       !isRecord(candidate) ||
       !hasOnlyKeys(candidate, [
         "artifactType",
         "entryNames",
+        "financialYear",
         "outcomeCategory",
         "period",
         "returnType",
       ]) ||
       !isFiledReturnsConcreteArtifactType(candidate.artifactType) ||
       !isFiledReturnsReturnType(candidate.returnType) ||
+      !isFiledReturnsFinancialYear(candidate.financialYear) ||
       !isBoundedString(candidate.period, 3, 12) ||
       !isSummaryOutcomeCategory(candidate.outcomeCategory) ||
       !Array.isArray(candidate.entryNames) ||
@@ -239,8 +243,9 @@ function isFiledReturnsSummaryPlanShape(input: unknown): input is FiledReturnsSu
     ) {
       return false;
     }
+    financialYears.add(candidate.financialYear);
   }
-  return true;
+  return financialYears.size === 1;
 }
 
 function isSummaryOutcomeCategory(

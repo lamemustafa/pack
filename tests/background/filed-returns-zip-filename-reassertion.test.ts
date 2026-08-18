@@ -121,8 +121,9 @@ describe("filed-return ZIP filename reassertion", () => {
     mocks.createOffscreenFiledReturnZipUrl.mockResolvedValueOnce({
       status: "created",
       blobUrl: "blob:pack-owned/full-year-zip",
-      zipEntryCount: 2,
+      zipEntryCount: 3,
       artifactEntryCount: 1,
+      summaryEntryCount: 2,
       summary: {
         status: "included",
         outcomeOnly: true,
@@ -159,6 +160,7 @@ describe("filed-return ZIP filename reassertion", () => {
         summaryPlan: [
           expect.objectContaining({
             artifactType: "PDF",
+            financialYear: "2026-27",
             outcomeCategory: "staged",
             period: "April",
             returnType: "GSTR-3B",

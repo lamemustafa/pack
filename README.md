@@ -70,18 +70,27 @@ outside store-facing claims until exact-ZIP clean-profile evidence,
 restart/resume evidence, and privacy-review evidence are recorded for the
 release.
 
-During each full-year ZIP assembly with eligible files, Pack attempts to add
-`full-year-summary.csv` from the staged portal JSON already in that run. When
-created, the CSV keeps the portal's own keys as JSON Pointer columns,
-represents each array by its element count at the array's path without expanding
-its elements, emits every JSON number token as apostrophe-prefixed text with its
-exact portal spelling, prefixes formula-like text with an apostrophe for
-spreadsheet safety, and uses fixed outcome rows when a selected period and
-artifact has no parseable JSON. It never emits a rounded numeric replacement
-and does not label or interpret tax concepts. A run with eligible files but no
-parseable JSON, including a PDF-only run, receives an outcome-only summary. If
-summary generation fails or exceeds its local size limit, Pack still exports
-the artifact ZIP and reports a fixed summary reason.
+During each full-year ZIP assembly with eligible files, Pack attempts to add two
+files derived from the staged portal JSON already in that run:
+`full-year-summary.csv` and `full-year-summary-context.csv`. The data CSV has the
+fixed columns `period`, `return_type`, `artifact`, `outcome`, `field_label`,
+`field_path`, `value_text`, and `value_number`, with one row per period and
+flattened field. JSON numbers are expanded without rounding into plain decimal
+notation in `value_number`; strings and identifiers retain their spelling in
+`value_text` except for the existing apostrophe guard on formula-like text;
+arrays use their element count at the array's JSON Pointer path.
+Periods and artifacts without parseable JSON receive fixed outcome rows instead
+of fabricated zeroes. `field_path` remains the canonical identifier, while
+`field_label` is populated only by a partial return-type map whose entries carry
+official-source provenance; unverified labels stay empty.
+
+The context CSV records the format version, run metadata, flattening and value
+rules, and recognized invariant taxpayer identity once rather than repeating it
+through the data rows. Both derived files persist only inside the user-requested
+downloaded ZIP. A run with eligible files but no parseable JSON, including a PDF-only run,
+receives outcome-only data plus its context file. If generation fails, identity
+is inconsistent, or the combined summary exceeds its local size limit, Pack
+still exports the artifact ZIP and reports a fixed summary reason.
 
 The current source build correlates a download to its target through one
 fail-closed evidence rule set, and that rule set is shared rather than
@@ -276,9 +285,9 @@ The Options page "Clear local Pack data" control removes the local keys above
 and clears Pack session storage. Pack does not store GST Portal credentials,
 OTPs, CAPTCHA values, cookies, GSTIN/PAN, taxpayer names, portal HTML, raw
 URLs/referrers, local download paths, filenames, or raw network captures.
-Generated ZIP bytes and the derived full-year summary CSV exist only
-transiently in extension-controlled memory before browser handoff. The summary
-then persists only as an entry in the user-requested downloaded ZIP; it is not
+Generated ZIP bytes and the two derived full-year summary CSV files exist only
+transiently in extension-controlled memory before browser handoff. The derived files
+then persist only as entries in the user-requested downloaded ZIP; they are not
 separately written to extension storage or OPFS. Source PDF, spreadsheet and
 acquired portal-data JSON bytes may be written to the temporary local OPFS staging described below;
 interrupted exports or cleanup failures may retain that staging locally across

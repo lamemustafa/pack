@@ -1,12 +1,33 @@
 import type { ArchiveManifest } from "./contracts";
 
-export type CsvCellValue = string | number | boolean | null | undefined;
+export interface CsvNumberText {
+  readonly kind: "csv-number-text";
+  readonly value: string;
+}
+
+export interface CsvEmptyString {
+  readonly kind: "csv-empty-string";
+}
+
+export type CsvCellValue =
+  string | number | boolean | null | undefined | CsvNumberText | CsvEmptyString;
 
 export class CsvSizeLimitError extends Error {
   constructor() {
     super("CSV exceeded its local output limit.");
     this.name = "CsvSizeLimitError";
   }
+}
+
+export function csvNumberText(value: string): CsvNumberText {
+  if (!/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value)) {
+    throw new TypeError("CSV numeric text must use plain decimal notation.");
+  }
+  return { kind: "csv-number-text", value };
+}
+
+export function csvEmptyString(): CsvEmptyString {
+  return { kind: "csv-empty-string" };
 }
 
 export function toCsv(
@@ -65,6 +86,8 @@ export function manifestExceptionsCsv(manifest: ArchiveManifest): string {
 
 function csvCell(value: CsvCellValue): string {
   if (value === undefined) return "";
+  if (isCsvNumberText(value)) return value.value;
+  if (isCsvEmptyString(value)) return '""';
 
   const stringValue = value === null ? "null" : String(value);
   const spreadsheetSafeValue =
@@ -72,4 +95,17 @@ function csvCell(value: CsvCellValue): string {
   return /[",\r\n]/.test(spreadsheetSafeValue)
     ? `"${spreadsheetSafeValue.replace(/"/g, '""')}"`
     : spreadsheetSafeValue;
+}
+
+function isCsvEmptyString(value: CsvCellValue): value is CsvEmptyString {
+  return typeof value === "object" && value !== null && value.kind === "csv-empty-string";
+}
+
+function isCsvNumberText(value: CsvCellValue): value is CsvNumberText {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    value.kind === "csv-number-text" &&
+    typeof value.value === "string"
+  );
 }

@@ -28,14 +28,14 @@ describe("offscreen full-year summary response validation", () => {
         ok: true,
         requestId,
         blobUrl: "blob:pack/summary",
-        zipEntryCount: 2,
+        zipEntryCount: 3,
         artifactEntryCount: 1,
-        summaryEntryCount: 1,
+        summaryEntryCount: 2,
         summary: {
           status: "included",
           outcomeOnly: false,
           parsedPeriodCount: 1,
-          rowCount: 1,
+          rowCount: 4,
         },
       };
     });
@@ -45,7 +45,7 @@ describe("offscreen full-year summary response validation", () => {
     ).resolves.toMatchObject({
       status: "created",
       artifactEntryCount: 1,
-      summary: { status: "included", parsedPeriodCount: 1, rowCount: 1 },
+      summary: { status: "included", parsedPeriodCount: 1, rowCount: 4 },
     });
   });
 
@@ -54,9 +54,9 @@ describe("offscreen full-year summary response validation", () => {
       ok: true,
       requestId: requestIdFrom(message),
       blobUrl: "blob:pack/summary-invalid",
-      zipEntryCount: 2,
+      zipEntryCount: 3,
       artifactEntryCount: 1,
-      summaryEntryCount: 1,
+      summaryEntryCount: 2,
       summary: {
         status: "included",
         outcomeOnly: false,
@@ -70,7 +70,7 @@ describe("offscreen full-year summary response validation", () => {
     ).resolves.toEqual({
       status: "created",
       blobUrl: "blob:pack/summary-invalid",
-      zipEntryCount: 2,
+      zipEntryCount: 3,
       artifactEntryCount: 1,
     });
   });
@@ -100,6 +100,7 @@ function request() {
       {
         artifactType: "JSON" as const,
         entryNames: ["april-data.json"],
+        financialYear: "2026-27",
         outcomeCategory: "staged" as const,
         period: "April" as const,
         returnType: "GSTR-2B" as const,

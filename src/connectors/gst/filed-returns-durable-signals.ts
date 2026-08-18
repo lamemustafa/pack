@@ -611,7 +611,7 @@ export function isDurableFiledReturnsSignal(signal: string): boolean {
     );
   if (zipCount) {
     const count = Number(zipCount[2]);
-    return zipCount[1] === "single-period" ? count <= 3 : count <= 37;
+    return zipCount[1] === "single-period" ? count <= 3 : count <= 38;
   }
   if (
     /^(?:full-fiscal-year-summary-included|full-fiscal-year-summary-outcomes-only|full-fiscal-year-summary-failed)$/.test(
@@ -629,10 +629,10 @@ export function isDurableFiledReturnsSignal(signal: string): boolean {
     signal,
   );
   if (summaryParsedPeriodCount) return Number(summaryParsedPeriodCount[1]) <= 12;
-  const summaryRowCount = /^full-fiscal-year-summary-row-count:(\d{1,2})$/.exec(signal);
+  const summaryRowCount = /^full-fiscal-year-summary-row-count:(\d{1,6})$/.exec(signal);
   if (summaryRowCount) {
     const count = Number(summaryRowCount[1]);
-    return count >= 1 && count <= 36;
+    return count >= 1 && count <= 100_000;
   }
   const opfsStageError = /^(full-fiscal-year|single-period)-opfs-stage-error:([a-z-]+)$/.exec(
     signal,

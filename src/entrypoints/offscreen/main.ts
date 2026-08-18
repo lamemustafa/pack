@@ -14,6 +14,7 @@ import { FILED_RETURNS_MONTHS } from "../../connectors/gst/filed-returns-scope";
 import { createZip, type ZipEntry } from "./zip";
 import {
   buildFiledReturnsSummarySheet,
+  FILED_RETURNS_SUMMARY_CONTEXT_PATH,
   FILED_RETURNS_SUMMARY_SHEET_PATH,
 } from "../../connectors/gst/filed-returns-summary-sheet";
 import type { PackOffscreenFiledReturnSummaryResult } from "../../connectors/gst/offscreen-blob-url";
@@ -95,7 +96,7 @@ async function handleMessage(
       const summary = message.payload.summaryPlan
         ? createSummaryEntry(message.payload.summaryPlan, entries, stagedInputBytes)
         : null;
-      const archiveEntries = summary?.entry ? [...entries, summary.entry] : entries;
+      const archiveEntries = summary?.entries ? [...entries, ...summary.entries] : entries;
       const zipBytes = createZip(archiveEntries);
       const zipBuffer = new ArrayBuffer(zipBytes.byteLength);
       new Uint8Array(zipBuffer).set(zipBytes);
@@ -108,7 +109,7 @@ async function handleMessage(
         blobUrl,
         zipEntryCount: archiveEntries.length,
         artifactEntryCount: entries.length,
-        summaryEntryCount: summary?.entry ? 1 : 0,
+        summaryEntryCount: summary?.entries?.length ?? 0,
         ...(summary ? { summary: summary.result } : {}),
       };
     } catch {
@@ -192,7 +193,7 @@ function createSummaryEntry(
   plan: Parameters<typeof buildFiledReturnsSummarySheet>[0],
   entries: readonly ZipEntry[],
   stagedInputBytes: number,
-): { entry?: ZipEntry; result: PackOffscreenFiledReturnSummaryResult } {
+): { entries?: [ZipEntry, ZipEntry]; result: PackOffscreenFiledReturnSummaryResult } {
   try {
     const summarySourcePaths = new Set(
       plan
@@ -208,14 +209,15 @@ function createSummaryEntry(
     }
     const summary = buildFiledReturnsSummarySheet(plan, entries, MAX_SUMMARY_SHEET_BYTES);
     const remainingZipBudget = Math.max(0, MAX_ZIP_INPUT_BYTES - stagedInputBytes);
-    if (
-      summary.bytes.byteLength > MAX_SUMMARY_SHEET_BYTES ||
-      summary.bytes.byteLength > remainingZipBudget
-    ) {
+    const summaryByteLength = summary.dataBytes.byteLength + summary.contextBytes.byteLength;
+    if (summaryByteLength > MAX_SUMMARY_SHEET_BYTES || summaryByteLength > remainingZipBudget) {
       return { result: { status: "failed", reasonCategory: "too-large" } };
     }
     return {
-      entry: { path: FILED_RETURNS_SUMMARY_SHEET_PATH, bytes: summary.bytes },
+      entries: [
+        { path: FILED_RETURNS_SUMMARY_SHEET_PATH, bytes: summary.dataBytes },
+        { path: FILED_RETURNS_SUMMARY_CONTEXT_PATH, bytes: summary.contextBytes },
+      ],
       result: {
         status: "included",
         outcomeOnly: summary.outcomeOnly,
