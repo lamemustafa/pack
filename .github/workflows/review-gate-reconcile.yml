@@ -1,0 +1,43 @@
+name: Reconcile review findings gate
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  scheduled-review-gate:
+    name: Reconcile Review gate checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    permissions:
+      contents: read
+      pull-requests: read
+      checks: write
+
+    steps:
+      - name: Checkout trusted default-branch code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 1
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22.13.0
+
+      - name: Reconcile open pull request checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          node scripts/publish-review-gate-check.mjs
+          --repo "${{ github.repository }}"
+          --reconcile-open-prs
+          --max-prs 4
+          --details-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

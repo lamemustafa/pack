@@ -1,11 +1,6 @@
 name: Review findings gate
 
 on:
-  workflow_dispatch:
-    inputs:
-      pr:
-        description: Pull request number to check
-        required: true
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review, edited]
   pull_request_review:
@@ -20,6 +15,10 @@ permissions:
 jobs:
   review-gate:
     name: Review gate
+    if: >-
+      github.event_name == 'pull_request' ||
+      github.event_name == 'pull_request_review' ||
+      github.event_name == 'pull_request_review_comment'
     runs-on: ubuntu-latest
     timeout-minutes: 8
 
@@ -28,9 +27,7 @@ jobs:
         id: resolve-pr
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
-          EVENT_NAME: ${{ github.event_name }}
-          PR_NUMBER: ${{ github.event.pull_request.number || github.event.inputs.pr }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
           EVENT_HEAD_REF: ${{ github.event.pull_request.head.ref }}
           EVENT_BASE_REF: ${{ github.event.pull_request.base.ref }}
           EVENT_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
@@ -43,22 +40,10 @@ jobs:
             exit 1
           fi
 
-          if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
-            mapfile -t pr_metadata < <(
-              gh pr view "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" \
-                --json headRefName,baseRefName,headRepository,headRefOid \
-                --jq '.headRefName, .baseRefName, .headRepository.nameWithOwner, .headRefOid'
-            )
-            head_ref="${pr_metadata[0]:-}"
-            base_ref="${pr_metadata[1]:-}"
-            head_repo="${pr_metadata[2]:-}"
-            head_sha="${pr_metadata[3]:-}"
-          else
-            head_ref="${EVENT_HEAD_REF}"
-            base_ref="${EVENT_BASE_REF}"
-            head_repo="${EVENT_HEAD_REPO}"
-            head_sha="${EVENT_HEAD_SHA}"
-          fi
+          head_ref="${EVENT_HEAD_REF}"
+          base_ref="${EVENT_BASE_REF}"
+          head_repo="${EVENT_HEAD_REPO}"
+          head_sha="${EVENT_HEAD_SHA}"
 
           if [ -z "${head_ref}" ] || [ -z "${base_ref}" ] || [ -z "${head_repo}" ] || [ -z "${head_sha}" ]; then
             echo "Could not resolve complete pull request metadata for #${PR_NUMBER}." >&2
