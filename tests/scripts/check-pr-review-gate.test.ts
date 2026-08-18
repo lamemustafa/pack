@@ -1,5 +1,5 @@
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -8,6 +8,147 @@ const rootDir = process.cwd();
 const scriptPath = path.join(rootDir, "scripts", "check-pr-review-gate.mjs");
 
 describe("PR review gate", () => {
+  it("fetches the minimization reason on initial and paginated PR comments", () => {
+    const script = readFileSync(scriptPath, "utf8");
+
+    expect(script.match(/isMinimized minimizedReason/g)).toHaveLength(2);
+  });
+
+  it.each([
+    ["unresolved finding", [prFindingComment()], 1],
+    ["resolved finding", [prFindingComment({ isMinimized: true, minimizedReason: "resolved" })], 0],
+    [
+      "off-topic minimization",
+      [prFindingComment({ isMinimized: true, minimizedReason: "off-topic" })],
+      1,
+    ],
+    [
+      "outdated minimization",
+      [prFindingComment({ isMinimized: true, minimizedReason: "outdated" })],
+      1,
+    ],
+    ["unrelated author", [prFindingComment({ author: "external-reviewer" })], 0],
+    [
+      "non-finding notes",
+      [
+        prFindingComment({ body: "Codex Review: Didn't find any major issues. Breezy!" }),
+        prFindingComment({ body: "To use Codex here, create an environment for this repo." }),
+      ],
+      0,
+    ],
+  ])("maps PR-level %s", (name, comments, expectedExit) => {
+    const result = runGateFixture(name, comments);
+    expect(result.status).toBe(expectedExit);
+    expect(expectedExit === 0 ? result.stdout : result.stderr).toContain(
+      expectedExit === 0 ? "PR review gate passed" : "Unresolved PR-level review findings",
+    );
+    if (name === "unresolved finding") {
+      expect(result.stderr).toContain("Hide → Resolved");
+      expect(result.stderr).toContain("next scheduled Review gate run");
+    }
+  });
+
+  it("evaluates PR-level findings from paginated fixture pages", () => {
+    const fixturePath = writeFixture("paginated-pr-level-findings", {
+      pages: [
+        reviewFixture({
+          headRefOid: "head-sha",
+          comments: [],
+          commentsPageInfo: { hasNextPage: true, endCursor: "comments-page-1" },
+          reviews: [review({ state: "COMMENTED", commit: "head-sha" })],
+        }),
+        reviewFixture({
+          headRefOid: "head-sha",
+          comments: [prFindingComment()],
+          reviews: [],
+        }),
+      ],
+    });
+
+    const result = spawnSync(
+      process.execPath,
+      [scriptPath, "--repo", "lamemustafa/pack", "--pr", "14", "--fixture", fixturePath],
+      { cwd: rootDir, encoding: "utf8" },
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Unresolved PR-level review findings");
+  });
+
+  it("fails as could-not-evaluate when a live pagination page has no PR data", () => {
+    const firstPage = reviewFixture({
+      headRefOid: "head-sha",
+      commentsPageInfo: { hasNextPage: true, endCursor: "comments-page-1" },
+      reviews: [review({ state: "COMMENTED", commit: "head-sha" })],
+    });
+    const missingPrPage = { data: { repository: { pullRequest: null } } };
+    const { result, attempts } = runGateWithFakeGh([
+      { status: 0, stdout: JSON.stringify(firstPage) },
+      { status: 0, stdout: JSON.stringify(missingPrPage) },
+    ]);
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("Review gate could not evaluate");
+    expect(result.stderr).toContain("next PR-comment page");
+    expect(attempts).toBe(2);
+  });
+
+  it.each([
+    ["http-429", "gh: HTTP 429: too many requests\n"],
+    ["http-500", "gh: HTTP 500: internal server error\n"],
+    ["http-502", "gh: HTTP 502: bad gateway\n"],
+    ["http-504", "gh: HTTP 504: gateway timeout\n"],
+    ["rate-limit", "gh: API rate limit exceeded\n"],
+    ["timeout", "gh: request timed out\n"],
+    ["connection-reset", "gh: read: connection reset by peer\n"],
+    ["dns", "gh: dial tcp: lookup api.github.com: no such host\n"],
+  ])("retries the allowed %s transient failure", (_name, stderr) => {
+    const fixture = reviewFixture({
+      headRefOid: "head-sha",
+      reviews: [review({ state: "COMMENTED", commit: "head-sha" })],
+    });
+    const { result, attempts } = runGateWithFakeGh([
+      { status: 1, stderr },
+      { status: 0, stdout: JSON.stringify(fixture) },
+    ]);
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain("Retrying in 0ms");
+    expect(attempts).toBe(2);
+  });
+
+  it.each([
+    [
+      "transient retry exhaustion",
+      [
+        { status: 1, stderr: "gh: Service Unavailable (HTTP 503)\n" },
+        { status: 1, stderr: "gh: Service Unavailable (HTTP 503)\n" },
+        { status: 1, stderr: "gh: Service Unavailable (HTTP 503)\n" },
+      ],
+      3,
+      "failed after 3 attempts",
+      3,
+    ],
+    [
+      "non-transient failure",
+      [
+        {
+          status: 1,
+          stderr: "gh: GraphQL: Could not resolve to a Repository with the name pack\n",
+        },
+      ],
+      3,
+      "Could not resolve to a Repository",
+      1,
+    ],
+  ])("fails closed for %s", (_name, responses, retryAttempts, message, expectedAttempts) => {
+    const { result, attempts } = runGateWithFakeGh(responses, retryAttempts);
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("Review gate could not evaluate");
+    expect(result.stderr).toContain(message);
+    expect(attempts).toBe(expectedAttempts);
+  });
+
   it("fails when unresolved review threads are present", () => {
     const fixturePath = writeFixture(
       "unresolved-thread",
@@ -865,6 +1006,8 @@ function reviewFixture({
   baseRefName = "master",
   headRepository = { nameWithOwner: "lamemustafa/pack" },
   body = packPrBody(),
+  comments = [],
+  commentsPageInfo = { hasNextPage: false, endCursor: null },
   reviewThreads = [],
   reviewThreadsPageInfo = { hasNextPage: false, endCursor: null },
   reviews,
@@ -875,6 +1018,8 @@ function reviewFixture({
   baseRefName?: string;
   headRepository?: { nameWithOwner: string };
   body?: string;
+  comments?: unknown[];
+  commentsPageInfo?: { hasNextPage: boolean; endCursor: string | null };
   reviewThreads?: unknown[];
   reviewThreadsPageInfo?: { hasNextPage: boolean; endCursor: string | null };
   reviews: Array<ReturnType<typeof review>>;
@@ -889,12 +1034,103 @@ function reviewFixture({
           baseRefName,
           headRepository,
           headRefOid,
+          comments: {
+            nodes: comments,
+            pageInfo: commentsPageInfo,
+          },
           reviewThreads: { nodes: reviewThreads, pageInfo: reviewThreadsPageInfo },
           reviews: { nodes: reviews, pageInfo: reviewsPageInfo },
         },
       },
     },
   };
+}
+
+function prFindingComment(
+  options: {
+    id?: string;
+    isMinimized?: boolean;
+    minimizedReason?: string | null;
+    author?: string;
+    body?: string;
+  } = {},
+) {
+  const {
+    id = "comment-1",
+    isMinimized = false,
+    minimizedReason = null,
+    author = "chatgpt-codex-connector[bot]",
+    body = "![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat) Fix this.",
+  } = options;
+  return {
+    id,
+    url: `https://github.com/lamemustafa/pack/pull/14#issuecomment-${id}`,
+    createdAt: "2026-08-17T12:00:00Z",
+    isMinimized,
+    minimizedReason,
+    author: { login: author },
+    body,
+  };
+}
+
+function runGateFixture(name: string, comments: unknown[]) {
+  const fixture = writeFixture(
+    `pr-finding-${name.replaceAll(" ", "-")}`,
+    reviewFixture({
+      headRefOid: "head-sha",
+      comments,
+      reviews: [review({ state: "COMMENTED", commit: "head-sha" })],
+    }),
+  );
+  return spawnSync(
+    process.execPath,
+    [scriptPath, "--repo", "lamemustafa/pack", "--pr", "14", "--fixture", fixture],
+    { cwd: rootDir, encoding: "utf8" },
+  );
+}
+
+function runGateWithFakeGh(
+  responses: Array<{ status: number; stdout?: string; stderr?: string }>,
+  retryAttempts = responses.length,
+) {
+  const directory = mkdtempSync(path.join(tmpdir(), "pack-review-gate-gh-"));
+  const statePath = path.join(directory, "attempts.txt");
+  const fakeGhPath = path.join(directory, "gh");
+  const fakeGhSource = `#!/usr/bin/env node
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+const responses = ${JSON.stringify(responses)};
+const statePath = ${JSON.stringify(statePath)};
+const attempt = existsSync(statePath) ? Number(readFileSync(statePath, "utf8")) : 0;
+writeFileSync(statePath, String(attempt + 1), "utf8");
+const response = responses[Math.min(attempt, responses.length - 1)];
+if (response.stdout) process.stdout.write(response.stdout);
+if (response.stderr) process.stderr.write(response.stderr);
+process.exit(response.status);
+`;
+  writeFileSync(fakeGhPath, fakeGhSource, "utf8");
+  chmodSync(fakeGhPath, 0o755);
+
+  const result = spawnSync(
+    process.execPath,
+    [
+      scriptPath,
+      "--repo",
+      "lamemustafa/pack",
+      "--pr",
+      "14",
+      "--retry-backoff-ms",
+      "0",
+      "--retry-attempts",
+      String(retryAttempts),
+    ],
+    {
+      cwd: rootDir,
+      encoding: "utf8",
+      env: { ...process.env, PATH: `${directory}${path.delimiter}${process.env.PATH ?? ""}` },
+    },
+  );
+
+  return { result, attempts: Number(readFileSync(statePath, "utf8")) };
 }
 
 function packPrBody() {
