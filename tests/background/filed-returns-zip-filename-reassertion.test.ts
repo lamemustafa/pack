@@ -195,6 +195,27 @@ describe("filed-return ZIP filename reassertion", () => {
     expect(mocks.browser.downloads.download).toHaveBeenCalledOnce();
   });
 
+  it("rejects an unattested summary receipt before download with a distinct safe reason", async () => {
+    mocks.createOffscreenFiledReturnZipUrl.mockResolvedValueOnce({
+      status: "failed",
+      errorCategory: "offscreen-response-invalid",
+    });
+
+    const result = await exportFullFiscalYearZip(fullYearLedger(), completeStep());
+
+    expect(result).toMatchObject({
+      state: "blocked",
+      safeSignals: expect.arrayContaining([
+        "full-fiscal-year-zip-export-failed",
+        "full-fiscal-year-zip-export-error:offscreen-response-invalid",
+      ]),
+      safeMessage:
+        "Pack rejected the fiscal-year ZIP because its local summary receipt could not be verified.",
+    });
+    expect(result.safeMessage).not.toContain("summary generation failed");
+    expect(mocks.browser.downloads.download).not.toHaveBeenCalled();
+  });
+
   it.each([
     {
       name: "included",

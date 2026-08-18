@@ -127,7 +127,9 @@ export async function exportStagedFiledReturnsZip({
       safeMessage:
         stagingClear?.opfsCleared && !stagingClear.cleanupCheckpointVerified
           ? (stagingCleanupCheckpointFailedMessage ?? zipFailedMessage)
-          : zipFailedMessage,
+          : zip.errorCategory === "offscreen-response-invalid" && summaryPlan
+            ? "Pack rejected the fiscal-year ZIP because its local summary receipt could not be verified."
+            : zipFailedMessage,
       ...(clearSignalPrefix === "full-fiscal-year"
         ? {
             userAction: {

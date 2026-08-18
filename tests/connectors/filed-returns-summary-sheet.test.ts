@@ -79,6 +79,34 @@ describe("filed-return full-year summary sheet", () => {
     expect(summary).toMatchObject({ outcomeOnly: false, parsedPeriodCount: 1 });
   });
 
+  it("keeps the root-array pointer distinct from an empty-key member in emitted CSV", () => {
+    const summary = buildFiledReturnsSummarySheet(
+      [
+        jsonPlan("April", "april-data.json", "GSTR-2B"),
+        jsonPlan("May", "may-data.json", "GSTR-2B"),
+      ],
+      [jsonEntry("april-data.json", [1, 2]), jsonEntry("may-data.json", { "": 7 })],
+    );
+
+    const rows = parseCsv(new TextDecoder().decode(summary.dataBytes));
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          period: "April",
+          outcome: "array-count-not-selected",
+          field_path: "",
+          value_number: "2",
+        }),
+        expect.objectContaining({
+          period: "May",
+          outcome: "parseable-json",
+          field_path: "/",
+          value_number: "7",
+        }),
+      ]),
+    );
+  });
+
   it("expands a small GSTR-3B ITC array by its stable discriminator", () => {
     const summary = buildFiledReturnsSummarySheet(
       [jsonPlan("April", "april-data.json", "GSTR-3B")],
@@ -303,14 +331,17 @@ describe("filed-return full-year summary sheet", () => {
     ).not.toThrow(secret);
   });
 
-  it("fails summary generation when a forbidden field is an ancestor container", () => {
-    expect(() =>
-      buildFiledReturnsSummarySheet(
-        [jsonPlan("April", "april-data.json", "GSTR-2B")],
-        [jsonEntry("april-data.json", { amount: 1, session: { id: "synthetic-sensitive" } })],
-      ),
-    ).toThrow("credential or session field");
-  });
+  it.each(["session", "safe/session", "~session"])(
+    "fails summary generation when forbidden ancestor container %s is pointer-decoded",
+    (ancestor) => {
+      expect(() =>
+        buildFiledReturnsSummarySheet(
+          [jsonPlan("April", "april-data.json", "GSTR-2B")],
+          [jsonEntry("april-data.json", { amount: 1, [ancestor]: { id: "synthetic-sensitive" } })],
+        ),
+      ).toThrow("credential or session field");
+    },
+  );
 
   it("bounds retained JSON Pointer paths before descending into wide nested keys", () => {
     const wideKeys = Array.from({ length: 12 }, (_, index) => `${index}-${"k".repeat(180)}`);
