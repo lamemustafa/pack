@@ -28,6 +28,13 @@ export class JsonFlatTableLimitError extends Error {
   }
 }
 
+export class JsonFlatTablePathNotFoundError extends Error {
+  constructor() {
+    super("Expected JSON object path was not found.");
+    this.name = "JsonFlatTablePathNotFoundError";
+  }
+}
+
 /**
  * Parses and flattens JSON in one pass so arrays and unused containers are not
  * materialized. Object keys use RFC 6901 JSON Pointer paths. Configured small
@@ -41,6 +48,16 @@ export function flattenJsonTextScalarLeaves(
   arrayExpansion?: FlatJsonArrayExpansionOptions,
 ): FlatJsonLeaf[] {
   return new FlatJsonParser(input, maxOutputBytes, arrayExpansion).parse();
+}
+
+export function flattenJsonTextObjectAtPath(
+  input: string,
+  objectPath: readonly string[],
+  maxOutputBytes = Number.POSITIVE_INFINITY,
+  arrayExpansion?: FlatJsonArrayExpansionOptions,
+): FlatJsonLeaf[] {
+  if (objectPath.length === 0) throw new JsonFlatTablePathNotFoundError();
+  return new FlatJsonParser(input, maxOutputBytes, arrayExpansion, objectPath).parse();
 }
 
 export function jsonNumberTokenToPlainDecimal(
@@ -112,15 +129,59 @@ class FlatJsonParser {
     private readonly input: string,
     private readonly maxOutputBytes: number,
     private readonly arrayExpansion?: FlatJsonArrayExpansionOptions,
+    private readonly objectPath: readonly string[] = [],
   ) {
     this.eligibleArrayPaths = new Set(arrayExpansion?.eligiblePaths ?? []);
   }
 
   parse(): FlatJsonLeaf[] {
-    this.parseValue("", true, 0);
+    const found =
+      this.objectPath.length === 0
+        ? (this.parseValue("", true, 0), true)
+        : this.parseObjectPath(0, 0);
     this.skipWhitespace();
     if (this.index !== this.input.length) this.fail();
+    if (!found) throw new JsonFlatTablePathNotFoundError();
     return this.leaves;
+  }
+
+  private parseObjectPath(segmentIndex: number, depth: number): boolean {
+    if (depth > MAX_JSON_DEPTH) this.fail();
+    this.skipWhitespace();
+    if (this.input[this.index] !== "{") {
+      this.parseValue("", false, depth);
+      return false;
+    }
+    const keys = new Set<string>();
+    let found = false;
+    this.index += 1;
+    this.skipWhitespace();
+    if (this.consume("}")) return false;
+    while (true) {
+      this.skipWhitespace();
+      if (this.input[this.index] !== '"') this.fail();
+      const key = this.parseString(true);
+      if (keys.has(key)) this.fail();
+      keys.add(key);
+      this.skipWhitespace();
+      if (!this.consume(":")) this.fail();
+      if (key !== this.objectPath[segmentIndex]) {
+        this.parseValue("", false, depth + 1);
+      } else if (segmentIndex < this.objectPath.length - 1) {
+        found = this.parseObjectPath(segmentIndex + 1, depth + 1) || found;
+      } else {
+        this.skipWhitespace();
+        if (this.input[this.index] === "{") {
+          this.parseObject("", true, depth + 1);
+          found = true;
+        } else {
+          this.parseValue("", false, depth + 1);
+        }
+      }
+      this.skipWhitespace();
+      if (this.consume("}")) return found;
+      if (!this.consume(",")) this.fail();
+    }
   }
 
   private parseValue(path: string, emit: boolean, depth: number): void {

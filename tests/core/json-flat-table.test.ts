@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   flatJsonLeavesApproximateBytes,
+  flattenJsonTextObjectAtPath,
   flattenJsonTextScalarLeaves,
   JsonFlatTableLimitError,
+  JsonFlatTablePathNotFoundError,
   jsonNumberTokenToPlainDecimal,
 } from "../../src/core/json-flat-table";
 
@@ -62,6 +64,27 @@ describe("flat JSON leaf extraction", () => {
       { path: "/items/A~1B/amount", valueKind: "number", value: "1" },
       { path: "/items/C/amount", valueKind: "number", value: "2" },
     ]);
+  });
+
+  it("flattens a selected object with paths reset while validating surrounding JSON", () => {
+    expect(
+      flattenJsonTextObjectAtPath(
+        '{"status":1,"data":{"r3b":{"amount":99999999999999.999}},"decoy":[1,2]}',
+        ["data", "r3b"],
+      ),
+    ).toEqual([{ path: "/amount", valueKind: "number", value: "99999999999999.999" }]);
+  });
+
+  it("distinguishes a missing or non-object selected path from malformed JSON", () => {
+    expect(() => flattenJsonTextObjectAtPath('{"data":{}}', ["data", "r3b"])).toThrow(
+      JsonFlatTablePathNotFoundError,
+    );
+    expect(() => flattenJsonTextObjectAtPath('{"data":{"r3b":[]}}', ["data", "r3b"])).toThrow(
+      JsonFlatTablePathNotFoundError,
+    );
+    expect(() =>
+      flattenJsonTextObjectAtPath('{"data":{"r3b":{}},"broken":}', ["data", "r3b"]),
+    ).toThrow(SyntaxError);
   });
 
   it("fails closed before expanding an unbounded numeric exponent", () => {

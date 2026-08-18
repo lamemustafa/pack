@@ -497,15 +497,17 @@ describe("offscreen Blob URL entrypoint", () => {
         path: "april-data.json",
         value: {
           status: 1,
-          gstin: "22AAAAA0000A1Z5",
-          lgnm: "Synthetic Example Taxpayer",
           data: {
-            rtnprd: "042026",
-            surrounding_decoy: { z: "april", a: 10 },
-            entries: [{ value: 900 }],
-            portal_leaf: 11,
+            r3b: {
+              ret_period: "042026",
+              gstin: "22AAAAA0000A1Z5",
+              lglnm: "Synthetic Example Taxpayer",
+              surrounding_decoy: { z: "april", a: 10 },
+              entries: [{ value: 900 }],
+              portal_leaf: 11,
+            },
           },
-          chksum: "synthetic-april-checksum",
+          response_decoy: "synthetic-april",
         },
       },
       {
@@ -513,15 +515,17 @@ describe("offscreen Blob URL entrypoint", () => {
         path: "may-data.json",
         value: {
           status: 1,
-          gstin: "22AAAAA0000A1Z5",
-          lgnm: "Synthetic Example Taxpayer",
           data: {
-            rtnprd: "052026",
-            surrounding_decoy: { z: "may" },
-            entries: [{ value: 800 }, { value: 700 }],
-            other_portal_leaf: 22,
+            r3b: {
+              ret_period: "052026",
+              gstin: "22AAAAA0000A1Z5",
+              lglnm: "Synthetic Example Taxpayer",
+              surrounding_decoy: { z: "may" },
+              entries: [{ value: 800 }, { value: 700 }],
+              other_portal_leaf: 22,
+            },
           },
-          chksum: "synthetic-may-checksum",
+          response_decoy: "synthetic-may",
         },
       },
     ];
@@ -533,7 +537,7 @@ describe("offscreen Blob URL entrypoint", () => {
           requestId: `stage-${row.period.toLowerCase()}-json`,
           ledgerId: TEST_FULL_YEAR_LEDGER_ID,
           zipPath: row.path,
-          returnType: "GSTR-2B",
+          returnType: "GSTR-3B",
           artifactType: "JSON",
           dataUrl: `data:application/json;base64,${btoa(JSON.stringify(row.value))}`,
         },
@@ -547,7 +551,7 @@ describe("offscreen Blob URL entrypoint", () => {
       payload: {
         requestId: "full-year-summary-request",
         ledgerId: TEST_FULL_YEAR_LEDGER_ID,
-        expectedReturnType: "GSTR-2B",
+        expectedReturnType: "GSTR-3B",
         expectedEntryCount: 2,
         expectedEntries: portalRows.map((row) => ({
           artifactType: "JSON",
@@ -559,7 +563,7 @@ describe("offscreen Blob URL entrypoint", () => {
           financialYear: "2026-27",
           outcomeCategory: "staged",
           period: row.period,
-          returnType: "GSTR-2B",
+          returnType: "GSTR-3B",
         })),
       },
     });
@@ -575,7 +579,7 @@ describe("offscreen Blob URL entrypoint", () => {
         status: "included",
         outcomeOnly: false,
         parsedPeriodCount: 2,
-        rowCount: 13,
+        rowCount: 9,
       },
     });
     const entries = await extractStoredZipEntries(createdBlobs[0]!);
@@ -589,16 +593,17 @@ describe("offscreen Blob URL entrypoint", () => {
     expect(summary.split("\n")[0]).toBe(
       "period,return_type,artifact,outcome,field_label,field_path,value_text,value_number",
     );
-    expect(summary).toContain("April,GSTR-2B,JSON,parseable-json,,/data/portal_leaf,,11");
-    expect(summary).toContain("May,GSTR-2B,JSON,parseable-json,,/data/other_portal_leaf,,22");
+    expect(summary).toContain("April,GSTR-3B,JSON,parseable-json,,/portal_leaf,,11");
+    expect(summary).toContain("May,GSTR-3B,JSON,parseable-json,,/other_portal_leaf,,22");
     expect(summary).not.toContain("900");
     expect(summary).not.toContain("800");
     expect(summary).not.toContain("700");
     expect(summary).not.toContain("22AAAAA0000A1Z5");
     expect(summary).not.toContain("Synthetic Example Taxpayer");
     const context = new TextDecoder().decode(entries.get("full-year-summary-context.csv"));
-    expect(context).toContain("format_version,,,pack-full-year-summary-tidy-v2");
+    expect(context).toContain("format_version,,,pack-full-year-summary-tidy-v3");
     expect(context).toContain("financial_year,,,2026-27");
+    expect(context).toContain("GSTR-3B:/data/r3b");
     expect(context.match(/22AAAAA0000A1Z5/g)).toHaveLength(1);
     expect(context.match(/Synthetic Example Taxpayer/g)).toHaveLength(1);
   });
@@ -693,7 +698,12 @@ describe("offscreen Blob URL entrypoint", () => {
     await loadOffscreenEntrypoint();
     opfsFiles.set(
       `filed-return-packs/${TEST_FULL_YEAR_LEDGER_ID}/april-data.json`,
-      new Blob([JSON.stringify({ portal_leaf: "x".repeat(5 * 1024 * 1024) })]),
+      new Blob([
+        JSON.stringify({
+          data: { rtnprd: "042026", portal_leaf: "x".repeat(5 * 1024 * 1024) },
+          response_decoy: "synthetic",
+        }),
+      ]),
     );
 
     const zip = await sendOffscreenMessage({

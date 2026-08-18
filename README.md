@@ -85,6 +85,11 @@ as the element key, omit the discriminator field itself, and do not also emit a
 count. Every other array emits one count at the array's JSON Pointer path, with
 the `outcome` column naming why it was not expanded; GSTR-1 and GSTR-2B arrays
 therefore remain count-only.
+Before flattening, Pack removes the return-type envelope already required by
+artifact validation: `/data/r3b` for GSTR-3B and `/data` for GSTR-1 and
+GSTR-2B. `field_path` is relative to that documented envelope. If it is absent
+or is not an object, the period receives a `json-envelope-missing` outcome row
+instead of silently flattening a different shape.
 Periods and artifacts without parseable JSON receive fixed outcome rows instead
 of fabricated zeroes. `field_path` remains the canonical identifier, while
 `field_label` is populated only by a partial return-type map whose entries carry
@@ -92,9 +97,10 @@ recorded provenance. The map distinguishes labels value-cross-checked against
 two portal PDF periods, labels derived only from form vocabulary and row order,
 and the pre-existing offline-utility mappings; unmapped labels stay empty.
 
-The context CSV records the format version, run metadata, flattening and value
-rules, and recognized invariant taxpayer identity once rather than repeating it
-through the data rows. Both derived files persist only inside the user-requested
+The context CSV records the format version, run metadata, normalized envelope,
+flattening and value rules, recognized invariant taxpayer identity once, and
+recognized filing identity once per return type and period rather than repeating
+either through the data rows. Both derived files persist only inside the user-requested
 downloaded ZIP. A run with eligible files but no parseable JSON, including a PDF-only run,
 receives outcome-only data plus its context file. If generation fails, identity
 is inconsistent, or the combined summary exceeds its local size limit, Pack

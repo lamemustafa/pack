@@ -249,19 +249,36 @@ export function filedReturnsSummaryFieldLabel(
 }
 
 export function filedReturnsSummaryIdentityLabel(path: string): string | null {
+  return filedReturnsSummaryIdentity(path)?.label ?? null;
+}
+
+export interface FiledReturnsSummaryIdentity {
+  contextType: "taxpayer_identity" | "return_identity";
+  label: string;
+}
+
+export function filedReturnsSummaryIdentity(path: string): FiledReturnsSummaryIdentity | null {
   const canonicalToken = canonicalTerminalToken(path);
-  if (canonicalToken === "gstin") return "GSTIN";
+  if (canonicalToken === "gstin") return taxpayerIdentity("GSTIN");
   if (canonicalToken === "pan" || canonicalToken === "panno" || canonicalToken === "taxpayerpan") {
-    return "PAN";
+    return taxpayerIdentity("PAN");
   }
-  if (canonicalToken === "lgnm" || canonicalToken === "legalname") return "Legal name";
-  if (canonicalToken === "trdnm" || canonicalToken === "tradename") return "Trade name";
+  if (canonicalToken === "lglnm" || canonicalToken === "lgnm" || canonicalToken === "legalname") {
+    return taxpayerIdentity("Legal name");
+  }
+  if (canonicalToken === "trdnm" || canonicalToken === "tradename") {
+    return taxpayerIdentity("Trade name");
+  }
+  if (canonicalToken === "arn") return returnIdentity("ARN");
+  if (canonicalToken === "arndt" || canonicalToken === "arndate") {
+    return returnIdentity("ARN date");
+  }
   if (
     canonicalToken === "taxpayername" ||
     canonicalToken === "taxpyrname" ||
     canonicalToken === "nameoftaxpayer"
   ) {
-    return "Taxpayer name";
+    return taxpayerIdentity("Taxpayer name");
   }
   if (
     canonicalToken === "signatory" ||
@@ -269,10 +286,20 @@ export function filedReturnsSummaryIdentityLabel(path: string): string | null {
     canonicalToken === "authorizedsignatory" ||
     canonicalToken === "authorisedsignatory"
   ) {
-    return "Signatory";
+    return taxpayerIdentity("Signatory");
   }
-  if (canonicalToken === "designation" || canonicalToken === "desig") return "Designation";
+  if (canonicalToken === "designation" || canonicalToken === "desig") {
+    return taxpayerIdentity("Designation");
+  }
   return null;
+}
+
+function taxpayerIdentity(label: string): FiledReturnsSummaryIdentity {
+  return { contextType: "taxpayer_identity", label };
+}
+
+function returnIdentity(label: string): FiledReturnsSummaryIdentity {
+  return { contextType: "return_identity", label };
 }
 
 export function isFiledReturnsSummaryForbiddenFieldPath(path: string): boolean {
@@ -282,9 +309,9 @@ export function isFiledReturnsSummaryForbiddenFieldPath(path: string): boolean {
 function isForbiddenCanonicalToken(canonicalToken: string): boolean {
   return (
     canonicalToken === "auth" ||
-    canonicalToken === "apikey" ||
-    canonicalToken === "authheader" ||
-    canonicalToken === "authkey" ||
+    canonicalToken.endsWith("apikey") ||
+    canonicalToken.endsWith("authheader") ||
+    canonicalToken.endsWith("authkey") ||
     canonicalToken === "authentication" ||
     canonicalToken === "authn" ||
     canonicalToken === "authz" ||

@@ -55,16 +55,20 @@ For each release candidate:
   non-empty and unique. Expanded paths must use the discriminator value, omit
   the discriminator field, and emit no count row. Every other array, including
   every GSTR-1 and GSTR-2B array, must emit one count row whose `outcome` names
-  why it was not expanded. Expand JSON numbers without rounding into plain decimal numeric cells; preserve strings
+  why it was not expanded. Confirm the canonical artifact-validation envelope
+  is removed before flattening (`/data/r3b` for GSTR-3B and `/data` for GSTR-1
+  and GSTR-2B), `field_path` is relative to it, and a missing or non-object
+  envelope emits a `json-envelope-missing` outcome row. Expand JSON numbers without rounding into plain decimal numeric cells; preserve strings
   and identifiers as text except for the existing apostrophe guard on
   formula-like text; and use fixed outcome rows where no parseable JSON exists.
   Labels must come only from the return-type map with recorded provenance that
   distinguishes two-period portal-PDF value cross-checks, form-vocabulary and
   row-order derivations that were not value-matched, and the pre-existing
   offline-utility mappings; unmapped labels must stay empty. The context
-  CSV must contain the format token, run metadata, value/flattening rules, and
-  recognized invariant taxpayer identity once; identity must not appear in the
-  data CSV. Both derived files must remain output-only ZIP entries: their bytes
+  CSV must contain the format token, run metadata, normalized-envelope and
+  value/flattening rules, recognized invariant taxpayer identity once, and
+  recognized filing identity once per return type and period; neither identity
+  class may appear in the data CSV. Both derived files must remain output-only ZIP entries: their bytes
   may be transient in extension-controlled memory before browser handoff and
   persist in the user's downloaded ZIP, but never write separately to OPFS,
   extension storage, diagnostics, logs, telemetry, support bundles, popup

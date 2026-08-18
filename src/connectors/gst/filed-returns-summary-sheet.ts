@@ -7,10 +7,12 @@ import {
 } from "../../core/csv";
 import {
   flatJsonLeavesApproximateBytes,
-  flattenJsonTextScalarLeaves,
+  flattenJsonTextObjectAtPath,
   JsonFlatTableLimitError,
+  JsonFlatTablePathNotFoundError,
   type FlatJsonLeaf,
 } from "../../core/json-flat-table";
+import { filedReturnsJsonDocumentContract } from "./artifact-validation";
 import type { FiledReturnsConcreteArtifactType } from "./filed-returns-artifacts";
 import type { FiledReturnsReturnType } from "./filed-returns-return-types";
 import {
@@ -19,14 +21,14 @@ import {
 } from "./filed-returns-summary-arrays";
 import {
   filedReturnsSummaryFieldLabel,
-  filedReturnsSummaryIdentityLabel,
+  filedReturnsSummaryIdentity,
   isFiledReturnsSummaryForbiddenFieldPath,
 } from "./filed-returns-summary-labels";
 import { FILED_RETURNS_MONTHS, type FiledReturnsMonth } from "./filed-returns-scope";
 
 export const FILED_RETURNS_SUMMARY_SHEET_PATH = "full-year-summary.csv";
 export const FILED_RETURNS_SUMMARY_CONTEXT_PATH = "full-year-summary-context.csv";
-export const FILED_RETURNS_SUMMARY_FORMAT_VERSION = "pack-full-year-summary-tidy-v2";
+export const FILED_RETURNS_SUMMARY_FORMAT_VERSION = "pack-full-year-summary-tidy-v3";
 export const MAX_FILED_RETURNS_SUMMARY_ROWS = 100_000;
 export const FILED_RETURNS_SUMMARY_ARRAY_RULE = `Configured return-summary arrays with at most ${MAX_FILED_RETURNS_SUMMARY_ARRAY_EXPANSION_ELEMENTS} elements expand only when every element shares a unique non-empty discriminator selected in order from ty, pos; expanded elements are keyed by the discriminator and emit no count row. Every other array emits one numeric count row whose outcome records why it was not expanded.`;
 export const FILED_RETURNS_SUMMARY_NUMBER_RULE =
@@ -36,7 +38,7 @@ export const FILED_RETURNS_SUMMARY_TEXT_RULE =
 export const FILED_RETURNS_SUMMARY_LABEL_RULE =
   "field_label is populated only by the return-type label map with recorded official-source provenance; otherwise it is empty and field_path remains canonical.";
 export const FILED_RETURNS_SUMMARY_IDENTITY_RULE =
-  "Recognized taxpayer identity fields are removed from the data CSV and written once in this context CSV; inconsistent identity values fail summary generation.";
+  "Recognized identity fields are removed from the data CSV. Invariant taxpayer identity is written once in this context CSV; filing identity is written once per return type and period; inconsistent invariant identity values fail summary generation.";
 
 export const FILED_RETURNS_SUMMARY_HEADERS = [
   "period",
@@ -95,6 +97,8 @@ interface ParsedPlanEntry {
 }
 
 interface SummaryIdentityValue {
+  contextKey: string;
+  contextType: "taxpayer_identity" | "return_identity";
   fieldPath: string;
   label: string;
   value: string;
@@ -126,8 +130,9 @@ export function buildFiledReturnsSummarySheet(
       .find((candidate) => candidate !== undefined);
     if (!entry) return { planned, leaves: [], outcome: "json-entry-missing" };
     try {
-      const leaves = flattenJsonTextScalarLeaves(
+      const leaves = flattenJsonTextObjectAtPath(
         new TextDecoder("utf-8", { fatal: true }).decode(entry.bytes),
+        filedReturnsJsonDocumentContract(planned.returnType).envelopePath,
         remainingFlattenedBytes,
         filedReturnsSummaryArrayExpansion(planned.returnType),
       );
@@ -136,18 +141,20 @@ export function buildFiledReturnsSummarySheet(
       return { planned, leaves, outcome: "parseable-json" };
     } catch (error) {
       if (error instanceof JsonFlatTableLimitError) throw new FiledReturnsSummaryTooLargeError();
+      if (error instanceof JsonFlatTablePathNotFoundError) {
+        return { planned, leaves: [], outcome: "json-envelope-missing" };
+      }
       return { planned, leaves: [], outcome: "json-unparseable" };
     }
   });
 
   rejectForbiddenFields(parsedEntries);
-  const identityByLabel = collectIdentityValues(parsedEntries);
+  const identities = collectIdentityValues(parsedEntries);
   const dataRows: Record<string, CsvCellValue>[] = [];
   for (const parsed of parsedEntries) {
-    const fieldLeaves = parsed.leaves.filter((leaf) => {
-      const identityLabel = filedReturnsSummaryIdentityLabel(leaf.path);
-      return identityLabel === null || !identityByLabel.has(identityLabel);
-    });
+    const fieldLeaves = parsed.leaves.filter(
+      (leaf) => filedReturnsSummaryIdentity(leaf.path) === null,
+    );
     if (fieldLeaves.length === 0) {
       dataRows.push(outcomeRow(parsed.planned, parsed.outcome));
       continue;
@@ -179,7 +186,7 @@ export function buildFiledReturnsSummarySheet(
       maxUtf8Bytes: maxOutputBytes,
     });
     const dataBytes = new TextEncoder().encode(dataCsv);
-    const contextRows = buildContextRows(sortedPlan, identityByLabel);
+    const contextRows = buildContextRows(sortedPlan, identities);
     const contextCsv = toCsv(contextRows, FILED_RETURNS_SUMMARY_CONTEXT_HEADERS, {
       maxUtf8Bytes: Math.max(0, maxOutputBytes - dataBytes.byteLength),
     });
@@ -204,42 +211,65 @@ function rejectForbiddenFields(parsedEntries: readonly ParsedPlanEntry[]): void 
   }
 }
 
-function collectIdentityValues(
-  parsedEntries: readonly ParsedPlanEntry[],
-): Map<string, SummaryIdentityValue> {
-  const identityByLabel = new Map<string, SummaryIdentityValue>();
+function collectIdentityValues(parsedEntries: readonly ParsedPlanEntry[]): SummaryIdentityValue[] {
+  const taxpayerIdentityByLabel = new Map<string, SummaryIdentityValue>();
+  const returnIdentityByKey = new Map<string, SummaryIdentityValue>();
   const parseableEntries = parsedEntries.filter((entry) => entry.outcome === "parseable-json");
   const occurrenceCountByLabel = new Map<string, number>();
   for (const parsed of parseableEntries) {
     const identityInEntry = new Map<string, SummaryIdentityValue>();
     for (const leaf of parsed.leaves) {
-      const label = filedReturnsSummaryIdentityLabel(leaf.path);
-      if (!label) continue;
-      const existingInEntry = identityInEntry.get(label);
+      const descriptor = filedReturnsSummaryIdentity(leaf.path);
+      if (!descriptor) continue;
+      const contextKey =
+        descriptor.contextType === "taxpayer_identity"
+          ? "identity"
+          : `${parsed.planned.returnType}:${parsed.planned.period}`;
+      const identityKey = `${descriptor.contextType}:${contextKey}:${descriptor.label}`;
+      const existingInEntry = identityInEntry.get(identityKey);
       if (existingInEntry && existingInEntry.value !== leaf.value) {
         throw new SyntaxError("Inconsistent taxpayer identity in filed-return summary source.");
       }
       if (!existingInEntry || compareCodeUnits(leaf.path, existingInEntry.fieldPath) < 0) {
-        identityInEntry.set(label, { fieldPath: leaf.path, label, value: leaf.value });
+        identityInEntry.set(identityKey, {
+          contextKey,
+          contextType: descriptor.contextType,
+          fieldPath: leaf.path,
+          label: descriptor.label,
+          value: leaf.value,
+        });
       }
     }
-    for (const [label, identity] of identityInEntry) {
-      const existing = identityByLabel.get(label);
+    for (const identity of identityInEntry.values()) {
+      const target =
+        identity.contextType === "taxpayer_identity"
+          ? taxpayerIdentityByLabel
+          : returnIdentityByKey;
+      const targetKey =
+        identity.contextType === "taxpayer_identity"
+          ? identity.label
+          : `${identity.contextKey}:${identity.label}`;
+      const existing = target.get(targetKey);
       if (existing && existing.value !== identity.value) {
         throw new SyntaxError("Inconsistent taxpayer identity in filed-return summary source.");
       }
       if (!existing || compareCodeUnits(identity.fieldPath, existing.fieldPath) < 0) {
-        identityByLabel.set(label, identity);
+        target.set(targetKey, identity);
       }
-      occurrenceCountByLabel.set(label, (occurrenceCountByLabel.get(label) ?? 0) + 1);
+      if (identity.contextType === "taxpayer_identity") {
+        occurrenceCountByLabel.set(
+          identity.label,
+          (occurrenceCountByLabel.get(identity.label) ?? 0) + 1,
+        );
+      }
     }
   }
-  for (const label of identityByLabel.keys()) {
+  for (const label of taxpayerIdentityByLabel.keys()) {
     if (occurrenceCountByLabel.get(label) !== parseableEntries.length) {
       throw new SyntaxError("Inconsistent taxpayer identity in filed-return summary source.");
     }
   }
-  return identityByLabel;
+  return [...taxpayerIdentityByLabel.values(), ...returnIdentityByKey.values()];
 }
 
 function outcomeRow(
@@ -260,7 +290,7 @@ function outcomeRow(
 
 function buildContextRows(
   plan: readonly FiledReturnsSummaryPlanEntry[],
-  identityByLabel: ReadonlyMap<string, SummaryIdentityValue>,
+  identityValues: readonly SummaryIdentityValue[],
 ): Record<string, CsvCellValue>[] {
   const financialYears = sortedUnique(plan.map((entry) => entry.financialYear));
   if (financialYears.length !== 1) {
@@ -281,22 +311,39 @@ function buildContextRows(
     ],
   ].map(([contextKey, valueText]) => contextRow("run_metadata", contextKey!, valueText!));
   const rules = [
+    ["envelope_rule", envelopeRule(plan)],
     ["array_rule", FILED_RETURNS_SUMMARY_ARRAY_RULE],
     ["number_rule", FILED_RETURNS_SUMMARY_NUMBER_RULE],
     ["text_rule", FILED_RETURNS_SUMMARY_TEXT_RULE],
     ["label_rule", FILED_RETURNS_SUMMARY_LABEL_RULE],
     ["identity_rule", FILED_RETURNS_SUMMARY_IDENTITY_RULE],
   ].map(([contextKey, valueText]) => contextRow("format_rule", contextKey!, valueText!));
-  const identities = [...identityByLabel.values()]
-    .sort((left, right) => compareCodeUnits(left.label, right.label))
+  const identities = [...identityValues]
+    .sort(
+      (left, right) =>
+        compareCodeUnits(left.contextType, right.contextType) ||
+        compareCodeUnits(left.contextKey, right.contextKey) ||
+        compareCodeUnits(left.label, right.label),
+    )
     .map((identity) => ({
-      context_type: "taxpayer_identity",
-      context_key: "identity",
+      context_type: identity.contextType,
+      context_key: identity.contextKey,
       field_label: identity.label,
       field_path: identity.fieldPath,
       value_text: identity.value,
     }));
   return [...metadata, ...rules, ...identities];
+}
+
+function envelopeRule(plan: readonly FiledReturnsSummaryPlanEntry[]): string {
+  const returnTypes = [...new Set(plan.map((entry) => entry.returnType))].sort(compareCodeUnits);
+  const normalizedEnvelopes = returnTypes.map((returnType) => {
+    const pointer = filedReturnsJsonDocumentContract(returnType)
+      .envelopePath.map((segment) => `/${segment.replace(/~/g, "~0").replace(/\//g, "~1")}`)
+      .join("");
+    return `${returnType}:${pointer}`;
+  });
+  return `Before flattening, Pack removes the documented return envelope (${normalizedEnvelopes.join("|")}); field_path is relative to that envelope, and a missing envelope emits json-envelope-missing.`;
 }
 
 function contextRow(
