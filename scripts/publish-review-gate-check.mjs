@@ -8,11 +8,11 @@ import {
   runGhText,
 } from "./lib/github-cli-retry.mjs";
 
-const CHECK_RUN_NAME = "Review gate";
+const CHECK_RUN_NAME = "Review gate (scheduled)";
 const EXIT_VERDICTS = new Map([
-  [0, { conclusion: "success", title: "Review gate passed" }],
-  [1, { conclusion: "failure", title: "Review gate found blocking review state" }],
-  [2, { conclusion: "action_required", title: "Review gate could not evaluate" }],
+  [0, { conclusion: "success", title: "Scheduled review gate passed" }],
+  [1, { conclusion: "failure", title: "Scheduled review gate found blocking review state" }],
+  [2, { conclusion: "action_required", title: "Scheduled review gate could not evaluate" }],
 ]);
 const rawArgs = process.argv.slice(2);
 const repo = readArg("--repo", true);
@@ -32,6 +32,11 @@ try {
 }
 function reconcileOpenPullRequests() {
   const maxPrs = readIntegerArg("--max-prs", 25, 1);
+  const selectionOffset = readIntegerArg(
+    "--selection-offset",
+    Math.floor(Date.now() / (15 * 60 * 1000)),
+    0,
+  );
   const pages = JSON.parse(
     runGithub(
       ["api", "--paginate", "--slurp", `repos/${repo}/pulls?state=open&per_page=100`],
@@ -57,7 +62,8 @@ function reconcileOpenPullRequests() {
     else eligible.push(pr);
   }
 
-  const selected = eligible.slice(0, maxPrs);
+  const start = eligible.length === 0 ? 0 : (selectionOffset * maxPrs) % eligible.length;
+  const selected = [...eligible.slice(start), ...eligible.slice(0, start)].slice(0, maxPrs);
   if (eligible.length > maxPrs) {
     console.warn(
       `Review gate schedule cap hit: processing ${maxPrs} of ${eligible.length} eligible pull requests.`,
@@ -84,6 +90,10 @@ function evaluatePullRequest(pr) {
       "--strict-head-review",
       "--required-review-author",
       "chatgpt-codex-connector",
+      "--wait-head-review-ms",
+      "180000",
+      "--poll-interval-ms",
+      "10000",
       "--allow-missing-head-review",
       "--expected-head-oid",
       pr.head.sha,
