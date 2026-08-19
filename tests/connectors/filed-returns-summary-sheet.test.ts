@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   buildFiledReturnsSummarySheet,
   FiledReturnsSummaryTooLargeError,
-  FILED_RETURNS_SUMMARY_CONTEXT_PATH,
   FILED_RETURNS_SUMMARY_FORMAT_VERSION,
   FILED_RETURNS_SUMMARY_HEADERS,
   FILED_RETURNS_SUMMARY_SHEET_PATH,
@@ -74,10 +73,10 @@ describe("filed-return full-year summary sheet", () => {
     expect(dataCsv).not.toMatch(/E7|'20385193\.31/);
     expect(dataCsv).toContain('/surrounding_decoy/empty_text,"",');
 
-    const context = new TextDecoder().decode(summary.contextBytes);
+    const context = contextText(summary.contextRows);
     expect(context).toContain(FILED_RETURNS_SUMMARY_FORMAT_VERSION);
     expect(context).toContain(FILED_RETURNS_SUMMARY_SHEET_PATH);
-    expect(context).toContain(FILED_RETURNS_SUMMARY_CONTEXT_PATH);
+    expect(context).toContain("Context");
     expect(context.match(/00XXXXX0000X0Z0/g)).toHaveLength(1);
     expect(context.match(/AAAAA0000A/g)).toHaveLength(1);
     expect(context.match(/Synthetic Taxpayer Name/g)).toHaveLength(1);
@@ -137,7 +136,7 @@ describe("filed-return full-year summary sheet", () => {
 
     const data = new TextDecoder().decode(summary.dataBytes);
     expect(data).not.toContain("SYNTHETIC-ARN");
-    const context = new TextDecoder().decode(summary.contextBytes);
+    const context = contextText(summary.contextRows);
     expect(context).toContain("return_identity,GSTR-3B:April,ARN,/arn,SYNTHETIC-ARN-APRIL");
     expect(context).toContain("return_identity,GSTR-3B:May,ARN,/arn,SYNTHETIC-ARN-MAY");
     expect(context.match(/Synthetic Legal Name/g)).toHaveLength(1);
@@ -156,7 +155,7 @@ describe("filed-return full-year summary sheet", () => {
 
     const data = new TextDecoder().decode(summary.dataBytes);
     expect(data).not.toContain("Synthetic Authorized Signatory");
-    const context = new TextDecoder().decode(summary.contextBytes);
+    const context = contextText(summary.contextRows);
     expect(context.match(/Synthetic Authorized Signatory/g)).toHaveLength(1);
     expect(context).toContain(
       "taxpayer_identity,identity,Signatory,/authSig,Synthetic Authorized Signatory",
@@ -311,7 +310,7 @@ describe("filed-return full-year summary sheet", () => {
         value_number: "",
       }),
     ]);
-    expect(new TextDecoder().decode(summary.contextBytes)).toContain("GSTR-3B:/data/r3b");
+    expect(contextText(summary.contextRows)).toContain("GSTR-3B:/data/r3b");
     expect(summary).toMatchObject({ outcomeOnly: true, parsedPeriodCount: 0, rowCount: 1 });
   });
 
@@ -408,7 +407,7 @@ describe("filed-return full-year summary sheet", () => {
       outcome: "array-count-empty",
       value_number: "0",
     });
-    expect(new TextDecoder().decode(summary.contextBytes)).toContain("array-count-empty");
+    expect(contextText(summary.contextRows)).toContain("array-count-empty");
   });
 
   it("keeps duplicate place-of-supply values as a named count row", () => {
@@ -679,6 +678,22 @@ function jsonEntry(
 
 function rawJsonEntry(path: string, value: unknown) {
   return { path, bytes: new TextEncoder().encode(JSON.stringify(value)) };
+}
+
+function contextText(
+  rows: readonly {
+    contextType: string;
+    contextKey: string;
+    fieldLabel: string;
+    fieldPath: string;
+    valueText: string;
+  }[],
+): string {
+  return rows
+    .map((row) =>
+      [row.contextType, row.contextKey, row.fieldLabel, row.fieldPath, row.valueText].join(","),
+    )
+    .join("\n");
 }
 
 function firstLine(bytes: Uint8Array): string {

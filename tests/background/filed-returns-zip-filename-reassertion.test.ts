@@ -190,7 +190,7 @@ describe("filed-return ZIP filename reassertion", () => {
       ]),
     });
     expect(result.safeMessage).toContain(
-      "Pack saved the artifact files without a summary because summary generation failed.",
+      "Pack saved the artifact files without derived summary outputs because summary generation failed.",
     );
     expect(mocks.browser.downloads.download).toHaveBeenCalledOnce();
   });

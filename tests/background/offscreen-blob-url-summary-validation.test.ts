@@ -91,6 +91,7 @@ function request() {
     returnType: "GSTR-2B" as const,
     entryCount: 1,
     entries: [{ artifactType: "JSON" as const, entryNames: ["april-data.json"] }],
+    generatedAt: new Date("2026-08-19T12:00:00.000Z"),
     summaryPlan: [
       {
         artifactType: "JSON" as const,

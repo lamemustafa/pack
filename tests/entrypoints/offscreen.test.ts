@@ -24,6 +24,7 @@ describe("offscreen Blob URL entrypoint", () => {
 
   beforeEach(() => {
     vi.doUnmock("../../src/connectors/gst/filed-returns-summary-sheet");
+    vi.doUnmock("../../src/connectors/gst/filed-returns-full-year-workbook");
     vi.resetModules();
     listener = null;
     blobCounter = 0;
@@ -211,6 +212,7 @@ describe("offscreen Blob URL entrypoint", () => {
       target: PACK_OFFSCREEN_BLOB_URL_TARGET,
       payload: {
         requestId: "exact-plan-request",
+        generatedAt: "2026-08-19T12:00:00.000Z",
         ledgerId: TEST_LEDGER_ID,
         expectedReturnType: "GSTR-1",
         expectedEntryCount: 2,
@@ -421,6 +423,7 @@ describe("offscreen Blob URL entrypoint", () => {
       target: PACK_OFFSCREEN_BLOB_URL_TARGET,
       payload: {
         requestId: "zip-request",
+        generatedAt: "2026-08-19T12:00:00.000Z",
         ledgerId: TEST_LEDGER_ID,
         expectedReturnType: "GSTR-3B",
         expectedEntryCount: 1,
@@ -479,6 +482,7 @@ describe("offscreen Blob URL entrypoint", () => {
       target: PACK_OFFSCREEN_BLOB_URL_TARGET,
       payload: {
         requestId: "zip-json-request",
+        generatedAt: "2026-08-19T12:00:00.000Z",
         ledgerId: TEST_LEDGER_ID,
         expectedReturnType: "GSTR-2B",
         expectedEntryCount: 1,
@@ -550,6 +554,7 @@ describe("offscreen Blob URL entrypoint", () => {
       target: PACK_OFFSCREEN_BLOB_URL_TARGET,
       payload: {
         requestId: "full-year-summary-request",
+        generatedAt: "2026-08-19T12:00:00.000Z",
         ledgerId: TEST_FULL_YEAR_LEDGER_ID,
         expectedReturnType: "GSTR-3B",
         expectedEntryCount: 2,
@@ -587,7 +592,7 @@ describe("offscreen Blob URL entrypoint", () => {
       "april-data.json",
       "may-data.json",
       "full-year-summary.csv",
-      "full-year-summary-context.csv",
+      "full-year-workbook.xlsx",
     ]);
     const summary = new TextDecoder().decode(entries.get("full-year-summary.csv"));
     expect(summary.split("\n")[0]).toBe(
@@ -600,12 +605,11 @@ describe("offscreen Blob URL entrypoint", () => {
     expect(summary).not.toContain("700");
     expect(summary).not.toContain("22AAAAA0000A1Z5");
     expect(summary).not.toContain("Synthetic Example Taxpayer");
-    const context = new TextDecoder().decode(entries.get("full-year-summary-context.csv"));
-    expect(context).toContain("format_version,,,pack-full-year-summary-tidy-v4");
-    expect(context).toContain("financial_year,,,2026-27");
-    expect(context).toContain("GSTR-3B:/data/r3b");
-    expect(context.match(/22AAAAA0000A1Z5/g)).toHaveLength(1);
-    expect(context.match(/Synthetic Example Taxpayer/g)).toHaveLength(1);
+    const workbookBytes = Uint8Array.from(entries.get("full-year-workbook.xlsx")!);
+    const workbook = await extractStoredZipEntries(new Blob([workbookBytes.buffer]));
+    expect(new TextDecoder().decode(workbook.get("xl/workbook.xml"))).toContain(
+      '<sheet name="GSTR-3B Consolidated"',
+    );
   });
 
   it("adds only fixed outcome rows when a full-year run has no parseable JSON", async () => {
@@ -620,6 +624,7 @@ describe("offscreen Blob URL entrypoint", () => {
       target: PACK_OFFSCREEN_BLOB_URL_TARGET,
       payload: {
         requestId: "pdf-only-summary-request",
+        generatedAt: "2026-08-19T12:00:00.000Z",
         ledgerId: TEST_FULL_YEAR_LEDGER_ID,
         expectedReturnType: "GSTR-3B",
         expectedEntryCount: 1,
@@ -650,7 +655,6 @@ describe("offscreen Blob URL entrypoint", () => {
 
   it("keeps the artifact ZIP when summary generation throws", async () => {
     vi.doMock("../../src/connectors/gst/filed-returns-summary-sheet", () => ({
-      FILED_RETURNS_SUMMARY_CONTEXT_PATH: "full-year-summary-context.csv",
       FILED_RETURNS_SUMMARY_SHEET_PATH: "full-year-summary.csv",
       buildFiledReturnsSummarySheet: () => {
         throw new Error("synthetic taxpayer figure must not escape");
@@ -667,6 +671,7 @@ describe("offscreen Blob URL entrypoint", () => {
       target: PACK_OFFSCREEN_BLOB_URL_TARGET,
       payload: {
         requestId: "throwing-summary-request",
+        generatedAt: "2026-08-19T12:00:00.000Z",
         ledgerId: TEST_FULL_YEAR_LEDGER_ID,
         expectedReturnType: "GSTR-3B",
         expectedEntryCount: 1,
@@ -694,6 +699,52 @@ describe("offscreen Blob URL entrypoint", () => {
     expect(JSON.stringify(zip)).not.toContain("synthetic taxpayer figure");
   });
 
+  it("keeps the artifact ZIP with a named outcome when workbook generation throws", async () => {
+    vi.doMock("../../src/connectors/gst/filed-returns-full-year-workbook", () => ({
+      FILED_RETURNS_FULL_YEAR_WORKBOOK_PATH: "full-year-workbook.xlsx",
+      buildFiledReturnsFullYearWorkbook: () => {
+        throw new Error("synthetic workbook failure");
+      },
+    }));
+    await loadOffscreenEntrypoint();
+    opfsFiles.set(
+      `filed-return-packs/${TEST_FULL_YEAR_LEDGER_ID}/april-return.pdf`,
+      new Blob(["%PDF-1.7 April\n%%EOF\n"]),
+    );
+
+    const zip = await sendOffscreenMessage({
+      type: "PACK_OFFSCREEN_CREATE_FILED_RETURN_ZIP",
+      target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+      payload: {
+        requestId: "throwing-workbook-request",
+        generatedAt: "2026-08-19T12:00:00.000Z",
+        ledgerId: TEST_FULL_YEAR_LEDGER_ID,
+        expectedReturnType: "GSTR-3B",
+        expectedEntryCount: 1,
+        expectedEntries: [{ artifactType: "PDF", entryNames: ["april-return.pdf"] }],
+        summaryPlan: [
+          {
+            artifactType: "PDF",
+            entryNames: ["april-return.pdf"],
+            financialYear: "2026-27",
+            outcomeCategory: "staged",
+            period: "April",
+            returnType: "GSTR-3B",
+          },
+        ],
+      },
+    });
+
+    expect(zip).toMatchObject({
+      ok: true,
+      zipEntryCount: 1,
+      summary: { status: "failed", reasonCategory: "workbook-generation-failed" },
+    });
+    const archivedEntries = await extractStoredZipEntries(createdBlobs[0]!);
+    expect([...archivedEntries.keys()]).toEqual(["april-return.pdf"]);
+    expect(JSON.stringify(zip)).not.toContain("synthetic workbook failure");
+  });
+
   it("keeps the artifact ZIP when the derived summary exceeds its local limit", async () => {
     await loadOffscreenEntrypoint();
     opfsFiles.set(
@@ -711,6 +762,7 @@ describe("offscreen Blob URL entrypoint", () => {
       target: PACK_OFFSCREEN_BLOB_URL_TARGET,
       payload: {
         requestId: "oversized-summary-request",
+        generatedAt: "2026-08-19T12:00:00.000Z",
         ledgerId: TEST_FULL_YEAR_LEDGER_ID,
         expectedReturnType: "GSTR-2B",
         expectedEntryCount: 1,
@@ -812,6 +864,7 @@ describe("offscreen Blob URL entrypoint", () => {
       target: PACK_OFFSCREEN_BLOB_URL_TARGET,
       payload: {
         requestId: "gstr1-full-year-request",
+        generatedAt: "2026-08-19T12:00:00.000Z",
         ledgerId: TEST_FULL_YEAR_LEDGER_ID,
         expectedReturnType: "GSTR-1",
         expectedEntryCount: periods.length * 2,
@@ -837,6 +890,7 @@ describe("offscreen Blob URL entrypoint", () => {
       target: PACK_OFFSCREEN_BLOB_URL_TARGET,
       payload: {
         requestId: "oversized-zip-request",
+        generatedAt: "2026-08-19T12:00:00.000Z",
         ledgerId: TEST_LEDGER_ID,
         expectedReturnType: "GSTR-3B",
         expectedEntryCount: 1,
@@ -913,6 +967,7 @@ describe("offscreen Blob URL entrypoint", () => {
       target: PACK_OFFSCREEN_BLOB_URL_TARGET,
       payload: {
         requestId: "zip-request",
+        generatedAt: "2026-08-19T12:00:00.000Z",
         ledgerId: TEST_LEDGER_ID,
         expectedReturnType: "GSTR-2B",
         expectedEntryCount: 2,
@@ -974,6 +1029,7 @@ describe("offscreen Blob URL entrypoint", () => {
       target: PACK_OFFSCREEN_BLOB_URL_TARGET,
       payload: {
         requestId: "gstr2b-all-formats-request",
+        generatedAt: "2026-08-19T12:00:00.000Z",
         ledgerId: TEST_LEDGER_ID,
         expectedReturnType: "GSTR-2B",
         expectedEntryCount: 3,
@@ -1139,6 +1195,7 @@ describe("offscreen Blob URL entrypoint", () => {
       target: PACK_OFFSCREEN_BLOB_URL_TARGET,
       payload: {
         requestId: "exact-combined-request",
+        generatedAt: "2026-08-19T12:00:00.000Z",
         ledgerId,
         expectedReturnType: "GSTR-1",
         expectedEntryCount: 2,
@@ -1161,6 +1218,7 @@ describe("offscreen Blob URL entrypoint", () => {
       target: PACK_OFFSCREEN_BLOB_URL_TARGET,
       payload: {
         requestId: "exact-full-year-request",
+        generatedAt: "2026-08-19T12:00:00.000Z",
         ledgerId: TEST_FULL_YEAR_LEDGER_ID,
         expectedReturnType: "GSTR-3B",
         expectedEntryCount: 2,
