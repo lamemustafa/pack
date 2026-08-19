@@ -45,8 +45,9 @@ For each release candidate:
   Artifact bytes must not be written to extension storage, IndexedDB, Cache
   Storage, diagnostics, logs, telemetry, support bundles, or ComplyEaze systems.
 - Confirm each full-year ZIP assembly with eligible files attempts to add
-  `full-year-summary.csv` and `full-year-summary-context.csv`, both derived
-  locally from staged portal JSON already in that run. The data CSV must keep
+  `full-year-workbook.xlsx` and `full-year-summary.csv`, both derived locally
+  from staged portal JSON already in that run; the standalone context CSV must
+  be absent. The data CSV must keep
   the fixed tidy columns `period`, `return_type`, `artifact`, `outcome`,
   `field_label`, `field_path`, `value_text`, and `value_number`; keep canonical
   JSON Pointer paths. Confirm only the configured GSTR-3B summary arrays with
@@ -60,23 +61,33 @@ For each release candidate:
   envelope is removed before flattening (`/data/r3b` for GSTR-3B and `/data`
   for GSTR-1 and GSTR-2B), `field_path` is relative to it, and a missing or
   non-object envelope emits a `json-envelope-missing` outcome row. Expand JSON
-  numbers without rounding into plain decimal numeric cells; preserve strings
+  numbers without rounding into plain decimal `value_number` text; preserve strings
   and identifiers as text except for the existing apostrophe guard on
   formula-like text; and use fixed outcome rows where no parseable JSON exists.
   Labels must come only from the return-type map with recorded provenance that
   distinguishes two-period portal-PDF value cross-checks, form-vocabulary and
   row-order derivations that were not value-matched, and the pre-existing
-  offline-utility mappings; unmapped labels must stay empty. The context
-  CSV must contain the format token, run metadata, normalized-envelope and
-  value/flattening rules, recognized invariant taxpayer identity once, and
-  recognized filing identity once per return type and period; neither identity
-  class may appear in the data CSV. Both derived files must remain output-only ZIP entries: their bytes
+  offline-utility mappings; unmapped labels must stay empty. The workbook must
+  contain `About`, `GSTR-3B Consolidated`, `GSTR-9 Reference`, `Data`, and
+  `Context` in that order. Its statement must use twelve typed date columns,
+  numeric figure and arithmetic-total cells, blank cells for missing or
+  unparseable periods, only mapped Table 3.1 and Table 4 rows, the portal-dash
+  applicability set for Table 3.1, and all four Table 4 tax columns. Its
+  GSTR-9 sheet must remain sourced mapping only and must not compute GSTR-9.
+  `Data` must mirror the tidy rows, including unmapped paths and outcomes. The
+  `Context` sheet must contain the format token, run metadata,
+  normalized-envelope and value/flattening rules, recognized invariant taxpayer
+  identity once, and recognized filing identity once per return type and
+  period; neither identity class may appear in the data CSV or any other
+  workbook sheet. Both derived files must remain output-only ZIP entries: their bytes
   may be transient in extension-controlled memory before browser handoff and
   persist in the user's downloaded ZIP, but never write separately to OPFS,
   extension storage, diagnostics, logs, telemetry, support bundles, popup
-  content, or ComplyEaze systems. If generation fails, identity is inconsistent,
-  or the combined output exceeds its local size limit, confirm the artifact ZIP
-  still exports and the popup shows only a fixed categorical reason.
+  content, or ComplyEaze systems. If summary or workbook generation fails,
+  identity is inconsistent, or the combined output exceeds its local size
+  limit, confirm the artifact ZIP still exports and the popup shows only a
+  fixed categorical reason that distinguishes workbook generation failure from
+  no parseable data.
 - Confirm the source-build `target-bound-portal-click-blob` path is enabled only
   for a single-period GSTR-3B PDF after the exact target action and one matching
   browser download candidate. It must remain disabled for GSTR-1, GSTR-2B,

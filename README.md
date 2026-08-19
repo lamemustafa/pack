@@ -72,7 +72,10 @@ release.
 
 During each full-year ZIP assembly with eligible files, Pack attempts to add two
 files derived from the staged portal JSON already in that run:
-`full-year-summary.csv` and `full-year-summary-context.csv`. The data CSV has the
+`full-year-workbook.xlsx` and `full-year-summary.csv`. The workbook is the primary
+working-paper output. Its sheets, in order, are `About`, `GSTR-3B Consolidated`,
+`GSTR-9 Reference`, `Data`, and `Context`; the former standalone context CSV is
+not emitted. The data CSV has the
 fixed columns `period`, `return_type`, `artifact`, `outcome`, `field_label`,
 `field_path`, `value_text`, and `value_number`, with one row per period and
 flattened field. JSON numbers are expanded without rounding into plain decimal
@@ -98,14 +101,24 @@ recorded provenance. The map distinguishes labels value-cross-checked against
 two portal PDF periods, labels derived only from form vocabulary and row order,
 and the pre-existing offline-utility mappings; unmapped labels stay empty.
 
-The context CSV records the format version, run metadata, normalized envelope,
-flattening and value rules, recognized invariant taxpayer identity once, and
-recognized filing identity once per return type and period rather than repeating
-either through the data rows. Both derived files persist only inside the user-requested
-downloaded ZIP. A run with eligible files but no parseable JSON, including a PDF-only run,
-receives outcome-only data plus its context file. If generation fails, identity
-is inconsistent, or the combined summary exceeds its local size limit, Pack
-still exports the artifact ZIP and reports a fixed summary reason.
+The workbook's consolidated statement includes only mapped GSTR-3B Table 3.1
+and Table 4 lines. Its twelve financial-year month headers are date cells,
+statement figures and arithmetic totals are numeric cells, and a missing or
+unparseable period stays blank rather than becoming zero. Table 3.1 rows follow
+the combinations displayed as figures rather than dashes on the portal form;
+Table 4 retains all four tax columns. The `GSTR-9 Reference` sheet contains only
+sourced, financial-year-specific mapping notes and does not calculate GSTR-9.
+The `Data` sheet mirrors the tidy rows, including unmapped paths and outcome
+rows. The `Context` sheet records the format version, run metadata, normalized
+envelope, flattening and value rules, recognized invariant taxpayer identity
+once, and recognized filing identity once per return type and period. Identity
+does not appear on the other sheets or in the data CSV. Both derived files
+persist only inside the user-requested downloaded ZIP. A run with eligible
+files but no parseable JSON, including a PDF-only run, receives a workbook with
+blank statement cells and an outcome-only data CSV. If summary or workbook
+generation fails, identity is inconsistent, or the combined derived output
+exceeds its local size limit, Pack still exports the artifact ZIP and reports a
+fixed categorical reason.
 
 The current source build correlates a download to its target through one
 fail-closed evidence rule set, and that rule set is shared rather than
@@ -300,7 +313,7 @@ The Options page "Clear local Pack data" control removes the local keys above
 and clears Pack session storage. Pack does not store GST Portal credentials,
 OTPs, CAPTCHA values, cookies, GSTIN/PAN, taxpayer names, portal HTML, raw
 URLs/referrers, local download paths, filenames, or raw network captures.
-Generated ZIP bytes and the two derived full-year summary CSV files exist only
+Generated ZIP bytes and the derived full-year workbook and tidy CSV exist only
 transiently in extension-controlled memory before browser handoff. The derived files
 then persist only as entries in the user-requested downloaded ZIP; they are not
 separately written to extension storage or OPFS. Source PDF, spreadsheet and
