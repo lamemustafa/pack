@@ -14,9 +14,14 @@ import { FILED_RETURNS_MONTHS } from "../../connectors/gst/filed-returns-scope";
 import { createZip, type ZipEntry } from "./zip";
 import {
   buildFiledReturnsSummarySheet,
-  FILED_RETURNS_SUMMARY_CONTEXT_PATH,
   FILED_RETURNS_SUMMARY_SHEET_PATH,
 } from "../../connectors/gst/filed-returns-summary-sheet";
+import {
+  buildFiledReturnsFullYearWorkbook,
+  FILED_RETURNS_FULL_YEAR_WORKBOOK_PATH,
+} from "../../connectors/gst/filed-returns-full-year-workbook";
+import { PACK_PRODUCT_VERSION } from "../../extension/version";
+import { XlsxSizeLimitError } from "../../core/xlsx";
 import type { PackOffscreenFiledReturnSummaryResult } from "../../connectors/gst/offscreen-blob-url";
 import {
   dataUrlChunksToDecoded,
@@ -93,11 +98,12 @@ async function handleMessage(
           errorCategory: "zip-invalid-entry",
         };
       }
+      const generatedAt = new Date(message.payload.generatedAt);
       const summary = message.payload.summaryPlan
-        ? createSummaryEntry(message.payload.summaryPlan, entries, stagedInputBytes)
+        ? createSummaryEntry(message.payload.summaryPlan, entries, stagedInputBytes, generatedAt)
         : null;
       const archiveEntries = summary?.entries ? [...entries, ...summary.entries] : entries;
-      const zipBytes = createZip(archiveEntries);
+      const zipBytes = createZip(archiveEntries, generatedAt);
       const zipBuffer = new ArrayBuffer(zipBytes.byteLength);
       new Uint8Array(zipBuffer).set(zipBytes);
       const zipBlob = new Blob([zipBuffer], { type: "application/zip" });
@@ -193,6 +199,7 @@ function createSummaryEntry(
   plan: Parameters<typeof buildFiledReturnsSummarySheet>[0],
   entries: readonly ZipEntry[],
   stagedInputBytes: number,
+  generatedAt: Date,
 ): { entries?: [ZipEntry, ZipEntry]; result: PackOffscreenFiledReturnSummaryResult } {
   try {
     const summarySourcePaths = new Set(
@@ -209,14 +216,34 @@ function createSummaryEntry(
     }
     const summary = buildFiledReturnsSummarySheet(plan, entries, MAX_SUMMARY_SHEET_BYTES);
     const remainingZipBudget = Math.max(0, MAX_ZIP_INPUT_BYTES - stagedInputBytes);
-    const summaryByteLength = summary.dataBytes.byteLength + summary.contextBytes.byteLength;
+    const workbookBudget = Math.min(
+      Math.max(0, MAX_SUMMARY_SHEET_BYTES - summary.dataBytes.byteLength),
+      Math.max(0, remainingZipBudget - summary.dataBytes.byteLength),
+    );
+    let workbookBytes: Uint8Array;
+    try {
+      workbookBytes = buildFiledReturnsFullYearWorkbook(summary, plan, {
+        generatedAt,
+        maxOutputBytes: workbookBudget,
+        packVersion: PACK_PRODUCT_VERSION,
+      });
+    } catch (error) {
+      return {
+        result: {
+          status: "failed",
+          reasonCategory:
+            error instanceof XlsxSizeLimitError ? "too-large" : "workbook-generation-failed",
+        },
+      };
+    }
+    const summaryByteLength = summary.dataBytes.byteLength + workbookBytes.byteLength;
     if (summaryByteLength > MAX_SUMMARY_SHEET_BYTES || summaryByteLength > remainingZipBudget) {
       return { result: { status: "failed", reasonCategory: "too-large" } };
     }
     return {
       entries: [
         { path: FILED_RETURNS_SUMMARY_SHEET_PATH, bytes: summary.dataBytes },
-        { path: FILED_RETURNS_SUMMARY_CONTEXT_PATH, bytes: summary.contextBytes },
+        { path: FILED_RETURNS_FULL_YEAR_WORKBOOK_PATH, bytes: workbookBytes },
       ],
       result: {
         status: "included",

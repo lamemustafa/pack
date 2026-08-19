@@ -101,10 +101,12 @@ export async function exportStagedFiledReturnsZip({
       safeMessage: zipFailedMessage,
     };
   }
+  const generatedAt = new Date();
   const zip = await createOffscreenFiledReturnZipUrl(ledgerId, {
     returnType: scope.returnType,
     entryCount: expectedZipEntryCount,
     entries: expectedZipEntries,
+    generatedAt,
     ...(summaryPlan ? { summaryPlan } : {}),
   });
   if (zip.status !== "created") {

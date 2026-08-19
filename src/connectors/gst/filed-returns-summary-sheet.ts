@@ -27,7 +27,6 @@ import {
 import { FILED_RETURNS_MONTHS, type FiledReturnsMonth } from "./filed-returns-scope";
 
 export const FILED_RETURNS_SUMMARY_SHEET_PATH = "full-year-summary.csv";
-export const FILED_RETURNS_SUMMARY_CONTEXT_PATH = "full-year-summary-context.csv";
 export const FILED_RETURNS_SUMMARY_FORMAT_VERSION = "pack-full-year-summary-tidy-v4";
 export const MAX_FILED_RETURNS_SUMMARY_ROWS = 100_000;
 export const FILED_RETURNS_SUMMARY_ARRAY_RULE = `Configured return-summary arrays with at most ${MAX_FILED_RETURNS_SUMMARY_ARRAY_EXPANSION_ELEMENTS} elements expand only when every element shares a unique non-empty discriminator selected in order from ty, pos; expanded elements are keyed by the discriminator and emit no count row. Empty arrays emit one numeric count row with array-count-empty; every other array emits one numeric count row whose outcome records why it was not expanded.`;
@@ -38,7 +37,7 @@ export const FILED_RETURNS_SUMMARY_TEXT_RULE =
 export const FILED_RETURNS_SUMMARY_LABEL_RULE =
   "field_label is populated only by the return-type label map with recorded official-source provenance; otherwise it is empty and field_path remains canonical.";
 export const FILED_RETURNS_SUMMARY_IDENTITY_RULE =
-  "Recognized identity fields are removed from the data CSV. Invariant taxpayer identity is written once in this context CSV; filing identity is written once per return type and period; inconsistent invariant identity values fail summary generation.";
+  "Recognized identity fields are removed from the data CSV and Data sheet. Invariant taxpayer identity is written once on the Context sheet; filing identity is written once per return type and period; inconsistent invariant identity values fail summary generation.";
 
 export const FILED_RETURNS_SUMMARY_HEADERS = [
   "period",
@@ -76,11 +75,31 @@ export interface FiledReturnsSummarySourceEntry {
 }
 
 export interface FiledReturnsSummarySheet {
-  contextBytes: Uint8Array;
+  contextRows: FiledReturnsSummaryContextRow[];
   dataBytes: Uint8Array;
+  dataRows: FiledReturnsSummaryDataRow[];
   outcomeOnly: boolean;
   parsedPeriodCount: number;
   rowCount: number;
+}
+
+export interface FiledReturnsSummaryDataRow {
+  artifact: FiledReturnsConcreteArtifactType;
+  fieldLabel: string;
+  fieldPath: string;
+  outcome: string;
+  period: FiledReturnsMonth;
+  returnType: FiledReturnsReturnType;
+  valueNumber?: string;
+  valueText?: string;
+}
+
+export interface FiledReturnsSummaryContextRow {
+  contextKey: string;
+  contextType: "run_metadata" | "format_rule" | "taxpayer_identity" | "return_identity";
+  fieldLabel: string;
+  fieldPath: string;
+  valueText: string;
 }
 
 export class FiledReturnsSummaryTooLargeError extends Error {
@@ -150,7 +169,7 @@ export function buildFiledReturnsSummarySheet(
 
   rejectForbiddenFields(parsedEntries);
   const identities = collectIdentityValues(parsedEntries);
-  const dataRows: Record<string, CsvCellValue>[] = [];
+  const dataRows: FiledReturnsSummaryDataRow[] = [];
   for (const parsed of parsedEntries) {
     const fieldLeaves = parsed.leaves.filter(
       (leaf) => filedReturnsSummaryIdentity(leaf.path) === null,
@@ -162,18 +181,13 @@ export function buildFiledReturnsSummarySheet(
     for (const leaf of fieldLeaves) {
       dataRows.push({
         period: parsed.planned.period,
-        return_type: parsed.planned.returnType,
+        returnType: parsed.planned.returnType,
         artifact: parsed.planned.artifactType,
         outcome: leaf.arrayCountReason ?? parsed.outcome,
-        field_label: filedReturnsSummaryFieldLabel(parsed.planned.returnType, leaf.path),
-        field_path: leaf.path,
-        value_text:
-          leaf.valueKind === "text"
-            ? leaf.value === ""
-              ? csvEmptyString()
-              : leaf.value
-            : undefined,
-        value_number: leaf.valueKind === "number" ? csvNumberText(leaf.value) : undefined,
+        fieldLabel: filedReturnsSummaryFieldLabel(parsed.planned.returnType, leaf.path),
+        fieldPath: leaf.path,
+        ...(leaf.valueKind === "text" ? { valueText: leaf.value } : {}),
+        ...(leaf.valueKind === "number" ? { valueNumber: leaf.value } : {}),
       });
       if (dataRows.length > MAX_FILED_RETURNS_SUMMARY_ROWS) {
         throw new FiledReturnsSummaryTooLargeError();
@@ -182,17 +196,15 @@ export function buildFiledReturnsSummarySheet(
   }
 
   try {
-    const dataCsv = toCsv(dataRows, FILED_RETURNS_SUMMARY_HEADERS, {
+    const dataCsv = toCsv(dataRows.map(dataCsvRow), FILED_RETURNS_SUMMARY_HEADERS, {
       maxUtf8Bytes: maxOutputBytes,
     });
     const dataBytes = new TextEncoder().encode(dataCsv);
     const contextRows = buildContextRows(sortedPlan, identities);
-    const contextCsv = toCsv(contextRows, FILED_RETURNS_SUMMARY_CONTEXT_HEADERS, {
-      maxUtf8Bytes: Math.max(0, maxOutputBytes - dataBytes.byteLength),
-    });
     return {
-      contextBytes: new TextEncoder().encode(contextCsv),
+      contextRows,
       dataBytes,
+      dataRows,
       outcomeOnly: parsedPeriods.size === 0,
       parsedPeriodCount: parsedPeriods.size,
       rowCount: dataRows.length,
@@ -275,23 +287,21 @@ function collectIdentityValues(parsedEntries: readonly ParsedPlanEntry[]): Summa
 function outcomeRow(
   planned: FiledReturnsSummaryPlanEntry,
   outcome: string,
-): Record<string, CsvCellValue> {
+): FiledReturnsSummaryDataRow {
   return {
     period: planned.period,
-    return_type: planned.returnType,
+    returnType: planned.returnType,
     artifact: planned.artifactType,
     outcome,
-    field_label: "",
-    field_path: OUTCOME_FIELD_PATH,
-    value_text: undefined,
-    value_number: undefined,
+    fieldLabel: "",
+    fieldPath: OUTCOME_FIELD_PATH,
   };
 }
 
 function buildContextRows(
   plan: readonly FiledReturnsSummaryPlanEntry[],
   identityValues: readonly SummaryIdentityValue[],
-): Record<string, CsvCellValue>[] {
+): FiledReturnsSummaryContextRow[] {
   const financialYears = sortedUnique(plan.map((entry) => entry.financialYear));
   if (financialYears.length !== 1) {
     throw new SyntaxError("Filed-return summary plan must have one financial year.");
@@ -299,7 +309,7 @@ function buildContextRows(
   const metadata = [
     ["format_version", FILED_RETURNS_SUMMARY_FORMAT_VERSION],
     ["data_file", FILED_RETURNS_SUMMARY_SHEET_PATH],
-    ["context_file", FILED_RETURNS_SUMMARY_CONTEXT_PATH],
+    ["context_sheet", "Context"],
     ["financial_year", financialYears[0]!],
     ["return_types", sortedUnique(plan.map((entry) => entry.returnType)).join("|")],
     ["artifacts", sortedUnique(plan.map((entry) => entry.artifactType)).join("|")],
@@ -326,11 +336,11 @@ function buildContextRows(
         compareCodeUnits(left.label, right.label),
     )
     .map((identity) => ({
-      context_type: identity.contextType,
-      context_key: identity.contextKey,
-      field_label: identity.label,
-      field_path: identity.fieldPath,
-      value_text: identity.value,
+      contextType: identity.contextType,
+      contextKey: identity.contextKey,
+      fieldLabel: identity.label,
+      fieldPath: identity.fieldPath,
+      valueText: identity.value,
     }));
   return [...metadata, ...rules, ...identities];
 }
@@ -350,13 +360,26 @@ function contextRow(
   contextType: "run_metadata" | "format_rule",
   contextKey: string,
   valueText: string,
-): Record<string, CsvCellValue> {
+): FiledReturnsSummaryContextRow {
   return {
-    context_type: contextType,
-    context_key: contextKey,
-    field_label: "",
-    field_path: "",
-    value_text: valueText,
+    contextType,
+    contextKey,
+    fieldLabel: "",
+    fieldPath: "",
+    valueText,
+  };
+}
+
+function dataCsvRow(row: FiledReturnsSummaryDataRow): Record<string, CsvCellValue> {
+  return {
+    period: row.period,
+    return_type: row.returnType,
+    artifact: row.artifact,
+    outcome: row.outcome,
+    field_label: row.fieldLabel,
+    field_path: row.fieldPath,
+    value_text: row.valueText === "" ? csvEmptyString() : row.valueText,
+    value_number: row.valueNumber === undefined ? undefined : csvNumberText(row.valueNumber),
   };
 }
 

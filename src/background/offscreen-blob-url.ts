@@ -95,6 +95,7 @@ export async function createOffscreenFiledReturnZipUrl(
     returnType: FiledReturnsReturnType;
     entryCount: number;
     entries: readonly PackOffscreenFiledReturnZipExpectedEntry[];
+    generatedAt: Date;
     summaryPlan?: readonly FiledReturnsSummaryPlanEntry[];
   },
 ): Promise<OffscreenFiledReturnZipResult> {
@@ -109,6 +110,7 @@ export async function createOffscreenFiledReturnZipUrl(
       expectedReturnType: expected.returnType,
       expectedEntryCount: expected.entryCount,
       expectedEntries: [...expected.entries],
+      generatedAt: expected.generatedAt.toISOString(),
       ...(expected.summaryPlan ? { summaryPlan: [...expected.summaryPlan] } : {}),
     },
   });
@@ -363,7 +365,9 @@ function isSummaryResult(
   if (record.status === "failed") {
     return (
       hasOnlyKeys(record, ["reasonCategory", "status"]) &&
-      (record.reasonCategory === "generation-failed" || record.reasonCategory === "too-large")
+      (record.reasonCategory === "generation-failed" ||
+        record.reasonCategory === "too-large" ||
+        record.reasonCategory === "workbook-generation-failed")
     );
   }
   const maximumParsedPeriodCount = new Set(

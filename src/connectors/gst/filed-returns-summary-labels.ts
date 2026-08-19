@@ -11,6 +11,14 @@ export interface FiledReturnsSummaryFieldLabel {
     officialSourceLocation: string;
     reviewedOn: string;
   };
+  statement?: FiledReturnsStatementLineItem;
+}
+
+export interface FiledReturnsStatementLineItem {
+  sectionCaption: string;
+  sectionOrder: number;
+  shortLabel: "Taxable Value" | "Value" | "IGST" | "CGST" | "SGST" | "Cess";
+  subrowOrder: number;
 }
 
 type FiledReturnsSummaryFieldLabelMap = Readonly<Record<string, FiledReturnsSummaryFieldLabel>>;
@@ -28,6 +36,23 @@ const COMPONENT_LABELS: Record<ComponentKey, string> = {
   camt: "Central tax",
   samt: "State/UT tax",
   csamt: "Cess",
+};
+const STATEMENT_COMPONENT_LABELS: Record<
+  ComponentKey,
+  FiledReturnsStatementLineItem["shortLabel"]
+> = {
+  txval: "Taxable Value",
+  iamt: "IGST",
+  camt: "CGST",
+  samt: "SGST",
+  csamt: "Cess",
+};
+const STATEMENT_COMPONENT_ORDER: Record<ComponentKey, number> = {
+  txval: 0,
+  iamt: 1,
+  camt: 2,
+  samt: 3,
+  csamt: 4,
 };
 
 function gstr3bLabel(
@@ -76,18 +101,44 @@ function componentEntries(
   table: string,
   components: readonly ComponentKey[],
   provenance: "confirmed" | "vocabulary",
+  statementSectionOrder?: number,
 ): Record<string, FiledReturnsSummaryFieldLabel> {
   return Object.fromEntries(
     components.map((component) => {
       const label = `${labelPrefix} — ${COMPONENT_LABELS[component]}`;
       return [
         `${basePath}/${component}`,
-        provenance === "confirmed"
-          ? valueConfirmedLabel(label, table)
-          : vocabularyDerivedLabel(label, table),
+        withOptionalStatement(
+          provenance === "confirmed"
+            ? valueConfirmedLabel(label, table)
+            : vocabularyDerivedLabel(label, table),
+          labelPrefix,
+          component,
+          statementSectionOrder,
+        ),
       ];
     }),
   );
+}
+
+function withOptionalStatement(
+  entry: FiledReturnsSummaryFieldLabel,
+  sectionCaption: string,
+  component: ComponentKey,
+  sectionOrder?: number,
+  shortLabel = STATEMENT_COMPONENT_LABELS[component],
+): FiledReturnsSummaryFieldLabel {
+  return sectionOrder === undefined
+    ? entry
+    : {
+        ...entry,
+        statement: {
+          sectionCaption,
+          sectionOrder,
+          shortLabel,
+          subrowOrder: STATEMENT_COMPONENT_ORDER[component],
+        },
+      };
 }
 
 const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
@@ -97,21 +148,37 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "3.1(a)",
     ["txval", "camt", "iamt", "samt"],
     "confirmed",
+    0,
   ),
-  "/sup_details/osup_det/csamt": gstr3bLabel(
-    "Table 3.1(a) Outward taxable supplies (other than zero rated, nil rated and exempted) — Cess",
-    "3.1(a)",
-    "osup_det",
+  "/sup_details/osup_det/csamt": withOptionalStatement(
+    gstr3bLabel(
+      "Table 3.1(a) Outward taxable supplies (other than zero rated, nil rated and exempted) — Cess",
+      "3.1(a)",
+      "osup_det",
+    ),
+    "Table 3.1(a) Outward taxable supplies (other than zero rated, nil rated and exempted)",
+    "csamt",
+    0,
   ),
-  "/sup_details/osup_zero/txval": gstr3bLabel(
-    "Table 3.1(b) Zero-rated outward taxable supplies — Taxable value",
-    "3.1(b)",
-    "osup_zero",
+  "/sup_details/osup_zero/txval": withOptionalStatement(
+    gstr3bLabel(
+      "Table 3.1(b) Zero-rated outward taxable supplies — Taxable value",
+      "3.1(b)",
+      "osup_zero",
+    ),
+    "Table 3.1(b) Outward taxable supplies (zero rated)",
+    "txval",
+    1,
   ),
-  "/sup_details/osup_zero/iamt": gstr3bLabel(
-    "Table 3.1(b) Zero-rated outward taxable supplies — Integrated tax",
-    "3.1(b)",
-    "osup_zero",
+  "/sup_details/osup_zero/iamt": withOptionalStatement(
+    gstr3bLabel(
+      "Table 3.1(b) Zero-rated outward taxable supplies — Integrated tax",
+      "3.1(b)",
+      "osup_zero",
+    ),
+    "Table 3.1(b) Outward taxable supplies (zero rated)",
+    "iamt",
+    1,
   ),
   "/sup_details/osup_zero/camt": gstr3bLabel(
     "Table 3.1(b) Zero-rated outward taxable supplies — Central tax",
@@ -123,15 +190,22 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "3.1(b)",
     "osup_zero",
   ),
-  "/sup_details/osup_zero/csamt": gstr3bLabel(
-    "Table 3.1(b) Zero-rated outward taxable supplies — Cess",
-    "3.1(b)",
-    "osup_zero",
+  "/sup_details/osup_zero/csamt": withOptionalStatement(
+    gstr3bLabel("Table 3.1(b) Zero-rated outward taxable supplies — Cess", "3.1(b)", "osup_zero"),
+    "Table 3.1(b) Outward taxable supplies (zero rated)",
+    "csamt",
+    1,
   ),
-  "/sup_details/osup_nil_exmp/txval": gstr3bLabel(
-    "Table 3.1(c) Nil-rated and exempt outward supplies — Value",
-    "3.1(c)",
-    "osup_nil_exmp",
+  "/sup_details/osup_nil_exmp/txval": withOptionalStatement(
+    gstr3bLabel(
+      "Table 3.1(c) Nil-rated and exempt outward supplies — Value",
+      "3.1(c)",
+      "osup_nil_exmp",
+    ),
+    "Table 3.1(c) Other outward supplies (Nil rated, exempted)",
+    "txval",
+    2,
+    "Value",
   ),
   ...componentEntries(
     "/sup_details/osup_nil_exmp",
@@ -140,34 +214,61 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     ["iamt", "camt", "samt", "csamt"],
     "vocabulary",
   ),
-  "/sup_details/isup_rev/txval": valueConfirmedLabel(
-    "Table 3.1(d) Inward supplies liable to reverse charge — Taxable value",
-    "3.1(d)",
+  "/sup_details/isup_rev/txval": withOptionalStatement(
+    valueConfirmedLabel(
+      "Table 3.1(d) Inward supplies liable to reverse charge — Taxable value",
+      "3.1(d)",
+    ),
+    "Table 3.1(d) Inward supplies (liable to reverse charge)",
+    "txval",
+    3,
   ),
-  "/sup_details/isup_rev/iamt": gstr3bLabel(
-    "Table 3.1(d) Inward supplies liable to reverse charge — Integrated tax",
-    "3.1(d)",
-    "isup_rev",
+  "/sup_details/isup_rev/iamt": withOptionalStatement(
+    gstr3bLabel(
+      "Table 3.1(d) Inward supplies liable to reverse charge — Integrated tax",
+      "3.1(d)",
+      "isup_rev",
+    ),
+    "Table 3.1(d) Inward supplies (liable to reverse charge)",
+    "iamt",
+    3,
   ),
-  "/sup_details/isup_rev/camt": gstr3bLabel(
-    "Table 3.1(d) Inward supplies liable to reverse charge — Central tax",
-    "3.1(d)",
-    "isup_rev",
+  "/sup_details/isup_rev/camt": withOptionalStatement(
+    gstr3bLabel(
+      "Table 3.1(d) Inward supplies liable to reverse charge — Central tax",
+      "3.1(d)",
+      "isup_rev",
+    ),
+    "Table 3.1(d) Inward supplies (liable to reverse charge)",
+    "camt",
+    3,
   ),
-  "/sup_details/isup_rev/samt": gstr3bLabel(
-    "Table 3.1(d) Inward supplies liable to reverse charge — State/UT tax",
-    "3.1(d)",
-    "isup_rev",
+  "/sup_details/isup_rev/samt": withOptionalStatement(
+    gstr3bLabel(
+      "Table 3.1(d) Inward supplies liable to reverse charge — State/UT tax",
+      "3.1(d)",
+      "isup_rev",
+    ),
+    "Table 3.1(d) Inward supplies (liable to reverse charge)",
+    "samt",
+    3,
   ),
-  "/sup_details/isup_rev/csamt": gstr3bLabel(
-    "Table 3.1(d) Inward supplies liable to reverse charge — Cess",
-    "3.1(d)",
-    "isup_rev",
+  "/sup_details/isup_rev/csamt": withOptionalStatement(
+    gstr3bLabel(
+      "Table 3.1(d) Inward supplies liable to reverse charge — Cess",
+      "3.1(d)",
+      "isup_rev",
+    ),
+    "Table 3.1(d) Inward supplies (liable to reverse charge)",
+    "csamt",
+    3,
   ),
-  "/sup_details/osup_nongst/txval": gstr3bLabel(
-    "Table 3.1(e) Non-GST outward supplies — Value",
-    "3.1(e)",
-    "osup_nongst",
+  "/sup_details/osup_nongst/txval": withOptionalStatement(
+    gstr3bLabel("Table 3.1(e) Non-GST outward supplies — Value", "3.1(e)", "osup_nongst"),
+    "Table 3.1(e) Non-GST outward supplies",
+    "txval",
+    4,
+    "Value",
   ),
   ...componentEntries(
     "/sup_details/osup_nongst",
@@ -182,6 +283,7 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "4(A)(5)",
     ["camt", "iamt", "samt"],
     "confirmed",
+    9,
   ),
   ...componentEntries(
     "/itc_elg/itc_avl/OTH",
@@ -189,6 +291,7 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "4(A)(5)",
     ["csamt"],
     "vocabulary",
+    9,
   ),
   ...componentEntries(
     "/itc_elg/itc_net",
@@ -196,6 +299,7 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "4(C)",
     ["camt", "iamt", "samt"],
     "confirmed",
+    12,
   ),
   ...componentEntries(
     "/itc_elg/itc_net",
@@ -203,6 +307,7 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "4(C)",
     ["csamt"],
     "vocabulary",
+    12,
   ),
   ...componentEntries(
     "/itc_elg/itc_avl/IMPG",
@@ -210,6 +315,7 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "4(A)(1)",
     ["camt", "iamt", "samt", "csamt"],
     "vocabulary",
+    5,
   ),
   ...componentEntries(
     "/itc_elg/itc_avl/IMPS",
@@ -217,6 +323,7 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "4(A)(2)",
     ["camt", "iamt", "samt", "csamt"],
     "vocabulary",
+    6,
   ),
   ...componentEntries(
     "/itc_elg/itc_avl/ISRC",
@@ -224,6 +331,7 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "4(A)(3)",
     ["camt", "iamt", "samt", "csamt"],
     "vocabulary",
+    7,
   ),
   ...componentEntries(
     "/itc_elg/itc_avl/ISD",
@@ -231,6 +339,7 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "4(A)(4)",
     ["camt", "iamt", "samt", "csamt"],
     "vocabulary",
+    8,
   ),
   ...componentEntries(
     "/itc_elg/itc_rev/RUL",
@@ -238,6 +347,7 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "4(B)(1)",
     ["camt", "iamt", "samt", "csamt"],
     "vocabulary",
+    10,
   ),
   ...componentEntries(
     "/itc_elg/itc_rev/OTH",
@@ -245,6 +355,7 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "4(B)(2)",
     ["camt", "iamt", "samt", "csamt"],
     "vocabulary",
+    11,
   ),
   ...componentEntries(
     "/itc_elg/itc_inelg/RUL",
@@ -252,6 +363,7 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "4(D)(1)",
     ["camt", "iamt", "samt", "csamt"],
     "vocabulary",
+    13,
   ),
   ...componentEntries(
     "/itc_elg/itc_inelg/OTH",
@@ -259,6 +371,7 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "4(D)(2)",
     ["camt", "iamt", "samt", "csamt"],
     "vocabulary",
+    14,
   ),
 };
 
@@ -275,6 +388,17 @@ export function filedReturnsSummaryFieldLabel(
   path: string,
 ): string {
   return FILED_RETURNS_SUMMARY_FIELD_LABELS_BY_RETURN_TYPE[returnType][path]?.label ?? "";
+}
+
+export function filedReturnsStatementLineItems(): Array<
+  FiledReturnsStatementLineItem & { fieldPath: string }
+> {
+  return Object.entries(GSTR3B_LABELS)
+    .flatMap(([fieldPath, entry]) => (entry.statement ? [{ fieldPath, ...entry.statement }] : []))
+    .sort(
+      (left, right) =>
+        left.sectionOrder - right.sectionOrder || left.subrowOrder - right.subrowOrder,
+    );
 }
 
 export function filedReturnsSummaryIdentityLabel(path: string): string | null {

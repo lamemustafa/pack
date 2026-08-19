@@ -48,6 +48,7 @@ export interface PackOffscreenCreateFiledReturnZipMessage {
     expectedReturnType: FiledReturnsReturnType;
     expectedEntryCount: number;
     expectedEntries: PackOffscreenFiledReturnZipExpectedEntry[];
+    generatedAt: string;
     summaryPlan?: FiledReturnsSummaryPlanEntry[];
   };
 }
@@ -143,7 +144,7 @@ export type PackOffscreenFiledReturnSummaryResult =
     }
   | {
       status: "failed";
-      reasonCategory: "generation-failed" | "too-large";
+      reasonCategory: "generation-failed" | "too-large" | "workbook-generation-failed";
     };
 
 export function isPackOffscreenBlobUrlMessageShape(
@@ -184,11 +185,13 @@ export function isPackOffscreenBlobUrlMessageShape(
         "expectedEntries",
         "expectedEntryCount",
         "expectedReturnType",
+        "generatedAt",
         "ledgerId",
         "requestId",
         "summaryPlan",
       ]) &&
       isBoundedString(input.payload.ledgerId, 1, 120) &&
+      isIsoTimestamp(input.payload.generatedAt) &&
       isFiledReturnsReturnType(input.payload.expectedReturnType) &&
       typeof expectedEntryCount === "number" &&
       Number.isInteger(expectedEntryCount) &&
@@ -256,6 +259,12 @@ function isSummaryOutcomeCategory(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function isIsoTimestamp(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) && new Date(parsed).toISOString() === value;
 }
 
 function isBoundedString(value: unknown, minLength: number, maxLength: number): value is string {

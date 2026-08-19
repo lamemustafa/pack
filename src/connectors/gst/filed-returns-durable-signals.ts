@@ -621,7 +621,9 @@ export function isDurableFiledReturnsSignal(signal: string): boolean {
     return true;
   }
   if (
-    /^full-fiscal-year-summary-error:(?:generation-failed|response-invalid|too-large)$/.test(signal)
+    /^full-fiscal-year-summary-error:(?:generation-failed|response-invalid|too-large|workbook-generation-failed)$/.test(
+      signal,
+    )
   ) {
     return true;
   }
