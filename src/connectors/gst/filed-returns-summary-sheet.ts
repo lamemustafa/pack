@@ -28,9 +28,9 @@ import { FILED_RETURNS_MONTHS, type FiledReturnsMonth } from "./filed-returns-sc
 
 export const FILED_RETURNS_SUMMARY_SHEET_PATH = "full-year-summary.csv";
 export const FILED_RETURNS_SUMMARY_CONTEXT_PATH = "full-year-summary-context.csv";
-export const FILED_RETURNS_SUMMARY_FORMAT_VERSION = "pack-full-year-summary-tidy-v3";
+export const FILED_RETURNS_SUMMARY_FORMAT_VERSION = "pack-full-year-summary-tidy-v4";
 export const MAX_FILED_RETURNS_SUMMARY_ROWS = 100_000;
-export const FILED_RETURNS_SUMMARY_ARRAY_RULE = `Configured return-summary arrays with at most ${MAX_FILED_RETURNS_SUMMARY_ARRAY_EXPANSION_ELEMENTS} elements expand only when every element shares a unique non-empty discriminator selected in order from ty, pos; expanded elements are keyed by the discriminator and emit no count row. Every other array emits one numeric count row whose outcome records why it was not expanded.`;
+export const FILED_RETURNS_SUMMARY_ARRAY_RULE = `Configured return-summary arrays with at most ${MAX_FILED_RETURNS_SUMMARY_ARRAY_EXPANSION_ELEMENTS} elements expand only when every element shares a unique non-empty discriminator selected in order from ty, pos; expanded elements are keyed by the discriminator and emit no count row. Empty arrays emit one numeric count row with array-count-empty; every other array emits one numeric count row whose outcome records why it was not expanded.`;
 export const FILED_RETURNS_SUMMARY_NUMBER_RULE =
   "JSON number tokens are expanded without rounding into plain decimal notation in value_number; spreadsheet software may apply its own numeric precision limits.";
 export const FILED_RETURNS_SUMMARY_TEXT_RULE =

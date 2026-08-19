@@ -143,6 +143,26 @@ describe("filed-return full-year summary sheet", () => {
     expect(context.match(/Synthetic Legal Name/g)).toHaveLength(1);
   });
 
+  it("moves the captured authSig signatory field out of data and into context once", () => {
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-3B")],
+      [
+        jsonEntry("april-data.json", "GSTR-3B", {
+          authSig: "Synthetic Authorized Signatory",
+          amount: 1,
+        }),
+      ],
+    );
+
+    const data = new TextDecoder().decode(summary.dataBytes);
+    expect(data).not.toContain("Synthetic Authorized Signatory");
+    const context = new TextDecoder().decode(summary.contextBytes);
+    expect(context.match(/Synthetic Authorized Signatory/g)).toHaveLength(1);
+    expect(context).toContain(
+      "taxpayer_identity,identity,Signatory,/authSig,Synthetic Authorized Signatory",
+    );
+  });
+
   it("keeps an empty-key member as the slash pointer after envelope normalization", () => {
     const summary = buildFiledReturnsSummarySheet(
       [jsonPlan("April", "april-data.json", "GSTR-2B")],
@@ -200,14 +220,18 @@ describe("filed-return full-year summary sheet", () => {
           data: {
             r3b: {
               ret_period: "042026",
-              sup_details: { osup_det: { txval: 101, camt: 11, iamt: 12, samt: 13 } },
+              sup_details: {
+                osup_det: { txval: 101, camt: 11, iamt: 12, samt: 13 },
+                osup_nil_exmp: { txval: 201, camt: 21, iamt: 22, samt: 23, csamt: 24 },
+                osup_nongst: { txval: 301, camt: 31, iamt: 32, samt: 33, csamt: 34 },
+              },
               itc_elg: {
                 itc_avl: [
                   { ty: "IMPG", camt: 21 },
                   { ty: "IMPS", camt: 22 },
                   { ty: "ISRC", camt: 23 },
                   { ty: "ISD", camt: 24 },
-                  { ty: "OTH", camt: 25 },
+                  { ty: "OTH", camt: 25, csamt: 26 },
                 ],
                 itc_rev: [
                   { ty: "RUL", camt: 31 },
@@ -254,6 +278,15 @@ describe("filed-return full-year summary sheet", () => {
     expect(fieldRow(rows, "/sup_details/osup_det/txval")).toMatchObject({
       field_label:
         "Table 3.1(a) Outward taxable supplies (other than zero rated, nil rated and exempted) — Taxable value",
+    });
+    expect(fieldRow(rows, "/sup_details/osup_nil_exmp/iamt")).toMatchObject({
+      field_label: "Table 3.1(c) Nil-rated and exempt outward supplies — Integrated tax",
+    });
+    expect(fieldRow(rows, "/sup_details/osup_nongst/csamt")).toMatchObject({
+      field_label: "Table 3.1(e) Non-GST outward supplies — Cess",
+    });
+    expect(fieldRow(rows, "/itc_elg/itc_avl/OTH/csamt")).toMatchObject({
+      field_label: "Table 4(A)(5) All other ITC — Cess",
     });
   });
 
@@ -344,7 +377,7 @@ describe("filed-return full-year summary sheet", () => {
     });
   });
 
-  it("expands a small place-of-supply array by its pos discriminator", () => {
+  it("expands response-shaped Table 3.2 rows by pos and distinguishes empty siblings", () => {
     const summary = buildFiledReturnsSummarySheet(
       [jsonPlan("April", "april-data.json", "GSTR-3B")],
       [
@@ -354,6 +387,8 @@ describe("filed-return full-year summary sheet", () => {
               { pos: "01", txval: 101, iamt: 11 },
               { pos: "02", txval: 202, iamt: 22 },
             ],
+            comp_details: [],
+            uin_details: [],
           },
         }),
       ],
@@ -365,6 +400,38 @@ describe("filed-return full-year summary sheet", () => {
       value_number: "202",
     });
     expect(rows.some((row) => row.field_path === "/inter_sup/unreg_details")).toBe(false);
+    expect(fieldRow(rows, "/inter_sup/comp_details")).toMatchObject({
+      outcome: "array-count-empty",
+      value_number: "0",
+    });
+    expect(fieldRow(rows, "/inter_sup/uin_details")).toMatchObject({
+      outcome: "array-count-empty",
+      value_number: "0",
+    });
+    expect(new TextDecoder().decode(summary.contextBytes)).toContain("array-count-empty");
+  });
+
+  it("keeps duplicate place-of-supply values as a named count row", () => {
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-3B")],
+      [
+        jsonEntry("april-data.json", "GSTR-3B", {
+          inter_sup: {
+            unreg_details: [
+              { pos: "01", txval: 101, iamt: 11 },
+              { pos: "01", txval: 202, iamt: 22 },
+            ],
+          },
+        }),
+      ],
+    );
+
+    expect(
+      fieldRow(parseCsv(new TextDecoder().decode(summary.dataBytes)), "/inter_sup/unreg_details"),
+    ).toMatchObject({
+      outcome: "array-count-duplicate-discriminator",
+      value_number: "2",
+    });
   });
 
   it("keeps the fixed column set across return types and different field sets", () => {
@@ -545,6 +612,30 @@ describe("filed-return full-year summary sheet", () => {
       FILED_RETURNS_SUMMARY_FIELD_LABELS_BY_RETURN_TYPE["GSTR-3B"]["/sup_details/osup_zero/txval"]
         ?.provenance.evidence,
     ).toBe("official-offline-utility");
+    for (const path of [
+      "/sup_details/osup_nil_exmp/iamt",
+      "/sup_details/osup_nil_exmp/camt",
+      "/sup_details/osup_nil_exmp/samt",
+      "/sup_details/osup_nil_exmp/csamt",
+      "/sup_details/osup_nongst/iamt",
+      "/sup_details/osup_nongst/camt",
+      "/sup_details/osup_nongst/samt",
+      "/sup_details/osup_nongst/csamt",
+      "/itc_elg/itc_avl/OTH/csamt",
+      "/itc_elg/itc_net/csamt",
+      "/itc_elg/itc_avl/IMPG/csamt",
+      "/itc_elg/itc_avl/IMPS/csamt",
+      "/itc_elg/itc_avl/ISRC/csamt",
+      "/itc_elg/itc_avl/ISD/csamt",
+      "/itc_elg/itc_rev/RUL/csamt",
+      "/itc_elg/itc_rev/OTH/csamt",
+      "/itc_elg/itc_inelg/RUL/csamt",
+      "/itc_elg/itc_inelg/OTH/csamt",
+    ]) {
+      const entry = FILED_RETURNS_SUMMARY_FIELD_LABELS_BY_RETURN_TYPE["GSTR-3B"][path];
+      expect(entry?.label.length).toBeGreaterThan(0);
+      expect(entry?.provenance.evidence).toBe("form-vocabulary-and-row-order");
+    }
   });
 });
 

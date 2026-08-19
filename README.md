@@ -82,9 +82,10 @@ Four configured GSTR-3B summary arrays may expand when they contain at most 64
 elements and every element has a unique, non-empty discriminator selected in
 order from the portal keys `ty` and `pos`. Expanded field paths use that value
 as the element key, omit the discriminator field itself, and do not also emit a
-count. Every other array emits one count at the array's JSON Pointer path, with
-the `outcome` column naming why it was not expanded; GSTR-1 and GSTR-2B arrays
-therefore remain count-only.
+count. Every array that does not expand emits one count at its JSON Pointer
+path. Empty arrays use the distinct `array-count-empty` reason, so they are not
+mistaken for a configuration gap; other count rows name why expansion was not
+performed. GSTR-1 and GSTR-2B non-empty arrays therefore remain count-only.
 Before flattening, Pack removes the return-type envelope already required by
 artifact validation: `/data/r3b` for GSTR-3B and `/data` for GSTR-1 and
 GSTR-2B. `field_path` is relative to that documented envelope. If it is absent

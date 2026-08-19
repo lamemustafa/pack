@@ -601,7 +601,7 @@ describe("offscreen Blob URL entrypoint", () => {
     expect(summary).not.toContain("22AAAAA0000A1Z5");
     expect(summary).not.toContain("Synthetic Example Taxpayer");
     const context = new TextDecoder().decode(entries.get("full-year-summary-context.csv"));
-    expect(context).toContain("format_version,,,pack-full-year-summary-tidy-v3");
+    expect(context).toContain("format_version,,,pack-full-year-summary-tidy-v4");
     expect(context).toContain("financial_year,,,2026-27");
     expect(context).toContain("GSTR-3B:/data/r3b");
     expect(context.match(/22AAAAA0000A1Z5/g)).toHaveLength(1);

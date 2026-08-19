@@ -17,7 +17,8 @@ type FiledReturnsSummaryFieldLabelMap = Readonly<Record<string, FiledReturnsSumm
 
 const GSTR3B_SOURCE = "GST Portal GSTR-3B Offline Utility V5.8 and Form GSTR-3B user guide";
 const GSTR3B_PDF_CROSS_CHECK_SOURCE = "GST Portal GSTR-3B PDF export and JSON schema";
-const GSTR3B_VOCABULARY_SOURCE = "GST Portal GSTR-3B JSON type codes and Form row order";
+const GSTR3B_VOCABULARY_SOURCE =
+  "GST Portal GSTR-3B JSON field vocabulary and Form row/column structure";
 const REVIEWED_ON = "2026-08-18";
 
 type ComponentKey = "txval" | "iamt" | "camt" | "samt" | "csamt";
@@ -63,7 +64,7 @@ function vocabularyDerivedLabel(label: string, table: string): FiledReturnsSumma
     provenance: {
       evidence: "form-vocabulary-and-row-order",
       officialSource: GSTR3B_VOCABULARY_SOURCE,
-      officialSourceLocation: `Vocabulary-derived from the JSON ty code and Form GSTR-3B Table ${table} row order; sampled evidence was not value-matched.`,
+      officialSourceLocation: `Vocabulary-derived from JSON field/component codes and Form GSTR-3B Table ${table} row/column structure; available evidence was not value-matched.`,
       reviewedOn: REVIEWED_ON,
     },
   };
@@ -132,6 +133,13 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "3.1(c)",
     "osup_nil_exmp",
   ),
+  ...componentEntries(
+    "/sup_details/osup_nil_exmp",
+    "Table 3.1(c) Nil-rated and exempt outward supplies",
+    "3.1(c)",
+    ["iamt", "camt", "samt", "csamt"],
+    "vocabulary",
+  ),
   "/sup_details/isup_rev/txval": valueConfirmedLabel(
     "Table 3.1(d) Inward supplies liable to reverse charge — Taxable value",
     "3.1(d)",
@@ -162,11 +170,25 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "osup_nongst",
   ),
   ...componentEntries(
+    "/sup_details/osup_nongst",
+    "Table 3.1(e) Non-GST outward supplies",
+    "3.1(e)",
+    ["iamt", "camt", "samt", "csamt"],
+    "vocabulary",
+  ),
+  ...componentEntries(
     "/itc_elg/itc_avl/OTH",
     "Table 4(A)(5) All other ITC",
     "4(A)(5)",
     ["camt", "iamt", "samt"],
     "confirmed",
+  ),
+  ...componentEntries(
+    "/itc_elg/itc_avl/OTH",
+    "Table 4(A)(5) All other ITC",
+    "4(A)(5)",
+    ["csamt"],
+    "vocabulary",
   ),
   ...componentEntries(
     "/itc_elg/itc_net",
@@ -176,59 +198,66 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "confirmed",
   ),
   ...componentEntries(
+    "/itc_elg/itc_net",
+    "Table 4(C) Net ITC available (A) − (B)",
+    "4(C)",
+    ["csamt"],
+    "vocabulary",
+  ),
+  ...componentEntries(
     "/itc_elg/itc_avl/IMPG",
     "Table 4(A)(1) Import of goods",
     "4(A)(1)",
-    ["camt", "iamt", "samt"],
+    ["camt", "iamt", "samt", "csamt"],
     "vocabulary",
   ),
   ...componentEntries(
     "/itc_elg/itc_avl/IMPS",
     "Table 4(A)(2) Import of services",
     "4(A)(2)",
-    ["camt", "iamt", "samt"],
+    ["camt", "iamt", "samt", "csamt"],
     "vocabulary",
   ),
   ...componentEntries(
     "/itc_elg/itc_avl/ISRC",
     "Table 4(A)(3) Inward supplies liable to reverse charge (other than 1 and 2 above)",
     "4(A)(3)",
-    ["camt", "iamt", "samt"],
+    ["camt", "iamt", "samt", "csamt"],
     "vocabulary",
   ),
   ...componentEntries(
     "/itc_elg/itc_avl/ISD",
     "Table 4(A)(4) Inward supplies from ISD",
     "4(A)(4)",
-    ["camt", "iamt", "samt"],
+    ["camt", "iamt", "samt", "csamt"],
     "vocabulary",
   ),
   ...componentEntries(
     "/itc_elg/itc_rev/RUL",
     "Table 4(B)(1) ITC reversed — As per rules 38, 42 and 43 and section 17(5)",
     "4(B)(1)",
-    ["camt", "iamt", "samt"],
+    ["camt", "iamt", "samt", "csamt"],
     "vocabulary",
   ),
   ...componentEntries(
     "/itc_elg/itc_rev/OTH",
     "Table 4(B)(2) ITC reversed — Others",
     "4(B)(2)",
-    ["camt", "iamt", "samt"],
+    ["camt", "iamt", "samt", "csamt"],
     "vocabulary",
   ),
   ...componentEntries(
     "/itc_elg/itc_inelg/RUL",
     "Table 4(D)(1) Ineligible ITC — As per section 17(5)",
     "4(D)(1)",
-    ["camt", "iamt", "samt"],
+    ["camt", "iamt", "samt", "csamt"],
     "vocabulary",
   ),
   ...componentEntries(
     "/itc_elg/itc_inelg/OTH",
     "Table 4(D)(2) Ineligible ITC — Others",
     "4(D)(2)",
-    ["camt", "iamt", "samt"],
+    ["camt", "iamt", "samt", "csamt"],
     "vocabulary",
   ),
 };
@@ -282,6 +311,7 @@ export function filedReturnsSummaryIdentity(path: string): FiledReturnsSummaryId
   }
   if (
     canonicalToken === "signatory" ||
+    canonicalToken === "authsig" ||
     canonicalToken === "signatoryname" ||
     canonicalToken === "authorizedsignatory" ||
     canonicalToken === "authorisedsignatory"

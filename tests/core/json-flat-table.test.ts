@@ -49,6 +49,23 @@ describe("flat JSON leaf extraction", () => {
     ]);
   });
 
+  it("distinguishes an empty array from an array that was not selected for expansion", () => {
+    expect(flattenJsonTextScalarLeaves('{"empty":[],"items":[1]}')).toEqual([
+      {
+        arrayCountReason: "array-count-empty",
+        path: "/empty",
+        valueKind: "number",
+        value: "0",
+      },
+      {
+        arrayCountReason: "array-count-not-selected",
+        path: "/items",
+        valueKind: "number",
+        value: "1",
+      },
+    ]);
+  });
+
   it("expands an eligible array with generic discriminator selection and pointer escaping", () => {
     expect(
       flattenJsonTextScalarLeaves(

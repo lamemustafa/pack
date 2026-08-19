@@ -1,5 +1,6 @@
 export type FlatJsonLeafValueKind = "number" | "text";
 export type FlatJsonArrayCountReason =
+  | "array-count-empty"
   | "array-count-not-selected"
   | "array-count-over-ceiling"
   | "array-count-no-common-discriminator"
@@ -258,16 +259,16 @@ class FlatJsonParser {
       }
     }
     if (!emit) return;
+    if (elementCount === 0) {
+      this.addArrayCount(path, elementCount, "array-count-empty");
+      return;
+    }
     if (!eligible) {
       this.addArrayCount(path, elementCount, "array-count-not-selected");
       return;
     }
     if (elementCount > (this.arrayExpansion?.maxElements ?? 0)) {
       this.addArrayCount(path, elementCount, "array-count-over-ceiling");
-      return;
-    }
-    if (elementCount === 0) {
-      this.addArrayCount(path, elementCount, "array-count-no-common-discriminator");
       return;
     }
     const elements: FlatJsonLeaf[][] = [];

@@ -53,12 +53,14 @@ For each release candidate:
   at most 64 elements may expand, using the first shared discriminator in the
   ordered candidate list `ty`, `pos`, and only when every discriminator is
   non-empty and unique. Expanded paths must use the discriminator value, omit
-  the discriminator field, and emit no count row. Every other array, including
-  every GSTR-1 and GSTR-2B array, must emit one count row whose `outcome` names
-  why it was not expanded. Confirm the canonical artifact-validation envelope
-  is removed before flattening (`/data/r3b` for GSTR-3B and `/data` for GSTR-1
-  and GSTR-2B), `field_path` is relative to it, and a missing or non-object
-  envelope emits a `json-envelope-missing` outcome row. Expand JSON numbers without rounding into plain decimal numeric cells; preserve strings
+  the discriminator field, and emit no count row. Empty arrays must emit one
+  count row with `array-count-empty`. Every other array, including every
+  non-empty GSTR-1 and GSTR-2B array, must emit one count row whose `outcome`
+  names why it was not expanded. Confirm the canonical artifact-validation
+  envelope is removed before flattening (`/data/r3b` for GSTR-3B and `/data`
+  for GSTR-1 and GSTR-2B), `field_path` is relative to it, and a missing or
+  non-object envelope emits a `json-envelope-missing` outcome row. Expand JSON
+  numbers without rounding into plain decimal numeric cells; preserve strings
   and identifiers as text except for the existing apostrophe guard on
   formula-like text; and use fixed outcome rows where no parseable JSON exists.
   Labels must come only from the return-type map with recorded provenance that
