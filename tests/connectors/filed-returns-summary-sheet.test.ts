@@ -6,7 +6,11 @@ import {
   FILED_RETURNS_SUMMARY_HEADERS,
   type FiledReturnsSummaryPlanEntry,
 } from "../../src/connectors/gst/filed-returns-summary-sheet";
-import { FILED_RETURNS_SUMMARY_FIELD_LABELS_BY_RETURN_TYPE } from "../../src/connectors/gst/filed-returns-summary-labels";
+import {
+  FILED_RETURNS_SUMMARY_FIELD_LABELS_BY_RETURN_TYPE,
+  filedReturnsSummaryFieldLabel,
+} from "../../src/connectors/gst/filed-returns-summary-labels";
+import type { FiledReturnsMonth } from "../../src/connectors/gst/filed-returns-scope";
 
 describe("filed-return full-year summary sheet", () => {
   it("emits tidy numeric and text rows while moving taxpayer identity into context once", () => {
@@ -856,17 +860,102 @@ describe("filed-return full-year summary sheet", () => {
       expect(entry?.provenance.evidence).toBe("portal-pdf-row-text");
     }
   });
+
+  it("uses the captured July 2022 caption for Table 4(D)(1)", () => {
+    expect(
+      filedReturnsSummaryFieldLabel("GSTR-3B", "/itc_elg/itc_inelg/RUL/camt", {
+        financialYear: "2022-23",
+        period: "July",
+      }),
+    ).toBe("Table 4(D)(1) Ineligible ITC — As per section 17(5) — Central tax");
+  });
+
+  it("uses the captured July 2022 caption for Table 4(B)(1)", () => {
+    expect(
+      filedReturnsSummaryFieldLabel("GSTR-3B", "/itc_elg/itc_rev/RUL/camt", {
+        financialYear: "2022-23",
+        period: "July",
+      }),
+    ).toBe("Table 4(B)(1) ITC reversed — As per rules 42 & 43 of CGST Rules — Central tax");
+  });
+
+  it("keeps both adjacent old captures, the current capture, and stable captions distinct", () => {
+    const june2022 = { financialYear: "2022-23", period: "June" } as const;
+    const july2022 = { financialYear: "2022-23", period: "July" } as const;
+    const december2025 = { financialYear: "2025-26", period: "December" } as const;
+    for (const filingPeriod of [june2022, july2022]) {
+      expect(
+        filedReturnsSummaryFieldLabel("GSTR-3B", "/itc_elg/itc_inelg/OTH/camt", filingPeriod),
+      ).toBe("Table 4(D)(2) Ineligible ITC — Others — Central tax");
+      expect(
+        filedReturnsSummaryFieldLabel("GSTR-3B", "/itc_elg/itc_inelg/RUL/camt", filingPeriod),
+      ).not.toContain("reclaimed");
+    }
+    expect(
+      filedReturnsSummaryFieldLabel("GSTR-3B", "/itc_elg/itc_rev/RUL/camt", december2025),
+    ).toBe(
+      "Table 4(B)(1) ITC reversed — As per rules 38, 42 & 43 of CGST Rules and sub-section (5) of section 17 — Central tax",
+    );
+    expect(
+      filedReturnsSummaryFieldLabel("GSTR-3B", "/itc_elg/itc_inelg/RUL/camt", december2025),
+    ).toContain("ITC reclaimed");
+    for (const path of ["/itc_elg/itc_avl/ISRC/camt", "/sup_details/osup_det/txval"]) {
+      const labels = [june2022, july2022, december2025].map((filingPeriod) =>
+        filedReturnsSummaryFieldLabel("GSTR-3B", path, filingPeriod),
+      );
+      expect(new Set(labels)).toHaveLength(1);
+    }
+  });
+
+  it("withholds only the three unproven captions in the summary CSV", () => {
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("August", "august-data.json", "GSTR-3B", "2022-23")],
+      [
+        rawJsonEntry("august-data.json", {
+          status: 1,
+          data: {
+            lglnm: "Synthetic Legal Name",
+            r3b: {
+              gstin: "00XXXXX0000X0Z0",
+              ret_period: "082022",
+              itc_elg: {
+                itc_avl: [{ ty: "ISRC", camt: 11 }],
+                itc_rev: [{ ty: "RUL", camt: 12 }],
+                itc_inelg: [
+                  { ty: "RUL", camt: 13 },
+                  { ty: "OTH", camt: 14 },
+                ],
+              },
+            },
+          },
+        }),
+      ],
+    );
+    const rows = parseCsv(new TextDecoder().decode(summary.dataBytes));
+    for (const path of [
+      "/itc_elg/itc_rev/RUL/camt",
+      "/itc_elg/itc_inelg/RUL/camt",
+      "/itc_elg/itc_inelg/OTH/camt",
+    ]) {
+      const row = fieldRow(rows, path);
+      expect(row.field_label).toMatch(/^Table 4\([BD]\)/);
+      expect(row.field_label).not.toMatch(/rules|section|reclaimed|ineligible|others/i);
+      expect(row.value_number).not.toBe("");
+    }
+    expect(fieldRow(rows, "/itc_elg/itc_avl/ISRC/camt").field_label).toContain("Inward supplies");
+  });
 });
 
 function jsonPlan(
-  period: "April" | "May",
+  period: FiledReturnsMonth,
   entryName: string,
   returnType: "GSTR-1" | "GSTR-2B" | "GSTR-3B",
+  financialYear = "2026-27",
 ): FiledReturnsSummaryPlanEntry {
   return {
     artifactType: "JSON",
     entryNames: [entryName],
-    financialYear: "2026-27",
+    financialYear,
     outcomeCategory: "staged",
     period,
     returnType,

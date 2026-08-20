@@ -8,7 +8,10 @@ import {
   buildFiledReturnsSummarySheet,
   type FiledReturnsSummaryPlanEntry,
 } from "../../src/connectors/gst/filed-returns-summary-sheet";
-import { FILED_RETURNS_MONTHS } from "../../src/connectors/gst/filed-returns-scope";
+import {
+  FILED_RETURNS_MONTHS,
+  type FiledReturnsMonth,
+} from "../../src/connectors/gst/filed-returns-scope";
 
 describe("filed-return full-year workbook", () => {
   it("builds the statement header from identity outside the return envelope", () => {
@@ -98,7 +101,11 @@ describe("filed-return full-year workbook", () => {
     ]);
     expect(subrowsAfter(statementRows, "Table 3.1(e)")).toEqual(["Value"]);
     expect([
-      ...new Set(filedReturnsStatementLineItems().map((lineItem) => lineItem.sectionCaption)),
+      ...new Set(
+        filedReturnsStatementLineItems({ financialYear: "2026-27", period: "March" }).map(
+          (lineItem) => lineItem.sectionCaption,
+        ),
+      ),
     ]).toEqual([
       "Table 3.1(a) Outward taxable supplies (other than zero rated, nil rated and exempted)",
       "Table 3.1(b) Outward taxable supplies (zero rated)",
@@ -131,13 +138,13 @@ describe("filed-return full-year workbook", () => {
       expect(subrowsAfter(statementRows, table)).toEqual(["IGST", "CGST", "SGST", "Cess"]);
     }
 
-    const coverage = filedReturnsStatementCoverage();
+    const coverage = filedReturnsStatementCoverage({ financialYear: "2026-27", period: "March" });
     expect(coverage).toEqual({
       includedTables: ["3.1", "4"],
       excludedTables: ["3.1.1", "3.2", "5", "5.1", "6.1"],
     });
     expect(
-      filedReturnsStatementLineItems().some(
+      filedReturnsStatementLineItems({ financialYear: "2026-27", period: "March" }).some(
         (lineItem) =>
           lineItem.coverageTable === "3.1" && lineItem.sectionCaption.startsWith("Table 3.1.1"),
       ),
@@ -198,6 +205,65 @@ describe("filed-return full-year workbook", () => {
         },
       ]),
     ).toThrow("Required taxpayer identity");
+  });
+
+  it("withholds unproven Table 4 captions in the workbook without changing their values", () => {
+    const plan = fullYearPlan("2022-23", "August");
+    const summary = buildFiledReturnsSummarySheet(plan, [
+      {
+        path: "august-data.json",
+        bytes: new TextEncoder().encode(
+          JSON.stringify({
+            status: 1,
+            data: {
+              lglnm: "Synthetic Workbook Taxpayer",
+              r3b: {
+                gstin: "00XXXXX0000X0Z0",
+                ret_period: "082022",
+                itc_elg: {
+                  itc_rev: [{ ty: "RUL", camt: 12 }],
+                  itc_inelg: [
+                    { ty: "RUL", camt: 13 },
+                    { ty: "OTH", camt: 14 },
+                  ],
+                },
+              },
+            },
+          }),
+        ),
+      },
+    ]);
+    const statement = text(
+      extractStoredZipEntries(
+        buildFiledReturnsFullYearWorkbook(summary, plan, {
+          generatedAt: new Date("2026-08-20T12:00:00.000Z"),
+        }),
+      ),
+      "xl/worksheets/sheet1.xml",
+    );
+    const rows = parsedRows(statement);
+    const withheldCaptions = rows
+      .map((row) => row.values().next().value?.text)
+      .filter((value): value is string =>
+        ["Table 4(B)(1)", "Table 4(D)(1)", "Table 4(D)(2)"].includes(value ?? ""),
+      );
+    expect(withheldCaptions).toEqual(["Table 4(B)(1)", "Table 4(D)(1)", "Table 4(D)(2)"]);
+    const statementNumbers = rows.flatMap((row) => [...row.values()].map((cell) => cell.number));
+    expect(statementNumbers).toEqual(expect.arrayContaining([12, 13, 14]));
+    expect(statement).toContain("Withheld captions: Table 4(B)(1) and Table 4(D).");
+  });
+
+  it("keeps FY 2025-26 statement captions on the current captured side", () => {
+    const captions = filedReturnsStatementLineItems({
+      financialYear: "2025-26",
+      period: "March",
+    }).map((lineItem) => lineItem.sectionCaption);
+    expect(captions).toContain(
+      "Table 4(D)(1) Other Details — ITC reclaimed which was reversed under Table 4(B)(2) in earlier tax period",
+    );
+    expect(
+      filedReturnsStatementCoverage({ financialYear: "2025-26", period: "March" }),
+    ).not.toHaveProperty("withheldCaptionTables");
   });
 
   it("keeps blank identity cells when no period has parseable JSON", () => {
@@ -369,12 +435,15 @@ function textValues(row: Map<string, ParsedCell> | undefined): Array<string | un
   return row ? [...row.values()].map((cell) => cell.text) : [];
 }
 
-function fullYearPlan(): FiledReturnsSummaryPlanEntry[] {
+function fullYearPlan(
+  financialYear = "2026-27",
+  populatedPeriod: FiledReturnsMonth = "April",
+): FiledReturnsSummaryPlanEntry[] {
   return FILED_RETURNS_MONTHS.map((period) => ({
     artifactType: "JSON",
-    entryNames: period === "April" ? ["april-data.json"] : [],
-    financialYear: "2026-27",
-    outcomeCategory: period === "April" ? "staged" : "artifact-unavailable",
+    entryNames: period === populatedPeriod ? [`${period.toLowerCase()}-data.json`] : [],
+    financialYear,
+    outcomeCategory: period === populatedPeriod ? "staged" : "artifact-unavailable",
     period,
     returnType: "GSTR-3B",
   }));
