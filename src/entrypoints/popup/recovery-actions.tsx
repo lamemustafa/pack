@@ -5,6 +5,9 @@ import {
   hasDiagnosticSignals,
 } from "./run-summary";
 
+export const PORTAL_RETRY_DISABLED_REASON =
+  "Open a signed-in GST Portal tab before retrying this period.";
+
 export interface RecoveryActionsProps {
   busy: string | null;
   portalReady: boolean;
@@ -15,6 +18,7 @@ export interface RecoveryActionsProps {
   onResolveFullFiscalYearTarget: (resolution: "manually-observed" | "cancelled") => void;
   onResolveTarget: (resolution: "manually-observed" | "cancelled") => void;
   onStartFresh: () => void;
+  showPortalRetryReason?: boolean;
 }
 
 export function RecoveryActions({
@@ -27,6 +31,7 @@ export function RecoveryActions({
   onResolveFullFiscalYearTarget,
   onResolveTarget,
   onStartFresh,
+  showPortalRetryReason = true,
 }: RecoveryActionsProps) {
   const recoveryState = getRecoveryActionState(summary);
   if (!summary || !recoveryState.visible) return null;
@@ -74,10 +79,8 @@ export function RecoveryActions({
                 <DiagnosticSignals summary={summary} />
               </details>
             ) : null}
-            {!portalReady ? (
-              <p className="muted">
-                Open a signed-in GST Portal tab before reconciling or starting again.
-              </p>
+            {!portalReady && showPortalRetryReason ? (
+              <p className="muted">{PORTAL_RETRY_DISABLED_REASON}</p>
             ) : null}
             {canReconcileTarget || canRetryTargetCleanup ? (
               <button type="button" disabled={retryDisabled} onClick={onRetryTarget}>
@@ -136,8 +139,8 @@ export function RecoveryActions({
                 is currently open.
               </p>
             ) : null}
-            {!portalReady ? (
-              <p className="muted">Open a signed-in GST Portal tab before retrying this period.</p>
+            {!portalReady && showPortalRetryReason ? (
+              <p className="muted">{PORTAL_RETRY_DISABLED_REASON}</p>
             ) : null}
             <button type="button" disabled={retryDisabled} onClick={onRetryFullFiscalYearTarget}>
               {busy === "retry-full-fiscal-year-target"
@@ -178,8 +181,8 @@ export function RecoveryActions({
             </button>
           </>
         ) : null}
-        {!portalReady ? (
-          <p className="muted">Open a signed-in GST Portal tab before retrying.</p>
+        {!portalReady && showPortalRetryReason ? (
+          <p className="muted">{PORTAL_RETRY_DISABLED_REASON}</p>
         ) : null}
       </div>
     </details>

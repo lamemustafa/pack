@@ -67,6 +67,7 @@ function App() {
           <PackSummary scope={popup.scope} summary={popup.scopedFlowSummary} />
           <InlineStatus
             busy={popup.effectiveBusy}
+            portalReady={portalReady}
             onOpenPortal={() => void browser.tabs.create({ url: "https://www.gst.gov.in" })}
             onRestartTarget={() => void popup.startFiledReturnsFlow()}
             onRetryFullFiscalYearTarget={() => void popup.retryFullFiscalYearTarget()}
@@ -104,6 +105,7 @@ function App() {
             void popup.resolveFullFiscalYearTarget(resolution)
           }
           onResolveTarget={(resolution) => void popup.resolveUnconfirmedDownload(resolution)}
+          showPortalRetryReason={!statusOwnsPrimaryAction || presentation.kind === "error"}
         />
       ) : null}
 

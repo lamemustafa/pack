@@ -6,9 +6,11 @@ import {
   hasPersistedFullFiscalYearZipDownloadId,
   isAmbiguousFullFiscalYearZipHandoff,
 } from "./flow-summary";
+import { PORTAL_RETRY_DISABLED_REASON } from "./recovery-actions";
 
 export interface InlineStatusProps {
   busy: string | null;
+  portalReady?: boolean;
   onOpenPortal: () => void;
   onRestartTarget: () => void;
   onRetryFullFiscalYearTarget: () => void;
@@ -19,6 +21,7 @@ export interface InlineStatusProps {
 
 export function InlineStatus({
   busy,
+  portalReady = true,
   onOpenPortal,
   onRestartTarget,
   onRetryFullFiscalYearTarget,
@@ -30,6 +33,7 @@ export function InlineStatus({
   if (!copy) return null;
 
   const actionBusy = busy !== null;
+  const retryBlockedByPortal = presentation.kind !== "error" && !portalReady;
   const primaryAction = getInlinePrimaryAction(presentation, summary, {
     onOpenPortal,
     onRestartTarget,
@@ -54,11 +58,14 @@ export function InlineStatus({
           <button
             className="inline-status-primary"
             type="button"
-            disabled={actionBusy}
+            disabled={actionBusy || retryBlockedByPortal}
             onClick={primaryAction.onClick}
           >
             {actionBusy ? "Working..." : primaryAction.label}
           </button>
+        ) : null}
+        {primaryAction && retryBlockedByPortal ? (
+          <p className="muted">{PORTAL_RETRY_DISABLED_REASON}</p>
         ) : null}
       </div>
     </section>
@@ -69,18 +76,13 @@ export function hasInlinePrimaryAction(
   presentation: PopupPresentationState,
   summary: FiledReturnsFlowSummary | null,
 ): boolean {
-  if (presentation.kind === "error") return true;
-  if (!summary) return false;
-
-  const signals = new Set(summary.flowStep.safeSignals);
   return Boolean(
-    (presentation.kind === "blocked" && summary.currentPeriod) ||
-    (signals.has("filed-returns-target-review-required") && summary.currentPeriod) ||
-    (summary.fullFiscalYearRecovery &&
-      (signals.has("full-fiscal-year-download-unconfirmed") ||
-        signals.has("full-fiscal-year-run-interrupted") ||
-        signals.has("full-fiscal-year-run-needs-action") ||
-        signals.has("full-fiscal-year-resume-confirmation-required"))),
+    getInlinePrimaryAction(presentation, summary, {
+      onOpenPortal: () => undefined,
+      onRestartTarget: () => undefined,
+      onRetryFullFiscalYearTarget: () => undefined,
+      onRetryTarget: () => undefined,
+    }),
   );
 }
 

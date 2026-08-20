@@ -372,7 +372,7 @@ describe("full fiscal year ledger", () => {
     }
   });
 
-  it("surfaces a blocked target before generic resume confirmation", () => {
+  it("self-heals an old stored download-review message for a blocked portal system error", () => {
     const ledger = createLedger([
       ["April", "blocked"],
       ["May", "pending"],
@@ -384,7 +384,8 @@ describe("full fiscal year ledger", () => {
           ? {
               ...target,
               safeSignals: ["portal-system-error"],
-              safeMessage: "The GST portal returned a system-error page.",
+              safeMessage:
+                "Pack could not verify the browser download for April. Check Downloads before retrying or cancelling this target.",
             }
           : target,
       ),
@@ -405,9 +406,77 @@ describe("full fiscal year ledger", () => {
           "full-fiscal-year-run-needs-action",
           "portal-system-error",
         ]),
-        safeMessage: "The GST portal returned a system-error page.",
+        safeMessage:
+          "The GST portal returned a system-error page. Return to an authenticated GST page and retry this period.",
       },
     });
+    expect(summary.flowStep.safeMessage.toLowerCase()).not.toContain("download");
+  });
+
+  it.each([
+    [
+      "portal-scheduled-downtime",
+      "The GST portal is in scheduled downtime. Wait until GST services are available, then reopen Pack and retry.",
+    ],
+    [
+      "portal-blocked-or-session-expired",
+      "The GST portal appears to be on an access-denied or expired-session screen. Please return to an authenticated GST page before using Pack.",
+    ],
+  ])("renders the durable %s cause without a download warning", (signal, expectedMessage) => {
+    const ledger = createLedger([["April", "blocked"]]);
+    const summary = summariseFullFiscalYearLedger({
+      ...ledger,
+      currentTargetId: ledger.targets[0]!.targetId,
+      status: "blocked",
+      targets: ledger.targets.map((target) => ({
+        ...target,
+        safeMessage: "The old stored review message is stale.",
+        safeSignals: [signal],
+      })),
+    });
+
+    expect(summary.flowStep.safeMessage).toBe(expectedMessage);
+    expect(summary.flowStep.safeMessage.toLowerCase()).not.toContain("download");
+  });
+
+  it("renders generic blocked and Pack-side failed targets as distinct non-download causes", () => {
+    const blockedLedger = createLedger([["April", "blocked"]]);
+    const failedLedger = createLedger([["April", "failed"]]);
+    const blocked = summariseFullFiscalYearLedger({
+      ...blockedLedger,
+      currentTargetId: blockedLedger.targets[0]!.targetId,
+      status: "blocked",
+      targets: blockedLedger.targets.map((target) => ({
+        ...target,
+        safeMessage: "The old stored review message is stale.",
+      })),
+    });
+    const failed = summariseFullFiscalYearLedger({
+      ...failedLedger,
+      currentTargetId: failedLedger.targets[0]!.targetId,
+      status: "blocked",
+      targets: failedLedger.targets.map((target) => ({
+        ...target,
+        safeMessage: "The old stored review message is stale.",
+      })),
+    });
+
+    expect(blocked.flowStep.safeMessage).toContain("paused the saved full-year run");
+    expect(failed.flowStep.safeMessage).toContain("Pack-side failure");
+    expect(failed.flowStep.safeMessage).not.toBe(blocked.flowStep.safeMessage);
+    expect(
+      `${blocked.flowStep.safeMessage} ${failed.flowStep.safeMessage}`.toLowerCase(),
+    ).not.toContain("download");
+  });
+
+  it("keeps download verification fail-closed when a download-unconfirmed target also carries a portal cause", () => {
+    const durable = canonicalDurableTargetStatus(
+      { financialYear: "2026-27", period: "April", returnType: "GSTR-3B" },
+      "download-unconfirmed",
+      ["portal-system-error"],
+    );
+
+    expect(durable.safeMessage).toContain("verify the browser download");
   });
 
   it("maps only positive not-filed evidence to a terminal not-filed target", () => {

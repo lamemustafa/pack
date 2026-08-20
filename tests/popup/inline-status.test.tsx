@@ -36,6 +36,50 @@ const blockedSummary: FiledReturnsFlowSummary = {
 };
 
 describe("inline filed-return recovery status", () => {
+  it("disables a retry while the GST Portal is unavailable and explains why", () => {
+    const markup = renderToStaticMarkup(
+      <InlineStatus
+        busy={null}
+        portalReady={false}
+        onOpenPortal={vi.fn()}
+        onRestartTarget={vi.fn()}
+        onRetryFullFiscalYearTarget={vi.fn()}
+        onRetryTarget={vi.fn()}
+        presentation={blockedPresentation}
+        summary={blockedSummary}
+      />,
+    );
+
+    expect(markup).toContain("Retry May");
+    expect(markup).toContain("disabled");
+    expect(markup).toContain("Open a signed-in GST Portal tab before retrying this period.");
+  });
+
+  it("keeps Open GST Portal enabled while the GST Portal is unavailable", () => {
+    const markup = renderToStaticMarkup(
+      <InlineStatus
+        busy={null}
+        portalReady={false}
+        onOpenPortal={vi.fn()}
+        onRestartTarget={vi.fn()}
+        onRetryFullFiscalYearTarget={vi.fn()}
+        onRetryTarget={vi.fn()}
+        presentation={{
+          badge: "Portal unavailable",
+          body: "Open the GST Portal to continue.",
+          icon: "!",
+          kind: "error",
+          title: "GST Portal unavailable",
+          tone: "warning",
+        }}
+        summary={null}
+      />,
+    );
+
+    expect(markup).toContain("Open GST Portal");
+    expect(markup).not.toContain("disabled");
+  });
+
   it("renders every safe missing artifact reason for a partial ZIP", () => {
     const summary: FiledReturnsFlowSummary = {
       ...blockedSummary,
@@ -465,6 +509,7 @@ describe("inline filed-return recovery status", () => {
     });
 
     expect(action).toBeNull();
+    expect(hasInlinePrimaryAction(blockedPresentation, targetReviewSummary)).toBe(false);
     expect(onRetryTarget).not.toHaveBeenCalled();
   });
 
