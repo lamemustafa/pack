@@ -8,6 +8,7 @@ import {
 import {
   flatJsonLeavesApproximateBytes,
   flattenJsonTextObjectAtPath,
+  flattenJsonTextSelectedScalarLeaves,
   JsonFlatTableLimitError,
   JsonFlatTablePathNotFoundError,
   type FlatJsonLeaf,
@@ -96,7 +97,10 @@ export class FiledReturnsSummaryTooLargeError extends Error {
   }
 }
 
+class FiledReturnsSummaryForbiddenFieldError extends SyntaxError {}
+
 interface ParsedPlanEntry {
+  identityLeaves: FlatJsonLeaf[];
   leaves: FlatJsonLeaf[];
   outcome: string;
   planned: FiledReturnsSummaryPlanEntry;
@@ -129,28 +133,38 @@ export function buildFiledReturnsSummarySheet(
   let remainingFlattenedBytes = maxOutputBytes;
   const parsedEntries = sortedPlan.map((planned): ParsedPlanEntry => {
     if (planned.artifactType !== "JSON" || planned.outcomeCategory !== "staged") {
-      return { planned, leaves: [], outcome: outcomeCategory(planned) };
+      return { planned, identityLeaves: [], leaves: [], outcome: outcomeCategory(planned) };
     }
     const entry = planned.entryNames
       .map((entryName) => entriesByPath.get(entryName))
       .find((candidate) => candidate !== undefined);
-    if (!entry) return { planned, leaves: [], outcome: "json-entry-missing" };
+    if (!entry) return { planned, identityLeaves: [], leaves: [], outcome: "json-entry-missing" };
     try {
+      const jsonText = new TextDecoder("utf-8", { fatal: true }).decode(entry.bytes);
+      const identityLeaves = flattenJsonTextSelectedScalarLeaves(
+        jsonText,
+        {
+          includePath: (path) => filedReturnsSummaryIdentity(path) !== null,
+          visitPath: rejectForbiddenFieldPath,
+        },
+        remainingFlattenedBytes,
+      );
       const leaves = flattenJsonTextObjectAtPath(
-        new TextDecoder("utf-8", { fatal: true }).decode(entry.bytes),
+        jsonText,
         filedReturnsJsonDocumentContract(planned.returnType).envelopePath,
         remainingFlattenedBytes,
         filedReturnsSummaryArrayExpansion(planned.returnType),
       );
       remainingFlattenedBytes -= flatJsonLeavesApproximateBytes(leaves);
       parsedPeriods.add(planned.period);
-      return { planned, leaves, outcome: "parseable-json" };
+      return { planned, identityLeaves, leaves, outcome: "parseable-json" };
     } catch (error) {
+      if (error instanceof FiledReturnsSummaryForbiddenFieldError) throw error;
       if (error instanceof JsonFlatTableLimitError) throw new FiledReturnsSummaryTooLargeError();
       if (error instanceof JsonFlatTablePathNotFoundError) {
-        return { planned, leaves: [], outcome: "json-envelope-missing" };
+        return { planned, identityLeaves: [], leaves: [], outcome: "json-envelope-missing" };
       }
-      return { planned, leaves: [], outcome: "json-unparseable" };
+      return { planned, identityLeaves: [], leaves: [], outcome: "json-unparseable" };
     }
   });
 
@@ -204,9 +218,15 @@ export function buildFiledReturnsSummarySheet(
 
 function rejectForbiddenFields(parsedEntries: readonly ParsedPlanEntry[]): void {
   for (const parsed of parsedEntries) {
-    if (parsed.leaves.some((leaf) => isFiledReturnsSummaryForbiddenFieldPath(leaf.path))) {
-      throw new SyntaxError("Filed-return summary source contains a credential or session field.");
-    }
+    for (const leaf of parsed.leaves) rejectForbiddenFieldPath(leaf.path);
+  }
+}
+
+function rejectForbiddenFieldPath(path: string): void {
+  if (isFiledReturnsSummaryForbiddenFieldPath(path)) {
+    throw new FiledReturnsSummaryForbiddenFieldError(
+      "Filed-return summary source contains a credential or session field.",
+    );
   }
 }
 
@@ -214,10 +234,9 @@ function collectIdentityValues(parsedEntries: readonly ParsedPlanEntry[]): Summa
   const taxpayerIdentityByLabel = new Map<string, SummaryIdentityValue>();
   const returnIdentityByKey = new Map<string, SummaryIdentityValue>();
   const parseableEntries = parsedEntries.filter((entry) => entry.outcome === "parseable-json");
-  const occurrenceCountByLabel = new Map<string, number>();
   for (const parsed of parseableEntries) {
     const identityInEntry = new Map<string, SummaryIdentityValue>();
-    for (const leaf of parsed.leaves) {
+    for (const leaf of parsed.identityLeaves) {
       const descriptor = filedReturnsSummaryIdentity(leaf.path);
       if (!descriptor) continue;
       const contextKey =
@@ -255,17 +274,6 @@ function collectIdentityValues(parsedEntries: readonly ParsedPlanEntry[]): Summa
       if (!existing || compareCodeUnits(identity.fieldPath, existing.fieldPath) < 0) {
         target.set(targetKey, identity);
       }
-      if (identity.contextType === "taxpayer_identity") {
-        occurrenceCountByLabel.set(
-          identity.label,
-          (occurrenceCountByLabel.get(identity.label) ?? 0) + 1,
-        );
-      }
-    }
-  }
-  for (const label of taxpayerIdentityByLabel.keys()) {
-    if (occurrenceCountByLabel.get(label) !== parseableEntries.length) {
-      throw new SyntaxError("Inconsistent taxpayer identity in filed-return summary source.");
     }
   }
   return [...taxpayerIdentityByLabel.values(), ...returnIdentityByKey.values()];

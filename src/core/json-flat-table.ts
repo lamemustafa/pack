@@ -19,6 +19,11 @@ export interface FlatJsonArrayExpansionOptions {
   maxElements: number;
 }
 
+export interface FlatJsonLeafSelection {
+  includePath: (path: string) => boolean;
+  visitPath?: (path: string) => void;
+}
+
 const MAX_JSON_DEPTH = 512;
 const MAX_PLAIN_NUMBER_BYTES = 5 * 1024 * 1024;
 
@@ -49,6 +54,14 @@ export function flattenJsonTextScalarLeaves(
   arrayExpansion?: FlatJsonArrayExpansionOptions,
 ): FlatJsonLeaf[] {
   return new FlatJsonParser(input, maxOutputBytes, arrayExpansion).parse();
+}
+
+export function flattenJsonTextSelectedScalarLeaves(
+  input: string,
+  selection: FlatJsonLeafSelection,
+  maxOutputBytes = Number.POSITIVE_INFINITY,
+): FlatJsonLeaf[] {
+  return new FlatJsonParser(input, maxOutputBytes, undefined, [], selection).parse();
 }
 
 export function flattenJsonTextObjectAtPath(
@@ -131,6 +144,7 @@ class FlatJsonParser {
     private readonly maxOutputBytes: number,
     private readonly arrayExpansion?: FlatJsonArrayExpansionOptions,
     private readonly objectPath: readonly string[] = [],
+    private readonly selection?: FlatJsonLeafSelection,
   ) {
     this.eligibleArrayPaths = new Set(arrayExpansion?.eligiblePaths ?? []);
   }
@@ -188,18 +202,20 @@ class FlatJsonParser {
   private parseValue(path: string, emit: boolean, depth: number): void {
     if (depth > MAX_JSON_DEPTH) this.fail();
     this.skipWhitespace();
+    if (emit) this.selection?.visitPath?.(path);
     const character = this.input[this.index];
     if (character === '"') {
-      const value = this.parseString(emit);
-      if (emit) this.addLeaf(path, "text", value);
+      const selected = this.shouldEmitLeaf(path, emit);
+      const value = this.parseString(selected);
+      if (selected) this.addLeaf(path, "text", value);
       return;
     }
     if (character === "{") return this.parseObject(path, emit, depth + 1);
     if (character === "[") return this.parseArray(path, emit, depth + 1);
-    if (character === "t") return this.parseLiteral("true", path, emit);
-    if (character === "f") return this.parseLiteral("false", path, emit);
-    if (character === "n") return this.parseLiteral("null", path, emit);
-    this.parseNumber(path, emit);
+    if (character === "t") return this.parseLiteral("true", path, this.shouldEmitLeaf(path, emit));
+    if (character === "f") return this.parseLiteral("false", path, this.shouldEmitLeaf(path, emit));
+    if (character === "n") return this.parseLiteral("null", path, this.shouldEmitLeaf(path, emit));
+    this.parseNumber(path, this.shouldEmitLeaf(path, emit));
   }
 
   private parseObject(path: string, emit: boolean, depth: number): void {
@@ -239,6 +255,7 @@ class FlatJsonParser {
   }
 
   private parseArray(path: string, emit: boolean, depth: number): void {
+    if (emit && this.selection) return this.parseSelectedArray(path, depth);
     let elementCount = 0;
     const elementSpans: Array<readonly [number, number]> = [];
     const eligible = emit && this.eligibleArrayPaths.has(path);
@@ -311,6 +328,25 @@ class FlatJsonParser {
         );
       }
     });
+  }
+
+  private parseSelectedArray(path: string, depth: number): void {
+    let elementIndex = 0;
+    this.index += 1;
+    this.skipWhitespace();
+    if (this.consume("]")) return;
+    while (true) {
+      this.parseValue(`${path}/${elementIndex}`, true, depth);
+      elementIndex += 1;
+      this.skipWhitespace();
+      if (this.consume("]")) return;
+      if (!this.consume(",")) this.fail();
+      this.skipWhitespace();
+    }
+  }
+
+  private shouldEmitLeaf(path: string, emit: boolean): boolean {
+    return emit && (this.selection?.includePath(path) ?? true);
   }
 
   private selectArrayDiscriminator(

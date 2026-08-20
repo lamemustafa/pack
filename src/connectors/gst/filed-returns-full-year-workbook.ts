@@ -36,7 +36,6 @@ export function buildFiledReturnsFullYearWorkbook(
           summary.dataRows,
           summary.contextRows,
           options.generatedAt,
-          !summary.outcomeOnly,
         ),
       ],
     },
@@ -49,16 +48,12 @@ function consolidatedSheet(
   dataRows: readonly FiledReturnsSummaryDataRow[],
   contextRows: readonly FiledReturnsSummaryContextRow[],
   generatedAt: Date,
-  requireIdentity: boolean,
 ): XlsxWorksheet {
   const rows: Array<Array<XlsxCell | undefined>> = [
-    [
-      { value: "GSTIN", style: "bold" },
-      { value: taxpayerIdentityValue(contextRows, "GSTIN", requireIdentity) },
-    ],
+    [{ value: "GSTIN", style: "bold" }, { value: taxpayerIdentityValue(contextRows, "GSTIN") }],
     [
       { value: "Legal name", style: "bold" },
-      { value: taxpayerIdentityValue(contextRows, "Legal name", requireIdentity) },
+      { value: taxpayerIdentityValue(contextRows, "Legal name") },
     ],
     [{ value: "Financial year", style: "bold" }, { value: financialYear }],
     [],
@@ -147,14 +142,11 @@ function exactSpreadsheetNumber(input: string): number | null {
 function taxpayerIdentityValue(
   rows: readonly FiledReturnsSummaryContextRow[],
   fieldLabel: "GSTIN" | "Legal name",
-  required: boolean,
 ): string {
   const matches = rows.filter(
     (row) => row.contextType === "taxpayer_identity" && row.fieldLabel === fieldLabel,
   );
   if (matches.length > 1) throw new SyntaxError("Duplicate workbook taxpayer identity.");
-  if (required && matches.length === 0)
-    throw new SyntaxError("Missing workbook taxpayer identity.");
   return matches[0]?.valueText ?? "";
 }
 
