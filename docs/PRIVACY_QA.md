@@ -57,10 +57,14 @@ For each release candidate:
   the discriminator field, and emit no count row. Empty arrays must emit one
   count row with `array-count-empty`. Every other array, including every
   non-empty GSTR-1 and GSTR-2B array, must emit one count row whose `outcome`
-  names why it was not expanded. Confirm the canonical artifact-validation
-  envelope is removed before flattening (`/data/r3b` for GSTR-3B and `/data`
-  for GSTR-1 and GSTR-2B), `field_path` is relative to it, and a missing or
-  non-object envelope emits a `json-envelope-missing` outcome row. Expand JSON
+  names why it was not expanded. Confirm the whole-document pre-scan retains
+  only paths selected by the canonical identity predicate and rejects a
+  forbidden credential/session path before retaining its value. Identity must
+  be classified before the canonical artifact-validation envelope is removed
+  for data flattening (`/data/r3b` for
+  GSTR-3B and `/data` for GSTR-1 and GSTR-2B), `field_path` is relative to that
+  envelope, and a missing or non-object envelope emits a
+  `json-envelope-missing` outcome row. Expand JSON
   numbers without rounding into plain decimal `value_number` text; preserve strings
   and identifiers as text except for the existing apostrophe guard on
   formula-like text; and use fixed outcome rows where no parseable JSON exists.
@@ -69,8 +73,10 @@ For each release candidate:
   row-order derivations that were not value-matched, and the pre-existing
   offline-utility mappings; unmapped labels must stay empty. The workbook must
   contain exactly one sheet, `GSTR-3B Consolidated`. Its header must contain
-  recognized GSTIN and legal name once plus the financial year above twelve
-  typed date columns. Those header rows, the `Description` row and the first
+  available recognized GSTIN and legal name once plus the financial year above
+  twelve typed date columns; a missing GSTIN or legal name must leave its value
+  cell blank without suppressing the workbook. Those header rows, the
+  `Description` row and the first
   column must remain frozen while scrolling. The statement body must retain
   numeric figure and arithmetic-total cells, blank cells for missing or
   unparseable periods, only mapped Table 3.1 and Table 4 rows, the portal-dash
@@ -78,8 +84,10 @@ For each release candidate:
   final spacer, the footer must state included and excluded coverage, the
   GSTR-9 boundary, generation timestamp and workbook format token. GSTIN and
   legal name must appear nowhere else in the workbook and no recognized
-  taxpayer or filing identity may appear in the data CSV. The tidy CSV must
-  retain unmapped paths and outcomes. The seven format rules, tidy-data format
+  taxpayer or filing identity may appear in the data CSV. Other recognized
+  taxpayer identity plus per-period ARN and ARN date may exist only in transient
+  summary context and must not be written to either generated file. The tidy
+  CSV must retain unmapped paths and outcomes. The seven format rules, tidy-data format
   version, sourced GSTR-9 mapping and disclaimer must live under the workbook
   format token in the README, not in generated rule rows or a second sheet.
   Both derived files must remain

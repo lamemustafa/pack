@@ -82,16 +82,20 @@ outcome rows instead of fabricated zeroes. The exact shaping rules are recorded
 below against the workbook format token.
 
 The workbook's consolidated statement includes only mapped GSTR-3B Table 3.1
-and Table 4 lines. A header block identifies the GSTIN, legal name and financial
-year above the typed financial-year month columns. The identity block, month
-header and first column stay frozen while scrolling. The statement body keeps
+and Table 4 lines. A header block shows the available GSTIN and legal name plus
+the financial year above the typed financial-year month columns. A missing
+GSTIN or legal name leaves its value cell blank without suppressing the
+workbook. The identity block, month header and first column stay frozen while
+scrolling. The statement body keeps
 the portal-dash applicability set for Table 3.1 and all four Table 4 tax columns.
 After the final statement spacer, a footer records included and excluded Form
 coverage, the GSTR-9 boundary, generation timestamp and workbook format token.
-Recognized identity is absent from the data CSV; only GSTIN and legal name are
-written to the workbook header. Other recognized taxpayer and filing identity
-is not written to the workbook. If no period has parseable JSON, the identity
-value cells and statement figures are blank. The tidy CSV remains the
+Recognized identity is absent from the data CSV; only available GSTIN and legal
+name are written to the workbook header. Other recognized taxpayer identity and
+per-period filing identity, including ARN and ARN date, are separated into
+transient summary context and are not written to either generated file. If no
+period has parseable JSON, the identity value cells and statement figures are
+blank. The tidy CSV remains the
 machine-readable trace from a statement figure to its source path, including
 unmapped paths and outcome rows. Both derived files persist only inside the
 user-requested downloaded ZIP. If summary or workbook generation fails,
@@ -103,10 +107,11 @@ reason.
 
 - **Tidy data format:** `pack-full-year-summary-tidy-v4`, written as
   `full-year-summary.csv`.
-- **Envelope rule:** before flattening, Pack removes the artifact validator's
-  documented return envelope (`/data/r3b` for GSTR-3B and `/data` for GSTR-1 and
-  GSTR-2B). `field_path` is relative to that envelope; a missing or non-object
-  envelope emits `json-envelope-missing`.
+- **Envelope rule:** Pack classifies identity against the whole JSON document,
+  then removes the artifact validator's documented return envelope before
+  flattening data (`/data/r3b` for GSTR-3B and `/data` for GSTR-1 and GSTR-2B).
+  `field_path` is relative to that envelope; a missing or non-object envelope
+  emits `json-envelope-missing`.
 - **Array rule:** configured GSTR-3B summary arrays with at most 64 elements
   expand only when every element has a unique, non-empty discriminator selected
   in order from `ty`, then `pos`. Expanded paths use that value, omit the
@@ -122,11 +127,12 @@ reason.
 - **Label rule:** `field_label` is populated only by the return-type label map
   with recorded official-source provenance; otherwise it is empty and
   `field_path` remains canonical.
-- **Identity rule:** recognized identity fields are removed from the data CSV.
-  For a statement with parseable JSON, recognized GSTIN and legal name are
-  required and written once in the workbook header. Other recognized identity
-  values are not written to the workbook. Inconsistent invariant identity fails
-  summary generation.
+- **Identity rule:** recognized identity fields are classified from the whole
+  document and removed from the data CSV. Available GSTIN and legal name are
+  written once in the workbook header; either missing value remains blank.
+  Other recognized taxpayer identity and per-period ARN/ARN date remain only in
+  transient summary context and are not written to the workbook. Conflicting
+  non-empty invariant identity fails summary generation.
 - **Workbook number rule:** statement cells are numeric only when a portal
   decimal can be represented without changing its value and within spreadsheet
   precision; otherwise the cell is blank. Totals sum the numeric month cells
