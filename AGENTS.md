@@ -91,7 +91,8 @@ and release metadata separately. Open PRs as draft. Never amend or rebase a push
 
 Before claiming readiness, run `pnpm review:gate` and disposition every ask in every automated
 finding as fixed with evidence, stale with evidence, rejected with evidence and reasoning, or a
-linked follow-up named in the reply. A partial reply is not a disposition; leave no ask implicit.
+linked follow-up named in the reply and recorded in the PR body. A partial reply is not a
+disposition; leave no ask implicit.
 
 **The PR body is gated, not decorative.** `Review gate` fails the PR unless the body carries the
 sections `evaluatePullRequestBody` in `scripts/check-pr-review-gate.mjs` requires. Build the body
