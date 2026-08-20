@@ -35,10 +35,18 @@ const expectedIcons = {
   48: "icons/icon-48.png",
   128: "icons/icon-128.png",
 };
+// Every page the built extension is expected to serve. A build that silently dropped one
+// of these still produced a loadable extension with a dead surface behind it, and nothing
+// here noticed: offscreen.html was the only page asserted.
+const expectedPackagedPages = ["offscreen.html", "options.html", "panel.html", "popup.html"];
 const expectedPackagedBrandAssets = [
   "favicon.ico",
   "icons/icon-256.png",
   "icons/icon-512.png",
+  // Referenced at runtime by a Pack page. Absent, the surface renders a broken image.
+  "brand/pack-favicon.svg",
+  "brand/pack-logo-header.svg",
+  "brand/pack-mark.svg",
   "brand/pack-icon.svg",
   "brand/pack-logo.svg",
   "brand/pack-logo-hero.svg",
@@ -92,13 +100,16 @@ for (const [size, iconPath] of Object.entries(expectedIcons)) {
   if (manifest.icons?.[size] !== iconPath) {
     throw new Error(`Missing required ${size}px icon: ${iconPath}`);
   }
-  await readFile(path.join(outputDir, iconPath));
+  await requirePackagedFile(iconPath, `required ${size}px icon`);
 }
 
 for (const assetPath of expectedPackagedBrandAssets) {
-  await readFile(path.join(outputDir, assetPath));
+  await requirePackagedFile(assetPath, "required brand asset");
 }
-await readFile(path.join(outputDir, "offscreen.html"));
+
+for (const page of expectedPackagedPages) {
+  await requirePackagedFile(page, "required extension page");
+}
 
 for (const permission of expectedPermissions) {
   if (!manifest.permissions?.includes(permission))
@@ -287,6 +298,15 @@ for (const file of await listFiles(path.join(process.cwd(), "src"))) {
 }
 
 console.log("Pack WXT extension package verification passed.");
+
+/** Reads a packaged file, or fails naming the file rather than crashing with a raw ENOENT. */
+async function requirePackagedFile(relativePath, reason) {
+  try {
+    return await readFile(path.join(outputDir, relativePath));
+  } catch (error) {
+    throw new Error(`Missing ${reason}: ${relativePath} (${error?.code ?? error?.message})`);
+  }
+}
 
 async function listFiles(dir) {
   const entries = await readdir(dir, { withFileTypes: true });
