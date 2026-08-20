@@ -88,6 +88,10 @@ GSTIN or legal name leaves its value cell blank without suppressing the
 workbook. The identity block, month header and first column stay frozen while
 scrolling. The statement body keeps
 the portal-dash applicability set for Table 3.1 and all four Table 4 tax columns.
+Totals use scaled decimal arithmetic on the original JSON number text. If an
+exact total cannot be emitted as a spreadsheet numeric cell, the Total cell
+shows the exact sum as text and explains the precision limit instead of writing
+a rounded figure.
 After the final statement spacer, a two-row footer records the GST portal as the
 source with a human-readable generation date, then included and excluded Form
 coverage. Column B is width 58 so both footer values are readable without
@@ -131,18 +135,27 @@ be given the producing Pack version.
   string is a quoted empty CSV cell, while formula-like text is
   apostrophe-prefixed for spreadsheet safety.
 - **Label rule:** `field_label` is populated only by the return-type label map
-  with recorded official-source provenance; otherwise it is empty and
-  `field_path` remains canonical.
-- **Identity rule:** recognized identity fields are classified from the whole
-  document and removed from the data CSV. Available GSTIN and legal name are
+  with recorded official-source provenance. Portal-PDF row-text evidence does
+  not claim that the JSON value was matched: for the existing Table 4 path
+  associations, it verifies only the caption and tax-component text and does
+  not upgrade the path association to value-matched evidence. JSON vocabulary
+  or row order alone is not enough for a future path mapping, which also needs
+  independent evidence for its JSON path or discriminator. Otherwise the label
+  is empty and `field_path` remains canonical.
+- **Identity rule:** recognized identity fields are classified from every
+  RFC6901-decoded path segment across the whole document and removed from the
+  data CSV. Available GSTIN and legal name are
   written once in the workbook header; either missing value remains blank.
   Other recognized taxpayer identity and per-period ARN/ARN date remain only in
   transient summary context and are not written to the workbook. Conflicting
   non-empty invariant identity fails summary generation.
 - **Workbook number rule:** statement cells are numeric only when a portal
   decimal can be represented without changing its value and within spreadsheet
-  precision; otherwise the cell is blank. Totals sum the numeric month cells
-  only.
+  precision; otherwise the month cell is blank. Totals use scaled exact
+  arithmetic on the original decimal strings and are numeric only when the
+  exact result can be emitted unchanged; otherwise the Total cell shows the
+  exact sum as text and explains the precision limit instead of writing a
+  rounded figure.
 
 GSTR-9 is not the sum of twelve GSTR-3B returns. Its Table 4 requires outward
 supplies split by counterparty type, which GSTR-3B does not contain, and it
