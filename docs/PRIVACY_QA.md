@@ -68,19 +68,21 @@ For each release candidate:
   distinguishes two-period portal-PDF value cross-checks, form-vocabulary and
   row-order derivations that were not value-matched, and the pre-existing
   offline-utility mappings; unmapped labels must stay empty. The workbook must
-  contain exactly `GSTR-3B Consolidated` and `Run details` in that order. Its
-  statement must use twelve typed date columns,
+  contain exactly one sheet, `GSTR-3B Consolidated`. Its header must contain
+  recognized GSTIN and legal name once plus the financial year above twelve
+  typed date columns. Those header rows, the `Description` row and the first
+  column must remain frozen while scrolling. The statement body must retain
   numeric figure and arithmetic-total cells, blank cells for missing or
   unparseable periods, only mapped Table 3.1 and Table 4 rows, the portal-dash
-  applicability set for Table 3.1, and all four Table 4 tax columns must remain.
-  The `Run details` sheet must contain unique keys for Pack and format provenance, run
-  scope, statement coverage, the boundary that the workbook does not produce GSTR-9
-  values, normalized-envelope and value/flattening rules, recognized invariant
-  taxpayer identity once, and recognized filing identity once per return type
-  and period. Neither identity class may appear in the data CSV or statement
-  sheet. The tidy CSV, rather than a duplicate workbook sheet, must retain
-  unmapped paths and outcomes. The sourced GSTR-9 mapping and disclaimer belong
-  in the README, not the generated workbook. Both derived files must remain
+  applicability set for Table 3.1 and all four Table 4 tax columns. After the
+  final spacer, the footer must state included and excluded coverage, the
+  GSTR-9 boundary, generation timestamp and workbook format token. GSTIN and
+  legal name must appear nowhere else in the workbook and no recognized
+  taxpayer or filing identity may appear in the data CSV. The tidy CSV must
+  retain unmapped paths and outcomes. The seven format rules, tidy-data format
+  version, sourced GSTR-9 mapping and disclaimer must live under the workbook
+  format token in the README, not in generated rule rows or a second sheet.
+  Both derived files must remain
   output-only ZIP entries: their bytes
   may be transient in extension-controlled memory before browser handoff and
   persist in the user's downloaded ZIP, but never write separately to OPFS,

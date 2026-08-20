@@ -73,53 +73,64 @@ release.
 During each full-year ZIP assembly with eligible files, Pack attempts to add two
 files derived from the staged portal JSON already in that run:
 `full-year-workbook.xlsx` and `full-year-summary.csv`. The workbook is the primary
-working-paper output. It contains exactly two sheets, in order:
-`GSTR-3B Consolidated` and `Run details`; the former standalone context CSV is
-not emitted. The data CSV has the
+working-paper output. It contains exactly one sheet, `GSTR-3B Consolidated`; the
+former standalone context CSV is not emitted. The data CSV has the
 fixed columns `period`, `return_type`, `artifact`, `outcome`, `field_label`,
 `field_path`, `value_text`, and `value_number`, with one row per period and
-flattened field. JSON numbers are expanded without rounding into plain decimal
-notation in `value_number`; strings and identifiers retain their spelling in
-`value_text` except for the existing apostrophe guard on formula-like text.
-Four configured GSTR-3B summary arrays may expand when they contain at most 64
-elements and every element has a unique, non-empty discriminator selected in
-order from the portal keys `ty` and `pos`. Expanded field paths use that value
-as the element key, omit the discriminator field itself, and do not also emit a
-count. Every array that does not expand emits one count at its JSON Pointer
-path. Empty arrays use the distinct `array-count-empty` reason, so they are not
-mistaken for a configuration gap; other count rows name why expansion was not
-performed. GSTR-1 and GSTR-2B non-empty arrays therefore remain count-only.
-Before flattening, Pack removes the return-type envelope already required by
-artifact validation: `/data/r3b` for GSTR-3B and `/data` for GSTR-1 and
-GSTR-2B. `field_path` is relative to that documented envelope. If it is absent
-or is not an object, the period receives a `json-envelope-missing` outcome row
-instead of silently flattening a different shape.
-Periods and artifacts without parseable JSON receive fixed outcome rows instead
-of fabricated zeroes. `field_path` remains the canonical identifier, while
-`field_label` is populated only by a partial return-type map whose entries carry
-recorded provenance. The map distinguishes labels value-cross-checked against
-two portal PDF periods, labels derived only from form vocabulary and row order,
-and the pre-existing offline-utility mappings; unmapped labels stay empty.
+flattened field. Periods and artifacts without parseable JSON receive fixed
+outcome rows instead of fabricated zeroes. The exact shaping rules are recorded
+below against the workbook format token.
 
 The workbook's consolidated statement includes only mapped GSTR-3B Table 3.1
-and Table 4 lines. Its twelve financial-year month headers are date cells,
-statement figures and arithmetic totals are numeric cells, and a missing or
-unparseable period stays blank rather than becoming zero. Table 3.1 rows follow
-the combinations displayed as figures rather than dashes on the portal form;
-Table 4 retains all four tax columns. The `Run details` sheet uses the
-two-column key/value layout previously used by About. It records Pack and
-format provenance, run scope, included and excluded statement coverage, the GSTR-9 boundary,
-normalized-envelope and value/flattening rules, recognized invariant taxpayer
-identity once, and recognized filing identity once per return type and period.
-Its keys are unique. Identity does not appear on the statement sheet or in the
-data CSV. The tidy CSV remains the machine-readable trace from a statement
-figure to its source path, including unmapped paths and outcome rows. Both
-derived files persist only inside the user-requested downloaded ZIP. A run with eligible
-files but no parseable JSON, including a PDF-only run, receives a workbook with
-blank statement cells and an outcome-only data CSV. If summary or workbook
-generation fails, identity is inconsistent, or the combined derived output
-exceeds its local size limit, Pack still exports the artifact ZIP and reports a
-fixed categorical reason.
+and Table 4 lines. A header block identifies the GSTIN, legal name and financial
+year above the typed financial-year month columns. The identity block, month
+header and first column stay frozen while scrolling. The statement body keeps
+the portal-dash applicability set for Table 3.1 and all four Table 4 tax columns.
+After the final statement spacer, a footer records included and excluded Form
+coverage, the GSTR-9 boundary, generation timestamp and workbook format token.
+Recognized identity is absent from the data CSV; only GSTIN and legal name are
+written to the workbook header. Other recognized taxpayer and filing identity
+is not written to the workbook. If no period has parseable JSON, the identity
+value cells and statement figures are blank. The tidy CSV remains the
+machine-readable trace from a statement figure to its source path, including
+unmapped paths and outcome rows. Both derived files persist only inside the
+user-requested downloaded ZIP. If summary or workbook generation fails,
+identity is inconsistent, or the combined derived output exceeds its local size
+limit, Pack still exports the artifact ZIP and reports a fixed categorical
+reason.
+
+### Workbook format `pack-full-year-workbook-v3`
+
+- **Tidy data format:** `pack-full-year-summary-tidy-v4`, written as
+  `full-year-summary.csv`.
+- **Envelope rule:** before flattening, Pack removes the artifact validator's
+  documented return envelope (`/data/r3b` for GSTR-3B and `/data` for GSTR-1 and
+  GSTR-2B). `field_path` is relative to that envelope; a missing or non-object
+  envelope emits `json-envelope-missing`.
+- **Array rule:** configured GSTR-3B summary arrays with at most 64 elements
+  expand only when every element has a unique, non-empty discriminator selected
+  in order from `ty`, then `pos`. Expanded paths use that value, omit the
+  discriminator field and emit no count row. Empty arrays emit
+  `array-count-empty`; every other array emits one count row naming why it was
+  not expanded. Non-empty GSTR-1 and GSTR-2B arrays remain count-only.
+- **Number rule:** JSON number tokens expand without rounding into plain decimal
+  `value_number` text; spreadsheet software may apply its own numeric precision
+  limits.
+- **Text rule:** JSON strings, booleans and null use `value_text`; an empty JSON
+  string is a quoted empty CSV cell, while formula-like text is
+  apostrophe-prefixed for spreadsheet safety.
+- **Label rule:** `field_label` is populated only by the return-type label map
+  with recorded official-source provenance; otherwise it is empty and
+  `field_path` remains canonical.
+- **Identity rule:** recognized identity fields are removed from the data CSV.
+  For a statement with parseable JSON, recognized GSTIN and legal name are
+  required and written once in the workbook header. Other recognized identity
+  values are not written to the workbook. Inconsistent invariant identity fails
+  summary generation.
+- **Workbook number rule:** statement cells are numeric only when a portal
+  decimal can be represented without changing its value and within spreadsheet
+  precision; otherwise the cell is blank. Totals sum the numeric month cells
+  only.
 
 GSTR-9 is not the sum of twelve GSTR-3B returns. Its Table 4 requires outward
 supplies split by counterparty type, which GSTR-3B does not contain, and it
