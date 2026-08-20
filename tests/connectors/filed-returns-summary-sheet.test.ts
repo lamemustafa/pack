@@ -41,6 +41,27 @@ describe("filed-return full-year summary sheet", () => {
     }
   });
 
+  it("withholds the taxpayer's own identifier under an unrecognised alias, but keeps a counterparty one", () => {
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-3B")],
+      [
+        {
+          path: "april-data.json",
+          bytes: new TextEncoder().encode(
+            '{"status":1,"data":{"lglnm":"Synthetic Legal Name","r3b":{"gstin":"27ABCDE1234F1Z0","ret_period":"042026","registration_number":"27ABCDE1234F1Z0","ctin":"29ZZZZZ9999Z9Z9","sup_details":{"osup_det":{"txval":1}}}}}',
+          ),
+        },
+      ],
+    );
+
+    const dataCsv = new TextDecoder().decode(summary.dataBytes);
+    // Same value as the canonical gstin, under a field name the alias registry
+    // does not know.
+    expect(dataCsv).not.toContain("27ABCDE1234F1Z0");
+    // A counterparty identifier is business data the summary exists to report.
+    expect(dataCsv).toContain("29ZZZZZ9999Z9Z9");
+  });
+
   it("withholds a leaf whose object key is itself identity-shaped", () => {
     const summary = buildFiledReturnsSummarySheet(
       [jsonPlan("April", "april-data.json", "GSTR-3B")],

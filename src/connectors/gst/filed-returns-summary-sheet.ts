@@ -186,9 +186,29 @@ export function buildFiledReturnsSummarySheet(
   const identities = collectIdentityValues(parsedEntries);
   const dataRows: FiledReturnsSummaryDataRow[] = [];
   for (const parsed of parsedEntries) {
+    // Path-based redaction cannot cover every alias a portal might use, so the
+    // taxpayer's own identifier under an unrecognised field name would reach
+    // value_text. It is withheld by value as well as by path.
+    //
+    // Deliberately scoped to *this document's own* identity rather than any
+    // GSTIN-shaped text. A counterparty GSTIN is business data the summary
+    // exists to report -- across 120 captured documents there are 3,171 such
+    // values, all `ctin`, and withholding them would empty the most useful
+    // column of a GSTR-2B CSV while withholding nothing the user does not
+    // already hold in the original artifact beside it.
+    const ownIdentityValues = new Set(
+      parsed.identityLeaves
+        .filter(
+          (leaf) => filedReturnsSummaryIdentity(leaf.path)?.contextType === "taxpayer_identity",
+        )
+        .map((leaf) => leaf.value)
+        .filter((value): value is string => typeof value === "string" && value.length > 0),
+    );
     const fieldLeaves = parsed.leaves.filter(
       (leaf) =>
-        !isFiledReturnsSummaryIdentityPath(leaf.path) && !hasIdentityShapedPathSegment(leaf.path),
+        !isFiledReturnsSummaryIdentityPath(leaf.path) &&
+        !hasIdentityShapedPathSegment(leaf.path) &&
+        !(leaf.valueKind === "text" && ownIdentityValues.has(leaf.value)),
     );
     if (fieldLeaves.length === 0) {
       dataRows.push(outcomeRow(parsed.planned, parsed.outcome));

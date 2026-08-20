@@ -44,6 +44,22 @@ export function filedReturnsSummaryOutcome(
   };
 }
 
+/**
+ * How a success claim may be phrased for a given lifecycle. The failure branch
+ * already conditions its wording; the success branches did not, so an
+ * unconfirmed download produced "the download may not have completed" followed
+ * by "The ZIP includes the workbook and tidy CSV" -- a claim that files were
+ * saved when no ZIP may exist.
+ *
+ * One place decides this, so a fourth success branch cannot reintroduce the
+ * contradiction by forgetting to.
+ */
+function summaryInclusionClaim(lifecycle: FiledReturnsSummaryLifecycle, contents: string): string {
+  if (lifecycle === "intent") return `Pack prepared the artifact ZIP with ${contents}.`;
+  if (lifecycle === "unconfirmed") return `If the ZIP download completed, it includes ${contents}.`;
+  return `The ZIP includes ${contents}.`;
+}
+
 export function filedReturnsSummaryStatusMessage(
   signals: readonly string[],
   lifecycle: FiledReturnsSummaryLifecycle,
@@ -57,23 +73,36 @@ export function filedReturnsSummaryStatusMessage(
       signal.startsWith("full-fiscal-year-summary-parsed-period-count:"),
     );
     const count = Number(countSignal?.split(":").at(-1));
-    return signalSet.has("full-fiscal-year-summary-outcomes-only")
-      ? "The ZIP includes an outcome-only tidy CSV. A consolidated workbook is not available for this return type."
-      : Number.isInteger(count) && count >= 0 && count <= 12
-        ? `The ZIP includes the tidy CSV for ${count} ${count === 1 ? "period" : "periods"}. A consolidated workbook is not available for this return type.`
-        : "The ZIP includes the tidy CSV. A consolidated workbook is not available for this return type.";
+    const notApplicable = " A consolidated workbook is not available for this return type.";
+    if (signalSet.has("full-fiscal-year-summary-outcomes-only")) {
+      return summaryInclusionClaim(lifecycle, "an outcome-only tidy CSV") + notApplicable;
+    }
+    return (
+      summaryInclusionClaim(
+        lifecycle,
+        Number.isInteger(count) && count >= 0 && count <= 12
+          ? `the tidy CSV for ${count} ${count === 1 ? "period" : "periods"}`
+          : "the tidy CSV",
+      ) + notApplicable
+    );
   }
   if (signalSet.has("full-fiscal-year-summary-outcomes-only")) {
-    return "The ZIP includes the workbook and an outcome-only tidy CSV because no parseable portal JSON was available.";
+    return summaryInclusionClaim(
+      lifecycle,
+      "the workbook and an outcome-only tidy CSV because no parseable portal JSON was available",
+    );
   }
   if (signalSet.has("full-fiscal-year-summary-included")) {
     const countSignal = signals.find((signal) =>
       signal.startsWith("full-fiscal-year-summary-parsed-period-count:"),
     );
     const count = Number(countSignal?.split(":").at(-1));
-    return Number.isInteger(count) && count >= 0 && count <= 12
-      ? `The ZIP includes the workbook and tidy CSV for ${count} ${count === 1 ? "period" : "periods"}.`
-      : "The ZIP includes the workbook and tidy CSV.";
+    return summaryInclusionClaim(
+      lifecycle,
+      Number.isInteger(count) && count >= 0 && count <= 12
+        ? `the workbook and tidy CSV for ${count} ${count === 1 ? "period" : "periods"}`
+        : "the workbook and tidy CSV",
+    );
   }
   if (signalSet.has("full-fiscal-year-summary-failed")) {
     const reason = filedReturnsSummaryFailureReason(signalSet);
