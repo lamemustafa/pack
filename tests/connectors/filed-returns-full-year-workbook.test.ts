@@ -482,6 +482,58 @@ describe("filed-return full-year workbook", () => {
       type: "inlineStr",
     });
   });
+
+  it("marks a non-numeric mapped statement value instead of dropping it from month and total", () => {
+    const staged: readonly FiledReturnsMonth[] = ["April", "May", "June", "July"];
+    const plan = FILED_RETURNS_MONTHS.map((period) => ({
+      artifactType: "JSON" as const,
+      entryNames: staged.includes(period) ? [`${period.toLowerCase()}-data.json`] : [],
+      financialYear: "2026-27",
+      outcomeCategory: staged.includes(period)
+        ? ("staged" as const)
+        : ("artifact-unavailable" as const),
+      period,
+      returnType: "GSTR-3B" as const,
+    }));
+    const entries = (
+      [
+        ["april-data.json", "042026", '"1,234.50"'],
+        ["may-data.json", "052026", "true"],
+        ["june-data.json", "062026", "null"],
+        ["july-data.json", "072026", "5"],
+      ] as const
+    ).map(([path, returnPeriod, txval]) => ({
+      path,
+      bytes: new TextEncoder().encode(
+        `{"data":{"lglnm":"Synthetic Legal Name","r3b":{"gstin":"27ABCDE1234F1Z0","ret_period":"${returnPeriod}","sup_details":{"osup_det":{"txval":${txval}}}}}}`,
+      ),
+    }));
+    const summary = buildFiledReturnsSummarySheet(plan, entries);
+    const statement = text(
+      extractStoredZipEntries(
+        buildFiledReturnsFullYearWorkbook(summary, plan, {
+          generatedAt: new Date("2026-08-20T12:00:00.000Z"),
+        }),
+      ),
+      "xl/worksheets/sheet1.xml",
+    );
+    const taxableValueRow = parsedRows(statement).find(
+      (row) => row.get("A7")?.text === "Taxable Value",
+    );
+
+    for (const column of ["B7", "C7", "D7"]) {
+      expect(taxableValueRow?.get(column)).toMatchObject({
+        text: "Non-numeric value",
+        type: "inlineStr",
+      });
+      expect(taxableValueRow?.get(column)?.number).toBeUndefined();
+    }
+    expect(taxableValueRow?.get("E7")).toMatchObject({ number: 5, style: "2" });
+    expect(taxableValueRow?.get("N7")).toMatchObject({
+      text: "Exact total unavailable: invalid source decimal",
+      type: "inlineStr",
+    });
+  });
 });
 
 function textValues(row: Map<string, ParsedCell> | undefined): Array<string | undefined> {

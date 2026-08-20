@@ -184,6 +184,7 @@ describe("filed-return durable signal contract", () => {
       "full-fiscal-year-summary-parsed-period-count:0",
       "full-fiscal-year-summary-row-count:100000",
       "full-fiscal-year-summary-error:too-large",
+      "full-fiscal-year-summary-error:identity-unverified",
     ];
 
     expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);

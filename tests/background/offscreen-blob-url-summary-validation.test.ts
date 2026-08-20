@@ -93,7 +93,7 @@ describe("offscreen full-year summary response validation", () => {
     ).resolves.toEqual({ status: "failed", errorCategory: "offscreen-response-invalid" });
   });
 
-  it.each(["identity-rejected", "privacy-rejected"] as const)(
+  it.each(["identity-rejected", "identity-unverified", "privacy-rejected"] as const)(
     "preserves the fixed %s summary rejection category",
     async (reasonCategory) => {
       mocks.runtime.sendMessage.mockImplementationOnce(async (message?: unknown) => ({

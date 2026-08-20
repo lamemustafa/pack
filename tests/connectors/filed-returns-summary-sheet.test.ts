@@ -4,6 +4,7 @@ import {
   FiledReturnsSummaryTooLargeError,
   MAX_FILED_RETURNS_SUMMARY_ARRAY_EXPANSION_ELEMENTS,
   FILED_RETURNS_SUMMARY_HEADERS,
+  FiledReturnsSummaryUncanonicalIdentityError,
   type FiledReturnsSummaryPlanEntry,
 } from "../../src/connectors/gst/filed-returns-summary-sheet";
 import {
@@ -619,6 +620,81 @@ describe("filed-return full-year summary sheet", () => {
     ).toThrow("Required taxpayer identity is missing");
   });
 
+  it.each([
+    {
+      label: "GSTIN outside the return envelope",
+      document: {
+        status: 1,
+        gstin: "27ABCDE1234F1Z0",
+        data: { lglnm: "Synthetic Legal Name", r3b: { ret_period: "042026", amount: 1 } },
+      },
+    },
+    {
+      label: "legal name in a metadata object",
+      document: {
+        status: 1,
+        meta: { lglnm: "Synthetic Legal Name" },
+        data: { r3b: { gstin: "27ABCDE1234F1Z0", ret_period: "042026", amount: 1 } },
+      },
+    },
+    {
+      label: "GSTIN one level below the canonical container",
+      document: {
+        status: 1,
+        data: {
+          lglnm: "Synthetic Legal Name",
+          r3b: { taxpayer: { gstin: "27ABCDE1234F1Z0" }, ret_period: "042026", amount: 1 },
+        },
+      },
+    },
+  ])("rejects a decoy $label rather than attributing the return to it", ({ document }) => {
+    expect(() =>
+      buildFiledReturnsSummarySheet(
+        [jsonPlan("April", "april-data.json", "GSTR-3B")],
+        [rawJsonEntry("april-data.json", document)],
+      ),
+    ).toThrow(FiledReturnsSummaryUncanonicalIdentityError);
+  });
+
+  it("accepts a scalar-wrapped identity at the canonical response path", () => {
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-3B")],
+      [
+        rawJsonEntry("april-data.json", {
+          status: 1,
+          data: {
+            lglnm: "Synthetic Legal Name",
+            r3b: { gstin: { value: "27ABCDE1234F1Z0" }, ret_period: "042026", amount: 1 },
+          },
+        }),
+      ],
+    );
+
+    expect(summary).toMatchObject({ outcomeOnly: false, parsedPeriodCount: 1 });
+    expect(contextText(summary.contextRows)).toContain(
+      "taxpayer_identity,identity,GSTIN,/data/r3b/gstin/value,27ABCDE1234F1Z0",
+    );
+  });
+
+  it("still accepts the canonical identity when a matching decoy sits beside it", () => {
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-3B")],
+      [
+        rawJsonEntry("april-data.json", {
+          status: 1,
+          gstin: "27ABCDE1234F1Z0",
+          data: {
+            lglnm: "Synthetic Legal Name",
+            r3b: { gstin: "27ABCDE1234F1Z0", ret_period: "042026", amount: 1 },
+          },
+        }),
+      ],
+    );
+
+    expect(summary).toMatchObject({ outcomeOnly: false, parsedPeriodCount: 1 });
+    expect(contextText(summary.contextRows)).toContain("27ABCDE1234F1Z0");
+  });
+
   it("treats an optional non-string taxpayer identity as absent", () => {
     const summary = buildFiledReturnsSummarySheet(
       [jsonPlan("April", "april-data.json", "GSTR-3B")],
@@ -800,6 +876,68 @@ describe("filed-return full-year summary sheet", () => {
       ).toThrow("credential or session field");
     },
   );
+
+  it.each([
+    ["api", "key"],
+    ["access", "key"],
+    ["recovery", "code"],
+    ["login", "id"],
+  ])(
+    "fails summary generation when credential spelling /%s/%s is split across adjacent segments",
+    (container, leaf) => {
+      expect(() =>
+        buildFiledReturnsSummarySheet(
+          [jsonPlan("April", "april-data.json", "GSTR-2B")],
+          [
+            jsonEntry("april-data.json", "GSTR-2B", {
+              amount: 1,
+              [container]: { [leaf]: "synthetic-sensitive" },
+            }),
+          ],
+        ),
+      ).toThrow("credential or session field");
+    },
+  );
+
+  it("fails summary generation when a credential spelling is split across deeper nesting", () => {
+    expect(() =>
+      buildFiledReturnsSummarySheet(
+        [jsonPlan("April", "april-data.json", "GSTR-2B")],
+        [
+          jsonEntry("april-data.json", "GSTR-2B", {
+            amount: 1,
+            api: { k: { ey: "synthetic-sensitive" } },
+          }),
+        ],
+      ),
+    ).toThrow("credential or session field");
+  });
+
+  it("still emits realistic mapped GSTR-3B paths that sit beside short segments", () => {
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-3B")],
+      [
+        rawJsonEntry("april-data.json", {
+          status: 1,
+          data: {
+            lglnm: "Synthetic Legal Name",
+            r3b: {
+              gstin: "27ABCDE1234F1Z0",
+              ret_period: "042026",
+              sup_details: { osup_det: { txval: 12.5 } },
+              itc_elg: { itc_avl: [{ ty: "ISD", iamt: 3 }] },
+            },
+          },
+        }),
+      ],
+    );
+
+    const dataRows = parseCsv(new TextDecoder().decode(summary.dataBytes));
+    expect(fieldRow(dataRows, "/sup_details/osup_det/txval")).toMatchObject({
+      value_number: "12.5",
+    });
+    expect(fieldRow(dataRows, "/itc_elg/itc_avl/ISD/iamt")).toMatchObject({ value_number: "3" });
+  });
 
   it("does not reject a benign longer segment containing a credential container word", () => {
     expect(() =>

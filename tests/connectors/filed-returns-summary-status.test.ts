@@ -84,6 +84,14 @@ describe("filed-return summary status", () => {
       {
         outcome: filedReturnsSummaryOutcome(true, {
           status: "failed",
+          reasonCategory: "identity-unverified",
+        }),
+        reason:
+          "taxpayer identity was not present at its expected place in the portal response; review the original return in the GST Portal, then retry",
+      },
+      {
+        outcome: filedReturnsSummaryOutcome(true, {
+          status: "failed",
           reasonCategory: "privacy-rejected",
         }),
         reason:

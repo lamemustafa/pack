@@ -821,6 +821,7 @@ describe("offscreen Blob URL entrypoint", () => {
       FILED_RETURNS_SUMMARY_SHEET_PATH: "full-year-summary.csv",
       FiledReturnsSummaryForbiddenFieldError: class extends SyntaxError {},
       FiledReturnsSummaryInvalidGstinError: class extends SyntaxError {},
+      FiledReturnsSummaryUncanonicalIdentityError: class extends SyntaxError {},
       buildFiledReturnsSummarySheet: () => {
         throw new Error("synthetic taxpayer figure must not escape");
       },
@@ -955,6 +956,59 @@ describe("offscreen Blob URL entrypoint", () => {
     });
     const entries = await extractStoredZipEntries(createdBlobs[0]!);
     expect([...entries.keys()]).toEqual(["april-data.json"]);
+  });
+
+  it("keeps the original artifact but omits the workbook for a decoy identity outside the canonical path", async () => {
+    await loadOffscreenEntrypoint();
+    opfsFiles.set(
+      `filed-return-packs/${TEST_FULL_YEAR_LEDGER_ID}/april-data.json`,
+      new Blob([
+        JSON.stringify({
+          status: 1,
+          gstin: "27ABCDE1234F1Z0",
+          data: {
+            lglnm: "Synthetic Legal Name",
+            r3b: { ret_period: "042026", amount: 1 },
+          },
+        }),
+      ]),
+    );
+
+    const zip = await sendOffscreenMessage({
+      type: "PACK_OFFSCREEN_CREATE_FILED_RETURN_ZIP",
+      target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+      payload: {
+        requestId: "decoy-identity-summary-request",
+        generatedAt: "2026-08-19T12:00:00.000Z",
+        ledgerId: TEST_FULL_YEAR_LEDGER_ID,
+        expectedReturnType: "GSTR-3B",
+        expectedEntryCount: 1,
+        expectedEntries: [{ artifactType: "JSON", entryNames: ["april-data.json"] }],
+        summaryPlan: [
+          {
+            artifactType: "JSON",
+            entryNames: ["april-data.json"],
+            financialYear: "2026-27",
+            outcomeCategory: "staged",
+            period: "April",
+            returnType: "GSTR-3B",
+          },
+        ],
+      },
+    });
+
+    expect(zip).toMatchObject({
+      ok: true,
+      summary: { status: "failed", reasonCategory: "identity-unverified" },
+    });
+    // The claim in docs/PORTAL_INTEGRATION_FINDINGS.md is scoped to the derived
+    // outputs: no CSV, no workbook, and no portal value in the reason. The
+    // original staged portal file the user asked for is copied verbatim, so the
+    // rejected value is still inside it — that is correct, not a leak.
+    const entries = await extractStoredZipEntries(createdBlobs[0]!);
+    expect([...entries.keys()]).toEqual(["april-data.json"]);
+    expect(JSON.stringify(zip)).not.toContain("27ABCDE1234F1Z0");
+    expect(new TextDecoder().decode(entries.get("april-data.json"))).toContain("27ABCDE1234F1Z0");
   });
 
   it("keeps the artifact ZIP with a named outcome when workbook generation throws", async () => {
