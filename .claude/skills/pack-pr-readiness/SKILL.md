@@ -77,10 +77,11 @@ its exact pass/fail output — do not paraphrase a failure as a pass.
 
 ## 5. Disposition register for PR bodies
 
-Every review finding (bot or human) needs an explicit disposition before a
-PR can be called ready or merge-ready — never leave a finding implicit.
-Use these four dispositions (per `AGENTS.md`'s "Branch, PR, And Review
-Workflow" and reviewer-disposition guidance):
+Every **ask** inside every review finding (bot or human) needs an explicit
+disposition before a PR can be called ready or merge-ready. A finding that
+asks for two things needs two dispositions; a reply addressing one while
+dropping the other is not a disposition. `AGENTS.md` is the canonical rule —
+this list only names the four outcomes it allows:
 
 - **fixed-with-evidence** — a commit or test now closes the finding; cite
   the commit/test.
@@ -94,7 +95,8 @@ Workflow" and reviewer-disposition guidance):
 
 Confirm the PR body's disposition table (matching
 `.github/PULL_REQUEST_TEMPLATE.md`'s "PR Review Follow-Up" section) is
-filled in with one row per thread/comment, for example:
+filled in with one row per ask — a finding with two asks gets two rows, or one
+row that names both outcomes — for example:
 
 | Thread/comment           | Disposition                                                                                                | Commit or evidence                    |
 | ------------------------ | ---------------------------------------------------------------------------------------------------------- | ------------------------------------- |
@@ -102,8 +104,9 @@ filled in with one row per thread/comment, for example:
 
 If the PR template uses its shorter literal column values (`accepted / fixed
 / outdated / follow-up`), map onto the four dispositions above rather than
-leaving anything unstated — the underlying discipline (every finding gets a
-named, evidenced outcome) is what matters, not which label set is used.
+leaving anything unstated — the underlying discipline (every ask gets a named,
+evidenced outcome, and a deferral is recorded in the PR body rather than only
+in the thread) is what matters, not which label set is used.
 
 ## 6. Final readiness report
 
