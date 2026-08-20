@@ -23,6 +23,41 @@ describe("extension package verifier", () => {
     expect(result.output).toContain("Pack WXT extension package verification passed.");
   });
 
+  it("accepts packaged HTML without module preload hints", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "popup.html",
+      '<!doctype html><html><body><script type="module" src="/chunks/popup.js"></script></body></html>',
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(0);
+  });
+
+  it("rejects module preload hints in any packaged HTML", async () => {
+    const cases = [
+      { file: "pages/quoted.html", rel: 'rel="modulepreload"' },
+      { file: "pages/multi-token.html", rel: 'rel="preload modulepreload"' },
+      { file: "pages/unquoted.html", rel: "rel=modulepreload" },
+    ];
+
+    for (const preloadCase of cases) {
+      const outputDir = await createValidPackage();
+      await writePackageFile(
+        outputDir,
+        preloadCase.file,
+        `<!doctype html><html><head><link ${preloadCase.rel} href="/chunks/shared.js"></head></html>`,
+      );
+
+      const result = await runVerifier(outputDir);
+
+      expect(result.status).not.toBe(0);
+      expect(result.output).toContain(`Module preload hint in ${preloadCase.file}`);
+    }
+  });
+
   it("rejects externally_connectable in the packaged manifest", async () => {
     const outputDir = await createValidPackage();
     const manifestPath = path.join(outputDir, "manifest.json");
