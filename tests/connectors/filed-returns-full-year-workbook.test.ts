@@ -261,6 +261,59 @@ describe("filed-return full-year workbook", () => {
     expect(statement).not.toContain("119999999999999.86");
   });
 
+  it("keeps an underflowing month distinct from genuine zero and a missing period", () => {
+    const plan = FILED_RETURNS_MONTHS.map((period) => {
+      const staged = period === "April" || period === "May";
+      return {
+        artifactType: "JSON" as const,
+        entryNames: staged ? [`${period.toLowerCase()}-data.json`] : [],
+        financialYear: "2026-27",
+        outcomeCategory: staged ? ("staged" as const) : ("artifact-unavailable" as const),
+        period,
+        returnType: "GSTR-3B" as const,
+      };
+    });
+    const entries = [
+      {
+        path: "april-data.json",
+        bytes: new TextEncoder().encode(
+          '{"data":{"lglnm":"Synthetic Legal Name","r3b":{"gstin":"00XXXXX0000X0Z0","ret_period":"042026","sup_details":{"osup_det":{"txval":1e-400}}}}}',
+        ),
+      },
+      {
+        path: "may-data.json",
+        bytes: new TextEncoder().encode(
+          '{"data":{"lglnm":"Synthetic Legal Name","r3b":{"gstin":"00XXXXX0000X0Z0","ret_period":"052026","sup_details":{"osup_det":{"txval":0}}}}}',
+        ),
+      },
+    ];
+    const summary = buildFiledReturnsSummarySheet(plan, entries);
+    const statement = text(
+      extractStoredZipEntries(
+        buildFiledReturnsFullYearWorkbook(summary, plan, {
+          generatedAt: new Date("2026-08-20T12:00:00.000Z"),
+        }),
+      ),
+      "xl/worksheets/sheet1.xml",
+    );
+    const taxableValueRow = parsedRows(statement).find(
+      (row) => row.get("A7")?.text === "Taxable Value",
+    );
+    const exactUnderflow = `0.${"0".repeat(399)}1`;
+
+    expect(taxableValueRow?.get("B7")).toMatchObject({
+      text: "Precision limit",
+      type: "inlineStr",
+    });
+    expect(taxableValueRow?.get("B7")?.number).toBeUndefined();
+    expect(taxableValueRow?.get("C7")).toMatchObject({ number: 0, style: "2" });
+    expect(taxableValueRow?.has("D7")).toBe(false);
+    expect(taxableValueRow?.get("N7")).toMatchObject({
+      text: `Exact total ${exactUnderflow} unavailable at spreadsheet numeric precision`,
+      type: "inlineStr",
+    });
+  });
+
   it("does not publish a partial total when a present month exceeds numeric precision", () => {
     const plan = FILED_RETURNS_MONTHS.map((period) => {
       const staged = period === "April" || period === "May";
@@ -300,7 +353,10 @@ describe("filed-return full-year workbook", () => {
       (row) => row.get("A7")?.text === "Taxable Value",
     );
 
-    expect(taxableValueRow?.has("B7")).toBe(false);
+    expect(taxableValueRow?.get("B7")).toMatchObject({
+      text: "Precision limit",
+      type: "inlineStr",
+    });
     expect(taxableValueRow?.get("C7")).toMatchObject({ number: 1, style: "2" });
     expect(taxableValueRow?.get("N7")).toMatchObject({
       text: "Exact total 100000000000000.999 unavailable at spreadsheet numeric precision",

@@ -568,6 +568,55 @@ describe("filed-return full-year summary sheet", () => {
     ).toThrow("Required taxpayer identity");
   });
 
+  it.each([
+    {
+      label: "null GSTIN",
+      document: {
+        status: 1,
+        data: {
+          lglnm: "Synthetic Legal Name",
+          r3b: { gstin: null, ret_period: "042026", amount: 1 },
+        },
+      },
+    },
+    {
+      label: "boolean legal name",
+      document: {
+        status: 1,
+        data: {
+          lglnm: false,
+          r3b: { gstin: "00XXXXX0000X0Z0", ret_period: "042026", amount: 1 },
+        },
+      },
+    },
+  ])("fails closed through the missing-identity path for a $label", ({ document }) => {
+    expect(() =>
+      buildFiledReturnsSummarySheet(
+        [jsonPlan("April", "april-data.json", "GSTR-3B")],
+        [rawJsonEntry("april-data.json", document)],
+      ),
+    ).toThrow("Required taxpayer identity is missing");
+  });
+
+  it("treats an optional non-string taxpayer identity as absent", () => {
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-3B")],
+      [
+        rawJsonEntry("april-data.json", {
+          status: 1,
+          data: {
+            lglnm: "Synthetic Legal Name",
+            trdnm: false,
+            r3b: { gstin: "00XXXXX0000X0Z0", ret_period: "042026", amount: 1 },
+          },
+        }),
+      ],
+    );
+
+    expect(summary).toMatchObject({ outcomeOnly: false, parsedPeriodCount: 1 });
+    expect(summary.contextRows.some((row) => row.fieldLabel === "Trade name")).toBe(false);
+  });
+
   it("allows an optional taxpayer identity to be absent from another parseable period", () => {
     const summary = buildFiledReturnsSummarySheet(
       [
