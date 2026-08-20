@@ -79,7 +79,7 @@ fixed columns `period`, `return_type`, `artifact`, `outcome`, `field_label`,
 `field_path`, `value_text`, and `value_number`, with one row per period and
 flattened field. Periods and artifacts without parseable JSON receive fixed
 outcome rows instead of fabricated zeroes. The exact shaping rules are recorded
-below against the workbook format token.
+below for the producing Pack version.
 
 The workbook's consolidated statement includes only mapped GSTR-3B Table 3.1
 and Table 4 lines. A header block shows the available GSTIN and legal name plus
@@ -88,8 +88,10 @@ GSTIN or legal name leaves its value cell blank without suppressing the
 workbook. The identity block, month header and first column stay frozen while
 scrolling. The statement body keeps
 the portal-dash applicability set for Table 3.1 and all four Table 4 tax columns.
-After the final statement spacer, a footer records included and excluded Form
-coverage, the GSTR-9 boundary, generation timestamp and workbook format token.
+After the final statement spacer, a two-row footer records the GST portal as the
+source with a human-readable generation date, then included and excluded Form
+coverage. Column B is width 58 so both footer values are readable without
+depending on text spill.
 Recognized identity is absent from the data CSV; only available GSTIN and legal
 name are written to the workbook header. Other recognized taxpayer identity and
 per-period filing identity, including ARN and ARN date, are separated into
@@ -103,10 +105,14 @@ identity is inconsistent, or the combined derived output exceeds its local size
 limit, Pack still exports the artifact ZIP and reports a fixed categorical
 reason.
 
-### Workbook format `pack-full-year-workbook-v3`
+### Full-year summary rules for Pack v0.5.1
 
-- **Tidy data format:** `pack-full-year-summary-tidy-v4`, written as
-  `full-year-summary.csv`.
+These rules apply to `full-year-workbook.xlsx` and `full-year-summary.csv`
+produced by Pack v0.5.1. The producing Pack version is available in the
+installed extension manifest. Neither file carries an in-file format marker, so
+a machine consumer cannot identify the CSV format from the CSV alone and must
+be given the producing Pack version.
+
 - **Envelope rule:** Pack classifies identity against the whole JSON document,
   then removes the artifact validator's documented return envelope before
   flattening data (`/data/r3b` for GSTR-3B and `/data` for GSTR-1 and GSTR-2B).

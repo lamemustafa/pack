@@ -81,15 +81,22 @@ For each release candidate:
   numeric figure and arithmetic-total cells, blank cells for missing or
   unparseable periods, only mapped Table 3.1 and Table 4 rows, the portal-dash
   applicability set for Table 3.1 and all four Table 4 tax columns. After the
-  final spacer, the footer must state included and excluded coverage, the
-  GSTR-9 boundary, generation timestamp and workbook format token. GSTIN and
+  final spacer, the footer must contain exactly `Source` and `Coverage` rows.
+  `Source` must name filed GSTR-3B returns from the GST portal and use the
+  existing generation clock as a human-readable date; `Coverage` must state
+  Tables 3.1 and 4 are included and Tables 3.1.1, 3.2, 5.1 and 6.1 are not.
+  Column B must remain wide enough to show either footer value without relying
+  on text spill. The GSTR-9 disclaimer and format token must be absent. GSTIN and
   legal name must appear nowhere else in the workbook and no recognized
   taxpayer or filing identity may appear in the data CSV. Other recognized
   taxpayer identity plus per-period ARN and ARN date may exist only in transient
   summary context and must not be written to either generated file. The tidy
-  CSV must retain unmapped paths and outcomes. The seven format rules, tidy-data format
-  version, sourced GSTR-9 mapping and disclaimer must live under the workbook
-  format token in the README, not in generated rule rows or a second sheet.
+  CSV must retain unmapped paths and outcomes. The seven format rules, sourced
+  GSTR-9 mapping and disclaimer must live under the producing Pack version in
+  the README, not in generated rule rows or a second sheet. The workbook and
+  CSV have no in-file format marker; a machine consumer of a separated CSV must
+  be given the producing Pack version because it cannot infer that version from
+  the CSV alone.
   Both derived files must remain
   output-only ZIP entries: their bytes
   may be transient in extension-controlled memory before browser handoff and
