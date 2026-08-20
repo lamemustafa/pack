@@ -1,4 +1,5 @@
 import type { FiledReturnsFlowSummary } from "../../connectors/gst/filed-returns-contracts";
+import { canRetryFiledReturnsTargetWithoutPortal } from "./flow-summary";
 import {
   canReconcileFiledReturnsTarget,
   DiagnosticSignals,
@@ -42,6 +43,12 @@ export function RecoveryActions({
   const canReconcileTarget = canReconcileFiledReturnsTarget(summary);
   const canRetryTargetCleanup = signals.has("filed-returns-target-local-cleanup-required");
   const retryDisabled = busy !== null || !portalReady;
+  // Reconciling the browser download and retrying local cleanup both return locally in
+  // retryFiledReturnsTargetDownloadFlow before any portal action, so they must not require
+  // portalReady. Every other retry here (full-year retry, start fresh) does reach the portal.
+  const targetRetryDisabled = canRetryFiledReturnsTargetWithoutPortal(summary)
+    ? busy !== null
+    : retryDisabled;
   const portalDisabledReason =
     !portalReady && showPortalRetryReason
       ? recoveryPortalDisabledReason(summary, {
@@ -85,7 +92,7 @@ export function RecoveryActions({
               </details>
             ) : null}
             {canReconcileTarget || canRetryTargetCleanup ? (
-              <button type="button" disabled={retryDisabled} onClick={onRetryTarget}>
+              <button type="button" disabled={targetRetryDisabled} onClick={onRetryTarget}>
                 {busy === "retry-filed-returns-target"
                   ? canReconcileTarget
                     ? "Reconciling..."
@@ -186,13 +193,13 @@ export function RecoveryActions({
   );
 }
 
-export function targetReviewPortalDisabledReason(summary: FiledReturnsFlowSummary): string {
-  if (canReconcileFiledReturnsTarget(summary)) {
-    return "Open a signed-in GST Portal tab before reconciling the browser download or starting again.";
-  }
-  if (summary.flowStep.safeSignals.includes("filed-returns-target-local-cleanup-required")) {
-    return "Open a signed-in GST Portal tab before retrying local cleanup or starting again.";
-  }
+/**
+ * Only "Discard saved state and start selected download" is portal-gated within target
+ * review — reconciling the browser download and retrying local cleanup are not (see
+ * `canRetryFiledReturnsTargetWithoutPortal` in ./flow-summary), so this reason always refers
+ * to starting again.
+ */
+export function targetReviewPortalDisabledReason(): string {
   return "Open a signed-in GST Portal tab before starting again.";
 }
 
@@ -221,7 +228,7 @@ function recoveryPortalDisabledReason(
     needsTargetReview: boolean;
   },
 ): string | null {
-  if (needsTargetReview) return targetReviewPortalDisabledReason(summary);
+  if (needsTargetReview) return targetReviewPortalDisabledReason();
   if (!needsFullFiscalYearReview) return null;
   const { gerund } = getSavedFullFiscalYearActionDecision(summary);
   return `Open a signed-in GST Portal tab before ${gerund} or starting again.`;

@@ -7,7 +7,11 @@ import "../../styles/popup-controls.css";
 import { ScopeForm, ScopeFormAction } from "./components";
 import { ContextState } from "./context-state";
 import { canRetryFullFiscalYearZipWithoutPortal } from "./flow-summary";
-import { hasInlinePrimaryAction, InlineStatus } from "./inline-status";
+import {
+  hasInlinePrimaryAction,
+  inlinePrimaryActionIsPortalGated,
+  InlineStatus,
+} from "./inline-status";
 import { PackSummary } from "./pack-summary";
 import { LastRunDiagnostics } from "./last-run-diagnostics";
 import { PopupPrimaryActionSlot } from "./popup-primary-action-slot";
@@ -110,7 +114,7 @@ function App() {
             void popup.resolveFullFiscalYearTarget(resolution)
           }
           onResolveTarget={(resolution) => void popup.resolveUnconfirmedDownload(resolution)}
-          showPortalRetryReason={!statusOwnsPrimaryAction || presentation.kind === "error"}
+          showPortalRetryReason={!inlinePrimaryActionIsPortalGated(presentation, displaySummary)}
         />
       ) : null}
 
