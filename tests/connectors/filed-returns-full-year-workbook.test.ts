@@ -400,6 +400,39 @@ describe("filed-return full-year workbook", () => {
     });
   });
 
+  it("keeps both derived artifacts when an exact total exceeds the Excel cell limit", () => {
+    const oversized = "1e-40000";
+    const plan = fullYearPlan("2026-27", "April");
+    const summary = buildFiledReturnsSummarySheet(plan, [
+      {
+        path: "april-data.json",
+        bytes: new TextEncoder().encode(
+          `{"data":{"lglnm":"Synthetic Legal Name","r3b":{"gstin":"00XXXXX0000X0Z0","ret_period":"042026","sup_details":{"osup_det":{"txval":2,"iamt":${oversized}}}}}}`,
+        ),
+      },
+    ]);
+    const statement = text(
+      extractStoredZipEntries(
+        buildFiledReturnsFullYearWorkbook(summary, plan, {
+          generatedAt: new Date("2026-08-20T12:00:00.000Z"),
+        }),
+      ),
+      "xl/worksheets/sheet1.xml",
+    );
+    const rows = parsedRows(statement);
+    const taxableValueRow = rows.find((row) => row.get("A7")?.text === "Taxable Value");
+    const igstRow = rows.find((row) => row.get("A8")?.text === "IGST");
+
+    expect(summary.dataBytes.byteLength).toBeGreaterThan(32_767);
+    expect(taxableValueRow?.get("B7")).toMatchObject({ number: 2, style: "2" });
+    expect(taxableValueRow?.get("N7")).toMatchObject({ number: 2, style: "2" });
+    expect(igstRow?.get("B8")).toMatchObject({ text: "Precision limit", type: "inlineStr" });
+    expect(igstRow?.get("N8")).toMatchObject({
+      text: "Exact total unavailable at spreadsheet numeric precision",
+      type: "inlineStr",
+    });
+  });
+
   it("does not publish a partial total when a present month exceeds numeric precision", () => {
     const plan = FILED_RETURNS_MONTHS.map((period) => {
       const staged = period === "April" || period === "May";

@@ -30,7 +30,7 @@ const XML_HEADER = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
 const SPREADSHEET_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 const RELATIONSHIP_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 const PACKAGE_RELATIONSHIP_NS = "http://schemas.openxmlformats.org/package/2006/relationships";
-const MAX_EXCEL_STRING_LENGTH = 32_767;
+export const MAX_EXCEL_STRING_LENGTH = 32_767;
 const MAX_EXCEL_ROWS = 1_048_576;
 
 export function createXlsx(

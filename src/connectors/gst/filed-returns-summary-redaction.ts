@@ -1,11 +1,26 @@
 import { canonicalJsonPointerSegments } from "../../core/json-flat-table";
 
+const FORBIDDEN_COMPOUND_IDENTIFIER_SEGMENTS = [
+  "clientid",
+  "clientidentifier",
+  "loginid",
+  "userid",
+  "useridentifier",
+] as const;
+
+const FORBIDDEN_CREDENTIAL_CONTAINERS = new Set(
+  FORBIDDEN_COMPOUND_IDENTIFIER_SEGMENTS.map((segment) =>
+    segment.replace(/(?:id|identifier)$/, ""),
+  ),
+);
+
 export function isFiledReturnsSummaryForbiddenFieldPath(path: string): boolean {
   return canonicalJsonPointerSegments(path).some(isForbiddenCanonicalSegment);
 }
 
 function isForbiddenCanonicalSegment(segment: string): boolean {
   return (
+    FORBIDDEN_CREDENTIAL_CONTAINERS.has(segment) ||
     segment === "auth" ||
     segment.includes("authcode") ||
     segment.includes("accesskey") ||
@@ -16,18 +31,16 @@ function isForbiddenCanonicalSegment(segment: string): boolean {
     segment === "authn" ||
     segment === "authz" ||
     segment === "bearer" ||
-    segment === "clientid" ||
-    segment === "clientidentifier" ||
+    FORBIDDEN_COMPOUND_IDENTIFIER_SEGMENTS.includes(
+      segment as (typeof FORBIDDEN_COMPOUND_IDENTIFIER_SEGMENTS)[number],
+    ) ||
     segment === "jwt" ||
-    segment === "loginid" ||
     segment === "nonce" ||
     segment === "pin" ||
     segment === "mpin" ||
     segment === "pwd" ||
     segment === "sid" ||
     segment === "username" ||
-    segment === "userid" ||
-    segment === "useridentifier" ||
     segment === "xauth" ||
     segment.endsWith("token") ||
     segment.includes("authorization") ||

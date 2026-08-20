@@ -1,4 +1,9 @@
-import { createXlsx, type XlsxCell, type XlsxWorksheet } from "../../core/xlsx";
+import {
+  createXlsx,
+  MAX_EXCEL_STRING_LENGTH,
+  type XlsxCell,
+  type XlsxWorksheet,
+} from "../../core/xlsx";
 import type {
   FiledReturnsSummaryContextRow,
   FiledReturnsSummaryDataRow,
@@ -215,7 +220,10 @@ function exactTotalSpreadsheetValue(
   if (exactText === null) return "Exact total unavailable: invalid source decimal";
   const value = exactSpreadsheetNumber(exactText);
   if (hasUnrepresentableMonth || value === null || String(value) !== exactText) {
-    return `Exact total ${exactText} unavailable at spreadsheet numeric precision`;
+    const explanatoryTotal = `Exact total ${exactText} unavailable at spreadsheet numeric precision`;
+    return explanatoryTotal.length <= MAX_EXCEL_STRING_LENGTH
+      ? explanatoryTotal
+      : "Exact total unavailable at spreadsheet numeric precision";
   }
   return value;
 }

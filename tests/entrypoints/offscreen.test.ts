@@ -615,6 +615,65 @@ describe("offscreen Blob URL entrypoint", () => {
     expect(statement).toContain("Synthetic Example Taxpayer");
   });
 
+  it("keeps the CSV and workbook when a precision-limited total exceeds an Excel cell", async () => {
+    await loadOffscreenEntrypoint();
+    const sourceJson =
+      '{"data":{"lglnm":"Synthetic Legal Name","r3b":{"gstin":"00XXXXX0000X0Z0","ret_period":"042026","sup_details":{"osup_det":{"txval":2,"iamt":1e-40000}}}}}';
+    const staged = await sendOffscreenMessage({
+      type: "PACK_OFFSCREEN_STAGE_FILED_RETURN",
+      target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+      payload: {
+        requestId: "stage-oversized-total-json",
+        ledgerId: TEST_FULL_YEAR_LEDGER_ID,
+        zipPath: "april-data.json",
+        returnType: "GSTR-3B",
+        artifactType: "JSON",
+        dataUrl: `data:application/json;base64,${btoa(sourceJson)}`,
+      },
+    });
+    expect(staged).toMatchObject({ ok: true, staged: true });
+
+    const zip = await sendOffscreenMessage({
+      type: "PACK_OFFSCREEN_CREATE_FILED_RETURN_ZIP",
+      target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+      payload: {
+        requestId: "oversized-total-summary-request",
+        generatedAt: "2026-08-20T12:00:00.000Z",
+        ledgerId: TEST_FULL_YEAR_LEDGER_ID,
+        expectedReturnType: "GSTR-3B",
+        expectedEntryCount: 1,
+        expectedEntries: [{ artifactType: "JSON", entryNames: ["april-data.json"] }],
+        summaryPlan: [
+          {
+            artifactType: "JSON",
+            entryNames: ["april-data.json"],
+            financialYear: "2026-27",
+            outcomeCategory: "staged",
+            period: "April",
+            returnType: "GSTR-3B",
+          },
+        ],
+      },
+    });
+
+    expect(zip).toMatchObject({ ok: true, artifactEntryCount: 1, summaryEntryCount: 2 });
+    const entries = await extractStoredZipEntries(createdBlobs[0]!);
+    expect([...entries.keys()]).toEqual([
+      "april-data.json",
+      "full-year-summary.csv",
+      "full-year-workbook.xlsx",
+    ]);
+    expect(new TextDecoder().decode(entries.get("full-year-summary.csv"))).toContain(
+      "/sup_details/osup_det/iamt",
+    );
+    const workbook = await extractStoredZipEntries(
+      new Blob([Uint8Array.from(entries.get("full-year-workbook.xlsx")!).buffer]),
+    );
+    expect(new TextDecoder().decode(workbook.get("xl/worksheets/sheet1.xml"))).toContain(
+      "Exact total unavailable at spreadsheet numeric precision",
+    );
+  });
+
   it("adds only fixed outcome rows when a full-year run has no parseable JSON", async () => {
     await loadOffscreenEntrypoint();
     opfsFiles.set(

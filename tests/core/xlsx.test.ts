@@ -45,6 +45,33 @@ describe("portal-neutral XLSX writer", () => {
     expect(statement).not.toContain("<f>");
   });
 
+  it("writes ZIP entry timestamps with the local clock components", () => {
+    const originalTimeZone = process.env.TZ;
+    process.env.TZ = "Asia/Kolkata";
+    try {
+      const generatedAt = new Date("2026-08-20T19:00:00.000Z");
+      const bytes = createXlsx({
+        generatedAt,
+        worksheets: [{ name: "Statement", rows: [[{ value: "Synthetic value" }]] }],
+      });
+      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+
+      expect(view.getUint16(10, true)).toBe(
+        (generatedAt.getHours() << 11) |
+          (generatedAt.getMinutes() << 5) |
+          Math.floor(generatedAt.getSeconds() / 2),
+      );
+      expect(view.getUint16(12, true)).toBe(
+        ((generatedAt.getFullYear() - 1980) << 9) |
+          ((generatedAt.getMonth() + 1) << 5) |
+          generatedAt.getDate(),
+      );
+    } finally {
+      if (originalTimeZone === undefined) delete process.env.TZ;
+      else process.env.TZ = originalTimeZone;
+    }
+  });
+
   it("fails closed for invalid names, non-finite numbers and bounded output", () => {
     const base = { generatedAt: new Date("2026-08-19T12:00:00.000Z") };
     expect(() => createXlsx({ ...base, worksheets: [{ name: "Bad/Name", rows: [[]] }] })).toThrow(

@@ -755,6 +755,48 @@ describe("filed-return full-year summary sheet", () => {
     },
   );
 
+  it.each(["login", "user", "client"])(
+    "fails summary generation when split credential container %s has an id leaf",
+    (container) => {
+      expect(() =>
+        buildFiledReturnsSummarySheet(
+          [jsonPlan("April", "april-data.json", "GSTR-2B")],
+          [
+            jsonEntry("april-data.json", "GSTR-2B", {
+              amount: 1,
+              [container]: { id: "synthetic-sensitive" },
+            }),
+          ],
+        ),
+      ).toThrow("credential or session field");
+    },
+  );
+
+  it.each(["loginId", "userId", "clientId"])(
+    "keeps combined credential spelling %s forbidden",
+    (field) => {
+      expect(() =>
+        buildFiledReturnsSummarySheet(
+          [jsonPlan("April", "april-data.json", "GSTR-2B")],
+          [jsonEntry("april-data.json", "GSTR-2B", { amount: 1, [field]: "synthetic-sensitive" })],
+        ),
+      ).toThrow("credential or session field");
+    },
+  );
+
+  it("does not reject a benign longer segment containing a credential container word", () => {
+    expect(() =>
+      buildFiledReturnsSummarySheet(
+        [jsonPlan("April", "april-data.json", "GSTR-2B")],
+        [
+          jsonEntry("april-data.json", "GSTR-2B", {
+            clientidentity: { id: "synthetic-benign-value" },
+          }),
+        ],
+      ),
+    ).not.toThrow();
+  });
+
   it("rejects forbidden material outside the normalized return envelope", () => {
     const secret = "synthetic-outside-envelope-sensitive-value";
     expect(() =>

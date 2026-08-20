@@ -85,12 +85,12 @@ function crc32(bytes: Uint8Array): number {
 function toDosTimestamp(value: Date): { date: number; time: number } {
   const fallback = new Date("2026-01-01T00:00:00.000Z");
   const date = Number.isFinite(value.getTime()) ? value : fallback;
-  const year = Math.min(2107, Math.max(1980, date.getUTCFullYear()));
-  const month = date.getUTCMonth() + 1;
-  const day = date.getUTCDate();
-  const hours = date.getUTCHours();
-  const minutes = date.getUTCMinutes();
-  const seconds = Math.floor(date.getUTCSeconds() / 2);
+  const year = Math.min(2107, Math.max(1980, date.getFullYear()));
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+  const seconds = Math.floor(date.getSeconds() / 2);
 
   return {
     date: ((year - 1980) << 9) | (month << 5) | day,
