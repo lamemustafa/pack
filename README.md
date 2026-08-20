@@ -70,11 +70,13 @@ outside store-facing claims until exact-ZIP clean-profile evidence,
 restart/resume evidence, and privacy-review evidence are recorded for the
 release.
 
-During each full-year ZIP assembly with eligible files, Pack attempts to add two
+During each GSTR-3B full-year ZIP assembly with eligible files, Pack attempts to add two
 files derived from the staged portal JSON already in that run:
 `full-year-workbook.xlsx` and `full-year-summary.csv`. The workbook is the primary
-working-paper output. It contains exactly one sheet, `GSTR-3B Consolidated`; the
-former standalone context CSV is not emitted. The data CSV has the
+GSTR-3B working-paper output. GSTR-1 and GSTR-2B runs add only the tidy CSV and report
+that a consolidated workbook is not available for that return type; they never emit a
+blank or mislabelled GSTR-3B workbook. The workbook contains exactly one sheet,
+`GSTR-3B Consolidated`; the former standalone context CSV is not emitted. The data CSV has the
 fixed columns `period`, `return_type`, `artifact`, `outcome`, `field_label`,
 `field_path`, `value_text`, and `value_number`, with one row per period and
 flattened field. Periods and artifacts without parseable JSON receive fixed
@@ -82,10 +84,12 @@ outcome rows instead of fabricated zeroes. The exact shaping rules are recorded
 below for the producing Pack version.
 
 The workbook's consolidated statement includes only mapped GSTR-3B Table 3.1
-and Table 4 lines. A header block shows the available GSTIN and legal name plus
-the financial year above the typed financial-year month columns. A missing
-GSTIN or legal name leaves its value cell blank without suppressing the
-workbook. The identity block, month header and first column stay frozen while
+and Table 4 lines. A header block shows the GSTIN and legal name plus the
+financial year above the typed financial-year month columns. Every parseable
+GSTR-3B period must contain the same non-empty GSTIN and legal name; a missing
+required identity fails the derived summary instead of borrowing one from
+another period. When no period has parseable JSON, both identity cells remain
+blank. The identity block, month header and first column stay frozen while
 scrolling. The statement body keeps
 the portal-dash applicability set for Table 3.1 and all four Table 4 tax columns.
 Totals use scaled decimal arithmetic on the original JSON number text. If an
@@ -96,8 +100,8 @@ After the final statement spacer, a two-row footer records the GST portal as the
 source with a human-readable generation date, then included and excluded Form
 coverage. Column B is width 58 so both footer values are readable without
 depending on text spill.
-Recognized identity is absent from the data CSV; only available GSTIN and legal
-name are written to the workbook header. Other recognized taxpayer identity and
+Recognized identity is absent from the data CSV; the required GSTIN and legal
+name are written to the GSTR-3B workbook header. Other recognized taxpayer identity and
 per-period filing identity, including ARN and ARN date, are separated into
 transient summary context and are not written to either generated file. If no
 period has parseable JSON, the identity value cells and statement figures are
@@ -111,8 +115,9 @@ reason.
 
 ### Full-year summary rules for Pack v0.5.1
 
-These rules apply to `full-year-workbook.xlsx` and `full-year-summary.csv`
-produced by Pack v0.5.1. The producing Pack version is available in the
+These rules apply to the GSTR-3B `full-year-workbook.xlsx` and the
+`full-year-summary.csv` produced for all supported return types by Pack v0.5.1.
+The producing Pack version is available in the
 installed extension manifest. Neither file carries an in-file format marker, so
 a machine consumer cannot identify the CSV format from the CSV alone and must
 be given the producing Pack version.
@@ -144,8 +149,10 @@ be given the producing Pack version.
   is empty and `field_path` remains canonical.
 - **Identity rule:** recognized identity fields are classified from every
   RFC6901-decoded path segment across the whole document and removed from the
-  data CSV. Available GSTIN and legal name are
-  written once in the workbook header; either missing value remains blank.
+  data CSV. Every parseable GSTR-3B period must provide the same non-empty GSTIN
+  and legal name before either derived file is emitted; those values are written
+  once in the workbook header. Optional recognized identity may be absent in
+  some periods, but conflicting values are still rejected.
   Other recognized taxpayer identity and per-period ARN/ARN date remain only in
   transient summary context and are not written to the workbook. Conflicting
   non-empty invariant identity fails summary generation.

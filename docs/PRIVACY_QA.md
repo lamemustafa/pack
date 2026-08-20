@@ -44,10 +44,13 @@ For each release candidate:
   recovery attempts until confirmed cleanup or a successful explicit discard.
   Artifact bytes must not be written to extension storage, IndexedDB, Cache
   Storage, diagnostics, logs, telemetry, support bundles, or ComplyEaze systems.
-- Confirm each full-year ZIP assembly with eligible files attempts to add
+- Confirm each GSTR-3B full-year ZIP assembly with eligible files attempts to add
   `full-year-workbook.xlsx` and `full-year-summary.csv`, both derived locally
-  from staged portal JSON already in that run; the standalone context CSV must
-  be absent. The data CSV must keep
+  from staged portal JSON already in that run. GSTR-1 and GSTR-2B assemblies
+  must add the tidy CSV only, emit the fixed
+  `full-fiscal-year-workbook-not-applicable` outcome,
+  and never emit a GSTR-3B workbook. The standalone context CSV must be absent.
+  The data CSV must keep
   the fixed tidy columns `period`, `return_type`, `artifact`, `outcome`,
   `field_label`, `field_path`, `value_text`, and `value_number`; keep canonical
   JSON Pointer paths. Confirm only the configured GSTR-3B summary arrays with
@@ -78,9 +81,12 @@ For each release candidate:
   portal PDF row text plus independent evidence for its JSON path or
   discriminator, or it must stay unmapped. The workbook must
   contain exactly one sheet, `GSTR-3B Consolidated`. Its header must contain
-  available recognized GSTIN and legal name once plus the financial year above
-  twelve typed date columns; a missing GSTIN or legal name must leave its value
-  cell blank without suppressing the workbook. Those header rows, the
+  the recognized GSTIN and legal name once plus the financial year above twelve
+  typed date columns. Every parseable GSTR-3B period must carry the same
+  non-empty GSTIN and legal name; a missing required identity must fail the
+  derived summary, while optional recognized identity may be absent in some
+  periods but must remain consistent when present. When no period is parseable,
+  both identity cells remain blank. Those header rows, the
   `Description` row and the first
   column must remain frozen while scrolling. The statement body must retain
   numeric figure cells and totals summed exactly from source decimal text, an
@@ -91,7 +97,7 @@ For each release candidate:
   final spacer, the footer must contain exactly `Source` and `Coverage` rows.
   `Source` must name filed GSTR-3B returns from the GST portal and use the
   existing generation clock as a human-readable date; `Coverage` must state
-  Tables 3.1 and 4 are included and Tables 3.1.1, 3.2, 5.1 and 6.1 are not.
+  Tables 3.1 and 4 are included and Tables 3.1.1, 3.2, 5, 5.1 and 6.1 are not.
   Column B must remain wide enough to show either footer value without relying
   on text spill. The GSTR-9 disclaimer and format token must be absent. GSTIN and
   legal name must appear nowhere else in the workbook and no recognized
