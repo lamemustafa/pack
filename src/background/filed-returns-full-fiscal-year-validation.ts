@@ -21,7 +21,10 @@ import {
   GST_LAUNCH_MONTH,
   type FiledReturnsMonth,
 } from "../connectors/gst/filed-returns-scope";
-import { parseDurableTargetStatus } from "../connectors/gst/filed-returns-durable-status";
+import {
+  isHistoricalDurableTargetMessage,
+  parseDurableTargetStatus,
+} from "../connectors/gst/filed-returns-durable-status";
 import { isCanonicalFullFiscalYearLedgerId } from "../connectors/gst/filed-returns-ledger-id";
 import {
   hasPositiveFiledReturnsDownloadEvidence,
@@ -396,7 +399,22 @@ function isFullFiscalYearTarget(
     target.safeSignals,
   );
   if (!durableStatus) return false;
-  if (target.safeMessage !== durableStatus.safeMessage) return false;
+  if (
+    target.safeMessage !== durableStatus.safeMessage &&
+    !isHistoricalDurableTargetMessage(
+      {
+        artifactType,
+        financialYear: target.financialYear,
+        period: target.period,
+        returnType: target.returnType,
+      },
+      target.status,
+      durableStatus.safeSignals,
+      target.safeMessage,
+    )
+  ) {
+    return false;
+  }
   if (!isValidTimestamp(target.updatedAt)) return false;
   if (target.startedAt !== undefined && !isValidTimestamp(target.startedAt)) return false;
   if (target.completedAt !== undefined && !isValidTimestamp(target.completedAt)) return false;

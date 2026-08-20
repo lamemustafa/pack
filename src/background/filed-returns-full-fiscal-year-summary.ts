@@ -10,6 +10,7 @@ import {
   normaliseFiledReturnsArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
 import { filedReturnsScopeId } from "../connectors/gst/filed-returns-return-types";
+import { parseDurableTargetStatus } from "../connectors/gst/filed-returns-durable-status";
 import { isUnconfirmedBrowserDownloadSignal } from "./download-evidence-signals";
 import {
   canCompleteFullFiscalYearLedger,
@@ -296,6 +297,16 @@ function recoverableActionRequiredFullFiscalYearStep(
       ? ledger.targets.find((candidate) => candidate.targetId === ledger.currentTargetId)
       : null) ?? ledger.targets.find((candidate) => candidate.status !== "pending");
   if (!target) return blockedFullFiscalYearStep("full-fiscal-year-run-needs-action", ledger);
+  const durableTargetStatus = parseDurableTargetStatus(
+    {
+      financialYear: target.financialYear,
+      period: target.period,
+      returnType: target.returnType,
+      ...(target.artifactType ? { artifactType: target.artifactType } : {}),
+    },
+    target.status,
+    target.safeSignals,
+  );
 
   return {
     connectorId: "gst",
@@ -303,7 +314,7 @@ function recoverableActionRequiredFullFiscalYearStep(
     state: "blocked",
     safeSignals: Array.from(new Set(["full-fiscal-year-run-needs-action", ...target.safeSignals])),
     safeMessage:
-      target.safeMessage ||
+      durableTargetStatus?.safeMessage ??
       `Pack needs action before it can continue the FY ${ledger.scope.financialYear} run.`,
     userAction: {
       type: "RETRY_PORTAL_GENERATION",

@@ -5,6 +5,8 @@ import type { PortalContext } from "../../src/core/contracts";
 import type { FiledReturnsFlowSummary } from "../../src/connectors/gst/filed-returns-contracts";
 import { FULL_FISCAL_YEAR_PERIOD } from "../../src/connectors/gst/filed-returns-scope";
 import { ScopeForm, ScopeFormAction } from "../../src/entrypoints/popup/components";
+import { hasInlinePrimaryAction } from "../../src/entrypoints/popup/inline-status";
+import { PopupPrimaryActionSlot } from "../../src/entrypoints/popup/popup-primary-action-slot";
 
 const context: PortalContext = {
   connectorId: "gst",
@@ -29,6 +31,36 @@ const targetReviewSummary: FiledReturnsFlowSummary = {
 };
 
 describe("popup scope form", () => {
+  it("does not render Start download while target review is unresolved without an inline action", () => {
+    expect(
+      hasInlinePrimaryAction(
+        {
+          badge: "Needs review",
+          body: "Review the target.",
+          icon: "!",
+          kind: "blocked",
+          title: "Review required",
+          tone: "warning",
+        },
+        targetReviewSummary,
+      ),
+    ).toBe(false);
+
+    const markup = renderToStaticMarkup(
+      <PopupPrimaryActionSlot recoverySummary={targetReviewSummary} statusOwnsPrimaryAction={false}>
+        <ScopeFormAction
+          busy={null}
+          context={context}
+          flowSummary={targetReviewSummary}
+          scope={targetReviewSummary.scope}
+          onStart={vi.fn()}
+        />
+      </PopupPrimaryActionSlot>,
+    );
+
+    expect(markup).not.toContain("Start download");
+  });
+
   it("renders exposed GST artifact formats as an accessible radio group", () => {
     const markup = renderToStaticMarkup(
       <ScopeForm

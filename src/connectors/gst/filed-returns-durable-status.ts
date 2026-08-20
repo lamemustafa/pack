@@ -20,6 +20,11 @@ import {
   durableFiledReturnsSignalRejectionReason,
   parseDurableFiledReturnsSignals,
 } from "./filed-returns-durable-signals";
+import {
+  FILED_RETURNS_PORTAL_BLOCKED_OR_SESSION_EXPIRED_MESSAGE,
+  FILED_RETURNS_PORTAL_SCHEDULED_DOWNTIME_MESSAGE,
+  FILED_RETURNS_PORTAL_SYSTEM_ERROR_MESSAGE,
+} from "./filed-returns-portal-availability";
 
 type DurableMessageKey =
   | "complete"
@@ -33,16 +38,21 @@ type DurableMessageKey =
   | "not-filed"
   | "partial"
   | "target-cancelled"
+  | "target-blocked"
+  | "target-blocked-or-session-expired"
   | "target-completion-pending-summary"
   | "target-cleanup-blocked"
   | "target-downloaded"
   | "target-downloaded-cleanup-blocked"
+  | "target-failed"
   | "target-manually-observed"
   | "target-pending"
   | "target-restaging"
   | "target-retry-approved"
   | "target-review"
-  | "target-running";
+  | "target-running"
+  | "target-scheduled-downtime"
+  | "target-system-error";
 
 export function canonicalDurableTargetStatus(
   scope: FiledReturnsDownloadScope,
@@ -77,6 +87,30 @@ export function parseDurableTargetStatus(
     safeSignals,
     safeMessage: renderDurableMessage(messageKeyForTarget(status, safeSignals), scope),
   };
+}
+
+export function isHistoricalDurableTargetMessage(
+  scope: FiledReturnsDownloadScope,
+  status: FiledReturnsFullFiscalYearTargetStatus | "target-review",
+  signals: readonly string[],
+  safeMessage: string,
+): boolean {
+  // This one-way migration admits only the old derived target-review cache for the
+  // newly distinct blocked/failed message keys. The exact-match guard otherwise rejects
+  // stale or arbitrary text; remove this once no persisted ledger can carry that cache.
+  const messageKey = messageKeyForTarget(status, signals);
+  if (
+    ![
+      "target-blocked",
+      "target-blocked-or-session-expired",
+      "target-failed",
+      "target-scheduled-downtime",
+      "target-system-error",
+    ].includes(messageKey)
+  ) {
+    return false;
+  }
+  return safeMessage === renderDurableMessage("target-review", scope);
 }
 
 export function canonicalDurableSummaryMessage(
@@ -216,6 +250,14 @@ function messageKeyForTarget(
   if (status === "running") return "target-running";
   if (status === "downloaded") return "target-downloaded";
   if (status === "cancelled") return "target-cancelled";
+  if (status === "blocked" || status === "failed") {
+    if (signals.includes("portal-system-error")) return "target-system-error";
+    if (signals.includes("portal-scheduled-downtime")) return "target-scheduled-downtime";
+    if (signals.includes("portal-blocked-or-session-expired")) {
+      return "target-blocked-or-session-expired";
+    }
+    return status === "failed" ? "target-failed" : "target-blocked";
+  }
   return "target-review";
 }
 
@@ -304,12 +346,15 @@ function renderDurableMessage(key: DurableMessageKey, scope: FiledReturnsDownloa
     "not-filed": "The GST Portal reported no filed return for the selected period.",
     partial: `Pack retained verified artifact progress for ${period}; the selection is not complete.`,
     "target-cancelled": `Pack cancelled the unresolved filed-return target for ${period}.`,
+    "target-blocked": `Pack paused the saved full-year run at ${period}. Resolve the GST Portal page before retrying this period.`,
+    "target-blocked-or-session-expired": FILED_RETURNS_PORTAL_BLOCKED_OR_SESSION_EXPIRED_MESSAGE,
     "target-completion-pending-summary":
       "Pack proved this browser download and is safely finishing its local recovery record.",
     "target-cleanup-blocked":
       "Pack cannot complete this review while temporary selected-file staging remains uncleared.",
     "target-downloaded": `Pack confirmed the filed-return download for ${period}.`,
     "target-downloaded-cleanup-blocked": `Pack confirmed the selected ZIP download for ${period}; only temporary local staging remains to be cleared.`,
+    "target-failed": `Pack stopped while processing ${period}. Retry this period, or discard the saved run and start again.`,
     "target-manually-observed":
       "Pack recorded a manual observation, but the target still requires an explicit retry or cancellation.",
     "target-pending": "Not checked yet.",
@@ -317,6 +362,8 @@ function renderDurableMessage(key: DurableMessageKey, scope: FiledReturnsDownloa
     "target-retry-approved": `Pack will retry ${period} in the full fiscal-year run.`,
     "target-review": `Pack could not verify the browser download for ${period}. Check Downloads before retrying or cancelling this target.`,
     "target-running": `Checking ${period}.`,
+    "target-scheduled-downtime": FILED_RETURNS_PORTAL_SCHEDULED_DOWNTIME_MESSAGE,
+    "target-system-error": FILED_RETURNS_PORTAL_SYSTEM_ERROR_MESSAGE,
   };
   return messages[key];
 }
