@@ -19,7 +19,12 @@ import {
 } from "../../src/background/filed-returns-full-fiscal-year-recovery";
 import { browser } from "wxt/browser";
 import { canonicalDurableTargetStatus } from "../../src/connectors/gst/filed-returns-durable-status";
-import { finishFullFiscalYearCleanup } from "../../src/background/filed-returns-full-fiscal-year-staging";
+import {
+  createFullFiscalYearCleanupPendingState,
+  finishFullFiscalYearCleanup,
+  markFullFiscalYearZipDownloadIntent,
+  markFullFiscalYearZipDownloadObserving,
+} from "../../src/background/filed-returns-full-fiscal-year-staging";
 import { persistCanonicalFiledReturnsFlowSummary } from "../../src/background/filed-returns-session-summary";
 import { parseDurableFiledReturnsSignals } from "../../src/connectors/gst/filed-returns-durable-signals";
 import type { FiledReturnsSummaryStatus } from "../../src/connectors/gst/filed-returns-summary-status";
@@ -592,6 +597,84 @@ describe("full fiscal-year recovery", () => {
     });
     if (!response.ok || !("flowStep" in response)) throw new Error("Expected flow response.");
     expect(response.flowStep.safeMessage).toContain("workbook and tidy CSV for 2 periods");
+  });
+
+  it("restores the intent-checkpoint summary after the cleanup ledger advances", async () => {
+    const intentAt = new Date("2017-08-20T00:00:00.000Z");
+    const cleanupAt = new Date("2017-08-20T00:01:00.000Z");
+    const scope = {
+      artifactType: "JSON" as const,
+      financialYear: "2017-18",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-3B" as const,
+    };
+    const periods = getFiledReturnsFullFiscalYearPeriods(scope.financialYear, cleanupAt);
+    const baseLedger = createFullFiscalYearLedger(scope, intentAt, periods);
+    const readyLedger: FiledReturnsFullFiscalYearLedger = {
+      ...baseLedger,
+      status: "blocked",
+      targets: baseLedger.targets.map((target) => {
+        const targetScope = {
+          artifactType: "JSON" as const,
+          financialYear: target.financialYear,
+          period: target.period,
+          returnType: "GSTR-3B" as const,
+        };
+        return {
+          ...target,
+          status: "not-filed" as const,
+          ...canonicalDurableTargetStatus(targetScope, "not-filed", [
+            "filed-return-positively-not-filed",
+          ]),
+        };
+      }),
+    };
+    const intentLedger = markFullFiscalYearZipDownloadIntent(readyLedger, intentAt);
+    const observingLedger = markFullFiscalYearZipDownloadObserving(intentLedger, cleanupAt, 41);
+    const cleanupLedger = createFullFiscalYearCleanupPendingState(observingLedger, {
+      connectorId: "gst",
+      scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+      state: "downloaded",
+      safeSignals: ["full-fiscal-year-zip-downloaded"],
+      safeMessage: "Synthetic ZIP downloaded.",
+    }).ledger;
+    expect(cleanupLedger.updatedAt).toBe(cleanupAt.toISOString());
+    expect(cleanupLedger.zipDownloadAttempt).toEqual({ requestedAt: intentAt.toISOString() });
+    expect(isFullFiscalYearLedger(cleanupLedger)).toBe(true);
+    await persistCanonicalFiledReturnsFlowSummary("completion", {
+      scope,
+      status: "blocked",
+      updatedAt: intentAt.toISOString(),
+      completedPeriods: [],
+      totalPeriods: 12,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "blocked",
+        safeSignals: [
+          "full-fiscal-year-zip-phase:download-intent-persisted",
+          "full-fiscal-year-summary-included",
+          "full-fiscal-year-summary-parsed-period-count:2",
+          `full-fiscal-year-summary-row-count:${periods.length}`,
+        ],
+        safeMessage: "Synthetic intent-checkpoint summary status.",
+      },
+    });
+
+    const response = await finishFullFiscalYearCleanup(
+      { ...recoveryDeps(), now: () => cleanupAt } as never,
+      cleanupLedger,
+    );
+
+    expect(response).toMatchObject({
+      flowStep: {
+        state: "downloaded",
+        safeSignals: expect.arrayContaining([
+          "full-fiscal-year-summary-included",
+          "full-fiscal-year-summary-parsed-period-count:2",
+        ]),
+      },
+    });
   });
 
   it("does not import a previous same-scope run's summary during cleanup recovery", async () => {

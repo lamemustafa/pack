@@ -97,6 +97,25 @@ describe("filed-return full-year workbook", () => {
       "Cess",
     ]);
     expect(subrowsAfter(statementRows, "Table 3.1(e)")).toEqual(["Value"]);
+    expect([
+      ...new Set(filedReturnsStatementLineItems().map((lineItem) => lineItem.sectionCaption)),
+    ]).toEqual([
+      "Table 3.1(a) Outward taxable supplies (other than zero rated, nil rated and exempted)",
+      "Table 3.1(b) Outward taxable supplies (zero rated)",
+      "Table 3.1(c) Other outward supplies (Nil rated, exempted)",
+      "Table 3.1(d) Inward supplies (liable to reverse charge)",
+      "Table 3.1(e) Non-GST outward supplies",
+      "Table 4(A)(1) Import of goods",
+      "Table 4(A)(2) Import of services",
+      "Table 4(A)(3) Inward supplies liable to reverse charge (other than 1 & 2 above)",
+      "Table 4(A)(4) Inward supplies from ISD",
+      "Table 4(A)(5) All other ITC",
+      "Table 4(B)(1) ITC reversed — As per rules 38, 42 & 43 of CGST Rules and sub-section (5) of section 17",
+      "Table 4(B)(2) ITC reversed — Others",
+      "Table 4(C) Net ITC available (A) − (B)",
+      "Table 4(D)(1) Other Details — ITC reclaimed which was reversed under Table 4(B)(2) in earlier tax period",
+      "Table 4(D)(2) Other Details — Ineligible ITC under section 16(4) & ITC restricted due to PoS rules",
+    ]);
     for (const table of [
       "Table 4(A)(1)",
       "Table 4(A)(2)",
@@ -185,6 +204,91 @@ describe("filed-return full-year workbook", () => {
     const rows = parsedRows(statement);
     expect(rows[0]?.get("B1")?.text).toBe("00XXXXX0000X0Z0");
     expect(rows[1]?.get("B2")?.text ?? "").toBe("");
+  });
+
+  it("sums twelve large monthly decimals exactly from their source text", () => {
+    const plan = FILED_RETURNS_MONTHS.map((period) => ({
+      artifactType: "JSON" as const,
+      entryNames: [`${period.toLowerCase()}-data.json`],
+      financialYear: "2026-27",
+      outcomeCategory: "staged" as const,
+      period,
+      returnType: "GSTR-3B" as const,
+    }));
+    const entries = plan.map(({ entryNames }) => ({
+      path: entryNames[0]!,
+      bytes: new TextEncoder().encode(
+        '{"data":{"r3b":{"sup_details":{"osup_det":{"txval":9999999999999.99}}}}}',
+      ),
+    }));
+    const summary = buildFiledReturnsSummarySheet(plan, entries);
+    const workbook = buildFiledReturnsFullYearWorkbook(summary, plan, {
+      generatedAt: new Date("2026-08-20T12:00:00.000Z"),
+    });
+    const statement = text(extractStoredZipEntries(workbook), "xl/worksheets/sheet1.xml");
+    const taxableValueRow = parsedRows(statement).find(
+      (row) => row.get("A7")?.text === "Taxable Value",
+    );
+
+    for (const column of "BCDEFGHIJKLM") {
+      expect(taxableValueRow?.get(`${column}7`)).toMatchObject({
+        number: 9_999_999_999_999.99,
+        style: "2",
+      });
+    }
+    expect(taxableValueRow?.get("N7")).toMatchObject({
+      text: "Exact total 119999999999999.88 unavailable at spreadsheet numeric precision",
+      type: "inlineStr",
+    });
+    expect(statement).toContain("119999999999999.88");
+    expect(statement).not.toContain("119999999999999.86");
+  });
+
+  it("does not publish a partial total when a present month exceeds numeric precision", () => {
+    const plan = FILED_RETURNS_MONTHS.map((period) => {
+      const staged = period === "April" || period === "May";
+      return {
+        artifactType: "JSON" as const,
+        entryNames: staged ? [`${period.toLowerCase()}-data.json`] : [],
+        financialYear: "2026-27",
+        outcomeCategory: staged ? ("staged" as const) : ("artifact-unavailable" as const),
+        period,
+        returnType: "GSTR-3B" as const,
+      };
+    });
+    const entries = [
+      {
+        path: "april-data.json",
+        bytes: new TextEncoder().encode(
+          '{"data":{"r3b":{"sup_details":{"osup_det":{"txval":99999999999999.999}}}}}',
+        ),
+      },
+      {
+        path: "may-data.json",
+        bytes: new TextEncoder().encode(
+          '{"data":{"r3b":{"sup_details":{"osup_det":{"txval":1}}}}}',
+        ),
+      },
+    ];
+    const summary = buildFiledReturnsSummarySheet(plan, entries);
+    const statement = text(
+      extractStoredZipEntries(
+        buildFiledReturnsFullYearWorkbook(summary, plan, {
+          generatedAt: new Date("2026-08-20T12:00:00.000Z"),
+        }),
+      ),
+      "xl/worksheets/sheet1.xml",
+    );
+    const taxableValueRow = parsedRows(statement).find(
+      (row) => row.get("A7")?.text === "Taxable Value",
+    );
+
+    expect(taxableValueRow?.has("B7")).toBe(false);
+    expect(taxableValueRow?.get("C7")).toMatchObject({ number: 1, style: "2" });
+    expect(taxableValueRow?.get("N7")).toMatchObject({
+      text: "Exact total 100000000000000.999 unavailable at spreadsheet numeric precision",
+      type: "inlineStr",
+    });
   });
 });
 

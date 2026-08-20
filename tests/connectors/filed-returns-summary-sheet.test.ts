@@ -164,6 +164,32 @@ describe("filed-return full-year summary sheet", () => {
     );
   });
 
+  it("classifies identity in every decoded JSON Pointer segment", () => {
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-2B")],
+      [
+        jsonEntry("april-data.json", "GSTR-2B", {
+          amount: 1,
+          gstin: { status: "Synthetic Non-Identity Status", value: "00XXXXX0000X0Z0" },
+          "legal/name": { value: "Synthetic Nested Legal Name" },
+        }),
+      ],
+    );
+
+    const data = new TextDecoder().decode(summary.dataBytes);
+    expect(data).not.toContain("00XXXXX0000X0Z0");
+    expect(data).not.toContain("Synthetic Nested Legal Name");
+    expect(data).not.toContain("Synthetic Non-Identity Status");
+    expect(data).not.toContain("/gstin/value");
+    expect(data).not.toContain("/legal~1name/value");
+    const context = contextText(summary.contextRows);
+    expect(context).toContain("taxpayer_identity,identity,GSTIN,/data/gstin/value,00XXXXX0000X0Z0");
+    expect(context).toContain(
+      "taxpayer_identity,identity,Legal name,/data/legal~1name/value,Synthetic Nested Legal Name",
+    );
+    expect(context).not.toContain("Synthetic Non-Identity Status");
+  });
+
   it("keeps an empty-key member as the slash pointer after envelope normalization", () => {
     const summary = buildFiledReturnsSummarySheet(
       [jsonPlan("April", "april-data.json", "GSTR-2B")],
@@ -266,11 +292,12 @@ describe("filed-return full-year summary sheet", () => {
     expect(fieldRow(rows, "/itc_elg/itc_rev/RUL/camt")).toMatchObject({
       outcome: "parseable-json",
       field_label:
-        "Table 4(B)(1) ITC reversed — As per rules 38, 42 and 43 and section 17(5) — Central tax",
+        "Table 4(B)(1) ITC reversed — As per rules 38, 42 & 43 of CGST Rules and sub-section (5) of section 17 — Central tax",
     });
     expect(fieldRow(rows, "/itc_elg/itc_inelg/RUL/camt")).toMatchObject({
       outcome: "parseable-json",
-      field_label: "Table 4(D)(1) Ineligible ITC — As per section 17(5) — Central tax",
+      field_label:
+        "Table 4(D)(1) Other Details — ITC reclaimed which was reversed under Table 4(B)(2) in earlier tax period — Central tax",
     });
     expect(fieldRow(rows, "/inter_sup/unreg_details/02/txval")).toMatchObject({
       outcome: "parseable-json",
@@ -281,10 +308,10 @@ describe("filed-return full-year summary sheet", () => {
         "Table 3.1(a) Outward taxable supplies (other than zero rated, nil rated and exempted) — Taxable value",
     });
     expect(fieldRow(rows, "/sup_details/osup_nil_exmp/iamt")).toMatchObject({
-      field_label: "Table 3.1(c) Nil-rated and exempt outward supplies — Integrated tax",
+      field_label: "",
     });
     expect(fieldRow(rows, "/sup_details/osup_nongst/csamt")).toMatchObject({
-      field_label: "Table 3.1(e) Non-GST outward supplies — Cess",
+      field_label: "",
     });
     expect(fieldRow(rows, "/itc_elg/itc_avl/OTH/csamt")).toMatchObject({
       field_label: "Table 4(A)(5) All other ITC — Cess",
@@ -523,6 +550,7 @@ describe("filed-return full-year summary sheet", () => {
     "otp",
     "captcha",
     "password",
+    "passphrase",
     "passcode",
     "credential",
     "credentials",
@@ -618,7 +646,7 @@ describe("filed-return full-year summary sheet", () => {
         expect([
           "official-offline-utility",
           "portal-pdf-value-cross-check-two-periods",
-          "form-vocabulary-and-row-order",
+          "portal-pdf-row-text",
         ]).toContain(entry.provenance.evidence);
         expect(entry.provenance.officialSource).toContain("GST Portal");
         expect(entry.provenance.officialSourceLocation.length).toBeGreaterThan(0);
@@ -637,7 +665,7 @@ describe("filed-return full-year summary sheet", () => {
     expect(
       FILED_RETURNS_SUMMARY_FIELD_LABELS_BY_RETURN_TYPE["GSTR-3B"]["/itc_elg/itc_avl/IMPG/camt"]
         ?.provenance.evidence,
-    ).toBe("form-vocabulary-and-row-order");
+    ).toBe("portal-pdf-row-text");
     expect(
       FILED_RETURNS_SUMMARY_FIELD_LABELS_BY_RETURN_TYPE["GSTR-3B"]["/sup_details/osup_zero/txval"]
         ?.provenance.evidence,
@@ -651,6 +679,10 @@ describe("filed-return full-year summary sheet", () => {
       "/sup_details/osup_nongst/camt",
       "/sup_details/osup_nongst/samt",
       "/sup_details/osup_nongst/csamt",
+    ]) {
+      expect(FILED_RETURNS_SUMMARY_FIELD_LABELS_BY_RETURN_TYPE["GSTR-3B"][path]).toBeUndefined();
+    }
+    for (const path of [
       "/itc_elg/itc_avl/OTH/csamt",
       "/itc_elg/itc_net/csamt",
       "/itc_elg/itc_avl/IMPG/csamt",
@@ -664,7 +696,7 @@ describe("filed-return full-year summary sheet", () => {
     ]) {
       const entry = FILED_RETURNS_SUMMARY_FIELD_LABELS_BY_RETURN_TYPE["GSTR-3B"][path];
       expect(entry?.label.length).toBeGreaterThan(0);
-      expect(entry?.provenance.evidence).toBe("form-vocabulary-and-row-order");
+      expect(entry?.provenance.evidence).toBe("portal-pdf-row-text");
     }
   });
 });
