@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   buildFiledReturnsSummarySheet,
   FiledReturnsSummaryTooLargeError,
+  MAX_FILED_RETURNS_SUMMARY_ARRAY_EXPANSION_ELEMENTS,
   FILED_RETURNS_SUMMARY_HEADERS,
   type FiledReturnsSummaryPlanEntry,
 } from "../../src/connectors/gst/filed-returns-summary-sheet";
 import { FILED_RETURNS_SUMMARY_FIELD_LABELS_BY_RETURN_TYPE } from "../../src/connectors/gst/filed-returns-summary-labels";
-import { MAX_FILED_RETURNS_SUMMARY_ARRAY_EXPANSION_ELEMENTS } from "../../src/connectors/gst/filed-returns-summary-arrays";
 
 describe("filed-return full-year summary sheet", () => {
   it("emits tidy numeric and text rows while moving taxpayer identity into context once", () => {
