@@ -13,7 +13,11 @@ import {
   filedReturnsStatementCoverage,
   filedReturnsStatementLineItems,
 } from "./filed-returns-summary-labels";
-import { FILED_RETURNS_MONTHS, type FiledReturnsMonth } from "./filed-returns-scope";
+import {
+  FILED_RETURNS_MONTHS,
+  type FiledReturnsFilingPeriod,
+  type FiledReturnsMonth,
+} from "./filed-returns-scope";
 
 export const FILED_RETURNS_FULL_YEAR_WORKBOOK_PATH = "full-year-workbook.xlsx";
 
@@ -67,6 +71,11 @@ function consolidatedSheet(
   contextRows: readonly FiledReturnsSummaryContextRow[],
   generatedAt: Date,
 ): XlsxWorksheet {
+  const renderedMonthSerials = financialYearMonthSerials(financialYear);
+  const renderedFilingPeriods = renderedMonthSerials.map((_, index) => ({
+    financialYear,
+    period: FILED_RETURNS_MONTHS[index]!,
+  }));
   const rows: Array<Array<XlsxCell | undefined>> = [
     ...FILED_RETURNS_GSTR3B_WORKBOOK_IDENTITY_LABELS.map((fieldLabel) => [
       { value: fieldLabel, style: "bold" as const },
@@ -76,22 +85,21 @@ function consolidatedSheet(
     [],
     [
       { value: "Description", style: "bold" },
-      ...financialYearMonthSerials(financialYear).map((value) => ({
+      ...renderedMonthSerials.map((value) => ({
         value,
         style: "bold-date" as const,
       })),
       { value: "Total", style: "bold" },
     ],
   ];
-  const filingPeriod = { financialYear, period: "March" as const };
-  const values = statementValues(dataRows, filingPeriod);
-  const lineItems = filedReturnsStatementLineItems(filingPeriod);
+  const values = statementValues(dataRows, renderedFilingPeriods);
+  const lineItems = filedReturnsStatementLineItems(renderedFilingPeriods);
   const sectionOrders = [...new Set(lineItems.map((item) => item.sectionOrder))];
   for (const sectionOrder of sectionOrders) {
     const sectionItems = lineItems.filter((item) => item.sectionOrder === sectionOrder);
     rows.push([{ value: sectionItems[0]!.sectionCaption, style: "bold" }]);
     for (const item of sectionItems) {
-      const monthValues = FILED_RETURNS_MONTHS.map((period) =>
+      const monthValues = renderedFilingPeriods.map(({ period }) =>
         values.get(`${period}:${item.fieldPath}`),
       );
       const numericValues = monthValues.filter(
@@ -122,7 +130,7 @@ function consolidatedSheet(
     }
     rows.push([]);
   }
-  const coverage = filedReturnsStatementCoverage(filingPeriod);
+  const coverage = filedReturnsStatementCoverage(renderedFilingPeriods);
   rows.push(
     [
       { value: "Source", style: "bold" },
@@ -138,7 +146,7 @@ function consolidatedSheet(
       ? [
           [
             { value: "Caption evidence", style: "bold" as const },
-            { value: "Withheld captions: Table 4(B)(1) and Table 4(D)." },
+            { value: withheldCaptionFooter(coverage.withheldCaptionTables) },
           ],
         ]
       : []),
@@ -149,7 +157,7 @@ function consolidatedSheet(
     columns: [
       { width: 78 },
       { width: FOOTER_VALUE_COLUMN_WIDTH },
-      ...FILED_RETURNS_MONTHS.slice(1).map(() => ({ width: MONTH_COLUMN_WIDTH })),
+      ...renderedFilingPeriods.slice(1).map(() => ({ width: MONTH_COLUMN_WIDTH })),
       { width: 15 },
     ],
     rows,
@@ -167,11 +175,11 @@ interface StatementNumericValue {
 
 function statementValues(
   dataRows: readonly FiledReturnsSummaryDataRow[],
-  filingPeriod: { financialYear: string; period: FiledReturnsMonth },
+  filingPeriods: readonly FiledReturnsFilingPeriod[],
 ): Map<string, StatementNumericValue> {
   const output = new Map<string, StatementNumericValue>();
   const statementPaths = new Set(
-    filedReturnsStatementLineItems(filingPeriod).map((item) => item.fieldPath),
+    filedReturnsStatementLineItems(filingPeriods).map((item) => item.fieldPath),
   );
   for (const row of dataRows) {
     if (
@@ -189,6 +197,14 @@ function statementValues(
     });
   }
   return output;
+}
+
+function withheldCaptionFooter(tableReferences: readonly string[]): string {
+  if (tableReferences.length === 1) return `Withheld captions: ${tableReferences[0]}.`;
+  if (tableReferences.length === 2) {
+    return `Withheld captions: ${tableReferences[0]} and ${tableReferences[1]}.`;
+  }
+  return `Withheld captions: ${tableReferences.slice(0, -1).join(", ")}, and ${tableReferences.at(-1)}.`;
 }
 
 function exactTotalSpreadsheetValue(

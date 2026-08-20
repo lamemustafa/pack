@@ -102,7 +102,7 @@ describe("filed-return full-year workbook", () => {
     expect(subrowsAfter(statementRows, "Table 3.1(e)")).toEqual(["Value"]);
     expect([
       ...new Set(
-        filedReturnsStatementLineItems({ financialYear: "2026-27", period: "March" }).map(
+        filedReturnsStatementLineItems([{ financialYear: "2026-27", period: "March" }]).map(
           (lineItem) => lineItem.sectionCaption,
         ),
       ),
@@ -138,13 +138,13 @@ describe("filed-return full-year workbook", () => {
       expect(subrowsAfter(statementRows, table)).toEqual(["IGST", "CGST", "SGST", "Cess"]);
     }
 
-    const coverage = filedReturnsStatementCoverage({ financialYear: "2026-27", period: "March" });
+    const coverage = filedReturnsStatementCoverage([{ financialYear: "2026-27", period: "March" }]);
     expect(coverage).toEqual({
       includedTables: ["3.1", "4"],
       excludedTables: ["3.1.1", "3.2", "5", "5.1", "6.1"],
     });
     expect(
-      filedReturnsStatementLineItems({ financialYear: "2026-27", period: "March" }).some(
+      filedReturnsStatementLineItems([{ financialYear: "2026-27", period: "March" }]).some(
         (lineItem) =>
           lineItem.coverageTable === "3.1" && lineItem.sectionCaption.startsWith("Table 3.1.1"),
       ),
@@ -207,7 +207,7 @@ describe("filed-return full-year workbook", () => {
     ).toThrow("Required taxpayer identity");
   });
 
-  it("withholds unproven Table 4 captions in the workbook without changing their values", () => {
+  it("withholds mixed FY 2022-23 Table 4 captions without changing values or totals", () => {
     const plan = fullYearPlan("2022-23", "August");
     const summary = buildFiledReturnsSummarySheet(plan, [
       {
@@ -250,20 +250,40 @@ describe("filed-return full-year workbook", () => {
     expect(withheldCaptions).toEqual(["Table 4(B)(1)", "Table 4(D)(1)", "Table 4(D)(2)"]);
     const statementNumbers = rows.flatMap((row) => [...row.values()].map((cell) => cell.number));
     expect(statementNumbers).toEqual(expect.arrayContaining([12, 13, 14]));
-    expect(statement).toContain("Withheld captions: Table 4(B)(1) and Table 4(D).");
+    expect(statement).toContain(
+      "Withheld captions: Table 4(B)(1), Table 4(D)(1), and Table 4(D)(2).",
+    );
   });
 
-  it("keeps FY 2025-26 statement captions on the current captured side", () => {
-    const captions = filedReturnsStatementLineItems({
-      financialYear: "2025-26",
-      period: "March",
-    }).map((lineItem) => lineItem.sectionCaption);
-    expect(captions).toContain(
+  it("withholds mixed FY 2025-26 statement captions", () => {
+    const filingPeriods = filingPeriodsForFinancialYear("2025-26");
+    const captions = filedReturnsStatementLineItems(filingPeriods).map(
+      (lineItem) => lineItem.sectionCaption,
+    );
+    expect(captions).toContain("Table 4(D)(1)");
+    expect(filedReturnsStatementCoverage(filingPeriods)).toMatchObject({
+      withheldCaptionTables: ["Table 4(B)(1)", "Table 4(D)(1)", "Table 4(D)(2)"],
+    });
+  });
+
+  it("keeps uniform old and current years descriptive, and resolves a reduced period set", () => {
+    expect(
+      filedReturnsStatementLineItems(filingPeriodsForFinancialYear("2021-22")).find((item) =>
+        item.sectionCaption.startsWith("Table 4(D)(1)"),
+      )?.sectionCaption,
+    ).toBe("Table 4(D)(1) Ineligible ITC — As per section 17(5)");
+    expect(
+      filedReturnsStatementLineItems(filingPeriodsForFinancialYear("2026-27")).find((item) =>
+        item.sectionCaption.startsWith("Table 4(D)(1)"),
+      )?.sectionCaption,
+    ).toBe(
       "Table 4(D)(1) Other Details — ITC reclaimed which was reversed under Table 4(B)(2) in earlier tax period",
     );
     expect(
-      filedReturnsStatementCoverage({ financialYear: "2025-26", period: "March" }),
-    ).not.toHaveProperty("withheldCaptionTables");
+      filedReturnsStatementLineItems([{ financialYear: "2025-26", period: "December" }]).find(
+        (item) => item.sectionCaption.startsWith("Table 4(D)(1)"),
+      )?.sectionCaption,
+    ).toContain("ITC reclaimed");
   });
 
   it("keeps blank identity cells when no period has parseable JSON", () => {
@@ -447,6 +467,10 @@ function fullYearPlan(
     period,
     returnType: "GSTR-3B",
   }));
+}
+
+function filingPeriodsForFinancialYear(financialYear: string) {
+  return FILED_RETURNS_MONTHS.map((period) => ({ financialYear, period }));
 }
 
 interface ParsedCell {

@@ -469,7 +469,9 @@ export function filedReturnsSummaryFieldLabel(
   return entry ? selectedCaption(entry, filingPeriod).label : "";
 }
 
-export function filedReturnsStatementLineItems(filingPeriod: FiledReturnsFilingPeriod): Array<
+export function filedReturnsStatementLineItems(
+  filingPeriods: readonly FiledReturnsFilingPeriod[],
+): Array<
   FiledReturnsStatementLineItem & {
     captionWithheld: boolean;
     fieldPath: string;
@@ -479,7 +481,7 @@ export function filedReturnsStatementLineItems(filingPeriod: FiledReturnsFilingP
   return Object.entries(GSTR3B_LABELS)
     .flatMap(([fieldPath, entry]) => {
       if (!entry.statement) return [];
-      const caption = selectedCaption(entry, filingPeriod);
+      const caption = selectedCaptionAcrossPeriods(entry, filingPeriods);
       return [
         {
           fieldPath,
@@ -496,12 +498,12 @@ export function filedReturnsStatementLineItems(filingPeriod: FiledReturnsFilingP
     );
 }
 
-export function filedReturnsStatementCoverage(filingPeriod: FiledReturnsFilingPeriod): {
+export function filedReturnsStatementCoverage(filingPeriods: readonly FiledReturnsFilingPeriod[]): {
   includedTables: string[];
   excludedTables: string[];
   withheldCaptionTables?: string[];
 } {
-  const lineItems = filedReturnsStatementLineItems(filingPeriod);
+  const lineItems = filedReturnsStatementLineItems(filingPeriods);
   const includedTables = [...new Set(lineItems.map((lineItem) => lineItem.coverageTable))];
   const withheldCaptionTables = [
     ...new Set(
@@ -515,6 +517,23 @@ export function filedReturnsStatementCoverage(filingPeriod: FiledReturnsFilingPe
     includedTables,
     excludedTables: GSTR3B_FORM_TABLES.filter((table) => !includedTables.includes(table)),
     ...(withheldCaptionTables.length > 0 ? { withheldCaptionTables } : {}),
+  };
+}
+
+function selectedCaptionAcrossPeriods(
+  entry: FiledReturnsSummaryFieldLabel,
+  filingPeriods: readonly FiledReturnsFilingPeriod[],
+): { label: string; sectionCaption?: string; tableReference?: string; withheld: boolean } {
+  const captions = filingPeriods.map((filingPeriod) => selectedCaption(entry, filingPeriod));
+  const firstCaption = captions[0];
+  if (!firstCaption) throw new TypeError("Statement requires at least one rendered filing period.");
+  if (captions.every((caption) => caption.label === firstCaption.label)) return firstCaption;
+  if (!entry.periodVersion) return firstCaption;
+  return {
+    label: entry.periodVersion.tableReference,
+    sectionCaption: entry.periodVersion.tableReference,
+    tableReference: entry.periodVersion.tableReference,
+    withheld: true,
   };
 }
 
