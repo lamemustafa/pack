@@ -77,6 +77,48 @@ describe("full fiscal-year recovery", () => {
     ]);
   });
 
+  it("keeps an offscreen-response-invalid ZIP summary persisted for recovery", async () => {
+    const scope = {
+      artifactType: "PDF" as const,
+      financialYear: "2026-27",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-3B" as const,
+    };
+
+    const summary = await persistCanonicalFiledReturnsFlowSummary("completion", {
+      scope,
+      status: "blocked",
+      updatedAt: "2026-08-20T00:00:00.000Z",
+      completedPeriods: [],
+      totalPeriods: 12,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: filedReturnsScopeId(scope.returnType),
+        state: "blocked",
+        safeSignals: [
+          "full-fiscal-year-zip-export-failed",
+          "full-fiscal-year-zip-export-error:offscreen-response-invalid",
+          "full-fiscal-year-opfs-retained",
+        ],
+        safeMessage: "Pack retained the staged fiscal-year files for a safe retry.",
+      },
+    });
+
+    expect(summary?.flowStep.safeSignals).toContain(
+      "full-fiscal-year-zip-export-error:offscreen-response-invalid",
+    );
+    expect(sessionValues.current.completion).toEqual(
+      expect.objectContaining({
+        flowStep: expect.objectContaining({
+          safeSignals: expect.arrayContaining([
+            "full-fiscal-year-zip-export-error:offscreen-response-invalid",
+          ]),
+        }),
+      }),
+    );
+    expect(browser.storage.session.remove).not.toHaveBeenCalledWith("completion");
+  });
+
   it("rejects stale target recovery revisions without mutating storage", async () => {
     mockLocalStorageGet({
       "full-year-ledger": createRecoveryLedger({ revision: 3 }),

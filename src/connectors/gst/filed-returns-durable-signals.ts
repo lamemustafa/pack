@@ -3,6 +3,7 @@ import type { FiledReturnsReturnType } from "./filed-returns-return-types";
 import { ARTIFACT_FAILURE_MESSAGES } from "./artifact-source";
 import { isSafeDashboardSelectedValue } from "./dashboard-selected-signal-values";
 import { FILED_RETURNS_OBSERVATION_SIGNALS } from "./filed-returns-observer-signals";
+import { PACK_OFFSCREEN_FILED_RETURN_ZIP_ERROR_CATEGORIES } from "./offscreen-blob-url";
 import {
   SINGLE_PERIOD_CLEANUP_CHECKPOINT_FAILURE_STAGES,
   singlePeriodCleanupCheckpointFailureSignal,
@@ -489,13 +490,9 @@ const ZIP_SIGNALS = new Set(
     ZIP_SIGNAL_SUFFIXES.map((suffix) => `${prefix}-zip-${suffix}`),
   ),
 );
-const ZIP_EXPORT_ERROR_CATEGORIES = new Set([
-  "opfs-unavailable",
-  "zip-empty",
-  "zip-failed",
-  "zip-invalid-entry",
-  "zip-too-large",
-]);
+const ZIP_EXPORT_ERROR_CATEGORIES = new Set<string>(
+  PACK_OFFSCREEN_FILED_RETURN_ZIP_ERROR_CATEGORIES,
+);
 const OPFS_STAGE_ERROR_CATEGORIES = new Set([
   "blob-url-failed",
   "clear-failed",
@@ -639,7 +636,7 @@ export function isDurableFiledReturnsSignal(signal: string): boolean {
     return true;
   }
   if (
-    /^full-fiscal-year-summary-error:(?:generation-failed|response-invalid|too-large|workbook-generation-failed)$/.test(
+    /^full-fiscal-year-summary-error:(?:generation-failed|identity-rejected|privacy-rejected|response-invalid|too-large|workbook-generation-failed)$/.test(
       signal,
     )
   ) {

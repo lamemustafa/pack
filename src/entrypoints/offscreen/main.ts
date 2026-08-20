@@ -14,6 +14,8 @@ import { FILED_RETURNS_MONTHS } from "../../connectors/gst/filed-returns-scope";
 import { createZip, type ZipEntry } from "./zip";
 import {
   buildFiledReturnsSummarySheet,
+  FiledReturnsSummaryForbiddenFieldError,
+  FiledReturnsSummaryInvalidGstinError,
   FILED_RETURNS_SUMMARY_SHEET_PATH,
 } from "../../connectors/gst/filed-returns-summary-sheet";
 import {
@@ -276,9 +278,13 @@ function createSummaryEntry(
       result: {
         status: "failed",
         reasonCategory:
-          error instanceof Error && error.name === "FiledReturnsSummaryTooLargeError"
-            ? "too-large"
-            : "generation-failed",
+          error instanceof FiledReturnsSummaryForbiddenFieldError
+            ? "privacy-rejected"
+            : error instanceof FiledReturnsSummaryInvalidGstinError
+              ? "identity-rejected"
+              : error instanceof Error && error.name === "FiledReturnsSummaryTooLargeError"
+                ? "too-large"
+                : "generation-failed",
       },
     };
   }

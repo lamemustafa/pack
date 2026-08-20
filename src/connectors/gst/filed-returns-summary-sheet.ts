@@ -100,7 +100,8 @@ export class FiledReturnsSummaryTooLargeError extends Error {
   }
 }
 
-class FiledReturnsSummaryForbiddenFieldError extends SyntaxError {}
+export class FiledReturnsSummaryForbiddenFieldError extends SyntaxError {}
+export class FiledReturnsSummaryInvalidGstinError extends SyntaxError {}
 
 interface ParsedPlanEntry {
   identityLeaves: FlatJsonLeaf[];
@@ -281,6 +282,11 @@ function collectIdentityValues(parsedEntries: readonly ParsedPlanEntry[]): Summa
           "Required taxpayer identity is missing from a parseable filed-return summary source.",
         );
       }
+      if (requiredLabel === "GSTIN" && !isValidGstin(requiredIdentity.value)) {
+        throw new FiledReturnsSummaryInvalidGstinError(
+          "GSTIN is invalid in a parseable filed-return summary source.",
+        );
+      }
     }
     for (const identity of identityInEntry.values()) {
       const target =
@@ -301,6 +307,31 @@ function collectIdentityValues(parsedEntries: readonly ParsedPlanEntry[]): Summa
     }
   }
   return [...taxpayerIdentityByLabel.values(), ...returnIdentityByKey.values()];
+}
+
+// Mirrors the public GST Portal common validation bundle: a 15-character GSTIN
+// shape plus the portal's base-36 check character. It validates only the
+// taxpayer identity that Pack would otherwise place in the derived workbook.
+const GSTIN_FORMAT = /^[0-9]{2}[A-Za-z]{5}[0-9]{4}[A-Za-z][1-9A-Za-z][Zz1-9A-Ja-j][0-9A-Za-z]$/;
+const GSTIN_CHECK_CHARACTERS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+function isValidGstin(value: string): boolean {
+  if (!GSTIN_FORMAT.test(value)) return false;
+  const prefix = value.slice(0, 14);
+  let factor = 2;
+  let sum = 0;
+  for (let index = prefix.length - 1; index >= 0; index -= 1) {
+    const codePoint = GSTIN_CHECK_CHARACTERS.indexOf(prefix[index]!.toUpperCase());
+    if (codePoint < 0) return false;
+    const digit = factor * codePoint;
+    factor = factor === 2 ? 1 : 2;
+    sum +=
+      Math.floor(digit / GSTIN_CHECK_CHARACTERS.length) + (digit % GSTIN_CHECK_CHARACTERS.length);
+  }
+  const checkCodePoint =
+    (GSTIN_CHECK_CHARACTERS.length - (sum % GSTIN_CHECK_CHARACTERS.length)) %
+    GSTIN_CHECK_CHARACTERS.length;
+  return value === `${prefix}${GSTIN_CHECK_CHARACTERS[checkCodePoint]}`;
 }
 
 function outcomeRow(

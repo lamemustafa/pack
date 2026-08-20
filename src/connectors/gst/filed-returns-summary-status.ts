@@ -85,6 +85,12 @@ export function filedReturnsSummaryStatusMessage(
 }
 
 function filedReturnsSummaryFailureReason(signals: ReadonlySet<string>): string {
+  if (signals.has("full-fiscal-year-summary-error:identity-rejected")) {
+    return "the taxpayer identity could not be validated; review the original return in the GST Portal, then retry";
+  }
+  if (signals.has("full-fiscal-year-summary-error:privacy-rejected")) {
+    return "Pack's privacy boundary rejected the source data; review the original return in the GST Portal, then retry";
+  }
   if (signals.has("full-fiscal-year-summary-error:too-large")) {
     return "the derived summary output exceeded its local size limit";
   }

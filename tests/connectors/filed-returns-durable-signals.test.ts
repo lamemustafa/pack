@@ -4,6 +4,7 @@ import {
   isDurableFiledReturnsSignal,
   parseDurableFiledReturnsSignals,
 } from "../../src/connectors/gst/filed-returns-durable-signals";
+import { PACK_OFFSCREEN_FILED_RETURN_ZIP_ERROR_CATEGORIES } from "../../src/connectors/gst/offscreen-blob-url";
 import {
   GSTR2B_ARTIFACT_DISPATCH_FAILURE_MESSAGES,
   Gstr2bArtifactDispatchFailureReason,
@@ -113,6 +114,15 @@ describe("filed-return durable signal contract", () => {
     expect(parseDurableFiledReturnsSignals(["zip-download-filename-overridden"])).toEqual([
       "zip-download-filename-overridden",
     ]);
+  });
+
+  it("admits every bounded ZIP-export error category for durable recovery", () => {
+    for (const prefix of ["full-fiscal-year", "single-period"]) {
+      for (const category of PACK_OFFSCREEN_FILED_RETURN_ZIP_ERROR_CATEGORIES) {
+        const signal = `${prefix}-zip-export-error:${category}`;
+        expect(parseDurableFiledReturnsSignals([signal])).toEqual([signal]);
+      }
+    }
   });
 
   it("persists bounded Returns Dashboard preflight failures", () => {

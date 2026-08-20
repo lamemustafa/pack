@@ -505,7 +505,7 @@ describe("offscreen Blob URL entrypoint", () => {
             lglnm: "Synthetic Example Taxpayer",
             r3b: {
               ret_period: "042026",
-              gstin: "22AAAAA0000A1Z5",
+              gstin: "27ABCDE1234F1Z0",
               surrounding_decoy: { z: "april", a: 10 },
               entries: [{ value: 900 }],
               portal_leaf: 11,
@@ -523,7 +523,7 @@ describe("offscreen Blob URL entrypoint", () => {
             lglnm: "Synthetic Example Taxpayer",
             r3b: {
               ret_period: "052026",
-              gstin: "22AAAAA0000A1Z5",
+              gstin: "27ABCDE1234F1Z0",
               surrounding_decoy: { z: "may" },
               entries: [{ value: 800 }, { value: 700 }],
               other_portal_leaf: 22,
@@ -611,14 +611,14 @@ describe("offscreen Blob URL entrypoint", () => {
       '<sheet name="GSTR-3B Consolidated"',
     );
     const statement = new TextDecoder().decode(workbook.get("xl/worksheets/sheet1.xml"));
-    expect(statement).toContain("22AAAAA0000A1Z5");
+    expect(statement).toContain("27ABCDE1234F1Z0");
     expect(statement).toContain("Synthetic Example Taxpayer");
   });
 
   it("keeps the CSV and workbook when a precision-limited total exceeds an Excel cell", async () => {
     await loadOffscreenEntrypoint();
     const sourceJson =
-      '{"data":{"lglnm":"Synthetic Legal Name","r3b":{"gstin":"00XXXXX0000X0Z0","ret_period":"042026","sup_details":{"osup_det":{"txval":2,"iamt":1e-40000}}}}}';
+      '{"data":{"lglnm":"Synthetic Legal Name","r3b":{"gstin":"27ABCDE1234F1Z0","ret_period":"042026","sup_details":{"osup_det":{"txval":2,"iamt":1e-40000}}}}}';
     const staged = await sendOffscreenMessage({
       type: "PACK_OFFSCREEN_STAGE_FILED_RETURN",
       target: PACK_OFFSCREEN_BLOB_URL_TARGET,
@@ -819,6 +819,8 @@ describe("offscreen Blob URL entrypoint", () => {
   it("keeps the artifact ZIP when summary generation throws", async () => {
     vi.doMock("../../src/connectors/gst/filed-returns-summary-sheet", () => ({
       FILED_RETURNS_SUMMARY_SHEET_PATH: "full-year-summary.csv",
+      FiledReturnsSummaryForbiddenFieldError: class extends SyntaxError {},
+      FiledReturnsSummaryInvalidGstinError: class extends SyntaxError {},
       buildFiledReturnsSummarySheet: () => {
         throw new Error("synthetic taxpayer figure must not escape");
       },
@@ -860,6 +862,99 @@ describe("offscreen Blob URL entrypoint", () => {
     const entries = await extractStoredZipEntries(createdBlobs[0]!);
     expect([...entries.keys()]).toEqual(["april-return.pdf"]);
     expect(JSON.stringify(zip)).not.toContain("synthetic taxpayer figure");
+  });
+
+  it("reports a privacy-boundary rejection without exposing the rejected source", async () => {
+    await loadOffscreenEntrypoint();
+    opfsFiles.set(
+      `filed-return-packs/${TEST_FULL_YEAR_LEDGER_ID}/april-data.json`,
+      new Blob([
+        JSON.stringify({
+          status: 1,
+          data: {
+            lglnm: "Synthetic Legal Name",
+            r3b: { gstin: "27ABCDE1234F1Z0", ret_period: "042026", amount: 1 },
+          },
+          decoy: { cookie: "synthetic-sensitive-value" },
+        }),
+      ]),
+    );
+
+    const zip = await sendOffscreenMessage({
+      type: "PACK_OFFSCREEN_CREATE_FILED_RETURN_ZIP",
+      target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+      payload: {
+        requestId: "privacy-summary-request",
+        generatedAt: "2026-08-19T12:00:00.000Z",
+        ledgerId: TEST_FULL_YEAR_LEDGER_ID,
+        expectedReturnType: "GSTR-3B",
+        expectedEntryCount: 1,
+        expectedEntries: [{ artifactType: "JSON", entryNames: ["april-data.json"] }],
+        summaryPlan: [
+          {
+            artifactType: "JSON",
+            entryNames: ["april-data.json"],
+            financialYear: "2026-27",
+            outcomeCategory: "staged",
+            period: "April",
+            returnType: "GSTR-3B",
+          },
+        ],
+      },
+    });
+
+    expect(zip).toMatchObject({
+      ok: true,
+      summary: { status: "failed", reasonCategory: "privacy-rejected" },
+    });
+    expect(JSON.stringify(zip)).not.toContain("cookie");
+    expect(JSON.stringify(zip)).not.toContain("synthetic-sensitive-value");
+  });
+
+  it("keeps the original artifact but omits the workbook when GSTIN validation rejects it", async () => {
+    await loadOffscreenEntrypoint();
+    opfsFiles.set(
+      `filed-return-packs/${TEST_FULL_YEAR_LEDGER_ID}/april-data.json`,
+      new Blob([
+        JSON.stringify({
+          status: 1,
+          data: {
+            lglnm: "Synthetic Legal Name",
+            r3b: { gstin: "27ABCDE1234F1Z1", ret_period: "042026", amount: 1 },
+          },
+        }),
+      ]),
+    );
+
+    const zip = await sendOffscreenMessage({
+      type: "PACK_OFFSCREEN_CREATE_FILED_RETURN_ZIP",
+      target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+      payload: {
+        requestId: "identity-summary-request",
+        generatedAt: "2026-08-19T12:00:00.000Z",
+        ledgerId: TEST_FULL_YEAR_LEDGER_ID,
+        expectedReturnType: "GSTR-3B",
+        expectedEntryCount: 1,
+        expectedEntries: [{ artifactType: "JSON", entryNames: ["april-data.json"] }],
+        summaryPlan: [
+          {
+            artifactType: "JSON",
+            entryNames: ["april-data.json"],
+            financialYear: "2026-27",
+            outcomeCategory: "staged",
+            period: "April",
+            returnType: "GSTR-3B",
+          },
+        ],
+      },
+    });
+
+    expect(zip).toMatchObject({
+      ok: true,
+      summary: { status: "failed", reasonCategory: "identity-rejected" },
+    });
+    const entries = await extractStoredZipEntries(createdBlobs[0]!);
+    expect([...entries.keys()]).toEqual(["april-data.json"]);
   });
 
   it("keeps the artifact ZIP with a named outcome when workbook generation throws", async () => {

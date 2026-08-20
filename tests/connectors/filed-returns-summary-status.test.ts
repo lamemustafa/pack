@@ -73,6 +73,22 @@ describe("filed-return summary status", () => {
         }),
         reason: "summary generation failed",
       },
+      {
+        outcome: filedReturnsSummaryOutcome(true, {
+          status: "failed",
+          reasonCategory: "identity-rejected",
+        }),
+        reason:
+          "taxpayer identity could not be validated; review the original return in the GST Portal, then retry",
+      },
+      {
+        outcome: filedReturnsSummaryOutcome(true, {
+          status: "failed",
+          reasonCategory: "privacy-rejected",
+        }),
+        reason:
+          "privacy boundary rejected the source data; review the original return in the GST Portal, then retry",
+      },
     ];
 
     for (const { outcome } of failures) {

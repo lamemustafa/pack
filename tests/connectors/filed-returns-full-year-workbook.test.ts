@@ -30,7 +30,7 @@ describe("filed-return full-year workbook", () => {
               authSig: "Synthetic Workbook Signatory",
               desig: "Synthetic Workbook Designation",
               r3b: {
-                gstin: "00XXXXX0000X0Z0",
+                gstin: "27ABCDE1234F1Z0",
                 ret_period: "042026",
                 sup_details: {
                   osup_det: { txval: 10.25, iamt: 2, camt: 3, samt: 4, csamt: 5 },
@@ -62,7 +62,7 @@ describe("filed-return full-year workbook", () => {
     const statementRows = parsedRows(statement);
     expect(statement).toContain('pane xSplit="1" ySplit="5" topLeftCell="B6"');
     expect(statementRows[0]?.get("A1")?.text).toBe("GSTIN");
-    expect(statementRows[0]?.get("B1")?.text).toBe("00XXXXX0000X0Z0");
+    expect(statementRows[0]?.get("B1")?.text).toBe("27ABCDE1234F1Z0");
     expect(statementRows[1]?.get("A2")?.text).toBe("Legal name");
     expect(statementRows[1]?.get("B2")?.text).toBe("Synthetic Workbook Taxpayer");
     expect(statementRows[2]?.get("A3")?.text).toBe("Financial year");
@@ -167,7 +167,7 @@ describe("filed-return full-year workbook", () => {
       .join("\n");
     expect(workbookText).not.toContain("GSTR-9");
     expect(workbookText).not.toContain("pack-full-year-workbook-");
-    for (const identity of ["00XXXXX0000X0Z0", "Synthetic Workbook Taxpayer"]) {
+    for (const identity of ["27ABCDE1234F1Z0", "Synthetic Workbook Taxpayer"]) {
       expect(statement.match(new RegExp(identity, "g"))).toHaveLength(1);
       expect(new TextDecoder().decode(summary.dataBytes)).not.toContain(identity);
     }
@@ -195,7 +195,7 @@ describe("filed-return full-year workbook", () => {
               status: 1,
               data: {
                 r3b: {
-                  gstin: "00XXXXX0000X0Z0",
+                  gstin: "27ABCDE1234F1Z0",
                   ret_period: "042026",
                   sup_details: { osup_det: { txval: 1 } },
                 },
@@ -218,7 +218,7 @@ describe("filed-return full-year workbook", () => {
             data: {
               lglnm: "Synthetic Workbook Taxpayer",
               r3b: {
-                gstin: "00XXXXX0000X0Z0",
+                gstin: "27ABCDE1234F1Z0",
                 ret_period: "082022",
                 itc_elg: {
                   itc_rev: [{ ty: "RUL", camt: 12 }],
@@ -316,7 +316,7 @@ describe("filed-return full-year workbook", () => {
           data: {
             lglnm: "Synthetic Legal Name",
             r3b: {
-              gstin: "00XXXXX0000X0Z0",
+              gstin: "27ABCDE1234F1Z0",
               ret_period: period,
               sup_details: { osup_det: { txval: 9_999_999_999_999.99 } },
             },
@@ -363,13 +363,13 @@ describe("filed-return full-year workbook", () => {
       {
         path: "april-data.json",
         bytes: new TextEncoder().encode(
-          '{"data":{"lglnm":"Synthetic Legal Name","r3b":{"gstin":"00XXXXX0000X0Z0","ret_period":"042026","sup_details":{"osup_det":{"txval":1e-400}}}}}',
+          '{"data":{"lglnm":"Synthetic Legal Name","r3b":{"gstin":"27ABCDE1234F1Z0","ret_period":"042026","sup_details":{"osup_det":{"txval":1e-400}}}}}',
         ),
       },
       {
         path: "may-data.json",
         bytes: new TextEncoder().encode(
-          '{"data":{"lglnm":"Synthetic Legal Name","r3b":{"gstin":"00XXXXX0000X0Z0","ret_period":"052026","sup_details":{"osup_det":{"txval":0}}}}}',
+          '{"data":{"lglnm":"Synthetic Legal Name","r3b":{"gstin":"27ABCDE1234F1Z0","ret_period":"052026","sup_details":{"osup_det":{"txval":0}}}}}',
         ),
       },
     ];
@@ -407,7 +407,7 @@ describe("filed-return full-year workbook", () => {
       {
         path: "april-data.json",
         bytes: new TextEncoder().encode(
-          `{"data":{"lglnm":"Synthetic Legal Name","r3b":{"gstin":"00XXXXX0000X0Z0","ret_period":"042026","sup_details":{"osup_det":{"txval":2,"iamt":${oversized}}}}}}`,
+          `{"data":{"lglnm":"Synthetic Legal Name","r3b":{"gstin":"27ABCDE1234F1Z0","ret_period":"042026","sup_details":{"osup_det":{"txval":2,"iamt":${oversized}}}}}}`,
         ),
       },
     ]);
@@ -449,13 +449,13 @@ describe("filed-return full-year workbook", () => {
       {
         path: "april-data.json",
         bytes: new TextEncoder().encode(
-          '{"data":{"lglnm":"Synthetic Legal Name","r3b":{"gstin":"00XXXXX0000X0Z0","ret_period":"042026","sup_details":{"osup_det":{"txval":99999999999999.999}}}}}',
+          '{"data":{"lglnm":"Synthetic Legal Name","r3b":{"gstin":"27ABCDE1234F1Z0","ret_period":"042026","sup_details":{"osup_det":{"txval":99999999999999.999}}}}}',
         ),
       },
       {
         path: "may-data.json",
         bytes: new TextEncoder().encode(
-          '{"data":{"lglnm":"Synthetic Legal Name","r3b":{"gstin":"00XXXXX0000X0Z0","ret_period":"052026","sup_details":{"osup_det":{"txval":1}}}}}',
+          '{"data":{"lglnm":"Synthetic Legal Name","r3b":{"gstin":"27ABCDE1234F1Z0","ret_period":"052026","sup_details":{"osup_det":{"txval":1}}}}}',
         ),
       },
     ];

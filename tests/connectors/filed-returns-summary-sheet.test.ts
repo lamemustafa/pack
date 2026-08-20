@@ -20,7 +20,7 @@ describe("filed-return full-year summary sheet", () => {
         {
           path: "april-data.json",
           bytes: new TextEncoder().encode(
-            '{"status":1,"data":{"pan":"AAAAA0000A","taxpayer_name":"Synthetic Taxpayer Name","lglnm":"Synthetic Legal Name","trdnm":"Synthetic Trade Name","arn":"SYNTHETIC-ARN-APRIL","arnDt":"2026-05-01","authSig":"Synthetic Signatory","desig":"Synthetic Designation","r3b":{"gstin":"00XXXXX0000X0Z0","ret_period":"042026","sup_details":{"osup_det":{"txval":2.038519331E7,"iamt":99999999999999.999}},"surrounding_decoy":{"leading_zero_id":"00042","empty_text":"","unknown_amount":7},"entries":[{"ignored":900},{"ignored":800}]}},"response_decoy":"synthetic"}',
+            '{"status":1,"data":{"pan":"AAAAA0000A","taxpayer_name":"Synthetic Taxpayer Name","lglnm":"Synthetic Legal Name","trdnm":"Synthetic Trade Name","arn":"SYNTHETIC-ARN-APRIL","arnDt":"2026-05-01","authSig":"Synthetic Signatory","desig":"Synthetic Designation","r3b":{"gstin":"27ABCDE1234F1Z0","ret_period":"042026","sup_details":{"osup_det":{"txval":2.038519331E7,"iamt":99999999999999.999}},"surrounding_decoy":{"leading_zero_id":"00042","empty_text":"","unknown_amount":7},"entries":[{"ignored":900},{"ignored":800}]}},"response_decoy":"synthetic"}',
           ),
         },
       ],
@@ -60,7 +60,7 @@ describe("filed-return full-year summary sheet", () => {
     expect(dataRows.every(exactlyOneValueColumnForFieldRow)).toBe(true);
     const dataCsv = new TextDecoder().decode(summary.dataBytes);
     for (const identityValue of [
-      "00XXXXX0000X0Z0",
+      "27ABCDE1234F1Z0",
       "AAAAA0000A",
       "Synthetic Taxpayer Name",
       "Synthetic Legal Name",
@@ -76,7 +76,7 @@ describe("filed-return full-year summary sheet", () => {
     expect(dataCsv).toContain('/surrounding_decoy/empty_text,"",');
 
     const context = contextText(summary.contextRows);
-    expect(context.match(/00XXXXX0000X0Z0/g)).toHaveLength(1);
+    expect(context.match(/27ABCDE1234F1Z0/g)).toHaveLength(1);
     expect(context.match(/AAAAA0000A/g)).toHaveLength(1);
     expect(context.match(/Synthetic Taxpayer Name/g)).toHaveLength(1);
     expect(context.match(/Synthetic Legal Name/g)).toHaveLength(1);
@@ -85,7 +85,7 @@ describe("filed-return full-year summary sheet", () => {
     expect(context.match(/2026-05-01/g)).toHaveLength(1);
     expect(context.match(/Synthetic Signatory/g)).toHaveLength(1);
     expect(context.match(/Synthetic Designation/g)).toHaveLength(1);
-    expect(context).toContain("taxpayer_identity,identity,GSTIN,/data/r3b/gstin,00XXXXX0000X0Z0");
+    expect(context).toContain("taxpayer_identity,identity,GSTIN,/data/r3b/gstin,27ABCDE1234F1Z0");
     expect(context).toContain(
       "taxpayer_identity,identity,Legal name,/data/lglnm,Synthetic Legal Name",
     );
@@ -120,7 +120,7 @@ describe("filed-return full-year summary sheet", () => {
             lglnm: "Synthetic Legal Name",
             arn: "SYNTHETIC-ARN-APRIL",
             arnDt: "2026-05-01",
-            r3b: { gstin: "00XXXXX0000X0Z0", ret_period: "042026", amount: 1 },
+            r3b: { gstin: "27ABCDE1234F1Z0", ret_period: "042026", amount: 1 },
           },
         }),
         rawJsonEntry("may-data.json", {
@@ -129,7 +129,7 @@ describe("filed-return full-year summary sheet", () => {
             lglnm: "Synthetic Legal Name",
             arn: "SYNTHETIC-ARN-MAY",
             arnDt: "2026-06-01",
-            r3b: { gstin: "00XXXXX0000X0Z0", ret_period: "052026", amount: 2 },
+            r3b: { gstin: "27ABCDE1234F1Z0", ret_period: "052026", amount: 2 },
           },
         }),
       ],
@@ -154,7 +154,7 @@ describe("filed-return full-year summary sheet", () => {
           data: {
             lglnm: "Synthetic Legal Name",
             authSig: "Synthetic Authorized Signatory",
-            r3b: { gstin: "00XXXXX0000X0Z0", ret_period: "042026", amount: 1 },
+            r3b: { gstin: "27ABCDE1234F1Z0", ret_period: "042026", amount: 1 },
           },
         }),
       ],
@@ -175,20 +175,20 @@ describe("filed-return full-year summary sheet", () => {
       [
         jsonEntry("april-data.json", "GSTR-2B", {
           amount: 1,
-          gstin: { status: "Synthetic Non-Identity Status", value: "00XXXXX0000X0Z0" },
+          gstin: { status: "Synthetic Non-Identity Status", value: "27ABCDE1234F1Z0" },
           "legal/name": { value: "Synthetic Nested Legal Name" },
         }),
       ],
     );
 
     const data = new TextDecoder().decode(summary.dataBytes);
-    expect(data).not.toContain("00XXXXX0000X0Z0");
+    expect(data).not.toContain("27ABCDE1234F1Z0");
     expect(data).not.toContain("Synthetic Nested Legal Name");
     expect(data).not.toContain("Synthetic Non-Identity Status");
     expect(data).not.toContain("/gstin/value");
     expect(data).not.toContain("/legal~1name/value");
     const context = contextText(summary.contextRows);
-    expect(context).toContain("taxpayer_identity,identity,GSTIN,/data/gstin/value,00XXXXX0000X0Z0");
+    expect(context).toContain("taxpayer_identity,identity,GSTIN,/data/gstin/value,27ABCDE1234F1Z0");
     expect(context).toContain(
       "taxpayer_identity,identity,Legal name,/data/legal~1name/value,Synthetic Nested Legal Name",
     );
@@ -252,7 +252,7 @@ describe("filed-return full-year summary sheet", () => {
           data: {
             lglnm: "Synthetic Legal Name",
             r3b: {
-              gstin: "00XXXXX0000X0Z0",
+              gstin: "27ABCDE1234F1Z0",
               ret_period: "042026",
               sup_details: {
                 osup_det: { txval: 101, camt: 11, iamt: 12, samt: 13 },
@@ -536,10 +536,10 @@ describe("filed-return full-year summary sheet", () => {
         ],
         [
           jsonEntry("april-data.json", "GSTR-3B", {
-            gstin: "00XXXXX0000X0Z0",
+            gstin: "27ABCDE1234F1Z0",
             amount: 1,
           }),
-          jsonEntry("may-data.json", "GSTR-3B", { gstin: "00YYYYY0000Y0Z0", amount: 2 }, "052026"),
+          jsonEntry("may-data.json", "GSTR-3B", { gstin: "27FGHIJ5678K1Z1", amount: 2 }, "052026"),
         ],
       ),
     ).toThrow("Inconsistent taxpayer identity");
@@ -557,7 +557,7 @@ describe("filed-return full-year summary sheet", () => {
             status: 1,
             data: {
               lglnm: "Synthetic Legal Name",
-              r3b: { gstin: "00XXXXX0000X0Z0", ret_period: "042026", amount: 1 },
+              r3b: { gstin: "27ABCDE1234F1Z0", ret_period: "042026", amount: 1 },
             },
           }),
           rawJsonEntry("may-data.json", {
@@ -570,6 +570,23 @@ describe("filed-return full-year summary sheet", () => {
         ],
       ),
     ).toThrow("Required taxpayer identity");
+  });
+
+  it("rejects a nonempty GSTR-3B GSTIN that fails the GST Portal checksum", () => {
+    expect(() =>
+      buildFiledReturnsSummarySheet(
+        [jsonPlan("April", "april-data.json", "GSTR-3B")],
+        [
+          rawJsonEntry("april-data.json", {
+            status: 1,
+            data: {
+              lglnm: "Synthetic Legal Name",
+              r3b: { gstin: "27ABCDE1234F1Z1", ret_period: "042026", amount: 1 },
+            },
+          }),
+        ],
+      ),
+    ).toThrow("GSTIN is invalid");
   });
 
   it.each([
@@ -589,7 +606,7 @@ describe("filed-return full-year summary sheet", () => {
         status: 1,
         data: {
           lglnm: false,
-          r3b: { gstin: "00XXXXX0000X0Z0", ret_period: "042026", amount: 1 },
+          r3b: { gstin: "27ABCDE1234F1Z0", ret_period: "042026", amount: 1 },
         },
       },
     },
@@ -611,7 +628,7 @@ describe("filed-return full-year summary sheet", () => {
           data: {
             lglnm: "Synthetic Legal Name",
             trdnm: false,
-            r3b: { gstin: "00XXXXX0000X0Z0", ret_period: "042026", amount: 1 },
+            r3b: { gstin: "27ABCDE1234F1Z0", ret_period: "042026", amount: 1 },
           },
         }),
       ],
@@ -633,14 +650,14 @@ describe("filed-return full-year summary sheet", () => {
           data: {
             lglnm: "Synthetic Legal Name",
             trdnm: "Synthetic Optional Trade Name",
-            r3b: { gstin: "00XXXXX0000X0Z0", ret_period: "042026", amount: 1 },
+            r3b: { gstin: "27ABCDE1234F1Z0", ret_period: "042026", amount: 1 },
           },
         }),
         rawJsonEntry("may-data.json", {
           status: 1,
           data: {
             lglnm: "Synthetic Legal Name",
-            r3b: { gstin: "00XXXXX0000X0Z0", ret_period: "052026", amount: 2 },
+            r3b: { gstin: "27ABCDE1234F1Z0", ret_period: "052026", amount: 2 },
           },
         }),
       ],
@@ -663,7 +680,7 @@ describe("filed-return full-year summary sheet", () => {
             data: {
               lglnm: "Synthetic Legal Name",
               trdnm: "Synthetic Trade Name One",
-              r3b: { gstin: "00XXXXX0000X0Z0", ret_period: "042026", amount: 1 },
+              r3b: { gstin: "27ABCDE1234F1Z0", ret_period: "042026", amount: 1 },
             },
           }),
           rawJsonEntry("may-data.json", {
@@ -671,7 +688,7 @@ describe("filed-return full-year summary sheet", () => {
             data: {
               lglnm: "Synthetic Legal Name",
               trdnm: "Synthetic Trade Name Two",
-              r3b: { gstin: "00XXXXX0000X0Z0", ret_period: "052026", amount: 2 },
+              r3b: { gstin: "27ABCDE1234F1Z0", ret_period: "052026", amount: 2 },
             },
           }),
         ],
@@ -808,7 +825,7 @@ describe("filed-return full-year summary sheet", () => {
             outside: { cookie: secret },
             data: {
               lglnm: "Synthetic Legal Name",
-              r3b: { gstin: "00XXXXX0000X0Z0", ret_period: "042026", amount: 1 },
+              r3b: { gstin: "27ABCDE1234F1Z0", ret_period: "042026", amount: 1 },
             },
           }),
         ],
@@ -966,7 +983,7 @@ describe("filed-return full-year summary sheet", () => {
           data: {
             lglnm: "Synthetic Legal Name",
             r3b: {
-              gstin: "00XXXXX0000X0Z0",
+              gstin: "27ABCDE1234F1Z0",
               ret_period: "082022",
               itc_elg: {
                 itc_avl: [{ ty: "ISRC", camt: 11 }],
@@ -1035,7 +1052,7 @@ function jsonEntry(
           status: 1,
           data: {
             lglnm: "Synthetic Legal Name",
-            r3b: { gstin: "00XXXXX0000X0Z0", ret_period: returnPeriod, ...value },
+            r3b: { gstin: "27ABCDE1234F1Z0", ret_period: returnPeriod, ...value },
           },
           response_decoy: "synthetic",
         }

@@ -58,6 +58,30 @@ export interface PackOffscreenFiledReturnZipExpectedEntry {
   entryNames: string[];
 }
 
+// These are the only filename-free ZIP failures produced by the offscreen
+// worker or synthesized while validating its untrusted response. The durable
+// signal contract imports this list so recovery cannot silently lose a known
+// ZIP failure category.
+export const PACK_OFFSCREEN_FILED_RETURN_ZIP_ERROR_CATEGORIES = [
+  "offscreen-response-invalid",
+  "opfs-unavailable",
+  "zip-empty",
+  "zip-failed",
+  "zip-invalid-entry",
+  "zip-too-large",
+] as const;
+export type PackOffscreenFiledReturnZipErrorCategory =
+  (typeof PACK_OFFSCREEN_FILED_RETURN_ZIP_ERROR_CATEGORIES)[number];
+
+export function isPackOffscreenFiledReturnZipErrorCategory(
+  value: unknown,
+): value is PackOffscreenFiledReturnZipErrorCategory {
+  return (
+    typeof value === "string" &&
+    (PACK_OFFSCREEN_FILED_RETURN_ZIP_ERROR_CATEGORIES as readonly string[]).includes(value)
+  );
+}
+
 export interface PackOffscreenClearFiledReturnLedgerMessage {
   type: "PACK_OFFSCREEN_CLEAR_FILED_RETURN_LEDGER";
   target: typeof PACK_OFFSCREEN_BLOB_URL_TARGET;
@@ -145,7 +169,12 @@ export type PackOffscreenFiledReturnSummaryResult =
     }
   | {
       status: "failed";
-      reasonCategory: "generation-failed" | "too-large" | "workbook-generation-failed";
+      reasonCategory:
+        | "generation-failed"
+        | "identity-rejected"
+        | "privacy-rejected"
+        | "too-large"
+        | "workbook-generation-failed";
     };
 
 export function isPackOffscreenBlobUrlMessageShape(

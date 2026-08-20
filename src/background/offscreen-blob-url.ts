@@ -1,7 +1,9 @@
 import { browser } from "wxt/browser";
 import {
   PACK_OFFSCREEN_BLOB_URL_TARGET,
+  isPackOffscreenFiledReturnZipErrorCategory,
   type PackOffscreenBlobUrlResponse,
+  type PackOffscreenFiledReturnZipErrorCategory,
   type PackOffscreenFiledReturnZipExpectedEntry,
   type PackOffscreenFiledReturnSummaryResult,
 } from "../connectors/gst/offscreen-blob-url";
@@ -24,7 +26,7 @@ export type OffscreenFiledReturnZipResult =
       artifactEntryCount: number;
       summary?: PackOffscreenFiledReturnSummaryResult;
     }
-  | { status: "failed"; errorCategory?: string };
+  | { status: "failed"; errorCategory?: PackOffscreenFiledReturnZipErrorCategory };
 export type OffscreenFiledReturnClearResult =
   | { status: "cleared" }
   | {
@@ -350,7 +352,7 @@ function toZipResult(
     if (
       record.ok === false &&
       record.requestId === requestId &&
-      typeof record.errorCategory === "string"
+      isPackOffscreenFiledReturnZipErrorCategory(record.errorCategory)
     ) {
       return { status: "failed", errorCategory: record.errorCategory };
     }
@@ -368,6 +370,8 @@ function isSummaryResult(
     return (
       hasOnlyKeys(record, ["reasonCategory", "status"]) &&
       (record.reasonCategory === "generation-failed" ||
+        record.reasonCategory === "identity-rejected" ||
+        record.reasonCategory === "privacy-rejected" ||
         record.reasonCategory === "too-large" ||
         record.reasonCategory === "workbook-generation-failed")
     );
