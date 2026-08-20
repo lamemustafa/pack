@@ -1,6 +1,7 @@
 import { browser } from "wxt/browser";
 import {
   PACK_OFFSCREEN_BLOB_URL_TARGET,
+  isPackOffscreenFiledReturnSummaryErrorCategory,
   isPackOffscreenFiledReturnZipErrorCategory,
   type PackOffscreenBlobUrlResponse,
   type PackOffscreenFiledReturnZipErrorCategory,
@@ -369,11 +370,7 @@ function isSummaryResult(
   if (record.status === "failed") {
     return (
       hasOnlyKeys(record, ["reasonCategory", "status"]) &&
-      (record.reasonCategory === "generation-failed" ||
-        record.reasonCategory === "identity-rejected" ||
-        record.reasonCategory === "privacy-rejected" ||
-        record.reasonCategory === "too-large" ||
-        record.reasonCategory === "workbook-generation-failed")
+      isPackOffscreenFiledReturnSummaryErrorCategory(record.reasonCategory)
     );
   }
   const maximumParsedPeriodCount = new Set(

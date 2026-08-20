@@ -27,6 +27,7 @@ import {
 export const FILED_RETURNS_FULL_YEAR_WORKBOOK_PATH = "full-year-workbook.xlsx";
 
 const FOOTER_VALUE_COLUMN_WIDTH = 58;
+const NON_NUMERIC_CELL_TEXT = "Non-numeric value";
 const MONTH_COLUMN_WIDTH = 13;
 const MONTH_NAMES = [
   "Jan",
@@ -107,24 +108,26 @@ function consolidatedSheet(
       const monthValues = renderedFilingPeriods.map(({ period }) =>
         values.get(`${period}:${item.fieldPath}`),
       );
-      const numericValues = monthValues.filter(
-        (value): value is StatementNumericValue => value !== undefined,
+      const presentValues = monthValues.filter(
+        (value): value is StatementCellValue => value !== undefined,
       );
       const total =
-        numericValues.length === 0
+        presentValues.length === 0
           ? undefined
           : exactTotalSpreadsheetValue(
-              numericValues.map((value) => value.sourceText),
-              numericValues.some((value) => value.number === null),
+              presentValues.map((value) => value.sourceText),
+              presentValues.some((value) => value.number === null),
             );
       rows.push([
         { value: item.shortLabel },
         ...monthValues.map((value) =>
           value === undefined
             ? undefined
-            : value.number === null
-              ? { value: "Precision limit" }
-              : { value: value.number, style: "number" as const },
+            : !value.numeric
+              ? { value: NON_NUMERIC_CELL_TEXT }
+              : value.number === null
+                ? { value: "Precision limit" }
+                : { value: value.number, style: "number" as const },
         ),
         total !== undefined
           ? typeof total === "number"
@@ -173,32 +176,32 @@ function humanDate(value: Date): string {
   return `${value.getUTCDate()} ${MONTH_NAMES[value.getUTCMonth()]} ${value.getUTCFullYear()}`;
 }
 
-interface StatementNumericValue {
+interface StatementCellValue {
   number: number | null;
+  numeric: boolean;
   sourceText: string;
 }
 
+// A mapped statement path whose portal value is a string, boolean, or null is
+// present and malformed, not absent. Dropping it blanked the month — which a
+// reader cannot tell from a filed zero — and silently understated the Total.
+// It is retained here as a non-numeric cell so both stay visible.
 function statementValues(
   dataRows: readonly FiledReturnsSummaryDataRow[],
   filingPeriods: readonly FiledReturnsFilingPeriod[],
-): Map<string, StatementNumericValue> {
-  const output = new Map<string, StatementNumericValue>();
+): Map<string, StatementCellValue> {
+  const output = new Map<string, StatementCellValue>();
   const statementPaths = new Set(
     filedReturnsStatementLineItems(filingPeriods).map((item) => item.fieldPath),
   );
   for (const row of dataRows) {
-    if (
-      row.returnType !== "GSTR-3B" ||
-      !statementPaths.has(row.fieldPath) ||
-      row.valueNumber === undefined
-    ) {
-      continue;
-    }
+    if (row.returnType !== "GSTR-3B" || !statementPaths.has(row.fieldPath)) continue;
     const key = `${row.period}:${row.fieldPath}`;
     if (output.has(key)) throw new SyntaxError("Duplicate GSTR-3B statement value.");
     output.set(key, {
-      number: exactSpreadsheetNumber(row.valueNumber),
-      sourceText: row.valueNumber,
+      number: row.valueNumber === undefined ? null : exactSpreadsheetNumber(row.valueNumber),
+      numeric: row.valueNumber !== undefined,
+      sourceText: row.valueNumber ?? row.valueText ?? "",
     });
   }
   return output;

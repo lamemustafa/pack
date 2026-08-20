@@ -1,5 +1,9 @@
 import type { PackOffscreenFiledReturnSummaryResult } from "./offscreen-blob-url";
 
+// Synthesized locally when the offscreen worker's response fails validation,
+// so it is not one of the worker's own reason categories.
+export const FILED_RETURNS_SUMMARY_RESPONSE_INVALID_CATEGORY = "response-invalid";
+
 export interface FiledReturnsSummaryStatus {
   safeSignals: string[];
 }
@@ -15,7 +19,7 @@ export function filedReturnsSummaryOutcome(
     return {
       safeSignals: [
         "full-fiscal-year-summary-failed",
-        "full-fiscal-year-summary-error:response-invalid",
+        `full-fiscal-year-summary-error:${FILED_RETURNS_SUMMARY_RESPONSE_INVALID_CATEGORY}`,
       ],
     };
   }
@@ -87,6 +91,9 @@ export function filedReturnsSummaryStatusMessage(
 function filedReturnsSummaryFailureReason(signals: ReadonlySet<string>): string {
   if (signals.has("full-fiscal-year-summary-error:identity-rejected")) {
     return "the taxpayer identity could not be validated; review the original return in the GST Portal, then retry";
+  }
+  if (signals.has("full-fiscal-year-summary-error:identity-unverified")) {
+    return "the taxpayer identity was not present at its expected place in the portal response; review the original return in the GST Portal, then retry";
   }
   if (signals.has("full-fiscal-year-summary-error:privacy-rejected")) {
     return "Pack's privacy boundary rejected the source data; review the original return in the GST Portal, then retry";

@@ -16,6 +16,7 @@ import {
   buildFiledReturnsSummarySheet,
   FiledReturnsSummaryForbiddenFieldError,
   FiledReturnsSummaryInvalidGstinError,
+  FiledReturnsSummaryUncanonicalIdentityError,
   FILED_RETURNS_SUMMARY_SHEET_PATH,
 } from "../../connectors/gst/filed-returns-summary-sheet";
 import {
@@ -282,9 +283,11 @@ function createSummaryEntry(
             ? "privacy-rejected"
             : error instanceof FiledReturnsSummaryInvalidGstinError
               ? "identity-rejected"
-              : error instanceof Error && error.name === "FiledReturnsSummaryTooLargeError"
-                ? "too-large"
-                : "generation-failed",
+              : error instanceof FiledReturnsSummaryUncanonicalIdentityError
+                ? "identity-unverified"
+                : error instanceof Error && error.name === "FiledReturnsSummaryTooLargeError"
+                  ? "too-large"
+                  : "generation-failed",
       },
     };
   }

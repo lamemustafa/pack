@@ -167,15 +167,31 @@ export type PackOffscreenFiledReturnSummaryResult =
       rowCount: number;
       workbookOutcome?: "not-applicable";
     }
-  | {
-      status: "failed";
-      reasonCategory:
-        | "generation-failed"
-        | "identity-rejected"
-        | "privacy-rejected"
-        | "too-large"
-        | "workbook-generation-failed";
-    };
+  | { status: "failed"; reasonCategory: PackOffscreenFiledReturnSummaryErrorCategory };
+
+// The only derived-summary failure reasons the offscreen worker produces. The
+// background response validator and the durable signal contract import this
+// list, so a reason the worker can emit can never be refused by the validator
+// or dropped during recovery.
+export const PACK_OFFSCREEN_FILED_RETURN_SUMMARY_ERROR_CATEGORIES = [
+  "generation-failed",
+  "identity-rejected",
+  "identity-unverified",
+  "privacy-rejected",
+  "too-large",
+  "workbook-generation-failed",
+] as const;
+export type PackOffscreenFiledReturnSummaryErrorCategory =
+  (typeof PACK_OFFSCREEN_FILED_RETURN_SUMMARY_ERROR_CATEGORIES)[number];
+
+export function isPackOffscreenFiledReturnSummaryErrorCategory(
+  value: unknown,
+): value is PackOffscreenFiledReturnSummaryErrorCategory {
+  return (
+    typeof value === "string" &&
+    (PACK_OFFSCREEN_FILED_RETURN_SUMMARY_ERROR_CATEGORIES as readonly string[]).includes(value)
+  );
+}
 
 export function isPackOffscreenBlobUrlMessageShape(
   input: unknown,

@@ -3,7 +3,11 @@ import type { FiledReturnsReturnType } from "./filed-returns-return-types";
 import { ARTIFACT_FAILURE_MESSAGES } from "./artifact-source";
 import { isSafeDashboardSelectedValue } from "./dashboard-selected-signal-values";
 import { FILED_RETURNS_OBSERVATION_SIGNALS } from "./filed-returns-observer-signals";
-import { PACK_OFFSCREEN_FILED_RETURN_ZIP_ERROR_CATEGORIES } from "./offscreen-blob-url";
+import {
+  PACK_OFFSCREEN_FILED_RETURN_SUMMARY_ERROR_CATEGORIES,
+  PACK_OFFSCREEN_FILED_RETURN_ZIP_ERROR_CATEGORIES,
+} from "./offscreen-blob-url";
+import { FILED_RETURNS_SUMMARY_RESPONSE_INVALID_CATEGORY } from "./filed-returns-summary-status";
 import {
   SINGLE_PERIOD_CLEANUP_CHECKPOINT_FAILURE_STAGES,
   singlePeriodCleanupCheckpointFailureSignal,
@@ -493,6 +497,10 @@ const ZIP_SIGNALS = new Set(
 const ZIP_EXPORT_ERROR_CATEGORIES = new Set<string>(
   PACK_OFFSCREEN_FILED_RETURN_ZIP_ERROR_CATEGORIES,
 );
+const SUMMARY_ERROR_CATEGORIES = new Set<string>([
+  ...PACK_OFFSCREEN_FILED_RETURN_SUMMARY_ERROR_CATEGORIES,
+  FILED_RETURNS_SUMMARY_RESPONSE_INVALID_CATEGORY,
+]);
 const OPFS_STAGE_ERROR_CATEGORIES = new Set([
   "blob-url-failed",
   "clear-failed",
@@ -635,13 +643,8 @@ export function isDurableFiledReturnsSignal(signal: string): boolean {
   ) {
     return true;
   }
-  if (
-    /^full-fiscal-year-summary-error:(?:generation-failed|identity-rejected|privacy-rejected|response-invalid|too-large|workbook-generation-failed)$/.test(
-      signal,
-    )
-  ) {
-    return true;
-  }
+  const summaryError = /^full-fiscal-year-summary-error:([a-z-]+)$/.exec(signal);
+  if (summaryError) return SUMMARY_ERROR_CATEGORIES.has(summaryError[1] ?? "");
   const summaryParsedPeriodCount = /^full-fiscal-year-summary-parsed-period-count:(\d{1,2})$/.exec(
     signal,
   );

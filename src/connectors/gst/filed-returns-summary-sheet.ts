@@ -20,7 +20,8 @@ import type { FiledReturnsReturnType } from "./filed-returns-return-types";
 import { filedReturnsSummaryFieldLabel } from "./filed-returns-summary-labels";
 import {
   filedReturnsSummaryIdentity,
-  filedReturnsRequiredWorkbookIdentityLabels,
+  filedReturnsRequiredWorkbookIdentityPaths,
+  isFiledReturnsCanonicalIdentityPath,
   isFiledReturnsSummaryIdentityPath,
 } from "./filed-returns-summary-identity";
 import { isFiledReturnsSummaryForbiddenFieldPath } from "./filed-returns-summary-redaction";
@@ -102,6 +103,7 @@ export class FiledReturnsSummaryTooLargeError extends Error {
 
 export class FiledReturnsSummaryForbiddenFieldError extends SyntaxError {}
 export class FiledReturnsSummaryInvalidGstinError extends SyntaxError {}
+export class FiledReturnsSummaryUncanonicalIdentityError extends SyntaxError {}
 
 interface ParsedPlanEntry {
   identityLeaves: FlatJsonLeaf[];
@@ -273,16 +275,22 @@ function collectIdentityValues(parsedEntries: readonly ParsedPlanEntry[]): Summa
         });
       }
     }
-    for (const requiredLabel of filedReturnsRequiredWorkbookIdentityLabels(
+    // Bind the requirement to the canonical response path, not to the label
+    // turning up anywhere in the document: a decoy `gstin` beside the envelope
+    // would otherwise satisfy it and the workbook would attribute this return's
+    // figures to an identity the portal never filed it under.
+    for (const [requiredLabel, canonicalPath] of filedReturnsRequiredWorkbookIdentityPaths(
       parsed.planned.returnType,
     )) {
-      const requiredIdentity = identityInEntry.get(`taxpayer_identity:identity:${requiredLabel}`);
-      if (!requiredIdentity || requiredIdentity.value.trim() === "") {
-        throw new SyntaxError(
-          "Required taxpayer identity is missing from a parseable filed-return summary source.",
+      const canonicalIdentity = parsed.identityLeaves.find((leaf) =>
+        isFiledReturnsCanonicalIdentityPath(leaf.path, canonicalPath),
+      );
+      if (!canonicalIdentity || canonicalIdentity.value.trim() === "") {
+        throw new FiledReturnsSummaryUncanonicalIdentityError(
+          "Required taxpayer identity is missing from its canonical filed-return response path.",
         );
       }
-      if (requiredLabel === "GSTIN" && !isValidGstin(requiredIdentity.value)) {
+      if (requiredLabel === "GSTIN" && !isValidGstin(canonicalIdentity.value)) {
         throw new FiledReturnsSummaryInvalidGstinError(
           "GSTIN is invalid in a parseable filed-return summary source.",
         );
