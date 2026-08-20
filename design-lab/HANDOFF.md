@@ -5,13 +5,13 @@ It is short on purpose; the depth is in the files it points at.
 
 ## State
 
-|              |                                                                                           |
-| ------------ | ----------------------------------------------------------------------------------------- |
-| Branch       | `tapish-codex/ux-redesign`, based on `e72438b`                                            |
-| Pushed       | **No.** No PR, no remote branch, nothing outward-facing.                                  |
-| Working tree | clean                                                                                     |
-| Gates        | full suite green — see the last runtime commit for the verbatim Vitest lines              |
-| Second lane  | `tapish-codex/ux-redesign-b` — Codex Desktop's independent pass, committed, also unpushed |
+|              |                                                                                            |
+| ------------ | ------------------------------------------------------------------------------------------ |
+| Branch       | `tapish-codex/ux-redesign`, based on `e72438b`                                             |
+| Pushed       | Yes. `tapish-codex/ux-redesign`, `-b`, and the combined `-integrated` branch.              |
+| Working tree | clean                                                                                      |
+| Gates        | full suite green — see the last runtime commit for the verbatim Vitest lines               |
+| Second lane  | `tapish-codex/ux-redesign-b` — Codex Desktop's independent pass, merged into `-integrated` |
 
 ## Do not restart the analysis
 

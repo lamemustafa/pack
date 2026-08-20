@@ -1,3 +1,9 @@
+// The `.ts` extensions on relative imports in this module and its siblings are
+// required, not stylistic. `scripts/create-live-run-evidence-template.mjs` loads
+// this graph with a real Node ESM `await import("....ts")` under
+// --experimental-strip-types, and Node's resolver has no extensionless fallback:
+// dropping them fails at runtime with ERR_MODULE_NOT_FOUND while `tsc` still
+// passes, because tsc resolves like a bundler. Ten tests catch it.
 import {
   filedReturnsCapabilityArtifactLabel,
   filedReturnsFormat,
