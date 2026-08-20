@@ -150,8 +150,8 @@ audit gap to record before merge/release claims.
 
 For PRs, record the exact local commands or CI run, release ZIP/checksum
 evidence when a ZIP is produced, and the SHA-256 checksum. Treat late Codex/bot
-comments as claims against the current head SHA; fix valid findings, answer
-stale findings with evidence, and list explicit follow-ups in the PR body.
+comments as claims against the current head SHA; disposition each ask under the
+canonical rule in `AGENTS.md`.
 
 For merged or closed PR cleanup, inspect GraphQL `reviewThreads` on every target
 PR; do not rely on flat comments or stale notification state. Resolve each open
