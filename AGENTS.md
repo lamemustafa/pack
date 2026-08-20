@@ -89,8 +89,9 @@ per lane — two agents sharing one produced ten phantom test failures. Conventi
 (`type(scope): imperative summary`), CI-enforced. Commit in logical lanes: runtime, tests, docs,
 and release metadata separately. Open PRs as draft. Never amend or rebase a pushed commit.
 
-Before claiming readiness, run `pnpm review:gate` and disposition every automated finding as fixed
-with evidence, stale with evidence, rejected with evidence, or a linked follow-up.
+Before claiming readiness, run `pnpm review:gate` and disposition every ask in every automated
+finding as fixed with evidence, stale with evidence, rejected with evidence and reasoning, or a
+linked follow-up named in the reply. A partial reply is not a disposition; leave no ask implicit.
 
 **The PR body is gated, not decorative.** `Review gate` fails the PR unless the body carries the
 sections `evaluatePullRequestBody` in `scripts/check-pr-review-gate.mjs` requires. Build the body
