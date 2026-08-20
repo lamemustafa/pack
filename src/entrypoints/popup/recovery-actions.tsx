@@ -34,7 +34,8 @@ export function RecoveryActions({
   if (!summary || !recoveryState.visible) return null;
   const { needsFullFiscalYearReview, needsRunReview, needsTargetReview, runActive, signals } =
     recoveryState;
-  const canManuallyObserveFullYear = canManuallyObserveFullFiscalYearTarget(summary);
+  const canManuallyObserveFullYear =
+    summary.fullFiscalYearRecovery?.targetStatus === "download-unconfirmed";
   const canManuallyResolveTarget =
     !signals.has("single-period-zip-incomplete") &&
     !signals.has("filed-returns-target-manually-observed");
@@ -143,7 +144,7 @@ export function RecoveryActions({
             <button type="button" disabled={retryDisabled} onClick={onRetryFullFiscalYearTarget}>
               {busy === "retry-full-fiscal-year-target"
                 ? "Retrying..."
-                : fullFiscalYearPrimaryActionLabel(summary)}
+                : getSavedFullFiscalYearActionDecision(summary).label}
             </button>
             <button
               type="button"
@@ -195,14 +196,19 @@ export function targetReviewPortalDisabledReason(summary: FiledReturnsFlowSummar
   return "Open a signed-in GST Portal tab before starting again.";
 }
 
-export function fullFiscalYearPortalDisabledReason(summary: FiledReturnsFlowSummary): string {
+export function getSavedFullFiscalYearActionDecision(summary: FiledReturnsFlowSummary): {
+  gerund: string;
+  label: string;
+} {
   if (summary.flowStep.safeSignals.includes("full-fiscal-year-resume-confirmation-required")) {
-    return "Open a signed-in GST Portal tab before resuming the saved run or starting again.";
+    return { label: "Resume saved run", gerund: "resuming the saved run" };
   }
   if (summary.fullFiscalYearRecovery?.targetStatus === "pending") {
-    return "Open a signed-in GST Portal tab before resuming the saved period or starting again.";
+    return { label: "Resume saved period", gerund: "resuming the saved period" };
   }
-  return "Open a signed-in GST Portal tab before retrying this period or starting again.";
+  return summary.currentPeriod
+    ? { label: `Retry ${summary.currentPeriod}`, gerund: `retrying ${summary.currentPeriod}` }
+    : { label: "Retry this period", gerund: "retrying this period" };
 }
 
 function recoveryPortalDisabledReason(
@@ -216,7 +222,9 @@ function recoveryPortalDisabledReason(
   },
 ): string | null {
   if (needsTargetReview) return targetReviewPortalDisabledReason(summary);
-  return needsFullFiscalYearReview ? fullFiscalYearPortalDisabledReason(summary) : null;
+  if (!needsFullFiscalYearReview) return null;
+  const { gerund } = getSavedFullFiscalYearActionDecision(summary);
+  return `Open a signed-in GST Portal tab before ${gerund} or starting again.`;
 }
 
 function targetReviewRecoveryMessage(
@@ -231,21 +239,6 @@ function targetReviewRecoveryMessage(
 
 export function hasRecoveryActions(summary: FiledReturnsFlowSummary | null): boolean {
   return getRecoveryActionState(summary).visible;
-}
-
-export function canManuallyObserveFullFiscalYearTarget(
-  summary: FiledReturnsFlowSummary | null,
-): boolean {
-  return summary?.fullFiscalYearRecovery?.targetStatus === "download-unconfirmed";
-}
-
-export function fullFiscalYearPrimaryActionLabel(summary: FiledReturnsFlowSummary): string {
-  if (summary.flowStep.safeSignals.includes("full-fiscal-year-resume-confirmation-required")) {
-    return "Resume saved run";
-  }
-  return summary.fullFiscalYearRecovery?.targetStatus === "pending"
-    ? "Resume saved period"
-    : "Retry this period";
 }
 
 function cancelFullYearLabel(summary: FiledReturnsFlowSummary): string {

@@ -6,7 +6,10 @@ import {
   hasPersistedFullFiscalYearZipDownloadId,
   isAmbiguousFullFiscalYearZipHandoff,
 } from "./flow-summary";
-import { targetReviewPortalDisabledReason } from "./recovery-actions";
+import {
+  getSavedFullFiscalYearActionDecision,
+  targetReviewPortalDisabledReason,
+} from "./recovery-actions";
 
 export interface InlineStatusProps {
   busy: string | null;
@@ -220,12 +223,11 @@ export function getInlinePrimaryAction(
 
   const signals = new Set(summary.flowStep.safeSignals);
   if (presentation.kind === "blocked" && summary.fullFiscalYearRecovery) {
+    const { gerund, label } = getSavedFullFiscalYearActionDecision(summary);
     return {
-      label: summary.currentPeriod ? `Retry ${summary.currentPeriod}` : "Resume saved period",
+      label,
       onClick: actions.onRetryFullFiscalYearTarget,
-      portalDisabledReason: summary.currentPeriod
-        ? `Open a signed-in GST Portal tab before retrying ${summary.currentPeriod}.`
-        : "Open a signed-in GST Portal tab before resuming the saved period.",
+      portalDisabledReason: `Open a signed-in GST Portal tab before ${gerund}.`,
     };
   }
   if (signals.has("filed-returns-target-review-required") && summary.currentPeriod) {

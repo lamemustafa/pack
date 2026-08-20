@@ -5,19 +5,20 @@ import type { PortalContext } from "../../src/core/contracts";
 import type { FiledReturnsFlowSummary } from "../../src/connectors/gst/filed-returns-contracts";
 import { FULL_FISCAL_YEAR_PERIOD } from "../../src/connectors/gst/filed-returns-scope";
 import { ScopeForm } from "../../src/entrypoints/popup/components";
-import {
-  canManuallyObserveFullFiscalYearTarget,
-  RecoveryActions,
-} from "../../src/entrypoints/popup/recovery-actions";
+import { RecoveryActions } from "../../src/entrypoints/popup/recovery-actions";
 import { canReconcileFiledReturnsTarget } from "../../src/entrypoints/popup/run-summary";
 import { RunEvidencePanel } from "../../src/entrypoints/popup/run-evidence-panel";
 
 describe("popup full-year recovery actions", () => {
   it("offers manual observation only for final-click recovery states", () => {
-    expect(canManuallyObserveFullFiscalYearTarget(summaryFor("download-unconfirmed"))).toBe(true);
-    expect(canManuallyObserveFullFiscalYearTarget(summaryFor("blocked"))).toBe(false);
-    expect(canManuallyObserveFullFiscalYearTarget(summaryFor("failed"))).toBe(false);
-    expect(canManuallyObserveFullFiscalYearTarget(summaryFor("running"))).toBe(false);
+    expect(renderFullYearRecovery(summaryFor("download-unconfirmed"))).toContain(
+      "Mark as manually observed",
+    );
+    for (const targetStatus of ["blocked", "failed", "running"] as const) {
+      expect(renderFullYearRecovery(summaryFor(targetStatus))).not.toContain(
+        "Mark as manually observed",
+      );
+    }
   });
 
   it("renders resume and discard immediately for a pending saved full-year run", () => {
@@ -810,6 +811,22 @@ function supportedPortalContext(): PortalContext {
     pageKind: "gst-filed-returns",
     supported: true,
   };
+}
+
+function renderFullYearRecovery(summary: FiledReturnsFlowSummary): string {
+  return renderToStaticMarkup(
+    createElement(RecoveryActions, {
+      busy: null,
+      portalReady: true,
+      summary,
+      onAcknowledgeInterruptedRun: () => undefined,
+      onRetryFullFiscalYearTarget: () => undefined,
+      onRetryTarget: () => undefined,
+      onResolveFullFiscalYearTarget: () => undefined,
+      onResolveTarget: () => undefined,
+      onStartFresh: () => undefined,
+    }),
+  );
 }
 
 function summaryFor(

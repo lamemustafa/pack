@@ -9,6 +9,7 @@ import {
   hasInlinePrimaryAction,
 } from "../../src/entrypoints/popup/inline-status";
 import type { PopupPresentationState } from "../../src/entrypoints/popup/presentation-state";
+import { RecoveryActions } from "../../src/entrypoints/popup/recovery-actions";
 
 const blockedPresentation: PopupPresentationState = {
   badge: "Needs review",
@@ -80,7 +81,7 @@ describe("inline filed-return recovery status", () => {
     expect(markup).not.toContain("disabled");
   });
 
-  it("matches a saved full-year action with its portal-disabled reason", () => {
+  it("uses the same resume-saved-run decision on both full-year recovery surfaces", () => {
     const summary: FiledReturnsFlowSummary = {
       ...blockedSummary,
       scope: { ...blockedSummary.scope, period: FULL_FISCAL_YEAR_PERIOD },
@@ -95,17 +96,126 @@ describe("inline filed-return recovery status", () => {
         safeSignals: ["full-fiscal-year-resume-confirmation-required"],
       },
     };
-    const action = getInlinePrimaryAction(blockedPresentation, summary, {
-      onOpenPortal: vi.fn(),
-      onRestartTarget: vi.fn(),
-      onRetryFullFiscalYearTarget: vi.fn(),
-      onRetryTarget: vi.fn(),
-    });
+    const inlineMarkup = renderToStaticMarkup(
+      <InlineStatus
+        busy={null}
+        portalReady={false}
+        onOpenPortal={vi.fn()}
+        onRestartTarget={vi.fn()}
+        onRetryFullFiscalYearTarget={vi.fn()}
+        onRetryTarget={vi.fn()}
+        presentation={blockedPresentation}
+        summary={summary}
+      />,
+    );
+    const recoveryMarkup = renderToStaticMarkup(
+      <RecoveryActions
+        busy={null}
+        portalReady={false}
+        summary={summary}
+        onAcknowledgeInterruptedRun={vi.fn()}
+        onRetryFullFiscalYearTarget={vi.fn()}
+        onRetryTarget={vi.fn()}
+        onResolveFullFiscalYearTarget={vi.fn()}
+        onResolveTarget={vi.fn()}
+        onStartFresh={vi.fn()}
+      />,
+    );
 
-    expect(action).toMatchObject({
-      label: "Retry May",
-      portalDisabledReason: "Open a signed-in GST Portal tab before retrying May.",
-    });
+    expect(inlineMarkup).toContain("Resume saved run");
+    expect(recoveryMarkup).toContain("Resume saved run");
+    expect(inlineMarkup).not.toContain("Retry May");
+    expect(recoveryMarkup).not.toContain("Retry May");
+    expect(inlineMarkup.match(/Open a signed-in GST Portal tab/g) ?? []).toHaveLength(1);
+    expect(recoveryMarkup.match(/Open a signed-in GST Portal tab/g) ?? []).toHaveLength(1);
+    expect(inlineMarkup).toContain(
+      "Open a signed-in GST Portal tab before resuming the saved run.",
+    );
+    expect(recoveryMarkup).toContain(
+      "Open a signed-in GST Portal tab before resuming the saved run or starting again.",
+    );
+  });
+
+  it("uses the same resume-saved-period decision on both full-year recovery surfaces", () => {
+    const summary: FiledReturnsFlowSummary = {
+      ...blockedSummary,
+      scope: { ...blockedSummary.scope, period: FULL_FISCAL_YEAR_PERIOD },
+      fullFiscalYearRecovery: {
+        expectedRevision: 1,
+        ledgerId: "full-fiscal-year-12345678",
+        targetId: "GSTR-3B:2026-27:May",
+        targetStatus: "pending",
+      },
+    };
+    const inlineMarkup = renderToStaticMarkup(
+      <InlineStatus
+        busy={null}
+        portalReady
+        onOpenPortal={vi.fn()}
+        onRestartTarget={vi.fn()}
+        onRetryFullFiscalYearTarget={vi.fn()}
+        onRetryTarget={vi.fn()}
+        presentation={blockedPresentation}
+        summary={summary}
+      />,
+    );
+    const recoveryMarkup = renderToStaticMarkup(
+      <RecoveryActions
+        busy={null}
+        portalReady
+        summary={summary}
+        onAcknowledgeInterruptedRun={vi.fn()}
+        onRetryFullFiscalYearTarget={vi.fn()}
+        onRetryTarget={vi.fn()}
+        onResolveFullFiscalYearTarget={vi.fn()}
+        onResolveTarget={vi.fn()}
+        onStartFresh={vi.fn()}
+      />,
+    );
+
+    expect(inlineMarkup).toContain("Resume saved period");
+    expect(recoveryMarkup).toContain("Resume saved period");
+  });
+
+  it("names the blocked full-year period on both recovery surfaces", () => {
+    const summary: FiledReturnsFlowSummary = {
+      ...blockedSummary,
+      scope: { ...blockedSummary.scope, period: FULL_FISCAL_YEAR_PERIOD },
+      fullFiscalYearRecovery: {
+        expectedRevision: 1,
+        ledgerId: "full-fiscal-year-12345678",
+        targetId: "GSTR-3B:2026-27:May",
+        targetStatus: "blocked",
+      },
+    };
+    const inlineMarkup = renderToStaticMarkup(
+      <InlineStatus
+        busy={null}
+        portalReady
+        onOpenPortal={vi.fn()}
+        onRestartTarget={vi.fn()}
+        onRetryFullFiscalYearTarget={vi.fn()}
+        onRetryTarget={vi.fn()}
+        presentation={blockedPresentation}
+        summary={summary}
+      />,
+    );
+    const recoveryMarkup = renderToStaticMarkup(
+      <RecoveryActions
+        busy={null}
+        portalReady
+        summary={summary}
+        onAcknowledgeInterruptedRun={vi.fn()}
+        onRetryFullFiscalYearTarget={vi.fn()}
+        onRetryTarget={vi.fn()}
+        onResolveFullFiscalYearTarget={vi.fn()}
+        onResolveTarget={vi.fn()}
+        onStartFresh={vi.fn()}
+      />,
+    );
+
+    expect(inlineMarkup).toContain("Retry May");
+    expect(recoveryMarkup).toContain("Retry May");
   });
 
   it("renders every safe missing artifact reason for a partial ZIP", () => {
