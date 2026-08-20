@@ -9,6 +9,7 @@ import { canRetryFullFiscalYearZipWithoutPortal } from "./flow-summary";
 import { hasInlinePrimaryAction, InlineStatus } from "./inline-status";
 import { PackSummary } from "./pack-summary";
 import { LastRunDiagnostics } from "./last-run-diagnostics";
+import { PopupPrimaryActionSlot } from "./popup-primary-action-slot";
 import { getPopupPresentationState, type PopupPresentationState } from "./presentation-state";
 import { RecoveryActions, hasRecoveryActions } from "./recovery-actions";
 import { usePackPopupController } from "./use-pack-popup-controller";
@@ -75,7 +76,10 @@ function App() {
             presentation={presentation}
             summary={displaySummary}
           />
-          {!statusOwnsPrimaryAction && !popup.recoverySummary ? (
+          <PopupPrimaryActionSlot
+            recoverySummary={popup.recoverySummary}
+            statusOwnsPrimaryAction={statusOwnsPrimaryAction}
+          >
             <ScopeFormAction
               busy={popup.effectiveBusy}
               context={popup.context}
@@ -83,7 +87,7 @@ function App() {
               scope={popup.scope}
               onStart={() => void popup.startFiledReturnsFlow()}
             />
-          ) : null}
+          </PopupPrimaryActionSlot>
         </>
       ) : (
         <ContextState

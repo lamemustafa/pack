@@ -95,6 +95,9 @@ export function isHistoricalDurableTargetMessage(
   signals: readonly string[],
   safeMessage: string,
 ): boolean {
+  // This one-way migration admits only the old derived target-review cache for the
+  // newly distinct blocked/failed message keys. The exact-match guard otherwise rejects
+  // stale or arbitrary text; remove this once no persisted ledger can carry that cache.
   const messageKey = messageKeyForTarget(status, signals);
   if (
     ![
@@ -351,7 +354,7 @@ function renderDurableMessage(key: DurableMessageKey, scope: FiledReturnsDownloa
       "Pack cannot complete this review while temporary selected-file staging remains uncleared.",
     "target-downloaded": `Pack confirmed the filed-return download for ${period}.`,
     "target-downloaded-cleanup-blocked": `Pack confirmed the selected ZIP download for ${period}; only temporary local staging remains to be cleared.`,
-    "target-failed": `Pack encountered a Pack-side failure while processing ${period}. Retry this period only after resolving the reported Pack state.`,
+    "target-failed": `Pack stopped while processing ${period}. Retry this period, or discard the saved run and start again.`,
     "target-manually-observed":
       "Pack recorded a manual observation, but the target still requires an explicit retry or cancellation.",
     "target-pending": "Not checked yet.",

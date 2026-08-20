@@ -462,7 +462,7 @@ describe("full fiscal year ledger", () => {
     });
 
     expect(blocked.flowStep.safeMessage).toContain("paused the saved full-year run");
-    expect(failed.flowStep.safeMessage).toContain("Pack-side failure");
+    expect(failed.flowStep.safeMessage).toContain("Pack stopped while processing April.");
     expect(failed.flowStep.safeMessage).not.toBe(blocked.flowStep.safeMessage);
     expect(
       `${blocked.flowStep.safeMessage} ${failed.flowStep.safeMessage}`.toLowerCase(),

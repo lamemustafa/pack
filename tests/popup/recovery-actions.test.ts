@@ -356,6 +356,46 @@ describe("popup full-year recovery actions", () => {
     expect(markup).toContain("Cancel and reset");
   });
 
+  it("renders an action-matched target-review reason without calling it a period retry", () => {
+    const markup = renderToStaticMarkup(
+      createElement(RecoveryActions, {
+        busy: null,
+        portalReady: false,
+        summary: targetReviewSummary(),
+        onStartFresh: () => undefined,
+        onAcknowledgeInterruptedRun: () => undefined,
+        onRetryFullFiscalYearTarget: () => undefined,
+        onRetryTarget: () => undefined,
+        onResolveFullFiscalYearTarget: () => undefined,
+        onResolveTarget: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain("Open a signed-in GST Portal tab before starting again.");
+    expect(markup).not.toContain("retrying this period");
+  });
+
+  it("renders one portal-disabled reason for a paused full-year run", () => {
+    const markup = renderToStaticMarkup(
+      createElement(RecoveryActions, {
+        busy: null,
+        portalReady: false,
+        summary: summaryFor("blocked"),
+        onStartFresh: () => undefined,
+        onAcknowledgeInterruptedRun: () => undefined,
+        onRetryFullFiscalYearTarget: () => undefined,
+        onRetryTarget: () => undefined,
+        onResolveFullFiscalYearTarget: () => undefined,
+        onResolveTarget: () => undefined,
+      }),
+    );
+
+    expect(markup.match(/Open a signed-in GST Portal tab/g) ?? []).toHaveLength(1);
+    expect(markup).toContain(
+      "Open a signed-in GST Portal tab before retrying this period or starting again.",
+    );
+  });
+
   it("uses retry-first copy for a blocked full-year period", () => {
     const markup = renderToStaticMarkup(
       createElement(RecoveryActions, {
@@ -646,7 +686,9 @@ describe("popup full-year recovery actions", () => {
       }),
     );
 
-    expect(markup).toContain("Open a signed-in GST Portal tab before retrying this period.");
+    expect(markup).toContain(
+      "Open a signed-in GST Portal tab before retrying this period or starting again.",
+    );
     expect(markup).toContain('<button type="button" disabled="">Retry this period</button>');
     expect(markup).toContain("Cancel and reset");
   });

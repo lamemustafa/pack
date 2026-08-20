@@ -5,9 +5,6 @@ import {
   hasDiagnosticSignals,
 } from "./run-summary";
 
-export const PORTAL_RETRY_DISABLED_REASON =
-  "Open a signed-in GST Portal tab before retrying this period.";
-
 export interface RecoveryActionsProps {
   busy: string | null;
   portalReady: boolean;
@@ -44,6 +41,13 @@ export function RecoveryActions({
   const canReconcileTarget = canReconcileFiledReturnsTarget(summary);
   const canRetryTargetCleanup = signals.has("filed-returns-target-local-cleanup-required");
   const retryDisabled = busy !== null || !portalReady;
+  const portalDisabledReason =
+    !portalReady && showPortalRetryReason
+      ? recoveryPortalDisabledReason(summary, {
+          needsFullFiscalYearReview,
+          needsTargetReview,
+        })
+      : null;
   return (
     <details className="recovery-details" open>
       <summary>Saved run options</summary>
@@ -78,9 +82,6 @@ export function RecoveryActions({
                 <summary>Safe diagnostics</summary>
                 <DiagnosticSignals summary={summary} />
               </details>
-            ) : null}
-            {!portalReady && showPortalRetryReason ? (
-              <p className="muted">{PORTAL_RETRY_DISABLED_REASON}</p>
             ) : null}
             {canReconcileTarget || canRetryTargetCleanup ? (
               <button type="button" disabled={retryDisabled} onClick={onRetryTarget}>
@@ -139,13 +140,10 @@ export function RecoveryActions({
                 is currently open.
               </p>
             ) : null}
-            {!portalReady && showPortalRetryReason ? (
-              <p className="muted">{PORTAL_RETRY_DISABLED_REASON}</p>
-            ) : null}
             <button type="button" disabled={retryDisabled} onClick={onRetryFullFiscalYearTarget}>
               {busy === "retry-full-fiscal-year-target"
                 ? "Retrying..."
-                : retryFullYearLabel(summary)}
+                : fullFiscalYearPrimaryActionLabel(summary)}
             </button>
             <button
               type="button"
@@ -181,12 +179,44 @@ export function RecoveryActions({
             </button>
           </>
         ) : null}
-        {!portalReady && showPortalRetryReason ? (
-          <p className="muted">{PORTAL_RETRY_DISABLED_REASON}</p>
-        ) : null}
+        {portalDisabledReason ? <p className="muted">{portalDisabledReason}</p> : null}
       </div>
     </details>
   );
+}
+
+export function targetReviewPortalDisabledReason(summary: FiledReturnsFlowSummary): string {
+  if (canReconcileFiledReturnsTarget(summary)) {
+    return "Open a signed-in GST Portal tab before reconciling the browser download or starting again.";
+  }
+  if (summary.flowStep.safeSignals.includes("filed-returns-target-local-cleanup-required")) {
+    return "Open a signed-in GST Portal tab before retrying local cleanup or starting again.";
+  }
+  return "Open a signed-in GST Portal tab before starting again.";
+}
+
+export function fullFiscalYearPortalDisabledReason(summary: FiledReturnsFlowSummary): string {
+  if (summary.flowStep.safeSignals.includes("full-fiscal-year-resume-confirmation-required")) {
+    return "Open a signed-in GST Portal tab before resuming the saved run or starting again.";
+  }
+  if (summary.fullFiscalYearRecovery?.targetStatus === "pending") {
+    return "Open a signed-in GST Portal tab before resuming the saved period or starting again.";
+  }
+  return "Open a signed-in GST Portal tab before retrying this period or starting again.";
+}
+
+function recoveryPortalDisabledReason(
+  summary: FiledReturnsFlowSummary,
+  {
+    needsFullFiscalYearReview,
+    needsTargetReview,
+  }: {
+    needsFullFiscalYearReview: boolean;
+    needsTargetReview: boolean;
+  },
+): string | null {
+  if (needsTargetReview) return targetReviewPortalDisabledReason(summary);
+  return needsFullFiscalYearReview ? fullFiscalYearPortalDisabledReason(summary) : null;
 }
 
 function targetReviewRecoveryMessage(
@@ -209,7 +239,7 @@ export function canManuallyObserveFullFiscalYearTarget(
   return summary?.fullFiscalYearRecovery?.targetStatus === "download-unconfirmed";
 }
 
-function retryFullYearLabel(summary: FiledReturnsFlowSummary): string {
+export function fullFiscalYearPrimaryActionLabel(summary: FiledReturnsFlowSummary): string {
   if (summary.flowStep.safeSignals.includes("full-fiscal-year-resume-confirmation-required")) {
     return "Resume saved run";
   }

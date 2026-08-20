@@ -6,11 +6,11 @@ import {
   hasPersistedFullFiscalYearZipDownloadId,
   isAmbiguousFullFiscalYearZipHandoff,
 } from "./flow-summary";
-import { PORTAL_RETRY_DISABLED_REASON } from "./recovery-actions";
+import { targetReviewPortalDisabledReason } from "./recovery-actions";
 
 export interface InlineStatusProps {
   busy: string | null;
-  portalReady?: boolean;
+  portalReady: boolean;
   onOpenPortal: () => void;
   onRestartTarget: () => void;
   onRetryFullFiscalYearTarget: () => void;
@@ -21,7 +21,7 @@ export interface InlineStatusProps {
 
 export function InlineStatus({
   busy,
-  portalReady = true,
+  portalReady,
   onOpenPortal,
   onRestartTarget,
   onRetryFullFiscalYearTarget,
@@ -33,13 +33,13 @@ export function InlineStatus({
   if (!copy) return null;
 
   const actionBusy = busy !== null;
-  const retryBlockedByPortal = presentation.kind !== "error" && !portalReady;
   const primaryAction = getInlinePrimaryAction(presentation, summary, {
     onOpenPortal,
     onRestartTarget,
     onRetryFullFiscalYearTarget,
     onRetryTarget,
   });
+  const portalDisabledReason = !portalReady ? (primaryAction?.portalDisabledReason ?? null) : null;
 
   return (
     <section
@@ -58,15 +58,13 @@ export function InlineStatus({
           <button
             className="inline-status-primary"
             type="button"
-            disabled={actionBusy || retryBlockedByPortal}
+            disabled={actionBusy || Boolean(portalDisabledReason)}
             onClick={primaryAction.onClick}
           >
             {actionBusy ? "Working..." : primaryAction.label}
           </button>
         ) : null}
-        {primaryAction && retryBlockedByPortal ? (
-          <p className="muted">{PORTAL_RETRY_DISABLED_REASON}</p>
-        ) : null}
+        {portalDisabledReason ? <p className="muted">{portalDisabledReason}</p> : null}
       </div>
     </section>
   );
@@ -214,7 +212,7 @@ export function getInlinePrimaryAction(
     InlineStatusProps,
     "onOpenPortal" | "onRestartTarget" | "onRetryFullFiscalYearTarget" | "onRetryTarget"
   >,
-): { label: string; onClick: () => void } | null {
+): { label: string; onClick: () => void; portalDisabledReason?: string } | null {
   if (presentation.kind === "error") {
     return { label: "Open GST Portal", onClick: actions.onOpenPortal };
   }
@@ -225,19 +223,34 @@ export function getInlinePrimaryAction(
     return {
       label: summary.currentPeriod ? `Retry ${summary.currentPeriod}` : "Resume saved period",
       onClick: actions.onRetryFullFiscalYearTarget,
+      portalDisabledReason: summary.currentPeriod
+        ? `Open a signed-in GST Portal tab before retrying ${summary.currentPeriod}.`
+        : "Open a signed-in GST Portal tab before resuming the saved period.",
     };
   }
   if (signals.has("filed-returns-target-review-required") && summary.currentPeriod) {
     if (canReconcileFiledReturnsTarget(summary)) {
-      return { label: "Reconcile browser download", onClick: actions.onRetryTarget };
+      return {
+        label: "Reconcile browser download",
+        onClick: actions.onRetryTarget,
+        portalDisabledReason: targetReviewPortalDisabledReason(summary),
+      };
     }
     if (signals.has("filed-returns-target-local-cleanup-required")) {
-      return { label: "Retry local cleanup", onClick: actions.onRetryTarget };
+      return {
+        label: "Retry local cleanup",
+        onClick: actions.onRetryTarget,
+        portalDisabledReason: targetReviewPortalDisabledReason(summary),
+      };
     }
     return null;
   }
   if (presentation.kind === "blocked" && summary.currentPeriod) {
-    return { label: `Retry ${summary.currentPeriod}`, onClick: actions.onRestartTarget };
+    return {
+      label: `Retry ${summary.currentPeriod}`,
+      onClick: actions.onRestartTarget,
+      portalDisabledReason: `Open a signed-in GST Portal tab before retrying ${summary.currentPeriod}.`,
+    };
   }
   return null;
 }

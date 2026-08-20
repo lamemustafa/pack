@@ -52,7 +52,7 @@ describe("inline filed-return recovery status", () => {
 
     expect(markup).toContain("Retry May");
     expect(markup).toContain("disabled");
-    expect(markup).toContain("Open a signed-in GST Portal tab before retrying this period.");
+    expect(markup).toContain("Open a signed-in GST Portal tab before retrying May.");
   });
 
   it("keeps Open GST Portal enabled while the GST Portal is unavailable", () => {
@@ -78,6 +78,34 @@ describe("inline filed-return recovery status", () => {
 
     expect(markup).toContain("Open GST Portal");
     expect(markup).not.toContain("disabled");
+  });
+
+  it("matches a saved full-year action with its portal-disabled reason", () => {
+    const summary: FiledReturnsFlowSummary = {
+      ...blockedSummary,
+      scope: { ...blockedSummary.scope, period: FULL_FISCAL_YEAR_PERIOD },
+      fullFiscalYearRecovery: {
+        expectedRevision: 1,
+        ledgerId: "full-fiscal-year-12345678",
+        targetId: "GSTR-3B:2026-27:May",
+        targetStatus: "pending",
+      },
+      flowStep: {
+        ...blockedSummary.flowStep,
+        safeSignals: ["full-fiscal-year-resume-confirmation-required"],
+      },
+    };
+    const action = getInlinePrimaryAction(blockedPresentation, summary, {
+      onOpenPortal: vi.fn(),
+      onRestartTarget: vi.fn(),
+      onRetryFullFiscalYearTarget: vi.fn(),
+      onRetryTarget: vi.fn(),
+    });
+
+    expect(action).toMatchObject({
+      label: "Retry May",
+      portalDisabledReason: "Open a signed-in GST Portal tab before retrying May.",
+    });
   });
 
   it("renders every safe missing artifact reason for a partial ZIP", () => {
