@@ -187,7 +187,8 @@ export function buildFiledReturnsSummarySheet(
   const dataRows: FiledReturnsSummaryDataRow[] = [];
   for (const parsed of parsedEntries) {
     const fieldLeaves = parsed.leaves.filter(
-      (leaf) => !isFiledReturnsSummaryIdentityPath(leaf.path) && !hasIdentityShapedPathSegment(leaf.path),
+      (leaf) =>
+        !isFiledReturnsSummaryIdentityPath(leaf.path) && !hasIdentityShapedPathSegment(leaf.path),
     );
     if (fieldLeaves.length === 0) {
       dataRows.push(outcomeRow(parsed.planned, parsed.outcome));
