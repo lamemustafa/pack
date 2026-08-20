@@ -1,9 +1,12 @@
-import { FILED_RETURNS_CONCRETE_ARTIFACT_TYPES } from "./filed-returns-artifacts.ts";
+// Imports the artifact vocabulary from its leaf, never from `filed-returns-artifacts.ts`:
+// that module imports this one, so reaching back through it would re-form the runtime
+// import cycle the leaf exists to prevent. The `.ts` extension is required, not stylistic.
+import { FILED_RETURNS_CONCRETE_ARTIFACT_TYPES } from "./filed-returns-artifact-types.ts";
 import type {
   FiledReturnsArtifactExtension,
   FiledReturnsArtifactType,
   FiledReturnsConcreteArtifactType,
-} from "./filed-returns-artifacts.ts";
+} from "./filed-returns-artifact-types.ts";
 import type { FiledReturnsReturnType } from "./filed-returns-return-types.ts";
 
 /**
