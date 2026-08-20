@@ -1427,6 +1427,32 @@ describe("filed returns target review", () => {
     );
   });
 
+  it("renders terminal unconfirmed evidence ahead of an earlier ZIP intent signal", () => {
+    const message = canonicalDurableSummaryMessage(
+      {
+        financialYear: "2026-27",
+        period: "FULL_FISCAL_YEAR",
+        returnType: "GSTR-3B",
+      },
+      "blocked",
+      [
+        "full-fiscal-year-final-zip-manual-review",
+        "full-fiscal-year-zip-download-started",
+        "full-fiscal-year-zip-download-unconfirmed",
+        "full-fiscal-year-zip-phase:download-intent-persisted",
+        "browser-download-not-observed",
+        "full-fiscal-year-summary-failed",
+        "full-fiscal-year-summary-error:generation-failed",
+      ],
+    );
+
+    expect(message).toContain(
+      "If the ZIP download completed, it does not include derived summary outputs because summary generation failed.",
+    );
+    expect(message).not.toContain("prepared the artifact ZIP");
+    expect(message).not.toContain("saved the artifact files");
+  });
+
   it.each([
     ["multiple browser IDs", ["browser-download-id:179"]],
     ["zero-byte contradiction", ["browser-download-zero-bytes"]],

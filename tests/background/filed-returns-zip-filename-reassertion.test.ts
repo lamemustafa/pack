@@ -195,6 +195,35 @@ describe("filed-return ZIP filename reassertion", () => {
     expect(mocks.browser.downloads.download).toHaveBeenCalledOnce();
   });
 
+  it("keeps the summary failure reason when the full-year ZIP download is unconfirmed", async () => {
+    mocks.createOffscreenFiledReturnZipUrl.mockResolvedValueOnce({
+      status: "created",
+      blobUrl: "blob:pack-owned/full-year-zip",
+      zipEntryCount: 1,
+      artifactEntryCount: 1,
+      summary: { status: "failed", reasonCategory: "generation-failed" },
+    });
+    mocks.observeBrowserDownloadById.mockResolvedValueOnce({
+      state: "not-observed",
+      safeSignals: ["browser-download-not-observed"],
+      safeMessage: "The synthetic ZIP was not observed.",
+    });
+
+    const result = await exportFullFiscalYearZip(fullYearLedger(), completeStep());
+
+    expect(result).toMatchObject({
+      state: "download-unconfirmed",
+      safeSignals: expect.arrayContaining([
+        "full-fiscal-year-zip-download-unconfirmed",
+        "full-fiscal-year-summary-failed",
+        "full-fiscal-year-summary-error:generation-failed",
+      ]),
+    });
+    expect(result.safeMessage).toContain("final browser download did not complete");
+    expect(result.safeMessage).toContain("summary generation failed");
+    expect(result.safeMessage).not.toContain("saved");
+  });
+
   it("rejects an unattested summary receipt before download with a distinct safe reason", async () => {
     mocks.createOffscreenFiledReturnZipUrl.mockResolvedValueOnce({
       status: "failed",

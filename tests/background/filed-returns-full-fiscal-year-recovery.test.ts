@@ -751,7 +751,6 @@ describe("full fiscal-year recovery", () => {
           "full-fiscal-year-summary-parsed-period-count:1",
           "full-fiscal-year-summary-row-count:4",
         ],
-        safeMessage: "The ZIP includes the workbook and tidy CSV for 1 period.",
       },
       messageFragment: "workbook and tidy CSV for 1 period",
     },
@@ -765,8 +764,6 @@ describe("full fiscal-year recovery", () => {
           "full-fiscal-year-summary-parsed-period-count:0",
           "full-fiscal-year-summary-row-count:4",
         ],
-        safeMessage:
-          "The ZIP includes the workbook and an outcome-only tidy CSV because no parseable portal JSON was available.",
       },
       messageFragment: "outcome-only tidy CSV",
     },
@@ -778,10 +775,8 @@ describe("full fiscal-year recovery", () => {
           "full-fiscal-year-summary-failed",
           "full-fiscal-year-summary-error:generation-failed",
         ],
-        safeMessage:
-          "Pack saved the artifact files without derived summary outputs because summary generation failed.",
       },
-      messageFragment: "without derived summary outputs because summary generation failed",
+      messageFragment: "summary generation failed",
     },
     {
       name: "workbook-not-applicable",
@@ -793,14 +788,15 @@ describe("full fiscal-year recovery", () => {
           "full-fiscal-year-summary-parsed-period-count:1",
           "full-fiscal-year-summary-row-count:4",
         ],
-        safeMessage:
-          "The ZIP includes the tidy CSV for 1 period. A consolidated workbook is not available for this return type.",
       },
       messageFragment: "tidy CSV for 1 period. A consolidated workbook is not available",
     },
   ])(
-    "restores the $name summary outcome when the worker stops after ZIP download start",
+    "restores the $name summary outcome across worker-stop checkpoints",
     async ({ outcome, messageFragment, returnType }) => {
+      const stopsAtIntentCheckpoint = outcome.safeSignals.includes(
+        "full-fiscal-year-summary-failed",
+      );
       const now = new Date("2017-08-20T00:00:00.000Z");
       let clock = now;
       const scope = {
@@ -867,6 +863,9 @@ describe("full fiscal-year recovery", () => {
           },
         ) => {
           await options.onBeforeDownloadStart?.(now, outcome);
+          if (stopsAtIntentCheckpoint) {
+            throw new Error("synthetic worker termination after ZIP intent checkpoint");
+          }
           browserDownloadStarted();
           throw new Error("synthetic worker termination after ZIP download start");
         },
@@ -878,19 +877,28 @@ describe("full fiscal-year recovery", () => {
           { ...recoveryDeps(), now: () => clock } as never,
           runSinglePeriod,
         ),
-      ).rejects.toThrow("synthetic worker termination");
+      ).rejects.toThrow(
+        stopsAtIntentCheckpoint
+          ? "synthetic worker termination after ZIP intent checkpoint"
+          : "synthetic worker termination after ZIP download start",
+      );
 
       const checkpoint = sessionValues.current.completion as {
-        flowStep?: { safeSignals?: unknown };
+        flowStep?: { safeMessage?: string; safeSignals?: unknown };
       };
       const durableSignals = parseDurableFiledReturnsSignals(checkpoint.flowStep?.safeSignals);
       expect(durableSignals).toEqual(expect.arrayContaining(outcome.safeSignals));
+      if (stopsAtIntentCheckpoint) {
+        expect(checkpoint.flowStep?.safeMessage).toContain("prepared the artifact ZIP");
+        expect(checkpoint.flowStep?.safeMessage).toContain("summary generation failed");
+        expect(checkpoint.flowStep?.safeMessage).not.toContain("saved");
+      }
       expect(store["full-year-ledger"]).toMatchObject({
         zipPhase: "download-intent-persisted",
         zipDownloadAttempt: { requestedAt: now.toISOString() },
       });
       expect(isFullFiscalYearLedger(store["full-year-ledger"])).toBe(true);
-      expect(browserDownloadStarted).toHaveBeenCalledOnce();
+      expect(browserDownloadStarted).toHaveBeenCalledTimes(stopsAtIntentCheckpoint ? 0 : 1);
 
       clock = new Date("2017-08-20T00:01:00.000Z");
       const firstRecovery = await startFullFiscalYearDownloadFlow(
@@ -908,6 +916,10 @@ describe("full fiscal-year recovery", () => {
           safeMessage: expect.stringContaining(messageFragment),
         },
       });
+      if (stopsAtIntentCheckpoint && firstRecovery.ok && "flowStep" in firstRecovery) {
+        expect(firstRecovery.flowStep.safeMessage).not.toContain("saved");
+        expect(firstRecovery.flowStep.safeMessage).toContain("summary generation failed");
+      }
       clock = new Date("2017-08-20T00:02:00.000Z");
       const secondRecovery = await startFullFiscalYearDownloadFlow(
         scope,
