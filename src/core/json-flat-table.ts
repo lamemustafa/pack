@@ -5,7 +5,8 @@ export type FlatJsonArrayCountReason =
   | "array-count-not-selected"
   | "array-count-over-ceiling"
   | "array-count-no-common-discriminator"
-  | "array-count-duplicate-discriminator";
+  | "array-count-duplicate-discriminator"
+  | "array-count-unsafe-discriminator";
 
 export interface FlatJsonLeaf {
   arrayCountReason?: FlatJsonArrayCountReason;
@@ -18,6 +19,17 @@ export interface FlatJsonArrayExpansionOptions {
   discriminatorKeys: readonly string[];
   eligiblePaths: readonly string[];
   maxElements: number;
+  /**
+   * Whether a discriminator value may be embedded as a path segment. Expansion
+   * copies the value into the path and drops the original leaf, so a value that
+   * carried sensitive content would survive in a path where field-name-based
+   * redaction cannot see it.
+   *
+   * The predicate is supplied by the caller because what counts as safe is
+   * portal knowledge, and this module stays portal-neutral. Omitted means no
+   * constraint, which is the pre-existing behaviour.
+   */
+  isSafeDiscriminatorValue?: (value: string) => boolean;
 }
 
 export interface FlatJsonLeafSelection {
@@ -313,6 +325,14 @@ class FlatJsonParser {
           ? "array-count-duplicate-discriminator"
           : "array-count-no-common-discriminator",
       );
+      return;
+    }
+    const isSafeDiscriminatorValue = this.arrayExpansion?.isSafeDiscriminatorValue;
+    if (
+      isSafeDiscriminatorValue &&
+      discriminator.values.some((value) => !isSafeDiscriminatorValue(value))
+    ) {
+      this.addArrayCount(path, elementCount, "array-count-unsafe-discriminator");
       return;
     }
     elements.forEach((leaves, index) => {

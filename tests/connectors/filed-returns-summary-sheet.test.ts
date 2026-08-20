@@ -14,6 +14,30 @@ import {
 import type { FiledReturnsMonth } from "../../src/connectors/gst/filed-returns-scope";
 
 describe("filed-return full-year summary sheet", () => {
+  it("refuses an identity-shaped array discriminator instead of embedding it in a path", () => {
+    const build = (ty: string) =>
+      buildFiledReturnsSummarySheet(
+        [jsonPlan("April", "april-data.json", "GSTR-3B")],
+        [
+          {
+            path: "april-data.json",
+            bytes: new TextEncoder().encode(
+              `{"status":1,"data":{"lglnm":"Synthetic Legal Name","r3b":{"gstin":"27ABCDE1234F1Z0","ret_period":"042026","itc_elg":{"itc_avl":[{"ty":"${ty}","iamt":5}]}}}}`,
+            ),
+          },
+        ],
+      );
+
+    const safe = new TextDecoder().decode(build("IMPG").dataBytes);
+    expect(safe).toContain("/itc_elg/itc_avl/IMPG/iamt");
+
+    // PAN-shaped: expansion would copy it into the path and drop its own leaf,
+    // where field-name redaction cannot see it.
+    const unsafe = new TextDecoder().decode(build("AAAAA0000A").dataBytes);
+    expect(unsafe).not.toContain("AAAAA0000A");
+    expect(unsafe).toContain("array-count-unsafe-discriminator");
+  });
+
   it("withholds a compound identity alias split across path segments", () => {
     const summary = buildFiledReturnsSummarySheet(
       [jsonPlan("April", "april-data.json", "GSTR-3B")],

@@ -399,11 +399,28 @@ function outcomeCategory(entry: FiledReturnsSummaryPlanEntry): string {
   return entry.artifactType === "JSON" ? "json-unparsed" : "non-json-artifact";
 }
 
+// A discriminator value becomes a path segment and its own leaf is dropped, so
+// anything embedded there escapes field-name-based redaction. The portal's own
+// values are short codes -- `ty` is IMPG/IMPS/ISD/ISRC/OTH/RUL and `pos` is a
+// two-digit state code -- so a bounded code shape is the honest constraint, and
+// an identity-shaped value is refused outright rather than trusted to be absent.
+// Refusing falls back to the array count, which is a visible outcome, not a
+// silent drop.
+const FILED_RETURNS_DISCRIMINATOR_CODE = /^[A-Za-z0-9]{1,12}$/;
+const PAN_SHAPE = /^[A-Za-z]{5}[0-9]{4}[A-Za-z]$/;
+
+function isSafeFiledReturnsDiscriminatorValue(value: string): boolean {
+  if (!FILED_RETURNS_DISCRIMINATOR_CODE.test(value)) return false;
+  if (PAN_SHAPE.test(value)) return false;
+  return !isValidGstin(value);
+}
+
 function filedReturnsSummaryArrayExpansion(
   returnType: FiledReturnsReturnType,
 ): FlatJsonArrayExpansionOptions {
   return {
     discriminatorKeys: DISCRIMINATOR_KEYS,
+    isSafeDiscriminatorValue: isSafeFiledReturnsDiscriminatorValue,
     eligiblePaths: returnType === "GSTR-3B" ? GSTR3B_EXPANDABLE_ARRAY_PATHS : [],
     maxElements: MAX_FILED_RETURNS_SUMMARY_ARRAY_EXPANSION_ELEMENTS,
   };
