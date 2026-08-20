@@ -5,16 +5,30 @@ import type {
   FiledReturnsSummaryPlanEntry,
   FiledReturnsSummarySheet,
 } from "./filed-returns-summary-sheet";
-import { filedReturnsStatementLineItems } from "./filed-returns-summary-labels";
+import {
+  filedReturnsStatementCoverage,
+  filedReturnsStatementLineItems,
+} from "./filed-returns-summary-labels";
 import { FILED_RETURNS_MONTHS, type FiledReturnsMonth } from "./filed-returns-scope";
 
 export const FILED_RETURNS_FULL_YEAR_WORKBOOK_PATH = "full-year-workbook.xlsx";
-export const FILED_RETURNS_FULL_YEAR_WORKBOOK_FORMAT_VERSION = "pack-full-year-workbook-v3";
 
-const GSTR9_BOUNDARY =
-  "GSTR-9 is not the sum of twelve GSTR-3B returns. Its Table 4 requires outward supplies split by counterparty type, which GSTR-3B does not contain, and it further requires amendments, ITC claimed in a later financial year, and reversals. This workbook does not produce GSTR-9 values.";
-const STATEMENT_COVERS = "Verified labels for Form GSTR-3B Tables 3.1 and 4.";
-const STATEMENT_NOT_COVERED = "Form GSTR-3B Tables 3.1.1, 3.2, 5.1 and 6.1 — labels not verified.";
+const FOOTER_VALUE_COLUMN_WIDTH = 58;
+const MONTH_COLUMN_WIDTH = 13;
+const MONTH_NAMES = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const;
 
 interface WorkbookOptions {
   generatedAt: Date;
@@ -89,22 +103,34 @@ function consolidatedSheet(
     }
     rows.push([]);
   }
+  const coverage = filedReturnsStatementCoverage();
   rows.push(
-    [{ value: "Statement covers", style: "bold" }, { value: STATEMENT_COVERS }],
-    [{ value: "Not covered", style: "bold" }, { value: STATEMENT_NOT_COVERED }],
-    [{ value: "GSTR-9", style: "bold" }, { value: GSTR9_BOUNDARY }],
-    [{ value: "Generated", style: "bold" }, { value: generatedAt.toISOString() }],
     [
-      { value: "Workbook format", style: "bold" },
-      { value: FILED_RETURNS_FULL_YEAR_WORKBOOK_FORMAT_VERSION },
+      { value: "Source", style: "bold" },
+      { value: `Filed GSTR-3B returns from the GST portal · ${humanDate(generatedAt)}` },
+    ],
+    [
+      { value: "Coverage", style: "bold" },
+      {
+        value: `Tables ${coverage.includedTables.join(" and ")}. Not included: ${coverage.excludedTables.join(", ")}.`,
+      },
     ],
   );
   return {
     name: "GSTR-3B Consolidated",
     freezeFirstColumnAndRows: 5,
-    columns: [{ width: 78 }, ...FILED_RETURNS_MONTHS.map(() => ({ width: 13 })), { width: 15 }],
+    columns: [
+      { width: 78 },
+      { width: FOOTER_VALUE_COLUMN_WIDTH },
+      ...FILED_RETURNS_MONTHS.slice(1).map(() => ({ width: MONTH_COLUMN_WIDTH })),
+      { width: 15 },
+    ],
     rows,
   };
+}
+
+function humanDate(value: Date): string {
+  return `${value.getUTCDate()} ${MONTH_NAMES[value.getUTCMonth()]} ${value.getUTCFullYear()}`;
 }
 
 function statementValues(dataRows: readonly FiledReturnsSummaryDataRow[]): Map<string, number> {

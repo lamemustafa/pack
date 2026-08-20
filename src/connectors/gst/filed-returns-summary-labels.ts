@@ -14,7 +14,10 @@ export interface FiledReturnsSummaryFieldLabel {
   statement?: FiledReturnsStatementLineItem;
 }
 
+type FiledReturnsStatementCoverageTable = "3.1" | "4";
+
 export interface FiledReturnsStatementLineItem {
+  coverageTable: FiledReturnsStatementCoverageTable;
   sectionCaption: string;
   sectionOrder: number;
   shortLabel: "Taxable Value" | "Value" | "IGST" | "CGST" | "SGST" | "Cess";
@@ -28,6 +31,15 @@ const GSTR3B_PDF_CROSS_CHECK_SOURCE = "GST Portal GSTR-3B PDF export and JSON sc
 const GSTR3B_VOCABULARY_SOURCE =
   "GST Portal GSTR-3B JSON field vocabulary and Form row/column structure";
 const REVIEWED_ON = "2026-08-18";
+
+const GSTR3B_STATEMENT_TABLE_COVERAGE = [
+  { table: "3.1", status: "included" },
+  { table: "4", status: "included" },
+  { table: "3.1.1", status: "not-included" },
+  { table: "3.2", status: "not-included" },
+  { table: "5.1", status: "not-included" },
+  { table: "6.1", status: "not-included" },
+] as const;
 
 type ComponentKey = "txval" | "iamt" | "camt" | "samt" | "csamt";
 const COMPONENT_LABELS: Record<ComponentKey, string> = {
@@ -101,6 +113,7 @@ function componentEntries(
   table: string,
   components: readonly ComponentKey[],
   provenance: "confirmed" | "vocabulary",
+  statementCoverageTable?: FiledReturnsStatementCoverageTable,
   statementSectionOrder?: number,
 ): Record<string, FiledReturnsSummaryFieldLabel> {
   return Object.fromEntries(
@@ -114,6 +127,7 @@ function componentEntries(
             : vocabularyDerivedLabel(label, table),
           labelPrefix,
           component,
+          statementCoverageTable,
           statementSectionOrder,
         ),
       ];
@@ -125,20 +139,28 @@ function withOptionalStatement(
   entry: FiledReturnsSummaryFieldLabel,
   sectionCaption: string,
   component: ComponentKey,
+  coverageTable?: FiledReturnsStatementCoverageTable,
   sectionOrder?: number,
   shortLabel = STATEMENT_COMPONENT_LABELS[component],
 ): FiledReturnsSummaryFieldLabel {
-  return sectionOrder === undefined
-    ? entry
-    : {
-        ...entry,
-        statement: {
-          sectionCaption,
-          sectionOrder,
-          shortLabel,
-          subrowOrder: STATEMENT_COMPONENT_ORDER[component],
-        },
-      };
+  if (coverageTable === undefined && sectionOrder === undefined) return entry;
+  if (
+    coverageTable === undefined ||
+    sectionOrder === undefined ||
+    !sectionCaption.startsWith(`Table ${coverageTable}(`)
+  ) {
+    throw new TypeError("Statement line is outside the verified table coverage.");
+  }
+  return {
+    ...entry,
+    statement: {
+      coverageTable,
+      sectionCaption,
+      sectionOrder,
+      shortLabel,
+      subrowOrder: STATEMENT_COMPONENT_ORDER[component],
+    },
+  };
 }
 
 const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
@@ -148,6 +170,7 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "3.1(a)",
     ["txval", "camt", "iamt", "samt"],
     "confirmed",
+    "3.1",
     0,
   ),
   "/sup_details/osup_det/csamt": withOptionalStatement(
@@ -158,6 +181,7 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     ),
     "Table 3.1(a) Outward taxable supplies (other than zero rated, nil rated and exempted)",
     "csamt",
+    "3.1",
     0,
   ),
   "/sup_details/osup_zero/txval": withOptionalStatement(
@@ -168,6 +192,7 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     ),
     "Table 3.1(b) Outward taxable supplies (zero rated)",
     "txval",
+    "3.1",
     1,
   ),
   "/sup_details/osup_zero/iamt": withOptionalStatement(
@@ -178,6 +203,7 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     ),
     "Table 3.1(b) Outward taxable supplies (zero rated)",
     "iamt",
+    "3.1",
     1,
   ),
   "/sup_details/osup_zero/camt": gstr3bLabel(
@@ -194,6 +220,7 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     gstr3bLabel("Table 3.1(b) Zero-rated outward taxable supplies — Cess", "3.1(b)", "osup_zero"),
     "Table 3.1(b) Outward taxable supplies (zero rated)",
     "csamt",
+    "3.1",
     1,
   ),
   "/sup_details/osup_nil_exmp/txval": withOptionalStatement(
@@ -204,6 +231,7 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     ),
     "Table 3.1(c) Other outward supplies (Nil rated, exempted)",
     "txval",
+    "3.1",
     2,
     "Value",
   ),
@@ -221,6 +249,7 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     ),
     "Table 3.1(d) Inward supplies (liable to reverse charge)",
     "txval",
+    "3.1",
     3,
   ),
   "/sup_details/isup_rev/iamt": withOptionalStatement(
@@ -231,6 +260,7 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     ),
     "Table 3.1(d) Inward supplies (liable to reverse charge)",
     "iamt",
+    "3.1",
     3,
   ),
   "/sup_details/isup_rev/camt": withOptionalStatement(
@@ -241,6 +271,7 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     ),
     "Table 3.1(d) Inward supplies (liable to reverse charge)",
     "camt",
+    "3.1",
     3,
   ),
   "/sup_details/isup_rev/samt": withOptionalStatement(
@@ -251,6 +282,7 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     ),
     "Table 3.1(d) Inward supplies (liable to reverse charge)",
     "samt",
+    "3.1",
     3,
   ),
   "/sup_details/isup_rev/csamt": withOptionalStatement(
@@ -261,12 +293,14 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     ),
     "Table 3.1(d) Inward supplies (liable to reverse charge)",
     "csamt",
+    "3.1",
     3,
   ),
   "/sup_details/osup_nongst/txval": withOptionalStatement(
     gstr3bLabel("Table 3.1(e) Non-GST outward supplies — Value", "3.1(e)", "osup_nongst"),
     "Table 3.1(e) Non-GST outward supplies",
     "txval",
+    "3.1",
     4,
     "Value",
   ),
@@ -283,6 +317,7 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "4(A)(5)",
     ["camt", "iamt", "samt"],
     "confirmed",
+    "4",
     9,
   ),
   ...componentEntries(
@@ -291,6 +326,7 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "4(A)(5)",
     ["csamt"],
     "vocabulary",
+    "4",
     9,
   ),
   ...componentEntries(
@@ -299,6 +335,7 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "4(C)",
     ["camt", "iamt", "samt"],
     "confirmed",
+    "4",
     12,
   ),
   ...componentEntries(
@@ -307,6 +344,7 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "4(C)",
     ["csamt"],
     "vocabulary",
+    "4",
     12,
   ),
   ...componentEntries(
@@ -315,6 +353,7 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "4(A)(1)",
     ["camt", "iamt", "samt", "csamt"],
     "vocabulary",
+    "4",
     5,
   ),
   ...componentEntries(
@@ -323,6 +362,7 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "4(A)(2)",
     ["camt", "iamt", "samt", "csamt"],
     "vocabulary",
+    "4",
     6,
   ),
   ...componentEntries(
@@ -331,6 +371,7 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "4(A)(3)",
     ["camt", "iamt", "samt", "csamt"],
     "vocabulary",
+    "4",
     7,
   ),
   ...componentEntries(
@@ -339,6 +380,7 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "4(A)(4)",
     ["camt", "iamt", "samt", "csamt"],
     "vocabulary",
+    "4",
     8,
   ),
   ...componentEntries(
@@ -347,6 +389,7 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "4(B)(1)",
     ["camt", "iamt", "samt", "csamt"],
     "vocabulary",
+    "4",
     10,
   ),
   ...componentEntries(
@@ -355,6 +398,7 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "4(B)(2)",
     ["camt", "iamt", "samt", "csamt"],
     "vocabulary",
+    "4",
     11,
   ),
   ...componentEntries(
@@ -363,6 +407,7 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "4(D)(1)",
     ["camt", "iamt", "samt", "csamt"],
     "vocabulary",
+    "4",
     13,
   ),
   ...componentEntries(
@@ -371,6 +416,7 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "4(D)(2)",
     ["camt", "iamt", "samt", "csamt"],
     "vocabulary",
+    "4",
     14,
   ),
 };
@@ -399,6 +445,20 @@ export function filedReturnsStatementLineItems(): Array<
       (left, right) =>
         left.sectionOrder - right.sectionOrder || left.subrowOrder - right.subrowOrder,
     );
+}
+
+export function filedReturnsStatementCoverage(): {
+  includedTables: string[];
+  excludedTables: string[];
+} {
+  return {
+    includedTables: [
+      ...new Set(filedReturnsStatementLineItems().map((lineItem) => lineItem.coverageTable)),
+    ],
+    excludedTables: GSTR3B_STATEMENT_TABLE_COVERAGE.filter(
+      ({ status }) => status === "not-included",
+    ).map(({ table }) => table),
+  };
 }
 
 export function filedReturnsSummaryIdentityLabel(path: string): string | null {
