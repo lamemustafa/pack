@@ -70,6 +70,28 @@ export function InlineStatus({
   );
 }
 
+/**
+ * Whether the inline primary action is itself portal-gated. The recovery panel
+ * suppresses its own portal reason only when this is true, because that is the
+ * only case where the two surfaces would print the same sentence twice.
+ *
+ * Suppressing whenever an inline action merely exists left a portal-gated
+ * secondary action in the panel disabled with nothing explaining it, once the
+ * inline action became portal-independent.
+ */
+export function inlinePrimaryActionIsPortalGated(
+  presentation: PopupPresentationState,
+  summary: FiledReturnsFlowSummary | null,
+): boolean {
+  const action = getInlinePrimaryAction(presentation, summary, {
+    onOpenPortal: () => undefined,
+    onRestartTarget: () => undefined,
+    onRetryFullFiscalYearTarget: () => undefined,
+    onRetryTarget: () => undefined,
+  });
+  return action?.portalDisabledReason != null;
+}
+
 export function hasInlinePrimaryAction(
   presentation: PopupPresentationState,
   summary: FiledReturnsFlowSummary | null,

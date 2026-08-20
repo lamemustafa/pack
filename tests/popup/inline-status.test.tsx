@@ -7,6 +7,7 @@ import {
   getInlinePrimaryAction,
   InlineStatus,
   hasInlinePrimaryAction,
+  inlinePrimaryActionIsPortalGated,
 } from "../../src/entrypoints/popup/inline-status";
 import type { PopupPresentationState } from "../../src/entrypoints/popup/presentation-state";
 import { RecoveryActions } from "../../src/entrypoints/popup/recovery-actions";
@@ -37,6 +38,45 @@ const blockedSummary: FiledReturnsFlowSummary = {
 };
 
 describe("inline filed-return recovery status", () => {
+  it("still explains the portal-gated secondary action when the inline action is local", () => {
+    const reconcileSummary: FiledReturnsFlowSummary = {
+      ...blockedSummary,
+      flowStep: {
+        ...blockedSummary.flowStep,
+        state: "download-unconfirmed",
+        safeSignals: [
+          "filed-returns-target-review-required",
+          "artifact-acquisition-download-unreconciled",
+        ],
+      },
+    };
+
+    // The inline action is local, so nothing would be duplicated and the panel
+    // must keep its own reason: "Discard saved state and start selected
+    // download" does reach the portal and stays disabled.
+    expect(inlinePrimaryActionIsPortalGated(blockedPresentation, reconcileSummary)).toBe(false);
+
+    const markup = renderToStaticMarkup(
+      <RecoveryActions
+        busy={null}
+        portalReady={false}
+        summary={reconcileSummary}
+        onAcknowledgeInterruptedRun={vi.fn()}
+        onRetryFullFiscalYearTarget={vi.fn()}
+        onRetryTarget={vi.fn()}
+        onResolveFullFiscalYearTarget={vi.fn()}
+        onResolveTarget={vi.fn()}
+        onStartFresh={vi.fn()}
+        showPortalRetryReason={
+          !inlinePrimaryActionIsPortalGated(blockedPresentation, reconcileSummary)
+        }
+      />,
+    );
+
+    expect(markup).toContain("Discard saved state and start selected download");
+    expect(markup).toMatch(/Open a signed-in GST Portal tab before [^<]+\./);
+  });
+
   it("renders every portal-gated primary action disabled with a visible reason", () => {
     const fullYearSummary: FiledReturnsFlowSummary = {
       ...blockedSummary,
