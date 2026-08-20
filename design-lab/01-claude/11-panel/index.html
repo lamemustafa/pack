@@ -263,6 +263,68 @@
         border-color: var(--pack-border-default);
         color: var(--pack-ink-muted);
       }
+      .sources {
+        display: flex;
+        gap: 4px;
+        padding: 6px 12px;
+        background: var(--pack-surface-muted);
+        border-bottom: 1px solid var(--pack-border-subtle);
+        font-family: var(--mono);
+        font-size: 10px;
+      }
+      .source {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        border: 1px solid var(--pack-border-subtle);
+        border-radius: 3px;
+        padding: 2px 6px;
+        color: var(--pack-ink-muted);
+      }
+      .source.live {
+        border-color: var(--pack-success-border);
+        background: var(--pack-success-bg);
+        color: var(--pack-success-fg);
+      }
+      .source.planned {
+        opacity: 0.6;
+      }
+      .outband {
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--pack-border-subtle);
+        background: var(--pack-surface-muted);
+      }
+      .outopt {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        width: 100%;
+        text-align: left;
+        font: inherit;
+        font-size: 12px;
+        color: var(--pack-ink-primary);
+        background: var(--pack-surface);
+        border: 1px solid var(--pack-border-subtle);
+        border-radius: 4px;
+        padding: 5px 8px;
+        margin-bottom: 4px;
+        cursor: pointer;
+      }
+      .outopt[aria-pressed="true"] {
+        border-color: var(--pack-action);
+        background: var(--pack-surface-accent-soft);
+      }
+      .outopt[disabled] {
+        opacity: 0.55;
+        cursor: default;
+      }
+      .outopt .n {
+        font-family: var(--mono);
+        font-size: 9px;
+        color: var(--pack-ink-muted);
+        text-align: right;
+      }
       .gtitle {
         font-family: var(--mono);
         font-size: 9px;
@@ -541,9 +603,7 @@
             ></span>
             <span class="pname">Pack</span><span class="ppub">ComplyEaze</span>
           </div>
-          <div class="src">
-            <span class="dot"></span><span id="srcline">GST portal · signed in</span>
-          </div>
+          <div class="sources" id="sources"></div>
 
           <div class="band">
             <div class="bandhead">
@@ -569,6 +629,7 @@
               <span class="step">3</span>
               <h2 id="planhead">Plan</h2>
             </div>
+            <div class="outband" id="outband" hidden></div>
             <div id="reviewslot"></div>
             <div class="ledger" style="max-height: 210px">
               <table class="rows" id="rows">
@@ -649,6 +710,16 @@
     </div>
 
     <script>
+      // Pack acts on the tab you are already signed in to, so the source is DETECTED, not
+      // picked. A source picker would imply you can run income tax while sitting on the GST
+      // portal, which is false. The strip states what Pack supports and which one is live.
+      const SOURCES = [
+        { id: "gst", label: "GST", state: "live", note: "signed in" },
+        { id: "it", label: "Income tax", state: "planned", note: "not supported yet" },
+        { id: "mca", label: "MCA", state: "planned", note: "not supported yet" },
+      ];
+      const source = SOURCES[0];
+
       const DOCS = [
         { id: "GSTR-3B", label: "3B", fmts: ["PDF", "JSON"] },
         { id: "GSTR-1", label: "R1", fmts: ["PDF", "EXCEL", "JSON"] },
@@ -680,39 +751,31 @@
         },
       ];
       let year = YEARS[0];
-      // Two kinds. COLLECT produces files from a portal. DERIVE produces a computed
-      // artifact from files you already hold, and is only offered once its inputs exist --
-      // which is what stops this list growing without bound as capabilities are added.
+      // One kind. Every recipe is a portal run, because every artifact Pack can produce --
+      // including a consolidated statement -- comes from downloading it first. How the run
+      // is packaged is a separate choice, made after selection. See OUTPUTS below.
       const RECIPES = [
-        { id: "3b", kind: "collect", label: "This year's GSTR-3B", docs: ["GSTR-3B"] },
+        { id: "3b", label: "This year's GSTR-3B", docs: ["GSTR-3B"] },
+        { id: "all", label: "Everything for this year", docs: ["GSTR-3B", "GSTR-1", "GSTR-2B"] },
+        { id: "r1v3b", label: "GSTR-1 and 3B, full year", docs: ["GSTR-3B", "GSTR-1"] },
+      ];
+      // Packaging options. Each states what it costs and what it needs; one is never a
+      // different kind of run, only a different way of handing the same downloads over.
+      const OUTPUTS = [
+        { id: "zip", label: "One ZIP", cost: "1 save prompt" },
+        { id: "individual", label: "Individual files", cost: "one prompt per file" },
         {
-          id: "all",
-          kind: "collect",
-          label: "Everything for this year",
-          docs: ["GSTR-3B", "GSTR-1", "GSTR-2B"],
-        },
-        {
-          id: "r1v3b",
-          kind: "collect",
-          label: "GSTR-1 and 3B, full year",
-          docs: ["GSTR-3B", "GSTR-1"],
-        },
-        {
-          id: "itr",
-          kind: "collect",
-          label: "Last 3 years of ITRs",
-          disabled: "income tax — not yet",
-        },
-        { id: "stmt", kind: "derive", label: "Consolidated 3B statement", needs: ["GSTR-3B"] },
-        {
-          id: "recon",
-          kind: "derive",
-          label: "GSTR-1 vs 3B reconciliation",
-          needs: ["GSTR-3B", "GSTR-1"],
+          id: "statement",
+          label: "+ Consolidated 3B statement",
+          cost: "1 save prompt",
+          needs: (plan) =>
+            plan.some((t) => t.doc === "GSTR-3B" && t.fmt === "JSON") &&
+            new Set(plan.filter((t) => t.doc === "GSTR-3B").map((t) => t.mi)).size >= 2
+              ? null
+              : "select GSTR-3B portal data (JSON) for 2 or more periods",
         },
       ];
-      // What the user already holds locally. In the product this is the saved-target index.
-      const held = new Set();
+      let output = "zip";
       let fmts = new Set(["PDF"]);
       let sel = new Set();
       let plan = [];
@@ -725,25 +788,12 @@
         avail(d, m) ? "" : `Not filed yet — ${year.label} has ${year.filed} filed periods.`;
 
       function render() {
-        // recipes
-        const missing = (r) => (r.needs || []).filter((d) => !held.has(d));
-        const recipeRow = (r) => {
-          if (r.kind === "derive") {
-            const gap = missing(r);
-            const off = gap.length > 0;
-            return `<button class="recipe" type="button" data-r="${r.id}" ${off ? "disabled" : ""}
-              title="${off ? "Needs " + gap.join(" and ") + " saved first" : "Builds from files already on this device"}">
-              <span>${r.label}</span><span class="n">${off ? "needs " + gap.join(" + ") : "from saved files"}</span></button>`;
-          }
-          return `<button class="recipe" type="button" data-r="${r.id}" ${r.disabled ? "disabled" : ""} aria-pressed="${recipe === r.id}">
-            <span>${r.label}</span><span class="n">${r.disabled || countFor(r) + " files"}</span></button>`;
-        };
-        const group = (kind, title) => {
-          const rs = RECIPES.filter((r) => r.kind === kind);
-          return `<p class="gtitle">${title}</p>` + rs.map(recipeRow).join("");
-        };
-        document.getElementById("recipes").innerHTML =
-          group("collect", "Collect from a portal") + group("derive", "Build from what you have");
+        // recipes -- one flat list, all of them portal runs
+        document.getElementById("recipes").innerHTML = RECIPES.map(
+          (r) =>
+            `<button class="recipe" type="button" data-r="${r.id}" aria-pressed="${recipe === r.id}">
+               <span>${r.label}</span><span class="n">${countFor(r)} files</span></button>`,
+        ).join("");
         // matrix
         const head = `<thead><tr><th></th>${MONTHS.map((m, i) => `<th data-col="${i}">${m[0]}</th>`).join("")}</tr></thead>`;
         const body = DOCS.map(
@@ -802,6 +852,31 @@
                    <button class="btn ghost" type="button" data-rv="skip">Skip ${rev.month}, keep going</button>
                  </div></div>`
             : "";
+        // source strip -- detected, not chosen
+        document.getElementById("sources").innerHTML = SOURCES.map(
+          (x) =>
+            `<span class="source ${x.state}" title="${x.note}">${x.state === "live" ? '<i class="dot"></i>' : ""}${x.label}${x.state === "live" ? " · " + x.note : ""}</span>`,
+        ).join("");
+
+        // output options -- only once something is selected
+        const outBand = document.getElementById("outband");
+        const currentPlan = phase === "prepare" ? buildPlan() : plan;
+        if (currentPlan.length && phase === "prepare") {
+          outBand.hidden = false;
+          outBand.innerHTML =
+            `<p class="gtitle">How should Pack hand it over?</p>` +
+            OUTPUTS.map((o) => {
+              const why = o.needs ? o.needs(currentPlan) : null;
+              const off = Boolean(why);
+              if (off && output === o.id) output = "zip";
+              return `<button class="outopt" type="button" data-o="${o.id}" ${off ? "disabled" : ""}
+                aria-pressed="${output === o.id}" title="${why || o.cost}">
+                <span>${o.label}</span><span class="n">${why || o.cost}</span></button>`;
+            }).join("");
+        } else {
+          outBand.hidden = true;
+        }
+
         // year switcher and the availability hint
         const ysel = document.getElementById("yearsel");
         if (ysel && ysel.options.length !== YEARS.length) {
@@ -820,8 +895,9 @@
         const go = document.getElementById("go");
         const n = shown.length;
         if (phase === "prepare") {
+          const chosen = OUTPUTS.find((x) => x.id === output) || OUTPUTS[0];
           document.getElementById("cost").innerHTML = n
-            ? `<b>${n} file${n === 1 ? "" : "s"}</b> · one ZIP<br>1 save prompt`
+            ? `<b>${n} file${n === 1 ? "" : "s"}</b> · ${chosen.label.replace("+ ", "")}<br>${output === "individual" ? n + " save prompts" : "1 save prompt"}`
             : "Nothing selected.";
           go.textContent = "Build pack";
           go.disabled = n === 0;
@@ -890,7 +966,6 @@
           if (token !== runToken) return;
           if (i >= plan.length) {
             phase = "done";
-            plan.filter((t) => t.status === "saved").forEach((t) => held.add(t.doc));
             render();
             return;
           }
@@ -982,6 +1057,11 @@
           return render();
         }
         if (e.target.id === "yearsel") return;
+        const o = e.target.closest("[data-o]");
+        if (o && !o.disabled && phase === "prepare") {
+          output = o.dataset.o;
+          return render();
+        }
         const f = e.target.closest("[data-f]");
         if (f && phase === "prepare") {
           const v = f.dataset.f;

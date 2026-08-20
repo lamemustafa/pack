@@ -153,3 +153,72 @@ and _Reset Pack_ — which is all a 420px surface should have been doing.
 6. Phase B, if approved.
 
 Steps 1–2 are the ones to do first: they are pure, testable, and every later step depends on them.
+
+---
+
+## 8. Corrections after review
+
+Three things in the first cut were wrong. All three were caught by the owner, and one of them was
+a contradiction between this document and its own prototype.
+
+### 8.1 Sources are detected, not chosen
+
+The prototype listed "Last 3 years of ITRs" as a recipe under a header reading _GST portal · signed
+in_. That is misleading, and the fix is not a tab bar.
+
+Pack acts on the tab the user is **already signed in to**. It cannot construct a portal URL — it
+clicks the portal's own control — so it cannot act on a portal that is not open. A source _picker_
+would imply you can start an income-tax run while sitting on the GST portal, which is false.
+
+So the surface carries a **source strip that reports detection**: the live source is marked and
+named, the supported-but-not-yet sources are visible and explicitly disabled. Everything below the
+strip — recipes, matrix, formats, outputs — is scoped to the detected source. GST is the primary
+bucket because it is the only one that exists; the others are documented as scope, not offered as
+choices.
+
+### 8.2 There is no "build from what you have"
+
+The prototype split recipes into _Collect_ and _Derive_, with derive recipes gated on files already
+held. That was wrong twice over.
+
+**It contradicts this document.** §1 already models the output as a property of the plan —
+`output: "individual" | "one-zip" | "consolidated-statement"`. The prototype invented a second,
+incompatible mechanism.
+
+**It describes a product Pack is not.** Pack does not maintain a library of your files. It downloads
+and hands off. "Build from what you have" implies a store that does not exist and would raise
+exactly the questions a first-time user should never have to ask — _what do I have, where do I put
+the files, how do I enable this?_
+
+And factually: a consolidated GSTR-3B statement is computed from portal data that **must be
+downloaded first**. It is not a different kind of run. It is a smarter way to package the same run.
+
+So packaging is a choice made **after selection**, in a band that only appears once something is
+selected, with each option stating its cost and — when unavailable — its requirement:
+
+| Option                      | Cost                | Requirement                                      |
+| --------------------------- | ------------------- | ------------------------------------------------ |
+| One ZIP                     | 1 save prompt       | —                                                |
+| Individual files            | one prompt per file | —                                                |
+| + Consolidated 3B statement | 1 save prompt       | GSTR-3B portal data (JSON) for 2 or more periods |
+
+The requirement is stated on the disabled control, so the way to enable it is a selection the user
+can make right there, not a file they have to find.
+
+### 8.3 No consolidation code exists — checked, not assumed
+
+Searched before designing. Every one of the ~200 `reconcile*` identifiers in `src/` is
+**download-evidence reconciliation** — matching a `chrome.downloads` item to a target
+(`filed-returns-durable-download-reconciler.ts`, `reconcileFiledReturnsTargetDownload`). None of it
+is statutory reconciliation.
+
+`src/core/csv.ts` emits `manifestIndexCsv` — a **file index** with `target_id`, `document_type`,
+`financial_year`, `period`, `status`, `filename`, `relative_path`. It does not read return content.
+
+Nothing parses `r3b`, table 3.1/4/5, or any return field. There is no workbook builder.
+
+**So the consolidated statement is greenfield, not an extension of existing code.** The roadmap
+should price it as such. The one asset that already exists is the acquisition path for GSTR-3B
+portal data (JSON), which is what a statement would be computed from — and note the portal fact that
+identity (`arn`, `lglnm`, `trdnm`) sits one level _above_ the return envelope, so a pipeline that
+normalises the envelope away discards it while appearing to succeed.
