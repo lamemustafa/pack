@@ -4,40 +4,62 @@
 html[data-pack-surface="panel"] body {
   margin: 0;
   background: var(--pack-canvas);
+  padding: 24px 16px;
 }
 
+/* A side panel is full width; a tab is not. Rendering as a bounded card on the canvas
+   reads as deliberate in both, rather than as a column that failed to fill its window. */
 .panel-shell {
   display: grid;
   align-content: start;
   width: 100%;
   max-width: 420px;
-  min-height: 100vh;
   margin: 0 auto;
+  border: 1px solid var(--pack-border-default);
+  border-radius: 10px;
   background: var(--pack-surface);
-  border-left: 1px solid var(--pack-border-subtle);
-  border-right: 1px solid var(--pack-border-subtle);
+  overflow: hidden;
 }
 
 .panel-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 16px 0;
+  gap: 9px;
+  padding: 14px 16px 0;
 }
 
-.panel-wordmark {
-  width: 96px;
-  height: auto;
+.panel-mark {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+}
+
+.panel-name {
+  color: var(--pack-ink-primary);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: -0.014em;
+}
+
+.panel-publisher {
+  margin-left: auto;
+  color: var(--pack-ink-muted);
+  font-size: 0.625rem;
+  letter-spacing: 0.04em;
 }
 
 .panel-source {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin: 8px 0 0;
-  padding: 0 16px 12px;
+  margin: 10px 0 0;
+  padding: 0 16px 14px;
   color: var(--pack-ink-muted);
   font-size: 0.75rem;
+}
+
+.panel-source-live {
+  color: var(--pack-success-fg);
 }
 
 .panel-source-dot {
@@ -58,7 +80,7 @@ html[data-pack-surface="panel"] body {
 }
 
 .panel-body h2 {
-  margin: 0 0 12px;
+  margin: 0 0 14px;
   color: var(--pack-ink-primary);
   font-size: 1rem;
   font-weight: 600;
@@ -79,8 +101,11 @@ html[data-pack-surface="panel"] body {
   cursor: pointer;
   font: inherit;
   font-size: 0.875rem;
-  padding: 10px 12px;
+  padding: 11px 13px;
   text-align: left;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease;
 }
 
 .panel-choice:hover:not([disabled]) {

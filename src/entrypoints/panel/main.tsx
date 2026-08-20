@@ -42,14 +42,15 @@ function Panel() {
 
   return (
     <main className="panel-shell">
+      {/* Lockup per design-lab/01-claude/04-brand.md: mark, "Pack" at full weight, then
+          ComplyEaze as a separate muted publisher credit. Legible precisely because it is not
+          squeezed into one wordmark asset. */}
       <header className="panel-head">
-        <img
-          className="panel-wordmark"
-          src="/brand/pack-logo-header.svg"
-          alt="Pack by ComplyEaze"
-        />
+        <img className="panel-mark" src="/brand/pack-mark.svg" alt="" aria-hidden="true" />
+        <span className="panel-name">Pack</span>
+        <span className="panel-publisher">ComplyEaze</span>
       </header>
-      <p className="panel-source">
+      <p className={portalReady ? "panel-source panel-source-live" : "panel-source"}>
         <span
           className={portalReady ? "panel-source-dot" : "panel-source-dot panel-source-dot-off"}
           aria-hidden="true"
