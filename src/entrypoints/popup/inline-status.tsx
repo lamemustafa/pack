@@ -42,7 +42,7 @@ export function InlineStatus({
     onRetryFullFiscalYearTarget,
     onRetryTarget,
   });
-  const portalDisabledReason = !portalReady ? (primaryAction?.portalDisabledReason ?? null) : null;
+  const portalDisabledReason = portalReady ? null : (primaryAction?.portalDisabledReason ?? null);
 
   return (
     <section
@@ -208,6 +208,17 @@ function getFullFiscalYearRecoveryBody(currentPeriod: string, signals: Set<strin
   return `The saved full-year run paused at ${currentPeriod}. Resolve the GST Portal page, then retry this period to continue the remaining periods.`;
 }
 
+/**
+ * `portalDisabledReason` is required, not optional: an action that can be gated on
+ * `portalReady` must say why it is disabled, and a missing reason would render a
+ * silently disabled button. `null` is the deliberate "never portal-gated" choice.
+ */
+interface InlinePrimaryAction {
+  label: string;
+  onClick: () => void;
+  portalDisabledReason: string | null;
+}
+
 export function getInlinePrimaryAction(
   presentation: PopupPresentationState,
   summary: FiledReturnsFlowSummary | null,
@@ -215,9 +226,10 @@ export function getInlinePrimaryAction(
     InlineStatusProps,
     "onOpenPortal" | "onRestartTarget" | "onRetryFullFiscalYearTarget" | "onRetryTarget"
   >,
-): { label: string; onClick: () => void; portalDisabledReason?: string } | null {
+): InlinePrimaryAction | null {
   if (presentation.kind === "error") {
-    return { label: "Open GST Portal", onClick: actions.onOpenPortal };
+    // The only action that makes the portal ready, so it is never portal-gated.
+    return { label: "Open GST Portal", onClick: actions.onOpenPortal, portalDisabledReason: null };
   }
   if (!summary) return null;
 
