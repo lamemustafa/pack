@@ -26,6 +26,15 @@ const SCHEDULED_DOWNTIME_PATTERNS = [
   /kindly come back later/i,
 ];
 
+export const FILED_RETURNS_PORTAL_SCHEDULED_DOWNTIME_MESSAGE =
+  "The GST portal is in scheduled downtime. Wait until GST services are available, then reopen Pack and retry.";
+
+export const FILED_RETURNS_PORTAL_SYSTEM_ERROR_MESSAGE =
+  "The GST portal returned a system-error page. Return to an authenticated GST page and retry this period.";
+
+export const FILED_RETURNS_PORTAL_BLOCKED_OR_SESSION_EXPIRED_MESSAGE =
+  "The GST portal appears to be on an access-denied or expired-session screen. Please return to an authenticated GST page before using Pack.";
+
 type PortalAvailabilityIssue = Pick<
   PortalFlowStepResult,
   "connectorId" | "scopeId" | "state" | "safeSignals" | "safeMessage" | "userAction"
@@ -45,8 +54,7 @@ export function detectFiledReturnsPortalAvailabilityIssue(
       scopeId,
       state: "blocked",
       safeSignals: ["portal-scheduled-downtime"],
-      safeMessage:
-        "The GST portal is in scheduled downtime. Wait until GST services are available, then reopen Pack and retry.",
+      safeMessage: FILED_RETURNS_PORTAL_SCHEDULED_DOWNTIME_MESSAGE,
       userAction: {
         type: "WAIT_FOR_PORTAL_AVAILABILITY",
         message: "Wait until the GST scheduled downtime window is over, then reopen Pack.",
@@ -64,8 +72,7 @@ export function detectFiledReturnsPortalAvailabilityIssue(
       scopeId,
       state: "blocked",
       safeSignals: ["portal-system-error"],
-      safeMessage:
-        "The GST portal returned a system-error page. Return to an authenticated GST page and retry this period.",
+      safeMessage: FILED_RETURNS_PORTAL_SYSTEM_ERROR_MESSAGE,
       userAction: {
         type: "WAIT_FOR_PORTAL_AVAILABILITY",
         message: "Return to an authenticated GST page after the portal system error clears.",
@@ -82,8 +89,7 @@ export function detectFiledReturnsPortalAvailabilityIssue(
     scopeId,
     state: /session|login/i.test(bodyText) ? "login-required" : "blocked",
     safeSignals: ["portal-blocked-or-session-expired"],
-    safeMessage:
-      "The GST portal appears to be on an access-denied or expired-session screen. Please return to an authenticated GST page before using Pack.",
+    safeMessage: FILED_RETURNS_PORTAL_BLOCKED_OR_SESSION_EXPIRED_MESSAGE,
     userAction: {
       type: "LOGIN",
       message: "Sign in to the GST portal, then reopen Pack on the authenticated page.",

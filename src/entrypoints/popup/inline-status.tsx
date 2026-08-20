@@ -6,9 +6,14 @@ import {
   hasPersistedFullFiscalYearZipDownloadId,
   isAmbiguousFullFiscalYearZipHandoff,
 } from "./flow-summary";
+import {
+  getSavedFullFiscalYearActionDecision,
+  targetReviewPortalDisabledReason,
+} from "./recovery-actions";
 
 export interface InlineStatusProps {
   busy: string | null;
+  portalReady: boolean;
   onOpenPortal: () => void;
   onRestartTarget: () => void;
   onRetryFullFiscalYearTarget: () => void;
@@ -19,6 +24,7 @@ export interface InlineStatusProps {
 
 export function InlineStatus({
   busy,
+  portalReady,
   onOpenPortal,
   onRestartTarget,
   onRetryFullFiscalYearTarget,
@@ -36,6 +42,7 @@ export function InlineStatus({
     onRetryFullFiscalYearTarget,
     onRetryTarget,
   });
+  const portalDisabledReason = !portalReady ? (primaryAction?.portalDisabledReason ?? null) : null;
 
   return (
     <section
@@ -54,12 +61,13 @@ export function InlineStatus({
           <button
             className="inline-status-primary"
             type="button"
-            disabled={actionBusy}
+            disabled={actionBusy || Boolean(portalDisabledReason)}
             onClick={primaryAction.onClick}
           >
             {actionBusy ? "Working..." : primaryAction.label}
           </button>
         ) : null}
+        {portalDisabledReason ? <p className="muted">{portalDisabledReason}</p> : null}
       </div>
     </section>
   );
@@ -69,18 +77,13 @@ export function hasInlinePrimaryAction(
   presentation: PopupPresentationState,
   summary: FiledReturnsFlowSummary | null,
 ): boolean {
-  if (presentation.kind === "error") return true;
-  if (!summary) return false;
-
-  const signals = new Set(summary.flowStep.safeSignals);
   return Boolean(
-    (presentation.kind === "blocked" && summary.currentPeriod) ||
-    (signals.has("filed-returns-target-review-required") && summary.currentPeriod) ||
-    (summary.fullFiscalYearRecovery &&
-      (signals.has("full-fiscal-year-download-unconfirmed") ||
-        signals.has("full-fiscal-year-run-interrupted") ||
-        signals.has("full-fiscal-year-run-needs-action") ||
-        signals.has("full-fiscal-year-resume-confirmation-required"))),
+    getInlinePrimaryAction(presentation, summary, {
+      onOpenPortal: () => undefined,
+      onRestartTarget: () => undefined,
+      onRetryFullFiscalYearTarget: () => undefined,
+      onRetryTarget: () => undefined,
+    }),
   );
 }
 
@@ -212,7 +215,7 @@ export function getInlinePrimaryAction(
     InlineStatusProps,
     "onOpenPortal" | "onRestartTarget" | "onRetryFullFiscalYearTarget" | "onRetryTarget"
   >,
-): { label: string; onClick: () => void } | null {
+): { label: string; onClick: () => void; portalDisabledReason?: string } | null {
   if (presentation.kind === "error") {
     return { label: "Open GST Portal", onClick: actions.onOpenPortal };
   }
@@ -220,22 +223,36 @@ export function getInlinePrimaryAction(
 
   const signals = new Set(summary.flowStep.safeSignals);
   if (presentation.kind === "blocked" && summary.fullFiscalYearRecovery) {
+    const { gerund, label } = getSavedFullFiscalYearActionDecision(summary);
     return {
-      label: summary.currentPeriod ? `Retry ${summary.currentPeriod}` : "Resume saved period",
+      label,
       onClick: actions.onRetryFullFiscalYearTarget,
+      portalDisabledReason: `Open a signed-in GST Portal tab before ${gerund}.`,
     };
   }
   if (signals.has("filed-returns-target-review-required") && summary.currentPeriod) {
     if (canReconcileFiledReturnsTarget(summary)) {
-      return { label: "Reconcile browser download", onClick: actions.onRetryTarget };
+      return {
+        label: "Reconcile browser download",
+        onClick: actions.onRetryTarget,
+        portalDisabledReason: targetReviewPortalDisabledReason(summary),
+      };
     }
     if (signals.has("filed-returns-target-local-cleanup-required")) {
-      return { label: "Retry local cleanup", onClick: actions.onRetryTarget };
+      return {
+        label: "Retry local cleanup",
+        onClick: actions.onRetryTarget,
+        portalDisabledReason: targetReviewPortalDisabledReason(summary),
+      };
     }
     return null;
   }
   if (presentation.kind === "blocked" && summary.currentPeriod) {
-    return { label: `Retry ${summary.currentPeriod}`, onClick: actions.onRestartTarget };
+    return {
+      label: `Retry ${summary.currentPeriod}`,
+      onClick: actions.onRestartTarget,
+      portalDisabledReason: `Open a signed-in GST Portal tab before retrying ${summary.currentPeriod}.`,
+    };
   }
   return null;
 }
