@@ -76,7 +76,6 @@ describe("filed-return full-year summary sheet", () => {
     const context = contextText(summary.contextRows);
     expect(context).toContain(FILED_RETURNS_SUMMARY_FORMAT_VERSION);
     expect(context).toContain(FILED_RETURNS_SUMMARY_SHEET_PATH);
-    expect(context).toContain("Context");
     expect(context.match(/00XXXXX0000X0Z0/g)).toHaveLength(1);
     expect(context.match(/AAAAA0000A/g)).toHaveLength(1);
     expect(context.match(/Synthetic Taxpayer Name/g)).toHaveLength(1);

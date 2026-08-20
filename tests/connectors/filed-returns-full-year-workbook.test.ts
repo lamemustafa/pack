@@ -10,7 +10,7 @@ import {
 import { FILED_RETURNS_MONTHS } from "../../src/connectors/gst/filed-returns-scope";
 
 describe("filed-return full-year workbook", () => {
-  it("emits the fixed comparative statement, typed months, numeric totals and identity-only context", () => {
+  it("emits the unchanged comparative statement and deduplicated run details", () => {
     const plan = fullYearPlan();
     const summary = buildFiledReturnsSummarySheet(plan, [
       {
@@ -49,14 +49,11 @@ describe("filed-return full-year workbook", () => {
 
     const entries = extractStoredZipEntries(first);
     expect(sheetNames(text(entries, "xl/workbook.xml"))).toEqual([
-      "About",
       "GSTR-3B Consolidated",
-      "GSTR-9 Reference",
-      "Data",
-      "Context",
+      "Run details",
     ]);
 
-    const statement = text(entries, "xl/worksheets/sheet2.xml");
+    const statement = text(entries, "xl/worksheets/sheet1.xml");
     const statementRows = parsedRows(statement);
     expect(statementRows[0]?.get("A1")?.text).toBe("Description");
     expect(statementRows[0]?.get("B1")).toMatchObject({ number: 46_113, style: "4" });
@@ -102,24 +99,51 @@ describe("filed-return full-year workbook", () => {
       expect(subrowsAfter(statementRows, table)).toEqual(["IGST", "CGST", "SGST", "Cess"]);
     }
 
-    const about = text(entries, "xl/worksheets/sheet1.xml");
-    expect(about).toContain(FILED_RETURNS_FULL_YEAR_WORKBOOK_FORMAT_VERSION);
-    expect(about).toContain("2026-08-19T12:00:00.000Z");
-    const data = text(entries, "xl/worksheets/sheet4.xml");
-    expect(data).toContain("/surrounding_decoy/unlabeled_amount");
-    expect(data).toContain("17.5");
-    const context = text(entries, "xl/worksheets/sheet5.xml");
-    const gstr9 = text(entries, "xl/worksheets/sheet3.xml");
-    expect(gstr9).toContain("GSTR-9 is not the sum of twelve GSTR-3B returns");
-    expect(gstr9).toContain("Table 6A is auto-filled from Form GSTR-3B");
-    expect(gstr9).not.toContain("Tables 4 and 5");
-    expect(gstr9).not.toContain("Table 7");
-    expect(gstr9).toContain("2024-25");
-    expect(gstr9).not.toContain("<f>");
-    for (const identity of ["00XXXXX0000X0Z0", "Synthetic Workbook Taxpayer"]) {
-      expect(context.match(new RegExp(identity, "g"))).toHaveLength(1);
-      expect([about, statement, gstr9, data].join("\n")).not.toContain(identity);
+    const runDetails = text(entries, "xl/worksheets/sheet2.xml");
+    const detailRows = parsedRows(runDetails);
+    expect(detailRows[0]?.get("A1")?.text).toBe("Item");
+    expect(detailRows[0]?.get("B1")?.text).toBe("Details");
+    const detailKeys = detailRows
+      .slice(1)
+      .map((row, index) => row.get(`A${index + 2}`)?.text)
+      .filter((key): key is string => key !== undefined);
+    expect(new Set(detailKeys).size).toBe(detailKeys.length);
+    for (const key of [
+      "pack_version",
+      "generated_at",
+      "workbook_format_version",
+      "tidy_data_format_version",
+      "tidy_data_file",
+    ]) {
+      expect(detailKeys.filter((candidate) => candidate === key)).toHaveLength(1);
     }
+    for (const key of [
+      "financial_year",
+      "return_types",
+      "artifacts",
+      "planned_periods",
+      "included_statement_coverage",
+      "excluded_statement_coverage",
+      "gstr9_boundary",
+      "envelope_rule",
+      "array_rule",
+      "number_rule",
+      "text_rule",
+      "label_rule",
+      "identity_rule",
+      "workbook_number_rule",
+    ]) {
+      expect(detailKeys).toContain(key);
+    }
+    expect(runDetails).toContain(FILED_RETURNS_FULL_YEAR_WORKBOOK_FORMAT_VERSION);
+    expect(runDetails).toContain("2026-08-19T12:00:00.000Z");
+    expect(runDetails).toContain("Verified labels for Form GSTR-3B Tables 3.1 and 4");
+    expect(runDetails).toContain("This workbook does not produce GSTR-9 values");
+    for (const identity of ["00XXXXX0000X0Z0", "Synthetic Workbook Taxpayer"]) {
+      expect(runDetails.match(new RegExp(identity, "g"))).toHaveLength(1);
+      expect(statement).not.toContain(identity);
+    }
+    expect([statement, runDetails].join("\n")).not.toContain("/surrounding_decoy/unlabeled_amount");
   });
 });
 
