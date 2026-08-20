@@ -5,6 +5,7 @@ import "../../styles/global.css";
 import "../../styles/popup.css";
 import "../../styles/popup-controls.css";
 import { ScopeForm, ScopeFormAction } from "./components";
+import { ContextState } from "./context-state";
 import { canRetryFullFiscalYearZipWithoutPortal } from "./flow-summary";
 import {
   hasInlinePrimaryAction,
@@ -14,7 +15,7 @@ import {
 import { PackSummary } from "./pack-summary";
 import { LastRunDiagnostics } from "./last-run-diagnostics";
 import { PopupPrimaryActionSlot } from "./popup-primary-action-slot";
-import { getPopupPresentationState, type PopupPresentationState } from "./presentation-state";
+import { getPopupPresentationState } from "./presentation-state";
 import { RecoveryActions, hasRecoveryActions } from "./recovery-actions";
 import { usePackPopupController } from "./use-pack-popup-controller";
 
@@ -134,40 +135,6 @@ function App() {
         </div>
       </footer>
     </main>
-  );
-}
-
-function ContextState({
-  status,
-  onOpenPortal,
-}: {
-  status: PopupPresentationState;
-  onOpenPortal: () => void;
-}) {
-  const isSessionExpired = status.kind === "session-expired";
-  const isChecking = status.kind === "loading";
-  return (
-    <section className="context-state" aria-live="polite">
-      <div className="context-state-icon" aria-hidden="true">
-        {isSessionExpired ? "!" : "↗"}
-      </div>
-      <div className="context-state-content">
-        <p className="context-state-kicker">GST Portal status</p>
-        <h2>{isChecking ? "Checking this tab" : status.title}</h2>
-        <p>
-          {isChecking ? "Checking for a supported GST Portal page in this browser." : status.body}
-        </p>
-        {!isChecking ? (
-          <button
-            className="primary-action context-state-action"
-            type="button"
-            onClick={onOpenPortal}
-          >
-            {isSessionExpired ? "Open GST Portal sign-in" : "Open GST Portal"}
-          </button>
-        ) : null}
-      </div>
-    </section>
   );
 }
 
