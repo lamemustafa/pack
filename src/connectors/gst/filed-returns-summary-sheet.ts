@@ -37,7 +37,7 @@ export const FILED_RETURNS_SUMMARY_TEXT_RULE =
 export const FILED_RETURNS_SUMMARY_LABEL_RULE =
   "field_label is populated only by the return-type label map with recorded official-source provenance; otherwise it is empty and field_path remains canonical.";
 export const FILED_RETURNS_SUMMARY_IDENTITY_RULE =
-  "Recognized identity fields are removed from the data CSV and Data sheet. Invariant taxpayer identity is written once on the Context sheet; filing identity is written once per return type and period; inconsistent invariant identity values fail summary generation.";
+  "Recognized identity fields are removed from the data CSV. Invariant taxpayer identity is written once on the Run details sheet; filing identity is written once per return type and period; inconsistent invariant identity values fail summary generation.";
 
 export const FILED_RETURNS_SUMMARY_HEADERS = [
   "period",
@@ -309,7 +309,6 @@ function buildContextRows(
   const metadata = [
     ["format_version", FILED_RETURNS_SUMMARY_FORMAT_VERSION],
     ["data_file", FILED_RETURNS_SUMMARY_SHEET_PATH],
-    ["context_sheet", "Context"],
     ["financial_year", financialYears[0]!],
     ["return_types", sortedUnique(plan.map((entry) => entry.returnType)).join("|")],
     ["artifacts", sortedUnique(plan.map((entry) => entry.artifactType)).join("|")],

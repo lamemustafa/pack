@@ -6,19 +6,17 @@ import type {
   FiledReturnsSummarySheet,
 } from "./filed-returns-summary-sheet";
 import {
-  FILED_RETURNS_SUMMARY_CONTEXT_HEADERS,
   FILED_RETURNS_SUMMARY_FORMAT_VERSION,
-  FILED_RETURNS_SUMMARY_HEADERS,
   FILED_RETURNS_SUMMARY_SHEET_PATH,
 } from "./filed-returns-summary-sheet";
 import { filedReturnsStatementLineItems } from "./filed-returns-summary-labels";
 import { FILED_RETURNS_MONTHS, type FiledReturnsMonth } from "./filed-returns-scope";
 
 export const FILED_RETURNS_FULL_YEAR_WORKBOOK_PATH = "full-year-workbook.xlsx";
-export const FILED_RETURNS_FULL_YEAR_WORKBOOK_FORMAT_VERSION = "pack-full-year-workbook-v1";
+export const FILED_RETURNS_FULL_YEAR_WORKBOOK_FORMAT_VERSION = "pack-full-year-workbook-v2";
 
-const GSTR9_DISCLAIMER =
-  "GSTR-9 is not the sum of twelve GSTR-3B returns. Its Table 4 requires outward supplies split by counterparty type, which GSTR-3B does not contain, and it further requires amendments, ITC claimed in a later financial year, and reversals. This sheet shows where sourced 3B figures feed. It does not produce GSTR-9 values.";
+const GSTR9_BOUNDARY =
+  "GSTR-9 is not the sum of twelve GSTR-3B returns. Its Table 4 requires outward supplies split by counterparty type, which GSTR-3B does not contain, and it further requires amendments, ITC claimed in a later financial year, and reversals. This workbook does not produce GSTR-9 values.";
 const WORKBOOK_NUMBER_RULE =
   "Statement cells are numeric only when a portal decimal can be represented without changing its value and within spreadsheet precision; otherwise the cell is blank. Totals sum the numeric month cells only.";
 
@@ -27,23 +25,6 @@ interface WorkbookOptions {
   maxOutputBytes?: number;
   packVersion: string;
 }
-
-interface Gstr9ReferenceRow {
-  basis: string;
-  gstr3bLineItem: string;
-  gstr9Table: string;
-  verifiedFinancialYear: string;
-}
-
-const GSTR9_REFERENCE_ROWS: readonly Gstr9ReferenceRow[] = [
-  {
-    gstr3bLineItem: "Table 4(A) ITC available",
-    gstr9Table: "Table 6",
-    basis:
-      "Official GST Portal Manual > GSTR-9, section 14.3: Table 6 reports ITC availed and its Table 6A is auto-filled from Form GSTR-3B.",
-    verifiedFinancialYear: "2024-25",
-  },
-];
 
 export function buildFiledReturnsFullYearWorkbook(
   summary: FiledReturnsSummarySheet,
@@ -55,42 +36,63 @@ export function buildFiledReturnsFullYearWorkbook(
     {
       generatedAt: options.generatedAt,
       worksheets: [
-        aboutSheet(financialYear, plan, options),
         consolidatedSheet(financialYear, summary.dataRows),
-        gstr9ReferenceSheet(),
-        dataSheet(summary.dataRows),
-        contextSheet(summary.contextRows),
+        runDetailsSheet(summary.contextRows, options),
       ],
     },
     options.maxOutputBytes,
   );
 }
 
-function aboutSheet(
-  financialYear: string,
-  plan: readonly FiledReturnsSummaryPlanEntry[],
+function runDetailsSheet(
+  sourceRows: readonly FiledReturnsSummaryContextRow[],
   options: WorkbookOptions,
 ): XlsxWorksheet {
-  const returnTypes = [...new Set(plan.map((entry) => entry.returnType))].sort().join(" | ");
-  return keyValueSheet("About", [
-    ["Workbook format", FILED_RETURNS_FULL_YEAR_WORKBOOK_FORMAT_VERSION],
-    ["Tidy data format", FILED_RETURNS_SUMMARY_FORMAT_VERSION],
-    ["Tidy data file", FILED_RETURNS_SUMMARY_SHEET_PATH],
-    ["Pack version", options.packVersion],
-    ["Generated at", options.generatedAt.toISOString()],
-    ["Financial year", financialYear],
-    ["Return types", returnTypes],
+  const rows: Array<readonly [string, string]> = [
+    ["pack_version", options.packVersion],
+    ["generated_at", options.generatedAt.toISOString()],
+    ["workbook_format_version", FILED_RETURNS_FULL_YEAR_WORKBOOK_FORMAT_VERSION],
+    ["tidy_data_format_version", FILED_RETURNS_SUMMARY_FORMAT_VERSION],
+    ["tidy_data_file", FILED_RETURNS_SUMMARY_SHEET_PATH],
+    ...["financial_year", "return_types", "artifacts", "planned_periods"].map((contextKey) =>
+      requiredContextEntry(sourceRows, "run_metadata", contextKey),
+    ),
+    ["included_statement_coverage", "Verified labels for Form GSTR-3B Tables 3.1 and 4."],
     [
-      "Purpose",
-      "A local comparative working paper derived from parseable portal JSON already present in this user-requested ZIP.",
+      "excluded_statement_coverage",
+      "Form GSTR-3B Tables 3.1.1, 3.2, 5.1 and 6.1 remain in full-year-summary.csv when present because their statement labels are not yet verified.",
     ],
-    ["Included statement coverage", "Verified labels for Form GSTR-3B Tables 3.1 and 4."],
-    [
-      "Excluded statement coverage",
-      "Form GSTR-3B Tables 3.1.1, 3.2, 5.1 and 6.1 remain on Data when present because their statement labels are not yet verified.",
+    ["gstr9_boundary", GSTR9_BOUNDARY],
+    ...[
+      "envelope_rule",
+      "array_rule",
+      "number_rule",
+      "text_rule",
+      "label_rule",
+      "identity_rule",
+    ].map((contextKey) => requiredContextEntry(sourceRows, "format_rule", contextKey)),
+    ["workbook_number_rule", WORKBOOK_NUMBER_RULE],
+    ...sourceRows
+      .filter(
+        (row) => row.contextType === "taxpayer_identity" || row.contextType === "return_identity",
+      )
+      .map(
+        (row) => [`${row.contextType}:${row.contextKey}:${row.fieldLabel}`, row.valueText] as const,
+      ),
+  ];
+  assertUniqueContextKeys(rows.map(([key]) => key));
+  return {
+    name: "Run details",
+    freezeFirstColumnAndTopRow: true,
+    columns: [{ width: 48 }, { width: 110 }],
+    rows: [
+      [
+        { value: "Item", style: "bold" },
+        { value: "Details", style: "bold" },
+      ],
+      ...rows.map(([key, value]) => [{ value: key }, { value }]),
     ],
-    ["GSTR-9 boundary", "Reference mapping only; this workbook does not compute GSTR-9."],
-  ]);
+  };
 }
 
 function consolidatedSheet(
@@ -170,98 +172,24 @@ function exactSpreadsheetNumber(input: string): number | null {
   return value;
 }
 
-function gstr9ReferenceSheet(): XlsxWorksheet {
-  return {
-    name: "GSTR-9 Reference",
-    columns: [{ width: 54 }, { width: 28 }, { width: 135 }, { width: 22 }],
-    rows: [
-      [{ value: GSTR9_DISCLAIMER }],
-      [],
-      [
-        { value: "GSTR-3B line item", style: "bold" },
-        { value: "GSTR-9 table it feeds", style: "bold" },
-        { value: "Basis", style: "bold" },
-        { value: "Verified financial year", style: "bold" },
-      ],
-      ...GSTR9_REFERENCE_ROWS.map((row) => [
-        { value: row.gstr3bLineItem },
-        { value: row.gstr9Table },
-        { value: row.basis },
-        { value: row.verifiedFinancialYear },
-      ]),
-    ],
-  };
+function requiredContextEntry(
+  rows: readonly FiledReturnsSummaryContextRow[],
+  contextType: FiledReturnsSummaryContextRow["contextType"],
+  contextKey: string,
+): readonly [string, string] {
+  const matches = rows.filter(
+    (row) => row.contextType === contextType && row.contextKey === contextKey,
+  );
+  if (matches.length !== 1) throw new SyntaxError("Workbook run detail must have one source row.");
+  return [contextKey, matches[0]!.valueText];
 }
 
-function dataSheet(rows: readonly FiledReturnsSummaryDataRow[]): XlsxWorksheet {
-  return {
-    name: "Data",
-    freezeFirstColumnAndTopRow: true,
-    columns: FILED_RETURNS_SUMMARY_HEADERS.map((header) => ({
-      width: header === "field_label" ? 120 : header === "field_path" ? 72 : 20,
-    })),
-    rows: [
-      FILED_RETURNS_SUMMARY_HEADERS.map((header) => ({ value: header, style: "bold" })),
-      ...rows.map((row) => dataCells(row)),
-    ],
-  };
-}
-
-function dataCells(row: FiledReturnsSummaryDataRow): Array<XlsxCell | undefined> {
-  return [
-    { value: row.period },
-    { value: row.returnType },
-    { value: row.artifact },
-    { value: row.outcome },
-    { value: row.fieldLabel },
-    { value: row.fieldPath },
-    row.valueText === undefined ? undefined : { value: row.valueText },
-    row.valueNumber === undefined ? undefined : { value: row.valueNumber },
-  ];
-}
-
-function contextSheet(rows: readonly FiledReturnsSummaryContextRow[]): XlsxWorksheet {
-  const augmentedRows = [
-    ...rows,
-    {
-      contextType: "format_rule" as const,
-      contextKey: "workbook_number_rule",
-      fieldLabel: "",
-      fieldPath: "",
-      valueText: WORKBOOK_NUMBER_RULE,
-    },
-  ];
-  return {
-    name: "Context",
-    freezeFirstColumnAndTopRow: true,
-    columns: FILED_RETURNS_SUMMARY_CONTEXT_HEADERS.map((header) => ({
-      width: header === "value_text" ? 110 : header === "field_path" ? 55 : 24,
-    })),
-    rows: [
-      FILED_RETURNS_SUMMARY_CONTEXT_HEADERS.map((header) => ({ value: header, style: "bold" })),
-      ...augmentedRows.map((row) => [
-        { value: row.contextType },
-        { value: row.contextKey },
-        { value: row.fieldLabel },
-        { value: row.fieldPath },
-        { value: row.valueText },
-      ]),
-    ],
-  };
-}
-
-function keyValueSheet(name: string, rows: readonly (readonly [string, string])[]): XlsxWorksheet {
-  return {
-    name,
-    columns: [{ width: 32 }, { width: 110 }],
-    rows: [
-      [
-        { value: "Item", style: "bold" },
-        { value: "Details", style: "bold" },
-      ],
-      ...rows.map(([key, value]) => [{ value: key }, { value }]),
-    ],
-  };
+function assertUniqueContextKeys(rows: readonly string[]): void {
+  const keys = new Set<string>();
+  for (const key of rows) {
+    if (keys.has(key)) throw new SyntaxError("Workbook run detail keys must be unique.");
+    keys.add(key);
+  }
 }
 
 function financialYearMonthSerials(financialYear: string): number[] {
