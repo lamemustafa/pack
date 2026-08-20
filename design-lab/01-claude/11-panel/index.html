@@ -3,36 +3,29 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Pack — target plan panel prototype</title>
+    <title>Pack — panel prototype</title>
     <style>
       :root {
-        /* the collapsed Pack token set, verbatim from src/styles/global.css */
-        --pack-surface: #ffffff;
-        --pack-surface-muted: #f7f9fb;
-        --pack-canvas: #f5f7fa;
-        --pack-surface-inset: #eef3f8;
-        --pack-surface-accent-soft: #e9f1f8;
-        --pack-surface-sunken: #e5ebf2;
-        --pack-ink-primary: #172033;
-        --pack-ink-secondary: #334155;
-        --pack-ink-tertiary: #43566b;
-        --pack-ink-muted: #526477;
-        --pack-ink-link: #244d7c;
-        --pack-ink-inverse: #ffffff;
-        --pack-border-subtle: #d8e1ec;
-        --pack-border-default: #c8d3de;
-        --pack-border-strong: #9fb0c1;
-        --pack-action: #173a63;
-        --pack-action-hover: #0f2a49;
-        --pack-success-fg: #115d38;
-        --pack-success-bg: #e8f8ef;
-        --pack-success-border: #9cc7b1;
-        --pack-warning-fg: #75420b;
-        --pack-warning-bg: #fff7e8;
-        --pack-warning-border: #ddc58b;
-        --pack-danger-fg: #7b241c;
-        --pack-danger-bg: #fff0ee;
-        --pack-danger-border: #e5b3ac;
+        --surface: #ffffff;
+        --surface-muted: #f7f9fb;
+        --canvas: #f5f7fa;
+        --inset: #eef3f8;
+        --sunken: #e5ebf2;
+        --ink: #172033;
+        --ink-2: #334155;
+        --ink-muted: #526477;
+        --link: #244d7c;
+        --inverse: #ffffff;
+        --b-subtle: #d8e1ec;
+        --b-default: #c8d3de;
+        --b-strong: #9fb0c1;
+        --action: #173a63;
+        --action-hover: #0f2a49;
+        --ok-fg: #115d38;
+        --ok-bg: #e8f8ef;
+        --warn-fg: #75420b;
+        --warn-bg: #fff7e8;
+        --warn-bd: #ddc58b;
         --sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
         --mono: ui-monospace, "SF Mono", Menlo, monospace;
       }
@@ -41,8 +34,8 @@
       }
       body {
         margin: 0;
-        background: var(--pack-canvas);
-        color: var(--pack-ink-primary);
+        background: var(--canvas);
+        color: var(--ink);
         font-family: var(--sans);
         font-size: 15px;
         line-height: 1.5;
@@ -50,587 +43,313 @@
       }
       .stage {
         display: flex;
-        gap: 24px;
+        gap: 28px;
         align-items: flex-start;
         flex-wrap: wrap;
       }
-      .caption {
+      .cap {
         font-family: var(--mono);
         font-size: 11px;
         letter-spacing: 0.08em;
         text-transform: uppercase;
-        color: var(--pack-ink-muted);
+        color: var(--ink-muted);
         margin: 0 0 8px;
       }
-      /* ---- the panel ---- */
       .panel {
-        width: 400px;
-        min-height: 620px;
-        display: flex;
-        flex-direction: column;
-        border: 1px solid var(--pack-border-default);
-        border-radius: 10px;
-        background: var(--pack-surface-inset);
+        width: 380px;
+        border: 1px solid var(--b-default);
+        border-radius: 8px;
+        background: var(--surface);
         overflow: hidden;
       }
-      .phead {
+      .head {
         display: flex;
         align-items: center;
         gap: 8px;
-        padding: 10px 12px;
-        background: var(--pack-surface);
-        border-bottom: 1px solid var(--pack-border-subtle);
+        padding: 10px 14px;
       }
       .mark {
-        width: 22px;
-        height: 22px;
-        border-radius: 5px;
-        background: var(--pack-action);
+        width: 20px;
+        height: 20px;
+        border-radius: 4px;
+        background: var(--action);
         display: grid;
         place-items: center;
         flex: 0 0 auto;
       }
-      .pname {
+      .name {
         font-weight: 600;
         letter-spacing: -0.01em;
       }
-      .ppub {
+      .pub {
         margin-left: auto;
         font-family: var(--mono);
         font-size: 10px;
-        color: var(--pack-ink-muted);
+        color: var(--ink-muted);
       }
       .src {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--ok-fg);
+        padding: 0 14px 10px;
         display: flex;
         align-items: center;
         gap: 6px;
-        font-family: var(--mono);
-        font-size: 11px;
-        color: var(--pack-ink-secondary);
-        background: var(--pack-success-bg);
-        border-bottom: 1px solid var(--pack-success-border);
-        padding: 6px 12px;
       }
       .dot {
         width: 6px;
         height: 6px;
         border-radius: 50%;
-        background: var(--pack-success-fg);
+        background: var(--ok-fg);
       }
-      .band {
-        padding: 12px;
-        border-bottom: 1px solid var(--pack-border-subtle);
-        background: var(--pack-surface);
+      .body {
+        padding: 14px;
+        border-top: 1px solid var(--b-subtle);
       }
-      .band:last-of-type {
-        border-bottom: 0;
-      }
-      .bandhead {
-        display: flex;
-        align-items: baseline;
-        gap: 8px;
-        margin-bottom: 8px;
-      }
-      .step {
-        font-family: var(--mono);
-        font-size: 10px;
-        letter-spacing: 0.1em;
-        color: var(--pack-ink-muted);
-        border: 1px solid var(--pack-border-default);
-        border-radius: 3px;
-        padding: 0 4px;
-      }
-      .bandhead h2 {
-        margin: 0;
-        font-size: 15px;
+      h2 {
+        margin: 0 0 10px;
+        font-size: 16px;
         font-weight: 600;
-        letter-spacing: -0.01em;
+        letter-spacing: -0.012em;
       }
-      .recipes {
-        display: grid;
-        gap: 5px;
-      }
-      .recipe {
+      .choice {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 8px;
+        gap: 10px;
+        width: 100%;
         text-align: left;
+        font: inherit;
+        font-size: 14px;
+        color: var(--ink);
+        background: var(--surface);
+        border: 1px solid var(--b-subtle);
+        border-radius: 6px;
+        padding: 10px 12px;
+        margin-bottom: 6px;
+        cursor: pointer;
+      }
+      .choice:hover {
+        border-color: var(--b-strong);
+        background: var(--surface-muted);
+      }
+      .choice .n {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--ink-muted);
+        white-space: nowrap;
+      }
+      .more {
         font: inherit;
         font-size: 13px;
-        color: var(--pack-ink-primary);
-        background: var(--pack-surface-muted);
-        border: 1px solid var(--pack-border-subtle);
-        border-radius: 6px;
-        padding: 7px 9px;
-        cursor: pointer;
-      }
-      .recipe:hover {
-        border-color: var(--pack-border-strong);
-      }
-      .recipe[aria-pressed="true"] {
-        border-color: var(--pack-action);
-        background: var(--pack-surface-accent-soft);
-      }
-      .recipe span.n {
-        font-family: var(--mono);
-        font-size: 10px;
-        color: var(--pack-ink-muted);
-      }
-      .recipe[disabled] {
-        opacity: 0.5;
-        cursor: default;
-      }
-      /* matrix */
-      table.mx {
-        width: 100%;
-        border-collapse: separate;
-        border-spacing: 2px;
-      }
-      table.mx th,
-      table.mx td {
-        padding: 0;
-      }
-      table.mx thead th {
-        font-family: var(--mono);
-        font-size: 9px;
-        font-weight: 500;
-        color: var(--pack-ink-muted);
-        padding-bottom: 3px;
-        cursor: pointer;
-      }
-      table.mx tbody th {
-        font-family: var(--mono);
-        font-size: 10px;
-        font-weight: 600;
-        color: var(--pack-ink-secondary);
-        text-align: left;
-        white-space: nowrap;
-        padding-right: 5px;
-        cursor: pointer;
-      }
-      table.mx thead th:hover,
-      table.mx tbody th:hover {
-        color: var(--pack-ink-link);
-        text-decoration: underline;
-      }
-      .cell {
-        display: block;
-        width: 100%;
-        height: 20px;
-        border: 1px solid var(--pack-border-default);
-        border-radius: 2px;
-        background: var(--pack-surface);
-        font-family: var(--mono);
-        font-size: 9px;
-        line-height: 18px;
-        text-align: center;
-        color: var(--pack-ink-muted);
-        cursor: pointer;
-        padding: 0;
-      }
-      .cell[data-on="1"] {
-        background: var(--pack-action);
-        border-color: var(--pack-action);
-        color: var(--pack-ink-inverse);
-      }
-      .cell[data-na="1"] {
-        background: repeating-linear-gradient(
-          135deg,
-          var(--pack-surface-sunken) 0 3px,
-          transparent 3px 6px
-        );
-        border-color: var(--pack-border-subtle);
-        cursor: not-allowed;
-      }
-      .cell[data-st="saved"] {
-        background: var(--pack-success-bg);
-        border-color: var(--pack-success-border);
-        color: var(--pack-success-fg);
-      }
-      .cell[data-st="running"] {
-        background: var(--pack-ink-link);
-        border-color: var(--pack-ink-link);
-        color: var(--pack-ink-inverse);
-      }
-      .cell[data-st="needs-review"] {
-        background: var(--pack-warning-bg);
-        border-color: var(--pack-warning-border);
-        color: var(--pack-warning-fg);
-      }
-      .cell[data-st="skipped"] {
-        background: var(--pack-surface-sunken);
-        border-color: var(--pack-border-default);
-        color: var(--pack-ink-muted);
-      }
-      .sources {
-        display: flex;
-        gap: 4px;
-        padding: 6px 12px;
-        background: var(--pack-surface-muted);
-        border-bottom: 1px solid var(--pack-border-subtle);
-        font-family: var(--mono);
-        font-size: 10px;
-      }
-      .source {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        border: 1px solid var(--pack-border-subtle);
-        border-radius: 3px;
-        padding: 2px 6px;
-        color: var(--pack-ink-muted);
-      }
-      .source.live {
-        border-color: var(--pack-success-border);
-        background: var(--pack-success-bg);
-        color: var(--pack-success-fg);
-      }
-      .source.planned {
-        opacity: 0.6;
-      }
-      .outband {
-        padding: 10px 12px;
-        border-bottom: 1px solid var(--pack-border-subtle);
-        background: var(--pack-surface-muted);
-      }
-      .outopt {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-        width: 100%;
-        text-align: left;
-        font: inherit;
-        font-size: 12px;
-        color: var(--pack-ink-primary);
-        background: var(--pack-surface);
-        border: 1px solid var(--pack-border-subtle);
-        border-radius: 4px;
-        padding: 5px 8px;
-        margin-bottom: 4px;
-        cursor: pointer;
-      }
-      .outopt[aria-pressed="true"] {
-        border-color: var(--pack-action);
-        background: var(--pack-surface-accent-soft);
-      }
-      .outopt[disabled] {
-        opacity: 0.55;
-        cursor: default;
-      }
-      .outopt .n {
-        font-family: var(--mono);
-        font-size: 9px;
-        color: var(--pack-ink-muted);
-        text-align: right;
-      }
-      .gtitle {
-        font-family: var(--mono);
-        font-size: 9px;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-        color: var(--pack-ink-muted);
-        margin: 8px 0 4px;
-      }
-      .gtitle:first-child {
-        margin-top: 0;
-      }
-      .mxwrap {
-        overflow-x: auto;
-        overscroll-behavior-x: contain;
-        border: 1px solid var(--pack-border-subtle);
-        border-radius: 4px;
-        background: var(--pack-surface);
-      }
-      .mx .corner {
-        position: sticky;
-        left: 0;
-        z-index: 2;
-        background: var(--pack-surface);
-      }
-      .mx .rowh {
-        position: sticky;
-        left: 0;
-        z-index: 2;
-        background: var(--pack-surface);
-        padding: 0 6px 0 4px;
-      }
-      .mx .fyh {
-        font-size: 9px;
-        color: var(--pack-ink-secondary);
-        background: var(--pack-surface-inset);
-        border: 1px solid var(--pack-border-subtle);
-        border-radius: 3px;
-        white-space: nowrap;
-        padding: 2px 4px;
-      }
-      .mx .fyh:hover {
-        background: var(--pack-surface-accent-soft);
-        color: var(--pack-ink-link);
-      }
-      .cell.wide {
-        width: auto;
-        min-width: 100%;
-        font-size: 8px;
-        letter-spacing: 0.04em;
-      }
-      .yearsel {
-        font: inherit;
-        font-size: 15px;
-        font-weight: 600;
-        letter-spacing: -0.01em;
-        color: var(--pack-ink-primary);
-        background: transparent;
+        color: var(--link);
+        background: none;
         border: 0;
-        border-bottom: 1px dashed var(--pack-border-strong);
-        padding: 0 2px 1px;
+        padding: 4px 8px 0 0;
         cursor: pointer;
+        text-decoration: underline;
+        text-underline-offset: 2px;
       }
-      .hint {
-        font-family: var(--mono);
-        font-size: 10px;
-        color: var(--pack-ink-muted);
-        margin: 6px 0 0;
-      }
-      .mx.dragging .cell {
-        cursor: crosshair;
-      }
-      .chips {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 4px;
-        margin-top: 8px;
-      }
-      .chip {
-        font-family: var(--mono);
-        font-size: 10px;
-        border: 1px solid var(--pack-border-default);
-        border-radius: 999px;
-        padding: 2px 8px;
-        background: var(--pack-surface);
-        color: var(--pack-ink-secondary);
-        cursor: pointer;
-      }
-      .chip[aria-pressed="true"] {
-        background: var(--pack-ink-primary);
-        border-color: var(--pack-ink-primary);
-        color: var(--pack-ink-inverse);
-      }
-      /* ledger */
-      .ledger {
-        flex: 1;
-        overflow: auto;
-        background: var(--pack-surface);
-      }
-      table.rows {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 12px;
-      }
-      table.rows thead th {
-        position: sticky;
-        top: 0;
-        background: var(--pack-surface-muted);
-        text-align: left;
-        font-family: var(--mono);
-        font-size: 9px;
-        font-weight: 600;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        color: var(--pack-ink-muted);
-        border-bottom: 1px solid var(--pack-border-default);
-        padding: 5px 8px;
-      }
-      table.rows td {
-        border-bottom: 1px solid var(--pack-border-subtle);
-        padding: 5px 8px;
-        color: var(--pack-ink-secondary);
-        vertical-align: top;
-      }
-      table.rows tr[data-sel="1"] td {
-        background: var(--pack-surface-accent-soft);
-      }
-      .tgt {
-        font-family: var(--mono);
-        color: var(--pack-ink-primary);
-        white-space: nowrap;
-      }
-      .pill {
-        display: inline-block;
-        font-family: var(--mono);
-        font-size: 9px;
-        border-radius: 3px;
-        padding: 1px 5px;
-        border: 1px solid;
-        white-space: nowrap;
-      }
-      .pill.planned,
-      .pill.queued {
-        color: var(--pack-ink-muted);
-        border-color: var(--pack-border-default);
-        background: var(--pack-surface-muted);
-      }
-      .pill.running {
-        color: var(--pack-ink-inverse);
-        border-color: var(--pack-ink-link);
-        background: var(--pack-ink-link);
-      }
-      .pill.saved {
-        color: var(--pack-success-fg);
-        border-color: var(--pack-success-border);
-        background: var(--pack-success-bg);
-      }
-      .pill\.needs-review,
-      .pill.needs-review {
-        color: var(--pack-warning-fg);
-        border-color: var(--pack-warning-border);
-        background: var(--pack-warning-bg);
-      }
-      .pill.skipped {
-        color: var(--pack-danger-fg);
-        border-color: var(--pack-danger-border);
-        background: var(--pack-danger-bg);
-      }
-      .pill.unavailable {
-        color: var(--pack-ink-muted);
-        border-color: var(--pack-border-subtle);
-        background: var(--pack-surface-sunken);
-      }
-      .ev {
-        font-family: var(--mono);
-        font-size: 10px;
-        color: var(--pack-ink-muted);
-      }
-      /* review */
-      .review {
-        margin: 8px;
-        border: 1px solid var(--pack-warning-border);
-        background: var(--pack-warning-bg);
-        border-radius: 6px;
-        padding: 10px;
-      }
-      .review h3 {
-        margin: 0 0 4px;
-        font-size: 14px;
-        font-weight: 600;
-        color: var(--pack-ink-primary);
-      }
-      .review p {
-        margin: 0 0 8px;
-        font-size: 12px;
-        color: var(--pack-ink-secondary);
-      }
-      .acts {
-        display: grid;
-        gap: 4px;
+      .foot {
+        border-top: 1px solid var(--b-subtle);
+        padding: 12px 14px;
+        background: var(--surface-muted);
       }
       .btn {
+        width: 100%;
         font: inherit;
-        font-size: 12px;
+        font-size: 14px;
         font-weight: 600;
-        border-radius: 5px;
-        padding: 7px 10px;
+        color: var(--inverse);
+        background: var(--action);
+        border: 1px solid var(--action);
+        border-radius: 6px;
+        padding: 10px;
         cursor: pointer;
-        border: 1px solid var(--pack-action);
-        background: var(--pack-action);
-        color: var(--pack-ink-inverse);
-        text-align: center;
       }
       .btn:hover {
-        background: var(--pack-action-hover);
-      }
-      .btn.ghost {
-        background: var(--pack-surface);
-        color: var(--pack-ink-secondary);
-        border-color: var(--pack-border-default);
-      }
-      .btn.ghost:hover {
-        background: var(--pack-surface-muted);
-        border-color: var(--pack-border-strong);
+        background: var(--action-hover);
       }
       .btn[disabled] {
         opacity: 0.45;
         cursor: default;
       }
-      .acts .btn {
-        text-align: left;
+      .btn.ghost {
+        background: var(--surface);
+        color: var(--ink-2);
+        border-color: var(--b-default);
       }
-      .pfoot {
-        border-top: 1px solid var(--pack-border-subtle);
-        background: var(--pack-surface);
-        padding: 10px 12px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-      .cost {
-        font-family: var(--mono);
-        font-size: 11px;
-        color: var(--pack-ink-secondary);
-        line-height: 1.35;
-        flex: 1;
-      }
-      .cost b {
-        color: var(--pack-ink-primary);
-      }
-      .note {
+      .fine {
         font-family: var(--mono);
         font-size: 10px;
-        color: var(--pack-ink-muted);
-        padding: 6px 12px;
-        border-top: 1px solid var(--pack-border-subtle);
-        background: var(--pack-surface-muted);
+        color: var(--ink-muted);
+        margin: 8px 0 0;
+        text-align: center;
       }
-      /* popup */
-      .popup {
-        width: 300px;
-        border: 1px solid var(--pack-border-default);
-        border-radius: 10px;
-        background: var(--pack-surface-inset);
+      .grid {
+        border: 1px solid var(--b-subtle);
+        border-radius: 6px;
         overflow: hidden;
+        margin-bottom: 8px;
       }
-      .popup .body {
+      table.mx {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .mx th,
+      .mx td {
+        padding: 0;
+      }
+      .mx thead th {
+        font-family: var(--mono);
+        font-size: 9px;
+        font-weight: 500;
+        color: var(--ink-muted);
+        padding: 4px 0;
+        background: var(--surface-muted);
+        border-bottom: 1px solid var(--b-subtle);
+      }
+      .mx .fy {
+        font-family: var(--mono);
+        font-size: 9px;
+        font-weight: 500;
+        color: var(--ink-muted);
+        text-align: left;
+        padding: 4px 6px;
+        background: var(--inset);
+      }
+      .mx tbody th.rowh {
+        font-family: var(--mono);
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--ink-2);
+        text-align: left;
+        padding: 0 6px;
+        cursor: pointer;
+        background: var(--surface-muted);
+        border-right: 1px solid var(--b-subtle);
+      }
+      .mx tbody th.rowh:hover {
+        color: var(--link);
+      }
+      .cell {
+        display: block;
+        width: 100%;
+        height: 24px;
+        border: 0;
+        border-right: 1px solid var(--b-subtle);
+        border-bottom: 1px solid var(--b-subtle);
+        background: var(--surface);
+        font-family: var(--mono);
+        font-size: 9px;
+        color: var(--ink-muted);
+        cursor: pointer;
+        padding: 0;
+      }
+      .cell[data-on="1"] {
+        background: var(--action);
+        color: var(--inverse);
+      }
+      .cell[data-na="1"] {
+        background: var(--sunken);
+        cursor: not-allowed;
+      }
+      .hint {
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--ink-muted);
+        margin: 0 0 8px;
+      }
+      .rows {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+      .rows td {
+        padding: 5px 0;
+        border-bottom: 1px solid var(--b-subtle);
+        color: var(--ink-2);
+      }
+      .rows td.t {
+        font-family: var(--mono);
+        color: var(--ink);
+        white-space: nowrap;
+      }
+      .rows td.e {
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--ink-muted);
+        text-align: right;
+      }
+      .review {
+        border: 1px solid var(--warn-bd);
+        background: var(--warn-bg);
+        border-radius: 6px;
         padding: 12px;
-        display: grid;
-        gap: 6px;
+        margin-bottom: 10px;
+      }
+      .review h3 {
+        margin: 0 0 4px;
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .review p {
+        margin: 0 0 10px;
+        font-size: 13px;
+        color: var(--ink-2);
+      }
+      .review .btn {
+        margin-bottom: 5px;
+        text-align: left;
+      }
+      .status {
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--ink-2);
+        margin: 0 0 10px;
+      }
+      .status b {
+        color: var(--ink);
       }
       .aside {
-        max-width: 26rem;
+        max-width: 25rem;
         font-size: 13px;
-        color: var(--pack-ink-secondary);
+        color: var(--ink-2);
       }
       .aside h3 {
         font-size: 13px;
-        margin: 16px 0 4px;
-        color: var(--pack-ink-primary);
-      }
-      .aside code {
-        font-family: var(--mono);
-        font-size: 11px;
-        background: var(--pack-surface-sunken);
-        padding: 1px 4px;
-        border-radius: 3px;
+        margin: 18px 0 4px;
+        color: var(--ink);
       }
       .aside ul {
         padding-left: 18px;
         margin: 4px 0;
+      }
+      .aside li {
+        margin-bottom: 3px;
+      }
+      .aside code {
+        font-family: var(--mono);
+        font-size: 11px;
+        background: var(--sunken);
+        padding: 1px 4px;
+        border-radius: 3px;
       }
     </style>
   </head>
   <body>
     <div class="stage">
       <div>
-        <p class="caption">Panel — Phase A mounts as an extension page, Phase B as a side panel</p>
+        <p class="cap">Panel — default view</p>
         <div class="panel">
-          <div class="phead">
+          <div class="head">
             <span class="mark" aria-hidden="true"
-              ><svg width="13" height="13" viewBox="0 0 24 24">
+              ><svg width="12" height="12" viewBox="0 0 24 24">
                 <path
                   d="M7 3H4v18h3M17 3h3v18h-3"
                   fill="none"
                   stroke="#A9C8FF"
-                  stroke-width="2.2"
+                  stroke-width="2.4"
                   stroke-linecap="square"
                 />
                 <rect x="9" y="7" width="2.6" height="2.6" fill="#fff" />
@@ -640,152 +359,59 @@
                 <rect x="9" y="14.6" width="2.6" height="2.6" fill="#fff" />
                 <rect x="12.8" y="14.6" width="2.6" height="2.6" fill="#fff" /></svg
             ></span>
-            <span class="pname">Pack</span><span class="ppub">ComplyEaze</span>
+            <span class="name">Pack</span><span class="pub">ComplyEaze</span>
           </div>
-          <div class="sources" id="sources"></div>
-
-          <div class="band">
-            <div class="bandhead">
-              <span class="step">1</span>
-              <h2>What do you need?</h2>
-            </div>
-            <div class="recipes" id="recipes"></div>
+          <div class="src"><span class="dot"></span>GST portal · signed in</div>
+          <div class="body" id="body"></div>
+          <div class="foot">
+            <button class="btn" id="go" type="button" hidden></button>
+            <p class="fine">Local only · nothing leaves this device.</p>
           </div>
-
-          <div class="band">
-            <div class="bandhead">
-              <span class="step">2</span>
-              <h2>Periods</h2>
-              <span class="ppub" style="margin-left: auto" id="selcount"></span>
-            </div>
-            <div class="mxwrap"><table class="mx" id="mx"></table></div>
-            <div class="chips" id="chips"></div>
-            <p class="hint">
-              Scroll for older years. Click a year header to take the whole year, a row label for
-              every period of one return. Hatched cells say why on hover.
-            </p>
-          </div>
-
-          <div class="band" style="padding: 0">
-            <div class="bandhead" style="padding: 12px 12px 0">
-              <span class="step">3</span>
-              <h2 id="planhead">Plan</h2>
-            </div>
-            <div class="outband" id="outband" hidden></div>
-            <div id="reviewslot"></div>
-            <div class="ledger" style="max-height: 210px">
-              <table class="rows" id="rows">
-                <thead>
-                  <tr>
-                    <th>Target</th>
-                    <th>Fmt</th>
-                    <th>Status</th>
-                    <th>Evidence</th>
-                  </tr>
-                </thead>
-                <tbody></tbody>
-              </table>
-            </div>
-          </div>
-
-          <div class="pfoot">
-            <span class="cost" id="cost"></span>
-            <button class="btn" id="go" type="button">Build pack</button>
-          </div>
-          <p class="note" id="note">Local only · nothing leaves this device.</p>
         </div>
       </div>
 
-      <div>
-        <p class="caption">Popup — all 420×560 should ever have done</p>
-        <div class="popup">
-          <div class="phead">
-            <span class="mark" aria-hidden="true"
-              ><svg width="13" height="13" viewBox="0 0 24 24">
-                <path
-                  d="M7 3H4v18h3M17 3h3v18h-3"
-                  fill="none"
-                  stroke="#A9C8FF"
-                  stroke-width="2.2"
-                  stroke-linecap="square"
-                />
-                <rect x="9" y="7" width="2.6" height="2.6" fill="#fff" />
-                <rect x="12.8" y="7" width="2.6" height="2.6" fill="#fff" />
-                <rect x="9" y="10.8" width="2.6" height="2.6" fill="#fff" />
-                <rect x="12.8" y="10.8" width="2.6" height="2.6" fill="#fff" /></svg
-            ></span>
-            <span class="pname">Pack</span>
-          </div>
-          <div class="body">
-            <span class="cost" id="popupstat"><b>No run in progress</b></span>
-            <button class="btn" type="button">Open plan</button>
-            <button class="btn ghost" type="button">Reset Pack</button>
-          </div>
-          <p class="note">Local only · nothing leaves this device.</p>
-        </div>
-
-        <div class="aside">
-          <h3>Try it</h3>
-          <ul>
-            <li>Click a <b>recipe</b>, or drag across cells to paint a range.</li>
-            <li>
-              Click a <b>year header</b> to take that whole financial year — click two for two
-              years. Click a <b>row label</b> for every available period of one return.
-            </li>
-            <li>
-              Scroll the matrix sideways for older years. Ten are available, matching the real
-              <code>getFiledReturnsFinancialYearOptions</code>.
-            </li>
-            <li>Press <b>Build pack</b> — July's GSTR-3B pauses for review, on purpose.</li>
-          </ul>
-          <h3>What it demonstrates</h3>
-          <ul>
-            <li>
-              <b>Time is one axis, grouped by year.</b> A dropdown cannot express "the last three
-              years", which is the whole point of a result-driven request.
-            </li>
-            <li>
-              <b>Granularity belongs to the document.</b> GSTR-9 is annual, so its row is one cell
-              per year rather than twelve. An income-tax return would behave the same way.
-            </li>
-            <li>
-              <b>Deliver and Also include are different questions.</b> Individual files disables
-              itself above five, because 56 files means 56 browser dialogs.
-            </li>
-            <li>
-              Computed artifacts are listed only when the selection could produce them, and say
-              <b>not built yet</b> when Pack cannot yet make them. There is no consolidation code in
-              <code>src/</code> today, and the UI must not imply otherwise.
-            </li>
-            <li>
-              <code>skipped</code> is terminal and still blocks plan completion — the footer never
-              says "complete" while a row is skipped.
-            </li>
-          </ul>
-        </div>
+      <div class="aside">
+        <h3>What changed</h3>
+        <p>
+          The previous version put 370 matrix cells, five recipes, three format chips, two delivery
+          options and four computed-artifact checkboxes on screen at once, in a 400px panel. Every
+          one was added to answer a real problem. Together they were worse than the popup they
+          replaced. That file is kept beside this one as
+          <code>_previous-overbuilt.html</code>.
+        </p>
+        <p>
+          This version opens with <b>three choices and no button</b>. Everything else still exists,
+          behind <i>Choose periods</i>, for the person who needs it.
+        </p>
+        <h3>Removed outright</h3>
+        <ul>
+          <li>
+            <b>Four computed-artifact checkboxes.</b> Three read "not built yet". A control for
+            something that does not exist is noise.
+          </li>
+          <li>
+            <b>The delivery choice.</b> More than one file is always a ZIP, because the alternative
+            is one browser dialog per file. The button states it rather than asking.
+          </li>
+          <li>
+            <b>Format chips.</b> Each return has a right default. Formats belong in the custom view,
+            not the first screen.
+          </li>
+          <li>
+            <b>Ten years by default.</b> It opens on the current year; earlier years are one click
+            away.
+          </li>
+        </ul>
+        <h3>Unchanged</h3>
+        <ul>
+          <li>A paused target asks one question with three answers.</li>
+          <li><code>skipped</code> is terminal and still blocks completion.</li>
+          <li>Every cell is one target with its own binding and download evidence.</li>
+        </ul>
       </div>
     </div>
 
     <script>
-      // Pack acts on the tab you are already signed in to, so the source is DETECTED, not
-      // picked. A source picker would imply you can run income tax while sitting on the GST
-      // portal, which is false. The strip states what Pack supports and which one is live.
-      const SOURCES = [
-        { id: "gst", label: "GST", state: "live", note: "signed in" },
-        { id: "it", label: "Income tax", state: "planned", note: "not supported yet" },
-        { id: "mca", label: "MCA", state: "planned", note: "not supported yet" },
-      ];
-      const source = SOURCES[0];
-
-      // Period granularity is a property of the document, not of the grid. GSTR-9 is annual
-      // and an income-tax return would be too, so a fixed twelve-month grid is the wrong
-      // shape for half the roadmap.
-      const DOCS = [
-        { id: "GSTR-3B", label: "3B", grain: "monthly", fmts: ["PDF", "JSON"] },
-        { id: "GSTR-1", label: "R1", grain: "monthly", fmts: ["PDF", "EXCEL", "JSON"] },
-        { id: "GSTR-2B", label: "2B", grain: "monthly", fmts: ["PDF", "EXCEL", "JSON"] },
-        { id: "GSTR-9", label: "R9", grain: "annual", fmts: ["PDF"] },
-      ];
       const MONTHS = [
         "Apr",
         "May",
@@ -800,319 +426,152 @@
         "Feb",
         "Mar",
       ];
-      // Ten financial years, matching getFiledReturnsFinancialYearOptions: current back to
-      // 2017. Time is one continuous axis grouped by year, not a dropdown -- a dropdown
-      // cannot express "the last three years", which is the whole point of a result.
-      const CURRENT_FY_START = 2026;
-      const YEARS = Array.from({ length: 10 }, (_, i) => {
-        const start = CURRENT_FY_START - i;
-        return {
-          id: `${start}-${String(start + 1).slice(2)}`,
-          start,
-          filed: i === 0 ? 4 : 12,
-          closed: i !== 0,
-        };
-      });
-      // One kind. Every recipe is a portal run, because every artifact Pack can produce --
-      // including a consolidated statement -- comes from downloading it first. How the run
-      // is packaged is a separate choice, made after selection. See OUTPUTS below.
+      const DOCS = [
+        { id: "GSTR-3B", label: "3B" },
+        { id: "GSTR-1", label: "R1" },
+        { id: "GSTR-2B", label: "2B" },
+      ];
+      const YEARS = [
+        { id: "2026-27", filed: 4 },
+        { id: "2025-26", filed: 12 },
+        { id: "2024-25", filed: 12 },
+      ];
       const RECIPES = [
-        { id: "3b", label: "This year's GSTR-3B", docs: ["GSTR-3B"], years: 1 },
-        {
-          id: "all",
-          label: "Everything for this year",
-          docs: ["GSTR-3B", "GSTR-1", "GSTR-2B"],
-          years: 1,
-        },
-        {
-          id: "r1v3b",
-          label: "GSTR-1 and 3B, last 3 years",
-          docs: ["GSTR-3B", "GSTR-1"],
-          years: 3,
-        },
-        { id: "annual", label: "Last 3 annual returns", docs: ["GSTR-9"], years: 3 },
+        { id: "3b", label: "This year's GSTR-3B", docs: ["GSTR-3B"] },
+        { id: "all", label: "Everything this year", docs: ["GSTR-3B", "GSTR-1", "GSTR-2B"] },
       ];
-      // Two separate questions. DELIVERY is how the files reach the disk. EXTRAS are
-      // artifacts Pack computes from the same run. Conflating them into one radio list
-      // stops working the moment there is more than one computed artifact.
-      const MAX_INDIVIDUAL = 5;
-      const DELIVERY = [
-        { id: "zip", label: "One ZIP", cost: () => "1 save prompt" },
-        {
-          id: "individual",
-          label: "Individual files",
-          cost: (n) => `${n} save prompts`,
-          blocked: (n) =>
-            n > MAX_INDIVIDUAL ? `${n} files means ${n} browser dialogs — use one ZIP` : null,
-        },
-      ];
-      const docsIn = (plan) => new Set(plan.map((t) => t.doc));
-      const periodsOf = (plan, doc) =>
-        new Set(plan.filter((t) => t.doc === doc).map((t) => `${t.fy}|${t.mi}`));
-      const hasFmt = (plan, doc, fmt) => plan.some((t) => t.doc === doc && t.fmt === fmt);
-      // `built: false` is stated on the control. Pack must never imply it can produce
-      // something it cannot -- there is no consolidation code in src/ today.
-      const EXTRAS = [
-        {
-          id: "index",
-          label: "Pack index (CSV)",
-          built: true,
-          needs: () => null,
-        },
-        {
-          id: "stmt3b",
-          label: "Consolidated GSTR-3B statement",
-          built: false,
-          needs: (p) =>
-            hasFmt(p, "GSTR-3B", "JSON") && periodsOf(p, "GSTR-3B").size >= 2
-              ? null
-              : "needs GSTR-3B portal data (JSON), 2+ periods",
-        },
-        {
-          id: "stmt2b",
-          label: "Consolidated GSTR-2B statement",
-          built: false,
-          needs: (p) =>
-            hasFmt(p, "GSTR-2B", "JSON") && periodsOf(p, "GSTR-2B").size >= 2
-              ? null
-              : "needs GSTR-2B portal data (JSON), 2+ periods",
-        },
-        {
-          id: "r1v3b",
-          label: "GSTR-1 vs 3B comparison",
-          built: false,
-          needs: (p) =>
-            docsIn(p).has("GSTR-1") && docsIn(p).has("GSTR-3B")
-              ? null
-              : "needs GSTR-1 and GSTR-3B for the same periods",
-        },
-      ];
-      const GLYPH = {
-        saved: "\u2713",
-        "needs-review": "!",
-        running: "\u2022",
-        skipped: "\u2013",
-      };
-      let output = "zip";
-      const extras = new Set();
-      let fmts = new Set(["PDF"]);
+
+      let view = "simple";
+      let years = 1;
       let sel = new Set();
       let plan = [];
-      let phase = "prepare";
-      let recipe = null;
+      let runToken = 0;
 
-      const key = (d, fy, m) => `${d}|${fy}|${m}`;
-      const avail = (doc, y, m) => (doc.grain === "annual" ? y.closed : m < y.filed);
-      const whyNot = (doc, y) =>
-        doc.grain === "annual"
-          ? `${doc.id} is annual and FY ${y.id} is not closed yet.`
-          : `Not filed yet — FY ${y.id} has ${y.filed} filed periods.`;
+      const key = (d, y, m) => `${d}|${y}|${m}`;
+      const avail = (y, m) => m < YEARS[y].filed;
+      const GLYPH = { saved: "✓", "needs-review": "!", running: "•", skipped: "–", queued: "·" };
 
-      function render() {
-        // recipes -- one flat list, all of them portal runs
-        document.getElementById("recipes").innerHTML = RECIPES.map(
-          (r) =>
-            `<button class="recipe" type="button" data-r="${r.id}" aria-pressed="${recipe === r.id}">
-               <span>${r.label}</span><span class="n">${countFor(r)} files</span></button>`,
-        ).join("");
-        // matrix -- one scrolling time axis, grouped by financial year. Clicking a year
-        // header selects that whole year, so "the last three years" is three clicks.
-        const yh = YEARS.map(
-          (y) =>
-            `<th class="fyh" colspan="12" data-fy="${y.id}" title="Select all of FY ${y.id}">FY ${y.id}${y.closed ? "" : " · open"}</th>`,
-        ).join("");
-        const mh = YEARS.map(() =>
-          MONTHS.map((m, i) => `<th data-mo="${i}">${m[0]}</th>`).join(""),
-        ).join("");
-        const body = DOCS.map((d) => {
-          const cells = YEARS.map((y) => {
-            if (d.grain === "annual") {
-              const k = key(d.id, y.id, -1);
-              const t = plan.find((x) => x.k === k);
-              const na = !avail(d, y, -1);
-              const g = t ? GLYPH[t.status] || "" : "";
-              return `<td colspan="12"><button class="cell wide" type="button" data-k="${k}" data-d="${d.id}" data-fy="${y.id}" data-m="-1"
-                data-na="${na ? 1 : 0}" data-on="${sel.has(k) ? 1 : 0}" ${t ? `data-st="${t.status}"` : ""} ${na ? "disabled" : ""}
-                title="${na ? whyNot(d, y) : d.id + " · FY " + y.id}">${g || (na ? "" : "annual")}</button></td>`;
-            }
-            return MONTHS.map((m, i) => {
-              const k = key(d.id, y.id, i);
-              const t = plan.find((x) => x.k === k);
-              const na = !avail(d, y, i);
-              const g = t ? GLYPH[t.status] || "" : "";
-              return `<td><button class="cell" type="button" data-k="${k}" data-d="${d.id}" data-fy="${y.id}" data-m="${i}"
-                data-na="${na ? 1 : 0}" data-on="${sel.has(k) ? 1 : 0}" ${t ? `data-st="${t.status}"` : ""} ${na ? "disabled" : ""}
-                title="${na ? whyNot(d, y) : d.id + " · " + m + " " + y.id}">${g}</button></td>`;
-            }).join("");
-          }).join("");
-          return `<tr><th class="rowh" data-row="${d.id}" title="Select every available ${d.id}">${d.label}</th>${cells}</tr>`;
-        }).join("");
-        document.getElementById("mx").innerHTML =
-          `<thead><tr><th class="corner"></th>${yh}</tr><tr><th class="corner"></th>${mh}</tr></thead><tbody>${body}</tbody>`;
-        document.getElementById("selcount").textContent = sel.size + " selected";
-
-        // format chips
-        const all = [...new Set(DOCS.flatMap((d) => d.fmts))];
-        document.getElementById("chips").innerHTML = all
-          .map(
-            (f) =>
-              `<button class="chip" type="button" data-f="${f}" aria-pressed="${fmts.has(f)}">${f}</button>`,
-          )
-          .join("");
-        // ledger
-        const tb = document.querySelector("#rows tbody");
-        const shown = phase === "prepare" ? buildPlan() : plan;
-        document.getElementById("planhead").textContent =
-          phase === "prepare" ? "Plan" : phase === "running" ? "Running" : "Pack";
-        tb.innerHTML = shown.length
-          ? shown
-              .map(
-                (t) =>
-                  `<tr data-sel="${t.status === "needs-review" ? 1 : 0}"><td class="tgt">${t.month} · ${t.docLabel}</td><td class="ev">${t.fmt}</td><td><span class="pill ${t.status}">${t.status}</span></td><td class="ev">${t.evidence || "—"}</td></tr>`,
-              )
-              .join("")
-          : `<tr><td colspan="4" class="ev" style="padding:14px 8px">Nothing selected yet. Pick a recipe, or click a row label.</td></tr>`;
-        // review
-        const rev = plan.find((t) => t.status === "needs-review");
-        document.getElementById("reviewslot").innerHTML =
-          rev && phase !== "prepare"
-            ? `<div class="review"><h3>${rev.month} · ${rev.docLabel}</h3>
-                 <p>Chrome saved a file, but Pack could not match it to ${rev.month}. It will not mark ${rev.month} done on a guess.</p>
-                 <div class="acts">
-                   <button class="btn" type="button" data-rv="observe">I checked Downloads — ${rev.month} is there</button>
-                   <button class="btn ghost" type="button" data-rv="retry">Try ${rev.month} again</button>
-                   <button class="btn ghost" type="button" data-rv="skip">Skip ${rev.month}, keep going</button>
-                 </div></div>`
-            : "";
-        // source strip -- detected, not chosen
-        document.getElementById("sources").innerHTML = SOURCES.map(
-          (x) =>
-            `<span class="source ${x.state}" title="${x.note}">${x.state === "live" ? '<i class="dot"></i>' : ""}${x.label}${x.state === "live" ? " · " + x.note : ""}</span>`,
-        ).join("");
-
-        // delivery and extras -- two separate questions, shown once there is a selection
-        const outBand = document.getElementById("outband");
-        const currentPlan = phase === "prepare" ? buildPlan() : plan;
-        const settledRun = phase === "done";
-        if (currentPlan.length && (phase === "prepare" || settledRun)) {
-          outBand.hidden = false;
-          const n = currentPlan.length;
-          const delivery = settledRun
-            ? ""
-            : `<p class="gtitle">Deliver</p>` +
-              DELIVERY.map((o) => {
-                const why = o.blocked ? o.blocked(n) : null;
-                if (why && output === o.id) output = "zip";
-                return `<button class="outopt" type="button" data-o="${o.id}" ${why ? "disabled" : ""}
-                  aria-pressed="${output === o.id}" title="${why || o.cost(n)}">
-                  <span>${o.label}</span><span class="n">${why || o.cost(n)}</span></button>`;
-              }).join("");
-          const box = (on) => (on ? String.fromCharCode(9745) : String.fromCharCode(9744));
-          const extraRows = EXTRAS.map((x) => {
-            const why = x.needs(currentPlan);
-            const off = Boolean(why) || !x.built;
-            const note = why || (x.built ? "included" : "not built yet");
-            return `<button class="outopt extra" type="button" data-x="${x.id}" ${off ? "disabled" : ""}
-              aria-pressed="${extras.has(x.id)}" title="${note}">
-              <span>${box(extras.has(x.id))} ${x.label}</span><span class="n">${note}</span></button>`;
-          }).join("");
-          outBand.innerHTML =
-            delivery +
-            `<p class="gtitle">${settledRun ? "Add to this pack" : "Also include"}</p>` +
-            extraRows;
-        } else {
-          outBand.hidden = true;
-        }
-
-        // footer
-        const go = document.getElementById("go");
-        const n = shown.length;
-        if (phase === "prepare") {
-          const chosen = DELIVERY.find((v) => v.id === output) || DELIVERY[0];
-          const ex = extras.size ? ` + ${extras.size} extra${extras.size === 1 ? "" : "s"}` : "";
-          document.getElementById("cost").innerHTML = n
-            ? `<b>${n} file${n === 1 ? "" : "s"}</b> · ${chosen.label}${ex}<br>${chosen.cost(n)}`
-            : "Nothing selected.";
-          go.textContent = "Build pack";
-          go.disabled = n === 0;
-          document.getElementById("popupstat").innerHTML = "<b>No run in progress</b>";
-        } else {
-          const saved = plan.filter((t) => t.status === "saved").length;
-          const need = plan.filter((t) => t.status === "needs-review").length;
-          const skip = plan.filter((t) => t.status === "skipped").length;
-          const settled = plan.every((t) => ["saved", "skipped", "unavailable"].includes(t.status));
-          const completable = settled && skip === 0;
-          document.getElementById("cost").innerHTML =
-            `<b>${saved} of ${plan.length} saved</b>${need ? " · " + need + " needs you" : ""}${skip ? " · " + skip + " skipped" : ""}<br>` +
-            (settled
-              ? completable
-                ? "Pack complete."
-                : "Settled, not complete — a target was skipped."
-              : "Keep the GST tab in front.");
-          go.textContent = settled ? "Start another" : "Running…";
-          go.disabled = !settled;
-          document.getElementById("popupstat").innerHTML =
-            `<b>${saved} of ${plan.length} saved</b>${need ? "<br>1 needs you" : ""}`;
-        }
+      function selectRecipe(r) {
+        sel = new Set();
+        for (const d of r.docs) for (let m = 0; m < 12; m++) if (avail(0, m)) sel.add(key(d, 0, m));
       }
-
       function countFor(r) {
-        if (!r.docs) return 0;
         let n = 0;
-        for (const id of r.docs) {
-          const d = DOCS.find((x) => x.id === id);
-          if (!d) continue;
-          const years = r.years ? YEARS.slice(0, r.years) : [YEARS[0]];
-          for (const y of years) {
-            const slots = d.grain === "annual" ? [-1] : MONTHS.map((_, i) => i);
-            for (const m of slots)
-              if (avail(d, y, m)) n += d.fmts.filter((f) => fmts.has(f)).length;
-          }
-        }
+        for (let m = 0; m < 12; m++) if (avail(0, m)) n += r.docs.length;
         return n;
       }
-
       function buildPlan() {
         const out = [];
         for (const d of DOCS)
-          for (const y of YEARS) {
-            const slots = d.grain === "annual" ? [-1] : MONTHS.map((_, i) => i);
-            for (const m of slots) {
-              const k = key(d.id, y.id, m);
-              if (!sel.has(k)) continue;
-              for (const f of d.fmts)
-                if (fmts.has(f))
-                  out.push({
-                    k,
-                    doc: d.id,
-                    docLabel: d.label,
-                    fy: y.id,
-                    mi: m,
-                    month: m === -1 ? "FY " + y.id : MONTHS[m],
-                    fmt: f,
-                    status: "planned",
-                    evidence: "",
-                  });
+          for (let y = 0; y < YEARS.length; y++)
+            for (let m = 0; m < 12; m++) {
+              const k = key(d.id, y, m);
+              if (sel.has(k))
+                out.push({
+                  k,
+                  doc: d.id,
+                  label: d.label,
+                  month: MONTHS[m],
+                  fy: YEARS[y].id,
+                  status: "planned",
+                  ev: "",
+                });
             }
-          }
         return out;
       }
 
-      let runToken = 0;
+      function render() {
+        const body = document.getElementById("body");
+        const go = document.getElementById("go");
+
+        if (view === "simple") {
+          body.innerHTML =
+            `<h2>What do you need?</h2>` +
+            RECIPES.map(
+              (r) =>
+                `<button class="choice" type="button" data-r="${r.id}"><span>${r.label}</span><span class="n">${countFor(r)} files</span></button>`,
+            ).join("") +
+            `<button class="choice" type="button" data-custom="1"><span>Choose periods</span><span class="n">pick your own</span></button>`;
+          go.hidden = true;
+          return;
+        }
+
+        if (view === "custom") {
+          const n = buildPlan().length;
+          const head = `<tr><th></th>${MONTHS.map((m) => `<th>${m[0]}</th>`).join("")}</tr>`;
+          const rows = [];
+          for (let y = 0; y < years; y++) {
+            rows.push(`<tr><th class="fy" colspan="13">FY ${YEARS[y].id}</th></tr>`);
+            for (const d of DOCS) {
+              const cells = MONTHS.map((m, i) => {
+                const k = key(d.id, y, i);
+                const na = !avail(y, i);
+                return `<td><button class="cell" type="button" data-k="${k}" data-na="${na ? 1 : 0}" data-on="${sel.has(k) ? 1 : 0}" ${na ? "disabled" : ""} title="${na ? "Not filed yet" : `${d.id} ${m} ${YEARS[y].id}`}"></button></td>`;
+              }).join("");
+              rows.push(
+                `<tr><th class="rowh" data-row="${d.id}" data-y="${y}">${d.label}</th>${cells}</tr>`,
+              );
+            }
+          }
+          body.innerHTML =
+            `<h2>Choose periods</h2>` +
+            `<p class="hint">Drag across cells. Click a row label to take its whole year.</p>` +
+            `<div class="grid"><table class="mx"><thead>${head}</thead><tbody>${rows.join("")}</tbody></table></div>` +
+            `<button class="more" type="button" data-back="1">Back</button>` +
+            (years < YEARS.length
+              ? `<button class="more" type="button" data-earlier="1">Earlier years</button>`
+              : "");
+          go.hidden = false;
+          go.disabled = n === 0;
+          go.textContent =
+            n === 0
+              ? "Nothing selected"
+              : n === 1
+                ? "Download 1 file"
+                : `Download ${n} files as one ZIP`;
+          return;
+        }
+
+        const saved = plan.filter((t) => t.status === "saved").length;
+        const rev = plan.find((t) => t.status === "needs-review");
+        const skipped = plan.filter((t) => t.status === "skipped").length;
+        const settled = plan.every((t) => ["saved", "skipped"].includes(t.status));
+        body.innerHTML =
+          (rev
+            ? `<div class="review"><h3>${rev.month} ${rev.fy} · ${rev.label}</h3>
+                 <p>Chrome saved a file, but Pack could not match it to ${rev.month}. It will not mark ${rev.month} done on a guess.</p>
+                 <button class="btn" type="button" data-rv="observe">I checked Downloads — it is there</button>
+                 <button class="btn ghost" type="button" data-rv="retry">Try ${rev.month} again</button>
+                 <button class="btn ghost" type="button" data-rv="skip">Skip ${rev.month}</button></div>`
+            : "") +
+          `<p class="status"><b>${saved} of ${plan.length} saved</b>${skipped ? ` · ${skipped} skipped` : ""} · ${
+            settled ? (skipped ? "settled, not complete" : "complete") : "keep the GST tab in front"
+          }</p>` +
+          `<table class="rows"><tbody>${plan
+            .slice(0, 7)
+            .map(
+              (t) =>
+                `<tr><td class="t">${t.month} ${t.label}</td><td>${GLYPH[t.status] || ""}</td><td class="e">${t.ev || "—"}</td></tr>`,
+            )
+            .join("")}</tbody></table>`;
+        go.hidden = false;
+        go.disabled = !settled;
+        go.textContent = settled ? "Start another" : "Running…";
+      }
+
       function start() {
         plan = buildPlan();
         if (!plan.length) return;
-        const token = ++runToken; // any earlier loop aborts on its next tick
-        phase = "running";
+        const token = ++runToken;
+        view = "running";
         plan.forEach((t) => (t.status = "queued"));
         render();
         let i = 0;
         const tick = () => {
           if (token !== runToken) return;
           if (i >= plan.length) {
-            phase = "done";
-            render();
-            return;
+            view = "done";
+            return render();
           }
           const t = plan[i];
           t.status = "running";
@@ -1121,114 +580,72 @@
             if (token !== runToken) return;
             if (t.doc === "GSTR-3B" && t.month === "Jul") {
               t.status = "needs-review";
-              t.evidence = "unmatched download";
+              t.ev = "unmatched download";
             } else {
               t.status = "saved";
-              t.evidence = "download confirmed";
+              t.ev = "download confirmed";
             }
-            i++;
+            i += 1;
             render();
             tick();
-          }, 190);
+          }, 150);
         };
         tick();
       }
 
-      // --- drag to paint a range -------------------------------------------------
-      // A compliance user selecting nine periods should sweep, not click nine times.
-      // The first cell decides the mode: start on an unselected cell and the drag
-      // selects; start on a selected one and it clears.
       let drag = null;
-      const mx = () => document.getElementById("mx");
-      function applyPaint(cell) {
-        if (!drag || !cell || cell.disabled) return;
-        const k = cell.dataset.k;
+      const paint = (c) => {
+        if (!drag || !c || c.disabled) return;
+        const k = c.dataset.k;
         if (drag.mode === "add") sel.add(k);
         else sel.delete(k);
-        cell.dataset.on = sel.has(k) ? "1" : "0";
-        document.getElementById("selcount").textContent = sel.size + " selected";
-      }
+        c.dataset.on = sel.has(k) ? "1" : "0";
+      };
       document.addEventListener("pointerdown", (e) => {
         const c = e.target.closest(".cell");
-        if (!c || c.disabled || phase !== "prepare") return;
+        if (!c || c.disabled || view !== "custom") return;
         e.preventDefault();
-        drag = { mode: sel.has(c.dataset.k) ? "remove" : "add", moved: false };
-        mx().classList.add("dragging");
-        applyPaint(c);
-        recipe = null;
+        drag = { mode: sel.has(c.dataset.k) ? "remove" : "add" };
+        paint(c);
       });
       document.addEventListener("pointerover", (e) => {
-        if (!drag) return;
-        const c = e.target.closest(".cell");
-        if (!c) return;
-        drag.moved = true;
-        applyPaint(c);
+        if (drag) paint(e.target.closest(".cell"));
       });
       document.addEventListener("pointerup", () => {
         if (!drag) return;
         drag = null;
-        mx().classList.remove("dragging");
         render();
       });
 
       document.addEventListener("click", (e) => {
-        // cells are handled by the pointer drag above
         if (e.target.closest(".cell")) return;
-        const rowh = e.target.closest("[data-row]");
-        if (rowh && phase === "prepare") {
-          const d = DOCS.find((x) => x.id === rowh.dataset.row);
-          const ks = [];
-          for (const y of YEARS) {
-            const slots = d.grain === "annual" ? [-1] : MONTHS.map((_, i) => i);
-            for (const m of slots) if (avail(d, y, m)) ks.push(key(d.id, y.id, m));
-          }
-          const on = ks.every((k) => sel.has(k));
-          ks.forEach((k) => (on ? sel.delete(k) : sel.add(k)));
-          recipe = null;
-          return render();
-        }
-        const fyh = e.target.closest("[data-fy].fyh");
-        if (fyh && phase === "prepare") {
-          const y = YEARS.find((x) => x.id === fyh.dataset.fy);
-          const ks = [];
-          for (const d of DOCS) {
-            const slots = d.grain === "annual" ? [-1] : MONTHS.map((_, i) => i);
-            for (const m of slots) if (avail(d, y, m)) ks.push(key(d.id, y.id, m));
-          }
-          const on = ks.every((k) => sel.has(k));
-          ks.forEach((k) => (on ? sel.delete(k) : sel.add(k)));
-          recipe = null;
-          return render();
-        }
         const r = e.target.closest("[data-r]");
-        if (r && !r.disabled && phase === "prepare") {
-          const def = RECIPES.find((x) => x.id === r.dataset.r);
+        if (r) {
+          selectRecipe(RECIPES.find((x) => x.id === r.dataset.r));
+          return start();
+        }
+        if (e.target.closest("[data-custom]")) {
+          view = "custom";
+          return render();
+        }
+        if (e.target.closest("[data-back]")) {
+          view = "simple";
           sel = new Set();
-          for (const id of def.docs) {
-            const d = DOCS.find((x) => x.id === id);
-            if (!d) continue;
-            for (const y of YEARS.slice(0, def.years || 1)) {
-              const slots = d.grain === "annual" ? [-1] : MONTHS.map((_, i) => i);
-              for (const m of slots) if (avail(d, y, m)) sel.add(key(d.id, y.id, m));
-            }
-          }
-          recipe = def.id;
+          years = 1;
           return render();
         }
-        const x = e.target.closest("[data-x]");
-        if (x && !x.disabled) {
-          extras.has(x.dataset.x) ? extras.delete(x.dataset.x) : extras.add(x.dataset.x);
+        if (e.target.closest("[data-earlier]")) {
+          years = YEARS.length;
           return render();
         }
-        const o = e.target.closest("[data-o]");
-        if (o && !o.disabled && phase === "prepare") {
-          output = o.dataset.o;
-          return render();
-        }
-        const f = e.target.closest("[data-f]");
-        if (f && phase === "prepare") {
-          const v = f.dataset.f;
-          fmts.has(v) ? fmts.size > 1 && fmts.delete(v) : fmts.add(v);
+        const rowh = e.target.closest("[data-row]");
+        if (rowh) {
+          const y = Number(rowh.dataset.y);
+          const ks = MONTHS.map((_, i) => i)
+            .filter((i) => avail(y, i))
+            .map((i) => key(rowh.dataset.row, y, i));
+          const on = ks.every((k) => sel.has(k));
+          ks.forEach((k) => (on ? sel.delete(k) : sel.add(k)));
           return render();
         }
         const rv = e.target.closest("[data-rv]");
@@ -1236,27 +653,28 @@
           const t = plan.find((x) => x.status === "needs-review");
           if (!t) return;
           if (rv.dataset.rv === "observe") {
-            t.status = "needs-review";
-            t.evidence = "manual observation — not completion";
+            t.ev = "manual observation — not completion";
             rv.closest(".review").innerHTML =
-              '<p style="margin:0;font-size:12px">Recorded. A manual observation does not complete the target — it stays reviewable.</p>';
+              '<p style="margin:0;font-size:13px">Recorded. A manual observation does not complete the target.</p>';
             return;
           }
           if (rv.dataset.rv === "retry") {
             t.status = "saved";
-            t.evidence = "download confirmed";
+            t.ev = "download confirmed";
           }
           if (rv.dataset.rv === "skip") {
             t.status = "skipped";
-            t.evidence = "user skipped";
+            t.ev = "you skipped this";
           }
           return render();
         }
         if (e.target.id === "go") {
-          if (phase === "prepare") return start();
-          runToken++;
-          phase = "prepare";
+          if (view === "custom") return start();
+          runToken += 1;
+          view = "simple";
+          sel = new Set();
           plan = [];
+          years = 1;
           return render();
         }
       });
