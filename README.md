@@ -149,20 +149,20 @@ be given the producing Pack version.
   is empty and `field_path` remains canonical.
 - **Identity rule:** recognized identity fields are classified from every
   RFC6901-decoded path segment across the whole document and removed from the
-  data CSV. Every parseable GSTR-3B period must provide the same non-empty GSTIN
-  and legal name before either derived file is emitted; those values are written
-  once in the workbook header. Optional recognized identity may be absent in
-  some periods, but conflicting values are still rejected.
+  data CSV. Every parseable GSTR-3B period must provide the same non-empty string
+  GSTIN and legal name before either derived file is emitted; those values are
+  written once in the workbook header. Optional recognized identity may be absent
+  or non-string in some periods, but conflicting string values are still rejected.
   Other recognized taxpayer identity and per-period ARN/ARN date remain only in
   transient summary context and are not written to the workbook. Conflicting
   non-empty invariant identity fails summary generation.
 - **Workbook number rule:** statement cells are numeric only when a portal
   decimal can be represented without changing its value and within spreadsheet
-  precision; otherwise the month cell is blank. Totals use scaled exact
-  arithmetic on the original decimal strings and are numeric only when the
-  exact result can be emitted unchanged; otherwise the Total cell shows the
-  exact sum as text and explains the precision limit instead of writing a
-  rounded figure.
+  precision; otherwise a present month carries a `Precision limit` marker. A
+  missing or unparseable period stays blank. Totals use scaled exact arithmetic
+  on the original decimal strings and are numeric only when the exact result can
+  be emitted unchanged; otherwise the Total cell shows the exact sum as text and
+  explains the precision limit instead of writing a rounded figure.
 
 GSTR-9 is not the sum of twelve GSTR-3B returns. Its Table 4 requires outward
 supplies split by counterparty type, which GSTR-3B does not contain, and it

@@ -83,15 +83,17 @@ For each release candidate:
   contain exactly one sheet, `GSTR-3B Consolidated`. Its header must contain
   the recognized GSTIN and legal name once plus the financial year above twelve
   typed date columns. Every parseable GSTR-3B period must carry the same
-  non-empty GSTIN and legal name; a missing required identity must fail the
-  derived summary, while optional recognized identity may be absent in some
-  periods but must remain consistent when present. When no period is parseable,
-  both identity cells remain blank. Those header rows, the
+  non-empty string GSTIN and legal name; a missing or non-string required
+  identity must fail the derived summary, while optional recognized identity
+  may be absent or non-string in some periods but must remain consistent when
+  present as a string. When no period is parseable, both identity cells remain
+  blank. Those header rows, the
   `Description` row and the first
   column must remain frozen while scrolling. The statement body must retain
-  numeric figure cells and totals summed exactly from source decimal text, an
-  explanatory text total carrying the exact sum when that decimal cannot be
-  represented as a spreadsheet numeric cell, blank cells for missing or
+  numeric figure cells and totals summed exactly from source decimal text, a
+  `Precision limit` marker for a present month that cannot be represented as a
+  spreadsheet numeric cell, an explanatory text total carrying the exact sum
+  when that decimal cannot be represented, blank cells for missing or
   unparseable periods, only mapped Table 3.1 and Table 4 rows, the portal-dash
   applicability set for Table 3.1 and all four Table 4 tax columns. After the
   final spacer, the footer must contain exactly `Source` and `Coverage` rows.
