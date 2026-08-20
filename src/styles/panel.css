@@ -148,9 +148,3 @@ html[data-pack-surface="panel"] body {
   font-size: 0.6875rem;
   text-align: center;
 }
-
-.panel-note {
-  margin: 0 0 12px;
-  color: var(--pack-ink-muted);
-  font-size: 0.8125rem;
-}
