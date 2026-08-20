@@ -286,6 +286,29 @@ describe("filed-return full-year workbook", () => {
     }
   });
 
+  it("dates the Source footer from local components, not UTC", () => {
+    const originalTimeZone = process.env.TZ;
+    process.env.TZ = "Asia/Kolkata";
+    try {
+      const plan = fullYearPlan();
+      const summary = buildFiledReturnsSummarySheet(plan, []);
+      // 19:00 UTC is 00:30 the next day in Asia/Kolkata. A UTC-derived footer
+      // would label this export with the previous calendar day.
+      const generatedAt = new Date("2026-08-20T19:00:00.000Z");
+      const workbook = buildFiledReturnsFullYearWorkbook(summary, plan, { generatedAt });
+      const rows = parsedRows(text(extractStoredZipEntries(workbook), "xl/worksheets/sheet1.xml"));
+      const footer = [...rows.values()]
+        .flatMap((row) => [...row.values()])
+        .map((cell) => cell.text ?? "")
+        .find((value) => value.startsWith("Filed GSTR-3B returns from the GST portal"));
+
+      expect(footer).toContain("21 Aug 2026");
+      expect(footer).not.toContain("20 Aug 2026");
+    } finally {
+      process.env.TZ = originalTimeZone;
+    }
+  });
+
   it("keeps blank identity cells when no period has parseable JSON", () => {
     const plan = fullYearPlan().map((entry) => ({
       ...entry,

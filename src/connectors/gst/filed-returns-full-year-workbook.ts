@@ -172,8 +172,12 @@ function consolidatedSheet(
   };
 }
 
+// Local components, not UTC. The footer presents an unqualified human-readable
+// date, so an export at 00:30 in a UTC+ zone was labelled with the previous
+// calendar day. This matches the ZIP entry timestamp, which is local for the
+// same reason: both are read by a person in their own timezone.
 function humanDate(value: Date): string {
-  return `${value.getUTCDate()} ${MONTH_NAMES[value.getUTCMonth()]} ${value.getUTCFullYear()}`;
+  return `${value.getDate()} ${MONTH_NAMES[value.getMonth()]} ${value.getFullYear()}`;
 }
 
 interface StatementCellValue {
