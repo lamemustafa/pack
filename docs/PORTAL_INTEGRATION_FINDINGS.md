@@ -141,3 +141,16 @@ This log records live diagnostic findings that constrain Pack's local, target-bo
     Periods before April 2022 emit only the table reference. The current side has no runtime upper
     bound: a future portal form change is a residual re-verification risk, not a reason to relabel
     fixed history without evidence.
+
+26. The GST Portal public common validation bundle, asset `directives2.0.js`, defines GSTIN
+    validation as a 15-character GSTIN format plus a base-36 check character calculated from its
+    first 14 characters. The implementation source is the official public GST Portal
+    common-client asset `directives2.0.js`, captured 2026-08-20 with SHA-256
+    `aa5385b105ff3ccb13f641be81f000b334b2626e0f67633c9e8eb2db1927100e`; this records an
+    independently verifiable source locator without recording a portal URL or taxpayer data here.
+    Pack applies that validation only before placing a GSTR-3B taxpayer identity in a derived
+    summary workbook.
+    An invalid identity rejects the derived summary as fixed `identity-rejected`; a forbidden
+    credential or session field rejects it as fixed `privacy-rejected`. In either case, the
+    original staged return artifact remains available and Pack neither retains nor renders the
+    rejected value.
