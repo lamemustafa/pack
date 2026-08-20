@@ -31,11 +31,34 @@ describe("filed-return full-year summary sheet", () => {
     const safe = new TextDecoder().decode(build("IMPG").dataBytes);
     expect(safe).toContain("/itc_elg/itc_avl/IMPG/iamt");
 
-    // PAN-shaped: expansion would copy it into the path and drop its own leaf,
-    // where field-name redaction cannot see it.
-    const unsafe = new TextDecoder().decode(build("AAAAA0000A").dataBytes);
-    expect(unsafe).not.toContain("AAAAA0000A");
-    expect(unsafe).toContain("array-count-unsafe-discriminator");
+    // Anything outside the key's own shape is refused: expansion would copy it
+    // into the path and drop its own leaf, where field-name redaction cannot see
+    // it. A six-digit code is the credential case; PAN-shaped is the identity one.
+    for (const unsafeValue of ["AAAAA0000A", "123456"]) {
+      const unsafe = new TextDecoder().decode(build(unsafeValue).dataBytes);
+      expect(unsafe).not.toContain(unsafeValue);
+      expect(unsafe).toContain("array-count-unsafe-discriminator");
+    }
+  });
+
+  it("withholds a leaf whose object key is itself identity-shaped", () => {
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-3B")],
+      [
+        {
+          path: "april-data.json",
+          bytes: new TextEncoder().encode(
+            '{"status":1,"data":{"lglnm":"Synthetic Legal Name","r3b":{"gstin":"27ABCDE1234F1Z0","ret_period":"042026","by_party":{"AAAAA0000A":{"amount":7}},"sup_details":{"osup_det":{"txval":1}}}}}',
+          ),
+        },
+      ],
+    );
+
+    const dataCsv = new TextDecoder().decode(summary.dataBytes);
+    // The flattener copies an object key into the path verbatim, and alias-name
+    // redaction only recognises field names.
+    expect(dataCsv).not.toContain("AAAAA0000A");
+    expect(dataCsv).toContain("/sup_details/osup_det/txval");
   });
 
   it("withholds a compound identity alias split across path segments", () => {

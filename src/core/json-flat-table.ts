@@ -25,11 +25,13 @@ export interface FlatJsonArrayExpansionOptions {
    * carried sensitive content would survive in a path where field-name-based
    * redaction cannot see it.
    *
-   * The predicate is supplied by the caller because what counts as safe is
-   * portal knowledge, and this module stays portal-neutral. Omitted means no
-   * constraint, which is the pre-existing behaviour.
+   * The predicate receives the discriminator key as well as the value, because
+   * each key has its own shape and a single shape covering all of them is
+   * necessarily looser than any one of them. It is supplied by the caller
+   * because what counts as safe is portal knowledge, and this module stays
+   * portal-neutral. Omitted means no constraint, the pre-existing behaviour.
    */
-  isSafeDiscriminatorValue?: (value: string) => boolean;
+  isSafeDiscriminatorValue?: (key: string, value: string) => boolean;
 }
 
 export interface FlatJsonLeafSelection {
@@ -330,7 +332,7 @@ class FlatJsonParser {
     const isSafeDiscriminatorValue = this.arrayExpansion?.isSafeDiscriminatorValue;
     if (
       isSafeDiscriminatorValue &&
-      discriminator.values.some((value) => !isSafeDiscriminatorValue(value))
+      discriminator.values.some((value) => !isSafeDiscriminatorValue(discriminator.key, value))
     ) {
       this.addArrayCount(path, elementCount, "array-count-unsafe-discriminator");
       return;
@@ -375,14 +377,14 @@ class FlatJsonParser {
 
   private selectArrayDiscriminator(
     elements: readonly (readonly FlatJsonLeaf[])[],
-  ): { pointer: string; values: string[] } | null {
+  ): { key: string; pointer: string; values: string[] } | null {
     for (const key of this.arrayExpansion?.discriminatorKeys ?? []) {
       const pointer = `/${escapeJsonPointerToken(key)}`;
       const values = elements.map((leaves) => discriminatorValue(leaves, pointer));
       if (values.some((value) => value === null)) continue;
       const presentValues = values as string[];
       if (new Set(presentValues).size === presentValues.length) {
-        return { pointer, values: presentValues };
+        return { key, pointer, values: presentValues };
       }
     }
     return null;

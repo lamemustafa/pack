@@ -187,7 +187,7 @@ export function buildFiledReturnsSummarySheet(
   const dataRows: FiledReturnsSummaryDataRow[] = [];
   for (const parsed of parsedEntries) {
     const fieldLeaves = parsed.leaves.filter(
-      (leaf) => !isFiledReturnsSummaryIdentityPath(leaf.path),
+      (leaf) => !isFiledReturnsSummaryIdentityPath(leaf.path) && !hasIdentityShapedPathSegment(leaf.path),
     );
     if (fieldLeaves.length === 0) {
       dataRows.push(outcomeRow(parsed.planned, parsed.outcome));
@@ -400,19 +400,41 @@ function outcomeCategory(entry: FiledReturnsSummaryPlanEntry): string {
 }
 
 // A discriminator value becomes a path segment and its own leaf is dropped, so
-// anything embedded there escapes field-name-based redaction. The portal's own
-// values are short codes -- `ty` is IMPG/IMPS/ISD/ISRC/OTH/RUL and `pos` is a
-// two-digit state code -- so a bounded code shape is the honest constraint, and
-// an identity-shaped value is refused outright rather than trusted to be absent.
-// Refusing falls back to the array count, which is a visible outcome, not a
-// silent drop.
-const FILED_RETURNS_DISCRIMINATOR_CODE = /^[A-Za-z0-9]{1,12}$/;
+// anything embedded there escapes field-name-based redaction. Each key is
+// constrained to its own observed shape rather than one shared pattern: a
+// pattern loose enough for both `ty` and `pos` also admits values that are
+// neither, such as a six-digit code. `pos` is a two-digit state code and `ty` is
+// an uppercase mnemonic, across every captured document.
+//
+// This constrains shape, not vocabulary. The captured corpus is a single
+// taxpayer, so it cannot establish the complete set of state codes another
+// taxpayer would produce; asserting one would break them.
+const FILED_RETURNS_DISCRIMINATOR_SHAPES: Readonly<Record<string, RegExp>> = {
+  pos: /^[0-9]{2}$/,
+  ty: /^[A-Z]{2,8}$/,
+};
+
+function isSafeFiledReturnsDiscriminatorValue(key: string, value: string): boolean {
+  const shape = FILED_RETURNS_DISCRIMINATOR_SHAPES[key];
+  if (!shape || !shape.test(value)) return false;
+  return !isIdentityShapedSegment(value);
+}
+
+// A GSTIN or PAN can also arrive as an ordinary object key, which the flattener
+// copies into the path verbatim. Alias-name redaction cannot see that, so the
+// shape is refused wherever a decoded segment carries it.
 const PAN_SHAPE = /^[A-Za-z]{5}[0-9]{4}[A-Za-z]$/;
 
-function isSafeFiledReturnsDiscriminatorValue(value: string): boolean {
-  if (!FILED_RETURNS_DISCRIMINATOR_CODE.test(value)) return false;
-  if (PAN_SHAPE.test(value)) return false;
-  return !isValidGstin(value);
+function isIdentityShapedSegment(segment: string): boolean {
+  return PAN_SHAPE.test(segment) || isValidGstin(segment);
+}
+
+export function hasIdentityShapedPathSegment(path: string): boolean {
+  return path
+    .split("/")
+    .slice(1)
+    .map((token) => token.replace(/~1/g, "/").replace(/~0/g, "~"))
+    .some(isIdentityShapedSegment);
 }
 
 function filedReturnsSummaryArrayExpansion(
