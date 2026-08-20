@@ -6,10 +6,7 @@ import {
   hasPersistedFullFiscalYearZipDownloadId,
   isAmbiguousFullFiscalYearZipHandoff,
 } from "./flow-summary";
-import {
-  getSavedFullFiscalYearActionDecision,
-  targetReviewPortalDisabledReason,
-} from "./recovery-actions";
+import { getSavedFullFiscalYearActionDecision } from "./recovery-actions";
 
 export interface InlineStatusProps {
   busy: string | null;
@@ -71,6 +68,28 @@ export function InlineStatus({
       </div>
     </section>
   );
+}
+
+/**
+ * Whether the inline primary action is itself portal-gated. The recovery panel
+ * suppresses its own portal reason only when this is true, because that is the
+ * only case where the two surfaces would print the same sentence twice.
+ *
+ * Suppressing whenever an inline action merely exists left a portal-gated
+ * secondary action in the panel disabled with nothing explaining it, once the
+ * inline action became portal-independent.
+ */
+export function inlinePrimaryActionIsPortalGated(
+  presentation: PopupPresentationState,
+  summary: FiledReturnsFlowSummary | null,
+): boolean {
+  const action = getInlinePrimaryAction(presentation, summary, {
+    onOpenPortal: () => undefined,
+    onRestartTarget: () => undefined,
+    onRetryFullFiscalYearTarget: () => undefined,
+    onRetryTarget: () => undefined,
+  });
+  return action?.portalDisabledReason != null;
 }
 
 export function hasInlinePrimaryAction(
@@ -243,18 +262,21 @@ export function getInlinePrimaryAction(
     };
   }
   if (signals.has("filed-returns-target-review-required") && summary.currentPeriod) {
+    // Both branches below return locally in retryFiledReturnsTargetDownloadFlow before any
+    // portal action (see canRetryFiledReturnsTargetWithoutPortal in ./flow-summary), so
+    // neither is portal-gated.
     if (canReconcileFiledReturnsTarget(summary)) {
       return {
         label: "Reconcile browser download",
         onClick: actions.onRetryTarget,
-        portalDisabledReason: targetReviewPortalDisabledReason(summary),
+        portalDisabledReason: null,
       };
     }
     if (signals.has("filed-returns-target-local-cleanup-required")) {
       return {
         label: "Retry local cleanup",
         onClick: actions.onRetryTarget,
-        portalDisabledReason: targetReviewPortalDisabledReason(summary),
+        portalDisabledReason: null,
       };
     }
     return null;

@@ -4,6 +4,7 @@ import type {
 } from "../../connectors/gst/filed-returns-contracts";
 import { normaliseFiledReturnsArtifactType } from "../../connectors/gst/filed-returns-artifacts";
 import { FULL_FISCAL_YEAR_PERIOD } from "../../connectors/gst/filed-returns-scope";
+import { canReconcileFiledReturnsTarget } from "./run-summary";
 
 export function hasUnresolvedFiledReturnsTargetReview(
   summary: FiledReturnsFlowSummary | null,
@@ -42,6 +43,23 @@ export function canRetryFullFiscalYearZipWithoutPortal(
     signals.has("full-fiscal-year-zip-phase:download-observing") ||
     signals.has("full-fiscal-year-zip-phase:export-retry-pending")
   );
+}
+
+/**
+ * Whether the target-review retry action — reconciling the exact browser download, or
+ * retrying local cleanup — can complete without a portal tab. Both paths return locally in
+ * `retryFiledReturnsTargetDownloadFlow` (src/background/filed-returns-flow-runner.ts) before
+ * any portal action is attempted; only falling through to a fresh single-period download
+ * reaches the portal. This is the target-review sibling of
+ * `canRetryFullFiscalYearZipWithoutPortal` above — extend this function, not a parallel check,
+ * when another retry path turns out to be portal-independent.
+ */
+export function canRetryFiledReturnsTargetWithoutPortal(
+  summary: FiledReturnsFlowSummary | null | undefined,
+): boolean {
+  if (!summary) return false;
+  if (canReconcileFiledReturnsTarget(summary)) return true;
+  return summary.flowStep.safeSignals.includes("filed-returns-target-local-cleanup-required");
 }
 
 export function isAmbiguousFullFiscalYearZipHandoff(
