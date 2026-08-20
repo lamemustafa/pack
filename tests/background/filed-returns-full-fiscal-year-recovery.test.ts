@@ -12,6 +12,7 @@ import {
   reconcilePersistedFullFiscalYearZipDownload,
   startFullFiscalYearDownloadFlow,
 } from "../../src/background/filed-returns-full-fiscal-year";
+import { summariseFullFiscalYearLedger } from "../../src/background/filed-returns-full-fiscal-year-summary";
 import {
   discardMalformedFullFiscalYearRunForFreshStart,
   prepareFullFiscalYearTargetRetry,
@@ -33,6 +34,7 @@ import {
   fullFiscalYearZipPhaseStep,
   toFullFiscalYearSummary,
 } from "../../src/background/filed-returns-full-fiscal-year-summary";
+import { readLedger } from "../../src/background/filed-returns-full-fiscal-year-run-state";
 
 const sessionValues = vi.hoisted(() => ({ current: {} as Record<string, unknown> }));
 
@@ -99,6 +101,28 @@ describe("full fiscal-year recovery", () => {
       },
     });
     expect(browser.storage.local.set).not.toHaveBeenCalled();
+  });
+
+  it("reads a historical blocked portal ledger and renders its canonical portal cause", async () => {
+    const historicalLedger = createRecoveryLedger({
+      revision: 2,
+      targetStatus: "blocked",
+      safeSignals: ["portal-system-error"],
+    });
+    historicalLedger.status = "blocked";
+    historicalLedger.targets[0] = {
+      ...historicalLedger.targets[0]!,
+      safeMessage:
+        "Pack could not verify the browser download for April. Check Downloads before retrying or cancelling this target.",
+    };
+    mockLocalStorageGet({ "full-year-ledger": historicalLedger });
+
+    const ledger = await readLedger("full-year-ledger");
+
+    expect(ledger).not.toBeNull();
+    expect(summariseFullFiscalYearLedger(ledger!).flowStep.safeMessage).toBe(
+      "The GST portal returned a system-error page. Return to an authenticated GST page and retry this period.",
+    );
   });
 
   it("discards only the matching malformed ledger for an explicit fresh start", async () => {
