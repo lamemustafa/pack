@@ -11,23 +11,24 @@ import {
   flattenJsonTextSelectedScalarLeaves,
   JsonFlatTableLimitError,
   JsonFlatTablePathNotFoundError,
+  type FlatJsonArrayExpansionOptions,
   type FlatJsonLeaf,
 } from "../../core/json-flat-table";
 import { filedReturnsJsonDocumentContract } from "./artifact-validation";
 import type { FiledReturnsConcreteArtifactType } from "./filed-returns-artifacts";
 import type { FiledReturnsReturnType } from "./filed-returns-return-types";
-import { filedReturnsSummaryArrayExpansion } from "./filed-returns-summary-arrays";
+import { filedReturnsSummaryFieldLabel } from "./filed-returns-summary-labels";
 import {
-  filedReturnsSummaryFieldLabel,
   filedReturnsSummaryIdentity,
   filedReturnsRequiredWorkbookIdentityLabels,
-  isFiledReturnsSummaryForbiddenFieldPath,
   isFiledReturnsSummaryIdentityPath,
-} from "./filed-returns-summary-labels";
+} from "./filed-returns-summary-identity";
+import { isFiledReturnsSummaryForbiddenFieldPath } from "./filed-returns-summary-redaction";
 import { FILED_RETURNS_MONTHS, type FiledReturnsMonth } from "./filed-returns-scope";
 
 export const FILED_RETURNS_SUMMARY_SHEET_PATH = "full-year-summary.csv";
 export const MAX_FILED_RETURNS_SUMMARY_ROWS = 100_000;
+export const MAX_FILED_RETURNS_SUMMARY_ARRAY_EXPANSION_ELEMENTS = 64;
 
 export const FILED_RETURNS_SUMMARY_HEADERS = [
   "period",
@@ -117,6 +118,13 @@ interface SummaryIdentityValue {
 }
 
 const OUTCOME_FIELD_PATH = "pack:outcome";
+const DISCRIMINATOR_KEYS = ["ty", "pos"] as const;
+const GSTR3B_EXPANDABLE_ARRAY_PATHS = [
+  "/itc_elg/itc_avl",
+  "/itc_elg/itc_rev",
+  "/itc_elg/itc_inelg",
+  "/inter_sup/unreg_details",
+] as const;
 const PERIOD_ORDER = new Map(FILED_RETURNS_MONTHS.map((period, index) => [period, index]));
 const ARTIFACT_ORDER: Record<FiledReturnsConcreteArtifactType, number> = {
   PDF: 0,
@@ -346,6 +354,16 @@ function dataCsvRow(row: FiledReturnsSummaryDataRow): Record<string, CsvCellValu
 function outcomeCategory(entry: FiledReturnsSummaryPlanEntry): string {
   if (entry.outcomeCategory !== "staged") return entry.outcomeCategory;
   return entry.artifactType === "JSON" ? "json-unparsed" : "non-json-artifact";
+}
+
+function filedReturnsSummaryArrayExpansion(
+  returnType: FiledReturnsReturnType,
+): FlatJsonArrayExpansionOptions {
+  return {
+    discriminatorKeys: DISCRIMINATOR_KEYS,
+    eligiblePaths: returnType === "GSTR-3B" ? GSTR3B_EXPANDABLE_ARRAY_PATHS : [],
+    maxElements: MAX_FILED_RETURNS_SUMMARY_ARRAY_EXPANSION_ELEMENTS,
+  };
 }
 
 function comparePlanEntries(

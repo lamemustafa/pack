@@ -474,6 +474,15 @@ function escapeJsonPointerToken(value: string): string {
   return value.replace(/~/g, "~0").replace(/\//g, "~1");
 }
 
+export function canonicalJsonPointerSegments(path: string): string[] {
+  if (path === "") return [];
+  return path
+    .split("/")
+    .slice(1)
+    .map((segment) => segment.replace(/~1/g, "/").replace(/~0/g, "~"))
+    .map((segment) => segment.toLowerCase().replace(/[^a-z0-9]/g, ""));
+}
+
 function discriminatorValue(leaves: readonly FlatJsonLeaf[], pointer: string): string | null {
   const leaf = leaves.find((candidate) => candidate.path === pointer);
   if (!leaf || leaf.arrayCountReason || leaf.value.length === 0) return null;

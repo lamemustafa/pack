@@ -8,6 +8,8 @@ import type {
 import {
   FILED_RETURNS_GSTR3B_WORKBOOK_IDENTITY_LABELS,
   type FiledReturnsGstr3bWorkbookIdentityLabel,
+} from "./filed-returns-summary-identity";
+import {
   filedReturnsStatementCoverage,
   filedReturnsStatementLineItems,
 } from "./filed-returns-summary-labels";
