@@ -15,10 +15,7 @@ import {
 import { filedReturnsJsonDocumentContract } from "./artifact-validation";
 import type { FiledReturnsConcreteArtifactType } from "./filed-returns-artifacts";
 import type { FiledReturnsReturnType } from "./filed-returns-return-types";
-import {
-  filedReturnsSummaryArrayExpansion,
-  MAX_FILED_RETURNS_SUMMARY_ARRAY_EXPANSION_ELEMENTS,
-} from "./filed-returns-summary-arrays";
+import { filedReturnsSummaryArrayExpansion } from "./filed-returns-summary-arrays";
 import {
   filedReturnsSummaryFieldLabel,
   filedReturnsSummaryIdentity,
@@ -27,17 +24,7 @@ import {
 import { FILED_RETURNS_MONTHS, type FiledReturnsMonth } from "./filed-returns-scope";
 
 export const FILED_RETURNS_SUMMARY_SHEET_PATH = "full-year-summary.csv";
-export const FILED_RETURNS_SUMMARY_FORMAT_VERSION = "pack-full-year-summary-tidy-v4";
 export const MAX_FILED_RETURNS_SUMMARY_ROWS = 100_000;
-export const FILED_RETURNS_SUMMARY_ARRAY_RULE = `Configured return-summary arrays with at most ${MAX_FILED_RETURNS_SUMMARY_ARRAY_EXPANSION_ELEMENTS} elements expand only when every element shares a unique non-empty discriminator selected in order from ty, pos; expanded elements are keyed by the discriminator and emit no count row. Empty arrays emit one numeric count row with array-count-empty; every other array emits one numeric count row whose outcome records why it was not expanded.`;
-export const FILED_RETURNS_SUMMARY_NUMBER_RULE =
-  "JSON number tokens are expanded without rounding into plain decimal notation in value_number; spreadsheet software may apply its own numeric precision limits.";
-export const FILED_RETURNS_SUMMARY_TEXT_RULE =
-  "JSON strings, booleans, and null use value_text; an empty JSON string is a quoted empty CSV cell, while formula-like text is apostrophe-prefixed for spreadsheet safety.";
-export const FILED_RETURNS_SUMMARY_LABEL_RULE =
-  "field_label is populated only by the return-type label map with recorded official-source provenance; otherwise it is empty and field_path remains canonical.";
-export const FILED_RETURNS_SUMMARY_IDENTITY_RULE =
-  "Recognized identity fields are removed from the data CSV. Invariant taxpayer identity is written once on the Run details sheet; filing identity is written once per return type and period; inconsistent invariant identity values fail summary generation.";
 
 export const FILED_RETURNS_SUMMARY_HEADERS = [
   "period",
@@ -96,7 +83,7 @@ export interface FiledReturnsSummaryDataRow {
 
 export interface FiledReturnsSummaryContextRow {
   contextKey: string;
-  contextType: "run_metadata" | "format_rule" | "taxpayer_identity" | "return_identity";
+  contextType: "taxpayer_identity" | "return_identity";
   fieldLabel: string;
   fieldPath: string;
   valueText: string;
@@ -306,27 +293,6 @@ function buildContextRows(
   if (financialYears.length !== 1) {
     throw new SyntaxError("Filed-return summary plan must have one financial year.");
   }
-  const metadata = [
-    ["format_version", FILED_RETURNS_SUMMARY_FORMAT_VERSION],
-    ["data_file", FILED_RETURNS_SUMMARY_SHEET_PATH],
-    ["financial_year", financialYears[0]!],
-    ["return_types", sortedUnique(plan.map((entry) => entry.returnType)).join("|")],
-    ["artifacts", sortedUnique(plan.map((entry) => entry.artifactType)).join("|")],
-    [
-      "planned_periods",
-      FILED_RETURNS_MONTHS.filter((period) => plan.some((entry) => entry.period === period)).join(
-        "|",
-      ),
-    ],
-  ].map(([contextKey, valueText]) => contextRow("run_metadata", contextKey!, valueText!));
-  const rules = [
-    ["envelope_rule", envelopeRule(plan)],
-    ["array_rule", FILED_RETURNS_SUMMARY_ARRAY_RULE],
-    ["number_rule", FILED_RETURNS_SUMMARY_NUMBER_RULE],
-    ["text_rule", FILED_RETURNS_SUMMARY_TEXT_RULE],
-    ["label_rule", FILED_RETURNS_SUMMARY_LABEL_RULE],
-    ["identity_rule", FILED_RETURNS_SUMMARY_IDENTITY_RULE],
-  ].map(([contextKey, valueText]) => contextRow("format_rule", contextKey!, valueText!));
   const identities = [...identityValues]
     .sort(
       (left, right) =>
@@ -341,32 +307,7 @@ function buildContextRows(
       fieldPath: identity.fieldPath,
       valueText: identity.value,
     }));
-  return [...metadata, ...rules, ...identities];
-}
-
-function envelopeRule(plan: readonly FiledReturnsSummaryPlanEntry[]): string {
-  const returnTypes = [...new Set(plan.map((entry) => entry.returnType))].sort(compareCodeUnits);
-  const normalizedEnvelopes = returnTypes.map((returnType) => {
-    const pointer = filedReturnsJsonDocumentContract(returnType)
-      .envelopePath.map((segment) => `/${segment.replace(/~/g, "~0").replace(/\//g, "~1")}`)
-      .join("");
-    return `${returnType}:${pointer}`;
-  });
-  return `Before flattening, Pack removes the documented return envelope (${normalizedEnvelopes.join("|")}); field_path is relative to that envelope, and a missing envelope emits json-envelope-missing.`;
-}
-
-function contextRow(
-  contextType: "run_metadata" | "format_rule",
-  contextKey: string,
-  valueText: string,
-): FiledReturnsSummaryContextRow {
-  return {
-    contextType,
-    contextKey,
-    fieldLabel: "",
-    fieldPath: "",
-    valueText,
-  };
+  return identities;
 }
 
 function dataCsvRow(row: FiledReturnsSummaryDataRow): Record<string, CsvCellValue> {

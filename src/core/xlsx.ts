@@ -11,7 +11,7 @@ export interface XlsxWorksheet {
   name: string;
   rows: readonly (readonly (XlsxCell | undefined)[])[];
   columns?: readonly { width: number }[];
-  freezeFirstColumnAndTopRow?: boolean;
+  freezeFirstColumnAndRows?: number;
 }
 
 export interface XlsxWorkbook {
@@ -31,6 +31,7 @@ const SPREADSHEET_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/mai
 const RELATIONSHIP_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 const PACKAGE_RELATIONSHIP_NS = "http://schemas.openxmlformats.org/package/2006/relationships";
 const MAX_EXCEL_STRING_LENGTH = 32_767;
+const MAX_EXCEL_ROWS = 1_048_576;
 
 export function createXlsx(
   workbook: XlsxWorkbook,
@@ -79,6 +80,14 @@ function validateWorkbook(workbook: XlsxWorkbook): void {
     ) {
       throw new TypeError("Invalid or duplicate XLSX worksheet name.");
     }
+    if (
+      worksheet.freezeFirstColumnAndRows !== undefined &&
+      (!Number.isInteger(worksheet.freezeFirstColumnAndRows) ||
+        worksheet.freezeFirstColumnAndRows < 1 ||
+        worksheet.freezeFirstColumnAndRows > MAX_EXCEL_ROWS)
+    ) {
+      throw new RangeError("Invalid XLSX frozen row count.");
+    }
     names.add(worksheet.name);
   }
 }
@@ -93,9 +102,10 @@ function worksheetXml(worksheet: XlsxWorksheet, maxOutputBytes: number): string 
     parts.push(part);
   };
   append(`${XML_HEADER}<worksheet xmlns="${SPREADSHEET_NS}">`);
+  const frozenRows = worksheet.freezeFirstColumnAndRows;
   append(
-    worksheet.freezeFirstColumnAndTopRow
-      ? '<sheetViews><sheetView workbookViewId="0"><pane xSplit="1" ySplit="1" topLeftCell="B2" activePane="bottomRight" state="frozen"/></sheetView></sheetViews>'
+    frozenRows
+      ? `<sheetViews><sheetView workbookViewId="0"><pane xSplit="1" ySplit="${frozenRows}" topLeftCell="B${frozenRows + 1}" activePane="bottomRight" state="frozen"/></sheetView></sheetViews>`
       : '<sheetViews><sheetView workbookViewId="0"/></sheetViews>',
   );
   if (worksheet.columns?.length) {

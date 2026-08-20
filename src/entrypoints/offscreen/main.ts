@@ -20,7 +20,6 @@ import {
   buildFiledReturnsFullYearWorkbook,
   FILED_RETURNS_FULL_YEAR_WORKBOOK_PATH,
 } from "../../connectors/gst/filed-returns-full-year-workbook";
-import { PACK_PRODUCT_VERSION } from "../../extension/version";
 import { XlsxSizeLimitError } from "../../core/xlsx";
 import type { PackOffscreenFiledReturnSummaryResult } from "../../connectors/gst/offscreen-blob-url";
 import {
@@ -225,7 +224,6 @@ function createSummaryEntry(
       workbookBytes = buildFiledReturnsFullYearWorkbook(summary, plan, {
         generatedAt,
         maxOutputBytes: workbookBudget,
-        packVersion: PACK_PRODUCT_VERSION,
       });
     } catch (error) {
       return {
