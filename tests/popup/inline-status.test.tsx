@@ -37,13 +37,7 @@ const blockedSummary: FiledReturnsFlowSummary = {
 };
 
 describe("inline filed-return recovery status", () => {
-  it("gives every portal-gated primary action a reason, and never gates Open GST Portal", () => {
-    const noop = {
-      onOpenPortal: vi.fn(),
-      onRestartTarget: vi.fn(),
-      onRetryFullFiscalYearTarget: vi.fn(),
-      onRetryTarget: vi.fn(),
-    };
+  it("renders every portal-gated primary action disabled with a visible reason", () => {
     const targetReviewSummary: FiledReturnsFlowSummary = {
       ...blockedSummary,
       flowStep: {
@@ -66,18 +60,41 @@ describe("inline filed-return recovery status", () => {
     };
 
     for (const summary of [blockedSummary, targetReviewSummary, fullYearSummary]) {
-      const action = getInlinePrimaryAction(blockedPresentation, summary, noop);
-      if (!action) continue;
-      expect(action.portalDisabledReason).toBeTruthy();
+      const markup = renderToStaticMarkup(
+        <InlineStatus
+          busy={null}
+          portalReady={false}
+          onOpenPortal={vi.fn()}
+          onRestartTarget={vi.fn()}
+          onRetryFullFiscalYearTarget={vi.fn()}
+          onRetryTarget={vi.fn()}
+          presentation={blockedPresentation}
+          summary={summary}
+        />,
+      );
+      if (!markup.includes("inline-status-primary")) continue;
+      expect(markup).toContain("disabled");
+      expect(markup).toMatch(/Open a signed-in GST Portal tab before [^<]+\./);
     }
+  });
 
-    const errorAction = getInlinePrimaryAction(
-      { ...blockedPresentation, kind: "error" },
-      blockedSummary,
-      noop,
+  it("renders Open GST Portal enabled and unexplained while the portal is unavailable", () => {
+    const markup = renderToStaticMarkup(
+      <InlineStatus
+        busy={null}
+        portalReady={false}
+        onOpenPortal={vi.fn()}
+        onRestartTarget={vi.fn()}
+        onRetryFullFiscalYearTarget={vi.fn()}
+        onRetryTarget={vi.fn()}
+        presentation={{ ...blockedPresentation, kind: "error" }}
+        summary={blockedSummary}
+      />,
     );
-    expect(errorAction?.label).toBe("Open GST Portal");
-    expect(errorAction?.portalDisabledReason).toBeNull();
+
+    expect(markup).toContain("Open GST Portal");
+    expect(markup).not.toContain("disabled");
+    expect(markup).not.toContain("Open a signed-in GST Portal tab before");
   });
 
   it("disables a retry while the GST Portal is unavailable and explains why", () => {
