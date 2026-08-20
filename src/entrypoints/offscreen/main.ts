@@ -102,6 +102,8 @@ async function handleMessage(
         ? createSummaryEntry(message.payload.summaryPlan, entries, stagedInputBytes, generatedAt)
         : null;
       const archiveEntries = summary?.entries ? [...entries, ...summary.entries] : entries;
+      const summaryEntryCount: 0 | 1 | 2 =
+        summary?.entries?.length === 2 ? 2 : summary?.entries?.length === 1 ? 1 : 0;
       const zipBytes = createZip(archiveEntries, generatedAt);
       const zipBuffer = new ArrayBuffer(zipBytes.byteLength);
       new Uint8Array(zipBuffer).set(zipBytes);
@@ -114,7 +116,7 @@ async function handleMessage(
         blobUrl,
         zipEntryCount: archiveEntries.length,
         artifactEntryCount: entries.length,
-        summaryEntryCount: summary?.entries?.length ?? 0,
+        summaryEntryCount,
         ...(summary ? { summary: summary.result } : {}),
       };
     } catch {
@@ -199,7 +201,7 @@ function createSummaryEntry(
   entries: readonly ZipEntry[],
   stagedInputBytes: number,
   generatedAt: Date,
-): { entries?: [ZipEntry, ZipEntry]; result: PackOffscreenFiledReturnSummaryResult } {
+): { entries?: ZipEntry[]; result: PackOffscreenFiledReturnSummaryResult } {
   try {
     const summarySourcePaths = new Set(
       plan
@@ -215,6 +217,25 @@ function createSummaryEntry(
     }
     const summary = buildFiledReturnsSummarySheet(plan, entries, MAX_SUMMARY_SHEET_BYTES);
     const remainingZipBudget = Math.max(0, MAX_ZIP_INPUT_BYTES - stagedInputBytes);
+    const workbookApplicable = plan.every((entry) => entry.returnType === "GSTR-3B");
+    if (!workbookApplicable) {
+      if (
+        summary.dataBytes.byteLength > MAX_SUMMARY_SHEET_BYTES ||
+        summary.dataBytes.byteLength > remainingZipBudget
+      ) {
+        return { result: { status: "failed", reasonCategory: "too-large" } };
+      }
+      return {
+        entries: [{ path: FILED_RETURNS_SUMMARY_SHEET_PATH, bytes: summary.dataBytes }],
+        result: {
+          status: "included",
+          outcomeOnly: summary.outcomeOnly,
+          parsedPeriodCount: summary.parsedPeriodCount,
+          rowCount: summary.rowCount,
+          workbookOutcome: "not-applicable",
+        },
+      };
+    }
     const workbookBudget = Math.min(
       Math.max(0, MAX_SUMMARY_SHEET_BYTES - summary.dataBytes.byteLength),
       Math.max(0, remainingZipBudget - summary.dataBytes.byteLength),

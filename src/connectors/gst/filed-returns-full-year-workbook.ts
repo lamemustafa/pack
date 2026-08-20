@@ -6,6 +6,8 @@ import type {
   FiledReturnsSummarySheet,
 } from "./filed-returns-summary-sheet";
 import {
+  FILED_RETURNS_GSTR3B_WORKBOOK_IDENTITY_LABELS,
+  type FiledReturnsGstr3bWorkbookIdentityLabel,
   filedReturnsStatementCoverage,
   filedReturnsStatementLineItems,
 } from "./filed-returns-summary-labels";
@@ -64,11 +66,10 @@ function consolidatedSheet(
   generatedAt: Date,
 ): XlsxWorksheet {
   const rows: Array<Array<XlsxCell | undefined>> = [
-    [{ value: "GSTIN", style: "bold" }, { value: taxpayerIdentityValue(contextRows, "GSTIN") }],
-    [
-      { value: "Legal name", style: "bold" },
-      { value: taxpayerIdentityValue(contextRows, "Legal name") },
-    ],
+    ...FILED_RETURNS_GSTR3B_WORKBOOK_IDENTITY_LABELS.map((fieldLabel) => [
+      { value: fieldLabel, style: "bold" as const },
+      { value: taxpayerIdentityValue(contextRows, fieldLabel) },
+    ]),
     [{ value: "Financial year", style: "bold" }, { value: financialYear }],
     [],
     [
@@ -219,7 +220,7 @@ function exactSpreadsheetNumber(input: string): number | null {
 
 function taxpayerIdentityValue(
   rows: readonly FiledReturnsSummaryContextRow[],
-  fieldLabel: "GSTIN" | "Legal name",
+  fieldLabel: FiledReturnsGstr3bWorkbookIdentityLabel,
 ): string {
   const matches = rows.filter(
     (row) => row.contextType === "taxpayer_identity" && row.fieldLabel === fieldLabel,

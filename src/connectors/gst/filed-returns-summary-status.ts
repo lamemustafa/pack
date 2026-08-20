@@ -28,7 +28,7 @@ export function filedReturnsSummaryOutcome(
       ],
       safeMessage:
         result.reasonCategory === "too-large"
-          ? "Pack saved the artifact files without derived summary outputs because the workbook and CSV exceeded their local size limit."
+          ? "Pack saved the artifact files without derived summary outputs because the derived summary output exceeded its local size limit."
           : result.reasonCategory === "workbook-generation-failed"
             ? "Pack saved the artifact files without derived summary outputs because workbook generation failed."
             : "Pack saved the artifact files without derived summary outputs because summary generation failed.",
@@ -37,18 +37,40 @@ export function filedReturnsSummaryOutcome(
   return {
     safeSignals: [
       "full-fiscal-year-summary-included",
+      ...(result.workbookOutcome === "not-applicable"
+        ? ["full-fiscal-year-workbook-not-applicable"]
+        : []),
       ...(result.outcomeOnly ? ["full-fiscal-year-summary-outcomes-only"] : []),
       `full-fiscal-year-summary-parsed-period-count:${result.parsedPeriodCount}`,
       `full-fiscal-year-summary-row-count:${result.rowCount}`,
     ],
-    safeMessage: result.outcomeOnly
-      ? "The ZIP includes the workbook and an outcome-only tidy CSV because no parseable portal JSON was available."
-      : `The ZIP includes the workbook and tidy CSV for ${result.parsedPeriodCount} ${result.parsedPeriodCount === 1 ? "period" : "periods"}.`,
+    safeMessage:
+      result.workbookOutcome === "not-applicable"
+        ? result.outcomeOnly
+          ? "The ZIP includes an outcome-only tidy CSV. A consolidated workbook is not available for this return type."
+          : `The ZIP includes the tidy CSV for ${result.parsedPeriodCount} ${result.parsedPeriodCount === 1 ? "period" : "periods"}. A consolidated workbook is not available for this return type.`
+        : result.outcomeOnly
+          ? "The ZIP includes the workbook and an outcome-only tidy CSV because no parseable portal JSON was available."
+          : `The ZIP includes the workbook and tidy CSV for ${result.parsedPeriodCount} ${result.parsedPeriodCount === 1 ? "period" : "periods"}.`,
   };
 }
 
 export function filedReturnsSummaryStatusMessage(signals: readonly string[]): string {
   const signalSet = new Set(signals);
+  if (
+    signalSet.has("full-fiscal-year-summary-included") &&
+    signalSet.has("full-fiscal-year-workbook-not-applicable")
+  ) {
+    const countSignal = signals.find((signal) =>
+      signal.startsWith("full-fiscal-year-summary-parsed-period-count:"),
+    );
+    const count = Number(countSignal?.split(":").at(-1));
+    return signalSet.has("full-fiscal-year-summary-outcomes-only")
+      ? " The ZIP includes an outcome-only tidy CSV. A consolidated workbook is not available for this return type."
+      : Number.isInteger(count) && count >= 0 && count <= 12
+        ? ` The ZIP includes the tidy CSV for ${count} ${count === 1 ? "period" : "periods"}. A consolidated workbook is not available for this return type.`
+        : " The ZIP includes the tidy CSV. A consolidated workbook is not available for this return type.";
+  }
   if (signalSet.has("full-fiscal-year-summary-outcomes-only")) {
     return " The ZIP includes the workbook and an outcome-only tidy CSV because no parseable portal JSON was available.";
   }
@@ -63,7 +85,7 @@ export function filedReturnsSummaryStatusMessage(signals: readonly string[]): st
   }
   if (signalSet.has("full-fiscal-year-summary-failed")) {
     if (signalSet.has("full-fiscal-year-summary-error:too-large")) {
-      return " Pack saved the artifact files without derived summary outputs because the workbook and CSV exceeded their local size limit.";
+      return " Pack saved the artifact files without derived summary outputs because the derived summary output exceeded its local size limit.";
     }
     if (signalSet.has("full-fiscal-year-summary-error:workbook-generation-failed")) {
       return " Pack saved the artifact files without derived summary outputs because workbook generation failed.";

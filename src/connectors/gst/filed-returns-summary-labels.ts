@@ -14,7 +14,10 @@ export interface FiledReturnsSummaryFieldLabel {
   statement?: FiledReturnsStatementLineItem;
 }
 
-type FiledReturnsStatementCoverageTable = "3.1" | "4";
+// Current-form table boundary verified against the GST Portal Form GSTR-3B PDF and manual.
+// Statement labels determine which of these tables are included; every other table is excluded.
+const GSTR3B_FORM_TABLES = ["3.1", "3.1.1", "3.2", "4", "5", "5.1", "6.1"] as const;
+type FiledReturnsStatementCoverageTable = (typeof GSTR3B_FORM_TABLES)[number];
 
 export interface FiledReturnsStatementLineItem {
   coverageTable: FiledReturnsStatementCoverageTable;
@@ -30,14 +33,9 @@ const GSTR3B_SOURCE = "GST Portal GSTR-3B Offline Utility V5.8 and Form GSTR-3B 
 const GSTR3B_PDF_CROSS_CHECK_SOURCE = "GST Portal GSTR-3B PDF export and JSON schema";
 const REVIEWED_ON = "2026-08-20";
 
-const GSTR3B_STATEMENT_TABLE_COVERAGE = [
-  { table: "3.1", status: "included" },
-  { table: "4", status: "included" },
-  { table: "3.1.1", status: "not-included" },
-  { table: "3.2", status: "not-included" },
-  { table: "5.1", status: "not-included" },
-  { table: "6.1", status: "not-included" },
-] as const;
+export const FILED_RETURNS_GSTR3B_WORKBOOK_IDENTITY_LABELS = ["GSTIN", "Legal name"] as const;
+export type FiledReturnsGstr3bWorkbookIdentityLabel =
+  (typeof FILED_RETURNS_GSTR3B_WORKBOOK_IDENTITY_LABELS)[number];
 
 type ComponentKey = "txval" | "iamt" | "camt" | "samt" | "csamt";
 const COMPONENT_LABELS: Record<ComponentKey, string> = {
@@ -435,14 +433,19 @@ export function filedReturnsStatementCoverage(): {
   includedTables: string[];
   excludedTables: string[];
 } {
+  const includedTables = [
+    ...new Set(filedReturnsStatementLineItems().map((lineItem) => lineItem.coverageTable)),
+  ];
   return {
-    includedTables: [
-      ...new Set(filedReturnsStatementLineItems().map((lineItem) => lineItem.coverageTable)),
-    ],
-    excludedTables: GSTR3B_STATEMENT_TABLE_COVERAGE.filter(
-      ({ status }) => status === "not-included",
-    ).map(({ table }) => table),
+    includedTables,
+    excludedTables: GSTR3B_FORM_TABLES.filter((table) => !includedTables.includes(table)),
   };
+}
+
+export function filedReturnsRequiredWorkbookIdentityLabels(
+  returnType: FiledReturnsReturnType,
+): readonly FiledReturnsGstr3bWorkbookIdentityLabel[] {
+  return returnType === "GSTR-3B" ? FILED_RETURNS_GSTR3B_WORKBOOK_IDENTITY_LABELS : [];
 }
 
 export function filedReturnsSummaryIdentityLabel(path: string): string | null {
@@ -522,6 +525,8 @@ export function isFiledReturnsSummaryForbiddenFieldPath(path: string): boolean {
 function isForbiddenCanonicalToken(canonicalToken: string): boolean {
   return (
     canonicalToken === "auth" ||
+    canonicalToken.includes("authcode") ||
+    canonicalToken.includes("accesskey") ||
     canonicalToken.endsWith("apikey") ||
     canonicalToken.endsWith("authheader") ||
     canonicalToken.endsWith("authkey") ||
@@ -529,6 +534,8 @@ function isForbiddenCanonicalToken(canonicalToken: string): boolean {
     canonicalToken === "authn" ||
     canonicalToken === "authz" ||
     canonicalToken === "bearer" ||
+    canonicalToken === "clientid" ||
+    canonicalToken === "clientidentifier" ||
     canonicalToken === "jwt" ||
     canonicalToken === "loginid" ||
     canonicalToken === "nonce" ||
@@ -537,6 +544,8 @@ function isForbiddenCanonicalToken(canonicalToken: string): boolean {
     canonicalToken === "pwd" ||
     canonicalToken === "sid" ||
     canonicalToken === "username" ||
+    canonicalToken === "userid" ||
+    canonicalToken === "useridentifier" ||
     canonicalToken === "xauth" ||
     canonicalToken.endsWith("token") ||
     canonicalToken.includes("authorization") ||
@@ -552,12 +561,20 @@ function isForbiddenCanonicalToken(canonicalToken: string): boolean {
     canonicalToken.includes("passwd") ||
     canonicalToken.includes("passphrase") ||
     canonicalToken.includes("privatekey") ||
+    canonicalToken.includes("recoverycode") ||
+    canonicalToken.includes("recoverykey") ||
     canonicalToken.includes("saml") ||
+    canonicalToken.includes("securityanswer") ||
     canonicalToken.includes("secret") ||
     canonicalToken.includes("session") ||
     canonicalToken.includes("sessid") ||
+    canonicalToken.startsWith("hotp") ||
+    canonicalToken.startsWith("mfa") ||
     canonicalToken === "otp" ||
-    canonicalToken.endsWith("otp")
+    canonicalToken.startsWith("otp") ||
+    canonicalToken.endsWith("otp") ||
+    canonicalToken.startsWith("totp") ||
+    canonicalToken.startsWith("twofactor")
   );
 }
 

@@ -20,6 +20,7 @@ import { filedReturnsSummaryArrayExpansion } from "./filed-returns-summary-array
 import {
   filedReturnsSummaryFieldLabel,
   filedReturnsSummaryIdentity,
+  filedReturnsRequiredWorkbookIdentityLabels,
   isFiledReturnsSummaryForbiddenFieldPath,
   isFiledReturnsSummaryIdentityPath,
 } from "./filed-returns-summary-labels";
@@ -257,6 +258,16 @@ function collectIdentityValues(parsedEntries: readonly ParsedPlanEntry[]): Summa
           label: descriptor.label,
           value: leaf.value,
         });
+      }
+    }
+    for (const requiredLabel of filedReturnsRequiredWorkbookIdentityLabels(
+      parsed.planned.returnType,
+    )) {
+      const requiredIdentity = identityInEntry.get(`taxpayer_identity:identity:${requiredLabel}`);
+      if (!requiredIdentity || requiredIdentity.value.trim() === "") {
+        throw new SyntaxError(
+          "Required taxpayer identity is missing from a parseable filed-return summary source.",
+        );
       }
     }
     for (const identity of identityInEntry.values()) {

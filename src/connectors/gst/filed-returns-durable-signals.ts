@@ -614,7 +614,7 @@ export function isDurableFiledReturnsSignal(signal: string): boolean {
     return zipCount[1] === "single-period" ? count <= 3 : count <= 38;
   }
   if (
-    /^(?:full-fiscal-year-summary-included|full-fiscal-year-summary-outcomes-only|full-fiscal-year-summary-failed)$/.test(
+    /^(?:full-fiscal-year-summary-included|full-fiscal-year-summary-outcomes-only|full-fiscal-year-summary-failed|full-fiscal-year-workbook-not-applicable)$/.test(
       signal,
     )
   ) {

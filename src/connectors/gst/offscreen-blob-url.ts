@@ -111,7 +111,7 @@ export type PackOffscreenBlobUrlResponse =
       blobUrl: string;
       zipEntryCount: number;
       artifactEntryCount: number;
-      summaryEntryCount: 0 | 2;
+      summaryEntryCount: 0 | 1 | 2;
       summary?: PackOffscreenFiledReturnSummaryResult;
     }
   | {
@@ -141,6 +141,7 @@ export type PackOffscreenFiledReturnSummaryResult =
       outcomeOnly: boolean;
       parsedPeriodCount: number;
       rowCount: number;
+      workbookOutcome?: "not-applicable";
     }
   | {
       status: "failed";

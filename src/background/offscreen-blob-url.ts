@@ -311,7 +311,8 @@ function isZipResponse(
     Number.isInteger(record.zipEntryCount) &&
     record.artifactEntryCount === expected.entryCount &&
     (record.summaryEntryCount === 0 ||
-      (record.summaryEntryCount === 2 && expected.summaryPlan !== undefined)) &&
+      ((record.summaryEntryCount === 1 || record.summaryEntryCount === 2) &&
+        expected.summaryPlan !== undefined)) &&
     record.zipEntryCount === record.artifactEntryCount + record.summaryEntryCount &&
     (expected.summaryPlan !== undefined || record.summary === undefined)
   );
@@ -330,8 +331,9 @@ function toZipResult(
       expected.summaryPlan && isSummaryResult(response.summary, expected.summaryPlan)
         ? response.summary
         : undefined;
-    const summaryCountMatches =
-      response.summaryEntryCount === (summary?.status === "included" ? 2 : 0);
+    const expectedSummaryEntryCount =
+      summary?.status === "included" ? (summary.workbookOutcome === "not-applicable" ? 1 : 2) : 0;
+    const summaryCountMatches = response.summaryEntryCount === expectedSummaryEntryCount;
     if (expected.summaryPlan && (!summary || !summaryCountMatches)) {
       return { status: "failed", errorCategory: "offscreen-response-invalid" };
     }
@@ -375,9 +377,19 @@ function isSummaryResult(
       .filter((entry) => entry.artifactType === "JSON" && entry.outcomeCategory === "staged")
       .map((entry) => entry.period),
   ).size;
+  const expectedWorkbookOutcome = plan.every((entry) => entry.returnType === "GSTR-3B")
+    ? undefined
+    : "not-applicable";
   return (
-    hasOnlyKeys(record, ["outcomeOnly", "parsedPeriodCount", "rowCount", "status"]) &&
+    hasOnlyKeys(record, [
+      "outcomeOnly",
+      "parsedPeriodCount",
+      "rowCount",
+      "status",
+      "workbookOutcome",
+    ]) &&
     record.status === "included" &&
+    record.workbookOutcome === expectedWorkbookOutcome &&
     typeof record.outcomeOnly === "boolean" &&
     typeof record.parsedPeriodCount === "number" &&
     Number.isInteger(record.parsedPeriodCount) &&
