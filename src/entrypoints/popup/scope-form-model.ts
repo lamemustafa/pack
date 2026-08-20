@@ -104,7 +104,7 @@ export function getScopeActionCopy(
       "Walks eligible periods",
       "Stages files locally",
       "Hands off one ZIP",
-      ...filedReturnsCapabilityRunNotes(scope.returnType),
+      ...filedReturnsCapabilityRunNotes(scope.returnType, artifactType),
     ],
   };
 }
