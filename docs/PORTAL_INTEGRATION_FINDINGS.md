@@ -150,7 +150,13 @@ This log records live diagnostic findings that constrain Pack's local, target-bo
     independently verifiable source locator without recording a portal URL or taxpayer data here.
     Pack applies that validation only before placing a GSTR-3B taxpayer identity in a derived
     summary workbook.
-    An invalid identity rejects the derived summary as fixed `identity-rejected`; a forbidden
-    credential or session field rejects it as fixed `privacy-rejected`. In either case, the
-    original staged return artifact remains available and Pack neither retains nor renders the
-    rejected value.
+    An invalid identity rejects the derived summary as fixed `identity-rejected`; a required
+    identity absent from the canonical response path rejects it as fixed `identity-unverified`;
+    a forbidden credential or session field rejects it as fixed `privacy-rejected`. The claim
+    that Pack neither retains nor renders the rejected value is true of the **derived** outputs
+    only: on rejection no summary CSV and no workbook are written, and the fixed reason carries
+    no portal value. The original staged return artifact is deliberately unchanged. ZIP assembly
+    copies every staged portal file verbatim, so a value a derived-output guard rejected is
+    still present in the user's own requested portal JSON inside the downloaded ZIP, and in OPFS
+    until the ledger is cleared. That is the file the user asked Pack to save, and Pack does not
+    edit portal bytes; the guard scopes what Pack derives, not what the portal produced.
