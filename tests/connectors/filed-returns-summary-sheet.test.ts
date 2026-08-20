@@ -16,7 +16,7 @@ describe("filed-return full-year summary sheet", () => {
         {
           path: "april-data.json",
           bytes: new TextEncoder().encode(
-            '{"status":1,"data":{"r3b":{"gstin":"00XXXXX0000X0Z0","pan":"AAAAA0000A","taxpayer_name":"Synthetic Taxpayer Name","lglnm":"Synthetic Legal Name","trdnm":"Synthetic Trade Name","arn":"SYNTHETIC-ARN-APRIL","arn_dt":"2026-05-01","signatory":"Synthetic Signatory","designation":"Synthetic Designation","ret_period":"042026","sup_details":{"osup_det":{"txval":2.038519331E7,"iamt":99999999999999.999}},"surrounding_decoy":{"leading_zero_id":"00042","empty_text":"","unknown_amount":7},"entries":[{"ignored":900},{"ignored":800}]}},"response_decoy":"synthetic"}',
+            '{"status":1,"data":{"pan":"AAAAA0000A","taxpayer_name":"Synthetic Taxpayer Name","lglnm":"Synthetic Legal Name","trdnm":"Synthetic Trade Name","arn":"SYNTHETIC-ARN-APRIL","arnDt":"2026-05-01","authSig":"Synthetic Signatory","desig":"Synthetic Designation","r3b":{"gstin":"00XXXXX0000X0Z0","ret_period":"042026","sup_details":{"osup_det":{"txval":2.038519331E7,"iamt":99999999999999.999}},"surrounding_decoy":{"leading_zero_id":"00042","empty_text":"","unknown_amount":7},"entries":[{"ignored":900},{"ignored":800}]}},"response_decoy":"synthetic"}',
           ),
         },
       ],
@@ -81,21 +81,25 @@ describe("filed-return full-year summary sheet", () => {
     expect(context.match(/2026-05-01/g)).toHaveLength(1);
     expect(context.match(/Synthetic Signatory/g)).toHaveLength(1);
     expect(context.match(/Synthetic Designation/g)).toHaveLength(1);
-    expect(context).toContain("taxpayer_identity,identity,GSTIN,/gstin,00XXXXX0000X0Z0");
-    expect(context).toContain("taxpayer_identity,identity,Legal name,/lglnm,Synthetic Legal Name");
-    expect(context).toContain("taxpayer_identity,identity,PAN,/pan,AAAAA0000A");
-    expect(context).toContain("taxpayer_identity,identity,Trade name,/trdnm,Synthetic Trade Name");
+    expect(context).toContain("taxpayer_identity,identity,GSTIN,/data/r3b/gstin,00XXXXX0000X0Z0");
     expect(context).toContain(
-      "taxpayer_identity,identity,Taxpayer name,/taxpayer_name,Synthetic Taxpayer Name",
+      "taxpayer_identity,identity,Legal name,/data/lglnm,Synthetic Legal Name",
+    );
+    expect(context).toContain("taxpayer_identity,identity,PAN,/data/pan,AAAAA0000A");
+    expect(context).toContain(
+      "taxpayer_identity,identity,Trade name,/data/trdnm,Synthetic Trade Name",
     );
     expect(context).toContain(
-      "taxpayer_identity,identity,Signatory,/signatory,Synthetic Signatory",
+      "taxpayer_identity,identity,Taxpayer name,/data/taxpayer_name,Synthetic Taxpayer Name",
     );
     expect(context).toContain(
-      "taxpayer_identity,identity,Designation,/designation,Synthetic Designation",
+      "taxpayer_identity,identity,Signatory,/data/authSig,Synthetic Signatory",
     );
-    expect(context).toContain("return_identity,GSTR-3B:April,ARN,/arn,SYNTHETIC-ARN-APRIL");
-    expect(context).toContain("return_identity,GSTR-3B:April,ARN date,/arn_dt,2026-05-01");
+    expect(context).toContain(
+      "taxpayer_identity,identity,Designation,/data/desig,Synthetic Designation",
+    );
+    expect(context).toContain("return_identity,GSTR-3B:April,ARN,/data/arn,SYNTHETIC-ARN-APRIL");
+    expect(context).toContain("return_identity,GSTR-3B:April,ARN date,/data/arnDt,2026-05-01");
     expect(summary).toMatchObject({ outcomeOnly: false, parsedPeriodCount: 1 });
   });
 
@@ -106,33 +110,34 @@ describe("filed-return full-year summary sheet", () => {
         jsonPlan("May", "may-data.json", "GSTR-3B"),
       ],
       [
-        jsonEntry("april-data.json", "GSTR-3B", {
-          gstin: "00XXXXX0000X0Z0",
-          lglnm: "Synthetic Legal Name",
-          arn: "SYNTHETIC-ARN-APRIL",
-          arn_dt: "2026-05-01",
-          amount: 1,
+        rawJsonEntry("april-data.json", {
+          status: 1,
+          data: {
+            lglnm: "Synthetic Legal Name",
+            arn: "SYNTHETIC-ARN-APRIL",
+            arnDt: "2026-05-01",
+            r3b: { gstin: "00XXXXX0000X0Z0", ret_period: "042026", amount: 1 },
+          },
         }),
-        jsonEntry(
-          "may-data.json",
-          "GSTR-3B",
-          {
-            gstin: "00XXXXX0000X0Z0",
+        rawJsonEntry("may-data.json", {
+          status: 1,
+          data: {
             lglnm: "Synthetic Legal Name",
             arn: "SYNTHETIC-ARN-MAY",
-            arn_dt: "2026-06-01",
-            amount: 2,
+            arnDt: "2026-06-01",
+            r3b: { gstin: "00XXXXX0000X0Z0", ret_period: "052026", amount: 2 },
           },
-          "052026",
-        ),
+        }),
       ],
     );
 
     const data = new TextDecoder().decode(summary.dataBytes);
     expect(data).not.toContain("SYNTHETIC-ARN");
     const context = contextText(summary.contextRows);
-    expect(context).toContain("return_identity,GSTR-3B:April,ARN,/arn,SYNTHETIC-ARN-APRIL");
-    expect(context).toContain("return_identity,GSTR-3B:May,ARN,/arn,SYNTHETIC-ARN-MAY");
+    expect(context).toContain("return_identity,GSTR-3B:April,ARN,/data/arn,SYNTHETIC-ARN-APRIL");
+    expect(context).toContain("return_identity,GSTR-3B:May,ARN,/data/arn,SYNTHETIC-ARN-MAY");
+    expect(context).toContain("return_identity,GSTR-3B:April,ARN date,/data/arnDt,2026-05-01");
+    expect(context).toContain("return_identity,GSTR-3B:May,ARN date,/data/arnDt,2026-06-01");
     expect(context.match(/Synthetic Legal Name/g)).toHaveLength(1);
   });
 
@@ -140,9 +145,12 @@ describe("filed-return full-year summary sheet", () => {
     const summary = buildFiledReturnsSummarySheet(
       [jsonPlan("April", "april-data.json", "GSTR-3B")],
       [
-        jsonEntry("april-data.json", "GSTR-3B", {
-          authSig: "Synthetic Authorized Signatory",
-          amount: 1,
+        rawJsonEntry("april-data.json", {
+          status: 1,
+          data: {
+            authSig: "Synthetic Authorized Signatory",
+            r3b: { ret_period: "042026", amount: 1 },
+          },
         }),
       ],
     );
@@ -152,7 +160,7 @@ describe("filed-return full-year summary sheet", () => {
     const context = contextText(summary.contextRows);
     expect(context.match(/Synthetic Authorized Signatory/g)).toHaveLength(1);
     expect(context).toContain(
-      "taxpayer_identity,identity,Signatory,/authSig,Synthetic Authorized Signatory",
+      "taxpayer_identity,identity,Signatory,/data/authSig,Synthetic Authorized Signatory",
     );
   });
 
@@ -557,6 +565,37 @@ describe("filed-return full-year summary sheet", () => {
       ).toThrow("credential or session field");
     },
   );
+
+  it("rejects forbidden material outside the normalized return envelope", () => {
+    const secret = "synthetic-outside-envelope-sensitive-value";
+    expect(() =>
+      buildFiledReturnsSummarySheet(
+        [jsonPlan("April", "april-data.json", "GSTR-3B")],
+        [
+          rawJsonEntry("april-data.json", {
+            status: 1,
+            outside: { cookie: secret },
+            data: {
+              lglnm: "Synthetic Legal Name",
+              r3b: { gstin: "00XXXXX0000X0Z0", ret_period: "042026", amount: 1 },
+            },
+          }),
+        ],
+      ),
+    ).toThrow("credential or session field");
+    expect(() =>
+      buildFiledReturnsSummarySheet(
+        [jsonPlan("April", "april-data.json", "GSTR-3B")],
+        [
+          rawJsonEntry("april-data.json", {
+            status: 1,
+            outside: { cookie: secret },
+            data: { r3b: { ret_period: "042026", amount: 1 } },
+          }),
+        ],
+      ),
+    ).not.toThrow(secret);
+  });
 
   it("bounds retained JSON Pointer paths before descending into wide nested keys", () => {
     const wideKeys = Array.from({ length: 12 }, (_, index) => `${index}-${"k".repeat(180)}`);

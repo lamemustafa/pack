@@ -10,7 +10,7 @@ import {
 import { FILED_RETURNS_MONTHS } from "../../src/connectors/gst/filed-returns-scope";
 
 describe("filed-return full-year workbook", () => {
-  it("emits one self-contained comparative statement", () => {
+  it("builds the statement header from identity outside the return envelope", () => {
     const plan = fullYearPlan();
     const summary = buildFiledReturnsSummarySheet(plan, [
       {
@@ -19,10 +19,14 @@ describe("filed-return full-year workbook", () => {
           JSON.stringify({
             status: 1,
             data: {
+              lglnm: "Synthetic Workbook Taxpayer",
+              trdnm: "Synthetic Workbook Trade Name",
+              arn: "SYNTHETIC-WORKBOOK-ARN",
+              arnDt: "2026-05-01",
+              authSig: "Synthetic Workbook Signatory",
+              desig: "Synthetic Workbook Designation",
               r3b: {
                 gstin: "00XXXXX0000X0Z0",
-                lglnm: "Synthetic Workbook Taxpayer",
-                trdnm: "Synthetic Workbook Trade Name",
                 ret_period: "042026",
                 sup_details: {
                   osup_det: { txval: 10.25, iamt: 2, camt: 3, samt: 4, csamt: 5 },
@@ -130,11 +134,46 @@ describe("filed-return full-year workbook", () => {
       expect(statement.match(new RegExp(identity, "g"))).toHaveLength(1);
       expect(new TextDecoder().decode(summary.dataBytes)).not.toContain(identity);
     }
-    expect(statement).not.toContain("Synthetic Workbook Trade Name");
-    expect(new TextDecoder().decode(summary.dataBytes)).not.toContain(
+    for (const excludedIdentity of [
       "Synthetic Workbook Trade Name",
-    );
+      "SYNTHETIC-WORKBOOK-ARN",
+      "2026-05-01",
+      "Synthetic Workbook Signatory",
+      "Synthetic Workbook Designation",
+    ]) {
+      expect(statement).not.toContain(excludedIdentity);
+      expect(new TextDecoder().decode(summary.dataBytes)).not.toContain(excludedIdentity);
+    }
     expect(statement).not.toContain("/surrounding_decoy/unlabeled_amount");
+  });
+
+  it("keeps the workbook when the legal name is missing", () => {
+    const plan = fullYearPlan();
+    const summary = buildFiledReturnsSummarySheet(plan, [
+      {
+        path: "april-data.json",
+        bytes: new TextEncoder().encode(
+          JSON.stringify({
+            status: 1,
+            data: {
+              r3b: {
+                gstin: "00XXXXX0000X0Z0",
+                ret_period: "042026",
+                sup_details: { osup_det: { txval: 1 } },
+              },
+            },
+          }),
+        ),
+      },
+    ]);
+
+    const workbook = buildFiledReturnsFullYearWorkbook(summary, plan, {
+      generatedAt: new Date("2026-08-19T12:00:00.000Z"),
+    });
+    const statement = text(extractStoredZipEntries(workbook), "xl/worksheets/sheet1.xml");
+    const rows = parsedRows(statement);
+    expect(rows[0]?.get("B1")?.text).toBe("00XXXXX0000X0Z0");
+    expect(rows[1]?.get("B2")?.text ?? "").toBe("");
   });
 });
 

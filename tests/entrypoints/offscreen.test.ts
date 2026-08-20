@@ -502,10 +502,10 @@ describe("offscreen Blob URL entrypoint", () => {
         value: {
           status: 1,
           data: {
+            lglnm: "Synthetic Example Taxpayer",
             r3b: {
               ret_period: "042026",
               gstin: "22AAAAA0000A1Z5",
-              lglnm: "Synthetic Example Taxpayer",
               surrounding_decoy: { z: "april", a: 10 },
               entries: [{ value: 900 }],
               portal_leaf: 11,
@@ -520,10 +520,10 @@ describe("offscreen Blob URL entrypoint", () => {
         value: {
           status: 1,
           data: {
+            lglnm: "Synthetic Example Taxpayer",
             r3b: {
               ret_period: "052026",
               gstin: "22AAAAA0000A1Z5",
-              lglnm: "Synthetic Example Taxpayer",
               surrounding_decoy: { z: "may" },
               entries: [{ value: 800 }, { value: 700 }],
               other_portal_leaf: 22,
@@ -610,6 +610,9 @@ describe("offscreen Blob URL entrypoint", () => {
     expect(new TextDecoder().decode(workbook.get("xl/workbook.xml"))).toContain(
       '<sheet name="GSTR-3B Consolidated"',
     );
+    const statement = new TextDecoder().decode(workbook.get("xl/worksheets/sheet1.xml"));
+    expect(statement).toContain("22AAAAA0000A1Z5");
+    expect(statement).toContain("Synthetic Example Taxpayer");
   });
 
   it("adds only fixed outcome rows when a full-year run has no parseable JSON", async () => {

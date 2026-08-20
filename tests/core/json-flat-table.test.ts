@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   flatJsonLeavesApproximateBytes,
   flattenJsonTextObjectAtPath,
+  flattenJsonTextSelectedScalarLeaves,
   flattenJsonTextScalarLeaves,
   JsonFlatTableLimitError,
   JsonFlatTablePathNotFoundError,
@@ -90,6 +91,24 @@ describe("flat JSON leaf extraction", () => {
         ["data", "r3b"],
       ),
     ).toEqual([{ path: "/amount", valueKind: "number", value: "99999999999999.999" }]);
+  });
+
+  it("retains only selected whole-document leaves while visiting nested paths", () => {
+    const visited: string[] = [];
+    expect(
+      flattenJsonTextSelectedScalarLeaves(
+        '{"data":{"lglnm":"Synthetic Name","unused":1e99999999,"rows":[{"arn":"SYNTHETIC-ARN"}]}}',
+        {
+          includePath: (path) => path.endsWith("/lglnm") || path.endsWith("/arn"),
+          visitPath: (path) => visited.push(path),
+        },
+      ),
+    ).toEqual([
+      { path: "/data/lglnm", valueKind: "text", value: "Synthetic Name" },
+      { path: "/data/rows/0/arn", valueKind: "text", value: "SYNTHETIC-ARN" },
+    ]);
+    expect(visited).toContain("/data/unused");
+    expect(visited).toContain("/data/rows/0/arn");
   });
 
   it("distinguishes a missing or non-object selected path from malformed JSON", () => {
