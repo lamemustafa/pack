@@ -20,6 +20,7 @@ const pkg = JSON.parse(readFileSync(resolve(import.meta.dirname, "package.json")
 export default defineConfig({
   srcDir: "src",
   modules: ["@wxt-dev/module-react"],
+  vite: () => ({ build: { modulePreload: false } }),
   manifest: {
     name: PACK_EXTENSION_NAME,
     short_name: PACK_EXTENSION_SHORT_NAME,
