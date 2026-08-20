@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { buildFiledReturnsFullYearWorkbook } from "../../src/connectors/gst/filed-returns-full-year-workbook";
 import {
-  buildFiledReturnsFullYearWorkbook,
-  FILED_RETURNS_FULL_YEAR_WORKBOOK_FORMAT_VERSION,
-} from "../../src/connectors/gst/filed-returns-full-year-workbook";
+  filedReturnsStatementCoverage,
+  filedReturnsStatementLineItems,
+} from "../../src/connectors/gst/filed-returns-summary-labels";
 import {
   buildFiledReturnsSummarySheet,
   type FiledReturnsSummaryPlanEntry,
@@ -44,7 +45,7 @@ describe("filed-return full-year workbook", () => {
       },
     ]);
     const options = {
-      generatedAt: new Date("2026-08-19T12:00:00.000Z"),
+      generatedAt: new Date("2026-08-20T12:00:00.000Z"),
     };
 
     const first = buildFiledReturnsFullYearWorkbook(summary, plan, options);
@@ -111,25 +112,35 @@ describe("filed-return full-year workbook", () => {
       expect(subrowsAfter(statementRows, table)).toEqual(["IGST", "CGST", "SGST", "Cess"]);
     }
 
-    const footerRows = statementRows.slice(-5);
-    expect(statementRows.at(-6)?.size).toBe(0);
+    const coverage = filedReturnsStatementCoverage();
+    expect(coverage).toEqual({
+      includedTables: ["3.1", "4"],
+      excludedTables: ["3.1.1", "3.2", "5.1", "6.1"],
+    });
+    expect(
+      filedReturnsStatementLineItems().some(
+        (lineItem) =>
+          lineItem.coverageTable === "3.1" && lineItem.sectionCaption.startsWith("Table 3.1.1"),
+      ),
+    ).toBe(false);
+    const footerRows = statementRows.slice(-2);
+    expect(statementRows.at(-3)?.size).toBe(0);
     expect(textValues(footerRows[0])).toEqual([
-      "Statement covers",
-      "Verified labels for Form GSTR-3B Tables 3.1 and 4.",
+      "Source",
+      "Filed GSTR-3B returns from the GST portal · 20 Aug 2026",
     ]);
     expect(textValues(footerRows[1])).toEqual([
-      "Not covered",
-      "Form GSTR-3B Tables 3.1.1, 3.2, 5.1 and 6.1 — labels not verified.",
+      "Coverage",
+      `Tables ${coverage.includedTables.join(" and ")}. Not included: ${coverage.excludedTables.join(", ")}.`,
     ]);
-    expect(textValues(footerRows[2])).toEqual([
-      "GSTR-9",
-      "GSTR-9 is not the sum of twelve GSTR-3B returns. Its Table 4 requires outward supplies split by counterparty type, which GSTR-3B does not contain, and it further requires amendments, ITC claimed in a later financial year, and reversals. This workbook does not produce GSTR-9 values.",
-    ]);
-    expect(textValues(footerRows[3])).toEqual(["Generated", "2026-08-19T12:00:00.000Z"]);
-    expect(textValues(footerRows[4])).toEqual([
-      "Workbook format",
-      FILED_RETURNS_FULL_YEAR_WORKBOOK_FORMAT_VERSION,
-    ]);
+    const footerValues = footerRows.map((row) => [...row!.values()][1]!.text!);
+    expect(Math.max(...footerValues.map((value) => value.length))).toBeLessThanOrEqual(55);
+    expect(statement).toContain('<col min="2" max="2" width="58" customWidth="1"/>');
+    const workbookText = [...entries.values()]
+      .map((entry) => new TextDecoder().decode(entry))
+      .join("\n");
+    expect(workbookText).not.toContain("GSTR-9");
+    expect(workbookText).not.toContain("pack-full-year-workbook-");
     for (const identity of ["00XXXXX0000X0Z0", "Synthetic Workbook Taxpayer"]) {
       expect(statement.match(new RegExp(identity, "g"))).toHaveLength(1);
       expect(new TextDecoder().decode(summary.dataBytes)).not.toContain(identity);
