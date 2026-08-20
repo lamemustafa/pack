@@ -235,6 +235,15 @@ for (const file of await listFiles(outputDir)) {
   assertNoHarnessPolicyLeaks(path.relative(outputDir, file), file);
   if (!/\.(js|json|html|css|svg)$/.test(file)) continue;
   const contents = await readFile(file, "utf8");
+  if (/\.html$/.test(file)) {
+    for (const linkTag of contents.matchAll(/<link\b[^>]*>/gi)) {
+      const relAttribute = linkTag[0].match(/\srel\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/i);
+      const relValue = relAttribute?.slice(1).find((value) => value !== undefined) ?? "";
+      if (relValue.toLowerCase().split(/\s+/).includes("modulepreload")) {
+        throw new Error(`Module preload hint in ${path.relative(outputDir, file)}`);
+      }
+    }
+  }
   if (/\.(js|json|html|css)$/.test(file)) {
     for (const pattern of forbiddenBuiltArtifactPatterns) {
       if (pattern.test(contents))
