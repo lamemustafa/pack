@@ -1,0 +1,131 @@
+/* Phase A panel. Mounts as an ordinary extension page today; the same document is what a
+   side panel would render if the sidePanel permission is ever approved. */
+
+html[data-pack-surface="panel"] body {
+  margin: 0;
+  background: var(--pack-canvas);
+}
+
+.panel-shell {
+  display: grid;
+  align-content: start;
+  width: 100%;
+  max-width: 420px;
+  min-height: 100vh;
+  margin: 0 auto;
+  background: var(--pack-surface);
+  border-left: 1px solid var(--pack-border-subtle);
+  border-right: 1px solid var(--pack-border-subtle);
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px 0;
+}
+
+.panel-wordmark {
+  width: 96px;
+  height: auto;
+}
+
+.panel-source {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0 16px 12px;
+  color: var(--pack-ink-muted);
+  font-size: 0.75rem;
+}
+
+.panel-source-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--pack-success-fg);
+}
+
+.panel-source-dot-off {
+  background: var(--pack-border-strong);
+}
+
+.panel-body {
+  border-top: 1px solid var(--pack-border-subtle);
+  padding: 16px;
+}
+
+.panel-body h2 {
+  margin: 0 0 12px;
+  color: var(--pack-ink-primary);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+}
+
+.panel-choice {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+  border: 1px solid var(--pack-border-subtle);
+  border-radius: 6px;
+  background: var(--pack-surface);
+  color: var(--pack-ink-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.875rem;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.panel-choice:hover:not([disabled]) {
+  border-color: var(--pack-border-strong);
+  background: var(--pack-surface-muted);
+}
+
+.panel-choice[disabled] {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.panel-choice-detail {
+  color: var(--pack-ink-muted);
+  font-size: 0.6875rem;
+  white-space: nowrap;
+}
+
+.panel-link {
+  border: 0;
+  background: none;
+  color: var(--pack-ink-link);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8125rem;
+  padding: 4px 10px 0 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.panel-foot {
+  border-top: 1px solid var(--pack-border-subtle);
+  background: var(--pack-surface-muted);
+  padding: 12px 16px;
+}
+
+.panel-fine {
+  margin: 8px 0 0;
+  color: var(--pack-ink-muted);
+  font-size: 0.6875rem;
+  text-align: center;
+}
+
+.panel-note {
+  margin: 0 0 12px;
+  color: var(--pack-ink-muted);
+  font-size: 0.8125rem;
+}

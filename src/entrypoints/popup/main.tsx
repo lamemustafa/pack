@@ -120,6 +120,13 @@ function App() {
       <footer className="fineprint" aria-label="Pack privacy boundary">
         <span>Local only · GST login and PDFs stay on your device.</span>
         <div className="fineprint-links">
+          <button
+            className="fineprint-action"
+            type="button"
+            onClick={() => void browser.tabs.create({ url: browser.runtime.getURL("/panel.html") })}
+          >
+            Open Pack panel
+          </button>
           <LastRunDiagnostics summary={popup.lastRunSummary} />
           <a href="https://pack.complyeaze.com/privacy" target="_blank" rel="noreferrer">
             Privacy
