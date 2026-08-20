@@ -106,9 +106,11 @@ function consolidatedSheet(
       rows.push([
         { value: item.shortLabel },
         ...monthValues.map((value) =>
-          value?.number === null || value === undefined
+          value === undefined
             ? undefined
-            : { value: value.number, style: "number" as const },
+            : value.number === null
+              ? { value: "Precision limit" }
+              : { value: value.number, style: "number" as const },
         ),
         total !== undefined
           ? typeof total === "number"
@@ -217,6 +219,7 @@ function exactSpreadsheetNumber(input: string): number | null {
   if (significantDigits > 15) return null;
   const value = Number(input);
   if (!Number.isFinite(value)) return null;
+  if (value === 0 && !/^-?0+(?:\.0+)?$/.test(input)) return null;
   return value;
 }
 

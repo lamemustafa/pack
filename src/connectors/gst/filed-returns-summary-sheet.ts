@@ -154,7 +154,8 @@ export function buildFiledReturnsSummarySheet(
       const identityLeaves = flattenJsonTextSelectedScalarLeaves(
         jsonText,
         {
-          includePath: (path) => filedReturnsSummaryIdentity(path) !== null,
+          includePath: (path, scalarKind) =>
+            scalarKind === "string" && filedReturnsSummaryIdentity(path) !== null,
           visitPath: rejectForbiddenFieldPath,
         },
         remainingFlattenedBytes,

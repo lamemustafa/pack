@@ -1,4 +1,5 @@
 export type FlatJsonLeafValueKind = "number" | "text";
+export type FlatJsonScalarKind = "boolean" | "null" | "number" | "string";
 export type FlatJsonArrayCountReason =
   | "array-count-empty"
   | "array-count-not-selected"
@@ -20,7 +21,7 @@ export interface FlatJsonArrayExpansionOptions {
 }
 
 export interface FlatJsonLeafSelection {
-  includePath: (path: string) => boolean;
+  includePath: (path: string, scalarKind: FlatJsonScalarKind) => boolean;
   visitPath?: (path: string) => void;
 }
 
@@ -205,17 +206,20 @@ class FlatJsonParser {
     if (emit) this.selection?.visitPath?.(path);
     const character = this.input[this.index];
     if (character === '"') {
-      const selected = this.shouldEmitLeaf(path, emit);
+      const selected = this.shouldEmitLeaf(path, emit, "string");
       const value = this.parseString(selected);
       if (selected) this.addLeaf(path, "text", value);
       return;
     }
     if (character === "{") return this.parseObject(path, emit, depth + 1);
     if (character === "[") return this.parseArray(path, emit, depth + 1);
-    if (character === "t") return this.parseLiteral("true", path, this.shouldEmitLeaf(path, emit));
-    if (character === "f") return this.parseLiteral("false", path, this.shouldEmitLeaf(path, emit));
-    if (character === "n") return this.parseLiteral("null", path, this.shouldEmitLeaf(path, emit));
-    this.parseNumber(path, this.shouldEmitLeaf(path, emit));
+    if (character === "t")
+      return this.parseLiteral("true", path, this.shouldEmitLeaf(path, emit, "boolean"));
+    if (character === "f")
+      return this.parseLiteral("false", path, this.shouldEmitLeaf(path, emit, "boolean"));
+    if (character === "n")
+      return this.parseLiteral("null", path, this.shouldEmitLeaf(path, emit, "null"));
+    this.parseNumber(path, this.shouldEmitLeaf(path, emit, "number"));
   }
 
   private parseObject(path: string, emit: boolean, depth: number): void {
@@ -345,8 +349,8 @@ class FlatJsonParser {
     }
   }
 
-  private shouldEmitLeaf(path: string, emit: boolean): boolean {
-    return emit && (this.selection?.includePath(path) ?? true);
+  private shouldEmitLeaf(path: string, emit: boolean, scalarKind: FlatJsonScalarKind): boolean {
+    return emit && (this.selection?.includePath(path, scalarKind) ?? true);
   }
 
   private selectArrayDiscriminator(
