@@ -73,8 +73,8 @@ release.
 During each full-year ZIP assembly with eligible files, Pack attempts to add two
 files derived from the staged portal JSON already in that run:
 `full-year-workbook.xlsx` and `full-year-summary.csv`. The workbook is the primary
-working-paper output. Its sheets, in order, are `About`, `GSTR-3B Consolidated`,
-`GSTR-9 Reference`, `Data`, and `Context`; the former standalone context CSV is
+working-paper output. It contains exactly two sheets, in order:
+`GSTR-3B Consolidated` and `Run details`; the former standalone context CSV is
 not emitted. The data CSV has the
 fixed columns `period`, `return_type`, `artifact`, `outcome`, `field_label`,
 `field_path`, `value_text`, and `value_number`, with one row per period and
@@ -106,19 +106,30 @@ and Table 4 lines. Its twelve financial-year month headers are date cells,
 statement figures and arithmetic totals are numeric cells, and a missing or
 unparseable period stays blank rather than becoming zero. Table 3.1 rows follow
 the combinations displayed as figures rather than dashes on the portal form;
-Table 4 retains all four tax columns. The `GSTR-9 Reference` sheet contains only
-sourced, financial-year-specific mapping notes and does not calculate GSTR-9.
-The `Data` sheet mirrors the tidy rows, including unmapped paths and outcome
-rows. The `Context` sheet records the format version, run metadata, normalized
-envelope, flattening and value rules, recognized invariant taxpayer identity
-once, and recognized filing identity once per return type and period. Identity
-does not appear on the other sheets or in the data CSV. Both derived files
-persist only inside the user-requested downloaded ZIP. A run with eligible
+Table 4 retains all four tax columns. The `Run details` sheet uses the
+two-column key/value layout previously used by About. It records Pack and
+format provenance, run scope, included and excluded statement coverage, the GSTR-9 boundary,
+normalized-envelope and value/flattening rules, recognized invariant taxpayer
+identity once, and recognized filing identity once per return type and period.
+Its keys are unique. Identity does not appear on the statement sheet or in the
+data CSV. The tidy CSV remains the machine-readable trace from a statement
+figure to its source path, including unmapped paths and outcome rows. Both
+derived files persist only inside the user-requested downloaded ZIP. A run with eligible
 files but no parseable JSON, including a PDF-only run, receives a workbook with
 blank statement cells and an outcome-only data CSV. If summary or workbook
 generation fails, identity is inconsistent, or the combined derived output
 exceeds its local size limit, Pack still exports the artifact ZIP and reports a
 fixed categorical reason.
+
+GSTR-9 is not the sum of twelve GSTR-3B returns. Its Table 4 requires outward
+supplies split by counterparty type, which GSTR-3B does not contain, and it
+further requires amendments, ITC claimed in a later financial year, and
+reversals. This mapping shows where sourced 3B figures feed. It does not produce
+GSTR-9 values.
+
+| GSTR-3B line item        | GSTR-9 table it feeds | Basis                                                                                                                       | Verified financial year |
+| ------------------------ | --------------------- | --------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| Table 4(A) ITC available | Table 6               | Official GST Portal Manual, GSTR-9 section 14.3: Table 6 reports ITC availed and Table 6A is auto-filled from Form GSTR-3B. | 2024-25                 |
 
 The current source build correlates a download to its target through one
 fail-closed evidence rule set, and that rule set is shared rather than

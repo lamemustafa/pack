@@ -68,18 +68,20 @@ For each release candidate:
   distinguishes two-period portal-PDF value cross-checks, form-vocabulary and
   row-order derivations that were not value-matched, and the pre-existing
   offline-utility mappings; unmapped labels must stay empty. The workbook must
-  contain `About`, `GSTR-3B Consolidated`, `GSTR-9 Reference`, `Data`, and
-  `Context` in that order. Its statement must use twelve typed date columns,
+  contain exactly `GSTR-3B Consolidated` and `Run details` in that order. Its
+  statement must use twelve typed date columns,
   numeric figure and arithmetic-total cells, blank cells for missing or
   unparseable periods, only mapped Table 3.1 and Table 4 rows, the portal-dash
-  applicability set for Table 3.1, and all four Table 4 tax columns. Its
-  GSTR-9 sheet must remain sourced mapping only and must not compute GSTR-9.
-  `Data` must mirror the tidy rows, including unmapped paths and outcomes. The
-  `Context` sheet must contain the format token, run metadata,
-  normalized-envelope and value/flattening rules, recognized invariant taxpayer
-  identity once, and recognized filing identity once per return type and
-  period; neither identity class may appear in the data CSV or any other
-  workbook sheet. Both derived files must remain output-only ZIP entries: their bytes
+  applicability set for Table 3.1, and all four Table 4 tax columns must remain.
+  The `Run details` sheet must contain unique keys for Pack and format provenance, run
+  scope, statement coverage, the boundary that the workbook does not produce GSTR-9
+  values, normalized-envelope and value/flattening rules, recognized invariant
+  taxpayer identity once, and recognized filing identity once per return type
+  and period. Neither identity class may appear in the data CSV or statement
+  sheet. The tidy CSV, rather than a duplicate workbook sheet, must retain
+  unmapped paths and outcomes. The sourced GSTR-9 mapping and disclaimer belong
+  in the README, not the generated workbook. Both derived files must remain
+  output-only ZIP entries: their bytes
   may be transient in extension-controlled memory before browser handoff and
   persist in the user's downloaded ZIP, but never write separately to OPFS,
   extension storage, diagnostics, logs, telemetry, support bundles, popup
