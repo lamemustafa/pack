@@ -72,7 +72,9 @@ describe("inline filed-return recovery status", () => {
           summary={summary}
         />,
       );
-      if (!markup.includes("inline-status-primary")) continue;
+      // No `continue` guard: a fixture that stops rendering its action must fail
+      // here rather than silently skip its assertions.
+      expect(markup).toContain("inline-status-primary");
       expect(markup).toContain("disabled");
       expect(markup).toMatch(/Open a signed-in GST Portal tab before [^<]+\./);
     }
