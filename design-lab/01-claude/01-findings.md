@@ -25,9 +25,9 @@ React tree renders, measured in-page.
 | Popup frame                                   | 420 × 560                             | RENDERED                    |
 | Content height, idle ready state              | 674 px                                | RENDERED                    |
 | Clipped behind scroll before any run starts   | **114 px**                            | RENDERED                    |
-| Focusable controls, idle                      | 11                                    | RENDERED                    |
-| Font weights that actually render             | 400, 700, 750, 800, 850               | RENDERED                    |
-| Font sizes that actually render               | 11, 12, 13, 13.33, 14, 16, 18 px      | RENDERED                    |
+| Focusable controls, idle                      | 11 (10 task controls + Privacy link)  | RENDERED                    |
+| Font weights rendered (all states)            | 400, 700, 750, 800, 850, 900          | RENDERED                    |
+| Font sizes on the ready surface               | 11, 12, 13, 14, 16, 18 px             | RENDERED                    |
 | `@font-face` rules loaded                     | **0**                                 | RENDERED (`document.fonts`) |
 | `font-weight` declarations in `src/styles/**` | 36, all ≥ 650, zero regular           | source                      |
 | Distinct hex literals in `src/styles/**`      | **102** across 157 occurrences        | source                      |
@@ -132,3 +132,48 @@ What is **inferred and still unverified**: that on a machine without Inter the s
 uninstalled, or a forced-fallback render. The Codex pass did not test it either. It should be
 settled before the fix is justified by it — though the fix (ship the font or stop naming it) is
 correct regardless, because a stack whose first entry is unshipped is unpredictable by construction.
+
+## Corrections after the UX-B pass
+
+A third pass (Codex Desktop, `tapish-codex/ux-redesign-b`) re-measured this base and falsified five
+claims above. All five are corrected in place. Recorded here because the errors are more instructive
+than the fixes.
+
+- **The Inter faux-bold claim is disproven.** This pass measured zero `@font-face` rules and then
+  _inferred_ that weights 750 and 850 would be synthesised on a machine without Inter. UX-B actually
+  tested it: the Chrome/macOS system stack produced distinct pixel fingerprints for every sampled
+  weight from 400 through 900. The stack is still unpredictable — naming a font you do not ship is
+  still a defect — but the specific mechanism asserted was wrong. It was flagged unverified here and
+  should not have appeared as an explanation in published copy.
+- **Recovery is not collapsed.** `<details className="recovery-details" open>`. Every action is
+  visible at once, which is a different problem from the one this pass described, and arguably a
+  worse one. The count was also wrong: 11 `signals.has` occurrences over 9 unique strings, not 10.
+  `grep -c` counts lines, not occurrences.
+- **"11 controls to express one file" overstated it.** Eleven interactive sites, of which ten are
+  task controls; the eleventh is the Privacy link.
+- **13.33px is not a surface size.** It came from `<option>` elements inside the native select
+  dropdown, which the OS renders. The ready surface renders six sizes, not seven.
+- **Complaint 5 is materially wrong at this base.** GSTR-3B full-year PDF and full-year portal-data
+  runs _are_ independently selectable, because `artifactType` is a separate axis from the period
+  sentinel. No consolidated statement exists yet, so nothing can be entangled with one. The
+  underlying observation — that `FULL_FISCAL_YEAR_PERIOD` is a sentinel in a month-shaped field —
+  stands; the consequence drawn from it did not.
+
+One UX-B finding this pass does not accept: that the parent June 2026 Impeccable critique of the
+Pack logo "could not be reproduced". It exists, at
+`.impeccable/critique/2026-06-23T11-52-20Z__ownload-utility-08-brand-and-content-pack-logo-svg.md`
+in the **parent ComplyEaze repo**, scoring 29/40 with two P1s. UX-B's sandbox was scoped to its
+worktree, so it could not see a sibling repository — a limitation of its evidence access rather than
+a false claim. The path is recorded here so the next pass does not re-litigate it.
+
+## Verification gap closed
+
+UX-B also established that `dev/popup-preview.html` has drifted from the mounted React UI: it
+contains zero `<input>` elements where the real popup renders real radios, and no `recovery-details`
+block at all. That matters, because this pass used those nine states as the oracle for the colour
+token collapse — so the recovery surface was never covered by the rendered check.
+
+Closed by a static audit over every rule in the stylesheets rather than every rendered node:
+**167 rules, 320 colour pairs, including the 11 recovery and diagnostic rules the preview never
+renders — zero AA failures.** That is strictly stronger than the rendered check, because it does not
+depend on a state being reachable in a harness.
