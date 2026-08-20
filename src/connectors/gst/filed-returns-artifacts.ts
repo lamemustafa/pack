@@ -1,3 +1,8 @@
+import {
+  filedReturnsCapabilityArtifactLabel,
+  filedReturnsFormat,
+  filedReturnsOfferedArtifacts,
+} from "./filed-returns-capabilities.ts";
 import type { FiledReturnsReturnType } from "./filed-returns-return-types";
 
 export const FILED_RETURNS_ARTIFACT_TYPES = ["PDF", "JSON", "EXCEL", "PDF_AND_EXCEL"] as const;
@@ -28,9 +33,13 @@ export function supportsFiledReturnsArtifactType(
   returnType: FiledReturnsReturnType,
   artifactType: FiledReturnsArtifactType,
 ): boolean {
-  if (returnType === "GSTR-3B") return artifactType === "PDF" || artifactType === "JSON";
-  if (returnType === "GSTR-1") return artifactType !== "JSON";
-  return true;
+  const offered = filedReturnsOfferedArtifacts(returnType);
+  if (artifactType === "PDF_AND_EXCEL") {
+    // The combined selection is literally PDF plus Excel. GSTR-3B offers two artifacts
+    // (PDF and portal data) but no Excel, so it must not qualify.
+    return offered.includes("PDF") && offered.includes("EXCEL");
+  }
+  return offered.includes(artifactType);
 }
 
 export function normaliseFiledReturnsArtifactType(
@@ -65,53 +74,26 @@ export function filedReturnsArtifactLabel(
   artifactType: FiledReturnsArtifactType,
   returnType?: FiledReturnsReturnType,
 ): string {
-  switch (artifactType) {
-    case "EXCEL":
-      if (returnType === "GSTR-2B") return "Details (Excel)";
-      if (returnType === "GSTR-1") return "E-invoice details (Excel)";
-      return "Excel";
-    case "PDF_AND_EXCEL":
-      return "All formats";
-    case "PDF":
-      if (returnType === "GSTR-1") return "Summary PDF";
-      if (returnType === "GSTR-2B") return "Summary (PDF)";
-      return returnType === "GSTR-3B" ? "Filed return (PDF)" : "PDF";
-    case "JSON":
-      return returnType === "GSTR-3B" || returnType === "GSTR-2B" ? "Portal data (JSON)" : "JSON";
-  }
+  if (!returnType) return artifactType === "PDF_AND_EXCEL" ? "All formats" : artifactType;
+  return filedReturnsCapabilityArtifactLabel(returnType, artifactType);
 }
 
 export function filedReturnsConcreteArtifactLabel(
   artifactType: FiledReturnsConcreteArtifactType,
   returnType?: FiledReturnsReturnType,
 ): string {
-  if (artifactType === "PDF") {
-    if (returnType === "GSTR-2B") return "Summary (PDF)";
-    return returnType === "GSTR-3B" ? "Filed return (PDF)" : "PDF";
-  }
-  if (artifactType === "JSON")
-    return returnType === "GSTR-3B" || returnType === "GSTR-2B"
-      ? "Portal data (JSON)"
-      : "portal data (JSON)";
-  if (returnType === "GSTR-2B") return "Details (Excel)";
-  if (returnType === "GSTR-1") return "E-invoice details (Excel)";
-  return "Excel";
+  if (!returnType) return artifactType;
+  return filedReturnsCapabilityArtifactLabel(returnType, artifactType);
 }
 
 export function filedReturnsArtifactExtension(
   artifactType: FiledReturnsConcreteArtifactType,
 ): FiledReturnsArtifactExtension {
-  if (artifactType === "JSON") return ".json";
-  return artifactType === "EXCEL" ? ".xlsx" : ".pdf";
+  return filedReturnsFormat(artifactType).extension;
 }
 
 export function filedReturnsArtifactMimeTypes(
   artifactType: FiledReturnsConcreteArtifactType,
 ): string[] {
-  if (artifactType === "PDF") return ["application/pdf"];
-  if (artifactType === "JSON") return ["application/json"];
-  return [
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "application/vnd.ms-excel",
-  ];
+  return [...filedReturnsFormat(artifactType).mimeTypes];
 }
