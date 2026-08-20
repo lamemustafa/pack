@@ -375,6 +375,36 @@ describe("extension package verifier", () => {
     expect(result.output).toContain("Pathful GST Portal URL");
   });
 
+  it("rejects a package missing any extension page", async () => {
+    // A build that dropped a page still loaded as an extension, with a dead surface behind
+    // the action. Only offscreen.html was asserted, so nothing failed.
+    for (const page of ["offscreen.html", "options.html", "panel.html", "popup.html"]) {
+      const outputDir = await createValidPackage();
+      await rm(path.join(outputDir, page));
+
+      const result = await runVerifier(outputDir);
+
+      expect(result.status).not.toBe(0);
+      expect(result.output).toContain(`Missing required extension page: ${page}`);
+    }
+  });
+
+  it("rejects a package missing a brand asset a Pack page loads at runtime", async () => {
+    for (const asset of [
+      "brand/pack-favicon.svg",
+      "brand/pack-logo-header.svg",
+      "brand/pack-mark.svg",
+    ]) {
+      const outputDir = await createValidPackage();
+      await rm(path.join(outputDir, asset));
+
+      const result = await runVerifier(outputDir);
+
+      expect(result.status).not.toBe(0);
+      expect(result.output).toContain(`Missing required brand asset: ${asset}`);
+    }
+  });
+
   it("keeps exact ZIP verification wired to browser-loaded release checks", async () => {
     const script = await readFile(
       path.join(rootDir, "scripts", "verify-extension-zip.mjs"),
@@ -476,11 +506,16 @@ async function createValidPackage(): Promise<string> {
   };
 
   await writePackageFile(outputDir, "manifest.json", `${JSON.stringify(manifest, null, 2)}\n`);
-  await writePackageFile(
-    outputDir,
-    "offscreen.html",
-    '<!doctype html><html><body><script type="module" src="/chunks/offscreen.js"></script></body></html>',
-  );
+  for (const page of ["offscreen.html", "options.html", "panel.html", "popup.html"]) {
+    await writePackageFile(
+      outputDir,
+      page,
+      `<!doctype html><html><body><script type="module" src="/chunks/${page.replace(
+        ".html",
+        ".js",
+      )}"></script></body></html>`,
+    );
+  }
   for (const iconSize of [16, 32, 48, 128]) {
     await writePackageFile(outputDir, `icons/icon-${iconSize}.png`, "synthetic-png");
   }
@@ -488,6 +523,9 @@ async function createValidPackage(): Promise<string> {
     "favicon.ico",
     "icons/icon-256.png",
     "icons/icon-512.png",
+    "brand/pack-favicon.svg",
+    "brand/pack-logo-header.svg",
+    "brand/pack-mark.svg",
     "brand/pack-icon.svg",
     "brand/pack-logo.svg",
     "brand/pack-logo-hero.svg",
