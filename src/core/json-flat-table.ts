@@ -1,12 +1,24 @@
 export type FlatJsonLeafValueKind = "number" | "text";
 export type FlatJsonScalarKind = "boolean" | "null" | "number" | "string";
-export type FlatJsonArrayCountReason =
-  | "array-count-empty"
-  | "array-count-not-selected"
-  | "array-count-over-ceiling"
-  | "array-count-no-common-discriminator"
-  | "array-count-duplicate-discriminator"
-  | "array-count-unsafe-discriminator";
+export const FLAT_JSON_ARRAY_COUNT_REASONS = [
+  "array-count-empty",
+  "array-count-not-selected",
+  "array-count-over-ceiling",
+  "array-count-no-common-discriminator",
+  "array-count-duplicate-discriminator",
+  "array-count-unsafe-discriminator",
+] as const;
+export type FlatJsonArrayCountReason = (typeof FLAT_JSON_ARRAY_COUNT_REASONS)[number];
+
+/**
+ * Whether an outcome names an array count rather than a value. Such a row
+ * carries the array's length in the numeric column, so a consumer that reads it
+ * as the field's own amount renders a count as a figure. Derived from the list
+ * above so a new reason cannot be added without every consumer seeing it.
+ */
+export function isFlatJsonArrayCountReason(outcome: string): boolean {
+  return (FLAT_JSON_ARRAY_COUNT_REASONS as readonly string[]).includes(outcome);
+}
 
 export interface FlatJsonLeaf {
   arrayCountReason?: FlatJsonArrayCountReason;

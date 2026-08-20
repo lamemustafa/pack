@@ -1,3 +1,4 @@
+import { isFlatJsonArrayCountReason } from "../../core/json-flat-table";
 import {
   createXlsx,
   MAX_EXCEL_STRING_LENGTH,
@@ -202,10 +203,19 @@ function statementValues(
     if (row.returnType !== "GSTR-3B" || !statementPaths.has(row.fieldPath)) continue;
     const key = `${row.period}:${row.fieldPath}`;
     if (output.has(key)) throw new SyntaxError("Duplicate GSTR-3B statement value.");
+    // An array-count row carries the array's length in the numeric column, not
+    // the field's amount: `txval: []` and `txval: [100]` would otherwise render
+    // as 0 and 1 and be summed into the total. The container is present and
+    // malformed, so it takes the same marked cell as any other non-numeric
+    // value rather than being dropped.
+    const isArrayCount = isFlatJsonArrayCountReason(row.outcome);
     output.set(key, {
-      number: row.valueNumber === undefined ? null : exactSpreadsheetNumber(row.valueNumber),
-      numeric: row.valueNumber !== undefined,
-      sourceText: row.valueNumber ?? row.valueText ?? "",
+      number:
+        isArrayCount || row.valueNumber === undefined
+          ? null
+          : exactSpreadsheetNumber(row.valueNumber),
+      numeric: !isArrayCount && row.valueNumber !== undefined,
+      sourceText: isArrayCount ? "" : (row.valueNumber ?? row.valueText ?? ""),
     });
   }
   return output;

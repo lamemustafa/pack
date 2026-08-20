@@ -202,13 +202,17 @@ export function buildFiledReturnsSummarySheet(
           (leaf) => filedReturnsSummaryIdentity(leaf.path)?.contextType === "taxpayer_identity",
         )
         .map((leaf) => leaf.value)
-        .filter((value): value is string => typeof value === "string" && value.length > 0),
+        .filter((value): value is string => typeof value === "string" && value.length > 0)
+        // Compared case-insensitively: the portal's casing is not guaranteed to
+        // be repeated under an unrecognised alias, and an identifier differing
+        // only in case is the same identifier.
+        .map((value) => value.toUpperCase()),
     );
     const fieldLeaves = parsed.leaves.filter(
       (leaf) =>
         !isFiledReturnsSummaryIdentityPath(leaf.path) &&
         !hasIdentityShapedPathSegment(leaf.path) &&
-        !(leaf.valueKind === "text" && ownIdentityValues.has(leaf.value)),
+        !(leaf.valueKind === "text" && ownIdentityValues.has(leaf.value.toUpperCase())),
     );
     if (fieldLeaves.length === 0) {
       dataRows.push(outcomeRow(parsed.planned, parsed.outcome));

@@ -286,6 +286,32 @@ describe("filed-return full-year workbook", () => {
     }
   });
 
+  it("marks an array at a mapped statement path instead of rendering its length", () => {
+    const plan = fullYearPlan();
+    // `txval: [100]` flattens to an array-count row whose numeric column is the
+    // array's length, not the amount. Rendered as a figure it would show 1 and
+    // be summed into the total.
+    const summary = buildFiledReturnsSummarySheet(plan, [
+      {
+        path: "april-data.json",
+        bytes: new TextEncoder().encode(
+          '{"status":1,"data":{"lglnm":"Synthetic Legal Name","r3b":{"gstin":"27ABCDE1234F1Z0","ret_period":"042026","sup_details":{"osup_det":{"txval":[100]}}}}}',
+        ),
+      },
+    ]);
+    const workbook = buildFiledReturnsFullYearWorkbook(summary, plan, {
+      generatedAt: new Date("2026-08-19T12:00:00.000Z"),
+    });
+    const rows = parsedRows(text(extractStoredZipEntries(workbook), "xl/worksheets/sheet1.xml"));
+    const cells = [...rows.values()].flatMap((row) => [...row.values()]);
+    const texts = cells.map((cell) => cell.text ?? "");
+    const numbers = cells.map((cell) => cell.number ?? "");
+
+    expect(texts).toContain("Non-numeric value");
+    // The array length must not appear as a figure anywhere.
+    expect(numbers).not.toContain("1");
+  });
+
   it("dates the Source footer from local components, not UTC", () => {
     const originalTimeZone = process.env.TZ;
     process.env.TZ = "Asia/Kolkata";
