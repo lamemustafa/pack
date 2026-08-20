@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pack mark size and toolbar proof</title>
+    <style>
+      :root {
+        color: #15344a;
+        background: #eef3f5;
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 32px;
+      }
+      main {
+        width: min(940px, 100%);
+        margin: 0 auto;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 28px;
+        line-height: 1.15;
+      }
+      p {
+        margin: 0 0 24px;
+        max-width: 70ch;
+        color: #496273;
+        line-height: 1.5;
+      }
+      .direction {
+        border-top: 1px solid #b9c8cf;
+        padding: 24px 0 32px;
+      }
+      h2 {
+        margin: 0 0 16px;
+        font-size: 18px;
+      }
+      .toolbar {
+        display: grid;
+        grid-template-columns: 140px 1fr;
+        align-items: center;
+        min-height: 176px;
+        padding: 22px 26px;
+        border-radius: 12px;
+      }
+      .toolbar + .toolbar {
+        margin-top: 12px;
+      }
+      .light {
+        background: #ffffff;
+        border: 1px solid #c9d3d8;
+      }
+      .dark {
+        color: #f7fbfc;
+        background: #24272b;
+        border: 1px solid #111416;
+      }
+      .label {
+        font-size: 13px;
+        font-weight: 700;
+      }
+      .sizes {
+        display: flex;
+        align-items: end;
+        gap: 30px;
+      }
+      figure {
+        margin: 0;
+        display: grid;
+        justify-items: center;
+        gap: 8px;
+      }
+      figcaption {
+        font-size: 11px;
+        color: #657985;
+      }
+      .dark figcaption {
+        color: #bdc9cf;
+      }
+      img {
+        display: block;
+      }
+      @media (max-width: 620px) {
+        body {
+          padding: 18px;
+        }
+        .toolbar {
+          grid-template-columns: 1fr;
+          gap: 22px;
+        }
+        .sizes {
+          gap: 20px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Pack mark proof</h1>
+      <p>
+        Source SVGs rendered without filters at 128, 32, and 16 px on simulated Chrome toolbar
+        tones.
+      </p>
+      <section class="direction">
+        <h2>Direction A — Bound sheet</h2>
+        <div class="toolbar light">
+          <span class="label">Light toolbar</span>
+          <div class="sizes">
+            <figure>
+              <img
+                src="direction-a.svg"
+                width="128"
+                height="128"
+                alt="Bound sheet mark at 128 pixels"
+              />
+              <figcaption>128 px</figcaption>
+            </figure>
+            <figure>
+              <img
+                src="direction-a.svg"
+                width="32"
+                height="32"
+                alt="Bound sheet mark at 32 pixels"
+              />
+              <figcaption>32 px</figcaption>
+            </figure>
+            <figure>
+              <img
+                src="direction-a.svg"
+                width="16"
+                height="16"
+                alt="Bound sheet mark at 16 pixels"
+              />
+              <figcaption>16 px</figcaption>
+            </figure>
+          </div>
+        </div>
+        <div class="toolbar dark">
+          <span class="label">Dark toolbar</span>
+          <div class="sizes">
+            <figure>
+              <img
+                src="direction-a.svg"
+                width="128"
+                height="128"
+                alt="Bound sheet mark at 128 pixels on dark"
+              />
+              <figcaption>128 px</figcaption>
+            </figure>
+            <figure>
+              <img
+                src="direction-a.svg"
+                width="32"
+                height="32"
+                alt="Bound sheet mark at 32 pixels on dark"
+              />
+              <figcaption>32 px</figcaption>
+            </figure>
+            <figure>
+              <img
+                src="direction-a.svg"
+                width="16"
+                height="16"
+                alt="Bound sheet mark at 16 pixels on dark"
+              />
+              <figcaption>16 px</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+      <section class="direction">
+        <h2>Direction B — Evidence bundle</h2>
+        <div class="toolbar light">
+          <span class="label">Light toolbar</span>
+          <div class="sizes">
+            <figure>
+              <img
+                src="direction-b.svg"
+                width="128"
+                height="128"
+                alt="Evidence bundle mark at 128 pixels"
+              />
+              <figcaption>128 px</figcaption>
+            </figure>
+            <figure>
+              <img
+                src="direction-b.svg"
+                width="32"
+                height="32"
+                alt="Evidence bundle mark at 32 pixels"
+              />
+              <figcaption>32 px</figcaption>
+            </figure>
+            <figure>
+              <img
+                src="direction-b.svg"
+                width="16"
+                height="16"
+                alt="Evidence bundle mark at 16 pixels"
+              />
+              <figcaption>16 px</figcaption>
+            </figure>
+          </div>
+        </div>
+        <div class="toolbar dark">
+          <span class="label">Dark toolbar</span>
+          <div class="sizes">
+            <figure>
+              <img
+                src="direction-b.svg"
+                width="128"
+                height="128"
+                alt="Evidence bundle mark at 128 pixels on dark"
+              />
+              <figcaption>128 px</figcaption>
+            </figure>
+            <figure>
+              <img
+                src="direction-b.svg"
+                width="32"
+                height="32"
+                alt="Evidence bundle mark at 32 pixels on dark"
+              />
+              <figcaption>32 px</figcaption>
+            </figure>
+            <figure>
+              <img
+                src="direction-b.svg"
+                width="16"
+                height="16"
+                alt="Evidence bundle mark at 16 pixels on dark"
+              />
+              <figcaption>16 px</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
