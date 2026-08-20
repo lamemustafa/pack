@@ -5,6 +5,7 @@ import type {
 } from "../connectors/gst/filed-returns-contracts";
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import { getFiledReturnsFullFiscalYearPeriods } from "../connectors/gst/filed-returns-scope";
+import { filedReturnsSummaryStatusMessage } from "../connectors/gst/filed-returns-summary-status";
 import type {
   FiledReturnsFlowRunnerDeps,
   FiledReturnsFlowStepCategory,
@@ -384,7 +385,12 @@ async function completeRun(
       const intentStep = {
         ...phaseStep,
         safeSignals: Array.from(new Set([...phaseStep.safeSignals, ...summaryOutcome.safeSignals])),
-        safeMessage: [phaseStep.safeMessage, summaryOutcome.safeMessage].filter(Boolean).join(" "),
+        safeMessage: [
+          phaseStep.safeMessage,
+          filedReturnsSummaryStatusMessage(summaryOutcome.safeSignals, "intent"),
+        ]
+          .filter(Boolean)
+          .join(" "),
       };
       await persistLedgerAndSummary(deps, intentLedger, intentStep);
       exportLedger = intentLedger;

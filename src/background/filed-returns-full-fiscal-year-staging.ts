@@ -383,7 +383,9 @@ export async function restorePersistedFullFiscalYearSummaryOutcome(
   return {
     ...step,
     safeSignals: Array.from(new Set([...step.safeSignals, ...summarySignals])),
-    safeMessage: `${step.safeMessage}${filedReturnsSummaryStatusMessage(summarySignals)}`,
+    safeMessage: [step.safeMessage, filedReturnsSummaryStatusMessage(summarySignals, "unconfirmed")]
+      .filter(Boolean)
+      .join(" "),
   };
 }
 
@@ -460,13 +462,16 @@ function fullFiscalYearCleanupFailedStep(
       ...clearSignals,
       "full-fiscal-year-opfs-retained",
     ],
-    safeMessage: `${
+    safeMessage: [
       noArtifacts
         ? "Pack found no fiscal-year artifacts to export but could not clear its retained local staging. Retry the local cleanup before starting another full-year run."
         : zipDownloaded
           ? "Pack downloaded the final fiscal-year ZIP but could not clear its retained local staging. Retry the local cleanup before starting another full-year run."
-          : "Pack could not clear retained local fiscal-year staging. Retry the local cleanup before starting another full-year run."
-    }${filedReturnsSummaryStatusMessage(summarySignals)}`,
+          : "Pack could not clear retained local fiscal-year staging. Retry the local cleanup before starting another full-year run.",
+      filedReturnsSummaryStatusMessage(summarySignals, zipDownloaded ? "confirmed" : "intent"),
+    ]
+      .filter(Boolean)
+      .join(" "),
   };
 }
 
@@ -492,7 +497,12 @@ function fullFiscalYearCleanupCompletedStep(
         ...availabilitySignals,
       ]),
     ),
-    safeMessage: `${completeStep.safeMessage}${filedReturnsSummaryStatusMessage(summarySignals)}`,
+    safeMessage: [
+      completeStep.safeMessage,
+      filedReturnsSummaryStatusMessage(summarySignals, zipDownloaded ? "confirmed" : "intent"),
+    ]
+      .filter(Boolean)
+      .join(" "),
   };
 }
 

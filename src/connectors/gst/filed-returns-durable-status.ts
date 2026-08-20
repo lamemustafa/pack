@@ -22,8 +22,13 @@ import {
   FILED_RETURN_ROUTE_MISMATCH_SIGNALS,
   RETURN_TYPE_MISMATCH_RECOVERY_STOPPED_SIGNAL,
   durableFiledReturnsSignalRejectionReason,
+  isUnconfirmedFiledReturnsDownloadSignal,
   parseDurableFiledReturnsSignals,
 } from "./filed-returns-durable-signals";
+import {
+  filedReturnsSummaryStatusMessage,
+  type FiledReturnsSummaryLifecycle,
+} from "./filed-returns-summary-status";
 
 type DurableMessageKey =
   | "complete"
@@ -107,7 +112,32 @@ export function canonicalDurableSummaryMessage(
         .join(", ")}.`;
     }
   }
-  return renderDurableMessage(messageKeyForSummary(status, signals), scope);
+  const durableMessage = renderDurableMessage(messageKeyForSummary(status, signals), scope);
+  const summaryMessage = filedReturnsSummaryStatusMessage(
+    signals,
+    summaryLifecycleForDurableSignals(signals),
+  );
+  return [durableMessage, summaryMessage].filter(Boolean).join(" ");
+}
+
+function summaryLifecycleForDurableSignals(
+  signals: readonly string[],
+): FiledReturnsSummaryLifecycle {
+  if (signals.includes("full-fiscal-year-zip-downloaded")) return "confirmed";
+  if (
+    signals.includes("full-fiscal-year-zip-phase:download-observing") ||
+    signals.some(isUnconfirmedFiledReturnsDownloadSignal) ||
+    signals.some((signal) =>
+      [
+        "full-fiscal-year-zip-download-id-invalid",
+        "full-fiscal-year-zip-download-id-persist-failed",
+      ].includes(signal),
+    )
+  ) {
+    return "unconfirmed";
+  }
+  if (signals.includes("full-fiscal-year-zip-phase:download-intent-persisted")) return "intent";
+  return "unconfirmed";
 }
 
 export function incompleteReturnTypeMismatchRecoveryMessage(

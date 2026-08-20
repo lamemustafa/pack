@@ -8,6 +8,7 @@ import type { PackOffscreenFiledReturnZipExpectedEntry } from "../connectors/gst
 import type { FiledReturnsSummaryPlanEntry } from "../connectors/gst/filed-returns-summary-sheet";
 import {
   filedReturnsSummaryOutcome,
+  filedReturnsSummaryStatusMessage,
   type FiledReturnsSummaryStatus,
 } from "../connectors/gst/filed-returns-summary-status";
 import {
@@ -291,8 +292,10 @@ export async function exportStagedFiledReturnsZip({
         `${clearSignalPrefix}-zip-download-id-invalid`,
         retainedStagedLedgerSignal(clearSignalPrefix),
       ],
-      safeMessage:
+      safeMessage: joinedSafeMessages(
         "Pack may have started the ZIP download but could not bind it to a valid browser download ID. Check browser Downloads before taking another action.",
+        filedReturnsSummaryStatusMessage(summaryOutcome.safeSignals, "unconfirmed"),
+      ),
       userAction: checkBrowserDownloadsAction(clearSignalPrefix),
     };
   }
@@ -313,8 +316,10 @@ export async function exportStagedFiledReturnsZip({
         `${clearSignalPrefix}-zip-download-id-persist-failed`,
         retainedStagedLedgerSignal(clearSignalPrefix),
       ],
-      safeMessage:
+      safeMessage: joinedSafeMessages(
         "Pack may have started the ZIP download but could not save its browser download ID. Check browser Downloads before taking another action.",
+        filedReturnsSummaryStatusMessage(summaryOutcome.safeSignals, "unconfirmed"),
+      ),
       userAction: checkBrowserDownloadsAction(clearSignalPrefix),
     };
   }
@@ -341,7 +346,10 @@ export async function exportStagedFiledReturnsZip({
         retainedStagedLedgerSignal(clearSignalPrefix),
         ...observed.safeSignals,
       ],
-      safeMessage: unconfirmedMessage,
+      safeMessage: joinedSafeMessages(
+        unconfirmedMessage,
+        filedReturnsSummaryStatusMessage(summaryOutcome.safeSignals, "unconfirmed"),
+      ),
       ...(observed.userAction ? { userAction: observed.userAction } : {}),
     };
   }
@@ -367,8 +375,10 @@ export async function exportStagedFiledReturnsZip({
           ...observed.safeSignals,
           ...filenameOutcome.safeSignals,
         ],
-        safeMessage:
+        safeMessage: joinedSafeMessages(
           "Pack downloaded the selected ZIP but could not clear its temporary local staging.",
+          filedReturnsSummaryStatusMessage(summaryOutcome.safeSignals, "confirmed"),
+        ),
         userAction: {
           type: "RETRY_PORTAL_GENERATION",
           message: "Retry the selected download after Pack can clear its temporary staging.",
@@ -389,7 +399,10 @@ export async function exportStagedFiledReturnsZip({
           ...observed.safeSignals,
           ...filenameOutcome.safeSignals,
         ],
-        safeMessage: stagingCleanupCheckpointFailedMessage ?? zipFailedMessage,
+        safeMessage: joinedSafeMessages(
+          stagingCleanupCheckpointFailedMessage ?? zipFailedMessage,
+          filedReturnsSummaryStatusMessage(summaryOutcome.safeSignals, "confirmed"),
+        ),
         userAction: {
           type: "RETRY_PORTAL_GENERATION",
           message: "Retry so Pack can reconcile its selected-file recovery checkpoint.",
@@ -410,10 +423,16 @@ export async function exportStagedFiledReturnsZip({
       ...observed.safeSignals,
       ...filenameOutcome.safeSignals,
     ],
-    safeMessage: [safeMessage, summaryOutcome.safeMessage, filenameOutcome.safeMessage]
-      .filter(Boolean)
-      .join(" "),
+    safeMessage: joinedSafeMessages(
+      safeMessage,
+      filedReturnsSummaryStatusMessage(summaryOutcome.safeSignals, "confirmed"),
+      filenameOutcome.safeMessage,
+    ),
   };
+}
+
+function joinedSafeMessages(...messages: readonly (string | undefined)[]): string {
+  return messages.filter((message): message is string => Boolean(message)).join(" ");
 }
 
 async function completedZipFilenameOutcome(
