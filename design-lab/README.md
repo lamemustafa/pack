@@ -1,5 +1,7 @@
 # design-lab — Pack UI/UX redesign lane
 
+> **Picking this up fresh? Read [HANDOFF.md](./HANDOFF.md) first.**
+
 Exploration only. Nothing here ships, nothing here is imported by `src/`, and nothing here makes a
 claim about Pack that `docs/PUBLICATION_READINESS.md` does not already permit.
 
