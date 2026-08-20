@@ -14,6 +14,29 @@ import {
 import type { FiledReturnsMonth } from "../../src/connectors/gst/filed-returns-scope";
 
 describe("filed-return full-year summary sheet", () => {
+  it("withholds a compound identity alias split across path segments", () => {
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-3B")],
+      [
+        {
+          path: "april-data.json",
+          bytes: new TextEncoder().encode(
+            '{"status":1,"data":{"lglnm":"Synthetic Legal Name","r3b":{"gstin":"27ABCDE1234F1Z0","ret_period":"042026","taxpayer":{"name":"Synthetic Split Name"},"legal":{"name":"Synthetic Split Legal"},"sup_details":{"osup_det":{"txval":1}}}}}',
+          ),
+        },
+      ],
+    );
+
+    const dataCsv = new TextDecoder().decode(summary.dataBytes);
+    // The registry knows `taxpayername` and `legalname` as single words; nested
+    // under a container neither segment matches alone.
+    expect(dataCsv).not.toContain("Synthetic Split Name");
+    expect(dataCsv).not.toContain("Synthetic Split Legal");
+    // A real mapped value alongside them is still emitted, so the broadened
+    // redaction has not swallowed legitimate data.
+    expect(dataCsv).toContain("/sup_details/osup_det/txval");
+  });
+
   it("emits tidy numeric and text rows while moving taxpayer identity into context once", () => {
     const summary = buildFiledReturnsSummarySheet(
       [jsonPlan("April", "april-data.json", "GSTR-3B")],

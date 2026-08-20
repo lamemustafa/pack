@@ -78,9 +78,24 @@ export function isFiledReturnsCanonicalIdentityPath(path: string, canonicalPath:
   );
 }
 
+/**
+ * Whether a leaf path is identity, for redaction. Every contiguous run of
+ * canonical segments is tested, not each segment alone: a compound alias the
+ * registry knows as one word can arrive split across a container boundary, so
+ * `{"taxpayer":{"name":"…"}}` is `/taxpayer/name` and neither segment matches
+ * `taxpayername` on its own.
+ *
+ * This is deliberately broader than `filedReturnsSummaryIdentity`, which stays
+ * terminal-specific because it names the identity for extraction. Redaction
+ * must fail closed; labelling must be exact.
+ */
 export function isFiledReturnsSummaryIdentityPath(path: string): boolean {
-  return canonicalJsonPointerSegments(path).some(
-    (segment) => identityForCanonicalSegment(segment) !== null,
+  const segments = canonicalJsonPointerSegments(path);
+  return segments.some((_, start) =>
+    segments.some(
+      (_ignored, end) =>
+        identityForCanonicalSegment(segments.slice(start, end + 1).join("")) !== null,
+    ),
   );
 }
 
