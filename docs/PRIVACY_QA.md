@@ -93,11 +93,13 @@ For each release candidate:
   numeric figure cells and totals summed exactly from source decimal text, a
   `Precision limit` marker for a present month that cannot be represented as a
   spreadsheet numeric cell, an explanatory text total carrying the exact sum
-  when that decimal cannot be represented, blank cells for missing or
+  when it fits in an Excel cell and a fixed precision-limit explanation
+  otherwise, blank cells for missing or
   unparseable periods, only mapped Table 3.1 and Table 4 rows, the portal-dash
   applicability set for Table 3.1 and all four Table 4 tax columns. After the
-  final spacer, the footer must contain exactly `Source` and `Coverage` rows.
-  `Source` must name filed GSTR-3B returns from the GST portal and use the
+  final spacer, the footer must contain `Source` and `Coverage` rows, plus a
+  `Caption evidence` row only when shared Table 4 captions are withheld for
+  mixed rendered periods. `Source` must name filed GSTR-3B returns from the GST portal and use the
   existing generation clock as a human-readable date; `Coverage` must state
   Tables 3.1 and 4 are included and Tables 3.1.1, 3.2, 5, 5.1 and 6.1 are not.
   Column B must remain wide enough to show either footer value without relying

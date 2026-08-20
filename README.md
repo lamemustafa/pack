@@ -94,12 +94,14 @@ scrolling. The statement body keeps
 the portal-dash applicability set for Table 3.1 and all four Table 4 tax columns.
 Totals use scaled decimal arithmetic on the original JSON number text. If an
 exact total cannot be emitted as a spreadsheet numeric cell, the Total cell
-shows the exact sum as text and explains the precision limit instead of writing
-a rounded figure.
-After the final statement spacer, a two-row footer records the GST portal as the
-source with a human-readable generation date, then included and excluded Form
-coverage. Column B is width 58 so both footer values are readable without
-depending on text spill.
+shows the exact sum as text when it fits in an Excel cell, otherwise a fixed
+precision-limit explanation instead of a rounded figure.
+After the final statement spacer, the normal two-row footer records the GST
+portal as the source with a human-readable generation date, then included and
+excluded Form coverage. When a shared Table 4 caption is withheld because the
+rendered periods resolve to different versions, a third `Caption evidence` row
+names the affected tables. Column B is width 58 so footer values are readable
+without depending on text spill.
 Recognized identity is absent from the data CSV; the required GSTIN and legal
 name are written to the GSTR-3B workbook header. Other recognized taxpayer identity and
 per-period filing identity, including ARN and ARN date, are separated into
@@ -113,14 +115,15 @@ identity is inconsistent, or the combined derived output exceeds its local size
 limit, Pack still exports the artifact ZIP and reports a fixed categorical
 reason.
 
-### Full-year summary rules for Pack v0.5.1
+### Full-year summary rules for unreleased source builds
 
 These rules apply to the GSTR-3B `full-year-workbook.xlsx` and the
-`full-year-summary.csv` produced for all supported return types by Pack v0.5.1.
-The producing Pack version is available in the
-installed extension manifest. Neither file carries an in-file format marker, so
-a machine consumer cannot identify the CSV format from the CSV alone and must
-be given the producing Pack version.
+`full-year-summary.csv` produced by source builds containing this feature. They
+are not assigned to any released Pack version because no release contains this
+format yet. The producing Pack version is available in the installed extension
+manifest. Neither file carries an in-file format marker, so a machine consumer
+cannot identify the CSV format from the CSV alone and must be given the
+producing Pack version.
 
 - **Envelope rule:** Pack classifies identity against the whole JSON document,
   then removes the artifact validator's documented return envelope before
