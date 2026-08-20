@@ -1,0 +1,889 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pack — target plan panel prototype</title>
+    <style>
+      :root {
+        /* the collapsed Pack token set, verbatim from src/styles/global.css */
+        --pack-surface: #ffffff;
+        --pack-surface-muted: #f7f9fb;
+        --pack-canvas: #f5f7fa;
+        --pack-surface-inset: #eef3f8;
+        --pack-surface-accent-soft: #e9f1f8;
+        --pack-surface-sunken: #e5ebf2;
+        --pack-ink-primary: #172033;
+        --pack-ink-secondary: #334155;
+        --pack-ink-tertiary: #43566b;
+        --pack-ink-muted: #526477;
+        --pack-ink-link: #244d7c;
+        --pack-ink-inverse: #ffffff;
+        --pack-border-subtle: #d8e1ec;
+        --pack-border-default: #c8d3de;
+        --pack-border-strong: #9fb0c1;
+        --pack-action: #173a63;
+        --pack-action-hover: #0f2a49;
+        --pack-success-fg: #115d38;
+        --pack-success-bg: #e8f8ef;
+        --pack-success-border: #9cc7b1;
+        --pack-warning-fg: #75420b;
+        --pack-warning-bg: #fff7e8;
+        --pack-warning-border: #ddc58b;
+        --pack-danger-fg: #7b241c;
+        --pack-danger-bg: #fff0ee;
+        --pack-danger-border: #e5b3ac;
+        --sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        --mono: ui-monospace, "SF Mono", Menlo, monospace;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--pack-canvas);
+        color: var(--pack-ink-primary);
+        font-family: var(--sans);
+        font-size: 15px;
+        line-height: 1.5;
+        padding: 24px;
+      }
+      .stage {
+        display: flex;
+        gap: 24px;
+        align-items: flex-start;
+        flex-wrap: wrap;
+      }
+      .caption {
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--pack-ink-muted);
+        margin: 0 0 8px;
+      }
+      /* ---- the panel ---- */
+      .panel {
+        width: 400px;
+        min-height: 620px;
+        display: flex;
+        flex-direction: column;
+        border: 1px solid var(--pack-border-default);
+        border-radius: 10px;
+        background: var(--pack-surface-inset);
+        overflow: hidden;
+      }
+      .phead {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 12px;
+        background: var(--pack-surface);
+        border-bottom: 1px solid var(--pack-border-subtle);
+      }
+      .mark {
+        width: 22px;
+        height: 22px;
+        border-radius: 5px;
+        background: var(--pack-action);
+        display: grid;
+        place-items: center;
+        flex: 0 0 auto;
+      }
+      .pname {
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+      .ppub {
+        margin-left: auto;
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--pack-ink-muted);
+      }
+      .src {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--pack-ink-secondary);
+        background: var(--pack-success-bg);
+        border-bottom: 1px solid var(--pack-success-border);
+        padding: 6px 12px;
+      }
+      .dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--pack-success-fg);
+      }
+      .band {
+        padding: 12px;
+        border-bottom: 1px solid var(--pack-border-subtle);
+        background: var(--pack-surface);
+      }
+      .band:last-of-type {
+        border-bottom: 0;
+      }
+      .bandhead {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      .step {
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.1em;
+        color: var(--pack-ink-muted);
+        border: 1px solid var(--pack-border-default);
+        border-radius: 3px;
+        padding: 0 4px;
+      }
+      .bandhead h2 {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+      .recipes {
+        display: grid;
+        gap: 5px;
+      }
+      .recipe {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        text-align: left;
+        font: inherit;
+        font-size: 13px;
+        color: var(--pack-ink-primary);
+        background: var(--pack-surface-muted);
+        border: 1px solid var(--pack-border-subtle);
+        border-radius: 6px;
+        padding: 7px 9px;
+        cursor: pointer;
+      }
+      .recipe:hover {
+        border-color: var(--pack-border-strong);
+      }
+      .recipe[aria-pressed="true"] {
+        border-color: var(--pack-action);
+        background: var(--pack-surface-accent-soft);
+      }
+      .recipe span.n {
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--pack-ink-muted);
+      }
+      .recipe[disabled] {
+        opacity: 0.5;
+        cursor: default;
+      }
+      /* matrix */
+      table.mx {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 2px;
+      }
+      table.mx th,
+      table.mx td {
+        padding: 0;
+      }
+      table.mx thead th {
+        font-family: var(--mono);
+        font-size: 9px;
+        font-weight: 500;
+        color: var(--pack-ink-muted);
+        padding-bottom: 3px;
+        cursor: pointer;
+      }
+      table.mx tbody th {
+        font-family: var(--mono);
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--pack-ink-secondary);
+        text-align: left;
+        white-space: nowrap;
+        padding-right: 5px;
+        cursor: pointer;
+      }
+      table.mx thead th:hover,
+      table.mx tbody th:hover {
+        color: var(--pack-ink-link);
+        text-decoration: underline;
+      }
+      .cell {
+        display: block;
+        width: 100%;
+        height: 20px;
+        border: 1px solid var(--pack-border-default);
+        border-radius: 2px;
+        background: var(--pack-surface);
+        font-family: var(--mono);
+        font-size: 9px;
+        line-height: 18px;
+        text-align: center;
+        color: var(--pack-ink-muted);
+        cursor: pointer;
+        padding: 0;
+      }
+      .cell[data-on="1"] {
+        background: var(--pack-action);
+        border-color: var(--pack-action);
+        color: var(--pack-ink-inverse);
+      }
+      .cell[data-na="1"] {
+        background: repeating-linear-gradient(
+          135deg,
+          var(--pack-surface-sunken) 0 3px,
+          transparent 3px 6px
+        );
+        border-color: var(--pack-border-subtle);
+        cursor: not-allowed;
+      }
+      .cell[data-st="saved"] {
+        background: var(--pack-success-bg);
+        border-color: var(--pack-success-border);
+        color: var(--pack-success-fg);
+      }
+      .cell[data-st="running"] {
+        background: var(--pack-ink-link);
+        border-color: var(--pack-ink-link);
+        color: var(--pack-ink-inverse);
+      }
+      .cell[data-st="needs-review"] {
+        background: var(--pack-warning-bg);
+        border-color: var(--pack-warning-border);
+        color: var(--pack-warning-fg);
+      }
+      .cell[data-st="skipped"] {
+        background: var(--pack-surface-sunken);
+        border-color: var(--pack-border-default);
+        color: var(--pack-ink-muted);
+      }
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-top: 8px;
+      }
+      .chip {
+        font-family: var(--mono);
+        font-size: 10px;
+        border: 1px solid var(--pack-border-default);
+        border-radius: 999px;
+        padding: 2px 8px;
+        background: var(--pack-surface);
+        color: var(--pack-ink-secondary);
+        cursor: pointer;
+      }
+      .chip[aria-pressed="true"] {
+        background: var(--pack-ink-primary);
+        border-color: var(--pack-ink-primary);
+        color: var(--pack-ink-inverse);
+      }
+      /* ledger */
+      .ledger {
+        flex: 1;
+        overflow: auto;
+        background: var(--pack-surface);
+      }
+      table.rows {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+      table.rows thead th {
+        position: sticky;
+        top: 0;
+        background: var(--pack-surface-muted);
+        text-align: left;
+        font-family: var(--mono);
+        font-size: 9px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--pack-ink-muted);
+        border-bottom: 1px solid var(--pack-border-default);
+        padding: 5px 8px;
+      }
+      table.rows td {
+        border-bottom: 1px solid var(--pack-border-subtle);
+        padding: 5px 8px;
+        color: var(--pack-ink-secondary);
+        vertical-align: top;
+      }
+      table.rows tr[data-sel="1"] td {
+        background: var(--pack-surface-accent-soft);
+      }
+      .tgt {
+        font-family: var(--mono);
+        color: var(--pack-ink-primary);
+        white-space: nowrap;
+      }
+      .pill {
+        display: inline-block;
+        font-family: var(--mono);
+        font-size: 9px;
+        border-radius: 3px;
+        padding: 1px 5px;
+        border: 1px solid;
+        white-space: nowrap;
+      }
+      .pill.planned,
+      .pill.queued {
+        color: var(--pack-ink-muted);
+        border-color: var(--pack-border-default);
+        background: var(--pack-surface-muted);
+      }
+      .pill.running {
+        color: var(--pack-ink-inverse);
+        border-color: var(--pack-ink-link);
+        background: var(--pack-ink-link);
+      }
+      .pill.saved {
+        color: var(--pack-success-fg);
+        border-color: var(--pack-success-border);
+        background: var(--pack-success-bg);
+      }
+      .pill\.needs-review,
+      .pill.needs-review {
+        color: var(--pack-warning-fg);
+        border-color: var(--pack-warning-border);
+        background: var(--pack-warning-bg);
+      }
+      .pill.skipped {
+        color: var(--pack-danger-fg);
+        border-color: var(--pack-danger-border);
+        background: var(--pack-danger-bg);
+      }
+      .pill.unavailable {
+        color: var(--pack-ink-muted);
+        border-color: var(--pack-border-subtle);
+        background: var(--pack-surface-sunken);
+      }
+      .ev {
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--pack-ink-muted);
+      }
+      /* review */
+      .review {
+        margin: 8px;
+        border: 1px solid var(--pack-warning-border);
+        background: var(--pack-warning-bg);
+        border-radius: 6px;
+        padding: 10px;
+      }
+      .review h3 {
+        margin: 0 0 4px;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--pack-ink-primary);
+      }
+      .review p {
+        margin: 0 0 8px;
+        font-size: 12px;
+        color: var(--pack-ink-secondary);
+      }
+      .acts {
+        display: grid;
+        gap: 4px;
+      }
+      .btn {
+        font: inherit;
+        font-size: 12px;
+        font-weight: 600;
+        border-radius: 5px;
+        padding: 7px 10px;
+        cursor: pointer;
+        border: 1px solid var(--pack-action);
+        background: var(--pack-action);
+        color: var(--pack-ink-inverse);
+        text-align: center;
+      }
+      .btn:hover {
+        background: var(--pack-action-hover);
+      }
+      .btn.ghost {
+        background: var(--pack-surface);
+        color: var(--pack-ink-secondary);
+        border-color: var(--pack-border-default);
+      }
+      .btn.ghost:hover {
+        background: var(--pack-surface-muted);
+        border-color: var(--pack-border-strong);
+      }
+      .btn[disabled] {
+        opacity: 0.45;
+        cursor: default;
+      }
+      .acts .btn {
+        text-align: left;
+      }
+      .pfoot {
+        border-top: 1px solid var(--pack-border-subtle);
+        background: var(--pack-surface);
+        padding: 10px 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .cost {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--pack-ink-secondary);
+        line-height: 1.35;
+        flex: 1;
+      }
+      .cost b {
+        color: var(--pack-ink-primary);
+      }
+      .note {
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--pack-ink-muted);
+        padding: 6px 12px;
+        border-top: 1px solid var(--pack-border-subtle);
+        background: var(--pack-surface-muted);
+      }
+      /* popup */
+      .popup {
+        width: 300px;
+        border: 1px solid var(--pack-border-default);
+        border-radius: 10px;
+        background: var(--pack-surface-inset);
+        overflow: hidden;
+      }
+      .popup .body {
+        padding: 12px;
+        display: grid;
+        gap: 6px;
+      }
+      .aside {
+        max-width: 26rem;
+        font-size: 13px;
+        color: var(--pack-ink-secondary);
+      }
+      .aside h3 {
+        font-size: 13px;
+        margin: 16px 0 4px;
+        color: var(--pack-ink-primary);
+      }
+      .aside code {
+        font-family: var(--mono);
+        font-size: 11px;
+        background: var(--pack-surface-sunken);
+        padding: 1px 4px;
+        border-radius: 3px;
+      }
+      .aside ul {
+        padding-left: 18px;
+        margin: 4px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <div>
+        <p class="caption">Panel — Phase A mounts as an extension page, Phase B as a side panel</p>
+        <div class="panel">
+          <div class="phead">
+            <span class="mark" aria-hidden="true"
+              ><svg width="13" height="13" viewBox="0 0 24 24">
+                <path
+                  d="M7 3H4v18h3M17 3h3v18h-3"
+                  fill="none"
+                  stroke="#A9C8FF"
+                  stroke-width="2.2"
+                  stroke-linecap="square"
+                />
+                <rect x="9" y="7" width="2.6" height="2.6" fill="#fff" />
+                <rect x="12.8" y="7" width="2.6" height="2.6" fill="#fff" />
+                <rect x="9" y="10.8" width="2.6" height="2.6" fill="#fff" />
+                <rect x="12.8" y="10.8" width="2.6" height="2.6" fill="#fff" />
+                <rect x="9" y="14.6" width="2.6" height="2.6" fill="#fff" />
+                <rect x="12.8" y="14.6" width="2.6" height="2.6" fill="#fff" /></svg
+            ></span>
+            <span class="pname">Pack</span><span class="ppub">ComplyEaze</span>
+          </div>
+          <div class="src">
+            <span class="dot"></span><span id="srcline">GST portal · signed in</span>
+          </div>
+
+          <div class="band">
+            <div class="bandhead">
+              <span class="step">1</span>
+              <h2>What do you need?</h2>
+            </div>
+            <div class="recipes" id="recipes"></div>
+          </div>
+
+          <div class="band">
+            <div class="bandhead">
+              <span class="step">2</span>
+              <h2>FY 2025-26</h2>
+              <span class="ppub" style="margin-left: auto" id="selcount"></span>
+            </div>
+            <table class="mx" id="mx"></table>
+            <div class="chips" id="chips"></div>
+          </div>
+
+          <div class="band" style="padding: 0">
+            <div class="bandhead" style="padding: 12px 12px 0">
+              <span class="step">3</span>
+              <h2 id="planhead">Plan</h2>
+            </div>
+            <div id="reviewslot"></div>
+            <div class="ledger" style="max-height: 210px">
+              <table class="rows" id="rows">
+                <thead>
+                  <tr>
+                    <th>Target</th>
+                    <th>Fmt</th>
+                    <th>Status</th>
+                    <th>Evidence</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="pfoot">
+            <span class="cost" id="cost"></span>
+            <button class="btn" id="go" type="button">Build pack</button>
+          </div>
+          <p class="note" id="note">Local only · nothing leaves this device.</p>
+        </div>
+      </div>
+
+      <div>
+        <p class="caption">Popup — all 420×560 should ever have done</p>
+        <div class="popup">
+          <div class="phead">
+            <span class="mark" aria-hidden="true"
+              ><svg width="13" height="13" viewBox="0 0 24 24">
+                <path
+                  d="M7 3H4v18h3M17 3h3v18h-3"
+                  fill="none"
+                  stroke="#A9C8FF"
+                  stroke-width="2.2"
+                  stroke-linecap="square"
+                />
+                <rect x="9" y="7" width="2.6" height="2.6" fill="#fff" />
+                <rect x="12.8" y="7" width="2.6" height="2.6" fill="#fff" />
+                <rect x="9" y="10.8" width="2.6" height="2.6" fill="#fff" />
+                <rect x="12.8" y="10.8" width="2.6" height="2.6" fill="#fff" /></svg
+            ></span>
+            <span class="pname">Pack</span>
+          </div>
+          <div class="body">
+            <span class="cost" id="popupstat"><b>No run in progress</b></span>
+            <button class="btn" type="button">Open plan</button>
+            <button class="btn ghost" type="button">Reset Pack</button>
+          </div>
+          <p class="note">Local only · nothing leaves this device.</p>
+        </div>
+
+        <div class="aside">
+          <h3>Try it</h3>
+          <ul>
+            <li>Click a <b>recipe</b>, or paint cells in the matrix.</li>
+            <li>
+              Click a <b>row label</b> for that document all year; a <b>column header</b> for every
+              document in that period.
+            </li>
+            <li>Press <b>Build pack</b> — July's GSTR-3B will pause for review, on purpose.</li>
+          </ul>
+          <h3>What it demonstrates</h3>
+          <ul>
+            <li>Matrix selects, ledger records. The matrix stays as an overview during the run.</li>
+            <li>A paused target asks <b>one question, three answers</b>.</li>
+            <li>
+              <code>skipped</code> is terminal and still blocks plan completion — the footer never
+              says "complete" while a row is skipped.
+            </li>
+            <li>
+              The footer states the real cost: files, one ZIP, and <b>one save prompt</b>, because
+              <code>saveAs:false</code> cannot override the user's "ask where to save" preference.
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const DOCS = [
+        { id: "GSTR-3B", label: "3B", fmts: ["PDF", "JSON"] },
+        { id: "GSTR-1", label: "R1", fmts: ["PDF", "EXCEL", "JSON"] },
+        { id: "GSTR-2B", label: "2B", fmts: ["PDF", "EXCEL", "JSON"] },
+      ];
+      const MONTHS = [
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+        "Jan",
+        "Feb",
+        "Mar",
+      ];
+      const FILED = 9; // periods available this FY
+      const RECIPES = [
+        { id: "3b", label: "This year's GSTR-3B", docs: ["GSTR-3B"] },
+        { id: "all", label: "FY 2025-26 — everything", docs: ["GSTR-3B", "GSTR-1", "GSTR-2B"] },
+        { id: "recon", label: "GSTR-1 vs 3B, full year", docs: ["GSTR-3B", "GSTR-1"] },
+        { id: "itr", label: "Last 3 years of ITRs", disabled: "income tax — not yet" },
+      ];
+      let fmts = new Set(["PDF"]);
+      let sel = new Set();
+      let plan = [];
+      let phase = "prepare";
+      let recipe = null;
+
+      const key = (d, m) => `${d}|${m}`;
+      const avail = (d, m) => m < FILED;
+
+      function render() {
+        // recipes
+        document.getElementById("recipes").innerHTML = RECIPES.map(
+          (r) =>
+            `<button class="recipe" type="button" data-r="${r.id}" ${r.disabled ? "disabled" : ""} aria-pressed="${recipe === r.id}">
+               <span>${r.label}</span><span class="n">${r.disabled || countFor(r) + " files"}</span></button>`,
+        ).join("");
+        // matrix
+        const head = `<thead><tr><th></th>${MONTHS.map((m, i) => `<th data-col="${i}">${m[0]}</th>`).join("")}</tr></thead>`;
+        const body = DOCS.map(
+          (d) =>
+            `<tr><th data-row="${d.id}">${d.label}</th>${MONTHS.map((m, i) => {
+              const k = key(d.id, i);
+              const t = plan.find((p) => p.k === k);
+              const na = !avail(d.id, i);
+              const st = t ? t.status : "";
+              const glyph =
+                st === "saved"
+                  ? "✓"
+                  : st === "needs-review"
+                    ? "!"
+                    : st === "running"
+                      ? "•"
+                      : st === "skipped"
+                        ? "–"
+                        : "";
+              return `<td><button class="cell" type="button" data-k="${k}" data-na="${na ? 1 : 0}" data-on="${sel.has(k) ? 1 : 0}" ${st ? `data-st="${st}"` : ""} ${na ? "disabled" : ""} aria-label="${d.id} ${m}">${glyph}</button></td>`;
+            }).join("")}</tr>`,
+        ).join("");
+        document.getElementById("mx").innerHTML = head + "<tbody>" + body + "</tbody>";
+        document.getElementById("selcount").textContent = sel.size + " selected";
+        // format chips
+        const all = [...new Set(DOCS.flatMap((d) => d.fmts))];
+        document.getElementById("chips").innerHTML = all
+          .map(
+            (f) =>
+              `<button class="chip" type="button" data-f="${f}" aria-pressed="${fmts.has(f)}">${f}</button>`,
+          )
+          .join("");
+        // ledger
+        const tb = document.querySelector("#rows tbody");
+        const shown = phase === "prepare" ? buildPlan() : plan;
+        document.getElementById("planhead").textContent =
+          phase === "prepare" ? "Plan" : phase === "running" ? "Running" : "Pack";
+        tb.innerHTML = shown.length
+          ? shown
+              .map(
+                (t) =>
+                  `<tr data-sel="${t.status === "needs-review" ? 1 : 0}"><td class="tgt">${t.month} · ${t.docLabel}</td><td class="ev">${t.fmt}</td><td><span class="pill ${t.status}">${t.status}</span></td><td class="ev">${t.evidence || "—"}</td></tr>`,
+              )
+              .join("")
+          : `<tr><td colspan="4" class="ev" style="padding:14px 8px">Nothing selected yet. Pick a recipe, or click a row label.</td></tr>`;
+        // review
+        const rev = plan.find((t) => t.status === "needs-review");
+        document.getElementById("reviewslot").innerHTML =
+          rev && phase !== "prepare"
+            ? `<div class="review"><h3>${rev.month} · ${rev.docLabel}</h3>
+                 <p>Chrome saved a file, but Pack could not match it to ${rev.month}. It will not mark ${rev.month} done on a guess.</p>
+                 <div class="acts">
+                   <button class="btn" type="button" data-rv="observe">I checked Downloads — ${rev.month} is there</button>
+                   <button class="btn ghost" type="button" data-rv="retry">Try ${rev.month} again</button>
+                   <button class="btn ghost" type="button" data-rv="skip">Skip ${rev.month}, keep going</button>
+                 </div></div>`
+            : "";
+        // footer
+        const go = document.getElementById("go");
+        const n = shown.length;
+        if (phase === "prepare") {
+          document.getElementById("cost").innerHTML = n
+            ? `<b>${n} file${n === 1 ? "" : "s"}</b> · one ZIP<br>1 save prompt`
+            : "Nothing selected.";
+          go.textContent = "Build pack";
+          go.disabled = n === 0;
+          document.getElementById("popupstat").innerHTML = "<b>No run in progress</b>";
+        } else {
+          const saved = plan.filter((t) => t.status === "saved").length;
+          const need = plan.filter((t) => t.status === "needs-review").length;
+          const skip = plan.filter((t) => t.status === "skipped").length;
+          const settled = plan.every((t) => ["saved", "skipped", "unavailable"].includes(t.status));
+          const completable = settled && skip === 0;
+          document.getElementById("cost").innerHTML =
+            `<b>${saved} of ${plan.length} saved</b>${need ? " · " + need + " needs you" : ""}${skip ? " · " + skip + " skipped" : ""}<br>` +
+            (settled
+              ? completable
+                ? "Pack complete."
+                : "Settled, not complete — a target was skipped."
+              : "Keep the GST tab in front.");
+          go.textContent = settled ? "Start another" : "Running…";
+          go.disabled = !settled;
+          document.getElementById("popupstat").innerHTML =
+            `<b>${saved} of ${plan.length} saved</b>${need ? "<br>1 needs you" : ""}`;
+        }
+      }
+
+      function countFor(r) {
+        if (!r.docs) return 0;
+        let n = 0;
+        for (const d of r.docs)
+          for (let i = 0; i < MONTHS.length; i++)
+            if (avail(d, i))
+              n += DOCS.find((x) => x.id === d).fmts.filter((f) => fmts.has(f)).length;
+        return n;
+      }
+
+      function buildPlan() {
+        const out = [];
+        for (const d of DOCS)
+          for (let i = 0; i < MONTHS.length; i++) {
+            if (!sel.has(key(d.id, i))) continue;
+            for (const f of d.fmts)
+              if (fmts.has(f))
+                out.push({
+                  k: key(d.id, i),
+                  doc: d.id,
+                  docLabel: d.label,
+                  month: MONTHS[i],
+                  mi: i,
+                  fmt: f,
+                  status: "planned",
+                  evidence: "",
+                });
+          }
+        return out;
+      }
+
+      let runToken = 0;
+      function start() {
+        plan = buildPlan();
+        if (!plan.length) return;
+        const token = ++runToken; // any earlier loop aborts on its next tick
+        phase = "running";
+        plan.forEach((t) => (t.status = "queued"));
+        render();
+        let i = 0;
+        const tick = () => {
+          if (token !== runToken) return;
+          if (i >= plan.length) {
+            phase = "done";
+            render();
+            return;
+          }
+          const t = plan[i];
+          t.status = "running";
+          render();
+          setTimeout(() => {
+            if (token !== runToken) return;
+            if (t.doc === "GSTR-3B" && t.month === "Jul") {
+              t.status = "needs-review";
+              t.evidence = "unmatched download";
+            } else {
+              t.status = "saved";
+              t.evidence = "download confirmed";
+            }
+            i++;
+            render();
+            tick();
+          }, 190);
+        };
+        tick();
+      }
+
+      document.addEventListener("click", (e) => {
+        const c = e.target.closest(".cell");
+        if (c && !c.disabled && phase === "prepare") {
+          const k = c.dataset.k;
+          sel.has(k) ? sel.delete(k) : sel.add(k);
+          recipe = null;
+          return render();
+        }
+        const rowh = e.target.closest("[data-row]");
+        if (rowh && phase === "prepare") {
+          const d = rowh.dataset.row;
+          const ks = MONTHS.map((_, i) => key(d, i)).filter((_, i) => avail(d, i));
+          const on = ks.every((k) => sel.has(k));
+          ks.forEach((k) => (on ? sel.delete(k) : sel.add(k)));
+          recipe = null;
+          return render();
+        }
+        const colh = e.target.closest("[data-col]");
+        if (colh && phase === "prepare") {
+          const i = +colh.dataset.col;
+          const ks = DOCS.filter((d) => avail(d.id, i)).map((d) => key(d.id, i));
+          const on = ks.every((k) => sel.has(k));
+          ks.forEach((k) => (on ? sel.delete(k) : sel.add(k)));
+          recipe = null;
+          return render();
+        }
+        const r = e.target.closest("[data-r]");
+        if (r && !r.disabled && phase === "prepare") {
+          const def = RECIPES.find((x) => x.id === r.dataset.r);
+          sel = new Set();
+          for (const d of def.docs)
+            for (let i = 0; i < MONTHS.length; i++) if (avail(d, i)) sel.add(key(d, i));
+          recipe = def.id;
+          return render();
+        }
+        const f = e.target.closest("[data-f]");
+        if (f && phase === "prepare") {
+          const v = f.dataset.f;
+          fmts.has(v) ? fmts.size > 1 && fmts.delete(v) : fmts.add(v);
+          return render();
+        }
+        const rv = e.target.closest("[data-rv]");
+        if (rv) {
+          const t = plan.find((x) => x.status === "needs-review");
+          if (!t) return;
+          if (rv.dataset.rv === "observe") {
+            t.status = "needs-review";
+            t.evidence = "manual observation — not completion";
+            rv.closest(".review").innerHTML =
+              '<p style="margin:0;font-size:12px">Recorded. A manual observation does not complete the target — it stays reviewable.</p>';
+            return;
+          }
+          if (rv.dataset.rv === "retry") {
+            t.status = "saved";
+            t.evidence = "download confirmed";
+          }
+          if (rv.dataset.rv === "skip") {
+            t.status = "skipped";
+            t.evidence = "user skipped";
+          }
+          return render();
+        }
+        if (e.target.id === "go") {
+          if (phase === "prepare") return start();
+          runToken++;
+          phase = "prepare";
+          plan = [];
+          return render();
+        }
+      });
+
+      render();
+    </script>
+  </body>
+</html>
