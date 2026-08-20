@@ -4,6 +4,20 @@
 // --experimental-strip-types, and Node's resolver has no extensionless fallback:
 // dropping them fails at runtime with ERR_MODULE_NOT_FOUND while `tsc` still
 // passes, because tsc resolves like a bundler. Ten tests catch it.
+//
+// This module is the public surface for artifact names and behaviour. The vocabulary
+// itself lives in the leaf `filed-returns-artifact-types.ts` and is re-exported here, so
+// that this module and `filed-returns-capabilities.ts` form a one-way edge rather than
+// the cycle they used to. See that leaf for why the cycle mattered.
+import {
+  FILED_RETURNS_ARTIFACT_TYPES,
+  FILED_RETURNS_CONCRETE_ARTIFACT_TYPES,
+} from "./filed-returns-artifact-types.ts";
+import type {
+  FiledReturnsArtifactExtension,
+  FiledReturnsArtifactType,
+  FiledReturnsConcreteArtifactType,
+} from "./filed-returns-artifact-types.ts";
 import {
   filedReturnsCapabilityArtifactLabel,
   filedReturnsFormat,
@@ -11,13 +25,12 @@ import {
 } from "./filed-returns-capabilities.ts";
 import type { FiledReturnsReturnType } from "./filed-returns-return-types";
 
-export const FILED_RETURNS_ARTIFACT_TYPES = ["PDF", "JSON", "EXCEL", "PDF_AND_EXCEL"] as const;
-export const FILED_RETURNS_CONCRETE_ARTIFACT_TYPES = ["PDF", "JSON", "EXCEL"] as const;
-
-export type FiledReturnsArtifactType = (typeof FILED_RETURNS_ARTIFACT_TYPES)[number];
-export type FiledReturnsConcreteArtifactType =
-  (typeof FILED_RETURNS_CONCRETE_ARTIFACT_TYPES)[number];
-export type FiledReturnsArtifactExtension = ".pdf" | ".json" | ".xls" | ".xlsx";
+export { FILED_RETURNS_ARTIFACT_TYPES, FILED_RETURNS_CONCRETE_ARTIFACT_TYPES };
+export type {
+  FiledReturnsArtifactExtension,
+  FiledReturnsArtifactType,
+  FiledReturnsConcreteArtifactType,
+};
 
 export function isFiledReturnsArtifactType(input: unknown): input is FiledReturnsArtifactType {
   return (
