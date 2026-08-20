@@ -123,3 +123,21 @@ This log records live diagnostic findings that constrain Pack's local, target-bo
     does not infer that a newly focused GST tab belongs to the same taxpayer or replay a portal
     action from a focus event. The full-year action therefore tells the operator to keep GST
     Portal visible in the foreground while Pack moves between periods.
+
+25. A maintainer captured three filed GSTR-3B PDFs and read the following row text directly. No
+    amounts or identity were retained. The capture establishes two independent caption anchors and
+    leaves the intervening range unproven:
+
+    | Caption      | June 2022-23                       | July 2022-23                       | December 2025-26                                                           |
+    | ------------ | ---------------------------------- | ---------------------------------- | -------------------------------------------------------------------------- |
+    | 4(B)(1)      | As per rules 42 & 43 of CGST Rules | As per rules 42 & 43 of CGST Rules | As per rules 38,42 & 43 of CGST Rules and section 17(5)                    |
+    | 4(D) heading | D. Ineligible ITC                  | D. Ineligible ITC                  | (D) Other Details                                                          |
+    | 4(D)(1)      | As per section 17(5)               | As per section 17(5)               | ITC reclaimed which was reversed under Table 4(B)(2) in earlier tax period |
+    | 4(D)(2)      | Others                             | Others                             | Ineligible ITC under section 16(4) & ITC restricted due to PoS rules       |
+
+    Table 4(A)(1)-(5), 4(B)(2), 4(C), and 3.1(a), (b), (d), and (e) were identical in all
+    three captures. Table 3.1.1 was absent in June and present in July and December; Pack does
+    not emit it. For 4(B)(1), 4(D)(1), and 4(D)(2), Pack emits the old caption through July 2022,
+    the current caption from December 2025, and only the table reference from August 2022 through
+    November 2025. The middle range narrows only with a further capture; it is not inferred from a
+    notification, amendment date, or uncaptured source.
