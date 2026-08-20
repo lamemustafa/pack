@@ -28,11 +28,12 @@ describe("offscreen full-year summary response validation", () => {
         ok: true,
         requestId,
         blobUrl: "blob:pack/summary",
-        zipEntryCount: 3,
+        zipEntryCount: 2,
         artifactEntryCount: 1,
-        summaryEntryCount: 2,
+        summaryEntryCount: 1,
         summary: {
           status: "included",
+          workbookOutcome: "not-applicable",
           outcomeOnly: false,
           parsedPeriodCount: 1,
           rowCount: 4,
@@ -54,13 +55,35 @@ describe("offscreen full-year summary response validation", () => {
       ok: true,
       requestId: requestIdFrom(message),
       blobUrl: "blob:pack/summary-invalid",
+      zipEntryCount: 2,
+      artifactEntryCount: 1,
+      summaryEntryCount: 1,
+      summary: {
+        status: "included",
+        workbookOutcome: "not-applicable",
+        outcomeOnly: false,
+        parsedPeriodCount: 2,
+        rowCount: 2,
+      },
+    }));
+
+    await expect(
+      createOffscreenFiledReturnZipUrl("full-fiscal-year-12345678", request()),
+    ).resolves.toEqual({ status: "failed", errorCategory: "offscreen-response-invalid" });
+  });
+
+  it("rejects a GSTR-2B receipt that claims a workbook entry", async () => {
+    mocks.runtime.sendMessage.mockImplementationOnce(async (message?: unknown) => ({
+      ok: true,
+      requestId: requestIdFrom(message),
+      blobUrl: "blob:pack/wrong-form-workbook",
       zipEntryCount: 3,
       artifactEntryCount: 1,
       summaryEntryCount: 2,
       summary: {
         status: "included",
         outcomeOnly: false,
-        parsedPeriodCount: 2,
+        parsedPeriodCount: 1,
         rowCount: 2,
       },
     }));

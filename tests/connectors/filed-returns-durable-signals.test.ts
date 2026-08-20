@@ -170,6 +170,7 @@ describe("filed-return durable signal contract", () => {
     const signals = [
       "full-fiscal-year-summary-included",
       "full-fiscal-year-summary-outcomes-only",
+      "full-fiscal-year-workbook-not-applicable",
       "full-fiscal-year-summary-parsed-period-count:0",
       "full-fiscal-year-summary-row-count:100000",
       "full-fiscal-year-summary-error:too-large",

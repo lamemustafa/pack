@@ -134,7 +134,7 @@ describe("filed-return full-year workbook", () => {
     const coverage = filedReturnsStatementCoverage();
     expect(coverage).toEqual({
       includedTables: ["3.1", "4"],
-      excludedTables: ["3.1.1", "3.2", "5.1", "6.1"],
+      excludedTables: ["3.1.1", "3.2", "5", "5.1", "6.1"],
     });
     expect(
       filedReturnsStatementLineItems().some(
@@ -153,7 +153,7 @@ describe("filed-return full-year workbook", () => {
       `Tables ${coverage.includedTables.join(" and ")}. Not included: ${coverage.excludedTables.join(", ")}.`,
     ]);
     const footerValues = footerRows.map((row) => [...row!.values()][1]!.text!);
-    expect(Math.max(...footerValues.map((value) => value.length))).toBeLessThanOrEqual(55);
+    expect(Math.max(...footerValues.map((value) => value.length))).toBeLessThanOrEqual(58);
     expect(statement).toContain('<col min="2" max="2" width="58" customWidth="1"/>');
     const workbookText = [...entries.values()]
       .map((entry) => new TextDecoder().decode(entry))
@@ -177,35 +177,43 @@ describe("filed-return full-year workbook", () => {
     expect(statement).not.toContain("/surrounding_decoy/unlabeled_amount");
   });
 
-  it("keeps the workbook when the legal name is missing", () => {
+  it("fails closed when a parseable workbook period omits its legal name", () => {
     const plan = fullYearPlan();
-    const summary = buildFiledReturnsSummarySheet(plan, [
-      {
-        path: "april-data.json",
-        bytes: new TextEncoder().encode(
-          JSON.stringify({
-            status: 1,
-            data: {
-              r3b: {
-                gstin: "00XXXXX0000X0Z0",
-                ret_period: "042026",
-                sup_details: { osup_det: { txval: 1 } },
+    expect(() =>
+      buildFiledReturnsSummarySheet(plan, [
+        {
+          path: "april-data.json",
+          bytes: new TextEncoder().encode(
+            JSON.stringify({
+              status: 1,
+              data: {
+                r3b: {
+                  gstin: "00XXXXX0000X0Z0",
+                  ret_period: "042026",
+                  sup_details: { osup_det: { txval: 1 } },
+                },
               },
-            },
-          }),
-        ),
-      },
-    ]);
+            }),
+          ),
+        },
+      ]),
+    ).toThrow("Required taxpayer identity");
+  });
 
+  it("keeps blank identity cells when no period has parseable JSON", () => {
+    const plan = fullYearPlan().map((entry) => ({
+      ...entry,
+      entryNames: [],
+      outcomeCategory: "artifact-unavailable" as const,
+    }));
+    const summary = buildFiledReturnsSummarySheet(plan, []);
     const workbook = buildFiledReturnsFullYearWorkbook(summary, plan, {
       generatedAt: new Date("2026-08-19T12:00:00.000Z"),
     });
-    const statement = text(extractStoredZipEntries(workbook), "xl/worksheets/sheet1.xml");
-    const rows = parsedRows(statement);
-    expect(rows[0]?.get("B1")?.text).toBe("00XXXXX0000X0Z0");
+    const rows = parsedRows(text(extractStoredZipEntries(workbook), "xl/worksheets/sheet1.xml"));
+    expect(rows[0]?.get("B1")?.text ?? "").toBe("");
     expect(rows[1]?.get("B2")?.text ?? "").toBe("");
   });
-
   it("sums twelve large monthly decimals exactly from their source text", () => {
     const plan = FILED_RETURNS_MONTHS.map((period) => ({
       artifactType: "JSON" as const,
@@ -215,10 +223,19 @@ describe("filed-return full-year workbook", () => {
       period,
       returnType: "GSTR-3B" as const,
     }));
-    const entries = plan.map(({ entryNames }) => ({
+    const entries = plan.map(({ entryNames, period }) => ({
       path: entryNames[0]!,
       bytes: new TextEncoder().encode(
-        '{"data":{"r3b":{"sup_details":{"osup_det":{"txval":9999999999999.99}}}}}',
+        JSON.stringify({
+          data: {
+            lglnm: "Synthetic Legal Name",
+            r3b: {
+              gstin: "00XXXXX0000X0Z0",
+              ret_period: period,
+              sup_details: { osup_det: { txval: 9_999_999_999_999.99 } },
+            },
+          },
+        }),
       ),
     }));
     const summary = buildFiledReturnsSummarySheet(plan, entries);
@@ -260,13 +277,13 @@ describe("filed-return full-year workbook", () => {
       {
         path: "april-data.json",
         bytes: new TextEncoder().encode(
-          '{"data":{"r3b":{"sup_details":{"osup_det":{"txval":99999999999999.999}}}}}',
+          '{"data":{"lglnm":"Synthetic Legal Name","r3b":{"gstin":"00XXXXX0000X0Z0","ret_period":"042026","sup_details":{"osup_det":{"txval":99999999999999.999}}}}}',
         ),
       },
       {
         path: "may-data.json",
         bytes: new TextEncoder().encode(
-          '{"data":{"r3b":{"sup_details":{"osup_det":{"txval":1}}}}}',
+          '{"data":{"lglnm":"Synthetic Legal Name","r3b":{"gstin":"00XXXXX0000X0Z0","ret_period":"052026","sup_details":{"osup_det":{"txval":1}}}}}',
         ),
       },
     ];

@@ -148,8 +148,9 @@ describe("filed-return full-year summary sheet", () => {
         rawJsonEntry("april-data.json", {
           status: 1,
           data: {
+            lglnm: "Synthetic Legal Name",
             authSig: "Synthetic Authorized Signatory",
-            r3b: { ret_period: "042026", amount: 1 },
+            r3b: { gstin: "00XXXXX0000X0Z0", ret_period: "042026", amount: 1 },
           },
         }),
       ],
@@ -245,7 +246,9 @@ describe("filed-return full-year summary sheet", () => {
         rawJsonEntry("april-data.json", {
           status: 1,
           data: {
+            lglnm: "Synthetic Legal Name",
             r3b: {
+              gstin: "00XXXXX0000X0Z0",
               ret_period: "042026",
               sup_details: {
                 osup_det: { txval: 101, camt: 11, iamt: 12, samt: 13 },
@@ -538,6 +541,91 @@ describe("filed-return full-year summary sheet", () => {
     ).toThrow("Inconsistent taxpayer identity");
   });
 
+  it("fails closed when any parseable GSTR-3B period omits its GSTIN", () => {
+    expect(() =>
+      buildFiledReturnsSummarySheet(
+        [
+          jsonPlan("April", "april-data.json", "GSTR-3B"),
+          jsonPlan("May", "may-data.json", "GSTR-3B"),
+        ],
+        [
+          rawJsonEntry("april-data.json", {
+            status: 1,
+            data: {
+              lglnm: "Synthetic Legal Name",
+              r3b: { gstin: "00XXXXX0000X0Z0", ret_period: "042026", amount: 1 },
+            },
+          }),
+          rawJsonEntry("may-data.json", {
+            status: 1,
+            data: {
+              lglnm: "Synthetic Legal Name",
+              r3b: { ret_period: "052026", amount: 2 },
+            },
+          }),
+        ],
+      ),
+    ).toThrow("Required taxpayer identity");
+  });
+
+  it("allows an optional taxpayer identity to be absent from another parseable period", () => {
+    const summary = buildFiledReturnsSummarySheet(
+      [
+        jsonPlan("April", "april-data.json", "GSTR-3B"),
+        jsonPlan("May", "may-data.json", "GSTR-3B"),
+      ],
+      [
+        rawJsonEntry("april-data.json", {
+          status: 1,
+          data: {
+            lglnm: "Synthetic Legal Name",
+            trdnm: "Synthetic Optional Trade Name",
+            r3b: { gstin: "00XXXXX0000X0Z0", ret_period: "042026", amount: 1 },
+          },
+        }),
+        rawJsonEntry("may-data.json", {
+          status: 1,
+          data: {
+            lglnm: "Synthetic Legal Name",
+            r3b: { gstin: "00XXXXX0000X0Z0", ret_period: "052026", amount: 2 },
+          },
+        }),
+      ],
+    );
+
+    expect(summary).toMatchObject({ outcomeOnly: false, parsedPeriodCount: 2 });
+    expect(contextText(summary.contextRows)).toContain("Synthetic Optional Trade Name");
+  });
+
+  it("still rejects different values for the same optional taxpayer identity", () => {
+    expect(() =>
+      buildFiledReturnsSummarySheet(
+        [
+          jsonPlan("April", "april-data.json", "GSTR-3B"),
+          jsonPlan("May", "may-data.json", "GSTR-3B"),
+        ],
+        [
+          rawJsonEntry("april-data.json", {
+            status: 1,
+            data: {
+              lglnm: "Synthetic Legal Name",
+              trdnm: "Synthetic Trade Name One",
+              r3b: { gstin: "00XXXXX0000X0Z0", ret_period: "042026", amount: 1 },
+            },
+          }),
+          rawJsonEntry("may-data.json", {
+            status: 1,
+            data: {
+              lglnm: "Synthetic Legal Name",
+              trdnm: "Synthetic Trade Name Two",
+              r3b: { gstin: "00XXXXX0000X0Z0", ret_period: "052026", amount: 2 },
+            },
+          }),
+        ],
+      ),
+    ).toThrow("Inconsistent taxpayer identity");
+  });
+
   it.each([
     "cookie",
     "access_token",
@@ -561,6 +649,26 @@ describe("filed-return full-year summary sheet", () => {
     "jwt",
     "bearer",
     "x_auth",
+    "userId",
+    "user_id",
+    "client_id",
+    "client_identifier",
+    "user_identifier",
+    "access_key",
+    "accessKeyId",
+    "recovery_code",
+    "recovery_key",
+    "security_answer",
+    "otp_code",
+    "otp_value",
+    "totp_code",
+    "hotp_code",
+    "mfa_code",
+    "two_factor_code",
+    "auth_code",
+    "x_auth_code",
+    "auth_code_value",
+    "access_key_value",
   ])("fails summary generation when portal JSON contains forbidden %s material", (field) => {
     const secret = "synthetic-sensitive-value";
     expect(() =>
@@ -726,7 +834,10 @@ function jsonEntry(
     returnType === "GSTR-3B"
       ? {
           status: 1,
-          data: { r3b: { ret_period: returnPeriod, ...value } },
+          data: {
+            lglnm: "Synthetic Legal Name",
+            r3b: { gstin: "00XXXXX0000X0Z0", ret_period: returnPeriod, ...value },
+          },
           response_decoy: "synthetic",
         }
       : {

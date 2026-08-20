@@ -28,6 +28,7 @@ import {
 import { persistCanonicalFiledReturnsFlowSummary } from "../../src/background/filed-returns-session-summary";
 import { parseDurableFiledReturnsSignals } from "../../src/connectors/gst/filed-returns-durable-signals";
 import type { FiledReturnsSummaryStatus } from "../../src/connectors/gst/filed-returns-summary-status";
+import { filedReturnsScopeId } from "../../src/connectors/gst/filed-returns-return-types";
 import {
   fullFiscalYearZipPhaseStep,
   toFullFiscalYearSummary,
@@ -487,31 +488,32 @@ describe("full fiscal-year recovery", () => {
     });
   });
 
-  it("keeps a fixed summary outcome visible through immediate ZIP cleanup without adding it to the ledger", async () => {
+  it("keeps the workbook-not-applicable outcome visible through immediate ZIP cleanup without adding it to the ledger", async () => {
     const now = new Date("2017-08-20T00:00:00.000Z");
     const scope = {
-      artifactType: "JSON" as const,
+      artifactType: "PDF" as const,
       financialYear: "2017-18",
       period: FULL_FISCAL_YEAR_PERIOD,
-      returnType: "GSTR-3B" as const,
+      returnType: "GSTR-1" as const,
     };
     const runSinglePeriod = vi.fn(async () => ({
       ok: true as const,
       flowStep: {
         connectorId: "gst" as const,
-        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
         state: "downloaded" as const,
-        safeSignals: ["filed-return-artifact-downloaded:JSON", "full-fiscal-year-opfs-staged:JSON"],
-        safeMessage: "Synthetic JSON staged.",
+        safeSignals: ["filed-return-artifact-downloaded:PDF", "full-fiscal-year-opfs-staged:PDF"],
+        safeMessage: "Synthetic PDF staged.",
       },
     }));
     zipMocks.exportFullFiscalYearZip.mockResolvedValue({
       connectorId: "gst",
-      scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+      scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
       state: "downloaded",
       safeSignals: [
         "full-fiscal-year-zip-downloaded",
         "full-fiscal-year-summary-included",
+        "full-fiscal-year-workbook-not-applicable",
         "full-fiscal-year-summary-parsed-period-count:1",
         "full-fiscal-year-summary-row-count:1",
       ],
@@ -530,23 +532,26 @@ describe("full fiscal-year recovery", () => {
         safeSignals: expect.arrayContaining([
           "full-fiscal-year-zip-downloaded",
           "full-fiscal-year-summary-included",
+          "full-fiscal-year-workbook-not-applicable",
           "full-fiscal-year-summary-parsed-period-count:1",
         ]),
       },
     });
     if (!("flowStep" in response)) throw new Error("Expected a filed-return flow response.");
-    expect(response.flowStep.safeMessage).toContain("workbook and tidy CSV for 1 period");
+    expect(response.flowStep.safeMessage).toContain(
+      "tidy CSV for 1 period. A consolidated workbook is not available",
+    );
     const durableWrites = vi.mocked(browser.storage.local.set).mock.calls;
     expect(JSON.stringify(durableWrites)).not.toContain("full-fiscal-year-summary-included");
   });
 
-  it("restores fixed summary status from session persistence during restart cleanup", async () => {
+  it("restores workbook-not-applicable status from session persistence during restart cleanup", async () => {
     const now = new Date("2017-08-20T00:00:00.000Z");
     const scope = {
       artifactType: "JSON" as const,
       financialYear: "2017-18",
       period: FULL_FISCAL_YEAR_PERIOD,
-      returnType: "GSTR-3B" as const,
+      returnType: "GSTR-2B" as const,
     };
     const periods = getFiledReturnsFullFiscalYearPeriods(scope.financialYear, now);
     const baseLedger = createFullFiscalYearLedger(scope, now, periods);
@@ -569,11 +574,12 @@ describe("full fiscal-year recovery", () => {
       totalPeriods: 12,
       flowStep: {
         connectorId: "gst",
-        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        scopeId: filedReturnsScopeId("GSTR-2B"),
         state: "blocked",
         safeSignals: [
           "full-fiscal-year-local-cleanup-retry",
           "full-fiscal-year-summary-included",
+          "full-fiscal-year-workbook-not-applicable",
           "full-fiscal-year-summary-parsed-period-count:2",
           `full-fiscal-year-summary-row-count:${periods.length}`,
         ],
@@ -591,12 +597,15 @@ describe("full fiscal-year recovery", () => {
         state: "downloaded",
         safeSignals: expect.arrayContaining([
           "full-fiscal-year-summary-included",
+          "full-fiscal-year-workbook-not-applicable",
           "full-fiscal-year-summary-parsed-period-count:2",
         ]),
       },
     });
     if (!response.ok || !("flowStep" in response)) throw new Error("Expected flow response.");
-    expect(response.flowStep.safeMessage).toContain("workbook and tidy CSV for 2 periods");
+    expect(response.flowStep.safeMessage).toContain(
+      "tidy CSV for 2 periods. A consolidated workbook is not available",
+    );
   });
 
   it("restores the intent-checkpoint summary after the cleanup ledger advances", async () => {
@@ -735,6 +744,7 @@ describe("full fiscal-year recovery", () => {
   it.each([
     {
       name: "included",
+      returnType: "GSTR-3B" as const,
       outcome: {
         safeSignals: [
           "full-fiscal-year-summary-included",
@@ -747,6 +757,7 @@ describe("full fiscal-year recovery", () => {
     },
     {
       name: "outcomes-only",
+      returnType: "GSTR-3B" as const,
       outcome: {
         safeSignals: [
           "full-fiscal-year-summary-included",
@@ -761,6 +772,7 @@ describe("full fiscal-year recovery", () => {
     },
     {
       name: "failed",
+      returnType: "GSTR-3B" as const,
       outcome: {
         safeSignals: [
           "full-fiscal-year-summary-failed",
@@ -771,16 +783,31 @@ describe("full fiscal-year recovery", () => {
       },
       messageFragment: "without derived summary outputs because summary generation failed",
     },
+    {
+      name: "workbook-not-applicable",
+      returnType: "GSTR-1" as const,
+      outcome: {
+        safeSignals: [
+          "full-fiscal-year-summary-included",
+          "full-fiscal-year-workbook-not-applicable",
+          "full-fiscal-year-summary-parsed-period-count:1",
+          "full-fiscal-year-summary-row-count:4",
+        ],
+        safeMessage:
+          "The ZIP includes the tidy CSV for 1 period. A consolidated workbook is not available for this return type.",
+      },
+      messageFragment: "tidy CSV for 1 period. A consolidated workbook is not available",
+    },
   ])(
     "restores the $name summary outcome when the worker stops after ZIP download start",
-    async ({ outcome, messageFragment }) => {
+    async ({ outcome, messageFragment, returnType }) => {
       const now = new Date("2017-08-20T00:00:00.000Z");
       let clock = now;
       const scope = {
         artifactType: "PDF" as const,
         financialYear: "2017-18",
         period: FULL_FISCAL_YEAR_PERIOD,
-        returnType: "GSTR-3B" as const,
+        returnType,
       };
       const store: Record<string, unknown> = {};
       vi.mocked(browser.storage.local.get).mockImplementation(async (key: unknown) => {
@@ -800,7 +827,7 @@ describe("full fiscal-year recovery", () => {
           ok: true as const,
           flowStep: {
             connectorId: "gst" as const,
-            scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+            scopeId: filedReturnsScopeId(returnType),
             state: "downloaded" as const,
             safeSignals: [
               "filed-return-artifact-downloaded:PDF",
@@ -812,12 +839,15 @@ describe("full fiscal-year recovery", () => {
               artifactType: "PDF" as const,
               byteCountClass: "non-empty" as const,
               downloadPathClass: "captured-portal-request-data" as const,
-              endpointClass: "gstr3b-portal-blob-captured-download" as const,
+              endpointClass:
+                returnType === "GSTR-1"
+                  ? ("gstr1-pdf-portal-blob-captured-download" as const)
+                  : ("gstr3b-portal-blob-captured-download" as const),
               eventType: "filed-return-download-path" as const,
               financialYear: targetScope.financialYear,
               mimeClass: "pdf" as const,
               period: targetScope.period,
-              returnType: "GSTR-3B" as const,
+              returnType,
               schemaVersion: "1.0" as const,
               status: "downloaded" as const,
             },
