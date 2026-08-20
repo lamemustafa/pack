@@ -37,6 +37,49 @@ const blockedSummary: FiledReturnsFlowSummary = {
 };
 
 describe("inline filed-return recovery status", () => {
+  it("gives every portal-gated primary action a reason, and never gates Open GST Portal", () => {
+    const noop = {
+      onOpenPortal: vi.fn(),
+      onRestartTarget: vi.fn(),
+      onRetryFullFiscalYearTarget: vi.fn(),
+      onRetryTarget: vi.fn(),
+    };
+    const targetReviewSummary: FiledReturnsFlowSummary = {
+      ...blockedSummary,
+      flowStep: {
+        ...blockedSummary.flowStep,
+        safeSignals: [
+          "filed-returns-target-review-required",
+          "filed-returns-target-local-cleanup-required",
+        ],
+      },
+    };
+    const fullYearSummary: FiledReturnsFlowSummary = {
+      ...blockedSummary,
+      scope: { ...blockedSummary.scope, period: FULL_FISCAL_YEAR_PERIOD },
+      fullFiscalYearRecovery: {
+        expectedRevision: 1,
+        ledgerId: "full-fiscal-year-12345678",
+        targetId: "GSTR-3B:2026-27:May",
+        targetStatus: "blocked",
+      },
+    };
+
+    for (const summary of [blockedSummary, targetReviewSummary, fullYearSummary]) {
+      const action = getInlinePrimaryAction(blockedPresentation, summary, noop);
+      if (!action) continue;
+      expect(action.portalDisabledReason).toBeTruthy();
+    }
+
+    const errorAction = getInlinePrimaryAction(
+      { ...blockedPresentation, kind: "error" },
+      blockedSummary,
+      noop,
+    );
+    expect(errorAction?.label).toBe("Open GST Portal");
+    expect(errorAction?.portalDisabledReason).toBeNull();
+  });
+
   it("disables a retry while the GST Portal is unavailable and explains why", () => {
     const markup = renderToStaticMarkup(
       <InlineStatus
