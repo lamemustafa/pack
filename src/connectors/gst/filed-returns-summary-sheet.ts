@@ -21,6 +21,7 @@ import {
   filedReturnsSummaryFieldLabel,
   filedReturnsSummaryIdentity,
   isFiledReturnsSummaryForbiddenFieldPath,
+  isFiledReturnsSummaryIdentityPath,
 } from "./filed-returns-summary-labels";
 import { FILED_RETURNS_MONTHS, type FiledReturnsMonth } from "./filed-returns-scope";
 
@@ -173,7 +174,7 @@ export function buildFiledReturnsSummarySheet(
   const dataRows: FiledReturnsSummaryDataRow[] = [];
   for (const parsed of parsedEntries) {
     const fieldLeaves = parsed.leaves.filter(
-      (leaf) => filedReturnsSummaryIdentity(leaf.path) === null,
+      (leaf) => !isFiledReturnsSummaryIdentityPath(leaf.path),
     );
     if (fieldLeaves.length === 0) {
       dataRows.push(outcomeRow(parsed.planned, parsed.outcome));

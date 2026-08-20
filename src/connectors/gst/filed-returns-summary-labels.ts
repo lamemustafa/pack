@@ -6,7 +6,7 @@ export interface FiledReturnsSummaryFieldLabel {
     evidence:
       | "official-offline-utility"
       | "portal-pdf-value-cross-check-two-periods"
-      | "form-vocabulary-and-row-order";
+      | "portal-pdf-row-text";
     officialSource: string;
     officialSourceLocation: string;
     reviewedOn: string;
@@ -28,9 +28,7 @@ type FiledReturnsSummaryFieldLabelMap = Readonly<Record<string, FiledReturnsSumm
 
 const GSTR3B_SOURCE = "GST Portal GSTR-3B Offline Utility V5.8 and Form GSTR-3B user guide";
 const GSTR3B_PDF_CROSS_CHECK_SOURCE = "GST Portal GSTR-3B PDF export and JSON schema";
-const GSTR3B_VOCABULARY_SOURCE =
-  "GST Portal GSTR-3B JSON field vocabulary and Form row/column structure";
-const REVIEWED_ON = "2026-08-18";
+const REVIEWED_ON = "2026-08-20";
 
 const GSTR3B_STATEMENT_TABLE_COVERAGE = [
   { table: "3.1", status: "included" },
@@ -95,13 +93,13 @@ function valueConfirmedLabel(label: string, table: string): FiledReturnsSummaryF
   };
 }
 
-function vocabularyDerivedLabel(label: string, table: string): FiledReturnsSummaryFieldLabel {
+function portalPdfRowTextLabel(label: string, table: string): FiledReturnsSummaryFieldLabel {
   return {
     label,
     provenance: {
-      evidence: "form-vocabulary-and-row-order",
-      officialSource: GSTR3B_VOCABULARY_SOURCE,
-      officialSourceLocation: `Vocabulary-derived from JSON field/component codes and Form GSTR-3B Table ${table} row/column structure; available evidence was not value-matched.`,
+      evidence: "portal-pdf-row-text",
+      officialSource: GSTR3B_PDF_CROSS_CHECK_SOURCE,
+      officialSourceLocation: `Caption transcribed from Form GSTR-3B Table ${table} portal PDF row text; tax component comes from the portal PDF column heading. This evidence does not claim a JSON value match.`,
       reviewedOn: REVIEWED_ON,
     },
   };
@@ -112,7 +110,7 @@ function componentEntries(
   labelPrefix: string,
   table: string,
   components: readonly ComponentKey[],
-  provenance: "confirmed" | "vocabulary",
+  provenance: "confirmed" | "portal-pdf",
   statementCoverageTable?: FiledReturnsStatementCoverageTable,
   statementSectionOrder?: number,
 ): Record<string, FiledReturnsSummaryFieldLabel> {
@@ -124,7 +122,7 @@ function componentEntries(
         withOptionalStatement(
           provenance === "confirmed"
             ? valueConfirmedLabel(label, table)
-            : vocabularyDerivedLabel(label, table),
+            : portalPdfRowTextLabel(label, table),
           labelPrefix,
           component,
           statementCoverageTable,
@@ -235,13 +233,6 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     2,
     "Value",
   ),
-  ...componentEntries(
-    "/sup_details/osup_nil_exmp",
-    "Table 3.1(c) Nil-rated and exempt outward supplies",
-    "3.1(c)",
-    ["iamt", "camt", "samt", "csamt"],
-    "vocabulary",
-  ),
   "/sup_details/isup_rev/txval": withOptionalStatement(
     valueConfirmedLabel(
       "Table 3.1(d) Inward supplies liable to reverse charge — Taxable value",
@@ -305,13 +296,6 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "Value",
   ),
   ...componentEntries(
-    "/sup_details/osup_nongst",
-    "Table 3.1(e) Non-GST outward supplies",
-    "3.1(e)",
-    ["iamt", "camt", "samt", "csamt"],
-    "vocabulary",
-  ),
-  ...componentEntries(
     "/itc_elg/itc_avl/OTH",
     "Table 4(A)(5) All other ITC",
     "4(A)(5)",
@@ -325,7 +309,7 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "Table 4(A)(5) All other ITC",
     "4(A)(5)",
     ["csamt"],
-    "vocabulary",
+    "portal-pdf",
     "4",
     9,
   ),
@@ -343,7 +327,7 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "Table 4(C) Net ITC available (A) − (B)",
     "4(C)",
     ["csamt"],
-    "vocabulary",
+    "portal-pdf",
     "4",
     12,
   ),
@@ -352,7 +336,7 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "Table 4(A)(1) Import of goods",
     "4(A)(1)",
     ["camt", "iamt", "samt", "csamt"],
-    "vocabulary",
+    "portal-pdf",
     "4",
     5,
   ),
@@ -361,16 +345,16 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "Table 4(A)(2) Import of services",
     "4(A)(2)",
     ["camt", "iamt", "samt", "csamt"],
-    "vocabulary",
+    "portal-pdf",
     "4",
     6,
   ),
   ...componentEntries(
     "/itc_elg/itc_avl/ISRC",
-    "Table 4(A)(3) Inward supplies liable to reverse charge (other than 1 and 2 above)",
+    "Table 4(A)(3) Inward supplies liable to reverse charge (other than 1 & 2 above)",
     "4(A)(3)",
     ["camt", "iamt", "samt", "csamt"],
-    "vocabulary",
+    "portal-pdf",
     "4",
     7,
   ),
@@ -379,16 +363,16 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "Table 4(A)(4) Inward supplies from ISD",
     "4(A)(4)",
     ["camt", "iamt", "samt", "csamt"],
-    "vocabulary",
+    "portal-pdf",
     "4",
     8,
   ),
   ...componentEntries(
     "/itc_elg/itc_rev/RUL",
-    "Table 4(B)(1) ITC reversed — As per rules 38, 42 and 43 and section 17(5)",
+    "Table 4(B)(1) ITC reversed — As per rules 38, 42 & 43 of CGST Rules and sub-section (5) of section 17",
     "4(B)(1)",
     ["camt", "iamt", "samt", "csamt"],
-    "vocabulary",
+    "portal-pdf",
     "4",
     10,
   ),
@@ -397,25 +381,25 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "Table 4(B)(2) ITC reversed — Others",
     "4(B)(2)",
     ["camt", "iamt", "samt", "csamt"],
-    "vocabulary",
+    "portal-pdf",
     "4",
     11,
   ),
   ...componentEntries(
     "/itc_elg/itc_inelg/RUL",
-    "Table 4(D)(1) Ineligible ITC — As per section 17(5)",
+    "Table 4(D)(1) Other Details — ITC reclaimed which was reversed under Table 4(B)(2) in earlier tax period",
     "4(D)(1)",
     ["camt", "iamt", "samt", "csamt"],
-    "vocabulary",
+    "portal-pdf",
     "4",
     13,
   ),
   ...componentEntries(
     "/itc_elg/itc_inelg/OTH",
-    "Table 4(D)(2) Ineligible ITC — Others",
+    "Table 4(D)(2) Other Details — Ineligible ITC under section 16(4) & ITC restricted due to PoS rules",
     "4(D)(2)",
     ["camt", "iamt", "samt", "csamt"],
-    "vocabulary",
+    "portal-pdf",
     "4",
     14,
   ),
@@ -471,7 +455,22 @@ export interface FiledReturnsSummaryIdentity {
 }
 
 export function filedReturnsSummaryIdentity(path: string): FiledReturnsSummaryIdentity | null {
-  const canonicalToken = canonicalTerminalToken(path);
+  const tokens = canonicalPathTokens(path);
+  const terminalIdentity = identityForCanonicalToken(tokens.at(-1) ?? "");
+  if (terminalIdentity) return terminalIdentity;
+  if (tokens.at(-1) === "value") {
+    return identityForCanonicalToken(tokens.at(-2) ?? "");
+  }
+  return null;
+}
+
+export function isFiledReturnsSummaryIdentityPath(path: string): boolean {
+  return canonicalPathTokens(path).some(
+    (canonicalToken) => identityForCanonicalToken(canonicalToken) !== null,
+  );
+}
+
+function identityForCanonicalToken(canonicalToken: string): FiledReturnsSummaryIdentity | null {
   if (canonicalToken === "gstin") return taxpayerIdentity("GSTIN");
   if (canonicalToken === "pan" || canonicalToken === "panno" || canonicalToken === "taxpayerpan") {
     return taxpayerIdentity("PAN");
@@ -551,6 +550,7 @@ function isForbiddenCanonicalToken(canonicalToken: string): boolean {
     canonicalToken.includes("xsrf") ||
     canonicalToken.includes("pass" + "word") ||
     canonicalToken.includes("passwd") ||
+    canonicalToken.includes("passphrase") ||
     canonicalToken.includes("privatekey") ||
     canonicalToken.includes("saml") ||
     canonicalToken.includes("secret") ||
@@ -559,10 +559,6 @@ function isForbiddenCanonicalToken(canonicalToken: string): boolean {
     canonicalToken === "otp" ||
     canonicalToken.endsWith("otp")
   );
-}
-
-function canonicalTerminalToken(path: string): string {
-  return canonicalPathTokens(path).at(-1) ?? "";
 }
 
 function canonicalPathTokens(path: string): string[] {

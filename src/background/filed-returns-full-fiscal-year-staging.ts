@@ -161,6 +161,7 @@ export function markFullFiscalYearCleanupPending(
     | "no-artifacts-cleanup-pending"
     | "legacy-cleanup-pending" = "downloaded-cleanup-pending",
 ): FiledReturnsFullFiscalYearLedger {
+  const requestedAt = ledger.zipDownloadAttempt?.requestedAt;
   const cleanupPendingLedger: FiledReturnsFullFiscalYearLedger = {
     ...ledger,
     revision: (ledger.revision ?? 1) + 1,
@@ -169,7 +170,11 @@ export function markFullFiscalYearCleanupPending(
     zipPhase,
   };
   delete cleanupPendingLedger.currentTargetId;
-  delete cleanupPendingLedger.zipDownloadAttempt;
+  if (zipPhase === "downloaded-cleanup-pending" && requestedAt) {
+    cleanupPendingLedger.zipDownloadAttempt = { requestedAt };
+  } else {
+    delete cleanupPendingLedger.zipDownloadAttempt;
+  }
   return cleanupPendingLedger;
 }
 
@@ -393,10 +398,14 @@ async function fullFiscalYearSummarySignalsForCleanup(
   const persistedSummary = await readCanonicalFiledReturnsFlowSummary(deps.storageKeys.completion);
   if (!persistedSummary) return [];
   if (!sameFiledReturnsScope(persistedSummary.scope, ledger.scope)) return [];
-  if (persistedSummary.updatedAt !== ledger.updatedAt) return [];
-  return persistedSummary.flowStep.safeSignals.filter((signal) =>
-    signal.startsWith("full-fiscal-year-summary-"),
-  );
+  const persistedSignals = persistedSummary.flowStep.safeSignals;
+  const exactCleanupCheckpoint = persistedSummary.updatedAt === ledger.updatedAt;
+  const intentCheckpoint =
+    ledger.zipPhase === "downloaded-cleanup-pending" &&
+    persistedSignals.includes("full-fiscal-year-zip-phase:download-intent-persisted") &&
+    persistedSummary.updatedAt === ledger.zipDownloadAttempt?.requestedAt;
+  if (!exactCleanupCheckpoint && !intentCheckpoint) return [];
+  return persistedSignals.filter((signal) => signal.startsWith("full-fiscal-year-summary-"));
 }
 
 export function completedRunCleanupBlockedStep(

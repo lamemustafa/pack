@@ -90,14 +90,27 @@ function consolidatedSheet(
       const monthValues = FILED_RETURNS_MONTHS.map((period) =>
         values.get(`${period}:${item.fieldPath}`),
       );
-      const numericValues = monthValues.filter((value): value is number => value !== undefined);
+      const numericValues = monthValues.filter(
+        (value): value is StatementNumericValue => value !== undefined,
+      );
+      const total =
+        numericValues.length === 0
+          ? undefined
+          : exactTotalSpreadsheetValue(
+              numericValues.map((value) => value.sourceText),
+              numericValues.some((value) => value.number === null),
+            );
       rows.push([
         { value: item.shortLabel },
         ...monthValues.map((value) =>
-          value === undefined ? undefined : { value, style: "number" as const },
+          value?.number === null || value === undefined
+            ? undefined
+            : { value: value.number, style: "number" as const },
         ),
-        numericValues.length > 0
-          ? { value: numericValues.reduce((total, value) => total + value, 0), style: "number" }
+        total !== undefined
+          ? typeof total === "number"
+            ? { value: total, style: "number" }
+            : { value: total }
           : undefined,
       ]);
     }
@@ -133,8 +146,15 @@ function humanDate(value: Date): string {
   return `${value.getUTCDate()} ${MONTH_NAMES[value.getUTCMonth()]} ${value.getUTCFullYear()}`;
 }
 
-function statementValues(dataRows: readonly FiledReturnsSummaryDataRow[]): Map<string, number> {
-  const output = new Map<string, number>();
+interface StatementNumericValue {
+  number: number | null;
+  sourceText: string;
+}
+
+function statementValues(
+  dataRows: readonly FiledReturnsSummaryDataRow[],
+): Map<string, StatementNumericValue> {
+  const output = new Map<string, StatementNumericValue>();
   const statementPaths = new Set(filedReturnsStatementLineItems().map((item) => item.fieldPath));
   for (const row of dataRows) {
     if (
@@ -144,13 +164,45 @@ function statementValues(dataRows: readonly FiledReturnsSummaryDataRow[]): Map<s
     ) {
       continue;
     }
-    const value = exactSpreadsheetNumber(row.valueNumber);
-    if (value === null) continue;
     const key = `${row.period}:${row.fieldPath}`;
     if (output.has(key)) throw new SyntaxError("Duplicate GSTR-3B statement value.");
-    output.set(key, value);
+    output.set(key, {
+      number: exactSpreadsheetNumber(row.valueNumber),
+      sourceText: row.valueNumber,
+    });
   }
   return output;
+}
+
+function exactTotalSpreadsheetValue(
+  inputs: readonly string[],
+  hasUnrepresentableMonth: boolean,
+): number | string {
+  const exactText = exactDecimalSum(inputs);
+  if (exactText === null) return "Exact total unavailable: invalid source decimal";
+  const value = exactSpreadsheetNumber(exactText);
+  if (hasUnrepresentableMonth || value === null || String(value) !== exactText) {
+    return `Exact total ${exactText} unavailable at spreadsheet numeric precision`;
+  }
+  return value;
+}
+
+function exactDecimalSum(inputs: readonly string[]): string | null {
+  const decimals = inputs.map((input) => /^(-?)(\d+)(?:\.(\d+))?$/.exec(input));
+  if (decimals.some((decimal) => decimal === null)) return null;
+  const scale = Math.max(...decimals.map((decimal) => decimal![3]?.length ?? 0));
+  let total = 0n;
+  for (const decimal of decimals) {
+    const [, sign, whole, fraction = ""] = decimal!;
+    const scaled = BigInt(`${whole}${fraction.padEnd(scale, "0")}`);
+    total += sign === "-" ? -scaled : scaled;
+  }
+  if (total === 0n) return "0";
+  const negative = total < 0n;
+  const digits = (negative ? -total : total).toString().padStart(scale + 1, "0");
+  const whole = scale === 0 ? digits : digits.slice(0, -scale);
+  const fraction = scale === 0 ? "" : digits.slice(-scale).replace(/0+$/, "");
+  return `${negative ? "-" : ""}${whole}${fraction ? `.${fraction}` : ""}`;
 }
 
 function exactSpreadsheetNumber(input: string): number | null {
