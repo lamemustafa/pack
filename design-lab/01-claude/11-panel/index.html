@@ -263,6 +263,38 @@
         border-color: var(--pack-border-default);
         color: var(--pack-ink-muted);
       }
+      .gtitle {
+        font-family: var(--mono);
+        font-size: 9px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--pack-ink-muted);
+        margin: 8px 0 4px;
+      }
+      .gtitle:first-child {
+        margin-top: 0;
+      }
+      .yearsel {
+        font: inherit;
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        color: var(--pack-ink-primary);
+        background: transparent;
+        border: 0;
+        border-bottom: 1px dashed var(--pack-border-strong);
+        padding: 0 2px 1px;
+        cursor: pointer;
+      }
+      .hint {
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--pack-ink-muted);
+        margin: 6px 0 0;
+      }
+      .mx.dragging .cell {
+        cursor: crosshair;
+      }
       .chips {
         display: flex;
         flex-wrap: wrap;
@@ -524,11 +556,12 @@
           <div class="band">
             <div class="bandhead">
               <span class="step">2</span>
-              <h2>FY 2025-26</h2>
+              <h2><select id="yearsel" class="yearsel" aria-label="Financial year"></select></h2>
               <span class="ppub" style="margin-left: auto" id="selcount"></span>
             </div>
             <table class="mx" id="mx"></table>
             <div class="chips" id="chips"></div>
+            <p class="hint" id="availhint"></p>
           </div>
 
           <div class="band" style="padding: 0">
@@ -635,13 +668,51 @@
         "Feb",
         "Mar",
       ];
-      const FILED = 9; // periods available this FY
-      const RECIPES = [
-        { id: "3b", label: "This year's GSTR-3B", docs: ["GSTR-3B"] },
-        { id: "all", label: "FY 2025-26 — everything", docs: ["GSTR-3B", "GSTR-1", "GSTR-2B"] },
-        { id: "recon", label: "GSTR-1 vs 3B, full year", docs: ["GSTR-3B", "GSTR-1"] },
-        { id: "itr", label: "Last 3 years of ITRs", disabled: "income tax — not yet" },
+      // Availability is a property of the financial year, not a magic constant. A closed
+      // year has all twelve periods; the current year only has the ones already filed.
+      const YEARS = [
+        { id: "2025-26", label: "FY 2025-26", filed: 12, note: "closed year" },
+        {
+          id: "2026-27",
+          label: "FY 2026-27",
+          filed: 4,
+          note: "current year — later periods not filed yet",
+        },
       ];
+      let year = YEARS[0];
+      // Two kinds. COLLECT produces files from a portal. DERIVE produces a computed
+      // artifact from files you already hold, and is only offered once its inputs exist --
+      // which is what stops this list growing without bound as capabilities are added.
+      const RECIPES = [
+        { id: "3b", kind: "collect", label: "This year's GSTR-3B", docs: ["GSTR-3B"] },
+        {
+          id: "all",
+          kind: "collect",
+          label: "Everything for this year",
+          docs: ["GSTR-3B", "GSTR-1", "GSTR-2B"],
+        },
+        {
+          id: "r1v3b",
+          kind: "collect",
+          label: "GSTR-1 and 3B, full year",
+          docs: ["GSTR-3B", "GSTR-1"],
+        },
+        {
+          id: "itr",
+          kind: "collect",
+          label: "Last 3 years of ITRs",
+          disabled: "income tax — not yet",
+        },
+        { id: "stmt", kind: "derive", label: "Consolidated 3B statement", needs: ["GSTR-3B"] },
+        {
+          id: "recon",
+          kind: "derive",
+          label: "GSTR-1 vs 3B reconciliation",
+          needs: ["GSTR-3B", "GSTR-1"],
+        },
+      ];
+      // What the user already holds locally. In the product this is the saved-target index.
+      const held = new Set();
       let fmts = new Set(["PDF"]);
       let sel = new Set();
       let plan = [];
@@ -649,15 +720,30 @@
       let recipe = null;
 
       const key = (d, m) => `${d}|${m}`;
-      const avail = (d, m) => m < FILED;
+      const avail = (d, m) => m < year.filed;
+      const unavailableReason = (d, m) =>
+        avail(d, m) ? "" : `Not filed yet — ${year.label} has ${year.filed} filed periods.`;
 
       function render() {
         // recipes
-        document.getElementById("recipes").innerHTML = RECIPES.map(
-          (r) =>
-            `<button class="recipe" type="button" data-r="${r.id}" ${r.disabled ? "disabled" : ""} aria-pressed="${recipe === r.id}">
-               <span>${r.label}</span><span class="n">${r.disabled || countFor(r) + " files"}</span></button>`,
-        ).join("");
+        const missing = (r) => (r.needs || []).filter((d) => !held.has(d));
+        const recipeRow = (r) => {
+          if (r.kind === "derive") {
+            const gap = missing(r);
+            const off = gap.length > 0;
+            return `<button class="recipe" type="button" data-r="${r.id}" ${off ? "disabled" : ""}
+              title="${off ? "Needs " + gap.join(" and ") + " saved first" : "Builds from files already on this device"}">
+              <span>${r.label}</span><span class="n">${off ? "needs " + gap.join(" + ") : "from saved files"}</span></button>`;
+          }
+          return `<button class="recipe" type="button" data-r="${r.id}" ${r.disabled ? "disabled" : ""} aria-pressed="${recipe === r.id}">
+            <span>${r.label}</span><span class="n">${r.disabled || countFor(r) + " files"}</span></button>`;
+        };
+        const group = (kind, title) => {
+          const rs = RECIPES.filter((r) => r.kind === kind);
+          return `<p class="gtitle">${title}</p>` + rs.map(recipeRow).join("");
+        };
+        document.getElementById("recipes").innerHTML =
+          group("collect", "Collect from a portal") + group("derive", "Build from what you have");
         // matrix
         const head = `<thead><tr><th></th>${MONTHS.map((m, i) => `<th data-col="${i}">${m[0]}</th>`).join("")}</tr></thead>`;
         const body = DOCS.map(
@@ -677,7 +763,8 @@
                       : st === "skipped"
                         ? "–"
                         : "";
-              return `<td><button class="cell" type="button" data-k="${k}" data-na="${na ? 1 : 0}" data-on="${sel.has(k) ? 1 : 0}" ${st ? `data-st="${st}"` : ""} ${na ? "disabled" : ""} aria-label="${d.id} ${m}">${glyph}</button></td>`;
+              const why = na ? unavailableReason(d.id, i) : `${d.id} · ${m} ${year.id}`;
+              return `<td><button class="cell" type="button" data-k="${k}" data-d="${d.id}" data-m="${i}" data-na="${na ? 1 : 0}" data-on="${sel.has(k) ? 1 : 0}" ${st ? `data-st="${st}"` : ""} ${na ? "disabled" : ""} title="${why}" aria-label="${why}">${glyph}</button></td>`;
             }).join("")}</tr>`,
         ).join("");
         document.getElementById("mx").innerHTML = head + "<tbody>" + body + "</tbody>";
@@ -715,6 +802,20 @@
                    <button class="btn ghost" type="button" data-rv="skip">Skip ${rev.month}, keep going</button>
                  </div></div>`
             : "";
+        // year switcher and the availability hint
+        const ysel = document.getElementById("yearsel");
+        if (ysel && ysel.options.length !== YEARS.length) {
+          ysel.innerHTML = YEARS.map((y) => `<option value="${y.id}">${y.label}</option>`).join("");
+        }
+        if (ysel) ysel.value = year.id;
+        const hint = document.getElementById("availhint");
+        if (hint) {
+          const na = DOCS.length * (MONTHS.length - year.filed);
+          hint.textContent =
+            year.filed === MONTHS.length
+              ? `${year.label} is closed — all ${MONTHS.length} periods available.`
+              : `${year.note}. ${na} hatched cells are periods with nothing filed yet.`;
+        }
         // footer
         const go = document.getElementById("go");
         const n = shown.length;
@@ -789,6 +890,7 @@
           if (token !== runToken) return;
           if (i >= plan.length) {
             phase = "done";
+            plan.filter((t) => t.status === "saved").forEach((t) => held.add(t.doc));
             render();
             return;
           }
@@ -812,14 +914,46 @@
         tick();
       }
 
-      document.addEventListener("click", (e) => {
+      // --- drag to paint a range -------------------------------------------------
+      // A compliance user selecting nine periods should sweep, not click nine times.
+      // The first cell decides the mode: start on an unselected cell and the drag
+      // selects; start on a selected one and it clears.
+      let drag = null;
+      const mx = () => document.getElementById("mx");
+      function applyPaint(cell) {
+        if (!drag || !cell || cell.disabled) return;
+        const k = cell.dataset.k;
+        if (drag.mode === "add") sel.add(k);
+        else sel.delete(k);
+        cell.dataset.on = sel.has(k) ? "1" : "0";
+        document.getElementById("selcount").textContent = sel.size + " selected";
+      }
+      document.addEventListener("pointerdown", (e) => {
         const c = e.target.closest(".cell");
-        if (c && !c.disabled && phase === "prepare") {
-          const k = c.dataset.k;
-          sel.has(k) ? sel.delete(k) : sel.add(k);
-          recipe = null;
-          return render();
-        }
+        if (!c || c.disabled || phase !== "prepare") return;
+        e.preventDefault();
+        drag = { mode: sel.has(c.dataset.k) ? "remove" : "add", moved: false };
+        mx().classList.add("dragging");
+        applyPaint(c);
+        recipe = null;
+      });
+      document.addEventListener("pointerover", (e) => {
+        if (!drag) return;
+        const c = e.target.closest(".cell");
+        if (!c) return;
+        drag.moved = true;
+        applyPaint(c);
+      });
+      document.addEventListener("pointerup", () => {
+        if (!drag) return;
+        drag = null;
+        mx().classList.remove("dragging");
+        render();
+      });
+
+      document.addEventListener("click", (e) => {
+        // cells are handled by the pointer drag above
+        if (e.target.closest(".cell")) return;
         const rowh = e.target.closest("[data-row]");
         if (rowh && phase === "prepare") {
           const d = rowh.dataset.row;
@@ -847,6 +981,7 @@
           recipe = def.id;
           return render();
         }
+        if (e.target.id === "yearsel") return;
         const f = e.target.closest("[data-f]");
         if (f && phase === "prepare") {
           const v = f.dataset.f;
@@ -881,6 +1016,16 @@
           plan = [];
           return render();
         }
+      });
+
+      document.addEventListener("change", (e) => {
+        if (e.target.id !== "yearsel") return;
+        year = YEARS.find((y) => y.id === e.target.value) || YEARS[0];
+        sel = new Set();
+        plan = [];
+        phase = "prepare";
+        recipe = null;
+        render();
       });
 
       render();
