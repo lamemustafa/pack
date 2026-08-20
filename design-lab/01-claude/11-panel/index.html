@@ -336,6 +336,45 @@
       .gtitle:first-child {
         margin-top: 0;
       }
+      .mxwrap {
+        overflow-x: auto;
+        overscroll-behavior-x: contain;
+        border: 1px solid var(--pack-border-subtle);
+        border-radius: 4px;
+        background: var(--pack-surface);
+      }
+      .mx .corner {
+        position: sticky;
+        left: 0;
+        z-index: 2;
+        background: var(--pack-surface);
+      }
+      .mx .rowh {
+        position: sticky;
+        left: 0;
+        z-index: 2;
+        background: var(--pack-surface);
+        padding: 0 6px 0 4px;
+      }
+      .mx .fyh {
+        font-size: 9px;
+        color: var(--pack-ink-secondary);
+        background: var(--pack-surface-inset);
+        border: 1px solid var(--pack-border-subtle);
+        border-radius: 3px;
+        white-space: nowrap;
+        padding: 2px 4px;
+      }
+      .mx .fyh:hover {
+        background: var(--pack-surface-accent-soft);
+        color: var(--pack-ink-link);
+      }
+      .cell.wide {
+        width: auto;
+        min-width: 100%;
+        font-size: 8px;
+        letter-spacing: 0.04em;
+      }
       .yearsel {
         font: inherit;
         font-size: 15px;
@@ -616,12 +655,15 @@
           <div class="band">
             <div class="bandhead">
               <span class="step">2</span>
-              <h2><select id="yearsel" class="yearsel" aria-label="Financial year"></select></h2>
+              <h2>Periods</h2>
               <span class="ppub" style="margin-left: auto" id="selcount"></span>
             </div>
-            <table class="mx" id="mx"></table>
+            <div class="mxwrap"><table class="mx" id="mx"></table></div>
             <div class="chips" id="chips"></div>
-            <p class="hint" id="availhint"></p>
+            <p class="hint">
+              Scroll for older years. Click a year header to take the whole year, a row label for
+              every period of one return. Hatched cells say why on hover.
+            </p>
           </div>
 
           <div class="band" style="padding: 0">
@@ -685,24 +727,39 @@
         <div class="aside">
           <h3>Try it</h3>
           <ul>
-            <li>Click a <b>recipe</b>, or paint cells in the matrix.</li>
+            <li>Click a <b>recipe</b>, or drag across cells to paint a range.</li>
             <li>
-              Click a <b>row label</b> for that document all year; a <b>column header</b> for every
-              document in that period.
+              Click a <b>year header</b> to take that whole financial year — click two for two
+              years. Click a <b>row label</b> for every available period of one return.
             </li>
-            <li>Press <b>Build pack</b> — July's GSTR-3B will pause for review, on purpose.</li>
+            <li>
+              Scroll the matrix sideways for older years. Ten are available, matching the real
+              <code>getFiledReturnsFinancialYearOptions</code>.
+            </li>
+            <li>Press <b>Build pack</b> — July's GSTR-3B pauses for review, on purpose.</li>
           </ul>
           <h3>What it demonstrates</h3>
           <ul>
-            <li>Matrix selects, ledger records. The matrix stays as an overview during the run.</li>
-            <li>A paused target asks <b>one question, three answers</b>.</li>
+            <li>
+              <b>Time is one axis, grouped by year.</b> A dropdown cannot express "the last three
+              years", which is the whole point of a result-driven request.
+            </li>
+            <li>
+              <b>Granularity belongs to the document.</b> GSTR-9 is annual, so its row is one cell
+              per year rather than twelve. An income-tax return would behave the same way.
+            </li>
+            <li>
+              <b>Deliver and Also include are different questions.</b> Individual files disables
+              itself above five, because 56 files means 56 browser dialogs.
+            </li>
+            <li>
+              Computed artifacts are listed only when the selection could produce them, and say
+              <b>not built yet</b> when Pack cannot yet make them. There is no consolidation code in
+              <code>src/</code> today, and the UI must not imply otherwise.
+            </li>
             <li>
               <code>skipped</code> is terminal and still blocks plan completion — the footer never
               says "complete" while a row is skipped.
-            </li>
-            <li>
-              The footer states the real cost: files, one ZIP, and <b>one save prompt</b>, because
-              <code>saveAs:false</code> cannot override the user's "ask where to save" preference.
             </li>
           </ul>
         </div>
@@ -720,10 +777,14 @@
       ];
       const source = SOURCES[0];
 
+      // Period granularity is a property of the document, not of the grid. GSTR-9 is annual
+      // and an income-tax return would be too, so a fixed twelve-month grid is the wrong
+      // shape for half the roadmap.
       const DOCS = [
-        { id: "GSTR-3B", label: "3B", fmts: ["PDF", "JSON"] },
-        { id: "GSTR-1", label: "R1", fmts: ["PDF", "EXCEL", "JSON"] },
-        { id: "GSTR-2B", label: "2B", fmts: ["PDF", "EXCEL", "JSON"] },
+        { id: "GSTR-3B", label: "3B", grain: "monthly", fmts: ["PDF", "JSON"] },
+        { id: "GSTR-1", label: "R1", grain: "monthly", fmts: ["PDF", "EXCEL", "JSON"] },
+        { id: "GSTR-2B", label: "2B", grain: "monthly", fmts: ["PDF", "EXCEL", "JSON"] },
+        { id: "GSTR-9", label: "R9", grain: "annual", fmts: ["PDF"] },
       ];
       const MONTHS = [
         "Apr",
@@ -739,53 +800,113 @@
         "Feb",
         "Mar",
       ];
-      // Availability is a property of the financial year, not a magic constant. A closed
-      // year has all twelve periods; the current year only has the ones already filed.
-      const YEARS = [
-        { id: "2025-26", label: "FY 2025-26", filed: 12, note: "closed year" },
-        {
-          id: "2026-27",
-          label: "FY 2026-27",
-          filed: 4,
-          note: "current year — later periods not filed yet",
-        },
-      ];
-      let year = YEARS[0];
+      // Ten financial years, matching getFiledReturnsFinancialYearOptions: current back to
+      // 2017. Time is one continuous axis grouped by year, not a dropdown -- a dropdown
+      // cannot express "the last three years", which is the whole point of a result.
+      const CURRENT_FY_START = 2026;
+      const YEARS = Array.from({ length: 10 }, (_, i) => {
+        const start = CURRENT_FY_START - i;
+        return {
+          id: `${start}-${String(start + 1).slice(2)}`,
+          start,
+          filed: i === 0 ? 4 : 12,
+          closed: i !== 0,
+        };
+      });
       // One kind. Every recipe is a portal run, because every artifact Pack can produce --
       // including a consolidated statement -- comes from downloading it first. How the run
       // is packaged is a separate choice, made after selection. See OUTPUTS below.
       const RECIPES = [
-        { id: "3b", label: "This year's GSTR-3B", docs: ["GSTR-3B"] },
-        { id: "all", label: "Everything for this year", docs: ["GSTR-3B", "GSTR-1", "GSTR-2B"] },
-        { id: "r1v3b", label: "GSTR-1 and 3B, full year", docs: ["GSTR-3B", "GSTR-1"] },
-      ];
-      // Packaging options. Each states what it costs and what it needs; one is never a
-      // different kind of run, only a different way of handing the same downloads over.
-      const OUTPUTS = [
-        { id: "zip", label: "One ZIP", cost: "1 save prompt" },
-        { id: "individual", label: "Individual files", cost: "one prompt per file" },
+        { id: "3b", label: "This year's GSTR-3B", docs: ["GSTR-3B"], years: 1 },
         {
-          id: "statement",
-          label: "+ Consolidated 3B statement",
-          cost: "1 save prompt",
-          needs: (plan) =>
-            plan.some((t) => t.doc === "GSTR-3B" && t.fmt === "JSON") &&
-            new Set(plan.filter((t) => t.doc === "GSTR-3B").map((t) => t.mi)).size >= 2
-              ? null
-              : "select GSTR-3B portal data (JSON) for 2 or more periods",
+          id: "all",
+          label: "Everything for this year",
+          docs: ["GSTR-3B", "GSTR-1", "GSTR-2B"],
+          years: 1,
+        },
+        {
+          id: "r1v3b",
+          label: "GSTR-1 and 3B, last 3 years",
+          docs: ["GSTR-3B", "GSTR-1"],
+          years: 3,
+        },
+        { id: "annual", label: "Last 3 annual returns", docs: ["GSTR-9"], years: 3 },
+      ];
+      // Two separate questions. DELIVERY is how the files reach the disk. EXTRAS are
+      // artifacts Pack computes from the same run. Conflating them into one radio list
+      // stops working the moment there is more than one computed artifact.
+      const MAX_INDIVIDUAL = 5;
+      const DELIVERY = [
+        { id: "zip", label: "One ZIP", cost: () => "1 save prompt" },
+        {
+          id: "individual",
+          label: "Individual files",
+          cost: (n) => `${n} save prompts`,
+          blocked: (n) =>
+            n > MAX_INDIVIDUAL ? `${n} files means ${n} browser dialogs — use one ZIP` : null,
         },
       ];
+      const docsIn = (plan) => new Set(plan.map((t) => t.doc));
+      const periodsOf = (plan, doc) =>
+        new Set(plan.filter((t) => t.doc === doc).map((t) => `${t.fy}|${t.mi}`));
+      const hasFmt = (plan, doc, fmt) => plan.some((t) => t.doc === doc && t.fmt === fmt);
+      // `built: false` is stated on the control. Pack must never imply it can produce
+      // something it cannot -- there is no consolidation code in src/ today.
+      const EXTRAS = [
+        {
+          id: "index",
+          label: "Pack index (CSV)",
+          built: true,
+          needs: () => null,
+        },
+        {
+          id: "stmt3b",
+          label: "Consolidated GSTR-3B statement",
+          built: false,
+          needs: (p) =>
+            hasFmt(p, "GSTR-3B", "JSON") && periodsOf(p, "GSTR-3B").size >= 2
+              ? null
+              : "needs GSTR-3B portal data (JSON), 2+ periods",
+        },
+        {
+          id: "stmt2b",
+          label: "Consolidated GSTR-2B statement",
+          built: false,
+          needs: (p) =>
+            hasFmt(p, "GSTR-2B", "JSON") && periodsOf(p, "GSTR-2B").size >= 2
+              ? null
+              : "needs GSTR-2B portal data (JSON), 2+ periods",
+        },
+        {
+          id: "r1v3b",
+          label: "GSTR-1 vs 3B comparison",
+          built: false,
+          needs: (p) =>
+            docsIn(p).has("GSTR-1") && docsIn(p).has("GSTR-3B")
+              ? null
+              : "needs GSTR-1 and GSTR-3B for the same periods",
+        },
+      ];
+      const GLYPH = {
+        saved: "\u2713",
+        "needs-review": "!",
+        running: "\u2022",
+        skipped: "\u2013",
+      };
       let output = "zip";
+      const extras = new Set();
       let fmts = new Set(["PDF"]);
       let sel = new Set();
       let plan = [];
       let phase = "prepare";
       let recipe = null;
 
-      const key = (d, m) => `${d}|${m}`;
-      const avail = (d, m) => m < year.filed;
-      const unavailableReason = (d, m) =>
-        avail(d, m) ? "" : `Not filed yet — ${year.label} has ${year.filed} filed periods.`;
+      const key = (d, fy, m) => `${d}|${fy}|${m}`;
+      const avail = (doc, y, m) => (doc.grain === "annual" ? y.closed : m < y.filed);
+      const whyNot = (doc, y) =>
+        doc.grain === "annual"
+          ? `${doc.id} is annual and FY ${y.id} is not closed yet.`
+          : `Not filed yet — FY ${y.id} has ${y.filed} filed periods.`;
 
       function render() {
         // recipes -- one flat list, all of them portal runs
@@ -794,31 +915,42 @@
             `<button class="recipe" type="button" data-r="${r.id}" aria-pressed="${recipe === r.id}">
                <span>${r.label}</span><span class="n">${countFor(r)} files</span></button>`,
         ).join("");
-        // matrix
-        const head = `<thead><tr><th></th>${MONTHS.map((m, i) => `<th data-col="${i}">${m[0]}</th>`).join("")}</tr></thead>`;
-        const body = DOCS.map(
-          (d) =>
-            `<tr><th data-row="${d.id}">${d.label}</th>${MONTHS.map((m, i) => {
-              const k = key(d.id, i);
-              const t = plan.find((p) => p.k === k);
-              const na = !avail(d.id, i);
-              const st = t ? t.status : "";
-              const glyph =
-                st === "saved"
-                  ? "✓"
-                  : st === "needs-review"
-                    ? "!"
-                    : st === "running"
-                      ? "•"
-                      : st === "skipped"
-                        ? "–"
-                        : "";
-              const why = na ? unavailableReason(d.id, i) : `${d.id} · ${m} ${year.id}`;
-              return `<td><button class="cell" type="button" data-k="${k}" data-d="${d.id}" data-m="${i}" data-na="${na ? 1 : 0}" data-on="${sel.has(k) ? 1 : 0}" ${st ? `data-st="${st}"` : ""} ${na ? "disabled" : ""} title="${why}" aria-label="${why}">${glyph}</button></td>`;
-            }).join("")}</tr>`,
+        // matrix -- one scrolling time axis, grouped by financial year. Clicking a year
+        // header selects that whole year, so "the last three years" is three clicks.
+        const yh = YEARS.map(
+          (y) =>
+            `<th class="fyh" colspan="12" data-fy="${y.id}" title="Select all of FY ${y.id}">FY ${y.id}${y.closed ? "" : " · open"}</th>`,
         ).join("");
-        document.getElementById("mx").innerHTML = head + "<tbody>" + body + "</tbody>";
+        const mh = YEARS.map(() =>
+          MONTHS.map((m, i) => `<th data-mo="${i}">${m[0]}</th>`).join(""),
+        ).join("");
+        const body = DOCS.map((d) => {
+          const cells = YEARS.map((y) => {
+            if (d.grain === "annual") {
+              const k = key(d.id, y.id, -1);
+              const t = plan.find((x) => x.k === k);
+              const na = !avail(d, y, -1);
+              const g = t ? GLYPH[t.status] || "" : "";
+              return `<td colspan="12"><button class="cell wide" type="button" data-k="${k}" data-d="${d.id}" data-fy="${y.id}" data-m="-1"
+                data-na="${na ? 1 : 0}" data-on="${sel.has(k) ? 1 : 0}" ${t ? `data-st="${t.status}"` : ""} ${na ? "disabled" : ""}
+                title="${na ? whyNot(d, y) : d.id + " · FY " + y.id}">${g || (na ? "" : "annual")}</button></td>`;
+            }
+            return MONTHS.map((m, i) => {
+              const k = key(d.id, y.id, i);
+              const t = plan.find((x) => x.k === k);
+              const na = !avail(d, y, i);
+              const g = t ? GLYPH[t.status] || "" : "";
+              return `<td><button class="cell" type="button" data-k="${k}" data-d="${d.id}" data-fy="${y.id}" data-m="${i}"
+                data-na="${na ? 1 : 0}" data-on="${sel.has(k) ? 1 : 0}" ${t ? `data-st="${t.status}"` : ""} ${na ? "disabled" : ""}
+                title="${na ? whyNot(d, y) : d.id + " · " + m + " " + y.id}">${g}</button></td>`;
+            }).join("");
+          }).join("");
+          return `<tr><th class="rowh" data-row="${d.id}" title="Select every available ${d.id}">${d.label}</th>${cells}</tr>`;
+        }).join("");
+        document.getElementById("mx").innerHTML =
+          `<thead><tr><th class="corner"></th>${yh}</tr><tr><th class="corner"></th>${mh}</tr></thead><tbody>${body}</tbody>`;
         document.getElementById("selcount").textContent = sel.size + " selected";
+
         // format chips
         const all = [...new Set(DOCS.flatMap((d) => d.fmts))];
         document.getElementById("chips").innerHTML = all
@@ -858,46 +990,48 @@
             `<span class="source ${x.state}" title="${x.note}">${x.state === "live" ? '<i class="dot"></i>' : ""}${x.label}${x.state === "live" ? " · " + x.note : ""}</span>`,
         ).join("");
 
-        // output options -- only once something is selected
+        // delivery and extras -- two separate questions, shown once there is a selection
         const outBand = document.getElementById("outband");
         const currentPlan = phase === "prepare" ? buildPlan() : plan;
-        if (currentPlan.length && phase === "prepare") {
+        const settledRun = phase === "done";
+        if (currentPlan.length && (phase === "prepare" || settledRun)) {
           outBand.hidden = false;
+          const n = currentPlan.length;
+          const delivery = settledRun
+            ? ""
+            : `<p class="gtitle">Deliver</p>` +
+              DELIVERY.map((o) => {
+                const why = o.blocked ? o.blocked(n) : null;
+                if (why && output === o.id) output = "zip";
+                return `<button class="outopt" type="button" data-o="${o.id}" ${why ? "disabled" : ""}
+                  aria-pressed="${output === o.id}" title="${why || o.cost(n)}">
+                  <span>${o.label}</span><span class="n">${why || o.cost(n)}</span></button>`;
+              }).join("");
+          const box = (on) => (on ? String.fromCharCode(9745) : String.fromCharCode(9744));
+          const extraRows = EXTRAS.map((x) => {
+            const why = x.needs(currentPlan);
+            const off = Boolean(why) || !x.built;
+            const note = why || (x.built ? "included" : "not built yet");
+            return `<button class="outopt extra" type="button" data-x="${x.id}" ${off ? "disabled" : ""}
+              aria-pressed="${extras.has(x.id)}" title="${note}">
+              <span>${box(extras.has(x.id))} ${x.label}</span><span class="n">${note}</span></button>`;
+          }).join("");
           outBand.innerHTML =
-            `<p class="gtitle">How should Pack hand it over?</p>` +
-            OUTPUTS.map((o) => {
-              const why = o.needs ? o.needs(currentPlan) : null;
-              const off = Boolean(why);
-              if (off && output === o.id) output = "zip";
-              return `<button class="outopt" type="button" data-o="${o.id}" ${off ? "disabled" : ""}
-                aria-pressed="${output === o.id}" title="${why || o.cost}">
-                <span>${o.label}</span><span class="n">${why || o.cost}</span></button>`;
-            }).join("");
+            delivery +
+            `<p class="gtitle">${settledRun ? "Add to this pack" : "Also include"}</p>` +
+            extraRows;
         } else {
           outBand.hidden = true;
         }
 
-        // year switcher and the availability hint
-        const ysel = document.getElementById("yearsel");
-        if (ysel && ysel.options.length !== YEARS.length) {
-          ysel.innerHTML = YEARS.map((y) => `<option value="${y.id}">${y.label}</option>`).join("");
-        }
-        if (ysel) ysel.value = year.id;
-        const hint = document.getElementById("availhint");
-        if (hint) {
-          const na = DOCS.length * (MONTHS.length - year.filed);
-          hint.textContent =
-            year.filed === MONTHS.length
-              ? `${year.label} is closed — all ${MONTHS.length} periods available.`
-              : `${year.note}. ${na} hatched cells are periods with nothing filed yet.`;
-        }
         // footer
         const go = document.getElementById("go");
         const n = shown.length;
         if (phase === "prepare") {
-          const chosen = OUTPUTS.find((x) => x.id === output) || OUTPUTS[0];
+          const chosen = DELIVERY.find((v) => v.id === output) || DELIVERY[0];
+          const ex = extras.size ? ` + ${extras.size} extra${extras.size === 1 ? "" : "s"}` : "";
           document.getElementById("cost").innerHTML = n
-            ? `<b>${n} file${n === 1 ? "" : "s"}</b> · ${chosen.label.replace("+ ", "")}<br>${output === "individual" ? n + " save prompts" : "1 save prompt"}`
+            ? `<b>${n} file${n === 1 ? "" : "s"}</b> · ${chosen.label}${ex}<br>${chosen.cost(n)}`
             : "Nothing selected.";
           go.textContent = "Build pack";
           go.disabled = n === 0;
@@ -925,30 +1059,41 @@
       function countFor(r) {
         if (!r.docs) return 0;
         let n = 0;
-        for (const d of r.docs)
-          for (let i = 0; i < MONTHS.length; i++)
-            if (avail(d, i))
-              n += DOCS.find((x) => x.id === d).fmts.filter((f) => fmts.has(f)).length;
+        for (const id of r.docs) {
+          const d = DOCS.find((x) => x.id === id);
+          if (!d) continue;
+          const years = r.years ? YEARS.slice(0, r.years) : [YEARS[0]];
+          for (const y of years) {
+            const slots = d.grain === "annual" ? [-1] : MONTHS.map((_, i) => i);
+            for (const m of slots)
+              if (avail(d, y, m)) n += d.fmts.filter((f) => fmts.has(f)).length;
+          }
+        }
         return n;
       }
 
       function buildPlan() {
         const out = [];
         for (const d of DOCS)
-          for (let i = 0; i < MONTHS.length; i++) {
-            if (!sel.has(key(d.id, i))) continue;
-            for (const f of d.fmts)
-              if (fmts.has(f))
-                out.push({
-                  k: key(d.id, i),
-                  doc: d.id,
-                  docLabel: d.label,
-                  month: MONTHS[i],
-                  mi: i,
-                  fmt: f,
-                  status: "planned",
-                  evidence: "",
-                });
+          for (const y of YEARS) {
+            const slots = d.grain === "annual" ? [-1] : MONTHS.map((_, i) => i);
+            for (const m of slots) {
+              const k = key(d.id, y.id, m);
+              if (!sel.has(k)) continue;
+              for (const f of d.fmts)
+                if (fmts.has(f))
+                  out.push({
+                    k,
+                    doc: d.id,
+                    docLabel: d.label,
+                    fy: y.id,
+                    mi: m,
+                    month: m === -1 ? "FY " + y.id : MONTHS[m],
+                    fmt: f,
+                    status: "planned",
+                    evidence: "",
+                  });
+            }
           }
         return out;
       }
@@ -1031,17 +1176,25 @@
         if (e.target.closest(".cell")) return;
         const rowh = e.target.closest("[data-row]");
         if (rowh && phase === "prepare") {
-          const d = rowh.dataset.row;
-          const ks = MONTHS.map((_, i) => key(d, i)).filter((_, i) => avail(d, i));
+          const d = DOCS.find((x) => x.id === rowh.dataset.row);
+          const ks = [];
+          for (const y of YEARS) {
+            const slots = d.grain === "annual" ? [-1] : MONTHS.map((_, i) => i);
+            for (const m of slots) if (avail(d, y, m)) ks.push(key(d.id, y.id, m));
+          }
           const on = ks.every((k) => sel.has(k));
           ks.forEach((k) => (on ? sel.delete(k) : sel.add(k)));
           recipe = null;
           return render();
         }
-        const colh = e.target.closest("[data-col]");
-        if (colh && phase === "prepare") {
-          const i = +colh.dataset.col;
-          const ks = DOCS.filter((d) => avail(d.id, i)).map((d) => key(d.id, i));
+        const fyh = e.target.closest("[data-fy].fyh");
+        if (fyh && phase === "prepare") {
+          const y = YEARS.find((x) => x.id === fyh.dataset.fy);
+          const ks = [];
+          for (const d of DOCS) {
+            const slots = d.grain === "annual" ? [-1] : MONTHS.map((_, i) => i);
+            for (const m of slots) if (avail(d, y, m)) ks.push(key(d.id, y.id, m));
+          }
           const on = ks.every((k) => sel.has(k));
           ks.forEach((k) => (on ? sel.delete(k) : sel.add(k)));
           recipe = null;
@@ -1051,12 +1204,22 @@
         if (r && !r.disabled && phase === "prepare") {
           const def = RECIPES.find((x) => x.id === r.dataset.r);
           sel = new Set();
-          for (const d of def.docs)
-            for (let i = 0; i < MONTHS.length; i++) if (avail(d, i)) sel.add(key(d, i));
+          for (const id of def.docs) {
+            const d = DOCS.find((x) => x.id === id);
+            if (!d) continue;
+            for (const y of YEARS.slice(0, def.years || 1)) {
+              const slots = d.grain === "annual" ? [-1] : MONTHS.map((_, i) => i);
+              for (const m of slots) if (avail(d, y, m)) sel.add(key(d.id, y.id, m));
+            }
+          }
           recipe = def.id;
           return render();
         }
-        if (e.target.id === "yearsel") return;
+        const x = e.target.closest("[data-x]");
+        if (x && !x.disabled) {
+          extras.has(x.dataset.x) ? extras.delete(x.dataset.x) : extras.add(x.dataset.x);
+          return render();
+        }
         const o = e.target.closest("[data-o]");
         if (o && !o.disabled && phase === "prepare") {
           output = o.dataset.o;
@@ -1096,16 +1259,6 @@
           plan = [];
           return render();
         }
-      });
-
-      document.addEventListener("change", (e) => {
-        if (e.target.id !== "yearsel") return;
-        year = YEARS.find((y) => y.id === e.target.value) || YEARS[0];
-        sel = new Set();
-        plan = [];
-        phase = "prepare";
-        recipe = null;
-        render();
       });
 
       render();
