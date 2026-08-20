@@ -66,11 +66,24 @@ interface ReturnTypeCapability {
   /** The combined selection in a whole-year sentence. */
   readonly bundleFullYearNoun: string;
   /**
-   * Per-return facts a full-year run must state. These are behaviours, not names, and
-   * they were previously inlined as `returnType ===` branches inside button copy.
+   * Facts a full-year run must state, per artifact selection. These are behaviours, not
+   * names, and they were previously inlined as `returnType ===` branches inside button copy.
+   *
+   * Keyed on the artifact and not only the return type, because each note is a claim about
+   * what the run will actually fetch: "includes Excel" is false for a PDF-only GSTR-1 run,
+   * and a GSTR-2B JSON run captures no portal-generated PDF or Excel control at all. An
+   * artifact with no entry has nothing extra to say.
    */
-  readonly runNotes: readonly string[];
+  readonly runNotes: Partial<Record<FiledReturnsArtifactType, readonly string[]>>;
 }
+
+/**
+ * Stated once and referenced by every GSTR-1 selection that actually fetches the workbook,
+ * so the two selections cannot drift into two different promises.
+ */
+const GSTR1_EXCEL_AVAILABILITY: readonly string[] = [
+  "Includes Excel only when the portal provides it",
+];
 
 const PORTAL_DATA: ArtifactCapability = {
   label: "Portal data (JSON)",
@@ -99,7 +112,7 @@ export const FILED_RETURNS_CAPABILITIES: Readonly<
     bundleDescription: "PDF and portal data",
     bundleNoun: "all formats",
     bundleFullYearNoun: "files",
-    runNotes: [],
+    runNotes: {},
   },
   "GSTR-1": {
     summary: "Summary PDF + E-invoice details (Excel)",
@@ -124,7 +137,10 @@ export const FILED_RETURNS_CAPABILITIES: Readonly<
     bundleDescription: "PDF and Excel",
     bundleNoun: "ZIP",
     bundleFullYearNoun: "files",
-    runNotes: ["Includes Excel only when the portal provides it"],
+    runNotes: {
+      EXCEL: GSTR1_EXCEL_AVAILABILITY,
+      PDF_AND_EXCEL: GSTR1_EXCEL_AVAILABILITY,
+    },
   },
   "GSTR-2B": {
     summary: "ITC PDF + Excel",
@@ -149,7 +165,9 @@ export const FILED_RETURNS_CAPABILITIES: Readonly<
     bundleDescription: "PDF, Excel, and portal data",
     bundleNoun: "all formats",
     bundleFullYearNoun: "files",
-    runNotes: ["Captures only portal-generated PDF and Excel controls"],
+    runNotes: {
+      PDF_AND_EXCEL: ["Captures only portal-generated PDF and Excel controls"],
+    },
   },
 };
 
@@ -246,8 +264,11 @@ export function filedReturnsCapabilitySentenceSubject(
   return artifact.standsAlone ? noun : `${returnType} ${noun}`;
 }
 
+const NO_RUN_NOTES: readonly string[] = [];
+
 export function filedReturnsCapabilityRunNotes(
   returnType: FiledReturnsReturnType,
+  artifactType: FiledReturnsArtifactType,
 ): readonly string[] {
-  return FILED_RETURNS_CAPABILITIES[returnType].runNotes;
+  return FILED_RETURNS_CAPABILITIES[returnType].runNotes[artifactType] ?? NO_RUN_NOTES;
 }
