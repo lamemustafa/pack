@@ -8,7 +8,7 @@ describe("portal-neutral XLSX writer", () => {
       worksheets: [
         {
           name: "Statement",
-          freezeFirstColumnAndTopRow: true,
+          freezeFirstColumnAndRows: 5,
           columns: [{ width: 42 }, { width: 14 }],
           rows: [
             [
@@ -39,7 +39,7 @@ describe("portal-neutral XLSX writer", () => {
     expect(text(entries, "xl/workbook.xml")).toContain('<sheet name="Statement"');
     expect(text(entries, "xl/workbook.xml")).toContain('<sheet name="Context"');
     const statement = text(entries, "xl/worksheets/sheet1.xml");
-    expect(statement).toContain('pane xSplit="1" ySplit="1"');
+    expect(statement).toContain('pane xSplit="1" ySplit="5" topLeftCell="B6"');
     expect(statement).toContain('<col min="1" max="1" width="42" customWidth="1"/>');
     expect(statement).toContain('<c r="B2" s="2"><v>12.5</v></c>');
     expect(statement).not.toContain("<f>");
@@ -59,6 +59,12 @@ describe("portal-neutral XLSX writer", () => {
     expect(() =>
       createXlsx({ ...base, worksheets: [{ name: "Bounded", rows: [[{ value: "x" }]] }] }, 32),
     ).toThrow(XlsxSizeLimitError);
+    expect(() =>
+      createXlsx({
+        ...base,
+        worksheets: [{ name: "Frozen", freezeFirstColumnAndRows: 0, rows: [[]] }],
+      }),
+    ).toThrow("frozen row count");
     expect(() =>
       createXlsx({
         ...base,

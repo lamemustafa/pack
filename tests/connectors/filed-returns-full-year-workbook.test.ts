@@ -10,7 +10,7 @@ import {
 import { FILED_RETURNS_MONTHS } from "../../src/connectors/gst/filed-returns-scope";
 
 describe("filed-return full-year workbook", () => {
-  it("emits the unchanged comparative statement and deduplicated run details", () => {
+  it("emits one self-contained comparative statement", () => {
     const plan = fullYearPlan();
     const summary = buildFiledReturnsSummarySheet(plan, [
       {
@@ -22,6 +22,7 @@ describe("filed-return full-year workbook", () => {
               r3b: {
                 gstin: "00XXXXX0000X0Z0",
                 lglnm: "Synthetic Workbook Taxpayer",
+                trdnm: "Synthetic Workbook Trade Name",
                 ret_period: "042026",
                 sup_details: {
                   osup_det: { txval: 10.25, iamt: 2, camt: 3, samt: 4, csamt: 5 },
@@ -40,7 +41,6 @@ describe("filed-return full-year workbook", () => {
     ]);
     const options = {
       generatedAt: new Date("2026-08-19T12:00:00.000Z"),
-      packVersion: "0.0.0-synthetic",
     };
 
     const first = buildFiledReturnsFullYearWorkbook(summary, plan, options);
@@ -48,24 +48,32 @@ describe("filed-return full-year workbook", () => {
     expect(second).toEqual(first);
 
     const entries = extractStoredZipEntries(first);
-    expect(sheetNames(text(entries, "xl/workbook.xml"))).toEqual([
-      "GSTR-3B Consolidated",
-      "Run details",
-    ]);
+    expect(sheetNames(text(entries, "xl/workbook.xml"))).toEqual(["GSTR-3B Consolidated"]);
 
     const statement = text(entries, "xl/worksheets/sheet1.xml");
     const statementRows = parsedRows(statement);
-    expect(statementRows[0]?.get("A1")?.text).toBe("Description");
-    expect(statementRows[0]?.get("B1")).toMatchObject({ number: 46_113, style: "4" });
-    expect(statementRows[0]?.get("B1")?.type).toBeUndefined();
-    expect(statementRows[0]?.get("M1")?.number).toBe(46_447);
-    expect(statementRows[0]?.get("N1")?.text).toBe("Total");
-    expect(statementRows[1]?.get("A2")?.text).toContain("Table 3.1(a)");
-    expect(statementRows[1]?.size).toBe(1);
-    expect(statementRows[2]?.get("A3")?.text).toBe("Taxable Value");
-    expect(statementRows[2]?.get("B3")).toMatchObject({ number: 10.25, style: "2" });
-    expect(statementRows[2]?.has("C3")).toBe(false);
-    expect(statementRows[2]?.get("N3")?.number).toBe(10.25);
+    expect(statement).toContain('pane xSplit="1" ySplit="5" topLeftCell="B6"');
+    expect(statementRows[0]?.get("A1")?.text).toBe("GSTIN");
+    expect(statementRows[0]?.get("B1")?.text).toBe("00XXXXX0000X0Z0");
+    expect(statementRows[1]?.get("A2")?.text).toBe("Legal name");
+    expect(statementRows[1]?.get("B2")?.text).toBe("Synthetic Workbook Taxpayer");
+    expect(statementRows[2]?.get("A3")?.text).toBe("Financial year");
+    expect(statementRows[2]?.get("B3")?.text).toBe("2026-27");
+    expect(statementRows[3]?.size).toBe(0);
+    expect(statementRows[4]?.get("A5")?.text).toBe("Description");
+    expect(statementRows[4]?.get("B5")).toMatchObject({ number: 46_113, style: "4" });
+    expect(statementRows[4]?.get("B5")?.type).toBeUndefined();
+    expect(statementRows[4]?.get("M5")?.number).toBe(46_447);
+    expect(statementRows[4]?.get("N5")?.text).toBe("Total");
+    expect(statementRows[5]?.get("A6")?.text).toContain("Table 3.1(a)");
+    expect(statementRows[5]?.size).toBe(1);
+    expect(statementRows[6]?.get("A7")?.text).toBe("Taxable Value");
+    expect(statementRows[6]?.get("B7")).toMatchObject({ number: 10.25, style: "2" });
+    expect(statementRows[6]?.has("C7")).toBe(false);
+    const monthTotal = "BCDEFGHIJKLM"
+      .split("")
+      .reduce((total, column) => total + (statementRows[6]?.get(`${column}7`)?.number ?? 0), 0);
+    expect(statementRows[6]?.get("N7")?.number).toBe(monthTotal);
 
     expect(subrowsAfter(statementRows, "Table 3.1(a)")).toEqual([
       "Taxable Value",
@@ -99,53 +107,40 @@ describe("filed-return full-year workbook", () => {
       expect(subrowsAfter(statementRows, table)).toEqual(["IGST", "CGST", "SGST", "Cess"]);
     }
 
-    const runDetails = text(entries, "xl/worksheets/sheet2.xml");
-    const detailRows = parsedRows(runDetails);
-    expect(detailRows[0]?.get("A1")?.text).toBe("Item");
-    expect(detailRows[0]?.get("B1")?.text).toBe("Details");
-    const detailKeys = detailRows
-      .slice(1)
-      .map((row, index) => row.get(`A${index + 2}`)?.text)
-      .filter((key): key is string => key !== undefined);
-    expect(new Set(detailKeys).size).toBe(detailKeys.length);
-    for (const key of [
-      "pack_version",
-      "generated_at",
-      "workbook_format_version",
-      "tidy_data_format_version",
-      "tidy_data_file",
-    ]) {
-      expect(detailKeys.filter((candidate) => candidate === key)).toHaveLength(1);
-    }
-    for (const key of [
-      "financial_year",
-      "return_types",
-      "artifacts",
-      "planned_periods",
-      "included_statement_coverage",
-      "excluded_statement_coverage",
-      "gstr9_boundary",
-      "envelope_rule",
-      "array_rule",
-      "number_rule",
-      "text_rule",
-      "label_rule",
-      "identity_rule",
-      "workbook_number_rule",
-    ]) {
-      expect(detailKeys).toContain(key);
-    }
-    expect(runDetails).toContain(FILED_RETURNS_FULL_YEAR_WORKBOOK_FORMAT_VERSION);
-    expect(runDetails).toContain("2026-08-19T12:00:00.000Z");
-    expect(runDetails).toContain("Verified labels for Form GSTR-3B Tables 3.1 and 4");
-    expect(runDetails).toContain("This workbook does not produce GSTR-9 values");
+    const footerRows = statementRows.slice(-5);
+    expect(statementRows.at(-6)?.size).toBe(0);
+    expect(textValues(footerRows[0])).toEqual([
+      "Statement covers",
+      "Verified labels for Form GSTR-3B Tables 3.1 and 4.",
+    ]);
+    expect(textValues(footerRows[1])).toEqual([
+      "Not covered",
+      "Form GSTR-3B Tables 3.1.1, 3.2, 5.1 and 6.1 — labels not verified.",
+    ]);
+    expect(textValues(footerRows[2])).toEqual([
+      "GSTR-9",
+      "GSTR-9 is not the sum of twelve GSTR-3B returns. Its Table 4 requires outward supplies split by counterparty type, which GSTR-3B does not contain, and it further requires amendments, ITC claimed in a later financial year, and reversals. This workbook does not produce GSTR-9 values.",
+    ]);
+    expect(textValues(footerRows[3])).toEqual(["Generated", "2026-08-19T12:00:00.000Z"]);
+    expect(textValues(footerRows[4])).toEqual([
+      "Workbook format",
+      FILED_RETURNS_FULL_YEAR_WORKBOOK_FORMAT_VERSION,
+    ]);
     for (const identity of ["00XXXXX0000X0Z0", "Synthetic Workbook Taxpayer"]) {
-      expect(runDetails.match(new RegExp(identity, "g"))).toHaveLength(1);
-      expect(statement).not.toContain(identity);
+      expect(statement.match(new RegExp(identity, "g"))).toHaveLength(1);
+      expect(new TextDecoder().decode(summary.dataBytes)).not.toContain(identity);
     }
-    expect([statement, runDetails].join("\n")).not.toContain("/surrounding_decoy/unlabeled_amount");
+    expect(statement).not.toContain("Synthetic Workbook Trade Name");
+    expect(new TextDecoder().decode(summary.dataBytes)).not.toContain(
+      "Synthetic Workbook Trade Name",
+    );
+    expect(statement).not.toContain("/surrounding_decoy/unlabeled_amount");
   });
 });
+
+function textValues(row: Map<string, ParsedCell> | undefined): Array<string | undefined> {
+  return row ? [...row.values()].map((cell) => cell.text) : [];
+}
 
 function fullYearPlan(): FiledReturnsSummaryPlanEntry[] {
   return FILED_RETURNS_MONTHS.map((period) => ({

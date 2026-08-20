@@ -2,9 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildFiledReturnsSummarySheet,
   FiledReturnsSummaryTooLargeError,
-  FILED_RETURNS_SUMMARY_FORMAT_VERSION,
   FILED_RETURNS_SUMMARY_HEADERS,
-  FILED_RETURNS_SUMMARY_SHEET_PATH,
   type FiledReturnsSummaryPlanEntry,
 } from "../../src/connectors/gst/filed-returns-summary-sheet";
 import { FILED_RETURNS_SUMMARY_FIELD_LABELS_BY_RETURN_TYPE } from "../../src/connectors/gst/filed-returns-summary-labels";
@@ -74,8 +72,6 @@ describe("filed-return full-year summary sheet", () => {
     expect(dataCsv).toContain('/surrounding_decoy/empty_text,"",');
 
     const context = contextText(summary.contextRows);
-    expect(context).toContain(FILED_RETURNS_SUMMARY_FORMAT_VERSION);
-    expect(context).toContain(FILED_RETURNS_SUMMARY_SHEET_PATH);
     expect(context.match(/00XXXXX0000X0Z0/g)).toHaveLength(1);
     expect(context.match(/AAAAA0000A/g)).toHaveLength(1);
     expect(context.match(/Synthetic Taxpayer Name/g)).toHaveLength(1);
@@ -100,7 +96,6 @@ describe("filed-return full-year summary sheet", () => {
     );
     expect(context).toContain("return_identity,GSTR-3B:April,ARN,/arn,SYNTHETIC-ARN-APRIL");
     expect(context).toContain("return_identity,GSTR-3B:April,ARN date,/arn_dt,2026-05-01");
-    expect(context).toContain("GSTR-3B:/data/r3b");
     expect(summary).toMatchObject({ outcomeOnly: false, parsedPeriodCount: 1 });
   });
 
@@ -309,7 +304,6 @@ describe("filed-return full-year summary sheet", () => {
         value_number: "",
       }),
     ]);
-    expect(contextText(summary.contextRows)).toContain("GSTR-3B:/data/r3b");
     expect(summary).toMatchObject({ outcomeOnly: true, parsedPeriodCount: 0, rowCount: 1 });
   });
 
@@ -406,7 +400,6 @@ describe("filed-return full-year summary sheet", () => {
       outcome: "array-count-empty",
       value_number: "0",
     });
-    expect(contextText(summary.contextRows)).toContain("array-count-empty");
   });
 
   it("keeps duplicate place-of-supply values as a named count row", () => {
