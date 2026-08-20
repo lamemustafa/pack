@@ -196,7 +196,10 @@ export function buildFiledReturnsSummarySheet(
         returnType: parsed.planned.returnType,
         artifact: parsed.planned.artifactType,
         outcome: leaf.arrayCountReason ?? parsed.outcome,
-        fieldLabel: filedReturnsSummaryFieldLabel(parsed.planned.returnType, leaf.path),
+        fieldLabel: filedReturnsSummaryFieldLabel(parsed.planned.returnType, leaf.path, {
+          financialYear: parsed.planned.financialYear,
+          period: parsed.planned.period,
+        }),
         fieldPath: leaf.path,
         ...(leaf.valueKind === "text" ? { valueText: leaf.value } : {}),
         ...(leaf.valueKind === "number" ? { valueNumber: leaf.value } : {}),

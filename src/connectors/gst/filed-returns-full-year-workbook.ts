@@ -83,8 +83,9 @@ function consolidatedSheet(
       { value: "Total", style: "bold" },
     ],
   ];
-  const values = statementValues(dataRows);
-  const lineItems = filedReturnsStatementLineItems();
+  const filingPeriod = { financialYear, period: "March" as const };
+  const values = statementValues(dataRows, filingPeriod);
+  const lineItems = filedReturnsStatementLineItems(filingPeriod);
   const sectionOrders = [...new Set(lineItems.map((item) => item.sectionOrder))];
   for (const sectionOrder of sectionOrders) {
     const sectionItems = lineItems.filter((item) => item.sectionOrder === sectionOrder);
@@ -121,7 +122,7 @@ function consolidatedSheet(
     }
     rows.push([]);
   }
-  const coverage = filedReturnsStatementCoverage();
+  const coverage = filedReturnsStatementCoverage(filingPeriod);
   rows.push(
     [
       { value: "Source", style: "bold" },
@@ -133,6 +134,14 @@ function consolidatedSheet(
         value: `Tables ${coverage.includedTables.join(" and ")}. Not included: ${coverage.excludedTables.join(", ")}.`,
       },
     ],
+    ...(coverage.withheldCaptionTables
+      ? [
+          [
+            { value: "Caption evidence", style: "bold" as const },
+            { value: "Withheld captions: Table 4(B)(1) and Table 4(D)." },
+          ],
+        ]
+      : []),
   );
   return {
     name: "GSTR-3B Consolidated",
@@ -158,9 +167,12 @@ interface StatementNumericValue {
 
 function statementValues(
   dataRows: readonly FiledReturnsSummaryDataRow[],
+  filingPeriod: { financialYear: string; period: FiledReturnsMonth },
 ): Map<string, StatementNumericValue> {
   const output = new Map<string, StatementNumericValue>();
-  const statementPaths = new Set(filedReturnsStatementLineItems().map((item) => item.fieldPath));
+  const statementPaths = new Set(
+    filedReturnsStatementLineItems(filingPeriod).map((item) => item.fieldPath),
+  );
   for (const row of dataRows) {
     if (
       row.returnType !== "GSTR-3B" ||

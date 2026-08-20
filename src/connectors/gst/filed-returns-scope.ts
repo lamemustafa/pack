@@ -61,6 +61,28 @@ export interface FiledReturnsScopePeriodOption {
   label: string;
 }
 
+export interface FiledReturnsFilingPeriod {
+  financialYear: string;
+  period: FiledReturnsMonth;
+}
+
+export function compareFiledReturnsFilingPeriods(
+  left: FiledReturnsFilingPeriod,
+  right: FiledReturnsFilingPeriod,
+): number {
+  const leftCalendar = getFiledReturnsPeriodCalendarMonth(
+    parseFinancialYearStartYearOrThrow(left.financialYear),
+    left.period,
+  );
+  const rightCalendar = getFiledReturnsPeriodCalendarMonth(
+    parseFinancialYearStartYearOrThrow(right.financialYear),
+    right.period,
+  );
+  return (
+    leftCalendar.year - rightCalendar.year || leftCalendar.monthIndex - rightCalendar.monthIndex
+  );
+}
+
 export const DEFAULT_FILED_RETURNS_DOWNLOAD_SCOPE: FiledReturnsDownloadScope = {
   ...getDefaultFiledReturnsPeriodScope(),
   returnType: "GSTR-3B",
@@ -253,6 +275,12 @@ function parseFinancialYearStartYear(financialYear: string): number | null {
   const match = /^(20\d{2})-\d{2}$/.exec(financialYear);
   if (!match?.[1]) return null;
   return Number(match[1]);
+}
+
+function parseFinancialYearStartYearOrThrow(financialYear: string): number {
+  const startYear = parseFinancialYearStartYear(financialYear);
+  if (startYear === null) throw new TypeError("Invalid filed-return financial year.");
+  return startYear;
 }
 
 function getPreviousCompletedCalendarMonth(asOf: Date): { year: number; monthIndex: number } {

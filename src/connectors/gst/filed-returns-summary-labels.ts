@@ -1,4 +1,8 @@
 import type { FiledReturnsReturnType } from "./filed-returns-return-types";
+import {
+  compareFiledReturnsFilingPeriods,
+  type FiledReturnsFilingPeriod,
+} from "./filed-returns-scope";
 
 export interface FiledReturnsSummaryFieldLabel {
   label: string;
@@ -12,6 +16,7 @@ export interface FiledReturnsSummaryFieldLabel {
     reviewedOn: string;
   };
   statement?: FiledReturnsStatementLineItem;
+  periodVersion?: FiledReturnsPeriodCaptionVersion;
 }
 
 // Current-form table boundary verified against the GST Portal Form GSTR-3B PDF and manual.
@@ -27,11 +32,30 @@ export interface FiledReturnsStatementLineItem {
   subrowOrder: number;
 }
 
+interface FiledReturnsPeriodCaptionVersion {
+  oldLabel: string;
+  oldSectionCaption: string;
+  tableReference: string;
+}
+
+interface FiledReturnsPeriodCaptionConfig {
+  oldSectionCaption: string;
+  tableReference: string;
+}
+
 type FiledReturnsSummaryFieldLabelMap = Readonly<Record<string, FiledReturnsSummaryFieldLabel>>;
 
 const GSTR3B_SOURCE = "GST Portal GSTR-3B Offline Utility V5.8 and Form GSTR-3B user guide";
 const GSTR3B_PDF_CROSS_CHECK_SOURCE = "GST Portal GSTR-3B PDF export and JSON schema";
 const REVIEWED_ON = "2026-08-20";
+const GSTR3B_OLD_CAPTION_THROUGH: FiledReturnsFilingPeriod = {
+  financialYear: "2022-23",
+  period: "July",
+};
+const GSTR3B_CURRENT_CAPTION_FROM: FiledReturnsFilingPeriod = {
+  financialYear: "2025-26",
+  period: "December",
+};
 
 type ComponentKey = "txval" | "iamt" | "camt" | "samt" | "csamt";
 const COMPONENT_LABELS: Record<ComponentKey, string> = {
@@ -107,24 +131,41 @@ function componentEntries(
   provenance: "confirmed" | "portal-pdf",
   statementCoverageTable?: FiledReturnsStatementCoverageTable,
   statementSectionOrder?: number,
+  periodCaption?: FiledReturnsPeriodCaptionConfig,
 ): Record<string, FiledReturnsSummaryFieldLabel> {
   return Object.fromEntries(
     components.map((component) => {
       const label = `${labelPrefix} — ${COMPONENT_LABELS[component]}`;
+      const entry = withOptionalStatement(
+        provenance === "confirmed"
+          ? valueConfirmedLabel(label, table)
+          : portalPdfRowTextLabel(label, table),
+        labelPrefix,
+        component,
+        statementCoverageTable,
+        statementSectionOrder,
+      );
       return [
         `${basePath}/${component}`,
-        withOptionalStatement(
-          provenance === "confirmed"
-            ? valueConfirmedLabel(label, table)
-            : portalPdfRowTextLabel(label, table),
-          labelPrefix,
-          component,
-          statementCoverageTable,
-          statementSectionOrder,
-        ),
+        periodCaption === undefined ? entry : withPeriodCaption(entry, periodCaption, component),
       ];
     }),
   );
+}
+
+function withPeriodCaption(
+  entry: FiledReturnsSummaryFieldLabel,
+  config: FiledReturnsPeriodCaptionConfig,
+  component: ComponentKey,
+): FiledReturnsSummaryFieldLabel {
+  return {
+    ...entry,
+    periodVersion: {
+      oldLabel: `${config.oldSectionCaption} — ${COMPONENT_LABELS[component]}`,
+      oldSectionCaption: config.oldSectionCaption,
+      tableReference: config.tableReference,
+    },
+  };
 }
 
 function withOptionalStatement(
@@ -369,6 +410,10 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "portal-pdf",
     "4",
     10,
+    {
+      oldSectionCaption: "Table 4(B)(1) ITC reversed — As per rules 42 & 43 of CGST Rules",
+      tableReference: "Table 4(B)(1)",
+    },
   ),
   ...componentEntries(
     "/itc_elg/itc_rev/OTH",
@@ -387,6 +432,10 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "portal-pdf",
     "4",
     13,
+    {
+      oldSectionCaption: "Table 4(D)(1) Ineligible ITC — As per section 17(5)",
+      tableReference: "Table 4(D)(1)",
+    },
   ),
   ...componentEntries(
     "/itc_elg/itc_inelg/OTH",
@@ -396,6 +445,10 @@ const GSTR3B_LABELS: FiledReturnsSummaryFieldLabelMap = {
     "portal-pdf",
     "4",
     14,
+    {
+      oldSectionCaption: "Table 4(D)(2) Ineligible ITC — Others",
+      tableReference: "Table 4(D)(2)",
+    },
   ),
 };
 
@@ -410,30 +463,80 @@ export const FILED_RETURNS_SUMMARY_FIELD_LABELS_BY_RETURN_TYPE: Readonly<
 export function filedReturnsSummaryFieldLabel(
   returnType: FiledReturnsReturnType,
   path: string,
+  filingPeriod: FiledReturnsFilingPeriod,
 ): string {
-  return FILED_RETURNS_SUMMARY_FIELD_LABELS_BY_RETURN_TYPE[returnType][path]?.label ?? "";
+  const entry = FILED_RETURNS_SUMMARY_FIELD_LABELS_BY_RETURN_TYPE[returnType][path];
+  return entry ? selectedCaption(entry, filingPeriod).label : "";
 }
 
-export function filedReturnsStatementLineItems(): Array<
-  FiledReturnsStatementLineItem & { fieldPath: string }
+export function filedReturnsStatementLineItems(filingPeriod: FiledReturnsFilingPeriod): Array<
+  FiledReturnsStatementLineItem & {
+    captionWithheld: boolean;
+    fieldPath: string;
+    tableReference?: string;
+  }
 > {
   return Object.entries(GSTR3B_LABELS)
-    .flatMap(([fieldPath, entry]) => (entry.statement ? [{ fieldPath, ...entry.statement }] : []))
+    .flatMap(([fieldPath, entry]) => {
+      if (!entry.statement) return [];
+      const caption = selectedCaption(entry, filingPeriod);
+      return [
+        {
+          fieldPath,
+          ...entry.statement,
+          sectionCaption: caption.sectionCaption ?? entry.statement.sectionCaption,
+          captionWithheld: caption.withheld,
+          ...(caption.tableReference ? { tableReference: caption.tableReference } : {}),
+        },
+      ];
+    })
     .sort(
       (left, right) =>
         left.sectionOrder - right.sectionOrder || left.subrowOrder - right.subrowOrder,
     );
 }
 
-export function filedReturnsStatementCoverage(): {
+export function filedReturnsStatementCoverage(filingPeriod: FiledReturnsFilingPeriod): {
   includedTables: string[];
   excludedTables: string[];
+  withheldCaptionTables?: string[];
 } {
-  const includedTables = [
-    ...new Set(filedReturnsStatementLineItems().map((lineItem) => lineItem.coverageTable)),
+  const lineItems = filedReturnsStatementLineItems(filingPeriod);
+  const includedTables = [...new Set(lineItems.map((lineItem) => lineItem.coverageTable))];
+  const withheldCaptionTables = [
+    ...new Set(
+      lineItems
+        .filter((lineItem) => lineItem.captionWithheld)
+        .map((lineItem) => lineItem.tableReference)
+        .filter((tableReference): tableReference is string => tableReference !== undefined),
+    ),
   ];
   return {
     includedTables,
     excludedTables: GSTR3B_FORM_TABLES.filter((table) => !includedTables.includes(table)),
+    ...(withheldCaptionTables.length > 0 ? { withheldCaptionTables } : {}),
+  };
+}
+
+function selectedCaption(
+  entry: FiledReturnsSummaryFieldLabel,
+  filingPeriod: FiledReturnsFilingPeriod,
+): { label: string; sectionCaption?: string; tableReference?: string; withheld: boolean } {
+  if (!entry.periodVersion) return { label: entry.label, withheld: false };
+  if (compareFiledReturnsFilingPeriods(filingPeriod, GSTR3B_OLD_CAPTION_THROUGH) <= 0) {
+    return {
+      label: entry.periodVersion.oldLabel,
+      sectionCaption: entry.periodVersion.oldSectionCaption,
+      withheld: false,
+    };
+  }
+  if (compareFiledReturnsFilingPeriods(filingPeriod, GSTR3B_CURRENT_CAPTION_FROM) >= 0) {
+    return { label: entry.label, withheld: false };
+  }
+  return {
+    label: entry.periodVersion.tableReference,
+    sectionCaption: entry.periodVersion.tableReference,
+    tableReference: entry.periodVersion.tableReference,
+    withheld: true,
   };
 }
