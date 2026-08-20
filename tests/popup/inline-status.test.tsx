@@ -38,16 +38,6 @@ const blockedSummary: FiledReturnsFlowSummary = {
 
 describe("inline filed-return recovery status", () => {
   it("renders every portal-gated primary action disabled with a visible reason", () => {
-    const targetReviewSummary: FiledReturnsFlowSummary = {
-      ...blockedSummary,
-      flowStep: {
-        ...blockedSummary.flowStep,
-        safeSignals: [
-          "filed-returns-target-review-required",
-          "filed-returns-target-local-cleanup-required",
-        ],
-      },
-    };
     const fullYearSummary: FiledReturnsFlowSummary = {
       ...blockedSummary,
       scope: { ...blockedSummary.scope, period: FULL_FISCAL_YEAR_PERIOD },
@@ -59,7 +49,7 @@ describe("inline filed-return recovery status", () => {
       },
     };
 
-    for (const summary of [blockedSummary, targetReviewSummary, fullYearSummary]) {
+    for (const summary of [blockedSummary, fullYearSummary]) {
       const markup = renderToStaticMarkup(
         <InlineStatus
           busy={null}
@@ -77,6 +67,70 @@ describe("inline filed-return recovery status", () => {
       expect(markup).toContain("inline-status-primary");
       expect(markup).toContain("disabled");
       expect(markup).toMatch(/Open a signed-in GST Portal tab before [^<]+\./);
+    }
+  });
+
+  it("keeps local-only target-review retries enabled without a portal tab, on both surfaces", () => {
+    const cleanupSummary: FiledReturnsFlowSummary = {
+      ...blockedSummary,
+      flowStep: {
+        ...blockedSummary.flowStep,
+        state: "download-unconfirmed",
+        safeSignals: [
+          "filed-returns-target-review-required",
+          "filed-returns-target-local-cleanup-required",
+        ],
+      },
+    };
+    const reconcileSummary: FiledReturnsFlowSummary = {
+      ...blockedSummary,
+      flowStep: {
+        ...blockedSummary.flowStep,
+        state: "download-unconfirmed",
+        safeSignals: [
+          "filed-returns-target-review-required",
+          "artifact-acquisition-download-unreconciled",
+        ],
+      },
+    };
+
+    for (const [summary, label] of [
+      [cleanupSummary, "Retry local cleanup"],
+      [reconcileSummary, "Reconcile browser download"],
+    ] as const) {
+      const inlineMarkup = renderToStaticMarkup(
+        <InlineStatus
+          busy={null}
+          portalReady={false}
+          onOpenPortal={vi.fn()}
+          onRestartTarget={vi.fn()}
+          onRetryFullFiscalYearTarget={vi.fn()}
+          onRetryTarget={vi.fn()}
+          presentation={blockedPresentation}
+          summary={summary}
+        />,
+      );
+      // No `continue` guard: assert the control is present before asserting its state.
+      expect(inlineMarkup).toContain("inline-status-primary");
+      expect(inlineMarkup).toContain(label);
+      expect(inlineMarkup).not.toContain("disabled");
+      expect(inlineMarkup).not.toContain("Open a signed-in GST Portal tab");
+
+      const recoveryMarkup = renderToStaticMarkup(
+        <RecoveryActions
+          busy={null}
+          portalReady={false}
+          summary={summary}
+          onAcknowledgeInterruptedRun={vi.fn()}
+          onRetryFullFiscalYearTarget={vi.fn()}
+          onRetryTarget={vi.fn()}
+          onResolveFullFiscalYearTarget={vi.fn()}
+          onResolveTarget={vi.fn()}
+          onStartFresh={vi.fn()}
+        />,
+      );
+      expect(recoveryMarkup).toContain(label);
+      expect(recoveryMarkup).toContain(`<button type="button">${label}</button>`);
     }
   });
 

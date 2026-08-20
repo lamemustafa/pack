@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  canRetryFiledReturnsTargetWithoutPortal,
   canRetryFullFiscalYearZipWithoutPortal,
   getFiledReturnsCompletionStatus,
   getScopeMatchedFiledReturnsSummary,
@@ -339,5 +340,53 @@ describe("popup filed returns flow summary", () => {
       }),
     ).toBe(false);
     expect(canRetryFullFiscalYearZipWithoutPortal(COMPLETE_SUMMARY)).toBe(false);
+  });
+
+  it("allows only the local target-review retries (reconcile, local cleanup) without a portal tab", () => {
+    const targetReviewBase: FiledReturnsFlowSummary = {
+      scope: { financialYear: "2026-27", period: "May", returnType: "GSTR-3B" },
+      status: "blocked",
+      completedPeriods: [],
+      totalPeriods: 1,
+      currentPeriod: "May",
+      updatedAt: "2026-06-24T00:00:00.000Z",
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "download-unconfirmed",
+        safeSignals: ["filed-returns-target-review-required"],
+        safeMessage: "Pack could not confirm the browser download for May.",
+      },
+    };
+
+    const reconcileSummary: FiledReturnsFlowSummary = {
+      ...targetReviewBase,
+      flowStep: {
+        ...targetReviewBase.flowStep,
+        safeSignals: [
+          "filed-returns-target-review-required",
+          "artifact-acquisition-download-unreconciled",
+        ],
+      },
+    };
+    expect(canRetryFiledReturnsTargetWithoutPortal(reconcileSummary)).toBe(true);
+
+    const cleanupSummary: FiledReturnsFlowSummary = {
+      ...targetReviewBase,
+      flowStep: {
+        ...targetReviewBase.flowStep,
+        safeSignals: [
+          "filed-returns-target-review-required",
+          "filed-returns-target-local-cleanup-required",
+        ],
+      },
+    };
+    expect(canRetryFiledReturnsTargetWithoutPortal(cleanupSummary)).toBe(true);
+
+    // Neither reconcile nor local cleanup applies: the only remaining action is starting
+    // fresh, which does reach the portal.
+    expect(canRetryFiledReturnsTargetWithoutPortal(targetReviewBase)).toBe(false);
+    expect(canRetryFiledReturnsTargetWithoutPortal(null)).toBe(false);
+    expect(canRetryFiledReturnsTargetWithoutPortal(undefined)).toBe(false);
   });
 });
