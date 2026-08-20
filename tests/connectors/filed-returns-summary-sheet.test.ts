@@ -861,13 +861,21 @@ describe("filed-return full-year summary sheet", () => {
     }
   });
 
-  it("uses the captured July 2022 caption for Table 4(D)(1)", () => {
+  it("uses the adjacent July old and August current Table 4(D)(1) captions", () => {
     expect(
       filedReturnsSummaryFieldLabel("GSTR-3B", "/itc_elg/itc_inelg/RUL/camt", {
         financialYear: "2022-23",
         period: "July",
       }),
     ).toBe("Table 4(D)(1) Ineligible ITC — As per section 17(5) — Central tax");
+    expect(
+      filedReturnsSummaryFieldLabel("GSTR-3B", "/itc_elg/itc_inelg/RUL/camt", {
+        financialYear: "2022-23",
+        period: "August",
+      }),
+    ).toBe(
+      "Table 4(D)(1) Other Details — ITC reclaimed which was reversed under Table 4(B)(2) in earlier tax period — Central tax",
+    );
   });
 
   it("uses the captured July 2022 caption for Table 4(B)(1)", () => {
@@ -907,7 +915,7 @@ describe("filed-return full-year summary sheet", () => {
     }
   });
 
-  it("withholds only the three unproven captions in the summary CSV", () => {
+  it("renders the current Table 4 captions in the August 2022 summary CSV", () => {
     const summary = buildFiledReturnsSummarySheet(
       [jsonPlan("August", "august-data.json", "GSTR-3B", "2022-23")],
       [
@@ -932,14 +940,25 @@ describe("filed-return full-year summary sheet", () => {
       ],
     );
     const rows = parseCsv(new TextDecoder().decode(summary.dataBytes));
-    for (const path of [
-      "/itc_elg/itc_rev/RUL/camt",
-      "/itc_elg/itc_inelg/RUL/camt",
-      "/itc_elg/itc_inelg/OTH/camt",
+    for (const { path, expectedLabel } of [
+      {
+        path: "/itc_elg/itc_rev/RUL/camt",
+        expectedLabel:
+          "Table 4(B)(1) ITC reversed — As per rules 38, 42 & 43 of CGST Rules and sub-section (5) of section 17 — Central tax",
+      },
+      {
+        path: "/itc_elg/itc_inelg/RUL/camt",
+        expectedLabel:
+          "Table 4(D)(1) Other Details — ITC reclaimed which was reversed under Table 4(B)(2) in earlier tax period — Central tax",
+      },
+      {
+        path: "/itc_elg/itc_inelg/OTH/camt",
+        expectedLabel:
+          "Table 4(D)(2) Other Details — Ineligible ITC under section 16(4) & ITC restricted due to PoS rules — Central tax",
+      },
     ]) {
       const row = fieldRow(rows, path);
-      expect(row.field_label).toMatch(/^Table 4\([BD]\)/);
-      expect(row.field_label).not.toMatch(/rules|section|reclaimed|ineligible|others/i);
+      expect(row.field_label).toBe(expectedLabel);
       expect(row.value_number).not.toBe("");
     }
     expect(fieldRow(rows, "/itc_elg/itc_avl/ISRC/camt").field_label).toContain("Inward supplies");

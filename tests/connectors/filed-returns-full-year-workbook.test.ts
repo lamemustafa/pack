@@ -255,35 +255,35 @@ describe("filed-return full-year workbook", () => {
     );
   });
 
-  it("withholds mixed FY 2025-26 statement captions", () => {
+  it("restores current Table 4 captions for FY 2025-26", () => {
     const filingPeriods = filingPeriodsForFinancialYear("2025-26");
     const captions = filedReturnsStatementLineItems(filingPeriods).map(
       (lineItem) => lineItem.sectionCaption,
     );
-    expect(captions).toContain("Table 4(D)(1)");
-    expect(filedReturnsStatementCoverage(filingPeriods)).toMatchObject({
-      withheldCaptionTables: ["Table 4(B)(1)", "Table 4(D)(1)", "Table 4(D)(2)"],
-    });
+    expect(captions).toEqual(expect.arrayContaining(currentTable4Captions()));
+    expect(filedReturnsStatementCoverage(filingPeriods)).not.toHaveProperty(
+      "withheldCaptionTables",
+    );
   });
 
-  it("keeps uniform old and current years descriptive, and resolves a reduced period set", () => {
+  it("uses captured current captions and withholds years before the evidence range", () => {
     expect(
       filedReturnsStatementLineItems(filingPeriodsForFinancialYear("2021-22")).find((item) =>
         item.sectionCaption.startsWith("Table 4(D)(1)"),
       )?.sectionCaption,
-    ).toBe("Table 4(D)(1) Ineligible ITC — As per section 17(5)");
+    ).toBe("Table 4(D)(1)");
     expect(
-      filedReturnsStatementLineItems(filingPeriodsForFinancialYear("2026-27")).find((item) =>
+      filedReturnsStatementLineItems(filingPeriodsForFinancialYear("2017-18")).find((item) =>
         item.sectionCaption.startsWith("Table 4(D)(1)"),
       )?.sectionCaption,
-    ).toBe(
-      "Table 4(D)(1) Other Details — ITC reclaimed which was reversed under Table 4(B)(2) in earlier tax period",
-    );
-    expect(
-      filedReturnsStatementLineItems([{ financialYear: "2025-26", period: "December" }]).find(
-        (item) => item.sectionCaption.startsWith("Table 4(D)(1)"),
-      )?.sectionCaption,
-    ).toContain("ITC reclaimed");
+    ).toBe("Table 4(D)(1)");
+    for (const financialYear of ["2023-24", "2024-25"]) {
+      expect(
+        filedReturnsStatementLineItems(filingPeriodsForFinancialYear(financialYear)).map(
+          (item) => item.sectionCaption,
+        ),
+      ).toEqual(expect.arrayContaining(currentTable4Captions()));
+    }
   });
 
   it("keeps blank identity cells when no period has parseable JSON", () => {
@@ -471,6 +471,14 @@ function fullYearPlan(
 
 function filingPeriodsForFinancialYear(financialYear: string) {
   return FILED_RETURNS_MONTHS.map((period) => ({ financialYear, period }));
+}
+
+function currentTable4Captions() {
+  return [
+    "Table 4(B)(1) ITC reversed — As per rules 38, 42 & 43 of CGST Rules and sub-section (5) of section 17",
+    "Table 4(D)(1) Other Details — ITC reclaimed which was reversed under Table 4(B)(2) in earlier tax period",
+    "Table 4(D)(2) Other Details — Ineligible ITC under section 16(4) & ITC restricted due to PoS rules",
+  ];
 }
 
 interface ParsedCell {

@@ -48,13 +48,17 @@ type FiledReturnsSummaryFieldLabelMap = Readonly<Record<string, FiledReturnsSumm
 const GSTR3B_SOURCE = "GST Portal GSTR-3B Offline Utility V5.8 and Form GSTR-3B user guide";
 const GSTR3B_PDF_CROSS_CHECK_SOURCE = "GST Portal GSTR-3B PDF export and JSON schema";
 const REVIEWED_ON = "2026-08-20";
+const GSTR3B_CAPTION_EVIDENCE_FROM: FiledReturnsFilingPeriod = {
+  financialYear: "2022-23",
+  period: "April",
+};
 const GSTR3B_OLD_CAPTION_THROUGH: FiledReturnsFilingPeriod = {
   financialYear: "2022-23",
   period: "July",
 };
 const GSTR3B_CURRENT_CAPTION_FROM: FiledReturnsFilingPeriod = {
-  financialYear: "2025-26",
-  period: "December",
+  financialYear: "2022-23",
+  period: "August",
 };
 
 type ComponentKey = "txval" | "iamt" | "camt" | "samt" | "csamt";
@@ -542,6 +546,14 @@ function selectedCaption(
   filingPeriod: FiledReturnsFilingPeriod,
 ): { label: string; sectionCaption?: string; tableReference?: string; withheld: boolean } {
   if (!entry.periodVersion) return { label: entry.label, withheld: false };
+  if (compareFiledReturnsFilingPeriods(filingPeriod, GSTR3B_CAPTION_EVIDENCE_FROM) < 0) {
+    return {
+      label: entry.periodVersion.tableReference,
+      sectionCaption: entry.periodVersion.tableReference,
+      tableReference: entry.periodVersion.tableReference,
+      withheld: true,
+    };
+  }
   if (compareFiledReturnsFilingPeriods(filingPeriod, GSTR3B_OLD_CAPTION_THROUGH) <= 0) {
     return {
       label: entry.periodVersion.oldLabel,
