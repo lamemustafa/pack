@@ -6,10 +6,7 @@ import {
   hasPersistedFullFiscalYearZipDownloadId,
   isAmbiguousFullFiscalYearZipHandoff,
 } from "./flow-summary";
-import {
-  getSavedFullFiscalYearActionDecision,
-  targetReviewPortalDisabledReason,
-} from "./recovery-actions";
+import { getSavedFullFiscalYearActionDecision } from "./recovery-actions";
 
 export interface InlineStatusProps {
   busy: string | null;
@@ -243,18 +240,21 @@ export function getInlinePrimaryAction(
     };
   }
   if (signals.has("filed-returns-target-review-required") && summary.currentPeriod) {
+    // Both branches below return locally in retryFiledReturnsTargetDownloadFlow before any
+    // portal action (see canRetryFiledReturnsTargetWithoutPortal in ./flow-summary), so
+    // neither is portal-gated.
     if (canReconcileFiledReturnsTarget(summary)) {
       return {
         label: "Reconcile browser download",
         onClick: actions.onRetryTarget,
-        portalDisabledReason: targetReviewPortalDisabledReason(summary),
+        portalDisabledReason: null,
       };
     }
     if (signals.has("filed-returns-target-local-cleanup-required")) {
       return {
         label: "Retry local cleanup",
         onClick: actions.onRetryTarget,
-        portalDisabledReason: targetReviewPortalDisabledReason(summary),
+        portalDisabledReason: null,
       };
     }
     return null;
