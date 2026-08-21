@@ -61,7 +61,7 @@ describe("filed-return full-year summary sheet", () => {
         {
           path: "april-data.json",
           bytes: new TextEncoder().encode(
-            '{"status":1,"data":{"lglnm":"Synthetic Legal Name","r3b":{"gstin":"27ABCDE1234F1Z0","ret_period":"042026","registration_number":"27abcde1234f1z0","ctin":"29ZZZZZ9999Z9Z9","sup_details":{"osup_det":{"txval":1}}}}}',
+            '{"status":1,"data":{"lglnm":"Synthetic Legal Name","r3b":{"gstin":"27ABCDE1234F1Z0","ret_period":"042026","registration_number":"27abcde1234f1z0","ctin":"29ZZZZZ9999Z9ZW","sup_details":{"osup_det":{"txval":1}}}}}',
           ),
         },
       ],
@@ -73,7 +73,7 @@ describe("filed-return full-year summary sheet", () => {
     expect(dataCsv).not.toContain("27abcde1234f1z0");
     expect(dataCsv).not.toContain("27ABCDE1234F1Z0");
     // A counterparty identifier is business data the summary exists to report.
-    expect(dataCsv).toContain("29ZZZZZ9999Z9Z9");
+    expect(dataCsv).toContain("29ZZZZZ9999Z9ZW");
   });
 
   it("withholds a filing identity repeated under an unrecognised alias", () => {
@@ -481,8 +481,8 @@ describe("filed-return full-year summary sheet", () => {
             trdnm: "Synthetic Owner Trade Name",
             docdata: {
               b2b: [
-                { ctin: "29ZZZZZ9999Z9Z9", trdnm: "Synthetic Supplier One" },
-                { ctin: "33YYYYY8888Y8Y8", trdnm: "Synthetic Supplier Two" },
+                { ctin: "29ZZZZZ9999Z9ZW", trdnm: "Synthetic Supplier One" },
+                { ctin: "33YYYYY8888Y1ZU", trdnm: "Synthetic Supplier Two" },
               ],
             },
             supplier_display_name: "Synthetic Supplier One",
@@ -501,6 +501,47 @@ describe("filed-return full-year summary sheet", () => {
     // value after the supplier record was seen.
     expect(dataCsv).toContain("Synthetic Supplier One");
     expect(summary).toMatchObject({ outcomeOnly: false, parsedPeriodCount: 1 });
+  });
+
+  it("does not release an owner trade name on a decoy counterparty identifier", () => {
+    // A field NAMED ctin was treated as counterparty evidence regardless of its
+    // value, so malformed or decoy portal data could mark a wrapper as a
+    // supplier record and release the owner's own trade name beside it.
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-2B")],
+      [
+        rawJsonEntry("april-data.json", {
+          data: {
+            rtnprd: "042026",
+            wrapper: { ctin: "unknown", trdnm: "Synthetic Owner Trade Name" },
+            amount: 1,
+          },
+        }),
+      ],
+    );
+
+    expect(new TextDecoder().decode(summary.dataBytes)).not.toContain("Synthetic Owner Trade Name");
+  });
+
+  it("keeps identity metadata out of cross-document value redaction", () => {
+    // An object-shaped identity carries metadata beside the identifier. Seeding
+    // redaction from every descendant string made an unrelated reportable leaf
+    // sharing that text vanish in every period.
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-2B")],
+      [
+        rawJsonEntry("april-data.json", {
+          data: {
+            rtnprd: "042026",
+            gstin: { value: "27ABCDE1234F1Z0", status: "Active" },
+            filing_status: "Active",
+            amount: 1,
+          },
+        }),
+      ],
+    );
+
+    expect(new TextDecoder().decode(summary.dataBytes)).toContain("Active");
   });
 
   it("withholds an owner trade name carried by a split alias", () => {
@@ -598,7 +639,7 @@ describe("filed-return full-year summary sheet", () => {
           data: {
             rtnprd: "042026",
             supplier: {
-              ctin: "29ZZZZZ9999Z9Z9",
+              ctin: "29ZZZZZ9999Z9ZW",
               trdnm: "Synthetic Proven Supplier Trade Name",
             },
           },
@@ -619,11 +660,11 @@ describe("filed-return full-year summary sheet", () => {
           data: {
             rtnprd: "042026",
             supplier_one: {
-              ctin: "29ZZZZZ9999Z9Z9",
+              ctin: "29ZZZZZ9999Z9ZW",
               trdnm: "Synthetic Proven Supplier One",
             },
             supplier_two: {
-              ctin: "33YYYYY8888Y8Y8",
+              ctin: "33YYYYY8888Y1ZU",
               trdnm: "Synthetic Proven Supplier Two",
             },
           },

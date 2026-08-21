@@ -20,6 +20,7 @@ import type { FiledReturnsReturnType } from "./filed-returns-return-types";
 import { filedReturnsSummaryFieldLabel } from "./filed-returns-summary-labels";
 import {
   filedReturnsSummaryCounterpartyRecordPath,
+  isFiledReturnsSummaryIdentityScalarPath,
   filedReturnsSummaryIdentity,
   filedReturnsRequiredWorkbookIdentityPaths,
   isFiledReturnsCanonicalIdentityPath,
@@ -278,12 +279,18 @@ function collectOwnIdentityValues(parsedEntries: readonly ParsedPlanEntry[]): Re
         // already removed by path, so a duplicate of it under an unrecognised
         // alias must be too, or the redaction depends on which name the portal
         // happened to use.
-        .filter((leaf) =>
-          isFiledReturnsSummaryIdentityPath(
-            parsed.planned.returnType,
-            leaf.path,
-            collectCounterpartyRecordPaths(parsed),
-          ),
+        // Path redaction stays broad; the values that seed CROSS-document
+        // redaction must not. A recognised identity that is object-shaped carries
+        // metadata beside the identifier -- `/data/gstin/status: "Active"` -- and
+        // seeding from every descendant string made an unrelated reportable leaf
+        // such as `/filing_status: "Active"` vanish by value in every period.
+        .filter(
+          (leaf) =>
+            isFiledReturnsSummaryIdentityPath(
+              parsed.planned.returnType,
+              leaf.path,
+              collectCounterpartyRecordPaths(parsed),
+            ) && isFiledReturnsSummaryIdentityScalarPath(leaf.path),
         )
         .map((leaf) => leaf.value)
         .filter((value): value is string => typeof value === "string" && value.length > 0)
@@ -298,7 +305,11 @@ function collectOwnIdentityValues(parsedEntries: readonly ParsedPlanEntry[]): Re
 function collectCounterpartyRecordPaths(parsed: ParsedPlanEntry): ReadonlySet<string> {
   return new Set(
     parsed.leaves.flatMap((leaf) => {
-      if (leaf.valueKind !== "text" || leaf.value.trim() === "") return [];
+      // A field NAMED ctin is not evidence; a counterparty GSTIN is. Accepting any
+      // non-empty text let decoy or malformed portal data -- `"ctin": "unknown"` --
+      // mark a wrapper as a counterparty record and release the owner's own trade
+      // name beside it. The checksum is the same one the owner GSTIN must pass.
+      if (leaf.valueKind !== "text" || !isValidGstin(leaf.value.trim())) return [];
       const recordPath = filedReturnsSummaryCounterpartyRecordPath(
         parsed.planned.returnType,
         filedReturnsSummaryDocumentPath(parsed.planned.returnType, leaf.path),

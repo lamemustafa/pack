@@ -133,6 +133,26 @@ export function isFiledReturnsSummaryIdentityCandidatePath(path: string): boolea
  * Returns the canonical path of a non-owner record with a direct `ctin` field.
  * A sibling `trdnm` in that record has affirmative counterparty evidence.
  */
+/**
+ * True when the leaf IS a recognised identity, rather than metadata beside one.
+ *
+ * Accepts the identity's own scalar and the single supported wrapper shape, and
+ * rejects any deeper property of an object-shaped identity. Path redaction can
+ * afford to be broad; the values that seed cross-document redaction cannot, or
+ * `/data/gstin/status: "Active"` teaches Pack to delete every "Active" it sees.
+ */
+export function isFiledReturnsSummaryIdentityScalarPath(path: string): boolean {
+  const segments = canonicalJsonPointerSegments(path);
+  const unwrapped = unwrapScalarPath(segments);
+  // A contiguous run ENDING at the terminal segment, so a split alias like
+  // `/data/trade/name` still composes to `tradename` and still seeds redaction.
+  // `/data/gstin/status` has no such run -- neither `status` nor `gstinstatus`
+  // is an alias -- so identity metadata does not.
+  return unwrapped.some(
+    (_, start) => identityForCanonicalSegment(unwrapped.slice(start).join("")) !== null,
+  );
+}
+
 export function filedReturnsSummaryCounterpartyRecordPath(
   returnType: FiledReturnsReturnType,
   path: string,
