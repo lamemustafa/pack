@@ -473,9 +473,12 @@ describe("extension package verifier", () => {
     expect(script).toContain("assertPanelPageLoads");
     expect(script).toContain("valid context state");
     expect(script).toContain("waitForFunction");
-    expect(script).toContain("visibleWordmark");
-    expect(script).toContain("shellRect.width < 380");
-    expect(script).toContain("shellRect.width > 460");
+    // The popup asserted an alt-text wordmark and a compact width band. The
+    // panel's mark is decorative, so paint is proved through elementFromPoint,
+    // and a side panel is user-resizable, so an upper width bound would fail on
+    // a wide panel rather than catching anything.
+    expect(script).toContain("markPainted");
+    expect(script).toContain("shellRect.width < 300");
     expect(script).toContain("https://services.gst.gov.in/services/auth/fowelcome");
     expect(script).toContain("readLoadedExtensionIdFromPreferences");
     expect(script).toContain("chrome-extension://${extensionId}/panel.html");
