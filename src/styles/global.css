@@ -23,7 +23,12 @@
   --pack-surface-accent-strong: #173b62;
   --pack-surface-inverse: #111827;
 
-  /* Ink. Every value passes WCAG AA (4.5:1) against every surface above. */
+  /* Ink. Each value passes WCAG AA (4.5:1) against the surfaces it is actually
+     paired with, not against every surface above: inverse ink belongs on inverse
+     surfaces, and 27 of the 63 possible ink/surface combinations fail — including
+     --pack-ink-primary on --pack-surface-inverse at 1.09:1. Pairing a token with a
+     surface it was not made for is a bug the palette cannot prevent, and nothing
+     enforces this yet (see issue #171). */
   --pack-ink-primary: #172033;
   --pack-ink-secondary: #334155;
   --pack-ink-tertiary: #43566b;
