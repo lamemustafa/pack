@@ -23,6 +23,16 @@ const SIGNED_IN: PortalContext = {
 };
 
 let dom: JSDOM;
+
+// jsdom's window is typed as the DOM `Window`, which does not declare the event
+// constructors as properties. The event must come from this realm for
+// dispatchEvent to accept it, so the constructor is read through one narrow,
+// precisely typed accessor rather than casting at each call site.
+function realmEvent(win: JSDOM["window"], type: string): Event {
+  const { Event: RealmEvent } = win as unknown as { Event: new (type: string) => Event };
+  return new RealmEvent(type);
+}
+
 let root: Root | null = null;
 let container: Element;
 let refreshes = 0;
@@ -73,7 +83,7 @@ describe("panel portal-context refresh", () => {
     expect(container.textContent).toContain("Open a signed-in GST Portal tab");
 
     await act(async () => {
-      dom.window.dispatchEvent(new dom.window.Event("focus"));
+      dom.window.dispatchEvent(realmEvent(dom.window, "focus"));
       await Promise.resolve();
     });
 
@@ -85,7 +95,7 @@ describe("panel portal-context refresh", () => {
     expect(container.textContent).toContain("Open a signed-in GST Portal tab");
 
     await act(async () => {
-      dom.window.document.dispatchEvent(new dom.window.Event("visibilitychange"));
+      dom.window.document.dispatchEvent(realmEvent(dom.window, "visibilitychange"));
       await Promise.resolve();
     });
 
@@ -98,8 +108,8 @@ describe("panel portal-context refresh", () => {
     root = null;
     const afterMount = refreshes;
 
-    dom.window.dispatchEvent(new dom.window.Event("focus"));
-    dom.window.document.dispatchEvent(new dom.window.Event("visibilitychange"));
+    dom.window.dispatchEvent(realmEvent(dom.window, "focus"));
+    dom.window.document.dispatchEvent(realmEvent(dom.window, "visibilitychange"));
 
     expect(refreshes).toBe(afterMount);
   });
