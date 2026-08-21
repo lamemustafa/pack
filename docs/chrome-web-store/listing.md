@@ -31,8 +31,8 @@ This section is the canonical source-controlled record for the current Store
 version and review state. Release-readiness and dashboard-closeout documents
 must not claim a newer state than this record.
 
-The Store-supported beta claims are GSTR-1, GSTR-3B and GSTR-2B single-period
-downloads. The full-fiscal-year workflow remains a source-build capability and
+The Store-supported beta claims are GSTR-1 and GSTR-3B filed returns and GSTR-2B
+auto-drafted statements, single-period. The full-fiscal-year workflow remains a source-build capability and
 must not be advertised as a Store-supported feature until the four evidence
 gates in `PUBLICATION_READINESS.md` are recorded for the release.
 
@@ -44,10 +44,17 @@ Title from package:
 ComplyEaze Pack: GST Return Downloader
 ```
 
+> **These fields describe the package that is submitted, not repository HEAD.** The summary and
+> description below are the corrected text, which reaches the Store only when a package built from
+> this commit or later is submitted. The bytes of any previously submitted ZIP are immutable and
+> still carry the older alpha wording; updating HEAD cannot change them. Before using these fields in
+> a dashboard closeout, confirm the package being submitted was built from a commit that contains
+> them.
+
 Summary from package:
 
 ```text
-Beta: locally download your filed GSTR-1, GSTR-3B and GSTR-2B returns from your own GST Portal session.
+Beta: locally download your filed GSTR-1 and GSTR-3B returns and your GSTR-2B statements.
 ```
 
 Description:
@@ -59,7 +66,7 @@ ComplyEaze Pack helps authorised users download their own filed GST returns usin
 
 • GSTR-3B: filed-return summary PDF, or the portal's own JSON
 • GSTR-1: summary PDF and, when the portal provides it, e-invoice details Excel
-• GSTR-2B: summary PDF, or the portal's own JSON
+• GSTR-2B: auto-drafted statement, as summary PDF or the portal's own JSON
 
 Files are saved by Chrome to the user's device. Pack does not require a Pack or ComplyEaze account. It does not ask for or store GST Portal credentials, OTPs, CAPTCHA responses, cookies, or session tokens, and it does not upload GST documents or return contents to ComplyEaze.
 
