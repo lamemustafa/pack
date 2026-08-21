@@ -152,7 +152,9 @@ This log records live diagnostic findings that constrain Pack's local, target-bo
     summary workbook.
     An invalid identity rejects the derived summary as fixed `identity-rejected`; a required
     identity absent from the canonical response path rejects it as fixed `identity-unverified`;
-    a forbidden credential or session field rejects it as fixed `privacy-rejected`. The claim
+    two sources that disagree about the same taxpayer identity reject it as fixed
+    `identity-conflict`; a forbidden credential or session field rejects it as fixed
+    `privacy-rejected`. The claim
     that Pack neither retains nor renders the rejected value is true of the **derived** outputs
     only: on rejection no summary CSV and no workbook are written, and the fixed reason carries
     no portal value. The original staged return artifact is deliberately unchanged. ZIP assembly
