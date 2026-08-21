@@ -132,6 +132,14 @@ describe("filed-return summary status", () => {
       {
         outcome: filedReturnsSummaryOutcome(true, {
           status: "failed",
+          reasonCategory: "identity-conflict",
+        }),
+        reason:
+          "filed-return sources disagreed about the taxpayer identity; re-download the affected periods from the GST Portal, then retry",
+      },
+      {
+        outcome: filedReturnsSummaryOutcome(true, {
+          status: "failed",
           reasonCategory: "privacy-rejected",
         }),
         reason:

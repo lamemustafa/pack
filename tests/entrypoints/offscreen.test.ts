@@ -820,6 +820,7 @@ describe("offscreen Blob URL entrypoint", () => {
     vi.doMock("../../src/connectors/gst/filed-returns-summary-sheet", () => ({
       FILED_RETURNS_SUMMARY_SHEET_PATH: "full-year-summary.csv",
       FiledReturnsSummaryForbiddenFieldError: class extends SyntaxError {},
+      FiledReturnsSummaryIdentityConflictError: class extends SyntaxError {},
       FiledReturnsSummaryInvalidGstinError: class extends SyntaxError {},
       FiledReturnsSummaryUncanonicalIdentityError: class extends SyntaxError {},
       buildFiledReturnsSummarySheet: () => {
@@ -1009,6 +1010,67 @@ describe("offscreen Blob URL entrypoint", () => {
     expect([...entries.keys()]).toEqual(["april-data.json"]);
     expect(JSON.stringify(zip)).not.toContain("27ABCDE1234F1Z0");
     expect(new TextDecoder().decode(entries.get("april-data.json"))).toContain("27ABCDE1234F1Z0");
+  });
+
+  it("names the identity conflict when two periods disagree about the taxpayer", async () => {
+    await loadOffscreenEntrypoint();
+    const periods = [
+      { path: "april-data.json", period: "April" as const, name: "Synthetic Legal Name" },
+      { path: "may-data.json", period: "May" as const, name: "Synthetic Other Name" },
+    ];
+    for (const [index, entry] of periods.entries()) {
+      opfsFiles.set(
+        `filed-return-packs/${TEST_FULL_YEAR_LEDGER_ID}/${entry.path}`,
+        new Blob([
+          JSON.stringify({
+            status: 1,
+            data: {
+              lglnm: entry.name,
+              r3b: {
+                gstin: "27ABCDE1234F1Z0",
+                ret_period: index === 0 ? "042026" : "052026",
+                amount: 1,
+              },
+            },
+          }),
+        ]),
+      );
+    }
+
+    const zip = await sendOffscreenMessage({
+      type: "PACK_OFFSCREEN_CREATE_FILED_RETURN_ZIP",
+      target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+      payload: {
+        requestId: "conflicting-identity-summary-request",
+        generatedAt: "2026-08-19T12:00:00.000Z",
+        ledgerId: TEST_FULL_YEAR_LEDGER_ID,
+        expectedReturnType: "GSTR-3B",
+        expectedEntryCount: 2,
+        expectedEntries: periods.map((entry) => ({
+          artifactType: "JSON",
+          entryNames: [entry.path],
+        })),
+        summaryPlan: periods.map((entry) => ({
+          artifactType: "JSON",
+          entryNames: [entry.path],
+          financialYear: "2026-27",
+          outcomeCategory: "staged",
+          period: entry.period,
+          returnType: "GSTR-3B",
+        })),
+      },
+    });
+
+    // The rejection carries its own reason rather than collapsing into the
+    // generic generation failure, so the terminal message can say what happened.
+    expect(zip).toMatchObject({
+      ok: true,
+      summary: { status: "failed", reasonCategory: "identity-conflict" },
+    });
+    const entries = await extractStoredZipEntries(createdBlobs[0]!);
+    expect([...entries.keys()]).toEqual(["april-data.json", "may-data.json"]);
+    expect(JSON.stringify(zip)).not.toContain("Synthetic Legal Name");
+    expect(JSON.stringify(zip)).not.toContain("Synthetic Other Name");
   });
 
   it("keeps the artifact ZIP with a named outcome when workbook generation throws", async () => {

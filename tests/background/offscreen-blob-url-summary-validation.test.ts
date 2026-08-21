@@ -93,27 +93,29 @@ describe("offscreen full-year summary response validation", () => {
     ).resolves.toEqual({ status: "failed", errorCategory: "offscreen-response-invalid" });
   });
 
-  it.each(["identity-rejected", "identity-unverified", "privacy-rejected"] as const)(
-    "preserves the fixed %s summary rejection category",
-    async (reasonCategory) => {
-      mocks.runtime.sendMessage.mockImplementationOnce(async (message?: unknown) => ({
-        ok: true,
-        requestId: requestIdFrom(message),
-        blobUrl: "blob:pack/rejected-summary",
-        zipEntryCount: 1,
-        artifactEntryCount: 1,
-        summaryEntryCount: 0,
-        summary: { status: "failed", reasonCategory },
-      }));
+  it.each([
+    "identity-conflict",
+    "identity-rejected",
+    "identity-unverified",
+    "privacy-rejected",
+  ] as const)("preserves the fixed %s summary rejection category", async (reasonCategory) => {
+    mocks.runtime.sendMessage.mockImplementationOnce(async (message?: unknown) => ({
+      ok: true,
+      requestId: requestIdFrom(message),
+      blobUrl: "blob:pack/rejected-summary",
+      zipEntryCount: 1,
+      artifactEntryCount: 1,
+      summaryEntryCount: 0,
+      summary: { status: "failed", reasonCategory },
+    }));
 
-      await expect(
-        createOffscreenFiledReturnZipUrl("full-fiscal-year-12345678", request()),
-      ).resolves.toMatchObject({
-        status: "created",
-        summary: { status: "failed", reasonCategory },
-      });
-    },
-  );
+    await expect(
+      createOffscreenFiledReturnZipUrl("full-fiscal-year-12345678", request()),
+    ).resolves.toMatchObject({
+      status: "created",
+      summary: { status: "failed", reasonCategory },
+    });
+  });
 
   it("rejects a receipt whose offscreen artifact count does not match the request", async () => {
     mocks.runtime.sendMessage.mockImplementationOnce(async (message?: unknown) => ({

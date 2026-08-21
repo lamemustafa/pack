@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildFiledReturnsSummarySheet,
+  FiledReturnsSummaryIdentityConflictError,
   FiledReturnsSummaryTooLargeError,
   MAX_FILED_RETURNS_SUMMARY_ARRAY_EXPANSION_ELEMENTS,
   FILED_RETURNS_SUMMARY_HEADERS,
@@ -84,6 +85,81 @@ describe("filed-return full-year summary sheet", () => {
     expect(dataCsv).not.toContain("SYNTHETIC-ARN-APRIL");
     expect(summary.contextRows.map((row) => row.valueText)).toContain("SYNTHETIC-ARN-APRIL");
     expect(dataCsv).toContain("/sup_details/osup_det/txval");
+  });
+
+  it("withholds an identity one period names canonically from every other period", () => {
+    const summary = buildFiledReturnsSummarySheet(
+      [
+        jsonPlan("April", "april-data.json", "GSTR-3B"),
+        jsonPlan("May", "may-data.json", "GSTR-3B"),
+      ],
+      [
+        {
+          path: "april-data.json",
+          bytes: new TextEncoder().encode(
+            '{"status":1,"data":{"lglnm":"Synthetic Legal Name","trdnm":"Synthetic Trade Name","r3b":{"gstin":"27ABCDE1234F1Z0","ret_period":"042026","sup_details":{"osup_det":{"txval":1}}}}}',
+          ),
+        },
+        {
+          path: "may-data.json",
+          bytes: new TextEncoder().encode(
+            '{"status":1,"data":{"lglnm":"Synthetic Legal Name","r3b":{"gstin":"27ABCDE1234F1Z0","ret_period":"052026","registration_name":"Synthetic Trade Name","by_name":{"Synthetic Trade Name":{"amount":7}},"sup_details":{"osup_det":{"txval":2}}}}}',
+          ),
+        },
+      ],
+    );
+
+    const dataCsv = new TextDecoder().decode(summary.dataBytes);
+    // Identity belongs to the taxpayer, not to one month. April names the trade
+    // name canonically; May repeats it only under an unrecognised alias and as
+    // an object key, where nothing in May alone could recognise it.
+    expect(dataCsv).not.toContain("Synthetic Trade Name");
+    // It still reaches the context rows once, so it is withheld rather than lost.
+    expect(summary.contextRows.map((row) => row.valueText)).toContain("Synthetic Trade Name");
+    // Nothing legitimate is dropped with it.
+    expect(dataCsv).toContain("/sup_details/osup_det/txval");
+    expect(
+      parseCsv(dataCsv).filter((row) => row.field_path === "/sup_details/osup_det/txval"),
+    ).toHaveLength(2);
+  });
+
+  it("rejects conflicting taxpayer identities with a reason that names the conflict", () => {
+    const build = () =>
+      buildFiledReturnsSummarySheet(
+        [
+          jsonPlan("April", "april-data.json", "GSTR-3B"),
+          jsonPlan("May", "may-data.json", "GSTR-3B"),
+        ],
+        [
+          {
+            path: "april-data.json",
+            bytes: new TextEncoder().encode(
+              '{"status":1,"data":{"lglnm":"Synthetic Legal Name","r3b":{"gstin":"27ABCDE1234F1Z0","ret_period":"042026","sup_details":{"osup_det":{"txval":1}}}}}',
+            ),
+          },
+          {
+            path: "may-data.json",
+            bytes: new TextEncoder().encode(
+              '{"status":1,"data":{"lglnm":"Synthetic Other Name","r3b":{"gstin":"27ABCDE1234F1Z0","ret_period":"052026","sup_details":{"osup_det":{"txval":2}}}}}',
+            ),
+          },
+        ],
+      );
+
+    expect(build).toThrow(FiledReturnsSummaryIdentityConflictError);
+    let message = "";
+    try {
+      build();
+    } catch (error) {
+      message = error instanceof Error ? error.message : "";
+    }
+    // The rejection names its own reason and what the user can do, and carries
+    // no portal value, no identity, and no path from the document.
+    expect(message).toContain("conflict");
+    expect(message).toContain("GST Portal");
+    expect(message).not.toContain("Synthetic");
+    expect(message).not.toContain("lglnm");
+    expect(message).not.toContain("/");
   });
 
   it("withholds a leaf whose object key is the taxpayer's own name", () => {
@@ -678,7 +754,7 @@ describe("filed-return full-year summary sheet", () => {
           jsonEntry("may-data.json", "GSTR-3B", { gstin: "27FGHIJ5678K1Z1", amount: 2 }, "052026"),
         ],
       ),
-    ).toThrow("Inconsistent taxpayer identity");
+    ).toThrow(FiledReturnsSummaryIdentityConflictError);
   });
 
   it("fails closed when any parseable GSTR-3B period omits its GSTIN", () => {
@@ -904,7 +980,7 @@ describe("filed-return full-year summary sheet", () => {
           }),
         ],
       ),
-    ).toThrow("Inconsistent taxpayer identity");
+    ).toThrow(FiledReturnsSummaryIdentityConflictError);
   });
 
   it.each([
