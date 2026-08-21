@@ -1,6 +1,5 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -40,7 +39,9 @@ function presetButton(markup: string, label: string): string {
     .map((fragment) => `<button${fragment}`)
     .find((fragment) => fragment.includes(escaped));
   expect(button, `no preset button rendered for ${label}`).toBeDefined();
-  return (button as string).split("</button>")[0];
+  if (button === undefined) throw new Error(`no preset button rendered for ${label}`);
+  const [opening = ""] = button.split("</button>");
+  return opening;
 }
 
 describe("panel surface", () => {
