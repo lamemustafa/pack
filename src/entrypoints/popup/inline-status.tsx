@@ -134,9 +134,7 @@ function getInlineStatusCopy(
      * a delivery from a state that cannot observe it, and would have said the
      * same had the ZIP never arrived.
      */
-    const zipConfirmed = summary?.flowStep.safeSignals.includes(
-      "full-fiscal-year-zip-downloaded",
-    );
+    const zipConfirmed = summary?.flowStep.safeSignals.includes("full-fiscal-year-zip-downloaded");
     if (isFullYear && !filenameOverridden && !zipConfirmed) {
       return {
         body: `${periods} periods were fetched. Pack has not confirmed the browser saved the ZIP -- check browser Downloads.`,

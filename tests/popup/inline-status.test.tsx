@@ -63,7 +63,7 @@ function fullYearSummary(safeSignals: string[]): FiledReturnsFlowSummary {
     flowStep: {
       connectorId: "gst",
       scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
-      state: "complete",
+      state: "downloaded",
       safeSignals,
       safeMessage: "Full-year run finished.",
     },
