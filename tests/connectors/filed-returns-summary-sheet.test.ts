@@ -471,6 +471,61 @@ describe("filed-return full-year summary sheet", () => {
     expect(context).not.toContain("Synthetic Non-Identity Status");
   });
 
+  it("scopes GSTR-2B trade names to the return owner instead of supplier records", () => {
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-2B")],
+      [
+        rawJsonEntry("april-data.json", {
+          data: {
+            rtnprd: "042026",
+            trdnm: "Synthetic Owner Trade Name",
+            docdata: {
+              b2b: [
+                { ctin: "29ZZZZZ9999Z9Z9", trdnm: "Synthetic Supplier One" },
+                { ctin: "33YYYYY8888Y8Y8", trdnm: "Synthetic Supplier Two" },
+              ],
+            },
+            supplier_display_name: "Synthetic Supplier One",
+          },
+        }),
+      ],
+    );
+
+    const dataCsv = new TextDecoder().decode(summary.dataBytes);
+    expect(contextText(summary.contextRows)).toContain(
+      "taxpayer_identity,identity,Trade name,/data/trdnm,Synthetic Owner Trade Name",
+    );
+    expect(dataCsv).not.toContain("Synthetic Owner Trade Name");
+    // A supplier's name is not an own-identity value. The same string on an
+    // unrecognised leaf must remain reportable rather than being redacted by
+    // value after the supplier record was seen.
+    expect(dataCsv).toContain("Synthetic Supplier One");
+    expect(summary).toMatchObject({ outcomeOnly: false, parsedPeriodCount: 1 });
+  });
+
+  it("withholds an owner trade name carried by a split alias", () => {
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-2B")],
+      [
+        rawJsonEntry("april-data.json", {
+          data: {
+            rtnprd: "042026",
+            trade: { name: "Synthetic Split Owner Trade Name" },
+            owner_name_copy: "Synthetic Split Owner Trade Name",
+            amount: 1,
+          },
+        }),
+      ],
+    );
+
+    const dataCsv = new TextDecoder().decode(summary.dataBytes);
+    expect(contextText(summary.contextRows)).toContain(
+      "taxpayer_identity,identity,Trade name,/data/trade/name,Synthetic Split Owner Trade Name",
+    );
+    expect(dataCsv).not.toContain("Synthetic Split Owner Trade Name");
+    expect(dataCsv).toContain("/amount");
+  });
+
   it("keeps an empty-key member as the slash pointer after envelope normalization", () => {
     const summary = buildFiledReturnsSummarySheet(
       [jsonPlan("April", "april-data.json", "GSTR-2B")],
