@@ -133,7 +133,7 @@ describe("preset scope at click time", () => {
     vi.useRealTimers();
   });
 
-  it("submits the year current at the click, not the year rendered at mount", async () => {
+  it("re-renders instead of submitting a year the button is not showing", async () => {
     // A panel left as the active tab overnight receives neither focus nor
     // visibilitychange, so it can cross the boundary with April's basis on
     // screen. The label going stale is cosmetic; the submitted scope going
@@ -160,6 +160,21 @@ describe("preset scope at click time", () => {
     );
     await act(async () => {
       button?.dispatchEvent(realmEvent(dom.window, "click"));
+      await Promise.resolve();
+    });
+
+    // The click must not start anything: the button still says 2025-26, and a
+    // run the user did not see the target for is worse than a stale label. It
+    // re-renders, and the now-correct label is what a second click submits.
+    expect(started).toEqual([]);
+    expect(container.textContent).toContain("2026-27 GSTR-3B");
+    expect(container.textContent).not.toContain("2025-26 GSTR-3B");
+
+    const refreshed = Array.from(container.querySelectorAll("button")).find((candidate) =>
+      candidate.textContent?.includes("2026-27 GSTR-3B"),
+    );
+    await act(async () => {
+      refreshed?.dispatchEvent(realmEvent(dom.window, "click"));
       await Promise.resolve();
     });
 

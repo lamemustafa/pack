@@ -2,7 +2,6 @@ import React from "react";
 import { browser } from "wxt/browser";
 import type { FiledReturnsFlowSummary } from "../../connectors/gst/filed-returns-contracts";
 import { isFullFiscalYearScope } from "../../connectors/gst/filed-returns-scope";
-import type { FiledReturnsDownloadScope } from "../../connectors/gst/filed-returns-contracts";
 import { ScopeForm } from "../popup/components";
 import { ContextState } from "../popup/context-state";
 import {
@@ -27,7 +26,7 @@ export type PackPanelController = ReturnType<typeof usePackPopupController>;
  */
 export function PanelSurface({ pack }: { pack: PackPanelController }) {
   const [view, setView] = React.useState<PanelView>("presets");
-  const presets = usePanelPresets();
+  const [presets, refreshPresets] = usePanelPresets();
 
   const summary = pack.recoverySummary ?? pack.scopedFlowSummary;
   const presentation = getPopupPresentationState(
@@ -133,7 +132,19 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
                       className="panel-choice"
                       type="button"
                       disabled={blockedReason !== null}
-                      onClick={() => void pack.startFiledReturnsFlow(startScopeFor(preset.id))}
+                      onClick={() => {
+                        // Never submit a scope the button is not showing. The
+                        // first version of this recomputed at click time and
+                        // started the fresh scope, so a stale label could read
+                        // 2025-26 while the run downloaded 2026-27 -- a user
+                        // getting something other than the target they clicked,
+                        // which is worse than the staleness it was fixing.
+                        if (!isCurrentPresetScope(preset)) {
+                          refreshPresets();
+                          return;
+                        }
+                        void pack.startFiledReturnsFlow(preset.scope);
+                      }}
                     >
                       <span>{preset.label}</span>
                       <span className="panel-choice-detail">
@@ -244,23 +255,17 @@ function useReturnToPage(onReturn: () => void) {
 }
 
 /**
- * Re-derives the preset's scope at the moment of the click.
+ * True when the rendered preset still matches what "now" produces.
  *
- * Return-to-page signals catch the common case, but a panel left as the active
- * tab overnight receives neither `focus` nor `visibilitychange`, so it can cross
- * the April-to-May boundary with April's normalised financial year still on
- * screen. The label would be stale, which is cosmetic; the scope handed to the
- * background would be stale too, which downloads the wrong year.
- *
- * Reading the scope again here means the click cannot submit a basis older than
- * itself, whatever the rendered label says, and needs no timer to do it. If the
- * two ever disagree the label is the wrong one, and it corrects on the next
- * render.
+ * A panel left as the active tab overnight receives neither `focus` nor
+ * `visibilitychange`, so it can cross the April-to-May boundary with April's
+ * normalised financial year still on screen. Clicking then has two wrong
+ * answers -- start the stale year, or start a year the button never showed --
+ * so the click re-renders instead and the user confirms what they can see.
  */
-function startScopeFor(presetId: string): FiledReturnsDownloadScope {
-  const preset = panelPresets().find((candidate) => candidate.id === presetId);
-  if (!preset) throw new Error(`Unknown panel preset: ${presetId}`);
-  return preset.scope;
+function isCurrentPresetScope(preset: PanelPreset): boolean {
+  const current = panelPresets().find((candidate) => candidate.id === preset.id);
+  return current !== undefined && presetsIdentity([current]) === presetsIdentity([preset]);
 }
 
 /**
@@ -279,17 +284,16 @@ function startScopeFor(presetId: string): FiledReturnsDownloadScope {
  * but the one that crosses a boundary. Handing back a new array each time would
  * re-render the list for nothing.
  */
-function usePanelPresets(): PanelPreset[] {
+function usePanelPresets(): [PanelPreset[], () => void] {
   const [presets, setPresets] = React.useState(panelPresets);
-  useReturnToPage(
-    React.useCallback(() => {
-      setPresets((current) => {
-        const next = panelPresets();
-        return presetsIdentity(next) === presetsIdentity(current) ? current : next;
-      });
-    }, []),
-  );
-  return presets;
+  const refresh = React.useCallback(() => {
+    setPresets((current) => {
+      const next = panelPresets();
+      return presetsIdentity(next) === presetsIdentity(current) ? current : next;
+    });
+  }, []);
+  useReturnToPage(refresh);
+  return [presets, refresh];
 }
 
 // Compares whole presets rather than the fields believed to matter: a preset
