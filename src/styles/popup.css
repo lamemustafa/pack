@@ -659,6 +659,12 @@ html[data-pack-surface="popup"] #root {
   text-decoration: none;
 }
 
-.fineprint-action:hover {
+/* The global `button:hover:not(:disabled)` rule is 0,2,1 and outranks a bare
+   `.fineprint-action:hover` at 0,2,0, so it painted the dark action background
+   behind dark link text. Matching its pseudo-class count restores the link
+   treatment this control actually is. */
+.fineprint-action:hover:not(:disabled) {
+  background: none;
+  border: 0;
   text-decoration: underline;
 }
