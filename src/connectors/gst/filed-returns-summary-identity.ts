@@ -171,7 +171,20 @@ export function filedReturnsSummaryCounterpartyRecordPath(
     pathsMatch(ownerPath, canonical.slice(0, -1)),
   )
     ? null
-    : recordPath.join("/");
+    : counterpartyRecordKey(recordPath);
+}
+
+/**
+ * A record key that cannot collide across segment boundaries.
+ *
+ * Joining decoded segments with "/" loses the boundary when a JSON key itself
+ * contains one: a ctin at `/data/supplier~1x/ctin` and a trade name at
+ * `/data/supplier/x/trdnm` both flatten to `data/supplier/x`, so evidence from
+ * one record vouched for a different record entirely. Encoding the array keeps
+ * the segmentation the pointer already carries.
+ */
+function counterpartyRecordKey(recordPath: readonly string[]): string {
+  return JSON.stringify(recordPath);
 }
 
 function ownerIdentityContainerPath(
@@ -218,7 +231,7 @@ function hasPositiveCounterpartyTradeNameEvidence(
   return (
     declaredCounterpartyContainerPaths(returnType).some((containerPath) =>
       containerPath.every((segment, index) => segment === recordPath[index]),
-    ) || counterpartyRecordPaths.has(recordPath.join("/"))
+    ) || counterpartyRecordPaths.has(counterpartyRecordKey(recordPath))
   );
 }
 

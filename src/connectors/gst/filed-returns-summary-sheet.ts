@@ -197,7 +197,7 @@ export function buildFiledReturnsSummarySheet(
   const ownIdentityValues = collectOwnIdentityValues(parsedEntries);
   const dataRows: FiledReturnsSummaryDataRow[] = [];
   for (const parsed of parsedEntries) {
-    const counterpartyRecordPaths = collectCounterpartyRecordPaths(parsed);
+    const counterpartyRecordPaths = counterpartyRecordPathsFor(parsed);
     const fieldLeaves = parsed.leaves.filter(
       (leaf) =>
         !isFiledReturnsSummaryIdentityPath(
@@ -289,7 +289,7 @@ function collectOwnIdentityValues(parsedEntries: readonly ParsedPlanEntry[]): Re
             isFiledReturnsSummaryIdentityPath(
               parsed.planned.returnType,
               leaf.path,
-              collectCounterpartyRecordPaths(parsed),
+              counterpartyRecordPathsFor(parsed),
             ) && isFiledReturnsSummaryIdentityScalarPath(leaf.path),
         )
         .map((leaf) => leaf.value)
@@ -302,7 +302,34 @@ function collectOwnIdentityValues(parsedEntries: readonly ParsedPlanEntry[]): Re
   );
 }
 
+// Rebuilding this per identity leaf scanned every leaf and re-ran GSTIN
+// validation on every text value, making summary generation quadratic in
+// document size -- a large object-shaped return could stall the offscreen export
+// before reaching any size check. One set per parsed entry, memoised by entry.
+const counterpartyRecordPathCache = new WeakMap<ParsedPlanEntry, ReadonlySet<string>>();
+
+function counterpartyRecordPathsFor(parsed: ParsedPlanEntry): ReadonlySet<string> {
+  const cached = counterpartyRecordPathCache.get(parsed);
+  if (cached) return cached;
+  const computed = collectCounterpartyRecordPaths(parsed);
+  counterpartyRecordPathCache.set(parsed, computed);
+  return computed;
+}
+
+/** The return owner's own GSTINs, read from this entry's identity leaves. */
+function ownGstinValues(parsed: ParsedPlanEntry): ReadonlySet<string> {
+  return new Set(
+    parsed.identityLeaves
+      .filter(
+        (leaf) =>
+          filedReturnsSummaryIdentity(parsed.planned.returnType, leaf.path)?.label === "GSTIN",
+      )
+      .flatMap((leaf) => (typeof leaf.value === "string" ? [leaf.value.trim().toUpperCase()] : [])),
+  );
+}
+
 function collectCounterpartyRecordPaths(parsed: ParsedPlanEntry): ReadonlySet<string> {
+  const ownGstins = ownGstinValues(parsed);
   return new Set(
     parsed.leaves.flatMap((leaf) => {
       // A field NAMED ctin is not evidence; a counterparty GSTIN is. Accepting any
@@ -310,6 +337,10 @@ function collectCounterpartyRecordPaths(parsed: ParsedPlanEntry): ReadonlySet<st
       // mark a wrapper as a counterparty record and release the owner's own trade
       // name beside it. The checksum is the same one the owner GSTIN must pass.
       if (leaf.valueKind !== "text" || !isValidGstin(leaf.value.trim())) return [];
+      // Valid proves it is A GSTIN, not that it is SOMEONE ELSE'S. A wrapper whose
+      // ctin repeats the return owner's own GSTIN is the owner's record, and
+      // treating it as a counterparty would release the owner trade name beside it.
+      if (ownGstins.has(leaf.value.trim().toUpperCase())) return [];
       const recordPath = filedReturnsSummaryCounterpartyRecordPath(
         parsed.planned.returnType,
         filedReturnsSummaryDocumentPath(parsed.planned.returnType, leaf.path),

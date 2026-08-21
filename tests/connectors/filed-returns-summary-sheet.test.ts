@@ -503,6 +503,48 @@ describe("filed-return full-year summary sheet", () => {
     expect(summary).toMatchObject({ outcomeOnly: false, parsedPeriodCount: 1 });
   });
 
+  it("does not let a slash inside a key vouch for a different record", () => {
+    // Joining decoded segments with "/" lost the boundary: `/data/supplier~1x`
+    // and `/data/supplier/x` flattened to the same key, so a valid ctin in one
+    // record released a trade name in an unrelated one.
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-2B")],
+      [
+        rawJsonEntry("april-data.json", {
+          data: {
+            rtnprd: "042026",
+            "supplier/x": { ctin: "29ZZZZZ9999Z9ZW", trdnm: "Synthetic Real Supplier" },
+            supplier: { x: { trdnm: "Synthetic Owner Trade Name" } },
+          },
+        }),
+      ],
+    );
+
+    const dataCsv = new TextDecoder().decode(summary.dataBytes);
+
+    expect(dataCsv).toContain("Synthetic Real Supplier");
+    expect(dataCsv).not.toContain("Synthetic Owner Trade Name");
+  });
+
+  it("does not accept the owner's own GSTIN as counterparty evidence", () => {
+    // A valid checksum proves the value is a GSTIN, not that it belongs to
+    // someone else. A wrapper repeating the owner's GSTIN is the owner's record.
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-2B")],
+      [
+        rawJsonEntry("april-data.json", {
+          data: {
+            rtnprd: "042026",
+            gstin: "27ABCDE1234F1Z0",
+            wrapper: { ctin: "27ABCDE1234F1Z0", trdnm: "Synthetic Owner Trade Name" },
+          },
+        }),
+      ],
+    );
+
+    expect(new TextDecoder().decode(summary.dataBytes)).not.toContain("Synthetic Owner Trade Name");
+  });
+
   it("does not let one sibling's counterparty evidence vouch for another", () => {
     // Canonical segments fold punctuation, so `supplier-one` and `supplier_one`
     // were the same record. A valid ctin under the first then released whatever
