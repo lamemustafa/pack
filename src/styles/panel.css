@@ -136,6 +136,16 @@ html[data-pack-surface="panel"] body {
   text-underline-offset: 2px;
 }
 
+/* `.panel-link` declares no hover of its own, so the global
+   `button:hover:not(:disabled)` rule takes over entirely and paints the dark
+   action background behind dark link text. Its 0,2,1 specificity also outranks a
+   bare `.panel-link:hover`, so the override matches its pseudo-class count. */
+.panel-link:hover:not(:disabled) {
+  background: none;
+  border: 0;
+  text-decoration: underline;
+}
+
 .panel-foot {
   border-top: 1px solid var(--pack-border-subtle);
   background: var(--pack-surface-muted);

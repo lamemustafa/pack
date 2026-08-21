@@ -83,6 +83,11 @@ export function usePackPopupController() {
       const response = await sendPackMessage({ type: "PACK_GET_CONTEXT" });
       if (response.ok && "context" in response) {
         setContext(response.context);
+        // A refresh that succeeds clears the error a previous refresh set.
+        // getPopupPresentationState reads actionError before the refreshed
+        // context, so leaving it would keep a recovered surface showing a
+        // failure that no longer applies.
+        setActionError(null);
         setStatus(
           response.context?.supported
             ? "GST context detected."
