@@ -199,7 +199,8 @@ export function buildFiledReturnsSummarySheet(
         !isFiledReturnsSummaryIdentityPath(leaf.path) &&
         !hasIdentityShapedPathSegment(leaf.path) &&
         !hasOwnIdentityPathSegment(leaf.path, ownIdentityValues) &&
-        !(leaf.valueKind === "text" && ownIdentityValues.has(leaf.value.trim().toUpperCase())),
+        !(leaf.valueKind === "text" && ownIdentityValues.has(leaf.value.trim().toUpperCase())) &&
+        !(leaf.valueKind === "text" && isCredentialShapedValue(leaf.value)),
     );
     if (fieldLeaves.length === 0) {
       dataRows.push(outcomeRow(parsed.planned, parsed.outcome));
@@ -475,6 +476,20 @@ const PAN_SHAPE = /^[A-Za-z]{5}[0-9]{4}[A-Za-z]$/;
 
 function isIdentityShapedSegment(segment: string): boolean {
   return PAN_SHAPE.test(segment) || isValidGstin(segment);
+}
+
+// A JWT is unmistakable and has no legitimate place in a filed return, so it is
+// refused by value wherever it appears -- a credential under a benign path such
+// as `/metadata/value` is invisible to the field-name guard.
+//
+// Deliberately only this shape. A generic "long opaque string" rule was measured
+// against the captured corpus and would withhold 2,077 real values, all of them
+// `irn` invoice references and `chksum` digests -- legitimate data the summary
+// exists to report. Zero JWT-shaped values appear in 77,154 real text values.
+const JWT_SHAPE = /^eyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}$/;
+
+function isCredentialShapedValue(value: string): boolean {
+  return JWT_SHAPE.test(value.trim());
 }
 
 function decodedPathSegments(path: string): string[] {

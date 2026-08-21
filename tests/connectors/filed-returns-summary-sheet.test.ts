@@ -162,6 +162,26 @@ describe("filed-return full-year summary sheet", () => {
     expect(message).not.toContain("/");
   });
 
+  it("withholds a JWT under a benign path but keeps a long invoice reference", () => {
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-3B")],
+      [
+        {
+          path: "april-data.json",
+          bytes: new TextEncoder().encode(
+            '{"status":1,"data":{"lglnm":"Synthetic Legal Name","r3b":{"gstin":"27ABCDE1234F1Z0","ret_period":"042026","metadata":{"value":"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJzeW50aGV0aWMifQ.c3ludGhldGljLXNpZ25hdHVyZQ"},"irn":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","sup_details":{"osup_det":{"txval":1}}}}}',
+          ),
+        },
+      ],
+    );
+
+    const dataCsv = new TextDecoder().decode(summary.dataBytes);
+    // The field name is benign, so only the value's shape can catch it.
+    expect(dataCsv).not.toContain("eyJhbGciOiJIUzI1NiJ9");
+    // A 64-character invoice reference is legitimate data, not a credential.
+    expect(dataCsv).toContain("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
+  });
+
   it("withholds a leaf whose object key is the taxpayer's own name", () => {
     const summary = buildFiledReturnsSummarySheet(
       [jsonPlan("April", "april-data.json", "GSTR-3B")],
