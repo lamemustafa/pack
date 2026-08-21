@@ -206,13 +206,14 @@ export function buildFiledReturnsSummarySheet(
         // Compared case-insensitively: the portal's casing is not guaranteed to
         // be repeated under an unrecognised alias, and an identifier differing
         // only in case is the same identifier.
-        .map((value) => value.toUpperCase()),
+        .map((value) => value.trim().toUpperCase()),
     );
     const fieldLeaves = parsed.leaves.filter(
       (leaf) =>
         !isFiledReturnsSummaryIdentityPath(leaf.path) &&
         !hasIdentityShapedPathSegment(leaf.path) &&
-        !(leaf.valueKind === "text" && ownIdentityValues.has(leaf.value.toUpperCase())),
+        !hasOwnIdentityPathSegment(leaf.path, ownIdentityValues) &&
+        !(leaf.valueKind === "text" && ownIdentityValues.has(leaf.value.trim().toUpperCase())),
     );
     if (fieldLeaves.length === 0) {
       dataRows.push(outcomeRow(parsed.planned, parsed.outcome));
@@ -454,12 +455,24 @@ function isIdentityShapedSegment(segment: string): boolean {
   return PAN_SHAPE.test(segment) || isValidGstin(segment);
 }
 
-export function hasIdentityShapedPathSegment(path: string): boolean {
+function decodedPathSegments(path: string): string[] {
   return path
     .split("/")
     .slice(1)
-    .map((token) => token.replace(/~1/g, "/").replace(/~0/g, "~"))
-    .some(isIdentityShapedSegment);
+    .map((token) => token.replace(/~1/g, "/").replace(/~0/g, "~"));
+}
+
+export function hasIdentityShapedPathSegment(path: string): boolean {
+  return decodedPathSegments(path).some(isIdentityShapedSegment);
+}
+
+// A recognised identity can also be used as an ordinary object key, and a legal
+// or trade name has no shape to match on. The document's own identity values are
+// therefore compared against decoded path segments as well as leaf values.
+function hasOwnIdentityPathSegment(path: string, ownIdentityValues: ReadonlySet<string>): boolean {
+  return decodedPathSegments(path).some((segment) =>
+    ownIdentityValues.has(segment.trim().toUpperCase()),
+  );
 }
 
 function filedReturnsSummaryArrayExpansion(
