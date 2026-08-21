@@ -312,6 +312,32 @@ describe("filed-return full-year workbook", () => {
     expect(numbers).not.toContain("1");
   });
 
+  it("refuses a total when a month is a numeric-looking string", () => {
+    const plan = fullYearPlan();
+    // "100" parses as a decimal, so it was summed into the total while its own
+    // month rendered `Non-numeric value` -- a figure asserting a sum containing a
+    // value the sheet had just declared unusable.
+    const summary = buildFiledReturnsSummarySheet(plan, [
+      {
+        path: "april-data.json",
+        bytes: new TextEncoder().encode(
+          '{"status":1,"data":{"lglnm":"Synthetic Legal Name","r3b":{"gstin":"27ABCDE1234F1Z0","ret_period":"042026","sup_details":{"osup_det":{"txval":"100"}}}}}',
+        ),
+      },
+    ]);
+    const workbook = buildFiledReturnsFullYearWorkbook(summary, plan, {
+      generatedAt: new Date("2026-08-19T12:00:00.000Z"),
+    });
+    const rows = parsedRows(text(extractStoredZipEntries(workbook), "xl/worksheets/sheet1.xml"));
+    const cells = [...rows.values()].flatMap((row) => [...row.values()]);
+    const texts = cells.map((cell) => cell.text ?? "");
+
+    expect(texts).toContain("Non-numeric value");
+    expect(texts).toContain("Total unavailable: a month is non-numeric");
+    // The parsed value must not appear as a figure anywhere.
+    expect(cells.map((cell) => cell.number ?? "")).not.toContain("100");
+  });
+
   it("dates the Source footer from local components, not UTC", () => {
     const originalTimeZone = process.env.TZ;
     process.env.TZ = "Asia/Kolkata";
@@ -579,7 +605,7 @@ describe("filed-return full-year workbook", () => {
     }
     expect(taxableValueRow?.get("E7")).toMatchObject({ number: 5, style: "2" });
     expect(taxableValueRow?.get("N7")).toMatchObject({
-      text: "Exact total unavailable: invalid source decimal",
+      text: "Total unavailable: a month is non-numeric",
       type: "inlineStr",
     });
   });

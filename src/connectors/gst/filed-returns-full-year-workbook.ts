@@ -29,6 +29,7 @@ export const FILED_RETURNS_FULL_YEAR_WORKBOOK_PATH = "full-year-workbook.xlsx";
 
 const FOOTER_VALUE_COLUMN_WIDTH = 58;
 const NON_NUMERIC_CELL_TEXT = "Non-numeric value";
+const NON_NUMERIC_TOTAL_TEXT = "Total unavailable: a month is non-numeric";
 const MONTH_COLUMN_WIDTH = 13;
 const MONTH_NAMES = [
   "Jan",
@@ -112,13 +113,21 @@ function consolidatedSheet(
       const presentValues = monthValues.filter(
         (value): value is StatementCellValue => value !== undefined,
       );
+      // A row with a non-numeric month has no total. Summing the rest would
+      // assert a figure that silently omits a month, and including the month
+      // was worse still: a JSON string like "100" parses as a decimal, so it was
+      // being added to a value the sheet had just marked unusable. Only the
+      // non-parsing case failed loudly, and only by accident.
+      const hasNonNumericMonth = presentValues.some((value) => !value.numeric);
       const total =
         presentValues.length === 0
           ? undefined
-          : exactTotalSpreadsheetValue(
-              presentValues.map((value) => value.sourceText),
-              presentValues.some((value) => value.number === null),
-            );
+          : hasNonNumericMonth
+            ? NON_NUMERIC_TOTAL_TEXT
+            : exactTotalSpreadsheetValue(
+                presentValues.map((value) => value.sourceText),
+                presentValues.some((value) => value.number === null),
+              );
       rows.push([
         { value: item.shortLabel },
         ...monthValues.map((value) =>
