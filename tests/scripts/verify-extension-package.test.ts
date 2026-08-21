@@ -76,6 +76,33 @@ describe("Pack extension package verifier", () => {
     expect(result.output).toContain("assets/absent-preloaded.css");
   });
 
+  it("rejects a package whose side panel is not bound to the panel page", async () => {
+    // Requiring panel.html to exist says nothing about whether the toolbar
+    // action reaches it. Without this the fixture below passes with no binding
+    // at all, and a package whose button does nothing clears every check.
+    const dir = await createPackage({}, (manifest) => {
+      delete manifest.side_panel;
+    });
+
+    const result = await runVerifier(dir);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("side panel");
+  });
+
+  it("rejects a package whose action still declares a popup", async () => {
+    // A default_popup takes precedence over the action's click event, so this
+    // package opens the popup while advertising a side panel.
+    const dir = await createPackage({}, (manifest) => {
+      (manifest.action as Record<string, unknown>).default_popup = "popup.html";
+    });
+
+    const result = await runVerifier(dir);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("must not declare a popup");
+  });
+
   it("accepts a non-stylesheet link to a file the package does not contain", async () => {
     // Reading attributes rather than one composed shape must not widen what
     // counts as a bundle. An icon link is not one, and failing the build on it
@@ -126,7 +153,10 @@ function page(head: string): string {
  * its markup and omits the bundles the default markup would have referenced, so
  * a test states only the reference it is about.
  */
-async function createPackage(pages: Record<string, string> = {}): Promise<string> {
+async function createPackage(
+  pages: Record<string, string> = {},
+  mutateManifest: (manifest: Record<string, unknown>) => void = () => {},
+): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), "pack-extension-package-"));
   createdDirs.push(dir);
 
@@ -135,8 +165,7 @@ async function createPackage(pages: Record<string, string> = {}): Promise<string
     await writeFile(path.join(dir, relativePath), contents);
   };
 
-  await write(
-    "manifest.json",
+  const manifest = JSON.parse(
     JSON.stringify({
       manifest_version: 3,
       name: "ComplyEaze Pack: GST Return Downloader",
@@ -148,6 +177,7 @@ async function createPackage(pages: Record<string, string> = {}): Promise<string
       icons: REQUIRED_ICONS,
       action: { default_title: "ComplyEaze Pack", default_icon: REQUIRED_ICONS },
       permissions: ["downloads", "offscreen", "scripting", "sidePanel", "storage"],
+      side_panel: { default_path: "panel.html" },
       host_permissions: [
         "https://www.gst.gov.in/*",
         "https://services.gst.gov.in/*",
@@ -156,7 +186,9 @@ async function createPackage(pages: Record<string, string> = {}): Promise<string
       ],
       content_security_policy: { extension_pages: "script-src 'self'; object-src 'self';" },
     }),
-  );
+  ) as Record<string, unknown>;
+  mutateManifest(manifest);
+  await write("manifest.json", JSON.stringify(manifest));
 
   for (const assetPath of [...Object.values(REQUIRED_ICONS), ...REQUIRED_BRAND_ASSETS]) {
     await write(assetPath, "synthetic asset");

@@ -460,7 +460,7 @@ describe("extension package verifier", () => {
     expect(packageJson.devDependencies["@playwright/test"]).toBe("1.62.1");
   });
 
-  it("keeps browser release verification fail-closed around popup, scripts, network, and runtime errors", async () => {
+  it("keeps browser release verification fail-closed around the panel, scripts, network, and runtime errors", async () => {
     const script = await readFile(
       path.join(rootDir, "scripts", "verify-extension-browser.mjs"),
       "utf8",
@@ -470,7 +470,7 @@ describe("extension package verifier", () => {
     expect(script).toContain("content-scripts/content.js");
     expect(script).not.toContain("content-scripts/gstr2b-capture-main.js");
     expect(script).toContain("Pack release must include only the approved content scripts.");
-    expect(script).toContain("assertPopupPageLoads");
+    expect(script).toContain("assertPanelPageLoads");
     expect(script).toContain("valid context state");
     expect(script).toContain("waitForFunction");
     expect(script).toContain("visibleWordmark");
@@ -517,6 +517,7 @@ async function createValidPackage(): Promise<string> {
       "Alpha: locally download GSTR-1/GSTR-3B files; private GSTR-2B downloads are source-build experimental.",
     homepage_url: "https://pack.complyeaze.com/gst",
     permissions: ["downloads", "offscreen", "scripting", "sidePanel", "storage"],
+    side_panel: { default_path: "panel.html" },
     host_permissions: [
       "https://www.gst.gov.in/*",
       "https://services.gst.gov.in/*",

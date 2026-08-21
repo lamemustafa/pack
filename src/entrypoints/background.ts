@@ -93,7 +93,25 @@ function installPackActionOpensSidePanel() {
       };
     }
   ).sidePanel;
-  void sidePanel?.setPanelBehavior?.({ openPanelOnActionClick: true }).catch(() => undefined);
+  void sidePanel
+    ?.setPanelBehavior?.({ openPanelOnActionClick: true })
+    .catch(() => installPackActionOpensPanelTab());
+  if (!sidePanel?.setPanelBehavior) installPackActionOpensPanelTab();
+}
+
+/**
+ * Opens the panel as an ordinary tab when the side panel cannot be armed.
+ *
+ * Without this the failure is silent and total: the popup is gone, so a browser
+ * that lacks `sidePanel` or rejects `setPanelBehavior` leaves a toolbar button
+ * that does nothing at all and explains nothing. A tab is a worse surface than
+ * the side panel and a far better one than a dead control, and it keeps a
+ * terminal state visible from outside rather than swallowed.
+ */
+function installPackActionOpensPanelTab() {
+  browser.action?.onClicked?.addListener?.(() => {
+    void browser.tabs.create({ url: browser.runtime.getURL("/panel.html") }).catch(() => undefined);
+  });
 }
 
 export default defineBackground(() => {

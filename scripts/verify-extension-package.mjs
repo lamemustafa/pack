@@ -124,6 +124,20 @@ for (const page of expectedPackagedPages) {
   await requireReferencedBundles(page, markup);
 }
 
+// A packaged panel page proves nothing about whether the toolbar action reaches
+// it. `default_popup` takes precedence over the action's click event, so a
+// package carrying both a side panel and a popup opens the popup, and a package
+// with neither has a toolbar button that does nothing. Both clear a check that
+// only asserts the page is present.
+if (manifest.side_panel?.default_path !== "panel.html") {
+  throw new Error(
+    `Extension must bind the side panel to panel.html: ${manifest.side_panel?.default_path ?? "absent"}`,
+  );
+}
+if (manifest.action?.default_popup !== undefined) {
+  throw new Error(`Extension action must not declare a popup: ${manifest.action.default_popup}`);
+}
+
 for (const permission of expectedPermissions) {
   if (!manifest.permissions?.includes(permission))
     throw new Error(`Missing required permission: ${permission}`);
