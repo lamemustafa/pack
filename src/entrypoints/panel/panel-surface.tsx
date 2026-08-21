@@ -299,7 +299,12 @@ function usePanelPresets(): [PanelPreset[], () => void] {
 // Compares whole presets rather than the fields believed to matter: a preset
 // that gained a time-dependent field would otherwise go stale again, silently.
 function presetsIdentity(presets: readonly PanelPreset[]): string {
-  return JSON.stringify(presets);
+  // The rendered period count is part of what the user is agreeing to, and it is
+  // NOT derivable from the preset alone: crossing an ordinary month boundary
+  // inside one financial year leaves `panelPresets()` byte-identical while the
+  // count rises, so a panel showing "2 periods" in June would accept a click in
+  // July and download three.
+  return JSON.stringify(presets.map((preset) => [preset, presetPeriodCount(preset)]));
 }
 
 /**

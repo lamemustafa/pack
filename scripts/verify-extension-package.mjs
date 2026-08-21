@@ -341,7 +341,7 @@ async function requireReferencedBundles(page, html) {
 // shipped as a passing build.
 function referencedAssetPaths(html) {
   const references = [];
-  html = withoutHtmlComments(html);
+  html = withoutInertMarkup(html);
   for (const attributes of htmlTags(html, "script")) {
     const src = attributes.get("src");
     if (src) references.push(src);
@@ -359,7 +359,7 @@ function referencedAssetPaths(html) {
 }
 
 /**
- * Blanks out comment bodies, preserving length so nothing else shifts.
+ * Blanks out comment and raw-text bodies, preserving length so nothing shifts.
  *
  * Scanning raw markup treats a commented-out `<script src=...>` as a live
  * reference, so a page carrying a disabled tag fails the build for an asset it
@@ -367,8 +367,29 @@ function referencedAssetPaths(html) {
  * that rejects a valid package blocks shipping, where the regex it replaced
  * merely failed to catch one.
  */
-function withoutHtmlComments(html) {
-  return html.replace(/<!--[\s\S]*?-->/g, (comment) => " ".repeat(comment.length));
+function withoutInertMarkup(html) {
+  const blank = (length) => " ".repeat(length);
+  let output = html.replace(/<!--[\s\S]*?-->/g, (comment) => blank(comment.length));
+  // A script or style BODY is raw text to an HTML parser, so tag-shaped text
+  // inside it is a string, not markup. `window.t = "<script src='/x.js'>"` was
+  // read as a live reference and failed the build for an asset nothing loads.
+  //
+  // The opening tag is located with the same quote-aware scanner the attribute
+  // reader uses, not a regex: `[^>]*` ends the tag at a `>` inside a quoted
+  // value, which would blank the tag's own `src` along with the body.
+  for (const tagName of ["script", "style"]) {
+    const openers = new RegExp(`<${tagName}(?=[\\s/>])`, "gi");
+    for (const opener of [...output.matchAll(openers)]) {
+      const attributesEnd = tagEnd(output, opener.index + opener[0].length);
+      if (attributesEnd === -1) continue;
+      const bodyStart = attributesEnd + 1;
+      const closeIndex = output.toLowerCase().indexOf(`</${tagName}`, bodyStart);
+      if (closeIndex === -1) continue;
+      output =
+        output.slice(0, bodyStart) + blank(closeIndex - bodyStart) + output.slice(closeIndex);
+    }
+  }
+  return output;
 }
 
 /** Yields each `<tagName ...>` open tag's attributes, lowercased and unquoted. */

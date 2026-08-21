@@ -588,6 +588,22 @@ describe("packaged page reference parsing", () => {
     expect(result.status).toBe(0);
   });
 
+  it("ignores tag-shaped text inside an inline script body", async () => {
+    // A script body is raw text to an HTML parser, so a tag-shaped string in it
+    // is a string. Scanning it as markup failed the build for an asset nothing
+    // loads.
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      page(`<script>window.template = "<script src='/assets/ghost.js'>";</script>`),
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(0);
+  });
+
   it("ignores a commented-out reference to a file the package does not contain", async () => {
     // Scanning raw markup treated a disabled tag as live, so a page carrying a
     // commented-out script failed the build for an asset it never loads. A gate
