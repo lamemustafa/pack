@@ -2,7 +2,14 @@ import { describe, expect, it } from "vitest";
 import { panelPresets, presetPeriodCount } from "../../src/entrypoints/panel/panel-presets";
 import { FULL_FISCAL_YEAR_PERIOD } from "../../src/connectors/gst/filed-returns-scope";
 import { FILED_RETURNS_RETURN_TYPES } from "../../src/connectors/gst/filed-returns-return-types";
-import { supportsFiledReturnsArtifactType } from "../../src/connectors/gst/filed-returns-artifacts";
+import {
+  normaliseFiledReturnsArtifactType,
+  supportsFiledReturnsArtifactType,
+} from "../../src/connectors/gst/filed-returns-artifacts";
+import {
+  filedReturnsCapabilityArtifactLabel,
+  filedReturnsCapabilitySummary,
+} from "../../src/connectors/gst/filed-returns-capabilities";
 
 const ASOF = new Date("2026-08-21T00:00:00.000Z");
 
@@ -41,9 +48,27 @@ describe("panel presets", () => {
     }
   });
 
-  it("describes each return from the capability table rather than a hand-written string", () => {
-    const details = panelPresets(ASOF).map((preset) => preset.detail);
-    expect(details.every((detail) => detail.length > 0)).toBe(true);
-    expect(new Set(details).size).toBe(details.length);
+  it("describes the artifact its own scope requests, from the capability table", () => {
+    for (const preset of panelPresets(ASOF)) {
+      expect(preset.detail).toBe(
+        filedReturnsCapabilityArtifactLabel(
+          preset.scope.returnType,
+          normaliseFiledReturnsArtifactType(preset.scope.returnType, preset.scope.artifactType),
+        ),
+      );
+      // The capability *summary* is what the presets used to borrow. GSTR-1's names an
+      // Excel workbook no preset scope asks the portal for.
+      expect(preset.detail).not.toBe(filedReturnsCapabilitySummary(preset.scope.returnType));
+    }
+  });
+
+  it("labels every preset from the scope normalisation actually produced", () => {
+    // 10 April 2026 IST: FY 2026-27 has begun with no completed period, so the requested
+    // year is not the year the run will walk.
+    const april = new Date("2026-04-10T09:00:00+05:30");
+    for (const preset of panelPresets(april)) {
+      expect(preset.scope.financialYear).toBe("2025-26");
+      expect(preset.label).toBe(`2025-26 ${preset.scope.returnType}`);
+    }
   });
 });
