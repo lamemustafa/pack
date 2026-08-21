@@ -124,6 +124,27 @@ function getInlineStatusCopy(
     const filenameOverridden =
       summary?.flowStep.safeSignals.includes("download-filename-overridden") ||
       summary?.flowStep.safeSignals.includes("zip-download-filename-overridden");
+    /**
+     * A full-year run carries two separate facts, and `status: "complete"` only
+     * knows the first: every period was fetched. `canCompleteFullFiscalYearLedger`
+     * requires each target to be positive and says nothing about the final ZIP,
+     * so this branch used to announce "12 periods saved as one ZIP" while the
+     * delivery line three rows below read "browser download not confirmed" --
+     * both on screen, from one run. The ZIP claim was the false one: it asserted
+     * a delivery from a state that cannot observe it, and would have said the
+     * same had the ZIP never arrived.
+     */
+    const zipConfirmed = summary?.flowStep.safeSignals.includes(
+      "full-fiscal-year-zip-downloaded",
+    );
+    if (isFullYear && !filenameOverridden && !zipConfirmed) {
+      return {
+        body: `${periods} periods were fetched. Pack has not confirmed the browser saved the ZIP -- check browser Downloads.`,
+        icon: "!",
+        title: "Periods fetched, ZIP unconfirmed",
+        tone: "warning",
+      };
+    }
     return {
       body: filenameOverridden
         ? (summary?.flowStep.safeMessage ??
