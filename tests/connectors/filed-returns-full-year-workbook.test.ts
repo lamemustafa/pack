@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { buildFiledReturnsFullYearWorkbook } from "../../src/connectors/gst/filed-returns-full-year-workbook";
 import {
@@ -338,6 +339,139 @@ describe("filed-return full-year workbook", () => {
     expect(cells.map((cell) => cell.number ?? "")).not.toContain("100");
   });
 
+  it("withholds every total and names an unavailable workbook period", () => {
+    const plan = FILED_RETURNS_MONTHS.map((period) => ({
+      artifactType: "JSON" as const,
+      entryNames: period === "April" ? ["april-data.json"] : [],
+      financialYear: "2026-27",
+      outcomeCategory:
+        period === "April"
+          ? ("staged" as const)
+          : period === "May"
+            ? ("artifact-unavailable" as const)
+            : ("not-filed" as const),
+      period,
+      returnType: "GSTR-3B" as const,
+    }));
+    const summary = buildFiledReturnsSummarySheet(plan, [
+      {
+        path: "april-data.json",
+        bytes: new TextEncoder().encode(
+          '{"data":{"lglnm":"Synthetic Legal Name","r3b":{"gstin":"27ABCDE1234F1Z0","ret_period":"042026","sup_details":{"osup_det":{"txval":1}}}}}',
+        ),
+      },
+    ]);
+    const rows = parsedRows(
+      text(
+        extractStoredZipEntries(
+          buildFiledReturnsFullYearWorkbook(summary, plan, {
+            generatedAt: new Date("2026-08-20T12:00:00.000Z"),
+          }),
+        ),
+        "xl/worksheets/sheet1.xml",
+      ),
+    );
+    const taxableValueRow = rows.find((row) => row.get("A7")?.text === "Taxable Value");
+    const coverageRow = rows.find((row) => row.values().next().value?.text === "Coverage");
+
+    expect(taxableValueRow?.get("N7")).toBeUndefined();
+    expect(statementTotalCells(rows)).toEqual([]);
+    expect([...coverageRow!.values()][1]?.text).toContain("Unreadable periods: May.");
+  });
+
+  it("keeps totals when a period was not filed", () => {
+    const valuesByPeriod = new Map(
+      FILED_RETURNS_MONTHS.map((period, index) => [period, index + 1]),
+    );
+    const plan = FILED_RETURNS_MONTHS.map((period) => ({
+      artifactType: "JSON" as const,
+      entryNames: period === "May" ? [] : [`${period.toLowerCase()}-data.json`],
+      financialYear: "2026-27",
+      outcomeCategory: period === "May" ? ("not-filed" as const) : ("staged" as const),
+      period,
+      returnType: "GSTR-3B" as const,
+    }));
+    const summary = buildFiledReturnsSummarySheet(
+      plan,
+      plan
+        .filter((entry) => entry.outcomeCategory === "staged")
+        .map((entry) =>
+          gstr3bStatementEntry(entry.period, { txval: valuesByPeriod.get(entry.period)! }),
+        ),
+    );
+    const rows = workbookRows(summary, plan);
+    const taxableValueRow = rows.find((row) => row.get("A7")?.text === "Taxable Value");
+
+    expect(taxableValueRow?.get("N7")).toMatchObject({ number: 76, style: "2" });
+  });
+
+  it("keeps totals when a parsed period omits a particular statement field", () => {
+    const plan = FILED_RETURNS_MONTHS.map((period) => ({
+      artifactType: "JSON" as const,
+      entryNames: [`${period.toLowerCase()}-data.json`],
+      financialYear: "2026-27",
+      outcomeCategory: "staged" as const,
+      period,
+      returnType: "GSTR-3B" as const,
+    }));
+    const summary = buildFiledReturnsSummarySheet(
+      plan,
+      plan.map((entry) =>
+        gstr3bStatementEntry(entry.period, entry.period === "May" ? { iamt: 2 } : { txval: 1 }),
+      ),
+    );
+    const rows = workbookRows(summary, plan);
+    const taxableValueRow = rows.find((row) => row.get("A7")?.text === "Taxable Value");
+
+    expect(taxableValueRow?.get("N7")).toMatchObject({ number: 11, style: "2" });
+  });
+
+  it("keeps a fully filed workbook byte-identical", () => {
+    const plan = FILED_RETURNS_MONTHS.map((period) => ({
+      artifactType: "JSON" as const,
+      entryNames: [`${period.toLowerCase()}-data.json`],
+      financialYear: "2026-27",
+      outcomeCategory: "staged" as const,
+      period,
+      returnType: "GSTR-3B" as const,
+    }));
+    const summary = buildFiledReturnsSummarySheet(
+      plan,
+      plan.map((entry) => gstr3bStatementEntry(entry.period, { txval: 1 })),
+    );
+    const workbook = buildFiledReturnsFullYearWorkbook(summary, plan, {
+      generatedAt: new Date("2026-08-20T12:00:00.000Z"),
+    });
+
+    expect(createHash("sha256").update(workbook).digest("hex")).toBe(
+      "1c422254db34b883c2dcb251a63667ebbd15e6195458765b0070f42bdd86e1af",
+    );
+  });
+
+  it("withholds every total when staged JSON cannot be parsed", () => {
+    const plan = FILED_RETURNS_MONTHS.map((period) => ({
+      artifactType: "JSON" as const,
+      entryNames:
+        period === "April" || period === "May" ? [`${period.toLowerCase()}-data.json`] : [],
+      financialYear: "2026-27",
+      outcomeCategory:
+        period === "April" || period === "May" ? ("staged" as const) : ("not-filed" as const),
+      period,
+      returnType: "GSTR-3B" as const,
+    }));
+    const summary = buildFiledReturnsSummarySheet(plan, [
+      gstr3bStatementEntry("April", { txval: 1 }),
+      { path: "may-data.json", bytes: new TextEncoder().encode("{") },
+    ]);
+    const rows = workbookRows(summary, plan);
+    const taxableValueRow = rows.find((row) => row.get("A7")?.text === "Taxable Value");
+    const coverageRow = rows.find((row) => row.values().next().value?.text === "Coverage");
+
+    expect(taxableValueRow?.get("N7")).toBeUndefined();
+    expect(statementTotalCells(rows)).toEqual([]);
+    expect([...coverageRow!.values()][1]?.text).toContain("Unreadable periods: May.");
+  });
+
   it("dates the Source footer from local components, not UTC", () => {
     const originalTimeZone = process.env.TZ;
     process.env.TZ = "Asia/Kolkata";
@@ -429,7 +563,7 @@ describe("filed-return full-year workbook", () => {
         artifactType: "JSON" as const,
         entryNames: staged ? [`${period.toLowerCase()}-data.json`] : [],
         financialYear: "2026-27",
-        outcomeCategory: staged ? ("staged" as const) : ("artifact-unavailable" as const),
+        outcomeCategory: staged ? ("staged" as const) : ("not-filed" as const),
         period,
         returnType: "GSTR-3B" as const,
       };
@@ -515,7 +649,7 @@ describe("filed-return full-year workbook", () => {
         artifactType: "JSON" as const,
         entryNames: staged ? [`${period.toLowerCase()}-data.json`] : [],
         financialYear: "2026-27",
-        outcomeCategory: staged ? ("staged" as const) : ("artifact-unavailable" as const),
+        outcomeCategory: staged ? ("staged" as const) : ("not-filed" as const),
         period,
         returnType: "GSTR-3B" as const,
       };
@@ -564,9 +698,7 @@ describe("filed-return full-year workbook", () => {
       artifactType: "JSON" as const,
       entryNames: staged.includes(period) ? [`${period.toLowerCase()}-data.json`] : [],
       financialYear: "2026-27",
-      outcomeCategory: staged.includes(period)
-        ? ("staged" as const)
-        : ("artifact-unavailable" as const),
+      outcomeCategory: staged.includes(period) ? ("staged" as const) : ("not-filed" as const),
       period,
       returnType: "GSTR-3B" as const,
     }));
@@ -611,6 +743,51 @@ describe("filed-return full-year workbook", () => {
   });
 });
 
+function workbookRows(
+  summary: ReturnType<typeof buildFiledReturnsSummarySheet>,
+  plan: readonly FiledReturnsSummaryPlanEntry[],
+): Map<string, ParsedCell>[] {
+  return parsedRows(
+    text(
+      extractStoredZipEntries(
+        buildFiledReturnsFullYearWorkbook(summary, plan, {
+          generatedAt: new Date("2026-08-20T12:00:00.000Z"),
+        }),
+      ),
+      "xl/worksheets/sheet1.xml",
+    ),
+  );
+}
+
+function gstr3bStatementEntry(period: FiledReturnsMonth, values: Record<string, number>) {
+  return {
+    path: `${period.toLowerCase()}-data.json`,
+    bytes: new TextEncoder().encode(
+      JSON.stringify({
+        data: {
+          lglnm: "Synthetic Legal Name",
+          r3b: {
+            gstin: "27ABCDE1234F1Z0",
+            ret_period: period,
+            sup_details: { osup_det: values },
+          },
+        },
+      }),
+    ),
+  };
+}
+
+function statementTotalCells(rows: readonly Map<string, ParsedCell>[]) {
+  const statementLabels = new Set<string>(
+    filedReturnsStatementLineItems(filingPeriodsForFinancialYear("2026-27")).map(
+      (lineItem) => lineItem.shortLabel,
+    ),
+  );
+  return rows
+    .filter((row) => statementLabels.has(row.values().next().value?.text ?? ""))
+    .flatMap((row) => [...row.entries()].filter(([reference]) => reference.startsWith("N")));
+}
+
 function textValues(row: Map<string, ParsedCell> | undefined): Array<string | undefined> {
   return row ? [...row.values()].map((cell) => cell.text) : [];
 }
@@ -623,7 +800,7 @@ function fullYearPlan(
     artifactType: "JSON",
     entryNames: period === populatedPeriod ? [`${period.toLowerCase()}-data.json`] : [],
     financialYear,
-    outcomeCategory: period === populatedPeriod ? "staged" : "artifact-unavailable",
+    outcomeCategory: period === populatedPeriod ? "staged" : "not-filed",
     period,
     returnType: "GSTR-3B",
   }));
