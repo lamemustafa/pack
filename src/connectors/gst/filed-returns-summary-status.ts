@@ -124,6 +124,9 @@ function filedReturnsSummaryFailureReason(signals: ReadonlySet<string>): string 
   if (signals.has("full-fiscal-year-summary-error:identity-unverified")) {
     return "the taxpayer identity was not present at its expected place in the portal response; review the original return in the GST Portal, then retry";
   }
+  if (signals.has("full-fiscal-year-summary-error:identity-conflict")) {
+    return "filed-return sources disagreed about the taxpayer identity; re-download the affected periods from the GST Portal, then retry";
+  }
   if (signals.has("full-fiscal-year-summary-error:privacy-rejected")) {
     return "Pack's privacy boundary rejected the source data; review the original return in the GST Portal, then retry";
   }

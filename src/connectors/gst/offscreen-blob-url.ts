@@ -175,6 +175,7 @@ export type PackOffscreenFiledReturnSummaryResult =
 // or dropped during recovery.
 export const PACK_OFFSCREEN_FILED_RETURN_SUMMARY_ERROR_CATEGORIES = [
   "generation-failed",
+  "identity-conflict",
   "identity-rejected",
   "identity-unverified",
   "privacy-rejected",

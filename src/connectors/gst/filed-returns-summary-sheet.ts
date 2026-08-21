@@ -102,8 +102,15 @@ export class FiledReturnsSummaryTooLargeError extends Error {
 }
 
 export class FiledReturnsSummaryForbiddenFieldError extends SyntaxError {}
+export class FiledReturnsSummaryIdentityConflictError extends SyntaxError {}
 export class FiledReturnsSummaryInvalidGstinError extends SyntaxError {}
 export class FiledReturnsSummaryUncanonicalIdentityError extends SyntaxError {}
+
+// Names the rejection without naming what conflicted: the values are the
+// taxpayer's identity and the paths are portal data, and neither may reach a
+// terminal message. It says what happened and what the user can do about it.
+const IDENTITY_CONFLICT_MESSAGE =
+  "Filed-return sources conflict about the taxpayer identity. Re-download the affected periods from the GST Portal, then retry.";
 
 interface ParsedPlanEntry {
   identityLeaves: FlatJsonLeaf[];
@@ -184,32 +191,9 @@ export function buildFiledReturnsSummarySheet(
 
   rejectForbiddenFields(parsedEntries);
   const identities = collectIdentityValues(parsedEntries);
+  const ownIdentityValues = collectOwnIdentityValues(parsedEntries);
   const dataRows: FiledReturnsSummaryDataRow[] = [];
   for (const parsed of parsedEntries) {
-    // Path-based redaction cannot cover every alias a portal might use, so the
-    // taxpayer's own identifier under an unrecognised field name would reach
-    // value_text. It is withheld by value as well as by path.
-    //
-    // Deliberately scoped to *this document's own* identity rather than any
-    // GSTIN-shaped text. A counterparty GSTIN is business data the summary
-    // exists to report -- across 120 captured documents there are 3,171 such
-    // values, all `ctin`, and withholding them would empty the most useful
-    // column of a GSTR-2B CSV while withholding nothing the user does not
-    // already hold in the original artifact beside it.
-    const ownIdentityValues = new Set(
-      parsed.identityLeaves
-        // Both contexts, not taxpayer identity alone: the canonical `arn` leaf is
-        // already removed by path, so a duplicate of it under an unrecognised
-        // alias must be too, or the redaction depends on which name the portal
-        // happened to use.
-        .filter((leaf) => filedReturnsSummaryIdentity(leaf.path) !== null)
-        .map((leaf) => leaf.value)
-        .filter((value): value is string => typeof value === "string" && value.length > 0)
-        // Compared case-insensitively: the portal's casing is not guaranteed to
-        // be repeated under an unrecognised alias, and an identifier differing
-        // only in case is the same identifier.
-        .map((value) => value.trim().toUpperCase()),
-    );
     const fieldLeaves = parsed.leaves.filter(
       (leaf) =>
         !isFiledReturnsSummaryIdentityPath(leaf.path) &&
@@ -261,6 +245,42 @@ export function buildFiledReturnsSummarySheet(
   }
 }
 
+// Path-based redaction cannot cover every alias a portal might use, so the
+// taxpayer's own identifier under an unrecognised field name would reach
+// value_text. It is withheld by value as well as by path.
+//
+// Collected across every parsed entry and applied to all of them, because
+// identity belongs to the taxpayer and not to one period: a value the portal
+// names canonically in one month can reappear in another under an unrecognised
+// alias, and a set rebuilt per entry would emit it there. Measured against the
+// maintainer's captured corpus -- 127 documents, 7,387 flattened leaves --
+// widening the set from per-entry to cross-entry withholds no additional leaf.
+//
+// Deliberately scoped to *the taxpayer's own* identity rather than any
+// GSTIN-shaped text. A counterparty GSTIN is business data the summary exists
+// to report -- across 120 captured documents there are 3,171 such values, all
+// `ctin`, and withholding them would empty the most useful column of a GSTR-2B
+// CSV while withholding nothing the user does not already hold in the original
+// artifact beside it.
+function collectOwnIdentityValues(parsedEntries: readonly ParsedPlanEntry[]): ReadonlySet<string> {
+  return new Set(
+    parsedEntries.flatMap((parsed) =>
+      parsed.identityLeaves
+        // Both contexts, not taxpayer identity alone: the canonical `arn` leaf is
+        // already removed by path, so a duplicate of it under an unrecognised
+        // alias must be too, or the redaction depends on which name the portal
+        // happened to use.
+        .filter((leaf) => filedReturnsSummaryIdentity(leaf.path) !== null)
+        .map((leaf) => leaf.value)
+        .filter((value): value is string => typeof value === "string" && value.length > 0)
+        // Compared case-insensitively: the portal's casing is not guaranteed to
+        // be repeated under an unrecognised alias, and an identifier differing
+        // only in case is the same identifier.
+        .map((value) => value.trim().toUpperCase()),
+    ),
+  );
+}
+
 function rejectForbiddenFields(parsedEntries: readonly ParsedPlanEntry[]): void {
   for (const parsed of parsedEntries) {
     for (const leaf of parsed.leaves) rejectForbiddenFieldPath(leaf.path);
@@ -291,7 +311,7 @@ function collectIdentityValues(parsedEntries: readonly ParsedPlanEntry[]): Summa
       const identityKey = `${descriptor.contextType}:${contextKey}:${descriptor.label}`;
       const existingInEntry = identityInEntry.get(identityKey);
       if (existingInEntry && existingInEntry.value !== leaf.value) {
-        throw new SyntaxError("Inconsistent taxpayer identity in filed-return summary source.");
+        throw new FiledReturnsSummaryIdentityConflictError(IDENTITY_CONFLICT_MESSAGE);
       }
       if (!existingInEntry || compareCodeUnits(leaf.path, existingInEntry.fieldPath) < 0) {
         identityInEntry.set(identityKey, {
@@ -335,7 +355,7 @@ function collectIdentityValues(parsedEntries: readonly ParsedPlanEntry[]): Summa
           : `${identity.contextKey}:${identity.label}`;
       const existing = target.get(targetKey);
       if (existing && existing.value !== identity.value) {
-        throw new SyntaxError("Inconsistent taxpayer identity in filed-return summary source.");
+        throw new FiledReturnsSummaryIdentityConflictError(IDENTITY_CONFLICT_MESSAGE);
       }
       if (!existing || compareCodeUnits(identity.fieldPath, existing.fieldPath) < 0) {
         target.set(targetKey, identity);

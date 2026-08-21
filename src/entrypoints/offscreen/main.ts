@@ -15,6 +15,7 @@ import { createZip, type ZipEntry } from "./zip";
 import {
   buildFiledReturnsSummarySheet,
   FiledReturnsSummaryForbiddenFieldError,
+  FiledReturnsSummaryIdentityConflictError,
   FiledReturnsSummaryInvalidGstinError,
   FiledReturnsSummaryUncanonicalIdentityError,
   FILED_RETURNS_SUMMARY_SHEET_PATH,
@@ -285,9 +286,11 @@ function createSummaryEntry(
               ? "identity-rejected"
               : error instanceof FiledReturnsSummaryUncanonicalIdentityError
                 ? "identity-unverified"
-                : error instanceof Error && error.name === "FiledReturnsSummaryTooLargeError"
-                  ? "too-large"
-                  : "generation-failed",
+                : error instanceof FiledReturnsSummaryIdentityConflictError
+                  ? "identity-conflict"
+                  : error instanceof Error && error.name === "FiledReturnsSummaryTooLargeError"
+                    ? "too-large"
+                    : "generation-failed",
       },
     };
   }
