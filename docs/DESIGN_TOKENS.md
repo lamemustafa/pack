@@ -60,8 +60,10 @@ its effective background was recomputed.
 
 ## The roles
 
-Grouped as they are defined. Surfaces run lightest ground to darkest fill; every ink passes AA
-against every surface.
+Grouped as they are defined. Surfaces run lightest ground to darkest fill. Each ink passes AA
+against the surfaces it is actually paired with — not against every surface: inverse ink belongs on
+inverse surfaces, and 27 of the 63 possible combinations fail. See `DESIGN.md` for the measurement
+and issue #171 for the absent detector.
 
 - **Surface** — `surface`, `surface-raised`, `surface-muted`, `canvas`, `surface-inset`,
   `surface-accent-soft`, `surface-sunken`, `surface-accent`, `surface-accent-strong`,

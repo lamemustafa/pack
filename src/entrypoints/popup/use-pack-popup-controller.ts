@@ -33,6 +33,11 @@ export function usePackPopupController() {
     React.useState<FiledReturnsFlowSummary | null>(null);
   const [busy, setBusy] = React.useState<string | null>(null);
   const [actionError, setActionError] = React.useState<string | null>(null);
+  // `actionError` is shared with flow actions, so a successful context refresh
+  // must clear only an error the context read itself produced. Clearing it
+  // unconditionally wiped an unrelated download failure whenever the panel
+  // regained focus.
+  const contextErrorPending = React.useRef(false);
   const showActionError = React.useCallback((message: string) => {
     setActionError(message);
     setStatus(message);
@@ -83,11 +88,15 @@ export function usePackPopupController() {
       const response = await sendPackMessage({ type: "PACK_GET_CONTEXT" });
       if (response.ok && "context" in response) {
         setContext(response.context);
-        // A refresh that succeeds clears the error a previous refresh set.
-        // getPopupPresentationState reads actionError before the refreshed
-        // context, so leaving it would keep a recovered surface showing a
-        // failure that no longer applies.
-        setActionError(null);
+        // A refresh that succeeds clears the error a previous refresh set, and
+        // only that: getPopupPresentationState reads actionError before the
+        // refreshed context, so leaving a context error would keep a recovered
+        // surface showing a failure that no longer applies — while clearing a
+        // flow failure would hide one that still does.
+        if (contextErrorPending.current) {
+          contextErrorPending.current = false;
+          setActionError(null);
+        }
         setStatus(
           response.context?.supported
             ? "GST context detected."
@@ -95,8 +104,10 @@ export function usePackPopupController() {
         );
         return;
       }
+      contextErrorPending.current = true;
       showActionError(response.ok ? "Unexpected Pack response." : response.error);
     } catch {
+      contextErrorPending.current = true;
       showActionError("Pack could not read the current GST Portal state. Try again.");
     }
   }, [showActionError]);
