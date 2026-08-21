@@ -31,8 +31,9 @@ export interface PanelPreset {
 
 /**
  * The default view offers one preset per return type: that return, for the whole current
- * financial year. This is the shape the market leader sells ("whole financial year in one
- * click") and the shape a full-year run already supports end to end.
+ * financial year — the shape a full-year run already supports end to end.
+ *
+ * The competitive rationale for this shape is recorded in the private knowledge hub, not here.
  */
 export function panelPresets(asOf = new Date()): PanelPreset[] {
   const financialYear = getFiledReturnsFinancialYearOptions(asOf)[0];
