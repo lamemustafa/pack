@@ -33,23 +33,41 @@ durable full-year, or stable-release claims.
   `6ee4be24cafbe15db69275cac4da6b212f3de49b0f747eb9909eed7d293347c6`.
 - Repository source and the GitHub release are the pre-1.0 `v0.5.1` beta. <!-- x-release-please-version -->
   It is published as a pre-release.
-  The Chrome Web Store package for `v0.5.0` is submitted and in review as a
-  draft; it is not approved, published, or live.
-  `v0.3.2` remains the last confirmed Store publication and the only basis for
-  current Store-published public claims.
-- The `v0.5.0` beta does not expand Store-facing, durable full-year, or
-  universal live-period/format claims. Synthetic regression coverage of target
-  binding, artifact selection, and recovery is not a substitute for the
-  authorised live-evidence gate below.
-- V0 purpose: download filed GSTR-3B PDFs, GSTR-1 summary PDFs, and optional
-  GSTR-1 e-invoice details Excel files locally from the user's active,
-  manually authenticated GST Portal session when the GST Portal exposes those
-  artifacts.
-- Full fiscal year download exists as a source-build alpha local per-period
-  ledger that runs eligible GSTR-3B or GSTR-1 periods through the
-  single-period path after user initiation. Store-facing V0 must not advertise
-  it until exact-ZIP clean-profile, real-browser restart/resume,
-  reconciliation, and privacy-review evidence are recorded for the release.
+  The Chrome Web Store package for `v0.5.0` is **published and live** as a
+  pre-1.0 beta. It supersedes `v0.3.2`, which was previously recorded here as
+  the last confirmed Store publication.
+  `v0.5.0` is therefore the basis for current Store-published public claims,
+  and any statement about what users have installed must be read against it.
+- Publication does not by itself expand Store-facing durable full-year or
+  universal live-period/format claims: those still depend on the live-evidence
+  gate below, and synthetic regression coverage of target binding, artifact
+  selection, and recovery is not a substitute for it. What publication does
+  change is the consequence of a gap — a claim that outruns its evidence is now
+  in front of users rather than waiting in review.
+- V0 purpose: download filed GSTR-3B PDFs, GSTR-1 summary PDFs, optional
+  GSTR-1 e-invoice details Excel files, and GSTR-2B summary artifacts locally
+  from the user's active, manually authenticated GST Portal session when the
+  GST Portal exposes those artifacts.
+- GSTR-2B is **in scope**, not experimental. It runs the same user-initiated,
+  evidence-backed download path as the other return types, and the derived
+  full-year summary CSV is produced for it. It has no consolidated workbook —
+  that remains GSTR-3B only — so a GSTR-2B run reports the absence rather than
+  emitting a blank or mislabelled one. The Chrome Web Store listing description
+  still calls GSTR-2B "source-build experimental" and is now inconsistent with
+  this; correcting it changes live Store copy and is tracked separately.
+- Full fiscal year download is a local per-period ledger that runs eligible
+  periods through the single-period path after user initiation. The four gates
+  below are what it must satisfy before Store-facing V0 advertises it:
+  exact-ZIP clean-profile, real-browser restart/resume, reconciliation, and
+  privacy-review evidence.
+  The decision on how to reach that state is to **record the gates and keep one
+  binary** — full-year is advertised once it has earned it, rather than being
+  compiled out of Store builds and left present in source builds. Two artifacts
+  that behave differently would make the binary the source of truth for what
+  Pack offers, and would mean live evidence covers a build users never receive.
+  Of the four gates, privacy-review evidence is recorded: an independent review
+  of the summary identity scoping was run and its findings were fixed and
+  verified. The remaining three require an authenticated live run.
 - V0 does not collect GST Portal credentials, OTPs, CAPTCHA responses, cookies,
   or session tokens, and does not log or upload GST document contents. The
   source-build capture path may use temporary local OPFS staging for an explicit
@@ -357,9 +375,9 @@ version here.
 
 ## Not Yet Stable Or Broad-Claim Ready Until
 
-The last confirmed Store publication is `v0.3.2`; the past `v0.4.0` package was
-uploaded but not published, and the `v0.5.0` package is submitted and in review
-as a draft. The source-build alpha full-year workflow has maintainer evidence
+The current Store publication is the `v0.5.0` pre-1.0 beta, which is published
+and live; the past `v0.4.0` package was uploaded but never published, and
+`v0.3.2` is superseded. The source-build alpha full-year workflow has maintainer evidence
 for automatic local downloads after user initiation. Pack must not claim stable
 Chrome Web Store maturity,
 store-facing full-year availability, durable restart-safe full-year support,
