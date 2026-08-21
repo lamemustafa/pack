@@ -38,6 +38,12 @@ export default defineConfig({
       default_icon: PACK_EXTENSION_ACTION_DEFAULT_ICON,
       default_title: PACK_EXTENSION_SHORT_NAME,
     },
+    // The action deliberately declares no popup. One registered here takes
+    // precedence over the action's click event, and that click is what opens
+    // the side panel.
+    side_panel: {
+      default_path: "panel.html",
+    },
     options_ui: {
       page: "options.html",
       open_in_tab: true,

@@ -5,12 +5,12 @@ import { describe, expect, it } from "vitest";
 const rootDir = process.cwd();
 
 describe("Pack brand surfaces", () => {
-  it("uses Pack iconography in popup and options UI sources", async () => {
-    const popupSource = await readFile(
-      path.join(rootDir, "src", "entrypoints", "popup", "main.tsx"),
+  it("uses Pack iconography in panel and options UI sources", async () => {
+    const panelSource = await readFile(
+      path.join(rootDir, "src", "entrypoints", "panel", "panel-surface.tsx"),
       "utf8",
     );
-    const popupControllerSource = await readFile(
+    const panelControllerSource = await readFile(
       path.join(rootDir, "src", "entrypoints", "popup", "use-pack-popup-controller.ts"),
       "utf8",
     );
@@ -19,14 +19,14 @@ describe("Pack brand surfaces", () => {
       "utf8",
     );
 
-    expect(popupSource).toContain("/brand/pack-logo-header.svg");
-    expect(popupSource).not.toContain("ReviewerTools");
-    expect(popupSource).not.toContain("PACK_CLEAR_LOCAL_DATA");
-    expect(popupControllerSource).toContain("PACK_ACKNOWLEDGE_INTERRUPTED_RUN");
-    expect(popupControllerSource).toContain("PACK_RETRY_FILED_RETURNS_TARGET");
-    expect(popupControllerSource).toContain("PACK_RESOLVE_UNCONFIRMED_DOWNLOAD");
-    expect(popupControllerSource).toContain("PACK_RETRY_FULL_FISCAL_YEAR_TARGET");
-    expect(popupControllerSource).toContain("PACK_RESOLVE_FULL_FISCAL_YEAR_TARGET");
+    expect(panelSource).toContain("/brand/pack-mark.svg");
+    expect(panelSource).not.toContain("ReviewerTools");
+    expect(panelSource).not.toContain("PACK_CLEAR_LOCAL_DATA");
+    expect(panelControllerSource).toContain("PACK_ACKNOWLEDGE_INTERRUPTED_RUN");
+    expect(panelControllerSource).toContain("PACK_RETRY_FILED_RETURNS_TARGET");
+    expect(panelControllerSource).toContain("PACK_RESOLVE_UNCONFIRMED_DOWNLOAD");
+    expect(panelControllerSource).toContain("PACK_RETRY_FULL_FISCAL_YEAR_TARGET");
+    expect(panelControllerSource).toContain("PACK_RESOLVE_FULL_FISCAL_YEAR_TARGET");
     expect(optionsSource).toContain("/icons/icon-48.png");
     expect(optionsSource).toContain("PACK_START_SYNTHETIC_DEMO");
     expect(optionsSource).toContain("runSyntheticDemo(false)");
@@ -39,8 +39,8 @@ describe("Pack brand surfaces", () => {
   });
 
   it("declares the Pack favicon on extension pages", async () => {
-    const popupHtml = await readFile(
-      path.join(rootDir, "src", "entrypoints", "popup", "index.html"),
+    const panelHtml = await readFile(
+      path.join(rootDir, "src", "entrypoints", "panel", "index.html"),
       "utf8",
     );
     const optionsHtml = await readFile(
@@ -48,13 +48,13 @@ describe("Pack brand surfaces", () => {
       "utf8",
     );
 
-    expect(popupHtml).toContain('href="/brand/pack-favicon.svg"');
+    expect(panelHtml).toContain('href="/brand/pack-favicon.svg"');
     expect(optionsHtml).toContain('href="/brand/pack-favicon.svg"');
   });
 
-  it("keeps the browser-action popup compact and task-first", async () => {
-    const popupSource = await readFile(
-      path.join(rootDir, "src", "entrypoints", "popup", "main.tsx"),
+  it("keeps the panel surface compact and task-first", async () => {
+    const panelSource = await readFile(
+      path.join(rootDir, "src", "entrypoints", "panel", "panel-surface.tsx"),
       "utf8",
     );
     const globalCss = await readFile(path.join(rootDir, "src", "styles", "global.css"), "utf8");
@@ -76,7 +76,7 @@ describe("Pack brand surfaces", () => {
     expect(globalCss).toContain("cursor: not-allowed;");
     expect(popupComponentsSource).toContain("Download GST returns");
     expect(packSummarySource).toContain("Your pack");
-    expect(popupSource).toContain("InlineStatus");
+    expect(panelSource).toContain("InlineStatus");
     expect(popupCss).toContain(".inline-status");
     expect(popupCss).toContain("overflow-y: auto;");
     expect(popupCss).not.toContain("border-left-width: 3px;");

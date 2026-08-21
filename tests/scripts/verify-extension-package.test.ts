@@ -31,7 +31,7 @@ describe("Pack extension package verifier", () => {
     // The replaced regexes matched only double-quoted attributes, so this
     // package verified clean while shipping a page whose script is not there.
     const dir = await createPackage({
-      "popup.html": page(`<script type="module" src='/assets/absent-single-quoted.js'></script>`),
+      "panel.html": page(`<script type="module" src='/assets/absent-single-quoted.js'></script>`),
     });
 
     const result = await runVerifier(dir);
@@ -43,7 +43,7 @@ describe("Pack extension package verifier", () => {
   it("rejects a stylesheet whose href precedes its rel and whose file is absent", async () => {
     // The replaced regex required `rel` before `href`; HTML does not.
     const dir = await createPackage({
-      "popup.html": page(`<link href="/assets/absent-reordered.css" rel="stylesheet">`),
+      "panel.html": page(`<link href="/assets/absent-reordered.css" rel="stylesheet">`),
     });
 
     const result = await runVerifier(dir);
@@ -56,7 +56,7 @@ describe("Pack extension package verifier", () => {
     // `[^>]+` ended the tag at the `>` inside the attribute value, losing the
     // `src` that followed it.
     const dir = await createPackage({
-      "popup.html": page(`<script data-note="a>b" src="/assets/absent-bracketed.js"></script>`),
+      "panel.html": page(`<script data-note="a>b" src="/assets/absent-bracketed.js"></script>`),
     });
 
     const result = await runVerifier(dir);
@@ -67,7 +67,7 @@ describe("Pack extension package verifier", () => {
 
   it("rejects a stylesheet declared through a multi-token rel", async () => {
     const dir = await createPackage({
-      "popup.html": page(`<link rel="preload stylesheet" href="/assets/absent-preloaded.css">`),
+      "panel.html": page(`<link rel="preload stylesheet" href="/assets/absent-preloaded.css">`),
     });
 
     const result = await runVerifier(dir);
@@ -81,7 +81,7 @@ describe("Pack extension package verifier", () => {
     // counts as a bundle. An icon link is not one, and failing the build on it
     // would reject a legitimate package.
     const dir = await createPackage({
-      "popup.html": page(`<link rel="icon" href="/assets/unpackaged-icon.png">`),
+      "panel.html": page(`<link rel="icon" href="/assets/unpackaged-icon.png">`),
     });
 
     const result = await runVerifier(dir);
@@ -115,7 +115,7 @@ const REQUIRED_BRAND_ASSETS = [
   "brand/pack-logo-reversed-outlined.svg",
 ];
 
-const REQUIRED_PAGES = ["offscreen.html", "options.html", "panel.html", "popup.html"];
+const REQUIRED_PAGES = ["offscreen.html", "options.html", "panel.html"];
 
 function page(head: string): string {
   return `<!doctype html><html><head>${head}</head><body>Pack</body></html>`;
@@ -147,7 +147,7 @@ async function createPackage(pages: Record<string, string> = {}): Promise<string
       version: "0.0.0",
       icons: REQUIRED_ICONS,
       action: { default_title: "ComplyEaze Pack", default_icon: REQUIRED_ICONS },
-      permissions: ["downloads", "offscreen", "scripting", "storage"],
+      permissions: ["downloads", "offscreen", "scripting", "sidePanel", "storage"],
       host_permissions: [
         "https://www.gst.gov.in/*",
         "https://services.gst.gov.in/*",

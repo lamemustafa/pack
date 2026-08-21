@@ -38,7 +38,7 @@ const expectedIcons = {
 // Every page the built extension is expected to serve. A build that silently dropped one
 // of these still produced a loadable extension with a dead surface behind it, and nothing
 // here noticed: offscreen.html was the only page asserted.
-const expectedPackagedPages = ["offscreen.html", "options.html", "panel.html", "popup.html"];
+const expectedPackagedPages = ["offscreen.html", "options.html", "panel.html"];
 const expectedPackagedBrandAssets = [
   "favicon.ico",
   "icons/icon-256.png",
@@ -56,7 +56,7 @@ const expectedPackagedBrandAssets = [
   "brand/pack-logo-reversed.svg",
   "brand/pack-logo-reversed-outlined.svg",
 ];
-const expectedPermissions = ["downloads", "offscreen", "scripting", "storage"];
+const expectedPermissions = ["downloads", "offscreen", "scripting", "sidePanel", "storage"];
 const expectedHostPermissions = [
   "https://www.gst.gov.in/*",
   "https://services.gst.gov.in/*",

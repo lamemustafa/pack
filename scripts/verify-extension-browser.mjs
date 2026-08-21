@@ -274,7 +274,7 @@ async function waitForServiceWorker(browserContext, extensionId) {
       })
       .catch(() => null);
     try {
-      await wakePage.goto(`chrome-extension://${extensionId}/popup.html`, {
+      await wakePage.goto(`chrome-extension://${extensionId}/panel.html`, {
         waitUntil: "domcontentloaded",
       });
       serviceWorker =
@@ -336,12 +336,12 @@ async function assertOptionsPageLoads(browserContext, extensionId) {
 }
 
 async function assertPopupPageLoads(browserContext, extensionId) {
-  const popupPage = await browserContext.newPage();
-  attachPageLogging(popupPage);
-  await popupPage.goto(`chrome-extension://${extensionId}/popup.html`);
-  await popupPage.waitForLoadState("domcontentloaded");
-  await popupPage.waitForSelector(".popup-shell", { timeout: 5_000 });
-  await popupPage.waitForFunction(
+  const panelPage = await browserContext.newPage();
+  attachPageLogging(panelPage);
+  await panelPage.goto(`chrome-extension://${extensionId}/panel.html`);
+  await panelPage.waitForLoadState("domcontentloaded");
+  await panelPage.waitForSelector(".popup-shell", { timeout: 5_000 });
+  await panelPage.waitForFunction(
     () =>
       document.body.textContent?.includes("Checking this tab") ||
       document.body.textContent?.includes("Open the GST Portal to use Pack") ||
@@ -349,7 +349,7 @@ async function assertPopupPageLoads(browserContext, extensionId) {
     undefined,
     { timeout: 5_000 },
   );
-  const popupState = await popupPage.evaluate(() => {
+  const popupState = await panelPage.evaluate(() => {
     const wordmark = document.querySelector(".popup-wordmark");
     const wordmarkRect = wordmark?.getBoundingClientRect();
     const visibleWordmark =
@@ -396,7 +396,7 @@ async function assertPopupPageLoads(browserContext, extensionId) {
       )}`,
     );
   }
-  await popupPage.close();
+  await panelPage.close();
 }
 
 async function assertApprovedContentScript(browserContext, serviceWorker) {

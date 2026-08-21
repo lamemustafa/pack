@@ -34,39 +34,39 @@ describe("extension package verifier", () => {
 
   it("rejects an empty extension page", async () => {
     const outputDir = await createValidPackage();
-    await writePackageFile(outputDir, "popup.html", "");
+    await writePackageFile(outputDir, "panel.html", "");
 
     // An empty page references nothing, so a bundle check alone would pass it.
     const result = await runVerifier(outputDir);
     expect(result.status).toBe(1);
-    expect(result.output).toContain("Required extension page is empty: popup.html");
+    expect(result.output).toContain("Required extension page is empty: panel.html");
   });
 
   it("rejects a page whose referenced bundle is missing", async () => {
     const outputDir = await createValidPackage();
-    await rm(path.join(outputDir, "chunks", "popup.js"));
+    await rm(path.join(outputDir, "chunks", "panel.js"));
 
     // A page that can be read is not a page that works.
     const result = await runVerifier(outputDir);
     expect(result.status).toBe(1);
-    expect(result.output).toContain("Missing asset referenced by popup.html: chunks/popup.js");
+    expect(result.output).toContain("Missing asset referenced by panel.html: chunks/panel.js");
   });
 
   it("rejects a page whose referenced bundle is empty", async () => {
     const outputDir = await createValidPackage();
-    await writePackageFile(outputDir, "chunks/popup.js", "");
+    await writePackageFile(outputDir, "chunks/panel.js", "");
 
     const result = await runVerifier(outputDir);
     expect(result.status).toBe(1);
-    expect(result.output).toContain("Asset referenced by popup.html is empty");
+    expect(result.output).toContain("Asset referenced by panel.html is empty");
   });
 
   it("accepts packaged HTML without module preload hints", async () => {
     const outputDir = await createValidPackage();
     await writePackageFile(
       outputDir,
-      "popup.html",
-      '<!doctype html><html><body><script type="module" src="/chunks/popup.js"></script></body></html>',
+      "panel.html",
+      '<!doctype html><html><body><script type="module" src="/chunks/panel.js"></script></body></html>',
     );
 
     const result = await runVerifier(outputDir);
@@ -416,7 +416,7 @@ describe("extension package verifier", () => {
   it("rejects a package missing any extension page", async () => {
     // A build that dropped a page still loaded as an extension, with a dead surface behind
     // the action. Only offscreen.html was asserted, so nothing failed.
-    for (const page of ["offscreen.html", "options.html", "panel.html", "popup.html"]) {
+    for (const page of ["offscreen.html", "options.html", "panel.html"]) {
       const outputDir = await createValidPackage();
       await rm(path.join(outputDir, page));
 
@@ -478,10 +478,10 @@ describe("extension package verifier", () => {
     expect(script).toContain("shellRect.width > 460");
     expect(script).toContain("https://services.gst.gov.in/services/auth/fowelcome");
     expect(script).toContain("readLoadedExtensionIdFromPreferences");
-    expect(script).toContain("chrome-extension://${extensionId}/popup.html");
+    expect(script).toContain("chrome-extension://${extensionId}/panel.html");
     expect(script).toContain('waitForEvent("serviceworker"');
     expect(script.indexOf('waitForEvent("serviceworker"')).toBeLessThan(
-      script.indexOf("wakePage.goto(`chrome-extension://${extensionId}/popup.html`"),
+      script.indexOf("wakePage.goto(`chrome-extension://${extensionId}/panel.html`"),
     );
     expect(script).toContain("findExtensionServiceWorker(browserContext, extensionId)");
     expect(script).toContain(
@@ -516,7 +516,7 @@ async function createValidPackage(): Promise<string> {
     description:
       "Alpha: locally download GSTR-1/GSTR-3B files; private GSTR-2B downloads are source-build experimental.",
     homepage_url: "https://pack.complyeaze.com/gst",
-    permissions: ["downloads", "offscreen", "scripting", "storage"],
+    permissions: ["downloads", "offscreen", "scripting", "sidePanel", "storage"],
     host_permissions: [
       "https://www.gst.gov.in/*",
       "https://services.gst.gov.in/*",
@@ -544,7 +544,7 @@ async function createValidPackage(): Promise<string> {
   };
 
   await writePackageFile(outputDir, "manifest.json", `${JSON.stringify(manifest, null, 2)}\n`);
-  for (const page of ["offscreen.html", "options.html", "panel.html", "popup.html"]) {
+  for (const page of ["offscreen.html", "options.html", "panel.html"]) {
     const chunk = `chunks/${page.replace(".html", ".js")}`;
     await writePackageFile(
       outputDir,

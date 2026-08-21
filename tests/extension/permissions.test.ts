@@ -33,6 +33,7 @@ describe("extension permission posture", () => {
       "downloads",
       "offscreen",
       "scripting",
+      "sidePanel",
       "storage",
     ]);
     expect(PACK_EXTENSION_PERMISSIONS).not.toContain("cookies");
