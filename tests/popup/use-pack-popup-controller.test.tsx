@@ -143,6 +143,38 @@ describe("popup background failure presentation", () => {
       }),
     );
     await vi.waitFor(() => expect(controller?.lastRunSummary).toEqual(completedSummary));
+
+    // Clearing local data removes the key, so the change carries no newValue.
+    // A surface that stays open must stop rendering the summary that no longer
+    // exists; the short-lived popup hid this, the panel page does not.
+    mocks.sendMessage.mockImplementation((message: PackMessage) => {
+      if (message.type === "PACK_GET_CONTEXT") {
+        return Promise.resolve({
+          ok: true,
+          context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
+        });
+      }
+      if (message.type === "PACK_GET_FILED_RETURNS_FLOW_SUMMARY") {
+        return Promise.resolve({ ok: true, flowSummary: null });
+      }
+      return Promise.resolve({ ok: true });
+    });
+    const chosenScope = controller?.scope;
+
+    await act(async () => {
+      mocks.changeListeners.forEach((listener) =>
+        listener(
+          { "pack:last-filed-returns-flow-summary": { oldValue: completedSummary } },
+          "session",
+        ),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await vi.waitFor(() => expect(controller?.lastRunSummary).toBeNull());
+    // The scope is the user's own selection and must survive a clear.
+    expect(controller?.scope).toEqual(chosenScope);
     await act(async () => root?.unmount());
   });
 });

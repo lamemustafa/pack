@@ -156,13 +156,10 @@ and it puts taxpayer data in scope for no benefit.
 | `docs/PUBLICATION_READINESS.md`                                      | what may and may not be claimed                                            |
 | `.github/PULL_REQUEST_TEMPLATE.md`                                   | the gated PR body sections                                                 |
 
-Also read the private knowledge hub if it is checked out nearby — it is the `brain` repo, cloned
-as a sibling of this one. Relevant entries:
-
-- `30-market/competitors/gst-return-downloader-extensions.md`
-- `10-domains/12-gst/gst-portal-automation-invariants.md`
-- `10-domains/14-browser-extensions/mv3-download-and-automation-constraints.md`
-- `40-decisions/duplicated-contract-failure-mode.md`
+Also read the private knowledge hub if it is checked out nearby: https://github.com/lamemustafa/brain,
+cloned as a sibling of this one. Search it for the competitor, GST portal, MV3 download and
+duplicated-contract material rather than following a path list — this repo is public, and entry
+paths disclose the hub's organisation even when their contents stay out.
 
 **Nothing from `brain` may be quoted, pasted or paraphrased into this public repo.** Use it to
 inform your judgement, then state your conclusion in your own words from public evidence. If a

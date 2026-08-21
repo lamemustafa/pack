@@ -101,16 +101,22 @@ export function usePackPopupController() {
       changes: Record<string, Browser.storage.StorageChange>,
       areaName: string,
     ) => {
+      // Reacting to the key changing at all, not to it gaining a value: a
+      // removal carries no `newValue`, so clearing local data left an already
+      // open surface rendering a summary that no longer exists. The popup is
+      // short-lived enough to have hidden this; the panel page is not.
       if (
         areaName !== "session" ||
-        !changes[PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary]?.newValue
+        !changes[PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary]
       ) {
         return;
       }
       void sendPackMessage({ type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" }).then((response) => {
-        if (!response.ok || !("flowSummary" in response) || !response.flowSummary) return;
-        setFiledReturnsFlowSummary(response.flowSummary);
-        setScopeState(response.flowSummary.scope);
+        if (!response.ok || !("flowSummary" in response)) return;
+        setFiledReturnsFlowSummary(response.flowSummary ?? null);
+        // The scope is the user's own selection, so it is only adopted from a
+        // summary that exists; a clear must not silently reset what they chose.
+        if (response.flowSummary) setScopeState(response.flowSummary.scope);
       });
     };
     browser.storage.onChanged.addListener(onChanged);
