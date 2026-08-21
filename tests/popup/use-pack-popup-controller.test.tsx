@@ -74,6 +74,34 @@ describe("popup background failure presentation", () => {
     });
   });
 
+  it("keeps a flow failure when a later context refresh succeeds", async () => {
+    mocks.sendMessage.mockImplementation((message: PackMessage) =>
+      message.type === "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW"
+        ? Promise.reject(new Error("worker unavailable"))
+        : Promise.resolve({
+            ok: true,
+            context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
+          }),
+    );
+
+    await act(async () => {
+      await controller?.startFiledReturnsFlow();
+    });
+    expect(controller?.actionError).toBe(
+      "Pack could not reach the background service. Try the action again.",
+    );
+
+    // A successful context refresh must not clear a failure it did not cause.
+    await act(async () => {
+      await controller?.refreshPortalContext();
+    });
+
+    expect(controller?.actionError).toBe(
+      "Pack could not reach the background service. Try the action again.",
+    );
+    await act(async () => root?.unmount());
+  });
+
   it("renders a safe action error when the background message rejects", async () => {
     mocks.sendMessage.mockImplementation((message: PackMessage) =>
       message.type === "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW"
