@@ -198,9 +198,11 @@ export function buildFiledReturnsSummarySheet(
     // already hold in the original artifact beside it.
     const ownIdentityValues = new Set(
       parsed.identityLeaves
-        .filter(
-          (leaf) => filedReturnsSummaryIdentity(leaf.path)?.contextType === "taxpayer_identity",
-        )
+        // Both contexts, not taxpayer identity alone: the canonical `arn` leaf is
+        // already removed by path, so a duplicate of it under an unrecognised
+        // alias must be too, or the redaction depends on which name the portal
+        // happened to use.
+        .filter((leaf) => filedReturnsSummaryIdentity(leaf.path) !== null)
         .map((leaf) => leaf.value)
         .filter((value): value is string => typeof value === "string" && value.length > 0)
         // Compared case-insensitively: the portal's casing is not guaranteed to

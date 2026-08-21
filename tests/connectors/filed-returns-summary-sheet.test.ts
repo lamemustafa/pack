@@ -63,6 +63,29 @@ describe("filed-return full-year summary sheet", () => {
     expect(dataCsv).toContain("29ZZZZZ9999Z9Z9");
   });
 
+  it("withholds a filing identity repeated under an unrecognised alias", () => {
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-3B")],
+      [
+        {
+          path: "april-data.json",
+          bytes: new TextEncoder().encode(
+            '{"status":1,"data":{"lglnm":"Synthetic Legal Name","arn":"SYNTHETIC-ARN-APRIL","r3b":{"gstin":"27ABCDE1234F1Z0","ret_period":"042026","reference_number":"SYNTHETIC-ARN-APRIL","sup_details":{"osup_det":{"txval":1}}}}}',
+          ),
+        },
+      ],
+    );
+
+    const dataCsv = new TextDecoder().decode(summary.dataBytes);
+    // The canonical arn leaf is already withheld by path; the duplicate must be
+    // too, or redaction depends on which name the portal happened to use. The
+    // value still reaches the context rows, so it is withheld from the data
+    // rows rather than lost.
+    expect(dataCsv).not.toContain("SYNTHETIC-ARN-APRIL");
+    expect(summary.contextRows.map((row) => row.valueText)).toContain("SYNTHETIC-ARN-APRIL");
+    expect(dataCsv).toContain("/sup_details/osup_det/txval");
+  });
+
   it("withholds a leaf whose object key is the taxpayer's own name", () => {
     const summary = buildFiledReturnsSummarySheet(
       [jsonPlan("April", "april-data.json", "GSTR-3B")],
