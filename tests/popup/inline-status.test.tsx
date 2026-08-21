@@ -91,7 +91,27 @@ describe("full-year completion claim", () => {
 
     expect(markup).not.toContain("saved as one ZIP");
     expect(markup).toContain("ZIP unconfirmed");
-    expect(markup).toContain("12 periods were fetched");
+    expect(markup).toContain("12 periods processed");
+  });
+
+  it("does not send the user to Downloads when no ZIP was ever meant to exist", () => {
+    // Every period positively not-filed produces no ZIP by design. Telling the
+    // user to check Downloads for it is the same contradiction, reversed.
+    const markup = renderToStaticMarkup(
+      <InlineStatus
+        busy={null}
+        portalReady
+        onOpenPortal={vi.fn()}
+        onRestartTarget={vi.fn()}
+        onRetryFullFiscalYearTarget={vi.fn()}
+        onRetryTarget={vi.fn()}
+        presentation={completePresentation}
+        summary={fullYearSummary(["full-fiscal-year-no-zip-artifacts"])}
+      />,
+    );
+
+    expect(markup).not.toContain("ZIP unconfirmed");
+    expect(markup).not.toContain("check browser Downloads");
   });
 
   it("claims the ZIP only once a download is correlated", () => {

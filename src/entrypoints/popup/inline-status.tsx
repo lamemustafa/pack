@@ -135,11 +135,22 @@ function getInlineStatusCopy(
      * same had the ZIP never arrived.
      */
     const zipConfirmed = summary?.flowStep.safeSignals.includes("full-fiscal-year-zip-downloaded");
-    if (isFullYear && !filenameOverridden && !zipConfirmed) {
+    // A run where every period was positively not-filed produces no ZIP BY
+    // DESIGN and says so through its own signal. Treating that absence as an
+    // unconfirmed download would send the user hunting in Downloads for a file
+    // Pack deliberately never created -- the same contradiction this branch
+    // exists to remove, pointed the other way.
+    const noZipExpected = summary?.flowStep.safeSignals.includes(
+      "full-fiscal-year-no-zip-artifacts",
+    );
+    if (isFullYear && !filenameOverridden && !zipConfirmed && !noZipExpected) {
       return {
-        body: `${periods} periods were fetched. Pack has not confirmed the browser saved the ZIP -- check browser Downloads.`,
+        // `completedPeriods` counts downloaded AND not-filed targets, so these
+        // are periods Pack finished with, not files it fetched. "Fetched" would
+        // claim a download for every period the portal reported nothing for.
+        body: `${periods} periods processed. Pack has not confirmed the browser saved the ZIP -- check browser Downloads.`,
         icon: "!",
-        title: "Periods fetched, ZIP unconfirmed",
+        title: "Periods processed, ZIP unconfirmed",
         tone: "warning",
       };
     }
