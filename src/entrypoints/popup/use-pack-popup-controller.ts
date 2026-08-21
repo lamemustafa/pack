@@ -67,6 +67,35 @@ export function usePackPopupController() {
       .catch(() => showActionError("Pack could not read the current GST Portal state. Try again."));
   }, [showActionError]);
 
+  /**
+   * Re-reads the portal context on demand.
+   *
+   * The popup is short-lived and the mount read above is all it can ever need. The panel is
+   * an ordinary extension page that stays mounted while the user opens, signs into, or
+   * navigates the GST tab, so it calls this when its own document regains focus and would
+   * otherwise show portal state from whenever it was opened.
+   *
+   * Deliberately narrower than the mount effect: re-running that would also reset `scope`
+   * from the saved run, discarding a selection the user is part-way through making.
+   */
+  const refreshPortalContext = React.useCallback(async () => {
+    try {
+      const response = await sendPackMessage({ type: "PACK_GET_CONTEXT" });
+      if (response.ok && "context" in response) {
+        setContext(response.context);
+        setStatus(
+          response.context?.supported
+            ? "GST context detected."
+            : "Pack is dormant until you start an action.",
+        );
+        return;
+      }
+      showActionError(response.ok ? "Unexpected Pack response." : response.error);
+    } catch {
+      showActionError("Pack could not read the current GST Portal state. Try again.");
+    }
+  }, [showActionError]);
+
   React.useEffect(() => {
     const onChanged = (
       changes: Record<string, Browser.storage.StorageChange>,
@@ -291,6 +320,7 @@ export function usePackPopupController() {
     filedReturnsObservation,
     lastRunSummary: filedReturnsFlowSummary,
     recoverySummary,
+    refreshPortalContext,
     resolveFullFiscalYearTarget,
     resolveUnconfirmedDownload,
     retryFiledReturnsTarget,
