@@ -341,6 +341,7 @@ async function requireReferencedBundles(page, html) {
 // shipped as a passing build.
 function referencedAssetPaths(html) {
   const references = [];
+  html = withoutHtmlComments(html);
   for (const attributes of htmlTags(html, "script")) {
     const src = attributes.get("src");
     if (src) references.push(src);
@@ -355,6 +356,19 @@ function referencedAssetPaths(html) {
     if (href) references.push(href);
   }
   return references;
+}
+
+/**
+ * Blanks out comment bodies, preserving length so nothing else shifts.
+ *
+ * Scanning raw markup treats a commented-out `<script src=...>` as a live
+ * reference, so a page carrying a disabled tag fails the build for an asset it
+ * never loads. That is worse than the gap this scanner closed: a release gate
+ * that rejects a valid package blocks shipping, where the regex it replaced
+ * merely failed to catch one.
+ */
+function withoutHtmlComments(html) {
+  return html.replace(/<!--[\s\S]*?-->/g, (comment) => " ".repeat(comment.length));
 }
 
 /** Yields each `<tagName ...>` open tag's attributes, lowercased and unquoted. */

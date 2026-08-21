@@ -2,6 +2,7 @@ import React from "react";
 import { browser } from "wxt/browser";
 import type { FiledReturnsFlowSummary } from "../../connectors/gst/filed-returns-contracts";
 import { isFullFiscalYearScope } from "../../connectors/gst/filed-returns-scope";
+import type { FiledReturnsDownloadScope } from "../../connectors/gst/filed-returns-contracts";
 import { ScopeForm } from "../popup/components";
 import { ContextState } from "../popup/context-state";
 import {
@@ -132,7 +133,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
                       className="panel-choice"
                       type="button"
                       disabled={blockedReason !== null}
-                      onClick={() => void pack.startFiledReturnsFlow(preset.scope)}
+                      onClick={() => void pack.startFiledReturnsFlow(startScopeFor(preset.id))}
                     >
                       <span>{preset.label}</span>
                       <span className="panel-choice-detail">
@@ -240,6 +241,26 @@ function useReturnToPage(onReturn: () => void) {
       document.removeEventListener("visibilitychange", handle);
     };
   }, [onReturn]);
+}
+
+/**
+ * Re-derives the preset's scope at the moment of the click.
+ *
+ * Return-to-page signals catch the common case, but a panel left as the active
+ * tab overnight receives neither `focus` nor `visibilitychange`, so it can cross
+ * the April-to-May boundary with April's normalised financial year still on
+ * screen. The label would be stale, which is cosmetic; the scope handed to the
+ * background would be stale too, which downloads the wrong year.
+ *
+ * Reading the scope again here means the click cannot submit a basis older than
+ * itself, whatever the rendered label says, and needs no timer to do it. If the
+ * two ever disagree the label is the wrong one, and it corrects on the next
+ * render.
+ */
+function startScopeFor(presetId: string): FiledReturnsDownloadScope {
+  const preset = panelPresets().find((candidate) => candidate.id === presetId);
+  if (!preset) throw new Error(`Unknown panel preset: ${presetId}`);
+  return preset.scope;
 }
 
 /**

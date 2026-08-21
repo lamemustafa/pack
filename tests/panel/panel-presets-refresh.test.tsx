@@ -21,8 +21,12 @@ let root: Root | null = null;
 let container: Element;
 
 function realmEvent(win: JSDOM["window"], type: string): Event {
-  const { Event: RealmEvent } = win as unknown as { Event: new (type: string) => Event };
-  return new RealmEvent(type);
+  // The event must come from this realm for dispatchEvent to accept it, and a
+  // click needs to bubble to reach React's delegated listener.
+  const { Event: RealmEvent } = win as unknown as {
+    Event: new (type: string, init?: { bubbles?: boolean }) => Event;
+  };
+  return new RealmEvent(type, { bubbles: true });
 }
 
 async function mount() {
@@ -107,5 +111,58 @@ describe("panel preset staleness", () => {
     dom.window.dispatchEvent(realmEvent(dom.window, "focus"));
 
     expect(container.textContent).not.toContain("2026-27 GSTR-3B");
+  });
+});
+
+describe("preset scope at click time", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(BEFORE_BOUNDARY);
+    dom = new JSDOM("<div id='root'></div>", {
+      pretendToBeVisual: true,
+      url: "https://extension.test",
+    });
+    Object.assign(globalThis, { document: dom.window.document, window: dom.window });
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    container = dom.window.document.getElementById("root") as Element;
+  });
+
+  afterEach(async () => {
+    if (root) await act(async () => root?.unmount());
+    root = null;
+    vi.useRealTimers();
+  });
+
+  it("submits the year current at the click, not the year rendered at mount", async () => {
+    // A panel left as the active tab overnight receives neither focus nor
+    // visibilitychange, so it can cross the boundary with April's basis on
+    // screen. The label going stale is cosmetic; the submitted scope going
+    // stale downloads the wrong year.
+    const started: { financialYear: string }[] = [];
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(
+        <PanelSurface
+          pack={panelController({
+            startFiledReturnsFlow: (async (scope?: { financialYear: string }) => {
+              if (scope) started.push(scope);
+            }) as never,
+          })}
+        />,
+      );
+      await Promise.resolve();
+    });
+    expect(container.textContent).toContain("2025-26 GSTR-3B");
+
+    vi.setSystemTime(AFTER_BOUNDARY);
+    const button = Array.from(container.querySelectorAll("button")).find((candidate) =>
+      candidate.textContent?.includes("2025-26 GSTR-3B"),
+    );
+    await act(async () => {
+      button?.dispatchEvent(realmEvent(dom.window, "click"));
+      await Promise.resolve();
+    });
+
+    expect(started.map((scope) => scope.financialYear)).toEqual(["2026-27"]);
   });
 });

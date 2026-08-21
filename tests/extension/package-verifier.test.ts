@@ -505,6 +505,106 @@ describe("extension package verifier", () => {
   });
 });
 
+describe("packaged page reference parsing", () => {
+  // These drive the same script and the same fixture as the suite above. They
+  // began as a separate file with its own hand-maintained manifest, host set,
+  // page list and brand assets -- a second copy of everything `createValidPackage`
+  // already owns, which is the duplication this repo keeps paying for.
+  const page = (head: string) =>
+    `<!doctype html><html><head>${head}</head><body>Pack</body></html>`;
+
+  it("rejects a single-quoted script reference whose bundle is absent", async () => {
+    // The replaced regexes matched only double-quoted attributes, so this
+    // package verified clean while shipping a page whose script is not there.
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      page(`<script type="module" src='/assets/absent-single-quoted.js'></script>`),
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("assets/absent-single-quoted.js");
+  });
+
+  it("rejects a stylesheet whose href precedes its rel and whose file is absent", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      page(`<link href="/assets/absent-reordered.css" rel="stylesheet">`),
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("assets/absent-reordered.css");
+  });
+
+  it("rejects a reference whose tag carries an angle bracket inside a quoted value", async () => {
+    // `[^>]+` ended the tag at the `>` inside the attribute value, losing the
+    // `src` that followed it.
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      page(`<script data-note="a>b" src="/assets/absent-bracketed.js"></script>`),
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("assets/absent-bracketed.js");
+  });
+
+  it("rejects a stylesheet declared through a multi-token rel", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      page(`<link rel="preload stylesheet" href="/assets/absent-preloaded.css">`),
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("assets/absent-preloaded.css");
+  });
+
+  it("accepts a non-stylesheet link to a file the package does not contain", async () => {
+    // Reading attributes rather than one composed shape must not widen what
+    // counts as a bundle. An icon link is not one.
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      page(`<link rel="icon" href="/assets/unpackaged-icon.png">`),
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(0);
+  });
+
+  it("ignores a commented-out reference to a file the package does not contain", async () => {
+    // Scanning raw markup treated a disabled tag as live, so a page carrying a
+    // commented-out script failed the build for an asset it never loads. A gate
+    // that rejects a valid package is worse than one that misses a case.
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      page(`<!-- <script type="module" src='/assets/removed.js'></script> -->`),
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(0);
+  });
+});
+
 async function createValidPackage(): Promise<string> {
   const outputDir = await mkdtemp(path.join(tmpdir(), "pack-extension-"));
   createdDirs.push(outputDir);
