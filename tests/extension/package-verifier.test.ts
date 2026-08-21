@@ -23,6 +23,15 @@ describe("extension package verifier", () => {
     expect(result.output).toContain("Pack WXT extension package verification passed.");
   });
 
+  it("rejects an empty required brand asset", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(outputDir, "brand/pack-mark.svg", "");
+
+    const result = await runVerifier(outputDir);
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("Required brand asset is empty: brand/pack-mark.svg");
+  });
+
   it("rejects an empty extension page", async () => {
     const outputDir = await createValidPackage();
     await writePackageFile(outputDir, "popup.html", "");
