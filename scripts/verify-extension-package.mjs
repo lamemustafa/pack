@@ -104,7 +104,13 @@ for (const [size, iconPath] of Object.entries(expectedIcons)) {
 }
 
 for (const assetPath of expectedPackagedBrandAssets) {
-  await requirePackagedFile(assetPath, "required brand asset");
+  const bytes = await requirePackagedFile(assetPath, "required brand asset");
+  // Present is not the same as usable. A zero-byte mark passes an existence
+  // check and every scan that follows, while the surface referencing it renders
+  // nothing -- the same distinction the page and bundle checks already make.
+  if (bytes.byteLength === 0) {
+    throw new Error(`Required brand asset is empty: ${assetPath}`);
+  }
 }
 
 for (const page of expectedPackagedPages) {
