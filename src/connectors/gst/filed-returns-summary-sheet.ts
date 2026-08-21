@@ -388,7 +388,11 @@ function isValidGstin(value: string): boolean {
   const checkCodePoint =
     (GSTIN_CHECK_CHARACTERS.length - (sum % GSTIN_CHECK_CHARACTERS.length)) %
     GSTIN_CHECK_CHARACTERS.length;
-  return value === `${prefix}${GSTIN_CHECK_CHARACTERS[checkCodePoint]}`;
+  // Compared case-insensitively: the format accepts either case and the checksum
+  // upper-cases its inputs, so a case-sensitive comparison here rejected an
+  // otherwise valid GSTIN whose check character is lower case — a false
+  // rejection that would take the whole summary with it.
+  return value.toUpperCase() === `${prefix.toUpperCase()}${GSTIN_CHECK_CHARACTERS[checkCodePoint]}`;
 }
 
 function outcomeRow(

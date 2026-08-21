@@ -246,6 +246,26 @@ describe("filed-return full-year summary sheet", () => {
     expect(dataCsv).toContain("/sup_details/osup_det/txval");
   });
 
+  it("accepts a valid GSTIN whose check character is lower case", () => {
+    // 27ABCDE1000F1ZC is checksum-valid and its check character is alphabetic,
+    // so casing is observable here in a way a digit check character hides.
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-3B")],
+      [
+        {
+          path: "april-data.json",
+          bytes: new TextEncoder().encode(
+            '{"status":1,"data":{"lglnm":"Synthetic Legal Name","r3b":{"gstin":"27ABCDE1000F1Zc","ret_period":"042026","sup_details":{"osup_det":{"txval":1}}}}}',
+          ),
+        },
+      ],
+    );
+
+    // Rejecting it would fail the whole summary for an identifier the portal
+    // considers valid.
+    expect(new TextDecoder().decode(summary.dataBytes)).toContain("/sup_details/osup_det/txval");
+  });
+
   it("withholds a compound identity alias split across path segments", () => {
     const summary = buildFiledReturnsSummarySheet(
       [jsonPlan("April", "april-data.json", "GSTR-3B")],
