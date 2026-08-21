@@ -15,7 +15,7 @@ import { getPopupPresentationState, isGstSignInRequired } from "../popup/present
 import { RecoveryActions, hasRecoveryActions } from "../popup/recovery-actions";
 import { getScopeFormStartAction } from "../popup/scope-form-model";
 import type { usePackPopupController } from "../popup/use-pack-popup-controller";
-import { panelPresets, presetPeriodCount, type PanelView } from "./panel-presets";
+import { panelPresets, presetPeriodCount, type PanelPreset, type PanelView } from "./panel-presets";
 
 export type PackPanelController = ReturnType<typeof usePackPopupController>;
 
@@ -26,7 +26,7 @@ export type PackPanelController = ReturnType<typeof usePackPopupController>;
  */
 export function PanelSurface({ pack }: { pack: PackPanelController }) {
   const [view, setView] = React.useState<PanelView>("presets");
-  const presets = React.useMemo(() => panelPresets(), []);
+  const presets = usePanelPresets();
 
   const summary = pack.recoverySummary ?? pack.scopedFlowSummary;
   const presentation = getPopupPresentationState(
@@ -214,18 +214,67 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
  * event. That case is left to the user's next interaction rather than answered with a poll.
  */
 function usePortalContextRefresh(refresh: () => Promise<void>) {
-  React.useEffect(() => {
-    const onReturn = () => {
-      if (document.visibilityState !== "visible") return;
+  useReturnToPage(
+    React.useCallback(() => {
       void refresh();
+    }, [refresh]),
+  );
+}
+
+/**
+ * Calls back when the user returns to this page, and only then. Both things the
+ * panel must not answer from a mount-time reading -- the portal context and the
+ * presets' "now" -- go stale for the same reason and are woken by the same
+ * signals, so there is one listener pair rather than two.
+ */
+function useReturnToPage(onReturn: () => void) {
+  React.useEffect(() => {
+    const handle = () => {
+      if (document.visibilityState !== "visible") return;
+      onReturn();
     };
-    window.addEventListener("focus", onReturn);
-    document.addEventListener("visibilitychange", onReturn);
+    window.addEventListener("focus", handle);
+    document.addEventListener("visibilitychange", handle);
     return () => {
-      window.removeEventListener("focus", onReturn);
-      document.removeEventListener("visibilitychange", onReturn);
+      window.removeEventListener("focus", handle);
+      document.removeEventListener("visibilitychange", handle);
     };
-  }, [refresh]);
+  }, [onReturn]);
+}
+
+/**
+ * Presets are normalised against "now". In April the new financial year has no
+ * completed period, so `normaliseFiledReturnsScope` answers with the preceding
+ * one -- and every string a preset shows is read back off that scope, so a
+ * stale basis produces a label that reads correct while the click downloads the
+ * wrong year.
+ *
+ * Computing once at mount was right for the popup, which dies on outside focus.
+ * The panel outlives the boundary: one mounted on 30 April would still offer
+ * April's answer in May. Recomputed on the browser's own return signals, so no
+ * timer polls and no permission is added.
+ *
+ * The array is kept when the recomputed answer matches, which is every return
+ * but the one that crosses a boundary. Handing back a new array each time would
+ * re-render the list for nothing.
+ */
+function usePanelPresets(): PanelPreset[] {
+  const [presets, setPresets] = React.useState(panelPresets);
+  useReturnToPage(
+    React.useCallback(() => {
+      setPresets((current) => {
+        const next = panelPresets();
+        return presetsIdentity(next) === presetsIdentity(current) ? current : next;
+      });
+    }, []),
+  );
+  return presets;
+}
+
+// Compares whole presets rather than the fields believed to matter: a preset
+// that gained a time-dependent field would otherwise go stale again, silently.
+function presetsIdentity(presets: readonly PanelPreset[]): string {
+  return JSON.stringify(presets);
 }
 
 /**
