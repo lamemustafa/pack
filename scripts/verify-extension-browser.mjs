@@ -383,7 +383,7 @@ async function assertPanelPageLoads(browserContext, extensionId) {
       // panel.css gives that box fixed dimensions whether or not the SVG
       // decodes. A corrupt asset with nonzero bytes passes the package check and
       // would have passed this one too, while Chrome shows a broken image.
-      markDecoded: mark instanceof HTMLImageElement && mark.complete && mark.naturalWidth > 0,
+      markDecoded: Boolean(mark && mark.complete && mark.naturalWidth > 0),
       markSource: mark?.getAttribute("src") ?? "",
     };
   });
