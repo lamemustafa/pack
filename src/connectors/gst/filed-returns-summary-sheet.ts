@@ -165,7 +165,8 @@ export function buildFiledReturnsSummarySheet(
         jsonText,
         {
           includePath: (path, scalarKind) =>
-            scalarKind === "string" && filedReturnsSummaryIdentity(path) !== null,
+            scalarKind === "string" &&
+            filedReturnsSummaryIdentity(planned.returnType, path) !== null,
           visitPath: rejectForbiddenFieldPath,
         },
         remainingFlattenedBytes,
@@ -196,7 +197,10 @@ export function buildFiledReturnsSummarySheet(
   for (const parsed of parsedEntries) {
     const fieldLeaves = parsed.leaves.filter(
       (leaf) =>
-        !isFiledReturnsSummaryIdentityPath(leaf.path) &&
+        !isFiledReturnsSummaryIdentityPath(
+          parsed.planned.returnType,
+          filedReturnsSummaryDocumentPath(parsed.planned.returnType, leaf.path),
+        ) &&
         !hasIdentityShapedPathSegment(leaf.path) &&
         !hasOwnIdentityPathSegment(leaf.path, ownIdentityValues) &&
         !(leaf.valueKind === "text" && ownIdentityValues.has(leaf.value.trim().toUpperCase())) &&
@@ -271,7 +275,9 @@ function collectOwnIdentityValues(parsedEntries: readonly ParsedPlanEntry[]): Re
         // already removed by path, so a duplicate of it under an unrecognised
         // alias must be too, or the redaction depends on which name the portal
         // happened to use.
-        .filter((leaf) => filedReturnsSummaryIdentity(leaf.path) !== null)
+        .filter(
+          (leaf) => filedReturnsSummaryIdentity(parsed.planned.returnType, leaf.path) !== null,
+        )
         .map((leaf) => leaf.value)
         .filter((value): value is string => typeof value === "string" && value.length > 0)
         // Compared case-insensitively: the portal's casing is not guaranteed to
@@ -303,7 +309,7 @@ function collectIdentityValues(parsedEntries: readonly ParsedPlanEntry[]): Summa
   for (const parsed of parseableEntries) {
     const identityInEntry = new Map<string, SummaryIdentityValue>();
     for (const leaf of parsed.identityLeaves) {
-      const descriptor = filedReturnsSummaryIdentity(leaf.path);
+      const descriptor = filedReturnsSummaryIdentity(parsed.planned.returnType, leaf.path);
       if (!descriptor) continue;
       const contextKey =
         descriptor.contextType === "taxpayer_identity"
@@ -514,6 +520,14 @@ function hasOwnIdentityPathSegment(path: string, ownIdentityValues: ReadonlySet<
   return decodedPathSegments(path).some((segment) =>
     ownIdentityValues.has(segment.trim().toUpperCase()),
   );
+}
+
+function filedReturnsSummaryDocumentPath(
+  returnType: FiledReturnsReturnType,
+  envelopeRelativePath: string,
+): string {
+  const envelopePath = filedReturnsJsonDocumentContract(returnType).envelopePath;
+  return `${envelopePath.map((segment) => `/${segment}`).join("")}${envelopeRelativePath}`;
 }
 
 function filedReturnsSummaryArrayExpansion(
