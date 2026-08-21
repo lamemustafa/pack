@@ -109,7 +109,13 @@ for (const assetPath of expectedPackagedBrandAssets) {
 
 for (const page of expectedPackagedPages) {
   const html = await requirePackagedFile(page, "required extension page");
-  await requireReferencedBundles(page, html.toString("utf8"));
+  const markup = html.toString("utf8");
+  // An empty page references nothing, so the bundle check below would pass it
+  // silently. A page that renders nothing is a dead surface, not a valid one.
+  if (markup.trim().length === 0) {
+    throw new Error(`Required extension page is empty: ${page}`);
+  }
+  await requireReferencedBundles(page, markup);
 }
 
 for (const permission of expectedPermissions) {

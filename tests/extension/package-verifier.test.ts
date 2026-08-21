@@ -23,6 +23,16 @@ describe("extension package verifier", () => {
     expect(result.output).toContain("Pack WXT extension package verification passed.");
   });
 
+  it("rejects an empty extension page", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(outputDir, "popup.html", "");
+
+    // An empty page references nothing, so a bundle check alone would pass it.
+    const result = await runVerifier(outputDir);
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("Required extension page is empty: popup.html");
+  });
+
   it("rejects a page whose referenced bundle is missing", async () => {
     const outputDir = await createValidPackage();
     await rm(path.join(outputDir, "chunks", "popup.js"));
