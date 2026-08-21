@@ -65,9 +65,15 @@ durable full-year, or stable-release claims.
   compiled out of Store builds and left present in source builds. Two artifacts
   that behave differently would make the binary the source of truth for what
   Pack offers, and would mean live evidence covers a build users never receive.
-  Of the four gates, privacy-review evidence is recorded: an independent review
-  of the summary identity scoping was run and its findings were fixed and
-  verified. The remaining three require an authenticated live run.
+  Of the four gates, privacy-review evidence is **partially** recorded. An
+  independent privacy review of the summary identity scoping ran against PR #184
+  and found two High issues: an owner trade name emitted when it sat inside the
+  return envelope, and a value-based backstop that read the same predicate as the
+  path check it was meant to catch. Both were reproduced by running them, fixed,
+  and re-verified; the disposition is in that PR's review comments. It is partial
+  because it covered one change rather than the feature, and because review of
+  the fixes is still open. The remaining three gates require an authenticated
+  live run.
 - V0 does not collect GST Portal credentials, OTPs, CAPTCHA responses, cookies,
   or session tokens, and does not log or upload GST document contents. The
   source-build capture path may use temporary local OPFS staging for an explicit
@@ -345,14 +351,17 @@ data are unrepresentable in the matrix.
       version `0.3.2`, and visibility `Public`.
 - [x] Record the historical `v0.4.0` package upload. Workflow run `29507382500`
       reported upload state `SUCCEEDED`; that release was not published.
-- [ ] Record the `v0.5.0` Chrome Web Store submission. The release sequence
-      currently describes the package as submitted and in review as a draft;
-      approval, publication, and live availability are not claimed. Required
-      evidence remains unfilled: `observation-date: not-recorded`;
-      `observed-state: not-recorded`; `observation-location: not-recorded`;
+- [ ] Record the `v0.5.0` Chrome Web Store publication evidence. The package
+      **is published and live** -- the maintainer observed it on the Store
+      dashboard -- so the version claim elsewhere in this file is correct. This
+      item stays unchecked because the observation is not auditable from this
+      repository: `observation-date: not-recorded`; `observed-state: published,
+maintainer-reported`; `observation-location: not-recorded`;
       `submission-method: not-recorded`; `workflow-run-id: not-recorded` (or
       `manual; workflow-run-id: none`); and
-      `observer-or-approver: not-recorded`.
+      `observer-or-approver: maintainer, undated`. Fill these from the dashboard
+      rather than inferring them; a published version with an unrecorded
+      evidence chain is exactly what this checklist exists to surface.
 - [x] Add a read-only Chrome Web Store status monitor for submitted packages.
       Scheduled runs use the dedicated `chrome-web-store-status` environment so
       publication/rejection monitoring is not blocked by the protected publishing

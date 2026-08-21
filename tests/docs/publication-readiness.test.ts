@@ -132,10 +132,13 @@ describe("publication readiness recovery matrix", () => {
       readFile(path.join(rootDir, "docs", "chrome-web-store", "listing.md"), "utf8"),
       readFile(path.join(rootDir, "docs", "chrome-web-store", "dashboard-closeout.md"), "utf8"),
     ]);
-    const submittedVersion = listing.match(/^- Submitted package: `(v\d+\.\d+\.\d+)`/m)?.[1];
+    // The canonical field is the PUBLISHED package. It was "Submitted package"
+    // while v0.5.0 sat in review; renaming it without moving this guard would
+    // have left the tie between these three documents silently unenforced.
+    const publishedVersion = listing.match(/^- Published package: `(v\d+\.\d+\.\d+)`/m)?.[1];
 
-    expect(submittedVersion).toBeTruthy();
-    const expectedVersion = submittedVersion?.slice(1);
+    expect(publishedVersion, "listing.md must name the canonical published package").toBeTruthy();
+    const expectedVersion = publishedVersion?.slice(1);
     expect(
       readiness.includes(`expected_version=${expectedVersion}`),
       "publication readiness must use the canonical submitted version",

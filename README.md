@@ -28,14 +28,17 @@ endorsed by, or operated by GSTN, CBIC, or the Government of India.
 
 ## Status
 
-This public repository and the Chrome Web Store V0 listing are open-source
-alpha surfaces. The Store-published `v0.3.2` source has live local download
-support for filed GSTR-3B PDFs, filed GSTR-1 summary PDFs, and optional GSTR-1
-e-invoice details Excel files where the GST Portal provides them. The verified
-GitHub pre-release for the Store-published package is
-[`v0.3.2`](https://github.com/lamemustafa/pack/releases/tag/v0.3.2), with
-Chrome ZIP SHA-256
-`6bd41a364a2466f0f255bef1b44e93694cc8d95431e7661fea5be3d52c9cdddb`.
+This public repository and the Chrome Web Store listing are open-source
+pre-1.0 surfaces. The Store-published package is the `v0.5.0` beta, which
+supersedes `v0.3.2`. It has live local download support for filed GSTR-3B PDFs,
+filed GSTR-1 summary PDFs, optional GSTR-1 e-invoice details Excel files, and
+GSTR-2B auto-drafted statements where the GST Portal provides them.
+
+The previously published `v0.3.2` remains recorded below because its evidence
+chain is complete and `v0.5.0`'s is not: publication is recorded on the
+maintainer's observation of the Store dashboard, without a workflow run,
+dashboard snapshot, or publication email captured in this repository. Treat the
+version as current and the evidence as thinner than `v0.3.2`'s.
 
 The Chrome Web Store package update for this GSTR-1 source release was
 submitted through the protected workflow on 2026-07-04. Run `28704776806`
@@ -45,9 +48,10 @@ publication email on 2026-07-06 records item ID
 `nfnbhekccajjfgkppolomflaeledoccb`, item name
 `ComplyEaze Pack: GSTR-1/GSTR-3B Downloader`, version `0.3.2`, and visibility
 `Public`. The repository source is now the `v0.5.1` pre-1.0 beta release. <!-- x-release-please-version -->
-It is not Store-published evidence: the Store-published package remains `v0.3.2`
-until a newer exact ZIP, Chrome Web Store, and live-evidence record is
-published.
+That superseded release's evidence chain is the fully recorded one. The current
+`v0.5.0` publication is maintainer-observed; see
+`docs/PUBLICATION_READINESS.md` for exactly which evidence fields remain
+unrecorded.
 Live manifest/index/exception-file generation is outside the current alpha.
 Future store updates require the release gates in
 [docs/PUBLICATION_READINESS.md](docs/PUBLICATION_READINESS.md) and

@@ -9,15 +9,19 @@ Use [`dashboard-closeout.md`](dashboard-closeout.md) for the action sequence.
 
 ## Current Store State
 
-- Published package: `v0.3.2`.
-- Submitted package: `v0.5.0`, source commit
-  `985e9aa91d30e2955c996cd483496ebe92cfeef6`.
+- Published package: `v0.5.0` (pre-1.0 beta), source commit
+  `985e9aa91d30e2955c996cd483496ebe92cfeef6`. Publication is recorded on the
+  maintainer's observation of the Store dashboard; the observation fields are
+  not captured in this repository.
+- Superseded package: `v0.3.2`, whose publication evidence chain is complete.
 - GitHub pre-release: <https://github.com/lamemustafa/pack/releases/tag/v0.5.0>.
 - Release ZIP SHA-256:
   `1ecea75998ce69ae79caf8e6d27134516320a527d298ef164543cf87f6c07e62`.
-- Chrome Web Store state: submitted and in review as a draft. It is not
-  approved, published, or live; `v0.3.2` remains the last confirmed Store
-  publication and the basis for Store-published public claims.
+- Chrome Web Store state: `v0.5.0` is published and live, and is the basis for
+  Store-published public claims. `v0.3.2` is superseded.
+- The submitted ZIP's bytes are immutable and carry that commit's manifest
+  description. Later corrections to the description in this repository do not
+  change the published package; they reach users only at the next submission.
 - Historical `v0.4.0` workflow run `29507382500` built, tested, verified, and
   uploaded that release's exact ZIP with Store upload state `SUCCEEDED`, but
   publish returned HTTP 400 because dashboard requirements were incomplete.
