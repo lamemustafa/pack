@@ -219,6 +219,8 @@ Nothing parses `r3b`, table 3.1/4/5, or any return field. There is no workbook b
 
 **So the consolidated statement is greenfield, not an extension of existing code.** The roadmap
 should price it as such. The one asset that already exists is the acquisition path for GSTR-3B
-portal data (JSON), which is what a statement would be computed from — and note the portal fact that
-identity (`arn`, `lglnm`, `trdnm`) sits one level _above_ the return envelope, so a pipeline that
-normalises the envelope away discards it while appearing to succeed.
+portal data (JSON), which is what a statement would be computed from — and note that taxpayer
+identity does not live inside the return envelope, so any pipeline that normalises to the envelope
+must extract identity before doing so. The failure this guards against is recorded in the private
+knowledge hub; the canonical paths themselves live in
+`src/connectors/gst/filed-returns-summary-identity.ts`, which is where a reader should look.
