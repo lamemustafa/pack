@@ -583,6 +583,38 @@ describe("filed-return session write boundary", () => {
     );
   });
 
+  it("retains fixed full-year summary status through canonical persistence and reopen", async () => {
+    const summaryWithDiagnostic = fullFiscalYearSummaryWithCurrentPeriodDiagnostic("March");
+    const { downloadDiagnostic: _discardedDiagnostic, ...flowStep } =
+      summaryWithDiagnostic.flowStep;
+    void _discardedDiagnostic;
+    const summary = {
+      ...summaryWithDiagnostic,
+      flowStep: {
+        ...flowStep,
+        safeSignals: [
+          "full-fiscal-year-summary-included",
+          "full-fiscal-year-summary-parsed-period-count:1",
+          "full-fiscal-year-summary-row-count:12",
+        ],
+      },
+    };
+
+    await expect(
+      persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, summary),
+    ).resolves.not.toBeNull();
+    await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining([
+          "full-fiscal-year-summary-included",
+          "full-fiscal-year-summary-parsed-period-count:1",
+          "full-fiscal-year-summary-row-count:12",
+        ]),
+        safeMessage: expect.not.stringContaining("Synthetic supplied portal prose"),
+      },
+    });
+  });
+
   it("reconstructs a timestamped summary when a provided envelope is incomplete", async () => {
     const provided = singlePeriodSummary();
     delete provided.updatedAt;

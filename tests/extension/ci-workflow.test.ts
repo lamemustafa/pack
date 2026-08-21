@@ -141,10 +141,9 @@ describe("Pack CI workflow", () => {
     const packConfig = releaseConfig.packages?.["."];
 
     expect(prettierIgnore).toContain("CHANGELOG.md");
-    expect(packConfig?.["extra-files"]).toContainEqual({
-      type: "generic",
-      path: "src/extension/version.ts",
-    });
+    for (const path of ["src/extension/version.ts", "README.md", "docs/PUBLICATION_READINESS.md"]) {
+      expect(packConfig?.["extra-files"]).toContainEqual({ type: "generic", path });
+    }
     for (const required of requiredReviewGateBodyText) {
       expect(packConfig?.["pull-request-footer"]).toContain(required);
     }
