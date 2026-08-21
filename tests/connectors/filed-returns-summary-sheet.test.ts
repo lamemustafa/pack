@@ -503,6 +503,29 @@ describe("filed-return full-year summary sheet", () => {
     expect(summary).toMatchObject({ outcomeOnly: false, parsedPeriodCount: 1 });
   });
 
+  it("does not let one sibling's counterparty evidence vouch for another", () => {
+    // Canonical segments fold punctuation, so `supplier-one` and `supplier_one`
+    // were the same record. A valid ctin under the first then released whatever
+    // sat under the second, which had proved nothing.
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-2B")],
+      [
+        rawJsonEntry("april-data.json", {
+          data: {
+            rtnprd: "042026",
+            "supplier-one": { ctin: "29ZZZZZ9999Z9ZW", trdnm: "Synthetic Real Supplier" },
+            supplier_one: { trdnm: "Synthetic Owner Trade Name" },
+          },
+        }),
+      ],
+    );
+
+    const dataCsv = new TextDecoder().decode(summary.dataBytes);
+
+    expect(dataCsv).toContain("Synthetic Real Supplier");
+    expect(dataCsv).not.toContain("Synthetic Owner Trade Name");
+  });
+
   it("does not release an owner trade name on a decoy counterparty identifier", () => {
     // A field NAMED ctin was treated as counterparty evidence regardless of its
     // value, so malformed or decoy portal data could mark a wrapper as a

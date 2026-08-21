@@ -1,4 +1,7 @@
-import { canonicalJsonPointerSegments } from "../../core/json-flat-table";
+import {
+  canonicalJsonPointerSegments,
+  decodedJsonPointerSegments,
+} from "../../core/json-flat-table";
 import { filedReturnsJsonDocumentContract } from "./artifact-validation";
 import type { FiledReturnsReturnType } from "./filed-returns-return-types";
 
@@ -157,12 +160,15 @@ export function filedReturnsSummaryCounterpartyRecordPath(
   returnType: FiledReturnsReturnType,
   path: string,
 ): string | null {
-  const segments = canonicalJsonPointerSegments(path);
-  const unwrapped = unwrapScalarPath(segments);
-  if (unwrapped.at(-1) !== "ctin") return null;
-  const recordPath = unwrapped.slice(0, -1);
+  const canonical = unwrapScalarPath(canonicalJsonPointerSegments(path));
+  if (canonical.at(-1) !== "ctin") return null;
+  // The RECORD is identified by its exact decoded segments. Folding them would
+  // let a valid ctin under `supplier-one` vouch for a trdnm under
+  // `supplier_one`, releasing a value that record never proved anything about.
+  const exact = unwrapScalarPath(decodedJsonPointerSegments(path));
+  const recordPath = exact.slice(0, -1);
   return ownerIdentityContainerPaths(returnType).some((ownerPath) =>
-    pathsMatch(ownerPath, recordPath),
+    pathsMatch(ownerPath, canonical.slice(0, -1)),
   )
     ? null
     : recordPath.join("/");
@@ -222,6 +228,7 @@ function declaredCounterpartyContainerPaths(
   // The captured GSTR-2B contract declares b2b records as counterparties. It
   // is affirmative structural evidence even when the array is collapsed to a
   // count rather than expanded into CSV rows.
+  // Exact segments: `/data/doc-data/b2b` is a different container.
   return returnType === "GSTR-2B" ? [["data", "docdata", "b2b"]] : [];
 }
 
@@ -229,11 +236,15 @@ function identityCandidates(
   path: string,
 ): readonly { identity: FiledReturnsSummaryIdentity; recordPath: readonly string[] }[] {
   const segments = unwrapScalarPath(canonicalJsonPointerSegments(path));
+  // Aliases are matched canonically; the record prefix is kept exact, so
+  // evidence recorded for one sibling cannot vouch for a punctuation-distinct
+  // one. Both arrays index the same segments.
+  const exact = unwrapScalarPath(decodedJsonPointerSegments(path));
   const candidates: { identity: FiledReturnsSummaryIdentity; recordPath: readonly string[] }[] = [];
   for (let start = 0; start < segments.length; start += 1) {
     for (let end = start; end < segments.length; end += 1) {
       const identity = identityForCanonicalSegment(segments.slice(start, end + 1).join(""));
-      if (identity) candidates.push({ identity, recordPath: segments.slice(0, start) });
+      if (identity) candidates.push({ identity, recordPath: exact.slice(0, start) });
     }
   }
   return candidates;
