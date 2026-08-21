@@ -446,7 +446,7 @@ async function createValidPackage(): Promise<string> {
     name: "ComplyEaze Pack: GST Return Downloader",
     short_name: "ComplyEaze Pack",
     description:
-      "Alpha: locally download GSTR-1/GSTR-3B files; private GSTR-2B downloads are source-build experimental.",
+      "Beta: locally download your filed GSTR-1, GSTR-3B and GSTR-2B returns from your own GST Portal session.",
     homepage_url: "https://pack.complyeaze.com/gst",
     permissions: ["downloads", "offscreen", "scripting", "storage"],
     host_permissions: [

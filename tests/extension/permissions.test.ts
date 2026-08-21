@@ -16,7 +16,7 @@ describe("extension permission posture", () => {
     expect(PACK_EXTENSION_NAME).toBe("ComplyEaze Pack: GST Return Downloader");
     expect(PACK_EXTENSION_SHORT_NAME).toBe("ComplyEaze Pack");
     expect(PACK_EXTENSION_DESCRIPTION).toBe(
-      "Alpha: locally download GSTR-1/GSTR-3B files; private GSTR-2B downloads are source-build experimental.",
+      "Beta: locally download your filed GSTR-1, GSTR-3B and GSTR-2B returns from your own GST Portal session.",
     );
     expect(PACK_EXTENSION_HOMEPAGE_URL).toBe("https://pack.complyeaze.com/gst");
     expect(PACK_EXTENSION_ICONS).toEqual({

@@ -31,9 +31,10 @@ This section is the canonical source-controlled record for the current Store
 version and review state. Release-readiness and dashboard-closeout documents
 must not claim a newer state than this record.
 
-The Store-supported alpha claims remain GSTR-1 and GSTR-3B single-period
-downloads. Private GSTR-2B and full-fiscal-year workflows are source-build
-experiments and must not be advertised as Store-supported features.
+The Store-supported beta claims are GSTR-1, GSTR-3B and GSTR-2B single-period
+downloads. The full-fiscal-year workflow remains a source-build capability and
+must not be advertised as a Store-supported feature until the four evidence
+gates in `PUBLICATION_READINESS.md` are recorded for the release.
 
 ## Store Listing Fields
 
@@ -46,7 +47,7 @@ ComplyEaze Pack: GST Return Downloader
 Summary from package:
 
 ```text
-Alpha: locally download GSTR-1/GSTR-3B files; private GSTR-2B downloads are source-build experimental.
+Beta: locally download your filed GSTR-1, GSTR-3B and GSTR-2B returns from your own GST Portal session.
 ```
 
 Description:
@@ -54,14 +55,15 @@ Description:
 ```text
 Download filed GST returns locally from your active GST Portal session.
 
-ComplyEaze Pack helps authorised users download their own filed GST returns using GST Portal pages already open in Chrome. The Store-supported alpha scope is:
+ComplyEaze Pack helps authorised users download their own filed GST returns using GST Portal pages already open in Chrome. The Store-supported beta scope is:
 
-• GSTR-3B: filed-return summary PDF
+• GSTR-3B: filed-return summary PDF, or the portal's own JSON
 • GSTR-1: summary PDF and, when the portal provides it, e-invoice details Excel
+• GSTR-2B: summary PDF, or the portal's own JSON
 
 Files are saved by Chrome to the user's device. Pack does not require a Pack or ComplyEaze account. It does not ask for or store GST Portal credentials, OTPs, CAPTCHA responses, cookies, or session tokens, and it does not upload GST documents or return contents to ComplyEaze.
 
-The package also contains private source-build experiments for GSTR-2B and full-fiscal-year ZIP workflows. These are not Store-supported claims for this alpha release.
+The package also contains a full-fiscal-year workflow that saves a whole year of eligible periods as one ZIP. It is available in source builds and is not a Store-supported claim for this beta release.
 
 Pack's content script runs only on the four declared GST Portal hosts. When a supported page loads, it reads page context locally so Pack can identify eligible workflows; artifact capture and downloads start only after an explicit user action. Pack keeps limited redacted recovery state locally so interrupted work does not retry blindly. Temporary artifact bytes may be staged in browser-local OPFS for explicit capture or ZIP operations. Pack normally removes those bytes after confirmed export or explicit discard; if local cleanup fails, it retains them with a cleanup-pending status until a later cleanup attempt succeeds.
 
