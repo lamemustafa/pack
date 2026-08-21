@@ -379,6 +379,11 @@ async function assertPanelPageLoads(browserContext, extensionId) {
       shellText: document.querySelector(".panel-shell")?.textContent ?? "",
       hasContextState: Boolean(document.querySelector(".context-state")),
       markPainted: paintedMark === mark,
+      // elementFromPoint only proves the <img> owns its CSS-sized hit box, and
+      // panel.css gives that box fixed dimensions whether or not the SVG
+      // decodes. A corrupt asset with nonzero bytes passes the package check and
+      // would have passed this one too, while Chrome shows a broken image.
+      markDecoded: mark instanceof HTMLImageElement && mark.complete && mark.naturalWidth > 0,
       markSource: mark?.getAttribute("src") ?? "",
     };
   });
@@ -394,6 +399,11 @@ async function assertPanelPageLoads(browserContext, extensionId) {
   }
   if (!panelState.markPainted || !panelState.markSource.includes("pack-mark")) {
     throw new Error("Pack panel mounted in the DOM but did not visibly paint its brand mark.");
+  }
+  if (!panelState.markDecoded) {
+    throw new Error(
+      "Pack panel brand mark did not decode; the packaged asset is not a usable image.",
+    );
   }
   if (!panelState.hasContextState) {
     throw new Error("Pack panel did not render its context state.");

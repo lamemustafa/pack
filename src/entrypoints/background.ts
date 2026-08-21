@@ -93,25 +93,22 @@ function installPackActionOpensSidePanel() {
       };
     }
   ).sidePanel;
-  void sidePanel
-    ?.setPanelBehavior?.({ openPanelOnActionClick: true })
-    .catch(() => installPackActionOpensPanelTab());
-  if (!sidePanel?.setPanelBehavior) installPackActionOpensPanelTab();
-}
-
-/**
- * Opens the panel as an ordinary tab when the side panel cannot be armed.
- *
- * Without this the failure is silent and total: the popup is gone, so a browser
- * that lacks `sidePanel` or rejects `setPanelBehavior` leaves a toolbar button
- * that does nothing at all and explains nothing. A tab is a worse surface than
- * the side panel and a far better one than a dead control, and it keeps a
- * terminal state visible from outside rather than swallowed.
- */
-function installPackActionOpensPanelTab() {
+  // Registered SYNCHRONOUSLY during worker start-up, not from the rejection
+  // handler. An action click can wake a suspended worker and be dispatched
+  // before an async rejection lands, so a listener installed inside `.catch`
+  // misses the very click that started the worker -- and the popup is gone, so
+  // that click does nothing at all.
+  let sidePanelArmed = false;
   browser.action?.onClicked?.addListener?.(() => {
+    if (sidePanelArmed) return;
     void browser.tabs.create({ url: browser.runtime.getURL("/panel.html") }).catch(() => undefined);
   });
+  void sidePanel
+    ?.setPanelBehavior?.({ openPanelOnActionClick: true })
+    .then(() => {
+      sidePanelArmed = true;
+    })
+    .catch(() => undefined);
 }
 
 export default defineBackground(() => {

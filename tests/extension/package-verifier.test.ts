@@ -478,6 +478,7 @@ describe("extension package verifier", () => {
     // and a side panel is user-resizable, so an upper width bound would fail on
     // a wide panel rather than catching anything.
     expect(script).toContain("markPainted");
+    expect(script).toContain("naturalWidth");
     expect(script).toContain("shellRect.width < 300");
     expect(script).toContain("https://services.gst.gov.in/services/auth/fowelcome");
     expect(script).toContain("readLoadedExtensionIdFromPreferences");
