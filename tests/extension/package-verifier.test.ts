@@ -23,6 +23,25 @@ describe("extension package verifier", () => {
     expect(result.output).toContain("Pack WXT extension package verification passed.");
   });
 
+  it("rejects a page whose referenced bundle is missing", async () => {
+    const outputDir = await createValidPackage();
+    await rm(path.join(outputDir, "chunks", "popup.js"));
+
+    // A page that can be read is not a page that works.
+    const result = await runVerifier(outputDir);
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("Missing asset referenced by popup.html: chunks/popup.js");
+  });
+
+  it("rejects a page whose referenced bundle is empty", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(outputDir, "chunks/popup.js", "");
+
+    const result = await runVerifier(outputDir);
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("Asset referenced by popup.html is empty");
+  });
+
   it("accepts packaged HTML without module preload hints", async () => {
     const outputDir = await createValidPackage();
     await writePackageFile(
@@ -507,14 +526,17 @@ async function createValidPackage(): Promise<string> {
 
   await writePackageFile(outputDir, "manifest.json", `${JSON.stringify(manifest, null, 2)}\n`);
   for (const page of ["offscreen.html", "options.html", "panel.html", "popup.html"]) {
+    const chunk = `chunks/${page.replace(".html", ".js")}`;
     await writePackageFile(
       outputDir,
       page,
-      `<!doctype html><html><body><script type="module" src="/chunks/${page.replace(
-        ".html",
-        ".js",
-      )}"></script></body></html>`,
+      `<!doctype html><html><body><script type="module" src="/${chunk}"></script></body></html>`,
     );
+    // The chunk each page references must exist for this to be a valid package.
+    // It previously did not, so the fixture asserted a package that could never
+    // load — the shape AGENTS.md warns about, where a fixture encodes what we
+    // assumed rather than what the artifact contains.
+    await writePackageFile(outputDir, chunk, "export {};\n");
   }
   for (const iconSize of [16, 32, 48, 128]) {
     await writePackageFile(outputDir, `icons/icon-${iconSize}.png`, "synthetic-png");
