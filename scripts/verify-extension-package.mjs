@@ -108,7 +108,8 @@ for (const assetPath of expectedPackagedBrandAssets) {
 }
 
 for (const page of expectedPackagedPages) {
-  await requirePackagedFile(page, "required extension page");
+  const html = await requirePackagedFile(page, "required extension page");
+  await requireReferencedBundles(page, html.toString("utf8"));
 }
 
 for (const permission of expectedPermissions) {
@@ -300,6 +301,29 @@ for (const file of await listFiles(path.join(process.cwd(), "src"))) {
 console.log("Pack WXT extension package verification passed.");
 
 /** Reads a packaged file, or fails naming the file rather than crashing with a raw ENOENT. */
+
+// A page that can be read is not a page that works: every local script and
+// stylesheet it references must also be present and non-empty. Without this, a
+// build that emitted the HTML but dropped its chunk passed verification.
+async function requireReferencedBundles(page, html) {
+  const references = [
+    ...html.matchAll(/<script[^>]+src="([^"]+)"/g),
+    ...html.matchAll(/<link[^>]+rel="stylesheet"[^>]+href="([^"]+)"/g),
+  ].map((match) => match[1]);
+
+  for (const reference of references) {
+    if (/^[a-z]+:/i.test(reference) || reference.startsWith("//")) {
+      throw new Error(`Extension page references a remote asset: ${page} -> ${reference}`);
+    }
+    const relative = reference.replace(/^\//, "").split(/[?#]/)[0];
+    if (!relative) continue;
+    const bytes = await requirePackagedFile(relative, `asset referenced by ${page}`);
+    if (bytes.byteLength === 0) {
+      throw new Error(`Asset referenced by ${page} is empty: ${relative}`);
+    }
+  }
+}
+
 async function requirePackagedFile(relativePath, reason) {
   try {
     return await readFile(path.join(outputDir, relativePath));
