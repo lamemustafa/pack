@@ -23,6 +23,7 @@
     "src/**/*.ts",
     "src/**/*.tsx",
     "tests/**/*.ts",
+    "tests/**/*.tsx",
     "wxt.config.ts",
     "scripts/**/*.mjs"
   ]

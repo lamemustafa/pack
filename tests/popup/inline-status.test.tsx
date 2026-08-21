@@ -1,4 +1,3 @@
-import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { FiledReturnsFlowSummary } from "../../src/connectors/gst/filed-returns-contracts";
@@ -36,6 +35,14 @@ const blockedSummary: FiledReturnsFlowSummary = {
     safeMessage: "Select the filed return filters in the GST portal, then start Pack again.",
   },
 };
+
+// `currentPeriod` is optional; under `exactOptionalPropertyTypes` a fixture that means
+// "no current period" must omit the key entirely rather than set it to `undefined`.
+function withoutCurrentPeriod(summary: FiledReturnsFlowSummary): FiledReturnsFlowSummary {
+  const clone: FiledReturnsFlowSummary = { ...summary };
+  delete clone.currentPeriod;
+  return clone;
+}
 
 describe("inline filed-return recovery status", () => {
   it("still explains the portal-gated secondary action when the inline action is local", () => {
@@ -376,9 +383,8 @@ describe("inline filed-return recovery status", () => {
 
   it("renders every safe missing artifact reason for a partial ZIP", () => {
     const summary: FiledReturnsFlowSummary = {
-      ...blockedSummary,
+      ...withoutCurrentPeriod(blockedSummary),
       status: "partial",
-      currentPeriod: undefined,
       flowStep: {
         ...blockedSummary.flowStep,
         state: "partial",
@@ -398,6 +404,7 @@ describe("inline filed-return recovery status", () => {
     const markup = renderToStaticMarkup(
       <InlineStatus
         busy={null}
+        portalReady
         onOpenPortal={vi.fn()}
         onRestartTarget={vi.fn()}
         onRetryFullFiscalYearTarget={vi.fn()}
@@ -422,6 +429,7 @@ describe("inline filed-return recovery status", () => {
     const markup = renderToStaticMarkup(
       <InlineStatus
         busy={null}
+        portalReady
         onOpenPortal={vi.fn()}
         onRestartTarget={vi.fn()}
         onRetryFullFiscalYearTarget={vi.fn()}
@@ -450,6 +458,7 @@ describe("inline filed-return recovery status", () => {
     const markup = renderToStaticMarkup(
       <InlineStatus
         busy={null}
+        portalReady
         onOpenPortal={vi.fn()}
         onRestartTarget={vi.fn()}
         onRetryFullFiscalYearTarget={vi.fn()}
@@ -486,6 +495,7 @@ describe("inline filed-return recovery status", () => {
     const markup = renderToStaticMarkup(
       <InlineStatus
         busy={null}
+        portalReady
         onOpenPortal={vi.fn()}
         onRestartTarget={vi.fn()}
         onRetryFullFiscalYearTarget={vi.fn()}
@@ -524,6 +534,7 @@ describe("inline filed-return recovery status", () => {
     const markup = renderToStaticMarkup(
       <InlineStatus
         busy={null}
+        portalReady
         onOpenPortal={vi.fn()}
         onRestartTarget={vi.fn()}
         onRetryFullFiscalYearTarget={vi.fn()}
@@ -546,9 +557,8 @@ describe("inline filed-return recovery status", () => {
 
   it("shows the final-ZIP check warning without requiring a current period", () => {
     const summary: FiledReturnsFlowSummary = {
-      ...blockedSummary,
+      ...withoutCurrentPeriod(blockedSummary),
       scope: { ...blockedSummary.scope, period: FULL_FISCAL_YEAR_PERIOD },
-      currentPeriod: undefined,
       completedPeriods: ["April", "May"],
       totalPeriods: 2,
       flowStep: {
@@ -568,6 +578,7 @@ describe("inline filed-return recovery status", () => {
     const markup = renderToStaticMarkup(
       <InlineStatus
         busy={null}
+        portalReady
         onOpenPortal={vi.fn()}
         onRestartTarget={vi.fn()}
         onRetryFullFiscalYearTarget={vi.fn()}
@@ -583,9 +594,8 @@ describe("inline filed-return recovery status", () => {
 
   it("offers exact-ID status reconciliation without another ZIP download", () => {
     const summary: FiledReturnsFlowSummary = {
-      ...blockedSummary,
+      ...withoutCurrentPeriod(blockedSummary),
       scope: { ...blockedSummary.scope, period: FULL_FISCAL_YEAR_PERIOD },
-      currentPeriod: undefined,
       completedPeriods: ["April", "May"],
       totalPeriods: 2,
       flowStep: {
@@ -605,6 +615,7 @@ describe("inline filed-return recovery status", () => {
     const markup = renderToStaticMarkup(
       <InlineStatus
         busy={null}
+        portalReady
         onOpenPortal={vi.fn()}
         onRestartTarget={vi.fn()}
         onRetryFullFiscalYearTarget={vi.fn()}
@@ -633,6 +644,7 @@ describe("inline filed-return recovery status", () => {
     const markup = renderToStaticMarkup(
       <InlineStatus
         busy={null}
+        portalReady
         onOpenPortal={vi.fn()}
         onRestartTarget={onRestartTarget}
         onRetryFullFiscalYearTarget={vi.fn()}
@@ -671,6 +683,7 @@ describe("inline filed-return recovery status", () => {
     const markup = renderToStaticMarkup(
       <InlineStatus
         busy={null}
+        portalReady
         onOpenPortal={vi.fn()}
         onRestartTarget={onRestartTarget}
         onRetryFullFiscalYearTarget={vi.fn()}
@@ -715,6 +728,7 @@ describe("inline filed-return recovery status", () => {
     const markup = renderToStaticMarkup(
       <InlineStatus
         busy={null}
+        portalReady
         onOpenPortal={vi.fn()}
         onRestartTarget={onRestartTarget}
         onRetryFullFiscalYearTarget={vi.fn()}
@@ -820,6 +834,7 @@ describe("inline filed-return recovery status", () => {
     const markup = renderToStaticMarkup(
       <InlineStatus
         busy={null}
+        portalReady
         onOpenPortal={() => undefined}
         onRestartTarget={() => undefined}
         onRetryFullFiscalYearTarget={() => undefined}
@@ -868,6 +883,7 @@ describe("inline filed-return recovery status", () => {
     const markup = renderToStaticMarkup(
       <InlineStatus
         busy={null}
+        portalReady
         onOpenPortal={vi.fn()}
         onRestartTarget={onRestartTarget}
         onRetryFullFiscalYearTarget={onRetryFullFiscalYearTarget}
@@ -898,6 +914,7 @@ describe("inline filed-return recovery status", () => {
     const markup = renderToStaticMarkup(
       <InlineStatus
         busy={null}
+        portalReady
         onOpenPortal={vi.fn()}
         onRestartTarget={vi.fn()}
         onRetryFullFiscalYearTarget={vi.fn()}
