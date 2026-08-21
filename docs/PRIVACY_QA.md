@@ -104,9 +104,10 @@ For each release candidate:
   Tables 3.1 and 4 are included and Tables 3.1.1, 3.2, 5, 5.1 and 6.1 are not.
   Column B must remain wide enough to show either footer value without relying
   on text spill. The GSTR-9 disclaimer and format token must be absent. GSTIN and
-  legal name must appear nowhere else in the workbook and no recognized
-  taxpayer or filing identity may appear in the data CSV. Other recognized
-  taxpayer identity plus per-period ARN and ARN date may exist only in transient
+  legal name must appear nowhere else in the workbook and no owner or filing
+  identity may appear in the data CSV. A trade name may appear only with positive
+  evidence that it belongs to a counterparty record; every unproven trade-name
+  location is withheld. Other recognized owner identity plus per-period ARN and ARN date may exist only in transient
   summary context and must not be written to either generated file. The tidy
   CSV must retain unmapped paths and outcomes. The seven format rules, sourced
   GSTR-9 mapping and disclaimer must live under the producing Pack version in

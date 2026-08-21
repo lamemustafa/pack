@@ -47,13 +47,6 @@ export function filedReturnsRequiredWorkbookIdentityPaths(
   );
 }
 
-export function filedReturnsSummaryIdentityLabel(
-  returnType: FiledReturnsReturnType,
-  path: string,
-): string | null {
-  return filedReturnsSummaryIdentity(returnType, path)?.label ?? null;
-}
-
 /**
  * Finds an identity that belongs to the return owner, rather than a similarly
  * named value inside a supplier record. Extraction names the taxpayer in the
@@ -74,14 +67,11 @@ export function filedReturnsSummaryIdentity(
       continue;
     }
     const identity = identityForCanonicalSegment(unwrapped.slice(ownerContainer.length).join(""));
-    const expectedOwnerContainer = identity
-      ? ownerIdentityContainerPath(returnType, identity)
-      : null;
     if (
       identity &&
-      expectedOwnerContainer &&
-      expectedOwnerContainer.length === ownerContainer.length &&
-      expectedOwnerContainer.every((segment, index) => segment === ownerContainer[index])
+      ownerIdentityContainerPathsForIdentity(returnType, identity).some((expectedOwnerContainer) =>
+        pathsMatch(expectedOwnerContainer, ownerContainer),
+      )
     ) {
       return identity;
     }
@@ -115,28 +105,47 @@ export function isFiledReturnsCanonicalIdentityPath(path: string, canonicalPath:
  *
  * This is deliberately broader than `filedReturnsSummaryIdentity`, which stays
  * owner-scoped because it names the identity for extraction. Redaction must
- * fail closed; labelling must be exact. Trade name is the exception: a
- * per-record supplier trade name is reportable business data, so its path is
- * redacted only when it is the contract-derived owner field.
+ * fail closed; labelling must be exact. A trade name is reportable only with
+ * positive counterparty evidence, never because owner evidence is absent.
  */
 export function isFiledReturnsSummaryIdentityPath(
   returnType: FiledReturnsReturnType,
   path: string,
+  counterpartyRecordPaths: ReadonlySet<string> = new Set(),
 ): boolean {
-  const segments = canonicalJsonPointerSegments(path);
-  return segments.some((_, start) =>
-    segments.some((_ignored, end) => {
-      const identity = identityForCanonicalSegment(segments.slice(start, end + 1).join(""));
-      if (!identity) return false;
-      // Supplier trade names are the business data a GSTR-2B summary exists
-      // to report. The filing taxpayer's own trade name still redacts by its
-      // contract-derived owner path and by its extracted value.
-      return (
-        identity.label !== "Trade name" ||
-        filedReturnsSummaryIdentity(returnType, path)?.label === "Trade name"
-      );
-    }),
+  return identityCandidates(path).some(
+    ({ identity, recordPath }) =>
+      identity.label !== "Trade name" ||
+      !hasPositiveCounterpartyTradeNameEvidence(returnType, recordPath, counterpartyRecordPaths),
   );
+}
+
+/**
+ * Whether a scalar can seed the own-identity value redaction net. This admits
+ * every recognised identity candidate, including an ambiguously placed trade
+ * name, so the value net remains broader than owner-context extraction.
+ */
+export function isFiledReturnsSummaryIdentityCandidatePath(path: string): boolean {
+  return identityCandidates(path).length > 0;
+}
+
+/**
+ * Returns the canonical path of a non-owner record with a direct `ctin` field.
+ * A sibling `trdnm` in that record has affirmative counterparty evidence.
+ */
+export function filedReturnsSummaryCounterpartyRecordPath(
+  returnType: FiledReturnsReturnType,
+  path: string,
+): string | null {
+  const segments = canonicalJsonPointerSegments(path);
+  const unwrapped = unwrapScalarPath(segments);
+  if (unwrapped.at(-1) !== "ctin") return null;
+  const recordPath = unwrapped.slice(0, -1);
+  return ownerIdentityContainerPaths(returnType).some((ownerPath) =>
+    pathsMatch(ownerPath, recordPath),
+  )
+    ? null
+    : recordPath.join("/");
 }
 
 function ownerIdentityContainerPath(
@@ -158,7 +167,64 @@ function ownerIdentityContainerPaths(
 ): readonly (readonly string[])[] {
   const envelopePath = filedReturnsJsonDocumentContract(returnType).envelopePath;
   const documentPath = envelopePath.length === 1 ? envelopePath : envelopePath.slice(0, -1);
-  return documentPath === envelopePath ? [envelopePath] : [envelopePath, documentPath];
+  return pathsMatch(documentPath, envelopePath) ? [envelopePath] : [envelopePath, documentPath];
+}
+
+function ownerIdentityContainerPathsForIdentity(
+  returnType: FiledReturnsReturnType,
+  identity: FiledReturnsSummaryIdentity,
+): readonly (readonly string[])[] {
+  const ownerPath = ownerIdentityContainerPath(returnType, identity);
+  const envelopePath = filedReturnsJsonDocumentContract(returnType).envelopePath;
+  // GSTR-3B has captured owner trade names both beside and inside its return
+  // envelope. This keeps context extraction precise without treating wrappers
+  // or supplier records as owner identity.
+  return identity.label === "Trade name" && !pathsMatch(ownerPath, envelopePath)
+    ? [ownerPath, envelopePath]
+    : [ownerPath];
+}
+
+function hasPositiveCounterpartyTradeNameEvidence(
+  returnType: FiledReturnsReturnType,
+  recordPath: readonly string[],
+  counterpartyRecordPaths: ReadonlySet<string>,
+): boolean {
+  return (
+    declaredCounterpartyContainerPaths(returnType).some((containerPath) =>
+      containerPath.every((segment, index) => segment === recordPath[index]),
+    ) || counterpartyRecordPaths.has(recordPath.join("/"))
+  );
+}
+
+function declaredCounterpartyContainerPaths(
+  returnType: FiledReturnsReturnType,
+): readonly (readonly string[])[] {
+  // The captured GSTR-2B contract declares b2b records as counterparties. It
+  // is affirmative structural evidence even when the array is collapsed to a
+  // count rather than expanded into CSV rows.
+  return returnType === "GSTR-2B" ? [["data", "docdata", "b2b"]] : [];
+}
+
+function identityCandidates(
+  path: string,
+): readonly { identity: FiledReturnsSummaryIdentity; recordPath: readonly string[] }[] {
+  const segments = unwrapScalarPath(canonicalJsonPointerSegments(path));
+  const candidates: { identity: FiledReturnsSummaryIdentity; recordPath: readonly string[] }[] = [];
+  for (let start = 0; start < segments.length; start += 1) {
+    for (let end = start; end < segments.length; end += 1) {
+      const identity = identityForCanonicalSegment(segments.slice(start, end + 1).join(""));
+      if (identity) candidates.push({ identity, recordPath: segments.slice(0, start) });
+    }
+  }
+  return candidates;
+}
+
+function unwrapScalarPath(segments: readonly string[]): readonly string[] {
+  return segments.at(-1) === SCALAR_WRAPPER_SEGMENT ? segments.slice(0, -1) : segments;
+}
+
+function pathsMatch(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((segment, index) => segment === right[index]);
 }
 
 function identityForCanonicalSegment(segment: string): FiledReturnsSummaryIdentity | null {

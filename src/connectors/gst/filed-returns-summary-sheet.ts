@@ -19,9 +19,11 @@ import type { FiledReturnsConcreteArtifactType } from "./filed-returns-artifacts
 import type { FiledReturnsReturnType } from "./filed-returns-return-types";
 import { filedReturnsSummaryFieldLabel } from "./filed-returns-summary-labels";
 import {
+  filedReturnsSummaryCounterpartyRecordPath,
   filedReturnsSummaryIdentity,
   filedReturnsRequiredWorkbookIdentityPaths,
   isFiledReturnsCanonicalIdentityPath,
+  isFiledReturnsSummaryIdentityCandidatePath,
   isFiledReturnsSummaryIdentityPath,
 } from "./filed-returns-summary-identity";
 import { isFiledReturnsSummaryForbiddenFieldPath } from "./filed-returns-summary-redaction";
@@ -165,8 +167,7 @@ export function buildFiledReturnsSummarySheet(
         jsonText,
         {
           includePath: (path, scalarKind) =>
-            scalarKind === "string" &&
-            filedReturnsSummaryIdentity(planned.returnType, path) !== null,
+            scalarKind === "string" && isFiledReturnsSummaryIdentityCandidatePath(path),
           visitPath: rejectForbiddenFieldPath,
         },
         remainingFlattenedBytes,
@@ -195,11 +196,13 @@ export function buildFiledReturnsSummarySheet(
   const ownIdentityValues = collectOwnIdentityValues(parsedEntries);
   const dataRows: FiledReturnsSummaryDataRow[] = [];
   for (const parsed of parsedEntries) {
+    const counterpartyRecordPaths = collectCounterpartyRecordPaths(parsed);
     const fieldLeaves = parsed.leaves.filter(
       (leaf) =>
         !isFiledReturnsSummaryIdentityPath(
           parsed.planned.returnType,
           filedReturnsSummaryDocumentPath(parsed.planned.returnType, leaf.path),
+          counterpartyRecordPaths,
         ) &&
         !hasIdentityShapedPathSegment(leaf.path) &&
         !hasOwnIdentityPathSegment(leaf.path, ownIdentityValues) &&
@@ -275,8 +278,12 @@ function collectOwnIdentityValues(parsedEntries: readonly ParsedPlanEntry[]): Re
         // already removed by path, so a duplicate of it under an unrecognised
         // alias must be too, or the redaction depends on which name the portal
         // happened to use.
-        .filter(
-          (leaf) => filedReturnsSummaryIdentity(parsed.planned.returnType, leaf.path) !== null,
+        .filter((leaf) =>
+          isFiledReturnsSummaryIdentityPath(
+            parsed.planned.returnType,
+            leaf.path,
+            collectCounterpartyRecordPaths(parsed),
+          ),
         )
         .map((leaf) => leaf.value)
         .filter((value): value is string => typeof value === "string" && value.length > 0)
@@ -285,6 +292,19 @@ function collectOwnIdentityValues(parsedEntries: readonly ParsedPlanEntry[]): Re
         // only in case is the same identifier.
         .map((value) => value.trim().toUpperCase()),
     ),
+  );
+}
+
+function collectCounterpartyRecordPaths(parsed: ParsedPlanEntry): ReadonlySet<string> {
+  return new Set(
+    parsed.leaves.flatMap((leaf) => {
+      if (leaf.valueKind !== "text" || leaf.value.trim() === "") return [];
+      const recordPath = filedReturnsSummaryCounterpartyRecordPath(
+        parsed.planned.returnType,
+        filedReturnsSummaryDocumentPath(parsed.planned.returnType, leaf.path),
+      );
+      return recordPath ? [recordPath] : [];
+    }),
   );
 }
 
