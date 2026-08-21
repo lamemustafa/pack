@@ -427,6 +427,10 @@ describe("filed-return full-year workbook", () => {
   });
 
   it("keeps a fully filed workbook byte-identical", () => {
+    // The digest is only stable because the suite pins TZ=UTC. ZIP entry headers
+    // carry a DOS date built from local-time getters, so this assertion silently
+    // encodes whichever zone last regenerated it -- it was pinned in IST and
+    // failed in CI and nowhere else.
     const plan = FILED_RETURNS_MONTHS.map((period) => ({
       artifactType: "JSON" as const,
       entryNames: [`${period.toLowerCase()}-data.json`],
@@ -444,7 +448,7 @@ describe("filed-return full-year workbook", () => {
     });
 
     expect(createHash("sha256").update(workbook).digest("hex")).toBe(
-      "1c422254db34b883c2dcb251a63667ebbd15e6195458765b0070f42bdd86e1af",
+      "3c7b76fc3cc8fae35f88632c1e08942c1842af6776f24eb056054f3259fbdaf6",
     );
   });
 
