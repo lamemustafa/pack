@@ -123,3 +123,42 @@ This log records live diagnostic findings that constrain Pack's local, target-bo
     does not infer that a newly focused GST tab belongs to the same taxpayer or replay a portal
     action from a focus event. The full-year action therefore tells the operator to keep GST
     Portal visible in the foreground while Pack moves between periods.
+
+25. A maintainer captured every monthly filed GSTR-3B PDF from April 2022 through May 2026 (50
+    periods) and read the row captions directly. No amounts or identity were retained. Two
+    independently downloaded copies of FY 2024-25 and FY 2025-26 produced identical caption sets,
+    confirming deterministic extraction.
+
+    | Effective from | Captured transition                                                                        | Pack effect                                                |
+    | -------------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------- |
+    | July 2022      | Table 3.1.1 appeared; Table 3.1 and 3.2 headings were reworded to reference it.            | Pack does not emit Table 3.1.1 or 3.2.                     |
+    | August 2022    | Table 4(B)(1), the 4(D) heading, 4(D)(1), and 4(D)(2) changed.                             | Version 4(B)(1), 4(D)(1), and 4(D)(2).                     |
+    | September 2024 | Table 6.1(B) changed from `Reverse charge` to `Reverse charge and supplies made u/s 9(5)`. | Record for planned Table 6.1 work; Pack does not emit 6.1. |
+
+    Every other caption Pack emits was byte-identical across the captured range. Apparent variation
+    in Table 3.1(a) was a `pdftotext` line-wrap artifact, not a form change. The captured Table 4
+    old text applies from April through July 2022; its current text applies from August 2022 onward.
+    Periods before April 2022 emit only the table reference. The current side has no runtime upper
+    bound: a future portal form change is a residual re-verification risk, not a reason to relabel
+    fixed history without evidence.
+
+26. The GST Portal public common validation bundle, asset `directives2.0.js`, defines GSTIN
+    validation as a 15-character GSTIN format plus a base-36 check character calculated from its
+    first 14 characters. The implementation source is the official public GST Portal
+    common-client asset `directives2.0.js`, captured 2026-08-20 with SHA-256
+    `aa5385b105ff3ccb13f641be81f000b334b2626e0f67633c9e8eb2db1927100e`; this records an
+    independently verifiable source locator without recording a portal URL or taxpayer data here.
+    Pack applies that validation only before placing a GSTR-3B taxpayer identity in a derived
+    summary workbook.
+    An invalid identity rejects the derived summary as fixed `identity-rejected`; a required
+    identity absent from the canonical response path rejects it as fixed `identity-unverified`;
+    two sources that disagree about the same taxpayer identity reject it as fixed
+    `identity-conflict`; a forbidden credential or session field rejects it as fixed
+    `privacy-rejected`. The claim
+    that Pack neither retains nor renders the rejected value is true of the **derived** outputs
+    only: on rejection no summary CSV and no workbook are written, and the fixed reason carries
+    no portal value. The original staged return artifact is deliberately unchanged. ZIP assembly
+    copies every staged portal file verbatim, so a value a derived-output guard rejected is
+    still present in the user's own requested portal JSON inside the downloaded ZIP, and in OPFS
+    until the ledger is cleared. That is the file the user asked Pack to save, and Pack does not
+    edit portal bytes; the guard scopes what Pack derives, not what the portal produced.

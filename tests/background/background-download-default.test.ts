@@ -124,6 +124,8 @@ const browserMocks = vi.hoisted(() => {
             requestId: message.payload.requestId,
             blobUrl: "blob:chrome-extension://pack/full-year.zip",
             zipEntryCount: 3,
+            artifactEntryCount: 3,
+            summaryEntryCount: 0,
           };
         }
         return { ok: false, errorCategory: "invalid-message" };

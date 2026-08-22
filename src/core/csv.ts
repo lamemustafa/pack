@@ -1,18 +1,61 @@
 import type { ArchiveManifest } from "./contracts";
 
-export function toCsv(
-  rows: readonly Record<string, string | number | boolean | undefined>[],
-): string {
-  if (rows.length === 0) return "";
+export interface CsvNumberText {
+  readonly kind: "csv-number-text";
+  readonly value: string;
+}
 
-  const headers = Object.keys(rows[0] ?? {});
-  const lines = [headers.join(",")];
+export interface CsvEmptyString {
+  readonly kind: "csv-empty-string";
+}
 
-  for (const row of rows) {
-    lines.push(headers.map((header) => csvCell(row[header])).join(","));
+export type CsvCellValue =
+  string | number | boolean | null | undefined | CsvNumberText | CsvEmptyString;
+
+export class CsvSizeLimitError extends Error {
+  constructor() {
+    super("CSV exceeded its local output limit.");
+    this.name = "CsvSizeLimitError";
   }
+}
 
-  return `${lines.join("\n")}\n`;
+export function csvNumberText(value: string): CsvNumberText {
+  if (!/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value)) {
+    throw new TypeError("CSV numeric text must use plain decimal notation.");
+  }
+  return { kind: "csv-number-text", value };
+}
+
+export function csvEmptyString(): CsvEmptyString {
+  return { kind: "csv-empty-string" };
+}
+
+export function toCsv(
+  rows: readonly Record<string, CsvCellValue>[],
+  headers: readonly string[] = Object.keys(rows[0] ?? {}),
+  options: { maxUtf8Bytes?: number } = {},
+): string {
+  if (rows.length === 0 || headers.length === 0) return "";
+  const maxUtf8Bytes = options.maxUtf8Bytes ?? Number.POSITIVE_INFINITY;
+  const encoder = new TextEncoder();
+  const output: string[] = [];
+  let byteLength = 0;
+  const append = (value: string) => {
+    byteLength += encoder.encode(value).byteLength;
+    if (byteLength > maxUtf8Bytes) throw new CsvSizeLimitError();
+    output.push(value);
+  };
+  const appendRow = (values: readonly CsvCellValue[]) => {
+    values.forEach((value, index) => {
+      if (index > 0) append(",");
+      append(csvCell(value));
+    });
+    append("\n");
+  };
+
+  appendRow(headers);
+  for (const row of rows) appendRow(headers.map((header) => row[header]));
+  return output.join("");
 }
 
 export function manifestIndexCsv(manifest: ArchiveManifest): string {
@@ -41,9 +84,28 @@ export function manifestExceptionsCsv(manifest: ArchiveManifest): string {
   );
 }
 
-function csvCell(value: string | number | boolean | undefined): string {
+function csvCell(value: CsvCellValue): string {
   if (value === undefined) return "";
+  if (isCsvNumberText(value)) return value.value;
+  if (isCsvEmptyString(value)) return '""';
 
-  const stringValue = String(value);
-  return /[",\n]/.test(stringValue) ? `"${stringValue.replace(/"/g, '""')}"` : stringValue;
+  const stringValue = value === null ? "null" : String(value);
+  const spreadsheetSafeValue =
+    typeof value === "string" && /^[\t\r\n ]*[=+\-@]/.test(value) ? `'${stringValue}` : stringValue;
+  return /[",\r\n]/.test(spreadsheetSafeValue)
+    ? `"${spreadsheetSafeValue.replace(/"/g, '""')}"`
+    : spreadsheetSafeValue;
+}
+
+function isCsvEmptyString(value: CsvCellValue): value is CsvEmptyString {
+  return typeof value === "object" && value !== null && value.kind === "csv-empty-string";
+}
+
+function isCsvNumberText(value: CsvCellValue): value is CsvNumberText {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    value.kind === "csv-number-text" &&
+    typeof value.value === "string"
+  );
 }

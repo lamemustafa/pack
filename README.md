@@ -74,6 +74,113 @@ outside store-facing claims until exact-ZIP clean-profile evidence,
 restart/resume evidence, and privacy-review evidence are recorded for the
 release.
 
+During each GSTR-3B full-year ZIP assembly with eligible files, Pack attempts to add two
+files derived from the staged portal JSON already in that run:
+`full-year-workbook.xlsx` and `full-year-summary.csv`. The workbook is the primary
+GSTR-3B working-paper output. GSTR-1 and GSTR-2B runs add only the tidy CSV and report
+that a consolidated workbook is not available for that return type; they never emit a
+blank or mislabelled GSTR-3B workbook. The workbook contains exactly one sheet,
+`GSTR-3B Consolidated`; the former standalone context CSV is not emitted. The data CSV has the
+fixed columns `period`, `return_type`, `artifact`, `outcome`, `field_label`,
+`field_path`, `value_text`, and `value_number`, with one row per period and
+flattened field. Periods and artifacts without parseable JSON receive fixed
+outcome rows instead of fabricated zeroes. The exact shaping rules are recorded
+below for the producing Pack version.
+
+The workbook's consolidated statement includes only mapped GSTR-3B Table 3.1
+and Table 4 lines. A header block shows the GSTIN and legal name plus the
+financial year above the typed financial-year month columns. Every parseable
+GSTR-3B period must contain the same non-empty GSTIN and legal name; a missing
+required identity fails the derived summary instead of borrowing one from
+another period. When no period has parseable JSON, both identity cells remain
+blank. The identity block, month header and first column stay frozen while
+scrolling. The statement body keeps
+the portal-dash applicability set for Table 3.1 and all four Table 4 tax columns.
+Totals use scaled decimal arithmetic on the original JSON number text. If an
+exact total cannot be emitted as a spreadsheet numeric cell, the Total cell
+shows the exact sum as text when it fits in an Excel cell, otherwise a fixed
+precision-limit explanation instead of a rounded figure.
+After the final statement spacer, the normal two-row footer records the GST
+portal as the source with a human-readable generation date, then included and
+excluded Form coverage. When a shared Table 4 caption is withheld because the
+rendered periods resolve to different versions, a third `Caption evidence` row
+names the affected tables. Column B is width 58 so footer values are readable
+without depending on text spill.
+Recognized identity is absent from the data CSV; the required GSTIN and legal
+name are written to the GSTR-3B workbook header. Other recognized taxpayer identity and
+per-period filing identity, including ARN and ARN date, are separated into
+transient summary context and are not written to either generated file. If no
+period has parseable JSON, the identity value cells and statement figures are
+blank. The tidy CSV remains the
+machine-readable trace from a statement figure to its source path, including
+unmapped paths and outcome rows. Both derived files persist only inside the
+user-requested downloaded ZIP. If summary or workbook generation fails,
+identity is inconsistent, or the combined derived output exceeds its local size
+limit, Pack still exports the artifact ZIP and reports a fixed categorical
+reason.
+
+### Full-year summary rules for unreleased source builds
+
+These rules apply to the GSTR-3B `full-year-workbook.xlsx` and the
+`full-year-summary.csv` produced by source builds containing this feature. They
+are not assigned to any released Pack version because no release contains this
+format yet. The producing Pack version is available in the installed extension
+manifest. Neither file carries an in-file format marker, so a machine consumer
+cannot identify the CSV format from the CSV alone and must be given the
+producing Pack version.
+
+- **Envelope rule:** Pack classifies identity against the whole JSON document,
+  then removes the artifact validator's documented return envelope before
+  flattening data (`/data/r3b` for GSTR-3B and `/data` for GSTR-1 and GSTR-2B).
+  `field_path` is relative to that envelope; a missing or non-object envelope
+  emits `json-envelope-missing`.
+- **Array rule:** configured GSTR-3B summary arrays with at most 64 elements
+  expand only when every element has a unique, non-empty discriminator selected
+  in order from `ty`, then `pos`. Expanded paths use that value, omit the
+  discriminator field and emit no count row. Empty arrays emit
+  `array-count-empty`; every other array emits one count row naming why it was
+  not expanded. Non-empty GSTR-1 and GSTR-2B arrays remain count-only.
+- **Number rule:** JSON number tokens expand without rounding into plain decimal
+  `value_number` text; spreadsheet software may apply its own numeric precision
+  limits.
+- **Text rule:** JSON strings, booleans and null use `value_text`; an empty JSON
+  string is a quoted empty CSV cell, while formula-like text is
+  apostrophe-prefixed for spreadsheet safety.
+- **Label rule:** `field_label` is populated only by the return-type label map
+  with recorded official-source provenance. Portal-PDF row-text evidence does
+  not claim that the JSON value was matched: for the existing Table 4 path
+  associations, it verifies only the caption and tax-component text and does
+  not upgrade the path association to value-matched evidence. JSON vocabulary
+  or row order alone is not enough for a future path mapping, which also needs
+  independent evidence for its JSON path or discriminator. Otherwise the label
+  is empty and `field_path` remains canonical.
+- **Identity rule:** recognized identity fields are classified from every
+  RFC6901-decoded path segment across the whole document and removed from the
+  data CSV. Every parseable GSTR-3B period must provide the same non-empty string
+  GSTIN and legal name before either derived file is emitted; those values are
+  written once in the workbook header. Optional recognized identity may be absent
+  or non-string in some periods, but conflicting string values are still rejected.
+  Other recognized taxpayer identity and per-period ARN/ARN date remain only in
+  transient summary context and are not written to the workbook. Conflicting
+  non-empty invariant identity fails summary generation.
+- **Workbook number rule:** statement cells are numeric only when a portal
+  decimal can be represented without changing its value and within spreadsheet
+  precision; otherwise a present month carries a `Precision limit` marker. A
+  missing or unparseable period stays blank. Totals use scaled exact arithmetic
+  on the original decimal strings and are numeric only when the exact result can
+  be emitted unchanged; otherwise the Total cell shows the exact sum as text and
+  explains the precision limit instead of writing a rounded figure.
+
+GSTR-9 is not the sum of twelve GSTR-3B returns. Its Table 4 requires outward
+supplies split by counterparty type, which GSTR-3B does not contain, and it
+further requires amendments, ITC claimed in a later financial year, and
+reversals. This mapping shows where sourced 3B figures feed. It does not produce
+GSTR-9 values.
+
+| GSTR-3B line item        | GSTR-9 table it feeds | Basis                                                                                                                       | Verified financial year |
+| ------------------------ | --------------------- | --------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| Table 4(A) ITC available | Table 6               | Official GST Portal Manual, GSTR-9 section 14.3: Table 6 reports ITC availed and Table 6A is auto-filled from Form GSTR-3B. | 2024-25                 |
+
 The current source build correlates a download to its target through one
 fail-closed evidence rule set, and that rule set is shared rather than
 return-type gated: the single-period GSTR-3B, GSTR-1 and GSTR-2B flows use it,
@@ -267,12 +374,14 @@ The Options page "Clear local Pack data" control removes the local keys above
 and clears Pack session storage. Pack does not store GST Portal credentials,
 OTPs, CAPTCHA values, cookies, GSTIN/PAN, taxpayer names, portal HTML, raw
 URLs/referrers, local download paths, filenames, or raw network captures.
-Generated ZIP bytes exist only transiently in memory. Source PDF, spreadsheet
-and acquired portal-data JSON bytes may also be written to the temporary local
-OPFS staging described below; interrupted exports or cleanup failures may retain
-that staging locally across saved-run recovery attempts. Pack removes it only
-after confirmed cleanup or an explicit discard that successfully clears the
-retained staging.
+Generated ZIP bytes and the derived full-year workbook and tidy CSV exist only
+transiently in extension-controlled memory before browser handoff. The derived files
+then persist only as entries in the user-requested downloaded ZIP; they are not
+separately written to extension storage or OPFS. Source PDF, spreadsheet and
+acquired portal-data JSON bytes may be written to the temporary local OPFS staging described below;
+interrupted exports or cleanup failures may retain that staging locally across
+saved-run recovery attempts. Pack removes artifact staging only after confirmed cleanup
+or an explicit discard that successfully clears the retained staging.
 
 The Options page also includes a foreground File System Access probe for
 Chromium browsers. It runs only after a user click, writes and reads back a
