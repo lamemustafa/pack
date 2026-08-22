@@ -112,6 +112,10 @@ describe("full-year completion claim", () => {
 
     expect(markup).not.toContain("ZIP unconfirmed");
     expect(markup).not.toContain("check browser Downloads");
+    // ...and it must not fall through to the success body either, which would
+    // claim a ZIP that was deliberately never created.
+    expect(markup).not.toContain("saved as one ZIP");
+    expect(markup).toContain("No ZIP created");
   });
 
   it("claims the ZIP only once a download is correlated", () => {

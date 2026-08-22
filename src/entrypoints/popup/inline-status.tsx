@@ -143,7 +143,19 @@ function getInlineStatusCopy(
     const noZipExpected = summary?.flowStep.safeSignals.includes(
       "full-fiscal-year-no-zip-artifacts",
     );
-    if (isFullYear && !filenameOverridden && !zipConfirmed && !noZipExpected) {
+    // Three distinct full-year outcomes, stated separately. Patching one of them
+    // into an exclusion on another is what produced two rounds of contradiction
+    // here: excluding the no-artifacts case from the warning dropped it into the
+    // success body, which claimed a ZIP that was deliberately never created.
+    if (isFullYear && !filenameOverridden && noZipExpected) {
+      return {
+        body: `${periods} periods processed. No ZIP was created because no eligible files were found.`,
+        icon: "–",
+        title: "No ZIP created",
+        tone: "neutral",
+      };
+    }
+    if (isFullYear && !filenameOverridden && !zipConfirmed) {
       return {
         // `completedPeriods` counts downloaded AND not-filed targets, so these
         // are periods Pack finished with, not files it fetched. "Fetched" would
