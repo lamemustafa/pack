@@ -42,7 +42,7 @@ describe("offscreen full-year summary response validation", () => {
     });
 
     await expect(
-      createOffscreenFiledReturnZipUrl("full-fiscal-year-12345678", request()),
+      createOffscreenFiledReturnZipUrl("full-fiscal-year-12345678", request("GSTR-1")),
     ).resolves.toMatchObject({
       status: "created",
       artifactEntryCount: 1,
@@ -72,7 +72,7 @@ describe("offscreen full-year summary response validation", () => {
     ).resolves.toEqual({ status: "failed", errorCategory: "offscreen-response-invalid" });
   });
 
-  it("rejects a GSTR-2B receipt that claims a workbook entry", async () => {
+  it("accepts a GSTR-2B receipt that includes a workbook entry", async () => {
     mocks.runtime.sendMessage.mockImplementationOnce(async (message?: unknown) => ({
       ok: true,
       requestId: requestIdFrom(message),
@@ -90,7 +90,11 @@ describe("offscreen full-year summary response validation", () => {
 
     await expect(
       createOffscreenFiledReturnZipUrl("full-fiscal-year-12345678", request()),
-    ).resolves.toEqual({ status: "failed", errorCategory: "offscreen-response-invalid" });
+    ).resolves.toMatchObject({
+      status: "created",
+      artifactEntryCount: 1,
+      summary: { status: "included", parsedPeriodCount: 1, rowCount: 2 },
+    });
   });
 
   it.each([
@@ -133,9 +137,9 @@ describe("offscreen full-year summary response validation", () => {
   });
 });
 
-function request() {
+function request(returnType: "GSTR-1" | "GSTR-2B" = "GSTR-2B") {
   return {
-    returnType: "GSTR-2B" as const,
+    returnType,
     entryCount: 1,
     entries: [{ artifactType: "JSON" as const, entryNames: ["april-data.json"] }],
     generatedAt: new Date("2026-08-19T12:00:00.000Z"),
@@ -146,7 +150,7 @@ function request() {
         financialYear: "2026-27",
         outcomeCategory: "staged" as const,
         period: "April" as const,
-        returnType: "GSTR-2B" as const,
+        returnType,
       },
     ],
   };

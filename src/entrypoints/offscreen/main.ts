@@ -24,6 +24,11 @@ import {
   buildFiledReturnsFullYearWorkbook,
   FILED_RETURNS_FULL_YEAR_WORKBOOK_PATH,
 } from "../../connectors/gst/filed-returns-full-year-workbook";
+import {
+  buildFiledReturnsGstr2bWorkbook,
+  FiledReturnsGstr2bWorkbookIdentityError,
+  FiledReturnsGstr2bWorkbookPrivacyError,
+} from "../../connectors/gst/filed-returns-gstr2b-workbook";
 import { XlsxSizeLimitError } from "../../core/xlsx";
 import type { PackOffscreenFiledReturnSummaryResult } from "../../connectors/gst/offscreen-blob-url";
 import {
@@ -35,8 +40,18 @@ import {
 
 const blobUrlsByRequest = new Map<string, string>();
 const MAX_ZIP_INPUT_BYTES = 100 * 1024 * 1024;
-const MAX_SUMMARY_SHEET_BYTES = 5 * 1024 * 1024;
 const MAX_SUMMARY_SOURCE_BYTES = 25 * 1024 * 1024;
+// Derived artifacts may be at most as large as the source they are derived from.
+// Tying the two removes a magic number: 5 MiB was calibrated for a CSV of mapped
+// GSTR-3B statement lines and is far too small for an invoice-level annual
+// workbook. A maintainer's SMALL captured GSTR-2B year -- 133 suppliers, about
+// 2 MiB of source JSON -- produces a 6.9 MiB workbook, so the feature was
+// refused on the very data it was designed from; a synthetic twelve-period,
+// thousand-invoice year measures 13.2 MiB, and the GST portal treats a thousand
+// documents in a period as the point where Excel/JSON becomes necessary rather
+// than as an extreme. This ceiling admits both with headroom and still sits four
+// times under MAX_ZIP_INPUT_BYTES.
+const MAX_SUMMARY_SHEET_BYTES = MAX_SUMMARY_SOURCE_BYTES;
 const FILED_RETURN_PERIOD_ORDER = new Map(
   FILED_RETURNS_MONTHS.map((period, index) => [period.toLowerCase(), index]),
 );
@@ -221,8 +236,9 @@ function createSummaryEntry(
     }
     const summary = buildFiledReturnsSummarySheet(plan, entries, MAX_SUMMARY_SHEET_BYTES);
     const remainingZipBudget = Math.max(0, MAX_ZIP_INPUT_BYTES - stagedInputBytes);
-    const workbookApplicable = plan.every((entry) => entry.returnType === "GSTR-3B");
-    if (!workbookApplicable) {
+    const gstr3bWorkbookApplicable = plan.every((entry) => entry.returnType === "GSTR-3B");
+    const gstr2bWorkbookApplicable = plan.every((entry) => entry.returnType === "GSTR-2B");
+    if (!gstr3bWorkbookApplicable && !gstr2bWorkbookApplicable) {
       if (
         summary.dataBytes.byteLength > MAX_SUMMARY_SHEET_BYTES ||
         summary.dataBytes.byteLength > remainingZipBudget
@@ -244,18 +260,41 @@ function createSummaryEntry(
       Math.max(0, MAX_SUMMARY_SHEET_BYTES - summary.dataBytes.byteLength),
       Math.max(0, remainingZipBudget - summary.dataBytes.byteLength),
     );
-    let workbookBytes: Uint8Array;
+    let workbookBytes: Uint8Array | null;
     try {
-      workbookBytes = buildFiledReturnsFullYearWorkbook(summary, plan, {
-        generatedAt,
-        maxOutputBytes: workbookBudget,
-      });
+      workbookBytes = gstr3bWorkbookApplicable
+        ? buildFiledReturnsFullYearWorkbook(summary, plan, {
+            generatedAt,
+            maxOutputBytes: workbookBudget,
+          })
+        : buildFiledReturnsGstr2bWorkbook(plan, entries, {
+            generatedAt,
+            maxOutputBytes: workbookBudget,
+          });
     } catch (error) {
       return {
         result: {
           status: "failed",
           reasonCategory:
-            error instanceof XlsxSizeLimitError ? "too-large" : "workbook-generation-failed",
+            error instanceof XlsxSizeLimitError
+              ? "too-large"
+              : error instanceof FiledReturnsGstr2bWorkbookPrivacyError
+                ? "privacy-rejected"
+                : error instanceof FiledReturnsGstr2bWorkbookIdentityError
+                  ? "identity-rejected"
+                  : "workbook-generation-failed",
+        },
+      };
+    }
+    if (!workbookBytes) {
+      return {
+        entries: [{ path: FILED_RETURNS_SUMMARY_SHEET_PATH, bytes: summary.dataBytes }],
+        result: {
+          status: "included",
+          outcomeOnly: summary.outcomeOnly,
+          parsedPeriodCount: summary.parsedPeriodCount,
+          rowCount: summary.rowCount,
+          workbookOutcome: "not-applicable",
         },
       };
     }

@@ -378,9 +378,12 @@ function isSummaryResult(
       .filter((entry) => entry.artifactType === "JSON" && entry.outcomeCategory === "staged")
       .map((entry) => entry.period),
   ).size;
-  const expectedWorkbookOutcome = plan.every((entry) => entry.returnType === "GSTR-3B")
-    ? undefined
-    : "not-applicable";
+  const returnType = plan[0]?.returnType;
+  const expectedWorkbookOutcome =
+    (returnType === "GSTR-3B" || returnType === "GSTR-2B") &&
+    plan.every((entry) => entry.returnType === returnType)
+      ? undefined
+      : "not-applicable";
   return (
     hasOnlyKeys(record, [
       "outcomeOnly",
