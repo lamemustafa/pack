@@ -1,0 +1,563 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pack UX Wireframe</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #111827;
+        --muted: #4b5563;
+        --line: #cbd5e1;
+        --line-strong: #94a3b8;
+        --surface: #ffffff;
+        --page: #f3f6f8;
+        --navy: #12365c;
+        --navy-2: #0b2540;
+        --teal: #0f766e;
+        --amber: #8a5b00;
+        --red: #9f2d20;
+        --soft-teal: #e7f6f3;
+        --soft-amber: #fff7e8;
+        --soft-red: #fff1ef;
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        background: var(--page);
+        color: var(--ink);
+      }
+
+      button,
+      input,
+      select {
+        font: inherit;
+      }
+
+      .lab {
+        display: grid;
+        justify-content: center;
+        gap: 12px;
+        padding: 20px;
+      }
+
+      .state-switcher {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        width: 420px;
+      }
+
+      .state-switcher button {
+        min-height: 34px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #fff;
+        color: var(--ink);
+        padding: 0 10px;
+        font-size: 12px;
+        font-weight: 750;
+      }
+
+      .state-switcher button[aria-pressed="true"] {
+        border-color: var(--navy);
+        background: var(--navy);
+        color: #fff;
+      }
+
+      .popup {
+        display: grid;
+        width: 420px;
+        max-height: 560px;
+        overflow: auto;
+        gap: 12px;
+        border: 1px solid var(--line);
+        background: #f8fafc;
+        padding: 14px;
+      }
+
+      .topbar,
+      .row,
+      .result-head,
+      .target-row,
+      .footer {
+        display: flex;
+        min-width: 0;
+        align-items: center;
+      }
+
+      .topbar,
+      .footer {
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+      }
+
+      .mark {
+        display: inline-grid;
+        width: 28px;
+        height: 28px;
+        flex: 0 0 auto;
+        place-items: center;
+        border-radius: 7px;
+        background: var(--navy);
+        color: #fff;
+        font-size: 14px;
+        font-weight: 900;
+      }
+
+      .brand strong {
+        display: block;
+        font-size: 15px;
+        line-height: 1.1;
+      }
+
+      .brand span {
+        display: block;
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.2;
+      }
+
+      .status-pill {
+        display: inline-flex;
+        min-height: 28px;
+        align-items: center;
+        border: 1px solid #96cdbf;
+        border-radius: 999px;
+        background: var(--soft-teal);
+        color: #075447;
+        padding: 0 9px;
+        font-size: 11px;
+        font-weight: 800;
+        white-space: nowrap;
+      }
+
+      .panel {
+        display: grid;
+        gap: 10px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface);
+        padding: 11px;
+      }
+
+      .result-head {
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      h1,
+      h2 {
+        margin: 0;
+        line-height: 1.2;
+      }
+
+      h1 {
+        font-size: 17px;
+      }
+
+      h2 {
+        font-size: 14px;
+      }
+
+      p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.35;
+      }
+
+      .quiet-label {
+        color: #334155;
+        font-size: 11px;
+        font-weight: 850;
+      }
+
+      .result-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 7px;
+      }
+
+      .choice {
+        display: grid;
+        min-height: 46px;
+        align-content: center;
+        gap: 2px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: #fff;
+        color: var(--ink);
+        padding: 7px 9px;
+        text-align: left;
+      }
+
+      .choice strong {
+        font-size: 12px;
+        line-height: 1.15;
+      }
+
+      .choice span {
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.2;
+      }
+
+      .choice-selected {
+        border-color: #6ba89a;
+        background: var(--soft-teal);
+      }
+
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .chip {
+        display: inline-flex;
+        min-height: 32px;
+        align-items: center;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: #fff;
+        color: #263447;
+        padding: 0 9px;
+        font-size: 12px;
+        font-weight: 750;
+      }
+
+      .chip-on {
+        border-color: var(--navy);
+        background: #e7edf5;
+        color: var(--navy-2);
+      }
+
+      .target-summary {
+        display: grid;
+        gap: 7px;
+      }
+
+      .target-row {
+        justify-content: space-between;
+        gap: 8px;
+        min-height: 42px;
+        border-top: 1px solid #e2e8f0;
+        padding-top: 7px;
+      }
+
+      .target-row:first-child {
+        border-top: 0;
+        padding-top: 0;
+      }
+
+      .target-main {
+        display: grid;
+        min-width: 0;
+        gap: 2px;
+      }
+
+      .target-main strong {
+        font-size: 12px;
+        line-height: 1.2;
+      }
+
+      .target-main span {
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .row-status {
+        display: inline-flex;
+        min-height: 26px;
+        align-items: center;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: #fff;
+        color: #334155;
+        padding: 0 8px;
+        font-size: 11px;
+        font-weight: 800;
+        white-space: nowrap;
+      }
+
+      .row-status-ok {
+        border-color: #8bc6ad;
+        background: var(--soft-teal);
+        color: #075447;
+      }
+
+      .row-status-warn {
+        border-color: #e7c27d;
+        background: var(--soft-amber);
+        color: #5b3b00;
+      }
+
+      .row-status-danger {
+        border-color: #e3a9a0;
+        background: var(--soft-red);
+        color: var(--red);
+      }
+
+      .primary {
+        min-height: 46px;
+        width: 100%;
+        border: 1px solid var(--navy);
+        border-radius: 8px;
+        background: var(--navy);
+        color: #fff;
+        font-weight: 850;
+      }
+
+      .secondary {
+        min-height: 38px;
+        border: 1px solid var(--line-strong);
+        border-radius: 7px;
+        background: #fff;
+        color: var(--ink);
+        font-weight: 800;
+      }
+
+      .question {
+        display: grid;
+        gap: 9px;
+        border: 1px solid #e7c27d;
+        border-radius: 8px;
+        background: var(--soft-amber);
+        color: #4c3200;
+        padding: 10px;
+      }
+
+      .question strong {
+        color: #2f2307;
+        font-size: 13px;
+      }
+
+      .question-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 7px;
+      }
+
+      .evidence {
+        display: grid;
+        gap: 5px;
+        border: 1px solid #d9e1ea;
+        border-radius: 8px;
+        background: #f9fbfd;
+        padding: 9px;
+      }
+
+      .evidence code {
+        color: #334155;
+        font-size: 11px;
+        overflow-wrap: anywhere;
+      }
+
+      .footer {
+        color: var(--muted);
+        font-size: 10.5px;
+        line-height: 1.3;
+      }
+
+      .footer a {
+        color: var(--navy);
+        font-weight: 800;
+        text-decoration: none;
+      }
+
+      [data-view] {
+        display: none;
+      }
+
+      [data-current="ready"] [data-view="ready"],
+      [data-current="running"] [data-view="running"],
+      [data-current="blocked"] [data-view="blocked"] {
+        display: grid;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="lab" data-current="ready" id="lab">
+      <nav class="state-switcher" aria-label="Wireframe states">
+        <button type="button" data-state="ready" aria-pressed="true">Plan</button>
+        <button type="button" data-state="running" aria-pressed="false">Running</button>
+        <button type="button" data-state="blocked" aria-pressed="false">Needs review</button>
+      </nav>
+
+      <main class="popup" aria-label="ComplyEaze Pack popup wireframe">
+        <header class="topbar">
+          <div class="brand">
+            <span class="mark">P</span>
+            <div>
+              <strong>Pack</strong>
+              <span>by ComplyEaze</span>
+            </div>
+          </div>
+          <span class="status-pill">GST ready</span>
+        </header>
+
+        <section class="panel" data-view="ready">
+          <div class="result-head">
+            <div>
+              <p class="quiet-label">Result</p>
+              <h1>Collect filed returns</h1>
+            </div>
+            <span class="row-status">14 targets</span>
+          </div>
+
+          <div class="result-grid" aria-label="Result choices">
+            <button type="button" class="choice choice-selected">
+              <strong>Filed returns</strong>
+              <span>PDF, Excel, portal data</span>
+            </button>
+            <button type="button" class="choice">
+              <strong>3B workbook</strong>
+              <span>Computed from saved files</span>
+            </button>
+          </div>
+
+          <div>
+            <p class="quiet-label">Returns</p>
+            <div class="chips" aria-label="Return types">
+              <span class="chip chip-on">GSTR-3B</span>
+              <span class="chip chip-on">GSTR-1</span>
+              <span class="chip">GSTR-2B</span>
+            </div>
+          </div>
+
+          <div>
+            <p class="quiet-label">Periods</p>
+            <div class="chips" aria-label="Periods">
+              <span class="chip">Last month</span>
+              <span class="chip chip-on">Full FY 2025-26</span>
+              <span class="chip">Choose months</span>
+            </div>
+          </div>
+
+          <div>
+            <p class="quiet-label">Formats</p>
+            <div class="chips" aria-label="Formats">
+              <span class="chip chip-on">All supported</span>
+              <span class="chip">PDF</span>
+              <span class="chip">Excel</span>
+            </div>
+          </div>
+
+          <section class="evidence" aria-label="Target plan summary">
+            <h2>Target plan</h2>
+            <p>
+              12 monthly 3B PDFs, 1 GSTR-1 PDF, 1 GSTR-1 Excel. Every row must finish on its own
+              evidence.
+            </p>
+          </section>
+
+          <button type="button" class="primary">Start 14 target-bound downloads</button>
+        </section>
+
+        <section class="panel" data-view="running">
+          <div class="result-head">
+            <div>
+              <p class="quiet-label">Run</p>
+              <h1>8 of 14 targets saved</h1>
+            </div>
+            <span class="row-status row-status-ok">Running</span>
+          </div>
+          <div class="target-summary">
+            <div class="target-row">
+              <div class="target-main">
+                <strong>GSTR-3B - April 2025 - PDF</strong>
+                <span>Completed by browser-download evidence</span>
+              </div>
+              <span class="row-status row-status-ok">Saved</span>
+            </div>
+            <div class="target-row">
+              <div class="target-main">
+                <strong>GSTR-3B - December 2025 - PDF</strong>
+                <span>GST Portal visible; Pack is waiting for the file</span>
+              </div>
+              <span class="row-status">Running</span>
+            </div>
+            <div class="target-row">
+              <div class="target-main">
+                <strong>GSTR-1 - FY 2025-26 - Excel</strong>
+                <span>Pending; no portal action yet</span>
+              </div>
+              <span class="row-status">Queued</span>
+            </div>
+          </div>
+          <button type="button" class="secondary">Pause after current target</button>
+        </section>
+
+        <section class="panel" data-view="blocked">
+          <div class="result-head">
+            <div>
+              <p class="quiet-label">Needs review</p>
+              <h1>March 2026 is not confirmed</h1>
+            </div>
+            <span class="row-status row-status-warn">1 question</span>
+          </div>
+          <div class="question">
+            <strong
+              >Did Browser Downloads show a completed Pack download for this exact target?</strong
+            >
+            <p>
+              Target: GSTR-3B - March 2026 - PDF. Manual observation records what you saw; it does
+              not complete the target.
+            </p>
+            <div class="question-actions">
+              <button type="button" class="primary">Reconcile</button>
+              <button type="button" class="secondary">Cancel target</button>
+            </div>
+          </div>
+          <details class="evidence">
+            <summary class="quiet-label">More run controls</summary>
+            <button type="button" class="secondary">
+              Discard saved run and start selected plan
+            </button>
+            <button type="button" class="secondary">Record manual observation</button>
+          </details>
+        </section>
+
+        <footer class="footer">
+          <span
+            >Local only. Pack is not affiliated with GSTN, CBIC, or the Government of India.</span
+          >
+          <a href="#">Storage and reset</a>
+        </footer>
+      </main>
+    </div>
+
+    <script>
+      const lab = document.querySelector("#lab");
+      document.querySelectorAll("[data-state]").forEach((button) => {
+        button.addEventListener("click", () => {
+          lab.dataset.current = button.dataset.state;
+          document
+            .querySelectorAll("[data-state]")
+            .forEach((item) => item.setAttribute("aria-pressed", String(item === button)));
+        });
+      });
+    </script>
+  </body>
+</html>

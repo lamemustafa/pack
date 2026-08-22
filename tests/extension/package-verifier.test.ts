@@ -23,6 +23,44 @@ describe("extension package verifier", () => {
     expect(result.output).toContain("Pack WXT extension package verification passed.");
   });
 
+  it("rejects an empty required brand asset", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(outputDir, "brand/pack-mark.svg", "");
+
+    const result = await runVerifier(outputDir);
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("Required brand asset is empty: brand/pack-mark.svg");
+  });
+
+  it("rejects an empty extension page", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(outputDir, "popup.html", "");
+
+    // An empty page references nothing, so a bundle check alone would pass it.
+    const result = await runVerifier(outputDir);
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("Required extension page is empty: popup.html");
+  });
+
+  it("rejects a page whose referenced bundle is missing", async () => {
+    const outputDir = await createValidPackage();
+    await rm(path.join(outputDir, "chunks", "popup.js"));
+
+    // A page that can be read is not a page that works.
+    const result = await runVerifier(outputDir);
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("Missing asset referenced by popup.html: chunks/popup.js");
+  });
+
+  it("rejects a page whose referenced bundle is empty", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(outputDir, "chunks/popup.js", "");
+
+    const result = await runVerifier(outputDir);
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("Asset referenced by popup.html is empty");
+  });
+
   it("accepts packaged HTML without module preload hints", async () => {
     const outputDir = await createValidPackage();
     await writePackageFile(
@@ -375,6 +413,36 @@ describe("extension package verifier", () => {
     expect(result.output).toContain("Pathful GST Portal URL");
   });
 
+  it("rejects a package missing any extension page", async () => {
+    // A build that dropped a page still loaded as an extension, with a dead surface behind
+    // the action. Only offscreen.html was asserted, so nothing failed.
+    for (const page of ["offscreen.html", "options.html", "panel.html", "popup.html"]) {
+      const outputDir = await createValidPackage();
+      await rm(path.join(outputDir, page));
+
+      const result = await runVerifier(outputDir);
+
+      expect(result.status).not.toBe(0);
+      expect(result.output).toContain(`Missing required extension page: ${page}`);
+    }
+  });
+
+  it("rejects a package missing a brand asset a Pack page loads at runtime", async () => {
+    for (const asset of [
+      "brand/pack-favicon.svg",
+      "brand/pack-logo-header.svg",
+      "brand/pack-mark.svg",
+    ]) {
+      const outputDir = await createValidPackage();
+      await rm(path.join(outputDir, asset));
+
+      const result = await runVerifier(outputDir);
+
+      expect(result.status).not.toBe(0);
+      expect(result.output).toContain(`Missing required brand asset: ${asset}`);
+    }
+  });
+
   it("keeps exact ZIP verification wired to browser-loaded release checks", async () => {
     const script = await readFile(
       path.join(rootDir, "scripts", "verify-extension-zip.mjs"),
@@ -476,11 +544,19 @@ async function createValidPackage(): Promise<string> {
   };
 
   await writePackageFile(outputDir, "manifest.json", `${JSON.stringify(manifest, null, 2)}\n`);
-  await writePackageFile(
-    outputDir,
-    "offscreen.html",
-    '<!doctype html><html><body><script type="module" src="/chunks/offscreen.js"></script></body></html>',
-  );
+  for (const page of ["offscreen.html", "options.html", "panel.html", "popup.html"]) {
+    const chunk = `chunks/${page.replace(".html", ".js")}`;
+    await writePackageFile(
+      outputDir,
+      page,
+      `<!doctype html><html><body><script type="module" src="/${chunk}"></script></body></html>`,
+    );
+    // The chunk each page references must exist for this to be a valid package.
+    // It previously did not, so the fixture asserted a package that could never
+    // load — the shape AGENTS.md warns about, where a fixture encodes what we
+    // assumed rather than what the artifact contains.
+    await writePackageFile(outputDir, chunk, "export {};\n");
+  }
   for (const iconSize of [16, 32, 48, 128]) {
     await writePackageFile(outputDir, `icons/icon-${iconSize}.png`, "synthetic-png");
   }
@@ -488,6 +564,9 @@ async function createValidPackage(): Promise<string> {
     "favicon.ico",
     "icons/icon-256.png",
     "icons/icon-512.png",
+    "brand/pack-favicon.svg",
+    "brand/pack-logo-header.svg",
+    "brand/pack-mark.svg",
     "brand/pack-icon.svg",
     "brand/pack-logo.svg",
     "brand/pack-logo-hero.svg",

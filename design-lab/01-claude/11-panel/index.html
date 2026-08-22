@@ -1,0 +1,685 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pack — panel prototype</title>
+    <style>
+      :root {
+        --surface: #ffffff;
+        --surface-muted: #f7f9fb;
+        --canvas: #f5f7fa;
+        --inset: #eef3f8;
+        --sunken: #e5ebf2;
+        --ink: #172033;
+        --ink-2: #334155;
+        --ink-muted: #526477;
+        --link: #244d7c;
+        --inverse: #ffffff;
+        --b-subtle: #d8e1ec;
+        --b-default: #c8d3de;
+        --b-strong: #9fb0c1;
+        --action: #173a63;
+        --action-hover: #0f2a49;
+        --ok-fg: #115d38;
+        --ok-bg: #e8f8ef;
+        --warn-fg: #75420b;
+        --warn-bg: #fff7e8;
+        --warn-bd: #ddc58b;
+        --sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        --mono: ui-monospace, "SF Mono", Menlo, monospace;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: var(--sans);
+        font-size: 15px;
+        line-height: 1.5;
+        padding: 24px;
+      }
+      .stage {
+        display: flex;
+        gap: 28px;
+        align-items: flex-start;
+        flex-wrap: wrap;
+      }
+      .cap {
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--ink-muted);
+        margin: 0 0 8px;
+      }
+      .panel {
+        width: 380px;
+        border: 1px solid var(--b-default);
+        border-radius: 8px;
+        background: var(--surface);
+        overflow: hidden;
+      }
+      .head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+      }
+      .mark {
+        width: 20px;
+        height: 20px;
+        border-radius: 4px;
+        background: var(--action);
+        display: grid;
+        place-items: center;
+        flex: 0 0 auto;
+      }
+      .name {
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+      .pub {
+        margin-left: auto;
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--ink-muted);
+      }
+      .src {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--ok-fg);
+        padding: 0 14px 10px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--ok-fg);
+      }
+      .body {
+        padding: 14px;
+        border-top: 1px solid var(--b-subtle);
+      }
+      h2 {
+        margin: 0 0 10px;
+        font-size: 16px;
+        font-weight: 600;
+        letter-spacing: -0.012em;
+      }
+      .choice {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        width: 100%;
+        text-align: left;
+        font: inherit;
+        font-size: 14px;
+        color: var(--ink);
+        background: var(--surface);
+        border: 1px solid var(--b-subtle);
+        border-radius: 6px;
+        padding: 10px 12px;
+        margin-bottom: 6px;
+        cursor: pointer;
+      }
+      .choice:hover {
+        border-color: var(--b-strong);
+        background: var(--surface-muted);
+      }
+      .choice .n {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--ink-muted);
+        white-space: nowrap;
+      }
+      .more {
+        font: inherit;
+        font-size: 13px;
+        color: var(--link);
+        background: none;
+        border: 0;
+        padding: 4px 8px 0 0;
+        cursor: pointer;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+      .foot {
+        border-top: 1px solid var(--b-subtle);
+        padding: 12px 14px;
+        background: var(--surface-muted);
+      }
+      .btn {
+        width: 100%;
+        font: inherit;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--inverse);
+        background: var(--action);
+        border: 1px solid var(--action);
+        border-radius: 6px;
+        padding: 10px;
+        cursor: pointer;
+      }
+      .btn:hover {
+        background: var(--action-hover);
+      }
+      .btn[disabled] {
+        opacity: 0.45;
+        cursor: default;
+      }
+      .btn.ghost {
+        background: var(--surface);
+        color: var(--ink-2);
+        border-color: var(--b-default);
+      }
+      .fine {
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--ink-muted);
+        margin: 8px 0 0;
+        text-align: center;
+      }
+      .grid {
+        border: 1px solid var(--b-subtle);
+        border-radius: 6px;
+        overflow: hidden;
+        margin-bottom: 8px;
+      }
+      table.mx {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .mx th,
+      .mx td {
+        padding: 0;
+      }
+      .mx thead th {
+        font-family: var(--mono);
+        font-size: 9px;
+        font-weight: 500;
+        color: var(--ink-muted);
+        padding: 4px 0;
+        background: var(--surface-muted);
+        border-bottom: 1px solid var(--b-subtle);
+      }
+      .mx .fy {
+        font-family: var(--mono);
+        font-size: 9px;
+        font-weight: 500;
+        color: var(--ink-muted);
+        text-align: left;
+        padding: 4px 6px;
+        background: var(--inset);
+      }
+      .mx tbody th.rowh {
+        font-family: var(--mono);
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--ink-2);
+        text-align: left;
+        padding: 0 6px;
+        cursor: pointer;
+        background: var(--surface-muted);
+        border-right: 1px solid var(--b-subtle);
+      }
+      .mx tbody th.rowh:hover {
+        color: var(--link);
+      }
+      .cell {
+        display: block;
+        width: 100%;
+        height: 24px;
+        border: 0;
+        border-right: 1px solid var(--b-subtle);
+        border-bottom: 1px solid var(--b-subtle);
+        background: var(--surface);
+        font-family: var(--mono);
+        font-size: 9px;
+        color: var(--ink-muted);
+        cursor: pointer;
+        padding: 0;
+      }
+      .cell[data-on="1"] {
+        background: var(--action);
+        color: var(--inverse);
+      }
+      .cell[data-na="1"] {
+        background: var(--sunken);
+        cursor: not-allowed;
+      }
+      .hint {
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--ink-muted);
+        margin: 0 0 8px;
+      }
+      .rows {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+      .rows td {
+        padding: 5px 0;
+        border-bottom: 1px solid var(--b-subtle);
+        color: var(--ink-2);
+      }
+      .rows td.t {
+        font-family: var(--mono);
+        color: var(--ink);
+        white-space: nowrap;
+      }
+      .rows td.e {
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--ink-muted);
+        text-align: right;
+      }
+      .review {
+        border: 1px solid var(--warn-bd);
+        background: var(--warn-bg);
+        border-radius: 6px;
+        padding: 12px;
+        margin-bottom: 10px;
+      }
+      .review h3 {
+        margin: 0 0 4px;
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .review p {
+        margin: 0 0 10px;
+        font-size: 13px;
+        color: var(--ink-2);
+      }
+      .review .btn {
+        margin-bottom: 5px;
+        text-align: left;
+      }
+      .status {
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--ink-2);
+        margin: 0 0 10px;
+      }
+      .status b {
+        color: var(--ink);
+      }
+      .aside {
+        max-width: 25rem;
+        font-size: 13px;
+        color: var(--ink-2);
+      }
+      .aside h3 {
+        font-size: 13px;
+        margin: 18px 0 4px;
+        color: var(--ink);
+      }
+      .aside ul {
+        padding-left: 18px;
+        margin: 4px 0;
+      }
+      .aside li {
+        margin-bottom: 3px;
+      }
+      .aside code {
+        font-family: var(--mono);
+        font-size: 11px;
+        background: var(--sunken);
+        padding: 1px 4px;
+        border-radius: 3px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <div>
+        <p class="cap">Panel — default view</p>
+        <div class="panel">
+          <div class="head">
+            <span class="mark" aria-hidden="true"
+              ><svg width="12" height="12" viewBox="0 0 24 24">
+                <path
+                  d="M7 3H4v18h3M17 3h3v18h-3"
+                  fill="none"
+                  stroke="#A9C8FF"
+                  stroke-width="2.4"
+                  stroke-linecap="square"
+                />
+                <rect x="9" y="7" width="2.6" height="2.6" fill="#fff" />
+                <rect x="12.8" y="7" width="2.6" height="2.6" fill="#fff" />
+                <rect x="9" y="10.8" width="2.6" height="2.6" fill="#fff" />
+                <rect x="12.8" y="10.8" width="2.6" height="2.6" fill="#fff" />
+                <rect x="9" y="14.6" width="2.6" height="2.6" fill="#fff" />
+                <rect x="12.8" y="14.6" width="2.6" height="2.6" fill="#fff" /></svg
+            ></span>
+            <span class="name">Pack</span><span class="pub">ComplyEaze</span>
+          </div>
+          <div class="src"><span class="dot"></span>GST portal · signed in</div>
+          <div class="body" id="body"></div>
+          <div class="foot">
+            <button class="btn" id="go" type="button" hidden></button>
+            <p class="fine">Local only · nothing leaves this device.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="aside">
+        <h3>What changed</h3>
+        <p>
+          The previous version put 370 matrix cells, five recipes, three format chips, two delivery
+          options and four computed-artifact checkboxes on screen at once, in a 400px panel. Every
+          one was added to answer a real problem. Together they were worse than the popup they
+          replaced. That file is kept beside this one as
+          <code>_previous-overbuilt.html</code>.
+        </p>
+        <p>
+          This version opens with <b>three choices and no button</b>. Everything else still exists,
+          behind <i>Choose periods</i>, for the person who needs it.
+        </p>
+        <h3>Removed outright</h3>
+        <ul>
+          <li>
+            <b>Four computed-artifact checkboxes.</b> Three read "not built yet". A control for
+            something that does not exist is noise.
+          </li>
+          <li>
+            <b>The delivery choice.</b> More than one file is always a ZIP, because the alternative
+            is one browser dialog per file. The button states it rather than asking.
+          </li>
+          <li>
+            <b>Format chips.</b> Each return has a right default. Formats belong in the custom view,
+            not the first screen.
+          </li>
+          <li>
+            <b>Ten years by default.</b> It opens on the current year; earlier years are one click
+            away.
+          </li>
+        </ul>
+        <h3>Unchanged</h3>
+        <ul>
+          <li>A paused target asks one question with three answers.</li>
+          <li><code>skipped</code> is terminal and still blocks completion.</li>
+          <li>Every cell is one target with its own binding and download evidence.</li>
+        </ul>
+      </div>
+    </div>
+
+    <script>
+      const MONTHS = [
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+        "Jan",
+        "Feb",
+        "Mar",
+      ];
+      const DOCS = [
+        { id: "GSTR-3B", label: "3B" },
+        { id: "GSTR-1", label: "R1" },
+        { id: "GSTR-2B", label: "2B" },
+      ];
+      const YEARS = [
+        { id: "2026-27", filed: 4 },
+        { id: "2025-26", filed: 12 },
+        { id: "2024-25", filed: 12 },
+      ];
+      const RECIPES = [
+        { id: "3b", label: "This year's GSTR-3B", docs: ["GSTR-3B"] },
+        { id: "all", label: "Everything this year", docs: ["GSTR-3B", "GSTR-1", "GSTR-2B"] },
+      ];
+
+      let view = "simple";
+      let years = 1;
+      let sel = new Set();
+      let plan = [];
+      let runToken = 0;
+
+      const key = (d, y, m) => `${d}|${y}|${m}`;
+      const avail = (y, m) => m < YEARS[y].filed;
+      const GLYPH = { saved: "✓", "needs-review": "!", running: "•", skipped: "–", queued: "·" };
+
+      function selectRecipe(r) {
+        sel = new Set();
+        for (const d of r.docs) for (let m = 0; m < 12; m++) if (avail(0, m)) sel.add(key(d, 0, m));
+      }
+      function countFor(r) {
+        let n = 0;
+        for (let m = 0; m < 12; m++) if (avail(0, m)) n += r.docs.length;
+        return n;
+      }
+      function buildPlan() {
+        const out = [];
+        for (const d of DOCS)
+          for (let y = 0; y < YEARS.length; y++)
+            for (let m = 0; m < 12; m++) {
+              const k = key(d.id, y, m);
+              if (sel.has(k))
+                out.push({
+                  k,
+                  doc: d.id,
+                  label: d.label,
+                  month: MONTHS[m],
+                  fy: YEARS[y].id,
+                  status: "planned",
+                  ev: "",
+                });
+            }
+        return out;
+      }
+
+      function render() {
+        const body = document.getElementById("body");
+        const go = document.getElementById("go");
+
+        if (view === "simple") {
+          body.innerHTML =
+            `<h2>What do you need?</h2>` +
+            RECIPES.map(
+              (r) =>
+                `<button class="choice" type="button" data-r="${r.id}"><span>${r.label}</span><span class="n">${countFor(r)} files</span></button>`,
+            ).join("") +
+            `<button class="choice" type="button" data-custom="1"><span>Choose periods</span><span class="n">pick your own</span></button>`;
+          go.hidden = true;
+          return;
+        }
+
+        if (view === "custom") {
+          const n = buildPlan().length;
+          const head = `<tr><th></th>${MONTHS.map((m) => `<th>${m[0]}</th>`).join("")}</tr>`;
+          const rows = [];
+          for (let y = 0; y < years; y++) {
+            rows.push(`<tr><th class="fy" colspan="13">FY ${YEARS[y].id}</th></tr>`);
+            for (const d of DOCS) {
+              const cells = MONTHS.map((m, i) => {
+                const k = key(d.id, y, i);
+                const na = !avail(y, i);
+                return `<td><button class="cell" type="button" data-k="${k}" data-na="${na ? 1 : 0}" data-on="${sel.has(k) ? 1 : 0}" ${na ? "disabled" : ""} title="${na ? "Not filed yet" : `${d.id} ${m} ${YEARS[y].id}`}"></button></td>`;
+              }).join("");
+              rows.push(
+                `<tr><th class="rowh" data-row="${d.id}" data-y="${y}">${d.label}</th>${cells}</tr>`,
+              );
+            }
+          }
+          body.innerHTML =
+            `<h2>Choose periods</h2>` +
+            `<p class="hint">Drag across cells. Click a row label to take its whole year.</p>` +
+            `<div class="grid"><table class="mx"><thead>${head}</thead><tbody>${rows.join("")}</tbody></table></div>` +
+            `<button class="more" type="button" data-back="1">Back</button>` +
+            (years < YEARS.length
+              ? `<button class="more" type="button" data-earlier="1">Earlier years</button>`
+              : "");
+          go.hidden = false;
+          go.disabled = n === 0;
+          go.textContent =
+            n === 0
+              ? "Nothing selected"
+              : n === 1
+                ? "Download 1 file"
+                : `Download ${n} files as one ZIP`;
+          return;
+        }
+
+        const saved = plan.filter((t) => t.status === "saved").length;
+        const rev = plan.find((t) => t.status === "needs-review");
+        const skipped = plan.filter((t) => t.status === "skipped").length;
+        const settled = plan.every((t) => ["saved", "skipped"].includes(t.status));
+        body.innerHTML =
+          (rev
+            ? `<div class="review"><h3>${rev.month} ${rev.fy} · ${rev.label}</h3>
+                 <p>Chrome saved a file, but Pack could not match it to ${rev.month}. It will not mark ${rev.month} done on a guess.</p>
+                 <button class="btn" type="button" data-rv="observe">I checked Downloads — it is there</button>
+                 <button class="btn ghost" type="button" data-rv="retry">Try ${rev.month} again</button>
+                 <button class="btn ghost" type="button" data-rv="skip">Skip ${rev.month}</button></div>`
+            : "") +
+          `<p class="status"><b>${saved} of ${plan.length} saved</b>${skipped ? ` · ${skipped} skipped` : ""} · ${
+            settled ? (skipped ? "settled, not complete" : "complete") : "keep the GST tab in front"
+          }</p>` +
+          `<table class="rows"><tbody>${plan
+            .slice(0, 7)
+            .map(
+              (t) =>
+                `<tr><td class="t">${t.month} ${t.label}</td><td>${GLYPH[t.status] || ""}</td><td class="e">${t.ev || "—"}</td></tr>`,
+            )
+            .join("")}</tbody></table>`;
+        go.hidden = false;
+        go.disabled = !settled;
+        go.textContent = settled ? "Start another" : "Running…";
+      }
+
+      function start() {
+        plan = buildPlan();
+        if (!plan.length) return;
+        const token = ++runToken;
+        view = "running";
+        plan.forEach((t) => (t.status = "queued"));
+        render();
+        let i = 0;
+        const tick = () => {
+          if (token !== runToken) return;
+          if (i >= plan.length) {
+            view = "done";
+            return render();
+          }
+          const t = plan[i];
+          t.status = "running";
+          render();
+          setTimeout(() => {
+            if (token !== runToken) return;
+            if (t.doc === "GSTR-3B" && t.month === "Jul") {
+              t.status = "needs-review";
+              t.ev = "unmatched download";
+            } else {
+              t.status = "saved";
+              t.ev = "download confirmed";
+            }
+            i += 1;
+            render();
+            tick();
+          }, 150);
+        };
+        tick();
+      }
+
+      let drag = null;
+      const paint = (c) => {
+        if (!drag || !c || c.disabled) return;
+        const k = c.dataset.k;
+        if (drag.mode === "add") sel.add(k);
+        else sel.delete(k);
+        c.dataset.on = sel.has(k) ? "1" : "0";
+      };
+      document.addEventListener("pointerdown", (e) => {
+        const c = e.target.closest(".cell");
+        if (!c || c.disabled || view !== "custom") return;
+        e.preventDefault();
+        drag = { mode: sel.has(c.dataset.k) ? "remove" : "add" };
+        paint(c);
+      });
+      document.addEventListener("pointerover", (e) => {
+        if (drag) paint(e.target.closest(".cell"));
+      });
+      document.addEventListener("pointerup", () => {
+        if (!drag) return;
+        drag = null;
+        render();
+      });
+
+      document.addEventListener("click", (e) => {
+        if (e.target.closest(".cell")) return;
+        const r = e.target.closest("[data-r]");
+        if (r) {
+          selectRecipe(RECIPES.find((x) => x.id === r.dataset.r));
+          return start();
+        }
+        if (e.target.closest("[data-custom]")) {
+          view = "custom";
+          return render();
+        }
+        if (e.target.closest("[data-back]")) {
+          view = "simple";
+          sel = new Set();
+          years = 1;
+          return render();
+        }
+        if (e.target.closest("[data-earlier]")) {
+          years = YEARS.length;
+          return render();
+        }
+        const rowh = e.target.closest("[data-row]");
+        if (rowh) {
+          const y = Number(rowh.dataset.y);
+          const ks = MONTHS.map((_, i) => i)
+            .filter((i) => avail(y, i))
+            .map((i) => key(rowh.dataset.row, y, i));
+          const on = ks.every((k) => sel.has(k));
+          ks.forEach((k) => (on ? sel.delete(k) : sel.add(k)));
+          return render();
+        }
+        const rv = e.target.closest("[data-rv]");
+        if (rv) {
+          const t = plan.find((x) => x.status === "needs-review");
+          if (!t) return;
+          if (rv.dataset.rv === "observe") {
+            t.ev = "manual observation — not completion";
+            rv.closest(".review").innerHTML =
+              '<p style="margin:0;font-size:13px">Recorded. A manual observation does not complete the target.</p>';
+            return;
+          }
+          if (rv.dataset.rv === "retry") {
+            t.status = "saved";
+            t.ev = "download confirmed";
+          }
+          if (rv.dataset.rv === "skip") {
+            t.status = "skipped";
+            t.ev = "you skipped this";
+          }
+          return render();
+        }
+        if (e.target.id === "go") {
+          if (view === "custom") return start();
+          runToken += 1;
+          view = "simple";
+          sel = new Set();
+          plan = [];
+          years = 1;
+          return render();
+        }
+      });
+
+      render();
+    </script>
+  </body>
+</html>
