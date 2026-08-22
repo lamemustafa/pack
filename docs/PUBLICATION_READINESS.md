@@ -1,7 +1,7 @@
 # Publication Readiness
 
 This checklist tracks what remains while ComplyEaze Pack is a public V0 Chrome
-Web Store alpha and source beta, and before it can make broader public,
+Web Store beta, and before it can make broader public,
 durable full-year, or stable-release claims.
 
 ## Current Decision

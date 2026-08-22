@@ -79,7 +79,7 @@ ComplyEaze Pack helps authorised users download their own filed GST returns usin
 
 Files are saved by Chrome to the user's device. Pack does not require a Pack or ComplyEaze account. It does not ask for or store GST Portal credentials, OTPs, CAPTCHA responses, cookies, or session tokens, and it does not upload GST documents or return contents to ComplyEaze.
 
-Store-supported use is a single return period at a time. The package contains further capability that this listing does not claim; anything not listed above is source-build only until its release evidence is recorded.
+Store-supported use is a single return period at a time. The package contains further capability that this listing does not claim, because the release evidence for those claims is not yet recorded.
 
 Pack's content script runs only on the four declared GST Portal hosts. When a supported page loads, it reads page context locally so Pack can identify eligible workflows; artifact capture and downloads start only after an explicit user action. Pack keeps limited redacted recovery state locally so interrupted work does not retry blindly. Temporary artifact bytes may be staged in browser-local OPFS for explicit capture or ZIP operations. Pack normally removes those bytes after confirmed export or explicit discard; if local cleanup fails, it retains them with a cleanup-pending status until a later cleanup attempt succeeds.
 

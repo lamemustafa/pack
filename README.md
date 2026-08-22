@@ -7,8 +7,8 @@ ComplyEaze Pack is a local-first Chrome MV3 browser extension for collecting
 compliance portal documents from an authorised browser session. V0 starts with
 filed GSTR-3B PDFs, filed GSTR-1 summary PDFs, and optional GSTR-1 e-invoice
 details Excel downloads from the GST Portal where the portal provides them. The
-current source also includes private GSTR-2B summary PDF and details Excel
-source-build support through the GST Portal's GSTR-2B page.
+current source also includes GSTR-2B summary PDF and details Excel downloads
+through the GST Portal's GSTR-2B page.
 
 V0 is intentionally narrow:
 
@@ -52,7 +52,7 @@ That superseded release's evidence chain is the fully recorded one. The current
 `v0.5.0` publication is maintainer-observed; see
 `docs/PUBLICATION_READINESS.md` for exactly which evidence fields remain
 unrecorded.
-Live manifest/index/exception-file generation is outside the current alpha.
+Live manifest/index/exception-file generation is outside the current release.
 Future store updates require the release gates in
 [docs/PUBLICATION_READINESS.md](docs/PUBLICATION_READINESS.md) and
 [docs/RELEASE.md](docs/RELEASE.md).
@@ -64,7 +64,7 @@ artifact, and recovery combinations. It is not a claim that every GST Portal
 period or format has authorised live evidence; those broader claims remain
 gated by the recorded publication evidence.
 
-Full fiscal year download is available in source-build alpha as a local
+Full fiscal year download is available in source builds as a local
 per-period ledger. It expands the selected financial year into eligible
 GSTR-3B, GSTR-1, or GSTR-2B periods and runs them one at a time through the
 single-period path. GSTR-2B full-year support uses the signed-in tab's
