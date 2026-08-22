@@ -66,14 +66,15 @@ durable full-year, or stable-release claims.
   that behave differently would make the binary the source of truth for what
   Pack offers, and would mean live evidence covers a build users never receive.
   Of the four gates, privacy-review evidence is **partially** recorded. An
-  independent privacy review of the summary identity scoping ran against PR #184
-  and found two High issues: an owner trade name emitted when it sat inside the
-  return envelope, and a value-based backstop that read the same predicate as the
-  path check it was meant to catch. Both were reproduced by running them, fixed,
-  and re-verified; the disposition is in that PR's review comments. It is partial
-  because it covered one change rather than the feature, and because review of
-  the fixes is still open. The remaining three gates require an authenticated
-  live run.
+  independent privacy review of the summary identity scoping ran against PR #184.
+  It returned findings at High severity; each was reproduced, fixed and
+  re-verified, and the dispositions are tracked on that PR. The failure mechanics
+  are recorded in the private knowledge hub rather than here: this repository is
+  public, and the summary feature was never part of a released package, so
+  publishing the conditions serves no reader who could act on them.
+  The evidence is partial because it covered one change rather than the whole
+  feature, and because review of the fixes is still open. The remaining three
+  gates require an authenticated live run.
 - V0 does not collect GST Portal credentials, OTPs, CAPTCHA responses, cookies,
   or session tokens, and does not log or upload GST document contents. The
   source-build capture path may use temporary local OPFS staging for an explicit
