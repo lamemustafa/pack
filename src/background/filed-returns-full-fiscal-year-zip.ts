@@ -5,6 +5,9 @@ import type {
 } from "../connectors/gst/filed-returns-contracts";
 import { concreteFiledReturnsArtifactTypesForSelection } from "../connectors/gst/filed-returns-artifacts";
 import type { PackOffscreenFiledReturnZipExpectedEntry } from "../connectors/gst/offscreen-blob-url";
+import type { FiledReturnsSummaryPlanEntry } from "../connectors/gst/filed-returns-summary-sheet";
+import type { FiledReturnsSummaryStatus } from "../connectors/gst/filed-returns-summary-status";
+import type { FiledReturnsMonth } from "../connectors/gst/filed-returns-scope";
 import {
   type DownloadCreatedItem,
   observeBrowserDownloadById,
@@ -27,7 +30,10 @@ import { clearOffscreenFiledReturnLedger, closeOffscreenBlobDocument } from "./o
 const USER_MEDIATED_ZIP_DOWNLOAD_WAIT_MS = 45 * 1000;
 
 interface ZipDownloadCheckpointCallbacks {
-  onBeforeDownloadStart?: (requestedAt: Date) => Promise<void>;
+  onBeforeDownloadStart?: (
+    requestedAt: Date,
+    summaryOutcome: FiledReturnsSummaryStatus,
+  ) => Promise<void>;
   onDownloadStarted?: (downloadId: number) => Promise<void>;
 }
 
@@ -100,8 +106,15 @@ export async function exportFullFiscalYearZip(
     zipFilename: safeFullFiscalYearZipFilename(ledger.scope),
     expectedZipEntryCount: staging.expectedArtifactCount,
     expectedZipEntries: staging.expectedEntries,
+    summaryPlan: staging.summaryPlan,
     ...(options.onBeforeDownloadStart
-      ? { onBeforeDownloadStart: options.onBeforeDownloadStart }
+      ? {
+          onBeforeDownloadStart: (
+            requestedAt: Date,
+            _extensionBlobUrlFingerprint: string,
+            summaryOutcome: FiledReturnsSummaryStatus,
+          ) => options.onBeforeDownloadStart!(requestedAt, summaryOutcome),
+        }
       : {}),
     ...(options.onDownloadStarted ? { onDownloadStarted: options.onDownloadStarted } : {}),
   });
@@ -234,28 +247,43 @@ function fullFiscalYearStagingRequirement(ledger: FiledReturnsFullFiscalYearLedg
   expectedArtifactCount: number;
   expectedEntries: PackOffscreenFiledReturnZipExpectedEntry[];
   missingArtifactCount: number;
+  summaryPlan: FiledReturnsSummaryPlanEntry[];
 } {
   const expectedEntries: PackOffscreenFiledReturnZipExpectedEntry[] = [];
+  const summaryPlan: FiledReturnsSummaryPlanEntry[] = [];
   let missingArtifactCount = 0;
   for (const target of ledger.targets) {
-    if (target.status === "not-filed") continue;
     const signals = new Set(target.safeSignals);
     for (const artifactType of concreteFiledReturnsArtifactTypesForSelection(
       target.returnType,
       target.artifactType,
     )) {
-      if (signals.has(`filed-return-artifact-unavailable:${artifactType}`)) continue;
-      expectedEntries.push(
-        ...filedReturnsZipExpectedEntries(
-          {
-            artifactType,
-            financialYear: target.financialYear,
-            period: target.period,
-            returnType: target.returnType,
-          },
-          [artifactType],
-        ),
+      const [expectedEntry] = filedReturnsZipExpectedEntries(
+        {
+          artifactType,
+          financialYear: target.financialYear,
+          period: target.period,
+          returnType: target.returnType,
+        },
+        [artifactType],
       );
+      if (!expectedEntry) continue;
+      const outcomeCategory =
+        target.status === "not-filed"
+          ? "not-filed"
+          : signals.has(`filed-return-artifact-unavailable:${artifactType}`)
+            ? "artifact-unavailable"
+            : "staged";
+      summaryPlan.push({
+        artifactType,
+        entryNames: outcomeCategory === "staged" ? expectedEntry.entryNames : [],
+        financialYear: target.financialYear,
+        outcomeCategory,
+        period: target.period as FiledReturnsMonth,
+        returnType: target.returnType,
+      });
+      if (outcomeCategory !== "staged") continue;
+      expectedEntries.push(expectedEntry);
       if (!signals.has(`full-fiscal-year-opfs-staged:${artifactType}`)) {
         missingArtifactCount += 1;
       }
@@ -265,5 +293,6 @@ function fullFiscalYearStagingRequirement(ledger: FiledReturnsFullFiscalYearLedg
     expectedArtifactCount: expectedEntries.length,
     expectedEntries,
     missingArtifactCount,
+    summaryPlan,
   };
 }

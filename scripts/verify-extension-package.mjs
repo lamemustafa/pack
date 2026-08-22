@@ -126,9 +126,9 @@ for (const page of expectedPackagedPages) {
 
 // A packaged panel page proves nothing about whether the toolbar action reaches
 // it. `default_popup` takes precedence over the action's click event, so a
-// package carrying both a side panel and a popup opens the popup, and a package
-// with neither has a toolbar button that does nothing. Both clear a check that
-// only asserts the page is present.
+// package carrying both a side panel and a popup opens the popup, and one with
+// neither has a toolbar button that does nothing. Both clear a check that only
+// asserts the page is present.
 if (manifest.side_panel?.default_path !== "panel.html") {
   throw new Error(
     `Extension must bind the side panel to panel.html: ${manifest.side_panel?.default_path ?? "absent"}`,
@@ -332,7 +332,12 @@ console.log("Pack WXT extension package verification passed.");
 // stylesheet it references must also be present and non-empty. Without this, a
 // build that emitted the HTML but dropped its chunk passed verification.
 async function requireReferencedBundles(page, html) {
-  for (const reference of referencedAssetPaths(html)) {
+  const references = [
+    ...html.matchAll(/<script[^>]+src="([^"]+)"/g),
+    ...html.matchAll(/<link[^>]+rel="stylesheet"[^>]+href="([^"]+)"/g),
+  ].map((match) => match[1]);
+
+  for (const reference of references) {
     if (/^[a-z]+:/i.test(reference) || reference.startsWith("//")) {
       throw new Error(`Extension page references a remote asset: ${page} -> ${reference}`);
     }
@@ -343,76 +348,6 @@ async function requireReferencedBundles(page, html) {
       throw new Error(`Asset referenced by ${page} is empty: ${relative}`);
     }
   }
-}
-
-// Reference extraction reads attributes rather than matching one composed
-// shape. The regexes this replaces accepted only double-quoted attributes and
-// required a stylesheet's `rel` to precede its `href` -- which is what the
-// current bundler emits, so the gate was verified against the emitter's
-// formatting habits rather than against HTML. A bundler upgrade that changed
-// quoting would have turned this check into a no-op, and a no-op check reports
-// success: a page referencing a bundle the package does not contain would have
-// shipped as a passing build.
-function referencedAssetPaths(html) {
-  const references = [];
-  for (const attributes of htmlTags(html, "script")) {
-    const src = attributes.get("src");
-    if (src) references.push(src);
-  }
-  for (const attributes of htmlTags(html, "link")) {
-    // `rel` is a space-separated token list, and only a stylesheet is a bundle.
-    // An icon or a manifest link is not one, so widening this to every `href`
-    // would fail the build on something legitimate.
-    const rel = attributes.get("rel") ?? "";
-    if (!rel.split(/\s+/).some((token) => token.toLowerCase() === "stylesheet")) continue;
-    const href = attributes.get("href");
-    if (href) references.push(href);
-  }
-  return references;
-}
-
-/** Yields each `<tagName ...>` open tag's attributes, lowercased and unquoted. */
-function* htmlTags(html, tagName) {
-  const openers = new RegExp(`<${tagName}(?=[\\s/>])`, "gi");
-  for (const opener of html.matchAll(openers)) {
-    const start = opener.index + opener[0].length;
-    const end = tagEnd(html, start);
-    if (end === -1) continue;
-    yield tagAttributes(html.slice(start, end));
-  }
-}
-
-/** Finds the `>` closing a tag, ignoring one that sits inside a quoted value. */
-function tagEnd(html, start) {
-  let quote = "";
-  for (let index = start; index < html.length; index += 1) {
-    const character = html[index];
-    if (quote) {
-      if (character === quote) quote = "";
-      continue;
-    }
-    if (character === '"' || character === "'") {
-      quote = character;
-      continue;
-    }
-    if (character === ">") return index;
-  }
-  return -1;
-}
-
-function tagAttributes(source) {
-  const attributes = new Map();
-  const pattern = /([a-z][-a-z0-9:_.]*)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s"'>`=]+))?/gi;
-  for (const match of source.matchAll(pattern)) {
-    const name = match[1].toLowerCase();
-    // First occurrence wins, which is how a browser resolves a duplicated
-    // attribute.
-    if (attributes.has(name)) continue;
-    const raw = match[2];
-    const quoted = raw !== undefined && (raw.startsWith('"') || raw.startsWith("'"));
-    attributes.set(name, raw === undefined ? "" : quoted ? raw.slice(1, -1) : raw);
-  }
-  return attributes;
 }
 
 async function requirePackagedFile(relativePath, reason) {

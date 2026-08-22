@@ -2,6 +2,8 @@ import { isFiledReturnsConcreteArtifactType } from "./filed-returns-artifacts";
 import { isFiledReturnsReturnType } from "./filed-returns-return-types";
 import type { FiledReturnsConcreteArtifactType } from "./filed-returns-artifacts";
 import type { FiledReturnsReturnType } from "./filed-returns-return-types";
+import { isFiledReturnsFinancialYear } from "./filed-returns-scope";
+import type { FiledReturnsSummaryPlanEntry } from "./filed-returns-summary-sheet";
 
 export const PACK_OFFSCREEN_BLOB_URL_TARGET = "pack-offscreen-blob-url";
 export const PACK_OFFSCREEN_DATA_URL_MAX_LENGTH = 50 * 1024 * 1024;
@@ -46,12 +48,38 @@ export interface PackOffscreenCreateFiledReturnZipMessage {
     expectedReturnType: FiledReturnsReturnType;
     expectedEntryCount: number;
     expectedEntries: PackOffscreenFiledReturnZipExpectedEntry[];
+    generatedAt: string;
+    summaryPlan?: FiledReturnsSummaryPlanEntry[];
   };
 }
 
 export interface PackOffscreenFiledReturnZipExpectedEntry {
   artifactType: FiledReturnsConcreteArtifactType;
   entryNames: string[];
+}
+
+// These are the only filename-free ZIP failures produced by the offscreen
+// worker or synthesized while validating its untrusted response. The durable
+// signal contract imports this list so recovery cannot silently lose a known
+// ZIP failure category.
+export const PACK_OFFSCREEN_FILED_RETURN_ZIP_ERROR_CATEGORIES = [
+  "offscreen-response-invalid",
+  "opfs-unavailable",
+  "zip-empty",
+  "zip-failed",
+  "zip-invalid-entry",
+  "zip-too-large",
+] as const;
+export type PackOffscreenFiledReturnZipErrorCategory =
+  (typeof PACK_OFFSCREEN_FILED_RETURN_ZIP_ERROR_CATEGORIES)[number];
+
+export function isPackOffscreenFiledReturnZipErrorCategory(
+  value: unknown,
+): value is PackOffscreenFiledReturnZipErrorCategory {
+  return (
+    typeof value === "string" &&
+    (PACK_OFFSCREEN_FILED_RETURN_ZIP_ERROR_CATEGORIES as readonly string[]).includes(value)
+  );
 }
 
 export interface PackOffscreenClearFiledReturnLedgerMessage {
@@ -106,6 +134,9 @@ export type PackOffscreenBlobUrlResponse =
       requestId: string;
       blobUrl: string;
       zipEntryCount: number;
+      artifactEntryCount: number;
+      summaryEntryCount: 0 | 1 | 2;
+      summary?: PackOffscreenFiledReturnSummaryResult;
     }
   | {
       ok: true;
@@ -127,6 +158,41 @@ export type PackOffscreenBlobUrlResponse =
         | "zip-too-large"
         | "zip-failed";
     };
+
+export type PackOffscreenFiledReturnSummaryResult =
+  | {
+      status: "included";
+      outcomeOnly: boolean;
+      parsedPeriodCount: number;
+      rowCount: number;
+      workbookOutcome?: "not-applicable";
+    }
+  | { status: "failed"; reasonCategory: PackOffscreenFiledReturnSummaryErrorCategory };
+
+// The only derived-summary failure reasons the offscreen worker produces. The
+// background response validator and the durable signal contract import this
+// list, so a reason the worker can emit can never be refused by the validator
+// or dropped during recovery.
+export const PACK_OFFSCREEN_FILED_RETURN_SUMMARY_ERROR_CATEGORIES = [
+  "generation-failed",
+  "identity-conflict",
+  "identity-rejected",
+  "identity-unverified",
+  "privacy-rejected",
+  "too-large",
+  "workbook-generation-failed",
+] as const;
+export type PackOffscreenFiledReturnSummaryErrorCategory =
+  (typeof PACK_OFFSCREEN_FILED_RETURN_SUMMARY_ERROR_CATEGORIES)[number];
+
+export function isPackOffscreenFiledReturnSummaryErrorCategory(
+  value: unknown,
+): value is PackOffscreenFiledReturnSummaryErrorCategory {
+  return (
+    typeof value === "string" &&
+    (PACK_OFFSCREEN_FILED_RETURN_SUMMARY_ERROR_CATEGORIES as readonly string[]).includes(value)
+  );
+}
 
 export function isPackOffscreenBlobUrlMessageShape(
   input: unknown,
@@ -166,17 +232,22 @@ export function isPackOffscreenBlobUrlMessageShape(
         "expectedEntries",
         "expectedEntryCount",
         "expectedReturnType",
+        "generatedAt",
         "ledgerId",
         "requestId",
+        "summaryPlan",
       ]) &&
       isBoundedString(input.payload.ledgerId, 1, 120) &&
+      isIsoTimestamp(input.payload.generatedAt) &&
       isFiledReturnsReturnType(input.payload.expectedReturnType) &&
       typeof expectedEntryCount === "number" &&
       Number.isInteger(expectedEntryCount) &&
       expectedEntryCount >= 1 &&
       expectedEntryCount <= 36 &&
       isExpectedZipEntryPlanShape(expectedEntries) &&
-      expectedEntries.length === expectedEntryCount
+      expectedEntries.length === expectedEntryCount &&
+      (input.payload.summaryPlan === undefined ||
+        isFiledReturnsSummaryPlanShape(input.payload.summaryPlan))
     );
   }
   if (input.type === "PACK_OFFSCREEN_CLEAR_FILED_RETURN_LEDGER") {
@@ -197,8 +268,50 @@ export function isPackOffscreenBlobUrlMessageShape(
   return false;
 }
 
+function isFiledReturnsSummaryPlanShape(input: unknown): input is FiledReturnsSummaryPlanEntry[] {
+  if (!Array.isArray(input) || input.length < 1 || input.length > 36) return false;
+  const financialYears = new Set<string>();
+  for (const candidate of input) {
+    if (
+      !isRecord(candidate) ||
+      !hasOnlyKeys(candidate, [
+        "artifactType",
+        "entryNames",
+        "financialYear",
+        "outcomeCategory",
+        "period",
+        "returnType",
+      ]) ||
+      !isFiledReturnsConcreteArtifactType(candidate.artifactType) ||
+      !isFiledReturnsReturnType(candidate.returnType) ||
+      !isFiledReturnsFinancialYear(candidate.financialYear) ||
+      !isBoundedString(candidate.period, 3, 12) ||
+      !isSummaryOutcomeCategory(candidate.outcomeCategory) ||
+      !Array.isArray(candidate.entryNames) ||
+      candidate.entryNames.length > 2 ||
+      candidate.entryNames.some((entryName) => !isBoundedString(entryName, 1, 220))
+    ) {
+      return false;
+    }
+    financialYears.add(candidate.financialYear);
+  }
+  return financialYears.size === 1;
+}
+
+function isSummaryOutcomeCategory(
+  value: unknown,
+): value is FiledReturnsSummaryPlanEntry["outcomeCategory"] {
+  return value === "staged" || value === "not-filed" || value === "artifact-unavailable";
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function isIsoTimestamp(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) && new Date(parsed).toISOString() === value;
 }
 
 function isBoundedString(value: unknown, minLength: number, maxLength: number): value is string {

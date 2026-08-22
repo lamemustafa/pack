@@ -13,6 +13,20 @@ import type { FiledReturnsReturnType } from "../../connectors/gst/filed-returns-
 import { FILED_RETURNS_MONTHS } from "../../connectors/gst/filed-returns-scope";
 import { createZip, type ZipEntry } from "./zip";
 import {
+  buildFiledReturnsSummarySheet,
+  FiledReturnsSummaryForbiddenFieldError,
+  FiledReturnsSummaryIdentityConflictError,
+  FiledReturnsSummaryInvalidGstinError,
+  FiledReturnsSummaryUncanonicalIdentityError,
+  FILED_RETURNS_SUMMARY_SHEET_PATH,
+} from "../../connectors/gst/filed-returns-summary-sheet";
+import {
+  buildFiledReturnsFullYearWorkbook,
+  FILED_RETURNS_FULL_YEAR_WORKBOOK_PATH,
+} from "../../connectors/gst/filed-returns-full-year-workbook";
+import { XlsxSizeLimitError } from "../../core/xlsx";
+import type { PackOffscreenFiledReturnSummaryResult } from "../../connectors/gst/offscreen-blob-url";
+import {
   dataUrlChunksToDecoded,
   dataUrlToBlob,
   isExpectedDecodedDataUrlForReturnType,
@@ -21,6 +35,8 @@ import {
 
 const blobUrlsByRequest = new Map<string, string>();
 const MAX_ZIP_INPUT_BYTES = 100 * 1024 * 1024;
+const MAX_SUMMARY_SHEET_BYTES = 5 * 1024 * 1024;
+const MAX_SUMMARY_SOURCE_BYTES = 25 * 1024 * 1024;
 const FILED_RETURN_PERIOD_ORDER = new Map(
   FILED_RETURNS_MONTHS.map((period, index) => [period.toLowerCase(), index]),
 );
@@ -56,7 +72,8 @@ async function handleMessage(
   if (message.type === "PACK_OFFSCREEN_CREATE_FILED_RETURN_ZIP") {
     try {
       const directory = await getLedgerDirectory(message.payload.ledgerId, false);
-      if ((await stagedZipInputByteLength(directory)) > MAX_ZIP_INPUT_BYTES) {
+      const stagedInputBytes = await stagedZipInputByteLength(directory);
+      if (stagedInputBytes > MAX_ZIP_INPUT_BYTES) {
         return {
           ok: false,
           requestId: message.payload.requestId,
@@ -84,7 +101,14 @@ async function handleMessage(
           errorCategory: "zip-invalid-entry",
         };
       }
-      const zipBytes = createZip(entries);
+      const generatedAt = new Date(message.payload.generatedAt);
+      const summary = message.payload.summaryPlan
+        ? createSummaryEntry(message.payload.summaryPlan, entries, stagedInputBytes, generatedAt)
+        : null;
+      const archiveEntries = summary?.entries ? [...entries, ...summary.entries] : entries;
+      const summaryEntryCount: 0 | 1 | 2 =
+        summary?.entries?.length === 2 ? 2 : summary?.entries?.length === 1 ? 1 : 0;
+      const zipBytes = createZip(archiveEntries, generatedAt);
       const zipBuffer = new ArrayBuffer(zipBytes.byteLength);
       new Uint8Array(zipBuffer).set(zipBytes);
       const zipBlob = new Blob([zipBuffer], { type: "application/zip" });
@@ -94,7 +118,10 @@ async function handleMessage(
         ok: true,
         requestId: message.payload.requestId,
         blobUrl,
-        zipEntryCount: entries.length,
+        zipEntryCount: archiveEntries.length,
+        artifactEntryCount: entries.length,
+        summaryEntryCount,
+        ...(summary ? { summary: summary.result } : {}),
       };
     } catch {
       return {
@@ -171,6 +198,102 @@ async function handleMessage(
     requestId: message.payload.requestId,
     blobUrl,
   };
+}
+
+function createSummaryEntry(
+  plan: Parameters<typeof buildFiledReturnsSummarySheet>[0],
+  entries: readonly ZipEntry[],
+  stagedInputBytes: number,
+  generatedAt: Date,
+): { entries?: ZipEntry[]; result: PackOffscreenFiledReturnSummaryResult } {
+  try {
+    const summarySourcePaths = new Set(
+      plan
+        .filter((entry) => entry.artifactType === "JSON" && entry.outcomeCategory === "staged")
+        .flatMap((entry) => entry.entryNames),
+    );
+    const summarySourceBytes = entries.reduce(
+      (total, entry) => total + (summarySourcePaths.has(entry.path) ? entry.bytes.byteLength : 0),
+      0,
+    );
+    if (summarySourceBytes > MAX_SUMMARY_SOURCE_BYTES) {
+      return { result: { status: "failed", reasonCategory: "too-large" } };
+    }
+    const summary = buildFiledReturnsSummarySheet(plan, entries, MAX_SUMMARY_SHEET_BYTES);
+    const remainingZipBudget = Math.max(0, MAX_ZIP_INPUT_BYTES - stagedInputBytes);
+    const workbookApplicable = plan.every((entry) => entry.returnType === "GSTR-3B");
+    if (!workbookApplicable) {
+      if (
+        summary.dataBytes.byteLength > MAX_SUMMARY_SHEET_BYTES ||
+        summary.dataBytes.byteLength > remainingZipBudget
+      ) {
+        return { result: { status: "failed", reasonCategory: "too-large" } };
+      }
+      return {
+        entries: [{ path: FILED_RETURNS_SUMMARY_SHEET_PATH, bytes: summary.dataBytes }],
+        result: {
+          status: "included",
+          outcomeOnly: summary.outcomeOnly,
+          parsedPeriodCount: summary.parsedPeriodCount,
+          rowCount: summary.rowCount,
+          workbookOutcome: "not-applicable",
+        },
+      };
+    }
+    const workbookBudget = Math.min(
+      Math.max(0, MAX_SUMMARY_SHEET_BYTES - summary.dataBytes.byteLength),
+      Math.max(0, remainingZipBudget - summary.dataBytes.byteLength),
+    );
+    let workbookBytes: Uint8Array;
+    try {
+      workbookBytes = buildFiledReturnsFullYearWorkbook(summary, plan, {
+        generatedAt,
+        maxOutputBytes: workbookBudget,
+      });
+    } catch (error) {
+      return {
+        result: {
+          status: "failed",
+          reasonCategory:
+            error instanceof XlsxSizeLimitError ? "too-large" : "workbook-generation-failed",
+        },
+      };
+    }
+    const summaryByteLength = summary.dataBytes.byteLength + workbookBytes.byteLength;
+    if (summaryByteLength > MAX_SUMMARY_SHEET_BYTES || summaryByteLength > remainingZipBudget) {
+      return { result: { status: "failed", reasonCategory: "too-large" } };
+    }
+    return {
+      entries: [
+        { path: FILED_RETURNS_SUMMARY_SHEET_PATH, bytes: summary.dataBytes },
+        { path: FILED_RETURNS_FULL_YEAR_WORKBOOK_PATH, bytes: workbookBytes },
+      ],
+      result: {
+        status: "included",
+        outcomeOnly: summary.outcomeOnly,
+        parsedPeriodCount: summary.parsedPeriodCount,
+        rowCount: summary.rowCount,
+      },
+    };
+  } catch (error) {
+    return {
+      result: {
+        status: "failed",
+        reasonCategory:
+          error instanceof FiledReturnsSummaryForbiddenFieldError
+            ? "privacy-rejected"
+            : error instanceof FiledReturnsSummaryInvalidGstinError
+              ? "identity-rejected"
+              : error instanceof FiledReturnsSummaryUncanonicalIdentityError
+                ? "identity-unverified"
+                : error instanceof FiledReturnsSummaryIdentityConflictError
+                  ? "identity-conflict"
+                  : error instanceof Error && error.name === "FiledReturnsSummaryTooLargeError"
+                    ? "too-large"
+                    : "generation-failed",
+      },
+    };
+  }
 }
 
 async function getLedgerDirectory(

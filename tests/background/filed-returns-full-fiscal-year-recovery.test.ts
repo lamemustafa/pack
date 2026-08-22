@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { FiledReturnsFullFiscalYearLedger } from "../../src/connectors/gst/filed-returns-contracts";
+import type {
+  FiledReturnsDownloadScope,
+  FiledReturnsFullFiscalYearLedger,
+} from "../../src/connectors/gst/filed-returns-contracts";
 import { FULL_FISCAL_YEAR_PERIOD } from "../../src/connectors/gst/filed-returns-scope";
 import { getFiledReturnsFullFiscalYearPeriods } from "../../src/connectors/gst/filed-returns-scope";
 import { createFullFiscalYearLedger } from "../../src/background/filed-returns-full-fiscal-year-ledger";
@@ -17,7 +20,23 @@ import {
 } from "../../src/background/filed-returns-full-fiscal-year-recovery";
 import { browser } from "wxt/browser";
 import { canonicalDurableTargetStatus } from "../../src/connectors/gst/filed-returns-durable-status";
+import {
+  createFullFiscalYearCleanupPendingState,
+  finishFullFiscalYearCleanup,
+  markFullFiscalYearZipDownloadIntent,
+  markFullFiscalYearZipDownloadObserving,
+} from "../../src/background/filed-returns-full-fiscal-year-staging";
+import { persistCanonicalFiledReturnsFlowSummary } from "../../src/background/filed-returns-session-summary";
+import { parseDurableFiledReturnsSignals } from "../../src/connectors/gst/filed-returns-durable-signals";
+import type { FiledReturnsSummaryStatus } from "../../src/connectors/gst/filed-returns-summary-status";
+import { filedReturnsScopeId } from "../../src/connectors/gst/filed-returns-return-types";
+import {
+  fullFiscalYearZipPhaseStep,
+  toFullFiscalYearSummary,
+} from "../../src/background/filed-returns-full-fiscal-year-summary";
 import { readLedger } from "../../src/background/filed-returns-full-fiscal-year-run-state";
+
+const sessionValues = vi.hoisted(() => ({ current: {} as Record<string, unknown> }));
 
 const browserMocks = vi.hoisted(() => ({
   storage: {
@@ -27,8 +46,13 @@ const browserMocks = vi.hoisted(() => ({
       set: vi.fn(async () => undefined),
     },
     session: {
-      remove: vi.fn(async () => undefined),
-      set: vi.fn(async () => undefined),
+      get: vi.fn(async (key: string) => ({ [key]: sessionValues.current[key] })),
+      remove: vi.fn(async (key: string) => {
+        delete sessionValues.current[key];
+      }),
+      set: vi.fn(async (values: Record<string, unknown>) => {
+        Object.assign(sessionValues.current, values);
+      }),
     },
   },
 }));
@@ -46,10 +70,53 @@ vi.mock("../../src/background/filed-returns-full-fiscal-year-zip", () => zipMock
 
 describe("full fiscal-year recovery", () => {
   beforeEach(() => {
+    sessionValues.current = {};
     vi.clearAllMocks();
     zipMocks.discardFullFiscalYearFiledReturnsZip.mockResolvedValue([
       "full-fiscal-year-opfs-cleared",
     ]);
+  });
+
+  it("keeps an offscreen-response-invalid ZIP summary persisted for recovery", async () => {
+    const scope = {
+      artifactType: "PDF" as const,
+      financialYear: "2026-27",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-3B" as const,
+    };
+
+    const summary = await persistCanonicalFiledReturnsFlowSummary("completion", {
+      scope,
+      status: "blocked",
+      updatedAt: "2026-08-20T00:00:00.000Z",
+      completedPeriods: [],
+      totalPeriods: 12,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: filedReturnsScopeId(scope.returnType),
+        state: "blocked",
+        safeSignals: [
+          "full-fiscal-year-zip-export-failed",
+          "full-fiscal-year-zip-export-error:offscreen-response-invalid",
+          "full-fiscal-year-opfs-retained",
+        ],
+        safeMessage: "Pack retained the staged fiscal-year files for a safe retry.",
+      },
+    });
+
+    expect(summary?.flowStep.safeSignals).toContain(
+      "full-fiscal-year-zip-export-error:offscreen-response-invalid",
+    );
+    expect(sessionValues.current.completion).toEqual(
+      expect.objectContaining({
+        flowStep: expect.objectContaining({
+          safeSignals: expect.arrayContaining([
+            "full-fiscal-year-zip-export-error:offscreen-response-invalid",
+          ]),
+        }),
+      }),
+    );
+    expect(browser.storage.session.remove).not.toHaveBeenCalledWith("completion");
   });
 
   it("rejects stale target recovery revisions without mutating storage", async () => {
@@ -201,6 +268,23 @@ describe("full fiscal-year recovery", () => {
     };
     expect(isFullFiscalYearLedger(ledger)).toBe(true);
     mockLocalStorageGet({ "full-year-ledger": ledger });
+    const staleStep = fullFiscalYearZipPhaseStep(ledger)!;
+    const staleUpdatedAt = "2026-06-23T23:59:59.000Z";
+    await persistCanonicalFiledReturnsFlowSummary(
+      "completion",
+      toFullFiscalYearSummary(
+        { ...ledger, updatedAt: staleUpdatedAt },
+        {
+          ...staleStep,
+          safeSignals: [
+            ...staleStep.safeSignals,
+            "full-fiscal-year-summary-included",
+            "full-fiscal-year-summary-parsed-period-count:1",
+            "full-fiscal-year-summary-row-count:1",
+          ],
+        },
+      ),
+    );
 
     const response = await startFullFiscalYearDownloadFlow(scope, recoveryDeps() as never, vi.fn());
 
@@ -210,6 +294,8 @@ describe("full fiscal-year recovery", () => {
         safeSignals: expect.arrayContaining(["full-fiscal-year-final-zip-manual-review"]),
       },
     });
+    if (!("flowStep" in response)) throw new Error("expected a filed-returns flow response");
+    expect(response.flowStep.safeSignals).not.toContain("full-fiscal-year-summary-included");
     expect(zipMocks.exportFullFiscalYearZip).not.toHaveBeenCalled();
     expect(browser.storage.local.set).toHaveBeenCalledWith({
       "full-year-ledger": expect.objectContaining({
@@ -296,6 +382,129 @@ describe("full fiscal-year recovery", () => {
     vi.mocked(browser.storage.local.get).mockImplementation(async () => ({}));
   });
 
+  it("retains the summary outcome across repeated observing reconciliation", async () => {
+    const requestedAt = new Date("2017-08-20T00:00:00.000Z");
+    let clock = new Date("2017-08-20T00:01:00.000Z");
+    const scope = {
+      artifactType: "PDF" as const,
+      financialYear: "2017-18",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-3B" as const,
+    };
+    const baseLedger = createFullFiscalYearLedger(
+      scope,
+      requestedAt,
+      getFiledReturnsFullFiscalYearPeriods(scope.financialYear, requestedAt),
+    );
+    const ledger: FiledReturnsFullFiscalYearLedger = {
+      ...baseLedger,
+      status: "blocked",
+      zipPhase: "download-observing",
+      zipDownloadAttempt: { downloadId: 41, requestedAt: requestedAt.toISOString() },
+      targets: baseLedger.targets.map((target, index) => ({
+        ...target,
+        status: "downloaded" as const,
+        ...canonicalDurableTargetStatus({ ...scope, period: target.period }, "downloaded", [
+          "filed-return-artifact-downloaded:PDF",
+          "full-fiscal-year-opfs-staged:PDF",
+        ]),
+        completedAt: requestedAt.toISOString(),
+        downloadDiagnostic: {
+          actionId: `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+          artifactType: "PDF" as const,
+          byteCountClass: "non-empty" as const,
+          downloadPathClass: "captured-portal-request-data" as const,
+          endpointClass: "gstr3b-portal-blob-captured-download" as const,
+          eventType: "filed-return-download-path" as const,
+          financialYear: target.financialYear,
+          mimeClass: "pdf" as const,
+          period: target.period,
+          returnType: "GSTR-3B" as const,
+          schemaVersion: "1.0" as const,
+          status: "downloaded" as const,
+        },
+      })),
+    };
+    const store: Record<string, unknown> = { "full-year-ledger": ledger };
+    vi.mocked(browser.storage.local.get).mockImplementation(async (key: unknown) => {
+      if (typeof key === "string") return { [key]: store[key] };
+      return store;
+    });
+    vi.mocked(browser.storage.local.set).mockImplementation(
+      async (values: Record<string, unknown>) => {
+        Object.assign(store, values);
+      },
+    );
+    const intentLedger = { ...ledger, zipPhase: "download-intent-persisted" as const };
+    const intentStep = fullFiscalYearZipPhaseStep(intentLedger)!;
+    await persistCanonicalFiledReturnsFlowSummary(
+      "completion",
+      toFullFiscalYearSummary(intentLedger, {
+        ...intentStep,
+        safeSignals: [
+          ...intentStep.safeSignals,
+          "full-fiscal-year-summary-included",
+          "full-fiscal-year-summary-parsed-period-count:1",
+          "full-fiscal-year-summary-row-count:4",
+        ],
+      }),
+    );
+    zipMocks.reconcileFullFiscalYearZipDownload
+      .mockResolvedValueOnce({
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "download-unconfirmed",
+        safeSignals: [
+          "full-fiscal-year-zip-download-started",
+          "full-fiscal-year-zip-download-unconfirmed",
+          "full-fiscal-year-zip-reconciled-by-id",
+          "browser-download-in-progress",
+          "full-fiscal-year-opfs-retained",
+        ],
+        safeMessage: "Synthetic exact ZIP download is still in progress.",
+      })
+      .mockResolvedValueOnce({
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "downloaded",
+        safeSignals: [
+          "full-fiscal-year-zip-download-started",
+          "full-fiscal-year-zip-downloaded",
+          "full-fiscal-year-zip-reconciled-by-id",
+          "browser-download-completed",
+          "browser-download-non-empty",
+          "full-fiscal-year-opfs-retained",
+        ],
+        safeMessage: "Synthetic exact ZIP download completed.",
+      });
+
+    const firstRecovery = await startFullFiscalYearDownloadFlow(
+      scope,
+      { ...recoveryDeps(), now: () => clock } as never,
+      vi.fn(),
+    );
+    clock = new Date("2017-08-20T00:02:00.000Z");
+    const secondRecovery = await startFullFiscalYearDownloadFlow(
+      scope,
+      { ...recoveryDeps(), now: () => clock } as never,
+      vi.fn(),
+    );
+
+    for (const recovered of [firstRecovery, secondRecovery]) {
+      expect(recovered).toMatchObject({
+        flowStep: {
+          safeSignals: expect.arrayContaining([
+            "full-fiscal-year-summary-included",
+            "full-fiscal-year-summary-parsed-period-count:1",
+            "full-fiscal-year-summary-row-count:4",
+          ]),
+          safeMessage: expect.stringContaining("workbook and tidy CSV for 1 period"),
+        },
+      });
+    }
+    expect(zipMocks.reconcileFullFiscalYearZipDownload).toHaveBeenCalledTimes(2);
+  });
+
   it("stages GSTR-3B targets before progressing to one ZIP export", async () => {
     const now = new Date("2026-06-24T00:00:00.000Z");
     const scope = {
@@ -344,6 +553,460 @@ describe("full fiscal-year recovery", () => {
       },
     });
   });
+
+  it("keeps the workbook-not-applicable outcome visible through immediate ZIP cleanup without adding it to the ledger", async () => {
+    const now = new Date("2017-08-20T00:00:00.000Z");
+    const scope = {
+      artifactType: "PDF" as const,
+      financialYear: "2017-18",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-1" as const,
+    };
+    const runSinglePeriod = vi.fn(async () => ({
+      ok: true as const,
+      flowStep: {
+        connectorId: "gst" as const,
+        scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
+        state: "downloaded" as const,
+        safeSignals: ["filed-return-artifact-downloaded:PDF", "full-fiscal-year-opfs-staged:PDF"],
+        safeMessage: "Synthetic PDF staged.",
+      },
+    }));
+    zipMocks.exportFullFiscalYearZip.mockResolvedValue({
+      connectorId: "gst",
+      scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
+      state: "downloaded",
+      safeSignals: [
+        "full-fiscal-year-zip-downloaded",
+        "full-fiscal-year-summary-included",
+        "full-fiscal-year-workbook-not-applicable",
+        "full-fiscal-year-summary-parsed-period-count:1",
+        "full-fiscal-year-summary-row-count:1",
+      ],
+      safeMessage: "Synthetic ZIP and summary downloaded.",
+    });
+
+    const response = await startFullFiscalYearDownloadFlow(
+      scope,
+      { ...recoveryDeps(), now: () => now } as never,
+      runSinglePeriod,
+    );
+
+    expect(response).toMatchObject({
+      flowStep: {
+        state: "downloaded",
+        safeSignals: expect.arrayContaining([
+          "full-fiscal-year-zip-downloaded",
+          "full-fiscal-year-summary-included",
+          "full-fiscal-year-workbook-not-applicable",
+          "full-fiscal-year-summary-parsed-period-count:1",
+        ]),
+      },
+    });
+    if (!("flowStep" in response)) throw new Error("Expected a filed-return flow response.");
+    expect(response.flowStep.safeMessage).toContain(
+      "tidy CSV for 1 period. A consolidated workbook is not available",
+    );
+    const durableWrites = vi.mocked(browser.storage.local.set).mock.calls;
+    expect(JSON.stringify(durableWrites)).not.toContain("full-fiscal-year-summary-included");
+  });
+
+  it("restores workbook-not-applicable status from session persistence during restart cleanup", async () => {
+    const now = new Date("2017-08-20T00:00:00.000Z");
+    const scope = {
+      artifactType: "JSON" as const,
+      financialYear: "2017-18",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-2B" as const,
+    };
+    const periods = getFiledReturnsFullFiscalYearPeriods(scope.financialYear, now);
+    const baseLedger = createFullFiscalYearLedger(scope, now, periods);
+    const cleanupLedger: FiledReturnsFullFiscalYearLedger = {
+      ...baseLedger,
+      status: "blocked",
+      zipPhase: "downloaded-cleanup-pending",
+      targets: baseLedger.targets.map((target) => ({
+        ...target,
+        status: "not-filed" as const,
+        safeSignals: ["not-filed"],
+        safeMessage: "Pack did not find a filed return for this period.",
+      })),
+    };
+    await persistCanonicalFiledReturnsFlowSummary("completion", {
+      scope,
+      status: "blocked",
+      updatedAt: now.toISOString(),
+      completedPeriods: [],
+      totalPeriods: 12,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: filedReturnsScopeId("GSTR-2B"),
+        state: "blocked",
+        safeSignals: [
+          "full-fiscal-year-local-cleanup-retry",
+          "full-fiscal-year-summary-included",
+          "full-fiscal-year-workbook-not-applicable",
+          "full-fiscal-year-summary-parsed-period-count:2",
+          `full-fiscal-year-summary-row-count:${periods.length}`,
+        ],
+        safeMessage: "Synthetic supplied summary status.",
+      },
+    });
+
+    const response = await finishFullFiscalYearCleanup(
+      { ...recoveryDeps(), now: () => now } as never,
+      cleanupLedger,
+    );
+
+    expect(response).toMatchObject({
+      flowStep: {
+        state: "downloaded",
+        safeSignals: expect.arrayContaining([
+          "full-fiscal-year-summary-included",
+          "full-fiscal-year-workbook-not-applicable",
+          "full-fiscal-year-summary-parsed-period-count:2",
+        ]),
+      },
+    });
+    if (!response.ok || !("flowStep" in response)) throw new Error("Expected flow response.");
+    expect(response.flowStep.safeMessage).toContain(
+      "tidy CSV for 2 periods. A consolidated workbook is not available",
+    );
+  });
+
+  it("restores the intent-checkpoint summary after the cleanup ledger advances", async () => {
+    const intentAt = new Date("2017-08-20T00:00:00.000Z");
+    const cleanupAt = new Date("2017-08-20T00:01:00.000Z");
+    const scope = {
+      artifactType: "JSON" as const,
+      financialYear: "2017-18",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-3B" as const,
+    };
+    const periods = getFiledReturnsFullFiscalYearPeriods(scope.financialYear, cleanupAt);
+    const baseLedger = createFullFiscalYearLedger(scope, intentAt, periods);
+    const readyLedger: FiledReturnsFullFiscalYearLedger = {
+      ...baseLedger,
+      status: "blocked",
+      targets: baseLedger.targets.map((target) => {
+        const targetScope = {
+          artifactType: "JSON" as const,
+          financialYear: target.financialYear,
+          period: target.period,
+          returnType: "GSTR-3B" as const,
+        };
+        return {
+          ...target,
+          status: "not-filed" as const,
+          ...canonicalDurableTargetStatus(targetScope, "not-filed", [
+            "filed-return-positively-not-filed",
+          ]),
+        };
+      }),
+    };
+    const intentLedger = markFullFiscalYearZipDownloadIntent(readyLedger, intentAt);
+    const observingLedger = markFullFiscalYearZipDownloadObserving(intentLedger, cleanupAt, 41);
+    const cleanupLedger = createFullFiscalYearCleanupPendingState(observingLedger, {
+      connectorId: "gst",
+      scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+      state: "downloaded",
+      safeSignals: ["full-fiscal-year-zip-downloaded"],
+      safeMessage: "Synthetic ZIP downloaded.",
+    }).ledger;
+    expect(cleanupLedger.updatedAt).toBe(cleanupAt.toISOString());
+    expect(cleanupLedger.zipDownloadAttempt).toEqual({ requestedAt: intentAt.toISOString() });
+    expect(isFullFiscalYearLedger(cleanupLedger)).toBe(true);
+    await persistCanonicalFiledReturnsFlowSummary("completion", {
+      scope,
+      status: "blocked",
+      updatedAt: intentAt.toISOString(),
+      completedPeriods: [],
+      totalPeriods: 12,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "blocked",
+        safeSignals: [
+          "full-fiscal-year-zip-phase:download-intent-persisted",
+          "full-fiscal-year-summary-included",
+          "full-fiscal-year-summary-parsed-period-count:2",
+          `full-fiscal-year-summary-row-count:${periods.length}`,
+        ],
+        safeMessage: "Synthetic intent-checkpoint summary status.",
+      },
+    });
+
+    const response = await finishFullFiscalYearCleanup(
+      { ...recoveryDeps(), now: () => cleanupAt } as never,
+      cleanupLedger,
+    );
+
+    expect(response).toMatchObject({
+      flowStep: {
+        state: "downloaded",
+        safeSignals: expect.arrayContaining([
+          "full-fiscal-year-summary-included",
+          "full-fiscal-year-summary-parsed-period-count:2",
+        ]),
+      },
+    });
+  });
+
+  it("does not import a previous same-scope run's summary during cleanup recovery", async () => {
+    const now = new Date("2017-08-20T00:01:00.000Z");
+    const scope = {
+      artifactType: "JSON" as const,
+      financialYear: "2017-18",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-3B" as const,
+    };
+    const periods = getFiledReturnsFullFiscalYearPeriods(scope.financialYear, now);
+    const baseLedger = createFullFiscalYearLedger(scope, now, periods);
+    const cleanupLedger: FiledReturnsFullFiscalYearLedger = {
+      ...baseLedger,
+      status: "blocked",
+      zipPhase: "no-artifacts-cleanup-pending",
+      targets: baseLedger.targets.map((target) => ({
+        ...target,
+        status: "not-filed" as const,
+        safeSignals: ["not-filed"],
+        safeMessage: "Pack did not find a filed return for this period.",
+      })),
+    };
+    await persistCanonicalFiledReturnsFlowSummary("completion", {
+      scope,
+      status: "blocked",
+      updatedAt: "2017-08-20T00:00:00.000Z",
+      completedPeriods: [],
+      totalPeriods: 12,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "blocked",
+        safeSignals: [
+          "full-fiscal-year-summary-included",
+          "full-fiscal-year-summary-parsed-period-count:2",
+          `full-fiscal-year-summary-row-count:${periods.length}`,
+        ],
+        safeMessage: "Synthetic previous-run summary status.",
+      },
+    });
+
+    const response = await finishFullFiscalYearCleanup(
+      { ...recoveryDeps(), now: () => now } as never,
+      cleanupLedger,
+    );
+
+    expect(response).toMatchObject({
+      flowStep: {
+        state: "downloaded",
+        safeSignals: expect.not.arrayContaining(["full-fiscal-year-summary-included"]),
+      },
+    });
+    if (!response.ok || !("flowStep" in response)) throw new Error("Expected flow response.");
+    expect(response.flowStep.safeMessage).not.toContain("summary");
+  });
+
+  it.each([
+    {
+      name: "included",
+      returnType: "GSTR-3B" as const,
+      outcome: {
+        safeSignals: [
+          "full-fiscal-year-summary-included",
+          "full-fiscal-year-summary-parsed-period-count:1",
+          "full-fiscal-year-summary-row-count:4",
+        ],
+      },
+      messageFragment: "workbook and tidy CSV for 1 period",
+    },
+    {
+      name: "outcomes-only",
+      returnType: "GSTR-3B" as const,
+      outcome: {
+        safeSignals: [
+          "full-fiscal-year-summary-included",
+          "full-fiscal-year-summary-outcomes-only",
+          "full-fiscal-year-summary-parsed-period-count:0",
+          "full-fiscal-year-summary-row-count:4",
+        ],
+      },
+      messageFragment: "outcome-only tidy CSV",
+    },
+    {
+      name: "failed",
+      returnType: "GSTR-3B" as const,
+      outcome: {
+        safeSignals: [
+          "full-fiscal-year-summary-failed",
+          "full-fiscal-year-summary-error:generation-failed",
+        ],
+      },
+      messageFragment: "summary generation failed",
+    },
+    {
+      name: "workbook-not-applicable",
+      returnType: "GSTR-1" as const,
+      outcome: {
+        safeSignals: [
+          "full-fiscal-year-summary-included",
+          "full-fiscal-year-workbook-not-applicable",
+          "full-fiscal-year-summary-parsed-period-count:1",
+          "full-fiscal-year-summary-row-count:4",
+        ],
+      },
+      messageFragment: "tidy CSV for 1 period. A consolidated workbook is not available",
+    },
+  ])(
+    "restores the $name summary outcome across worker-stop checkpoints",
+    async ({ outcome, messageFragment, returnType }) => {
+      const stopsAtIntentCheckpoint = outcome.safeSignals.includes(
+        "full-fiscal-year-summary-failed",
+      );
+      const now = new Date("2017-08-20T00:00:00.000Z");
+      let clock = now;
+      const scope = {
+        artifactType: "PDF" as const,
+        financialYear: "2017-18",
+        period: FULL_FISCAL_YEAR_PERIOD,
+        returnType,
+      };
+      const store: Record<string, unknown> = {};
+      vi.mocked(browser.storage.local.get).mockImplementation(async (key: unknown) => {
+        if (typeof key === "string") return { [key]: store[key] };
+        return store;
+      });
+      vi.mocked(browser.storage.local.set).mockImplementation(
+        async (values: Record<string, unknown>) => {
+          Object.assign(store, values);
+        },
+      );
+      const browserDownloadStarted = vi.fn();
+      const periods = getFiledReturnsFullFiscalYearPeriods(scope.financialYear, now);
+      const runSinglePeriod = vi.fn(async (targetScope: FiledReturnsDownloadScope) => {
+        const periodIndex = periods.findIndex((period) => period === targetScope.period);
+        return {
+          ok: true as const,
+          flowStep: {
+            connectorId: "gst" as const,
+            scopeId: filedReturnsScopeId(returnType),
+            state: "downloaded" as const,
+            safeSignals: [
+              "filed-return-artifact-downloaded:PDF",
+              "full-fiscal-year-opfs-staged:PDF",
+            ],
+            safeMessage: "Synthetic PDF staged.",
+            downloadDiagnostic: {
+              actionId: `00000000-0000-4000-8000-${String(periodIndex + 1).padStart(12, "0")}`,
+              artifactType: "PDF" as const,
+              byteCountClass: "non-empty" as const,
+              downloadPathClass: "captured-portal-request-data" as const,
+              endpointClass:
+                returnType === "GSTR-1"
+                  ? ("gstr1-pdf-portal-blob-captured-download" as const)
+                  : ("gstr3b-portal-blob-captured-download" as const),
+              eventType: "filed-return-download-path" as const,
+              financialYear: targetScope.financialYear,
+              mimeClass: "pdf" as const,
+              period: targetScope.period,
+              returnType,
+              schemaVersion: "1.0" as const,
+              status: "downloaded" as const,
+            },
+          },
+        };
+      });
+      zipMocks.exportFullFiscalYearZip.mockImplementationOnce(
+        async (
+          _ledger: FiledReturnsFullFiscalYearLedger,
+          _step: unknown,
+          options: {
+            onBeforeDownloadStart?: (
+              requestedAt: Date,
+              summaryOutcome: FiledReturnsSummaryStatus,
+            ) => Promise<void>;
+            onDownloadStarted?: (downloadId: number) => Promise<void>;
+          },
+        ) => {
+          await options.onBeforeDownloadStart?.(now, outcome);
+          if (stopsAtIntentCheckpoint) {
+            throw new Error("synthetic worker termination after ZIP intent checkpoint");
+          }
+          browserDownloadStarted();
+          throw new Error("synthetic worker termination after ZIP download start");
+        },
+      );
+
+      await expect(
+        startFullFiscalYearDownloadFlow(
+          scope,
+          { ...recoveryDeps(), now: () => clock } as never,
+          runSinglePeriod,
+        ),
+      ).rejects.toThrow(
+        stopsAtIntentCheckpoint
+          ? "synthetic worker termination after ZIP intent checkpoint"
+          : "synthetic worker termination after ZIP download start",
+      );
+
+      const checkpoint = sessionValues.current.completion as {
+        flowStep?: { safeMessage?: string; safeSignals?: unknown };
+      };
+      const durableSignals = parseDurableFiledReturnsSignals(checkpoint.flowStep?.safeSignals);
+      expect(durableSignals).toEqual(expect.arrayContaining(outcome.safeSignals));
+      if (stopsAtIntentCheckpoint) {
+        expect(checkpoint.flowStep?.safeMessage).toContain("prepared the artifact ZIP");
+        expect(checkpoint.flowStep?.safeMessage).toContain("summary generation failed");
+        expect(checkpoint.flowStep?.safeMessage).not.toContain("saved");
+      }
+      expect(store["full-year-ledger"]).toMatchObject({
+        zipPhase: "download-intent-persisted",
+        zipDownloadAttempt: { requestedAt: now.toISOString() },
+      });
+      expect(isFullFiscalYearLedger(store["full-year-ledger"])).toBe(true);
+      expect(browserDownloadStarted).toHaveBeenCalledTimes(stopsAtIntentCheckpoint ? 0 : 1);
+
+      clock = new Date("2017-08-20T00:01:00.000Z");
+      const firstRecovery = await startFullFiscalYearDownloadFlow(
+        scope,
+        { ...recoveryDeps(), now: () => clock } as never,
+        vi.fn(),
+      );
+      expect(firstRecovery).toMatchObject({
+        flowStep: {
+          state: "download-unconfirmed",
+          safeSignals: expect.arrayContaining([
+            ...outcome.safeSignals,
+            "full-fiscal-year-final-zip-manual-review",
+          ]),
+          safeMessage: expect.stringContaining(messageFragment),
+        },
+      });
+      if (stopsAtIntentCheckpoint && firstRecovery.ok && "flowStep" in firstRecovery) {
+        expect(firstRecovery.flowStep.safeMessage).not.toContain("saved");
+        expect(firstRecovery.flowStep.safeMessage).toContain("summary generation failed");
+      }
+      clock = new Date("2017-08-20T00:02:00.000Z");
+      const secondRecovery = await startFullFiscalYearDownloadFlow(
+        scope,
+        { ...recoveryDeps(), now: () => clock } as never,
+        vi.fn(),
+      );
+
+      expect(secondRecovery).toMatchObject({
+        flowStep: {
+          state: "download-unconfirmed",
+          safeSignals: expect.arrayContaining([
+            ...outcome.safeSignals,
+            "full-fiscal-year-final-zip-manual-review",
+          ]),
+          safeMessage: expect.stringContaining(messageFragment),
+        },
+      });
+      expect(zipMocks.reconcileFullFiscalYearZipDownload).not.toHaveBeenCalled();
+      expect(zipMocks.exportFullFiscalYearZip).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it("passes a fresh GSTR-1 all-formats target to the period flow without narrowing it", async () => {
     const now = new Date("2026-06-24T00:00:00.000Z");

@@ -5,8 +5,11 @@ not replace the protected package submit workflow. It records the manual Chrome
 Web Store Developer Dashboard steps that cannot be proved from source control
 alone.
 
-The public item remains on `v0.3.2`. The `v0.5.0` package is submitted and in
-review as a draft; it is not approved, published, or live. The exact historical
+The public item is the `v0.5.0` beta, published and live per the maintainer's
+observation of the Store dashboard; it supersedes `v0.3.2`. The observation
+fields that would make that auditable from this repository -- date, dashboard
+state, workflow run -- are not recorded, so the closeout below is not complete
+even though the item is live. The exact historical
 `v0.4.0` package upload succeeded in workflow run `29507382500`, but that
 release was not published. The 2026-07-16 dashboard snapshots are historical
 `v0.4.0` evidence: they showed a blank required `offscreen` justification,

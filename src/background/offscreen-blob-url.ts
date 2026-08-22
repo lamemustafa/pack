@@ -1,9 +1,15 @@
 import { browser } from "wxt/browser";
 import {
   PACK_OFFSCREEN_BLOB_URL_TARGET,
+  isPackOffscreenFiledReturnSummaryErrorCategory,
+  isPackOffscreenFiledReturnZipErrorCategory,
   type PackOffscreenBlobUrlResponse,
+  type PackOffscreenFiledReturnZipErrorCategory,
   type PackOffscreenFiledReturnZipExpectedEntry,
+  type PackOffscreenFiledReturnSummaryResult,
 } from "../connectors/gst/offscreen-blob-url";
+import type { FiledReturnsSummaryPlanEntry } from "../connectors/gst/filed-returns-summary-sheet";
+import { MAX_FILED_RETURNS_SUMMARY_ROWS } from "../connectors/gst/filed-returns-summary-sheet";
 import type { FiledReturnsConcreteArtifactType } from "../connectors/gst/filed-returns-artifacts";
 import type { FiledReturnsReturnType } from "../connectors/gst/filed-returns-return-types";
 import { MAX_ARTIFACT_BYTES } from "../connectors/gst/artifact-validation";
@@ -14,8 +20,14 @@ const OFFSCREEN_JUSTIFICATION =
 export type OffscreenFiledReturnStageResult =
   { status: "staged" } | { status: "failed"; errorCategory?: string };
 export type OffscreenFiledReturnZipResult =
-  | { status: "created"; blobUrl: string; zipEntryCount: number }
-  | { status: "failed"; errorCategory?: string };
+  | {
+      status: "created";
+      blobUrl: string;
+      zipEntryCount: number;
+      artifactEntryCount: number;
+      summary?: PackOffscreenFiledReturnSummaryResult;
+    }
+  | { status: "failed"; errorCategory?: PackOffscreenFiledReturnZipErrorCategory };
 export type OffscreenFiledReturnClearResult =
   | { status: "cleared" }
   | {
@@ -86,6 +98,8 @@ export async function createOffscreenFiledReturnZipUrl(
     returnType: FiledReturnsReturnType;
     entryCount: number;
     entries: readonly PackOffscreenFiledReturnZipExpectedEntry[];
+    generatedAt: Date;
+    summaryPlan?: readonly FiledReturnsSummaryPlanEntry[];
   },
 ): Promise<OffscreenFiledReturnZipResult> {
   const requestId = createRequestId();
@@ -99,9 +113,11 @@ export async function createOffscreenFiledReturnZipUrl(
       expectedReturnType: expected.returnType,
       expectedEntryCount: expected.entryCount,
       expectedEntries: [...expected.entries],
+      generatedAt: expected.generatedAt.toISOString(),
+      ...(expected.summaryPlan ? { summaryPlan: [...expected.summaryPlan] } : {}),
     },
   });
-  return toZipResult(response, requestId);
+  return toZipResult(response, requestId, expected);
 }
 
 export async function clearOffscreenFiledReturnLedger(
@@ -275,7 +291,19 @@ function toStageResult(
 function isZipResponse(
   response: unknown,
   requestId: string,
-): response is { ok: true; requestId: string; blobUrl: string; zipEntryCount: number } {
+  expected: {
+    entryCount: number;
+    summaryPlan?: readonly FiledReturnsSummaryPlanEntry[];
+  },
+): response is {
+  ok: true;
+  requestId: string;
+  blobUrl: string;
+  zipEntryCount: number;
+  artifactEntryCount: number;
+  summaryEntryCount: number;
+  summary?: unknown;
+} {
   if (typeof response !== "object" || response === null) return false;
   const record = response as Record<string, unknown>;
   return (
@@ -284,16 +312,40 @@ function isZipResponse(
     typeof record.blobUrl === "string" &&
     typeof record.zipEntryCount === "number" &&
     Number.isInteger(record.zipEntryCount) &&
-    record.zipEntryCount > 0
+    record.artifactEntryCount === expected.entryCount &&
+    (record.summaryEntryCount === 0 ||
+      ((record.summaryEntryCount === 1 || record.summaryEntryCount === 2) &&
+        expected.summaryPlan !== undefined)) &&
+    record.zipEntryCount === record.artifactEntryCount + record.summaryEntryCount &&
+    (expected.summaryPlan !== undefined || record.summary === undefined)
   );
 }
 
-function toZipResult(response: unknown, requestId: string): OffscreenFiledReturnZipResult {
-  if (isZipResponse(response, requestId)) {
+function toZipResult(
+  response: unknown,
+  requestId: string,
+  expected: {
+    entryCount: number;
+    summaryPlan?: readonly FiledReturnsSummaryPlanEntry[];
+  },
+): OffscreenFiledReturnZipResult {
+  if (isZipResponse(response, requestId, expected)) {
+    const summary =
+      expected.summaryPlan && isSummaryResult(response.summary, expected.summaryPlan)
+        ? response.summary
+        : undefined;
+    const expectedSummaryEntryCount =
+      summary?.status === "included" ? (summary.workbookOutcome === "not-applicable" ? 1 : 2) : 0;
+    const summaryCountMatches = response.summaryEntryCount === expectedSummaryEntryCount;
+    if (expected.summaryPlan && (!summary || !summaryCountMatches)) {
+      return { status: "failed", errorCategory: "offscreen-response-invalid" };
+    }
     return {
       status: "created",
       blobUrl: response.blobUrl,
       zipEntryCount: response.zipEntryCount,
+      artifactEntryCount: response.artifactEntryCount,
+      ...(summary ? { summary } : {}),
     };
   }
   if (typeof response === "object" && response !== null) {
@@ -301,12 +353,63 @@ function toZipResult(response: unknown, requestId: string): OffscreenFiledReturn
     if (
       record.ok === false &&
       record.requestId === requestId &&
-      typeof record.errorCategory === "string"
+      isPackOffscreenFiledReturnZipErrorCategory(record.errorCategory)
     ) {
       return { status: "failed", errorCategory: record.errorCategory };
     }
   }
   return { status: "failed" };
+}
+
+function isSummaryResult(
+  input: unknown,
+  plan: readonly FiledReturnsSummaryPlanEntry[],
+): input is PackOffscreenFiledReturnSummaryResult {
+  if (typeof input !== "object" || input === null) return false;
+  const record = input as Record<string, unknown>;
+  if (record.status === "failed") {
+    return (
+      hasOnlyKeys(record, ["reasonCategory", "status"]) &&
+      isPackOffscreenFiledReturnSummaryErrorCategory(record.reasonCategory)
+    );
+  }
+  const maximumParsedPeriodCount = new Set(
+    plan
+      .filter((entry) => entry.artifactType === "JSON" && entry.outcomeCategory === "staged")
+      .map((entry) => entry.period),
+  ).size;
+  const expectedWorkbookOutcome = plan.every((entry) => entry.returnType === "GSTR-3B")
+    ? undefined
+    : "not-applicable";
+  return (
+    hasOnlyKeys(record, [
+      "outcomeOnly",
+      "parsedPeriodCount",
+      "rowCount",
+      "status",
+      "workbookOutcome",
+    ]) &&
+    record.status === "included" &&
+    record.workbookOutcome === expectedWorkbookOutcome &&
+    typeof record.outcomeOnly === "boolean" &&
+    typeof record.parsedPeriodCount === "number" &&
+    Number.isInteger(record.parsedPeriodCount) &&
+    record.parsedPeriodCount >= 0 &&
+    record.parsedPeriodCount <= maximumParsedPeriodCount &&
+    (record.outcomeOnly === true
+      ? record.parsedPeriodCount === 0
+      : record.parsedPeriodCount >= 1) &&
+    typeof record.rowCount === "number" &&
+    Number.isInteger(record.rowCount) &&
+    record.rowCount >= plan.length &&
+    record.rowCount >= record.parsedPeriodCount &&
+    record.rowCount <= MAX_FILED_RETURNS_SUMMARY_ROWS
+  );
+}
+
+function hasOnlyKeys(input: Record<string, unknown>, keys: readonly string[]): boolean {
+  const allowed = new Set(keys);
+  return Object.keys(input).every((key) => allowed.has(key));
 }
 
 function isClearedResponse(

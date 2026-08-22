@@ -10,7 +10,6 @@ import {
   hasUnresolvedFiledReturnsRecovery,
 } from "../popup/flow-summary";
 import { InlineStatus } from "../popup/inline-status";
-import { LastRunDiagnostics } from "../popup/last-run-diagnostics";
 import { PackSummary } from "../popup/pack-summary";
 import { getPopupPresentationState, isGstSignInRequired } from "../popup/presentation-state";
 import { RecoveryActions, hasRecoveryActions } from "../popup/recovery-actions";
@@ -27,7 +26,12 @@ export type PackPanelController = ReturnType<typeof usePackPopupController>;
  */
 export function PanelSurface({ pack }: { pack: PackPanelController }) {
   const [view, setView] = React.useState<PanelView>("presets");
-  const presets = usePanelPresets();
+  const {
+    presets,
+    periodCounts,
+    refresh: refreshPresets,
+    isStale: presetsAreStale,
+  } = usePanelPresets();
 
   const summary = pack.recoverySummary ?? pack.scopedFlowSummary;
   const presentation = getPopupPresentationState(
@@ -102,7 +106,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
             {running ? null : view === "presets" ? (
               <>
                 <h2>What do you need?</h2>
-                {presets.map((preset) => {
+                {presets.map((preset, presetIndex) => {
                   // The same guard matrix the popup's start control consults. Reading it here
                   // rather than re-deriving "is something running" is the point: a preset that
                   // the background will refuse must say so instead of looking available.
@@ -133,12 +137,24 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
                       className="panel-choice"
                       type="button"
                       disabled={blockedReason !== null}
-                      onClick={() => void pack.startFiledReturnsFlow(preset.scope)}
+                      onClick={() => {
+                        // Never submit a scope the button is not showing. The
+                        // first version of this recomputed at click time and
+                        // started the fresh scope, so a stale label could read
+                        // 2025-26 while the run downloaded 2026-27 -- a user
+                        // getting something other than the target they clicked,
+                        // which is worse than the staleness it was fixing.
+                        if (presetsAreStale()) {
+                          refreshPresets();
+                          return;
+                        }
+                        void pack.startFiledReturnsFlow(preset.scope);
+                      }}
                     >
                       <span>{preset.label}</span>
                       <span className="panel-choice-detail">
                         {blockedReason ??
-                          `${preset.detail} · ${presetPeriodCount(preset)} periods · one ZIP`}
+                          `${preset.detail} · ${periodCounts[presetIndex]} periods · one ZIP`}
                       </span>
                     </button>
                   );
@@ -177,7 +193,14 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
         {hasRecoveryActions(summary ?? null) ? (
           <RecoveryActions
             busy={pack.effectiveBusy}
-            portalReady={portalReady}
+            /*
+             * Signed-in, not merely supported. The auth landing page is
+             * `supported: true` -- that is how Pack offers to act on it -- so
+             * gating on `portalReady` enabled portal-dependent recovery on a
+             * signed-out tab. The background then discards saved recovery state
+             * for a run it cannot continue, which is not recoverable afterwards.
+             */
+            portalReady={portalSignedIn}
             summary={summary}
             onStartFresh={() => void pack.startFreshFiledReturnsFlow()}
             onAcknowledgeInterruptedRun={() => void pack.acknowledgeInterruptedRun()}
@@ -193,12 +216,6 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
 
       <footer className="panel-foot">
         <p className="panel-fine">Local only · GST login and files stay on this device.</p>
-        {/*
-          Carried over when the popup folded into this surface. It was the popup's
-          only route to the last run's evidence, so leaving it behind would have
-          removed a diagnostic rather than moved it.
-        */}
-        <LastRunDiagnostics summary={pack.lastRunSummary} />
         {/* Required wherever the Pack mark appears. See DESIGN.md and AGENTS.md. */}
         <p className="panel-fine">
           Not affiliated with, endorsed by, or operated by GSTN, CBIC, or the Government of India.
@@ -265,23 +282,62 @@ function useReturnToPage(onReturn: () => void) {
  * but the one that crosses a boundary. Handing back a new array each time would
  * re-render the list for nothing.
  */
-function usePanelPresets(): PanelPreset[] {
-  const [presets, setPresets] = React.useState(panelPresets);
-  useReturnToPage(
-    React.useCallback(() => {
-      setPresets((current) => {
-        const next = panelPresets();
-        return presetsIdentity(next) === presetsIdentity(current) ? current : next;
-      });
-    }, []),
-  );
-  return presets;
+function usePanelPresets(): {
+  presets: PanelPreset[];
+  periodCounts: number[];
+  refresh: () => void;
+  isStale: () => boolean;
+} {
+  // The identity is SNAPSHOTTED when the presets are stored. Recomputing it for
+  // the stored presets defeats the check: `presetPeriodCount` reads the current
+  // date, so a panel mounted in June and read in July produced three for both
+  // sides and compared equal, while the button still showed two.
+  const [rendered, setRendered] = React.useState(renderedPresetsNow);
+  const refresh = React.useCallback(() => {
+    setRendered((current) => {
+      const next = renderedPresetsNow();
+      return next.identity === current.identity ? current : next;
+    });
+  }, []);
+  // Deliberately a plain closure over the CURRENT render's snapshot, not a ref:
+  // it is only called from a click handler, which is itself recreated each
+  // render, so there is no stale-closure risk and no ref read during render.
+  const isStale = () => presetsIdentity(panelPresets()) !== rendered.identity;
+  useReturnToPage(refresh);
+  return {
+    presets: rendered.presets,
+    periodCounts: rendered.periodCounts,
+    refresh,
+    isStale,
+  };
+}
+
+function renderedPresetsNow(): {
+  presets: PanelPreset[];
+  periodCounts: number[];
+  identity: string;
+} {
+  const presets = panelPresets();
+  // The counts are captured HERE, with the presets, and rendered from this
+  // snapshot. Reading `presetPeriodCount` again at render time made the button
+  // show the current month's count while the stored identity held the old one,
+  // so the label moved without the freshness check ever noticing.
+  return {
+    presets,
+    periodCounts: presets.map((preset) => presetPeriodCount(preset)),
+    identity: presetsIdentity(presets),
+  };
 }
 
 // Compares whole presets rather than the fields believed to matter: a preset
 // that gained a time-dependent field would otherwise go stale again, silently.
 function presetsIdentity(presets: readonly PanelPreset[]): string {
-  return JSON.stringify(presets);
+  // The rendered period count is part of what the user is agreeing to, and it is
+  // NOT derivable from the preset alone: crossing an ordinary month boundary
+  // inside one financial year leaves `panelPresets()` byte-identical while the
+  // count rises, so a panel showing "2 periods" in June would accept a click in
+  // July and download three.
+  return JSON.stringify(presets.map((preset) => [preset, presetPeriodCount(preset)]));
 }
 
 /**
