@@ -588,6 +588,27 @@ describe("packaged page reference parsing", () => {
     expect(result.status).toBe(0);
   });
 
+  it("does not treat comment delimiters inside quoted attributes as a comment", async () => {
+    // Stripping comments with a global regex blanked everything between a
+    // `data-open="<!--"` and a `data-close="-->"`, including a real script tag
+    // in between, so a package missing that bundle verified clean.
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      page(
+        `<div data-open="<!--"></div>` +
+          `<script type="module" src="/assets/absent-between-attrs.js"></script>` +
+          `<div data-close="-->"></div>`,
+      ),
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("assets/absent-between-attrs.js");
+  });
+
   it("still sees a real script after an inline one containing tag-shaped text", async () => {
     // The first raw-text fix collected openers up front and mutated as it went,
     // so a stale offset made the scan run past the real closing tag and blank

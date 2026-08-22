@@ -369,38 +369,49 @@ function referencedAssetPaths(html) {
  */
 function withoutInertMarkup(html) {
   const blank = (length) => " ".repeat(length);
-  const withoutComments = html.replace(/<!--[\s\S]*?-->/g, (comment) => blank(comment.length));
-  // A script or style BODY is raw text to an HTML parser, so tag-shaped text
-  // inside it is a string, not markup.
-  //
-  // This walks FORWARD and never reuses an offset taken before an edit. The
-  // previous version collected every opener up front and then mutated as it
-  // went, so after blanking one body a stale opener pointed into blanked space;
-  // the scan ran past the real closing tag and blanked the NEXT script's opening
-  // tag too. An inline script containing tag-shaped text followed by a real
-  // external script therefore left no reference at all, and a package missing
-  // that bundle verified clean -- a hole in a release gate, opened by the fix
-  // for a different hole in the same gate.
-  const opener = /<(script|style)\b/gi;
+  // ONE forward scan that understands markup context. Comments were previously
+  // stripped by a global regex, which treated a comment delimiter inside a
+  // quoted attribute value as a real comment: a page carrying `data-open="<!--"`
+  // and `data-close="-->"` had everything between them blanked, including a real
+  // script tag, so a package missing that bundle verified clean. Tag interiors
+  // are skipped wholesale here, so nothing inside a quoted value is ever read as
+  // markup.
   let output = "";
   let index = 0;
-  while (index < withoutComments.length) {
-    opener.lastIndex = index;
-    const match = opener.exec(withoutComments);
-    if (!match) break;
-    const attributesEnd = tagEnd(withoutComments, match.index + match[0].length);
+  while (index < html.length) {
+    const next = html.indexOf("<", index);
+    if (next === -1) break;
+    output += html.slice(index, next);
+    index = next;
+
+    if (html.startsWith("<!--", index)) {
+      const close = html.indexOf("-->", index + 4);
+      const end = close === -1 ? html.length : close + 3;
+      output += blank(end - index);
+      index = end;
+      continue;
+    }
+
+    const rawText = /^<(script|style)\b/i.exec(html.slice(index, index + 8));
+    const attributesEnd = tagEnd(html, index + 1);
     if (attributesEnd === -1) break;
-    const bodyStart = attributesEnd + 1;
-    const closeIndex = withoutComments
-      .toLowerCase()
-      .indexOf(`</${match[1].toLowerCase()}`, bodyStart);
-    if (closeIndex === -1) break;
-    output += withoutComments.slice(index, bodyStart) + blank(closeIndex - bodyStart);
-    // Resume AT the closing tag, so tag-shaped text inside the body just blanked
-    // is never seen as an opener.
-    index = closeIndex;
+
+    if (rawText) {
+      const tagName = rawText[1].toLowerCase();
+      const bodyStart = attributesEnd + 1;
+      const closeIndex = html.toLowerCase().indexOf(`</${tagName}`, bodyStart);
+      const bodyEnd = closeIndex === -1 ? html.length : closeIndex;
+      output += html.slice(index, bodyStart) + blank(bodyEnd - bodyStart);
+      index = bodyEnd;
+      continue;
+    }
+
+    // An ordinary tag: copied verbatim and skipped past, so a `<!--` or a `<`
+    // inside one of its quoted values is never treated as markup.
+    output += html.slice(index, attributesEnd + 1);
+    index = attributesEnd + 1;
   }
-  return output + withoutComments.slice(index);
+  return output + html.slice(index);
 }
 
 /** Yields each `<tagName ...>` open tag's attributes, lowercased and unquoted. */

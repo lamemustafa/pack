@@ -26,7 +26,12 @@ export type PackPanelController = ReturnType<typeof usePackPopupController>;
  */
 export function PanelSurface({ pack }: { pack: PackPanelController }) {
   const [view, setView] = React.useState<PanelView>("presets");
-  const { presets, refresh: refreshPresets, isStale: presetsAreStale } = usePanelPresets();
+  const {
+    presets,
+    periodCounts,
+    refresh: refreshPresets,
+    isStale: presetsAreStale,
+  } = usePanelPresets();
 
   const summary = pack.recoverySummary ?? pack.scopedFlowSummary;
   const presentation = getPopupPresentationState(
@@ -101,7 +106,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
             {running ? null : view === "presets" ? (
               <>
                 <h2>What do you need?</h2>
-                {presets.map((preset) => {
+                {presets.map((preset, presetIndex) => {
                   // The same guard matrix the popup's start control consults. Reading it here
                   // rather than re-deriving "is something running" is the point: a preset that
                   // the background will refuse must say so instead of looking available.
@@ -149,7 +154,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
                       <span>{preset.label}</span>
                       <span className="panel-choice-detail">
                         {blockedReason ??
-                          `${preset.detail} · ${presetPeriodCount(preset)} periods · one ZIP`}
+                          `${preset.detail} · ${periodCounts[presetIndex]} periods · one ZIP`}
                       </span>
                     </button>
                   );
@@ -272,6 +277,7 @@ function useReturnToPage(onReturn: () => void) {
  */
 function usePanelPresets(): {
   presets: PanelPreset[];
+  periodCounts: number[];
   refresh: () => void;
   isStale: () => boolean;
 } {
@@ -291,12 +297,29 @@ function usePanelPresets(): {
   // render, so there is no stale-closure risk and no ref read during render.
   const isStale = () => presetsIdentity(panelPresets()) !== rendered.identity;
   useReturnToPage(refresh);
-  return { presets: rendered.presets, refresh, isStale };
+  return {
+    presets: rendered.presets,
+    periodCounts: rendered.periodCounts,
+    refresh,
+    isStale,
+  };
 }
 
-function renderedPresetsNow(): { presets: PanelPreset[]; identity: string } {
+function renderedPresetsNow(): {
+  presets: PanelPreset[];
+  periodCounts: number[];
+  identity: string;
+} {
   const presets = panelPresets();
-  return { presets, identity: presetsIdentity(presets) };
+  // The counts are captured HERE, with the presets, and rendered from this
+  // snapshot. Reading `presetPeriodCount` again at render time made the button
+  // show the current month's count while the stored identity held the old one,
+  // so the label moved without the freshness check ever noticing.
+  return {
+    presets,
+    periodCounts: presets.map((preset) => presetPeriodCount(preset)),
+    identity: presetsIdentity(presets),
+  };
 }
 
 // Compares whole presets rather than the fields believed to matter: a preset
