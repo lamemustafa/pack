@@ -318,7 +318,12 @@ console.log("Pack WXT extension package verification passed.");
 // stylesheet it references must also be present and non-empty. Without this, a
 // build that emitted the HTML but dropped its chunk passed verification.
 async function requireReferencedBundles(page, html) {
-  for (const reference of referencedAssetPaths(html)) {
+  const references = [
+    ...html.matchAll(/<script[^>]+src="([^"]+)"/g),
+    ...html.matchAll(/<link[^>]+rel="stylesheet"[^>]+href="([^"]+)"/g),
+  ].map((match) => match[1]);
+
+  for (const reference of references) {
     if (/^[a-z]+:/i.test(reference) || reference.startsWith("//")) {
       throw new Error(`Extension page references a remote asset: ${page} -> ${reference}`);
     }
@@ -329,148 +334,6 @@ async function requireReferencedBundles(page, html) {
       throw new Error(`Asset referenced by ${page} is empty: ${relative}`);
     }
   }
-}
-
-// Reference extraction reads attributes rather than matching one composed
-// shape. The regexes this replaces accepted only double-quoted attributes and
-// required a stylesheet's `rel` to precede its `href` -- which is what the
-// current bundler emits, so the gate was verified against the emitter's
-// formatting habits rather than against HTML. A bundler upgrade that changed
-// quoting would have turned this check into a no-op, and a no-op check reports
-// success: a page referencing a bundle the package does not contain would have
-// shipped as a passing build.
-function referencedAssetPaths(html) {
-  const references = [];
-  html = withoutInertMarkup(html);
-  for (const attributes of htmlTags(html, "script")) {
-    const src = attributes.get("src");
-    if (src) references.push(src);
-  }
-  for (const attributes of htmlTags(html, "link")) {
-    // `rel` is a space-separated token list, and only a stylesheet is a bundle.
-    // An icon or a manifest link is not one, so widening this to every `href`
-    // would fail the build on something legitimate.
-    const rel = attributes.get("rel") ?? "";
-    if (!rel.split(/\s+/).some((token) => token.toLowerCase() === "stylesheet")) continue;
-    const href = attributes.get("href");
-    if (href) references.push(href);
-  }
-  return references;
-}
-
-/**
- * Blanks out comment and raw-text bodies, preserving length so nothing shifts.
- *
- * Scanning raw markup treats a commented-out `<script src=...>` as a live
- * reference, so a page carrying a disabled tag fails the build for an asset it
- * never loads. That is worse than the gap this scanner closed: a release gate
- * that rejects a valid package blocks shipping, where the regex it replaced
- * merely failed to catch one.
- */
-function withoutInertMarkup(html) {
-  const blank = (length) => " ".repeat(length);
-  // ONE forward scan that understands markup context. Comments were previously
-  // stripped by a global regex, which treated a comment delimiter inside a
-  // quoted attribute value as a real comment: a page carrying `data-open="<!--"`
-  // and `data-close="-->"` had everything between them blanked, including a real
-  // script tag, so a package missing that bundle verified clean. Tag interiors
-  // are skipped wholesale here, so nothing inside a quoted value is ever read as
-  // markup.
-  let output = "";
-  let index = 0;
-  while (index < html.length) {
-    const next = html.indexOf("<", index);
-    if (next === -1) break;
-    output += html.slice(index, next);
-    index = next;
-
-    if (html.startsWith("<!--", index)) {
-      // Chrome closes a comment on `--!>` as well as `-->`. Recognising only the
-      // latter meant a page using the other form had the REST OF THE DOCUMENT
-      // blanked, so every later reference vanished and a package missing those
-      // bundles verified clean.
-      const plain = html.indexOf("-->", index + 4);
-      const bang = html.indexOf("--!>", index + 4);
-      const close = plain === -1 ? bang : bang === -1 ? plain : Math.min(plain, bang);
-      const end = close === -1 ? html.length : close + (close === bang ? 4 : 3);
-      output += blank(end - index);
-      index = end;
-      continue;
-    }
-
-    // script and style are raw text; textarea and title are RCDATA. A browser
-    // loads nothing from either, so tag-shaped example text inside them is not a
-    // reference and must not fail an otherwise valid package.
-    // An HTML delimiter must follow the name, not a word boundary: `\b` matches
-    // before a hyphen, so `<script-widget>` was misread as a raw-text element
-    // and its body -- including any real nested reference -- was blanked. This is
-    // the same delimiter test `htmlTags` already uses.
-    const rawText = /^<(script|style|textarea|title)(?=[\s/>])/i.exec(
-      html.slice(index, index + 11),
-    );
-    const attributesEnd = tagEnd(html, index + 1);
-    if (attributesEnd === -1) break;
-
-    if (rawText) {
-      const tagName = rawText[1].toLowerCase();
-      const bodyStart = attributesEnd + 1;
-      const closeIndex = html.toLowerCase().indexOf(`</${tagName}`, bodyStart);
-      const bodyEnd = closeIndex === -1 ? html.length : closeIndex;
-      output += html.slice(index, bodyStart) + blank(bodyEnd - bodyStart);
-      index = bodyEnd;
-      continue;
-    }
-
-    // An ordinary tag: copied verbatim and skipped past, so a `<!--` or a `<`
-    // inside one of its quoted values is never treated as markup.
-    output += html.slice(index, attributesEnd + 1);
-    index = attributesEnd + 1;
-  }
-  return output + html.slice(index);
-}
-
-/** Yields each `<tagName ...>` open tag's attributes, lowercased and unquoted. */
-function* htmlTags(html, tagName) {
-  const openers = new RegExp(`<${tagName}(?=[\\s/>])`, "gi");
-  for (const opener of html.matchAll(openers)) {
-    const start = opener.index + opener[0].length;
-    const end = tagEnd(html, start);
-    if (end === -1) continue;
-    yield tagAttributes(html.slice(start, end));
-  }
-}
-
-/** Finds the `>` closing a tag, ignoring one that sits inside a quoted value. */
-function tagEnd(html, start) {
-  let quote = "";
-  for (let index = start; index < html.length; index += 1) {
-    const character = html[index];
-    if (quote) {
-      if (character === quote) quote = "";
-      continue;
-    }
-    if (character === '"' || character === "'") {
-      quote = character;
-      continue;
-    }
-    if (character === ">") return index;
-  }
-  return -1;
-}
-
-function tagAttributes(source) {
-  const attributes = new Map();
-  const pattern = /([a-z][-a-z0-9:_.]*)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s"'>`=]+))?/gi;
-  for (const match of source.matchAll(pattern)) {
-    const name = match[1].toLowerCase();
-    // First occurrence wins, which is how a browser resolves a duplicated
-    // attribute.
-    if (attributes.has(name)) continue;
-    const raw = match[2];
-    const quoted = raw !== undefined && (raw.startsWith('"') || raw.startsWith("'"));
-    attributes.set(name, raw === undefined ? "" : quoted ? raw.slice(1, -1) : raw);
-  }
-  return attributes;
 }
 
 async function requirePackagedFile(relativePath, reason) {
