@@ -102,6 +102,47 @@ describe("popup background failure presentation", () => {
     await act(async () => root?.unmount());
   });
 
+  it("keeps a flow failure that replaced an earlier context failure", async () => {
+    // The reported sequence, which the test above does not reach: a context
+    // refresh fails FIRST and marks the error as its own, then a flow action
+    // fails and replaces the message. A boolean the context path alone
+    // maintained stayed set, so the next successful refresh cleared a flow
+    // error it did not own and hid a live diagnostic.
+    let contextFails = true;
+    mocks.sendMessage.mockImplementation((message: PackMessage) => {
+      if (message.type === "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW") {
+        return Promise.reject(new Error("worker unavailable"));
+      }
+      return contextFails
+        ? Promise.reject(new Error("context unavailable"))
+        : Promise.resolve({
+            ok: true,
+            context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
+          });
+    });
+
+    await act(async () => {
+      await controller?.refreshPortalContext();
+    });
+    expect(controller?.actionError).toBe(
+      "Pack could not read the current GST Portal state. Try again.",
+    );
+
+    await act(async () => {
+      await controller?.startFiledReturnsFlow();
+    });
+    const flowFailure = "Pack could not reach the background service. Try the action again.";
+    expect(controller?.actionError).toBe(flowFailure);
+
+    contextFails = false;
+    await act(async () => {
+      await controller?.refreshPortalContext();
+    });
+
+    expect(controller?.actionError).toBe(flowFailure);
+    await act(async () => root?.unmount());
+  });
+
   it("renders a safe action error when the background message rejects", async () => {
     mocks.sendMessage.mockImplementation((message: PackMessage) =>
       message.type === "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW"
