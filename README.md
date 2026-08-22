@@ -295,7 +295,7 @@ ComplyEaze Pack uses WXT, Vite, React, and TypeScript.
 - `scripts/verify-extension-package.mjs`: built-package policy verification.
 
 The reusable UCP-facing surface is the Pack plan/result/archive-manifest
-contract, not shared credential or session handling. In the current alpha, that
+contract, not shared credential or session handling. In the current release, that
 contract is exercised by the local demo; the live GST path downloads PDFs without
 persisting per-target `DownloadResult` records or a live manifest.
 
@@ -341,7 +341,7 @@ Pack uses Chrome extension storage only inside the current browser profile.
   local path, URL/referrer, GSTIN/PAN, taxpayer name, portal HTML, credentials,
   cookies, tokens or artifact bytes;
 - `pack:last-manifest`: the last local demo archive manifest summary. The live
-  GST download path does not write a live manifest in this alpha.
+  GST download path does not write a live manifest in this release.
 
 `chrome.storage.session`:
 
@@ -387,7 +387,7 @@ The Options page also includes a foreground File System Access probe for
 Chromium browsers. It runs only after a user click, writes and reads back a
 synthetic probe file in a user-chosen folder, removes the probe file, and stores
 no file or directory handle. It is not used for unattended GST artifact
-downloads in this alpha.
+downloads in this release.
 
 During a user-initiated live download, Pack temporarily observes browser download
 metadata such as download ID, origin, MIME type, filename, start time, state, and
@@ -396,7 +396,7 @@ for the selected artifact. This observation is bounded to the active run. Pack
 does not transmit this metadata, and the current live path does not persist raw
 URLs, referrers, absolute local paths, or filenames.
 
-Where the source-build alpha uses the reviewed capture path, Pack may hold GST
+Where the source build uses the reviewed capture path, Pack may hold GST
 artifact bytes transiently in memory or temporary local OPFS staging only for
 an explicit user-started, target-bound local download or ZIP export and its
 saved recovery/cleanup lifecycle. Pack clears that staging after confirmed

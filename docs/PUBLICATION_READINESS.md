@@ -387,7 +387,7 @@ version here.
 
 The current Store publication is the `v0.5.0` pre-1.0 beta, which is published
 and live; the past `v0.4.0` package was uploaded but never published, and
-`v0.3.2` is superseded. The source-build alpha full-year workflow has maintainer evidence
+`v0.3.2` is superseded. The source-build full-year workflow has maintainer evidence
 for automatic local downloads after user initiation. Pack must not claim stable
 Chrome Web Store maturity,
 store-facing full-year availability, durable restart-safe full-year support,
