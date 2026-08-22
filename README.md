@@ -7,8 +7,9 @@ ComplyEaze Pack is a local-first Chrome MV3 browser extension for collecting
 compliance portal documents from an authorised browser session. V0 starts with
 filed GSTR-3B PDFs, filed GSTR-1 summary PDFs, and optional GSTR-1 e-invoice
 details Excel downloads from the GST Portal where the portal provides them. The
-current source also includes private GSTR-2B summary PDF and details Excel
-source-build support through the GST Portal's GSTR-2B page.
+published package also downloads the GSTR-2B summary PDF through the GST
+Portal's GSTR-2B page. Its details Excel ships in the same binary but is not
+Store-advertised: that format's live evidence is not recorded yet.
 
 V0 is intentionally narrow:
 
@@ -20,7 +21,7 @@ V0 is intentionally narrow:
 - live local downloads for selected filed GSTR-3B and GSTR-1 periods, with
   GSTR-1 Excel available only when the GST Portal provides the selected
   e-invoice details file;
-- private source-build support for selected GSTR-2B periods, pending live
+- GSTR-2B statements, in stated scope, with the live gate recorded as not fully closed; see
   Chrome/Brave evidence before any broader release claim.
 
 ComplyEaze Pack is an independent third-party tool. It is not affiliated with,
@@ -52,7 +53,7 @@ That superseded release's evidence chain is the fully recorded one. The current
 `v0.5.0` publication is maintainer-observed; see
 `docs/PUBLICATION_READINESS.md` for exactly which evidence fields remain
 unrecorded.
-Live manifest/index/exception-file generation is outside the current alpha.
+Live manifest/index/exception-file generation is outside the current release.
 Future store updates require the release gates in
 [docs/PUBLICATION_READINESS.md](docs/PUBLICATION_READINESS.md) and
 [docs/RELEASE.md](docs/RELEASE.md).
@@ -64,13 +65,13 @@ artifact, and recovery combinations. It is not a claim that every GST Portal
 period or format has authorised live evidence; those broader claims remain
 gated by the recorded publication evidence.
 
-Full fiscal year download is available in source-build alpha as a local
-per-period ledger. It expands the selected financial year into eligible
+Full fiscal year download ships in the published package -- there is one binary --
+as a local per-period ledger. It expands the selected financial year into eligible
 GSTR-3B, GSTR-1, or GSTR-2B periods and runs them one at a time through the
 single-period path. GSTR-2B full-year support uses the signed-in tab's
 portal-loaded source data when available and exports the selected summary
-PDF/details Excel files through Pack's local ZIP path. Full-year support remains
-outside store-facing claims until exact-ZIP clean-profile evidence,
+PDF/details Excel files through Pack's local ZIP path. It is not Store-advertised,
+and remains outside store-facing claims until exact-ZIP clean-profile evidence,
 restart/resume evidence, and privacy-review evidence are recorded for the
 release.
 
@@ -295,7 +296,7 @@ ComplyEaze Pack uses WXT, Vite, React, and TypeScript.
 - `scripts/verify-extension-package.mjs`: built-package policy verification.
 
 The reusable UCP-facing surface is the Pack plan/result/archive-manifest
-contract, not shared credential or session handling. In the current alpha, that
+contract, not shared credential or session handling. In the current release, that
 contract is exercised by the local demo; the live GST path downloads PDFs without
 persisting per-target `DownloadResult` records or a live manifest.
 
@@ -341,7 +342,7 @@ Pack uses Chrome extension storage only inside the current browser profile.
   local path, URL/referrer, GSTIN/PAN, taxpayer name, portal HTML, credentials,
   cookies, tokens or artifact bytes;
 - `pack:last-manifest`: the last local demo archive manifest summary. The live
-  GST download path does not write a live manifest in this alpha.
+  GST download path does not write a live manifest in this release.
 
 `chrome.storage.session`:
 
@@ -387,7 +388,7 @@ The Options page also includes a foreground File System Access probe for
 Chromium browsers. It runs only after a user click, writes and reads back a
 synthetic probe file in a user-chosen folder, removes the probe file, and stores
 no file or directory handle. It is not used for unattended GST artifact
-downloads in this alpha.
+downloads in this release.
 
 During a user-initiated live download, Pack temporarily observes browser download
 metadata such as download ID, origin, MIME type, filename, start time, state, and
@@ -396,7 +397,7 @@ for the selected artifact. This observation is bounded to the active run. Pack
 does not transmit this metadata, and the current live path does not persist raw
 URLs, referrers, absolute local paths, or filenames.
 
-Where the source-build alpha uses the reviewed capture path, Pack may hold GST
+Where the source build uses the reviewed capture path, Pack may hold GST
 artifact bytes transiently in memory or temporary local OPFS staging only for
 an explicit user-started, target-bound local download or ZIP export and its
 saved recovery/cleanup lifecycle. Pack clears that staging after confirmed

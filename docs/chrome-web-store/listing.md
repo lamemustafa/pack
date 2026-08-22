@@ -35,9 +35,11 @@ This section is the canonical source-controlled record for the current Store
 version and review state. Release-readiness and dashboard-closeout documents
 must not claim a newer state than this record.
 
-The Store-supported alpha claims remain GSTR-1 and GSTR-3B single-period
-downloads. Private GSTR-2B and full-fiscal-year workflows are source-build
-experiments and must not be advertised as Store-supported features.
+The Store-supported beta claims are GSTR-1 and GSTR-3B filed returns and GSTR-2B
+auto-drafted statements, single-period. The full-fiscal-year workflow ships in the
+same binary -- there is only one -- but is not Store-advertised, and must not be
+advertised until the four evidence gates in `PUBLICATION_READINESS.md` are
+recorded for the release.
 
 ## Store Listing Fields
 
@@ -47,10 +49,22 @@ Title from package:
 ComplyEaze Pack: GST Return Downloader
 ```
 
+> **The summary is package metadata; the description is dashboard-held.** They reach the Store by
+> different routes and must not be treated alike.
+>
+> The **summary** below comes from the packaged manifest, so it reaches users only when a package
+> built from this commit or later is submitted. The bytes of any previously submitted ZIP are
+> immutable and still carry the older wording; updating HEAD cannot change them. Confirm the package
+> being submitted was built from a commit that contains this text before using it in a closeout.
+>
+> The **description** is entered in the dashboard, as the introduction to this file states, so it can
+> be corrected on the live listing without a new package — and should be, since the currently
+> published listing carries superseded wording.
+
 Summary from package:
 
 ```text
-Alpha: locally download GSTR-1/GSTR-3B files; private GSTR-2B downloads are source-build experimental.
+Beta: locally download your filed GSTR-1 and GSTR-3B returns and your GSTR-2B statements.
 ```
 
 Description:
@@ -58,14 +72,15 @@ Description:
 ```text
 Download filed GST returns locally from your active GST Portal session.
 
-ComplyEaze Pack helps authorised users download their own filed GST returns using GST Portal pages already open in Chrome. The Store-supported alpha scope is:
+ComplyEaze Pack helps authorised users download their own filed GST returns and auto-drafted GSTR-2B statements using GST Portal pages already open in Chrome. The Store-supported beta scope is:
 
 • GSTR-3B: filed-return summary PDF
 • GSTR-1: summary PDF and, when the portal provides it, e-invoice details Excel
+• GSTR-2B: auto-drafted statement, as summary PDF
 
 Files are saved by Chrome to the user's device. Pack does not require a Pack or ComplyEaze account. It does not ask for or store GST Portal credentials, OTPs, CAPTCHA responses, cookies, or session tokens, and it does not upload GST documents or return contents to ComplyEaze.
 
-The package also contains private source-build experiments for GSTR-2B and full-fiscal-year ZIP workflows. These are not Store-supported claims for this alpha release.
+Store-supported use is a single return period at a time. The package contains further capability that this listing does not claim, because the release evidence for those claims is not yet recorded.
 
 Pack's content script runs only on the four declared GST Portal hosts. When a supported page loads, it reads page context locally so Pack can identify eligible workflows; artifact capture and downloads start only after an explicit user action. Pack keeps limited redacted recovery state locally so interrupted work does not retry blindly. Temporary artifact bytes may be staged in browser-local OPFS for explicit capture or ZIP operations. Pack normally removes those bytes after confirmed export or explicit discard; if local cleanup fails, it retains them with a cleanup-pending status until a later cleanup attempt succeeds.
 
@@ -89,7 +104,7 @@ Other fields:
 Single purpose:
 
 ```text
-ComplyEaze Pack lets authorised GST Portal users locally download their own selected filed-return artifacts from an active browser session. It does not file returns, request credentials, or transmit GST documents to ComplyEaze.
+ComplyEaze Pack lets authorised GST Portal users locally download their own selected GSTR-1 and GSTR-3B filed-return artifacts and auto-drafted GSTR-2B statements from an active browser session. It does not file returns, request credentials, or transmit GST documents to ComplyEaze.
 ```
 
 Permission justifications:

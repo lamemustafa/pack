@@ -75,8 +75,11 @@ pass/fail per item with file:line evidence.
 6. **Portal-neutral boundary.** GST-specific identifiers, selectors, and logic
    stay inside `src/connectors/gst`. `src/core` and other shared contracts must
    not carry GST-specific taxpayer fields or hardcoded portal values.
-7. **Source-first public claims.** Any README/docs/store/PR/release copy stays
-   "source-first alpha" phrasing. Flag any claim of Chrome Web Store readiness,
+7. **Public claims match recorded evidence.** Any README/docs/store/PR/release
+   copy must claim no more than `docs/PUBLICATION_READINESS.md` records. That
+   file is the state; a phrasing rule restated here is a second copy of it, and
+   this line spent two releases mandating a maturity label the project had left
+   behind. Flag any claim of Chrome Web Store readiness,
    legal approval, broad GST support, cloud sync, or durable full-fiscal-year
    completeness unless the PR also demonstrates the matching
    `docs/PUBLICATION_READINESS.md` gates are satisfied.

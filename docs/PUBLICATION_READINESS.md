@@ -1,7 +1,7 @@
 # Publication Readiness
 
 This checklist tracks what remains while ComplyEaze Pack is a public V0 Chrome
-Web Store alpha and source beta, and before it can make broader public,
+Web Store beta, and before it can make broader public,
 durable full-year, or stable-release claims.
 
 ## Current Decision
@@ -45,16 +45,19 @@ durable full-year, or stable-release claims.
   change is the consequence of a gap — a claim that outruns its evidence is now
   in front of users rather than waiting in review.
 - V0 purpose: download filed GSTR-3B PDFs, GSTR-1 summary PDFs, optional
-  GSTR-1 e-invoice details Excel files, and GSTR-2B summary artifacts locally
+  GSTR-1 e-invoice details Excel files, and auto-drafted GSTR-2B summary
+  artifacts locally
   from the user's active, manually authenticated GST Portal session when the
   GST Portal exposes those artifacts.
 - GSTR-2B is **in scope**, not experimental. It runs the same user-initiated,
   evidence-backed download path as the other return types, and the derived
   full-year summary CSV is produced for it. It has no consolidated workbook —
   that remains GSTR-3B only — so a GSTR-2B run reports the absence rather than
-  emitting a blank or mislabelled one. The Chrome Web Store listing description
-  still calls GSTR-2B "source-build experimental" and is now inconsistent with
-  this; correcting it changes live Store copy and is tracked separately.
+  emitting a blank or mislabelled one. The source-controlled Store listing draft
+  names GSTR-2B as supported beta scope and a test binds it to the capability
+  table, but the live dashboard fields still carry superseded wording: they are
+  corrected only once `docs/chrome-web-store/dashboard-closeout.md` records the
+  submission. Treat these values as the draft until that evidence exists.
 - Full fiscal year download is a local per-period ledger that runs eligible
   periods through the single-period path after user initiation. The four gates
   below are what it must satisfy before Store-facing V0 advertises it:
@@ -387,7 +390,7 @@ version here.
 
 The current Store publication is the `v0.5.0` pre-1.0 beta, which is published
 and live; the past `v0.4.0` package was uploaded but never published, and
-`v0.3.2` is superseded. The source-build alpha full-year workflow has maintainer evidence
+`v0.3.2` is superseded. The source-build full-year workflow has maintainer evidence
 for automatic local downloads after user initiation. Pack must not claim stable
 Chrome Web Store maturity,
 store-facing full-year availability, durable restart-safe full-year support,

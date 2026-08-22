@@ -2,7 +2,7 @@
   "name": "@complyeaze/pack",
   "version": "0.5.1",
   "private": true,
-  "description": "ComplyEaze Pack: local-first GST filed-return downloader for GSTR-3B/GSTR-1 files, with private GSTR-2B source-build support.",
+  "description": "ComplyEaze Pack: local-first downloader for your filed GSTR-1 and GSTR-3B returns and your GSTR-2B statements.",
   "type": "module",
   "homepage": "https://github.com/lamemustafa/pack#readme",
   "repository": {
