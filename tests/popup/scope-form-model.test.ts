@@ -6,6 +6,7 @@ import type {
 import { FULL_FISCAL_YEAR_PERIOD } from "../../src/connectors/gst/filed-returns-scope";
 import {
   createScopeFormModel,
+  getScopeActionCopy,
   getScopeFormStartAction,
 } from "../../src/entrypoints/popup/scope-form-model";
 
@@ -199,6 +200,53 @@ describe("popup scope form model", () => {
     );
 
     expect(action).toEqual({ disabled: false, label: "Check final ZIP status" });
+  });
+
+  // A run note is a claim about what the run will fetch. Keyed on the return type alone it
+  // survives an artifact choice that makes it false, and nothing else in this suite reads
+  // either string — which is why the overstatement went unnoticed.
+  const EXCEL_WHEN_OFFERED = "Includes Excel only when the portal provides it";
+  const PORTAL_GENERATED_ONLY = "Captures only portal-generated PDF and Excel controls";
+
+  it("does not promise GSTR-1 Excel on a full-year run that only fetches the PDF", () => {
+    const pdfOnly = getScopeActionCopy(
+      {
+        artifactType: "PDF",
+        financialYear: "2025-26",
+        period: FULL_FISCAL_YEAR_PERIOD,
+        returnType: "GSTR-1",
+      },
+      true,
+    );
+    const withExcel = getScopeActionCopy(
+      {
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2025-26",
+        period: FULL_FISCAL_YEAR_PERIOD,
+        returnType: "GSTR-1",
+      },
+      true,
+    );
+
+    expect(pdfOnly.details).not.toContain(EXCEL_WHEN_OFFERED);
+    expect(withExcel.details).toContain(EXCEL_WHEN_OFFERED);
+  });
+
+  it("does not claim a GSTR-2B PDF and Excel scope on a portal-data-only full-year run", () => {
+    const jsonOnly = getScopeActionCopy(
+      {
+        artifactType: "JSON",
+        financialYear: "2025-26",
+        period: FULL_FISCAL_YEAR_PERIOD,
+        returnType: "GSTR-2B",
+      },
+      true,
+    );
+
+    expect(jsonOnly.details).not.toContain(PORTAL_GENERATED_ONLY);
+    expect(getScopeActionCopy(fullYearGstr2bScope(), true).details).toContain(
+      PORTAL_GENERATED_ONLY,
+    );
   });
 });
 

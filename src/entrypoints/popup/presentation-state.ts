@@ -198,6 +198,19 @@ function getUnsupportedContextState(context: PortalContext): PopupPresentationSt
   };
 }
 
+/**
+ * Whether this portal context is one the user is not signed in to.
+ *
+ * `detect.ts` reports `gst-auth-landing` only for the sign-in landing page it could not
+ * find an authenticated welcome marker on, and `requiredAction.type === "LOGIN"` is that
+ * same fact observed later, once a flow has hit it. The pair is stated here once because
+ * three surfaces already restated it, and a fourth — the panel header — skipped it and
+ * claimed "signed in" from `supported` alone, which the auth landing page also sets.
+ */
+export function isGstSignInRequired(context: PortalContext | null | undefined): boolean {
+  return context?.pageKind === "gst-auth-landing" || context?.requiredAction?.type === "LOGIN";
+}
+
 function isSessionExpired(context: PortalContext | null, summary: FiledReturnsFlowSummary | null) {
   return (
     context?.requiredAction?.type === "LOGIN" ||

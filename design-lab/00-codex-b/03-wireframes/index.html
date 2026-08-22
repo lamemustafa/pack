@@ -1,0 +1,810 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Static Pack result-workspace and recovery wireframe." />
+    <title>Pack result workspace wireframe</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #15384f;
+        --muted: #557080;
+        --quiet: #526a77;
+        --line: #c9d6dc;
+        --line-strong: #9fb3bd;
+        --paper: #f8fbfc;
+        --surface: #ffffff;
+        --wash: #eaf2f4;
+        --navy: #103b5d;
+        --teal: #087f71;
+        --teal-soft: #d9f0eb;
+        --amber: #8a5200;
+        --amber-soft: #fff1d4;
+        --red: #a23035;
+        --red-soft: #fbe7e8;
+        --focus: #0a6f9e;
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        color: var(--ink);
+        background: #dfe7ea;
+        font-size: 14px;
+      }
+      button,
+      select,
+      input {
+        font: inherit;
+      }
+      button {
+        color: inherit;
+      }
+      button:focus-visible,
+      select:focus-visible,
+      input:focus-visible,
+      summary:focus-visible,
+      a:focus-visible {
+        outline: 3px solid color-mix(in srgb, var(--focus) 35%, transparent);
+        outline-offset: 2px;
+      }
+      .stage {
+        min-height: 100vh;
+        display: grid;
+        grid-template-rows: 48px 1fr;
+      }
+      .browser-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        padding: 0 20px;
+        color: #d6e0e4;
+        background: #2d3337;
+        font-size: 12px;
+      }
+      .browser-bar strong {
+        color: white;
+        font-size: 13px;
+      }
+      .browser-status {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .browser-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #5bd0ba;
+      }
+      .workspace {
+        display: grid;
+        grid-template-columns: minmax(340px, 1fr) 420px;
+        min-height: 760px;
+      }
+      .page-context {
+        position: relative;
+        overflow: hidden;
+        padding: 44px;
+        background: #edf2f4;
+      }
+      .page-context::after {
+        content: "Synthetic page context";
+        position: absolute;
+        right: 26px;
+        bottom: 22px;
+        color: #8ba0aa;
+        font-size: 12px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .ghost-title {
+        width: min(530px, 80%);
+        height: 24px;
+        border-radius: 5px;
+        background: #d5e0e4;
+      }
+      .ghost-line {
+        width: min(700px, 92%);
+        height: 12px;
+        margin-top: 18px;
+        border-radius: 4px;
+        background: #dde6e9;
+      }
+      .ghost-line.short {
+        width: 52%;
+      }
+      .ghost-panel {
+        width: min(760px, 96%);
+        height: 260px;
+        margin-top: 36px;
+        border: 1px solid #d1dde1;
+        border-radius: 12px;
+        background: #f8fafb;
+        box-shadow: 0 10px 28px rgb(0 0 0 / 0.06);
+      }
+      .panel {
+        display: flex;
+        flex-direction: column;
+        height: calc(100vh - 48px);
+        min-height: 760px;
+        max-height: 900px;
+        background: var(--paper);
+        border-left: 1px solid #a8b8c0;
+        box-shadow: -10px 0 28px rgb(0 0 0 / 0.12);
+      }
+      .panel-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 16px 18px 12px;
+        border-bottom: 1px solid var(--line);
+        background: var(--surface);
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .brand img {
+        width: 32px;
+        height: 32px;
+      }
+      .brand-copy {
+        display: grid;
+        gap: 1px;
+      }
+      .brand-name {
+        font-size: 17px;
+        line-height: 1;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+      }
+      .endorsement {
+        color: var(--quiet);
+        font-size: 12px;
+        font-weight: 400;
+      }
+      .local-badge {
+        padding: 4px 7px;
+        border: 1px solid #b8d5ce;
+        border-radius: 4px;
+        color: #166455;
+        background: #edf8f5;
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .state-nav {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        border-bottom: 1px solid var(--line);
+        background: var(--surface);
+      }
+      .state-nav button {
+        appearance: none;
+        border: 0;
+        border-bottom: 3px solid transparent;
+        padding: 10px 4px 8px;
+        color: var(--muted);
+        background: transparent;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .state-nav button[aria-pressed="true"] {
+        color: var(--navy);
+        border-bottom-color: var(--teal);
+      }
+      .panel-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 18px;
+      }
+      .screen {
+        display: none;
+      }
+      .screen.active {
+        display: block;
+      }
+      h1 {
+        margin: 0;
+        font-size: 22px;
+        line-height: 1.18;
+        letter-spacing: -0.025em;
+      }
+      .lede {
+        margin: 7px 0 18px;
+        color: var(--muted);
+        line-height: 1.45;
+      }
+      .result-sentence {
+        padding: 15px 0;
+        border-block: 1px solid var(--line);
+        font-size: 16px;
+        line-height: 1.55;
+        font-weight: 700;
+      }
+      .result-sentence button {
+        appearance: none;
+        display: inline;
+        padding: 4px;
+        border: 0;
+        border-bottom: 2px solid #71b8aa;
+        color: var(--navy);
+        background: transparent;
+        font-weight: 800;
+        cursor: pointer;
+      }
+      .field-block {
+        padding: 16px 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .field-label {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 9px;
+        font-size: 12px;
+        font-weight: 800;
+      }
+      .hint {
+        color: var(--quiet);
+        font-size: 12px;
+        font-weight: 400;
+      }
+      .choice-row {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 7px;
+      }
+      .choice {
+        position: relative;
+      }
+      .choice input {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+      }
+      .choice label {
+        display: grid;
+        place-items: center;
+        min-height: 40px;
+        padding: 6px;
+        border: 1px solid var(--line-strong);
+        border-radius: 5px;
+        background: var(--surface);
+        font-size: 12px;
+        font-weight: 700;
+        text-align: center;
+        cursor: pointer;
+      }
+      .choice input:checked + label {
+        border-color: var(--teal);
+        color: #075f55;
+        background: var(--teal-soft);
+        box-shadow: inset 0 0 0 1px var(--teal);
+      }
+      .choice input:focus-visible + label {
+        outline: 3px solid color-mix(in srgb, var(--focus) 35%, transparent);
+        outline-offset: 2px;
+      }
+      .plan-line {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        padding: 13px 0;
+      }
+      .plan-count {
+        display: grid;
+        gap: 2px;
+      }
+      .plan-count strong {
+        font-size: 14px;
+      }
+      .plan-count span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .link-button {
+        appearance: none;
+        border: 0;
+        padding: 0;
+        color: var(--focus);
+        background: none;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .primary {
+        width: 100%;
+        min-height: 44px;
+        padding: 10px 12px;
+        border: 1px solid #072f49;
+        border-radius: 6px;
+        color: white;
+        background: var(--navy);
+        font-weight: 800;
+        cursor: pointer;
+        box-shadow: 0 2px 0 #072f49;
+      }
+      .primary:hover {
+        background: #0b496f;
+      }
+      .secondary {
+        min-height: 40px;
+        padding: 8px 12px;
+        border: 1px solid var(--line-strong);
+        border-radius: 6px;
+        background: var(--surface);
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .guard-note {
+        margin: 11px 0 0;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.45;
+        text-align: center;
+      }
+      .status-strip {
+        display: flex;
+        gap: 8px;
+        margin: 14px 0 18px;
+      }
+      .status-cell {
+        flex: 1;
+        min-width: 0;
+        padding: 9px 6px;
+        border-top: 3px solid var(--line-strong);
+        background: var(--surface);
+      }
+      .status-cell strong {
+        display: block;
+        font-size: 17px;
+      }
+      .status-cell span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .status-cell.done {
+        border-top-color: var(--teal);
+      }
+      .status-cell.attention {
+        border-top-color: #d28a20;
+      }
+      .target-list {
+        border-top: 1px solid var(--line);
+      }
+      .target {
+        display: grid;
+        grid-template-columns: 9px 1fr auto;
+        gap: 10px;
+        align-items: start;
+        padding: 13px 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .target-dot {
+        width: 8px;
+        height: 8px;
+        margin-top: 5px;
+        border-radius: 50%;
+        background: #99aab2;
+      }
+      .target-dot.done {
+        background: var(--teal);
+      }
+      .target-dot.active {
+        background: #d28a20;
+        box-shadow: 0 0 0 4px #fae8ca;
+      }
+      .target-title {
+        font-size: 12px;
+        font-weight: 800;
+      }
+      .target-meta {
+        margin-top: 3px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.35;
+      }
+      .status-word {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .evidence-callout {
+        margin-top: 16px;
+        padding: 12px;
+        border-left: 4px solid #d28a20;
+        background: var(--amber-soft);
+        color: #5f410e;
+        font-size: 12px;
+        line-height: 1.45;
+      }
+      .question {
+        margin-top: 20px;
+        padding: 18px;
+        border: 1px solid #d4b16b;
+        border-radius: 7px;
+        background: #fffaf0;
+      }
+      .question h2 {
+        margin: 0;
+        font-size: 18px;
+        line-height: 1.3;
+      }
+      .question p {
+        margin: 8px 0 16px;
+        color: #6f5a31;
+        line-height: 1.45;
+      }
+      .question-actions {
+        display: grid;
+        gap: 8px;
+      }
+      details {
+        margin-top: 16px;
+        border-top: 1px solid var(--line);
+        padding-top: 12px;
+      }
+      summary {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      details p {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+      .receipt-header {
+        padding: 14px;
+        border-left: 4px solid var(--teal);
+        background: var(--teal-soft);
+      }
+      .receipt-header strong {
+        display: block;
+        font-size: 17px;
+      }
+      .receipt-header span {
+        color: #27685e;
+        font-size: 12px;
+      }
+      .receipt-section {
+        padding: 15px 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .receipt-section h2 {
+        margin: 0 0 9px;
+        font-size: 13px;
+      }
+      .receipt-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 4px 0;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .receipt-row strong {
+        color: var(--ink);
+      }
+      .generated {
+        margin-top: 10px;
+        padding: 10px;
+        border: 1px solid #b8cbd2;
+        background: var(--surface);
+      }
+      .generated-label {
+        color: var(--amber);
+        font-size: 12px;
+        font-weight: 800;
+      }
+      .panel-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        padding: 11px 18px;
+        border-top: 1px solid var(--line);
+        background: var(--surface);
+      }
+      .panel-footer a,
+      .panel-footer button {
+        appearance: none;
+        border: 0;
+        padding: 0;
+        color: var(--muted);
+        background: none;
+        font-size: 12px;
+        font-weight: 700;
+        text-decoration: none;
+        cursor: pointer;
+      }
+      .panel-footer .reset {
+        color: var(--red);
+      }
+      .prototype-note {
+        position: fixed;
+        left: 18px;
+        bottom: 18px;
+        max-width: 360px;
+        padding: 9px 12px;
+        border: 1px solid #b9c8cf;
+        border-radius: 6px;
+        color: #47606d;
+        background: rgb(255 255 255 / 0.92);
+        font-size: 12px;
+        line-height: 1.4;
+        box-shadow: 0 6px 20px rgb(0 0 0 / 0.1);
+      }
+      @media (max-width: 760px) {
+        .workspace {
+          display: block;
+        }
+        .page-context {
+          display: none;
+        }
+        .panel {
+          width: 100%;
+          height: calc(100vh - 48px);
+          border-left: 0;
+        }
+        .prototype-note {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <header class="browser-bar">
+        <strong>Browser + persistent Pack panel</strong>
+        <span class="browser-status"
+          ><span class="browser-dot"></span> Synthetic state — no live session</span
+        >
+      </header>
+      <main class="workspace">
+        <section class="page-context" aria-label="Synthetic page context">
+          <div class="ghost-title"></div>
+          <div class="ghost-line"></div>
+          <div class="ghost-line short"></div>
+          <div class="ghost-panel"></div>
+        </section>
+        <aside class="panel" aria-label="Pack result workspace">
+          <header class="panel-header">
+            <div class="brand">
+              <img src="marks/direction-a.svg" alt="Pack" />
+              <div class="brand-copy">
+                <span class="brand-name">Pack</span><span class="endorsement">from ComplyEaze</span>
+              </div>
+            </div>
+            <span class="local-badge">Local only</span>
+          </header>
+          <nav class="state-nav" aria-label="Wireframe states">
+            <button type="button" data-screen="prepare" aria-pressed="true">Prepare</button>
+            <button type="button" data-screen="running" aria-pressed="false">Running</button>
+            <button type="button" data-screen="paused" aria-pressed="false">Needs answer</button>
+            <button type="button" data-screen="complete" aria-pressed="false">Complete</button>
+          </nav>
+          <div class="panel-body">
+            <section class="screen active" id="prepare">
+              <h1>What should Pack assemble?</h1>
+              <p class="lede">
+                Choose a common result, then inspect the exact target plan before anything starts.
+              </p>
+              <div class="result-sentence">
+                Prepare a <button type="button">complete filed-return archive</button> for
+                <button type="button">FY 2025–26</button>.
+              </div>
+              <div class="field-block">
+                <div class="field-label">
+                  <span>Result recipe</span><span class="hint">One gesture</span>
+                </div>
+                <div class="choice-row">
+                  <div class="choice">
+                    <input id="recipe-last" name="recipe" type="radio" /><label for="recipe-last"
+                      >Last filed period</label
+                    >
+                  </div>
+                  <div class="choice">
+                    <input id="recipe-year" name="recipe" type="radio" checked /><label
+                      for="recipe-year"
+                      >Full financial year</label
+                    >
+                  </div>
+                  <div class="choice">
+                    <input id="recipe-custom" name="recipe" type="radio" /><label
+                      for="recipe-custom"
+                      >Custom result</label
+                    >
+                  </div>
+                </div>
+              </div>
+              <div class="field-block">
+                <div class="field-label">
+                  <span>Include</span><span class="hint">Current connector capabilities</span>
+                </div>
+                <div class="choice-row">
+                  <div class="choice">
+                    <input id="r1" type="checkbox" checked /><label for="r1">GSTR-1</label>
+                  </div>
+                  <div class="choice">
+                    <input id="r3" type="checkbox" checked /><label for="r3">GSTR-3B</label>
+                  </div>
+                  <div class="choice">
+                    <input id="r2" type="checkbox" checked /><label for="r2">GSTR-2B</label>
+                  </div>
+                </div>
+              </div>
+              <div class="plan-line">
+                <div class="plan-count">
+                  <strong>36 explicit targets</strong
+                  ><span>33 ready · 3 excluded with reasons</span>
+                </div>
+                <button class="link-button" type="button">Inspect plan</button>
+              </div>
+              <button class="primary" type="button" data-go="running">
+                Start 33 ready targets
+              </button>
+              <p class="guard-note">
+                Each target still needs its own completed, non-empty browser-download evidence.
+              </p>
+            </section>
+
+            <section class="screen" id="running">
+              <h1>Collecting the approved plan</h1>
+              <p class="lede">
+                Keep the required return page visible. Pack will pause when the next visible control
+                cannot be verified.
+              </p>
+              <div class="status-strip">
+                <div class="status-cell done"><strong>12</strong><span>Complete</span></div>
+                <div class="status-cell attention"><strong>1</strong><span>Waiting</span></div>
+                <div class="status-cell"><strong>20</strong><span>Queued</span></div>
+                <div class="status-cell"><strong>3</strong><span>Excluded</span></div>
+              </div>
+              <div class="target-list">
+                <div class="target">
+                  <span class="target-dot done"></span>
+                  <div>
+                    <div class="target-title">March 2026 · GSTR-1 · PDF</div>
+                    <div class="target-meta">Completed and non-empty evidence correlated</div>
+                  </div>
+                  <span class="status-word">Done</span>
+                </div>
+                <div class="target">
+                  <span class="target-dot active"></span>
+                  <div>
+                    <div class="target-title">April 2026 · GSTR-3B · PDF</div>
+                    <div class="target-meta">
+                      Portal control clicked · waiting for exact browser evidence
+                    </div>
+                  </div>
+                  <span class="status-word">Waiting</span>
+                </div>
+                <div class="target">
+                  <span class="target-dot"></span>
+                  <div>
+                    <div class="target-title">April 2026 · GSTR-3B · data</div>
+                    <div class="target-meta">Not started</div>
+                  </div>
+                  <span class="status-word">Queued</span>
+                </div>
+                <div class="target">
+                  <span class="target-dot"></span>
+                  <div>
+                    <div class="target-title">April 2026 · GSTR-2B · PDF</div>
+                    <div class="target-meta">Not started</div>
+                  </div>
+                  <span class="status-word">Queued</span>
+                </div>
+              </div>
+              <div class="evidence-callout">
+                <strong>A click is not completion.</strong> This target remains waiting until Pack
+                correlates a completed, non-empty browser download to the exact plan row.
+              </div>
+            </section>
+
+            <section class="screen" id="paused">
+              <h1>Pack paused safely</h1>
+              <p class="lede">
+                Nothing was marked complete. One visible-page check is required before retry.
+              </p>
+              <div class="question">
+                <h2>Is the visible page showing April 2026 GSTR-3B?</h2>
+                <p>
+                  The next target can be retried only from that exact page. If it is not visible,
+                  leave the plan paused and navigate using the page's own controls.
+                </p>
+                <div class="question-actions">
+                  <button class="primary" type="button" data-go="running">
+                    Yes — retry this target
+                  </button>
+                  <button class="secondary" type="button">No — leave it paused</button>
+                </div>
+              </div>
+              <details>
+                <summary>Safe diagnostics</summary>
+                <p>
+                  Target identity matched the plan, but the required visible-page identity could not
+                  be confirmed. No page address or session material is retained.
+                </p>
+              </details>
+            </section>
+
+            <section class="screen" id="complete">
+              <h1>Your archive is ready</h1>
+              <p class="lede">Original artifacts and generated outputs remain visibly separate.</p>
+              <div class="receipt-header">
+                <strong>33 targets complete</strong
+                ><span>3 unsupported combinations excluded before execution</span>
+              </div>
+              <div class="receipt-section">
+                <h2>Portal-original artifacts</h2>
+                <div class="receipt-row">
+                  <span>Completed, non-empty evidence</span><strong>33 / 33</strong>
+                </div>
+                <div class="receipt-row">
+                  <span>Ambiguous or interrupted</span><strong>0</strong>
+                </div>
+              </div>
+              <div class="receipt-section">
+                <h2>Generated outputs</h2>
+                <div class="generated">
+                  <span class="generated-label">Pack-generated · not a filed return</span>
+                  <div class="target-title">Archive index and coverage report</div>
+                  <div class="target-meta">
+                    Recipe, target-plan version, source coverage, exclusions, and transformation
+                    version included.
+                  </div>
+                </div>
+              </div>
+              <div class="receipt-section">
+                <h2>Unresolved and excluded</h2>
+                <div class="receipt-row"><span>Unresolved targets</span><strong>0</strong></div>
+                <div class="receipt-row"><span>Excluded with reason</span><strong>3</strong></div>
+              </div>
+              <button class="secondary" type="button">Review local result receipt</button>
+            </section>
+          </div>
+          <footer class="panel-footer">
+            <a href="#privacy">Privacy</a>
+            <button type="button">Help</button>
+            <button class="reset" type="button">Reset Pack</button>
+          </footer>
+        </aside>
+      </main>
+    </div>
+    <p class="prototype-note">
+      Static direction only. It demonstrates result → plan → evidence → one-question recovery; it
+      does not call browser or portal APIs.
+    </p>
+    <script>
+      const screens = [...document.querySelectorAll(".screen")];
+      const tabs = [...document.querySelectorAll("[data-screen]")];
+      function showScreen(id) {
+        screens.forEach((screen) => screen.classList.toggle("active", screen.id === id));
+        tabs.forEach((tab) => tab.setAttribute("aria-pressed", String(tab.dataset.screen === id)));
+        document.querySelector(".panel-body").scrollTop = 0;
+      }
+      tabs.forEach((tab) => tab.addEventListener("click", () => showScreen(tab.dataset.screen)));
+      document
+        .querySelectorAll("[data-go]")
+        .forEach((button) => button.addEventListener("click", () => showScreen(button.dataset.go)));
+    </script>
+  </body>
+</html>

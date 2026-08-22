@@ -74,6 +74,74 @@ describe("popup background failure presentation", () => {
     });
   });
 
+  it("keeps a flow failure when a later context refresh succeeds", async () => {
+    mocks.sendMessage.mockImplementation((message: PackMessage) =>
+      message.type === "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW"
+        ? Promise.reject(new Error("worker unavailable"))
+        : Promise.resolve({
+            ok: true,
+            context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
+          }),
+    );
+
+    await act(async () => {
+      await controller?.startFiledReturnsFlow();
+    });
+    expect(controller?.actionError).toBe(
+      "Pack could not reach the background service. Try the action again.",
+    );
+
+    // A successful context refresh must not clear a failure it did not cause.
+    await act(async () => {
+      await controller?.refreshPortalContext();
+    });
+
+    expect(controller?.actionError).toBe(
+      "Pack could not reach the background service. Try the action again.",
+    );
+    await act(async () => root?.unmount());
+  });
+
+  it("keeps a flow failure that replaced an earlier context failure", async () => {
+    // A context refresh fails FIRST and marks the error as its own, then a flow
+    // action fails and replaces the message. A boolean the context path alone
+    // maintained stayed set, so the next successful refresh cleared a flow error
+    // it did not own and hid a live diagnostic.
+    let contextFails = true;
+    mocks.sendMessage.mockImplementation((message: PackMessage) => {
+      if (message.type === "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW") {
+        return Promise.reject(new Error("worker unavailable"));
+      }
+      return contextFails
+        ? Promise.reject(new Error("context unavailable"))
+        : Promise.resolve({
+            ok: true,
+            context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
+          });
+    });
+
+    await act(async () => {
+      await controller?.refreshPortalContext();
+    });
+    expect(controller?.actionError).toBe(
+      "Pack could not read the current GST Portal state. Try again.",
+    );
+
+    await act(async () => {
+      await controller?.startFiledReturnsFlow();
+    });
+    const flowFailure = "Pack could not reach the background service. Try the action again.";
+    expect(controller?.actionError).toBe(flowFailure);
+
+    contextFails = false;
+    await act(async () => {
+      await controller?.refreshPortalContext();
+    });
+
+    expect(controller?.actionError).toBe(flowFailure);
+    await act(async () => root?.unmount());
+  });
+
   it("renders a safe action error when the background message rejects", async () => {
     mocks.sendMessage.mockImplementation((message: PackMessage) =>
       message.type === "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW"
@@ -143,6 +211,38 @@ describe("popup background failure presentation", () => {
       }),
     );
     await vi.waitFor(() => expect(controller?.lastRunSummary).toEqual(completedSummary));
+
+    // Clearing local data removes the key, so the change carries no newValue.
+    // A surface that stays open must stop rendering the summary that no longer
+    // exists; the short-lived popup hid this, the panel page does not.
+    mocks.sendMessage.mockImplementation((message: PackMessage) => {
+      if (message.type === "PACK_GET_CONTEXT") {
+        return Promise.resolve({
+          ok: true,
+          context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
+        });
+      }
+      if (message.type === "PACK_GET_FILED_RETURNS_FLOW_SUMMARY") {
+        return Promise.resolve({ ok: true, flowSummary: null });
+      }
+      return Promise.resolve({ ok: true });
+    });
+    const chosenScope = controller?.scope;
+
+    await act(async () => {
+      mocks.changeListeners.forEach((listener) =>
+        listener(
+          { "pack:last-filed-returns-flow-summary": { oldValue: completedSummary } },
+          "session",
+        ),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await vi.waitFor(() => expect(controller?.lastRunSummary).toBeNull());
+    // The scope is the user's own selection and must survive a clear.
+    expect(controller?.scope).toEqual(chosenScope);
     await act(async () => root?.unmount());
   });
 });

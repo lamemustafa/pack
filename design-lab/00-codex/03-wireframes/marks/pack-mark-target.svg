@@ -1,0 +1,29 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  role="img"
+  viewBox="0 0 128 128"
+  aria-labelledby="title desc"
+>
+  <title id="title">Pack target mark</title>
+  <desc id="desc">A local archive target with a single confirmed file.</desc>
+  <rect x="12" y="12" width="104" height="104" rx="16" fill="#0b2540" />
+  <path
+    d="M31 42c0-8 6-14 14-14h24l12 12h18c7 0 12 5 12 12v30c0 11-9 20-20 20H51c-11 0-20-9-20-20V42Z"
+    fill="#ffffff"
+  />
+  <path d="M31 59h80v23c0 11-9 20-20 20H51c-11 0-20-9-20-20V59Z" fill="#8ecae6" />
+  <path
+    d="M51 76l12 12 27-31"
+    fill="none"
+    stroke="#0b2540"
+    stroke-width="10"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M24 24h17M87 24h17M24 104h17M87 104h17"
+    stroke="#20b38f"
+    stroke-width="8"
+    stroke-linecap="round"
+  />
+</svg>

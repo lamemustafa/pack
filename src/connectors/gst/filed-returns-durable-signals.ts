@@ -4,11 +4,34 @@ import { ARTIFACT_FAILURE_MESSAGES } from "./artifact-source";
 import { isSafeDashboardSelectedValue } from "./dashboard-selected-signal-values";
 import { FILED_RETURNS_OBSERVATION_SIGNALS } from "./filed-returns-observer-signals";
 import {
+  PACK_OFFSCREEN_FILED_RETURN_SUMMARY_ERROR_CATEGORIES,
+  PACK_OFFSCREEN_FILED_RETURN_ZIP_ERROR_CATEGORIES,
+} from "./offscreen-blob-url";
+import { FILED_RETURNS_SUMMARY_RESPONSE_INVALID_CATEGORY } from "./filed-returns-summary-status";
+import {
   SINGLE_PERIOD_CLEANUP_CHECKPOINT_FAILURE_STAGES,
   singlePeriodCleanupCheckpointFailureSignal,
 } from "./single-period-cleanup-checkpoint";
 
 const MAX_DURABLE_SIGNAL_COUNT = 32;
+
+const UNCONFIRMED_BROWSER_DOWNLOAD_SIGNALS = new Set([
+  "browser-download-not-observed",
+  "browser-download-size-unknown",
+  "browser-download-interrupted",
+  "browser-download-in-progress",
+  "browser-download-correlation-rejected",
+  "browser-download-search-unavailable",
+  "browser-download-search-missing",
+  "browser-download-zero-bytes",
+  "browser-download-zero-size",
+  "filed-return-download-trigger-ambiguous",
+  "filed-gstr3b-download-trigger-ambiguous",
+]);
+
+export function isUnconfirmedFiledReturnsDownloadSignal(signal: string): boolean {
+  return UNCONFIRMED_BROWSER_DOWNLOAD_SIGNALS.has(signal);
+}
 
 export type DurableFiledReturnsSignalRejectionReason =
   | "duplicate"
@@ -471,12 +494,12 @@ const ZIP_SIGNALS = new Set(
     ZIP_SIGNAL_SUFFIXES.map((suffix) => `${prefix}-zip-${suffix}`),
   ),
 );
-const ZIP_EXPORT_ERROR_CATEGORIES = new Set([
-  "opfs-unavailable",
-  "zip-empty",
-  "zip-failed",
-  "zip-invalid-entry",
-  "zip-too-large",
+const ZIP_EXPORT_ERROR_CATEGORIES = new Set<string>(
+  PACK_OFFSCREEN_FILED_RETURN_ZIP_ERROR_CATEGORIES,
+);
+const SUMMARY_ERROR_CATEGORIES = new Set<string>([
+  ...PACK_OFFSCREEN_FILED_RETURN_SUMMARY_ERROR_CATEGORIES,
+  FILED_RETURNS_SUMMARY_RESPONSE_INVALID_CATEGORY,
 ]);
 const OPFS_STAGE_ERROR_CATEGORIES = new Set([
   "blob-url-failed",
@@ -611,7 +634,25 @@ export function isDurableFiledReturnsSignal(signal: string): boolean {
     );
   if (zipCount) {
     const count = Number(zipCount[2]);
-    return zipCount[1] === "single-period" ? count <= 3 : count <= 36;
+    return zipCount[1] === "single-period" ? count <= 3 : count <= 38;
+  }
+  if (
+    /^(?:full-fiscal-year-summary-included|full-fiscal-year-summary-outcomes-only|full-fiscal-year-summary-failed|full-fiscal-year-workbook-not-applicable)$/.test(
+      signal,
+    )
+  ) {
+    return true;
+  }
+  const summaryError = /^full-fiscal-year-summary-error:([a-z-]+)$/.exec(signal);
+  if (summaryError) return SUMMARY_ERROR_CATEGORIES.has(summaryError[1] ?? "");
+  const summaryParsedPeriodCount = /^full-fiscal-year-summary-parsed-period-count:(\d{1,2})$/.exec(
+    signal,
+  );
+  if (summaryParsedPeriodCount) return Number(summaryParsedPeriodCount[1]) <= 12;
+  const summaryRowCount = /^full-fiscal-year-summary-row-count:(\d{1,6})$/.exec(signal);
+  if (summaryRowCount) {
+    const count = Number(summaryRowCount[1]);
+    return count >= 1 && count <= 100_000;
   }
   const opfsStageError = /^(full-fiscal-year|single-period)-opfs-stage-error:([a-z-]+)$/.exec(
     signal,

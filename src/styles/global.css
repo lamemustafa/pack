@@ -5,21 +5,63 @@
   --pack-popup-min-width: 360px;
   --pack-popup-min-height: 760px;
   --pack-popup-max-height: 880px;
-  --pack-ink: #101923;
-  --pack-muted: #4c5c6d;
-  --pack-border: #ccd6e2;
-  --pack-border-strong: #aebdcb;
+
+  /* Colour is defined here and only here. Every value below is a semantic role,
+     not a shade: style against the role, never against the hex. Role names track
+     the Sanchika vocabulary (canvas / surface / ink / border / status) so a later
+     adoption is a rename rather than a redesign — see docs/DESIGN_TOKENS.md.
+
+     Surfaces, lightest ground to darkest fill. */
   --pack-surface: #ffffff;
   --pack-surface-raised: #fbfcfe;
-  --pack-soft: #f6f8fb;
-  --pack-soft-strong: #e8edf3;
-  --pack-accent: #173a63;
-  --pack-accent-strong: #0f2a49;
-  --pack-accent-soft: #e9f1f8;
-  --pack-success: #177245;
-  --pack-warning: #8a5b00;
-  color: var(--pack-ink);
-  background: var(--pack-soft);
+  --pack-surface-muted: #f7f9fb;
+  --pack-canvas: #f5f7fa;
+  --pack-surface-inset: #eef3f8;
+  --pack-surface-accent-soft: #e9f1f8;
+  --pack-surface-sunken: #e5ebf2;
+  --pack-surface-accent: #244d7c;
+  --pack-surface-accent-strong: #173b62;
+  --pack-surface-inverse: #111827;
+
+  /* Ink. Each value passes WCAG AA (4.5:1) against the surfaces it is actually
+     paired with, not against every surface above: inverse ink belongs on inverse
+     surfaces, and 27 of the 63 possible ink/surface combinations fail — including
+     --pack-ink-primary on --pack-surface-inverse at 1.09:1. Pairing a token with a
+     surface it was not made for is a bug the palette cannot prevent, and nothing
+     enforces this yet (see issue #171). */
+  --pack-ink-primary: #172033;
+  --pack-ink-secondary: #334155;
+  --pack-ink-tertiary: #43566b;
+  --pack-ink-muted: #526477;
+  --pack-ink-link: #244d7c;
+  --pack-ink-inverse: #ffffff;
+  --pack-ink-inverse-muted: #e5e7eb;
+
+  /* Borders, subtle to strong. */
+  --pack-border-subtle: #d8e1ec;
+  --pack-border-default: #c8d3de;
+  --pack-border-strong: #9fb0c1;
+  --pack-border-accent-soft: #7894b2;
+  --pack-border-accent: #245b91;
+
+  /* The primary action. */
+  --pack-action: #173a63;
+  --pack-action-hover: #0f2a49;
+
+  /* Status. Each triad is foreground / background / border and is AA-safe
+     against its own background and against every neutral surface. */
+  --pack-success-fg: #115d38;
+  --pack-success-bg: #e8f8ef;
+  --pack-success-border: #9cc7b1;
+  --pack-success-solid: #21815d;
+  --pack-warning-fg: #75420b;
+  --pack-warning-bg: #fff7e8;
+  --pack-warning-border: #ddc58b;
+  --pack-danger-fg: #7b241c;
+  --pack-danger-bg: #fff0ee;
+  --pack-danger-border: #e5b3ac;
+  color: var(--pack-ink-primary);
+  background: var(--pack-surface-muted);
   color-scheme: light;
   font-family:
     Inter,
@@ -59,7 +101,7 @@ body {
 
 .eyebrow {
   margin: 0 0 4px;
-  color: #556070;
+  color: var(--pack-ink-muted);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0;
@@ -80,7 +122,7 @@ body {
 
 h1 {
   margin: 6px 0 0;
-  color: var(--pack-ink);
+  color: var(--pack-ink-primary);
   font-size: 18px;
   line-height: 1.2;
   letter-spacing: 0;
@@ -89,7 +131,7 @@ h1 {
 label {
   display: grid;
   gap: 5px;
-  color: #334155;
+  color: var(--pack-ink-secondary);
   font-size: 12px;
   font-weight: 700;
 }
@@ -97,10 +139,10 @@ label {
 select {
   min-height: 36px;
   width: 100%;
-  border: 1px solid #c4c7bd;
+  border: 1px solid var(--pack-border-default);
   border-radius: 7px;
-  background: #ffffff;
-  color: #18202f;
+  background: var(--pack-surface);
+  color: var(--pack-ink-primary);
   font: inherit;
   font-size: 13px;
 }
@@ -116,7 +158,7 @@ select:disabled {
 
 summary {
   cursor: pointer;
-  color: #334155;
+  color: var(--pack-ink-secondary);
   font-size: 12px;
   font-weight: 700;
 }
@@ -124,17 +166,17 @@ summary {
 button {
   min-height: 38px;
   cursor: pointer;
-  border: 1px solid var(--pack-accent);
+  border: 1px solid var(--pack-action);
   border-radius: 7px;
-  background: var(--pack-accent);
-  color: #ffffff;
+  background: var(--pack-action);
+  color: var(--pack-ink-inverse);
   font: inherit;
   font-weight: 700;
 }
 
 button:hover:not(:disabled) {
-  border-color: var(--pack-accent-strong);
-  background: var(--pack-accent-strong);
+  border-color: var(--pack-action-hover);
+  background: var(--pack-action-hover);
 }
 
 .primary-action {
@@ -143,20 +185,20 @@ button:hover:not(:disabled) {
 }
 
 button:focus-visible {
-  outline: 2px solid #245b91;
+  outline: 2px solid var(--pack-border-accent);
   outline-offset: 2px;
 }
 
 button.secondary {
-  border-color: #c4c7bd;
-  background: #ffffff;
-  color: #1d2634;
+  border-color: var(--pack-border-default);
+  background: var(--pack-surface);
+  color: var(--pack-ink-primary);
 }
 
 button.secondary:hover:not(:disabled) {
-  border-color: #9fb0c1;
-  background: #f6f8fb;
-  color: #101923;
+  border-color: var(--pack-border-strong);
+  background: var(--pack-surface-muted);
+  color: var(--pack-ink-primary);
 }
 
 button:disabled {
@@ -169,10 +211,10 @@ button:disabled {
   max-height: 180px;
   overflow: auto;
   margin: 0;
-  border: 1px solid #d8d6cc;
+  border: 1px solid var(--pack-border-default);
   border-radius: 8px;
-  background: #111827;
-  color: #e5e7eb;
+  background: var(--pack-surface-inverse);
+  color: var(--pack-ink-inverse-muted);
   padding: 10px;
   white-space: pre-wrap;
 }

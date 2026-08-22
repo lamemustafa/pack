@@ -1,3 +1,5 @@
+import type { FiledReturnsReturnType } from "./filed-returns-return-types";
+
 export type ArtifactValidationResult =
   | {
       ok: true;
@@ -13,6 +15,26 @@ const MIN_JSON_BYTES = 100;
 export const MAX_ARTIFACT_BYTES = 25 * 1024 * 1024;
 const PDF_MAGIC = [0x25, 0x50, 0x44, 0x46, 0x2d];
 const XLSX_MAGIC = [0x50, 0x4b];
+
+export interface FiledReturnsJsonDocumentContract {
+  envelopePath: readonly string[];
+  requiredStatus?: number;
+  returnPeriodKey: "ret_period" | "rtnprd";
+}
+
+const FILED_RETURNS_JSON_DOCUMENT_CONTRACTS: Readonly<
+  Record<FiledReturnsReturnType, FiledReturnsJsonDocumentContract>
+> = {
+  "GSTR-1": { envelopePath: ["data"], returnPeriodKey: "ret_period" },
+  "GSTR-2B": { envelopePath: ["data"], returnPeriodKey: "rtnprd" },
+  "GSTR-3B": { envelopePath: ["data", "r3b"], requiredStatus: 1, returnPeriodKey: "ret_period" },
+};
+
+export function filedReturnsJsonDocumentContract(
+  returnType: FiledReturnsReturnType,
+): FiledReturnsJsonDocumentContract {
+  return FILED_RETURNS_JSON_DOCUMENT_CONTRACTS[returnType];
+}
 
 export function validateArtifactBytes(
   bytes: Uint8Array,
@@ -45,18 +67,13 @@ export function validateArtifactBytes(
   }
   if (bytes.byteLength < MIN_JSON_BYTES) return { ok: false, reason: "unexpected-content" };
   try {
-    const parsed = JSON.parse(new TextDecoder().decode(bytes)) as {
-      status?: unknown;
-      data?: { r3b?: { ret_period?: unknown }; ret_period?: unknown; rtnprd?: unknown };
-    };
-    const actualPeriod =
-      returnType === "GSTR-2B"
-        ? parsed.data?.rtnprd
-        : returnType === "GSTR-1"
-          ? parsed.data?.ret_period
-          : parsed.status === 1
-            ? parsed.data?.r3b?.ret_period
-            : null;
+    const parsed = JSON.parse(new TextDecoder().decode(bytes)) as unknown;
+    const contract = filedReturnsJsonDocumentContract(returnType);
+    const document = jsonObjectAtPath(parsed, contract.envelopePath);
+    const statusMatches =
+      contract.requiredStatus === undefined ||
+      (isJsonObject(parsed) && parsed.status === contract.requiredStatus);
+    const actualPeriod = statusMatches ? document?.[contract.returnPeriodKey] : null;
     if (typeof actualPeriod !== "string") return { ok: false, reason: "unexpected-content" };
     return actualPeriod === expectedReturnPeriod
       ? { ok: true, mimeType: "application/json" }
@@ -64,4 +81,17 @@ export function validateArtifactBytes(
   } catch {
     return { ok: false, reason: "unexpected-content" };
   }
+}
+
+function jsonObjectAtPath(input: unknown, path: readonly string[]): Record<string, unknown> | null {
+  let current = input;
+  for (const segment of path) {
+    if (!isJsonObject(current)) return null;
+    current = current[segment];
+  }
+  return isJsonObject(current) ? current : null;
+}
+
+function isJsonObject(input: unknown): input is Record<string, unknown> {
+  return typeof input === "object" && input !== null && !Array.isArray(input);
 }

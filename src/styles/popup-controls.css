@@ -14,7 +14,7 @@
 
 .flow-panel-heading h2 {
   margin: 0;
-  color: var(--pack-ink);
+  color: var(--pack-ink-primary);
   font-size: 1.125rem;
   font-weight: 850;
   line-height: 1.2;
@@ -22,7 +22,7 @@
 
 .flow-panel-heading p {
   margin: 0;
-  color: #526477;
+  color: var(--pack-ink-muted);
   font-size: 0.8125rem;
   line-height: 1.35;
 }
@@ -51,25 +51,25 @@
 .advanced-options {
   display: grid;
   gap: 8px;
-  border-top: 1px solid #e1e8f0;
+  border-top: 1px solid var(--pack-border-subtle);
   padding-top: 9px;
 }
 
 .scope-note {
   margin: 0;
-  border: 1px solid #dbe3ec;
+  border: 1px solid var(--pack-border-subtle);
   border-radius: 10px;
-  background: #f8fafc;
-  color: #37475a;
+  background: var(--pack-surface-muted);
+  color: var(--pack-ink-secondary);
   font-size: 0.75rem;
   line-height: 1.35;
   padding: 8px 9px;
 }
 
 .scope-note-warning {
-  border-color: #ddc58b;
-  background: #fff9eb;
-  color: #4f3b12;
+  border-color: var(--pack-warning-border);
+  background: var(--pack-warning-bg);
+  color: var(--pack-warning-fg);
 }
 
 .scope-group {
@@ -82,7 +82,7 @@
 .scope-group legend,
 .scope-select span {
   margin: 0 0 6px;
-  color: #26384b;
+  color: var(--pack-ink-secondary);
   font-size: 0.75rem;
   font-weight: 850;
   line-height: 1.2;
@@ -114,10 +114,10 @@
   align-content: center;
   justify-content: stretch;
   gap: 2px;
-  border: 1px solid #d3dde7;
+  border: 1px solid var(--pack-border-subtle);
   border-radius: 8px;
-  background: #ffffff;
-  color: #1d2634;
+  background: var(--pack-surface);
+  color: var(--pack-ink-primary);
   font-size: 0.8125rem;
   font-weight: 850;
   line-height: 1.15;
@@ -138,7 +138,7 @@
 }
 
 .scope-option-description {
-  color: #607287;
+  color: var(--pack-ink-muted);
   font-size: 0.6875rem;
   font-weight: 700;
   line-height: 1.15;
@@ -170,8 +170,8 @@
 }
 
 .scope-option:hover {
-  border-color: #9eb1c5;
-  background: #f8fbff;
+  border-color: var(--pack-border-strong);
+  background: var(--pack-surface-muted);
 }
 
 .scope-option-disabled {
@@ -180,23 +180,23 @@
 }
 
 .scope-option-disabled:hover {
-  border-color: #d3dde7;
-  background: #ffffff;
+  border-color: var(--pack-border-subtle);
+  background: var(--pack-surface);
 }
 
 .scope-option-selected {
-  border-color: #5d86af;
-  background: #edf3fa;
-  color: #244d7c;
+  border-color: var(--pack-border-accent-soft);
+  background: var(--pack-surface-inset);
+  color: var(--pack-ink-link);
   box-shadow: none;
 }
 
 .scope-option-selected .scope-option-description {
-  color: #23486e;
+  color: var(--pack-ink-link);
 }
 
 .scope-option:has(input:focus-visible) {
-  outline: 2px solid #245b91;
+  outline: 2px solid var(--pack-border-accent);
   outline-offset: 2px;
 }
 
@@ -207,9 +207,9 @@
 
 .scope-select select {
   min-height: 42px;
-  border-color: #d3dde7;
+  border-color: var(--pack-border-subtle);
   border-radius: 10px;
-  color: #172436;
+  color: var(--pack-ink-primary);
   font-size: 0.8125rem;
   font-weight: 750;
   padding: 0 10px;
@@ -221,14 +221,14 @@
   z-index: 1;
   display: grid;
   gap: 8px;
-  border-top: 1px solid #d8e1ec;
-  background: #eef3f8;
+  border-top: 1px solid var(--pack-border-subtle);
+  background: var(--pack-surface-inset);
   padding: 10px 0 2px;
 }
 
 .run-action-copy {
   margin: 0;
-  color: #526477;
+  color: var(--pack-ink-muted);
   font-size: 0.75rem;
   line-height: 1.35;
 }
@@ -254,13 +254,13 @@
 }
 
 .recovery-details {
-  border-top: 1px solid #d8e1ec;
+  border-top: 1px solid var(--pack-border-subtle);
   padding-top: 8px;
 }
 
 .recovery-details summary {
   min-height: 28px;
-  color: #5e6b80;
+  color: var(--pack-ink-muted);
   font-size: 0.75rem;
   font-weight: 750;
 }

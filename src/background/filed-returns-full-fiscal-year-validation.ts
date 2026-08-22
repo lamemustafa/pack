@@ -319,6 +319,9 @@ function isValidZipDownloadAttempt(ledger: Partial<FiledReturnsFullFiscalYearLed
   if (ledger.zipPhase === "download-observing") {
     return attempt.downloadId !== undefined;
   }
+  if (ledger.zipPhase === "downloaded-cleanup-pending") {
+    return attempt.downloadId === undefined;
+  }
   return false;
 }
 
