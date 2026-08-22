@@ -37,12 +37,10 @@ export function usePackPopupController() {
   // must clear only an error the context read itself produced. Clearing it
   // unconditionally wiped an unrelated download failure whenever the panel
   // regained focus.
-<<<<<<< HEAD
-  // Which kind of failure the currently displayed error belongs to. A boolean
-  // that only the context path maintained went stale: a later flow failure
-  // replaced the message without clearing the marker, so the next successful
-  // refresh cleared a flow error it did not own and hid a live diagnostic.
-  // Every error now records its own source, so ownership cannot drift.
+  // Which kind of failure the displayed error belongs to. A boolean maintained
+  // only by the context path went stale: a later flow failure replaced the
+  // message without clearing the marker, so the next successful refresh cleared
+  // a flow error it did not own and hid a live diagnostic.
   const actionErrorSource = React.useRef<"context" | "flow" | null>(null);
   const showActionError = React.useCallback(
     (message: string, source: "context" | "flow" = "flow") => {
@@ -52,18 +50,6 @@ export function usePackPopupController() {
     },
     [],
   );
-||||||| a477b4b
-  const showActionError = React.useCallback((message: string) => {
-    setActionError(message);
-    setStatus(message);
-  }, []);
-=======
-  const contextErrorPending = React.useRef(false);
-  const showActionError = React.useCallback((message: string) => {
-    setActionError(message);
-    setStatus(message);
-  }, []);
->>>>>>> origin/tapish-codex/ux-redesign-integrated
   React.useEffect(() => {
     void Promise.all([
       sendPackMessage({ type: "PACK_GET_CONTEXT" }),
@@ -115,7 +101,6 @@ export function usePackPopupController() {
         // refreshed context, so leaving a context error would keep a recovered
         // surface showing a failure that no longer applies — while clearing a
         // flow failure would hide one that still does.
-<<<<<<< HEAD
         if (actionErrorSource.current === "context") {
           actionErrorSource.current = null;
           setActionError(null);
@@ -130,25 +115,6 @@ export function usePackPopupController() {
       showActionError(response.ok ? "Unexpected Pack response." : response.error, "context");
     } catch {
       showActionError("Pack could not read the current GST Portal state. Try again.", "context");
-||||||| a477b4b
-=======
-        if (contextErrorPending.current) {
-          contextErrorPending.current = false;
-          setActionError(null);
-        }
-        setStatus(
-          response.context?.supported
-            ? "GST context detected."
-            : "Pack is dormant until you start an action.",
-        );
-        return;
-      }
-      contextErrorPending.current = true;
-      showActionError(response.ok ? "Unexpected Pack response." : response.error);
-    } catch {
-      contextErrorPending.current = true;
-      showActionError("Pack could not read the current GST Portal state. Try again.");
->>>>>>> origin/tapish-codex/ux-redesign-integrated
     }
   }, [showActionError]);
 
