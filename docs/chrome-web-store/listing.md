@@ -48,12 +48,17 @@ Title from package:
 ComplyEaze Pack: GST Return Downloader
 ```
 
-> **These fields describe the package that is submitted, not repository HEAD.** The summary and
-> description below are the corrected text, which reaches the Store only when a package built from
-> this commit or later is submitted. The bytes of any previously submitted ZIP are immutable and
-> still carry the older alpha wording; updating HEAD cannot change them. Before using these fields in
-> a dashboard closeout, confirm the package being submitted was built from a commit that contains
-> them.
+> **The summary is package metadata; the description is dashboard-held.** They reach the Store by
+> different routes and must not be treated alike.
+>
+> The **summary** below comes from the packaged manifest, so it reaches users only when a package
+> built from this commit or later is submitted. The bytes of any previously submitted ZIP are
+> immutable and still carry the older wording; updating HEAD cannot change them. Confirm the package
+> being submitted was built from a commit that contains this text before using it in a closeout.
+>
+> The **description** is entered in the dashboard, as the introduction to this file states, so it can
+> be corrected on the live listing without a new package — and should be, since the currently
+> published listing carries superseded wording.
 
 Summary from package:
 
@@ -74,7 +79,7 @@ ComplyEaze Pack helps authorised users download their own filed GST returns usin
 
 Files are saved by Chrome to the user's device. Pack does not require a Pack or ComplyEaze account. It does not ask for or store GST Portal credentials, OTPs, CAPTCHA responses, cookies, or session tokens, and it does not upload GST documents or return contents to ComplyEaze.
 
-The package also contains a full-fiscal-year workflow that saves a whole year of eligible periods as one ZIP. It is available in source builds and is not a Store-supported claim for this beta release.
+Pack downloads one return period at a time.
 
 Pack's content script runs only on the four declared GST Portal hosts. When a supported page loads, it reads page context locally so Pack can identify eligible workflows; artifact capture and downloads start only after an explicit user action. Pack keeps limited redacted recovery state locally so interrupted work does not retry blindly. Temporary artifact bytes may be staged in browser-local OPFS for explicit capture or ZIP operations. Pack normally removes those bytes after confirmed export or explicit discard; if local cleanup fails, it retains them with a cleanup-pending status until a later cleanup attempt succeeds.
 
