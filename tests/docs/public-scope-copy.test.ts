@@ -63,8 +63,14 @@ function trackedTextFiles(): string[] {
 // published. Inverting the scan immediately surfaced two more the review had not
 // named either: the Chrome reviewer instructions, and a PR-template checkbox that
 // made every contributor affirm full-year was source-build alpha.
+//
+// `.claude/**` is in scope because those files are operative, not descriptive:
+// three of them ordered reviewers to keep public copy in "source-first alpha"
+// phrasing, so the review step this repo requires for every public-copy change
+// would have rejected the corrected wording. Enforcement that restates a claim
+// is part of the claim.
 const PUBLIC_DOCUMENT =
-  /^([A-Z][A-Z_]*\.md|docs\/.*\.md|\.github\/.*\.md|package\.json|src\/extension\/manifest-policy\.ts|docs\/chrome-web-store\/assets\/.*\.svg)$/;
+  /^([A-Z][A-Z_]*\.md|docs\/.*\.md|\.github\/.*\.md|\.claude\/.*\.md|package\.json|src\/extension\/manifest-policy\.ts|docs\/chrome-web-store\/assets\/.*\.svg)$/;
 
 // Records that must be able to state what was previously claimed. Each is a hole
 // in the scan, so each needs a reason -- and the reason must be that the file is
@@ -89,6 +95,20 @@ const RETIRED_CLAIMS: readonly { pattern: RegExp; why: string }[] = [
   {
     pattern: /private GSTR-2B/i,
     why: "GSTR-2B support is not private to source builds",
+  },
+  {
+    // Whether a Store build exists is a fact restated in four files, and a
+    // retired *term* rule cannot catch it -- SECURITY.md's disclosure section
+    // said Chrome review would matter "if a Chrome Web Store build exists in the
+    // future" directly below a table saying one is published. Nothing in that
+    // sentence is a retired word; the claim is simply two releases stale.
+    //
+    // Anchored on the Store's own name. A first draft also matched a bare
+    // "public release", which fired on "not public release evidence" and "a
+    // public release candidate" in two unrelated docs -- a guard that flags
+    // correct prose gets suppressed, and then catches nothing at all.
+    pattern: /Chrome Web Store[^.]{0,80}(in the future|not yet|none published|does not exist)/i,
+    why: "a Chrome Web Store build is published; copy must not defer it to the future",
   },
   {
     // Deliberately the bare adjacency. A wider window fires on the correct

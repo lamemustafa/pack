@@ -57,8 +57,7 @@ critical severity.
 ## Coordinated Disclosure
 
 Please allow reasonable time for investigation, release review, and user updates.
-If a Chrome Web Store build exists in the future, Chrome review may also affect
-timing. We will credit reporters who request credit unless law, safety, or
+Chrome review of the published Store build may also affect timing. We will credit reporters who request credit unless law, safety, or
 privacy prevents it.
 
 ## Safe Harbour
