@@ -763,13 +763,50 @@ describe("offscreen Blob URL entrypoint", () => {
     );
   });
 
-  it("ships parseable GSTR-2B tidy data without attempting a GSTR-3B workbook", async () => {
+  it("ships parseable GSTR-2B tidy data and its invoice-level workbook", async () => {
     await loadOffscreenEntrypoint();
     opfsFiles.set(
       `filed-return-packs/${TEST_FULL_YEAR_LEDGER_ID}/april-data.json`,
       new Blob([
         JSON.stringify({
-          data: { rtnprd: "042026", synthetic_amount: 3 },
+          data: {
+            gstin: "27ABCDE1234F1Z0",
+            lglnm: "Synthetic GSTR-2B Owner",
+            trdnm: "Synthetic GSTR-2B Owner Trade",
+            rtnprd: "042026",
+            synthetic_amount: 3,
+            docdata: {
+              b2b: [
+                {
+                  ctin: "27ABCDE1000F1ZC",
+                  trdnm: "Synthetic GSTR-2B Counterparty",
+                  supfildt: "20-05-2026",
+                  supprd: "042026",
+                  inv: [
+                    {
+                      inum: "INV-001",
+                      dt: "01-04-2026",
+                      val: 110,
+                      txval: 100,
+                      igst: 10,
+                      cgst: 0,
+                      sgst: 0,
+                      cess: 0,
+                      pos: "27",
+                      rev: "N",
+                      typ: "R",
+                      itcavl: "Y",
+                      rsn: "",
+                      srctyp: "GSTR2B",
+                      irn: "SYNTHETIC-IRN",
+                      irngendate: "01-04-2026",
+                      imsStatus: "ACCEPTED",
+                    },
+                  ],
+                },
+              ],
+            },
+          },
           response_decoy: "synthetic",
         }),
       ]),
@@ -800,20 +837,115 @@ describe("offscreen Blob URL entrypoint", () => {
 
     expect(zip).toMatchObject({
       ok: true,
-      zipEntryCount: 2,
-      summaryEntryCount: 1,
+      zipEntryCount: 3,
+      summaryEntryCount: 2,
       summary: {
         status: "included",
-        workbookOutcome: "not-applicable",
         outcomeOnly: false,
         parsedPeriodCount: 1,
       },
     });
     const entries = await extractStoredZipEntries(createdBlobs[0]!);
-    expect([...entries.keys()]).toEqual(["april-data.json", "full-year-summary.csv"]);
+    expect([...entries.keys()]).toEqual([
+      "april-data.json",
+      "full-year-summary.csv",
+      "full-year-workbook.xlsx",
+    ]);
     expect(new TextDecoder().decode(entries.get("full-year-summary.csv"))).toContain(
       "April,GSTR-2B,JSON,parseable-json,,/synthetic_amount,,3",
     );
+    const workbook = await extractStoredZipEntries(
+      new Blob([Uint8Array.from(entries.get("full-year-workbook.xlsx")!).buffer]),
+    );
+    const workbookXml = new TextDecoder().decode(workbook.get("xl/workbook.xml"));
+    const b2b = new TextDecoder().decode(workbook.get("xl/worksheets/sheet1.xml"));
+    expect(workbookXml).toContain('<sheet name="B2B"');
+    expect(workbookXml).not.toContain("27ABCDE1000F1ZC");
+    expect(b2b).toContain("Synthetic GSTR-2B Counterparty");
+    expect(b2b).toContain("INV-001");
+    expect(b2b.match(/27ABCDE1234F1Z0/g)).toHaveLength(1);
+    expect(b2b.match(/Synthetic GSTR-2B Owner/g)).toHaveLength(2);
+  });
+
+  it("reports an oversized GSTR-2B workbook without emitting a partial workbook", async () => {
+    await loadOffscreenEntrypoint();
+    const irnPadding = "x".repeat(700);
+    const invoices = Array.from({ length: 8_000 }, (_, index) => ({
+      inum: `INV-${index}`,
+      dt: "01-04-2026",
+      val: 110,
+      txval: 100,
+      igst: 10,
+      cgst: 0,
+      sgst: 0,
+      cess: 0,
+      pos: "27",
+      rev: "N",
+      typ: "R",
+      itcavl: "Y",
+      rsn: "",
+      srctyp: "GSTR2B",
+      irn: `SYNTHETIC-${irnPadding}`,
+      irngendate: "01-04-2026",
+      imsStatus: "ACCEPTED",
+    }));
+    opfsFiles.set(
+      `filed-return-packs/${TEST_FULL_YEAR_LEDGER_ID}/april-data.json`,
+      new Blob([
+        JSON.stringify({
+          data: {
+            gstin: "27ABCDE1234F1Z0",
+            lglnm: "Synthetic GSTR-2B Owner",
+            trdnm: "Synthetic GSTR-2B Owner Trade",
+            rtnprd: "042026",
+            docdata: {
+              b2b: [
+                {
+                  ctin: "27ABCDE1000F1ZC",
+                  trdnm: "Synthetic GSTR-2B Counterparty",
+                  supfildt: "20-05-2026",
+                  supprd: "042026",
+                  inv: invoices,
+                },
+              ],
+            },
+          },
+        }),
+      ]),
+    );
+
+    const zip = await sendOffscreenMessage({
+      type: "PACK_OFFSCREEN_CREATE_FILED_RETURN_ZIP",
+      target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+      payload: {
+        requestId: "gstr2b-oversized-workbook-request",
+        generatedAt: "2026-08-19T12:00:00.000Z",
+        ledgerId: TEST_FULL_YEAR_LEDGER_ID,
+        expectedReturnType: "GSTR-2B",
+        expectedEntryCount: 1,
+        expectedEntries: [{ artifactType: "JSON", entryNames: ["april-data.json"] }],
+        summaryPlan: [
+          {
+            artifactType: "JSON",
+            entryNames: ["april-data.json"],
+            financialYear: "2026-27",
+            outcomeCategory: "staged",
+            period: "April",
+            returnType: "GSTR-2B",
+          },
+        ],
+      },
+    });
+
+    expect(zip).toMatchObject({
+      ok: true,
+      zipEntryCount: 1,
+      summaryEntryCount: 0,
+      summary: { status: "failed", reasonCategory: "too-large" },
+    });
+    const entries = await extractStoredZipEntries(createdBlobs[0]!);
+    expect([...entries.keys()]).toEqual(["april-data.json"]);
+    expect(entries.has("full-year-workbook.xlsx")).toBe(false);
   });
 
   it("keeps the artifact ZIP when summary generation throws", async () => {

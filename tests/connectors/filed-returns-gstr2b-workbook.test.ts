@@ -1,0 +1,240 @@
+import { describe, expect, it } from "vitest";
+import { XlsxSizeLimitError } from "../../src/core/xlsx";
+import {
+  buildFiledReturnsGstr2bWorkbook,
+  FiledReturnsGstr2bWorkbookPrivacyError,
+  FiledReturnsGstr2bWorkbookSchemaError,
+} from "../../src/connectors/gst/filed-returns-gstr2b-workbook";
+import type { FiledReturnsSummaryPlanEntry } from "../../src/connectors/gst/filed-returns-summary-sheet";
+
+const OWNER_GSTIN = "27ABCDE1234F1Z0";
+const COUNTERPARTY_GSTIN = "27ABCDE1000F1ZC";
+
+describe("GSTR-2B consolidated workbook", () => {
+  it("writes one invoice row per nested record with static present-section sheets", () => {
+    const workbook = buildWorkbook(docdata());
+    const entries = extractStoredZipEntries(workbook);
+
+    expect(sheetNames(text(entries, "xl/workbook.xml"))).toEqual(["B2B", "B2BA", "CDNR", "IMPG"]);
+    expect(text(entries, "xl/workbook.xml")).not.toContain(COUNTERPARTY_GSTIN);
+
+    const b2b = text(entries, "xl/worksheets/sheet1.xml");
+    expect(b2b.match(new RegExp(COUNTERPARTY_GSTIN, "g"))).toHaveLength(2);
+    expect(b2b.match(/Synthetic Counterparty Private Limited/g)).toHaveLength(2);
+    expect(b2b).toContain("INV-001");
+    expect(b2b).toContain("INV-002");
+    expect(b2b).toContain('<c r="H7" s="2"><v>110</v></c>');
+    expect(b2b).toContain('pane xSplit="1" ySplit="6" topLeftCell="B7"');
+    expect(b2b).toContain("B2B invoice-level records present in the captured JSON.");
+    expect(b2b).not.toContain("/data/");
+    expect(b2b.match(new RegExp(OWNER_GSTIN, "g"))).toHaveLength(1);
+    expect(b2b.match(/Synthetic Owner Legal Name/g)).toHaveLength(1);
+    expect(b2b.match(/Synthetic Owner Trade Name/g)).toHaveLength(1);
+
+    for (const sheet of ["sheet2.xml", "sheet3.xml", "sheet4.xml"]) {
+      const xml = text(entries, `xl/worksheets/${sheet}`);
+      expect(xml.match(new RegExp(OWNER_GSTIN, "g"))).toHaveLength(1);
+      expect(xml.match(/Synthetic Owner Legal Name/g)).toHaveLength(1);
+      expect(xml.match(/Synthetic Owner Trade Name/g)).toHaveLength(1);
+    }
+  });
+
+  it("does not create an empty worksheet for an absent GSTR-2B section", () => {
+    const workbook = buildWorkbook({ b2b: docdata().b2b });
+    expect(sheetNames(text(extractStoredZipEntries(workbook), "xl/workbook.xml"))).toEqual(["B2B"]);
+  });
+
+  it("fails closed rather than placing the return owner in a counterparty row", () => {
+    const data = docdata();
+    data.b2b[0]!.ctin = OWNER_GSTIN;
+    expect(() => buildWorkbook(data)).toThrow(FiledReturnsGstr2bWorkbookPrivacyError);
+  });
+
+  it("rejects a forbidden source key before copying any invoice value", () => {
+    const data = docdata();
+    (data.b2b[0]!.inv[0] as Record<string, unknown>).session = "synthetic-sensitive";
+    expect(() => buildWorkbook(data)).toThrow(FiledReturnsGstr2bWorkbookPrivacyError);
+  });
+
+  it("fails with the XLSX size error instead of truncating invoice rows", () => {
+    expect(() =>
+      buildWorkbook(docdata(), {
+        maxOutputBytes: 512,
+      }),
+    ).toThrow(XlsxSizeLimitError);
+  });
+
+  it("refuses an annual workbook when a staged middle period is absent", () => {
+    const plan: FiledReturnsSummaryPlanEntry[] = [
+      planEntry("April", "april-data.json"),
+      planEntry("May", "may-data.json"),
+    ];
+    expect(() =>
+      buildFiledReturnsGstr2bWorkbook(plan, [sourceEntry("april-data.json", docdata())], {
+        generatedAt: new Date("2026-08-22T12:00:00.000Z"),
+      }),
+    ).toThrow(FiledReturnsGstr2bWorkbookSchemaError);
+  });
+});
+
+function buildWorkbook(
+  documentSections: Partial<ReturnType<typeof docdata>>,
+  options: { maxOutputBytes?: number } = {},
+): Uint8Array {
+  const plan: FiledReturnsSummaryPlanEntry[] = [planEntry("April", "april-data.json")];
+  const workbook = buildFiledReturnsGstr2bWorkbook(
+    plan,
+    [sourceEntry("april-data.json", documentSections)],
+    { generatedAt: new Date("2026-08-22T12:00:00.000Z"), ...options },
+  );
+  if (!workbook) throw new Error("Expected synthetic GSTR-2B workbook.");
+  return workbook;
+}
+
+function planEntry(period: "April" | "May", entryName: string): FiledReturnsSummaryPlanEntry {
+  return {
+    artifactType: "JSON",
+    entryNames: [entryName],
+    financialYear: "2026-27",
+    outcomeCategory: "staged",
+    period,
+    returnType: "GSTR-2B",
+  };
+}
+
+function sourceEntry(path: string, documentSections: Partial<ReturnType<typeof docdata>>) {
+  return {
+    path,
+    bytes: new TextEncoder().encode(
+      JSON.stringify({
+        data: {
+          gstin: OWNER_GSTIN,
+          lglnm: "Synthetic Owner Legal Name",
+          trdnm: "Synthetic Owner Trade Name",
+          rtnprd: "042026",
+          docdata: documentSections,
+        },
+      }),
+    ),
+  };
+}
+
+function docdata() {
+  return {
+    b2b: [
+      {
+        ctin: COUNTERPARTY_GSTIN,
+        trdnm: "Synthetic Counterparty Private Limited",
+        supfildt: "20-05-2026",
+        supprd: "042026",
+        inv: [invoice("INV-001", "01-04-2026", 110), invoice("INV-002", "02-04-2026", 220)],
+      },
+    ],
+    b2ba: [
+      {
+        ctin: COUNTERPARTY_GSTIN,
+        trdnm: "Synthetic Counterparty Private Limited",
+        supfildt: "20-05-2026",
+        supprd: "042026",
+        inv: [
+          { ...invoice("INV-A-001", "03-04-2026", 330), oinum: "INV-OLD-001", oidt: "01-03-2026" },
+        ],
+      },
+    ],
+    cdnr: [
+      {
+        ctin: COUNTERPARTY_GSTIN,
+        trdnm: "Synthetic Counterparty Private Limited",
+        supfildt: "20-05-2026",
+        supprd: "042026",
+        nt: [creditNote("CN-001", "04-04-2026", 440)],
+      },
+    ],
+    impg: [
+      {
+        boenum: "BE-001",
+        boedt: "05-04-2026",
+        portcode: "INBOM1",
+        refdt: "06-04-2026",
+        txval: 500,
+        igst: 90,
+        cgst: 0,
+        cess: 0,
+        imsStatus: "ACCEPTED",
+        isamd: "N",
+      },
+    ],
+  };
+}
+
+function invoice(inum: string, dt: string, val: number) {
+  return {
+    inum,
+    dt,
+    val,
+    txval: val - 10,
+    igst: 10,
+    cgst: 0,
+    sgst: 0,
+    cess: 0,
+    pos: "27",
+    rev: "N",
+    typ: "R",
+    itcavl: "Y",
+    rsn: "",
+    srctyp: "GSTR2B",
+    irn: "SYNTHETIC-IRN",
+    irngendate: "01-04-2026",
+    imsStatus: "ACCEPTED",
+  };
+}
+
+function creditNote(ntnum: string, dt: string, val: number) {
+  return {
+    ntnum,
+    dt,
+    val,
+    txval: val - 10,
+    igst: 10,
+    cgst: 0,
+    sgst: 0,
+    cess: 0,
+    pos: "27",
+    rev: "N",
+    typ: "R",
+    itcavl: "Y",
+    rsn: "",
+    srctyp: "GSTR2B",
+    suptyp: "R",
+    irn: "SYNTHETIC-IRN",
+    irngendate: "04-04-2026",
+    imsStatus: "ACCEPTED",
+  };
+}
+
+function sheetNames(xml: string): string[] {
+  return [...xml.matchAll(/<sheet name="([^"]+)"/g)].map((match) => match[1]!);
+}
+
+function extractStoredZipEntries(bytes: Uint8Array): Map<string, Uint8Array> {
+  const entries = new Map<string, Uint8Array>();
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let offset = 0;
+  while (offset + 30 <= bytes.byteLength && view.getUint32(offset, true) === 0x04034b50) {
+    const size = view.getUint32(offset + 18, true);
+    const nameLength = view.getUint16(offset + 26, true);
+    const extraLength = view.getUint16(offset + 28, true);
+    const nameStart = offset + 30;
+    const dataStart = nameStart + nameLength + extraLength;
+    const name = new TextDecoder().decode(bytes.slice(nameStart, nameStart + nameLength));
+    entries.set(name, bytes.slice(dataStart, dataStart + size));
+    offset = dataStart + size;
+  }
+  return entries;
+}
+
+function text(entries: Map<string, Uint8Array>, path: string): string {
+  const bytes = entries.get(path);
+  if (!bytes) throw new Error(`Missing synthetic workbook part ${path}`);
+  return new TextDecoder().decode(bytes);
+}
