@@ -5,7 +5,6 @@ import type { FiledReturnsFlowSummary } from "../../src/connectors/gst/filed-ret
 import { FULL_FISCAL_YEAR_PERIOD } from "../../src/connectors/gst/filed-returns-scope";
 import { ScopeForm, ScopeFormAction } from "../../src/entrypoints/popup/components";
 import { hasInlinePrimaryAction } from "../../src/entrypoints/popup/inline-status";
-import { PopupPrimaryActionSlot } from "../../src/entrypoints/popup/popup-primary-action-slot";
 
 const context: PortalContext = {
   connectorId: "gst",
@@ -45,19 +44,9 @@ describe("popup scope form", () => {
       ),
     ).toBe(false);
 
-    const markup = renderToStaticMarkup(
-      <PopupPrimaryActionSlot recoverySummary={targetReviewSummary} statusOwnsPrimaryAction={false}>
-        <ScopeFormAction
-          busy={null}
-          context={context}
-          flowSummary={targetReviewSummary}
-          scope={targetReviewSummary.scope}
-          onStart={vi.fn()}
-        />
-      </PopupPrimaryActionSlot>,
-    );
-
-    expect(markup).not.toContain("Start download");
+    // The slot component that used to be asserted here went with the popup
+    // entrypoint. `hasInlinePrimaryAction` is the part the panel still consults,
+    // so the predicate keeps its coverage and the orphaned rendering does not.
   });
 
   it("renders exposed GST artifact formats as an accessible radio group", () => {

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">Pack bound sheet mark</title>
+  <desc id="desc">A white sheet bound by a teal band on a navy rounded square.</desc>
+  <rect width="128" height="128" rx="26" fill="#103B5D"/>
+  <path d="M34 25c0-5 4-9 9-9h35l16 16v70c0 5-4 9-9 9H43c-5 0-9-4-9-9V25Z" fill="#F7FBFC"/>
+  <path d="M78 16v16h16" fill="#D9E8EC"/>
+  <rect x="27" y="57" width="74" height="18" rx="5" fill="#16A58F"/>
+  <path d="M44 91h40" stroke="#103B5D" stroke-width="9" stroke-linecap="round"/>
+</svg>

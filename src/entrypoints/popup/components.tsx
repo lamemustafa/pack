@@ -10,6 +10,7 @@ import {
 import { ScopeActionPanel } from "./scope-action-panel";
 import { ScopeButtonGroup } from "./scope-button-group";
 import { canRetryFullFiscalYearZipWithoutPortal } from "./flow-summary";
+import { isGstSignInRequired } from "./presentation-state";
 import {
   createScopeFormModel,
   getScopeActionCopy,
@@ -205,7 +206,7 @@ export function ScopeFormAction({
 }
 
 function getPortalDisabledReason(context: PortalContext | null): string {
-  if (context?.pageKind === "gst-auth-landing" || context?.requiredAction?.type === "LOGIN") {
+  if (isGstSignInRequired(context)) {
     return "Refresh or sign in to GST Portal to continue.";
   }
   if (context?.pageKind === "unsupported") return "Open a supported filed-return page.";

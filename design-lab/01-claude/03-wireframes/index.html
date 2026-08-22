@@ -1,0 +1,1016 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pack — Claude pass wireframes</title>
+    <style>
+      :root {
+        --paper: #f2f4f0;
+        --surface: #fbfcfa;
+        --surface-2: #e9ede5;
+        --ink: #131a16;
+        --ink-2: #4a554d;
+        --ink-3: #6f7a72;
+        --rule: #d3d9ce;
+        --rule-2: #bcc5b6;
+        --accent: #14624a;
+        --accent-2: #e3efe8;
+        --signal: #a85b12;
+        --signal-2: #f7ecde;
+        --brand: #1e5bff;
+        --brand-ink: #0d2a66;
+        --data: ui-monospace, "SF Mono", Menlo, monospace;
+        --body: system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font-family: var(--body);
+        line-height: 1.55;
+        padding: 2rem 1.5rem 5rem;
+      }
+      .wrap {
+        max-width: 62rem;
+        margin: 0 auto;
+      }
+      h1 {
+        font-size: 1.5rem;
+        letter-spacing: -0.02em;
+        margin: 0 0 0.4rem;
+      }
+      .sub {
+        color: var(--ink-2);
+        font-size: 0.9375rem;
+        max-width: 60ch;
+        margin: 0 0 2rem;
+      }
+      h2 {
+        font-family: var(--data);
+        font-size: 0.6875rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-3);
+        border-top: 1px solid var(--rule);
+        padding-top: 0.75rem;
+        margin: 2.5rem 0 1rem;
+      }
+      .frames {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
+        gap: 1.5rem;
+        align-items: start;
+      }
+      .frame {
+        border: 1px solid var(--rule-2);
+        border-radius: 6px;
+        background: var(--surface);
+        overflow: hidden;
+      }
+      .cap {
+        font-family: var(--data);
+        font-size: 0.625rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--ink-3);
+        padding: 0.45rem 0.7rem;
+        background: var(--surface-2);
+        border-bottom: 1px solid var(--rule);
+        display: flex;
+        justify-content: space-between;
+        gap: 0.5rem;
+      }
+      .body {
+        padding: 0.8rem;
+        font-size: 0.8125rem;
+      }
+      .top {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.65rem;
+      }
+      .plate {
+        width: 22px;
+        height: 22px;
+        border-radius: 4px;
+        background: var(--brand-ink);
+        display: grid;
+        place-items: center;
+        flex: 0 0 auto;
+      }
+      .name {
+        font-weight: 600;
+        font-size: 0.9375rem;
+        letter-spacing: -0.01em;
+      }
+      .pub {
+        font-family: var(--data);
+        font-size: 0.625rem;
+        color: var(--ink-3);
+        margin-left: auto;
+      }
+      .src {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-family: var(--data);
+        font-size: 0.6875rem;
+        color: var(--ink-2);
+        background: var(--accent-2);
+        border: 1px solid var(--rule);
+        padding: 0.3rem 0.5rem;
+        border-radius: 3px;
+        margin-bottom: 0.7rem;
+      }
+      .dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--accent);
+        flex: 0 0 auto;
+      }
+      .q {
+        font-weight: 600;
+        font-size: 1rem;
+        letter-spacing: -0.012em;
+        margin: 0 0 0.55rem;
+      }
+      .recipe {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        border: 1px solid var(--rule-2);
+        border-radius: 4px;
+        padding: 0.45rem 0.55rem;
+        margin-bottom: 0.35rem;
+        background: var(--paper);
+      }
+      .recipe em {
+        font-family: var(--data);
+        font-size: 0.625rem;
+        font-style: normal;
+        color: var(--ink-3);
+      }
+      .recipe.off {
+        opacity: 0.5;
+      }
+      .link {
+        font-family: var(--data);
+        font-size: 0.6875rem;
+        color: var(--accent);
+        display: block;
+        margin-top: 0.55rem;
+        text-align: center;
+      }
+      table.mx {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 2px;
+      }
+      table.mx th,
+      table.mx td {
+        padding: 0;
+        border: 0;
+      }
+      table.mx thead th {
+        font-family: var(--data);
+        font-size: 0.5625rem;
+        font-weight: 500;
+        color: var(--ink-3);
+        text-align: center;
+        padding-bottom: 3px;
+      }
+      table.mx tbody th {
+        font-family: var(--data);
+        font-size: 0.625rem;
+        font-weight: 600;
+        color: var(--ink-2);
+        text-align: left;
+        white-space: nowrap;
+        padding-right: 5px;
+      }
+      .cell {
+        display: block;
+        width: 100%;
+        height: 20px;
+        border: 1px solid var(--rule-2);
+        border-radius: 2px;
+        background: var(--surface);
+        font-family: var(--data);
+        font-size: 0.5625rem;
+        line-height: 18px;
+        text-align: center;
+        color: var(--ink-3);
+      }
+      .on {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+      .na {
+        background: repeating-linear-gradient(135deg, var(--surface-2) 0 3px, transparent 3px 6px);
+        border-color: var(--rule);
+      }
+      .done {
+        background: var(--accent-2);
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      .run {
+        background: var(--brand);
+        border-color: var(--brand);
+        color: #fff;
+      }
+      .rev {
+        background: var(--signal);
+        border-color: var(--signal);
+        color: #fff;
+      }
+      .queue {
+        background: var(--surface-2);
+      }
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin: 0.55rem 0;
+      }
+      .chip {
+        font-family: var(--data);
+        font-size: 0.625rem;
+        border: 1px solid var(--rule-2);
+        border-radius: 999px;
+        padding: 0.18rem 0.5rem;
+        color: var(--ink-2);
+      }
+      .chip.sel {
+        background: var(--ink);
+        border-color: var(--ink);
+        color: var(--paper);
+      }
+      .chip.dis {
+        opacity: 0.4;
+        text-decoration: line-through;
+      }
+      .bar {
+        border-top: 1px solid var(--rule);
+        margin-top: 0.65rem;
+        padding-top: 0.55rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+      }
+      .count {
+        font-family: var(--data);
+        font-size: 0.6875rem;
+        color: var(--ink-2);
+        line-height: 1.35;
+      }
+      .count b {
+        color: var(--ink);
+      }
+      .btn {
+        font-size: 0.75rem;
+        font-weight: 600;
+        background: var(--accent);
+        color: #fff;
+        border: 1px solid var(--accent);
+        border-radius: 4px;
+        padding: 0.4rem 0.75rem;
+        white-space: nowrap;
+      }
+      .btn.ghost {
+        background: transparent;
+        color: var(--ink-2);
+        border-color: var(--rule-2);
+      }
+      .btn.wide {
+        width: 100%;
+        text-align: center;
+      }
+      .rows {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.6875rem;
+        font-family: var(--data);
+      }
+      .rows th {
+        text-align: left;
+        color: var(--ink-3);
+        font-weight: 500;
+        border-bottom: 1px solid var(--rule);
+        padding: 3px 5px 3px 0;
+        font-size: 0.5625rem;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+      .rows td {
+        padding: 4px 5px 4px 0;
+        border-bottom: 1px solid var(--rule);
+        color: var(--ink-2);
+      }
+      .pill {
+        display: inline-block;
+        border-radius: 3px;
+        padding: 0 4px;
+        font-size: 0.5625rem;
+        border: 1px solid;
+      }
+      .pill.ok {
+        color: var(--accent);
+        border-color: var(--accent);
+        background: var(--accent-2);
+      }
+      .pill.rv {
+        color: var(--signal);
+        border-color: var(--signal);
+        background: var(--signal-2);
+      }
+      .pill.qd {
+        color: var(--ink-3);
+        border-color: var(--rule-2);
+      }
+      .review {
+        border: 1px solid var(--signal);
+        background: var(--signal-2);
+        border-radius: 4px;
+        padding: 0.65rem;
+      }
+      .review p {
+        font-size: 0.75rem;
+        margin: 0 0 0.5rem;
+      }
+      .review .h {
+        font-weight: 600;
+        font-size: 0.875rem;
+      }
+      .acts {
+        display: grid;
+        gap: 4px;
+      }
+      .acts .btn {
+        width: 100%;
+        text-align: left;
+      }
+      .marks {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+        gap: 1.25rem;
+      }
+      .markcard {
+        border: 1px solid var(--rule);
+        border-radius: 4px;
+        background: var(--surface);
+        padding: 0.9rem;
+      }
+      .markcard h3 {
+        margin: 0 0 0.6rem;
+        font-size: 0.9375rem;
+      }
+      .sizes {
+        display: flex;
+        align-items: flex-end;
+        gap: 0.9rem;
+        margin-bottom: 0.7rem;
+      }
+      .sizes figure {
+        margin: 0;
+        text-align: center;
+      }
+      .sizes figcaption {
+        font-family: var(--data);
+        font-size: 0.5625rem;
+        color: var(--ink-3);
+        margin-top: 3px;
+      }
+      .tb {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        border-radius: 4px;
+        padding: 5px 8px;
+        margin-bottom: 5px;
+      }
+      .tb.light {
+        background: #f1f3f4;
+        border: 1px solid var(--rule);
+      }
+      .tb.dark {
+        background: #202124;
+        border: 1px solid #3c4043;
+      }
+      .tb .ph {
+        width: 16px;
+        height: 16px;
+        border-radius: 3px;
+        background: #9aa0a6;
+        opacity: 0.5;
+      }
+      .tb small {
+        font-family: var(--data);
+        font-size: 0.5625rem;
+        margin-left: auto;
+      }
+      .tb.light small {
+        color: #5f6368;
+      }
+      .tb.dark small {
+        color: #9aa0a6;
+      }
+      .markcard p {
+        font-size: 0.8125rem;
+        color: var(--ink-2);
+        margin: 0.6rem 0 0;
+      }
+      .note {
+        border-left: 3px solid var(--accent);
+        background: var(--surface);
+        padding: 0.8rem 1rem;
+        margin: 1.5rem 0;
+        font-size: 0.875rem;
+        max-width: 62ch;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Pack — Claude pass wireframes</h1>
+      <p class="sub">
+        Static, self-contained, no build step. Screens A–F are the proposed flow; the marks section
+        renders three directions at the sizes that actually decide them. Counts are deliberately not
+        round numbers.
+      </p>
+
+      <h2>Flow</h2>
+      <div class="frames">
+        <!-- A -->
+        <div class="frame">
+          <div class="cap"><span>A · Start</span><span>side panel</span></div>
+          <div class="body">
+            <div class="top">
+              <span class="plate"
+                ><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
+                  <path
+                    d="M7 3H4v18h3M17 3h3v18h-3"
+                    fill="none"
+                    stroke="#A9C8FF"
+                    stroke-width="2.2"
+                    stroke-linecap="square"
+                  />
+                  <rect x="9" y="7" width="2.6" height="2.6" fill="#fff" />
+                  <rect x="12.8" y="7" width="2.6" height="2.6" fill="#fff" />
+                  <rect x="9" y="10.8" width="2.6" height="2.6" fill="#fff" />
+                  <rect x="12.8" y="10.8" width="2.6" height="2.6" fill="#fff" />
+                  <rect x="9" y="14.6" width="2.6" height="2.6" fill="#fff" />
+                  <rect x="12.8" y="14.6" width="2.6" height="2.6" fill="#fff" /></svg
+              ></span>
+              <span class="name">Pack</span><span class="pub">ComplyEaze</span>
+            </div>
+            <div class="src"><span class="dot"></span> GST portal · signed in</div>
+            <p class="q">What do you need?</p>
+            <div class="recipe"><span>This year's GSTR-3B</span><em>4 files</em></div>
+            <div class="recipe"><span>FY 2025-26 — everything</span><em>36 files</em></div>
+            <div class="recipe"><span>GSTR-1 vs 3B, full year</span><em>24 files</em></div>
+            <div class="recipe off">
+              <span>Last 3 years of ITRs</span><em>income tax — not yet</em>
+            </div>
+            <a class="link" href="#build">Build a custom pack →</a>
+          </div>
+        </div>
+
+        <!-- B -->
+        <div class="frame" id="build">
+          <div class="cap"><span>B · Build</span><span>matrix selects</span></div>
+          <div class="body">
+            <div class="top">
+              <span class="name" style="font-size: 0.8125rem">FY 2025-26</span
+              ><span class="pub">change year</span>
+            </div>
+            <table class="mx">
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>A</th>
+                  <th>M</th>
+                  <th>J</th>
+                  <th>J</th>
+                  <th>A</th>
+                  <th>S</th>
+                  <th>O</th>
+                  <th>N</th>
+                  <th>D</th>
+                  <th>J</th>
+                  <th>F</th>
+                  <th>M</th>
+                  <th>YR</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th>3B</th>
+                  <td><span class="cell on"></span></td>
+                  <td><span class="cell on"></span></td>
+                  <td><span class="cell on"></span></td>
+                  <td><span class="cell on"></span></td>
+                  <td><span class="cell on"></span></td>
+                  <td><span class="cell on"></span></td>
+                  <td><span class="cell on"></span></td>
+                  <td><span class="cell on"></span></td>
+                  <td><span class="cell on"></span></td>
+                  <td><span class="cell on"></span></td>
+                  <td><span class="cell on"></span></td>
+                  <td><span class="cell on"></span></td>
+                  <td><span class="cell on">✓</span></td>
+                </tr>
+                <tr>
+                  <th>R1</th>
+                  <td><span class="cell on"></span></td>
+                  <td><span class="cell on"></span></td>
+                  <td><span class="cell on"></span></td>
+                  <td><span class="cell"></span></td>
+                  <td><span class="cell"></span></td>
+                  <td><span class="cell"></span></td>
+                  <td><span class="cell"></span></td>
+                  <td><span class="cell"></span></td>
+                  <td><span class="cell"></span></td>
+                  <td><span class="cell"></span></td>
+                  <td><span class="cell"></span></td>
+                  <td><span class="cell"></span></td>
+                  <td><span class="cell"></span></td>
+                </tr>
+                <tr>
+                  <th>2B</th>
+                  <td><span class="cell"></span></td>
+                  <td><span class="cell"></span></td>
+                  <td><span class="cell"></span></td>
+                  <td><span class="cell"></span></td>
+                  <td><span class="cell"></span></td>
+                  <td><span class="cell"></span></td>
+                  <td><span class="cell"></span></td>
+                  <td><span class="cell"></span></td>
+                  <td><span class="cell"></span></td>
+                  <td><span class="cell na"></span></td>
+                  <td><span class="cell na"></span></td>
+                  <td><span class="cell na"></span></td>
+                  <td><span class="cell"></span></td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="chips">
+              <span class="chip sel">PDF</span><span class="chip sel">Excel</span
+              ><span class="chip">JSON</span><span class="chip dis">CSV</span>
+            </div>
+            <div class="bar">
+              <span class="count"><b>27 files</b> · one ZIP<br />≈ 7 min · 1 save prompt</span>
+              <button class="btn" type="button">Build pack</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- C -->
+        <div class="frame">
+          <div class="cap"><span>C · Running</span><span>rows track</span></div>
+          <div class="body">
+            <div class="src"><span class="dot"></span> Keep the GST tab in front</div>
+            <table class="rows">
+              <thead>
+                <tr>
+                  <th>Target</th>
+                  <th>Artifact</th>
+                  <th>Status</th>
+                  <th>Evidence</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Apr · 3B</td>
+                  <td>PDF</td>
+                  <td><span class="pill ok">saved</span></td>
+                  <td>download confirmed</td>
+                </tr>
+                <tr>
+                  <td>May · 3B</td>
+                  <td>PDF</td>
+                  <td><span class="pill ok">saved</span></td>
+                  <td>download confirmed</td>
+                </tr>
+                <tr>
+                  <td>Jun · 3B</td>
+                  <td>PDF</td>
+                  <td><span class="pill ok">saved</span></td>
+                  <td>download confirmed</td>
+                </tr>
+                <tr>
+                  <td>Jul · 3B</td>
+                  <td>PDF</td>
+                  <td><span class="pill rv">needs you</span></td>
+                  <td>unmatched download</td>
+                </tr>
+                <tr>
+                  <td>Aug · 3B</td>
+                  <td>PDF</td>
+                  <td><span class="pill qd">queued</span></td>
+                  <td>—</td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="bar">
+              <span class="count"><b>16 of 27 saved</b> · 1 needs you</span>
+              <button class="btn ghost" type="button">Pause</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- D -->
+        <div class="frame">
+          <div class="cap"><span>D · Needs you</span><span>one question</span></div>
+          <div class="body">
+            <div class="review">
+              <p class="h">July · GSTR-3B</p>
+              <p>
+                Chrome saved a file, but Pack could not match it to July. It will not mark July done
+                on a guess.
+              </p>
+              <div class="acts">
+                <button class="btn" type="button">I checked Downloads — July is there</button>
+                <button class="btn ghost" type="button">Try July again</button>
+                <button class="btn ghost" type="button">Skip July, keep going</button>
+              </div>
+            </div>
+            <a class="link" href="#">Safe diagnostics ▾</a>
+            <div class="bar">
+              <span class="count">Everything else is still running.</span>
+              <button class="btn ghost" type="button">Reset Pack</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- E -->
+        <div class="frame">
+          <div class="cap"><span>E · Done</span><span>the pack</span></div>
+          <div class="body">
+            <p class="q" style="margin-bottom: 0.2rem">FY 2025-26 pack</p>
+            <span class="count">26 of 27 saved · 1 skipped · assembled on this machine</span>
+            <table class="mx" style="margin-top: 0.6rem">
+              <tbody>
+                <tr>
+                  <th>3B</th>
+                  <td><span class="cell done">✓</span></td>
+                  <td><span class="cell done">✓</span></td>
+                  <td><span class="cell done">✓</span></td>
+                  <td><span class="cell rev">—</span></td>
+                  <td><span class="cell done">✓</span></td>
+                  <td><span class="cell done">✓</span></td>
+                  <td><span class="cell done">✓</span></td>
+                  <td><span class="cell done">✓</span></td>
+                  <td><span class="cell done">✓</span></td>
+                  <td><span class="cell done">✓</span></td>
+                  <td><span class="cell done">✓</span></td>
+                  <td><span class="cell done">✓</span></td>
+                  <td><span class="cell done">✓</span></td>
+                </tr>
+                <tr>
+                  <th>R1</th>
+                  <td><span class="cell done">✓</span></td>
+                  <td><span class="cell done">✓</span></td>
+                  <td><span class="cell done">✓</span></td>
+                  <td><span class="cell done">✓</span></td>
+                  <td><span class="cell done">✓</span></td>
+                  <td><span class="cell done">✓</span></td>
+                  <td><span class="cell done">✓</span></td>
+                  <td><span class="cell done">✓</span></td>
+                  <td><span class="cell done">✓</span></td>
+                  <td><span class="cell done">✓</span></td>
+                  <td><span class="cell done">✓</span></td>
+                  <td><span class="cell done">✓</span></td>
+                  <td><span class="cell done">✓</span></td>
+                </tr>
+              </tbody>
+            </table>
+            <div style="margin-top: 0.6rem">
+              <button class="btn wide" type="button">Save consolidated 3B statement</button>
+            </div>
+            <a class="link" href="#">What's missing and why →</a>
+          </div>
+        </div>
+
+        <!-- F -->
+        <div class="frame">
+          <div class="cap"><span>F · Popup</span><span>what's left</span></div>
+          <div class="body">
+            <div class="top">
+              <span class="plate"
+                ><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
+                  <path
+                    d="M7 3H4v18h3M17 3h3v18h-3"
+                    fill="none"
+                    stroke="#A9C8FF"
+                    stroke-width="2.2"
+                    stroke-linecap="square"
+                  />
+                  <rect x="9" y="7" width="2.6" height="2.6" fill="#fff" />
+                  <rect x="12.8" y="7" width="2.6" height="2.6" fill="#fff" />
+                  <rect x="9" y="10.8" width="2.6" height="2.6" fill="#fff" />
+                  <rect x="12.8" y="10.8" width="2.6" height="2.6" fill="#fff" />
+                  <rect x="9" y="14.6" width="2.6" height="2.6" fill="#fff" />
+                  <rect x="12.8" y="14.6" width="2.6" height="2.6" fill="#fff" /></svg
+              ></span>
+              <span class="name">Pack</span>
+            </div>
+            <span class="count"><b>16 of 27 saved</b><br />1 needs you</span>
+            <div style="margin-top: 0.6rem">
+              <button class="btn wide" type="button">Open Pack panel</button>
+            </div>
+            <div style="height: 5px"></div>
+            <button class="btn ghost wide" type="button">Reset Pack</button>
+            <p style="font-size: 0.625rem; color: var(--ink-3); margin: 0.6rem 0 0">
+              Local only · nothing leaves this device.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="note">
+        <strong>Matrix selects, rows track.</strong> Screen B is the selector — 27 targets in one
+        gesture. Screen C is the ledger — a coloured cell cannot show an evidence class or a
+        per-target next action, and a row can. Batch progress is an aggregate of rows and never
+        replaces row truth: “26 of 27 saved, 1 skipped” is admissible; “complete” is admissible only
+        when every target reaches a completion-eligible terminal state. Every cell is still one
+        target with its own binding.
+      </div>
+
+      <h2>Marks — at the sizes that decide them</h2>
+      <div class="marks">
+        <div class="markcard">
+          <h3>01 · The bound set</h3>
+          <div class="sizes">
+            <figure>
+              <svg width="72" height="72" viewBox="0 0 24 24" aria-label="Bound set, 128px">
+                <rect width="24" height="24" rx="5" fill="#0D2A66" />
+                <path
+                  d="M7.5 4.5H5v15h2.5M16.5 4.5H19v15h-2.5"
+                  fill="none"
+                  stroke="#A9C8FF"
+                  stroke-width="1.7"
+                  stroke-linecap="square"
+                />
+                <rect x="9" y="7" width="2.6" height="2.6" fill="#fff" />
+                <rect x="12.8" y="7" width="2.6" height="2.6" fill="#fff" />
+                <rect x="9" y="10.8" width="2.6" height="2.6" fill="#fff" />
+                <rect x="12.8" y="10.8" width="2.6" height="2.6" fill="#fff" />
+                <rect x="9" y="14.6" width="2.6" height="2.6" fill="#fff" />
+                <rect x="12.8" y="14.6" width="2.6" height="2.6" fill="#fff" />
+              </svg>
+              <figcaption>128</figcaption>
+            </figure>
+            <figure>
+              <svg width="32" height="32" viewBox="0 0 24 24" aria-label="Bound set, 32px">
+                <rect width="24" height="24" rx="5" fill="#0D2A66" />
+                <path
+                  d="M7.5 4.5H5v15h2.5M16.5 4.5H19v15h-2.5"
+                  fill="none"
+                  stroke="#A9C8FF"
+                  stroke-width="1.7"
+                  stroke-linecap="square"
+                />
+                <rect x="9" y="7" width="2.6" height="2.6" fill="#fff" />
+                <rect x="12.8" y="7" width="2.6" height="2.6" fill="#fff" />
+                <rect x="9" y="10.8" width="2.6" height="2.6" fill="#fff" />
+                <rect x="12.8" y="10.8" width="2.6" height="2.6" fill="#fff" />
+                <rect x="9" y="14.6" width="2.6" height="2.6" fill="#fff" />
+                <rect x="12.8" y="14.6" width="2.6" height="2.6" fill="#fff" />
+              </svg>
+              <figcaption>32</figcaption>
+            </figure>
+            <figure>
+              <svg width="16" height="16" viewBox="0 0 24 24" aria-label="Bound set, 16px">
+                <rect width="24" height="24" rx="5" fill="#0D2A66" />
+                <path
+                  d="M7.5 4.5H5v15h2.5M16.5 4.5H19v15h-2.5"
+                  fill="none"
+                  stroke="#A9C8FF"
+                  stroke-width="1.7"
+                  stroke-linecap="square"
+                />
+                <rect x="9" y="7" width="2.6" height="2.6" fill="#fff" />
+                <rect x="12.8" y="7" width="2.6" height="2.6" fill="#fff" />
+                <rect x="9" y="10.8" width="2.6" height="2.6" fill="#fff" />
+                <rect x="12.8" y="10.8" width="2.6" height="2.6" fill="#fff" />
+                <rect x="9" y="14.6" width="2.6" height="2.6" fill="#fff" />
+                <rect x="12.8" y="14.6" width="2.6" height="2.6" fill="#fff" />
+              </svg>
+              <figcaption>16</figcaption>
+            </figure>
+          </div>
+          <div class="tb light">
+            <i class="ph"></i><i class="ph"></i>
+            <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+              <rect width="24" height="24" rx="5" fill="#0D2A66" />
+              <path
+                d="M7.5 4.5H5v15h2.5M16.5 4.5H19v15h-2.5"
+                fill="none"
+                stroke="#A9C8FF"
+                stroke-width="1.7"
+                stroke-linecap="square"
+              />
+              <rect x="9" y="7" width="2.6" height="2.6" fill="#fff" />
+              <rect x="12.8" y="7" width="2.6" height="2.6" fill="#fff" />
+              <rect x="9" y="10.8" width="2.6" height="2.6" fill="#fff" />
+              <rect x="12.8" y="10.8" width="2.6" height="2.6" fill="#fff" />
+              <rect x="9" y="14.6" width="2.6" height="2.6" fill="#fff" />
+              <rect x="12.8" y="14.6" width="2.6" height="2.6" fill="#fff" />
+            </svg>
+            <small>light toolbar</small>
+          </div>
+          <div class="tb dark">
+            <i class="ph"></i><i class="ph"></i>
+            <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+              <rect width="24" height="24" rx="5" fill="#0D2A66" />
+              <path
+                d="M7.5 4.5H5v15h2.5M16.5 4.5H19v15h-2.5"
+                fill="none"
+                stroke="#A9C8FF"
+                stroke-width="1.7"
+                stroke-linecap="square"
+              />
+              <rect x="9" y="7" width="2.6" height="2.6" fill="#fff" />
+              <rect x="12.8" y="7" width="2.6" height="2.6" fill="#fff" />
+              <rect x="9" y="10.8" width="2.6" height="2.6" fill="#fff" />
+              <rect x="12.8" y="10.8" width="2.6" height="2.6" fill="#fff" />
+              <rect x="9" y="14.6" width="2.6" height="2.6" fill="#fff" />
+              <rect x="12.8" y="14.6" width="2.6" height="2.6" fill="#fff" />
+            </svg>
+            <small>dark toolbar</small>
+          </div>
+          <p>
+            Brackets closing around six marks — a set, enclosed. Four colours, nothing thinner than
+            1.7 units, so it resolves as one dense object at 16px. Recommended. The dark-toolbar row
+            is the honest test: the navy field still needs a lighter variant, which is a field
+            decision, not more detail.
+          </p>
+        </div>
+
+        <div class="markcard">
+          <h3>02 · The filled year</h3>
+          <div class="sizes">
+            <figure>
+              <svg width="72" height="72" viewBox="0 0 24 24" aria-label="Filled year, 128px">
+                <rect width="24" height="24" rx="5" fill="#0D2A66" />
+                <g fill="#A9C8FF">
+                  <rect x="5" y="5" width="3.6" height="3.6" rx="0.6" />
+                  <rect x="10.2" y="5" width="3.6" height="3.6" rx="0.6" />
+                  <rect x="15.4" y="5" width="3.6" height="3.6" rx="0.6" />
+                  <rect x="5" y="10.2" width="3.6" height="3.6" rx="0.6" />
+                </g>
+                <g fill="#fff">
+                  <rect x="10.2" y="10.2" width="3.6" height="3.6" rx="0.6" />
+                  <rect x="15.4" y="10.2" width="3.6" height="3.6" rx="0.6" />
+                  <rect x="5" y="15.4" width="3.6" height="3.6" rx="0.6" />
+                  <rect x="10.2" y="15.4" width="3.6" height="3.6" rx="0.6" />
+                </g>
+                <rect x="15.4" y="15.4" width="3.6" height="3.6" rx="0.6" fill="#20C997" />
+              </svg>
+              <figcaption>128</figcaption>
+            </figure>
+            <figure>
+              <svg width="32" height="32" viewBox="0 0 24 24" aria-label="Filled year, 32px">
+                <rect width="24" height="24" rx="5" fill="#0D2A66" />
+                <g fill="#A9C8FF">
+                  <rect x="5" y="5" width="3.6" height="3.6" rx="0.6" />
+                  <rect x="10.2" y="5" width="3.6" height="3.6" rx="0.6" />
+                  <rect x="15.4" y="5" width="3.6" height="3.6" rx="0.6" />
+                  <rect x="5" y="10.2" width="3.6" height="3.6" rx="0.6" />
+                </g>
+                <g fill="#fff">
+                  <rect x="10.2" y="10.2" width="3.6" height="3.6" rx="0.6" />
+                  <rect x="15.4" y="10.2" width="3.6" height="3.6" rx="0.6" />
+                  <rect x="5" y="15.4" width="3.6" height="3.6" rx="0.6" />
+                  <rect x="10.2" y="15.4" width="3.6" height="3.6" rx="0.6" />
+                </g>
+                <rect x="15.4" y="15.4" width="3.6" height="3.6" rx="0.6" fill="#20C997" />
+              </svg>
+              <figcaption>32</figcaption>
+            </figure>
+            <figure>
+              <svg width="16" height="16" viewBox="0 0 24 24" aria-label="Filled year, 16px">
+                <rect width="24" height="24" rx="5" fill="#0D2A66" />
+                <g fill="#A9C8FF">
+                  <rect x="5" y="5" width="3.6" height="3.6" rx="0.6" />
+                  <rect x="10.2" y="5" width="3.6" height="3.6" rx="0.6" />
+                  <rect x="15.4" y="5" width="3.6" height="3.6" rx="0.6" />
+                  <rect x="5" y="10.2" width="3.6" height="3.6" rx="0.6" />
+                </g>
+                <g fill="#fff">
+                  <rect x="10.2" y="10.2" width="3.6" height="3.6" rx="0.6" />
+                  <rect x="15.4" y="10.2" width="3.6" height="3.6" rx="0.6" />
+                  <rect x="5" y="15.4" width="3.6" height="3.6" rx="0.6" />
+                  <rect x="10.2" y="15.4" width="3.6" height="3.6" rx="0.6" />
+                </g>
+                <rect x="15.4" y="15.4" width="3.6" height="3.6" rx="0.6" fill="#20C997" />
+              </svg>
+              <figcaption>16</figcaption>
+            </figure>
+          </div>
+          <div class="tb dark">
+            <i class="ph"></i><i class="ph"></i>
+            <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+              <rect width="24" height="24" rx="5" fill="#0D2A66" />
+              <g fill="#A9C8FF">
+                <rect x="5" y="5" width="3.6" height="3.6" rx="0.6" />
+                <rect x="10.2" y="5" width="3.6" height="3.6" rx="0.6" />
+                <rect x="15.4" y="5" width="3.6" height="3.6" rx="0.6" />
+                <rect x="5" y="10.2" width="3.6" height="3.6" rx="0.6" />
+              </g>
+              <g fill="#fff">
+                <rect x="10.2" y="10.2" width="3.6" height="3.6" rx="0.6" />
+                <rect x="15.4" y="10.2" width="3.6" height="3.6" rx="0.6" />
+                <rect x="5" y="15.4" width="3.6" height="3.6" rx="0.6" />
+                <rect x="10.2" y="15.4" width="3.6" height="3.6" rx="0.6" />
+              </g>
+              <rect x="15.4" y="15.4" width="3.6" height="3.6" rx="0.6" fill="#20C997" />
+            </svg>
+            <small>dark toolbar</small>
+          </div>
+          <p>
+            Periods filling in, last cell landing in ComplyEaze green. It means something — progress
+            through a year. Three tonal fills are the first thing to muddy at 16px.
+          </p>
+        </div>
+
+        <div class="markcard">
+          <h3>03 · The stamped P</h3>
+          <div class="sizes">
+            <figure>
+              <svg width="72" height="72" viewBox="0 0 24 24" aria-label="Stamped P, 128px">
+                <rect width="24" height="24" rx="5" fill="#0D2A66" />
+                <path
+                  d="M8 18.5V5.5h5.4a4.1 4.1 0 0 1 0 8.2H8"
+                  fill="none"
+                  stroke="#fff"
+                  stroke-width="2.6"
+                  stroke-linecap="square"
+                />
+                <rect x="4" y="19.6" width="16" height="1.6" fill="#20C997" />
+              </svg>
+              <figcaption>128</figcaption>
+            </figure>
+            <figure>
+              <svg width="32" height="32" viewBox="0 0 24 24" aria-label="Stamped P, 32px">
+                <rect width="24" height="24" rx="5" fill="#0D2A66" />
+                <path
+                  d="M8 18.5V5.5h5.4a4.1 4.1 0 0 1 0 8.2H8"
+                  fill="none"
+                  stroke="#fff"
+                  stroke-width="2.6"
+                  stroke-linecap="square"
+                />
+                <rect x="4" y="19.6" width="16" height="1.6" fill="#20C997" />
+              </svg>
+              <figcaption>32</figcaption>
+            </figure>
+            <figure>
+              <svg width="16" height="16" viewBox="0 0 24 24" aria-label="Stamped P, 16px">
+                <rect width="24" height="24" rx="5" fill="#0D2A66" />
+                <path
+                  d="M8 18.5V5.5h5.4a4.1 4.1 0 0 1 0 8.2H8"
+                  fill="none"
+                  stroke="#fff"
+                  stroke-width="2.6"
+                  stroke-linecap="square"
+                />
+                <rect x="4" y="19.6" width="16" height="1.6" fill="#20C997" />
+              </svg>
+              <figcaption>16</figcaption>
+            </figure>
+          </div>
+          <div class="tb dark">
+            <i class="ph"></i><i class="ph"></i>
+            <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+              <rect width="24" height="24" rx="5" fill="#0D2A66" />
+              <path
+                d="M8 18.5V5.5h5.4a4.1 4.1 0 0 1 0 8.2H8"
+                fill="none"
+                stroke="#fff"
+                stroke-width="2.6"
+                stroke-linecap="square"
+              />
+              <rect x="4" y="19.6" width="16" height="1.6" fill="#20C997" />
+            </svg>
+            <small>dark toolbar</small>
+          </div>
+          <p>
+            Safest at every size, least ownable. Close cousin of the Codex pass's Ledger P — the two
+            passes agree on the criterion and differ on how far to travel from the current metaphor.
+          </p>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

@@ -19,13 +19,13 @@ html[data-pack-surface="popup"] #root {
 html[data-pack-surface="popup"] body,
 body:has(.popup-shell) {
   overflow: hidden;
-  background: #f5f7fa;
+  background: var(--pack-canvas);
 }
 
 html[data-pack-surface="popup"] #root {
   display: grid;
   overflow: hidden;
-  background: #f5f7fa;
+  background: var(--pack-canvas);
 }
 
 .popup-shell {
@@ -40,7 +40,7 @@ html[data-pack-surface="popup"] #root {
   overflow-y: auto;
   overscroll-behavior: contain;
   margin: 0;
-  background: #eef3f8;
+  background: var(--pack-surface-inset);
   padding: 16px;
 }
 
@@ -73,7 +73,7 @@ html[data-pack-surface="popup"] #root {
 
 .popup-title-block h1 {
   margin: 0;
-  color: var(--pack-ink);
+  color: var(--pack-ink-primary);
   font-size: 1.125rem;
   font-weight: 850;
   line-height: 1.15;
@@ -84,7 +84,7 @@ html[data-pack-surface="popup"] #root {
   align-items: center;
   gap: 7px;
   margin: -3px 0 0;
-  color: #5e6b80;
+  color: var(--pack-ink-muted);
   font-size: 0.75rem;
   font-weight: 700;
 }
@@ -94,8 +94,8 @@ html[data-pack-surface="popup"] #root {
   height: 7px;
   flex: 0 0 auto;
   border-radius: 50%;
-  background: #21815d;
-  box-shadow: 0 0 0 3px #e3f3ec;
+  background: var(--pack-success-solid);
+  box-shadow: 0 0 0 3px var(--pack-success-bg);
 }
 
 .context-state {
@@ -104,9 +104,9 @@ html[data-pack-surface="popup"] #root {
   gap: 12px;
   align-items: start;
   margin-top: 20px;
-  border: 1px solid #d8e1ec;
+  border: 1px solid var(--pack-border-subtle);
   border-radius: 12px;
-  background: #ffffff;
+  background: var(--pack-surface);
   padding: 14px;
 }
 
@@ -117,8 +117,8 @@ html[data-pack-surface="popup"] #root {
   align-items: center;
   justify-content: center;
   border-radius: 9px;
-  background: #edf3fa;
-  color: #244d7c;
+  background: var(--pack-surface-inset);
+  color: var(--pack-ink-link);
   font-size: 1rem;
   font-weight: 850;
 }
@@ -131,21 +131,21 @@ html[data-pack-surface="popup"] #root {
 
 .context-state-kicker {
   margin: 0;
-  color: #5e6b80;
+  color: var(--pack-ink-muted);
   font-size: 0.6875rem;
   font-weight: 800;
 }
 
 .context-state h2 {
   margin: 0;
-  color: #172033;
+  color: var(--pack-ink-primary);
   font-size: 1.125rem;
   line-height: 1.22;
 }
 
 .context-state-content > p:not(.context-state-kicker) {
   margin: 0;
-  color: #5e6b80;
+  color: var(--pack-ink-muted);
   font-size: 0.8125rem;
   line-height: 1.4;
 }
@@ -159,23 +159,23 @@ html[data-pack-surface="popup"] #root {
   grid-template-columns: 20px minmax(0, 1fr);
   gap: 9px;
   align-items: start;
-  border: 1px solid #e7c27d;
+  border: 1px solid var(--pack-warning-border);
   border-radius: 9px;
-  background: #fff7e8;
-  color: #75420b;
+  background: var(--pack-warning-bg);
+  color: var(--pack-warning-fg);
   padding: 10px 11px;
 }
 
 .inline-status-success {
-  border-color: #a9d6c3;
-  background: #eaf7f2;
-  color: #176b57;
+  border-color: var(--pack-success-border);
+  background: var(--pack-success-bg);
+  color: var(--pack-success-fg);
 }
 
 .inline-status-neutral {
-  border-color: #d8e1ec;
-  background: #f7f9fb;
-  color: #334b65;
+  border-color: var(--pack-border-subtle);
+  background: var(--pack-surface-muted);
+  color: var(--pack-ink-secondary);
 }
 
 .inline-status-icon {
@@ -195,14 +195,14 @@ html[data-pack-surface="popup"] #root {
 }
 
 .inline-status-content strong {
-  color: #172033;
+  color: var(--pack-ink-primary);
   font-size: 0.8125rem;
   line-height: 1.25;
 }
 
 .inline-status-content p {
   margin: 0;
-  color: #5e6b80;
+  color: var(--pack-ink-muted);
   font-size: 0.75rem;
   line-height: 1.35;
 }
@@ -213,8 +213,8 @@ html[data-pack-surface="popup"] #root {
   margin-top: 2px;
   border: 0;
   border-radius: 7px;
-  background: #244d7c;
-  color: #ffffff;
+  background: var(--pack-surface-accent);
+  color: var(--pack-ink-inverse);
   padding: 0 11px;
   font-size: 0.75rem;
   font-weight: 800;
@@ -224,10 +224,10 @@ html[data-pack-surface="popup"] #root {
   display: flex;
   gap: 10px;
   align-items: start;
-  border: 1px solid #e7c27d;
+  border: 1px solid var(--pack-warning-border);
   border-radius: 9px;
-  background: #fff7e8;
-  color: #75420b;
+  background: var(--pack-warning-bg);
+  color: var(--pack-warning-fg);
   padding: 10px 11px;
 }
 
@@ -238,14 +238,14 @@ html[data-pack-surface="popup"] #root {
 }
 
 .download-save-prompt-notice strong {
-  color: #172033;
+  color: var(--pack-ink-primary);
   font-size: 0.8125rem;
   line-height: 1.25;
 }
 
 .download-save-prompt-notice p {
   margin: 0;
-  color: #5e6b80;
+  color: var(--pack-ink-muted);
   font-size: 0.75rem;
   line-height: 1.35;
 }
@@ -255,19 +255,19 @@ html[data-pack-surface="popup"] #root {
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: #244d7c;
+  color: var(--pack-ink-link);
   padding: 2px 0;
   font-size: 0.75rem;
   font-weight: 800;
 }
 
 .inline-status-primary:hover:not(:disabled) {
-  background: #173b62;
+  background: var(--pack-surface-accent-strong);
 }
 
 .popup-title-block p {
   margin: 0;
-  color: #56677a;
+  color: var(--pack-ink-muted);
   font-size: 0.75rem;
   font-weight: 650;
   line-height: 1.25;
@@ -275,7 +275,7 @@ html[data-pack-surface="popup"] #root {
 
 .section-label {
   margin: 0;
-  color: #5c6d80;
+  color: var(--pack-ink-muted);
   font-size: 0.6875rem;
   font-weight: 800;
   line-height: 1.2;
@@ -287,10 +287,10 @@ html[data-pack-surface="popup"] #root {
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  border: 1px solid #c8d3de;
+  border: 1px solid var(--pack-border-default);
   border-radius: 999px;
-  background: #ffffff;
-  color: #26394c;
+  background: var(--pack-surface);
+  color: var(--pack-ink-secondary);
   padding: 4px 10px;
   font-size: 0.6875rem;
   font-weight: 850;
@@ -299,34 +299,34 @@ html[data-pack-surface="popup"] #root {
 }
 
 .state-pill-neutral {
-  border-color: #c8d3de;
-  background: #f7f9fb;
-  color: #43566b;
+  border-color: var(--pack-border-default);
+  background: var(--pack-surface-muted);
+  color: var(--pack-ink-tertiary);
 }
 
 .state-pill-ready {
-  border-color: #9cc7b1;
-  background: #edf9f2;
-  color: #115d38;
+  border-color: var(--pack-success-border);
+  background: var(--pack-success-bg);
+  color: var(--pack-success-fg);
 }
 
 .state-pill-needed,
 .state-pill-warning {
-  border-color: #dec98f;
-  background: #fff8e8;
-  color: #624408;
+  border-color: var(--pack-warning-border);
+  background: var(--pack-warning-bg);
+  color: var(--pack-warning-fg);
 }
 
 .state-pill-success {
-  border-color: #9cc7b1;
-  background: #edf9f2;
-  color: #115d38;
+  border-color: var(--pack-success-border);
+  background: var(--pack-success-bg);
+  color: var(--pack-success-fg);
 }
 
 .state-pill-danger {
-  border-color: #e5b3ac;
-  background: #fff1ef;
-  color: #7b241c;
+  border-color: var(--pack-danger-border);
+  background: var(--pack-danger-bg);
+  color: var(--pack-danger-fg);
 }
 
 .portal-status-card,
@@ -365,33 +365,33 @@ html[data-pack-surface="popup"] #root {
   align-items: center;
   justify-content: center;
   border-radius: 11px;
-  background: var(--pack-accent-soft);
-  color: var(--pack-accent);
+  background: var(--pack-surface-accent-soft);
+  color: var(--pack-action);
   font-size: 1rem;
   font-weight: 900;
 }
 
 .portal-status-card-success .status-icon {
-  background: #e8f8ef;
-  color: #12633c;
+  background: var(--pack-success-bg);
+  color: var(--pack-success-fg);
 }
 
 .portal-status-card-warning .status-icon {
-  background: #fff6dc;
-  color: #7a5206;
+  background: var(--pack-warning-bg);
+  color: var(--pack-warning-fg);
 }
 
 .portal-status-card-danger .status-icon {
-  background: #fff0ee;
-  color: #8b2a20;
+  background: var(--pack-danger-bg);
+  color: var(--pack-danger-fg);
 }
 
 .pack-summary {
   display: grid;
   gap: 5px;
-  border: 1px solid #d4dfeb;
+  border: 1px solid var(--pack-border-subtle);
   border-radius: 12px;
-  background: #f8fbfe;
+  background: var(--pack-surface-muted);
   padding: 10px 12px;
 }
 
@@ -405,7 +405,7 @@ html[data-pack-surface="popup"] #root {
 
 .pack-summary h2 {
   margin: 2px 0 0;
-  color: var(--pack-ink);
+  color: var(--pack-ink-primary);
   font-size: 0.8125rem;
   font-weight: 850;
   line-height: 1.2;
@@ -414,13 +414,13 @@ html[data-pack-surface="popup"] #root {
 .pack-summary-line,
 .pack-summary-meta {
   margin: 0;
-  color: #40566f;
+  color: var(--pack-ink-tertiary);
   font-size: 0.75rem;
   line-height: 1.35;
 }
 
 .pack-summary-meta {
-  color: #64768a;
+  color: var(--pack-ink-muted);
   font-size: 0.6875rem;
 }
 
@@ -437,9 +437,9 @@ html[data-pack-surface="popup"] #root {
   display: block;
   width: 22px;
   height: 6px;
-  border: 1px solid #7894b2;
+  border: 1px solid var(--pack-border-accent-soft);
   border-radius: 3px;
-  background: #e9f1f8;
+  background: var(--pack-surface-accent-soft);
 }
 
 .pack-motif span:nth-child(1) {
@@ -465,7 +465,7 @@ html[data-pack-surface="popup"] #root {
 
 .portal-status-content h2 {
   margin: 0;
-  color: var(--pack-ink);
+  color: var(--pack-ink-primary);
   font-size: 0.9rem;
   font-weight: 850;
   line-height: 1.2;
@@ -473,7 +473,7 @@ html[data-pack-surface="popup"] #root {
 
 .portal-status-content p {
   margin: 0;
-  color: #425369;
+  color: var(--pack-ink-tertiary);
   font-size: 0.78125rem;
   line-height: 1.4;
 }
@@ -492,10 +492,10 @@ html[data-pack-surface="popup"] #root {
   min-height: 34px;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--pack-accent);
+  border: 1px solid var(--pack-action);
   border-radius: 8px;
-  background: var(--pack-accent);
-  color: #ffffff;
+  background: var(--pack-action);
+  color: var(--pack-ink-inverse);
   padding: 0 12px;
   font-size: 0.75rem;
   font-weight: 800;
@@ -512,26 +512,26 @@ html[data-pack-surface="popup"] #root {
 
 .button-link:hover,
 .status-link-button:hover {
-  border-color: var(--pack-accent-strong);
-  background: var(--pack-accent-strong);
+  border-color: var(--pack-action-hover);
+  background: var(--pack-action-hover);
 }
 
 .secondary-button-link,
 .status-link-button {
-  border-color: #cad5e1;
-  background: #ffffff;
-  color: #1d3148;
+  border-color: var(--pack-border-default);
+  background: var(--pack-surface);
+  color: var(--pack-ink-secondary);
 }
 
 .secondary-button-link:hover,
 .status-link-button:hover {
-  border-color: #9fb0c1;
-  background: #f7fafc;
-  color: #102033;
+  border-color: var(--pack-border-strong);
+  background: var(--pack-surface-muted);
+  color: var(--pack-ink-primary);
 }
 
 .text-link {
-  color: var(--pack-accent);
+  color: var(--pack-action);
   font-size: 0.75rem;
   font-weight: 800;
   text-decoration: none;
@@ -559,7 +559,7 @@ html[data-pack-surface="popup"] #root {
 
 .recovery-panel h2 {
   margin: 0;
-  color: var(--pack-ink);
+  color: var(--pack-ink-primary);
   font-size: 0.875rem;
   font-weight: 850;
   line-height: 1.25;
@@ -567,7 +567,7 @@ html[data-pack-surface="popup"] #root {
 
 .muted {
   margin: 0;
-  color: var(--pack-muted);
+  color: var(--pack-ink-muted);
   font-size: 0.75rem;
   line-height: 1.4;
 }
@@ -575,20 +575,20 @@ html[data-pack-surface="popup"] #root {
 .diagnostic-details {
   display: grid;
   gap: 6px;
-  border-top: 1px solid #dbe3ec;
+  border-top: 1px solid var(--pack-border-subtle);
   padding-top: 6px;
 }
 
 .diagnostic-details summary {
   min-height: 24px;
-  color: #34465a;
+  color: var(--pack-ink-secondary);
   font-size: 0.75rem;
   font-weight: 800;
 }
 
 .diagnostic-line {
   margin: 4px 0 0;
-  color: #46566a;
+  color: var(--pack-ink-tertiary);
   font-size: 0.6875rem;
   line-height: 1.35;
   overflow-wrap: anywhere;
@@ -599,7 +599,7 @@ html[data-pack-surface="popup"] #root {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
   align-items: center;
-  color: #334155;
+  color: var(--pack-ink-secondary);
   font-size: 0.6875rem;
   font-weight: 800;
 }
@@ -608,14 +608,14 @@ html[data-pack-surface="popup"] #root {
   height: 7px;
   overflow: hidden;
   border-radius: 999px;
-  background: #e5ebf2;
+  background: var(--pack-surface-sunken);
 }
 
 .run-progress-track span {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--pack-success);
+  background: var(--pack-success-fg);
 }
 
 .fineprint {
@@ -625,7 +625,7 @@ html[data-pack-surface="popup"] #root {
   gap: 4px 8px;
   justify-content: space-between;
   margin: 0;
-  color: #526477;
+  color: var(--pack-ink-muted);
   padding: 0 2px 2px;
   font-size: 0.6875rem;
   line-height: 1.35;
@@ -638,11 +638,33 @@ html[data-pack-surface="popup"] #root {
 }
 
 .fineprint a {
-  color: #294b70;
+  color: var(--pack-ink-link);
   font-weight: 750;
   text-decoration: none;
 }
 
 .fineprint a:hover {
+  text-decoration: underline;
+}
+
+.fineprint-action {
+  border: 0;
+  background: none;
+  color: var(--pack-ink-link);
+  cursor: pointer;
+  font: inherit;
+  font-size: inherit;
+  font-weight: 750;
+  padding: 0;
+  text-decoration: none;
+}
+
+/* The global `button:hover:not(:disabled)` rule is 0,2,1 and outranks a bare
+   `.fineprint-action:hover` at 0,2,0, so it painted the dark action background
+   behind dark link text. Matching its pseudo-class count restores the link
+   treatment this control actually is. */
+.fineprint-action:hover:not(:disabled) {
+  background: none;
+  border: 0;
   text-decoration: underline;
 }

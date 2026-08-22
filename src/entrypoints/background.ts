@@ -71,8 +71,45 @@ export {
 
 const OFFICIAL_URL = "https://pack.complyeaze.com";
 
+/**
+ * Clicking the toolbar icon opens the side panel.
+ *
+ * The panel is the surface a run can be watched from, and it is the only one
+ * that survives the run itself: `getRequiredGstTab` focuses the GST tab and its
+ * window when a run starts, which pushes any tab-hosted surface behind the page
+ * being driven, and a popup closes outright the moment focus leaves it.
+ *
+ * `setPanelBehavior` is what makes the action's click open the panel, and it is
+ * guarded rather than awaited at module scope: a browser without the API, or a
+ * failure here, must not take the rest of the service worker down with it. The
+ * manifest's `side_panel.default_path` still resolves the panel in that case,
+ * so the surface remains reachable from the browser's own side-panel control.
+ */
+function installPackActionOpensSidePanel() {
+  const sidePanel = (
+    browser as unknown as {
+      sidePanel?: {
+        setPanelBehavior?: (options: { openPanelOnActionClick: boolean }) => Promise<void>;
+      };
+    }
+  ).sidePanel;
+  // No tab fallback. It was added to keep the toolbar button alive on a browser
+  // without `sidePanel`, but the manifest already requires Chrome 116 and the
+  // API landed in 114, so that browser cannot install this extension. The guard
+  // covered a case that cannot occur.
+  //
+  // Worse, it could not be made correct: Chrome retains `openPanelOnActionClick`
+  // across a worker suspension while a module-scoped flag resets on wake, so the
+  // next click opened the panel through the retained setting AND a tab through
+  // the listener. Removing it removes both the dead case and the double-open,
+  // and `side_panel.default_path` keeps the panel reachable from the browser's
+  // own side-panel control regardless.
+  void sidePanel?.setPanelBehavior?.({ openPanelOnActionClick: true }).catch(() => undefined);
+}
+
 export default defineBackground(() => {
   void restrictLocalStorageToTrustedContexts().catch(() => undefined);
+  installPackActionOpensSidePanel();
   installFiledReturnsDurableDownloadReconciler(undefined, {
     storageKeys: filedReturnsStorageKeys(),
     reconcileFullFiscalYearZip: (downloadId) =>
