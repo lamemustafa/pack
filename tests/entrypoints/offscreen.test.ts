@@ -869,8 +869,11 @@ describe("offscreen Blob URL entrypoint", () => {
 
   it("reports an oversized GSTR-2B workbook without emitting a partial workbook", async () => {
     await loadOffscreenEntrypoint();
+    // Sized against MAX_SUMMARY_SHEET_BYTES, which is now tied to the source
+    // budget rather than a standalone 5 MiB. The refusal is the assertion; the
+    // fixture only has to cross whatever the ceiling currently is.
     const irnPadding = "x".repeat(700);
-    const invoices = Array.from({ length: 8_000 }, (_, index) => ({
+    const invoices = Array.from({ length: 40_000 }, (_, index) => ({
       inum: `INV-${index}`,
       dt: "01-04-2026",
       val: 110,
@@ -1257,7 +1260,7 @@ describe("offscreen Blob URL entrypoint", () => {
       `filed-return-packs/${TEST_FULL_YEAR_LEDGER_ID}/april-data.json`,
       new Blob([
         JSON.stringify({
-          data: { rtnprd: "042026", portal_leaf: "x".repeat(5 * 1024 * 1024) },
+          data: { rtnprd: "042026", portal_leaf: "x".repeat(26 * 1024 * 1024) },
           response_decoy: "synthetic",
         }),
       ]),

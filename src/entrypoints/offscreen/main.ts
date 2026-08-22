@@ -40,8 +40,18 @@ import {
 
 const blobUrlsByRequest = new Map<string, string>();
 const MAX_ZIP_INPUT_BYTES = 100 * 1024 * 1024;
-const MAX_SUMMARY_SHEET_BYTES = 5 * 1024 * 1024;
 const MAX_SUMMARY_SOURCE_BYTES = 25 * 1024 * 1024;
+// Derived artifacts may be at most as large as the source they are derived from.
+// Tying the two removes a magic number: 5 MiB was calibrated for a CSV of mapped
+// GSTR-3B statement lines and is far too small for an invoice-level annual
+// workbook. A maintainer's SMALL captured GSTR-2B year -- 133 suppliers, about
+// 2 MiB of source JSON -- produces a 6.9 MiB workbook, so the feature was
+// refused on the very data it was designed from; a synthetic twelve-period,
+// thousand-invoice year measures 13.2 MiB, and the GST portal treats a thousand
+// documents in a period as the point where Excel/JSON becomes necessary rather
+// than as an extreme. This ceiling admits both with headroom and still sits four
+// times under MAX_ZIP_INPUT_BYTES.
+const MAX_SUMMARY_SHEET_BYTES = MAX_SUMMARY_SOURCE_BYTES;
 const FILED_RETURN_PERIOD_ORDER = new Map(
   FILED_RETURNS_MONTHS.map((period, index) => [period.toLowerCase(), index]),
 );
