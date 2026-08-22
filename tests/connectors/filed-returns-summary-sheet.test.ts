@@ -526,6 +526,32 @@ describe("filed-return full-year summary sheet", () => {
     expect(dataCsv).not.toContain("Synthetic Owner Trade Name");
   });
 
+  it("rejects a ctin matching an owner GSTIN that a different period established", () => {
+    // The owner is a property of the summary, not of whichever document names
+    // them. Scoping the comparison per entry left a period that omits the owner
+    // GSTIN accepting it as someone else's.
+    const summary = buildFiledReturnsSummarySheet(
+      [
+        jsonPlan("April", "april-data.json", "GSTR-2B"),
+        jsonPlan("May", "may-data.json", "GSTR-2B"),
+      ],
+      [
+        rawJsonEntry("april-data.json", {
+          data: { rtnprd: "042026", gstin: "27ABCDE1234F1Z0", amount: 1 },
+        }),
+        rawJsonEntry("may-data.json", {
+          data: {
+            rtnprd: "052026",
+            wrapper: { ctin: "27ABCDE1234F1Z0", trdnm: "Synthetic Owner Trade Name" },
+            amount: 2,
+          },
+        }),
+      ],
+    );
+
+    expect(new TextDecoder().decode(summary.dataBytes)).not.toContain("Synthetic Owner Trade Name");
+  });
+
   it("does not accept the owner's own GSTIN as counterparty evidence", () => {
     // A valid checksum proves the value is a GSTIN, not that it belongs to
     // someone else. A wrapper repeating the owner's GSTIN is the owner's record.

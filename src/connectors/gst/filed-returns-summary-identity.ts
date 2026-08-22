@@ -151,9 +151,10 @@ export function isFiledReturnsSummaryIdentityScalarPath(path: string): boolean {
   // `/data/trade/name` still composes to `tradename` and still seeds redaction.
   // `/data/gstin/status` has no such run -- neither `status` nor `gstinstatus`
   // is an alias -- so identity metadata does not.
-  return unwrapped.some(
-    (_, start) => identityForCanonicalSegment(unwrapped.slice(start).join("")) !== null,
-  );
+  return unwrapped.some((_, start) => {
+    const run = unwrapped.slice(start).join("");
+    return run.length <= MAX_IDENTITY_ALIAS_LENGTH && identityForCanonicalSegment(run) !== null;
+  });
 }
 
 export function filedReturnsSummaryCounterpartyRecordPath(
@@ -255,7 +256,12 @@ function identityCandidates(
   const exact = unwrapScalarPath(decodedJsonPointerSegments(path));
   const candidates: { identity: FiledReturnsSummaryIdentity; recordPath: readonly string[] }[] = [];
   for (let start = 0; start < segments.length; start += 1) {
+    let runLength = 0;
     for (let end = start; end < segments.length; end += 1) {
+      runLength += segments[end]!.length;
+      // Past the longest alias no run can match, so stop extending rather than
+      // slicing and joining the rest of the path.
+      if (runLength > MAX_IDENTITY_ALIAS_LENGTH) break;
       const identity = identityForCanonicalSegment(segments.slice(start, end + 1).join(""));
       if (identity) candidates.push({ identity, recordPath: exact.slice(0, start) });
     }
@@ -270,6 +276,13 @@ function unwrapScalarPath(segments: readonly string[]): readonly string[] {
 function pathsMatch(left: readonly string[], right: readonly string[]): boolean {
   return left.length === right.length && left.every((segment, index) => segment === right[index]);
 }
+
+// No alias is longer than this, so a candidate run past it cannot match one.
+// Without the bound, every contiguous range of every path is sliced and joined,
+// which is cubic in path depth -- and the whole-document identity pre-scan runs
+// this predicate for every string in a source that may be up to 25 MiB, so a
+// deep valid document could stall the export before any output limit applied.
+const MAX_IDENTITY_ALIAS_LENGTH = 19;
 
 function identityForCanonicalSegment(segment: string): FiledReturnsSummaryIdentity | null {
   if (segment === "gstin") return taxpayerIdentity("GSTIN");

@@ -194,10 +194,11 @@ export function buildFiledReturnsSummarySheet(
 
   rejectForbiddenFields(parsedEntries);
   const identities = collectIdentityValues(parsedEntries);
-  const ownIdentityValues = collectOwnIdentityValues(parsedEntries);
+  const summaryOwnGstins = summaryOwnGstinValues(parsedEntries);
+  const ownIdentityValues = collectOwnIdentityValues(parsedEntries, summaryOwnGstins);
   const dataRows: FiledReturnsSummaryDataRow[] = [];
   for (const parsed of parsedEntries) {
-    const counterpartyRecordPaths = counterpartyRecordPathsFor(parsed);
+    const counterpartyRecordPaths = counterpartyRecordPathsFor(parsed, summaryOwnGstins);
     const fieldLeaves = parsed.leaves.filter(
       (leaf) =>
         !isFiledReturnsSummaryIdentityPath(
@@ -271,7 +272,10 @@ export function buildFiledReturnsSummarySheet(
 // `ctin`, and withholding them would empty the most useful column of a GSTR-2B
 // CSV while withholding nothing the user does not already hold in the original
 // artifact beside it.
-function collectOwnIdentityValues(parsedEntries: readonly ParsedPlanEntry[]): ReadonlySet<string> {
+function collectOwnIdentityValues(
+  parsedEntries: readonly ParsedPlanEntry[],
+  summaryOwnGstins: ReadonlySet<string>,
+): ReadonlySet<string> {
   return new Set(
     parsedEntries.flatMap((parsed) =>
       parsed.identityLeaves
@@ -289,7 +293,7 @@ function collectOwnIdentityValues(parsedEntries: readonly ParsedPlanEntry[]): Re
             isFiledReturnsSummaryIdentityPath(
               parsed.planned.returnType,
               leaf.path,
-              counterpartyRecordPathsFor(parsed),
+              counterpartyRecordPathsFor(parsed, summaryOwnGstins),
             ) && isFiledReturnsSummaryIdentityScalarPath(leaf.path),
         )
         .map((leaf) => leaf.value)
@@ -308,15 +312,31 @@ function collectOwnIdentityValues(parsedEntries: readonly ParsedPlanEntry[]): Re
 // before reaching any size check. One set per parsed entry, memoised by entry.
 const counterpartyRecordPathCache = new WeakMap<ParsedPlanEntry, ReadonlySet<string>>();
 
-function counterpartyRecordPathsFor(parsed: ParsedPlanEntry): ReadonlySet<string> {
+function counterpartyRecordPathsFor(
+  parsed: ParsedPlanEntry,
+  ownGstins: ReadonlySet<string>,
+): ReadonlySet<string> {
   const cached = counterpartyRecordPathCache.get(parsed);
   if (cached) return cached;
-  const computed = collectCounterpartyRecordPaths(parsed);
+  const computed = collectCounterpartyRecordPaths(parsed, ownGstins);
   counterpartyRecordPathCache.set(parsed, computed);
   return computed;
 }
 
-/** The return owner's own GSTINs, read from this entry's identity leaves. */
+/**
+ * The return owner's GSTINs, read across EVERY period in the summary.
+ *
+ * Scoping this to one entry left a hole: a period that omits the owner GSTIN has
+ * an empty set, so a `ctin` repeating the owner's GSTIN -- established by a
+ * different period of the same run -- was accepted as counterparty evidence and
+ * released the owner trade name beside it. The owner is a property of the
+ * summary, not of whichever document happens to name them.
+ */
+function summaryOwnGstinValues(parsedEntries: readonly ParsedPlanEntry[]): ReadonlySet<string> {
+  return new Set(parsedEntries.flatMap((parsed) => [...ownGstinValues(parsed)]));
+}
+
+/** The owner GSTINs a single entry names. */
 function ownGstinValues(parsed: ParsedPlanEntry): ReadonlySet<string> {
   return new Set(
     parsed.identityLeaves
@@ -328,8 +348,10 @@ function ownGstinValues(parsed: ParsedPlanEntry): ReadonlySet<string> {
   );
 }
 
-function collectCounterpartyRecordPaths(parsed: ParsedPlanEntry): ReadonlySet<string> {
-  const ownGstins = ownGstinValues(parsed);
+function collectCounterpartyRecordPaths(
+  parsed: ParsedPlanEntry,
+  ownGstins: ReadonlySet<string>,
+): ReadonlySet<string> {
   return new Set(
     parsed.leaves.flatMap((leaf) => {
       // A field NAMED ctin is not evidence; a counterparty GSTIN is. Accepting any
