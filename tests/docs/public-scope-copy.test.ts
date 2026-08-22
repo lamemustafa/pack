@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import type { FiledReturnsReturnType } from "../../src/connectors/gst/filed-returns-return-types";
 import {
   FILED_RETURNS_RETURN_TYPES,
   storeAdvertisedFiledReturnsReturnTypes,
@@ -155,16 +156,50 @@ describe("public scope copy", () => {
       advertised.length,
       "no return type is advertised; public scope copy is unbound",
     ).toBeGreaterThan(0);
-
     const unadvertised = FILED_RETURNS_RETURN_TYPES.filter((type) => !advertised.includes(type));
-    const listing = await read("docs/chrome-web-store/listing.md");
-    const singlePurpose = /Single purpose:\s*```text\n([\s\S]*?)```/.exec(listing)?.[1];
-    expect(singlePurpose, "the Single purpose block is no longer parseable").toBeDefined();
 
-    for (const passage of [
-      { label: "the packaged description", text: PACK_EXTENSION_DESCRIPTION },
-      { label: "the Store single-purpose field", text: singlePurpose ?? "" },
-    ]) {
+    // The passages are found, not listed. An earlier version named the packaged
+    // summary and the single-purpose field by hand and silently skipped the
+    // dashboard Description -- the longest scope enumeration in the file -- while
+    // claiming to cover every one. Enumerating the places a claim lives is the
+    // defect this file exists to prevent, one level up.
+    //
+    // The rule: a Store field that names ANY return type is enumerating scope, so
+    // it must name all of them. A field naming none is saying something else --
+    // the six permission justifications are the reason this is a rule and not a
+    // list, since applying a scope check to them would be wrong.
+    const listing = await read("docs/chrome-web-store/listing.md");
+    const passages: { label: string; text: string }[] = [
+      { label: "the packaged description constant", text: PACK_EXTENSION_DESCRIPTION },
+    ];
+    for (const match of listing.matchAll(/```text\n([\s\S]*?)```/g)) {
+      const text = match[1] ?? "";
+      if (!FILED_RETURNS_RETURN_TYPES.some((type) => text.includes(type))) continue;
+      const line = listing.slice(0, match.index).split("\n").length;
+      passages.push({ label: `the Store field at listing.md:${line}`, text });
+    }
+
+    // Guards against the fence syntax changing and this test quietly checking
+    // nothing: the summary, the dashboard description, and the single-purpose
+    // field all enumerate scope today.
+    expect(
+      passages.length,
+      "fewer scope-enumerating Store fields were found than exist; the block parsing broke",
+    ).toBeGreaterThanOrEqual(4);
+
+    for (const passage of passages) {
+      // A return the code does not implement at all is the worst overclaim, and the
+      // two checks below cannot see it: they compare against known types, so a
+      // wholly invented "GSTR-9" is absent from both lists and passes. Read the
+      // tokens the copy actually uses instead.
+      const invented = [...passage.text.matchAll(/GSTR-[0-9]+[A-Z]?/g)]
+        .map((match) => match[0])
+        .filter((token) => !FILED_RETURNS_RETURN_TYPES.includes(token as FiledReturnsReturnType));
+      expect(
+        invented,
+        `${passage.label} names ${invented.join(", ")}, which Pack does not implement at all.`,
+      ).toEqual([]);
+
       const omitted = advertised.filter((type) => !passage.text.includes(type));
       expect(
         omitted,
