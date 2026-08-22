@@ -2,7 +2,10 @@ import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { FILED_RETURNS_RETURN_TYPES } from "../../src/connectors/gst/filed-returns-return-types";
+import {
+  FILED_RETURNS_RETURN_TYPES,
+  storeAdvertisedFiledReturnsReturnTypes,
+} from "../../src/connectors/gst/filed-returns-return-types";
 import { PACK_EXTENSION_DESCRIPTION } from "../../src/extension/manifest-policy";
 
 const rootDir = process.cwd();
@@ -137,9 +140,23 @@ describe("public scope copy", () => {
   // The two guards above catch a claim that says something retired. They cannot
   // catch one that quietly says too little: the Store single-purpose field named
   // "filed-return artifacts" only, which silently excluded GSTR-2B for a whole
-  // round of review. Under-inclusion is the same drift wearing the other face,
-  // so the passages that enumerate scope are bound to the code's own list.
-  it("names every supported return type wherever public copy enumerates scope", async () => {
+  // round of review. Under-inclusion is the same drift wearing the other face.
+  //
+  // The list bound here is the ADVERTISED set, not the runtime chooser's. An
+  // earlier version of this test used FILED_RETURNS_RETURN_TYPES, which is the
+  // set of returns Pack can fetch -- a different fact. GSTR-2B sat in that list
+  // for a release while the listing deliberately called it experimental, so a
+  // future return implemented ahead of its evidence would have failed this test
+  // until someone either advertised it early or deleted working support. A guard
+  // whose cheapest fix is an overclaim is worse than no guard.
+  it("names exactly the advertised return types wherever public copy enumerates scope", async () => {
+    const advertised = storeAdvertisedFiledReturnsReturnTypes();
+    expect(
+      advertised.length,
+      "no return type is advertised; public scope copy is unbound",
+    ).toBeGreaterThan(0);
+
+    const unadvertised = FILED_RETURNS_RETURN_TYPES.filter((type) => !advertised.includes(type));
     const listing = await read("docs/chrome-web-store/listing.md");
     const singlePurpose = /Single purpose:\s*```text\n([\s\S]*?)```/.exec(listing)?.[1];
     expect(singlePurpose, "the Single purpose block is no longer parseable").toBeDefined();
@@ -148,11 +165,19 @@ describe("public scope copy", () => {
       { label: "the packaged description", text: PACK_EXTENSION_DESCRIPTION },
       { label: "the Store single-purpose field", text: singlePurpose ?? "" },
     ]) {
-      const omitted = FILED_RETURNS_RETURN_TYPES.filter((type) => !passage.text.includes(type));
+      const omitted = advertised.filter((type) => !passage.text.includes(type));
       expect(
         omitted,
-        `${passage.label} does not name ${omitted.join(", ")}, which FILED_RETURNS_RETURN_TYPES ` +
-          "lists as supported. Either name it or remove it from the supported list.",
+        `${passage.label} does not name ${omitted.join(", ")}, which the capability table ` +
+          "marks storeAdvertised. Either name it or clear the flag.",
+      ).toEqual([]);
+
+      const overclaimed = unadvertised.filter((type) => passage.text.includes(type));
+      expect(
+        overclaimed,
+        `${passage.label} names ${overclaimed.join(", ")}, which the capability table does ` +
+          "NOT mark storeAdvertised. Either record its evidence and set the flag, or stop " +
+          "claiming it.",
       ).toEqual([]);
     }
   });

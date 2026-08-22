@@ -53,6 +53,20 @@ interface ReturnTypeCapability {
   readonly summary: string;
   /** Whether a whole-financial-year run is offered for this return. */
   readonly fullFiscalYear: boolean;
+  /**
+   * Whether public Store copy advertises this return.
+   *
+   * Deliberately not the same fact as being in `FILED_RETURNS_RETURN_TYPES`. GSTR-2B ran
+   * through this table for a release while the listing still called it "source-build
+   * experimental", so the runtime chooser and the advertised scope were genuinely
+   * different sets, and a check that conflates them would have forced either advertising
+   * GSTR-2B before its evidence was recorded or deleting working support.
+   *
+   * A return may work and not be advertised. It must never be advertised without working
+   * -- which is why this is a field on the row rather than a second list that could name
+   * a return this table does not have.
+   */
+  readonly storeAdvertised: boolean;
   /** Stable identifier for the acquisition scope. Never derived from the label. */
   readonly scopeId: string;
   /** Only the concrete artifacts the portal actually offers for this return. */
@@ -98,6 +112,7 @@ export const FILED_RETURNS_CAPABILITIES: Readonly<
   "GSTR-3B": {
     summary: "Filed PDF or portal data (JSON)",
     fullFiscalYear: true,
+    storeAdvertised: true,
     scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
     artifacts: {
       PDF: {
@@ -117,6 +132,7 @@ export const FILED_RETURNS_CAPABILITIES: Readonly<
   "GSTR-1": {
     summary: "Summary PDF + E-invoice details (Excel)",
     fullFiscalYear: true,
+    storeAdvertised: true,
     scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
     artifacts: {
       PDF: {
@@ -145,6 +161,7 @@ export const FILED_RETURNS_CAPABILITIES: Readonly<
   "GSTR-2B": {
     summary: "ITC PDF + Excel",
     fullFiscalYear: true,
+    storeAdvertised: true,
     scopeId: "gst-gstr2b-private-v0",
     artifacts: {
       PDF: {

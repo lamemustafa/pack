@@ -11,6 +11,17 @@ export function isFiledReturnsReturnType(input: unknown): input is FiledReturnsR
   );
 }
 
+/**
+ * The returns public Store copy advertises. A subset of FILED_RETURNS_RETURN_TYPES by
+ * construction -- it is filtered from it -- so copy can never name a return Pack does
+ * not implement, and a return can be implemented ahead of its public claim.
+ */
+export function storeAdvertisedFiledReturnsReturnTypes(): FiledReturnsReturnType[] {
+  return FILED_RETURNS_RETURN_TYPES.filter(
+    (type) => FILED_RETURNS_CAPABILITIES[type].storeAdvertised,
+  );
+}
+
 export function supportsFullFiscalYearFiledReturnsRun(returnType: FiledReturnsReturnType): boolean {
   return FILED_RETURNS_CAPABILITIES[returnType].fullFiscalYear;
 }
