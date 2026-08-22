@@ -91,7 +91,7 @@ try {
   const serviceWorker = await waitForServiceWorker(context, extensionId);
   await assertServiceWorkerStarted(serviceWorker);
   await assertOptionsPageLoads(context, extensionId);
-  await assertPopupPageLoads(context, extensionId);
+  await assertPanelPageLoads(context, extensionId);
   await assertApprovedContentScript(context, serviceWorker);
   await assertHostilePageCannotMessageExtension(context);
   assertDeniedUnexpectedNetwork();
@@ -274,7 +274,7 @@ async function waitForServiceWorker(browserContext, extensionId) {
       })
       .catch(() => null);
     try {
-      await wakePage.goto(`chrome-extension://${extensionId}/popup.html`, {
+      await wakePage.goto(`chrome-extension://${extensionId}/panel.html`, {
         waitUntil: "domcontentloaded",
       });
       serviceWorker =
@@ -335,13 +335,25 @@ async function assertOptionsPageLoads(browserContext, extensionId) {
   await optionsPage.close();
 }
 
-async function assertPopupPageLoads(browserContext, extensionId) {
-  const popupPage = await browserContext.newPage();
-  attachPageLogging(popupPage);
-  await popupPage.goto(`chrome-extension://${extensionId}/popup.html`);
-  await popupPage.waitForLoadState("domcontentloaded");
-  await popupPage.waitForSelector(".popup-shell", { timeout: 5_000 });
-  await popupPage.waitForFunction(
+/**
+ * Loads the panel page out of the packaged extension and proves it painted.
+ *
+ * This asserted the popup until the popup folded into the panel. Every
+ * assertion in it was popup-specific -- `.popup-shell`, the `.popup-wordmark`
+ * alt text, and a title the panel does not use -- so pointing it at
+ * `panel.html` without rewriting them turned a passing gate into a timeout.
+ * Rendering is checked through the brand mark's own paint rather than its alt
+ * text, because the mark is decorative (`alt=""`, `aria-hidden`) and an alt
+ * assertion would have been asserting a string this surface deliberately
+ * does not carry.
+ */
+async function assertPanelPageLoads(browserContext, extensionId) {
+  const panelPage = await browserContext.newPage();
+  attachPageLogging(panelPage);
+  await panelPage.goto(`chrome-extension://${extensionId}/panel.html`);
+  await panelPage.waitForLoadState("domcontentloaded");
+  await panelPage.waitForSelector(".panel-shell", { timeout: 5_000 });
+  await panelPage.waitForFunction(
     () =>
       document.body.textContent?.includes("Checking this tab") ||
       document.body.textContent?.includes("Open the GST Portal to use Pack") ||
@@ -349,54 +361,65 @@ async function assertPopupPageLoads(browserContext, extensionId) {
     undefined,
     { timeout: 5_000 },
   );
-  const popupState = await popupPage.evaluate(() => {
-    const wordmark = document.querySelector(".popup-wordmark");
-    const wordmarkRect = wordmark?.getBoundingClientRect();
-    const visibleWordmark =
-      wordmarkRect && wordmarkRect.width > 0 && wordmarkRect.height > 0
+  const panelState = await panelPage.evaluate(() => {
+    const mark = document.querySelector(".panel-mark");
+    const markRect = mark?.getBoundingClientRect();
+    // Present in the DOM is not painted. `elementFromPoint` at the mark's own
+    // centre is what separates a rendered asset from a broken or covered one.
+    const paintedMark =
+      markRect && markRect.width > 0 && markRect.height > 0
         ? document.elementFromPoint(
-            wordmarkRect.left + wordmarkRect.width / 2,
-            wordmarkRect.top + wordmarkRect.height / 2,
+            markRect.left + markRect.width / 2,
+            markRect.top + markRect.height / 2,
           )
         : null;
     return {
       title: document.title,
-      shellRect: document.querySelector(".popup-shell")?.getBoundingClientRect().toJSON(),
-      shellText: document.querySelector(".popup-shell")?.textContent ?? "",
+      shellRect: document.querySelector(".panel-shell")?.getBoundingClientRect().toJSON(),
+      shellText: document.querySelector(".panel-shell")?.textContent ?? "",
       hasContextState: Boolean(document.querySelector(".context-state")),
-      visibleWordmark: visibleWordmark?.getAttribute("alt") ?? "",
+      markPainted: paintedMark === mark,
+      // elementFromPoint only proves the <img> owns its CSS-sized hit box, and
+      // panel.css gives that box fixed dimensions whether or not the SVG
+      // decodes. A corrupt asset with nonzero bytes passes the package check and
+      // would have passed this one too, while Chrome shows a broken image.
+      markDecoded: Boolean(mark && mark.complete && mark.naturalWidth > 0),
+      markSource: mark?.getAttribute("src") ?? "",
     };
   });
-  if (popupState.title !== "ComplyEaze Pack") {
-    throw new Error(`Unexpected popup page title: ${popupState.title}`);
+  if (panelState.title !== "Pack") {
+    throw new Error(`Unexpected panel page title: ${panelState.title}`);
   }
   if (
-    !popupState.shellText.includes("Checking this tab") &&
-    !popupState.shellText.includes("Open the GST Portal to use Pack") &&
-    !popupState.shellText.includes("Sign in again on the GST Portal")
+    !panelState.shellText.includes("Checking this tab") &&
+    !panelState.shellText.includes("Open the GST Portal to use Pack") &&
+    !panelState.shellText.includes("Sign in again on the GST Portal")
   ) {
-    throw new Error("Pack popup did not render a valid context state.");
+    throw new Error("Pack panel did not render a valid context state.");
   }
-  if (!popupState.visibleWordmark.includes("Pack by ComplyEaze")) {
-    throw new Error("Pack popup mounted in the DOM but did not visibly paint its brand header.");
+  if (!panelState.markPainted || !panelState.markSource.includes("pack-mark")) {
+    throw new Error("Pack panel mounted in the DOM but did not visibly paint its brand mark.");
   }
-  if (!popupState.hasContextState) {
-    throw new Error("Pack popup did not render its context state.");
+  if (!panelState.markDecoded) {
+    throw new Error(
+      "Pack panel brand mark did not decode; the packaged asset is not a usable image.",
+    );
+  }
+  if (!panelState.hasContextState) {
+    throw new Error("Pack panel did not render its context state.");
   }
   if (
-    !popupState.shellRect ||
-    popupState.shellRect.width < 380 ||
-    popupState.shellRect.width > 460 ||
-    popupState.shellRect.height < 180 ||
-    popupState.shellRect.height > 700
+    !panelState.shellRect ||
+    panelState.shellRect.width < 300 ||
+    panelState.shellRect.height < 180
   ) {
     throw new Error(
-      `Pack popup shell rendered outside the expected compact size: ${JSON.stringify(
-        popupState.shellRect,
+      `Pack panel shell rendered smaller than a usable surface: ${JSON.stringify(
+        panelState.shellRect,
       )}`,
     );
   }
-  await popupPage.close();
+  await panelPage.close();
 }
 
 async function assertApprovedContentScript(browserContext, serviceWorker) {

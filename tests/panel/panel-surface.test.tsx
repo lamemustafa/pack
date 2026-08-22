@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -49,17 +49,39 @@ describe("panel surface", () => {
     vi.useRealTimers();
   });
 
-  it("costs no new permission and no new host", () => {
-    // Phase A is an ordinary extension page. If this test fails, the panel has stopped
-    // being free and the sidePanel decision is no longer separable from shipping it.
+  it("keeps the reviewed permission set exactly, with sidePanel and nothing more", () => {
+    /**
+     * This guard previously asserted that `sidePanel` was ABSENT, so that the
+     * permission decision stayed separable from shipping the surface. That
+     * decision has been taken and the permission is approved, so the guard is
+     * rewritten rather than deleted: it is worth more now than it was before,
+     * because a permission set that has just grown is the one most likely to
+     * grow again unnoticed.
+     *
+     * An exact-equality assertion, deliberately. A `toContain` check would let a
+     * sixth permission through, and the whole point is that the set is closed.
+     */
     expect([...PACK_EXTENSION_PERMISSIONS]).toEqual([
       "downloads",
       "offscreen",
       "scripting",
+      "sidePanel",
       "storage",
     ]);
     expect(PACK_GST_HOST_PERMISSIONS).toHaveLength(4);
-    expect(read("wxt.config.ts")).not.toContain("sidePanel");
+  });
+
+  it("opens the panel from the action instead of a popup", () => {
+    // A `default_popup` takes precedence over the action's click event, so the
+    // popup entrypoint's absence is what makes the click reach the side panel.
+    // Asserting the manifest declaration alone would pass with a popup still
+    // registered, and the click would silently keep opening the old surface.
+    const config = read("wxt.config.ts");
+    expect(config).toContain("side_panel");
+    expect(config).toContain("default_path");
+    expect(config).not.toContain("default_popup");
+    expect(existsSync(path.join(root, "src/entrypoints/popup/index.html"))).toBe(false);
+    expect(read("src/entrypoints/background.ts")).toContain("openPanelOnActionClick");
   });
 
   it("reuses the popup controller instead of reimplementing the flow", () => {
@@ -70,8 +92,12 @@ describe("panel surface", () => {
     );
   });
 
-  it("is reachable from the popup", () => {
-    expect(read("src/entrypoints/popup/main.tsx")).toContain("/panel.html");
+  it("is what the toolbar action opens, with no popup left to reach it from", () => {
+    // Inverted when the popup folded into this surface. It used to assert that
+    // the popup offered a way here; the panel is now the surface itself, so the
+    // reachability that matters is the manifest's.
+    expect(read("wxt.config.ts")).toContain('default_path: "panel.html"');
+    expect(existsSync(path.join(root, "src/entrypoints/popup/main.tsx"))).toBe(false);
   });
 
   it("keeps the local-only boundary and the non-affiliation disclaimer visible", () => {
