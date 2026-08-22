@@ -45,16 +45,19 @@ durable full-year, or stable-release claims.
   change is the consequence of a gap — a claim that outruns its evidence is now
   in front of users rather than waiting in review.
 - V0 purpose: download filed GSTR-3B PDFs, GSTR-1 summary PDFs, optional
-  GSTR-1 e-invoice details Excel files, and GSTR-2B summary artifacts locally
+  GSTR-1 e-invoice details Excel files, and auto-drafted GSTR-2B summary
+  artifacts locally
   from the user's active, manually authenticated GST Portal session when the
   GST Portal exposes those artifacts.
 - GSTR-2B is **in scope**, not experimental. It runs the same user-initiated,
   evidence-backed download path as the other return types, and the derived
   full-year summary CSV is produced for it. It has no consolidated workbook —
   that remains GSTR-3B only — so a GSTR-2B run reports the absence rather than
-  emitting a blank or mislabelled one. The Chrome Web Store listing description
-  and Store privacy fields name GSTR-2B as supported beta scope, and a test binds
-  them to `PACK_EXTENSION_DESCRIPTION` and `FILED_RETURNS_RETURN_TYPES`.
+  emitting a blank or mislabelled one. The source-controlled Store listing draft
+  names GSTR-2B as supported beta scope and a test binds it to the capability
+  table, but the live dashboard fields still carry superseded wording: they are
+  corrected only once `docs/chrome-web-store/dashboard-closeout.md` records the
+  submission. Treat these values as the draft until that evidence exists.
 - Full fiscal year download is a local per-period ledger that runs eligible
   periods through the single-period path after user initiation. The four gates
   below are what it must satisfy before Store-facing V0 advertises it:

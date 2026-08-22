@@ -7,8 +7,9 @@ ComplyEaze Pack is a local-first Chrome MV3 browser extension for collecting
 compliance portal documents from an authorised browser session. V0 starts with
 filed GSTR-3B PDFs, filed GSTR-1 summary PDFs, and optional GSTR-1 e-invoice
 details Excel downloads from the GST Portal where the portal provides them. The
-published package also includes GSTR-2B summary PDF and details Excel downloads
-through the GST Portal's GSTR-2B page.
+published package also downloads the GSTR-2B summary PDF through the GST
+Portal's GSTR-2B page. Its details Excel ships in the same binary but is not
+Store-advertised: that format's live evidence is not recorded yet.
 
 V0 is intentionally narrow:
 

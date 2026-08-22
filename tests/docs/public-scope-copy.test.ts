@@ -111,14 +111,6 @@ const RETIRED_CLAIMS: readonly { pattern: RegExp; why: string }[] = [
     pattern: /Chrome Web Store[^.]{0,80}(in the future|not yet|none published|does not exist)/i,
     why: "a Chrome Web Store build is published; copy must not defer it to the future",
   },
-  {
-    // Deliberately the bare adjacency. A wider window fires on the correct
-    // "filed GSTR-1 and GSTR-3B returns and your GSTR-2B statements", where
-    // "filed" governs the first two only -- and a guard that flags correct copy
-    // gets suppressed, which is worse than not having one.
-    pattern: /\bfiled\s+GSTR-2B\b/i,
-    why: "GSTR-2B is auto-drafted by the portal, not filed by the taxpayer",
-  },
 ];
 
 describe("public scope copy", () => {
@@ -202,11 +194,13 @@ describe("public scope copy", () => {
     const passages: { label: string; text: string }[] = [
       { label: "the packaged description constant", text: PACK_EXTENSION_DESCRIPTION },
     ];
+    let listingPassageCount = 0;
     for (const match of listing.matchAll(/```text\n([\s\S]*?)```/g)) {
       const text = match[1] ?? "";
       if (!FILED_RETURNS_RETURN_TYPES.some((type) => text.includes(type))) continue;
       const line = listing.slice(0, match.index).split("\n").length;
       passages.push({ label: `the Store field at listing.md:${line}`, text });
+      listingPassageCount += 1;
     }
 
     // Scope is also claimed outside listing.md. The promo tile said
@@ -228,13 +222,16 @@ describe("public scope copy", () => {
       passages.push({ label: `the promo asset ${relativePath}`, text });
     }
 
-    // Guards against the fence syntax changing and this test quietly checking
-    // nothing: the summary, the dashboard description, and the single-purpose
-    // field all enumerate scope today.
+    // Counted separately from the other carriers, because they are what the fence
+    // parser produces. When this floor covered `passages` as a whole, adding the
+    // manifest constant, package.json and two promo assets satisfied it on their
+    // own -- so all three dashboard fields could have vanished from validation
+    // while the check that exists to notice that still passed.
     expect(
-      passages.length,
-      "fewer scope-enumerating Store fields were found than exist; the block parsing broke",
-    ).toBeGreaterThanOrEqual(4);
+      listingPassageCount,
+      "fewer scope-enumerating fields were parsed out of listing.md than exist " +
+        "(summary, dashboard description, single purpose); the fence parsing broke",
+    ).toBeGreaterThanOrEqual(3);
 
     for (const passage of passages) {
       // A return the code does not implement at all is the worst overclaim, and the
@@ -320,5 +317,52 @@ describe("public scope copy", () => {
     }
 
     expect(problems, problems.join("\n  ")).toEqual([]);
+  });
+
+  // The original error was "filed GSTR-1, GSTR-3B and GSTR-2B returns", where one
+  // "filed" governs a list ending in a return the portal auto-drafts. The first
+  // guard for it matched only the bare adjacency "filed GSTR-2B", which that
+  // sentence never contains -- so the rule written to stop a specific mistake
+  // could not have stopped that mistake.
+  //
+  // Narrowing was still right; the earlier wide window fired on correct copy. So
+  // the rule is positive instead: where a sentence says "filed" and names
+  // GSTR-2B, the copy must separately mark GSTR-2B as auto-drafted or as a
+  // statement. That is what every correct sentence in this repo already does.
+  it("never classifies GSTR-2B as a filed return", async () => {
+    const misclassified: string[] = [];
+
+    for (const relativePath of trackedTextFiles()) {
+      if (!PUBLIC_DOCUMENT.test(relativePath)) continue;
+      if (HISTORICAL_RECORDS.has(relativePath)) continue;
+      const contents = await read(relativePath);
+
+      // List bullets are separate claims -- a bullet naming a filed return must
+      // not colour the next one -- so a bullet marker ends the preceding segment.
+      // Splitting on every newline instead was wrong: it cut a wrapped sentence
+      // away from the "auto-drafted statements" that qualified it, and the guard
+      // reported correct copy on its first run.
+      // Table rows are separate claims for the same reason. Without this, the
+      // captured table of portal control labels in PORTAL_INTEGRATION_FINDINGS
+      // read as one sentence containing both "Download Filed GSTR-3B" and a
+      // GSTR-2B row, and the guard reported correct copy a second time.
+      const segments = contents
+        .replace(/\n\s*[•\-*]\s/g, ". ")
+        .replace(/\n\s*\|/g, ". |")
+        .split(".");
+      for (const sentence of segments) {
+        if (!sentence.includes("GSTR-2B") || !/\bfiled\b/i.test(sentence)) continue;
+        const marked =
+          /auto-drafted[^.]{0,25}GSTR-2B/i.test(sentence) ||
+          /GSTR-2B[^.]{0,25}\bstatement/i.test(sentence);
+        if (!marked) misclassified.push(`${relativePath}\n    ${sentence.trim()}`);
+      }
+    }
+
+    expect(
+      misclassified,
+      "these name GSTR-2B in a sentence about filed returns without marking it as " +
+        `auto-drafted or as a statement; the portal drafts it:\n  ${misclassified.join("\n  ")}`,
+    ).toEqual([]);
   });
 });
