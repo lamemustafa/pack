@@ -1,9 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { validateArtifactBytes } from "../../src/connectors/gst/artifact-validation";
+import {
+  filedReturnsJsonDocumentContract,
+  validateArtifactBytes,
+} from "../../src/connectors/gst/artifact-validation";
 
 const encoder = new TextEncoder();
 
 describe("validateArtifactBytes", () => {
+  it("owns the canonical JSON envelope and return-period contract for every return type", () => {
+    expect(filedReturnsJsonDocumentContract("GSTR-3B")).toEqual({
+      envelopePath: ["data", "r3b"],
+      requiredStatus: 1,
+      returnPeriodKey: "ret_period",
+    });
+    expect(filedReturnsJsonDocumentContract("GSTR-1")).toEqual({
+      envelopePath: ["data"],
+      returnPeriodKey: "ret_period",
+    });
+    expect(filedReturnsJsonDocumentContract("GSTR-2B")).toEqual({
+      envelopePath: ["data"],
+      returnPeriodKey: "rtnprd",
+    });
+  });
+
   it("accepts a portal-shaped PDF", () => {
     const bytes = new Uint8Array(40 * 1024);
     bytes.set(encoder.encode("%PDF-1.7"));

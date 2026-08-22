@@ -4,6 +4,7 @@ import {
   isDurableFiledReturnsSignal,
   parseDurableFiledReturnsSignals,
 } from "../../src/connectors/gst/filed-returns-durable-signals";
+import { PACK_OFFSCREEN_FILED_RETURN_ZIP_ERROR_CATEGORIES } from "../../src/connectors/gst/offscreen-blob-url";
 import {
   GSTR2B_ARTIFACT_DISPATCH_FAILURE_MESSAGES,
   Gstr2bArtifactDispatchFailureReason,
@@ -115,6 +116,15 @@ describe("filed-return durable signal contract", () => {
     ]);
   });
 
+  it("admits every bounded ZIP-export error category for durable recovery", () => {
+    for (const prefix of ["full-fiscal-year", "single-period"]) {
+      for (const category of PACK_OFFSCREEN_FILED_RETURN_ZIP_ERROR_CATEGORIES) {
+        const signal = `${prefix}-zip-export-error:${category}`;
+        expect(parseDurableFiledReturnsSignals([signal])).toEqual([signal]);
+      }
+    }
+  });
+
   it("persists bounded Returns Dashboard preflight failures", () => {
     const signals = ["wrong-origin-open-returns-dashboard", "returns-dashboard-anchor-ambiguous"];
 
@@ -164,6 +174,29 @@ describe("filed-return durable signal contract", () => {
       false,
     );
     expect(isDurableFiledReturnsSignal("filed-return-detail-type:private-value")).toBe(false);
+  });
+
+  it("retains only bounded full-year summary status and counts", () => {
+    const signals = [
+      "full-fiscal-year-summary-included",
+      "full-fiscal-year-summary-outcomes-only",
+      "full-fiscal-year-workbook-not-applicable",
+      "full-fiscal-year-summary-parsed-period-count:0",
+      "full-fiscal-year-summary-row-count:100000",
+      "full-fiscal-year-summary-error:too-large",
+      "full-fiscal-year-summary-error:identity-unverified",
+    ];
+
+    expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);
+    expect(isDurableFiledReturnsSignal("full-fiscal-year-summary-parsed-period-count:13")).toBe(
+      false,
+    );
+    expect(isDurableFiledReturnsSignal("full-fiscal-year-summary-row-count:0")).toBe(false);
+    expect(isDurableFiledReturnsSignal("full-fiscal-year-summary-row-count:100001")).toBe(false);
+    expect(isDurableFiledReturnsSignal("full-fiscal-year-summary-error:portal-value")).toBe(false);
+    expect(isDurableFiledReturnsSignal("full-fiscal-year-zip-entry-count:37")).toBe(true);
+    expect(isDurableFiledReturnsSignal("full-fiscal-year-zip-entry-count:38")).toBe(true);
+    expect(isDurableFiledReturnsSignal("full-fiscal-year-zip-entry-count:39")).toBe(false);
   });
 
   it("retains categorical page-generated artifact readiness evidence", () => {

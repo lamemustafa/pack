@@ -34,4 +34,13 @@ describe("Pack product version", () => {
       expect(claim?.groups?.version).toBe(packageJson.version);
     },
   );
+
+  it("keeps unreleased full-year format rules separate from released version claims", () => {
+    const fullYearRules = readFileSync("README.md", "utf8").match(
+      /^### Full-year summary rules for (?<status>.+)$(?<body>[\s\S]*?)^### /m,
+    );
+
+    expect(fullYearRules?.groups?.status).toBe("unreleased source builds");
+    expect(fullYearRules?.groups?.body).toContain("not assigned to any released Pack version");
+  });
 });

@@ -13,13 +13,22 @@ import {
   isFiledReturnsReturnType,
   type FiledReturnsReturnType,
 } from "./filed-returns-return-types";
-import { FILED_RETURNS_MONTHS, FULL_FISCAL_YEAR_PERIOD } from "./filed-returns-scope";
+import {
+  FILED_RETURNS_MONTHS,
+  FULL_FISCAL_YEAR_PERIOD,
+  isFiledReturnsFinancialYear,
+} from "./filed-returns-scope";
 import {
   FILED_RETURN_ROUTE_MISMATCH_SIGNALS,
   RETURN_TYPE_MISMATCH_RECOVERY_STOPPED_SIGNAL,
   durableFiledReturnsSignalRejectionReason,
+  isUnconfirmedFiledReturnsDownloadSignal,
   parseDurableFiledReturnsSignals,
 } from "./filed-returns-durable-signals";
+import {
+  filedReturnsSummaryStatusMessage,
+  type FiledReturnsSummaryLifecycle,
+} from "./filed-returns-summary-status";
 import {
   FILED_RETURNS_PORTAL_BLOCKED_OR_SESSION_EXPIRED_MESSAGE,
   FILED_RETURNS_PORTAL_SCHEDULED_DOWNTIME_MESSAGE,
@@ -137,7 +146,32 @@ export function canonicalDurableSummaryMessage(
         .join(", ")}.`;
     }
   }
-  return renderDurableMessage(messageKeyForSummary(status, signals), scope);
+  const durableMessage = renderDurableMessage(messageKeyForSummary(status, signals), scope);
+  const summaryMessage = filedReturnsSummaryStatusMessage(
+    signals,
+    summaryLifecycleForDurableSignals(signals),
+  );
+  return [durableMessage, summaryMessage].filter(Boolean).join(" ");
+}
+
+function summaryLifecycleForDurableSignals(
+  signals: readonly string[],
+): FiledReturnsSummaryLifecycle {
+  if (signals.includes("full-fiscal-year-zip-downloaded")) return "confirmed";
+  if (
+    signals.includes("full-fiscal-year-zip-phase:download-observing") ||
+    signals.some(isUnconfirmedFiledReturnsDownloadSignal) ||
+    signals.some((signal) =>
+      [
+        "full-fiscal-year-zip-download-id-invalid",
+        "full-fiscal-year-zip-download-id-persist-failed",
+      ].includes(signal),
+    )
+  ) {
+    return "unconfirmed";
+  }
+  if (signals.includes("full-fiscal-year-zip-phase:download-intent-persisted")) return "intent";
+  return "unconfirmed";
 }
 
 export function incompleteReturnTypeMismatchRecoveryMessage(
@@ -200,7 +234,7 @@ export function parseDurableFiledReturnsScope(
   ) {
     return null;
   }
-  if (!isConsecutiveFinancialYear(scope.financialYear)) return null;
+  if (!isFiledReturnsFinancialYear(scope.financialYear)) return null;
   if (!isFiledReturnsReturnType(scope.returnType)) return null;
   if (
     typeof scope.period !== "string" ||
@@ -409,12 +443,6 @@ function parsePeriods(input: unknown): string[] | null {
   if (!Array.isArray(input) || input.length > FILED_RETURNS_MONTHS.length) return null;
   if (!input.every((period) => FILED_RETURNS_MONTHS.includes(period as never))) return null;
   return new Set(input).size === input.length ? [...input] : null;
-}
-
-function isConsecutiveFinancialYear(input: unknown): input is string {
-  if (typeof input !== "string") return false;
-  const match = /^20(\d{2})-(\d{2})$/.exec(input);
-  return Boolean(match && Number(match[2]) === (Number(match[1]) + 1) % 100);
 }
 
 function hasOnlyKeys(input: Record<string, unknown>, allowedKeys: readonly string[]): boolean {

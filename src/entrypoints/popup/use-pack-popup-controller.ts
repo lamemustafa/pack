@@ -37,11 +37,19 @@ export function usePackPopupController() {
   // must clear only an error the context read itself produced. Clearing it
   // unconditionally wiped an unrelated download failure whenever the panel
   // regained focus.
-  const contextErrorPending = React.useRef(false);
-  const showActionError = React.useCallback((message: string) => {
-    setActionError(message);
-    setStatus(message);
-  }, []);
+  // Which kind of failure the displayed error belongs to. A boolean maintained
+  // only by the context path went stale: a later flow failure replaced the
+  // message without clearing the marker, so the next successful refresh cleared
+  // a flow error it did not own and hid a live diagnostic.
+  const actionErrorSource = React.useRef<"context" | "flow" | null>(null);
+  const showActionError = React.useCallback(
+    (message: string, source: "context" | "flow" = "flow") => {
+      actionErrorSource.current = source;
+      setActionError(message);
+      setStatus(message);
+    },
+    [],
+  );
   React.useEffect(() => {
     void Promise.all([
       sendPackMessage({ type: "PACK_GET_CONTEXT" }),
@@ -93,8 +101,8 @@ export function usePackPopupController() {
         // refreshed context, so leaving a context error would keep a recovered
         // surface showing a failure that no longer applies — while clearing a
         // flow failure would hide one that still does.
-        if (contextErrorPending.current) {
-          contextErrorPending.current = false;
+        if (actionErrorSource.current === "context") {
+          actionErrorSource.current = null;
           setActionError(null);
         }
         setStatus(
@@ -104,11 +112,9 @@ export function usePackPopupController() {
         );
         return;
       }
-      contextErrorPending.current = true;
-      showActionError(response.ok ? "Unexpected Pack response." : response.error);
+      showActionError(response.ok ? "Unexpected Pack response." : response.error, "context");
     } catch {
-      contextErrorPending.current = true;
-      showActionError("Pack could not read the current GST Portal state. Try again.");
+      showActionError("Pack could not read the current GST Portal state. Try again.", "context");
     }
   }, [showActionError]);
 
@@ -142,6 +148,7 @@ export function usePackPopupController() {
   const applyFlowResponse = React.useCallback(
     (response: PackMessageResponse) => {
       if (response.ok && "flowStep" in response) {
+        actionErrorSource.current = null;
         setActionError(null);
         setStatus(response.flowStep.safeMessage);
         if ("flowSummary" in response && response.flowSummary) {
@@ -198,6 +205,7 @@ export function usePackPopupController() {
     await withBusy("acknowledge-interrupted-run", async () => {
       const response = await sendPackMessage({ type: "PACK_ACKNOWLEDGE_INTERRUPTED_RUN" });
       if (response.ok && "flowStep" in response) {
+        actionErrorSource.current = null;
         setActionError(null);
         setStatus(response.flowStep.safeMessage);
         setFiledReturnsFlowSummary(null);

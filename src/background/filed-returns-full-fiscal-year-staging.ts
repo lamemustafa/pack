@@ -13,12 +13,14 @@ import {
   completeFullFiscalYearLedger,
   hasCanonicalFullFiscalYearTargetPlan,
   reconcileFullFiscalYearLedgerTargets,
+  sameFiledReturnsScope,
 } from "./filed-returns-full-fiscal-year-ledger";
 import {
   persistLedger,
   persistLedgerAndSummary,
   shouldPersistReconciledLedger,
 } from "./filed-returns-full-fiscal-year-run-state";
+import { filedReturnsSummaryStatusMessage } from "../connectors/gst/filed-returns-summary-status";
 import {
   blockedFullFiscalYearStep,
   completeFullFiscalYearStep,
@@ -26,6 +28,7 @@ import {
 } from "./filed-returns-full-fiscal-year-summary";
 import { durableFullFiscalYearArtifactSignals } from "./filed-returns-full-fiscal-year-validation";
 import { discardFullFiscalYearFiledReturnsZip } from "./filed-returns-full-fiscal-year-zip";
+import { readCanonicalFiledReturnsFlowSummary } from "./filed-returns-session-summary";
 
 const FULL_YEAR_STAGED_SIGNAL_PREFIX = "full-fiscal-year-opfs-staged:";
 
@@ -158,6 +161,7 @@ export function markFullFiscalYearCleanupPending(
     | "no-artifacts-cleanup-pending"
     | "legacy-cleanup-pending" = "downloaded-cleanup-pending",
 ): FiledReturnsFullFiscalYearLedger {
+  const requestedAt = ledger.zipDownloadAttempt?.requestedAt;
   const cleanupPendingLedger: FiledReturnsFullFiscalYearLedger = {
     ...ledger,
     revision: (ledger.revision ?? 1) + 1,
@@ -166,7 +170,11 @@ export function markFullFiscalYearCleanupPending(
     zipPhase,
   };
   delete cleanupPendingLedger.currentTargetId;
-  delete cleanupPendingLedger.zipDownloadAttempt;
+  if (zipPhase === "downloaded-cleanup-pending" && requestedAt) {
+    cleanupPendingLedger.zipDownloadAttempt = { requestedAt };
+  } else {
+    delete cleanupPendingLedger.zipDownloadAttempt;
+  }
   return cleanupPendingLedger;
 }
 
@@ -280,7 +288,13 @@ export function markFullFiscalYearRestagingRequired(
 export async function finishFullFiscalYearCleanup(
   deps: FiledReturnsFlowRunnerDeps,
   cleanupPendingLedger: FiledReturnsFullFiscalYearLedger,
+  priorStep?: PortalFlowStepResult,
 ): Promise<PackMessageResponse> {
+  const summarySignals = await fullFiscalYearSummarySignalsForCleanup(
+    deps,
+    cleanupPendingLedger,
+    priorStep,
+  );
   const now = deps.now?.() ?? new Date();
   const plannedPeriods = getFiledReturnsFullFiscalYearPeriods(
     cleanupPendingLedger.scope.financialYear,
@@ -309,7 +323,11 @@ export async function finishFullFiscalYearCleanup(
 
   const clearSignals = await discardFullFiscalYearFiledReturnsZip(cleanupPendingLedger.ledgerId);
   if (!clearSignals.includes("full-fiscal-year-opfs-cleared")) {
-    const step = fullFiscalYearCleanupFailedStep(cleanupPendingLedger, clearSignals);
+    const step = fullFiscalYearCleanupFailedStep(
+      cleanupPendingLedger,
+      clearSignals,
+      summarySignals,
+    );
     await persistLedgerAndSummary(deps, cleanupPendingLedger, step);
     return {
       ok: true,
@@ -322,13 +340,81 @@ export async function finishFullFiscalYearCleanup(
     cleanupPendingLedger,
     deps.now?.() ?? new Date(),
   );
-  const step = fullFiscalYearCleanupCompletedStep(cleanupPendingLedger);
+  const step = fullFiscalYearCleanupCompletedStep(cleanupPendingLedger, summarySignals);
   await persistLedgerAndSummary(deps, completedLedger, step);
   return {
     ok: true,
     flowStep: step,
     flowSummary: toFullFiscalYearSummary(completedLedger, step),
   };
+}
+
+export async function restorePersistedFullFiscalYearSummaryOutcome(
+  deps: FiledReturnsFlowRunnerDeps,
+  ledger: FiledReturnsFullFiscalYearLedger,
+  step: PortalFlowStepResult,
+): Promise<PortalFlowStepResult> {
+  if (!["download-intent-persisted", "download-observing"].includes(ledger.zipPhase ?? "")) {
+    return step;
+  }
+  const requestedAt = ledger.zipDownloadAttempt?.requestedAt;
+  if (!requestedAt) return step;
+  const persistedSummary = await readCanonicalFiledReturnsFlowSummary(deps.storageKeys.completion);
+  const persistedSignals = persistedSummary?.flowStep.safeSignals ?? [];
+  const intentCheckpointMatches =
+    persistedSignals.includes("full-fiscal-year-zip-phase:download-intent-persisted") &&
+    persistedSummary?.updatedAt ===
+      (ledger.zipPhase === "download-intent-persisted" ? ledger.updatedAt : requestedAt);
+  const observingCheckpointMatches =
+    ledger.zipPhase === "download-observing" &&
+    persistedSignals.includes("full-fiscal-year-zip-reconciled-by-id") &&
+    persistedSummary?.updatedAt === ledger.updatedAt;
+  if (
+    !persistedSummary ||
+    !sameFiledReturnsScope(persistedSummary.scope, ledger.scope) ||
+    (!intentCheckpointMatches && !observingCheckpointMatches)
+  ) {
+    return step;
+  }
+  const summarySignals = persistedSummary.flowStep.safeSignals.filter(
+    isFullFiscalYearSummaryOutcomeSignal,
+  );
+  if (summarySignals.length === 0) return step;
+  return {
+    ...step,
+    safeSignals: Array.from(new Set([...step.safeSignals, ...summarySignals])),
+    safeMessage: [step.safeMessage, filedReturnsSummaryStatusMessage(summarySignals, "unconfirmed")]
+      .filter(Boolean)
+      .join(" "),
+  };
+}
+
+async function fullFiscalYearSummarySignalsForCleanup(
+  deps: FiledReturnsFlowRunnerDeps,
+  ledger: FiledReturnsFullFiscalYearLedger,
+  priorStep?: PortalFlowStepResult,
+): Promise<string[]> {
+  if (priorStep) {
+    return priorStep.safeSignals.filter(isFullFiscalYearSummaryOutcomeSignal);
+  }
+  const persistedSummary = await readCanonicalFiledReturnsFlowSummary(deps.storageKeys.completion);
+  if (!persistedSummary) return [];
+  if (!sameFiledReturnsScope(persistedSummary.scope, ledger.scope)) return [];
+  const persistedSignals = persistedSummary.flowStep.safeSignals;
+  const exactCleanupCheckpoint = persistedSummary.updatedAt === ledger.updatedAt;
+  const intentCheckpoint =
+    ledger.zipPhase === "downloaded-cleanup-pending" &&
+    persistedSignals.includes("full-fiscal-year-zip-phase:download-intent-persisted") &&
+    persistedSummary.updatedAt === ledger.zipDownloadAttempt?.requestedAt;
+  if (!exactCleanupCheckpoint && !intentCheckpoint) return [];
+  return persistedSignals.filter(isFullFiscalYearSummaryOutcomeSignal);
+}
+
+function isFullFiscalYearSummaryOutcomeSignal(signal: string): boolean {
+  return (
+    signal.startsWith("full-fiscal-year-summary-") ||
+    signal === "full-fiscal-year-workbook-not-applicable"
+  );
 }
 
 export function completedRunCleanupBlockedStep(
@@ -359,6 +445,7 @@ export function completedRunCleanupBlockedStep(
 function fullFiscalYearCleanupFailedStep(
   ledger: FiledReturnsFullFiscalYearLedger,
   clearSignals: readonly string[],
+  summarySignals: readonly string[] = [],
 ): PortalFlowStepResult {
   const zipDownloaded = ledger.zipPhase === "downloaded-cleanup-pending";
   const noArtifacts = ledger.zipPhase === "no-artifacts-cleanup-pending";
@@ -370,37 +457,52 @@ function fullFiscalYearCleanupFailedStep(
       "full-fiscal-year-local-cleanup-retry",
       ...(zipDownloaded ? ["full-fiscal-year-zip-downloaded"] : []),
       ...(noArtifacts ? ["full-fiscal-year-no-zip-artifacts"] : []),
+      ...summarySignals,
       "full-fiscal-year-zip-cleanup-pending",
       ...clearSignals,
       "full-fiscal-year-opfs-retained",
     ],
-    safeMessage: noArtifacts
-      ? "Pack found no fiscal-year artifacts to export but could not clear its retained local staging. Retry the local cleanup before starting another full-year run."
-      : zipDownloaded
-        ? "Pack downloaded the final fiscal-year ZIP but could not clear its retained local staging. Retry the local cleanup before starting another full-year run."
-        : "Pack could not clear retained local fiscal-year staging. Retry the local cleanup before starting another full-year run.",
+    safeMessage: [
+      noArtifacts
+        ? "Pack found no fiscal-year artifacts to export but could not clear its retained local staging. Retry the local cleanup before starting another full-year run."
+        : zipDownloaded
+          ? "Pack downloaded the final fiscal-year ZIP but could not clear its retained local staging. Retry the local cleanup before starting another full-year run."
+          : "Pack could not clear retained local fiscal-year staging. Retry the local cleanup before starting another full-year run.",
+      filedReturnsSummaryStatusMessage(summarySignals, zipDownloaded ? "confirmed" : "intent"),
+    ]
+      .filter(Boolean)
+      .join(" "),
   };
 }
 
 function fullFiscalYearCleanupCompletedStep(
   ledger: FiledReturnsFullFiscalYearLedger,
+  summarySignals: readonly string[] = [],
 ): PortalFlowStepResult {
   const zipDownloaded = ledger.zipPhase === "downloaded-cleanup-pending";
   const noArtifacts = ledger.zipPhase === "no-artifacts-cleanup-pending";
   const availabilitySignals = ledger.targets.flatMap((target) =>
     target.safeSignals.filter((signal) => signal.startsWith("filed-return-artifact-unavailable:")),
   );
+  const completeStep = completeFullFiscalYearStep(ledger);
   return {
-    ...completeFullFiscalYearStep(ledger),
+    ...completeStep,
     safeSignals: Array.from(
       new Set([
         "full-fiscal-year-complete",
         ...(zipDownloaded ? ["full-fiscal-year-zip-downloaded"] : []),
         ...(noArtifacts ? ["full-fiscal-year-no-zip-artifacts"] : []),
+        ...summarySignals,
         "full-fiscal-year-opfs-cleared",
         ...availabilitySignals,
       ]),
     ),
+    safeMessage: [
+      completeStep.safeMessage,
+      filedReturnsSummaryStatusMessage(summarySignals, zipDownloaded ? "confirmed" : "intent"),
+    ]
+      .filter(Boolean)
+      .join(" "),
   };
 }
 
