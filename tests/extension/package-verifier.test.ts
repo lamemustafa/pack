@@ -588,6 +588,40 @@ describe("packaged page reference parsing", () => {
     expect(result.status).toBe(0);
   });
 
+  it("recognises the --!> comment close", async () => {
+    // Chrome accepts `--!>`. Matching only `-->` blanked the rest of the
+    // document, so every later reference vanished and a missing bundle passed.
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      page(`<!-- disabled --!><script type="module" src="/assets/absent-after-bang.js"></script>`),
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("assets/absent-after-bang.js");
+  });
+
+  it("does not treat a custom element as a raw-text element", async () => {
+    // `\\b` matches before a hyphen, so `<script-widget>` was misread as raw text
+    // and its body -- including a real nested reference -- was blanked.
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      page(
+        `<script-widget><script type="module" src="/assets/absent-in-custom.js"></script></script-widget>`,
+      ),
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("assets/absent-in-custom.js");
+  });
+
   it("ignores tag-shaped example text inside an RCDATA body", async () => {
     // A browser loads nothing from a textarea or title body, so tag-shaped text
     // in one is example copy, not a reference. Recognising only script and style

@@ -385,8 +385,14 @@ function withoutInertMarkup(html) {
     index = next;
 
     if (html.startsWith("<!--", index)) {
-      const close = html.indexOf("-->", index + 4);
-      const end = close === -1 ? html.length : close + 3;
+      // Chrome closes a comment on `--!>` as well as `-->`. Recognising only the
+      // latter meant a page using the other form had the REST OF THE DOCUMENT
+      // blanked, so every later reference vanished and a package missing those
+      // bundles verified clean.
+      const plain = html.indexOf("-->", index + 4);
+      const bang = html.indexOf("--!>", index + 4);
+      const close = plain === -1 ? bang : bang === -1 ? plain : Math.min(plain, bang);
+      const end = close === -1 ? html.length : close + (close === bang ? 4 : 3);
       output += blank(end - index);
       index = end;
       continue;
@@ -395,7 +401,13 @@ function withoutInertMarkup(html) {
     // script and style are raw text; textarea and title are RCDATA. A browser
     // loads nothing from either, so tag-shaped example text inside them is not a
     // reference and must not fail an otherwise valid package.
-    const rawText = /^<(script|style|textarea|title)\b/i.exec(html.slice(index, index + 10));
+    // An HTML delimiter must follow the name, not a word boundary: `\b` matches
+    // before a hyphen, so `<script-widget>` was misread as a raw-text element
+    // and its body -- including any real nested reference -- was blanked. This is
+    // the same delimiter test `htmlTags` already uses.
+    const rawText = /^<(script|style|textarea|title)(?=[\s/>])/i.exec(
+      html.slice(index, index + 11),
+    );
     const attributesEnd = tagEnd(html, index + 1);
     if (attributesEnd === -1) break;
 
