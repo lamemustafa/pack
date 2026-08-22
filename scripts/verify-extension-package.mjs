@@ -392,7 +392,10 @@ function withoutInertMarkup(html) {
       continue;
     }
 
-    const rawText = /^<(script|style)\b/i.exec(html.slice(index, index + 8));
+    // script and style are raw text; textarea and title are RCDATA. A browser
+    // loads nothing from either, so tag-shaped example text inside them is not a
+    // reference and must not fail an otherwise valid package.
+    const rawText = /^<(script|style|textarea|title)\b/i.exec(html.slice(index, index + 10));
     const attributesEnd = tagEnd(html, index + 1);
     if (attributesEnd === -1) break;
 

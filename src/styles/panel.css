@@ -120,7 +120,7 @@ html[data-pack-surface="panel"] body {
 
 .panel-choice-detail {
   color: var(--pack-ink-muted);
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   white-space: nowrap;
 }
 
@@ -155,6 +155,6 @@ html[data-pack-surface="panel"] body {
 .panel-fine {
   margin: 8px 0 0;
   color: var(--pack-ink-muted);
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   text-align: center;
 }

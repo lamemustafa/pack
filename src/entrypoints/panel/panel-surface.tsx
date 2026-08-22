@@ -193,7 +193,14 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
         {hasRecoveryActions(summary ?? null) ? (
           <RecoveryActions
             busy={pack.effectiveBusy}
-            portalReady={portalReady}
+            /*
+             * Signed-in, not merely supported. The auth landing page is
+             * `supported: true` -- that is how Pack offers to act on it -- so
+             * gating on `portalReady` enabled portal-dependent recovery on a
+             * signed-out tab. The background then discards saved recovery state
+             * for a run it cannot continue, which is not recoverable afterwards.
+             */
+            portalReady={portalSignedIn}
             summary={summary}
             onStartFresh={() => void pack.startFreshFiledReturnsFlow()}
             onAcknowledgeInterruptedRun={() => void pack.acknowledgeInterruptedRun()}

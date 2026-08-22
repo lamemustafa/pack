@@ -588,6 +588,25 @@ describe("packaged page reference parsing", () => {
     expect(result.status).toBe(0);
   });
 
+  it("ignores tag-shaped example text inside an RCDATA body", async () => {
+    // A browser loads nothing from a textarea or title body, so tag-shaped text
+    // in one is example copy, not a reference. Recognising only script and style
+    // left those rejecting an otherwise valid package.
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      page(`<textarea>&lt;script src="/assets/example.js"&gt;</textarea>`).replace(
+        '&lt;script src="/assets/example.js"&gt;',
+        `<script src="/assets/example-not-packaged.js"></script>`,
+      ),
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(0);
+  });
+
   it("does not treat comment delimiters inside quoted attributes as a comment", async () => {
     // Stripping comments with a global regex blanked everything between a
     // `data-open="<!--"` and a `data-close="-->"`, including a real script tag
