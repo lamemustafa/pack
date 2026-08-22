@@ -124,6 +124,48 @@ function getInlineStatusCopy(
     const filenameOverridden =
       summary?.flowStep.safeSignals.includes("download-filename-overridden") ||
       summary?.flowStep.safeSignals.includes("zip-download-filename-overridden");
+    /**
+     * A full-year run carries two separate facts, and `status: "complete"` only
+     * knows the first: every period was fetched. `canCompleteFullFiscalYearLedger`
+     * requires each target to be positive and says nothing about the final ZIP,
+     * so this branch used to announce "12 periods saved as one ZIP" while the
+     * delivery line three rows below read "browser download not confirmed" --
+     * both on screen, from one run. The ZIP claim was the false one: it asserted
+     * a delivery from a state that cannot observe it, and would have said the
+     * same had the ZIP never arrived.
+     */
+    const zipConfirmed = summary?.flowStep.safeSignals.includes("full-fiscal-year-zip-downloaded");
+    // A run where every period was positively not-filed produces no ZIP BY
+    // DESIGN and says so through its own signal. Treating that absence as an
+    // unconfirmed download would send the user hunting in Downloads for a file
+    // Pack deliberately never created -- the same contradiction this branch
+    // exists to remove, pointed the other way.
+    const noZipExpected = summary?.flowStep.safeSignals.includes(
+      "full-fiscal-year-no-zip-artifacts",
+    );
+    // Three distinct full-year outcomes, stated separately. Patching one of them
+    // into an exclusion on another is what produced two rounds of contradiction
+    // here: excluding the no-artifacts case from the warning dropped it into the
+    // success body, which claimed a ZIP that was deliberately never created.
+    if (isFullYear && !filenameOverridden && noZipExpected) {
+      return {
+        body: `${periods} periods processed. No ZIP was created because no eligible files were found.`,
+        icon: "–",
+        title: "No ZIP created",
+        tone: "neutral",
+      };
+    }
+    if (isFullYear && !filenameOverridden && !zipConfirmed) {
+      return {
+        // `completedPeriods` counts downloaded AND not-filed targets, so these
+        // are periods Pack finished with, not files it fetched. "Fetched" would
+        // claim a download for every period the portal reported nothing for.
+        body: `${periods} periods processed. Pack has not confirmed the browser saved the ZIP -- check browser Downloads.`,
+        icon: "!",
+        title: "Periods processed, ZIP unconfirmed",
+        tone: "warning",
+      };
+    }
     return {
       body: filenameOverridden
         ? (summary?.flowStep.safeMessage ??

@@ -63,6 +63,7 @@ export function buildFiledReturnsFullYearWorkbook(
       worksheets: [
         consolidatedSheet(
           financialYear,
+          plan,
           summary.dataRows,
           summary.contextRows,
           options.generatedAt,
@@ -75,6 +76,7 @@ export function buildFiledReturnsFullYearWorkbook(
 
 function consolidatedSheet(
   financialYear: string,
+  plan: readonly FiledReturnsSummaryPlanEntry[],
   dataRows: readonly FiledReturnsSummaryDataRow[],
   contextRows: readonly FiledReturnsSummaryContextRow[],
   generatedAt: Date,
@@ -101,6 +103,7 @@ function consolidatedSheet(
     ],
   ];
   const values = statementValues(dataRows, renderedFilingPeriods);
+  const unreadablePeriods = unreadableStatementPeriods(plan, dataRows);
   const lineItems = filedReturnsStatementLineItems(renderedFilingPeriods);
   const sectionOrders = [...new Set(lineItems.map((item) => item.sectionOrder))];
   for (const sectionOrder of sectionOrders) {
@@ -122,12 +125,14 @@ function consolidatedSheet(
       const total =
         presentValues.length === 0
           ? undefined
-          : hasNonNumericMonth
-            ? NON_NUMERIC_TOTAL_TEXT
-            : exactTotalSpreadsheetValue(
-                presentValues.map((value) => value.sourceText),
-                presentValues.some((value) => value.number === null),
-              );
+          : unreadablePeriods.length > 0
+            ? undefined
+            : hasNonNumericMonth
+              ? NON_NUMERIC_TOTAL_TEXT
+              : exactTotalSpreadsheetValue(
+                  presentValues.map((value) => value.sourceText),
+                  presentValues.some((value) => value.number === null),
+                );
       rows.push([
         { value: item.shortLabel },
         ...monthValues.map((value) =>
@@ -157,7 +162,7 @@ function consolidatedSheet(
     [
       { value: "Coverage", style: "bold" },
       {
-        value: `Tables ${coverage.includedTables.join(" and ")}. Not included: ${coverage.excludedTables.join(", ")}.`,
+        value: `Tables ${coverage.includedTables.join(" and ")}. Not included: ${coverage.excludedTables.join(", ")}.${unreadablePeriods.length === 0 ? "" : ` Unreadable periods: ${unreadablePeriods.join(", ")}.`}`,
       },
     ],
     ...(coverage.withheldCaptionTables
@@ -180,6 +185,39 @@ function consolidatedSheet(
     ],
     rows,
   };
+}
+
+function unreadableStatementPeriods(
+  plan: readonly FiledReturnsSummaryPlanEntry[],
+  dataRows: readonly FiledReturnsSummaryDataRow[],
+): FiledReturnsMonth[] {
+  return FILED_RETURNS_MONTHS.filter((period) =>
+    plan
+      .filter(
+        (entry) =>
+          entry.artifactType === "JSON" &&
+          entry.period === period &&
+          entry.returnType === "GSTR-3B",
+      )
+      .some(
+        (entry) =>
+          entry.outcomeCategory === "artifact-unavailable" ||
+          (entry.outcomeCategory === "staged" && stagedJsonPeriodIsUnreadable(period, dataRows)),
+      ),
+  );
+}
+
+function stagedJsonPeriodIsUnreadable(
+  period: FiledReturnsMonth,
+  dataRows: readonly FiledReturnsSummaryDataRow[],
+): boolean {
+  const periodRows = dataRows.filter(
+    (row) => row.artifact === "JSON" && row.period === period && row.returnType === "GSTR-3B",
+  );
+  return (
+    periodRows.length === 0 ||
+    periodRows.some((row) => row.fieldPath === "pack:outcome" && row.outcome !== "parseable-json")
+  );
 }
 
 // Local components, not UTC. The footer presents an unqualified human-readable
