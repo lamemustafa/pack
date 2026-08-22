@@ -73,13 +73,13 @@ Download filed GST returns locally from your active GST Portal session.
 
 ComplyEaze Pack helps authorised users download their own filed GST returns using GST Portal pages already open in Chrome. The Store-supported beta scope is:
 
-• GSTR-3B: filed-return summary PDF, or the portal's own JSON
+• GSTR-3B: filed-return summary PDF
 • GSTR-1: summary PDF and, when the portal provides it, e-invoice details Excel
-• GSTR-2B: auto-drafted statement, as summary PDF or the portal's own JSON
+• GSTR-2B: auto-drafted statement, as summary PDF
 
 Files are saved by Chrome to the user's device. Pack does not require a Pack or ComplyEaze account. It does not ask for or store GST Portal credentials, OTPs, CAPTCHA responses, cookies, or session tokens, and it does not upload GST documents or return contents to ComplyEaze.
 
-Pack downloads one return period at a time.
+Store-supported use is a single return period at a time. The package contains further capability that this listing does not claim; anything not listed above is source-build only until its release evidence is recorded.
 
 Pack's content script runs only on the four declared GST Portal hosts. When a supported page loads, it reads page context locally so Pack can identify eligible workflows; artifact capture and downloads start only after an explicit user action. Pack keeps limited redacted recovery state locally so interrupted work does not retry blindly. Temporary artifact bytes may be staged in browser-local OPFS for explicit capture or ZIP operations. Pack normally removes those bytes after confirmed export or explicit discard; if local cleanup fails, it retains them with a cleanup-pending status until a later cleanup attempt succeeds.
 
