@@ -45,6 +45,12 @@ const CALENDAR_MONTHS = [
 export type FiledReturnsMonth = (typeof FILED_RETURNS_MONTHS)[number];
 export type FiledReturnsScopePeriod = FiledReturnsMonth | typeof FULL_FISCAL_YEAR_PERIOD;
 
+export function isFiledReturnsFinancialYear(input: unknown): input is string {
+  if (typeof input !== "string") return false;
+  const match = /^20(\d{2})-(\d{2})$/.exec(input);
+  return Boolean(match && Number(match[2]) === (Number(match[1]) + 1) % 100);
+}
+
 export interface FiledReturnsPeriodOption {
   value: FiledReturnsMonth;
   label: string;
@@ -53,6 +59,28 @@ export interface FiledReturnsPeriodOption {
 export interface FiledReturnsScopePeriodOption {
   value: FiledReturnsScopePeriod;
   label: string;
+}
+
+export interface FiledReturnsFilingPeriod {
+  financialYear: string;
+  period: FiledReturnsMonth;
+}
+
+export function compareFiledReturnsFilingPeriods(
+  left: FiledReturnsFilingPeriod,
+  right: FiledReturnsFilingPeriod,
+): number {
+  const leftCalendar = getFiledReturnsPeriodCalendarMonth(
+    parseFinancialYearStartYearOrThrow(left.financialYear),
+    left.period,
+  );
+  const rightCalendar = getFiledReturnsPeriodCalendarMonth(
+    parseFinancialYearStartYearOrThrow(right.financialYear),
+    right.period,
+  );
+  return (
+    leftCalendar.year - rightCalendar.year || leftCalendar.monthIndex - rightCalendar.monthIndex
+  );
 }
 
 export const DEFAULT_FILED_RETURNS_DOWNLOAD_SCOPE: FiledReturnsDownloadScope = {
@@ -247,6 +275,12 @@ function parseFinancialYearStartYear(financialYear: string): number | null {
   const match = /^(20\d{2})-\d{2}$/.exec(financialYear);
   if (!match?.[1]) return null;
   return Number(match[1]);
+}
+
+function parseFinancialYearStartYearOrThrow(financialYear: string): number {
+  const startYear = parseFinancialYearStartYear(financialYear);
+  if (startYear === null) throw new TypeError("Invalid filed-return financial year.");
+  return startYear;
 }
 
 function getPreviousCompletedCalendarMonth(asOf: Date): { year: number; monthIndex: number } {

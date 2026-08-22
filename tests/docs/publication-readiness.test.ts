@@ -132,13 +132,20 @@ describe("publication readiness recovery matrix", () => {
       readFile(path.join(rootDir, "docs", "chrome-web-store", "listing.md"), "utf8"),
       readFile(path.join(rootDir, "docs", "chrome-web-store", "dashboard-closeout.md"), "utf8"),
     ]);
+    // The closeout must track whichever package the dashboard work is ABOUT.
+    // While one is in review that is the submitted package, and once nothing is
+    // pending it is the published one -- so a submitted entry, when present,
+    // wins. Keying only on the published version let a new submission sit
+    // unvalidated while the assertions passed against the older live build.
     const submittedVersion = listing.match(/^- Submitted package: `(v\d+\.\d+\.\d+)`/m)?.[1];
+    const publishedVersion = listing.match(/^- Published package: `(v\d+\.\d+\.\d+)`/m)?.[1];
+    const canonicalVersion = submittedVersion ?? publishedVersion;
 
-    expect(submittedVersion).toBeTruthy();
-    const expectedVersion = submittedVersion?.slice(1);
+    expect(canonicalVersion, "listing.md must name a submitted or published package").toBeTruthy();
+    const expectedVersion = canonicalVersion?.slice(1);
     expect(
       readiness.includes(`expected_version=${expectedVersion}`),
-      "publication readiness must use the canonical submitted version",
+      "publication readiness must use the canonical package version",
     ).toBe(true);
     expect(
       [...dashboardCloseout.matchAll(/^expected_version=(\d+\.\d+\.\d+)$/gm)].map(

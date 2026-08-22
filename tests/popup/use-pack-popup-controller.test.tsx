@@ -103,11 +103,10 @@ describe("popup background failure presentation", () => {
   });
 
   it("keeps a flow failure that replaced an earlier context failure", async () => {
-    // The reported sequence, which the test above does not reach: a context
-    // refresh fails FIRST and marks the error as its own, then a flow action
-    // fails and replaces the message. A boolean the context path alone
-    // maintained stayed set, so the next successful refresh cleared a flow
-    // error it did not own and hid a live diagnostic.
+    // A context refresh fails FIRST and marks the error as its own, then a flow
+    // action fails and replaces the message. A boolean the context path alone
+    // maintained stayed set, so the next successful refresh cleared a flow error
+    // it did not own and hid a live diagnostic.
     let contextFails = true;
     mocks.sendMessage.mockImplementation((message: PackMessage) => {
       if (message.type === "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW") {

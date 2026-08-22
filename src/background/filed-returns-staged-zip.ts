@@ -5,6 +5,12 @@ import type {
 } from "../connectors/gst/filed-returns-contracts";
 import type { FiledReturnsConcreteArtifactType } from "../connectors/gst/filed-returns-artifacts";
 import type { PackOffscreenFiledReturnZipExpectedEntry } from "../connectors/gst/offscreen-blob-url";
+import type { FiledReturnsSummaryPlanEntry } from "../connectors/gst/filed-returns-summary-sheet";
+import {
+  filedReturnsSummaryOutcome,
+  filedReturnsSummaryStatusMessage,
+  type FiledReturnsSummaryStatus,
+} from "../connectors/gst/filed-returns-summary-status";
 import {
   clearAllOffscreenFiledReturnLedgers,
   closeOffscreenBlobDocument,
@@ -50,6 +56,7 @@ export async function exportStagedFiledReturnsZip({
   zipFilename,
   expectedZipEntries,
   expectedZipEntryCount,
+  summaryPlan,
   onBeforeDownloadStart,
   onClearStaging,
   onDownloadStarted,
@@ -66,7 +73,12 @@ export async function exportStagedFiledReturnsZip({
   zipFilename: string;
   expectedZipEntries?: readonly PackOffscreenFiledReturnZipExpectedEntry[];
   expectedZipEntryCount?: number;
-  onBeforeDownloadStart?: (requestedAt: Date, extensionBlobUrlFingerprint: string) => Promise<void>;
+  summaryPlan?: readonly FiledReturnsSummaryPlanEntry[];
+  onBeforeDownloadStart?: (
+    requestedAt: Date,
+    extensionBlobUrlFingerprint: string,
+    summaryOutcome: FiledReturnsSummaryStatus,
+  ) => Promise<void>;
   onClearStaging?: (
     outcome: "downloaded" | "not-downloaded",
   ) => Promise<StagedFiledReturnsZipClearResult>;
@@ -90,10 +102,13 @@ export async function exportStagedFiledReturnsZip({
       safeMessage: zipFailedMessage,
     };
   }
+  const generatedAt = new Date();
   const zip = await createOffscreenFiledReturnZipUrl(ledgerId, {
     returnType: scope.returnType,
     entryCount: expectedZipEntryCount,
     entries: expectedZipEntries,
+    generatedAt,
+    ...(summaryPlan ? { summaryPlan } : {}),
   });
   if (zip.status !== "created") {
     const stagingClear = onClearStaging ? await onClearStaging("not-downloaded") : null;
@@ -115,7 +130,9 @@ export async function exportStagedFiledReturnsZip({
       safeMessage:
         stagingClear?.opfsCleared && !stagingClear.cleanupCheckpointVerified
           ? (stagingCleanupCheckpointFailedMessage ?? zipFailedMessage)
-          : zipFailedMessage,
+          : zip.errorCategory === "offscreen-response-invalid" && summaryPlan
+            ? "Pack rejected the fiscal-year ZIP because its local summary receipt could not be verified."
+            : zipFailedMessage,
       ...(clearSignalPrefix === "full-fiscal-year"
         ? {
             userAction: {
@@ -128,17 +145,24 @@ export async function exportStagedFiledReturnsZip({
     };
   }
 
-  if (typeof expectedZipEntryCount === "number" && zip.zipEntryCount !== expectedZipEntryCount) {
+  const summaryOutcome = filedReturnsSummaryOutcome(Boolean(summaryPlan), zip.summary);
+  const artifactEntryCount = zip.artifactEntryCount;
+  const completeStepWithSummary = {
+    ...completeStep,
+    safeSignals: [...completeStep.safeSignals, ...summaryOutcome.safeSignals],
+  };
+
+  if (typeof expectedZipEntryCount === "number" && artifactEntryCount !== expectedZipEntryCount) {
     await revokeOffscreenBlobUrl(zip.blobUrl);
     await closeOffscreenBlobDocument();
     return {
-      ...completeStep,
+      ...completeStepWithSummary,
       state: "blocked",
       safeSignals: [
-        ...completeStep.safeSignals,
+        ...completeStepWithSummary.safeSignals,
         `${clearSignalPrefix}-zip-entry-count-mismatch`,
         `${clearSignalPrefix}-zip-expected-entry-count:${expectedZipEntryCount}`,
-        `${clearSignalPrefix}-zip-actual-entry-count:${zip.zipEntryCount}`,
+        `${clearSignalPrefix}-zip-actual-entry-count:${artifactEntryCount}`,
         retainedStagedLedgerSignal(clearSignalPrefix),
       ],
       safeMessage:
@@ -161,7 +185,7 @@ export async function exportStagedFiledReturnsZip({
   try {
     const fingerprint = await extensionBlobUrlFingerprint(zip.blobUrl);
     if (!fingerprint) throw new Error("extension Blob URL fingerprint unavailable");
-    await onBeforeDownloadStart?.(armedAt, fingerprint);
+    await onBeforeDownloadStart?.(armedAt, fingerprint, summaryOutcome);
   } catch {
     await revokeOffscreenBlobUrl(zip.blobUrl);
     const stagingClear = onClearStaging ? await onClearStaging("not-downloaded") : null;
@@ -170,10 +194,10 @@ export async function exportStagedFiledReturnsZip({
     ];
     await closeOffscreenBlobDocument();
     return {
-      ...completeStep,
+      ...completeStepWithSummary,
       state: "blocked",
       safeSignals: [
-        ...completeStep.safeSignals,
+        ...completeStepWithSummary.safeSignals,
         `${clearSignalPrefix}-zip-download-state-persist-failed`,
         ...stagedLedgerSignals,
       ],
@@ -196,10 +220,10 @@ export async function exportStagedFiledReturnsZip({
     ];
     await closeOffscreenBlobDocument();
     return {
-      ...completeStep,
+      ...completeStepWithSummary,
       state: "blocked",
       safeSignals: [
-        ...completeStep.safeSignals,
+        ...completeStepWithSummary.safeSignals,
         `${clearSignalPrefix}-zip-download-checkpoint-incomplete`,
         ...stagedLedgerSignals,
       ],
@@ -236,10 +260,10 @@ export async function exportStagedFiledReturnsZip({
     ];
     await closeOffscreenBlobDocument();
     return {
-      ...completeStep,
+      ...completeStepWithSummary,
       state: "blocked",
       safeSignals: [
-        ...completeStep.safeSignals,
+        ...completeStepWithSummary.safeSignals,
         `${clearSignalPrefix}-zip-download-start-rejected`,
         ...stagedLedgerSignals,
       ],
@@ -261,15 +285,17 @@ export async function exportStagedFiledReturnsZip({
     await revokeOffscreenBlobUrl(zip.blobUrl);
     await closeOffscreenBlobDocument();
     return {
-      ...completeStep,
+      ...completeStepWithSummary,
       state: "download-unconfirmed",
       safeSignals: [
-        ...completeStep.safeSignals,
+        ...completeStepWithSummary.safeSignals,
         `${clearSignalPrefix}-zip-download-id-invalid`,
         retainedStagedLedgerSignal(clearSignalPrefix),
       ],
-      safeMessage:
+      safeMessage: joinedSafeMessages(
         "Pack may have started the ZIP download but could not bind it to a valid browser download ID. Check browser Downloads before taking another action.",
+        filedReturnsSummaryStatusMessage(summaryOutcome.safeSignals, "unconfirmed"),
+      ),
       userAction: checkBrowserDownloadsAction(clearSignalPrefix),
     };
   }
@@ -283,15 +309,17 @@ export async function exportStagedFiledReturnsZip({
     await revokeOffscreenBlobUrl(zip.blobUrl);
     await closeOffscreenBlobDocument();
     return {
-      ...completeStep,
+      ...completeStepWithSummary,
       state: "download-unconfirmed",
       safeSignals: [
-        ...completeStep.safeSignals,
+        ...completeStepWithSummary.safeSignals,
         `${clearSignalPrefix}-zip-download-id-persist-failed`,
         retainedStagedLedgerSignal(clearSignalPrefix),
       ],
-      safeMessage:
+      safeMessage: joinedSafeMessages(
         "Pack may have started the ZIP download but could not save its browser download ID. Check browser Downloads before taking another action.",
+        filedReturnsSummaryStatusMessage(summaryOutcome.safeSignals, "unconfirmed"),
+      ),
       userAction: checkBrowserDownloadsAction(clearSignalPrefix),
     };
   }
@@ -309,16 +337,19 @@ export async function exportStagedFiledReturnsZip({
     filenameReservation.release();
     await closeOffscreenBlobDocument();
     return {
-      ...completeStep,
+      ...completeStepWithSummary,
       state: observed.state === "failed" ? "blocked" : "download-unconfirmed",
       safeSignals: [
-        ...completeStep.safeSignals,
+        ...completeStepWithSummary.safeSignals,
         `${clearSignalPrefix}-zip-download-started`,
         `${clearSignalPrefix}-zip-download-unconfirmed`,
         retainedStagedLedgerSignal(clearSignalPrefix),
         ...observed.safeSignals,
       ],
-      safeMessage: unconfirmedMessage,
+      safeMessage: joinedSafeMessages(
+        unconfirmedMessage,
+        filedReturnsSummaryStatusMessage(summaryOutcome.safeSignals, "unconfirmed"),
+      ),
       ...(observed.userAction ? { userAction: observed.userAction } : {}),
     };
   }
@@ -333,10 +364,10 @@ export async function exportStagedFiledReturnsZip({
     await closeOffscreenBlobDocument();
     if (!stagingClear?.opfsCleared) {
       return {
-        ...completeStep,
+        ...completeStepWithSummary,
         state: "blocked",
         safeSignals: [
-          ...completeStep.safeSignals,
+          ...completeStepWithSummary.safeSignals,
           "single-period-zip-download-started",
           "single-period-zip-downloaded",
           `single-period-zip-entry-count:${zip.zipEntryCount}`,
@@ -344,8 +375,10 @@ export async function exportStagedFiledReturnsZip({
           ...observed.safeSignals,
           ...filenameOutcome.safeSignals,
         ],
-        safeMessage:
+        safeMessage: joinedSafeMessages(
           "Pack downloaded the selected ZIP but could not clear its temporary local staging.",
+          filedReturnsSummaryStatusMessage(summaryOutcome.safeSignals, "confirmed"),
+        ),
         userAction: {
           type: "RETRY_PORTAL_GENERATION",
           message: "Retry the selected download after Pack can clear its temporary staging.",
@@ -355,10 +388,10 @@ export async function exportStagedFiledReturnsZip({
     }
     if (!stagingClear.cleanupCheckpointVerified) {
       return {
-        ...completeStep,
+        ...completeStepWithSummary,
         state: "blocked",
         safeSignals: [
-          ...completeStep.safeSignals,
+          ...completeStepWithSummary.safeSignals,
           "single-period-zip-download-started",
           "single-period-zip-downloaded",
           `single-period-zip-entry-count:${zip.zipEntryCount}`,
@@ -366,7 +399,10 @@ export async function exportStagedFiledReturnsZip({
           ...observed.safeSignals,
           ...filenameOutcome.safeSignals,
         ],
-        safeMessage: stagingCleanupCheckpointFailedMessage ?? zipFailedMessage,
+        safeMessage: joinedSafeMessages(
+          stagingCleanupCheckpointFailedMessage ?? zipFailedMessage,
+          filedReturnsSummaryStatusMessage(summaryOutcome.safeSignals, "confirmed"),
+        ),
         userAction: {
           type: "RETRY_PORTAL_GENERATION",
           message: "Retry so Pack can reconcile its selected-file recovery checkpoint.",
@@ -377,9 +413,9 @@ export async function exportStagedFiledReturnsZip({
   }
 
   return {
-    ...completeStep,
+    ...completeStepWithSummary,
     safeSignals: [
-      ...completeStep.safeSignals,
+      ...completeStepWithSummary.safeSignals,
       `${clearSignalPrefix}-zip-download-started`,
       `${clearSignalPrefix}-zip-downloaded`,
       `${clearSignalPrefix}-zip-entry-count:${zip.zipEntryCount}`,
@@ -387,10 +423,16 @@ export async function exportStagedFiledReturnsZip({
       ...observed.safeSignals,
       ...filenameOutcome.safeSignals,
     ],
-    safeMessage: filenameOutcome.safeMessage
-      ? `${safeMessage} ${filenameOutcome.safeMessage}`
-      : safeMessage,
+    safeMessage: joinedSafeMessages(
+      safeMessage,
+      filedReturnsSummaryStatusMessage(summaryOutcome.safeSignals, "confirmed"),
+      filenameOutcome.safeMessage,
+    ),
   };
+}
+
+function joinedSafeMessages(...messages: readonly (string | undefined)[]): string {
+  return messages.filter((message): message is string => Boolean(message)).join(" ");
 }
 
 async function completedZipFilenameOutcome(

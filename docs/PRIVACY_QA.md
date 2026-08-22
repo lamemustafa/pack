@@ -44,6 +44,86 @@ For each release candidate:
   recovery attempts until confirmed cleanup or a successful explicit discard.
   Artifact bytes must not be written to extension storage, IndexedDB, Cache
   Storage, diagnostics, logs, telemetry, support bundles, or ComplyEaze systems.
+- Confirm each GSTR-3B full-year ZIP assembly with eligible files attempts to add
+  `full-year-workbook.xlsx` and `full-year-summary.csv`, both derived locally
+  from staged portal JSON already in that run. GSTR-1 and GSTR-2B assemblies
+  must add the tidy CSV only, emit the fixed
+  `full-fiscal-year-workbook-not-applicable` outcome,
+  and never emit a GSTR-3B workbook. The standalone context CSV must be absent.
+  The data CSV must keep
+  the fixed tidy columns `period`, `return_type`, `artifact`, `outcome`,
+  `field_label`, `field_path`, `value_text`, and `value_number`; keep canonical
+  JSON Pointer paths. Confirm only the configured GSTR-3B summary arrays with
+  at most 64 elements may expand, using the first shared discriminator in the
+  ordered candidate list `ty`, `pos`, and only when every discriminator is
+  non-empty and unique. Expanded paths must use the discriminator value, omit
+  the discriminator field, and emit no count row. Empty arrays must emit one
+  count row with `array-count-empty`. Every other array, including every
+  non-empty GSTR-1 and GSTR-2B array, must emit one count row whose `outcome`
+  names why it was not expanded. Confirm the whole-document pre-scan retains
+  only paths selected by the canonical identity predicate and rejects a
+  forbidden credential/session path before retaining its value. Identity must
+  be classified before the canonical artifact-validation envelope is removed
+  for data flattening (`/data/r3b` for
+  GSTR-3B and `/data` for GSTR-1 and GSTR-2B), `field_path` is relative to that
+  envelope, and a missing or non-object envelope emits a
+  `json-envelope-missing` outcome row. Expand JSON
+  numbers without rounding into plain decimal `value_number` text; preserve strings
+  and identifiers as text except for the existing apostrophe guard on
+  formula-like text; and use fixed outcome rows where no parseable JSON exists.
+  Labels must come only from the return-type map with recorded provenance that
+  distinguishes two-period portal-PDF value cross-checks, portal-PDF row-text
+  transcriptions that do not claim a JSON value match, and the pre-existing
+  offline-utility mappings. For existing Table 4 path associations, the
+  row-text tier verifies only the caption and tax-component text; it does not
+  upgrade the path association to value-matched evidence. JSON vocabulary or
+  row order alone is not caption evidence. A future path mapping requires the
+  portal PDF row text plus independent evidence for its JSON path or
+  discriminator, or it must stay unmapped. The workbook must
+  contain exactly one sheet, `GSTR-3B Consolidated`. Its header must contain
+  the recognized GSTIN and legal name once plus the financial year above twelve
+  typed date columns. Every parseable GSTR-3B period must carry the same
+  non-empty string GSTIN and legal name; a missing or non-string required
+  identity must fail the derived summary, while optional recognized identity
+  may be absent or non-string in some periods but must remain consistent when
+  present as a string. When no period is parseable, both identity cells remain
+  blank. Those header rows, the
+  `Description` row and the first
+  column must remain frozen while scrolling. The statement body must retain
+  numeric figure cells and totals summed exactly from source decimal text, a
+  `Precision limit` marker for a present month that cannot be represented as a
+  spreadsheet numeric cell, an explanatory text total carrying the exact sum
+  when it fits in an Excel cell and a fixed precision-limit explanation
+  otherwise, blank cells for missing or
+  unparseable periods, only mapped Table 3.1 and Table 4 rows, the portal-dash
+  applicability set for Table 3.1 and all four Table 4 tax columns. After the
+  final spacer, the footer must contain `Source` and `Coverage` rows, plus a
+  `Caption evidence` row only when shared Table 4 captions are withheld for
+  mixed rendered periods. `Source` must name filed GSTR-3B returns from the GST portal and use the
+  existing generation clock as a human-readable date; `Coverage` must state
+  Tables 3.1 and 4 are included and Tables 3.1.1, 3.2, 5, 5.1 and 6.1 are not.
+  Column B must remain wide enough to show either footer value without relying
+  on text spill. The GSTR-9 disclaimer and format token must be absent. GSTIN and
+  legal name must appear nowhere else in the workbook and no recognized
+  taxpayer or filing identity may appear in the data CSV. Other recognized
+  taxpayer identity plus per-period ARN and ARN date may exist only in transient
+  summary context and must not be written to either generated file. The tidy
+  CSV must retain unmapped paths and outcomes. The seven format rules, sourced
+  GSTR-9 mapping and disclaimer must live under the producing Pack version in
+  the README, not in generated rule rows or a second sheet. The workbook and
+  CSV have no in-file format marker; a machine consumer of a separated CSV must
+  be given the producing Pack version because it cannot infer that version from
+  the CSV alone.
+  Both derived files must remain
+  output-only ZIP entries: their bytes
+  may be transient in extension-controlled memory before browser handoff and
+  persist in the user's downloaded ZIP, but never write separately to OPFS,
+  extension storage, diagnostics, logs, telemetry, support bundles, popup
+  content, or ComplyEaze systems. If summary or workbook generation fails,
+  identity is inconsistent, or the combined output exceeds its local size
+  limit, confirm the artifact ZIP still exports and the popup shows only a
+  fixed categorical reason that distinguishes workbook generation failure from
+  no parseable data.
 - Confirm the source-build `target-bound-portal-click-blob` path is enabled only
   for a single-period GSTR-3B PDF after the exact target action and one matching
   browser download candidate. It must remain disabled for GSTR-1, GSTR-2B,
