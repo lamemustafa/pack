@@ -133,6 +133,41 @@ describe("preset scope at click time", () => {
     vi.useRealTimers();
   });
 
+  it("treats a preset as stale when only the period count has moved", async () => {
+    // Crossing an ordinary month boundary inside one financial year leaves the
+    // preset objects identical and only the rendered count changes. Recomputing
+    // the count for both sides made them agree, so the staleness was invisible.
+    // Mount inside a financial year, then advance a month WITHOUT crossing it.
+    vi.setSystemTime(new Date("2026-05-10T09:00:00+05:30"));
+    const started: { financialYear: string }[] = [];
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(
+        <PanelSurface
+          pack={panelController({
+            startFiledReturnsFlow: (async (scope?: { financialYear: string }) => {
+              if (scope) started.push(scope);
+            }) as never,
+          })}
+        />,
+      );
+      await Promise.resolve();
+    });
+    const mounted = container.textContent ?? "";
+
+    vi.setSystemTime(new Date("2026-06-10T09:00:00+05:30"));
+    const button = Array.from(container.querySelectorAll("button")).find((candidate) =>
+      candidate.textContent?.includes("GSTR-3B"),
+    );
+    await act(async () => {
+      button?.dispatchEvent(realmEvent(dom.window, "click"));
+      await Promise.resolve();
+    });
+
+    expect(started).toEqual([]);
+    expect(container.textContent).not.toBe(mounted);
+  });
+
   it("re-renders instead of submitting a year the button is not showing", async () => {
     // A panel left as the active tab overnight receives neither focus nor
     // visibilitychange, so it can cross the boundary with April's basis on

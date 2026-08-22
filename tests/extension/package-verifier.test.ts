@@ -588,6 +588,27 @@ describe("packaged page reference parsing", () => {
     expect(result.status).toBe(0);
   });
 
+  it("still sees a real script after an inline one containing tag-shaped text", async () => {
+    // The first raw-text fix collected openers up front and mutated as it went,
+    // so a stale offset made the scan run past the real closing tag and blank
+    // the NEXT script's opening tag. A package missing that bundle then verified
+    // clean -- a hole in the gate opened by the fix for another hole in it.
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      page(
+        `<script>window.t = "<script>";</script>` +
+          `<script type="module" src="/assets/absent-after-inline.js"></script>`,
+      ),
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("assets/absent-after-inline.js");
+  });
+
   it("ignores tag-shaped text inside an inline script body", async () => {
     // A script body is raw text to an HTML parser, so a tag-shaped string in it
     // is a string. Scanning it as markup failed the build for an asset nothing

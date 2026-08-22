@@ -26,7 +26,7 @@ export type PackPanelController = ReturnType<typeof usePackPopupController>;
  */
 export function PanelSurface({ pack }: { pack: PackPanelController }) {
   const [view, setView] = React.useState<PanelView>("presets");
-  const [presets, refreshPresets] = usePanelPresets();
+  const { presets, refresh: refreshPresets, isStale: presetsAreStale } = usePanelPresets();
 
   const summary = pack.recoverySummary ?? pack.scopedFlowSummary;
   const presentation = getPopupPresentationState(
@@ -139,7 +139,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
                         // 2025-26 while the run downloaded 2026-27 -- a user
                         // getting something other than the target they clicked,
                         // which is worse than the staleness it was fixing.
-                        if (!isCurrentPresetScope(preset)) {
+                        if (presetsAreStale()) {
                           refreshPresets();
                           return;
                         }
@@ -255,20 +255,6 @@ function useReturnToPage(onReturn: () => void) {
 }
 
 /**
- * True when the rendered preset still matches what "now" produces.
- *
- * A panel left as the active tab overnight receives neither `focus` nor
- * `visibilitychange`, so it can cross the April-to-May boundary with April's
- * normalised financial year still on screen. Clicking then has two wrong
- * answers -- start the stale year, or start a year the button never showed --
- * so the click re-renders instead and the user confirms what they can see.
- */
-function isCurrentPresetScope(preset: PanelPreset): boolean {
-  const current = panelPresets().find((candidate) => candidate.id === preset.id);
-  return current !== undefined && presetsIdentity([current]) === presetsIdentity([preset]);
-}
-
-/**
  * Presets are normalised against "now". In April the new financial year has no
  * completed period, so `normaliseFiledReturnsScope` answers with the preceding
  * one -- and every string a preset shows is read back off that scope, so a
@@ -284,16 +270,33 @@ function isCurrentPresetScope(preset: PanelPreset): boolean {
  * but the one that crosses a boundary. Handing back a new array each time would
  * re-render the list for nothing.
  */
-function usePanelPresets(): [PanelPreset[], () => void] {
-  const [presets, setPresets] = React.useState(panelPresets);
+function usePanelPresets(): {
+  presets: PanelPreset[];
+  refresh: () => void;
+  isStale: () => boolean;
+} {
+  // The identity is SNAPSHOTTED when the presets are stored. Recomputing it for
+  // the stored presets defeats the check: `presetPeriodCount` reads the current
+  // date, so a panel mounted in June and read in July produced three for both
+  // sides and compared equal, while the button still showed two.
+  const [rendered, setRendered] = React.useState(renderedPresetsNow);
   const refresh = React.useCallback(() => {
-    setPresets((current) => {
-      const next = panelPresets();
-      return presetsIdentity(next) === presetsIdentity(current) ? current : next;
+    setRendered((current) => {
+      const next = renderedPresetsNow();
+      return next.identity === current.identity ? current : next;
     });
   }, []);
+  // Deliberately a plain closure over the CURRENT render's snapshot, not a ref:
+  // it is only called from a click handler, which is itself recreated each
+  // render, so there is no stale-closure risk and no ref read during render.
+  const isStale = () => presetsIdentity(panelPresets()) !== rendered.identity;
   useReturnToPage(refresh);
-  return [presets, refresh];
+  return { presets: rendered.presets, refresh, isStale };
+}
+
+function renderedPresetsNow(): { presets: PanelPreset[]; identity: string } {
+  const presets = panelPresets();
+  return { presets, identity: presetsIdentity(presets) };
 }
 
 // Compares whole presets rather than the fields believed to matter: a preset

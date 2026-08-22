@@ -369,27 +369,38 @@ function referencedAssetPaths(html) {
  */
 function withoutInertMarkup(html) {
   const blank = (length) => " ".repeat(length);
-  let output = html.replace(/<!--[\s\S]*?-->/g, (comment) => blank(comment.length));
+  const withoutComments = html.replace(/<!--[\s\S]*?-->/g, (comment) => blank(comment.length));
   // A script or style BODY is raw text to an HTML parser, so tag-shaped text
-  // inside it is a string, not markup. `window.t = "<script src='/x.js'>"` was
-  // read as a live reference and failed the build for an asset nothing loads.
+  // inside it is a string, not markup.
   //
-  // The opening tag is located with the same quote-aware scanner the attribute
-  // reader uses, not a regex: `[^>]*` ends the tag at a `>` inside a quoted
-  // value, which would blank the tag's own `src` along with the body.
-  for (const tagName of ["script", "style"]) {
-    const openers = new RegExp(`<${tagName}(?=[\\s/>])`, "gi");
-    for (const opener of [...output.matchAll(openers)]) {
-      const attributesEnd = tagEnd(output, opener.index + opener[0].length);
-      if (attributesEnd === -1) continue;
-      const bodyStart = attributesEnd + 1;
-      const closeIndex = output.toLowerCase().indexOf(`</${tagName}`, bodyStart);
-      if (closeIndex === -1) continue;
-      output =
-        output.slice(0, bodyStart) + blank(closeIndex - bodyStart) + output.slice(closeIndex);
-    }
+  // This walks FORWARD and never reuses an offset taken before an edit. The
+  // previous version collected every opener up front and then mutated as it
+  // went, so after blanking one body a stale opener pointed into blanked space;
+  // the scan ran past the real closing tag and blanked the NEXT script's opening
+  // tag too. An inline script containing tag-shaped text followed by a real
+  // external script therefore left no reference at all, and a package missing
+  // that bundle verified clean -- a hole in a release gate, opened by the fix
+  // for a different hole in the same gate.
+  const opener = /<(script|style)\b/gi;
+  let output = "";
+  let index = 0;
+  while (index < withoutComments.length) {
+    opener.lastIndex = index;
+    const match = opener.exec(withoutComments);
+    if (!match) break;
+    const attributesEnd = tagEnd(withoutComments, match.index + match[0].length);
+    if (attributesEnd === -1) break;
+    const bodyStart = attributesEnd + 1;
+    const closeIndex = withoutComments
+      .toLowerCase()
+      .indexOf(`</${match[1].toLowerCase()}`, bodyStart);
+    if (closeIndex === -1) break;
+    output += withoutComments.slice(index, bodyStart) + blank(closeIndex - bodyStart);
+    // Resume AT the closing tag, so tag-shaped text inside the body just blanked
+    // is never seen as an opener.
+    index = closeIndex;
   }
-  return output;
+  return output + withoutComments.slice(index);
 }
 
 /** Yields each `<tagName ...>` open tag's attributes, lowercased and unquoted. */
