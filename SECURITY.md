@@ -5,13 +5,13 @@ privately; do not open a public issue for security findings.
 
 ## Supported Versions
 
-| Version                        | Supported                                 |
-| ------------------------------ | ----------------------------------------- |
-| Current source alpha (`0.3.x`) | Security reports and best-effort fixes    |
-| Chrome Web Store release       | Not applicable; none published yet        |
-| Previous release               | Not applicable until first public release |
-| Development/nightly builds     | No production support                     |
-| Third-party forks              | Not supported by ComplyEaze               |
+| Version                    | Supported                                 |
+| -------------------------- | ----------------------------------------- |
+| Current release (`0.5.x`)  | Security reports and best-effort fixes    |
+| Chrome Web Store release   | Published beta; reports and fixes         |
+| Previous releases          | Not supported; upgrade to the current one |
+| Development/nightly builds | No production support                     |
+| Third-party forks          | Not supported by ComplyEaze               |
 
 ## Reporting A Vulnerability
 

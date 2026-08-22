@@ -57,16 +57,23 @@ function trackedTextFiles(): string[] {
     .filter((entry) => entry !== "" && TEXT_FILE.test(entry));
 }
 
-// Files that make a LIVE public claim, as opposed to recording history. The
-// readiness record and the live-run spike are excluded on purpose: they must be
-// able to say what was previously claimed.
-const LIVE_PUBLIC_COPY = [
-  "README.md",
-  "package.json",
-  "docs/chrome-web-store/listing.md",
-  "src/extension/manifest-policy.ts",
-  "docs/chrome-web-store/assets/marquee-promo-1400x560.svg",
-];
+// Public documents are found by rule, not listed. The previous version named
+// five files, and the file it did not name -- SECURITY.md -- still told users the
+// current source was a 0.3.x alpha with no Store release, months after v0.5.0
+// published. Inverting the scan immediately surfaced two more the review had not
+// named either: the Chrome reviewer instructions, and a PR-template checkbox that
+// made every contributor affirm full-year was source-build alpha.
+const PUBLIC_DOCUMENT =
+  /^([A-Z][A-Z_]*\.md|docs\/.*\.md|\.github\/.*\.md|package\.json|src\/extension\/manifest-policy\.ts|docs\/chrome-web-store\/assets\/.*\.svg)$/;
+
+// Records that must be able to state what was previously claimed. Each is a hole
+// in the scan, so each needs a reason -- and the reason must be that the file is
+// historical, never that fixing it is inconvenient.
+const HISTORICAL_RECORDS = new Map([
+  ["CHANGELOG.md", "records what each past release claimed at the time"],
+  ["docs/LIVE_FILED_RETURNS_SPIKE.md", "a dated capture of one run, not a live claim"],
+  ["tests/docs/public-scope-copy.test.ts", "names the retired terms in order to detect them"],
+]);
 
 // Superseded vocabulary. Each entry was live in one of these files during the
 // correction and was found by review rather than by us.
@@ -126,7 +133,9 @@ describe("public scope copy", () => {
 
   it("carries no superseded claim in live public copy", async () => {
     const offences: string[] = [];
-    for (const relativePath of LIVE_PUBLIC_COPY) {
+    for (const relativePath of trackedTextFiles()) {
+      if (!PUBLIC_DOCUMENT.test(relativePath)) continue;
+      if (HISTORICAL_RECORDS.has(relativePath)) continue;
       const contents = await read(relativePath);
       for (const line of contents.split("\n")) {
         for (const { pattern, why } of RETIRED_CLAIMS) {
@@ -215,5 +224,22 @@ describe("public scope copy", () => {
           "claiming it.",
       ).toEqual([]);
     }
+  });
+
+  // SECURITY.md's supported-version token is a restatement of package.json, and
+  // it had drifted two minor versions -- it named 0.3.x while 0.5.1 shipped, so
+  // the file telling users which version receives security fixes named a version
+  // that no longer exists.
+  it("keeps the security policy's supported version bound to the package", async () => {
+    const version = JSON.parse(await read("package.json")).version as string;
+    const [major, minor] = version.split(".");
+    const security = await read("SECURITY.md");
+    const declared = [...security.matchAll(/`(\d+)\.(\d+)\.x`/g)].map((m) => `${m[1]}.${m[2]}`);
+
+    expect(declared.length, "SECURITY.md declares no supported version series").toBeGreaterThan(0);
+    expect(
+      declared.filter((series) => series !== `${major}.${minor}`),
+      `SECURITY.md names a version series the package is not on (package.json is ${version}).`,
+    ).toEqual([]);
   });
 });

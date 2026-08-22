@@ -51,7 +51,7 @@ document contents to ComplyEaze. The live filed-return flow requires the user to
 open and authenticate to GST Portal directly; Pack does not ask reviewers or
 users to share GST credentials with ComplyEaze. Live GST downloads currently do
 not generate a Pack manifest, exception CSV, or index file; those artifacts are
-limited to local demo output in this alpha.
+limited to local demo output in this release.
 
 The download-prompt probes use synthetic text only. They do not read GST Portal
 pages, credentials, cookies, session material, or GST artifacts.

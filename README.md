@@ -64,13 +64,13 @@ artifact, and recovery combinations. It is not a claim that every GST Portal
 period or format has authorised live evidence; those broader claims remain
 gated by the recorded publication evidence.
 
-Full fiscal year download is available in source builds as a local
-per-period ledger. It expands the selected financial year into eligible
+Full fiscal year download ships in the published package -- there is one binary --
+as a local per-period ledger. It expands the selected financial year into eligible
 GSTR-3B, GSTR-1, or GSTR-2B periods and runs them one at a time through the
 single-period path. GSTR-2B full-year support uses the signed-in tab's
 portal-loaded source data when available and exports the selected summary
-PDF/details Excel files through Pack's local ZIP path. Full-year support remains
-outside store-facing claims until exact-ZIP clean-profile evidence,
+PDF/details Excel files through Pack's local ZIP path. It is not Store-advertised,
+and remains outside store-facing claims until exact-ZIP clean-profile evidence,
 restart/resume evidence, and privacy-review evidence are recorded for the
 release.
 
