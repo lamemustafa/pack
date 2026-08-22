@@ -46,6 +46,14 @@ interface ArtifactCapability {
    * "GSTR-1 E-invoice details (Excel)" would assert that it is.
    */
   readonly standsAlone?: true;
+  /**
+   * Whether public Store copy advertises this artifact for this return.
+   *
+   * Return-level `storeAdvertised` is too coarse: every return is advertised, yet
+   * GSTR-3B portal JSON and GSTR-2B Excel ship without their format evidence
+   * recorded. A check that compares only return names passes copy claiming them.
+   */
+  readonly storeAdvertised?: true;
 }
 
 interface ReturnTypeCapability {
@@ -120,6 +128,7 @@ export const FILED_RETURNS_CAPABILITIES: Readonly<
         description: "Filed copy",
         sentenceNoun: "PDF",
         fullYearNoun: "PDFs",
+        storeAdvertised: true,
       },
       JSON: PORTAL_DATA,
     },
@@ -140,6 +149,7 @@ export const FILED_RETURNS_CAPABILITIES: Readonly<
         description: "Summary copy",
         sentenceNoun: "PDF",
         fullYearNoun: "PDFs",
+        storeAdvertised: true,
       },
       EXCEL: {
         label: "E-invoice details (Excel)",
@@ -147,6 +157,7 @@ export const FILED_RETURNS_CAPABILITIES: Readonly<
         sentenceNoun: "E-invoice details (Excel)",
         fullYearNoun: "E-invoice details (Excel) files",
         standsAlone: true,
+        storeAdvertised: true,
       },
     },
     bundleLabel: "All formats",
@@ -169,6 +180,7 @@ export const FILED_RETURNS_CAPABILITIES: Readonly<
         description: "Summary file",
         sentenceNoun: "PDF",
         fullYearNoun: "PDFs",
+        storeAdvertised: true,
       },
       EXCEL: {
         label: "Details (Excel)",

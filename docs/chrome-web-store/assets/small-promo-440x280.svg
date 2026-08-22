@@ -21,7 +21,8 @@
   <path d="M162 190l12 12 25-28" fill="none" stroke="#ffffff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" />
   <text x="228" y="94" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="30" font-weight="700">ComplyEaze</text>
   <text x="228" y="128" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="30" font-weight="700">Pack</text>
-  <text x="230" y="168" fill="#bfdbfe" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="600">GSTR-1 + GSTR-3B</text>
-  <text x="230" y="196" fill="#e2e8f0" font-family="Inter, Arial, sans-serif" font-size="14">Filed returns, saved locally</text>
-  <text x="230" y="218" fill="#e2e8f0" font-family="Inter, Arial, sans-serif" font-size="14">No Pack account needed</text>
+  <text x="230" y="164" fill="#bfdbfe" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="600">GSTR-1 + GSTR-3B</text>
+  <text x="230" y="186" fill="#bfdbfe" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="600">+ GSTR-2B</text>
+  <text x="230" y="214" fill="#e2e8f0" font-family="Inter, Arial, sans-serif" font-size="14">Saved locally</text>
+  <text x="230" y="236" fill="#e2e8f0" font-family="Inter, Arial, sans-serif" font-size="14">No Pack account needed</text>
 </svg>

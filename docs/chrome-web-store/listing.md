@@ -72,7 +72,7 @@ Description:
 ```text
 Download filed GST returns locally from your active GST Portal session.
 
-ComplyEaze Pack helps authorised users download their own filed GST returns using GST Portal pages already open in Chrome. The Store-supported beta scope is:
+ComplyEaze Pack helps authorised users download their own filed GST returns and auto-drafted GSTR-2B statements using GST Portal pages already open in Chrome. The Store-supported beta scope is:
 
 • GSTR-3B: filed-return summary PDF
 • GSTR-1: summary PDF and, when the portal provides it, e-invoice details Excel

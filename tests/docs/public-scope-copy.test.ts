@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { FiledReturnsReturnType } from "../../src/connectors/gst/filed-returns-return-types";
+import { FILED_RETURNS_CAPABILITIES } from "../../src/connectors/gst/filed-returns-capabilities";
 import {
   FILED_RETURNS_RETURN_TYPES,
   storeAdvertisedFiledReturnsReturnTypes,
@@ -208,6 +209,25 @@ describe("public scope copy", () => {
       passages.push({ label: `the Store field at listing.md:${line}`, text });
     }
 
+    // Scope is also claimed outside listing.md. The promo tile said
+    // "GSTR-1 + GSTR-3B" while every other surface named three returns, and the
+    // asset-hash test could not see it: that check proves the PNG matches its
+    // SVG, not that either says something true.
+    //
+    // Promo assets state scope; screenshots depict one run and legitimately name
+    // a single return, which is why this splits on the repo's existing
+    // promo/screenshot filename convention rather than scanning every asset.
+    passages.push({
+      label: "the package.json description",
+      text: JSON.parse(await read("package.json")).description as string,
+    });
+    for (const relativePath of trackedTextFiles()) {
+      if (!/^docs\/chrome-web-store\/assets\/.*promo.*\.svg$/.test(relativePath)) continue;
+      const svg = await read(relativePath);
+      const text = [...svg.matchAll(/>([^<>]*)</g)].map((match) => match[1]).join(" ");
+      passages.push({ label: `the promo asset ${relativePath}`, text });
+    }
+
     // Guards against the fence syntax changing and this test quietly checking
     // nothing: the summary, the dashboard description, and the single-purpose
     // field all enumerate scope today.
@@ -261,5 +281,44 @@ describe("public scope copy", () => {
       declared.filter((series) => series !== `${major}.${minor}`),
       `SECURITY.md names a version series the package is not on (package.json is ${version}).`,
     ).toEqual([]);
+  });
+
+  // Return-level advertising is too coarse. Every return is advertised, yet
+  // GSTR-3B portal JSON and GSTR-2B details Excel ship without their format
+  // evidence recorded -- so copy could regress to claiming them and every check
+  // above would still pass, because all of them compare return names only.
+  it("claims only the advertised artifact formats for each return", async () => {
+    const FORMAT_WORD: Record<string, RegExp> = {
+      PDF: /\bPDF\b/i,
+      EXCEL: /\bExcel\b/i,
+      JSON: /\bJSON\b|\bportal data\b/i,
+    };
+    const listing = await read("docs/chrome-web-store/listing.md");
+    const problems: string[] = [];
+
+    for (const returnType of storeAdvertisedFiledReturnsReturnTypes()) {
+      const bullet = listing
+        .split("\n")
+        .find((line) => line.trimStart().startsWith(`• ${returnType}:`));
+      expect(bullet, `listing.md has no scope bullet for ${returnType}`).toBeDefined();
+
+      const artifacts = FILED_RETURNS_CAPABILITIES[returnType].artifacts;
+      for (const [artifactType, capability] of Object.entries(artifacts)) {
+        const pattern = FORMAT_WORD[artifactType];
+        if (!pattern) continue;
+        const claimed = pattern.test(bullet ?? "");
+        if (capability.storeAdvertised && !claimed) {
+          problems.push(`${returnType} advertises ${artifactType}, but its bullet omits it`);
+        }
+        if (!capability.storeAdvertised && claimed) {
+          problems.push(
+            `${returnType}'s bullet claims ${artifactType}, which is not marked storeAdvertised ` +
+              "-- it ships, but its format evidence is not recorded",
+          );
+        }
+      }
+    }
+
+    expect(problems, problems.join("\n  ")).toEqual([]);
   });
 });
