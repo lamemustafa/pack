@@ -47,18 +47,44 @@ export function filedReturnsRequiredWorkbookIdentityPaths(
   );
 }
 
-export function filedReturnsSummaryIdentityLabel(path: string): string | null {
-  return filedReturnsSummaryIdentity(path)?.label ?? null;
+export function filedReturnsSummaryIdentityLabel(
+  returnType: FiledReturnsReturnType,
+  path: string,
+): string | null {
+  return filedReturnsSummaryIdentity(returnType, path)?.label ?? null;
 }
 
-export function filedReturnsSummaryIdentity(path: string): FiledReturnsSummaryIdentity | null {
+export function filedReturnsSummaryIdentity(
+  returnType: FiledReturnsReturnType,
+  path: string,
+): FiledReturnsSummaryIdentity | null {
   const segments = canonicalJsonPointerSegments(path);
-  const terminalIdentity = identityForCanonicalSegment(segments.at(-1) ?? "");
-  if (terminalIdentity) return terminalIdentity;
-  if (segments.at(-1) === SCALAR_WRAPPER_SEGMENT) {
-    return identityForCanonicalSegment(segments.at(-2) ?? "");
+  const unwrapped = segments.at(-1) === SCALAR_WRAPPER_SEGMENT ? segments.slice(0, -1) : segments;
+  const envelope = filedReturnsJsonDocumentContract(returnType).envelopePath;
+  const document = envelope.length === 1 ? envelope : envelope.slice(0, -1);
+  for (const container of [envelope, document]) {
+    if (!container.every((segment, index) => segment === unwrapped[index])) continue;
+    const identity = identityForCanonicalSegment(unwrapped.slice(container.length).join(""));
+    if (!identity) continue;
+    // GSTR-3B alone places its GSTIN in `data.r3b`; a same-named document-level
+    // decoy must not become the workbook owner. Its trade name can occur in
+    // either owner container, while the remaining owner labels are document-level.
+    if (
+      returnType === "GSTR-3B" &&
+      ((identity.label === "GSTIN" && !pathsMatch(container, envelope)) ||
+        (identity.label !== "GSTIN" &&
+          identity.label !== "Trade name" &&
+          !pathsMatch(container, document)))
+    ) {
+      continue;
+    }
+    return identity;
   }
   return null;
+}
+
+function pathsMatch(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((segment, index) => segment === right[index]);
 }
 
 /**

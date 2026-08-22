@@ -165,7 +165,8 @@ export function buildFiledReturnsSummarySheet(
         jsonText,
         {
           includePath: (path, scalarKind) =>
-            scalarKind === "string" && filedReturnsSummaryIdentity(path) !== null,
+            scalarKind === "string" &&
+            filedReturnsSummaryIdentity(planned.returnType, path) !== null,
           visitPath: rejectForbiddenFieldPath,
         },
         remainingFlattenedBytes,
@@ -200,7 +201,7 @@ export function buildFiledReturnsSummarySheet(
         !hasIdentityShapedPathSegment(leaf.path) &&
         !hasOwnIdentityPathSegment(leaf.path, ownIdentityValues) &&
         !(leaf.valueKind === "text" && ownIdentityValues.has(leaf.value.trim().toUpperCase())) &&
-        !(leaf.valueKind === "text" && isCredentialShapedValue(leaf.value)),
+        !(leaf.valueKind === "text" && isFiledReturnsCredentialShapedValue(leaf.value)),
     );
     if (fieldLeaves.length === 0) {
       dataRows.push(outcomeRow(parsed.planned, parsed.outcome));
@@ -271,7 +272,9 @@ function collectOwnIdentityValues(parsedEntries: readonly ParsedPlanEntry[]): Re
         // already removed by path, so a duplicate of it under an unrecognised
         // alias must be too, or the redaction depends on which name the portal
         // happened to use.
-        .filter((leaf) => filedReturnsSummaryIdentity(leaf.path) !== null)
+        .filter(
+          (leaf) => filedReturnsSummaryIdentity(parsed.planned.returnType, leaf.path) !== null,
+        )
         .map((leaf) => leaf.value)
         .filter((value): value is string => typeof value === "string" && value.length > 0)
         // Compared case-insensitively: the portal's casing is not guaranteed to
@@ -303,7 +306,7 @@ function collectIdentityValues(parsedEntries: readonly ParsedPlanEntry[]): Summa
   for (const parsed of parseableEntries) {
     const identityInEntry = new Map<string, SummaryIdentityValue>();
     for (const leaf of parsed.identityLeaves) {
-      const descriptor = filedReturnsSummaryIdentity(leaf.path);
+      const descriptor = filedReturnsSummaryIdentity(parsed.planned.returnType, leaf.path);
       if (!descriptor) continue;
       const contextKey =
         descriptor.contextType === "taxpayer_identity"
@@ -339,7 +342,7 @@ function collectIdentityValues(parsedEntries: readonly ParsedPlanEntry[]): Summa
           "Required taxpayer identity is missing from its canonical filed-return response path.",
         );
       }
-      if (requiredLabel === "GSTIN" && !isValidGstin(canonicalIdentity.value)) {
+      if (requiredLabel === "GSTIN" && !isFiledReturnsValidGstin(canonicalIdentity.value)) {
         throw new FiledReturnsSummaryInvalidGstinError(
           "GSTIN is invalid in a parseable filed-return summary source.",
         );
@@ -372,7 +375,7 @@ function collectIdentityValues(parsedEntries: readonly ParsedPlanEntry[]): Summa
 const GSTIN_FORMAT = /^[0-9]{2}[A-Za-z]{5}[0-9]{4}[A-Za-z][1-9A-Za-z][Zz1-9A-Ja-j][0-9A-Za-z]$/;
 const GSTIN_CHECK_CHARACTERS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-function isValidGstin(value: string): boolean {
+export function isFiledReturnsValidGstin(value: string): boolean {
   if (!GSTIN_FORMAT.test(value)) return false;
   const prefix = value.slice(0, 14);
   let factor = 2;
@@ -479,7 +482,7 @@ function isSafeFiledReturnsDiscriminatorValue(key: string, value: string): boole
 const PAN_SHAPE = /^[A-Za-z]{5}[0-9]{4}[A-Za-z]$/;
 
 function isIdentityShapedSegment(segment: string): boolean {
-  return PAN_SHAPE.test(segment) || isValidGstin(segment);
+  return PAN_SHAPE.test(segment) || isFiledReturnsValidGstin(segment);
 }
 
 // A JWT is unmistakable and has no legitimate place in a filed return, so it is
@@ -492,7 +495,7 @@ function isIdentityShapedSegment(segment: string): boolean {
 // exists to report. Zero JWT-shaped values appear in 77,154 real text values.
 const JWT_SHAPE = /^eyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}$/;
 
-function isCredentialShapedValue(value: string): boolean {
+export function isFiledReturnsCredentialShapedValue(value: string): boolean {
   return JWT_SHAPE.test(value.trim());
 }
 
