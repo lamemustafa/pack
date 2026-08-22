@@ -93,22 +93,18 @@ function installPackActionOpensSidePanel() {
       };
     }
   ).sidePanel;
-  // Registered SYNCHRONOUSLY during worker start-up, not from the rejection
-  // handler. An action click can wake a suspended worker and be dispatched
-  // before an async rejection lands, so a listener installed inside `.catch`
-  // misses the very click that started the worker -- and the popup is gone, so
-  // that click does nothing at all.
-  let sidePanelArmed = false;
-  browser.action?.onClicked?.addListener?.(() => {
-    if (sidePanelArmed) return;
-    void browser.tabs.create({ url: browser.runtime.getURL("/panel.html") }).catch(() => undefined);
-  });
-  void sidePanel
-    ?.setPanelBehavior?.({ openPanelOnActionClick: true })
-    .then(() => {
-      sidePanelArmed = true;
-    })
-    .catch(() => undefined);
+  // No tab fallback. It was added to keep the toolbar button alive on a browser
+  // without `sidePanel`, but the manifest already requires Chrome 116 and the
+  // API landed in 114, so that browser cannot install this extension. The guard
+  // covered a case that cannot occur.
+  //
+  // Worse, it could not be made correct: Chrome retains `openPanelOnActionClick`
+  // across a worker suspension while a module-scoped flag resets on wake, so the
+  // next click opened the panel through the retained setting AND a tab through
+  // the listener. Removing it removes both the dead case and the double-open,
+  // and `side_panel.default_path` keeps the panel reachable from the browser's
+  // own side-panel control regardless.
+  void sidePanel?.setPanelBehavior?.({ openPanelOnActionClick: true }).catch(() => undefined);
 }
 
 export default defineBackground(() => {

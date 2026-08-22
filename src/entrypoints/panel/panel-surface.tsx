@@ -10,6 +10,7 @@ import {
   hasUnresolvedFiledReturnsRecovery,
 } from "../popup/flow-summary";
 import { InlineStatus } from "../popup/inline-status";
+import { LastRunDiagnostics } from "../popup/last-run-diagnostics";
 import { PackSummary } from "../popup/pack-summary";
 import { getPopupPresentationState, isGstSignInRequired } from "../popup/presentation-state";
 import { RecoveryActions, hasRecoveryActions } from "../popup/recovery-actions";
@@ -216,6 +217,12 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
 
       <footer className="panel-foot">
         <p className="panel-fine">Local only · GST login and files stay on this device.</p>
+        {/*
+          Carried over when the popup folded into this surface. It was the popup's
+          only route to the last run's state, reason and safe signals, so folding
+          without it would have deleted a diagnostic rather than moved it.
+        */}
+        <LastRunDiagnostics summary={pack.lastRunSummary} />
         {/* Required wherever the Pack mark appears. See DESIGN.md and AGENTS.md. */}
         <p className="panel-fine">
           Not affiliated with, endorsed by, or operated by GSTN, CBIC, or the Government of India.
