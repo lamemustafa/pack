@@ -19,9 +19,12 @@ import type { FiledReturnsConcreteArtifactType } from "./filed-returns-artifacts
 import type { FiledReturnsReturnType } from "./filed-returns-return-types";
 import { filedReturnsSummaryFieldLabel } from "./filed-returns-summary-labels";
 import {
+  filedReturnsSummaryCounterpartyRecordPath,
+  isFiledReturnsSummaryIdentityScalarPath,
   filedReturnsSummaryIdentity,
   filedReturnsRequiredWorkbookIdentityPaths,
   isFiledReturnsCanonicalIdentityPath,
+  isFiledReturnsSummaryIdentityCandidatePath,
   isFiledReturnsSummaryIdentityPath,
 } from "./filed-returns-summary-identity";
 import { isFiledReturnsSummaryForbiddenFieldPath } from "./filed-returns-summary-redaction";
@@ -165,7 +168,7 @@ export function buildFiledReturnsSummarySheet(
         jsonText,
         {
           includePath: (path, scalarKind) =>
-            scalarKind === "string" && filedReturnsSummaryIdentity(path) !== null,
+            scalarKind === "string" && isFiledReturnsSummaryIdentityCandidatePath(path),
           visitPath: rejectForbiddenFieldPath,
         },
         remainingFlattenedBytes,
@@ -191,12 +194,18 @@ export function buildFiledReturnsSummarySheet(
 
   rejectForbiddenFields(parsedEntries);
   const identities = collectIdentityValues(parsedEntries);
-  const ownIdentityValues = collectOwnIdentityValues(parsedEntries);
+  const summaryOwnGstins = summaryOwnGstinValues(parsedEntries);
+  const ownIdentityValues = collectOwnIdentityValues(parsedEntries, summaryOwnGstins);
   const dataRows: FiledReturnsSummaryDataRow[] = [];
   for (const parsed of parsedEntries) {
+    const counterpartyRecordPaths = counterpartyRecordPathsFor(parsed, summaryOwnGstins);
     const fieldLeaves = parsed.leaves.filter(
       (leaf) =>
-        !isFiledReturnsSummaryIdentityPath(leaf.path) &&
+        !isFiledReturnsSummaryIdentityPath(
+          parsed.planned.returnType,
+          filedReturnsSummaryDocumentPath(parsed.planned.returnType, leaf.path),
+          counterpartyRecordPaths,
+        ) &&
         !hasIdentityShapedPathSegment(leaf.path) &&
         !hasOwnIdentityPathSegment(leaf.path, ownIdentityValues) &&
         !(leaf.valueKind === "text" && ownIdentityValues.has(leaf.value.trim().toUpperCase())) &&
@@ -263,7 +272,10 @@ export function buildFiledReturnsSummarySheet(
 // `ctin`, and withholding them would empty the most useful column of a GSTR-2B
 // CSV while withholding nothing the user does not already hold in the original
 // artifact beside it.
-function collectOwnIdentityValues(parsedEntries: readonly ParsedPlanEntry[]): ReadonlySet<string> {
+function collectOwnIdentityValues(
+  parsedEntries: readonly ParsedPlanEntry[],
+  summaryOwnGstins: ReadonlySet<string>,
+): ReadonlySet<string> {
   return new Set(
     parsedEntries.flatMap((parsed) =>
       parsed.identityLeaves
@@ -271,7 +283,19 @@ function collectOwnIdentityValues(parsedEntries: readonly ParsedPlanEntry[]): Re
         // already removed by path, so a duplicate of it under an unrecognised
         // alias must be too, or the redaction depends on which name the portal
         // happened to use.
-        .filter((leaf) => filedReturnsSummaryIdentity(leaf.path) !== null)
+        // Path redaction stays broad; the values that seed CROSS-document
+        // redaction must not. A recognised identity that is object-shaped carries
+        // metadata beside the identifier -- `/data/gstin/status: "Active"` -- and
+        // seeding from every descendant string made an unrelated reportable leaf
+        // such as `/filing_status: "Active"` vanish by value in every period.
+        .filter(
+          (leaf) =>
+            isFiledReturnsSummaryIdentityPath(
+              parsed.planned.returnType,
+              leaf.path,
+              counterpartyRecordPathsFor(parsed, summaryOwnGstins),
+            ) && isFiledReturnsSummaryIdentityScalarPath(leaf.path),
+        )
         .map((leaf) => leaf.value)
         .filter((value): value is string => typeof value === "string" && value.length > 0)
         // Compared case-insensitively: the portal's casing is not guaranteed to
@@ -279,6 +303,72 @@ function collectOwnIdentityValues(parsedEntries: readonly ParsedPlanEntry[]): Re
         // only in case is the same identifier.
         .map((value) => value.trim().toUpperCase()),
     ),
+  );
+}
+
+// Rebuilding this per identity leaf scanned every leaf and re-ran GSTIN
+// validation on every text value, making summary generation quadratic in
+// document size -- a large object-shaped return could stall the offscreen export
+// before reaching any size check. One set per parsed entry, memoised by entry.
+const counterpartyRecordPathCache = new WeakMap<ParsedPlanEntry, ReadonlySet<string>>();
+
+function counterpartyRecordPathsFor(
+  parsed: ParsedPlanEntry,
+  ownGstins: ReadonlySet<string>,
+): ReadonlySet<string> {
+  const cached = counterpartyRecordPathCache.get(parsed);
+  if (cached) return cached;
+  const computed = collectCounterpartyRecordPaths(parsed, ownGstins);
+  counterpartyRecordPathCache.set(parsed, computed);
+  return computed;
+}
+
+/**
+ * The return owner's GSTINs, read across EVERY period in the summary.
+ *
+ * Scoping this to one entry left a hole: a period that omits the owner GSTIN has
+ * an empty set, so a `ctin` repeating the owner's GSTIN -- established by a
+ * different period of the same run -- was accepted as counterparty evidence and
+ * released the owner trade name beside it. The owner is a property of the
+ * summary, not of whichever document happens to name them.
+ */
+function summaryOwnGstinValues(parsedEntries: readonly ParsedPlanEntry[]): ReadonlySet<string> {
+  return new Set(parsedEntries.flatMap((parsed) => [...ownGstinValues(parsed)]));
+}
+
+/** The owner GSTINs a single entry names. */
+function ownGstinValues(parsed: ParsedPlanEntry): ReadonlySet<string> {
+  return new Set(
+    parsed.identityLeaves
+      .filter(
+        (leaf) =>
+          filedReturnsSummaryIdentity(parsed.planned.returnType, leaf.path)?.label === "GSTIN",
+      )
+      .flatMap((leaf) => (typeof leaf.value === "string" ? [leaf.value.trim().toUpperCase()] : [])),
+  );
+}
+
+function collectCounterpartyRecordPaths(
+  parsed: ParsedPlanEntry,
+  ownGstins: ReadonlySet<string>,
+): ReadonlySet<string> {
+  return new Set(
+    parsed.leaves.flatMap((leaf) => {
+      // A field NAMED ctin is not evidence; a counterparty GSTIN is. Accepting any
+      // non-empty text let decoy or malformed portal data -- `"ctin": "unknown"` --
+      // mark a wrapper as a counterparty record and release the owner's own trade
+      // name beside it. The checksum is the same one the owner GSTIN must pass.
+      if (leaf.valueKind !== "text" || !isValidGstin(leaf.value.trim())) return [];
+      // Valid proves it is A GSTIN, not that it is SOMEONE ELSE'S. A wrapper whose
+      // ctin repeats the return owner's own GSTIN is the owner's record, and
+      // treating it as a counterparty would release the owner trade name beside it.
+      if (ownGstins.has(leaf.value.trim().toUpperCase())) return [];
+      const recordPath = filedReturnsSummaryCounterpartyRecordPath(
+        parsed.planned.returnType,
+        filedReturnsSummaryDocumentPath(parsed.planned.returnType, leaf.path),
+      );
+      return recordPath ? [recordPath] : [];
+    }),
   );
 }
 
@@ -303,7 +393,7 @@ function collectIdentityValues(parsedEntries: readonly ParsedPlanEntry[]): Summa
   for (const parsed of parseableEntries) {
     const identityInEntry = new Map<string, SummaryIdentityValue>();
     for (const leaf of parsed.identityLeaves) {
-      const descriptor = filedReturnsSummaryIdentity(leaf.path);
+      const descriptor = filedReturnsSummaryIdentity(parsed.planned.returnType, leaf.path);
       if (!descriptor) continue;
       const contextKey =
         descriptor.contextType === "taxpayer_identity"
@@ -514,6 +604,14 @@ function hasOwnIdentityPathSegment(path: string, ownIdentityValues: ReadonlySet<
   return decodedPathSegments(path).some((segment) =>
     ownIdentityValues.has(segment.trim().toUpperCase()),
   );
+}
+
+function filedReturnsSummaryDocumentPath(
+  returnType: FiledReturnsReturnType,
+  envelopeRelativePath: string,
+): string {
+  const envelopePath = filedReturnsJsonDocumentContract(returnType).envelopePath;
+  return `${envelopePath.map((segment) => `/${segment}`).join("")}${envelopeRelativePath}`;
 }
 
 function filedReturnsSummaryArrayExpansion(
