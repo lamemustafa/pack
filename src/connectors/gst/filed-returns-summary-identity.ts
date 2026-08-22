@@ -151,6 +151,12 @@ export function isFiledReturnsSummaryIdentityScalarPath(path: string): boolean {
   // `/data/trade/name` still composes to `tradename` and still seeds redaction.
   // `/data/gstin/status` has no such run -- neither `status` nor `gstinstatus`
   // is an alias -- so identity metadata does not.
+  // The TERMINAL segment must itself contribute. Canonicalisation strips
+  // non-alphanumerics, so a metadata key like `_` becomes an empty segment and
+  // `/data/gstin/_` would otherwise join to `gstin` and classify that metadata
+  // value as the identity scalar -- seeding cross-document redaction with, say,
+  // "Active" and deleting every unrelated leaf that happens to share it.
+  if ((unwrapped.at(-1) ?? "") === "") return false;
   return unwrapped.some((_, start) => {
     const run = unwrapped.slice(start).join("");
     return run.length <= MAX_IDENTITY_ALIAS_LENGTH && identityForCanonicalSegment(run) !== null;
