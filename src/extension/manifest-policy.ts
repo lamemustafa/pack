@@ -1,6 +1,6 @@
 export const PACK_EXTENSION_PERMISSIONS = [
   "downloads",
-  // Reviewed source-build alpha Blob/OPFS ZIP boundary:
+  // Reviewed source-build Blob/OPFS ZIP boundary:
   // https://github.com/lamemustafa/pack/issues/79
   "offscreen",
   "scripting",

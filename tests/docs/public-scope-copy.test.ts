@@ -1,0 +1,135 @@
+import { execFileSync } from "node:child_process";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { describe, expect, it } from "vitest";
+import { PACK_EXTENSION_DESCRIPTION } from "../../src/extension/manifest-policy";
+
+const rootDir = process.cwd();
+const read = (relativePath: string) => readFile(path.join(rootDir, relativePath), "utf8");
+
+/**
+ * One claim about what Pack supports lives in eleven files. Correcting it took
+ * seven review rounds, and every round found the same defect: another copy that
+ * had not been updated. Finding the copies was never the hard part -- four of
+ * those rounds re-reported lines that a previous enumeration had already listed.
+ *
+ * Only one pair was bound by a test: the promo SVG and its checked-in export.
+ * That guard caught an inconsistency the moment the image changed, and it is the
+ * one copy that could not drift. These tests give the rest of the claim the same
+ * property.
+ */
+
+// The copies are discovered, not listed. A hand-maintained list of the places a
+// claim appears is the same defect this file exists to prevent -- it would need
+// updating every time a copy is added, which is exactly the step that failed.
+//
+// Discovery anchors on a stem taken from the constant itself, so a copy that
+// still carries an older maturity prefix ("Alpha: locally download your filed
+// ...") is found and reported. A copy rewritten past the stem is not findable
+// this way; DESCRIPTION_COPY_FLOOR below keeps that from silently shrinking
+// coverage to zero.
+const DESCRIPTION_STEM = PACK_EXTENSION_DESCRIPTION.replace(/^[A-Za-z]+:\s*/, "")
+  .split(" ")
+  .slice(0, 4)
+  .join(" ");
+
+// Known copies as of this guard landing. Discovery must keep finding all of
+// them; a file dropping off the list means either the copy was deleted (update
+// this) or the stem drifted (fix the copy).
+const DESCRIPTION_COPY_FLOOR = [
+  "docs/chrome-web-store/listing.md",
+  "scripts/verify-extension-package.mjs",
+  "src/extension/manifest-policy.ts",
+  "tests/extension/package-verifier.test.ts",
+  "tests/extension/permissions.test.ts",
+];
+
+const TEXT_FILE = /\.(ts|tsx|js|mjs|cjs|json|md|svg|html|yml|yaml)$/;
+
+function trackedTextFiles(): string[] {
+  return execFileSync("git", ["ls-files"], { cwd: rootDir, encoding: "utf8" })
+    .split("\n")
+    .filter((entry) => entry !== "" && TEXT_FILE.test(entry));
+}
+
+// Files that make a LIVE public claim, as opposed to recording history. The
+// readiness record and the live-run spike are excluded on purpose: they must be
+// able to say what was previously claimed.
+const LIVE_PUBLIC_COPY = [
+  "README.md",
+  "package.json",
+  "docs/chrome-web-store/listing.md",
+  "src/extension/manifest-policy.ts",
+  "docs/chrome-web-store/assets/marquee-promo-1400x560.svg",
+];
+
+// Superseded vocabulary. Each entry was live in one of these files during the
+// correction and was found by review rather than by us.
+const RETIRED_CLAIMS: readonly { pattern: RegExp; why: string }[] = [
+  {
+    pattern: /\balpha\b/i,
+    why: "the published package is a pre-1.0 beta; 'alpha' understates the release",
+  },
+  {
+    pattern: /source-build experimental/i,
+    why: "GSTR-2B is in stated scope, not an experiment",
+  },
+  {
+    pattern: /private GSTR-2B/i,
+    why: "GSTR-2B support is not private to source builds",
+  },
+  {
+    // Deliberately the bare adjacency. A wider window fires on the correct
+    // "filed GSTR-1 and GSTR-3B returns and your GSTR-2B statements", where
+    // "filed" governs the first two only -- and a guard that flags correct copy
+    // gets suppressed, which is worse than not having one.
+    pattern: /\bfiled\s+GSTR-2B\b/i,
+    why: "GSTR-2B is auto-drafted by the portal, not filed by the taxpayer",
+  },
+];
+
+describe("public scope copy", () => {
+  it("keeps every restatement of the packaged description identical", async () => {
+    const drifted: string[] = [];
+    const carriers = new Set<string>();
+
+    for (const relativePath of trackedTextFiles()) {
+      if (relativePath === "tests/docs/public-scope-copy.test.ts") continue;
+      const contents = await read(relativePath);
+      if (!contents.includes(DESCRIPTION_STEM)) continue;
+      carriers.add(relativePath);
+      for (const line of contents.split("\n")) {
+        if (line.includes(DESCRIPTION_STEM) && !line.includes(PACK_EXTENSION_DESCRIPTION)) {
+          drifted.push(`${relativePath}\n    ${line.trim()}`);
+        }
+      }
+    }
+
+    expect(
+      drifted,
+      "these restate the packaged description but no longer match " +
+        `PACK_EXTENSION_DESCRIPTION in src/extension/manifest-policy.ts:\n  ${drifted.join("\n  ")}`,
+    ).toEqual([]);
+
+    const missing = DESCRIPTION_COPY_FLOOR.filter((entry) => !carriers.has(entry));
+    expect(
+      missing,
+      `discovery stopped finding the description in: ${missing.join(", ")}. Either the copy was ` +
+        "removed (update DESCRIPTION_COPY_FLOOR) or it drifted past the stem (fix the copy).",
+    ).toEqual([]);
+  });
+
+  it("carries no superseded claim in live public copy", async () => {
+    const offences: string[] = [];
+    for (const relativePath of LIVE_PUBLIC_COPY) {
+      const contents = await read(relativePath);
+      for (const line of contents.split("\n")) {
+        for (const { pattern, why } of RETIRED_CLAIMS) {
+          if (pattern.test(line)) offences.push(`${relativePath}: ${why}\n    ${line.trim()}`);
+        }
+      }
+    }
+
+    expect(offences, `superseded public claims:\n  ${offences.join("\n  ")}`).toEqual([]);
+  });
+});
