@@ -1,4 +1,7 @@
-import { canonicalJsonPointerSegments } from "../../core/json-flat-table";
+import {
+  canonicalJsonPointerSegments,
+  decodedJsonPointerSegments,
+} from "../../core/json-flat-table";
 import { filedReturnsJsonDocumentContract } from "./artifact-validation";
 import type { FiledReturnsReturnType } from "./filed-returns-return-types";
 
@@ -47,16 +50,34 @@ export function filedReturnsRequiredWorkbookIdentityPaths(
   );
 }
 
-export function filedReturnsSummaryIdentityLabel(path: string): string | null {
-  return filedReturnsSummaryIdentity(path)?.label ?? null;
-}
-
-export function filedReturnsSummaryIdentity(path: string): FiledReturnsSummaryIdentity | null {
+/**
+ * Finds an identity that belongs to the return owner, rather than a similarly
+ * named value inside a supplier record. Extraction names the taxpayer in the
+ * context rows and seeds value redaction, so it must be bound to the owner
+ * container declared by the return type's JSON contract.
+ */
+export function filedReturnsSummaryIdentity(
+  returnType: FiledReturnsReturnType,
+  path: string,
+): FiledReturnsSummaryIdentity | null {
   const segments = canonicalJsonPointerSegments(path);
-  const terminalIdentity = identityForCanonicalSegment(segments.at(-1) ?? "");
-  if (terminalIdentity) return terminalIdentity;
-  if (segments.at(-1) === SCALAR_WRAPPER_SEGMENT) {
-    return identityForCanonicalSegment(segments.at(-2) ?? "");
+  const unwrapped = segments.at(-1) === SCALAR_WRAPPER_SEGMENT ? segments.slice(0, -1) : segments;
+  for (const ownerContainer of ownerIdentityContainerPaths(returnType)) {
+    if (
+      unwrapped.length <= ownerContainer.length ||
+      !ownerContainer.every((segment, index) => segment === unwrapped[index])
+    ) {
+      continue;
+    }
+    const identity = identityForCanonicalSegment(unwrapped.slice(ownerContainer.length).join(""));
+    if (
+      identity &&
+      ownerIdentityContainerPathsForIdentity(returnType, identity).some((expectedOwnerContainer) =>
+        pathsMatch(expectedOwnerContainer, ownerContainer),
+      )
+    ) {
+      return identity;
+    }
   }
   return null;
 }
@@ -86,50 +107,222 @@ export function isFiledReturnsCanonicalIdentityPath(path: string, canonicalPath:
  * `taxpayername` on its own.
  *
  * This is deliberately broader than `filedReturnsSummaryIdentity`, which stays
- * terminal-specific because it names the identity for extraction. Redaction
- * must fail closed; labelling must be exact.
+ * owner-scoped because it names the identity for extraction. Redaction must
+ * fail closed; labelling must be exact. A trade name is reportable only with
+ * positive counterparty evidence, never because owner evidence is absent.
  */
-export function isFiledReturnsSummaryIdentityPath(path: string): boolean {
-  const segments = canonicalJsonPointerSegments(path);
-  return segments.some((_, start) =>
-    segments.some(
-      (_ignored, end) =>
-        identityForCanonicalSegment(segments.slice(start, end + 1).join("")) !== null,
-    ),
+export function isFiledReturnsSummaryIdentityPath(
+  returnType: FiledReturnsReturnType,
+  path: string,
+  counterpartyRecordPaths: ReadonlySet<string> = new Set(),
+): boolean {
+  // The counterparty carve-out applies to the trade name ITSELF, not to whatever
+  // sits underneath it. When `trdnm` is object-shaped, every descendant inherits
+  // the record prefix, so `{supplier:{ctin:<valid>,trdnm:{copy:<owner name>}}}`
+  // exempted the nested value from path redaction on evidence that vouched only
+  // for the supplier's own name.
+  const scalar = isFiledReturnsSummaryIdentityScalarPath(path);
+  return identityCandidates(path).some(
+    ({ identity, recordPath }) =>
+      identity.label !== "Trade name" ||
+      !scalar ||
+      !hasPositiveCounterpartyTradeNameEvidence(returnType, recordPath, counterpartyRecordPaths),
   );
 }
 
+/**
+ * Whether a scalar can seed the own-identity value redaction net. This admits
+ * every recognised identity candidate, including an ambiguously placed trade
+ * name, so the value net remains broader than owner-context extraction.
+ */
+export function isFiledReturnsSummaryIdentityCandidatePath(path: string): boolean {
+  return identityCandidates(path).length > 0;
+}
+
+/**
+ * Returns the canonical path of a non-owner record with a direct `ctin` field.
+ * A sibling `trdnm` in that record has affirmative counterparty evidence.
+ */
+/**
+ * True when the leaf IS a recognised identity, rather than metadata beside one.
+ *
+ * Accepts the identity's own scalar and the single supported wrapper shape, and
+ * rejects any deeper property of an object-shaped identity. Path redaction can
+ * afford to be broad; the values that seed cross-document redaction cannot, or
+ * `/data/gstin/status: "Active"` teaches Pack to delete every "Active" it sees.
+ */
+export function isFiledReturnsSummaryIdentityScalarPath(path: string): boolean {
+  const segments = canonicalJsonPointerSegments(path);
+  const unwrapped = unwrapScalarPath(segments);
+  // A contiguous run ENDING at the terminal segment, so a split alias like
+  // `/data/trade/name` still composes to `tradename` and still seeds redaction.
+  // `/data/gstin/status` has no such run -- neither `status` nor `gstinstatus`
+  // is an alias -- so identity metadata does not.
+  // The TERMINAL segment must itself contribute. Canonicalisation strips
+  // non-alphanumerics, so a metadata key like `_` becomes an empty segment and
+  // `/data/gstin/_` would otherwise join to `gstin` and classify that metadata
+  // value as the identity scalar -- seeding cross-document redaction with, say,
+  // "Active" and deleting every unrelated leaf that happens to share it.
+  if ((unwrapped.at(-1) ?? "") === "") return false;
+  return unwrapped.some((_, start) => {
+    const run = unwrapped.slice(start).join("");
+    return run.length <= MAX_IDENTITY_ALIAS_LENGTH && identityForCanonicalSegment(run) !== null;
+  });
+}
+
+export function filedReturnsSummaryCounterpartyRecordPath(
+  returnType: FiledReturnsReturnType,
+  path: string,
+): string | null {
+  const canonical = unwrapScalarPath(canonicalJsonPointerSegments(path));
+  if (canonical.at(-1) !== "ctin") return null;
+  // The RECORD is identified by its exact decoded segments. Folding them would
+  // let a valid ctin under `supplier-one` vouch for a trdnm under
+  // `supplier_one`, releasing a value that record never proved anything about.
+  const exact = unwrapScalarPath(decodedJsonPointerSegments(path));
+  const recordPath = exact.slice(0, -1);
+  return ownerIdentityContainerPaths(returnType).some((ownerPath) =>
+    pathsMatch(ownerPath, canonical.slice(0, -1)),
+  )
+    ? null
+    : counterpartyRecordKey(recordPath);
+}
+
+/**
+ * A record key that cannot collide across segment boundaries.
+ *
+ * Joining decoded segments with "/" loses the boundary when a JSON key itself
+ * contains one: a ctin at `/data/supplier~1x/ctin` and a trade name at
+ * `/data/supplier/x/trdnm` both flatten to `data/supplier/x`, so evidence from
+ * one record vouched for a different record entirely. Encoding the array keeps
+ * the segmentation the pointer already carries.
+ */
+function counterpartyRecordKey(recordPath: readonly string[]): string {
+  return JSON.stringify(recordPath);
+}
+
+function ownerIdentityContainerPath(
+  returnType: FiledReturnsReturnType,
+  identity: FiledReturnsSummaryIdentity,
+): readonly string[] {
+  const envelopePath = filedReturnsJsonDocumentContract(returnType).envelopePath;
+  // GSTR-3B keeps its GSTIN inside the return envelope while its remaining
+  // owner/filing identity sits beside that envelope. GSTR-1 and GSTR-2B have a
+  // one-segment envelope, which is itself their owner container. This derives
+  // every location from the document contract instead of restating pointers.
+  return identity.label === "GSTIN" || envelopePath.length === 1
+    ? envelopePath
+    : envelopePath.slice(0, -1);
+}
+
+function ownerIdentityContainerPaths(
+  returnType: FiledReturnsReturnType,
+): readonly (readonly string[])[] {
+  const envelopePath = filedReturnsJsonDocumentContract(returnType).envelopePath;
+  const documentPath = envelopePath.length === 1 ? envelopePath : envelopePath.slice(0, -1);
+  return pathsMatch(documentPath, envelopePath) ? [envelopePath] : [envelopePath, documentPath];
+}
+
+function ownerIdentityContainerPathsForIdentity(
+  returnType: FiledReturnsReturnType,
+  identity: FiledReturnsSummaryIdentity,
+): readonly (readonly string[])[] {
+  const ownerPath = ownerIdentityContainerPath(returnType, identity);
+  const envelopePath = filedReturnsJsonDocumentContract(returnType).envelopePath;
+  // GSTR-3B has captured owner trade names both beside and inside its return
+  // envelope. This keeps context extraction precise without treating wrappers
+  // or supplier records as owner identity.
+  return identity.label === "Trade name" && !pathsMatch(ownerPath, envelopePath)
+    ? [ownerPath, envelopePath]
+    : [ownerPath];
+}
+
+function hasPositiveCounterpartyTradeNameEvidence(
+  returnType: FiledReturnsReturnType,
+  recordPath: readonly string[],
+  counterpartyRecordPaths: ReadonlySet<string>,
+): boolean {
+  return (
+    declaredCounterpartyContainerPaths(returnType).some((containerPath) =>
+      containerPath.every((segment, index) => segment === recordPath[index]),
+    ) || counterpartyRecordPaths.has(counterpartyRecordKey(recordPath))
+  );
+}
+
+function declaredCounterpartyContainerPaths(
+  returnType: FiledReturnsReturnType,
+): readonly (readonly string[])[] {
+  // The captured GSTR-2B contract declares b2b records as counterparties. It
+  // is affirmative structural evidence even when the array is collapsed to a
+  // count rather than expanded into CSV rows.
+  // Exact segments: `/data/doc-data/b2b` is a different container.
+  return returnType === "GSTR-2B" ? [["data", "docdata", "b2b"]] : [];
+}
+
+function identityCandidates(
+  path: string,
+): readonly { identity: FiledReturnsSummaryIdentity; recordPath: readonly string[] }[] {
+  const segments = unwrapScalarPath(canonicalJsonPointerSegments(path));
+  // Aliases are matched canonically; the record prefix is kept exact, so
+  // evidence recorded for one sibling cannot vouch for a punctuation-distinct
+  // one. Both arrays index the same segments.
+  const exact = unwrapScalarPath(decodedJsonPointerSegments(path));
+  const candidates: { identity: FiledReturnsSummaryIdentity; recordPath: readonly string[] }[] = [];
+  for (let start = 0; start < segments.length; start += 1) {
+    let runLength = 0;
+    for (let end = start; end < segments.length; end += 1) {
+      runLength += segments[end]!.length;
+      // Past the longest alias no run can match, so stop extending rather than
+      // slicing and joining the rest of the path.
+      if (runLength > MAX_IDENTITY_ALIAS_LENGTH) break;
+      const identity = identityForCanonicalSegment(segments.slice(start, end + 1).join(""));
+      if (identity) candidates.push({ identity, recordPath: exact.slice(0, start) });
+    }
+  }
+  return candidates;
+}
+
+function unwrapScalarPath(segments: readonly string[]): readonly string[] {
+  return segments.at(-1) === SCALAR_WRAPPER_SEGMENT ? segments.slice(0, -1) : segments;
+}
+
+function pathsMatch(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((segment, index) => segment === right[index]);
+}
+
+// The alias registry, as data. It was an if-chain with the longest spelling
+// duplicated as a separate `19` constant -- exactly the hand-maintained
+// duplicate this repository keeps paying for, and the bound failed OPEN: an
+// alias longer than the constant would never be reached, so a newly recognised
+// identity would be neither extracted nor redacted.
+const IDENTITY_ALIASES: readonly (readonly [FiledReturnsSummaryIdentity, readonly string[]])[] = [
+  [taxpayerIdentity("GSTIN"), ["gstin"]],
+  [taxpayerIdentity("PAN"), ["pan", "panno", "taxpayerpan"]],
+  [taxpayerIdentity("Legal name"), ["lglnm", "lgnm", "legalname"]],
+  [taxpayerIdentity("Trade name"), ["trdnm", "tradename"]],
+  [returnIdentity("ARN"), ["arn"]],
+  [returnIdentity("ARN date"), ["arndt", "arndate"]],
+  [taxpayerIdentity("Taxpayer name"), ["taxpayername", "taxpyrname", "nameoftaxpayer"]],
+  [
+    taxpayerIdentity("Signatory"),
+    ["signatory", "authsig", "signatoryname", "authorizedsignatory", "authorisedsignatory"],
+  ],
+  [taxpayerIdentity("Designation"), ["designation", "desig"]],
+];
+
+const IDENTITY_BY_ALIAS = new Map<string, FiledReturnsSummaryIdentity>(
+  IDENTITY_ALIASES.flatMap(([identity, aliases]) =>
+    aliases.map((alias) => [alias, identity] as const),
+  ),
+);
+
+// Derived, so adding a longer alias cannot silently put it out of reach.
+const MAX_IDENTITY_ALIAS_LENGTH = Math.max(
+  ...IDENTITY_ALIASES.flatMap(([, aliases]) => aliases.map((alias) => alias.length)),
+);
+
 function identityForCanonicalSegment(segment: string): FiledReturnsSummaryIdentity | null {
-  if (segment === "gstin") return taxpayerIdentity("GSTIN");
-  if (segment === "pan" || segment === "panno" || segment === "taxpayerpan") {
-    return taxpayerIdentity("PAN");
-  }
-  if (segment === "lglnm" || segment === "lgnm" || segment === "legalname") {
-    return taxpayerIdentity("Legal name");
-  }
-  if (segment === "trdnm" || segment === "tradename") {
-    return taxpayerIdentity("Trade name");
-  }
-  if (segment === "arn") return returnIdentity("ARN");
-  if (segment === "arndt" || segment === "arndate") {
-    return returnIdentity("ARN date");
-  }
-  if (segment === "taxpayername" || segment === "taxpyrname" || segment === "nameoftaxpayer") {
-    return taxpayerIdentity("Taxpayer name");
-  }
-  if (
-    segment === "signatory" ||
-    segment === "authsig" ||
-    segment === "signatoryname" ||
-    segment === "authorizedsignatory" ||
-    segment === "authorisedsignatory"
-  ) {
-    return taxpayerIdentity("Signatory");
-  }
-  if (segment === "designation" || segment === "desig") {
-    return taxpayerIdentity("Designation");
-  }
-  return null;
+  return IDENTITY_BY_ALIAS.get(segment) ?? null;
 }
 
 function taxpayerIdentity(label: string): FiledReturnsSummaryIdentity {

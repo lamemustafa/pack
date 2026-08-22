@@ -512,6 +512,23 @@ function escapeJsonPointerToken(value: string): string {
   return value.replace(/~/g, "~0").replace(/\//g, "~1");
 }
 
+/**
+ * Decoded pointer segments with no case or punctuation folding.
+ *
+ * `canonicalJsonPointerSegments` exists to compare a segment against a known
+ * vocabulary, so it lowercases and strips punctuation -- which makes
+ * `supplier-one` and `supplier_one` the same segment. That is right for
+ * matching an alias and wrong for identifying WHICH record a value belongs to:
+ * two punctuation-distinct siblings would share one identity.
+ */
+export function decodedJsonPointerSegments(path: string): string[] {
+  if (path === "") return [];
+  return path
+    .split("/")
+    .slice(1)
+    .map((segment) => segment.replace(/~1/g, "/").replace(/~0/g, "~"));
+}
+
 export function canonicalJsonPointerSegments(path: string): string[] {
   if (path === "") return [];
   return path

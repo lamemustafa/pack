@@ -61,7 +61,7 @@ describe("filed-return full-year summary sheet", () => {
         {
           path: "april-data.json",
           bytes: new TextEncoder().encode(
-            '{"status":1,"data":{"lglnm":"Synthetic Legal Name","r3b":{"gstin":"27ABCDE1234F1Z0","ret_period":"042026","registration_number":"27abcde1234f1z0","ctin":"29ZZZZZ9999Z9Z9","sup_details":{"osup_det":{"txval":1}}}}}',
+            '{"status":1,"data":{"lglnm":"Synthetic Legal Name","r3b":{"gstin":"27ABCDE1234F1Z0","ret_period":"042026","registration_number":"27abcde1234f1z0","ctin":"29ZZZZZ9999Z9ZW","sup_details":{"osup_det":{"txval":1}}}}}',
           ),
         },
       ],
@@ -73,7 +73,7 @@ describe("filed-return full-year summary sheet", () => {
     expect(dataCsv).not.toContain("27abcde1234f1z0");
     expect(dataCsv).not.toContain("27ABCDE1234F1Z0");
     // A counterparty identifier is business data the summary exists to report.
-    expect(dataCsv).toContain("29ZZZZZ9999Z9Z9");
+    expect(dataCsv).toContain("29ZZZZZ9999Z9ZW");
   });
 
   it("withholds a filing identity repeated under an unrecognised alias", () => {
@@ -469,6 +469,372 @@ describe("filed-return full-year summary sheet", () => {
       "taxpayer_identity,identity,Legal name,/data/legal~1name/value,Synthetic Nested Legal Name",
     );
     expect(context).not.toContain("Synthetic Non-Identity Status");
+  });
+
+  it("scopes GSTR-2B trade names to the return owner instead of supplier records", () => {
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-2B")],
+      [
+        rawJsonEntry("april-data.json", {
+          data: {
+            rtnprd: "042026",
+            trdnm: "Synthetic Owner Trade Name",
+            docdata: {
+              b2b: [
+                { ctin: "29ZZZZZ9999Z9ZW", trdnm: "Synthetic Supplier One" },
+                { ctin: "33YYYYY8888Y1ZU", trdnm: "Synthetic Supplier Two" },
+              ],
+            },
+            supplier_display_name: "Synthetic Supplier One",
+          },
+        }),
+      ],
+    );
+
+    const dataCsv = new TextDecoder().decode(summary.dataBytes);
+    expect(contextText(summary.contextRows)).toContain(
+      "taxpayer_identity,identity,Trade name,/data/trdnm,Synthetic Owner Trade Name",
+    );
+    expect(dataCsv).not.toContain("Synthetic Owner Trade Name");
+    // A supplier's name is not an own-identity value. The same string on an
+    // unrecognised leaf must remain reportable rather than being redacted by
+    // value after the supplier record was seen.
+    expect(dataCsv).toContain("Synthetic Supplier One");
+    expect(summary).toMatchObject({ outcomeOnly: false, parsedPeriodCount: 1 });
+  });
+
+  it("does not let a slash inside a key vouch for a different record", () => {
+    // Joining decoded segments with "/" lost the boundary: `/data/supplier~1x`
+    // and `/data/supplier/x` flattened to the same key, so a valid ctin in one
+    // record released a trade name in an unrelated one.
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-2B")],
+      [
+        rawJsonEntry("april-data.json", {
+          data: {
+            rtnprd: "042026",
+            "supplier/x": { ctin: "29ZZZZZ9999Z9ZW", trdnm: "Synthetic Real Supplier" },
+            supplier: { x: { trdnm: "Synthetic Owner Trade Name" } },
+          },
+        }),
+      ],
+    );
+
+    const dataCsv = new TextDecoder().decode(summary.dataBytes);
+
+    expect(dataCsv).toContain("Synthetic Real Supplier");
+    expect(dataCsv).not.toContain("Synthetic Owner Trade Name");
+  });
+
+  it("rejects a ctin matching an owner GSTIN that a different period established", () => {
+    // The owner is a property of the summary, not of whichever document names
+    // them. Scoping the comparison per entry left a period that omits the owner
+    // GSTIN accepting it as someone else's.
+    const summary = buildFiledReturnsSummarySheet(
+      [
+        jsonPlan("April", "april-data.json", "GSTR-2B"),
+        jsonPlan("May", "may-data.json", "GSTR-2B"),
+      ],
+      [
+        rawJsonEntry("april-data.json", {
+          data: { rtnprd: "042026", gstin: "27ABCDE1234F1Z0", amount: 1 },
+        }),
+        rawJsonEntry("may-data.json", {
+          data: {
+            rtnprd: "052026",
+            wrapper: { ctin: "27ABCDE1234F1Z0", trdnm: "Synthetic Owner Trade Name" },
+            amount: 2,
+          },
+        }),
+      ],
+    );
+
+    expect(new TextDecoder().decode(summary.dataBytes)).not.toContain("Synthetic Owner Trade Name");
+  });
+
+  it("does not exempt a value nested under a counterparty trade name", () => {
+    // The carve-out vouches for the supplier's own name, not for whatever sits
+    // underneath it. An object-shaped trdnm gave every descendant the record
+    // prefix, so a nested owner trade name inherited the exemption.
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-2B")],
+      [
+        rawJsonEntry("april-data.json", {
+          data: {
+            rtnprd: "042026",
+            supplier: {
+              ctin: "29ZZZZZ9999Z9ZW",
+              trdnm: { copy: "Synthetic Owner Trade Name" },
+            },
+          },
+        }),
+      ],
+    );
+
+    expect(new TextDecoder().decode(summary.dataBytes)).not.toContain("Synthetic Owner Trade Name");
+  });
+
+  it("does not accept the owner's own GSTIN as counterparty evidence", () => {
+    // A valid checksum proves the value is a GSTIN, not that it belongs to
+    // someone else. A wrapper repeating the owner's GSTIN is the owner's record.
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-2B")],
+      [
+        rawJsonEntry("april-data.json", {
+          data: {
+            rtnprd: "042026",
+            gstin: "27ABCDE1234F1Z0",
+            wrapper: { ctin: "27ABCDE1234F1Z0", trdnm: "Synthetic Owner Trade Name" },
+          },
+        }),
+      ],
+    );
+
+    expect(new TextDecoder().decode(summary.dataBytes)).not.toContain("Synthetic Owner Trade Name");
+  });
+
+  it("does not let one sibling's counterparty evidence vouch for another", () => {
+    // Canonical segments fold punctuation, so `supplier-one` and `supplier_one`
+    // were the same record. A valid ctin under the first then released whatever
+    // sat under the second, which had proved nothing.
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-2B")],
+      [
+        rawJsonEntry("april-data.json", {
+          data: {
+            rtnprd: "042026",
+            "supplier-one": { ctin: "29ZZZZZ9999Z9ZW", trdnm: "Synthetic Real Supplier" },
+            supplier_one: { trdnm: "Synthetic Owner Trade Name" },
+          },
+        }),
+      ],
+    );
+
+    const dataCsv = new TextDecoder().decode(summary.dataBytes);
+
+    expect(dataCsv).toContain("Synthetic Real Supplier");
+    expect(dataCsv).not.toContain("Synthetic Owner Trade Name");
+  });
+
+  it("does not release an owner trade name on a decoy counterparty identifier", () => {
+    // A field NAMED ctin was treated as counterparty evidence regardless of its
+    // value, so malformed or decoy portal data could mark a wrapper as a
+    // supplier record and release the owner's own trade name beside it.
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-2B")],
+      [
+        rawJsonEntry("april-data.json", {
+          data: {
+            rtnprd: "042026",
+            wrapper: { ctin: "unknown", trdnm: "Synthetic Owner Trade Name" },
+            amount: 1,
+          },
+        }),
+      ],
+    );
+
+    expect(new TextDecoder().decode(summary.dataBytes)).not.toContain("Synthetic Owner Trade Name");
+  });
+
+  it("keeps identity metadata out of cross-document value redaction", () => {
+    // An object-shaped identity carries metadata beside the identifier. Seeding
+    // redaction from every descendant string made an unrelated reportable leaf
+    // sharing that text vanish in every period.
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-2B")],
+      [
+        rawJsonEntry("april-data.json", {
+          data: {
+            rtnprd: "042026",
+            gstin: { value: "27ABCDE1234F1Z0", status: "Active" },
+            filing_status: "Active",
+            amount: 1,
+          },
+        }),
+      ],
+    );
+
+    expect(new TextDecoder().decode(summary.dataBytes)).toContain("Active");
+  });
+
+  it("withholds an owner trade name carried by a split alias", () => {
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-2B")],
+      [
+        rawJsonEntry("april-data.json", {
+          data: {
+            rtnprd: "042026",
+            trade: { name: "Synthetic Split Owner Trade Name" },
+            owner_name_copy: "Synthetic Split Owner Trade Name",
+            amount: 1,
+          },
+        }),
+      ],
+    );
+
+    const dataCsv = new TextDecoder().decode(summary.dataBytes);
+    expect(contextText(summary.contextRows)).toContain(
+      "taxpayer_identity,identity,Trade name,/data/trade/name,Synthetic Split Owner Trade Name",
+    );
+    expect(dataCsv).not.toContain("Synthetic Split Owner Trade Name");
+    expect(dataCsv).toContain("/amount");
+  });
+
+  it("withholds a GSTR-3B owner trade name inside the return envelope", () => {
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-3B")],
+      [
+        rawJsonEntry("april-data.json", {
+          status: 1,
+          data: {
+            lglnm: "Synthetic Legal Name",
+            r3b: {
+              gstin: "27ABCDE1234F1Z0",
+              ret_period: "042026",
+              trdnm: "Synthetic Envelope Owner Trade Name",
+              sup_details: { osup_det: { txval: 1 } },
+            },
+          },
+        }),
+      ],
+    );
+
+    const dataCsv = new TextDecoder().decode(summary.dataBytes);
+    expect(contextText(summary.contextRows)).toContain(
+      "taxpayer_identity,identity,Trade name,/data/r3b/trdnm,Synthetic Envelope Owner Trade Name",
+    );
+    expect(dataCsv).not.toContain("Synthetic Envelope Owner Trade Name");
+  });
+
+  it("withholds a GSTR-2B owner trade name under a wrapper", () => {
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-2B")],
+      [
+        rawJsonEntry("april-data.json", {
+          data: {
+            rtnprd: "042026",
+            hdr: { trdnm: "Synthetic Wrapped Owner Trade Name" },
+            amount: 1,
+          },
+        }),
+      ],
+    );
+
+    expect(new TextDecoder().decode(summary.dataBytes)).not.toContain(
+      "Synthetic Wrapped Owner Trade Name",
+    );
+  });
+
+  it("withholds a GSTR-2B owner trade name under a deeper wrapper", () => {
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-2B")],
+      [
+        rawJsonEntry("april-data.json", {
+          data: {
+            rtnprd: "042026",
+            a: { b: { trdnm: "Synthetic Deep Owner Trade Name" } },
+            amount: 1,
+          },
+        }),
+      ],
+    );
+
+    expect(new TextDecoder().decode(summary.dataBytes)).not.toContain(
+      "Synthetic Deep Owner Trade Name",
+    );
+  });
+
+  it("keeps a GSTR-2B supplier trade name with sibling counterparty evidence", () => {
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-2B")],
+      [
+        rawJsonEntry("april-data.json", {
+          data: {
+            rtnprd: "042026",
+            supplier: {
+              ctin: "29ZZZZZ9999Z9ZW",
+              trdnm: "Synthetic Proven Supplier Trade Name",
+            },
+          },
+        }),
+      ],
+    );
+
+    expect(new TextDecoder().decode(summary.dataBytes)).toContain(
+      "Synthetic Proven Supplier Trade Name",
+    );
+  });
+
+  it("keeps differing supplier trade names without an identity conflict", () => {
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-2B")],
+      [
+        rawJsonEntry("april-data.json", {
+          data: {
+            rtnprd: "042026",
+            supplier_one: {
+              ctin: "29ZZZZZ9999Z9ZW",
+              trdnm: "Synthetic Proven Supplier One",
+            },
+            supplier_two: {
+              ctin: "33YYYYY8888Y1ZU",
+              trdnm: "Synthetic Proven Supplier Two",
+            },
+          },
+        }),
+      ],
+    );
+
+    const dataCsv = new TextDecoder().decode(summary.dataBytes);
+    expect(dataCsv).toContain("Synthetic Proven Supplier One");
+    expect(dataCsv).toContain("Synthetic Proven Supplier Two");
+  });
+
+  it("withholds trade names whose sibling counterparty identifier is blank or non-text", () => {
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-2B")],
+      [
+        rawJsonEntry("april-data.json", {
+          data: {
+            rtnprd: "042026",
+            blank_counterparty: {
+              ctin: "",
+              trdnm: "Synthetic Blank-Ctin Trade Name",
+            },
+            numeric_counterparty: {
+              ctin: 1,
+              trdnm: "Synthetic Numeric-Ctin Trade Name",
+            },
+            amount: 1,
+          },
+        }),
+      ],
+    );
+
+    const dataCsv = new TextDecoder().decode(summary.dataBytes);
+    expect(dataCsv).not.toContain("Synthetic Blank-Ctin Trade Name");
+    expect(dataCsv).not.toContain("Synthetic Numeric-Ctin Trade Name");
+    expect(dataCsv).toContain("/amount");
+  });
+
+  it("withholds a mislocated owner trade-name copy through the value net", () => {
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-2B")],
+      [
+        rawJsonEntry("april-data.json", {
+          data: {
+            rtnprd: "042026",
+            a: { b: { trdnm: "Synthetic Value-Net Owner Trade Name" } },
+            owner_name_copy: "Synthetic Value-Net Owner Trade Name",
+            amount: 1,
+          },
+        }),
+      ],
+    );
+
+    const dataCsv = new TextDecoder().decode(summary.dataBytes);
+    expect(dataCsv).not.toContain("Synthetic Value-Net Owner Trade Name");
+    expect(dataCsv).toContain("/amount");
   });
 
   it("keeps an empty-key member as the slash pointer after envelope normalization", () => {
