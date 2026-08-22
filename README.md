@@ -20,7 +20,7 @@ V0 is intentionally narrow:
 - live local downloads for selected filed GSTR-3B and GSTR-1 periods, with
   GSTR-1 Excel available only when the GST Portal provides the selected
   e-invoice details file;
-- private source-build support for selected GSTR-2B periods, pending live
+- GSTR-2B statements, in stated scope, with the live gate recorded as not fully closed; see
   Chrome/Brave evidence before any broader release claim.
 
 ComplyEaze Pack is an independent third-party tool. It is not affiliated with,
