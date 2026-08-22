@@ -53,8 +53,8 @@ durable full-year, or stable-release claims.
   full-year summary CSV is produced for it. It has no consolidated workbook —
   that remains GSTR-3B only — so a GSTR-2B run reports the absence rather than
   emitting a blank or mislabelled one. The Chrome Web Store listing description
-  still calls GSTR-2B "source-build experimental" and is now inconsistent with
-  this; correcting it changes live Store copy and is tracked separately.
+  and Store privacy fields name GSTR-2B as supported beta scope, and a test binds
+  them to `PACK_EXTENSION_DESCRIPTION` and `FILED_RETURNS_RETURN_TYPES`.
 - Full fiscal year download is a local per-period ledger that runs eligible
   periods through the single-period path after user initiation. The four gates
   below are what it must satisfy before Store-facing V0 advertises it:

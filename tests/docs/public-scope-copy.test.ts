@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { FILED_RETURNS_RETURN_TYPES } from "../../src/connectors/gst/filed-returns-return-types";
 import { PACK_EXTENSION_DESCRIPTION } from "../../src/extension/manifest-policy";
 
 const rootDir = process.cwd();
@@ -131,5 +132,28 @@ describe("public scope copy", () => {
     }
 
     expect(offences, `superseded public claims:\n  ${offences.join("\n  ")}`).toEqual([]);
+  });
+
+  // The two guards above catch a claim that says something retired. They cannot
+  // catch one that quietly says too little: the Store single-purpose field named
+  // "filed-return artifacts" only, which silently excluded GSTR-2B for a whole
+  // round of review. Under-inclusion is the same drift wearing the other face,
+  // so the passages that enumerate scope are bound to the code's own list.
+  it("names every supported return type wherever public copy enumerates scope", async () => {
+    const listing = await read("docs/chrome-web-store/listing.md");
+    const singlePurpose = /Single purpose:\s*```text\n([\s\S]*?)```/.exec(listing)?.[1];
+    expect(singlePurpose, "the Single purpose block is no longer parseable").toBeDefined();
+
+    for (const passage of [
+      { label: "the packaged description", text: PACK_EXTENSION_DESCRIPTION },
+      { label: "the Store single-purpose field", text: singlePurpose ?? "" },
+    ]) {
+      const omitted = FILED_RETURNS_RETURN_TYPES.filter((type) => !passage.text.includes(type));
+      expect(
+        omitted,
+        `${passage.label} does not name ${omitted.join(", ")}, which FILED_RETURNS_RETURN_TYPES ` +
+          "lists as supported. Either name it or remove it from the supported list.",
+      ).toEqual([]);
+    }
   });
 });

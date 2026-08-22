@@ -36,9 +36,10 @@ version and review state. Release-readiness and dashboard-closeout documents
 must not claim a newer state than this record.
 
 The Store-supported beta claims are GSTR-1 and GSTR-3B filed returns and GSTR-2B
-auto-drafted statements, single-period. The full-fiscal-year workflow remains a source-build capability and
-must not be advertised as a Store-supported feature until the four evidence
-gates in `PUBLICATION_READINESS.md` are recorded for the release.
+auto-drafted statements, single-period. The full-fiscal-year workflow ships in the
+same binary -- there is only one -- but is not Store-advertised, and must not be
+advertised until the four evidence gates in `PUBLICATION_READINESS.md` are
+recorded for the release.
 
 ## Store Listing Fields
 
@@ -103,7 +104,7 @@ Other fields:
 Single purpose:
 
 ```text
-ComplyEaze Pack lets authorised GST Portal users locally download their own selected filed-return artifacts from an active browser session. It does not file returns, request credentials, or transmit GST documents to ComplyEaze.
+ComplyEaze Pack lets authorised GST Portal users locally download their own selected GSTR-1 and GSTR-3B filed-return artifacts and auto-drafted GSTR-2B statements from an active browser session. It does not file returns, request credentials, or transmit GST documents to ComplyEaze.
 ```
 
 Permission justifications:
