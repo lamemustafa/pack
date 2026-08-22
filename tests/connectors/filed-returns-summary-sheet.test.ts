@@ -552,6 +552,28 @@ describe("filed-return full-year summary sheet", () => {
     expect(new TextDecoder().decode(summary.dataBytes)).not.toContain("Synthetic Owner Trade Name");
   });
 
+  it("does not exempt a value nested under a counterparty trade name", () => {
+    // The carve-out vouches for the supplier's own name, not for whatever sits
+    // underneath it. An object-shaped trdnm gave every descendant the record
+    // prefix, so a nested owner trade name inherited the exemption.
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-2B")],
+      [
+        rawJsonEntry("april-data.json", {
+          data: {
+            rtnprd: "042026",
+            supplier: {
+              ctin: "29ZZZZZ9999Z9ZW",
+              trdnm: { copy: "Synthetic Owner Trade Name" },
+            },
+          },
+        }),
+      ],
+    );
+
+    expect(new TextDecoder().decode(summary.dataBytes)).not.toContain("Synthetic Owner Trade Name");
+  });
+
   it("does not accept the owner's own GSTIN as counterparty evidence", () => {
     // A valid checksum proves the value is a GSTIN, not that it belongs to
     // someone else. A wrapper repeating the owner's GSTIN is the owner's record.

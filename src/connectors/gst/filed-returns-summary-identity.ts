@@ -116,9 +116,16 @@ export function isFiledReturnsSummaryIdentityPath(
   path: string,
   counterpartyRecordPaths: ReadonlySet<string> = new Set(),
 ): boolean {
+  // The counterparty carve-out applies to the trade name ITSELF, not to whatever
+  // sits underneath it. When `trdnm` is object-shaped, every descendant inherits
+  // the record prefix, so `{supplier:{ctin:<valid>,trdnm:{copy:<owner name>}}}`
+  // exempted the nested value from path redaction on evidence that vouched only
+  // for the supplier's own name.
+  const scalar = isFiledReturnsSummaryIdentityScalarPath(path);
   return identityCandidates(path).some(
     ({ identity, recordPath }) =>
       identity.label !== "Trade name" ||
+      !scalar ||
       !hasPositiveCounterpartyTradeNameEvidence(returnType, recordPath, counterpartyRecordPaths),
   );
 }
@@ -283,44 +290,39 @@ function pathsMatch(left: readonly string[], right: readonly string[]): boolean 
   return left.length === right.length && left.every((segment, index) => segment === right[index]);
 }
 
-// No alias is longer than this, so a candidate run past it cannot match one.
-// Without the bound, every contiguous range of every path is sliced and joined,
-// which is cubic in path depth -- and the whole-document identity pre-scan runs
-// this predicate for every string in a source that may be up to 25 MiB, so a
-// deep valid document could stall the export before any output limit applied.
-const MAX_IDENTITY_ALIAS_LENGTH = 19;
+// The alias registry, as data. It was an if-chain with the longest spelling
+// duplicated as a separate `19` constant -- exactly the hand-maintained
+// duplicate this repository keeps paying for, and the bound failed OPEN: an
+// alias longer than the constant would never be reached, so a newly recognised
+// identity would be neither extracted nor redacted.
+const IDENTITY_ALIASES: readonly (readonly [FiledReturnsSummaryIdentity, readonly string[]])[] = [
+  [taxpayerIdentity("GSTIN"), ["gstin"]],
+  [taxpayerIdentity("PAN"), ["pan", "panno", "taxpayerpan"]],
+  [taxpayerIdentity("Legal name"), ["lglnm", "lgnm", "legalname"]],
+  [taxpayerIdentity("Trade name"), ["trdnm", "tradename"]],
+  [returnIdentity("ARN"), ["arn"]],
+  [returnIdentity("ARN date"), ["arndt", "arndate"]],
+  [taxpayerIdentity("Taxpayer name"), ["taxpayername", "taxpyrname", "nameoftaxpayer"]],
+  [
+    taxpayerIdentity("Signatory"),
+    ["signatory", "authsig", "signatoryname", "authorizedsignatory", "authorisedsignatory"],
+  ],
+  [taxpayerIdentity("Designation"), ["designation", "desig"]],
+];
+
+const IDENTITY_BY_ALIAS = new Map<string, FiledReturnsSummaryIdentity>(
+  IDENTITY_ALIASES.flatMap(([identity, aliases]) =>
+    aliases.map((alias) => [alias, identity] as const),
+  ),
+);
+
+// Derived, so adding a longer alias cannot silently put it out of reach.
+const MAX_IDENTITY_ALIAS_LENGTH = Math.max(
+  ...IDENTITY_ALIASES.flatMap(([, aliases]) => aliases.map((alias) => alias.length)),
+);
 
 function identityForCanonicalSegment(segment: string): FiledReturnsSummaryIdentity | null {
-  if (segment === "gstin") return taxpayerIdentity("GSTIN");
-  if (segment === "pan" || segment === "panno" || segment === "taxpayerpan") {
-    return taxpayerIdentity("PAN");
-  }
-  if (segment === "lglnm" || segment === "lgnm" || segment === "legalname") {
-    return taxpayerIdentity("Legal name");
-  }
-  if (segment === "trdnm" || segment === "tradename") {
-    return taxpayerIdentity("Trade name");
-  }
-  if (segment === "arn") return returnIdentity("ARN");
-  if (segment === "arndt" || segment === "arndate") {
-    return returnIdentity("ARN date");
-  }
-  if (segment === "taxpayername" || segment === "taxpyrname" || segment === "nameoftaxpayer") {
-    return taxpayerIdentity("Taxpayer name");
-  }
-  if (
-    segment === "signatory" ||
-    segment === "authsig" ||
-    segment === "signatoryname" ||
-    segment === "authorizedsignatory" ||
-    segment === "authorisedsignatory"
-  ) {
-    return taxpayerIdentity("Signatory");
-  }
-  if (segment === "designation" || segment === "desig") {
-    return taxpayerIdentity("Designation");
-  }
-  return null;
+  return IDENTITY_BY_ALIAS.get(segment) ?? null;
 }
 
 function taxpayerIdentity(label: string): FiledReturnsSummaryIdentity {
