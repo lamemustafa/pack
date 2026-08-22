@@ -16,7 +16,7 @@
 
 .target-strip h2 {
   margin: 0;
-  color: var(--pack-ink);
+  color: var(--pack-ink-primary);
   font-size: 16px;
   line-height: 1.25;
 }
@@ -26,10 +26,10 @@
   min-height: 24px;
   align-items: center;
   justify-content: center;
-  border: 1px solid #c8d3de;
+  border: 1px solid var(--pack-border-default);
   border-radius: 999px;
-  background: #f4f7fa;
-  color: #26394c;
+  background: var(--pack-surface-muted);
+  color: var(--pack-ink-secondary);
   padding: 3px 8px;
   font-size: 11px;
   font-weight: 750;
@@ -37,15 +37,15 @@
 }
 
 .state-pill-ready {
-  border-color: #a9cfb7;
-  background: #eef8f1;
-  color: #185d38;
+  border-color: var(--pack-success-border);
+  background: var(--pack-success-bg);
+  color: var(--pack-success-fg);
 }
 
 .state-pill-needed {
-  border-color: #ddc58b;
-  background: #fff9eb;
-  color: #5f4300;
+  border-color: var(--pack-warning-border);
+  background: var(--pack-warning-bg);
+  color: var(--pack-warning-fg);
 }
 
 .target-metadata {
@@ -76,10 +76,10 @@
   min-height: 30px;
   align-items: center;
   gap: 7px;
-  border: 1px solid #dce4ed;
+  border: 1px solid var(--pack-border-subtle);
   border-radius: 7px;
-  background: #f9fbfd;
-  color: #26394c;
+  background: var(--pack-surface-muted);
+  color: var(--pack-ink-secondary);
   font-size: 11px;
   font-weight: 750;
   line-height: 1.2;
@@ -94,8 +94,8 @@
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: var(--pack-accent);
-  color: #ffffff;
+  background: var(--pack-action);
+  color: var(--pack-ink-inverse);
   content: counter(target-step);
   counter-increment: target-step;
   font-size: 10px;
@@ -106,7 +106,7 @@
   display: grid;
   gap: 3px;
   min-width: 0;
-  border-left: 1px solid #dde5ee;
+  border-left: 1px solid var(--pack-border-subtle);
   padding: 2px 0 2px 10px;
 }
 
@@ -116,14 +116,14 @@
 }
 
 .target-metadata dt {
-  color: #5c6c7d;
+  color: var(--pack-ink-muted);
   font-size: 10px;
   font-weight: 700;
 }
 
 .target-metadata dd {
   margin: 0;
-  color: #172334;
+  color: var(--pack-ink-primary);
   font-size: 12.5px;
   font-weight: 800;
   line-height: 1.25;
@@ -133,8 +133,8 @@
 .target-status {
   grid-column: 1 / -1;
   margin: 0;
-  border-top: 1px solid #dde5ee;
-  color: #324356;
+  border-top: 1px solid var(--pack-border-subtle);
+  color: var(--pack-ink-secondary);
   font-size: 12px;
   line-height: 1.35;
   text-align: left;

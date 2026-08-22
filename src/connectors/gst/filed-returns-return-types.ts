@@ -1,3 +1,5 @@
+import { FILED_RETURNS_CAPABILITIES } from "./filed-returns-capabilities.ts";
+
 export const FILED_RETURNS_RETURN_TYPES = ["GSTR-3B", "GSTR-1", "GSTR-2B"] as const;
 
 export type FiledReturnsReturnType = (typeof FILED_RETURNS_RETURN_TYPES)[number];
@@ -10,13 +12,11 @@ export function isFiledReturnsReturnType(input: unknown): input is FiledReturnsR
 }
 
 export function supportsFullFiscalYearFiledReturnsRun(returnType: FiledReturnsReturnType): boolean {
-  return returnType === "GSTR-3B" || returnType === "GSTR-1" || returnType === "GSTR-2B";
+  return FILED_RETURNS_CAPABILITIES[returnType].fullFiscalYear;
 }
 
 export function filedReturnsScopeId(returnType: FiledReturnsReturnType): string {
-  if (returnType === "GSTR-3B") return "gst-filed-returns-gstr3b-pdf-private-v0";
-  if (returnType === "GSTR-1") return "gst-filed-returns-gstr1-pdf-private-v0";
-  return "gst-gstr2b-private-v0";
+  return FILED_RETURNS_CAPABILITIES[returnType].scopeId;
 }
 
 export function filedReturnsSafeSlug(returnType: FiledReturnsReturnType): string {

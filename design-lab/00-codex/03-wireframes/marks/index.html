@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pack Mark Directions</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #111827;
+        --muted: #4b5563;
+        --line: #cbd5e1;
+        --page: #f3f6f8;
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--page);
+        color: var(--ink);
+        padding: 24px;
+      }
+      main {
+        display: grid;
+        gap: 18px;
+        max-width: 820px;
+        margin: 0 auto;
+      }
+      section {
+        display: grid;
+        gap: 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        padding: 14px;
+      }
+      h1,
+      h2,
+      p {
+        margin: 0;
+      }
+      h1 {
+        font-size: 20px;
+      }
+      h2 {
+        font-size: 15px;
+      }
+      p {
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.4;
+      }
+      .sizes {
+        display: grid;
+        grid-template-columns: 160px 80px 48px 1fr;
+        gap: 14px;
+        align-items: center;
+      }
+      .swatch {
+        display: grid;
+        gap: 6px;
+        justify-items: center;
+      }
+      .label {
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 750;
+      }
+      .toolbar {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        min-height: 44px;
+        border-radius: 8px;
+        padding: 8px 10px;
+      }
+      .toolbar-light {
+        background: #f8f9fa;
+      }
+      .toolbar-dark {
+        background: #202124;
+      }
+      .lockup {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--ink);
+        font-size: 15px;
+        font-weight: 850;
+      }
+      .lockup span {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 650;
+      }
+      .toolbar-dark .lockup {
+        color: #fff;
+      }
+      .toolbar-dark .lockup span {
+        color: #cbd5e1;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Pack Mark Directions</h1>
+        <p>Each direction is shown at 128, 32, and 16 px plus light/dark toolbar scale.</p>
+      </header>
+
+      <section>
+        <h2>Direction A: Ledger P</h2>
+        <div class="sizes">
+          <div class="swatch">
+            <img
+              src="pack-mark-ledger.svg"
+              width="128"
+              height="128"
+              alt="Ledger P at 128 px"
+            /><span class="label">128 px</span>
+          </div>
+          <div class="swatch">
+            <img src="pack-mark-ledger.svg" width="32" height="32" alt="Ledger P at 32 px" /><span
+              class="label"
+              >32 px</span
+            >
+          </div>
+          <div class="swatch">
+            <img src="pack-mark-ledger.svg" width="16" height="16" alt="Ledger P at 16 px" /><span
+              class="label"
+              >16 px</span
+            >
+          </div>
+          <div class="swatch">
+            <div class="toolbar toolbar-light">
+              <img src="pack-mark-ledger.svg" width="16" height="16" alt="" />
+              <div class="lockup">Pack <span>by ComplyEaze</span></div>
+            </div>
+            <div class="toolbar toolbar-dark">
+              <img src="pack-mark-ledger.svg" width="16" height="16" alt="" />
+              <div class="lockup">Pack <span>by ComplyEaze</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Direction B: Target Archive</h2>
+        <div class="sizes">
+          <div class="swatch">
+            <img
+              src="pack-mark-target.svg"
+              width="128"
+              height="128"
+              alt="Target Archive at 128 px"
+            /><span class="label">128 px</span>
+          </div>
+          <div class="swatch">
+            <img
+              src="pack-mark-target.svg"
+              width="32"
+              height="32"
+              alt="Target Archive at 32 px"
+            /><span class="label">32 px</span>
+          </div>
+          <div class="swatch">
+            <img
+              src="pack-mark-target.svg"
+              width="16"
+              height="16"
+              alt="Target Archive at 16 px"
+            /><span class="label">16 px</span>
+          </div>
+          <div class="swatch">
+            <div class="toolbar toolbar-light">
+              <img src="pack-mark-target.svg" width="16" height="16" alt="" />
+              <div class="lockup">Pack <span>by ComplyEaze</span></div>
+            </div>
+            <div class="toolbar toolbar-dark">
+              <img src="pack-mark-target.svg" width="16" height="16" alt="" />
+              <div class="lockup">Pack <span>by ComplyEaze</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

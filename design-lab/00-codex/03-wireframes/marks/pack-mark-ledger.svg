@@ -1,0 +1,21 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  role="img"
+  viewBox="0 0 128 128"
+  aria-labelledby="title desc"
+>
+  <title id="title">Pack ledger mark</title>
+  <desc id="desc">A compact Pack P built from a ledger page and target-bound check.</desc>
+  <rect x="10" y="10" width="108" height="108" rx="18" fill="#12365c" />
+  <path d="M38 30h35c13 0 22 8 22 20s-9 20-22 20H54v28H38V30Z" fill="#ffffff" />
+  <path d="M54 44v12h18c4 0 7-2 7-6s-3-6-7-6H54Z" fill="#12365c" />
+  <path
+    d="M71 92l11 11 25-29"
+    fill="none"
+    stroke="#20b38f"
+    stroke-width="11"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <path d="M30 24h45" stroke="#8ecae6" stroke-width="4" stroke-linecap="round" opacity="0.9" />
+</svg>
