@@ -70,21 +70,27 @@ Beta: locally download your filed GSTR-1 and GSTR-3B returns and your GSTR-2B st
 Description:
 
 ```text
-Download filed GST returns locally from your active GST Portal session.
+Save copies of the GST returns you have already filed, straight from the portal.
 
-ComplyEaze Pack helps authorised users download their own filed GST returns and auto-drafted GSTR-2B statements using GST Portal pages already open in Chrome. The Store-supported beta scope is:
+ComplyEaze Pack works on the GST Portal pages you already have open in Chrome. You sign in to the portal yourself, as usual. Pack finds the return you asked for and clicks the portal's own download button.
 
-• GSTR-3B: filed-return summary PDF
-• GSTR-1: summary PDF and, when the portal provides it, e-invoice details Excel
-• GSTR-2B: auto-drafted statement, as summary PDF
+What it covers today:
 
-Files are saved by Chrome to the user's device. Pack does not require a Pack or ComplyEaze account. It does not ask for or store GST Portal credentials, OTPs, CAPTCHA responses, cookies, or session tokens, and it does not upload GST documents or return contents to ComplyEaze.
+• GSTR-3B: the filed return summary, as PDF
+• GSTR-1: the summary PDF, plus e-invoice details in Excel when the portal offers them
+• GSTR-2B: your auto-drafted ITC statement, as PDF
 
-Store-supported use is a single return period at a time. The package contains further capability that this listing does not claim, because the release evidence for those claims is not yet recorded.
+Chrome saves the files to your machine, in your usual downloads folder. There is no ComplyEaze account and nothing to sign up for.
 
-Pack's content script runs only on the four declared GST Portal hosts. When a supported page loads, it reads page context locally so Pack can identify eligible workflows; artifact capture and downloads start only after an explicit user action. Pack keeps limited redacted recovery state locally so interrupted work does not retry blindly. Temporary artifact bytes may be staged in browser-local OPFS for explicit capture or ZIP operations. Pack normally removes those bytes after confirmed export or explicit discard; if local cleanup fails, it retains them with a cleanup-pending status until a later cleanup attempt succeeds.
+Pack never asks for your portal password, an OTP, or a CAPTCHA answer. It does not read or store your cookies or session tokens. Your returns stay on your computer. They are not sent to ComplyEaze, and we have no way to see them.
 
-ComplyEaze Pack is an independent third-party tool. It is not affiliated with, endorsed by, or operated by GSTN, CBIC, or the Government of India.
+This listing covers one return period at a time. The extension can do more than that, and we would rather record the evidence before we advertise it.
+
+Pack runs on four GST Portal addresses and nowhere else. When one of those pages loads, it reads what is on the page so it can work out which returns are available to you. Nothing is captured or downloaded until you ask for it.
+
+While a download is in progress, Pack keeps a short redacted note of how far it got, so an interrupted run does not start again blindly. Files being assembled are held in your browser's own storage and cleared once the download is confirmed. If clearing fails, Pack marks them and tries again rather than quietly leaving them behind.
+
+ComplyEaze Pack is an independent tool. It is not affiliated with, endorsed by, or operated by GSTN, CBIC, or the Government of India.
 ```
 
 Other fields:
@@ -104,7 +110,7 @@ Other fields:
 Single purpose:
 
 ```text
-ComplyEaze Pack lets authorised GST Portal users locally download their own selected GSTR-1 and GSTR-3B filed-return artifacts and auto-drafted GSTR-2B statements from an active browser session. It does not file returns, request credentials, or transmit GST documents to ComplyEaze.
+ComplyEaze Pack lets someone signed in to the GST Portal download their own GSTR-1 and GSTR-3B filed returns, and their auto-drafted GSTR-2B statements, from the session already open in their browser. It does not file returns, ask for credentials, or send GST documents to ComplyEaze.
 ```
 
 Permission justifications:
