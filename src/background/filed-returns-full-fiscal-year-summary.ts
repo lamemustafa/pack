@@ -296,7 +296,16 @@ export function fullFiscalYearTargetEvidence(
   // showing its cancelled target as "Needs review" and the untouched ones as
   // "Waiting", for a ledger that had just been deleted.
   const runDiscarded = flowStep.safeSignals.includes("full-fiscal-year-run-discarded");
-  if (runDiscarded || (clearedWithoutDelivery && hadStagedFiles)) return [];
+  // Clearing staged files invalidates evidence about files. It does not
+  // invalidate a portal-confirmed `not-filed`, which is a fact about the return
+  // rather than about anything Pack held -- and for a year where earlier periods
+  // were confirmed not filed, dropping those rows discards the only result the
+  // run produced. Everything that depended on a file Pack no longer has goes.
+  if (runDiscarded || (clearedWithoutDelivery && hadStagedFiles)) {
+    return ledger.targets
+      .filter((target) => target.status === "not-filed")
+      .map((target) => ({ period: target.period, outcome: "not-filed" as const }));
+  }
   // From the step as well as the ledger. An MV3 interruption produces a blocked
   // summary while the persisted ledger normally still reads `running`, so
   // reading the ledger alone left the current target as "In progress" and out of

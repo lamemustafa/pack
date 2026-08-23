@@ -338,15 +338,16 @@ function toZipResult(
     // carries no invoice rows; GSTR-3B ships both. So a produced workbook means
     // one entry for GSTR-2B and two for GSTR-3B, and any no-workbook outcome
     // means one either way.
-    const summaryReturnType = expected.summaryPlan?.[0]?.returnType;
+    // Two entries unless the receipt says the workbook shipped alone. A GSTR-2B
+    // workbook without ITC totals travels with the CSV, and that receipt omits
+    // `workbookOnly` -- so the count follows the flag rather than the return
+    // type, which was the assumption that made the fallback unreachable.
     const expectedSummaryEntryCount =
       summary?.status !== "included"
         ? 0
-        : summary.workbookOutcome !== undefined
+        : summary.workbookOutcome !== undefined || summary.workbookOnly === true
           ? 1
-          : summaryReturnType === "GSTR-2B"
-            ? 1
-            : 2;
+          : 2;
     const summaryCountMatches = response.summaryEntryCount === expectedSummaryEntryCount;
     if (expected.summaryPlan && (!summary || !summaryCountMatches)) {
       return { status: "failed", errorCategory: "offscreen-response-invalid" };
@@ -403,7 +404,10 @@ function isSummaryResult(
   const homogeneous = plan.every((entry) => entry.returnType === returnType);
   const permittedWorkbookOutcomes: readonly (string | undefined)[] =
     homogeneous && returnType === "GSTR-2B"
-      ? [undefined, "no-records", "unavailable"]
+      ? // `not-applicable` is reachable for GSTR-2B too: a PDF-only selection, or
+        // one whose JSON is artifact-unavailable, never had a source to build
+        // from. Omitting it rejected the worker's own successful result.
+        [undefined, "no-records", "not-applicable", "unavailable"]
       : homogeneous && returnType === "GSTR-3B"
         ? [undefined]
         : ["not-applicable"];
@@ -427,9 +431,13 @@ function isSummaryResult(
     // A successful GSTR-2B workbook ships alone, so the flag is required rather
     // than optional there, and refused beside any CSV-only outcome -- without
     // it the status message claims a tidy CSV the ZIP does not contain.
-    (returnType === "GSTR-2B" && homogeneous && record.workbookOutcome === undefined
-      ? record.workbookOnly === true
+    // A GSTR-2B workbook ships alone only when it carries the ITC totals that
+    // justify dropping the CSV. Without them the worker ships both and omits the
+    // flag, so requiring it unconditionally rejected that valid receipt.
+    (returnType === "GSTR-2B" && homogeneous
+      ? record.workbookOnly === undefined || record.workbookOnly === true
       : record.workbookOnly === undefined) &&
+    (record.workbookOnly !== true || record.workbookOutcome === undefined) &&
     typeof record.outcomeOnly === "boolean" &&
     typeof record.parsedPeriodCount === "number" &&
     Number.isInteger(record.parsedPeriodCount) &&

@@ -333,18 +333,63 @@ interface OwnerIdentity {
 const RENDERED_SUBTREE_KEYS = ["docdata", "itcsumm"] as const;
 
 /**
- * The value of `key` inside `text`, as a substring, or undefined.
+ * The value of `key` as a direct child of the object `text` describes.
  *
- * Brace-matched rather than parsed, because the caller needs the raw text: the
- * precision this guards is destroyed by `JSON.parse` before any parsed value
- * could be inspected. String state is tracked so a brace inside a taxpayer's
- * trade name cannot end the region early.
+ * Depth-aware, not a first-occurrence search. `indexOf('"docdata"')` finds a
+ * decoy anywhere in the response -- and a decoy is exactly what a captured
+ * payload carries, which is why the fixtures in this repo are built with the
+ * surrounding content rather than the field under test alone. A decoy matched
+ * first would send the precision scan over the wrong subtree while the real
+ * amounts went unchecked, so the guard would pass by looking at nothing.
+ *
+ * Brace-matched rather than parsed, because the precision this protects is
+ * destroyed by `JSON.parse` before any parsed value could be inspected. String
+ * state is tracked so a brace inside a trade name cannot close a region early.
  */
-function subtreeText(text: string, key: string): string | undefined {
+function childValueText(text: string, key: string): string | undefined {
   const marker = `"${key}"`;
-  const keyAt = text.indexOf(marker);
-  if (keyAt === -1) return undefined;
-  let index = text.indexOf(":", keyAt + marker.length);
+  let index = 0;
+  let depth = 0;
+  let inString = false;
+  while (index < text.length) {
+    const character = text[index]!;
+    if (inString) {
+      if (character === "\\") {
+        index += 2;
+        continue;
+      }
+      if (character === '"') inString = false;
+      index += 1;
+      continue;
+    }
+    if (character === "{" || character === "[") {
+      depth += 1;
+      index += 1;
+      continue;
+    }
+    if (character === "}" || character === "]") {
+      depth -= 1;
+      index += 1;
+      continue;
+    }
+    if (character === '"') {
+      // Only a key sitting directly inside the outermost object counts.
+      if (depth === 1 && text.startsWith(marker, index)) {
+        const value = valueTextAt(text, index + marker.length);
+        if (value !== undefined) return value;
+      }
+      inString = true;
+      index += 1;
+      continue;
+    }
+    index += 1;
+  }
+  return undefined;
+}
+
+/** The brace-matched value following a key, or undefined if it is not a container. */
+function valueTextAt(text: string, afterKey: number): string | undefined {
+  let index = text.indexOf(":", afterKey);
   if (index === -1) return undefined;
   index += 1;
   while (index < text.length && /\s/.test(text[index]!)) index += 1;
@@ -373,8 +418,13 @@ function subtreeText(text: string, key: string): string | undefined {
 }
 
 function rejectInexactNumbersInRenderedSubtrees(text: string): void {
+  // Anchored at `/data`, then its direct children. The workbook renders
+  // `parsed.data.docdata` and `parsed.data.itcsumm`, so anything reached by a
+  // different route is a different value.
+  const data = childValueText(text, "data");
+  if (data === undefined) return;
   for (const key of RENDERED_SUBTREE_KEYS) {
-    const subtree = subtreeText(text, key);
+    const subtree = childValueText(data, key);
     if (subtree !== undefined) rejectInexactNumbers(subtree);
   }
 }
