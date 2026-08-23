@@ -52,9 +52,16 @@ For each release candidate:
 - Confirm a GSTR-2B assembly with invoice-level records adds its own
   `full-year-workbook.xlsx` **and no tidy CSV**, with an `ITC summary` sheet
   first and one sheet per present section. On every sheet, confirm the owner
-  GSTIN, legal name and trade name appear in the header block and in **no**
-  invoice row, and that counterparty GSTIN and trade name appear in the invoice
-  rows -- withholding them would empty the column the statement exists to report.
+  GSTIN appears in the header block and in **no** invoice row. Owner legal and
+  trade name are checked the same way **when the source carries them**: a
+  captured GSTR-2B response has neither, and the workbook omits a header row
+  rather than printing a labelled blank, so their absence is correct rather than
+  a finding.
+- Confirm counterparty GSTIN and trade name appear in the invoice rows of the
+  sections that carry a counterparty -- B2B, B2BA and CDNR. IMPG has none by
+  design, since an import is declared on a bill of entry, so their absence there
+  is also correct. Withholding a counterparty where one exists would empty the
+  column the statement exists to report.
 - Confirm the `ITC summary` sheet carries only the portal's own figures from
   `data.itcsumm`, and that a category or section name it does not recognise is
   either rendered as plain text or withheld and counted, never printed when the
