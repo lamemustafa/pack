@@ -165,11 +165,20 @@ export type PackOffscreenBlobUrlResponse =
  * disagree about which outcomes exist.
  *
  * - `not-applicable`: this return type never produces a workbook.
- * - `no-records`: it does, but this document carried no invoice-level record.
+ * - `no-source`: it does, but this run staged nothing to build one from.
+ * - `no-records`: it does, a source was read, and it carried no invoice-level
+ *   record.
  * - `unavailable`: one was attempted and could not be produced.
+ *
+ * `no-source` and `not-applicable` were one value until a PDF-only GSTR-2B run
+ * reported the latter and told the user a workbook is unavailable for GSTR-2B,
+ * which is false -- the return type supports one, this selection gave it
+ * nothing to read. Two causes sharing one value cannot both be described
+ * accurately, and the collapsed value renders the wrong one.
  */
 export const FILED_RETURNS_WORKBOOK_ABSENCE_OUTCOMES = [
   "not-applicable",
+  "no-source",
   "no-records",
   "unavailable",
 ] as const;

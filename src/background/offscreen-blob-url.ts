@@ -404,10 +404,12 @@ function isSummaryResult(
   const homogeneous = plan.every((entry) => entry.returnType === returnType);
   const permittedWorkbookOutcomes: readonly (string | undefined)[] =
     homogeneous && returnType === "GSTR-2B"
-      ? // `not-applicable` is reachable for GSTR-2B too: a PDF-only selection, or
-        // one whose JSON is artifact-unavailable, never had a source to build
-        // from. Omitting it rejected the worker's own successful result.
-        [undefined, "no-records", "not-applicable", "unavailable"]
+      ? // A PDF-only selection, or one whose JSON is artifact-unavailable, never
+        // had a source to build from and reports `no-source`. `not-applicable`
+        // stays out: for GSTR-2B it is not reachable, and accepting it would let
+        // a stale receipt render "not available for this return type" about a
+        // return type that supports one.
+        [undefined, "no-records", "no-source", "unavailable"]
       : homogeneous && returnType === "GSTR-3B"
         ? [undefined]
         : ["not-applicable"];
@@ -422,12 +424,21 @@ function isSummaryResult(
     ]) &&
     record.status === "included" &&
     permittedWorkbookOutcomes.includes(record.workbookOutcome as string | undefined) &&
-    // Combinations, not fields. A produced workbook needs a staged JSON source,
-    // and such a source also contributes a parsed period -- so a workbook with
-    // no parsed period is a shape the worker cannot emit, and accepting it let a
-    // stale receipt through while the status claimed a workbook accompanied an
-    // outcome-only CSV.
-    (record.workbookOutcome !== undefined || (record.parsedPeriodCount as number) > 0) &&
+    // Combinations, not fields. Only the GSTR-2B workbook is built from staged
+    // JSON, so only there does a produced workbook imply a parsed period; the
+    // GSTR-3B workbook is built from the run's own outcome rows and legitimately
+    // reports none. Applying the GSTR-2B rule to every return type rejected that
+    // producer receipt and dropped an assembled ZIP before its download started.
+    (returnType !== "GSTR-2B" ||
+      !homogeneous ||
+      record.workbookOutcome !== undefined ||
+      (record.parsedPeriodCount as number) > 0) &&
+    // The absence reasons are not interchangeable, and each is reachable from
+    // exactly one producer state. `no-source` means nothing was staged, which is
+    // the same condition as no period having been parsed; a receipt claiming it
+    // beside a parsed period is a combination the worker cannot emit.
+    (record.workbookOutcome !== "no-source" || record.parsedPeriodCount === 0) &&
+    (record.workbookOutcome !== "no-records" || (record.parsedPeriodCount as number) > 0) &&
     // A successful GSTR-2B workbook ships alone, so the flag is required rather
     // than optional there, and refused beside any CSV-only outcome -- without
     // it the status message claims a tidy CSV the ZIP does not contain.

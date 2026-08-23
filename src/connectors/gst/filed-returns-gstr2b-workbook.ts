@@ -417,16 +417,49 @@ function valueTextAt(text: string, afterKey: number): string | undefined {
   return undefined;
 }
 
-function rejectInexactNumbersInRenderedSubtrees(text: string): void {
+/**
+ * The raw-token scan and the parser do not agree on what a key is spelled. A
+ * canonical source may encode `data` as `"d\u0061ta"`, which `JSON.parse` and
+ * the flattener both decode, and which this scan -- comparing raw spelling --
+ * does not find. Treating "not found" as "nothing to check" would then render
+ * the parsed subtree with none of its numbers examined, which is the guard
+ * being skipped rather than the guard passing.
+ *
+ * So the locator is checked against the parsed object rather than trusted: a
+ * subtree the parser can reach and the scan cannot is a source this build
+ * cannot make a precision claim about, and it is refused. Decoding escapes here
+ * instead would put a second JSON key parser next to the real one, which is the
+ * duplicate this guard exists to avoid.
+ */
+function rejectInexactNumbersInRenderedSubtrees(text: string, parsed: unknown): void {
   // Anchored at `/data`, then its direct children. The workbook renders
   // `parsed.data.docdata` and `parsed.data.itcsumm`, so anything reached by a
   // different route is a different value.
+  const parsedData = childObject(parsed, "data");
   const data = childValueText(text, "data");
-  if (data === undefined) return;
+  if (data === undefined) {
+    if (parsedData === undefined) return;
+    throw new FiledReturnsGstr2bWorkbookSchemaError(
+      "GSTR-2B workbook source spells a rendered key in a form this build cannot scan for exact amounts.",
+    );
+  }
   for (const key of RENDERED_SUBTREE_KEYS) {
     const subtree = childValueText(data, key);
-    if (subtree !== undefined) rejectInexactNumbers(subtree);
+    if (subtree === undefined) {
+      if (childObject(parsedData, key) === undefined) continue;
+      throw new FiledReturnsGstr2bWorkbookSchemaError(
+        "GSTR-2B workbook source spells a rendered key in a form this build cannot scan for exact amounts.",
+      );
+    }
+    rejectInexactNumbers(subtree);
   }
+}
+
+/** The named child of an object value, or undefined when there is not one. */
+function childObject(value: unknown, key: string): unknown {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+  const child = (value as Record<string, unknown>)[key];
+  return typeof child === "object" && child !== null ? child : undefined;
 }
 
 function rejectInexactNumbers(text: string): void {
@@ -530,7 +563,7 @@ function gstr2bSources(
     // Outside the JSON.parse catch on purpose: inside it, this refusal was
     // rewritten as "source is not JSON", which is untrue and undiagnosable. A
     // boundary that rejects a value must be able to state its own reason.
-    rejectInexactNumbersInRenderedSubtrees(sourceText);
+    rejectInexactNumbersInRenderedSubtrees(sourceText, parsed);
     const data = requiredObject(requiredObject(parsed, "/").data, "/data");
     sources.push({ data, period: item.period });
   }

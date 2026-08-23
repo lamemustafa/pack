@@ -66,6 +66,8 @@ function summaryInclusionClaim(lifecycle: FiledReturnsSummaryLifecycle, contents
 // here rather than silently rendering the fallback sentence.
 const WORKBOOK_ABSENCE_SENTENCE: Readonly<Record<FiledReturnsWorkbookAbsenceOutcome, string>> = {
   "not-applicable": " A consolidated workbook is not available for this return type.",
+  "no-source":
+    " This run staged no portal JSON to build the workbook from, so the ZIP has the tidy CSV only.",
   "no-records":
     " The staged portal JSON carried no invoice-level records, so no workbook was produced.",
   unavailable:

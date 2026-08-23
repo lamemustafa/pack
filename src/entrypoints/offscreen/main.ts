@@ -354,12 +354,14 @@ function createSummaryEntry(
           // GSTR-2B does produce workbooks, so "not-applicable" would give the
           // wrong reason: nothing here is inapplicable to the return type, this
           // document simply carried no invoice-level record.
-          // "no-records" says the staged JSON carried none. A run with no
+          // "no-records" says a source was read and carried none. A run with no
           // staged JSON at all -- a PDF-only GSTR-2B year, or one where the JSON
-          // is artifact-unavailable -- never had a source to read, so the reason
-          // is that a workbook was not applicable to what was selected.
+          // is artifact-unavailable -- never had a source to read, which is a
+          // different fact and gets its own outcome. Reporting `not-applicable`
+          // here told the user a workbook is unavailable for GSTR-2B, which is
+          // false: the return type supports one, this selection gave it nothing.
           workbookOutcome:
-            gstr2bWorkbookApplicable && hasStagedGstr2bJson ? "no-records" : "not-applicable",
+            gstr2bWorkbookApplicable && hasStagedGstr2bJson ? "no-records" : "no-source",
         },
       };
     }
