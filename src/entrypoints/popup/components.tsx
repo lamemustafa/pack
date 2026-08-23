@@ -28,6 +28,19 @@ export interface ScopeFormProps {
   onScopeChange: (scope: FiledReturnsDownloadScope) => void;
   onStart: () => void;
   showPrimaryAction?: boolean;
+  /**
+   * A refusal that belongs to a different scope than the one on screen.
+   *
+   * `flowSummary` is scoped: change the selection and it goes null, taking any
+   * outstanding review with it. The background does not scope its refusal --
+   * `startFiledReturnsDownloadFlow` returns an unresolved target review before
+   * it reads the requested scope at all -- so without this the form offers a
+   * start button for an action that cannot succeed.
+   *
+   * The deleted popup avoided this by never showing more than one scope. The
+   * panel does, so the block has to travel with the form.
+   */
+  externalBlock?: { disabled: true; label: string } | null;
 }
 
 export function ScopeForm({
@@ -39,6 +52,7 @@ export function ScopeForm({
   onScopeChange,
   onStart,
   showPrimaryAction = true,
+  externalBlock = null,
 }: ScopeFormProps) {
   const formModel = createScopeFormModel(scope);
   const multipleArtifactChoices = formModel.artifactOptions.length > 1;
@@ -163,6 +177,7 @@ export function ScopeForm({
         <ScopeFormAction
           busy={busy}
           context={context}
+          externalBlock={externalBlock}
           flowSummary={flowSummary ?? null}
           scope={scope}
           onStart={onStart}
@@ -174,6 +189,7 @@ export function ScopeForm({
 
 export function ScopeFormAction({
   busy,
+  externalBlock = null,
   context,
   flowSummary,
   scope,
@@ -181,12 +197,17 @@ export function ScopeFormAction({
 }: {
   busy: string | null;
   context: PortalContext | null;
+  /** See `ScopeFormProps.externalBlock`: a refusal from a different scope. */
+  externalBlock?: { disabled: true; label: string } | null;
   flowSummary?: FiledReturnsFlowSummary | null;
   scope: FiledReturnsDownloadScope;
   onStart: () => void;
 }) {
   const formModel = createScopeFormModel(scope);
-  const startAction = getScopeFormStartAction(scope, flowSummary, busy, formModel.fullFiscalYear);
+  const ownAction = getScopeFormStartAction(scope, flowSummary, busy, formModel.fullFiscalYear);
+  // The external block wins: it describes a refusal the background will apply
+  // whatever this form asks for.
+  const startAction = externalBlock ?? ownAction;
   const actionCopy = getScopeActionCopy(scope, formModel.fullFiscalYear);
   const portalSupported = context?.supported === true;
   const portalIndependentRetry = canRetryFullFiscalYearZipWithoutPortal(flowSummary);

@@ -143,4 +143,51 @@ describe("popup scope form", () => {
     expect(formMarkup).toMatch(/<select[^>]*disabled=""/);
     expect(formMarkup).toMatch(/<input[^>]*disabled=""/);
   });
+
+  // #206: the panel offers several scopes at once, and the background does not
+  // scope its refusal -- an unresolved target review is returned before the
+  // requested scope is read. Changing the selection nulls `flowSummary`, so
+  // without an external block the form renders an enabled start button for a run
+  // that cannot begin. The deleted popup avoided this by only ever showing one
+  // scope; the panel cannot.
+  it("refuses to start when a saved run blocks every scope", () => {
+    const markup = renderToStaticMarkup(
+      <ScopeFormAction
+        busy={null}
+        context={{ supported: true } as never}
+        externalBlock={{ disabled: true, label: "Resolve the paused run first" }}
+        flowSummary={null}
+        scope={{
+          artifactType: "PDF",
+          financialYear: "2026-27",
+          period: "April",
+          returnType: "GSTR-3B",
+        }}
+        onStart={() => {}}
+      />,
+    );
+
+    expect(markup).toContain("Resolve the paused run first");
+    expect(markup).toContain("disabled");
+  });
+
+  it("starts normally when no saved run blocks the scope", () => {
+    const markup = renderToStaticMarkup(
+      <ScopeFormAction
+        busy={null}
+        context={{ supported: true } as never}
+        externalBlock={null}
+        flowSummary={null}
+        scope={{
+          artifactType: "PDF",
+          financialYear: "2026-27",
+          period: "April",
+          returnType: "GSTR-3B",
+        }}
+        onStart={() => {}}
+      />,
+    );
+
+    expect(markup).not.toContain("disabled");
+  });
 });

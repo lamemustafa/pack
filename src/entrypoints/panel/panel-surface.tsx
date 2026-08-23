@@ -180,6 +180,12 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
                 <ScopeForm
                   busy={pack.effectiveBusy}
                   context={pack.context}
+                  // The saved run blocks this form for the same reason it blocks
+                  // every preset: the background refuses an unresolved target
+                  // review before it reads the requested scope. Changing the
+                  // selection nulls `scopedFlowSummary` and would otherwise
+                  // leave the start button enabled for a run that cannot begin.
+                  externalBlock={savedRunBlock}
                   flowSummary={pack.scopedFlowSummary}
                   scope={pack.scope}
                   scopeLockedForReview={pack.scopeLockedForReview}
