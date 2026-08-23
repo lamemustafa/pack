@@ -46,6 +46,25 @@ describe("filed-return summary status", () => {
     expect(message).toContain("The workbook is not included in this ZIP.");
   });
 
+  // GSTR-2B ships its workbook without the tidy CSV, so a message naming both
+  // is a completion claim for a file that was never written.
+  it("names only the workbook when the run shipped no CSV", () => {
+    const outcome = filedReturnsSummaryOutcome(true, {
+      status: "included",
+      outcomeOnly: false,
+      parsedPeriodCount: 12,
+      rowCount: 20,
+      workbookOnly: true,
+    });
+
+    expect(outcome.safeSignals).toContain("full-fiscal-year-summary-workbook-only");
+    for (const lifecycle of LIFECYCLES) {
+      const message = filedReturnsSummaryStatusMessage(outcome.safeSignals, lifecycle);
+      expect(message).not.toContain("tidy CSV");
+      expect(message).toContain("the workbook for 12 periods");
+    }
+  });
+
   it("names the return-type workbook boundary while keeping the CSV included", () => {
     const outcome = filedReturnsSummaryOutcome(true, {
       status: "included",

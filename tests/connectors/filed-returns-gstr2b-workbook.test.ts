@@ -474,6 +474,70 @@ describe("GSTR-2B consolidated workbook", () => {
     expect(othersup?.[3]).not.toMatch(/^4\(A\)/);
   });
 
+  // An ITC summary alone must not make a workbook. A nil period, or one holding
+  // only a section this build does not render, would otherwise produce an
+  // ITC-only workbook -- which suppresses the `no-records` outcome and drops the
+  // tidy CSV that is the fallback for exactly that case.
+  it("produces no workbook from an ITC summary with no renderable invoice rows", () => {
+    const plan: FiledReturnsSummaryPlanEntry[] = [planEntry("April", "april-data.json")];
+    const bytes = new TextEncoder().encode(
+      JSON.stringify({
+        data: {
+          gstin: OWNER_GSTIN,
+          rtnprd: "042026",
+          docdata: {},
+          itcsumm: { itcavl: { nonrevsup: { igst: 10, cgst: 0, sgst: 0, cess: 0 } } },
+        },
+      }),
+    );
+
+    expect(
+      buildFiledReturnsGstr2bWorkbook(plan, [{ path: "april-data.json", bytes }], {
+        generatedAt: new Date("2026-08-22T12:00:00.000Z"),
+      }),
+    ).toBeNull();
+  });
+
+  // A screened-out ITC key takes every total beneath it, and the CSV that used
+  // to carry those figures is no longer shipped alongside. An omission nobody
+  // can see would be a figure that simply vanished.
+  it("counts an ITC key its own screen rejects", () => {
+    const plan: FiledReturnsSummaryPlanEntry[] = [planEntry("April", "april-data.json")];
+    const bytes = new TextEncoder().encode(
+      JSON.stringify({
+        data: {
+          gstin: OWNER_GSTIN,
+          rtnprd: "042026",
+          docdata: docdata(),
+          itcsumm: {
+            itcavl: {
+              nonrevsup: { igst: 10, cgst: 0, sgst: 0, cess: 0 },
+              [COUNTERPARTY_GSTIN]: { igst: 1, cgst: 0, sgst: 0, cess: 0 },
+            },
+          },
+        },
+      }),
+    );
+    const workbook = buildFiledReturnsGstr2bWorkbook(plan, [{ path: "april-data.json", bytes }], {
+      generatedAt: new Date("2026-08-22T12:00:00.000Z"),
+    });
+    const itc = text(extractStoredZipEntries(workbook!), "xl/worksheets/sheet1.xml");
+
+    expect(itc).not.toContain(COUNTERPARTY_GSTIN);
+    expect(itc).toContain("section name(s) withheld");
+  });
+
+  it("upper-cases both halves of the reconciliation key", () => {
+    const data = docdata();
+    data.b2b[0]!.ctin = COUNTERPARTY_GSTIN.toLowerCase();
+    data.b2b[0]!.inv[0]!.inum = "inv-001";
+    const { data: rows } = partitionSheet(
+      text(extractStoredZipEntries(buildWorkbook(data)), "xl/worksheets/sheet2.xml"),
+    );
+
+    expect(rows[0]?.[0]).toBe(`${COUNTERPARTY_GSTIN}|INV-001`);
+  });
+
   it("fails closed rather than placing the return owner in a counterparty row", () => {
     const data = docdata();
     data.b2b[0]!.ctin = OWNER_GSTIN;

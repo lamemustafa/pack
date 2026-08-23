@@ -255,9 +255,13 @@ function createSummaryEntry(
         },
       };
     }
+    // GSTR-2B ships the workbook without the tidy CSV, so the CSV must not
+    // consume its budget: charging for bytes that are never written would refuse
+    // a workbook that fits.
+    const summaryShippedBytes = gstr2bWorkbookApplicable ? 0 : summary.dataBytes.byteLength;
     const workbookBudget = Math.min(
-      Math.max(0, MAX_SUMMARY_SHEET_BYTES - summary.dataBytes.byteLength),
-      Math.max(0, remainingZipBudget - summary.dataBytes.byteLength),
+      Math.max(0, MAX_SUMMARY_SHEET_BYTES - summaryShippedBytes),
+      Math.max(0, remainingZipBudget - summaryShippedBytes),
     );
     let workbookBytes: Uint8Array | null;
     try {
@@ -338,7 +342,7 @@ function createSummaryEntry(
         },
       };
     }
-    const summaryByteLength = summary.dataBytes.byteLength + workbookBytes.byteLength;
+    const summaryByteLength = summaryShippedBytes + workbookBytes.byteLength;
     if (summaryByteLength > MAX_SUMMARY_SHEET_BYTES || summaryByteLength > remainingZipBudget) {
       return { result: { status: "failed", reasonCategory: "too-large" } };
     }
@@ -362,6 +366,7 @@ function createSummaryEntry(
         outcomeOnly: summary.outcomeOnly,
         parsedPeriodCount: summary.parsedPeriodCount,
         rowCount: summary.rowCount,
+        ...(gstr2bWorkbookApplicable ? { workbookOnly: true as const } : {}),
       },
     };
   } catch (error) {

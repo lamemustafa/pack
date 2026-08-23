@@ -413,10 +413,13 @@ function isSummaryResult(
       "parsedPeriodCount",
       "rowCount",
       "status",
+      "workbookOnly",
       "workbookOutcome",
     ]) &&
     record.status === "included" &&
     permittedWorkbookOutcomes.includes(record.workbookOutcome as string | undefined) &&
+    (record.workbookOnly === undefined ||
+      (record.workbookOnly === true && returnType === "GSTR-2B")) &&
     typeof record.outcomeOnly === "boolean" &&
     typeof record.parsedPeriodCount === "number" &&
     Number.isInteger(record.parsedPeriodCount) &&

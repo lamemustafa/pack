@@ -35,6 +35,7 @@ export function filedReturnsSummaryOutcome(
   return {
     safeSignals: [
       "full-fiscal-year-summary-included",
+      ...(result.workbookOnly ? ["full-fiscal-year-summary-workbook-only"] : []),
       ...(result.workbookOutcome === undefined
         ? []
         : [`full-fiscal-year-workbook-${result.workbookOutcome}`]),
@@ -116,11 +117,17 @@ export function filedReturnsSummaryStatusMessage(
       signal.startsWith("full-fiscal-year-summary-parsed-period-count:"),
     );
     const count = Number(countSignal?.split(":").at(-1));
+    // Name the files the ZIP actually holds. A GSTR-2B run ships its workbook
+    // without the tidy CSV, and claiming both is a completion claim for a file
+    // that was never written.
+    const contents = signalSet.has("full-fiscal-year-summary-workbook-only")
+      ? "the workbook"
+      : "the workbook and tidy CSV";
     return summaryInclusionClaim(
       lifecycle,
       Number.isInteger(count) && count >= 0 && count <= 12
-        ? `the workbook and tidy CSV for ${count} ${count === 1 ? "period" : "periods"}`
-        : "the workbook and tidy CSV",
+        ? `${contents} for ${count} ${count === 1 ? "period" : "periods"}`
+        : contents,
     );
   }
   if (signalSet.has("full-fiscal-year-summary-failed")) {

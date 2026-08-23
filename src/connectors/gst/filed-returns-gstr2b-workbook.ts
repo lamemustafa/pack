@@ -221,8 +221,9 @@ export function buildFiledReturnsGstr2bWorkbook(
   const rowsBySection = new Map<SectionKey, Row[]>();
   const excludedSections = new Set<string>();
   const itcRows: Row[] = [];
+  const withheldItcKeys = { count: 0 };
   for (const source of sources) {
-    itcRows.push(...itcSummaryRows(source, identity.values));
+    itcRows.push(...itcSummaryRows(source, identity.values, withheldItcKeys));
     const docdata = optionalObject(source.data.docdata, "/data/docdata");
     if (!docdata) continue;
     for (const section of screenKeysCollectingUnknown(docdata, SECTION_ORDER, "/data/docdata")) {
@@ -236,18 +237,12 @@ export function buildFiledReturnsGstr2bWorkbook(
   }
   // First sheet: a return preparer reads the totals before the detail, and this
   // is the only place the portal's own ITC figures now appear.
-  const itcWorksheet =
-    itcRows.length > 0
-      ? [
-          summaryWorksheet(
-            itcRows,
-            identity,
-            financialYear,
-            options.generatedAt,
-            renderableSectionNames(excludedSections, identity.values),
-          ),
-        ]
-      : [];
+  //
+  // Only ever ALONGSIDE invoice sheets. A period with an ITC summary but no
+  // renderable invoice rows -- a nil month, or one holding only a section this
+  // build does not render -- would otherwise produce an ITC-only workbook, which
+  // suppresses the `no-records` outcome and drops the tidy CSV that is the
+  // fallback for exactly that case.
   const worksheets = SECTION_ORDER.flatMap((section) => {
     const rows = rowsBySection.get(section);
     return rows?.length
@@ -263,6 +258,16 @@ export function buildFiledReturnsGstr2bWorkbook(
         ]
       : [];
   });
+  const excluded = renderableSectionNames(excludedSections, identity.values);
+  const itcWorksheet =
+    worksheets.length > 0 && itcRows.length > 0
+      ? [
+          summaryWorksheet(itcRows, identity, financialYear, options.generatedAt, {
+            ...excluded,
+            withheld: excluded.withheld + withheldItcKeys.count,
+          }),
+        ]
+      : [];
   const allWorksheets = [...itcWorksheet, ...worksheets];
   return allWorksheets.length
     ? createXlsx(
@@ -482,14 +487,18 @@ function sameIdentityValue(
   return current ?? next;
 }
 
-function itcSummaryRows(source: Gstr2bSource, ownerValues: ReadonlySet<string>): Row[] {
+function itcSummaryRows(
+  source: Gstr2bSource,
+  ownerValues: ReadonlySet<string>,
+  withheld: { count: number },
+): Row[] {
   const summary = optionalObject(source.data.itcsumm, "/data/itcsumm");
   if (!summary) return [];
   const rows: Row[] = [];
-  for (const availability of screenedKeys(summary, "/data/itcsumm")) {
+  for (const availability of screenedKeys(summary, "/data/itcsumm", withheld)) {
     const categories = optionalObject(summary[availability], `/data/itcsumm/${availability}`);
     if (!categories) continue;
-    for (const category of screenedKeys(categories, `/data/itcsumm/${availability}`)) {
+    for (const category of screenedKeys(categories, `/data/itcsumm/${availability}`, withheld)) {
       const categoryPath = `/data/itcsumm/${availability}/${category}`;
       const value = categories[category];
       const nested = optionalObject(value, categoryPath);
@@ -503,7 +512,7 @@ function itcSummaryRows(source: Gstr2bSource, ownerValues: ReadonlySet<string>):
       // A category carries its own rollup heads beside its per-section objects.
       const rollup = itcAmounts(nested, categoryPath);
       if (rollup) rows.push({ ...base, section: "All", ...rollup });
-      for (const section of screenedKeys(nested, categoryPath)) {
+      for (const section of screenedKeys(nested, categoryPath, withheld)) {
         // A category node holds its own rollup heads beside its section
         // objects, so the heads are not sections. Reading one as an object
         // refused the whole workbook.
@@ -544,11 +553,23 @@ function itcAmounts(record: Record<string, unknown>, path: string): Row | null {
  * text could carry an identity is skipped rather than printed, exactly as an
  * unrendered `docdata` section name is.
  */
-function screenedKeys(record: Record<string, unknown>, path: string): string[] {
+function screenedKeys(
+  record: Record<string, unknown>,
+  path: string,
+  withheld: { count: number },
+): string[] {
   const keys: string[] = [];
   for (const key of Object.keys(record)) {
     rejectForbiddenPath(`${path}/${key.replace(/~/g, "~0").replace(/\//g, "~1")}`);
-    if (/^[A-Za-z0-9_]{1,24}$/.test(key) && !isIdentityShapedSegment(key)) keys.push(key);
+    if (/^[A-Za-z0-9_]{1,24}$/.test(key) && !isIdentityShapedSegment(key)) {
+      keys.push(key);
+      continue;
+    }
+    // Counted, never silently dropped. A screened-out key takes every tax total
+    // beneath it with it, and the CSV that used to carry those figures is no
+    // longer shipped alongside -- so an omission nobody can see would be a
+    // figure that simply vanished.
+    withheld.count += 1;
   }
   return keys;
 }
@@ -618,10 +639,11 @@ function invoiceRows(
     return {
       period,
       ...supplier,
-      // Normalised the way reconciliation guidance describes: the GSTIN without
-      // spaces, the document number upper-cased and without spaces. Both sides
-      // of a match have to agree on case and padding or the lookup misses.
-      matchKey: `${ctin.replace(/\s+/g, "")}|${typeof documentNumber === "string" ? documentNumber.replace(/\s+/g, "").toUpperCase() : ""}`,
+      // Both halves normalised the same way: de-spaced and upper-cased.
+      // `isValidGstin` accepts either case, so a lower-case GSTIN from the
+      // portal against an upper-case purchase register would have missed on the
+      // half that was left alone.
+      matchKey: `${ctin.replace(/\s+/g, "").toUpperCase()}|${typeof documentNumber === "string" ? documentNumber.replace(/\s+/g, "").toUpperCase() : ""}`,
       documentNumber,
       documentDate: safeText(
         optionalText(documentRecord.dt, `${recordPath}/${documentKey}/dt`),
