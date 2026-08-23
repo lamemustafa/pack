@@ -281,6 +281,9 @@ function createSummaryEntry(
       // unexpected failures keep their existing terminal outcomes, which other
       // tests pin.
       if (error instanceof FiledReturnsGstr2bWorkbookSchemaError) {
+        if (summary.dataBytes.byteLength > remainingZipBudget) {
+          return { result: { status: "failed", reasonCategory: "too-large" } };
+        }
         return {
           entries: [{ path: FILED_RETURNS_SUMMARY_SHEET_PATH, bytes: summary.dataBytes }],
           result: {
@@ -307,6 +310,12 @@ function createSummaryEntry(
       };
     }
     if (!workbookBytes) {
+      // The same ceiling as the workbook branch below. Both CSV-only returns
+      // skipped it, so a run whose staged artifacts had already consumed the
+      // budget could pass more than MAX_ZIP_INPUT_BYTES into createZip.
+      if (summary.dataBytes.byteLength > remainingZipBudget) {
+        return { result: { status: "failed", reasonCategory: "too-large" } };
+      }
       return {
         entries: [{ path: FILED_RETURNS_SUMMARY_SHEET_PATH, bytes: summary.dataBytes }],
         result: {

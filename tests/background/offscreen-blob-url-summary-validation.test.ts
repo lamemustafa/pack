@@ -128,6 +128,34 @@ describe("offscreen full-year summary response validation", () => {
     });
   });
 
+  // GSTR-3B can only produce a workbook plus CSV or a failed summary. Accepting
+  // the CSV-only outcomes for it would let a stale or malformed receipt through
+  // as an incomplete ZIP, so eligibility alone is not the right test.
+  it.each(["not-applicable", "unavailable"] as const)(
+    "rejects a GSTR-3B receipt claiming the %s workbook outcome",
+    async (workbookOutcome) => {
+      mocks.runtime.sendMessage.mockImplementationOnce(async (message?: unknown) => ({
+        ok: true,
+        requestId: requestIdFrom(message),
+        blobUrl: "blob:pack/gstr3b-csv-only",
+        zipEntryCount: 2,
+        artifactEntryCount: 1,
+        summaryEntryCount: 1,
+        summary: {
+          status: "included",
+          outcomeOnly: false,
+          parsedPeriodCount: 1,
+          rowCount: 2,
+          workbookOutcome,
+        },
+      }));
+
+      await expect(
+        createOffscreenFiledReturnZipUrl("full-fiscal-year-12345678", request("GSTR-3B")),
+      ).resolves.toMatchObject({ status: "failed", errorCategory: "offscreen-response-invalid" });
+    },
+  );
+
   it.each([
     "identity-conflict",
     "identity-rejected",
@@ -168,7 +196,7 @@ describe("offscreen full-year summary response validation", () => {
   });
 });
 
-function request(returnType: "GSTR-1" | "GSTR-2B" = "GSTR-2B") {
+function request(returnType: "GSTR-1" | "GSTR-2B" | "GSTR-3B" = "GSTR-2B") {
   return {
     returnType,
     entryCount: 1,

@@ -9,6 +9,43 @@ import {
 const LIFECYCLES = ["intent", "confirmed", "unconfirmed"] as const;
 
 describe("filed-return summary status", () => {
+  // The `unavailable` outcome was added to the worker without a branch here, so
+  // a run that emitted only the CSV still told the user the ZIP included "the
+  // workbook and tidy CSV" -- a completion claim for a file that was never
+  // written.
+  it("does not claim a workbook when the run reports it unavailable", () => {
+    const outcome = filedReturnsSummaryOutcome(true, {
+      status: "included",
+      workbookOutcome: "unavailable",
+      outcomeOnly: false,
+      parsedPeriodCount: 1,
+      rowCount: 2,
+    });
+
+    expect(outcome.safeSignals).toContain("full-fiscal-year-workbook-unavailable");
+    for (const lifecycle of LIFECYCLES) {
+      const message = filedReturnsSummaryStatusMessage(outcome.safeSignals, lifecycle);
+      expect(message).not.toContain("the workbook and tidy CSV");
+      expect(message).toContain("could not produce the workbook");
+    }
+  });
+
+  // An outcome this build does not recognise must still say the workbook is
+  // absent rather than falling through to the inclusion claim.
+  it("still withholds the workbook claim for an unrecognised outcome", () => {
+    const message = filedReturnsSummaryStatusMessage(
+      [
+        "full-fiscal-year-summary-included",
+        "full-fiscal-year-workbook-some-future-outcome",
+        "full-fiscal-year-summary-parsed-period-count:1",
+      ],
+      "confirmed",
+    );
+
+    expect(message).not.toContain("the workbook and tidy CSV");
+    expect(message).toContain("The workbook is not included in this ZIP.");
+  });
+
   it("names the return-type workbook boundary while keeping the CSV included", () => {
     const outcome = filedReturnsSummaryOutcome(true, {
       status: "included",

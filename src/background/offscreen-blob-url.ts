@@ -386,12 +386,16 @@ function isSummaryResult(
   // whole ZIP. Fail-closed belongs on the artifact's evidence, not on a
   // re-derivation of what the worker should have decided; the CSV discarded here
   // had already passed its privacy screen.
-  const workbookEligible =
-    (returnType === "GSTR-3B" || returnType === "GSTR-2B") &&
-    plan.every((entry) => entry.returnType === returnType);
-  const permittedWorkbookOutcomes: readonly (string | undefined)[] = workbookEligible
-    ? [undefined, "not-applicable", "unavailable"]
-    : ["not-applicable"];
+  // Per return type, not per eligibility. GSTR-3B can only produce a workbook
+  // plus CSV or a failed summary, so accepting the CSV-only outcomes for it
+  // would let a stale or malformed receipt through as an incomplete ZIP.
+  const homogeneous = plan.every((entry) => entry.returnType === returnType);
+  const permittedWorkbookOutcomes: readonly (string | undefined)[] =
+    homogeneous && returnType === "GSTR-2B"
+      ? [undefined, "not-applicable", "unavailable"]
+      : homogeneous && returnType === "GSTR-3B"
+        ? [undefined]
+        : ["not-applicable"];
   return (
     hasOnlyKeys(record, [
       "outcomeOnly",

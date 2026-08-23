@@ -637,7 +637,10 @@ export function isDurableFiledReturnsSignal(signal: string): boolean {
     return zipCount[1] === "single-period" ? count <= 3 : count <= 38;
   }
   if (
-    /^(?:full-fiscal-year-summary-included|full-fiscal-year-summary-outcomes-only|full-fiscal-year-summary-failed|full-fiscal-year-workbook-not-applicable)$/.test(
+    // The workbook outcome is matched by prefix. Naming one value here meant
+    // that adding `unavailable` silently dropped it from durable state, which
+    // can remove the completion summary around a visible ZIP download.
+    /^(?:full-fiscal-year-summary-included|full-fiscal-year-summary-outcomes-only|full-fiscal-year-summary-failed|full-fiscal-year-workbook-[a-z-]+)$/.test(
       signal,
     )
   ) {
