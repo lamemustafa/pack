@@ -190,7 +190,7 @@ async function selectGstr2bFiledReturnsFiltersOrResult(
           "gstr2b-filed-return-search-results-unchanged",
         ],
         safeMessage:
-          "The GST Portal left the previous filed GSTR-2B results unchanged after Search. Retry this period instead of using the stale result.",
+          "The GST Portal left the previous GSTR-2B statement results unchanged after Search. Retry this period instead of using the stale result.",
         userAction: {
           type: "NAVIGATE_TO_SUPPORTED_PAGE",
           message: "Retry the selected GSTR-2B period after the GST Portal results refresh.",
@@ -206,7 +206,7 @@ async function selectGstr2bFiledReturnsFiltersOrResult(
         "filed-return-search-results-pending",
         "gstr2b-filed-return-search-results-pending",
       ],
-      safeMessage: "Pack is waiting for the GST Portal's filed GSTR-2B search results.",
+      safeMessage: "Pack is waiting for the GST Portal's GSTR-2B statement search results.",
     };
   }
 
@@ -218,10 +218,10 @@ async function selectGstr2bFiledReturnsFiltersOrResult(
       state: "blocked",
       safeSignals: ["gstr2b-filed-return-result-row-ambiguous"],
       safeMessage:
-        "Pack found more than one filed GSTR-2B result row for the requested period. Open the correct row manually, then start Pack again.",
+        "Pack found more than one GSTR-2B statement result row for the requested period. Open the correct row manually, then start Pack again.",
       userAction: {
         type: "NAVIGATE_TO_SUPPORTED_PAGE",
-        message: "Open the exact filed GSTR-2B row for the requested period.",
+        message: "Open the exact GSTR-2B statement row for the requested period.",
         canResume: true,
       },
     };
@@ -240,7 +240,7 @@ async function selectGstr2bFiledReturnsFiltersOrResult(
         "gstr2b-filed-return-result-view-clicked",
         ...(actionableRow.period ? [`filed-return-result-period:${actionableRow.period}`] : []),
       ],
-      safeMessage: "Pack opened the filed GSTR-2B result row.",
+      safeMessage: "Pack opened the GSTR-2B statement result row.",
     };
   }
 

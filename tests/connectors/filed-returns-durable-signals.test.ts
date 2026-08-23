@@ -1,3 +1,4 @@
+import { FILED_RETURNS_WORKBOOK_ABSENCE_OUTCOMES } from "../../src/connectors/gst/offscreen-blob-url";
 import { describe, expect, it } from "vitest";
 import {
   durableFiledReturnsSignalRejectionReason,
@@ -174,6 +175,24 @@ describe("filed-return durable signal contract", () => {
       false,
     );
     expect(isDurableFiledReturnsSignal("filed-return-detail-type:private-value")).toBe(false);
+  });
+
+  // Persisted state can be stale, mistyped or corrupted. A prefix wildcard was
+  // added to stop a new outcome being silently dropped from durable state, and
+  // it accepted any suffix as canonical -- which the status renderer then reads
+  // as evidence that the workbook is absent.
+  it("accepts only the modelled workbook absence outcomes", () => {
+    for (const outcome of FILED_RETURNS_WORKBOOK_ABSENCE_OUTCOMES) {
+      expect(isDurableFiledReturnsSignal(`full-fiscal-year-workbook-${outcome}`)).toBe(true);
+    }
+    for (const corrupted of [
+      "full-fiscal-year-workbook-includded",
+      "full-fiscal-year-workbook-included",
+      "full-fiscal-year-workbook-",
+      "full-fiscal-year-workbook-not-applicable-x",
+    ]) {
+      expect(isDurableFiledReturnsSignal(corrupted), corrupted).toBe(false);
+    }
   });
 
   it("retains only bounded full-year summary status and counts", () => {

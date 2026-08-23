@@ -42,7 +42,7 @@ describe("offscreen full-year summary response validation", () => {
     });
 
     await expect(
-      createOffscreenFiledReturnZipUrl("full-fiscal-year-12345678", request()),
+      createOffscreenFiledReturnZipUrl("full-fiscal-year-12345678", request("GSTR-1")),
     ).resolves.toMatchObject({
       status: "created",
       artifactEntryCount: 1,
@@ -72,7 +72,7 @@ describe("offscreen full-year summary response validation", () => {
     ).resolves.toEqual({ status: "failed", errorCategory: "offscreen-response-invalid" });
   });
 
-  it("rejects a GSTR-2B receipt that claims a workbook entry", async () => {
+  it("accepts a GSTR-2B receipt that includes a workbook entry", async () => {
     mocks.runtime.sendMessage.mockImplementationOnce(async (message?: unknown) => ({
       ok: true,
       requestId: requestIdFrom(message),
@@ -90,8 +90,96 @@ describe("offscreen full-year summary response validation", () => {
 
     await expect(
       createOffscreenFiledReturnZipUrl("full-fiscal-year-12345678", request()),
-    ).resolves.toEqual({ status: "failed", errorCategory: "offscreen-response-invalid" });
+    ).resolves.toMatchObject({
+      status: "created",
+      artifactEntryCount: 1,
+      summary: { status: "included", parsedPeriodCount: 1, rowCount: 2 },
+    });
   });
+
+  // A GSTR-2B year whose staged JSON carries no supported `docdata` section
+  // produces the tidy CSV and no workbook, and the worker says so with
+  // "not-applicable". The validator used to re-derive the expected outcome from
+  // the return type alone and reject this, which discarded an already
+  // privacy-screened CSV and blocked the whole ZIP.
+  it("accepts a GSTR-2B receipt that emitted the CSV alone for want of records", async () => {
+    mocks.runtime.sendMessage.mockImplementationOnce(async (message?: unknown) => ({
+      ok: true,
+      requestId: requestIdFrom(message),
+      blobUrl: "blob:pack/csv-only",
+      zipEntryCount: 2,
+      artifactEntryCount: 1,
+      summaryEntryCount: 1,
+      summary: {
+        status: "included",
+        outcomeOnly: false,
+        parsedPeriodCount: 1,
+        rowCount: 2,
+        workbookOutcome: "no-records",
+      },
+    }));
+
+    await expect(
+      createOffscreenFiledReturnZipUrl("full-fiscal-year-12345678", request()),
+    ).resolves.toMatchObject({
+      status: "created",
+      artifactEntryCount: 1,
+      summary: { status: "included", parsedPeriodCount: 1, rowCount: 2 },
+    });
+  });
+
+  // GSTR-2B does produce workbooks, so "not-applicable" is the wrong reason for
+  // it and no longer a legitimate receipt: it would tell the user a workbook is
+  // unavailable for this return type, which is false.
+  it("rejects a GSTR-2B receipt claiming the not-applicable outcome", async () => {
+    mocks.runtime.sendMessage.mockImplementationOnce(async (message?: unknown) => ({
+      ok: true,
+      requestId: requestIdFrom(message),
+      blobUrl: "blob:pack/gstr2b-wrong-reason",
+      zipEntryCount: 2,
+      artifactEntryCount: 1,
+      summaryEntryCount: 1,
+      summary: {
+        status: "included",
+        outcomeOnly: false,
+        parsedPeriodCount: 1,
+        rowCount: 2,
+        workbookOutcome: "not-applicable",
+      },
+    }));
+
+    await expect(
+      createOffscreenFiledReturnZipUrl("full-fiscal-year-12345678", request()),
+    ).resolves.toMatchObject({ status: "failed", errorCategory: "offscreen-response-invalid" });
+  });
+
+  // GSTR-3B can only produce a workbook plus CSV or a failed summary. Accepting
+  // the CSV-only outcomes for it would let a stale or malformed receipt through
+  // as an incomplete ZIP, so eligibility alone is not the right test.
+  it.each(["not-applicable", "unavailable"] as const)(
+    "rejects a GSTR-3B receipt claiming the %s workbook outcome",
+    async (workbookOutcome) => {
+      mocks.runtime.sendMessage.mockImplementationOnce(async (message?: unknown) => ({
+        ok: true,
+        requestId: requestIdFrom(message),
+        blobUrl: "blob:pack/gstr3b-csv-only",
+        zipEntryCount: 2,
+        artifactEntryCount: 1,
+        summaryEntryCount: 1,
+        summary: {
+          status: "included",
+          outcomeOnly: false,
+          parsedPeriodCount: 1,
+          rowCount: 2,
+          workbookOutcome,
+        },
+      }));
+
+      await expect(
+        createOffscreenFiledReturnZipUrl("full-fiscal-year-12345678", request("GSTR-3B")),
+      ).resolves.toMatchObject({ status: "failed", errorCategory: "offscreen-response-invalid" });
+    },
+  );
 
   it.each([
     "identity-conflict",
@@ -133,9 +221,9 @@ describe("offscreen full-year summary response validation", () => {
   });
 });
 
-function request() {
+function request(returnType: "GSTR-1" | "GSTR-2B" | "GSTR-3B" = "GSTR-2B") {
   return {
-    returnType: "GSTR-2B" as const,
+    returnType,
     entryCount: 1,
     entries: [{ artifactType: "JSON" as const, entryNames: ["april-data.json"] }],
     generatedAt: new Date("2026-08-19T12:00:00.000Z"),
@@ -146,7 +234,7 @@ function request() {
         financialYear: "2026-27",
         outcomeCategory: "staged" as const,
         period: "April" as const,
-        returnType: "GSTR-2B" as const,
+        returnType,
       },
     ],
   };

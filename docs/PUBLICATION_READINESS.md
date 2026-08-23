@@ -51,9 +51,12 @@ durable full-year, or stable-release claims.
   GST Portal exposes those artifacts.
 - GSTR-2B is **in scope**, not experimental. It runs the same user-initiated,
   evidence-backed download path as the other return types, and the derived
-  full-year summary CSV is produced for it. It has no consolidated workbook —
-  that remains GSTR-3B only — so a GSTR-2B run reports the absence rather than
-  emitting a blank or mislabelled one. The source-controlled Store listing draft
+  full-year summary CSV is produced for it. A GSTR-2B run with invoice-level
+  records also produces its own `full-year-workbook.xlsx`, one sheet per present
+  section, distinct from the GSTR-3B consolidated workbook; where no such record
+  exists, or the document carries a shape or a value that cannot be written to a
+  spreadsheet unchanged, the run keeps the tidy CSV and reports the absence
+  rather than emitting a blank or mislabelled workbook. The source-controlled Store listing draft
   names GSTR-2B as supported beta scope and a test binds it to the capability
   table, but the live dashboard fields still carry superseded wording: they are
   corrected only once `docs/chrome-web-store/dashboard-closeout.md` records the

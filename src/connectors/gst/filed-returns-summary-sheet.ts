@@ -262,16 +262,16 @@ export function buildFiledReturnsSummarySheet(
 // Collected across every parsed entry and applied to all of them, because
 // identity belongs to the taxpayer and not to one period: a value the portal
 // names canonically in one month can reappear in another under an unrecognised
-// alias, and a set rebuilt per entry would emit it there. Measured against the
-// maintainer's captured corpus -- 127 documents, 7,387 flattened leaves --
-// widening the set from per-entry to cross-entry withholds no additional leaf.
+// alias, and a set rebuilt per entry would emit it there. Measured against a
+// captured corpus, widening the set from per-entry to cross-entry withholds no
+// additional leaf.
 //
 // Deliberately scoped to *the taxpayer's own* identity rather than any
-// GSTIN-shaped text. A counterparty GSTIN is business data the summary exists
-// to report -- across 120 captured documents there are 3,171 such values, all
-// `ctin`, and withholding them would empty the most useful column of a GSTR-2B
-// CSV while withholding nothing the user does not already hold in the original
-// artifact beside it.
+// GSTIN-shaped text. A counterparty GSTIN is business data the summary exists to
+// report -- in captured returns they are numerous and arrive as `ctin` -- and
+// withholding them would empty the most useful column of a GSTR-2B CSV while
+// withholding nothing the user does not already hold in the original artifact
+// beside it.
 function collectOwnIdentityValues(
   parsedEntries: readonly ParsedPlanEntry[],
   summaryOwnGstins: ReadonlySet<string>,
@@ -462,7 +462,7 @@ function collectIdentityValues(parsedEntries: readonly ParsedPlanEntry[]): Summa
 const GSTIN_FORMAT = /^[0-9]{2}[A-Za-z]{5}[0-9]{4}[A-Za-z][1-9A-Za-z][Zz1-9A-Ja-j][0-9A-Za-z]$/;
 const GSTIN_CHECK_CHARACTERS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-function isValidGstin(value: string): boolean {
+export function isValidGstin(value: string): boolean {
   if (!GSTIN_FORMAT.test(value)) return false;
   const prefix = value.slice(0, 14);
   let factor = 2;
@@ -568,7 +568,7 @@ function isSafeFiledReturnsDiscriminatorValue(key: string, value: string): boole
 // shape is refused wherever a decoded segment carries it.
 const PAN_SHAPE = /^[A-Za-z]{5}[0-9]{4}[A-Za-z]$/;
 
-function isIdentityShapedSegment(segment: string): boolean {
+export function isIdentityShapedSegment(segment: string): boolean {
   return PAN_SHAPE.test(segment) || isValidGstin(segment);
 }
 
@@ -577,12 +577,12 @@ function isIdentityShapedSegment(segment: string): boolean {
 // as `/metadata/value` is invisible to the field-name guard.
 //
 // Deliberately only this shape. A generic "long opaque string" rule was measured
-// against the captured corpus and would withhold 2,077 real values, all of them
+// against a captured corpus and would withhold many real values, all of them
 // `irn` invoice references and `chksum` digests -- legitimate data the summary
-// exists to report. Zero JWT-shaped values appear in 77,154 real text values.
+// exists to report. No JWT-shaped value appeared anywhere in that corpus.
 const JWT_SHAPE = /^eyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}$/;
 
-function isCredentialShapedValue(value: string): boolean {
+export function isCredentialShapedValue(value: string): boolean {
   return JWT_SHAPE.test(value.trim());
 }
 

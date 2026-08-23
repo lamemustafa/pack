@@ -46,10 +46,26 @@ For each release candidate:
   Storage, diagnostics, logs, telemetry, support bundles, or ComplyEaze systems.
 - Confirm each GSTR-3B full-year ZIP assembly with eligible files attempts to add
   `full-year-workbook.xlsx` and `full-year-summary.csv`, both derived locally
-  from staged portal JSON already in that run. GSTR-1 and GSTR-2B assemblies
-  must add the tidy CSV only, emit the fixed
-  `full-fiscal-year-workbook-not-applicable` outcome,
-  and never emit a GSTR-3B workbook. The standalone context CSV must be absent.
+  from staged portal JSON already in that run. A GSTR-1 assembly must add the
+  tidy CSV only and emit the fixed `full-fiscal-year-workbook-not-applicable`
+  outcome.
+- Confirm a GSTR-2B assembly with invoice-level records adds its own
+  `full-year-workbook.xlsx` beside the tidy CSV, with one sheet per present
+  section. On every sheet, confirm the owner GSTIN, legal name and trade name
+  appear in the header block and in **no** invoice row, and that counterparty
+  GSTIN and trade name appear in the invoice rows -- withholding them would
+  empty the column the statement exists to report.
+- Confirm a GSTR-2B assembly with no invoice-level record emits
+  `full-fiscal-year-workbook-no-records`, and that one refused for its **shape or
+  for a value that cannot be written to a spreadsheet unchanged** emits
+  `full-fiscal-year-workbook-unavailable`; both must keep the tidy CSV.
+- Confirm the opposite for the other two refusals: a **privacy or identity**
+  rejection must fail the whole derived-summary path with no CSV and no
+  workbook. Those say something about the source document, not about the
+  workbook, and must stay fail-closed. Do not read the line above as covering
+  them.
+- No assembly may emit a GSTR-3B workbook for another return type. The
+  standalone context CSV must be absent.
   The data CSV must keep
   the fixed tidy columns `period`, `return_type`, `artifact`, `outcome`,
   `field_label`, `field_path`, `value_text`, and `value_number`; keep canonical

@@ -146,6 +146,10 @@ describe("public scope copy", () => {
 
   it("carries no superseded claim in live public copy", async () => {
     const offences: string[] = [];
+    // Documents only. Source carries the retired words legitimately -- a semver
+    // regex matches `alpha|beta|rc` -- and a maturity label in a code comment is
+    // not copy anyone reads. The GSTR-2B classification rule below does scan
+    // source, because that copy reaches the user through the product.
     for (const relativePath of trackedTextFiles()) {
       if (!PUBLIC_DOCUMENT.test(relativePath)) continue;
       if (HISTORICAL_RECORDS.has(relativePath)) continue;
@@ -332,8 +336,13 @@ describe("public scope copy", () => {
   it("never classifies GSTR-2B as a filed return", async () => {
     const misclassified: string[] = [];
 
+    // Source is scanned as well as documents. A review of the GSTR-2B workbook
+    // found "Filed GSTR-2B JSON" written into every generated sheet footer and
+    // five user-visible flow messages calling it a filed return -- copy that
+    // reaches the user through the product rather than through a document, which
+    // a docs-only scan cannot see.
     for (const relativePath of trackedTextFiles()) {
-      if (!PUBLIC_DOCUMENT.test(relativePath)) continue;
+      if (!PUBLIC_DOCUMENT.test(relativePath) && !/^src\/.*\.tsx?$/.test(relativePath)) continue;
       if (HISTORICAL_RECORDS.has(relativePath)) continue;
       const contents = await read(relativePath);
 
@@ -346,12 +355,26 @@ describe("public scope copy", () => {
       // captured table of portal control labels in PORTAL_INTEGRATION_FINDINGS
       // read as one sentence containing both "Download Filed GSTR-3B" and a
       // GSTR-2B row, and the guard reported correct copy a second time.
-      const segments = contents
-        .replace(/\n\s*[•\-*]\s/g, ". ")
-        .replace(/\n\s*\|/g, ". |")
-        .split(".");
+      // Source splits on newlines; prose does not. A wrapped sentence in a
+      // document must stay joined to the qualifier on its next line, while in
+      // code each line is its own claim -- joining them made an unrelated
+      // constant and a returnType parameter read as one sentence about filed
+      // GSTR-2B.
+      const segments = /\.tsx?$/.test(relativePath)
+        ? contents.split("\n")
+        : contents
+            .replace(/\n\s*[•\-*]\s/g, ". ")
+            .replace(/\n\s*\|/g, ". |")
+            .split(".");
       for (const sentence of segments) {
         if (!sentence.includes("GSTR-2B") || !/\bfiled\b/i.test(sentence)) continue;
+        // Two shapes are not prose about GSTR-2B and must not be flagged:
+        // a hyphenated identifier such as `filed-return-detail-type`, and the
+        // portal's own control name "View Filed Returns", which Pack quotes
+        // when it explains which page it left.
+        if (/filed-return/i.test(sentence)) continue;
+        if (/\bFiled Returns\b/.test(sentence)) continue;
+
         const marked =
           /auto-drafted[^.]{0,25}GSTR-2B/i.test(sentence) ||
           /GSTR-2B[^.]{0,25}\bstatement/i.test(sentence);

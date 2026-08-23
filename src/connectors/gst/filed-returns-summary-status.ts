@@ -1,3 +1,4 @@
+import type { FiledReturnsWorkbookAbsenceOutcome } from "./offscreen-blob-url";
 import type { PackOffscreenFiledReturnSummaryResult } from "./offscreen-blob-url";
 
 // Synthesized locally when the offscreen worker's response fails validation,
@@ -34,9 +35,9 @@ export function filedReturnsSummaryOutcome(
   return {
     safeSignals: [
       "full-fiscal-year-summary-included",
-      ...(result.workbookOutcome === "not-applicable"
-        ? ["full-fiscal-year-workbook-not-applicable"]
-        : []),
+      ...(result.workbookOutcome === undefined
+        ? []
+        : [`full-fiscal-year-workbook-${result.workbookOutcome}`]),
       ...(result.outcomeOnly ? ["full-fiscal-year-summary-outcomes-only"] : []),
       `full-fiscal-year-summary-parsed-period-count:${result.parsedPeriodCount}`,
       `full-fiscal-year-summary-row-count:${result.rowCount}`,
@@ -60,20 +61,38 @@ function summaryInclusionClaim(lifecycle: FiledReturnsSummaryLifecycle, contents
   return `The ZIP includes ${contents}.`;
 }
 
+// Keyed by the canonical outcome type, so adding an outcome fails to compile
+// here rather than silently rendering the fallback sentence.
+const WORKBOOK_ABSENCE_SENTENCE: Readonly<Record<FiledReturnsWorkbookAbsenceOutcome, string>> = {
+  "not-applicable": " A consolidated workbook is not available for this return type.",
+  "no-records":
+    " The staged portal JSON carried no invoice-level records, so no workbook was produced.",
+  unavailable:
+    " Pack could not produce the workbook for this document, so the ZIP has the tidy CSV only.",
+};
+const UNRECOGNISED_WORKBOOK_ABSENCE = " The workbook is not included in this ZIP.";
+
 export function filedReturnsSummaryStatusMessage(
   signals: readonly string[],
   lifecycle: FiledReturnsSummaryLifecycle,
 ): string {
   const signalSet = new Set(signals);
-  if (
-    signalSet.has("full-fiscal-year-summary-included") &&
-    signalSet.has("full-fiscal-year-workbook-not-applicable")
-  ) {
+  const absentWorkbookOutcome = signals
+    .map((signal) => /^full-fiscal-year-workbook-(.+)$/.exec(signal)?.[1])
+    .find((outcome) => outcome !== undefined);
+  if (signalSet.has("full-fiscal-year-summary-included") && absentWorkbookOutcome !== undefined) {
     const countSignal = signals.find((signal) =>
       signal.startsWith("full-fiscal-year-summary-parsed-period-count:"),
     );
     const count = Number(countSignal?.split(":").at(-1));
-    const notApplicable = " A consolidated workbook is not available for this return type.";
+    // Keyed on whatever outcome the run reported, not on one known value. The
+    // `unavailable` outcome was added without a branch here, so a run that
+    // emitted only the CSV still told the user the ZIP included "the workbook
+    // and tidy CSV". An outcome this build does not recognise still says the
+    // workbook is absent rather than falling through to the inclusion claim.
+    const notApplicable =
+      WORKBOOK_ABSENCE_SENTENCE[absentWorkbookOutcome as FiledReturnsWorkbookAbsenceOutcome] ??
+      UNRECOGNISED_WORKBOOK_ABSENCE;
     if (signalSet.has("full-fiscal-year-summary-outcomes-only")) {
       return summaryInclusionClaim(lifecycle, "an outcome-only tidy CSV") + notApplicable;
     }

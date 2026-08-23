@@ -162,3 +162,32 @@ This log records live diagnostic findings that constrain Pack's local, target-bo
     still present in the user's own requested portal JSON inside the downloaded ZIP, and in OPFS
     until the ledger is cleared. That is the file the user asked Pack to save, and Pack does not
     edit portal bytes; the guard scopes what Pack derives, not what the portal produced.
+
+27. GSTR-2B `data.docdata` invoice records are **flat**. A captured live period carried
+    `b2b[].inv[]` objects holding `txval`, `igst`, `cgst`, `sgst` and `cess` directly on the
+    invoice, with **no nested `items` array and no `diffprcnt`**; `cdnr[].nt[]` has the same
+    shape plus `ntnum` and `suptyp`. A review finding asserted a nested rate-wise `items`
+    breakdown; this capture falsifies it for GSTR-2B. Do not port the GSTR-1 `itms`/`itm_det`
+    shape onto GSTR-2B without a capture that shows it.
+
+28. Three GSTR-2B invoice fields are **optional**: `irn`, `irngendate` and `srctyp` are present
+    on some invoice records and absent from others within a single period. Every fixture written
+    before that was observed supplied all three on every invoice, so the absent case was untested.
+    Treat them as optional in any schema or fixture.
+
+    **Record structure only.** Entries here may state what fields exist, whether they are
+    optional, and how they nest. They must not state any measurement taken from a real return --
+    not a count, a prevalence, a magnitude, a size, or a bound. Three consecutive review rounds
+    removed one such metric and introduced another in the same edit; the rule is the fix, an
+    example is not.
+
+29. `data.docdata` has siblings the workbook does not read: `cpsumm` (counterparty
+    summary), `itcsumm` (ITC availability totals), `gendt`, `version`, plus a root `chksum`.
+    A derived-output builder must ignore them rather than treat them as unknown sections, and a
+    fixture that omits them is not representative of a real response.
+
+30. A captured GSTR-2B response carries `data.gstin` but **no `data.lglnm` and no `data.trdnm`**.
+    The owner's legal and trade name are therefore not available to a GSTR-2B derived output, and
+    a builder must neither print a labelled blank for them nor refuse the document for their
+    absence -- refusing would reject every real GSTR-2B period. It also means those two values
+    cannot be added to a value-redaction set for this return type, because Pack never learns them.

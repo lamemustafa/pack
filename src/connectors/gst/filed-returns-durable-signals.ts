@@ -1,3 +1,4 @@
+import { FILED_RETURNS_WORKBOOK_ABSENCE_OUTCOMES } from "./offscreen-blob-url";
 import { FILED_RETURNS_MONTHS } from "./filed-returns-scope";
 import type { FiledReturnsReturnType } from "./filed-returns-return-types";
 import { ARTIFACT_FAILURE_MESSAGES } from "./artifact-source";
@@ -637,9 +638,14 @@ export function isDurableFiledReturnsSignal(signal: string): boolean {
     return zipCount[1] === "single-period" ? count <= 3 : count <= 38;
   }
   if (
-    /^(?:full-fiscal-year-summary-included|full-fiscal-year-summary-outcomes-only|full-fiscal-year-summary-failed|full-fiscal-year-workbook-not-applicable)$/.test(
-      signal,
-    )
+    // The modelled outcomes, not any suffix. Matching `[a-z-]+` was the wrong
+    // correction for a real problem: it stopped a new value being dropped, but
+    // it also accepted a stale or corrupted token such as
+    // `full-fiscal-year-workbook-includded` as canonical, which the renderer
+    // then reads as evidence that the workbook is absent.
+    new RegExp(
+      `^(?:full-fiscal-year-summary-included|full-fiscal-year-summary-outcomes-only|full-fiscal-year-summary-failed|full-fiscal-year-workbook-(?:${FILED_RETURNS_WORKBOOK_ABSENCE_OUTCOMES.join("|")}))$`,
+    ).test(signal)
   ) {
     return true;
   }

@@ -310,7 +310,13 @@ function exactDecimalSum(inputs: readonly string[]): string | null {
   return `${negative ? "-" : ""}${whole}${fraction ? `.${fraction}` : ""}`;
 }
 
-function exactSpreadsheetNumber(input: string): number | null {
+/**
+ * Exported so the GSTR-2B workbook applies the same boundary rather than
+ * carrying a second copy of it. Takes exact decimal *text*, never a number: by
+ * the time a value is a JavaScript number the loss this guards against has
+ * already happened.
+ */
+export function exactSpreadsheetNumber(input: string): number | null {
   const significantDigits = input
     .replace(/^-/, "")
     .replace(".", "")

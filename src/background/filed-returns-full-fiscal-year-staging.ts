@@ -413,7 +413,7 @@ async function fullFiscalYearSummarySignalsForCleanup(
 function isFullFiscalYearSummaryOutcomeSignal(signal: string): boolean {
   return (
     signal.startsWith("full-fiscal-year-summary-") ||
-    signal === "full-fiscal-year-workbook-not-applicable"
+    signal.startsWith("full-fiscal-year-workbook-")
   );
 }
 
