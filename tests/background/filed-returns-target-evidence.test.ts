@@ -238,4 +238,19 @@ describe("per-target evidence in the flow summary", () => {
 
     expect(summary.targetEvidence).toEqual([]);
   });
+
+  // Clearing staged files invalidates evidence about files, not a
+  // portal-confirmed `not-filed`. For a year whose earlier periods were
+  // confirmed not filed, dropping those rows discards the only result the run
+  // produced.
+  it("keeps portal-confirmed not-filed rows when a run is discarded", () => {
+    const discarded = { ...FLOW_STEP, safeSignals: ["full-fiscal-year-run-discarded"] };
+
+    const summary = toFullFiscalYearSummary(
+      ledgerWith(["not-filed", "downloaded", "cancelled", "pending"]),
+      discarded,
+    );
+
+    expect(summary.targetEvidence).toEqual([{ period: "April", outcome: "not-filed" }]);
+  });
 });
