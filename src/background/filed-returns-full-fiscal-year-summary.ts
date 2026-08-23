@@ -232,30 +232,27 @@ function targetOutcome(
 }
 
 /**
- * Whether the ZIP reached the browser, from durable state as well as the signal.
+ * Whether the ZIP reached the browser.
  *
- * `full-fiscal-year-zip-downloaded` is transient: it appears on the step that
- * observes the delivery and not on the completed step a later re-summarisation
- * produces. Reading only the signal meant a run whose ZIP downloaded and cleaned
- * successfully reverted every period to "Captured" the moment the panel was
- * reopened -- the inverse of the overclaim this mapping was added to fix, and
- * just as wrong.
+ * The signal alone, deliberately. `zipPhase: "cleaned"` looked like the durable
+ * form of the same fact and is not: three different phases reach it -- a
+ * confirmed download, a run that found no artifacts, and a legacy retained
+ * staging cleared on upgrade. Only the first is a delivery, and the phase that
+ * distinguishes them is overwritten by the transition, so the origin cannot be
+ * recovered from the ledger afterwards.
  *
- * `zipPhase: "cleaned"` is the durable form of the same fact. It is set only
- * after `discardFullFiscalYearFiledReturnsZip` clears the staged copy, which
- * happens after the browser handoff. The `downloaded` conjunct keeps a
- * no-artifacts run -- which also cleans, having never produced a ZIP -- from
- * asserting a delivery, even though such a run has no downloaded target for the
- * claim to attach to.
+ * Inferring from it reported never-exported files as saved. That is the
+ * overclaim this list exists to prevent, so the inference is gone rather than
+ * narrowed -- a guard that fails closed states what it can prove and no more.
+ *
+ * The cost is real and is the right way round: a delivered run re-summarised
+ * after the panel reopens reads `captured` rather than `saved`, because at that
+ * point Pack genuinely cannot prove the browser still holds the file. Recording
+ * delivery durably would fix that, and is a persistence change to raise rather
+ * than make.
  */
-function isFullFiscalYearZipDelivered(
-  ledger: FiledReturnsFullFiscalYearLedger,
-  flowStep: PortalFlowStepResult,
-): boolean {
-  if (flowStep.safeSignals.includes("full-fiscal-year-zip-downloaded")) return true;
-  return (
-    ledger.zipPhase === "cleaned" && ledger.targets.some((target) => target.status === "downloaded")
-  );
+function isFullFiscalYearZipDelivered(flowStep: PortalFlowStepResult): boolean {
+  return flowStep.safeSignals.includes("full-fiscal-year-zip-downloaded");
 }
 
 /**
@@ -272,13 +269,26 @@ export function fullFiscalYearTargetEvidence(
   ledger: FiledReturnsFullFiscalYearLedger,
   flowStep: PortalFlowStepResult,
 ): FiledReturnsTargetEvidence[] {
-  const zipDelivered = isFullFiscalYearZipDelivered(ledger, flowStep);
-  // A discarded run: OPFS was cleared without a delivery. Its targets still read
-  // `downloaded`, and reporting those as captured claims Pack holds files it has
-  // just deleted. There is nothing left to have evidence about, so the list is
-  // empty rather than reassuring.
-  if (!zipDelivered && flowStep.safeSignals.includes("full-fiscal-year-opfs-cleared")) return [];
-  const runInterrupted = ledger.status === "blocked";
+  const zipDelivered = isFullFiscalYearZipDelivered(flowStep);
+  // A discarded run: staged files were cleared without a delivery. Their targets
+  // still read `downloaded`, and reporting those as captured claims Pack holds
+  // files it has just deleted.
+  //
+  // Only when something was actually staged. A run where every period was
+  // positively not filed clears too, having produced nothing -- and dropping the
+  // list there hid proven `Not filed` rows that are the entire result of the
+  // run, then let them reappear on reopen when the transient clear signal was
+  // gone.
+  const clearedWithoutDelivery =
+    !zipDelivered && flowStep.safeSignals.includes("full-fiscal-year-opfs-cleared");
+  const hadStagedFiles = ledger.targets.some((target) => target.status === "downloaded");
+  if (clearedWithoutDelivery && hadStagedFiles) return [];
+  // From the step as well as the ledger. An MV3 interruption produces a blocked
+  // summary while the persisted ledger normally still reads `running`, so
+  // reading the ledger alone left the current target as "In progress" and out of
+  // the needs-review count.
+  const runInterrupted =
+    ledger.status === "blocked" || flowStep.safeSignals.includes("filed-returns-run-needs-review");
   return ledger.targets.map((target) => ({
     period: target.period,
     outcome: targetOutcome(target.status, zipDelivered, runInterrupted),

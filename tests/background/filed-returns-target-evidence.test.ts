@@ -136,27 +136,51 @@ describe("per-target evidence in the flow summary", () => {
   // run whose ZIP downloaded and cleaned successfully reverted every period to
   // "captured" the moment the panel was reopened -- the inverse of the
   // overclaim, and just as wrong.
-  it("keeps a delivered run saved after cleanup drops the signal", () => {
+  // `zipPhase: "cleaned"` is NOT delivery evidence. A confirmed download, a run
+  // that found no artifacts, and a legacy staging cleared on upgrade all reach
+  // it, and the phase that distinguishes them is overwritten by the transition.
+  // Inferring from it reported never-exported files as saved.
+  it("does not infer delivery from a cleaned ledger", () => {
     const ledger = ledgerWith(["downloaded", "downloaded"]);
     const cleaned = { ...ledger, status: "complete" as const, zipPhase: "cleaned" as const };
 
     const summary = toFullFiscalYearSummary(cleaned, FLOW_STEP);
 
-    expect(summary.targetEvidence?.map((entry) => entry.outcome)).toEqual(["saved", "saved"]);
+    expect(summary.targetEvidence?.map((entry) => entry.outcome)).toEqual(["captured", "captured"]);
   });
 
   // A run that found nothing eligible also cleans, having never produced a ZIP.
   // It has no downloaded target for a delivery claim to attach to, and must not
   // manufacture one.
-  it("claims no delivery for a cleaned run that produced no artifacts", () => {
-    const ledger = ledgerWith(["not-filed", "not-filed"]);
-    const cleaned = { ...ledger, status: "complete" as const, zipPhase: "cleaned" as const };
+  // A run where every period was positively not filed clears its staging too,
+  // having produced nothing. Dropping the list there hid the proven `Not filed`
+  // rows that are the whole result of the run, and they reappeared on reopen
+  // once the transient clear signal was gone.
+  it("keeps not-filed rows after a run that produced no artifacts", () => {
+    const cleared = {
+      ...FLOW_STEP,
+      safeSignals: ["full-fiscal-year-opfs-cleared", "full-fiscal-year-no-zip-artifacts"],
+    };
 
-    const summary = toFullFiscalYearSummary(cleaned, FLOW_STEP);
+    const summary = toFullFiscalYearSummary(ledgerWith(["not-filed", "not-filed"]), cleared);
 
     expect(summary.targetEvidence?.map((entry) => entry.outcome)).toEqual([
       "not-filed",
       "not-filed",
+    ]);
+  });
+
+  // An MV3 interruption produces a blocked summary while the persisted ledger
+  // still reads `running`, so the ledger alone left the current target as
+  // "In progress" and out of the needs-review count.
+  it("treats a run the step reports as interrupted as needing review", () => {
+    const interrupted = { ...FLOW_STEP, safeSignals: ["filed-returns-run-needs-review"] };
+
+    const summary = toFullFiscalYearSummary(ledgerWith(["running", "pending"]), interrupted);
+
+    expect(summary.targetEvidence?.map((entry) => entry.outcome)).toEqual([
+      "needs-review",
+      "pending",
     ]);
   });
 
