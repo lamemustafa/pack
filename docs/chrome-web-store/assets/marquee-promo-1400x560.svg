@@ -19,8 +19,8 @@
   <path d="M0 430C190 360 346 386 506 426C672 468 850 540 1060 450C1204 388 1302 382 1400 404V560H0Z" fill="#93c5fd" opacity="0.17" />
   <g transform="translate(112 128)">
     <text x="0" y="0" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="64" font-weight="750">ComplyEaze Pack</text>
-    <text x="4" y="68" fill="#bfdbfe" font-family="Inter, Arial, sans-serif" font-size="31" font-weight="650">Filed GSTR-1 and GSTR-3B downloads</text>
-    <text x="4" y="124" fill="#e2e8f0" font-family="Inter, Arial, sans-serif" font-size="24">Local-first alpha for your active GST Portal session</text>
+    <text x="4" y="68" fill="#bfdbfe" font-family="Inter, Arial, sans-serif" font-size="31" font-weight="650">GSTR-1, GSTR-3B and GSTR-2B downloads</text>
+    <text x="4" y="124" fill="#e2e8f0" font-family="Inter, Arial, sans-serif" font-size="24">Local-first beta for your active GST Portal session</text>
     <g transform="translate(4 178)">
       <rect x="0" y="0" width="270" height="54" rx="27" fill="#ffffff" opacity="0.18" />
       <text x="28" y="35" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="20" font-weight="650">No Pack account needed</text>

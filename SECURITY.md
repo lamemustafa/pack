@@ -5,13 +5,13 @@ privately; do not open a public issue for security findings.
 
 ## Supported Versions
 
-| Version                        | Supported                                 |
-| ------------------------------ | ----------------------------------------- |
-| Current source alpha (`0.3.x`) | Security reports and best-effort fixes    |
-| Chrome Web Store release       | Not applicable; none published yet        |
-| Previous release               | Not applicable until first public release |
-| Development/nightly builds     | No production support                     |
-| Third-party forks              | Not supported by ComplyEaze               |
+| Version                    | Supported                                 |
+| -------------------------- | ----------------------------------------- |
+| Current release (`0.5.x`)  | Security reports and best-effort fixes    |
+| Chrome Web Store release   | Published beta; reports and fixes         |
+| Previous releases          | Not supported; upgrade to the current one |
+| Development/nightly builds | No production support                     |
+| Third-party forks          | Not supported by ComplyEaze               |
 
 ## Reporting A Vulnerability
 
@@ -57,8 +57,7 @@ critical severity.
 ## Coordinated Disclosure
 
 Please allow reasonable time for investigation, release review, and user updates.
-If a Chrome Web Store build exists in the future, Chrome review may also affect
-timing. We will credit reporters who request credit unless law, safety, or
+Chrome review of the published Store build may also affect timing. We will credit reporters who request credit unless law, safety, or
 privacy prevents it.
 
 ## Safe Harbour

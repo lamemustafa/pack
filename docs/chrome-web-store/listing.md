@@ -9,15 +9,19 @@ Use [`dashboard-closeout.md`](dashboard-closeout.md) for the action sequence.
 
 ## Current Store State
 
-- Published package: `v0.3.2`.
-- Submitted package: `v0.5.0`, source commit
-  `985e9aa91d30e2955c996cd483496ebe92cfeef6`.
+- Published package: `v0.5.0` (pre-1.0 beta), source commit
+  `985e9aa91d30e2955c996cd483496ebe92cfeef6`. Publication is recorded on the
+  maintainer's observation of the Store dashboard; the observation fields are
+  not captured in this repository.
+- Superseded package: `v0.3.2`, whose publication evidence chain is complete.
 - GitHub pre-release: <https://github.com/lamemustafa/pack/releases/tag/v0.5.0>.
 - Release ZIP SHA-256:
   `1ecea75998ce69ae79caf8e6d27134516320a527d298ef164543cf87f6c07e62`.
-- Chrome Web Store state: submitted and in review as a draft. It is not
-  approved, published, or live; `v0.3.2` remains the last confirmed Store
-  publication and the basis for Store-published public claims.
+- Chrome Web Store state: `v0.5.0` is published and live, and is the basis for
+  Store-published public claims. `v0.3.2` is superseded.
+- The submitted ZIP's bytes are immutable and carry that commit's manifest
+  description. Later corrections to the description in this repository do not
+  change the published package; they reach users only at the next submission.
 - Historical `v0.4.0` workflow run `29507382500` built, tested, verified, and
   uploaded that release's exact ZIP with Store upload state `SUCCEEDED`, but
   publish returned HTTP 400 because dashboard requirements were incomplete.
@@ -31,9 +35,11 @@ This section is the canonical source-controlled record for the current Store
 version and review state. Release-readiness and dashboard-closeout documents
 must not claim a newer state than this record.
 
-The Store-supported alpha claims remain GSTR-1 and GSTR-3B single-period
-downloads. Private GSTR-2B and full-fiscal-year workflows are source-build
-experiments and must not be advertised as Store-supported features.
+The Store-supported beta claims are GSTR-1 and GSTR-3B filed returns and GSTR-2B
+auto-drafted statements, single-period. The full-fiscal-year workflow ships in the
+same binary -- there is only one -- but is not Store-advertised, and must not be
+advertised until the four evidence gates in `PUBLICATION_READINESS.md` are
+recorded for the release.
 
 ## Store Listing Fields
 
@@ -43,10 +49,22 @@ Title from package:
 ComplyEaze Pack: GST Return Downloader
 ```
 
+> **The summary is package metadata; the description is dashboard-held.** They reach the Store by
+> different routes and must not be treated alike.
+>
+> The **summary** below comes from the packaged manifest, so it reaches users only when a package
+> built from this commit or later is submitted. The bytes of any previously submitted ZIP are
+> immutable and still carry the older wording; updating HEAD cannot change them. Confirm the package
+> being submitted was built from a commit that contains this text before using it in a closeout.
+>
+> The **description** is entered in the dashboard, as the introduction to this file states, so it can
+> be corrected on the live listing without a new package — and should be, since the currently
+> published listing carries superseded wording.
+
 Summary from package:
 
 ```text
-Alpha: locally download GSTR-1/GSTR-3B files; private GSTR-2B downloads are source-build experimental.
+Beta: locally download your filed GSTR-1 and GSTR-3B returns and your GSTR-2B statements.
 ```
 
 Description:
@@ -54,14 +72,15 @@ Description:
 ```text
 Download filed GST returns locally from your active GST Portal session.
 
-ComplyEaze Pack helps authorised users download their own filed GST returns using GST Portal pages already open in Chrome. The Store-supported alpha scope is:
+ComplyEaze Pack helps authorised users download their own filed GST returns and auto-drafted GSTR-2B statements using GST Portal pages already open in Chrome. The Store-supported beta scope is:
 
 • GSTR-3B: filed-return summary PDF
 • GSTR-1: summary PDF and, when the portal provides it, e-invoice details Excel
+• GSTR-2B: auto-drafted statement, as summary PDF
 
 Files are saved by Chrome to the user's device. Pack does not require a Pack or ComplyEaze account. It does not ask for or store GST Portal credentials, OTPs, CAPTCHA responses, cookies, or session tokens, and it does not upload GST documents or return contents to ComplyEaze.
 
-The package also contains private source-build experiments for GSTR-2B and full-fiscal-year ZIP workflows. These are not Store-supported claims for this alpha release.
+Store-supported use is a single return period at a time. The package contains further capability that this listing does not claim, because the release evidence for those claims is not yet recorded.
 
 Pack's content script runs only on the four declared GST Portal hosts. When a supported page loads, it reads page context locally so Pack can identify eligible workflows; artifact capture and downloads start only after an explicit user action. Pack keeps limited redacted recovery state locally so interrupted work does not retry blindly. Temporary artifact bytes may be staged in browser-local OPFS for explicit capture or ZIP operations. Pack normally removes those bytes after confirmed export or explicit discard; if local cleanup fails, it retains them with a cleanup-pending status until a later cleanup attempt succeeds.
 
@@ -85,7 +104,7 @@ Other fields:
 Single purpose:
 
 ```text
-ComplyEaze Pack lets authorised GST Portal users locally download their own selected filed-return artifacts from an active browser session. It does not file returns, request credentials, or transmit GST documents to ComplyEaze.
+ComplyEaze Pack lets authorised GST Portal users locally download their own selected GSTR-1 and GSTR-3B filed-return artifacts and auto-drafted GSTR-2B statements from an active browser session. It does not file returns, request credentials, or transmit GST documents to ComplyEaze.
 ```
 
 Permission justifications:

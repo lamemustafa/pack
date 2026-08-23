@@ -2,7 +2,7 @@
 Title format: type(scope): imperative summary
 Examples:
 - fix(download): block implicit full-year retries
-- docs(release): align alpha store-readiness gates
+- docs(release): align store-readiness gates
 - chore(ci): strengthen verified ZIP evidence
 -->
 
@@ -57,7 +57,7 @@ Examples:
 ## Chrome Web Store Impact
 
 - [ ] This PR does not expand beyond the existing Chrome Web Store V0 listing unless every gate in `docs/PUBLICATION_READINESS.md` is checked.
-- [ ] Full fiscal year remains source-build alpha and is not part of the Chrome Web Store V0 listing.
+- [ ] Full fiscal year ships in the one binary but stays out of Store-advertised scope until its evidence gates are recorded.
 - [ ] Store copy, README status, Privacy QA, and reviewer instructions were reviewed if user-facing behavior changed.
 - [ ] CI ZIP creation, provenance, and protected publishing are treated as release evidence, not manual store-submission sign-off.
 - [ ] PR title uses Conventional Commits so Release Please can bump Pack after merge.

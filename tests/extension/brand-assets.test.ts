@@ -1,21 +1,10 @@
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 const rootDir = process.cwd();
 
 describe("Pack brand assets", () => {
-  const svgFiles = [
-    "pack-icon.svg",
-    "pack-logo.svg",
-    "pack-logo-hero.svg",
-    "pack-logo-monochrome.svg",
-    "pack-logo-monochrome-outlined.svg",
-    "pack-logo-outlined.svg",
-    "pack-logo-reversed.svg",
-    "pack-logo-reversed-outlined.svg",
-  ];
-
   it("provides extension icon PNGs at required and store-ready sizes", async () => {
     const expectedSizes = [16, 32, 48, 128, 256, 512];
 
@@ -57,6 +46,12 @@ describe("Pack brand assets", () => {
   });
 
   it("keeps packaged SVG brand assets self-contained and passive", async () => {
+    // Enumerated, never listed: everything in public/brand is copied into the package, so a
+    // hand-maintained list would silently stop covering the next asset added beside it.
+    const brandDir = path.join(rootDir, "public", "brand");
+    const svgFiles = (await readdir(brandDir)).filter((file) => file.endsWith(".svg"));
+    expect(svgFiles.length).toBeGreaterThan(0);
+
     for (const file of svgFiles) {
       const svg = await readFile(path.join(rootDir, "public", "brand", file), "utf8");
 

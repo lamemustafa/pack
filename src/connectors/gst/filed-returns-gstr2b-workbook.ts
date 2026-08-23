@@ -2,8 +2,8 @@ import { createXlsx, type XlsxCell, type XlsxWorksheet } from "../../core/xlsx";
 import type { ZipEntry } from "../../core/zip";
 import { isFiledReturnsSummaryForbiddenFieldPath } from "./filed-returns-summary-redaction";
 import {
-  isFiledReturnsCredentialShapedValue,
-  isFiledReturnsValidGstin,
+  isCredentialShapedValue,
+  isValidGstin,
   type FiledReturnsSummaryPlanEntry,
 } from "./filed-returns-summary-sheet";
 
@@ -217,7 +217,7 @@ function collectOwnerIdentity(sources: readonly Gstr2bSource[]): OwnerIdentity {
   let tradeName: string | undefined;
   for (const source of sources) {
     const sourceGstin = requiredText(source.data.gstin, "/data/gstin");
-    if (!isFiledReturnsValidGstin(sourceGstin)) {
+    if (!isValidGstin(sourceGstin)) {
       throw new FiledReturnsGstr2bWorkbookIdentityError("GSTR-2B owner GSTIN is invalid.");
     }
     gstin = sameIdentityValue(gstin, sourceGstin, "GSTIN");
@@ -277,7 +277,7 @@ function invoiceRows(
   const documentKey = section === "cdnr" ? "nt" : "inv";
   validateKeys(record, [...SUPPLIER_KEYS.filter((key) => key !== "inv"), documentKey], recordPath);
   const ctin = requiredText(record.ctin, `${recordPath}/ctin`);
-  if (!isFiledReturnsValidGstin(ctin)) {
+  if (!isValidGstin(ctin)) {
     throw new FiledReturnsGstr2bWorkbookPrivacyError("GSTR-2B counterparty GSTIN is invalid.");
   }
   assertNotOwnerIdentity(ctin, ownerValues);
@@ -480,7 +480,7 @@ function optionalText(value: unknown, path: string): string | undefined {
   if (value === undefined || value === null) return undefined;
   if (typeof value !== "string")
     throw new FiledReturnsGstr2bWorkbookSchemaError(`Expected GSTR-2B text at ${path}.`);
-  if (isFiledReturnsCredentialShapedValue(value)) {
+  if (isCredentialShapedValue(value)) {
     throw new FiledReturnsGstr2bWorkbookPrivacyError(
       "GSTR-2B workbook source contains credential-shaped text.",
     );

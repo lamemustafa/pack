@@ -23,12 +23,50 @@ describe("extension package verifier", () => {
     expect(result.output).toContain("Pack WXT extension package verification passed.");
   });
 
+  it("rejects an empty required brand asset", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(outputDir, "brand/pack-mark.svg", "");
+
+    const result = await runVerifier(outputDir);
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("Required brand asset is empty: brand/pack-mark.svg");
+  });
+
+  it("rejects an empty extension page", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(outputDir, "panel.html", "");
+
+    // An empty page references nothing, so a bundle check alone would pass it.
+    const result = await runVerifier(outputDir);
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("Required extension page is empty: panel.html");
+  });
+
+  it("rejects a page whose referenced bundle is missing", async () => {
+    const outputDir = await createValidPackage();
+    await rm(path.join(outputDir, "chunks", "panel.js"));
+
+    // A page that can be read is not a page that works.
+    const result = await runVerifier(outputDir);
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("Missing asset referenced by panel.html: chunks/panel.js");
+  });
+
+  it("rejects a page whose referenced bundle is empty", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(outputDir, "chunks/panel.js", "");
+
+    const result = await runVerifier(outputDir);
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("Asset referenced by panel.html is empty");
+  });
+
   it("accepts packaged HTML without module preload hints", async () => {
     const outputDir = await createValidPackage();
     await writePackageFile(
       outputDir,
-      "popup.html",
-      '<!doctype html><html><body><script type="module" src="/chunks/popup.js"></script></body></html>',
+      "panel.html",
+      '<!doctype html><html><body><script type="module" src="/chunks/panel.js"></script></body></html>',
     );
 
     const result = await runVerifier(outputDir);
@@ -375,6 +413,36 @@ describe("extension package verifier", () => {
     expect(result.output).toContain("Pathful GST Portal URL");
   });
 
+  it("rejects a package missing any extension page", async () => {
+    // A build that dropped a page still loaded as an extension, with a dead surface behind
+    // the action. Only offscreen.html was asserted, so nothing failed.
+    for (const page of ["offscreen.html", "options.html", "panel.html"]) {
+      const outputDir = await createValidPackage();
+      await rm(path.join(outputDir, page));
+
+      const result = await runVerifier(outputDir);
+
+      expect(result.status).not.toBe(0);
+      expect(result.output).toContain(`Missing required extension page: ${page}`);
+    }
+  });
+
+  it("rejects a package missing a brand asset a Pack page loads at runtime", async () => {
+    for (const asset of [
+      "brand/pack-favicon.svg",
+      "brand/pack-logo-header.svg",
+      "brand/pack-mark.svg",
+    ]) {
+      const outputDir = await createValidPackage();
+      await rm(path.join(outputDir, asset));
+
+      const result = await runVerifier(outputDir);
+
+      expect(result.status).not.toBe(0);
+      expect(result.output).toContain(`Missing required brand asset: ${asset}`);
+    }
+  });
+
   it("keeps exact ZIP verification wired to browser-loaded release checks", async () => {
     const script = await readFile(
       path.join(rootDir, "scripts", "verify-extension-zip.mjs"),
@@ -392,7 +460,7 @@ describe("extension package verifier", () => {
     expect(packageJson.devDependencies["@playwright/test"]).toBe("1.62.1");
   });
 
-  it("keeps browser release verification fail-closed around popup, scripts, network, and runtime errors", async () => {
+  it("keeps browser release verification fail-closed around the panel, scripts, network, and runtime errors", async () => {
     const script = await readFile(
       path.join(rootDir, "scripts", "verify-extension-browser.mjs"),
       "utf8",
@@ -402,18 +470,22 @@ describe("extension package verifier", () => {
     expect(script).toContain("content-scripts/content.js");
     expect(script).not.toContain("content-scripts/gstr2b-capture-main.js");
     expect(script).toContain("Pack release must include only the approved content scripts.");
-    expect(script).toContain("assertPopupPageLoads");
+    expect(script).toContain("assertPanelPageLoads");
     expect(script).toContain("valid context state");
     expect(script).toContain("waitForFunction");
-    expect(script).toContain("visibleWordmark");
-    expect(script).toContain("shellRect.width < 380");
-    expect(script).toContain("shellRect.width > 460");
+    // The popup asserted an alt-text wordmark and a compact width band. The panel
+    // mark is decorative, so paint is proved through elementFromPoint plus a
+    // decode check, and a side panel is user-resizable, so an upper width bound
+    // would fail on a wide panel rather than catch anything.
+    expect(script).toContain("markPainted");
+    expect(script).toContain("naturalWidth");
+    expect(script).toContain("shellRect.width < 300");
     expect(script).toContain("https://services.gst.gov.in/services/auth/fowelcome");
     expect(script).toContain("readLoadedExtensionIdFromPreferences");
-    expect(script).toContain("chrome-extension://${extensionId}/popup.html");
+    expect(script).toContain("chrome-extension://${extensionId}/panel.html");
     expect(script).toContain('waitForEvent("serviceworker"');
     expect(script.indexOf('waitForEvent("serviceworker"')).toBeLessThan(
-      script.indexOf("wakePage.goto(`chrome-extension://${extensionId}/popup.html`"),
+      script.indexOf("wakePage.goto(`chrome-extension://${extensionId}/panel.html`"),
     );
     expect(script).toContain("findExtensionServiceWorker(browserContext, extensionId)");
     expect(script).toContain(
@@ -437,6 +509,38 @@ describe("extension package verifier", () => {
   });
 });
 
+describe("action-to-panel binding", () => {
+  it("rejects a package whose side panel is not bound to the panel page", async () => {
+    // Requiring panel.html to exist says nothing about whether the toolbar
+    // action reaches it.
+    const outputDir = await createValidPackage();
+    const manifestPath = path.join(outputDir, "manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    delete manifest.side_panel;
+    await writePackageFile(outputDir, "manifest.json", JSON.stringify(manifest));
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("side panel");
+  });
+
+  it("rejects a package whose action still declares a popup", async () => {
+    // A default_popup takes precedence over the action's click event, so this
+    // package opens the popup while advertising a side panel.
+    const outputDir = await createValidPackage();
+    const manifestPath = path.join(outputDir, "manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    manifest.action.default_popup = "popup.html";
+    await writePackageFile(outputDir, "manifest.json", JSON.stringify(manifest));
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("must not declare a popup");
+  });
+});
+
 async function createValidPackage(): Promise<string> {
   const outputDir = await mkdtemp(path.join(tmpdir(), "pack-extension-"));
   createdDirs.push(outputDir);
@@ -446,9 +550,10 @@ async function createValidPackage(): Promise<string> {
     name: "ComplyEaze Pack: GST Return Downloader",
     short_name: "ComplyEaze Pack",
     description:
-      "Alpha: locally download GSTR-1/GSTR-3B files; private GSTR-2B downloads are source-build experimental.",
+      "Beta: locally download your filed GSTR-1 and GSTR-3B returns and your GSTR-2B statements.",
     homepage_url: "https://pack.complyeaze.com/gst",
-    permissions: ["downloads", "offscreen", "scripting", "storage"],
+    permissions: ["downloads", "offscreen", "scripting", "sidePanel", "storage"],
+    side_panel: { default_path: "panel.html" },
     host_permissions: [
       "https://www.gst.gov.in/*",
       "https://services.gst.gov.in/*",
@@ -476,11 +581,19 @@ async function createValidPackage(): Promise<string> {
   };
 
   await writePackageFile(outputDir, "manifest.json", `${JSON.stringify(manifest, null, 2)}\n`);
-  await writePackageFile(
-    outputDir,
-    "offscreen.html",
-    '<!doctype html><html><body><script type="module" src="/chunks/offscreen.js"></script></body></html>',
-  );
+  for (const page of ["offscreen.html", "options.html", "panel.html"]) {
+    const chunk = `chunks/${page.replace(".html", ".js")}`;
+    await writePackageFile(
+      outputDir,
+      page,
+      `<!doctype html><html><body><script type="module" src="/${chunk}"></script></body></html>`,
+    );
+    // The chunk each page references must exist for this to be a valid package.
+    // It previously did not, so the fixture asserted a package that could never
+    // load — the shape AGENTS.md warns about, where a fixture encodes what we
+    // assumed rather than what the artifact contains.
+    await writePackageFile(outputDir, chunk, "export {};\n");
+  }
   for (const iconSize of [16, 32, 48, 128]) {
     await writePackageFile(outputDir, `icons/icon-${iconSize}.png`, "synthetic-png");
   }
@@ -488,6 +601,9 @@ async function createValidPackage(): Promise<string> {
     "favicon.ico",
     "icons/icon-256.png",
     "icons/icon-512.png",
+    "brand/pack-favicon.svg",
+    "brand/pack-logo-header.svg",
+    "brand/pack-mark.svg",
     "brand/pack-icon.svg",
     "brand/pack-logo.svg",
     "brand/pack-logo-hero.svg",

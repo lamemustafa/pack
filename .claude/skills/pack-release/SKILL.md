@@ -163,8 +163,8 @@ only if you need to debug which specific step is failing.
 ## Source-first public claims
 
 Any release notes, PR description, or public copy you draft as part of this
-flow must stay "source-first alpha" phrasing unless exact evidence proves a
-stronger claim. Do not claim Chrome Web Store readiness, legal approval,
+flow must claim no more than `docs/PUBLICATION_READINESS.md` records, unless
+exact evidence in the PR proves a stronger claim. Do not claim Chrome Web Store readiness, legal approval,
 broad GST support, cloud sync, or durable full-year completeness unless
 `docs/PUBLICATION_READINESS.md`'s gates are actually satisfied. Keep the
 government-non-affiliation disclaimer visible on any public-facing surface

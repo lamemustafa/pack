@@ -111,7 +111,11 @@ body written from scratch fails the gate. Four consecutive PRs were blocked this
   anywhere.
 - Add analytics, backend telemetry, remote selector config, remote executable code,
   `externally_connectable`, or broad host permissions.
-- Construct a portal URL to navigate. Click the portal's own control. Two constructed navigations
+- Construct a portal URL to navigate. Click the portal's own control. **One exception, and only
+  one:** opening the portal's public landing page in a new tab, in direct response to an explicit
+  user action. Everything else is prohibited whether or not a session is active -- qualifying the
+  ban as in-flow would licence constructing a login or recovery URL while logged out, which is a
+  wider permission than this exception was written to grant. Two constructed in-flow navigations
   were WAF-rejected and one ended a live session.
 - Mark a target complete on a click alone. Completion requires correlated `chrome.downloads`
   evidence of a completed, non-empty portal file. Unknown-size, zero-byte, interrupted, ambiguous,

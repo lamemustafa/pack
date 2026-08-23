@@ -27,7 +27,7 @@ const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
 const expectedName = "ComplyEaze Pack: GST Return Downloader";
 const expectedShortName = "ComplyEaze Pack";
 const expectedDescription =
-  "Alpha: locally download GSTR-1/GSTR-3B files; private GSTR-2B downloads are source-build experimental.";
+  "Beta: locally download your filed GSTR-1 and GSTR-3B returns and your GSTR-2B statements.";
 const expectedHomepageUrl = "https://pack.complyeaze.com/gst";
 const expectedIcons = {
   16: "icons/icon-16.png",
@@ -35,10 +35,18 @@ const expectedIcons = {
   48: "icons/icon-48.png",
   128: "icons/icon-128.png",
 };
+// Every page the built extension is expected to serve. A build that silently dropped one
+// of these still produced a loadable extension with a dead surface behind it, and nothing
+// here noticed: offscreen.html was the only page asserted.
+const expectedPackagedPages = ["offscreen.html", "options.html", "panel.html"];
 const expectedPackagedBrandAssets = [
   "favicon.ico",
   "icons/icon-256.png",
   "icons/icon-512.png",
+  // Referenced at runtime by a Pack page. Absent, the surface renders a broken image.
+  "brand/pack-favicon.svg",
+  "brand/pack-logo-header.svg",
+  "brand/pack-mark.svg",
   "brand/pack-icon.svg",
   "brand/pack-logo.svg",
   "brand/pack-logo-hero.svg",
@@ -48,7 +56,7 @@ const expectedPackagedBrandAssets = [
   "brand/pack-logo-reversed.svg",
   "brand/pack-logo-reversed-outlined.svg",
 ];
-const expectedPermissions = ["downloads", "offscreen", "scripting", "storage"];
+const expectedPermissions = ["downloads", "offscreen", "scripting", "sidePanel", "storage"];
 const expectedHostPermissions = [
   "https://www.gst.gov.in/*",
   "https://services.gst.gov.in/*",
@@ -92,13 +100,43 @@ for (const [size, iconPath] of Object.entries(expectedIcons)) {
   if (manifest.icons?.[size] !== iconPath) {
     throw new Error(`Missing required ${size}px icon: ${iconPath}`);
   }
-  await readFile(path.join(outputDir, iconPath));
+  await requirePackagedFile(iconPath, `required ${size}px icon`);
 }
 
 for (const assetPath of expectedPackagedBrandAssets) {
-  await readFile(path.join(outputDir, assetPath));
+  const bytes = await requirePackagedFile(assetPath, "required brand asset");
+  // Present is not the same as usable. A zero-byte mark passes an existence
+  // check and every scan that follows, while the surface referencing it renders
+  // nothing -- the same distinction the page and bundle checks already make.
+  if (bytes.byteLength === 0) {
+    throw new Error(`Required brand asset is empty: ${assetPath}`);
+  }
 }
-await readFile(path.join(outputDir, "offscreen.html"));
+
+for (const page of expectedPackagedPages) {
+  const html = await requirePackagedFile(page, "required extension page");
+  const markup = html.toString("utf8");
+  // An empty page references nothing, so the bundle check below would pass it
+  // silently. A page that renders nothing is a dead surface, not a valid one.
+  if (markup.trim().length === 0) {
+    throw new Error(`Required extension page is empty: ${page}`);
+  }
+  await requireReferencedBundles(page, markup);
+}
+
+// A packaged panel page proves nothing about whether the toolbar action reaches
+// it. `default_popup` takes precedence over the action's click event, so a
+// package carrying both a side panel and a popup opens the popup, and one with
+// neither has a toolbar button that does nothing. Both clear a check that only
+// asserts the page is present.
+if (manifest.side_panel?.default_path !== "panel.html") {
+  throw new Error(
+    `Extension must bind the side panel to panel.html: ${manifest.side_panel?.default_path ?? "absent"}`,
+  );
+}
+if (manifest.action?.default_popup !== undefined) {
+  throw new Error(`Extension action must not declare a popup: ${manifest.action.default_popup}`);
+}
 
 for (const permission of expectedPermissions) {
   if (!manifest.permissions?.includes(permission))
@@ -287,6 +325,38 @@ for (const file of await listFiles(path.join(process.cwd(), "src"))) {
 }
 
 console.log("Pack WXT extension package verification passed.");
+
+/** Reads a packaged file, or fails naming the file rather than crashing with a raw ENOENT. */
+
+// A page that can be read is not a page that works: every local script and
+// stylesheet it references must also be present and non-empty. Without this, a
+// build that emitted the HTML but dropped its chunk passed verification.
+async function requireReferencedBundles(page, html) {
+  const references = [
+    ...html.matchAll(/<script[^>]+src="([^"]+)"/g),
+    ...html.matchAll(/<link[^>]+rel="stylesheet"[^>]+href="([^"]+)"/g),
+  ].map((match) => match[1]);
+
+  for (const reference of references) {
+    if (/^[a-z]+:/i.test(reference) || reference.startsWith("//")) {
+      throw new Error(`Extension page references a remote asset: ${page} -> ${reference}`);
+    }
+    const relative = reference.replace(/^\//, "").split(/[?#]/)[0];
+    if (!relative) continue;
+    const bytes = await requirePackagedFile(relative, `asset referenced by ${page}`);
+    if (bytes.byteLength === 0) {
+      throw new Error(`Asset referenced by ${page} is empty: ${relative}`);
+    }
+  }
+}
+
+async function requirePackagedFile(relativePath, reason) {
+  try {
+    return await readFile(path.join(outputDir, relativePath));
+  } catch (error) {
+    throw new Error(`Missing ${reason}: ${relativePath} (${error?.code ?? error?.message})`);
+  }
+}
 
 async function listFiles(dir) {
   const entries = await readdir(dir, { withFileTypes: true });

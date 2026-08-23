@@ -128,8 +128,9 @@ comment, chat message):
   filename, or URL.
 - Confirm no screenshot, recording, HAR file, or raw downloaded document is
   attached alongside it.
-- Confirm any accompanying prose uses "source-first alpha" phrasing and does
-  not claim Chrome Web Store readiness, legal approval, broad GST support,
+- Confirm any accompanying prose claims no more than
+  `docs/PUBLICATION_READINESS.md` records, and does not claim Chrome Web Store
+  readiness, legal approval, broad GST support,
   cloud sync, or durable full-year completeness beyond what
   `docs/PUBLICATION_READINESS.md`'s gates actually allow.
 - Keep the government-non-affiliation disclaimer visible on any public-facing

@@ -44,6 +44,99 @@ function withoutCurrentPeriod(summary: FiledReturnsFlowSummary): FiledReturnsFlo
   return clone;
 }
 
+const completePresentation: PopupPresentationState = {
+  badge: "Complete",
+  body: "The selected files were saved by your browser.",
+  icon: "\u2713",
+  kind: "complete",
+  title: "Your download is ready",
+  tone: "success",
+};
+
+function fullYearSummary(safeSignals: string[]): FiledReturnsFlowSummary {
+  return {
+    scope: { financialYear: "2025-26", period: FULL_FISCAL_YEAR_PERIOD, returnType: "GSTR-3B" },
+    status: "complete",
+    completedPeriods: Array.from({ length: 12 }, (_, index) => `p${index}`),
+    totalPeriods: 12,
+    updatedAt: "2026-08-21T00:00:00.000Z",
+    flowStep: {
+      connectorId: "gst",
+      scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+      state: "downloaded",
+      safeSignals,
+      safeMessage: "Full-year run finished.",
+    },
+  };
+}
+
+describe("full-year completion claim", () => {
+  it("does not claim the ZIP was saved when no download was correlated", () => {
+    // A full-year run completes when every PERIOD is positive. That state cannot
+    // observe the final ZIP, so announcing it saved was a completion claim with
+    // no download evidence behind it -- while the delivery line on the same
+    // screen said the opposite.
+    const markup = renderToStaticMarkup(
+      <InlineStatus
+        busy={null}
+        portalReady
+        onOpenPortal={vi.fn()}
+        onRestartTarget={vi.fn()}
+        onRetryFullFiscalYearTarget={vi.fn()}
+        onRetryTarget={vi.fn()}
+        presentation={completePresentation}
+        summary={fullYearSummary([])}
+      />,
+    );
+
+    expect(markup).not.toContain("saved as one ZIP");
+    expect(markup).toContain("ZIP unconfirmed");
+    expect(markup).toContain("12 periods processed");
+  });
+
+  it("does not send the user to Downloads when no ZIP was ever meant to exist", () => {
+    // Every period positively not-filed produces no ZIP by design. Telling the
+    // user to check Downloads for it is the same contradiction, reversed.
+    const markup = renderToStaticMarkup(
+      <InlineStatus
+        busy={null}
+        portalReady
+        onOpenPortal={vi.fn()}
+        onRestartTarget={vi.fn()}
+        onRetryFullFiscalYearTarget={vi.fn()}
+        onRetryTarget={vi.fn()}
+        presentation={completePresentation}
+        summary={fullYearSummary(["full-fiscal-year-no-zip-artifacts"])}
+      />,
+    );
+
+    expect(markup).not.toContain("ZIP unconfirmed");
+    expect(markup).not.toContain("check browser Downloads");
+    // ...and it must not fall through to the success body either, which would
+    // claim a ZIP that was deliberately never created.
+    expect(markup).not.toContain("saved as one ZIP");
+    expect(markup).toContain("No ZIP created");
+  });
+
+  it("claims the ZIP only once a download is correlated", () => {
+    const markup = renderToStaticMarkup(
+      <InlineStatus
+        busy={null}
+        portalReady
+        onOpenPortal={vi.fn()}
+        onRestartTarget={vi.fn()}
+        onRetryFullFiscalYearTarget={vi.fn()}
+        onRetryTarget={vi.fn()}
+        presentation={completePresentation}
+        summary={fullYearSummary(["full-fiscal-year-zip-downloaded"])}
+      />,
+    );
+
+    expect(markup).toContain("12 periods saved as one ZIP");
+    expect(markup).not.toContain("ZIP unconfirmed");
+  });
+});
+
 describe("inline filed-return recovery status", () => {
   it("still explains the portal-gated secondary action when the inline action is local", () => {
     const reconcileSummary: FiledReturnsFlowSummary = {
