@@ -418,7 +418,7 @@ function worksheet(
       [],
       [
         { value: "Source", style: "bold" },
-        { value: `Filed GSTR-2B JSON from the GST portal · ${humanDate(generatedAt)}` },
+        { value: `GSTR-2B statement JSON from the GST portal · ${humanDate(generatedAt)}` },
       ],
       [
         { value: "Coverage", style: "bold" },
