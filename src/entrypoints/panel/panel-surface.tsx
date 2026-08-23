@@ -107,8 +107,14 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
             {summary ? <PackSummary scope={pack.scope} summary={pack.scopedFlowSummary} /> : null}
             {/* Below the pack card, above the recovery actions: a reader who
                 sees "needs review" here is one row away from the control that
-                resolves it. */}
-            <TargetEvidence summary={pack.scopedFlowSummary} />
+                resolves it.
+                
+                `summary`, not `scopedFlowSummary`. Changing the selection while
+                a saved run still needs recovery nulls the scoped summary while
+                the recovery controls stay actionable -- reading the scoped one
+                here hid the per-period evidence at exactly the moment it
+                explains what those controls are for. */}
+            <TargetEvidence summary={summary ?? null} />
             {running ? null : view === "presets" ? (
               <>
                 <h2>What do you need?</h2>

@@ -4,8 +4,6 @@ import type {
   FiledReturnsFlowSummary,
   FiledReturnsFullFiscalYearTargetStatus,
   PortalFlowStepResult,
-  FiledReturnsTargetEvidence,
-  FiledReturnsTargetOutcome,
 } from "../connectors/gst/filed-returns-contracts";
 import {
   concreteFiledReturnsArtifactTypesForSelection,
@@ -41,6 +39,15 @@ const SUMMARY_KEYS = [
   "fullFiscalYearRecovery",
   "scope",
   "status",
+  // Permitted so a summary carrying it can still be parsed, and then
+  // deliberately DROPPED: it is never copied into the parsed result, so it never
+  // reaches storage.
+  //
+  // Per-period outcomes include `not-filed`, which is a taxpayer's filing status
+  // for a month. `AGENTS.md` allows scope selections to persist and taxpayer
+  // data not to, and the ledger already holds these statuses where recovery
+  // needs them -- a second copy in session storage widens what is persisted for
+  // nothing but display convenience.
   "targetEvidence",
   "totalPeriods",
   "updatedAt",
@@ -96,8 +103,6 @@ export function parseDurableFiledReturnsFlowSummary(
   if (!scope || !summary.status || !SUMMARY_STATUSES.has(summary.status)) return null;
   const completedPeriods = parsePeriods(summary.completedPeriods);
   if (!completedPeriods || !isOptionalCount(summary.totalPeriods)) return null;
-  const targetEvidence = parseTargetEvidence(summary.targetEvidence);
-  if (targetEvidence === null) return null;
   const artifactAcquisitionCompletion = parseArtifactAcquisitionCompletion(
     summary.artifactAcquisitionCompletion,
     scope,
@@ -145,7 +150,6 @@ export function parseDurableFiledReturnsFlowSummary(
     ...(summary.completedAt ? { completedAt: summary.completedAt } : {}),
     ...(summary.updatedAt ? { updatedAt: summary.updatedAt } : {}),
     completedPeriods,
-    ...(targetEvidence !== undefined ? { targetEvidence } : {}),
     ...(summary.totalPeriods !== undefined ? { totalPeriods: summary.totalPeriods } : {}),
     ...(summary.currentPeriod ? { currentPeriod: summary.currentPeriod } : {}),
     ...(recovery ? { fullFiscalYearRecovery: recovery } : {}),
@@ -390,43 +394,6 @@ function targetIdFor(scope: FiledReturnsDownloadScope, period: string): string {
   const base = `${scope.returnType}:${scope.financialYear}:${period}`;
   return artifactType === "PDF" ? base : `${base}:${artifactType}`;
 }
-
-/**
- * Validated, not merely permitted. Durable state is replayed into the panel
- * after a worker restart, so an entry that survived here would be rendered as
- * evidence -- and evidence is the one thing this list must not invent. An
- * unrecognised outcome, a period that is not a month, or a repeat rejects the
- * whole summary rather than the row, because a partial evidence list is a
- * quieter lie than no list at all.
- */
-function parseTargetEvidence(input: unknown): FiledReturnsTargetEvidence[] | null | undefined {
-  if (input === undefined) return undefined;
-  if (!Array.isArray(input) || input.length > FILED_RETURNS_MONTHS.length) return null;
-  const periods = new Set<string>();
-  const parsed: FiledReturnsTargetEvidence[] = [];
-  for (const entry of input) {
-    if (!entry || typeof entry !== "object") return null;
-    const record = entry as Record<string, unknown>;
-    if (!hasOnlyKeys(record, ["outcome", "period"])) return null;
-    const { outcome, period } = record;
-    if (typeof period !== "string" || !FILED_RETURNS_MONTHS.includes(period as never)) return null;
-    if (periods.has(period)) return null;
-    if (typeof outcome !== "string" || !TARGET_OUTCOMES.has(outcome as FiledReturnsTargetOutcome)) {
-      return null;
-    }
-    periods.add(period);
-    parsed.push({ outcome: outcome as FiledReturnsTargetOutcome, period });
-  }
-  return parsed;
-}
-
-const TARGET_OUTCOMES = new Set<FiledReturnsTargetOutcome>([
-  "saved",
-  "not-filed",
-  "needs-review",
-  "running",
-  "pending",
-]);
 
 function parsePeriods(input: unknown): string[] | null {
   if (!Array.isArray(input) || input.length > FILED_RETURNS_MONTHS.length) return null;

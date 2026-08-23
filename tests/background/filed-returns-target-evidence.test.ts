@@ -5,6 +5,8 @@ import type {
   PortalFlowStepResult,
 } from "../../src/connectors/gst/filed-returns-contracts";
 import { toFullFiscalYearSummary } from "../../src/background/filed-returns-full-fiscal-year-summary";
+import { FULL_FISCAL_YEAR_PERIOD } from "../../src/connectors/gst/filed-returns-scope";
+import { parseDurableFiledReturnsFlowSummary } from "../../src/background/filed-returns-durable-summary";
 
 const FLOW_STEP: PortalFlowStepResult = {
   connectorId: "gst",
@@ -24,7 +26,7 @@ function ledgerWith(
     scope: {
       artifactType: "PDF",
       financialYear: "2026-27",
-      period: "Full financial year",
+      period: FULL_FISCAL_YEAR_PERIOD,
       returnType: "GSTR-3B",
     },
     status: "partial",
@@ -76,5 +78,21 @@ describe("per-target evidence in the flow summary", () => {
       { period: "April", outcome: "running" },
       { period: "May", outcome: "pending" },
     ]);
+  });
+
+  // Per-period outcomes include `not-filed`, which is a taxpayer's filing status
+  // for a month. `AGENTS.md` permits scope selections to persist and taxpayer
+  // data not to, and the ledger already holds these statuses where recovery
+  // needs them. The evidence list is display-only: the durable parser accepts a
+  // summary carrying it and drops it, so no second copy reaches storage.
+  it("never carries per-period outcomes into durable state", () => {
+    const summary = toFullFiscalYearSummary(ledgerWith(["downloaded", "not-filed"]), FLOW_STEP);
+    expect(summary.targetEvidence).toBeDefined();
+
+    const durable = parseDurableFiledReturnsFlowSummary(summary);
+
+    expect(durable).not.toBeNull();
+    expect(durable).not.toHaveProperty("targetEvidence");
+    expect(JSON.stringify(durable)).not.toContain("not-filed");
   });
 });
