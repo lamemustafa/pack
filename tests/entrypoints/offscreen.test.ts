@@ -764,7 +764,7 @@ describe("offscreen Blob URL entrypoint", () => {
     );
   });
 
-  it("ships parseable GSTR-2B tidy data and its invoice-level workbook", async () => {
+  it("ships the GSTR-2B invoice-level workbook in place of the tidy CSV", async () => {
     await loadOffscreenEntrypoint();
     opfsFiles.set(
       `filed-return-packs/${TEST_FULL_YEAR_LEDGER_ID}/april-data.json`,
@@ -838,8 +838,8 @@ describe("offscreen Blob URL entrypoint", () => {
 
     expect(zip).toMatchObject({
       ok: true,
-      zipEntryCount: 3,
-      summaryEntryCount: 2,
+      zipEntryCount: 2,
+      summaryEntryCount: 1,
       summary: {
         status: "included",
         outcomeOnly: false,
@@ -847,14 +847,10 @@ describe("offscreen Blob URL entrypoint", () => {
       },
     });
     const entries = await extractStoredZipEntries(createdBlobs[0]!);
-    expect([...entries.keys()]).toEqual([
-      "april-data.json",
-      "full-year-summary.csv",
-      "full-year-workbook.xlsx",
-    ]);
-    expect(new TextDecoder().decode(entries.get("full-year-summary.csv"))).toContain(
-      "April,GSTR-2B,JSON,parseable-json,,/synthetic_amount,,3",
-    );
+    // The tidy CSV is deliberately absent for GSTR-2B once a workbook exists:
+    // it carries no invoice rows for this return type, and the workbook states
+    // the same ITC totals on its first sheet.
+    expect([...entries.keys()]).toEqual(["april-data.json", "full-year-workbook.xlsx"]);
     const workbook = await extractStoredZipEntries(
       new Blob([Uint8Array.from(entries.get("full-year-workbook.xlsx")!).buffer]),
     );

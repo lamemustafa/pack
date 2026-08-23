@@ -15,23 +15,30 @@ describe("GSTR-2B consolidated workbook", () => {
     const workbook = buildWorkbook(docdata());
     const entries = extractStoredZipEntries(workbook);
 
-    expect(sheetNames(text(entries, "xl/workbook.xml"))).toEqual(["B2B", "B2BA", "CDNR", "IMPG"]);
+    expect(sheetNames(text(entries, "xl/workbook.xml"))).toEqual([
+      "ITC summary",
+      "B2B",
+      "B2BA",
+      "CDNR",
+      "IMPG",
+    ]);
     expect(text(entries, "xl/workbook.xml")).not.toContain(COUNTERPARTY_GSTIN);
 
-    const b2b = text(entries, "xl/worksheets/sheet1.xml");
-    expect(b2b.match(new RegExp(COUNTERPARTY_GSTIN, "g"))).toHaveLength(2);
+    const b2b = text(entries, "xl/worksheets/sheet2.xml");
+    // Twice per row now: once in the match key, once in its own column.
+    expect(b2b.match(new RegExp(COUNTERPARTY_GSTIN, "g"))).toHaveLength(4);
     expect(b2b.match(/Synthetic Counterparty Private Limited/g)).toHaveLength(2);
     expect(b2b).toContain("INV-001");
     expect(b2b).toContain("INV-002");
-    expect(b2b).toContain('<c r="H7" s="2"><v>110</v></c>');
-    expect(b2b).toContain('pane xSplit="1" ySplit="6" topLeftCell="B7"');
+    expect(b2b).toContain("<v>110</v>");
+    expect(b2b).toContain('pane xSplit="1"');
     expect(b2b).toContain("B2B invoice-level records present in the captured JSON.");
     expect(b2b).not.toContain("/data/");
     expect(b2b.match(new RegExp(OWNER_GSTIN, "g"))).toHaveLength(1);
     expect(b2b.match(/Synthetic Owner Legal Name/g)).toHaveLength(1);
     expect(b2b.match(/Synthetic Owner Trade Name/g)).toHaveLength(1);
 
-    for (const sheet of ["sheet2.xml", "sheet3.xml", "sheet4.xml"]) {
+    for (const sheet of ["sheet3.xml", "sheet4.xml", "sheet5.xml"]) {
       const xml = text(entries, `xl/worksheets/${sheet}`);
       expect(xml.match(new RegExp(OWNER_GSTIN, "g"))).toHaveLength(1);
       expect(xml.match(/Synthetic Owner Legal Name/g)).toHaveLength(1);
@@ -52,7 +59,7 @@ describe("GSTR-2B consolidated workbook", () => {
     const entries = extractStoredZipEntries(buildWorkbook(docdata()));
     const ownerValues = [OWNER_GSTIN, "Synthetic Owner Legal Name", "Synthetic Owner Trade Name"];
 
-    for (const sheet of ["sheet1.xml", "sheet2.xml", "sheet3.xml", "sheet4.xml"]) {
+    for (const sheet of ["sheet2.xml", "sheet3.xml", "sheet4.xml", "sheet5.xml"]) {
       const { header, data } = partitionSheet(text(entries, `xl/worksheets/${sheet}`));
 
       expect(data.length, `${sheet} has no invoice rows to check`).toBeGreaterThan(0);
@@ -76,7 +83,7 @@ describe("GSTR-2B consolidated workbook", () => {
     const entries = extractStoredZipEntries(buildWorkbook(docdata()));
     const counterpartyValues = [COUNTERPARTY_GSTIN, "Synthetic Counterparty Private Limited"];
 
-    for (const sheet of ["sheet1.xml", "sheet2.xml", "sheet3.xml"]) {
+    for (const sheet of ["sheet2.xml", "sheet3.xml", "sheet4.xml"]) {
       const { header, data } = partitionSheet(text(entries, `xl/worksheets/${sheet}`));
 
       for (const value of counterpartyValues) {
@@ -94,7 +101,10 @@ describe("GSTR-2B consolidated workbook", () => {
 
   it("does not create an empty worksheet for an absent GSTR-2B section", () => {
     const workbook = buildWorkbook({ b2b: docdata().b2b });
-    expect(sheetNames(text(extractStoredZipEntries(workbook), "xl/workbook.xml"))).toEqual(["B2B"]);
+    expect(sheetNames(text(extractStoredZipEntries(workbook), "xl/workbook.xml"))).toEqual([
+      "ITC summary",
+      "B2B",
+    ]);
   });
 
   // The workbook footer already promised that unconfirmed portal sections are
@@ -112,7 +122,7 @@ describe("GSTR-2B consolidated workbook", () => {
     ["an owner-trade-name-keyed section", "Synthetic Owner Trade Name"],
   ])("withholds %s from the footer while still counting it", (_label, sectionKey) => {
     const data = { ...docdata(), [sectionKey]: [{}] } as ReturnType<typeof docdata>;
-    const b2b = text(extractStoredZipEntries(buildWorkbook(data)), "xl/worksheets/sheet1.xml");
+    const b2b = text(extractStoredZipEntries(buildWorkbook(data)), "xl/worksheets/sheet2.xml");
 
     // Asserted on the footer, not the whole sheet: the counterparty GSTIN
     // belongs in the invoice rows and the owner trade name belongs in the
@@ -126,8 +136,14 @@ describe("GSTR-2B consolidated workbook", () => {
     const data = { ...docdata(), isd: [{ ctin: "27ABCDE1000F1ZC" }] } as ReturnType<typeof docdata>;
     const entries = extractStoredZipEntries(buildWorkbook(data));
 
-    expect(sheetNames(text(entries, "xl/workbook.xml"))).toEqual(["B2B", "B2BA", "CDNR", "IMPG"]);
-    const b2b = text(entries, "xl/worksheets/sheet1.xml");
+    expect(sheetNames(text(entries, "xl/workbook.xml"))).toEqual([
+      "ITC summary",
+      "B2B",
+      "B2BA",
+      "CDNR",
+      "IMPG",
+    ]);
+    const b2b = text(entries, "xl/worksheets/sheet2.xml");
     expect(b2b).toContain("Sections present in the source but not rendered: isd.");
     expect(b2b).toContain("INV-001");
   });
@@ -258,8 +274,8 @@ describe("GSTR-2B consolidated workbook", () => {
     expect(workbook, "a captured-shape period produced no workbook").not.toBeNull();
 
     const entries = extractStoredZipEntries(workbook!);
-    expect(sheetNames(text(entries, "xl/workbook.xml"))).toEqual(["B2B"]);
-    const b2b = text(entries, "xl/worksheets/sheet1.xml");
+    expect(sheetNames(text(entries, "xl/workbook.xml"))).toEqual(["ITC summary", "B2B"]);
+    const b2b = text(entries, "xl/worksheets/sheet2.xml");
     expect(b2b).toContain("INV-900");
     // The capture carries no `lglnm` or `trdnm`, so those header rows are not
     // written at all. Printing them regardless produced a labelled blank -- a
@@ -363,6 +379,165 @@ describe("GSTR-2B consolidated workbook", () => {
     ).toThrow(/cannot be written to a spreadsheet without changing it/);
   });
 
+  // The ITC totals a return preparer works from reached only the tidy CSV,
+  // which for GSTR-2B carries no invoice rows -- so the figures a taxpayer
+  // files from sat in the artifact least able to show them.
+  it("states the portal's own ITC totals on a first sheet", () => {
+    const entries = extractStoredZipEntries(buildWorkbook(docdata()));
+    expect(sheetNames(text(entries, "xl/workbook.xml"))[0]).toBe("ITC summary");
+
+    const { header, data } = partitionSheet(text(entries, "xl/worksheets/sheet1.xml"));
+    expect(header.some((row) => row.includes(OWNER_GSTIN))).toBe(true);
+    expect(data.length).toBeGreaterThan(0);
+    // A category rollup and the per-section row beneath it, labelled with the
+    // sheet name that section is rendered on.
+    expect(data.some((row) => row.includes("All"))).toBe(true);
+    expect(data.some((row) => row.includes("B2B"))).toBe(true);
+    expect(data.some((row) => row.includes("ITC available"))).toBe(true);
+  });
+
+  it("walks an ITC category this build does not know rather than dropping it", () => {
+    const plan: FiledReturnsSummaryPlanEntry[] = [planEntry("April", "april-data.json")];
+    const bytes = new TextEncoder().encode(
+      JSON.stringify({
+        data: {
+          gstin: OWNER_GSTIN,
+          rtnprd: "042026",
+          docdata: docdata(),
+          itcsumm: { itcavl: { somefuturecategory: { igst: 5, cgst: 0, sgst: 0, cess: 0 } } },
+        },
+      }),
+    );
+    const workbook = buildFiledReturnsGstr2bWorkbook(plan, [{ path: "april-data.json", bytes }], {
+      generatedAt: new Date("2026-08-22T12:00:00.000Z"),
+    });
+
+    const { data } = partitionSheet(
+      text(extractStoredZipEntries(workbook!), "xl/worksheets/sheet1.xml"),
+    );
+    expect(data.some((row) => row.includes("somefuturecategory"))).toBe(true);
+  });
+
+  // Reconciliation against a purchase register matches on counterparty GSTIN
+  // plus document number, and Excel's VLOOKUP wants the key in the first
+  // column of its range. Normalised on both halves, because a match fails on a
+  // case or padding difference alone.
+  it("leads each invoice row with a normalised reconciliation key", () => {
+    const data = docdata();
+    data.b2b[0]!.inv[0]!.inum = " inv-001 ";
+    const { data: rows } = partitionSheet(
+      text(extractStoredZipEntries(buildWorkbook(data)), "xl/worksheets/sheet2.xml"),
+    );
+
+    expect(rows[0]?.[0]).toBe(`${COUNTERPARTY_GSTIN}|INV-001`);
+  });
+
+  // FORM GSTR-2B carries a `GSTR-3B table` column against every summary
+  // heading, so printing it reproduces the form rather than asserting a mapping
+  // of ours. Which JSON key is which heading was settled by matching a captured
+  // period against the portal's rendered summary.
+  it("prints the GSTR-3B table the form prescribes, and none where unestablished", () => {
+    const plan: FiledReturnsSummaryPlanEntry[] = [planEntry("April", "april-data.json")];
+    const bytes = new TextEncoder().encode(
+      JSON.stringify({
+        data: {
+          gstin: OWNER_GSTIN,
+          rtnprd: "042026",
+          docdata: docdata(),
+          itcsumm: {
+            itcavl: {
+              nonrevsup: { igst: 10, cgst: 0, sgst: 0, cess: 0 },
+              revsup: { igst: 5, cgst: 0, sgst: 0, cess: 0 },
+              imports: { igst: 7, cess: 0 },
+              othersup: { igst: 3, cgst: 0, sgst: 0, cess: 0 },
+            },
+            itcunavl: { nonrevsup: { igst: 1, cgst: 0, sgst: 0, cess: 0 } },
+          },
+        },
+      }),
+    );
+    const workbook = buildFiledReturnsGstr2bWorkbook(plan, [{ path: "april-data.json", bytes }], {
+      generatedAt: new Date("2026-08-22T12:00:00.000Z"),
+    });
+    const { data } = partitionSheet(
+      text(extractStoredZipEntries(workbook!), "xl/worksheets/sheet1.xml"),
+    );
+    const tableFor = (category: string) =>
+      data.find((row) => row.includes(category))?.[3] ?? "(none)";
+
+    expect(tableFor("Supplies other than reverse charge")).toBe("4(A)(5)");
+    expect(tableFor("Reverse charge supplies")).toBe("3.1(d), 4(A)(3)");
+    expect(tableFor("Imports")).toBe("4(A)(1)");
+    // Matched no Part A heading, so no reference is printed against it.
+    const othersup = data.find((row) => row.includes("Other supplies"));
+    expect(othersup?.[3]).not.toBe("4(A)(5)");
+    expect(othersup?.[3]).not.toMatch(/^4\(A\)/);
+  });
+
+  // An ITC summary alone must not make a workbook. A nil period, or one holding
+  // only a section this build does not render, would otherwise produce an
+  // ITC-only workbook -- which suppresses the `no-records` outcome and drops the
+  // tidy CSV that is the fallback for exactly that case.
+  it("produces no workbook from an ITC summary with no renderable invoice rows", () => {
+    const plan: FiledReturnsSummaryPlanEntry[] = [planEntry("April", "april-data.json")];
+    const bytes = new TextEncoder().encode(
+      JSON.stringify({
+        data: {
+          gstin: OWNER_GSTIN,
+          rtnprd: "042026",
+          docdata: {},
+          itcsumm: { itcavl: { nonrevsup: { igst: 10, cgst: 0, sgst: 0, cess: 0 } } },
+        },
+      }),
+    );
+
+    expect(
+      buildFiledReturnsGstr2bWorkbook(plan, [{ path: "april-data.json", bytes }], {
+        generatedAt: new Date("2026-08-22T12:00:00.000Z"),
+      }),
+    ).toBeNull();
+  });
+
+  // A screened-out ITC key takes every total beneath it, and the CSV that used
+  // to carry those figures is no longer shipped alongside. An omission nobody
+  // can see would be a figure that simply vanished.
+  it("counts an ITC key its own screen rejects", () => {
+    const plan: FiledReturnsSummaryPlanEntry[] = [planEntry("April", "april-data.json")];
+    const bytes = new TextEncoder().encode(
+      JSON.stringify({
+        data: {
+          gstin: OWNER_GSTIN,
+          rtnprd: "042026",
+          docdata: docdata(),
+          itcsumm: {
+            itcavl: {
+              nonrevsup: { igst: 10, cgst: 0, sgst: 0, cess: 0 },
+              [COUNTERPARTY_GSTIN]: { igst: 1, cgst: 0, sgst: 0, cess: 0 },
+            },
+          },
+        },
+      }),
+    );
+    const workbook = buildFiledReturnsGstr2bWorkbook(plan, [{ path: "april-data.json", bytes }], {
+      generatedAt: new Date("2026-08-22T12:00:00.000Z"),
+    });
+    const itc = text(extractStoredZipEntries(workbook!), "xl/worksheets/sheet1.xml");
+
+    expect(itc).not.toContain(COUNTERPARTY_GSTIN);
+    expect(itc).toContain("section name(s) withheld");
+  });
+
+  it("upper-cases both halves of the reconciliation key", () => {
+    const data = docdata();
+    data.b2b[0]!.ctin = COUNTERPARTY_GSTIN.toLowerCase();
+    data.b2b[0]!.inv[0]!.inum = "inv-001";
+    const { data: rows } = partitionSheet(
+      text(extractStoredZipEntries(buildWorkbook(data)), "xl/worksheets/sheet2.xml"),
+    );
+
+    expect(rows[0]?.[0]).toBe(`${COUNTERPARTY_GSTIN}|INV-001`);
+  });
+
   it("fails closed rather than placing the return owner in a counterparty row", () => {
     const data = docdata();
     data.b2b[0]!.ctin = OWNER_GSTIN;
@@ -432,6 +607,20 @@ function sourceEntry(path: string, documentSections: Partial<ReturnType<typeof d
           trdnm: "Synthetic Owner Trade Name",
           rtnprd: "042026",
           docdata: documentSections,
+          // Every captured period carries an ITC summary, so a fixture without
+          // one is not a representative response -- and the sheet built from it
+          // would never be exercised.
+          itcsumm: {
+            itcavl: {
+              nonrevsup: {
+                igst: 10,
+                cgst: 0,
+                sgst: 0,
+                cess: 0,
+                b2b: { txval: 100, igst: 10, cgst: 0, sgst: 0, cess: 0 },
+              },
+            },
+          },
         },
       }),
     ),
@@ -549,7 +738,9 @@ function partitionSheet(xml: string): { header: string[][]; data: string[][] } {
       .map((cell) => cell.trim())
       .filter((cell) => cell !== ""),
   );
-  const columnHeader = rows.findIndex((row) => row[0] === "Period");
+  // The invoice sheets lead with the reconciliation match key and the summary
+  // sheets lead with the period, so the boundary is either of those.
+  const columnHeader = rows.findIndex((row) => row[0] === "Match key" || row[0] === "Period");
   expect(columnHeader, "the column-header row is no longer identifiable").toBeGreaterThan(-1);
 
   const footer = rows.findIndex((row, index) => index > columnHeader && row[0] === "Source");

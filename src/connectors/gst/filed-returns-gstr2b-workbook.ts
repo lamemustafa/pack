@@ -35,6 +35,69 @@ interface Column {
 }
 
 const SECTION_ORDER: readonly SectionKey[] = ["b2b", "b2ba", "cdnr", "impg"];
+
+/**
+ * The ITC availability totals the portal states for itself, under `data.itcsumm`.
+ *
+ * These are the figures a return preparer works from, and until now they reached
+ * only the tidy CSV -- which for GSTR-2B carries no invoice rows at all, so the
+ * numbers a taxpayer files from were in the artifact least able to show them.
+ *
+ * Walked structurally rather than by a hardcoded shape: the portal nests
+ * availability, then a category, then either a tax head (a category rollup) or a
+ * per-section object. A category or section this build has not seen appears as
+ * its own row instead of being dropped.
+ */
+const ITC_TAX_HEADS = ["txval", "igst", "cgst", "sgst", "cess"] as const;
+const ITC_AVAILABILITY_LABELS: Readonly<Record<string, string>> = {
+  itcavl: "ITC available",
+  itcunavl: "ITC not available",
+};
+/**
+ * The GSTR-3B table each ITC category feeds, as FORM GSTR-2B itself prescribes.
+ *
+ * This is not a compliance claim of ours: the form, made under rule 60(7),
+ * carries a `GSTR-3B table` column against every summary heading, and this
+ * reproduces it. What needed establishing was which JSON key is which heading,
+ * and that was done by matching a captured period's figures against the
+ * portal's own rendered summary for the same period.
+ *
+ * `othersup` is deliberately absent. It matched no Part A heading; it is very
+ * likely the Part B credit-note aggregate, but that is elimination rather than
+ * a matched figure, and a reference printed on a guess is worse than none.
+ */
+const ITC_GSTR3B_TABLE: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  itcavl: {
+    nonrevsup: "4(A)(5)",
+    revsup: "3.1(d), 4(A)(3)",
+    imports: "4(A)(1)",
+    isd: "4(A)(4)",
+  },
+  itcunavl: {
+    nonrevsup: "4(D)(2)",
+    revsup: "3.1(d), 4(D)(2)",
+    isd: "4(D)(2)",
+  },
+};
+
+const ITC_CATEGORY_LABELS: Readonly<Record<string, string>> = {
+  nonrevsup: "Supplies other than reverse charge",
+  revsup: "Reverse charge supplies",
+  othersup: "Other supplies",
+  imports: "Imports",
+};
+const ITC_SUMMARY_COLUMNS: readonly Column[] = [
+  { key: "period", header: "Period", width: 13 },
+  { key: "availability", header: "Availability", width: 22 },
+  { key: "category", header: "Category", width: 34 },
+  { key: "gstr3bTable", header: "GSTR-3B table", width: 18 },
+  { key: "section", header: "Section", width: 14 },
+  { key: "txval", header: "Taxable value", width: 16, amount: true },
+  { key: "igst", header: "IGST", width: 14, amount: true },
+  { key: "cgst", header: "CGST", width: 14, amount: true },
+  { key: "sgst", header: "SGST", width: 14, amount: true },
+  { key: "cess", header: "Cess", width: 14, amount: true },
+];
 const SECTION_NAMES: Readonly<Record<SectionKey, string>> = {
   b2b: "B2B",
   b2ba: "B2BA",
@@ -96,6 +159,11 @@ const IMPG_KEYS = [
 ] as const;
 
 const INVOICE_COLUMNS: readonly Column[] = [
+  // First, deliberately. Reconciliation against a purchase register matches on
+  // counterparty GSTIN plus document number, and Excel's VLOOKUP requires the
+  // key in the first column of its range. Every user would otherwise build this
+  // column by hand before doing anything else.
+  { key: "matchKey", header: "Match key", width: 32 },
   { key: "period", header: "Period", width: 13 },
   { key: "ctin", header: "Counterparty GSTIN", width: 20 },
   { key: "trdnm", header: "Counterparty trade name", width: 32 },
@@ -152,7 +220,10 @@ export function buildFiledReturnsGstr2bWorkbook(
   const financialYear = singleFinancialYear(plan);
   const rowsBySection = new Map<SectionKey, Row[]>();
   const excludedSections = new Set<string>();
+  const itcRows: Row[] = [];
+  const withheldItcKeys = { count: 0 };
   for (const source of sources) {
+    itcRows.push(...itcSummaryRows(source, identity.values, withheldItcKeys));
     const docdata = optionalObject(source.data.docdata, "/data/docdata");
     if (!docdata) continue;
     for (const section of screenKeysCollectingUnknown(docdata, SECTION_ORDER, "/data/docdata")) {
@@ -164,6 +235,14 @@ export function buildFiledReturnsGstr2bWorkbook(
       rowsBySection.set(section, [...(rowsBySection.get(section) ?? []), ...sectionRows]);
     }
   }
+  // First sheet: a return preparer reads the totals before the detail, and this
+  // is the only place the portal's own ITC figures now appear.
+  //
+  // Only ever ALONGSIDE invoice sheets. A period with an ITC summary but no
+  // renderable invoice rows -- a nil month, or one holding only a section this
+  // build does not render -- would otherwise produce an ITC-only workbook, which
+  // suppresses the `no-records` outcome and drops the tidy CSV that is the
+  // fallback for exactly that case.
   const worksheets = SECTION_ORDER.flatMap((section) => {
     const rows = rowsBySection.get(section);
     return rows?.length
@@ -179,8 +258,22 @@ export function buildFiledReturnsGstr2bWorkbook(
         ]
       : [];
   });
-  return worksheets.length
-    ? createXlsx({ generatedAt: options.generatedAt, worksheets }, options.maxOutputBytes)
+  const excluded = renderableSectionNames(excludedSections, identity.values);
+  const itcWorksheet =
+    worksheets.length > 0 && itcRows.length > 0
+      ? [
+          summaryWorksheet(itcRows, identity, financialYear, options.generatedAt, {
+            ...excluded,
+            withheld: excluded.withheld + withheldItcKeys.count,
+          }),
+        ]
+      : [];
+  const allWorksheets = [...itcWorksheet, ...worksheets];
+  return allWorksheets.length
+    ? createXlsx(
+        { generatedAt: options.generatedAt, worksheets: allWorksheets },
+        options.maxOutputBytes,
+      )
     : null;
 }
 
@@ -394,6 +487,93 @@ function sameIdentityValue(
   return current ?? next;
 }
 
+function itcSummaryRows(
+  source: Gstr2bSource,
+  ownerValues: ReadonlySet<string>,
+  withheld: { count: number },
+): Row[] {
+  const summary = optionalObject(source.data.itcsumm, "/data/itcsumm");
+  if (!summary) return [];
+  const rows: Row[] = [];
+  for (const availability of screenedKeys(summary, "/data/itcsumm", withheld)) {
+    const categories = optionalObject(summary[availability], `/data/itcsumm/${availability}`);
+    if (!categories) continue;
+    for (const category of screenedKeys(categories, `/data/itcsumm/${availability}`, withheld)) {
+      const categoryPath = `/data/itcsumm/${availability}/${category}`;
+      const value = categories[category];
+      const nested = optionalObject(value, categoryPath);
+      if (!nested) continue;
+      const base = {
+        period: source.period,
+        availability: ITC_AVAILABILITY_LABELS[availability] ?? availability,
+        category: ITC_CATEGORY_LABELS[category] ?? category,
+        gstr3bTable: ITC_GSTR3B_TABLE[availability]?.[category],
+      };
+      // A category carries its own rollup heads beside its per-section objects.
+      const rollup = itcAmounts(nested, categoryPath);
+      if (rollup) rows.push({ ...base, section: "All", ...rollup });
+      for (const section of screenedKeys(nested, categoryPath, withheld)) {
+        // A category node holds its own rollup heads beside its section
+        // objects, so the heads are not sections. Reading one as an object
+        // refused the whole workbook.
+        if ((ITC_TAX_HEADS as readonly string[]).includes(section)) continue;
+        const sectionValue = optionalObject(nested[section], `${categoryPath}/${section}`);
+        if (!sectionValue) continue;
+        const amounts = itcAmounts(sectionValue, `${categoryPath}/${section}`);
+        if (amounts) {
+          rows.push({
+            ...base,
+            // The sheet names for sections this build renders, so a reader can
+            // tie a summary row to the sheet it summarises; the raw key
+            // otherwise, because a section we do not render still has totals.
+            section: SECTION_NAMES[section as SectionKey] ?? safeText(section, ownerValues),
+            ...amounts,
+          });
+        }
+      }
+    }
+  }
+  return rows;
+}
+
+/** Tax heads present on this node, or null when it carries none of its own. */
+function itcAmounts(record: Record<string, unknown>, path: string): Row | null {
+  const amounts: Row = {};
+  let present = false;
+  for (const head of ITC_TAX_HEADS) {
+    const amount = optionalAmount(record[head], `${path}/${head}`);
+    if (amount !== undefined) present = true;
+    amounts[head] = amount;
+  }
+  return present ? amounts : null;
+}
+
+/**
+ * Keys that are safe to render. Forbidden paths still throw; a key whose own
+ * text could carry an identity is skipped rather than printed, exactly as an
+ * unrendered `docdata` section name is.
+ */
+function screenedKeys(
+  record: Record<string, unknown>,
+  path: string,
+  withheld: { count: number },
+): string[] {
+  const keys: string[] = [];
+  for (const key of Object.keys(record)) {
+    rejectForbiddenPath(`${path}/${key.replace(/~/g, "~0").replace(/\//g, "~1")}`);
+    if (/^[A-Za-z0-9_]{1,24}$/.test(key) && !isIdentityShapedSegment(key)) {
+      keys.push(key);
+      continue;
+    }
+    // Counted, never silently dropped. A screened-out key takes every tax total
+    // beneath it with it, and the CSV that used to carry those figures is no
+    // longer shipped alongside -- so an omission nobody can see would be a
+    // figure that simply vanished.
+    withheld.count += 1;
+  }
+  return keys;
+}
+
 function rowsForSection(
   section: SectionKey,
   value: unknown,
@@ -449,16 +629,22 @@ function invoiceRows(
         `A GSTR-2B ${section.toUpperCase()} record carries no document number.`,
       );
     }
+    const documentNumber = safeText(
+      optionalText(
+        documentRecord[section === "cdnr" ? "ntnum" : "inum"],
+        `${recordPath}/${documentKey}/number`,
+      ),
+      ownerValues,
+    );
     return {
       period,
       ...supplier,
-      documentNumber: safeText(
-        optionalText(
-          documentRecord[section === "cdnr" ? "ntnum" : "inum"],
-          `${recordPath}/${documentKey}/number`,
-        ),
-        ownerValues,
-      ),
+      // Both halves normalised the same way: de-spaced and upper-cased.
+      // `isValidGstin` accepts either case, so a lower-case GSTIN from the
+      // portal against an upper-case purchase register would have missed on the
+      // half that was left alone.
+      matchKey: `${ctin.replace(/\s+/g, "").toUpperCase()}|${typeof documentNumber === "string" ? documentNumber.replace(/\s+/g, "").toUpperCase() : ""}`,
+      documentNumber,
       documentDate: safeText(
         optionalText(documentRecord.dt, `${recordPath}/${documentKey}/dt`),
         ownerValues,
@@ -545,6 +731,25 @@ function importGoodsRow(value: unknown, period: string, ownerValues: ReadonlySet
   };
 }
 
+function summaryWorksheet(
+  rows: readonly Row[],
+  identity: OwnerIdentity,
+  financialYear: string,
+  generatedAt: Date,
+  excludedSections: { named: readonly string[]; withheld: number },
+): XlsxWorksheet {
+  return sheetFromColumns(
+    "ITC summary",
+    ITC_SUMMARY_COLUMNS,
+    rows,
+    identity,
+    financialYear,
+    generatedAt,
+    "ITC availability totals stated by the portal under `data.itcsumm`, and the GSTR-3B table each heading feeds as prescribed by FORM GSTR-2B under rule 60(7). These are the portal's own figures, not a recomputation from the invoice sheets. A blank GSTR-3B table means the heading's correspondence is not established, not that it has none.",
+    excludedSections,
+  );
+}
+
 function worksheet(
   section: SectionKey,
   rows: readonly Row[],
@@ -557,6 +762,34 @@ function worksheet(
     section === "impg"
       ? IMPG_COLUMNS
       : INVOICE_COLUMNS.filter((column) => columnForSection(section, column.key));
+  return sheetFromColumns(
+    SECTION_NAMES[section],
+    columns,
+    rows,
+    identity,
+    financialYear,
+    generatedAt,
+    `${SECTION_NAMES[section]} invoice-level records present in the captured JSON. Does not include ITC summary figures or unconfirmed portal sections.`,
+    excludedSections,
+  );
+}
+
+/**
+ * One sheet body for every sheet in this workbook. The ITC summary and the
+ * invoice sections differ only in their columns and their coverage sentence, so
+ * a second copy of the header, freeze, footer and cell logic would be a second
+ * place for them to drift apart.
+ */
+function sheetFromColumns(
+  name: string,
+  columns: readonly Column[],
+  rows: readonly Row[],
+  identity: OwnerIdentity,
+  financialYear: string,
+  generatedAt: Date,
+  coverage: string,
+  excludedSections: { named: readonly string[]; withheld: number },
+): XlsxWorksheet {
   // Only the fields the portal actually sent. A captured GSTR-2B period carries
   // `data.gstin` and neither `lglnm` nor `trdnm`, so emitting those two rows
   // regardless printed a labelled blank -- a field that looks reported and is
@@ -581,7 +814,7 @@ function worksheet(
     }),
   );
   return {
-    name: SECTION_NAMES[section],
+    name,
     freezeFirstColumnAndRows: headerRows.length,
     columns: columns.map((column) => ({ width: column.width })),
     rows: [
@@ -599,8 +832,7 @@ function worksheet(
           // diagnosed from the artifact, which is the definition of a silent
           // no-op here.
           value:
-            `${SECTION_NAMES[section]} invoice-level records present in the captured JSON. ` +
-            `Does not include ITC summary figures or unconfirmed portal sections.` +
+            coverage +
             (excludedSections.named.length > 0
               ? ` Sections present in the source but not rendered: ${excludedSections.named.join(", ")}.`
               : "") +

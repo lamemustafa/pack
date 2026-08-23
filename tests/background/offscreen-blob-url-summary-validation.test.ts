@@ -77,9 +77,11 @@ describe("offscreen full-year summary response validation", () => {
       ok: true,
       requestId: requestIdFrom(message),
       blobUrl: "blob:pack/wrong-form-workbook",
-      zipEntryCount: 3,
+      zipEntryCount: 2,
       artifactEntryCount: 1,
-      summaryEntryCount: 2,
+      // One, not two: GSTR-2B ships the workbook alone now that its tidy CSV
+      // carries no invoice rows.
+      summaryEntryCount: 1,
       summary: {
         status: "included",
         outcomeOnly: false,

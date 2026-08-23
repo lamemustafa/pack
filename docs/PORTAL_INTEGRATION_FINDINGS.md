@@ -209,3 +209,70 @@ This log records live diagnostic findings that constrain Pack's local, target-bo
     Both drafts survived because the figure looked harmless. That is the argument the rule exists
     to refuse: a rule that admits exceptions for figures someone judges harmless cannot be checked
     by anyone but its author.
+
+32. `data.itcsumm` nests availability, then a category, then **either** a tax head or a
+    per-section object: a category carries its own rollup heads beside its section children.
+    A reader that treats every child of a category as a section refuses the document. Captured
+    availabilities were `itcavl` and `itcunavl`; captured categories included `nonrevsup`,
+    `revsup`, `othersup` and `imports`. Walk the structure rather than encoding this list --
+    the shape is the durable fact, the key names are not.
+
+33. Only `b2b`, `b2ba`, `cdnr` and `impg` appear under `docdata` across a captured corpus spanning
+    several financial years -- so the narrow section coverage is this taxpayer's shape rather than
+    one year's sampling. The GST
+    portal's own user manual lists **fifteen** GSTR-2B tables: B2B, B2BA, B2B CDNR, B2B CDNRA,
+    ISD, ISDA, IMPG, IMPG (Amendments), IMPGSEZ, IMPGSEZ (Amendments), ECO, ECOA, ITC REVERSED
+    (rule 37A), B2B DNR and B2B DNRA. **None of the eleven we do not render has been captured
+    here**, so no builder should encode their shape from that list alone. A taxpayer who has them
+    sees them named as unrendered in the workbook footer rather than dropped silently, which is
+    the correct behaviour until a capture exists.
+
+    The rule 37A reversal table is the one worth capturing first: it identifies credit that must
+    be reversed because the supplier has not paid, which is an obligation rather than an
+    entitlement.
+
+34. **FORM GSTR-2B itself prescribes the GSTR-3B mapping.** The form, made under rule 60(7),
+    carries a `GSTR-3B table` column against every summary heading, so reproducing that reference
+    is quoting the form rather than making a compliance claim. As prescribed:
+
+    | GSTR-2B summary heading                                                                   | GSTR-3B table                                |
+    | ----------------------------------------------------------------------------------------- | -------------------------------------------- |
+    | ITC Available — All other ITC, supplies from registered persons other than reverse charge | `4(A)(5)`                                    |
+    | ITC Available — Inward supplies from ISD                                                  | `4(A)(4)`                                    |
+    | ITC Available — Inward supplies liable for reverse charge                                 | `3.1(d)` and `4(A)(3)`                       |
+    | ITC Available — Import of goods                                                           | `4(A)(1)`                                    |
+    | ITC Available — Credit notes (Part B, net-off)                                            | `4(A)`, netted against `4A(3,4,5)`           |
+    | ITC Not Available — all three headings                                                    | `4(D)(2)`, with reverse charge also `3.1(d)` |
+
+35. The `data.itcsumm` keys were matched to those headings **empirically**, by comparing a
+    captured period's JSON figures against the portal's own rendered summary for the same period.
+    Confirmed by figure equality on integrated and central tax:
+
+    | JSON key           | FORM GSTR-2B heading                            | GSTR-3B table                            |
+    | ------------------ | ----------------------------------------------- | ---------------------------------------- |
+    | `itcavl/nonrevsup` | I — All other ITC, other than reverse charge    | `4(A)(5)`                                |
+    | `itcavl/revsup`    | III — Inward supplies liable for reverse charge | `3.1(d)`, `4(A)(3)`                      |
+    | `itcavl/imports`   | IV — Import of goods                            | `4(A)(1)`                                |
+    | `itcunavl/*`       | ITC Not Available                               | `4(D)(2)` (reverse charge also `3.1(d)`) |
+
+    `itcavl/othersup` matched **no** Part A heading, and a wider search has since failed to
+    explain it. Across a larger captured corpus it holds exactly one child, `cdnr`, in every file,
+    which invites the reading that it is the Part B credit-note aggregate. Five ways of testing
+    that were tried and **all failed in every file**:
+
+    - `othersup` against the sum of CDNR note rows;
+    - `nonrevsup/cdnr` against the same sum;
+    - `othersup` plus `nonrevsup/cdnr` against it;
+    - those two plus `revsup/cdnr`;
+    - `othersup` against CDNR notes excluding IMS-rejected ones.
+
+    So the plausible reading is not merely unproven, it is **unsupported by the data available**.
+    Whatever `othersup` aggregates, it is not a straightforward roll-up of the credit-note rows in
+    the same document. No GSTR-3B reference is printed against it, and none should be until a
+    period is captured whose rendered Part B figure can be matched directly.
+
+    `itcavl/isd` did not occur: this taxpayer has no ISD credit, and the portal rendered that
+    heading as nil. Heading II therefore remains unmatched against a JSON key.
+
+    Method note: imports carry IGST only, so the absent CGST head must be read as zero. Treating
+    absent as "no match" made the one heading that is structurally IGST-only look unmapped.

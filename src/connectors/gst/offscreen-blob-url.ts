@@ -188,6 +188,12 @@ export type PackOffscreenFiledReturnSummaryResult =
       // tidy CSV -- already built and already privacy-screened -- is kept
       // rather than discarded with it.
       workbookOutcome?: FiledReturnsWorkbookAbsenceOutcome;
+      /**
+       * True when the run shipped its workbook without the tidy CSV. GSTR-2B
+       * does; GSTR-3B does not. Without it the success message claims files the
+       * ZIP does not contain.
+       */
+      workbookOnly?: true;
     }
   | { status: "failed"; reasonCategory: PackOffscreenFiledReturnSummaryErrorCategory };
 

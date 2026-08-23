@@ -255,9 +255,13 @@ function createSummaryEntry(
         },
       };
     }
+    // GSTR-2B ships the workbook without the tidy CSV, so the CSV must not
+    // consume its budget: charging for bytes that are never written would refuse
+    // a workbook that fits.
+    const summaryShippedBytes = gstr2bWorkbookApplicable ? 0 : summary.dataBytes.byteLength;
     const workbookBudget = Math.min(
-      Math.max(0, MAX_SUMMARY_SHEET_BYTES - summary.dataBytes.byteLength),
-      Math.max(0, remainingZipBudget - summary.dataBytes.byteLength),
+      Math.max(0, MAX_SUMMARY_SHEET_BYTES - summaryShippedBytes),
+      Math.max(0, remainingZipBudget - summaryShippedBytes),
     );
     let workbookBytes: Uint8Array | null;
     try {
@@ -338,20 +342,31 @@ function createSummaryEntry(
         },
       };
     }
-    const summaryByteLength = summary.dataBytes.byteLength + workbookBytes.byteLength;
+    const summaryByteLength = summaryShippedBytes + workbookBytes.byteLength;
     if (summaryByteLength > MAX_SUMMARY_SHEET_BYTES || summaryByteLength > remainingZipBudget) {
       return { result: { status: "failed", reasonCategory: "too-large" } };
     }
+    // The tidy CSV is dropped for GSTR-2B once its workbook exists. For this
+    // return type the CSV carries no invoice rows at all -- arrays collapse to
+    // counts, so a whole year reduces to a few hundred rows of summary
+    // key-values -- and the workbook now states those same ITC totals on its
+    // first sheet. Shipping both implied a parity that never held.
+    //
+    // It is still the fallback when no workbook is produced; that is what the
+    // `no-records` and `unavailable` outcomes are for.
     return {
-      entries: [
-        { path: FILED_RETURNS_SUMMARY_SHEET_PATH, bytes: summary.dataBytes },
-        { path: FILED_RETURNS_FULL_YEAR_WORKBOOK_PATH, bytes: workbookBytes },
-      ],
+      entries: gstr2bWorkbookApplicable
+        ? [{ path: FILED_RETURNS_FULL_YEAR_WORKBOOK_PATH, bytes: workbookBytes }]
+        : [
+            { path: FILED_RETURNS_SUMMARY_SHEET_PATH, bytes: summary.dataBytes },
+            { path: FILED_RETURNS_FULL_YEAR_WORKBOOK_PATH, bytes: workbookBytes },
+          ],
       result: {
         status: "included",
         outcomeOnly: summary.outcomeOnly,
         parsedPeriodCount: summary.parsedPeriodCount,
         rowCount: summary.rowCount,
+        ...(gstr2bWorkbookApplicable ? { workbookOnly: true as const } : {}),
       },
     };
   } catch (error) {
