@@ -303,6 +303,66 @@ describe("GSTR-2B consolidated workbook", () => {
     ).toThrow(/not canonically parseable/);
   });
 
+  // The portal writes ITC summary totals in scientific notation. An earlier
+  // version of the exact-number guard tested tokens against a hand-written
+  // decimal grammar, with a comment asserting the portal does not emit exponent
+  // form -- so it refused documents carrying them, for values that never reach a
+  // cell.
+  it("accepts exponent-form numbers the portal actually emits", () => {
+    const plan: FiledReturnsSummaryPlanEntry[] = [planEntry("April", "april-data.json")];
+    const bytes = new TextEncoder().encode(
+      JSON.stringify({
+        data: {
+          gstin: OWNER_GSTIN,
+          rtnprd: "042026",
+          docdata: docdata(),
+          itcsumm: {
+            itcavl: { nonrevsup: { b2b: { sgst: 0, cgst: 0, igst: 0, cess: 0, txval: 0 } } },
+          },
+        },
+      }).replace('"sgst":0,"cgst":0', '"sgst":1.111111E1,"cgst":2.222222E2'),
+    );
+
+    const workbook = buildFiledReturnsGstr2bWorkbook(plan, [{ path: "april-data.json", bytes }], {
+      generatedAt: new Date("2026-08-22T12:00:00.000Z"),
+    });
+    expect(workbook, "an exponent-form total refused the whole workbook").not.toBeNull();
+  });
+
+  // Still refused when the exponent form genuinely cannot be represented.
+  it("refuses an exponent-form value beyond spreadsheet precision", () => {
+    const plan: FiledReturnsSummaryPlanEntry[] = [planEntry("April", "april-data.json")];
+    const bytes = new TextEncoder().encode(
+      JSON.stringify({
+        data: { gstin: OWNER_GSTIN, rtnprd: "042026", docdata: docdata() },
+      }).replace('"val":110', '"val":1.11111111111111111E5'),
+    );
+
+    expect(() =>
+      buildFiledReturnsGstr2bWorkbook(plan, [{ path: "april-data.json", bytes }], {
+        generatedAt: new Date("2026-08-22T12:00:00.000Z"),
+      }),
+    ).toThrow(/cannot be written to a spreadsheet without changing it/);
+  });
+
+  // A valid number the converter will not expand is a limit rejection, not
+  // malformed input. Both used to produce the same message, which described a
+  // resource refusal as a syntax error.
+  it("names the reason when a valid exponent is too large to expand", () => {
+    const plan: FiledReturnsSummaryPlanEntry[] = [planEntry("April", "april-data.json")];
+    const bytes = new TextEncoder().encode(
+      JSON.stringify({
+        data: { gstin: OWNER_GSTIN, rtnprd: "042026", docdata: docdata() },
+      }).replace('"val":110', '"val":1.1E999999999'),
+    );
+
+    expect(() =>
+      buildFiledReturnsGstr2bWorkbook(plan, [{ path: "april-data.json", bytes }], {
+        generatedAt: new Date("2026-08-22T12:00:00.000Z"),
+      }),
+    ).toThrow(/cannot be written to a spreadsheet without changing it/);
+  });
+
   it("fails closed rather than placing the return owner in a counterparty row", () => {
     const data = docdata();
     data.b2b[0]!.ctin = OWNER_GSTIN;

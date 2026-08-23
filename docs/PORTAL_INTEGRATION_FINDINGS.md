@@ -191,3 +191,21 @@ This log records live diagnostic findings that constrain Pack's local, target-bo
     a builder must neither print a labelled blank for them nor refuse the document for their
     absence -- refusing would reject every real GSTR-2B period. It also means those two values
     cannot be added to a value-redaction set for this return type, because Pack never learns them.
+
+31. GSTR-2B JSON writes numbers in **scientific notation**: some values under `data.itcsumm`
+    arrive as a fractional mantissa with an exponent suffix rather than as a plain decimal. A guard
+    that accepts only plain decimal tokens therefore refuses such a document, for values the
+    workbook never renders. Use `jsonNumberTokenToPlainDecimal` to normalise a JSON number token
+    before judging it; do not write a second number grammar.
+
+    Neither a magnitude nor an incidence is stated above, deliberately. One draft of this entry
+    gave an example value and said a captured period "carried" it; the value was invented, but a
+    reader cannot tell that from the sentence, and an entry that reads as a quoted observation is
+    the same disclosure whether or not it is one. The next draft removed the value and still said
+    the guard had refused the whole captured run -- a prevalence, which the rule under 28 names
+    alongside magnitudes. Quoting the retired wording here would republish it, so it is described
+    rather than shown.
+
+    Both drafts survived because the figure looked harmless. That is the argument the rule exists
+    to refuse: a rule that admits exceptions for figures someone judges harmless cannot be checked
+    by anyone but its author.
