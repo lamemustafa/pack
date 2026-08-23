@@ -209,11 +209,25 @@ const IMPG_COLUMNS: readonly Column[] = [
  * structure. This intentionally does not use JSON-pointer array expansion:
  * counterparty identifiers stay values in columns and can never become paths.
  */
+/**
+ * The bytes, and whether they carry the portal's ITC totals.
+ *
+ * The caller drops the tidy CSV for GSTR-2B because the workbook states those
+ * totals on its first sheet. When it does not, that justification does not hold,
+ * so the fact is reported rather than assumed -- a document with invoice rows
+ * and no `itcsumm` has never been captured, and an unobserved case is exactly
+ * where an assumption survives longest.
+ */
+export interface FiledReturnsGstr2bWorkbook {
+  bytes: Uint8Array;
+  includesItcSummary: boolean;
+}
+
 export function buildFiledReturnsGstr2bWorkbook(
   plan: readonly FiledReturnsSummaryPlanEntry[],
   entries: readonly ZipEntry[],
   options: WorkbookOptions,
-): Uint8Array | null {
+): FiledReturnsGstr2bWorkbook | null {
   const sources = gstr2bSources(plan, entries);
   if (sources.length === 0) return null;
   const identity = collectOwnerIdentity(sources);
@@ -269,12 +283,14 @@ export function buildFiledReturnsGstr2bWorkbook(
         ]
       : [];
   const allWorksheets = [...itcWorksheet, ...worksheets];
-  return allWorksheets.length
-    ? createXlsx(
-        { generatedAt: options.generatedAt, worksheets: allWorksheets },
-        options.maxOutputBytes,
-      )
-    : null;
+  if (allWorksheets.length === 0) return null;
+  return {
+    bytes: createXlsx(
+      { generatedAt: options.generatedAt, worksheets: allWorksheets },
+      options.maxOutputBytes,
+    ),
+    includesItcSummary: itcWorksheet.length > 0,
+  };
 }
 
 interface Gstr2bSource {
@@ -304,6 +320,65 @@ interface OwnerIdentity {
  * preserves numeric tokens as exact decimal text. The taxpayer gets the exact
  * figure in the artifact that can hold it instead of a rounded one here.
  */
+/**
+ * The subtrees whose numbers become cells. Everything else in the response --
+ * `cpsumm`, `chksum`, `gendt`, `version` -- is read by nothing here, and
+ * refusing a workbook because one of them holds a value a spreadsheet cannot
+ * represent rejects an artifact whose own cells are all fine.
+ *
+ * `itcsumm` is in the list because the ITC summary sheet renders its figures.
+ * It was not when this scan was written, which is how a whole-document sweep
+ * looked harmless.
+ */
+const RENDERED_SUBTREE_KEYS = ["docdata", "itcsumm"] as const;
+
+/**
+ * The value of `key` inside `text`, as a substring, or undefined.
+ *
+ * Brace-matched rather than parsed, because the caller needs the raw text: the
+ * precision this guards is destroyed by `JSON.parse` before any parsed value
+ * could be inspected. String state is tracked so a brace inside a taxpayer's
+ * trade name cannot end the region early.
+ */
+function subtreeText(text: string, key: string): string | undefined {
+  const marker = `"${key}"`;
+  const keyAt = text.indexOf(marker);
+  if (keyAt === -1) return undefined;
+  let index = text.indexOf(":", keyAt + marker.length);
+  if (index === -1) return undefined;
+  index += 1;
+  while (index < text.length && /\s/.test(text[index]!)) index += 1;
+  const open = text[index];
+  if (open !== "{" && open !== "[") return undefined;
+  const close = open === "{" ? "}" : "]";
+  const start = index;
+  let depth = 0;
+  let inString = false;
+  while (index < text.length) {
+    const character = text[index]!;
+    if (inString) {
+      index += character === "\\" ? 2 : 1;
+      if (character === '"') inString = false;
+      continue;
+    }
+    if (character === '"') inString = true;
+    else if (character === open) depth += 1;
+    else if (character === close) {
+      depth -= 1;
+      if (depth === 0) return text.slice(start, index + 1);
+    }
+    index += 1;
+  }
+  return undefined;
+}
+
+function rejectInexactNumbersInRenderedSubtrees(text: string): void {
+  for (const key of RENDERED_SUBTREE_KEYS) {
+    const subtree = subtreeText(text, key);
+    if (subtree !== undefined) rejectInexactNumbers(subtree);
+  }
+}
+
 function rejectInexactNumbers(text: string): void {
   let index = 0;
   let inString = false;
@@ -405,7 +480,7 @@ function gstr2bSources(
     // Outside the JSON.parse catch on purpose: inside it, this refusal was
     // rewritten as "source is not JSON", which is untrue and undiagnosable. A
     // boundary that rejects a value must be able to state its own reason.
-    rejectInexactNumbers(sourceText);
+    rejectInexactNumbersInRenderedSubtrees(sourceText);
     const data = requiredObject(requiredObject(parsed, "/").data, "/data");
     sources.push({ data, period: item.period });
   }
@@ -495,10 +570,15 @@ function itcSummaryRows(
   const summary = optionalObject(source.data.itcsumm, "/data/itcsumm");
   if (!summary) return [];
   const rows: Row[] = [];
-  for (const availability of screenedKeys(summary, "/data/itcsumm", withheld)) {
+  for (const availability of screenedKeys(summary, "/data/itcsumm", withheld, ownerValues)) {
     const categories = optionalObject(summary[availability], `/data/itcsumm/${availability}`);
     if (!categories) continue;
-    for (const category of screenedKeys(categories, `/data/itcsumm/${availability}`, withheld)) {
+    for (const category of screenedKeys(
+      categories,
+      `/data/itcsumm/${availability}`,
+      withheld,
+      ownerValues,
+    )) {
       const categoryPath = `/data/itcsumm/${availability}/${category}`;
       const value = categories[category];
       const nested = optionalObject(value, categoryPath);
@@ -512,7 +592,7 @@ function itcSummaryRows(
       // A category carries its own rollup heads beside its per-section objects.
       const rollup = itcAmounts(nested, categoryPath);
       if (rollup) rows.push({ ...base, section: "All", ...rollup });
-      for (const section of screenedKeys(nested, categoryPath, withheld)) {
+      for (const section of screenedKeys(nested, categoryPath, withheld, ownerValues)) {
         // A category node holds its own rollup heads beside its section
         // objects, so the heads are not sections. Reading one as an object
         // refused the whole workbook.
@@ -526,7 +606,7 @@ function itcSummaryRows(
             // The sheet names for sections this build renders, so a reader can
             // tie a summary row to the sheet it summarises; the raw key
             // otherwise, because a section we do not render still has totals.
-            section: SECTION_NAMES[section as SectionKey] ?? safeText(section, ownerValues),
+            section: SECTION_NAMES[section as SectionKey] ?? section,
             ...amounts,
           });
         }
@@ -557,11 +637,25 @@ function screenedKeys(
   record: Record<string, unknown>,
   path: string,
   withheld: { count: number },
+  ownerValues: ReadonlySet<string>,
 ): string[] {
   const keys: string[] = [];
   for (const key of Object.keys(record)) {
     rejectForbiddenPath(`${path}/${key.replace(/~/g, "~0").replace(/\//g, "~1")}`);
-    if (/^[A-Za-z0-9_]{1,24}$/.test(key) && !isIdentityShapedSegment(key)) {
+    // Shape and value, at every level. A short single-token legal or trade name
+    // is neither GSTIN- nor PAN-shaped, so the shape test alone let it through
+    // to be printed as a category label -- while the section level ran the same
+    // key through `safeText` and rejected the whole workbook. One boundary
+    // behaving three ways is worse than either behaviour.
+    //
+    // Withheld and counted rather than thrown: a label repeating an identity is
+    // a naming collision, not evidence that the document carries a leak, and
+    // failing the workbook for it would discard the tidy CSV too.
+    if (
+      /^[A-Za-z0-9_]{1,24}$/.test(key) &&
+      !isIdentityShapedSegment(key) &&
+      !ownerValues.has(normaliseIdentity(key))
+    ) {
       keys.push(key);
       continue;
     }

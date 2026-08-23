@@ -87,6 +87,7 @@ describe("offscreen full-year summary response validation", () => {
         outcomeOnly: false,
         parsedPeriodCount: 1,
         rowCount: 2,
+        workbookOnly: true,
       },
     }));
 
@@ -97,6 +98,51 @@ describe("offscreen full-year summary response validation", () => {
       artifactEntryCount: 1,
       summary: { status: "included", parsedPeriodCount: 1, rowCount: 2 },
     });
+  });
+
+  // The worker always sets `workbookOnly` for a successful GSTR-2B workbook,
+  // because that run ships without the tidy CSV. A receipt missing it is a shape
+  // the worker cannot emit, and accepting it let the status message claim a CSV
+  // the ZIP does not contain.
+  it("rejects a successful GSTR-2B workbook receipt with no workbook-only flag", async () => {
+    mocks.runtime.sendMessage.mockImplementationOnce(async (message?: unknown) => ({
+      ok: true,
+      requestId: requestIdFrom(message),
+      blobUrl: "blob:pack/missing-flag",
+      zipEntryCount: 2,
+      artifactEntryCount: 1,
+      summaryEntryCount: 1,
+      summary: { status: "included", outcomeOnly: false, parsedPeriodCount: 1, rowCount: 2 },
+    }));
+
+    await expect(
+      createOffscreenFiledReturnZipUrl("full-fiscal-year-12345678", request()),
+    ).resolves.toMatchObject({ status: "failed", errorCategory: "offscreen-response-invalid" });
+  });
+
+  // A produced workbook needs a staged JSON source, and such a source also
+  // contributes a parsed period. Zero parsed periods beside a produced workbook
+  // is a combination the worker cannot reach.
+  it("rejects a workbook receipt reporting no parsed period", async () => {
+    mocks.runtime.sendMessage.mockImplementationOnce(async (message?: unknown) => ({
+      ok: true,
+      requestId: requestIdFrom(message),
+      blobUrl: "blob:pack/no-parsed-period",
+      zipEntryCount: 2,
+      artifactEntryCount: 1,
+      summaryEntryCount: 1,
+      summary: {
+        status: "included",
+        outcomeOnly: true,
+        parsedPeriodCount: 0,
+        rowCount: 1,
+        workbookOnly: true,
+      },
+    }));
+
+    await expect(
+      createOffscreenFiledReturnZipUrl("full-fiscal-year-12345678", request()),
+    ).resolves.toMatchObject({ status: "failed", errorCategory: "offscreen-response-invalid" });
   });
 
   // A GSTR-2B year whose staged JSON carries no supported `docdata` section

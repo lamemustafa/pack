@@ -776,6 +776,13 @@ describe("offscreen Blob URL entrypoint", () => {
             trdnm: "Synthetic GSTR-2B Owner Trade",
             rtnprd: "042026",
             synthetic_amount: 3,
+            // Every captured period carries an ITC summary, and the tidy CSV is
+            // dropped for GSTR-2B only because the workbook states those totals.
+            // A fixture without one exercises the fallback, not the path this
+            // test is named for.
+            itcsumm: {
+              itcavl: { nonrevsup: { txval: 100, igst: 10, cgst: 0, sgst: 0, cess: 0 } },
+            },
             docdata: {
               b2b: [
                 {
@@ -855,7 +862,8 @@ describe("offscreen Blob URL entrypoint", () => {
       new Blob([Uint8Array.from(entries.get("full-year-workbook.xlsx")!).buffer]),
     );
     const workbookXml = new TextDecoder().decode(workbook.get("xl/workbook.xml"));
-    const b2b = new TextDecoder().decode(workbook.get("xl/worksheets/sheet1.xml"));
+    // Sheet 1 is the ITC summary; the invoice sections follow it.
+    const b2b = new TextDecoder().decode(workbook.get("xl/worksheets/sheet2.xml"));
     expect(workbookXml).toContain('<sheet name="B2B"');
     expect(workbookXml).not.toContain("27ABCDE1000F1ZC");
     expect(b2b).toContain("Synthetic GSTR-2B Counterparty");

@@ -237,6 +237,9 @@ function createSummaryEntry(
     const remainingZipBudget = Math.max(0, MAX_ZIP_INPUT_BYTES - stagedInputBytes);
     const gstr3bWorkbookApplicable = plan.every((entry) => entry.returnType === "GSTR-3B");
     const gstr2bWorkbookApplicable = plan.every((entry) => entry.returnType === "GSTR-2B");
+    const hasStagedGstr2bJson = plan.some(
+      (entry) => entry.artifactType === "JSON" && entry.outcomeCategory === "staged",
+    );
     if (!gstr3bWorkbookApplicable && !gstr2bWorkbookApplicable) {
       if (
         summary.dataBytes.byteLength > MAX_SUMMARY_SHEET_BYTES ||
@@ -264,16 +267,24 @@ function createSummaryEntry(
       Math.max(0, remainingZipBudget - summaryShippedBytes),
     );
     let workbookBytes: Uint8Array | null;
+    // Whether the workbook carries the portal's ITC totals. Dropping the tidy
+    // CSV for GSTR-2B is justified by the workbook stating them, so a workbook
+    // without them must not take the CSV with it.
+    let workbookIncludesItcSummary = true;
     try {
-      workbookBytes = gstr3bWorkbookApplicable
-        ? buildFiledReturnsFullYearWorkbook(summary, plan, {
-            generatedAt,
-            maxOutputBytes: workbookBudget,
-          })
-        : buildFiledReturnsGstr2bWorkbook(plan, entries, {
-            generatedAt,
-            maxOutputBytes: workbookBudget,
-          });
+      if (gstr3bWorkbookApplicable) {
+        workbookBytes = buildFiledReturnsFullYearWorkbook(summary, plan, {
+          generatedAt,
+          maxOutputBytes: workbookBudget,
+        });
+      } else {
+        const workbook = buildFiledReturnsGstr2bWorkbook(plan, entries, {
+          generatedAt,
+          maxOutputBytes: workbookBudget,
+        });
+        workbookBytes = workbook?.bytes ?? null;
+        workbookIncludesItcSummary = workbook?.includesItcSummary ?? false;
+      }
     } catch (error) {
       // A schema rejection is a statement about the workbook alone: the tidy
       // CSV beside it was already built and already privacy-screened, and does
@@ -338,7 +349,12 @@ function createSummaryEntry(
           // GSTR-2B does produce workbooks, so "not-applicable" would give the
           // wrong reason: nothing here is inapplicable to the return type, this
           // document simply carried no invoice-level record.
-          workbookOutcome: gstr2bWorkbookApplicable ? "no-records" : "not-applicable",
+          // "no-records" says the staged JSON carried none. A run with no
+          // staged JSON at all -- a PDF-only GSTR-2B year, or one where the JSON
+          // is artifact-unavailable -- never had a source to read, so the reason
+          // is that a workbook was not applicable to what was selected.
+          workbookOutcome:
+            gstr2bWorkbookApplicable && hasStagedGstr2bJson ? "no-records" : "not-applicable",
         },
       };
     }
@@ -355,18 +371,21 @@ function createSummaryEntry(
     // It is still the fallback when no workbook is produced; that is what the
     // `no-records` and `unavailable` outcomes are for.
     return {
-      entries: gstr2bWorkbookApplicable
-        ? [{ path: FILED_RETURNS_FULL_YEAR_WORKBOOK_PATH, bytes: workbookBytes }]
-        : [
-            { path: FILED_RETURNS_SUMMARY_SHEET_PATH, bytes: summary.dataBytes },
-            { path: FILED_RETURNS_FULL_YEAR_WORKBOOK_PATH, bytes: workbookBytes },
-          ],
+      entries:
+        gstr2bWorkbookApplicable && workbookIncludesItcSummary
+          ? [{ path: FILED_RETURNS_FULL_YEAR_WORKBOOK_PATH, bytes: workbookBytes }]
+          : [
+              { path: FILED_RETURNS_SUMMARY_SHEET_PATH, bytes: summary.dataBytes },
+              { path: FILED_RETURNS_FULL_YEAR_WORKBOOK_PATH, bytes: workbookBytes },
+            ],
       result: {
         status: "included",
         outcomeOnly: summary.outcomeOnly,
         parsedPeriodCount: summary.parsedPeriodCount,
         rowCount: summary.rowCount,
-        ...(gstr2bWorkbookApplicable ? { workbookOnly: true as const } : {}),
+        ...(gstr2bWorkbookApplicable && workbookIncludesItcSummary
+          ? { workbookOnly: true as const }
+          : {}),
       },
     };
   } catch (error) {

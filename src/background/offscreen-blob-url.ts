@@ -418,8 +418,18 @@ function isSummaryResult(
     ]) &&
     record.status === "included" &&
     permittedWorkbookOutcomes.includes(record.workbookOutcome as string | undefined) &&
-    (record.workbookOnly === undefined ||
-      (record.workbookOnly === true && returnType === "GSTR-2B")) &&
+    // Combinations, not fields. A produced workbook needs a staged JSON source,
+    // and such a source also contributes a parsed period -- so a workbook with
+    // no parsed period is a shape the worker cannot emit, and accepting it let a
+    // stale receipt through while the status claimed a workbook accompanied an
+    // outcome-only CSV.
+    (record.workbookOutcome !== undefined || (record.parsedPeriodCount as number) > 0) &&
+    // A successful GSTR-2B workbook ships alone, so the flag is required rather
+    // than optional there, and refused beside any CSV-only outcome -- without
+    // it the status message claims a tidy CSV the ZIP does not contain.
+    (returnType === "GSTR-2B" && homogeneous && record.workbookOutcome === undefined
+      ? record.workbookOnly === true
+      : record.workbookOnly === undefined) &&
     typeof record.outcomeOnly === "boolean" &&
     typeof record.parsedPeriodCount === "number" &&
     Number.isInteger(record.parsedPeriodCount) &&

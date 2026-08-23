@@ -273,7 +273,7 @@ describe("GSTR-2B consolidated workbook", () => {
     });
     expect(workbook, "a captured-shape period produced no workbook").not.toBeNull();
 
-    const entries = extractStoredZipEntries(workbook!);
+    const entries = extractStoredZipEntries(workbook!.bytes);
     expect(sheetNames(text(entries, "xl/workbook.xml"))).toEqual(["ITC summary", "B2B"]);
     const b2b = text(entries, "xl/worksheets/sheet2.xml");
     expect(b2b).toContain("INV-900");
@@ -413,7 +413,7 @@ describe("GSTR-2B consolidated workbook", () => {
     });
 
     const { data } = partitionSheet(
-      text(extractStoredZipEntries(workbook!), "xl/worksheets/sheet1.xml"),
+      text(extractStoredZipEntries(workbook!.bytes), "xl/worksheets/sheet1.xml"),
     );
     expect(data.some((row) => row.includes("somefuturecategory"))).toBe(true);
   });
@@ -460,7 +460,7 @@ describe("GSTR-2B consolidated workbook", () => {
       generatedAt: new Date("2026-08-22T12:00:00.000Z"),
     });
     const { data } = partitionSheet(
-      text(extractStoredZipEntries(workbook!), "xl/worksheets/sheet1.xml"),
+      text(extractStoredZipEntries(workbook!.bytes), "xl/worksheets/sheet1.xml"),
     );
     const tableFor = (category: string) =>
       data.find((row) => row.includes(category))?.[3] ?? "(none)";
@@ -521,7 +521,7 @@ describe("GSTR-2B consolidated workbook", () => {
     const workbook = buildFiledReturnsGstr2bWorkbook(plan, [{ path: "april-data.json", bytes }], {
       generatedAt: new Date("2026-08-22T12:00:00.000Z"),
     });
-    const itc = text(extractStoredZipEntries(workbook!), "xl/worksheets/sheet1.xml");
+    const itc = text(extractStoredZipEntries(workbook!.bytes), "xl/worksheets/sheet1.xml");
 
     expect(itc).not.toContain(COUNTERPARTY_GSTIN);
     expect(itc).toContain("section name(s) withheld");
@@ -536,6 +536,53 @@ describe("GSTR-2B consolidated workbook", () => {
     );
 
     expect(rows[0]?.[0]).toBe(`${COUNTERPARTY_GSTIN}|INV-001`);
+  });
+
+  // The scan reads raw text because JSON.parse destroys the precision it
+  // guards, but a whole-document sweep refused workbooks over values nothing
+  // renders. `cpsumm` is the portal's own counterparty roll-up and reaches no
+  // cell.
+  it("ignores an unrepresentable value in a subtree it never renders", () => {
+    const plan: FiledReturnsSummaryPlanEntry[] = [planEntry("April", "april-data.json")];
+    const bytes = new TextEncoder().encode(
+      JSON.stringify({
+        data: {
+          gstin: OWNER_GSTIN,
+          rtnprd: "042026",
+          cpsumm: { b2b: [{ ctin: COUNTERPARTY_GSTIN, txval: 1 }] },
+          docdata: docdata(),
+        },
+      }).replace('"txval":1', '"txval":1.11111111111111111E5'),
+    );
+
+    const workbook = buildFiledReturnsGstr2bWorkbook(plan, [{ path: "april-data.json", bytes }], {
+      generatedAt: new Date("2026-08-22T12:00:00.000Z"),
+    });
+
+    expect(workbook, "an unrendered subtree refused the workbook").not.toBeNull();
+  });
+
+  // Still refused where the value does become a cell. The ITC summary sheet
+  // renders `itcsumm`, which it did not when the scan was written -- so the
+  // scope has to name it, not merely exclude the siblings that existed then.
+  it("still refuses an unrepresentable value in the ITC summary", () => {
+    const plan: FiledReturnsSummaryPlanEntry[] = [planEntry("April", "april-data.json")];
+    const bytes = new TextEncoder().encode(
+      JSON.stringify({
+        data: {
+          gstin: OWNER_GSTIN,
+          rtnprd: "042026",
+          docdata: docdata(),
+          itcsumm: { itcavl: { nonrevsup: { igst: 1, cgst: 0, sgst: 0, cess: 0 } } },
+        },
+      }).replace('"igst":1,', '"igst":1.11111111111111111E5,'),
+    );
+
+    expect(() =>
+      buildFiledReturnsGstr2bWorkbook(plan, [{ path: "april-data.json", bytes }], {
+        generatedAt: new Date("2026-08-22T12:00:00.000Z"),
+      }),
+    ).toThrow(/cannot be written to a spreadsheet without changing it/);
   });
 
   it("fails closed rather than placing the return owner in a counterparty row", () => {
@@ -582,7 +629,7 @@ function buildWorkbook(
     { generatedAt: new Date("2026-08-22T12:00:00.000Z"), ...options },
   );
   if (!workbook) throw new Error("Expected synthetic GSTR-2B workbook.");
-  return workbook;
+  return workbook.bytes;
 }
 
 function planEntry(period: "April" | "May", entryName: string): FiledReturnsSummaryPlanEntry {
