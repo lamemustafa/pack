@@ -309,6 +309,25 @@ export function markFullFiscalYearTargetTerminal(
   };
 }
 
+/**
+ * The terminal phase for a cleanup, keeping which pending phase it came from.
+ *
+ * Three routes reach cleanup and only one of them delivered a ZIP to the
+ * browser. Writing a single `cleaned` for all three discarded the distinction
+ * at exactly the moment it became the only record of it.
+ *
+ * An unrecognised or absent pending phase stays on the origin-less `cleaned`
+ * rather than guessing a route, so it reads as indeterminate.
+ */
+function cleanedPhaseFor(
+  pending: FiledReturnsFullFiscalYearLedger["zipPhase"],
+): NonNullable<FiledReturnsFullFiscalYearLedger["zipPhase"]> {
+  if (pending === "downloaded-cleanup-pending") return "cleaned-after-download";
+  if (pending === "no-artifacts-cleanup-pending") return "cleaned-without-export";
+  if (pending === "legacy-cleanup-pending") return "cleaned-legacy";
+  return "cleaned";
+}
+
 export function completeFullFiscalYearLedger(
   ledger: FiledReturnsFullFiscalYearLedger,
   now: Date,
@@ -320,7 +339,7 @@ export function completeFullFiscalYearLedger(
     revision: nextRevision(ledger),
     status: "complete",
     updatedAt: now.toISOString(),
-    zipPhase: "cleaned",
+    zipPhase: cleanedPhaseFor(ledger.zipPhase),
   };
   delete completedLedger.zipDownloadAttempt;
   return completedLedger;

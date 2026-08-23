@@ -1,5 +1,6 @@
 import { browser } from "wxt/browser";
 import type { FiledReturnsFullFiscalYearLedger } from "../connectors/gst/filed-returns-contracts";
+import { isCleanedZipPhase } from "../connectors/gst/filed-returns-contracts";
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import {
   readActiveFiledReturnsRunStorageState,
@@ -127,7 +128,7 @@ async function hasUnresolvedFiledReturnsRecoveryState(deps: PackLocalDataDeps): 
 
 function hasUnresolvedZipState(ledger: FiledReturnsFullFiscalYearLedger): boolean {
   if (ledger.zipDownloadAttempt !== undefined) return true;
-  return ledger.zipPhase !== undefined && ledger.zipPhase !== "cleaned";
+  return ledger.zipPhase !== undefined && !isCleanedZipPhase(ledger.zipPhase);
 }
 
 function isUnresolvedFullFiscalYearLedger(ledger: FiledReturnsFullFiscalYearLedger): boolean {

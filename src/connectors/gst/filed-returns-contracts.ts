@@ -227,6 +227,32 @@ export interface FiledReturnsFullFiscalYearTarget {
   updatedAt: string;
 }
 
+/**
+ * The terminal cleanup phases. One predicate rather than a comparison repeated
+ * at each call site: splitting `cleaned` by origin turned every existing
+ * `=== "cleaned"` into a check that silently stopped matching three quarters of
+ * the runs it used to.
+ */
+export const CLEANED_ZIP_PHASES = [
+  "cleaned",
+  "cleaned-after-download",
+  "cleaned-without-export",
+  "cleaned-legacy",
+] as const;
+
+export function isCleanedZipPhase(
+  phase: FiledReturnsFullFiscalYearLedger["zipPhase"],
+): phase is (typeof CLEANED_ZIP_PHASES)[number] {
+  return CLEANED_ZIP_PHASES.includes(phase as (typeof CLEANED_ZIP_PHASES)[number]);
+}
+
+/** Whether cleanup followed a ZIP the browser confirmed it received. */
+export function zipPhaseProvesDelivery(
+  phase: FiledReturnsFullFiscalYearLedger["zipPhase"],
+): boolean {
+  return phase === "cleaned-after-download";
+}
+
 export interface FiledReturnsFullFiscalYearLedger {
   schemaVersion: "1.0";
   planVersion?: string;
@@ -245,6 +271,18 @@ export interface FiledReturnsFullFiscalYearLedger {
     | "downloaded-cleanup-pending"
     | "no-artifacts-cleanup-pending"
     | "legacy-cleanup-pending"
+    // Cleanup preserves which of the three pending phases it came from, because
+    // that origin is the only durable evidence of whether the ZIP reached the
+    // browser. Collapsing them into one `cleaned` made a confirmed delivery, a
+    // run that produced no ZIP, and a legacy staging cleared on upgrade
+    // indistinguishable afterwards -- and an evidence claim built on the
+    // collapsed value called never-exported files saved.
+    | "cleaned-after-download"
+    | "cleaned-without-export"
+    | "cleaned-legacy"
+    // Retained so a ledger written before the split still parses. It carries no
+    // origin, so it stays indeterminate: such a run reads as captured rather
+    // than saved, which is the safe direction and the behaviour it already had.
     | "cleaned";
   zipDownloadAttempt?: {
     requestedAt: string;
@@ -280,7 +318,21 @@ export interface FiledReturnsFullFiscalYearLedger {
  * `needs-review` beside the failures.
  */
 export type FiledReturnsTargetOutcome =
-  "saved" | "captured" | "not-filed" | "needs-review" | "running" | "pending";
+  | "saved"
+  // Some of the selection arrived and some did not. A multi-artifact target
+  // reaches `downloaded` when one artifact staged and another was explicitly
+  // unavailable, because an unavailable artifact is a resolved outcome -- so
+  // `saved` claimed the whole selection for a period that only had part of it.
+  //
+  // Distinct from `needs-review` on purpose: an artifact the portal never
+  // offered is not a fault a re-run corrects, and routing it to review would
+  // send someone looking for a problem that is not theirs.
+  | "partly-saved"
+  | "captured"
+  | "not-filed"
+  | "needs-review"
+  | "running"
+  | "pending";
 
 export interface FiledReturnsTargetEvidence {
   period: string;

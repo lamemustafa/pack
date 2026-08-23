@@ -4,6 +4,7 @@ import type {
   FiledReturnsFullFiscalYearLedger,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
+import { isCleanedZipPhase } from "../connectors/gst/filed-returns-contracts";
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
@@ -39,7 +40,7 @@ export function hasDownloadUnconfirmedTarget(ledger: FiledReturnsFullFiscalYearL
 export function hasRetainedFullFiscalYearStaging(
   ledger: FiledReturnsFullFiscalYearLedger,
 ): boolean {
-  if (ledger.zipPhase === "cleaned") return false;
+  if (isCleanedZipPhase(ledger.zipPhase)) return false;
   if (ledger.zipPhase !== undefined) return true;
   if (hasLegacyRetainedStaging(ledger)) return true;
   return ledger.targets.some((target) =>
