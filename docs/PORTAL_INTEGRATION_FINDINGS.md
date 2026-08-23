@@ -191,3 +191,9 @@ This log records live diagnostic findings that constrain Pack's local, target-bo
     a builder must neither print a labelled blank for them nor refuse the document for their
     absence -- refusing would reject every real GSTR-2B period. It also means those two values
     cannot be added to a value-redaction set for this return type, because Pack never learns them.
+
+31. GSTR-2B JSON writes numbers in **scientific notation**. A captured period carried ITC summary
+    totals such as `1.2345678E7` under `data.itcsumm`. A guard that accepted only plain decimal
+    tokens refused every real period, for values the workbook never renders. Use
+    `jsonNumberTokenToPlainDecimal` to normalise a JSON number token before judging it; do not
+    write a second number grammar.

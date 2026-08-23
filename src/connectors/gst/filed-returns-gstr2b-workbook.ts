@@ -1,4 +1,8 @@
-import { flattenJsonTextScalarLeaves, JsonFlatTableLimitError } from "../../core/json-flat-table";
+import {
+  flattenJsonTextScalarLeaves,
+  jsonNumberTokenToPlainDecimal,
+  JsonFlatTableLimitError,
+} from "../../core/json-flat-table";
 import { createXlsx, type XlsxCell, type XlsxWorksheet } from "../../core/xlsx";
 import type { ZipEntry } from "../../core/zip";
 import { exactSpreadsheetNumber } from "./filed-returns-full-year-workbook";
@@ -230,9 +234,21 @@ function rejectInexactNumbers(text: string): void {
     index += 1;
     while (index < text.length && /[0-9.eE+-]/.test(text[index]!)) index += 1;
     const token = text.slice(start, index);
-    // Only plain decimals reach a cell; an exponent form is not something the
-    // portal emits, and treating it as unrepresentable errs toward the CSV.
-    if (!/^-?\d+(?:\.\d+)?$/.test(token) || exactSpreadsheetNumber(token) === null) {
+    // Normalised by the canonical converter before it is judged. An earlier
+    // version tested the token against a hand-written decimal grammar and said
+    // in a comment that "an exponent form is not something the portal emits".
+    // A live capture falsified that: the portal writes ITC summary totals in
+    // scientific notation, so every real period was refused -- for values that
+    // never reach a cell.
+    let plainDecimal: string;
+    try {
+      plainDecimal = jsonNumberTokenToPlainDecimal(token);
+    } catch {
+      throw new FiledReturnsGstr2bWorkbookSchemaError(
+        "A GSTR-2B numeric value is not a JSON number token.",
+      );
+    }
+    if (exactSpreadsheetNumber(plainDecimal) === null) {
       throw new FiledReturnsGstr2bWorkbookSchemaError(
         "A GSTR-2B value cannot be written to a spreadsheet without changing it.",
       );

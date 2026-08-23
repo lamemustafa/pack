@@ -303,6 +303,47 @@ describe("GSTR-2B consolidated workbook", () => {
     ).toThrow(/not canonically parseable/);
   });
 
+  // The portal writes ITC summary totals in scientific notation. An earlier
+  // version of the exact-number guard tested tokens against a hand-written
+  // decimal grammar, with a comment asserting the portal does not emit exponent
+  // form -- so it refused every real period, for values that never reach a cell.
+  it("accepts exponent-form numbers the portal actually emits", () => {
+    const plan: FiledReturnsSummaryPlanEntry[] = [planEntry("April", "april-data.json")];
+    const bytes = new TextEncoder().encode(
+      JSON.stringify({
+        data: {
+          gstin: OWNER_GSTIN,
+          rtnprd: "042026",
+          docdata: docdata(),
+          itcsumm: {
+            itcavl: { nonrevsup: { b2b: { sgst: 0, cgst: 0, igst: 0, cess: 0, txval: 0 } } },
+          },
+        },
+      }).replace('"sgst":0,"cgst":0', '"sgst":1.2345678E7,"cgst":9.87654321E6'),
+    );
+
+    const workbook = buildFiledReturnsGstr2bWorkbook(plan, [{ path: "april-data.json", bytes }], {
+      generatedAt: new Date("2026-08-22T12:00:00.000Z"),
+    });
+    expect(workbook, "an exponent-form total refused the whole workbook").not.toBeNull();
+  });
+
+  // Still refused when the exponent form genuinely cannot be represented.
+  it("refuses an exponent-form value beyond spreadsheet precision", () => {
+    const plan: FiledReturnsSummaryPlanEntry[] = [planEntry("April", "april-data.json")];
+    const bytes = new TextEncoder().encode(
+      JSON.stringify({
+        data: { gstin: OWNER_GSTIN, rtnprd: "042026", docdata: docdata() },
+      }).replace('"val":110', '"val":1.23456789012345678E5'),
+    );
+
+    expect(() =>
+      buildFiledReturnsGstr2bWorkbook(plan, [{ path: "april-data.json", bytes }], {
+        generatedAt: new Date("2026-08-22T12:00:00.000Z"),
+      }),
+    ).toThrow(/cannot be written to a spreadsheet without changing it/);
+  });
+
   it("fails closed rather than placing the return owner in a counterparty row", () => {
     const data = docdata();
     data.b2b[0]!.ctin = OWNER_GSTIN;
