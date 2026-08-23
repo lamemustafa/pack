@@ -12,6 +12,7 @@ import {
 import { InlineStatus } from "../popup/inline-status";
 import { LastRunDiagnostics } from "../popup/last-run-diagnostics";
 import { PackSummary } from "../popup/pack-summary";
+import { TargetEvidence } from "../popup/target-evidence";
 import { getPopupPresentationState, isGstSignInRequired } from "../popup/presentation-state";
 import { RecoveryActions, hasRecoveryActions } from "../popup/recovery-actions";
 import { getScopeFormStartAction } from "../popup/scope-form-model";
@@ -104,6 +105,10 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
               summary={summary}
             />
             {summary ? <PackSummary scope={pack.scope} summary={pack.scopedFlowSummary} /> : null}
+            {/* Below the pack card, above the recovery actions: a reader who
+                sees "needs review" here is one row away from the control that
+                resolves it. */}
+            <TargetEvidence summary={pack.scopedFlowSummary} />
             {running ? null : view === "presets" ? (
               <>
                 <h2>What do you need?</h2>

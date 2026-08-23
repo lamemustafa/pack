@@ -1,4 +1,5 @@
 import type {
+  FiledReturnsTargetOutcome,
   FiledReturnsFlowSummary,
   FiledReturnsFullFiscalYearLedger,
   FiledReturnsFullFiscalYearTarget,
@@ -109,6 +110,30 @@ const COMPLETED_SUMMARY_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTarg
   "not-filed",
 ]);
 
+/**
+ * The nine internal statuses collapsed to what a reader is deciding about.
+ *
+ * Exhaustive by type rather than by a default branch: a new target status must
+ * be given an outcome here, and failing to compile is the point. A default would
+ * quietly file an unknown status under whichever outcome seemed safe at the
+ * time, and the safe-seeming one is usually the reassuring one.
+ */
+const TARGET_OUTCOMES: Readonly<
+  Record<FiledReturnsFullFiscalYearTargetStatus, FiledReturnsTargetOutcome>
+> = {
+  downloaded: "saved",
+  "not-filed": "not-filed",
+  // A person reporting what they saw is not correlated download evidence, so
+  // this sits with the failures rather than with `saved`.
+  "manually-observed": "needs-review",
+  "download-unconfirmed": "needs-review",
+  blocked: "needs-review",
+  failed: "needs-review",
+  cancelled: "needs-review",
+  running: "running",
+  pending: "pending",
+};
+
 export function targetStatusFromFlowStep(
   step: PortalFlowStepResult,
 ): FiledReturnsFullFiscalYearTargetStatus {
@@ -197,6 +222,10 @@ export function toFullFiscalYearSummary(
     scope: ledger.scope,
     status: ledger.status,
     completedPeriods,
+    targetEvidence: ledger.targets.map((target) => ({
+      period: target.period,
+      outcome: TARGET_OUTCOMES[target.status],
+    })),
     totalPeriods: ledger.targets.length,
     updatedAt: ledger.updatedAt,
     ...(ledger.status === "complete" ? { completedAt: ledger.updatedAt } : {}),

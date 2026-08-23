@@ -158,3 +158,65 @@ html[data-pack-surface="panel"] body {
   font-size: 0.75rem;
   text-align: center;
 }
+
+/* Per-period evidence. Reads as a compact ledger rather than a status banner:
+   a CA scans this the way they scan a reconciliation, so the period and its
+   outcome sit in fixed columns and the glyph carries no meaning colour alone
+   would have to supply. */
+.evidence {
+  border-top: 1px solid var(--pack-border-subtle);
+  margin-top: 0.75rem;
+  padding-top: 0.625rem;
+}
+
+.evidence-status {
+  color: var(--pack-ink-muted);
+  font-size: 0.8125rem;
+  margin: 0 0 0.5rem;
+}
+
+.evidence-review {
+  color: var(--pack-warning-fg);
+}
+
+.evidence-list {
+  display: grid;
+  gap: 0.125rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.evidence-row {
+  align-items: baseline;
+  display: grid;
+  font-size: 0.8125rem;
+  /* Fixed columns so the outcomes align down the strip and a scan finds the
+     exceptions without reading every line. */
+  grid-template-columns: 1rem 1fr auto;
+  gap: 0.5rem;
+  padding: 0.125rem 0;
+}
+
+.evidence-glyph {
+  color: var(--pack-ink-muted);
+  text-align: center;
+}
+
+.evidence-period {
+  color: var(--pack-ink-primary);
+}
+
+.evidence-outcome {
+  color: var(--pack-ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.evidence-saved .evidence-glyph {
+  color: var(--pack-success-fg);
+}
+
+.evidence-needs-review .evidence-glyph,
+.evidence-needs-review .evidence-outcome {
+  color: var(--pack-warning-fg);
+}
