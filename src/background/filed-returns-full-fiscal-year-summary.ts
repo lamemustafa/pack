@@ -273,6 +273,11 @@ export function fullFiscalYearTargetEvidence(
   flowStep: PortalFlowStepResult,
 ): FiledReturnsTargetEvidence[] {
   const zipDelivered = isFullFiscalYearZipDelivered(ledger, flowStep);
+  // A discarded run: OPFS was cleared without a delivery. Its targets still read
+  // `downloaded`, and reporting those as captured claims Pack holds files it has
+  // just deleted. There is nothing left to have evidence about, so the list is
+  // empty rather than reassuring.
+  if (!zipDelivered && flowStep.safeSignals.includes("full-fiscal-year-opfs-cleared")) return [];
   const runInterrupted = ledger.status === "blocked";
   return ledger.targets.map((target) => ({
     period: target.period,

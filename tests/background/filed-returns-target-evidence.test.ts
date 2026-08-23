@@ -159,4 +159,32 @@ describe("per-target evidence in the flow summary", () => {
       "not-filed",
     ]);
   });
+
+  // Cancel and reset clears OPFS while the targets still read `downloaded`.
+  // With no delivery signal those map to `captured`, which claims Pack holds
+  // files it has just deleted -- the one thing a discarded run must not say.
+  it("reports nothing for a run whose staged files were discarded", () => {
+    const cleared = {
+      ...FLOW_STEP,
+      safeSignals: ["full-fiscal-year-opfs-cleared"],
+    };
+
+    const summary = toFullFiscalYearSummary(ledgerWith(["downloaded", "downloaded"]), cleared);
+
+    expect(summary.targetEvidence).toEqual([]);
+  });
+
+  // A successful cleanup carries the same signal, and there the files did reach
+  // the browser -- so the delivery check has to run first or a completed run
+  // would report nothing at all.
+  it("still reports a delivered run whose staged copy was cleaned", () => {
+    const cleared = {
+      ...FLOW_STEP,
+      safeSignals: ["full-fiscal-year-opfs-cleared", "full-fiscal-year-zip-downloaded"],
+    };
+
+    const summary = toFullFiscalYearSummary(ledgerWith(["downloaded"]), cleared);
+
+    expect(summary.targetEvidence).toEqual([{ period: "April", outcome: "saved" }]);
+  });
 });

@@ -32,7 +32,26 @@ export async function readCurrentFiledReturnsFlowSummary(
     storageKeys: { activeRun: deps.storageKeys.activeRun },
     ...(deps.now ? { now: deps.now } : {}),
   });
-  if (activeRunSummary) return activeRunSummary;
+  if (activeRunSummary) {
+    // The generic active-run summary carries no per-period detail, and the start
+    // message only returns once the whole run finishes -- so mounting or
+    // refreshing the panel mid-run showed an empty list precisely while
+    // "In progress" and "Waiting" rows are the thing worth seeing.
+    //
+    // Read the ledger here rather than moving the read above: the ledger lookup
+    // costs a storage round trip that the other early returns do not need.
+    const activeLedger = await readLocalValue<unknown>(deps.storageKeys.fullFiscalYearLedger);
+    if (
+      isFullFiscalYearLedger(activeLedger) &&
+      sameFiledReturnsScope(activeLedger.scope, activeRunSummary.scope)
+    ) {
+      return {
+        ...activeRunSummary,
+        targetEvidence: fullFiscalYearTargetEvidence(activeLedger, activeRunSummary.flowStep),
+      };
+    }
+    return activeRunSummary;
+  }
 
   const targetReviewSummary = await readCurrentFiledReturnsTargetReviewSummary({
     storageKeys: { targetReview: deps.storageKeys.targetReview },
