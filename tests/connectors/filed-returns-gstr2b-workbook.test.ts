@@ -39,6 +39,59 @@ describe("GSTR-2B consolidated workbook", () => {
     }
   });
 
+  // The existing coverage counts how often an owner value appears in a sheet.
+  // A count cannot say WHERE: a defect that dropped the owner from the header
+  // and leaked it into one invoice row would still total one, and pass. These
+  // partition each sheet and assert placement instead.
+  //
+  // Both directions are load-bearing. Owner identity in a data row is a privacy
+  // defect; counterparty identity MISSING from data rows is the over-redaction
+  // defect tracked in #195, which would silently destroy the supplier detail
+  // that makes the workbook worth building.
+  it("keeps the return owner out of every invoice row on every sheet", () => {
+    const entries = extractStoredZipEntries(buildWorkbook(docdata()));
+    const ownerValues = [OWNER_GSTIN, "Synthetic Owner Legal Name", "Synthetic Owner Trade Name"];
+
+    for (const sheet of ["sheet1.xml", "sheet2.xml", "sheet3.xml", "sheet4.xml"]) {
+      const { header, data } = partitionSheet(text(entries, `xl/worksheets/${sheet}`));
+
+      expect(data.length, `${sheet} has no invoice rows to check`).toBeGreaterThan(0);
+      for (const value of ownerValues) {
+        expect(
+          data.filter((row) => row.includes(value)),
+          `${sheet} places the return owner value in an invoice row`,
+        ).toEqual([]);
+        expect(
+          header.some((row) => row.includes(value)),
+          `${sheet} no longer states the return owner in its header`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  // IMPG is excluded on purpose: imports are declared on a bill of entry and
+  // carry no counterparty, so requiring one there would assert a field the
+  // portal never sends.
+  it("keeps counterparty identity in the invoice rows and out of the header", () => {
+    const entries = extractStoredZipEntries(buildWorkbook(docdata()));
+    const counterpartyValues = [COUNTERPARTY_GSTIN, "Synthetic Counterparty Private Limited"];
+
+    for (const sheet of ["sheet1.xml", "sheet2.xml", "sheet3.xml"]) {
+      const { header, data } = partitionSheet(text(entries, `xl/worksheets/${sheet}`));
+
+      for (const value of counterpartyValues) {
+        expect(
+          data.some((row) => row.includes(value)),
+          `${sheet} lost the counterparty value from its invoice rows -- over-redaction`,
+        ).toBe(true);
+        expect(
+          header.filter((row) => row.includes(value)),
+          `${sheet} names a counterparty in the owner header`,
+        ).toEqual([]);
+      }
+    }
+  });
+
   it("does not create an empty worksheet for an absent GSTR-2B section", () => {
     const workbook = buildWorkbook({ b2b: docdata().b2b });
     expect(sheetNames(text(extractStoredZipEntries(workbook), "xl/workbook.xml"))).toEqual(["B2B"]);
@@ -209,6 +262,34 @@ function creditNote(ntnum: string, dt: string, val: number) {
     irn: "SYNTHETIC-IRN",
     irngendate: "04-04-2026",
     imsStatus: "ACCEPTED",
+  };
+}
+
+/**
+ * Splits a sheet into the owner header, the invoice rows, and the footer, as
+ * lists of cell values.
+ *
+ * Cells are parsed rather than pattern-matched on the raw XML, so the assertions
+ * compare whole cell values instead of substrings. The column-header row is
+ * found by its leading cell, not a fixed index, so adding an owner field shifts
+ * the boundary instead of silently reclassifying a data row as a header row.
+ * Keying on "Counterparty GSTIN" instead was wrong: IMPG carries a bill of entry
+ * and no counterparty, so that boundary is absent on one of the four sheets.
+ */
+function partitionSheet(xml: string): { header: string[][]; data: string[][] } {
+  const rows = [...xml.matchAll(/<row[^>]*>([\s\S]*?)<\/row>/g)].map((match) =>
+    (match[1] ?? "")
+      .split(/<[^>]+>/)
+      .map((cell) => cell.trim())
+      .filter((cell) => cell !== ""),
+  );
+  const columnHeader = rows.findIndex((row) => row[0] === "Period");
+  expect(columnHeader, "the column-header row is no longer identifiable").toBeGreaterThan(-1);
+
+  const footer = rows.findIndex((row, index) => index > columnHeader && row[0] === "Source");
+  return {
+    header: rows.slice(0, columnHeader),
+    data: rows.slice(columnHeader + 1, footer === -1 ? rows.length : footer),
   };
 }
 
