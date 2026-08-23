@@ -1,4 +1,6 @@
 import type {
+  FiledReturnsTargetEvidence,
+  FiledReturnsTargetOutcome,
   FiledReturnsFlowSummary,
   FiledReturnsFullFiscalYearLedger,
   FiledReturnsFullFiscalYearTarget,
@@ -109,6 +111,32 @@ const COMPLETED_SUMMARY_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTarg
   "not-filed",
 ]);
 
+/**
+ * The nine internal statuses collapsed to what a reader is deciding about.
+ *
+ * Exhaustive by type rather than by a default branch: a new target status must
+ * be given an outcome here, and failing to compile is the point. A default would
+ * quietly file an unknown status under whichever outcome seemed safe at the
+ * time, and the safe-seeming one is usually the reassuring one.
+ */
+const TARGET_OUTCOMES: Readonly<
+  Record<FiledReturnsFullFiscalYearTargetStatus, FiledReturnsTargetOutcome>
+> = {
+  // Reconsidered per run below: a full-year `downloaded` target is staged in
+  // OPFS, not delivered to the browser.
+  downloaded: "saved",
+  "not-filed": "not-filed",
+  // A person reporting what they saw is not correlated download evidence, so
+  // this sits with the failures rather than with `saved`.
+  "manually-observed": "needs-review",
+  "download-unconfirmed": "needs-review",
+  blocked: "needs-review",
+  failed: "needs-review",
+  cancelled: "needs-review",
+  running: "running",
+  pending: "pending",
+};
+
 export function targetStatusFromFlowStep(
   step: PortalFlowStepResult,
 ): FiledReturnsFullFiscalYearTargetStatus {
@@ -181,6 +209,92 @@ export function needsResumeConfirmation(ledger: FiledReturnsFullFiscalYearLedger
   );
 }
 
+/**
+ * A staged period is not a saved one.
+ *
+ * `filed-returns-download-trigger` bypasses browser delivery while
+ * `stageCapturedDownloads` is set, and the handoff happens once for the whole
+ * ZIP afterwards. So `downloaded` means "Pack holds these bytes" until the ZIP
+ * delivery signal appears, and only then does it mean the browser has them.
+ */
+function targetOutcome(
+  status: FiledReturnsFullFiscalYearTargetStatus,
+  zipDelivered: boolean,
+  runInterrupted: boolean,
+): FiledReturnsTargetOutcome {
+  const outcome = TARGET_OUTCOMES[status];
+  // `summariseFullFiscalYearLedger` reports an interrupted run as blocked while
+  // leaving the current target's durable status at `running`. Nothing is
+  // running after an MV3 worker interruption, and reading it as "In progress"
+  // both misdescribes it and excludes it from the count of what needs a person.
+  if (outcome === "running" && runInterrupted) return "needs-review";
+  return outcome === "saved" && !zipDelivered ? "captured" : outcome;
+}
+
+/**
+ * Whether the ZIP reached the browser.
+ *
+ * The signal alone, deliberately. `zipPhase: "cleaned"` looked like the durable
+ * form of the same fact and is not: three different phases reach it -- a
+ * confirmed download, a run that found no artifacts, and a legacy retained
+ * staging cleared on upgrade. Only the first is a delivery, and the phase that
+ * distinguishes them is overwritten by the transition, so the origin cannot be
+ * recovered from the ledger afterwards.
+ *
+ * Inferring from it reported never-exported files as saved. That is the
+ * overclaim this list exists to prevent, so the inference is gone rather than
+ * narrowed -- a guard that fails closed states what it can prove and no more.
+ *
+ * The cost is real and is the right way round: a delivered run re-summarised
+ * after the panel reopens reads `captured` rather than `saved`, because at that
+ * point Pack genuinely cannot prove the browser still holds the file. Recording
+ * delivery durably would fix that, and is a persistence change to raise rather
+ * than make.
+ */
+function isFullFiscalYearZipDelivered(flowStep: PortalFlowStepResult): boolean {
+  return flowStep.safeSignals.includes("full-fiscal-year-zip-downloaded");
+}
+
+/**
+ * Derived from the ledger every time it is needed, never stored.
+ *
+ * Exported because one read path returns a durable completion summary directly
+ * -- the retained-ZIP retry state -- instead of re-summarising. That summary
+ * carries no evidence by design, since per-period outcomes are taxpayer data and
+ * do not persist, so the caller rebuilds the list from the ledger it already
+ * holds. Without that, the evidence vanished in precisely the state where a
+ * reader is deciding whether to retry.
+ */
+export function fullFiscalYearTargetEvidence(
+  ledger: FiledReturnsFullFiscalYearLedger,
+  flowStep: PortalFlowStepResult,
+): FiledReturnsTargetEvidence[] {
+  const zipDelivered = isFullFiscalYearZipDelivered(flowStep);
+  // A discarded run: staged files were cleared without a delivery. Their targets
+  // still read `downloaded`, and reporting those as captured claims Pack holds
+  // files it has just deleted.
+  //
+  // Only when something was actually staged. A run where every period was
+  // positively not filed clears too, having produced nothing -- and dropping the
+  // list there hid proven `Not filed` rows that are the entire result of the
+  // run, then let them reappear on reopen when the transient clear signal was
+  // gone.
+  const clearedWithoutDelivery =
+    !zipDelivered && flowStep.safeSignals.includes("full-fiscal-year-opfs-cleared");
+  const hadStagedFiles = ledger.targets.some((target) => target.status === "downloaded");
+  if (clearedWithoutDelivery && hadStagedFiles) return [];
+  // From the step as well as the ledger. An MV3 interruption produces a blocked
+  // summary while the persisted ledger normally still reads `running`, so
+  // reading the ledger alone left the current target as "In progress" and out of
+  // the needs-review count.
+  const runInterrupted =
+    ledger.status === "blocked" || flowStep.safeSignals.includes("filed-returns-run-needs-review");
+  return ledger.targets.map((target) => ({
+    period: target.period,
+    outcome: targetOutcome(target.status, zipDelivered, runInterrupted),
+  }));
+}
+
 export function toFullFiscalYearSummary(
   ledger: FiledReturnsFullFiscalYearLedger,
   flowStep: PortalFlowStepResult,
@@ -197,6 +311,7 @@ export function toFullFiscalYearSummary(
     scope: ledger.scope,
     status: ledger.status,
     completedPeriods,
+    targetEvidence: fullFiscalYearTargetEvidence(ledger, flowStep),
     totalPeriods: ledger.targets.length,
     updatedAt: ledger.updatedAt,
     ...(ledger.status === "complete" ? { completedAt: ledger.updatedAt } : {}),

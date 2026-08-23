@@ -12,6 +12,7 @@ import {
 import { InlineStatus } from "../popup/inline-status";
 import { LastRunDiagnostics } from "../popup/last-run-diagnostics";
 import { PackSummary } from "../popup/pack-summary";
+import { TargetEvidence } from "../popup/target-evidence";
 import { getPopupPresentationState, isGstSignInRequired } from "../popup/presentation-state";
 import { RecoveryActions, hasRecoveryActions } from "../popup/recovery-actions";
 import { getScopeFormStartAction } from "../popup/scope-form-model";
@@ -55,6 +56,9 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
 
   const savedRun = pack.lastRunSummary;
   const savedRunBlock = getSavedRunBlock(savedRun, pack.effectiveBusy);
+  // The same test the presets use, so the form and the presets cannot
+  // disagree about whether the saved run is describing this scope.
+  const savedRunIsThisScope = getScopeMatchedFiledReturnsSummary(pack.scope, savedRun) !== null;
 
   /**
    * Which surface owns the body. Mirrors the popup deliberately: a terminal run, a retained
@@ -104,6 +108,16 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
               summary={summary}
             />
             {summary ? <PackSummary scope={pack.scope} summary={pack.scopedFlowSummary} /> : null}
+            {/* Below the pack card, above the recovery actions: a reader who
+                sees "needs review" here is one row away from the control that
+                resolves it.
+                
+                `summary`, not `scopedFlowSummary`. Changing the selection while
+                a saved run still needs recovery nulls the scoped summary while
+                the recovery controls stay actionable -- reading the scoped one
+                here hid the per-period evidence at exactly the moment it
+                explains what those controls are for. */}
+            <TargetEvidence summary={summary ?? null} />
             {running ? null : view === "presets" ? (
               <>
                 <h2>What do you need?</h2>
@@ -175,6 +189,17 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
                 <ScopeForm
                   busy={pack.effectiveBusy}
                   context={pack.context}
+                  // The saved run blocks this form for the same reason it blocks
+                  // every preset: the background refuses an unresolved target
+                  // review before it reads the requested scope. Changing the
+                  // selection nulls `scopedFlowSummary` and would otherwise
+                  // leave the start button enabled for a run that cannot begin.
+                  // Only when the form shows a DIFFERENT scope, matching how
+                  // the presets apply it. A saved run blocked merely because no
+                  // portal tab was available re-enables itself once one is, and
+                  // its own scope must be allowed to act on that rather than
+                  // being disabled by a block describing itself.
+                  externalBlock={savedRunIsThisScope ? null : savedRunBlock}
                   flowSummary={pack.scopedFlowSummary}
                   scope={pack.scope}
                   scopeLockedForReview={pack.scopeLockedForReview}

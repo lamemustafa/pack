@@ -1,3 +1,4 @@
+import { fullFiscalYearTargetEvidence } from "./filed-returns-full-fiscal-year-summary";
 import { browser } from "wxt/browser";
 import type {
   FiledReturnsFlowSummary,
@@ -31,7 +32,26 @@ export async function readCurrentFiledReturnsFlowSummary(
     storageKeys: { activeRun: deps.storageKeys.activeRun },
     ...(deps.now ? { now: deps.now } : {}),
   });
-  if (activeRunSummary) return activeRunSummary;
+  if (activeRunSummary) {
+    // The generic active-run summary carries no per-period detail, and the start
+    // message only returns once the whole run finishes -- so mounting or
+    // refreshing the panel mid-run showed an empty list precisely while
+    // "In progress" and "Waiting" rows are the thing worth seeing.
+    //
+    // Read the ledger here rather than moving the read above: the ledger lookup
+    // costs a storage round trip that the other early returns do not need.
+    const activeLedger = await readLocalValue<unknown>(deps.storageKeys.fullFiscalYearLedger);
+    if (
+      isFullFiscalYearLedger(activeLedger) &&
+      sameFiledReturnsScope(activeLedger.scope, activeRunSummary.scope)
+    ) {
+      return {
+        ...activeRunSummary,
+        targetEvidence: fullFiscalYearTargetEvidence(activeLedger, activeRunSummary.flowStep),
+      };
+    }
+    return activeRunSummary;
+  }
 
   const targetReviewSummary = await readCurrentFiledReturnsTargetReviewSummary({
     storageKeys: { targetReview: deps.storageKeys.targetReview },
@@ -41,7 +61,14 @@ export async function readCurrentFiledReturnsFlowSummary(
 
   const ledger = await readLocalValue<unknown>(deps.storageKeys.fullFiscalYearLedger);
   if (isFullFiscalYearLedger(ledger) && isRetainedZipRetrySummary(completionSummary, ledger)) {
-    return completionSummary;
+    // Evidence is display-only and never persisted, so this path -- which
+    // returns the durable summary rather than re-summarising -- has to rebuild
+    // it from the ledger already read above. Otherwise the per-period list is
+    // missing in exactly the state where a reader is deciding whether to retry.
+    return {
+      ...completionSummary,
+      targetEvidence: fullFiscalYearTargetEvidence(ledger, completionSummary.flowStep),
+    };
   }
   if (isFullFiscalYearLedger(ledger) && isActionableFullFiscalYearLedger(ledger)) {
     return summariseFullFiscalYearLedger(ledger, deps.now?.());

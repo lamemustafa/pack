@@ -259,6 +259,34 @@ export interface FiledReturnsFullFiscalYearLedger {
   targets: FiledReturnsFullFiscalYearTarget[];
 }
 
+/**
+ * What Pack can prove about one period, in the terms a reader needs.
+ *
+ * Deliberately a smaller vocabulary than the nine internal target statuses. A
+ * reader is deciding one thing -- is this period settled, or does it need me --
+ * and nine words to express four answers invites the reader to guess which ones
+ * are the same.
+ *
+ * `saved` is the only value that asserts a file reached the browser. In a
+ * full-year run a `downloaded` target means the period's artifacts were staged
+ * in OPFS -- the browser handoff happens later, once, for the whole ZIP. So
+ * `downloaded` reads as `captured` until that delivery is confirmed and `saved`
+ * after it. Calling a staged period saved asserts a delivery from a state that
+ * has not reached the browser at all, which is the overclaim this list exists
+ * to prevent.
+ *
+ * `not-filed` is a true outcome but not a saved file, and `manually-observed`
+ * is a person's report rather than evidence, which is why it lands in
+ * `needs-review` beside the failures.
+ */
+export type FiledReturnsTargetOutcome =
+  "saved" | "captured" | "not-filed" | "needs-review" | "running" | "pending";
+
+export interface FiledReturnsTargetEvidence {
+  period: string;
+  outcome: FiledReturnsTargetOutcome;
+}
+
 export interface FiledReturnsFlowSummary {
   /** Binds an artifact-reconciled completion to the acquisition that produced it. */
   artifactAcquisitionCompletion?: FiledReturnsArtifactAcquisitionCompletion[];
@@ -267,6 +295,15 @@ export interface FiledReturnsFlowSummary {
   completedAt?: string;
   updatedAt?: string;
   completedPeriods: string[];
+  /**
+   * One entry per planned period, in plan order. Present for a full-year run.
+   *
+   * `completedPeriods` cannot carry this: it counts `downloaded` and `not-filed`
+   * together, so a period the taxpayer never filed reads as a saved file. That
+   * is right for progress and wrong for evidence, and an aggregate built on it
+   * cannot express a partially-settled run at all.
+   */
+  targetEvidence?: FiledReturnsTargetEvidence[];
   totalPeriods?: number;
   currentPeriod?: string;
   fullFiscalYearRecovery?: {

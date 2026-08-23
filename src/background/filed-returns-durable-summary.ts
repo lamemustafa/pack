@@ -39,6 +39,16 @@ const SUMMARY_KEYS = [
   "fullFiscalYearRecovery",
   "scope",
   "status",
+  // Permitted so a summary carrying it can still be parsed, and then
+  // deliberately DROPPED: it is never copied into the parsed result, so it never
+  // reaches storage.
+  //
+  // Per-period outcomes include `not-filed`, which is a taxpayer's filing status
+  // for a month. `AGENTS.md` allows scope selections to persist and taxpayer
+  // data not to, and the ledger already holds these statuses where recovery
+  // needs them -- a second copy in session storage widens what is persisted for
+  // nothing but display convenience.
+  "targetEvidence",
   "totalPeriods",
   "updatedAt",
 ] as const;
