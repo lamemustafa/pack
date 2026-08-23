@@ -217,7 +217,9 @@ This log records live diagnostic findings that constrain Pack's local, target-bo
     `revsup`, `othersup` and `imports`. Walk the structure rather than encoding this list --
     the shape is the durable fact, the key names are not.
 
-33. Only `b2b`, `b2ba`, `cdnr` and `impg` appeared under `docdata` in a captured year. The GST
+33. Only `b2b`, `b2ba`, `cdnr` and `impg` appear under `docdata` across a captured corpus spanning
+    several financial years -- so the narrow section coverage is this taxpayer's shape rather than
+    one year's sampling. The GST
     portal's own user manual lists **fifteen** GSTR-2B tables: B2B, B2BA, B2B CDNR, B2B CDNRA,
     ISD, ISDA, IMPG, IMPG (Amendments), IMPGSEZ, IMPGSEZ (Amendments), ECO, ECOA, ITC REVERSED
     (rule 37A), B2B DNR and B2B DNRA. **None of the eleven we do not render has been captured
@@ -253,10 +255,21 @@ This log records live diagnostic findings that constrain Pack's local, target-bo
     | `itcavl/imports`   | IV — Import of goods                            | `4(A)(1)`                                |
     | `itcunavl/*`       | ITC Not Available                               | `4(D)(2)` (reverse charge also `3.1(d)`) |
 
-    `itcavl/othersup` matched **no** Part A heading. It is therefore inferred to be the Part B
-    credit-note aggregate -- consistent with it holding only `cdnr` in the captured year -- but
-    that is elimination, not a matched figure, so **no GSTR-3B reference is printed against it**.
-    A period whose Part B carries a figure would settle it the same way.
+    `itcavl/othersup` matched **no** Part A heading, and a wider search has since failed to
+    explain it. Across a larger captured corpus it holds exactly one child, `cdnr`, in every file,
+    which invites the reading that it is the Part B credit-note aggregate. Five ways of testing
+    that were tried and **all failed in every file**:
+
+    - `othersup` against the sum of CDNR note rows;
+    - `nonrevsup/cdnr` against the same sum;
+    - `othersup` plus `nonrevsup/cdnr` against it;
+    - those two plus `revsup/cdnr`;
+    - `othersup` against CDNR notes excluding IMS-rejected ones.
+
+    So the plausible reading is not merely unproven, it is **unsupported by the data available**.
+    Whatever `othersup` aggregates, it is not a straightforward roll-up of the credit-note rows in
+    the same document. No GSTR-3B reference is printed against it, and none should be until a
+    period is captured whose rendered Part B figure can be matched directly.
 
     `itcavl/isd` did not occur: this taxpayer has no ISD credit, and the portal rendered that
     heading as nil. Heading II therefore remains unmatched against a JSON key.
