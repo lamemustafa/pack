@@ -379,6 +379,27 @@ describe("GSTR-2B consolidated workbook", () => {
     ).toThrow(/cannot be written to a spreadsheet without changing it/);
   });
 
+  // The guard has to find the subtree it is protecting, and a first-occurrence
+  // text search does not: an unrelated earlier `docdata` -- permitted by the
+  // canonical parser because it belongs to a different object -- is scanned
+  // instead, and the real one is never examined. The workbook then renders a
+  // value `JSON.parse` has already rounded.
+  it("scans the real docdata when an unrelated one appears first", () => {
+    const plan: FiledReturnsSummaryPlanEntry[] = [planEntry("April", "april-data.json")];
+    const bytes = new TextEncoder().encode(
+      JSON.stringify({
+        docdata: { b2b: [] },
+        data: { gstin: OWNER_GSTIN, rtnprd: "042026", docdata: docdata() },
+      }).replace('"val":110', '"val":1.11111111111111111'),
+    );
+
+    expect(() =>
+      buildFiledReturnsGstr2bWorkbook(plan, [{ path: "april-data.json", bytes }], {
+        generatedAt: new Date("2026-08-22T12:00:00.000Z"),
+      }),
+    ).toThrow(/cannot be written to a spreadsheet without changing it/);
+  });
+
   // The ITC totals a return preparer works from reached only the tidy CSV,
   // which for GSTR-2B carries no invoice rows -- so the figures a taxpayer
   // files from sat in the artifact least able to show them.
