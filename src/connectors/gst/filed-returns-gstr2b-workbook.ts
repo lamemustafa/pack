@@ -373,8 +373,18 @@ function childValueText(text: string, key: string): string | undefined {
       continue;
     }
     if (character === '"') {
-      // Only a key sitting directly inside the outermost object counts.
-      if (depth === 1 && text.startsWith(marker, index)) {
+      // Only a key sitting directly inside the outermost object counts, and
+      // only a token a colon follows is a key at all. Depth alone does not
+      // distinguish the two: in `{"x":"data","data":{...}}` the string *value*
+      // `"data"` sits at depth 1 and matches, and the old forward search for the
+      // next colon then returned the following member's container. The decoy
+      // did not have to be nested or escaped -- an ordinary sibling whose value
+      // happens to equal the key name was enough.
+      if (
+        depth === 1 &&
+        text.startsWith(marker, index) &&
+        isKeyPosition(text, index + marker.length)
+      ) {
         const value = valueTextAt(text, index + marker.length);
         if (value !== undefined) return value;
       }
@@ -387,8 +397,17 @@ function childValueText(text: string, key: string): string | undefined {
   return undefined;
 }
 
+/** Whether the token ending here is a member key -- only whitespace, then a colon. */
+function isKeyPosition(text: string, afterToken: number): boolean {
+  let index = afterToken;
+  while (index < text.length && /\s/.test(text[index]!)) index += 1;
+  return text[index] === ":";
+}
+
 /** The brace-matched value following a key, or undefined if it is not a container. */
 function valueTextAt(text: string, afterKey: number): string | undefined {
+  // The caller has already established a colon follows, so this cannot run
+  // forward past the member it was given into an unrelated one.
   let index = text.indexOf(":", afterKey);
   if (index === -1) return undefined;
   index += 1;
