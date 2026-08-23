@@ -192,8 +192,14 @@ This log records live diagnostic findings that constrain Pack's local, target-bo
     absence -- refusing would reject every real GSTR-2B period. It also means those two values
     cannot be added to a value-redaction set for this return type, because Pack never learns them.
 
-31. GSTR-2B JSON writes numbers in **scientific notation**. A captured period carried ITC summary
-    totals such as `1.2345678E7` under `data.itcsumm`. A guard that accepted only plain decimal
-    tokens refused every real period, for values the workbook never renders. Use
-    `jsonNumberTokenToPlainDecimal` to normalise a JSON number token before judging it; do not
-    write a second number grammar.
+31. GSTR-2B JSON writes numbers in **scientific notation**: some values under `data.itcsumm`
+    arrive as a fractional mantissa with an exponent suffix rather than as a plain decimal. A guard
+    that accepted only plain decimal tokens refused every real period, for values the workbook
+    never renders. Use `jsonNumberTokenToPlainDecimal` to normalise a JSON number token before
+    judging it; do not write a second number grammar.
+
+    No magnitude is stated above, deliberately. An earlier draft of this entry gave an example
+    value and said a captured period "carried" it. The value was invented, but a reader cannot tell
+    that from the sentence, and an entry that reads as a quoted observation is the same disclosure
+    whether or not it is one -- which is why the rule under 28 forbids stating a magnitude at all
+    rather than forbidding accurate ones.

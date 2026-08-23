@@ -243,9 +243,15 @@ function rejectInexactNumbers(text: string): void {
     let plainDecimal: string;
     try {
       plainDecimal = jsonNumberTokenToPlainDecimal(token);
-    } catch {
+    } catch (error) {
+      // A limit failure is a valid number the converter will not expand, not
+      // malformed input. Collapsing both into one message described a
+      // resource rejection as a syntax error -- a boundary that rejects a value
+      // has to say which reason applies.
       throw new FiledReturnsGstr2bWorkbookSchemaError(
-        "A GSTR-2B numeric value is not a JSON number token.",
+        error instanceof JsonFlatTableLimitError
+          ? "A GSTR-2B value cannot be written to a spreadsheet without changing it."
+          : "A GSTR-2B numeric value is not a JSON number token.",
       );
     }
     if (exactSpreadsheetNumber(plainDecimal) === null) {
