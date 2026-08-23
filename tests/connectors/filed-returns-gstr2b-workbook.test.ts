@@ -159,6 +159,95 @@ describe("GSTR-2B consolidated workbook", () => {
     ).toThrow(/cannot be written to a spreadsheet without changing it/);
   });
 
+  // Built from a captured live GSTR-2B period, not from an assumed shape. The
+  // capture settled three things the fixtures above could not:
+  //
+  // 1. `inv[]` is FLAT -- txval/igst/cgst/sgst/cess sit on the invoice, and
+  //    there is no nested `items` array;
+  // 2. `irn`, `irngendate` and `srctyp` are present on well under half the
+  //    invoices, so they are optional and every fixture above over-specified
+  //    them by always supplying all three;
+  // 3. `docdata` has siblings under `/data` -- `cpsumm`, `itcsumm`, `gendt`,
+  //    `version` -- plus a root `chksum`, none of which the builder reads.
+  it("renders a captured-shape period whose invoices omit the optional keys", () => {
+    const plan: FiledReturnsSummaryPlanEntry[] = [planEntry("April", "april-data.json")];
+    const bytes = new TextEncoder().encode(
+      JSON.stringify({
+        chksum: "synthetic-digest",
+        data: {
+          cpsumm: {
+            b2b: [
+              {
+                cess: 0,
+                cgst: 0,
+                ctin: COUNTERPARTY_GSTIN,
+                igst: 10,
+                sgst: 0,
+                supfildt: "20-05-2026",
+                supprd: "042026",
+                trdnm: "Synthetic Counterparty Private Limited",
+                ttldocs: 2,
+                txval: 100,
+              },
+            ],
+          },
+          docdata: {
+            b2b: [
+              {
+                ctin: COUNTERPARTY_GSTIN,
+                trdnm: "Synthetic Counterparty Private Limited",
+                supfildt: "20-05-2026",
+                supprd: "042026",
+                inv: [
+                  // No irn / irngendate / srctyp: the majority case in the capture.
+                  {
+                    inum: "INV-900",
+                    dt: "01-04-2026",
+                    val: 110,
+                    txval: 100,
+                    igst: 10,
+                    cgst: 0,
+                    sgst: 0,
+                    cess: 0,
+                    pos: "27",
+                    rev: "N",
+                    typ: "R",
+                    itcavl: "Y",
+                    rsn: "",
+                    imsStatus: "ACCEPTED",
+                  },
+                ],
+              },
+            ],
+          },
+          gendt: "14-05-2026",
+          gstin: OWNER_GSTIN,
+          itcsumm: {
+            itcavl: { nonrevsup: { b2b: { cess: 0, cgst: 0, igst: 10, sgst: 0, txval: 100 } } },
+          },
+          rtnprd: "042026",
+          version: "1.0",
+        },
+      }),
+    );
+
+    const workbook = buildFiledReturnsGstr2bWorkbook(plan, [{ path: "april-data.json", bytes }], {
+      generatedAt: new Date("2026-08-22T12:00:00.000Z"),
+    });
+    expect(workbook, "a captured-shape period produced no workbook").not.toBeNull();
+
+    const entries = extractStoredZipEntries(workbook!);
+    expect(sheetNames(text(entries, "xl/workbook.xml"))).toEqual(["B2B"]);
+    const b2b = text(entries, "xl/worksheets/sheet1.xml");
+    expect(b2b).toContain("INV-900");
+    expect(b2b).toContain(COUNTERPARTY_GSTIN);
+    // The unread siblings are not a reason to exclude anything, and must not
+    // leak into the sheet.
+    expect(b2b).not.toContain("cpsumm");
+    expect(b2b).not.toContain("itcsumm");
+    expect(b2b).not.toContain("Sections present in the source but not rendered");
+  });
+
   it("fails closed rather than placing the return owner in a counterparty row", () => {
     const data = docdata();
     data.b2b[0]!.ctin = OWNER_GSTIN;

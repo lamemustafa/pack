@@ -162,3 +162,25 @@ This log records live diagnostic findings that constrain Pack's local, target-bo
     still present in the user's own requested portal JSON inside the downloaded ZIP, and in OPFS
     until the ledger is cleared. That is the file the user asked Pack to save, and Pack does not
     edit portal bytes; the guard scopes what Pack derives, not what the portal produced.
+
+27. GSTR-2B `data.docdata` invoice records are **flat**. A captured live period carried
+    `b2b[].inv[]` objects holding `txval`, `igst`, `cgst`, `sgst` and `cess` directly on the
+    invoice, with **no nested `items` array and no `diffprcnt`**; `cdnr[].nt[]` has the same
+    shape plus `ntnum` and `suptyp`. A review finding asserted a nested rate-wise `items`
+    breakdown; this capture falsifies it for GSTR-2B. Do not port the GSTR-1 `itms`/`itm_det`
+    shape onto GSTR-2B without a capture that shows it.
+
+28. Three GSTR-2B invoice fields are **optional**: `irn`, `irngendate` and `srctyp` were
+    present on well under half the invoice records in a captured period, and absent from the rest.
+    Every fixture written before that capture supplied all three on every invoice, so the majority
+    real case was untested. Treat them as optional in any schema or fixture.
+
+29. `data.docdata` has siblings the workbook does not read: `cpsumm` (counterparty
+    summary), `itcsumm` (ITC availability totals), `gendt`, `version`, plus a root `chksum`.
+    A derived-output builder must ignore them rather than treat them as unknown sections, and a
+    fixture that omits them is not representative of a real response.
+
+30. No numeric token in a captured GSTR-2B period exceeded 15 significant digits, so the
+    exact-spreadsheet-number boundary does not fire on ordinary real data. It remains necessary:
+    it guards a value the portal _may_ send, and the cost of being wrong is a silently altered
+    tax figure.
