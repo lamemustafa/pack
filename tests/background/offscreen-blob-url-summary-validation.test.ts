@@ -364,6 +364,56 @@ describe("offscreen full-year summary response validation", () => {
       createOffscreenFiledReturnZipUrl("full-fiscal-year-12345678", request()),
     ).resolves.toEqual({ status: "failed" });
   });
+  // `unavailable` is thrown from building a workbook, which only runs when there
+  // was a source to build from, so a PDF-only plan cannot reach it. This row of
+  // the table was unbound while its siblings were being corrected one at a time.
+  it("rejects an unavailable receipt when the plan staged no JSON", async () => {
+    mocks.runtime.sendMessage.mockImplementationOnce(async (message?: unknown) => ({
+      ok: true,
+      requestId: requestIdFrom(message),
+      blobUrl: "blob:pack/gstr2b-unreachable-unavailable",
+      zipEntryCount: 2,
+      artifactEntryCount: 1,
+      summaryEntryCount: 1,
+      summary: {
+        status: "included",
+        outcomeOnly: true,
+        parsedPeriodCount: 0,
+        rowCount: 1,
+        workbookOutcome: "unavailable",
+      },
+    }));
+
+    await expect(
+      createOffscreenFiledReturnZipUrl("full-fiscal-year-12345678", pdfOnlyRequest("GSTR-2B")),
+    ).resolves.toMatchObject({ status: "failed", errorCategory: "offscreen-response-invalid" });
+  });
+
+  // `no-records` says a source was read and carried none, so it needs both a
+  // staged source and a period actually parsed. Staged-but-unparseable JSON
+  // reaches a different outcome.
+  it("rejects a no-records receipt that parsed no period", async () => {
+    mocks.runtime.sendMessage.mockImplementationOnce(async (message?: unknown) => ({
+      ok: true,
+      requestId: requestIdFrom(message),
+      blobUrl: "blob:pack/gstr2b-unparsed-no-records",
+      zipEntryCount: 2,
+      artifactEntryCount: 1,
+      summaryEntryCount: 1,
+      summary: {
+        status: "included",
+        outcomeOnly: true,
+        parsedPeriodCount: 0,
+        rowCount: 1,
+        workbookOutcome: "no-records",
+      },
+    }));
+
+    await expect(
+      createOffscreenFiledReturnZipUrl("full-fiscal-year-12345678", request()),
+    ).resolves.toMatchObject({ status: "failed", errorCategory: "offscreen-response-invalid" });
+  });
+
   // Only the GSTR-2B workbook is built from staged JSON. The GSTR-3B workbook is
   // built from the run's own outcome rows, so a PDF-only selection produces one
   // with no parsed period at all -- a receipt the producer emits and its own
