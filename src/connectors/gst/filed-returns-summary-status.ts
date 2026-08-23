@@ -1,3 +1,4 @@
+import type { FiledReturnsWorkbookAbsenceOutcome } from "./offscreen-blob-url";
 import type { PackOffscreenFiledReturnSummaryResult } from "./offscreen-blob-url";
 
 // Synthesized locally when the offscreen worker's response fails validation,
@@ -60,7 +61,9 @@ function summaryInclusionClaim(lifecycle: FiledReturnsSummaryLifecycle, contents
   return `The ZIP includes ${contents}.`;
 }
 
-const WORKBOOK_ABSENCE_SENTENCE: Readonly<Record<string, string>> = {
+// Keyed by the canonical outcome type, so adding an outcome fails to compile
+// here rather than silently rendering the fallback sentence.
+const WORKBOOK_ABSENCE_SENTENCE: Readonly<Record<FiledReturnsWorkbookAbsenceOutcome, string>> = {
   "not-applicable": " A consolidated workbook is not available for this return type.",
   "no-records":
     " The staged portal JSON carried no invoice-level records, so no workbook was produced.",
@@ -88,7 +91,8 @@ export function filedReturnsSummaryStatusMessage(
     // and tidy CSV". An outcome this build does not recognise still says the
     // workbook is absent rather than falling through to the inclusion claim.
     const notApplicable =
-      WORKBOOK_ABSENCE_SENTENCE[absentWorkbookOutcome] ?? UNRECOGNISED_WORKBOOK_ABSENCE;
+      WORKBOOK_ABSENCE_SENTENCE[absentWorkbookOutcome as FiledReturnsWorkbookAbsenceOutcome] ??
+      UNRECOGNISED_WORKBOOK_ABSENCE;
     if (signalSet.has("full-fiscal-year-summary-outcomes-only")) {
       return summaryInclusionClaim(lifecycle, "an outcome-only tidy CSV") + notApplicable;
     }

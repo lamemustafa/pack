@@ -261,6 +261,12 @@ describe("GSTR-2B consolidated workbook", () => {
     expect(sheetNames(text(entries, "xl/workbook.xml"))).toEqual(["B2B"]);
     const b2b = text(entries, "xl/worksheets/sheet1.xml");
     expect(b2b).toContain("INV-900");
+    // The capture carries no `lglnm` or `trdnm`, so those header rows are not
+    // written at all. Printing them regardless produced a labelled blank -- a
+    // field that looks reported and is not.
+    expect(b2b).not.toContain("Legal name");
+    expect(b2b).not.toContain("Trade name");
+    expect(b2b).toContain("GSTIN");
     expect(b2b).toContain(COUNTERPARTY_GSTIN);
     // The unread siblings are not a reason to exclude anything, and must not
     // leak into the sheet.

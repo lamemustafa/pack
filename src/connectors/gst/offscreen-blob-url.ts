@@ -159,6 +159,24 @@ export type PackOffscreenBlobUrlResponse =
         | "zip-failed";
     };
 
+/**
+ * Why a run produced no workbook. One list, so the contract, the receipt
+ * validator, the durable-signal allowlist and the message the user reads cannot
+ * disagree about which outcomes exist.
+ *
+ * - `not-applicable`: this return type never produces a workbook.
+ * - `no-records`: it does, but this document carried no invoice-level record.
+ * - `unavailable`: one was attempted and could not be produced.
+ */
+export const FILED_RETURNS_WORKBOOK_ABSENCE_OUTCOMES = [
+  "not-applicable",
+  "no-records",
+  "unavailable",
+] as const;
+
+export type FiledReturnsWorkbookAbsenceOutcome =
+  (typeof FILED_RETURNS_WORKBOOK_ABSENCE_OUTCOMES)[number];
+
 export type PackOffscreenFiledReturnSummaryResult =
   | {
       status: "included";
@@ -169,10 +187,7 @@ export type PackOffscreenFiledReturnSummaryResult =
       // "unavailable": one was attempted and could not be produced, and the
       // tidy CSV -- already built and already privacy-screened -- is kept
       // rather than discarded with it.
-      // "not-applicable": this return type never produces a workbook.
-      // "no-records": it does, but this document carried no invoice-level record.
-      // "unavailable": one was attempted and could not be produced.
-      workbookOutcome?: "not-applicable" | "no-records" | "unavailable";
+      workbookOutcome?: FiledReturnsWorkbookAbsenceOutcome;
     }
   | { status: "failed"; reasonCategory: PackOffscreenFiledReturnSummaryErrorCategory };
 

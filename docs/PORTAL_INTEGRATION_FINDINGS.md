@@ -173,15 +173,21 @@ This log records live diagnostic findings that constrain Pack's local, target-bo
 28. Three GSTR-2B invoice fields are **optional**: `irn`, `irngendate` and `srctyp` are present
     on some invoice records and absent from others within a single period. Every fixture written
     before that was observed supplied all three on every invoice, so the absent case was untested.
-    Treat them as optional in any schema or fixture, and do not record how often either case
-    occurs -- a prevalence figure from a real return is a taxpayer-derived metric.
+    Treat them as optional in any schema or fixture.
+
+    **Record structure only.** Entries here may state what fields exist, whether they are
+    optional, and how they nest. They must not state any measurement taken from a real return --
+    not a count, a prevalence, a magnitude, a size, or a bound. Three consecutive review rounds
+    removed one such metric and introduced another in the same edit; the rule is the fix, an
+    example is not.
 
 29. `data.docdata` has siblings the workbook does not read: `cpsumm` (counterparty
     summary), `itcsumm` (ITC availability totals), `gendt`, `version`, plus a root `chksum`.
     A derived-output builder must ignore them rather than treat them as unknown sections, and a
     fixture that omits them is not representative of a real response.
 
-30. No numeric token in a captured GSTR-2B period exceeded 15 significant digits, so the
-    exact-spreadsheet-number boundary does not fire on ordinary real data. It remains necessary:
-    it guards a value the portal _may_ send, and the cost of being wrong is a silently altered
-    tax figure.
+30. A captured GSTR-2B response carries `data.gstin` but **no `data.lglnm` and no `data.trdnm`**.
+    The owner's legal and trade name are therefore not available to a GSTR-2B derived output, and
+    a builder must neither print a labelled blank for them nor refuse the document for their
+    absence -- refusing would reject every real GSTR-2B period. It also means those two values
+    cannot be added to a value-redaction set for this return type, because Pack never learns them.

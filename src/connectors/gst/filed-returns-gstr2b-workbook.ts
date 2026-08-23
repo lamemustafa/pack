@@ -535,10 +535,19 @@ function worksheet(
     section === "impg"
       ? IMPG_COLUMNS
       : INVOICE_COLUMNS.filter((column) => columnForSection(section, column.key));
+  // Only the fields the portal actually sent. A captured GSTR-2B period carries
+  // `data.gstin` and neither `lglnm` nor `trdnm`, so emitting those two rows
+  // regardless printed a labelled blank -- a field that looks reported and is
+  // not. Refusing the workbook when they are absent, as one review suggested,
+  // would reject every real GSTR-2B document instead.
   const headerRows: Array<Array<XlsxCell | undefined>> = [
     [{ value: "GSTIN", style: "bold" }, { value: identity.gstin }],
-    [{ value: "Legal name", style: "bold" }, { value: identity.legalName }],
-    [{ value: "Trade name", style: "bold" }, { value: identity.tradeName }],
+    ...(identity.legalName
+      ? [[{ value: "Legal name", style: "bold" as const }, { value: identity.legalName }]]
+      : []),
+    ...(identity.tradeName
+      ? [[{ value: "Trade name", style: "bold" as const }, { value: identity.tradeName }]]
+      : []),
     [{ value: "Financial year", style: "bold" }, { value: financialYear }],
     [],
     columns.map((column) => ({ value: column.header, style: "bold" })),
