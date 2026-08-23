@@ -118,6 +118,47 @@ describe("GSTR-2B consolidated workbook", () => {
     expect(() => buildWorkbook(data)).toThrow(FiledReturnsGstr2bWorkbookPrivacyError);
   });
 
+  // JSON.parse turns every amount into a double before the builder sees it, so a
+  // figure the portal sent exactly arrives already rounded. Refusing keeps the
+  // tidy CSV, which is built by the flattener that preserves numeric tokens as
+  // exact decimal text -- the taxpayer gets the exact figure in the artifact
+  // that can hold it, instead of a changed one here.
+  it("refuses a value it cannot write to a spreadsheet unchanged", () => {
+    const plan: FiledReturnsSummaryPlanEntry[] = [planEntry("April", "april-data.json")];
+    const bytes = new TextEncoder().encode(
+      JSON.stringify({
+        data: {
+          gstin: OWNER_GSTIN,
+          lglnm: "Synthetic Owner Legal Name",
+          trdnm: "Synthetic Owner Trade Name",
+          rtnprd: "042026",
+          docdata: docdata(),
+        },
+      }).replace('"val":110', '"val":99999999999999.999'),
+    );
+
+    expect(() =>
+      buildFiledReturnsGstr2bWorkbook(plan, [{ path: "april-data.json", bytes }], {
+        generatedAt: new Date("2026-08-22T12:00:00.000Z"),
+      }),
+    ).toThrow(FiledReturnsGstr2bWorkbookSchemaError);
+  });
+
+  it("states its own reason rather than reporting invalid JSON", () => {
+    const plan: FiledReturnsSummaryPlanEntry[] = [planEntry("April", "april-data.json")];
+    const bytes = new TextEncoder().encode(
+      JSON.stringify({
+        data: { gstin: OWNER_GSTIN, rtnprd: "042026", docdata: docdata() },
+      }).replace('"val":110', '"val":99999999999999.999'),
+    );
+
+    expect(() =>
+      buildFiledReturnsGstr2bWorkbook(plan, [{ path: "april-data.json", bytes }], {
+        generatedAt: new Date("2026-08-22T12:00:00.000Z"),
+      }),
+    ).toThrow(/cannot be written to a spreadsheet without changing it/);
+  });
+
   it("fails closed rather than placing the return owner in a counterparty row", () => {
     const data = docdata();
     data.b2b[0]!.ctin = OWNER_GSTIN;

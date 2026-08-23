@@ -78,10 +78,21 @@ release.
 During each GSTR-3B full-year ZIP assembly with eligible files, Pack attempts to add two
 files derived from the staged portal JSON already in that run:
 `full-year-workbook.xlsx` and `full-year-summary.csv`. The workbook is the primary
-GSTR-3B working-paper output. GSTR-1 and GSTR-2B runs add only the tidy CSV and report
-that a consolidated workbook is not available for that return type; they never emit a
-blank or mislabelled GSTR-3B workbook. The workbook contains exactly one sheet,
-`GSTR-3B Consolidated`; the former standalone context CSV is not emitted. The data CSV has the
+GSTR-3B working-paper output and contains exactly one sheet, `GSTR-3B Consolidated`.
+
+A GSTR-2B full-year run adds the tidy CSV and, when the staged JSON carries
+invoice-level records, its own `full-year-workbook.xlsx` with one sheet per
+present section (B2B, B2BA, CDNR, IMPG). Each sheet states the return owner's
+GSTIN, legal name and trade name in its header, exactly as the GSTR-3B workbook
+does, and carries counterparty GSTIN and trade name in the invoice rows, which
+is the data the statement exists to report. Owner identity never appears in an
+invoice row.
+
+Where no invoice-level record is present, or the document carries a shape or a
+value this build cannot render without changing it, the run keeps the tidy CSV
+and reports that the workbook is unavailable. A GSTR-1 run adds only the tidy
+CSV. No run emits a blank or mislabelled GSTR-3B workbook, and the former
+standalone context CSV is not emitted. The data CSV has the
 fixed columns `period`, `return_type`, `artifact`, `outcome`, `field_label`,
 `field_path`, `value_text`, and `value_number`, with one row per period and
 flattened field. Periods and artifacts without parseable JSON receive fixed

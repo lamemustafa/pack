@@ -1,5 +1,6 @@
 import { createXlsx, type XlsxCell, type XlsxWorksheet } from "../../core/xlsx";
 import type { ZipEntry } from "../../core/zip";
+import { exactSpreadsheetNumber } from "./filed-returns-full-year-workbook";
 import { isFiledReturnsSummaryForbiddenFieldPath } from "./filed-returns-summary-redaction";
 import {
   isCredentialShapedValue,
@@ -189,6 +190,54 @@ interface OwnerIdentity {
   values: ReadonlySet<string>;
 }
 
+/**
+ * Refuses a source document that carries a number this workbook cannot publish
+ * without changing it.
+ *
+ * `JSON.parse` converts every amount to an IEEE-754 double before this module
+ * sees it, so a figure the portal sent exactly -- `99999999999999.999` --
+ * arrives as `100000000000000` and would be emitted as a different taxable or
+ * tax amount. By then the loss is unrecoverable, which is why this reads the
+ * raw text instead of the parsed value.
+ *
+ * Refusing is the right terminal state rather than a limitation: a schema
+ * rejection now keeps the tidy CSV, and the CSV is built by the flattener that
+ * preserves numeric tokens as exact decimal text. The taxpayer gets the exact
+ * figure in the artifact that can hold it instead of a rounded one here.
+ */
+function rejectInexactNumbers(text: string): void {
+  let index = 0;
+  let inString = false;
+  while (index < text.length) {
+    const character = text[index]!;
+    if (inString) {
+      index += character === "\\" ? 2 : 1;
+      if (character === '"') inString = false;
+      continue;
+    }
+    if (character === '"') {
+      inString = true;
+      index += 1;
+      continue;
+    }
+    if (character !== "-" && (character < "0" || character > "9")) {
+      index += 1;
+      continue;
+    }
+    const start = index;
+    index += 1;
+    while (index < text.length && /[0-9.eE+-]/.test(text[index]!)) index += 1;
+    const token = text.slice(start, index);
+    // Only plain decimals reach a cell; an exponent form is not something the
+    // portal emits, and treating it as unrepresentable errs toward the CSV.
+    if (!/^-?\d+(?:\.\d+)?$/.test(token) || exactSpreadsheetNumber(token) === null) {
+      throw new FiledReturnsGstr2bWorkbookSchemaError(
+        "A GSTR-2B value cannot be written to a spreadsheet without changing it.",
+      );
+    }
+  }
+}
+
 function gstr2bSources(
   plan: readonly FiledReturnsSummaryPlanEntry[],
   entries: readonly ZipEntry[],
@@ -211,12 +260,18 @@ function gstr2bSources(
         "A staged GSTR-2B period is missing its JSON source.",
       );
     }
+    let sourceText: string;
     let parsed: unknown;
     try {
-      parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(entry.bytes));
+      sourceText = new TextDecoder("utf-8", { fatal: true }).decode(entry.bytes);
+      parsed = JSON.parse(sourceText);
     } catch {
       throw new FiledReturnsGstr2bWorkbookSchemaError("GSTR-2B workbook source is not JSON.");
     }
+    // Outside the catch above on purpose: inside it, this refusal was rewritten
+    // as "source is not JSON", which is untrue and undiagnosable. A boundary
+    // that rejects a value must be able to state its own reason.
+    rejectInexactNumbers(sourceText);
     const data = requiredObject(requiredObject(parsed, "/").data, "/data");
     sources.push({ data, period: item.period });
   }
