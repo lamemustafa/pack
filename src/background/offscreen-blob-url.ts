@@ -7,6 +7,7 @@ import {
   type PackOffscreenFiledReturnZipErrorCategory,
   type PackOffscreenFiledReturnZipExpectedEntry,
   type PackOffscreenFiledReturnSummaryResult,
+  type FiledReturnsWorkbookAbsenceOutcome,
 } from "../connectors/gst/offscreen-blob-url";
 import type { FiledReturnsSummaryPlanEntry } from "../connectors/gst/filed-returns-summary-sheet";
 import { MAX_FILED_RETURNS_SUMMARY_ROWS } from "../connectors/gst/filed-returns-summary-sheet";
@@ -373,6 +374,42 @@ function toZipResult(
   return { status: "failed" };
 }
 
+/**
+ * Whether an absence reason is reachable from the state the run was actually in.
+ *
+ * The plan says what was staged and the caller built it, so that is what each
+ * reason binds to. `parsedPeriodCount` appears only as a second, weaker
+ * condition: it is asserted by the same message being validated, so it can
+ * catch a truncated or internally contradictory response but never a response
+ * that is confidently wrong -- one wrong about the outcome is wrong about the
+ * count in the same way. It belongs beside an external check and never in place
+ * of one, which is the error the previous revision made.
+ *
+ * Exhaustive over the outcome list on purpose. The chain this replaced grew one
+ * condition per review round and bound only the reason that round named, so a
+ * PDF-only plan could claim `unavailable` -- a reason only reachable after a
+ * staged source was read and threw.
+ */
+function absenceReceiptMatchesProducerState(
+  record: Record<string, unknown>,
+  stagedJsonPeriodCount: number,
+): boolean {
+  const outcome = record.workbookOutcome;
+  if (outcome === undefined) return true;
+  const parsed = record.parsedPeriodCount as number;
+  const reachable: Readonly<Record<FiledReturnsWorkbookAbsenceOutcome, boolean>> = {
+    // No workbook was ever due, so nothing about the sources bears on it.
+    "not-applicable": true,
+    // Nothing was staged to build from.
+    "no-source": stagedJsonPeriodCount === 0,
+    // A source was staged and read, and carried no invoice-level record.
+    "no-records": stagedJsonPeriodCount > 0 && parsed > 0,
+    // A source was staged, and building the workbook from it failed.
+    unavailable: stagedJsonPeriodCount > 0,
+  };
+  return reachable[outcome as FiledReturnsWorkbookAbsenceOutcome] ?? false;
+}
+
 function isSummaryResult(
   input: unknown,
   plan: readonly FiledReturnsSummaryPlanEntry[],
@@ -433,20 +470,12 @@ function isSummaryResult(
       !homogeneous ||
       record.workbookOutcome !== undefined ||
       (record.parsedPeriodCount as number) > 0) &&
-    // The absence reasons are not interchangeable, and each is reachable from
-    // exactly one producer state.
-    //
-    // `no-source` means nothing was staged, and the plan is what says whether
-    // anything was -- so it binds to `maximumParsedPeriodCount`, derived here
-    // from the request, and not to `parsedPeriodCount`, which the receipt
-    // asserts. Checking the receipt's own count against the receipt's own
-    // outcome asks the untrusted side to corroborate itself: a response that is
-    // stale or wrong about one is wrong about the other in the same way, and
-    // agrees with itself perfectly. A staged-JSON plan whose receipt claims no
-    // source is exactly that response, and it would have delivered a ZIP
-    // stating a false reason for a missing workbook.
-    (record.workbookOutcome !== "no-source" || maximumParsedPeriodCount === 0) &&
-    (record.workbookOutcome !== "no-records" || maximumParsedPeriodCount > 0) &&
+    // Every absence reason binds to the producer state it is reachable from.
+    // Written as a table rather than a chain of conditions: three findings
+    // landed here, each adding the case in front of it, and each left the
+    // siblings unbound. A table makes the missing row visible and a new outcome
+    // fail to compile.
+    absenceReceiptMatchesProducerState(record, maximumParsedPeriodCount) &&
     // A successful GSTR-2B workbook ships alone, so the flag is required rather
     // than optional there, and refused beside any CSV-only outcome -- without
     // it the status message claims a tidy CSV the ZIP does not contain.
