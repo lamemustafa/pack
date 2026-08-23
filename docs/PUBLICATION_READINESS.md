@@ -53,9 +53,12 @@ durable full-year, or stable-release claims.
   evidence-backed download path as the other return types. A GSTR-2B run with
   invoice-level records produces its own `full-year-workbook.xlsx` -- an `ITC
 summary` sheet stating the portal's own availability totals and the GSTR-3B
-  table each feeds, then one sheet per present section -- and **replaces** the
-  derived full-year summary CSV rather than shipping beside it, because for this
-  return type the CSV carries no invoice rows at all. Where no such record
+  table each feeds, then one sheet per present section. It **replaces** the
+  derived full-year summary CSV rather than shipping beside it whenever that ITC
+  sheet is present, because for this return type the CSV carries no invoice rows
+  at all and the sheet states the same totals. A source with no availability
+  section yields a workbook without that sheet, and the run then ships both,
+  rather than dropping totals nothing replaced. Where no invoice-level record
   exists, or the document carries a shape or a value that cannot be written to a
   spreadsheet unchanged, the run keeps the tidy CSV instead and reports the
   absence rather than emitting a blank or mislabelled workbook.

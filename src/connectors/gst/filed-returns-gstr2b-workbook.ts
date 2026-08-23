@@ -209,11 +209,25 @@ const IMPG_COLUMNS: readonly Column[] = [
  * structure. This intentionally does not use JSON-pointer array expansion:
  * counterparty identifiers stay values in columns and can never become paths.
  */
+/**
+ * The bytes, and whether they carry the portal's ITC totals.
+ *
+ * The caller drops the tidy CSV for GSTR-2B because the workbook states those
+ * totals on its first sheet. When it does not, that justification does not hold,
+ * so the fact is reported rather than assumed -- a document with invoice rows
+ * and no `itcsumm` has never been captured, and an unobserved case is exactly
+ * where an assumption survives longest.
+ */
+export interface FiledReturnsGstr2bWorkbook {
+  bytes: Uint8Array;
+  includesItcSummary: boolean;
+}
+
 export function buildFiledReturnsGstr2bWorkbook(
   plan: readonly FiledReturnsSummaryPlanEntry[],
   entries: readonly ZipEntry[],
   options: WorkbookOptions,
-): Uint8Array | null {
+): FiledReturnsGstr2bWorkbook | null {
   const sources = gstr2bSources(plan, entries);
   if (sources.length === 0) return null;
   const identity = collectOwnerIdentity(sources);
@@ -269,12 +283,14 @@ export function buildFiledReturnsGstr2bWorkbook(
         ]
       : [];
   const allWorksheets = [...itcWorksheet, ...worksheets];
-  return allWorksheets.length
-    ? createXlsx(
-        { generatedAt: options.generatedAt, worksheets: allWorksheets },
-        options.maxOutputBytes,
-      )
-    : null;
+  if (allWorksheets.length === 0) return null;
+  return {
+    bytes: createXlsx(
+      { generatedAt: options.generatedAt, worksheets: allWorksheets },
+      options.maxOutputBytes,
+    ),
+    includesItcSummary: itcWorksheet.length > 0,
+  };
 }
 
 interface Gstr2bSource {
@@ -304,6 +320,167 @@ interface OwnerIdentity {
  * preserves numeric tokens as exact decimal text. The taxpayer gets the exact
  * figure in the artifact that can hold it instead of a rounded one here.
  */
+/**
+ * The subtrees whose numbers become cells. Everything else in the response --
+ * `cpsumm`, `chksum`, `gendt`, `version` -- is read by nothing here, and
+ * refusing a workbook because one of them holds a value a spreadsheet cannot
+ * represent rejects an artifact whose own cells are all fine.
+ *
+ * `itcsumm` is in the list because the ITC summary sheet renders its figures.
+ * It was not when this scan was written, which is how a whole-document sweep
+ * looked harmless.
+ */
+const RENDERED_SUBTREE_KEYS = ["docdata", "itcsumm"] as const;
+
+/**
+ * The value of `key` as a direct child of the object `text` describes.
+ *
+ * Depth-aware, not a first-occurrence search. `indexOf('"docdata"')` finds a
+ * decoy anywhere in the response -- and a decoy is exactly what a captured
+ * payload carries, which is why the fixtures in this repo are built with the
+ * surrounding content rather than the field under test alone. A decoy matched
+ * first would send the precision scan over the wrong subtree while the real
+ * amounts went unchecked, so the guard would pass by looking at nothing.
+ *
+ * Brace-matched rather than parsed, because the precision this protects is
+ * destroyed by `JSON.parse` before any parsed value could be inspected. String
+ * state is tracked so a brace inside a trade name cannot close a region early.
+ */
+function childValueText(text: string, key: string): string | undefined {
+  const marker = `"${key}"`;
+  let index = 0;
+  let depth = 0;
+  let inString = false;
+  while (index < text.length) {
+    const character = text[index]!;
+    if (inString) {
+      if (character === "\\") {
+        index += 2;
+        continue;
+      }
+      if (character === '"') inString = false;
+      index += 1;
+      continue;
+    }
+    if (character === "{" || character === "[") {
+      depth += 1;
+      index += 1;
+      continue;
+    }
+    if (character === "}" || character === "]") {
+      depth -= 1;
+      index += 1;
+      continue;
+    }
+    if (character === '"') {
+      // Only a key sitting directly inside the outermost object counts, and
+      // only a token a colon follows is a key at all. Depth alone does not
+      // distinguish the two: in `{"x":"data","data":{...}}` the string *value*
+      // `"data"` sits at depth 1 and matches, and the old forward search for the
+      // next colon then returned the following member's container. The decoy
+      // did not have to be nested or escaped -- an ordinary sibling whose value
+      // happens to equal the key name was enough.
+      if (
+        depth === 1 &&
+        text.startsWith(marker, index) &&
+        isKeyPosition(text, index + marker.length)
+      ) {
+        const value = valueTextAt(text, index + marker.length);
+        if (value !== undefined) return value;
+      }
+      inString = true;
+      index += 1;
+      continue;
+    }
+    index += 1;
+  }
+  return undefined;
+}
+
+/** Whether the token ending here is a member key -- only whitespace, then a colon. */
+function isKeyPosition(text: string, afterToken: number): boolean {
+  let index = afterToken;
+  while (index < text.length && /\s/.test(text[index]!)) index += 1;
+  return text[index] === ":";
+}
+
+/** The brace-matched value following a key, or undefined if it is not a container. */
+function valueTextAt(text: string, afterKey: number): string | undefined {
+  // The caller has already established a colon follows, so this cannot run
+  // forward past the member it was given into an unrelated one.
+  let index = text.indexOf(":", afterKey);
+  if (index === -1) return undefined;
+  index += 1;
+  while (index < text.length && /\s/.test(text[index]!)) index += 1;
+  const open = text[index];
+  if (open !== "{" && open !== "[") return undefined;
+  const close = open === "{" ? "}" : "]";
+  const start = index;
+  let depth = 0;
+  let inString = false;
+  while (index < text.length) {
+    const character = text[index]!;
+    if (inString) {
+      index += character === "\\" ? 2 : 1;
+      if (character === '"') inString = false;
+      continue;
+    }
+    if (character === '"') inString = true;
+    else if (character === open) depth += 1;
+    else if (character === close) {
+      depth -= 1;
+      if (depth === 0) return text.slice(start, index + 1);
+    }
+    index += 1;
+  }
+  return undefined;
+}
+
+/**
+ * The raw-token scan and the parser do not agree on what a key is spelled. A
+ * canonical source may encode `data` as `"d\u0061ta"`, which `JSON.parse` and
+ * the flattener both decode, and which this scan -- comparing raw spelling --
+ * does not find. Treating "not found" as "nothing to check" would then render
+ * the parsed subtree with none of its numbers examined, which is the guard
+ * being skipped rather than the guard passing.
+ *
+ * So the locator is checked against the parsed object rather than trusted: a
+ * subtree the parser can reach and the scan cannot is a source this build
+ * cannot make a precision claim about, and it is refused. Decoding escapes here
+ * instead would put a second JSON key parser next to the real one, which is the
+ * duplicate this guard exists to avoid.
+ */
+function rejectInexactNumbersInRenderedSubtrees(text: string, parsed: unknown): void {
+  // Anchored at `/data`, then its direct children. The workbook renders
+  // `parsed.data.docdata` and `parsed.data.itcsumm`, so anything reached by a
+  // different route is a different value.
+  const parsedData = childObject(parsed, "data");
+  const data = childValueText(text, "data");
+  if (data === undefined) {
+    if (parsedData === undefined) return;
+    throw new FiledReturnsGstr2bWorkbookSchemaError(
+      "GSTR-2B workbook source spells a rendered key in a form this build cannot scan for exact amounts.",
+    );
+  }
+  for (const key of RENDERED_SUBTREE_KEYS) {
+    const subtree = childValueText(data, key);
+    if (subtree === undefined) {
+      if (childObject(parsedData, key) === undefined) continue;
+      throw new FiledReturnsGstr2bWorkbookSchemaError(
+        "GSTR-2B workbook source spells a rendered key in a form this build cannot scan for exact amounts.",
+      );
+    }
+    rejectInexactNumbers(subtree);
+  }
+}
+
+/** The named child of an object value, or undefined when there is not one. */
+function childObject(value: unknown, key: string): unknown {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+  const child = (value as Record<string, unknown>)[key];
+  return typeof child === "object" && child !== null ? child : undefined;
+}
+
 function rejectInexactNumbers(text: string): void {
   let index = 0;
   let inString = false;
@@ -405,7 +582,7 @@ function gstr2bSources(
     // Outside the JSON.parse catch on purpose: inside it, this refusal was
     // rewritten as "source is not JSON", which is untrue and undiagnosable. A
     // boundary that rejects a value must be able to state its own reason.
-    rejectInexactNumbers(sourceText);
+    rejectInexactNumbersInRenderedSubtrees(sourceText, parsed);
     const data = requiredObject(requiredObject(parsed, "/").data, "/data");
     sources.push({ data, period: item.period });
   }
@@ -495,10 +672,15 @@ function itcSummaryRows(
   const summary = optionalObject(source.data.itcsumm, "/data/itcsumm");
   if (!summary) return [];
   const rows: Row[] = [];
-  for (const availability of screenedKeys(summary, "/data/itcsumm", withheld)) {
+  for (const availability of screenedKeys(summary, "/data/itcsumm", withheld, ownerValues)) {
     const categories = optionalObject(summary[availability], `/data/itcsumm/${availability}`);
     if (!categories) continue;
-    for (const category of screenedKeys(categories, `/data/itcsumm/${availability}`, withheld)) {
+    for (const category of screenedKeys(
+      categories,
+      `/data/itcsumm/${availability}`,
+      withheld,
+      ownerValues,
+    )) {
       const categoryPath = `/data/itcsumm/${availability}/${category}`;
       const value = categories[category];
       const nested = optionalObject(value, categoryPath);
@@ -512,7 +694,7 @@ function itcSummaryRows(
       // A category carries its own rollup heads beside its per-section objects.
       const rollup = itcAmounts(nested, categoryPath);
       if (rollup) rows.push({ ...base, section: "All", ...rollup });
-      for (const section of screenedKeys(nested, categoryPath, withheld)) {
+      for (const section of screenedKeys(nested, categoryPath, withheld, ownerValues)) {
         // A category node holds its own rollup heads beside its section
         // objects, so the heads are not sections. Reading one as an object
         // refused the whole workbook.
@@ -526,7 +708,7 @@ function itcSummaryRows(
             // The sheet names for sections this build renders, so a reader can
             // tie a summary row to the sheet it summarises; the raw key
             // otherwise, because a section we do not render still has totals.
-            section: SECTION_NAMES[section as SectionKey] ?? safeText(section, ownerValues),
+            section: SECTION_NAMES[section as SectionKey] ?? section,
             ...amounts,
           });
         }
@@ -557,11 +739,25 @@ function screenedKeys(
   record: Record<string, unknown>,
   path: string,
   withheld: { count: number },
+  ownerValues: ReadonlySet<string>,
 ): string[] {
   const keys: string[] = [];
   for (const key of Object.keys(record)) {
     rejectForbiddenPath(`${path}/${key.replace(/~/g, "~0").replace(/\//g, "~1")}`);
-    if (/^[A-Za-z0-9_]{1,24}$/.test(key) && !isIdentityShapedSegment(key)) {
+    // Shape and value, at every level. A short single-token legal or trade name
+    // is neither GSTIN- nor PAN-shaped, so the shape test alone let it through
+    // to be printed as a category label -- while the section level ran the same
+    // key through `safeText` and rejected the whole workbook. One boundary
+    // behaving three ways is worse than either behaviour.
+    //
+    // Withheld and counted rather than thrown: a label repeating an identity is
+    // a naming collision, not evidence that the document carries a leak, and
+    // failing the workbook for it would discard the tidy CSV too.
+    if (
+      /^[A-Za-z0-9_]{1,24}$/.test(key) &&
+      !isIdentityShapedSegment(key) &&
+      !ownerValues.has(normaliseIdentity(key))
+    ) {
       keys.push(key);
       continue;
     }

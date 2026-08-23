@@ -7,6 +7,7 @@ import {
   type PackOffscreenFiledReturnZipErrorCategory,
   type PackOffscreenFiledReturnZipExpectedEntry,
   type PackOffscreenFiledReturnSummaryResult,
+  type FiledReturnsWorkbookAbsenceOutcome,
 } from "../connectors/gst/offscreen-blob-url";
 import type { FiledReturnsSummaryPlanEntry } from "../connectors/gst/filed-returns-summary-sheet";
 import { MAX_FILED_RETURNS_SUMMARY_ROWS } from "../connectors/gst/filed-returns-summary-sheet";
@@ -338,15 +339,16 @@ function toZipResult(
     // carries no invoice rows; GSTR-3B ships both. So a produced workbook means
     // one entry for GSTR-2B and two for GSTR-3B, and any no-workbook outcome
     // means one either way.
-    const summaryReturnType = expected.summaryPlan?.[0]?.returnType;
+    // Two entries unless the receipt says the workbook shipped alone. A GSTR-2B
+    // workbook without ITC totals travels with the CSV, and that receipt omits
+    // `workbookOnly` -- so the count follows the flag rather than the return
+    // type, which was the assumption that made the fallback unreachable.
     const expectedSummaryEntryCount =
       summary?.status !== "included"
         ? 0
-        : summary.workbookOutcome !== undefined
+        : summary.workbookOutcome !== undefined || summary.workbookOnly === true
           ? 1
-          : summaryReturnType === "GSTR-2B"
-            ? 1
-            : 2;
+          : 2;
     const summaryCountMatches = response.summaryEntryCount === expectedSummaryEntryCount;
     if (expected.summaryPlan && (!summary || !summaryCountMatches)) {
       return { status: "failed", errorCategory: "offscreen-response-invalid" };
@@ -370,6 +372,42 @@ function toZipResult(
     }
   }
   return { status: "failed" };
+}
+
+/**
+ * Whether an absence reason is reachable from the state the run was actually in.
+ *
+ * The plan says what was staged and the caller built it, so that is what each
+ * reason binds to. `parsedPeriodCount` appears only as a second, weaker
+ * condition: it is asserted by the same message being validated, so it can
+ * catch a truncated or internally contradictory response but never a response
+ * that is confidently wrong -- one wrong about the outcome is wrong about the
+ * count in the same way. It belongs beside an external check and never in place
+ * of one, which is the error the previous revision made.
+ *
+ * Exhaustive over the outcome list on purpose. The chain this replaced grew one
+ * condition per review round and bound only the reason that round named, so a
+ * PDF-only plan could claim `unavailable` -- a reason only reachable after a
+ * staged source was read and threw.
+ */
+function absenceReceiptMatchesProducerState(
+  record: Record<string, unknown>,
+  stagedJsonPeriodCount: number,
+): boolean {
+  const outcome = record.workbookOutcome;
+  if (outcome === undefined) return true;
+  const parsed = record.parsedPeriodCount as number;
+  const reachable: Readonly<Record<FiledReturnsWorkbookAbsenceOutcome, boolean>> = {
+    // No workbook was ever due, so nothing about the sources bears on it.
+    "not-applicable": true,
+    // Nothing was staged to build from.
+    "no-source": stagedJsonPeriodCount === 0,
+    // A source was staged and read, and carried no invoice-level record.
+    "no-records": stagedJsonPeriodCount > 0 && parsed > 0,
+    // A source was staged, and building the workbook from it failed.
+    unavailable: stagedJsonPeriodCount > 0,
+  };
+  return reachable[outcome as FiledReturnsWorkbookAbsenceOutcome] ?? false;
 }
 
 function isSummaryResult(
@@ -403,7 +441,12 @@ function isSummaryResult(
   const homogeneous = plan.every((entry) => entry.returnType === returnType);
   const permittedWorkbookOutcomes: readonly (string | undefined)[] =
     homogeneous && returnType === "GSTR-2B"
-      ? [undefined, "no-records", "unavailable"]
+      ? // A PDF-only selection, or one whose JSON is artifact-unavailable, never
+        // had a source to build from and reports `no-source`. `not-applicable`
+        // stays out: for GSTR-2B it is not reachable, and accepting it would let
+        // a stale receipt render "not available for this return type" about a
+        // return type that supports one.
+        [undefined, "no-records", "no-source", "unavailable"]
       : homogeneous && returnType === "GSTR-3B"
         ? [undefined]
         : ["not-applicable"];
@@ -418,8 +461,31 @@ function isSummaryResult(
     ]) &&
     record.status === "included" &&
     permittedWorkbookOutcomes.includes(record.workbookOutcome as string | undefined) &&
-    (record.workbookOnly === undefined ||
-      (record.workbookOnly === true && returnType === "GSTR-2B")) &&
+    // Combinations, not fields. Only the GSTR-2B workbook is built from staged
+    // JSON, so only there does a produced workbook imply a parsed period; the
+    // GSTR-3B workbook is built from the run's own outcome rows and legitimately
+    // reports none. Applying the GSTR-2B rule to every return type rejected that
+    // producer receipt and dropped an assembled ZIP before its download started.
+    (returnType !== "GSTR-2B" ||
+      !homogeneous ||
+      record.workbookOutcome !== undefined ||
+      (record.parsedPeriodCount as number) > 0) &&
+    // Every absence reason binds to the producer state it is reachable from.
+    // Written as a table rather than a chain of conditions: three findings
+    // landed here, each adding the case in front of it, and each left the
+    // siblings unbound. A table makes the missing row visible and a new outcome
+    // fail to compile.
+    absenceReceiptMatchesProducerState(record, maximumParsedPeriodCount) &&
+    // A successful GSTR-2B workbook ships alone, so the flag is required rather
+    // than optional there, and refused beside any CSV-only outcome -- without
+    // it the status message claims a tidy CSV the ZIP does not contain.
+    // A GSTR-2B workbook ships alone only when it carries the ITC totals that
+    // justify dropping the CSV. Without them the worker ships both and omits the
+    // flag, so requiring it unconditionally rejected that valid receipt.
+    (returnType === "GSTR-2B" && homogeneous
+      ? record.workbookOnly === undefined || record.workbookOnly === true
+      : record.workbookOnly === undefined) &&
+    (record.workbookOnly !== true || record.workbookOutcome === undefined) &&
     typeof record.outcomeOnly === "boolean" &&
     typeof record.parsedPeriodCount === "number" &&
     Number.isInteger(record.parsedPeriodCount) &&

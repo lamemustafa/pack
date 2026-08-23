@@ -64,12 +64,20 @@ function summaryInclusionClaim(lifecycle: FiledReturnsSummaryLifecycle, contents
 
 // Keyed by the canonical outcome type, so adding an outcome fails to compile
 // here rather than silently rendering the fallback sentence.
+// Each sentence describes the *derived summary* output, never the ZIP's total
+// contents. The ZIP also carries the staged portal artifacts the user selected,
+// so "the ZIP has the tidy CSV only" told them their own downloaded file was
+// absent from the archive that contains it. `unavailable` carried that wording
+// before `no-source` copied it; both are corrected, since fixing one instance of
+// a sentence and leaving its sibling is how the wrong one survives.
 const WORKBOOK_ABSENCE_SENTENCE: Readonly<Record<FiledReturnsWorkbookAbsenceOutcome, string>> = {
   "not-applicable": " A consolidated workbook is not available for this return type.",
+  "no-source":
+    " This run staged no portal JSON to build the workbook from, so the tidy CSV is the only derived summary included.",
   "no-records":
     " The staged portal JSON carried no invoice-level records, so no workbook was produced.",
   unavailable:
-    " Pack could not produce the workbook for this document, so the ZIP has the tidy CSV only.",
+    " Pack could not produce the workbook for this document, so the tidy CSV is the only derived summary included.",
 };
 const UNRECOGNISED_WORKBOOK_ABSENCE = " The workbook is not included in this ZIP.";
 

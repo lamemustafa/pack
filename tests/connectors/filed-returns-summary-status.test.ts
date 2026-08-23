@@ -5,6 +5,7 @@ import {
   filedReturnsSummaryStatusMessage,
   type FiledReturnsSummaryLifecycle,
 } from "../../src/connectors/gst/filed-returns-summary-status";
+import { FILED_RETURNS_WORKBOOK_ABSENCE_OUTCOMES } from "../../src/connectors/gst/offscreen-blob-url";
 
 const LIFECYCLES = ["intent", "confirmed", "unconfirmed"] as const;
 
@@ -249,6 +250,30 @@ describe("filed-return summary status", () => {
       expect(
         filedReturnsSummaryStatusMessage(["full-fiscal-year-workbook-not-applicable"], lifecycle),
       ).toBe("");
+    }
+  });
+  // A workbook-absence sentence describes the derived summary, never the ZIP's
+  // total contents: the archive also carries the staged portal artifacts the
+  // user selected, so claiming it holds the CSV "only" tells them their own
+  // downloaded file is missing from the ZIP that contains it.
+  //
+  // Driven off the canonical outcome list rather than the two known sentences,
+  // so a fourth outcome cannot reintroduce the wording by being added without
+  // this test in mind -- which is exactly how the second instance appeared.
+  it("never claims the ZIP holds the tidy CSV alone", () => {
+    for (const outcome of FILED_RETURNS_WORKBOOK_ABSENCE_OUTCOMES) {
+      for (const lifecycle of LIFECYCLES) {
+        const message = filedReturnsSummaryStatusMessage(
+          [
+            "full-fiscal-year-summary-included",
+            `full-fiscal-year-workbook-${outcome}`,
+            "full-fiscal-year-summary-parsed-period-count:2",
+          ],
+          lifecycle,
+        );
+
+        expect(message, `${outcome}/${lifecycle}`).not.toMatch(/ZIP[^.]*\bonly\b/i);
+      }
     }
   });
 });

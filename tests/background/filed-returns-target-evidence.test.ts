@@ -211,4 +211,46 @@ describe("per-target evidence in the flow summary", () => {
 
     expect(summary.targetEvidence).toEqual([{ period: "April", outcome: "saved" }]);
   });
+
+  // A malformed active-run record is another state where Pack cannot say
+  // whether work is running. Naming one signal left this one showing its target
+  // as "In progress" and out of the review count -- the same defect the first
+  // signal was added to fix, reached by the other door.
+  it("treats a malformed active run as needing review", () => {
+    const malformed = { ...FLOW_STEP, safeSignals: ["filed-returns-active-run-malformed"] };
+
+    const summary = toFullFiscalYearSummary(ledgerWith(["running", "pending"]), malformed);
+
+    expect(summary.targetEvidence?.map((entry) => entry.outcome)).toEqual([
+      "needs-review",
+      "pending",
+    ]);
+  });
+
+  // Cancel and reset before any period reached `downloaded` deletes the ledger
+  // just the same. Requiring staged files left the cancelled target reading
+  // "Needs review" and the untouched ones "Waiting", for a run that no longer
+  // exists.
+  it("reports nothing for a discarded run that never staged anything", () => {
+    const discarded = { ...FLOW_STEP, safeSignals: ["full-fiscal-year-run-discarded"] };
+
+    const summary = toFullFiscalYearSummary(ledgerWith(["cancelled", "pending"]), discarded);
+
+    expect(summary.targetEvidence).toEqual([]);
+  });
+
+  // Clearing staged files invalidates evidence about files, not a
+  // portal-confirmed `not-filed`. For a year whose earlier periods were
+  // confirmed not filed, dropping those rows discards the only result the run
+  // produced.
+  it("keeps portal-confirmed not-filed rows when a run is discarded", () => {
+    const discarded = { ...FLOW_STEP, safeSignals: ["full-fiscal-year-run-discarded"] };
+
+    const summary = toFullFiscalYearSummary(
+      ledgerWith(["not-filed", "downloaded", "cancelled", "pending"]),
+      discarded,
+    );
+
+    expect(summary.targetEvidence).toEqual([{ period: "April", outcome: "not-filed" }]);
+  });
 });

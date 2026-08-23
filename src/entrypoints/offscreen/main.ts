@@ -237,6 +237,9 @@ function createSummaryEntry(
     const remainingZipBudget = Math.max(0, MAX_ZIP_INPUT_BYTES - stagedInputBytes);
     const gstr3bWorkbookApplicable = plan.every((entry) => entry.returnType === "GSTR-3B");
     const gstr2bWorkbookApplicable = plan.every((entry) => entry.returnType === "GSTR-2B");
+    const hasStagedGstr2bJson = plan.some(
+      (entry) => entry.artifactType === "JSON" && entry.outcomeCategory === "staged",
+    );
     if (!gstr3bWorkbookApplicable && !gstr2bWorkbookApplicable) {
       if (
         summary.dataBytes.byteLength > MAX_SUMMARY_SHEET_BYTES ||
@@ -258,22 +261,35 @@ function createSummaryEntry(
     // GSTR-2B ships the workbook without the tidy CSV, so the CSV must not
     // consume its budget: charging for bytes that are never written would refuse
     // a workbook that fits.
+    // Provisional: a GSTR-2B workbook usually ships without the CSV, so the CSV
+    // does not consume the workbook's budget. When the workbook turns out to
+    // carry no ITC totals the CSV ships after all, and the final check below
+    // charges for it -- the budget above cannot, because whether the sheet
+    // exists is not known until the workbook is built.
     const summaryShippedBytes = gstr2bWorkbookApplicable ? 0 : summary.dataBytes.byteLength;
     const workbookBudget = Math.min(
       Math.max(0, MAX_SUMMARY_SHEET_BYTES - summaryShippedBytes),
       Math.max(0, remainingZipBudget - summaryShippedBytes),
     );
     let workbookBytes: Uint8Array | null;
+    // Whether the workbook carries the portal's ITC totals. Dropping the tidy
+    // CSV for GSTR-2B is justified by the workbook stating them, so a workbook
+    // without them must not take the CSV with it.
+    let workbookIncludesItcSummary = true;
     try {
-      workbookBytes = gstr3bWorkbookApplicable
-        ? buildFiledReturnsFullYearWorkbook(summary, plan, {
-            generatedAt,
-            maxOutputBytes: workbookBudget,
-          })
-        : buildFiledReturnsGstr2bWorkbook(plan, entries, {
-            generatedAt,
-            maxOutputBytes: workbookBudget,
-          });
+      if (gstr3bWorkbookApplicable) {
+        workbookBytes = buildFiledReturnsFullYearWorkbook(summary, plan, {
+          generatedAt,
+          maxOutputBytes: workbookBudget,
+        });
+      } else {
+        const workbook = buildFiledReturnsGstr2bWorkbook(plan, entries, {
+          generatedAt,
+          maxOutputBytes: workbookBudget,
+        });
+        workbookBytes = workbook?.bytes ?? null;
+        workbookIncludesItcSummary = workbook?.includesItcSummary ?? false;
+      }
     } catch (error) {
       // A schema rejection is a statement about the workbook alone: the tidy
       // CSV beside it was already built and already privacy-screened, and does
@@ -338,11 +354,20 @@ function createSummaryEntry(
           // GSTR-2B does produce workbooks, so "not-applicable" would give the
           // wrong reason: nothing here is inapplicable to the return type, this
           // document simply carried no invoice-level record.
-          workbookOutcome: gstr2bWorkbookApplicable ? "no-records" : "not-applicable",
+          // "no-records" says a source was read and carried none. A run with no
+          // staged JSON at all -- a PDF-only GSTR-2B year, or one where the JSON
+          // is artifact-unavailable -- never had a source to read, which is a
+          // different fact and gets its own outcome. Reporting `not-applicable`
+          // here told the user a workbook is unavailable for GSTR-2B, which is
+          // false: the return type supports one, this selection gave it nothing.
+          workbookOutcome:
+            gstr2bWorkbookApplicable && hasStagedGstr2bJson ? "no-records" : "no-source",
         },
       };
     }
-    const summaryByteLength = summaryShippedBytes + workbookBytes.byteLength;
+    const shipsCsvWithWorkbook = !gstr2bWorkbookApplicable || !workbookIncludesItcSummary;
+    const summaryByteLength =
+      (shipsCsvWithWorkbook ? summary.dataBytes.byteLength : 0) + workbookBytes.byteLength;
     if (summaryByteLength > MAX_SUMMARY_SHEET_BYTES || summaryByteLength > remainingZipBudget) {
       return { result: { status: "failed", reasonCategory: "too-large" } };
     }
@@ -355,7 +380,7 @@ function createSummaryEntry(
     // It is still the fallback when no workbook is produced; that is what the
     // `no-records` and `unavailable` outcomes are for.
     return {
-      entries: gstr2bWorkbookApplicable
+      entries: !shipsCsvWithWorkbook
         ? [{ path: FILED_RETURNS_FULL_YEAR_WORKBOOK_PATH, bytes: workbookBytes }]
         : [
             { path: FILED_RETURNS_SUMMARY_SHEET_PATH, bytes: summary.dataBytes },
@@ -366,7 +391,7 @@ function createSummaryEntry(
         outcomeOnly: summary.outcomeOnly,
         parsedPeriodCount: summary.parsedPeriodCount,
         rowCount: summary.rowCount,
-        ...(gstr2bWorkbookApplicable ? { workbookOnly: true as const } : {}),
+        ...(shipsCsvWithWorkbook ? {} : { workbookOnly: true as const }),
       },
     };
   } catch (error) {

@@ -106,6 +106,15 @@ export function hasLegacyRetainedStaging(ledger: FiledReturnsFullFiscalYearLedge
   );
 }
 
+/**
+ * Signals meaning Pack cannot determine whether the run is still going. A
+ * durable `running` target under any of these is stale, not in progress.
+ */
+const RUN_INDETERMINATE_SIGNALS: readonly string[] = [
+  "filed-returns-run-needs-review",
+  "filed-returns-active-run-malformed",
+];
+
 const COMPLETED_SUMMARY_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
   "downloaded",
   "not-filed",
@@ -282,13 +291,32 @@ export function fullFiscalYearTargetEvidence(
   const clearedWithoutDelivery =
     !zipDelivered && flowStep.safeSignals.includes("full-fiscal-year-opfs-cleared");
   const hadStagedFiles = ledger.targets.some((target) => target.status === "downloaded");
-  if (clearedWithoutDelivery && hadStagedFiles) return [];
+  // A discarded run has no evidence to report whether or not anything reached
+  // `downloaded` first. Requiring staged files left a cancel-before-any-download
+  // showing its cancelled target as "Needs review" and the untouched ones as
+  // "Waiting", for a ledger that had just been deleted.
+  const runDiscarded = flowStep.safeSignals.includes("full-fiscal-year-run-discarded");
+  // Clearing staged files invalidates evidence about files. It does not
+  // invalidate a portal-confirmed `not-filed`, which is a fact about the return
+  // rather than about anything Pack held -- and for a year where earlier periods
+  // were confirmed not filed, dropping those rows discards the only result the
+  // run produced. Everything that depended on a file Pack no longer has goes.
+  if (runDiscarded || (clearedWithoutDelivery && hadStagedFiles)) {
+    return ledger.targets
+      .filter((target) => target.status === "not-filed")
+      .map((target) => ({ period: target.period, outcome: "not-filed" as const }));
+  }
   // From the step as well as the ledger. An MV3 interruption produces a blocked
   // summary while the persisted ledger normally still reads `running`, so
   // reading the ledger alone left the current target as "In progress" and out of
   // the needs-review count.
+  // Any state where Pack cannot say whether work is running, not one signal.
+  // Naming `filed-returns-run-needs-review` alone left a malformed active-run
+  // record showing its target as "In progress" and out of the review count --
+  // the same defect the signal was added to fix, reached by the other door.
   const runInterrupted =
-    ledger.status === "blocked" || flowStep.safeSignals.includes("filed-returns-run-needs-review");
+    ledger.status === "blocked" ||
+    RUN_INDETERMINATE_SIGNALS.some((signal) => flowStep.safeSignals.includes(signal));
   return ledger.targets.map((target) => ({
     period: target.period,
     outcome: targetOutcome(target.status, zipDelivered, runInterrupted),

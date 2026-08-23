@@ -90,10 +90,13 @@ then one sheet per present section (B2B, B2BA, CDNR, IMPG). Each invoice row beg
 counterparty GSTIN and the document number, normalised so a lookup against a
 purchase register does not miss on case or spacing.
 
-The tidy CSV is not included in a GSTR-2B run that produced a workbook. For this
-return type the CSV carries no invoice rows -- arrays collapse to counts -- so a
-whole year reduces to a few hundred summary key-values, and those same totals now
-appear on the workbook's first sheet. Each sheet states the return owner's
+The tidy CSV is dropped from a GSTR-2B run whose workbook carries the ITC
+summary sheet. For this return type the CSV carries no invoice rows -- arrays
+collapse to counts -- so a whole year reduces to a few hundred summary
+key-values, and the ITC sheet states those same totals. Where the staged JSON
+has no availability section, the workbook has no ITC sheet to state them, and
+the run ships the CSV beside the workbook rather than dropping totals no sheet
+replaced. Each sheet states the return owner's
 GSTIN, legal name and trade name in its header. Each of those three is written only
 when the portal JSON carried it: a GSTR-2B response may omit the owner's legal
 and trade name, and the header then states the GSTIN alone rather than a blank

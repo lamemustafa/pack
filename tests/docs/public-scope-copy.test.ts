@@ -111,6 +111,20 @@ const RETIRED_CLAIMS: readonly { pattern: RegExp; why: string }[] = [
     pattern: /Chrome Web Store[^.]{0,80}(in the future|not yet|none published|does not exist)/i,
     why: "a Chrome Web Store build is published; copy must not defer it to the future",
   },
+  {
+    // Three documents stated the CSV is dropped whenever a GSTR-2B workbook is
+    // produced. The condition is narrower: it is dropped when the workbook
+    // carries the ITC summary sheet that restates the CSV's totals, and a
+    // source with no availability section ships both. Nothing reads these
+    // documents, so the claim went stale in all three at once when the fallback
+    // was added.
+    //
+    // Anchored on the unconditional forms rather than on "tidy CSV", which
+    // appears throughout correct prose describing exactly this behaviour.
+    pattern:
+      /(workbook[^.]{0,60}\band no tidy CSV\b|tidy CSV is not included in a GSTR-2B run|replaces[^.]{0,40}CSV rather than shipping beside it, because)/i,
+    why: "the CSV is dropped only when the workbook carries the ITC summary sheet, not whenever a workbook is produced",
+  },
 ];
 
 describe("public scope copy", () => {

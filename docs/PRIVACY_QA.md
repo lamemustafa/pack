@@ -50,8 +50,13 @@ For each release candidate:
   tidy CSV only and emit the fixed `full-fiscal-year-workbook-not-applicable`
   outcome.
 - Confirm a GSTR-2B assembly with invoice-level records adds its own
-  `full-year-workbook.xlsx` **and no tidy CSV**, with an `ITC summary` sheet
-  first and one sheet per present section. On every sheet, confirm the owner
+  `full-year-workbook.xlsx`, with an `ITC summary` sheet first and one sheet per
+  present section. **The tidy CSV is absent only when that ITC sheet is
+  present**: a source with no availability section produces a workbook without
+  it, and the run then ships both files, because the sheet that would have
+  restated the CSV's totals does not exist. Check which of the two shapes the
+  captured source implies before treating an extra `full-year-summary.csv` as a
+  defect. On every sheet, confirm the owner
   GSTIN appears in the header block and in **no** invoice row. Owner legal and
   trade name are checked the same way **when the source carries them**: a
   captured GSTR-2B response has neither, and the workbook omits a header row
