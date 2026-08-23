@@ -334,8 +334,19 @@ function toZipResult(
       expected.summaryPlan && isSummaryResult(response.summary, expected.summaryPlan)
         ? response.summary
         : undefined;
+    // GSTR-2B ships the workbook alone once it has one, because its tidy CSV
+    // carries no invoice rows; GSTR-3B ships both. So a produced workbook means
+    // one entry for GSTR-2B and two for GSTR-3B, and any no-workbook outcome
+    // means one either way.
+    const summaryReturnType = expected.summaryPlan?.[0]?.returnType;
     const expectedSummaryEntryCount =
-      summary?.status === "included" ? (summary.workbookOutcome === undefined ? 2 : 1) : 0;
+      summary?.status !== "included"
+        ? 0
+        : summary.workbookOutcome !== undefined
+          ? 1
+          : summaryReturnType === "GSTR-2B"
+            ? 1
+            : 2;
     const summaryCountMatches = response.summaryEntryCount === expectedSummaryEntryCount;
     if (expected.summaryPlan && (!summary || !summaryCountMatches)) {
       return { status: "failed", errorCategory: "offscreen-response-invalid" };

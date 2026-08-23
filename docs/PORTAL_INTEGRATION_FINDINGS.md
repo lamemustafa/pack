@@ -209,3 +209,16 @@ This log records live diagnostic findings that constrain Pack's local, target-bo
     Both drafts survived because the figure looked harmless. That is the argument the rule exists
     to refuse: a rule that admits exceptions for figures someone judges harmless cannot be checked
     by anyone but its author.
+
+32. `data.itcsumm` nests availability, then a category, then **either** a tax head or a
+    per-section object: a category carries its own rollup heads beside its section children.
+    A reader that treats every child of a category as a section refuses the document. Captured
+    availabilities were `itcavl` and `itcunavl`; captured categories included `nonrevsup`,
+    `revsup`, `othersup` and `imports`. Walk the structure rather than encoding this list --
+    the shape is the durable fact, the key names are not.
+
+33. Only `b2b`, `b2ba`, `cdnr` and `impg` appeared under `docdata` in a captured year.
+    Public GST documentation describes further GSTR-2B sections -- ISD, ISDA, CDNRA, ECO, ECOA
+    and IMPGSEZ among them -- and **none of those has been captured here**, so no builder should
+    encode their shape. A taxpayer who has them sees them named as unrendered in the workbook
+    footer rather than dropped silently, which is the correct behaviour until a capture exists.

@@ -50,11 +50,15 @@ For each release candidate:
   tidy CSV only and emit the fixed `full-fiscal-year-workbook-not-applicable`
   outcome.
 - Confirm a GSTR-2B assembly with invoice-level records adds its own
-  `full-year-workbook.xlsx` beside the tidy CSV, with one sheet per present
-  section. On every sheet, confirm the owner GSTIN, legal name and trade name
-  appear in the header block and in **no** invoice row, and that counterparty
-  GSTIN and trade name appear in the invoice rows -- withholding them would
-  empty the column the statement exists to report.
+  `full-year-workbook.xlsx` **and no tidy CSV**, with an `ITC summary` sheet
+  first and one sheet per present section. On every sheet, confirm the owner
+  GSTIN, legal name and trade name appear in the header block and in **no**
+  invoice row, and that counterparty GSTIN and trade name appear in the invoice
+  rows -- withholding them would empty the column the statement exists to report.
+- Confirm the `ITC summary` sheet carries only the portal's own figures from
+  `data.itcsumm`, and that a category or section name it does not recognise is
+  either rendered as plain text or withheld and counted, never printed when the
+  name itself could carry an identity.
 - Confirm a GSTR-2B assembly with no invoice-level record emits
   `full-fiscal-year-workbook-no-records`, and that one refused for its **shape or
   for a value that cannot be written to a spreadsheet unchanged** emits

@@ -80,9 +80,17 @@ files derived from the staged portal JSON already in that run:
 `full-year-workbook.xlsx` and `full-year-summary.csv`. The workbook is the primary
 GSTR-3B working-paper output and contains exactly one sheet, `GSTR-3B Consolidated`.
 
-A GSTR-2B full-year run adds the tidy CSV and, when the staged JSON carries
-invoice-level records, its own `full-year-workbook.xlsx` with one sheet per
-present section (B2B, B2BA, CDNR, IMPG). Each sheet states the return owner's
+A GSTR-2B full-year run produces its own `full-year-workbook.xlsx` when the
+staged JSON carries invoice-level records: a first `ITC summary` sheet stating
+the portal's own availability totals, then one sheet per present section (B2B,
+B2BA, CDNR, IMPG). Each invoice row begins with a reconciliation key of the
+counterparty GSTIN and the document number, normalised so a lookup against a
+purchase register does not miss on case or spacing.
+
+The tidy CSV is not included in a GSTR-2B run that produced a workbook. For this
+return type the CSV carries no invoice rows -- arrays collapse to counts -- so a
+whole year reduces to a few hundred summary key-values, and those same totals now
+appear on the workbook's first sheet. Each sheet states the return owner's
 GSTIN, legal name and trade name in its header. Each of those three is written only
 when the portal JSON carried it: a GSTR-2B response may omit the owner's legal
 and trade name, and the header then states the GSTIN alone rather than a blank
