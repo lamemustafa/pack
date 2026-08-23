@@ -434,11 +434,19 @@ function isSummaryResult(
       record.workbookOutcome !== undefined ||
       (record.parsedPeriodCount as number) > 0) &&
     // The absence reasons are not interchangeable, and each is reachable from
-    // exactly one producer state. `no-source` means nothing was staged, which is
-    // the same condition as no period having been parsed; a receipt claiming it
-    // beside a parsed period is a combination the worker cannot emit.
-    (record.workbookOutcome !== "no-source" || record.parsedPeriodCount === 0) &&
-    (record.workbookOutcome !== "no-records" || (record.parsedPeriodCount as number) > 0) &&
+    // exactly one producer state.
+    //
+    // `no-source` means nothing was staged, and the plan is what says whether
+    // anything was -- so it binds to `maximumParsedPeriodCount`, derived here
+    // from the request, and not to `parsedPeriodCount`, which the receipt
+    // asserts. Checking the receipt's own count against the receipt's own
+    // outcome asks the untrusted side to corroborate itself: a response that is
+    // stale or wrong about one is wrong about the other in the same way, and
+    // agrees with itself perfectly. A staged-JSON plan whose receipt claims no
+    // source is exactly that response, and it would have delivered a ZIP
+    // stating a false reason for a missing workbook.
+    (record.workbookOutcome !== "no-source" || maximumParsedPeriodCount === 0) &&
+    (record.workbookOutcome !== "no-records" || maximumParsedPeriodCount > 0) &&
     // A successful GSTR-2B workbook ships alone, so the flag is required rather
     // than optional there, and refused beside any CSV-only outcome -- without
     // it the status message claims a tidy CSV the ZIP does not contain.
