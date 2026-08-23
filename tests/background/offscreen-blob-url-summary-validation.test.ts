@@ -177,9 +177,10 @@ describe("offscreen full-year summary response validation", () => {
   });
 
   // A PDF-only GSTR-2B selection, or one whose JSON is artifact-unavailable,
-  // never had a source to build from and reports `no-source`. Nothing was
-  // staged, so nothing was parsed: the outcome and the parsed-period count are
-  // two views of one producer state, and the receipt has to agree with itself.
+  // never had a source to build from and reports `no-source`. What makes that
+  // receipt valid is the *plan* staging no JSON, so the request has to be one
+  // where none was: an earlier version of this test paired the outcome with a
+  // staged-JSON request and pinned a receipt no worker can emit.
   it("accepts a GSTR-2B receipt reporting no staged source", async () => {
     mocks.runtime.sendMessage.mockImplementationOnce(async (message?: unknown) => ({
       ok: true,
@@ -198,8 +199,35 @@ describe("offscreen full-year summary response validation", () => {
     }));
 
     await expect(
-      createOffscreenFiledReturnZipUrl("full-fiscal-year-12345678", request()),
+      createOffscreenFiledReturnZipUrl("full-fiscal-year-12345678", pdfOnlyRequest("GSTR-2B")),
     ).resolves.toMatchObject({ status: "created" });
+  });
+
+  // The plan is what says whether anything was staged, so that is what the
+  // absence reason binds to. Checking the receipt's own count against the
+  // receipt's own outcome asks the untrusted side to corroborate itself, and a
+  // response wrong about one is wrong about the other in the same way -- it
+  // agrees with itself perfectly and states a false reason to the user.
+  it("rejects a no-source receipt when the plan staged JSON", async () => {
+    mocks.runtime.sendMessage.mockImplementationOnce(async (message?: unknown) => ({
+      ok: true,
+      requestId: requestIdFrom(message),
+      blobUrl: "blob:pack/gstr2b-false-absence",
+      zipEntryCount: 2,
+      artifactEntryCount: 1,
+      summaryEntryCount: 1,
+      summary: {
+        status: "included",
+        outcomeOnly: true,
+        parsedPeriodCount: 0,
+        rowCount: 1,
+        workbookOutcome: "no-source",
+      },
+    }));
+
+    await expect(
+      createOffscreenFiledReturnZipUrl("full-fiscal-year-12345678", request()),
+    ).resolves.toMatchObject({ status: "failed", errorCategory: "offscreen-response-invalid" });
   });
 
   // The absence reasons are not interchangeable. `not-applicable` renders "not
