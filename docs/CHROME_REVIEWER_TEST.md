@@ -7,8 +7,8 @@ Portal credentials.
 ## Test steps
 
 1. Install the unpacked extension from `.output/chrome-mv3`.
-2. Pin Pack and open the popup.
-3. Confirm the popup opens without any Axal, ComplyEaze, or Pack account prompt.
+2. Pin Pack and click its toolbar icon. Pack opens in Chrome's side panel; there is no popup.
+3. Confirm the side panel opens without any Axal, ComplyEaze, or Pack account prompt.
 4. Open Pack options.
 5. Click `Run local reviewer demo`.
 6. Confirm the local demo manifest summary appears without requiring a download.
@@ -33,6 +33,9 @@ The extension requests:
 - `offscreen`, limited to the bundled Blob/OPFS ZIP workflow approved in
   [GitHub issue #79](https://github.com/lamemustafa/pack/issues/79);
 - `scripting`;
+- `sidePanel`, so the toolbar icon opens Pack in Chrome's side panel. Pack must
+  stay visible while the GST Portal tab holds focus, and a popup closes as soon
+  as focus moves to the page it is driving;
 - `storage`;
 - exact host access for:
   - `https://gstr2b.gst.gov.in/*`;

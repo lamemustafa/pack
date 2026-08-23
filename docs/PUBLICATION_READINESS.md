@@ -50,17 +50,24 @@ durable full-year, or stable-release claims.
   from the user's active, manually authenticated GST Portal session when the
   GST Portal exposes those artifacts.
 - GSTR-2B is **in scope**, not experimental. It runs the same user-initiated,
-  evidence-backed download path as the other return types, and the derived
-  full-year summary CSV is produced for it. A GSTR-2B run with invoice-level
-  records also produces its own `full-year-workbook.xlsx`, one sheet per present
-  section, distinct from the GSTR-3B consolidated workbook; where no such record
+  evidence-backed download path as the other return types. A GSTR-2B run with
+  invoice-level records produces its own `full-year-workbook.xlsx` -- an `ITC
+summary` sheet stating the portal's own availability totals and the GSTR-3B
+  table each feeds, then one sheet per present section -- and **replaces** the
+  derived full-year summary CSV rather than shipping beside it, because for this
+  return type the CSV carries no invoice rows at all. Where no such record
   exists, or the document carries a shape or a value that cannot be written to a
-  spreadsheet unchanged, the run keeps the tidy CSV and reports the absence
-  rather than emitting a blank or mislabelled workbook. The source-controlled Store listing draft
+  spreadsheet unchanged, the run keeps the tidy CSV instead and reports the
+  absence rather than emitting a blank or mislabelled workbook.
+
+  **Not in a released binary.** This builder postdates `v0.5.1`. A user of the
+  published package cannot produce a GSTR-2B workbook, and public copy must not
+  imply otherwise until a release carries it. The source-controlled Store listing draft
   names GSTR-2B as supported beta scope and a test binds it to the capability
   table, but the live dashboard fields still carry superseded wording: they are
   corrected only once `docs/chrome-web-store/dashboard-closeout.md` records the
   submission. Treat these values as the draft until that evidence exists.
+
 - Full fiscal year download is a local per-period ledger that runs eligible
   periods through the single-period path after user initiation. The four gates
   below are what it must satisfy before Store-facing V0 advertises it:

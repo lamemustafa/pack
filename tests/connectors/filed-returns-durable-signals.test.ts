@@ -19,6 +19,23 @@ import { scoreFiledReturnsSummaryModalDismissalCandidate } from "../../src/conne
 import { detectSafeSignals } from "../../src/connectors/gst/filed-returns-observer-signals";
 
 describe("filed-return durable signal contract", () => {
+  // Every successful GSTR-2B run emits this signal. It was not in the allowlist,
+  // so `persistLedgerAndSummary` rejected the whole array and removed the
+  // canonical session summary -- letting a download proceed with no recoverable
+  // intent and no terminal status, which is the one thing durable state exists
+  // to prevent.
+  //
+  // Listed with the summary signals rather than matched by the workbook-outcome
+  // prefix, because it says which files the ZIP holds, not which outcome the
+  // workbook reached.
+  it("keeps the workbook-only summary signal in durable state", () => {
+    expect(isDurableFiledReturnsSignal("full-fiscal-year-summary-workbook-only")).toBe(true);
+  });
+
+  it("still rejects a workbook-outcome token this build does not model", () => {
+    expect(isDurableFiledReturnsSignal("full-fiscal-year-workbook-includded")).toBe(false);
+  });
+
   it("keeps live GSTR-3B detail observations persistable for terminal recovery", () => {
     // The full-year ledger persists the terminal step if the portal stops before
     // acquisition. These are fixed classifier tokens (not portal text), so the

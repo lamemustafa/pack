@@ -638,13 +638,19 @@ export function isDurableFiledReturnsSignal(signal: string): boolean {
     return zipCount[1] === "single-period" ? count <= 3 : count <= 38;
   }
   if (
+    // `workbook-only` is listed with the summary signals, not matched by a
+    // prefix: it says which files the ZIP holds, not which outcome the workbook
+    // reached. Omitting it made `persistLedgerAndSummary` reject the whole
+    // signal array for every successful GSTR-2B run, which removed the canonical
+    // session summary and let a download proceed with no recoverable intent.
+    //
     // The modelled outcomes, not any suffix. Matching `[a-z-]+` was the wrong
     // correction for a real problem: it stopped a new value being dropped, but
     // it also accepted a stale or corrupted token such as
     // `full-fiscal-year-workbook-includded` as canonical, which the renderer
     // then reads as evidence that the workbook is absent.
     new RegExp(
-      `^(?:full-fiscal-year-summary-included|full-fiscal-year-summary-outcomes-only|full-fiscal-year-summary-failed|full-fiscal-year-workbook-(?:${FILED_RETURNS_WORKBOOK_ABSENCE_OUTCOMES.join("|")}))$`,
+      `^(?:full-fiscal-year-summary-included|full-fiscal-year-summary-outcomes-only|full-fiscal-year-summary-workbook-only|full-fiscal-year-summary-failed|full-fiscal-year-workbook-(?:${FILED_RETURNS_WORKBOOK_ABSENCE_OUTCOMES.join("|")}))$`,
     ).test(signal)
   ) {
     return true;
