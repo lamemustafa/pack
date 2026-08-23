@@ -82,8 +82,9 @@ GSTR-3B working-paper output and contains exactly one sheet, `GSTR-3B Consolidat
 
 A GSTR-2B full-year run produces its own `full-year-workbook.xlsx` when the
 staged JSON carries invoice-level records: a first `ITC summary` sheet stating
-the portal's own availability totals, then one sheet per present section (B2B,
-B2BA, CDNR, IMPG). Each invoice row begins with a reconciliation key of the
+the portal's own availability totals alongside the GSTR-3B table each heading
+feeds -- as prescribed by FORM GSTR-2B under rule 60(7), not asserted by Pack --
+then one sheet per present section (B2B, B2BA, CDNR, IMPG). Each invoice row begins with a reconciliation key of the
 counterparty GSTIN and the document number, normalised so a lookup against a
 purchase register does not miss on case or spacing.
 

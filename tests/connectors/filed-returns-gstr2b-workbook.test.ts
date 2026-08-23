@@ -432,6 +432,48 @@ describe("GSTR-2B consolidated workbook", () => {
     expect(rows[0]?.[0]).toBe(`${COUNTERPARTY_GSTIN}|INV-001`);
   });
 
+  // FORM GSTR-2B carries a `GSTR-3B table` column against every summary
+  // heading, so printing it reproduces the form rather than asserting a mapping
+  // of ours. Which JSON key is which heading was settled by matching a captured
+  // period against the portal's rendered summary.
+  it("prints the GSTR-3B table the form prescribes, and none where unestablished", () => {
+    const plan: FiledReturnsSummaryPlanEntry[] = [planEntry("April", "april-data.json")];
+    const bytes = new TextEncoder().encode(
+      JSON.stringify({
+        data: {
+          gstin: OWNER_GSTIN,
+          rtnprd: "042026",
+          docdata: docdata(),
+          itcsumm: {
+            itcavl: {
+              nonrevsup: { igst: 10, cgst: 0, sgst: 0, cess: 0 },
+              revsup: { igst: 5, cgst: 0, sgst: 0, cess: 0 },
+              imports: { igst: 7, cess: 0 },
+              othersup: { igst: 3, cgst: 0, sgst: 0, cess: 0 },
+            },
+            itcunavl: { nonrevsup: { igst: 1, cgst: 0, sgst: 0, cess: 0 } },
+          },
+        },
+      }),
+    );
+    const workbook = buildFiledReturnsGstr2bWorkbook(plan, [{ path: "april-data.json", bytes }], {
+      generatedAt: new Date("2026-08-22T12:00:00.000Z"),
+    });
+    const { data } = partitionSheet(
+      text(extractStoredZipEntries(workbook!), "xl/worksheets/sheet1.xml"),
+    );
+    const tableFor = (category: string) =>
+      data.find((row) => row.includes(category))?.[3] ?? "(none)";
+
+    expect(tableFor("Supplies other than reverse charge")).toBe("4(A)(5)");
+    expect(tableFor("Reverse charge supplies")).toBe("3.1(d), 4(A)(3)");
+    expect(tableFor("Imports")).toBe("4(A)(1)");
+    // Matched no Part A heading, so no reference is printed against it.
+    const othersup = data.find((row) => row.includes("Other supplies"));
+    expect(othersup?.[3]).not.toBe("4(A)(5)");
+    expect(othersup?.[3]).not.toMatch(/^4\(A\)/);
+  });
+
   it("fails closed rather than placing the return owner in a counterparty row", () => {
     const data = docdata();
     data.b2b[0]!.ctin = OWNER_GSTIN;

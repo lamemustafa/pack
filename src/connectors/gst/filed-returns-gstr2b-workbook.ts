@@ -53,6 +53,33 @@ const ITC_AVAILABILITY_LABELS: Readonly<Record<string, string>> = {
   itcavl: "ITC available",
   itcunavl: "ITC not available",
 };
+/**
+ * The GSTR-3B table each ITC category feeds, as FORM GSTR-2B itself prescribes.
+ *
+ * This is not a compliance claim of ours: the form, made under rule 60(7),
+ * carries a `GSTR-3B table` column against every summary heading, and this
+ * reproduces it. What needed establishing was which JSON key is which heading,
+ * and that was done by matching a captured period's figures against the
+ * portal's own rendered summary for the same period.
+ *
+ * `othersup` is deliberately absent. It matched no Part A heading; it is very
+ * likely the Part B credit-note aggregate, but that is elimination rather than
+ * a matched figure, and a reference printed on a guess is worse than none.
+ */
+const ITC_GSTR3B_TABLE: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  itcavl: {
+    nonrevsup: "4(A)(5)",
+    revsup: "3.1(d), 4(A)(3)",
+    imports: "4(A)(1)",
+    isd: "4(A)(4)",
+  },
+  itcunavl: {
+    nonrevsup: "4(D)(2)",
+    revsup: "3.1(d), 4(D)(2)",
+    isd: "4(D)(2)",
+  },
+};
+
 const ITC_CATEGORY_LABELS: Readonly<Record<string, string>> = {
   nonrevsup: "Supplies other than reverse charge",
   revsup: "Reverse charge supplies",
@@ -63,6 +90,7 @@ const ITC_SUMMARY_COLUMNS: readonly Column[] = [
   { key: "period", header: "Period", width: 13 },
   { key: "availability", header: "Availability", width: 22 },
   { key: "category", header: "Category", width: 34 },
+  { key: "gstr3bTable", header: "GSTR-3B table", width: 18 },
   { key: "section", header: "Section", width: 14 },
   { key: "txval", header: "Taxable value", width: 16, amount: true },
   { key: "igst", header: "IGST", width: 14, amount: true },
@@ -470,6 +498,7 @@ function itcSummaryRows(source: Gstr2bSource, ownerValues: ReadonlySet<string>):
         period: source.period,
         availability: ITC_AVAILABILITY_LABELS[availability] ?? availability,
         category: ITC_CATEGORY_LABELS[category] ?? category,
+        gstr3bTable: ITC_GSTR3B_TABLE[availability]?.[category],
       };
       // A category carries its own rollup heads beside its per-section objects.
       const rollup = itcAmounts(nested, categoryPath);
@@ -694,7 +723,7 @@ function summaryWorksheet(
     identity,
     financialYear,
     generatedAt,
-    "ITC availability totals stated by the portal under `data.itcsumm`. These are the portal's own figures, not a recomputation from the invoice sheets.",
+    "ITC availability totals stated by the portal under `data.itcsumm`, and the GSTR-3B table each heading feeds as prescribed by FORM GSTR-2B under rule 60(7). These are the portal's own figures, not a recomputation from the invoice sheets. A blank GSTR-3B table means the heading's correspondence is not established, not that it has none.",
     excludedSections,
   );
 }
