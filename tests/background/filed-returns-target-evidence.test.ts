@@ -130,4 +130,33 @@ describe("per-target evidence in the flow summary", () => {
       { period: "May", outcome: "pending" },
     ]);
   });
+
+  // The delivery signal is transient: it appears on the step that observes the
+  // download, not on the completed step a later re-summarisation produces. So a
+  // run whose ZIP downloaded and cleaned successfully reverted every period to
+  // "captured" the moment the panel was reopened -- the inverse of the
+  // overclaim, and just as wrong.
+  it("keeps a delivered run saved after cleanup drops the signal", () => {
+    const ledger = ledgerWith(["downloaded", "downloaded"]);
+    const cleaned = { ...ledger, status: "complete" as const, zipPhase: "cleaned" as const };
+
+    const summary = toFullFiscalYearSummary(cleaned, FLOW_STEP);
+
+    expect(summary.targetEvidence?.map((entry) => entry.outcome)).toEqual(["saved", "saved"]);
+  });
+
+  // A run that found nothing eligible also cleans, having never produced a ZIP.
+  // It has no downloaded target for a delivery claim to attach to, and must not
+  // manufacture one.
+  it("claims no delivery for a cleaned run that produced no artifacts", () => {
+    const ledger = ledgerWith(["not-filed", "not-filed"]);
+    const cleaned = { ...ledger, status: "complete" as const, zipPhase: "cleaned" as const };
+
+    const summary = toFullFiscalYearSummary(cleaned, FLOW_STEP);
+
+    expect(summary.targetEvidence?.map((entry) => entry.outcome)).toEqual([
+      "not-filed",
+      "not-filed",
+    ]);
+  });
 });

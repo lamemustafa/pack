@@ -232,6 +232,33 @@ function targetOutcome(
 }
 
 /**
+ * Whether the ZIP reached the browser, from durable state as well as the signal.
+ *
+ * `full-fiscal-year-zip-downloaded` is transient: it appears on the step that
+ * observes the delivery and not on the completed step a later re-summarisation
+ * produces. Reading only the signal meant a run whose ZIP downloaded and cleaned
+ * successfully reverted every period to "Captured" the moment the panel was
+ * reopened -- the inverse of the overclaim this mapping was added to fix, and
+ * just as wrong.
+ *
+ * `zipPhase: "cleaned"` is the durable form of the same fact. It is set only
+ * after `discardFullFiscalYearFiledReturnsZip` clears the staged copy, which
+ * happens after the browser handoff. The `downloaded` conjunct keeps a
+ * no-artifacts run -- which also cleans, having never produced a ZIP -- from
+ * asserting a delivery, even though such a run has no downloaded target for the
+ * claim to attach to.
+ */
+function isFullFiscalYearZipDelivered(
+  ledger: FiledReturnsFullFiscalYearLedger,
+  flowStep: PortalFlowStepResult,
+): boolean {
+  if (flowStep.safeSignals.includes("full-fiscal-year-zip-downloaded")) return true;
+  return (
+    ledger.zipPhase === "cleaned" && ledger.targets.some((target) => target.status === "downloaded")
+  );
+}
+
+/**
  * Derived from the ledger every time it is needed, never stored.
  *
  * Exported because one read path returns a durable completion summary directly
@@ -245,7 +272,7 @@ export function fullFiscalYearTargetEvidence(
   ledger: FiledReturnsFullFiscalYearLedger,
   flowStep: PortalFlowStepResult,
 ): FiledReturnsTargetEvidence[] {
-  const zipDelivered = flowStep.safeSignals.includes("full-fiscal-year-zip-downloaded");
+  const zipDelivered = isFullFiscalYearZipDelivered(ledger, flowStep);
   const runInterrupted = ledger.status === "blocked";
   return ledger.targets.map((target) => ({
     period: target.period,
