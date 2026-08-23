@@ -238,8 +238,8 @@ function rejectInexactNumbers(text: string): void {
     // version tested the token against a hand-written decimal grammar and said
     // in a comment that "an exponent form is not something the portal emits".
     // A live capture falsified that: the portal writes ITC summary totals in
-    // scientific notation, so every real period was refused -- for values that
-    // never reach a cell.
+    // scientific notation, so a document carrying one was refused outright --
+    // for values that never reach a cell.
     let plainDecimal: string;
     try {
       plainDecimal = jsonNumberTokenToPlainDecimal(token);

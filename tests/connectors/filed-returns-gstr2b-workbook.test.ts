@@ -306,7 +306,8 @@ describe("GSTR-2B consolidated workbook", () => {
   // The portal writes ITC summary totals in scientific notation. An earlier
   // version of the exact-number guard tested tokens against a hand-written
   // decimal grammar, with a comment asserting the portal does not emit exponent
-  // form -- so it refused every real period, for values that never reach a cell.
+  // form -- so it refused documents carrying them, for values that never reach a
+  // cell.
   it("accepts exponent-form numbers the portal actually emits", () => {
     const plan: FiledReturnsSummaryPlanEntry[] = [planEntry("April", "april-data.json")];
     const bytes = new TextEncoder().encode(
