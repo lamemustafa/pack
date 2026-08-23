@@ -400,6 +400,25 @@ describe("GSTR-2B consolidated workbook", () => {
     ).toThrow(/cannot be written to a spreadsheet without changing it/);
   });
 
+  // The scan compares raw key spelling; the parser decodes escapes. A canonical
+  // source spelling `data` as `d\u0061ta` is therefore reachable by the parser
+  // and invisible to the scan, and treating that as "nothing to check" renders
+  // the subtree with none of its numbers examined. Refused rather than skipped.
+  it("refuses a source whose rendered key is spelled with an escape", () => {
+    const plan: FiledReturnsSummaryPlanEntry[] = [planEntry("April", "april-data.json")];
+    const bytes = new TextEncoder().encode(
+      JSON.stringify({
+        data: { gstin: OWNER_GSTIN, rtnprd: "042026", docdata: docdata() },
+      }).replace('"data"', '"d\\u0061ta"'),
+    );
+
+    expect(() =>
+      buildFiledReturnsGstr2bWorkbook(plan, [{ path: "april-data.json", bytes }], {
+        generatedAt: new Date("2026-08-22T12:00:00.000Z"),
+      }),
+    ).toThrow(/cannot scan for exact amounts/);
+  });
+
   // The ITC totals a return preparer works from reached only the tidy CSV,
   // which for GSTR-2B carries no invoice rows -- so the figures a taxpayer
   // files from sat in the artifact least able to show them.

@@ -176,12 +176,36 @@ describe("offscreen full-year summary response validation", () => {
     });
   });
 
-  // GSTR-2B reaches `not-applicable` legitimately when no JSON was staged -- a
-  // PDF-only selection, or one whose JSON is artifact-unavailable, never had a
-  // source to build from. This test previously asserted the opposite, on the
-  // assumption that every GSTR-2B run has JSON; rejecting it turned the worker's
-  // own successful result into an invalid response.
-  it("accepts a GSTR-2B receipt claiming the not-applicable outcome", async () => {
+  // A PDF-only GSTR-2B selection, or one whose JSON is artifact-unavailable,
+  // never had a source to build from and reports `no-source`. Nothing was
+  // staged, so nothing was parsed: the outcome and the parsed-period count are
+  // two views of one producer state, and the receipt has to agree with itself.
+  it("accepts a GSTR-2B receipt reporting no staged source", async () => {
+    mocks.runtime.sendMessage.mockImplementationOnce(async (message?: unknown) => ({
+      ok: true,
+      requestId: requestIdFrom(message),
+      blobUrl: "blob:pack/gstr2b-no-source",
+      zipEntryCount: 2,
+      artifactEntryCount: 1,
+      summaryEntryCount: 1,
+      summary: {
+        status: "included",
+        outcomeOnly: true,
+        parsedPeriodCount: 0,
+        rowCount: 1,
+        workbookOutcome: "no-source",
+      },
+    }));
+
+    await expect(
+      createOffscreenFiledReturnZipUrl("full-fiscal-year-12345678", request()),
+    ).resolves.toMatchObject({ status: "created" });
+  });
+
+  // The absence reasons are not interchangeable. `not-applicable` renders "not
+  // available for this return type", which is false for GSTR-2B, so a stale
+  // receipt carrying it must not reach the user with that sentence.
+  it("rejects a GSTR-2B receipt claiming the workbook is not applicable", async () => {
     mocks.runtime.sendMessage.mockImplementationOnce(async (message?: unknown) => ({
       ok: true,
       requestId: requestIdFrom(message),
@@ -191,16 +215,40 @@ describe("offscreen full-year summary response validation", () => {
       summaryEntryCount: 1,
       summary: {
         status: "included",
-        outcomeOnly: false,
-        parsedPeriodCount: 1,
-        rowCount: 2,
+        outcomeOnly: true,
+        parsedPeriodCount: 0,
+        rowCount: 1,
         workbookOutcome: "not-applicable",
       },
     }));
 
     await expect(
       createOffscreenFiledReturnZipUrl("full-fiscal-year-12345678", request()),
-    ).resolves.toMatchObject({ status: "created" });
+    ).resolves.toMatchObject({ status: "failed", errorCategory: "offscreen-response-invalid" });
+  });
+
+  // `no-source` says nothing was staged, so a receipt claiming it beside a
+  // parsed period describes two producer states at once.
+  it("rejects a no-source receipt that also reports a parsed period", async () => {
+    mocks.runtime.sendMessage.mockImplementationOnce(async (message?: unknown) => ({
+      ok: true,
+      requestId: requestIdFrom(message),
+      blobUrl: "blob:pack/gstr2b-contradictory",
+      zipEntryCount: 2,
+      artifactEntryCount: 1,
+      summaryEntryCount: 1,
+      summary: {
+        status: "included",
+        outcomeOnly: false,
+        parsedPeriodCount: 1,
+        rowCount: 2,
+        workbookOutcome: "no-source",
+      },
+    }));
+
+    await expect(
+      createOffscreenFiledReturnZipUrl("full-fiscal-year-12345678", request()),
+    ).resolves.toMatchObject({ status: "failed", errorCategory: "offscreen-response-invalid" });
   });
 
   // A workbook without ITC totals ships beside the CSV, and that receipt omits
@@ -288,7 +336,46 @@ describe("offscreen full-year summary response validation", () => {
       createOffscreenFiledReturnZipUrl("full-fiscal-year-12345678", request()),
     ).resolves.toEqual({ status: "failed" });
   });
+  // Only the GSTR-2B workbook is built from staged JSON. The GSTR-3B workbook is
+  // built from the run's own outcome rows, so a PDF-only selection produces one
+  // with no parsed period at all -- a receipt the producer emits and its own
+  // test pins, which this boundary rejected. The producer test never crosses
+  // this boundary, which is why a green suite said nothing about it.
+  it("accepts a GSTR-3B workbook receipt with no parsed period", async () => {
+    mocks.runtime.sendMessage.mockImplementationOnce(async (message?: unknown) => ({
+      ok: true,
+      requestId: requestIdFrom(message),
+      blobUrl: "blob:pack/gstr3b-pdf-only",
+      zipEntryCount: 3,
+      artifactEntryCount: 1,
+      summaryEntryCount: 2,
+      summary: { status: "included", outcomeOnly: true, parsedPeriodCount: 0, rowCount: 1 },
+    }));
+
+    await expect(
+      createOffscreenFiledReturnZipUrl("full-fiscal-year-12345678", pdfOnlyRequest("GSTR-3B")),
+    ).resolves.toMatchObject({ status: "created", artifactEntryCount: 1 });
+  });
 });
+
+function pdfOnlyRequest(returnType: "GSTR-1" | "GSTR-2B" | "GSTR-3B") {
+  return {
+    returnType,
+    entryCount: 1,
+    entries: [{ artifactType: "PDF" as const, entryNames: ["april-return.pdf"] }],
+    generatedAt: new Date("2026-08-19T12:00:00.000Z"),
+    summaryPlan: [
+      {
+        artifactType: "PDF" as const,
+        entryNames: ["april-return.pdf"],
+        financialYear: "2026-27",
+        outcomeCategory: "staged" as const,
+        period: "April" as const,
+        returnType,
+      },
+    ],
+  };
+}
 
 function request(returnType: "GSTR-1" | "GSTR-2B" | "GSTR-3B" = "GSTR-2B") {
   return {
