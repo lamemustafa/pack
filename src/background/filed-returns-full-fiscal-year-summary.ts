@@ -359,11 +359,17 @@ export function fullFiscalYearTargetEvidence(
  * the wrong one.
  */
 function targetMissedAnArtifact(target: FiledReturnsFullFiscalYearTarget): boolean {
-  // `?? []` matching the two existing reads in the validation module. A target
-  // without signals fails validation and cannot come from storage, but this path
-  // also summarises ledgers straight from the runner, and an exception here
-  // takes the panel down rather than reporting anything.
-  return (target.safeSignals ?? []).some((signal) =>
+  // Dereferenced without a fallback, like `hasLegacyRetainedStaging` above it.
+  // A `?? []` here would read as caution and is the opposite: absent signals
+  // would mean no evidence of a gap, which resolves to the *stronger* claim of a
+  // fully saved period. That is "could not determine" answering "matches", on
+  // the one field that decides the difference.
+  //
+  // The field is required by the type, set by every construction path, and its
+  // absence fails ledger validation, so this cannot be reached with a real
+  // record. A malformed one throwing here is diagnosable; a malformed one
+  // silently reading as saved is not.
+  return target.safeSignals.some((signal) =>
     signal.startsWith("filed-return-artifact-unavailable:"),
   );
 }
