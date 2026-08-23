@@ -48,6 +48,7 @@ import {
   createFullFiscalYearCleanupPendingState,
   finishFullFiscalYearCleanup,
   mergeRetriedArtifactSignals,
+  cleanupPendingPhaseFor,
   markFullFiscalYearCleanupPending,
   markFullFiscalYearRestagingRequired,
   markFullFiscalYearZipDownloadIntent,
@@ -222,7 +223,15 @@ export async function startFullFiscalYearDownloadFlow(
   if (existingLedger && replaceCompletedSameScopeLedger) {
     const clearSignals = await discardFullFiscalYearFiledReturnsZip(existingLedger.ledgerId);
     if (!clearSignals.includes("full-fiscal-year-opfs-cleared")) {
-      const cleanupPendingLedger = markFullFiscalYearCleanupPending(existingLedger, now);
+      // Derived from the phase this ledger already reached, never reset. This
+      // call took the default before, which is `downloaded-cleanup-pending` --
+      // so retrying the cleanup of a run that never exported a ZIP promoted it
+      // to the delivery route and, on completion, to `cleaned-after-download`.
+      const cleanupPendingLedger = markFullFiscalYearCleanupPending(
+        existingLedger,
+        now,
+        cleanupPendingPhaseFor(existingLedger.zipPhase),
+      );
       const step = completedRunCleanupBlockedStep(cleanupPendingLedger, clearSignals);
       const summary = toFullFiscalYearSummary(cleanupPendingLedger, step);
       await persistLedgerAndSummary(deps, cleanupPendingLedger, step);
