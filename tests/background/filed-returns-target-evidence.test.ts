@@ -8,6 +8,14 @@ import { toFullFiscalYearSummary } from "../../src/background/filed-returns-full
 import { FULL_FISCAL_YEAR_PERIOD } from "../../src/connectors/gst/filed-returns-scope";
 import { parseDurableFiledReturnsFlowSummary } from "../../src/background/filed-returns-durable-summary";
 
+const ZIP_DELIVERED: PortalFlowStepResult = {
+  connectorId: "gst",
+  scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+  state: "downloaded",
+  safeMessage: "",
+  safeSignals: ["full-fiscal-year-zip-downloaded"],
+};
+
 const FLOW_STEP: PortalFlowStepResult = {
   connectorId: "gst",
   scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
@@ -45,10 +53,10 @@ describe("per-target evidence in the flow summary", () => {
   // true outcome and not a saved file, and a manual observation is a person's
   // report -- the ledger already refuses to count it toward completion, and the
   // evidence list must not undo that by calling it saved.
-  it("maps only a downloaded target to saved", () => {
+  it("maps only a downloaded target to saved, once the ZIP is delivered", () => {
     const summary = toFullFiscalYearSummary(
       ledgerWith(["downloaded", "not-filed", "manually-observed", "download-unconfirmed"]),
-      FLOW_STEP,
+      ZIP_DELIVERED,
     );
 
     expect(summary.targetEvidence).toEqual([
@@ -63,7 +71,7 @@ describe("per-target evidence in the flow summary", () => {
   // progress and wrong for evidence. Both are produced from one ledger, so this
   // pins that they disagree deliberately rather than by accident.
   it("keeps the evidence list narrower than completedPeriods", () => {
-    const summary = toFullFiscalYearSummary(ledgerWith(["downloaded", "not-filed"]), FLOW_STEP);
+    const summary = toFullFiscalYearSummary(ledgerWith(["downloaded", "not-filed"]), ZIP_DELIVERED);
 
     expect(summary.completedPeriods).toEqual(["April", "May"]);
     expect(summary.targetEvidence?.filter((entry) => entry.outcome === "saved")).toEqual([
@@ -94,5 +102,32 @@ describe("per-target evidence in the flow summary", () => {
     expect(durable).not.toBeNull();
     expect(durable).not.toHaveProperty("targetEvidence");
     expect(JSON.stringify(durable)).not.toContain("not-filed");
+  });
+
+  // In a full-year run a `downloaded` target is staged in OPFS; the browser
+  // handoff happens once, later, for the whole ZIP. Reading it as saved before
+  // that asserts a delivery from a state that never reached the browser.
+  it("reads a staged period as captured until the ZIP is delivered", () => {
+    const staged = toFullFiscalYearSummary(ledgerWith(["downloaded", "downloaded"]), FLOW_STEP);
+    expect(staged.targetEvidence?.map((entry) => entry.outcome)).toEqual(["captured", "captured"]);
+
+    const delivered = toFullFiscalYearSummary(
+      ledgerWith(["downloaded", "downloaded"]),
+      ZIP_DELIVERED,
+    );
+    expect(delivered.targetEvidence?.map((entry) => entry.outcome)).toEqual(["saved", "saved"]);
+  });
+
+  // An interrupted run leaves the current target's durable status at `running`
+  // while the ledger reports blocked. Nothing is running, so reading it as in
+  // progress both misdescribes it and hides it from the needs-review count.
+  it("treats a stale running target as needing review", () => {
+    const ledger = ledgerWith(["running", "pending"]);
+    const summary = toFullFiscalYearSummary({ ...ledger, status: "blocked" }, FLOW_STEP);
+
+    expect(summary.targetEvidence).toEqual([
+      { period: "April", outcome: "needs-review" },
+      { period: "May", outcome: "pending" },
+    ]);
   });
 });

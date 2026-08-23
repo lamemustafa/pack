@@ -1,4 +1,5 @@
 import type {
+  FiledReturnsTargetEvidence,
   FiledReturnsTargetOutcome,
   FiledReturnsFlowSummary,
   FiledReturnsFullFiscalYearLedger,
@@ -121,6 +122,8 @@ const COMPLETED_SUMMARY_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTarg
 const TARGET_OUTCOMES: Readonly<
   Record<FiledReturnsFullFiscalYearTargetStatus, FiledReturnsTargetOutcome>
 > = {
+  // Reconsidered per run below: a full-year `downloaded` target is staged in
+  // OPFS, not delivered to the browser.
   downloaded: "saved",
   "not-filed": "not-filed",
   // A person reporting what they saw is not correlated download evidence, so
@@ -206,6 +209,50 @@ export function needsResumeConfirmation(ledger: FiledReturnsFullFiscalYearLedger
   );
 }
 
+/**
+ * A staged period is not a saved one.
+ *
+ * `filed-returns-download-trigger` bypasses browser delivery while
+ * `stageCapturedDownloads` is set, and the handoff happens once for the whole
+ * ZIP afterwards. So `downloaded` means "Pack holds these bytes" until the ZIP
+ * delivery signal appears, and only then does it mean the browser has them.
+ */
+function targetOutcome(
+  status: FiledReturnsFullFiscalYearTargetStatus,
+  zipDelivered: boolean,
+  runInterrupted: boolean,
+): FiledReturnsTargetOutcome {
+  const outcome = TARGET_OUTCOMES[status];
+  // `summariseFullFiscalYearLedger` reports an interrupted run as blocked while
+  // leaving the current target's durable status at `running`. Nothing is
+  // running after an MV3 worker interruption, and reading it as "In progress"
+  // both misdescribes it and excludes it from the count of what needs a person.
+  if (outcome === "running" && runInterrupted) return "needs-review";
+  return outcome === "saved" && !zipDelivered ? "captured" : outcome;
+}
+
+/**
+ * Derived from the ledger every time it is needed, never stored.
+ *
+ * Exported because one read path returns a durable completion summary directly
+ * -- the retained-ZIP retry state -- instead of re-summarising. That summary
+ * carries no evidence by design, since per-period outcomes are taxpayer data and
+ * do not persist, so the caller rebuilds the list from the ledger it already
+ * holds. Without that, the evidence vanished in precisely the state where a
+ * reader is deciding whether to retry.
+ */
+export function fullFiscalYearTargetEvidence(
+  ledger: FiledReturnsFullFiscalYearLedger,
+  flowStep: PortalFlowStepResult,
+): FiledReturnsTargetEvidence[] {
+  const zipDelivered = flowStep.safeSignals.includes("full-fiscal-year-zip-downloaded");
+  const runInterrupted = ledger.status === "blocked";
+  return ledger.targets.map((target) => ({
+    period: target.period,
+    outcome: targetOutcome(target.status, zipDelivered, runInterrupted),
+  }));
+}
+
 export function toFullFiscalYearSummary(
   ledger: FiledReturnsFullFiscalYearLedger,
   flowStep: PortalFlowStepResult,
@@ -222,10 +269,7 @@ export function toFullFiscalYearSummary(
     scope: ledger.scope,
     status: ledger.status,
     completedPeriods,
-    targetEvidence: ledger.targets.map((target) => ({
-      period: target.period,
-      outcome: TARGET_OUTCOMES[target.status],
-    })),
+    targetEvidence: fullFiscalYearTargetEvidence(ledger, flowStep),
     totalPeriods: ledger.targets.length,
     updatedAt: ledger.updatedAt,
     ...(ledger.status === "complete" ? { completedAt: ledger.updatedAt } : {}),

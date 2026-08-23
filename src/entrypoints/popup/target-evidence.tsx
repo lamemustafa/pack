@@ -21,6 +21,7 @@ import type {
 
 const OUTCOME_LABELS: Readonly<Record<FiledReturnsTargetOutcome, string>> = {
   saved: "Saved",
+  captured: "Captured",
   "not-filed": "Not filed",
   "needs-review": "Needs review",
   running: "In progress",
@@ -32,6 +33,9 @@ const OUTCOME_LABELS: Readonly<Record<FiledReturnsTargetOutcome, string>> = {
 // cannot separate the hues.
 const OUTCOME_GLYPHS: Readonly<Record<FiledReturnsTargetOutcome, string>> = {
   saved: "✓",
+  // A filled mark for a file Pack holds, an outline for one the browser has
+  // confirmed. The difference is the whole point of the column.
+  captured: "•",
   "not-filed": "–",
   "needs-review": "!",
   running: "…",
@@ -43,6 +47,7 @@ export function TargetEvidence({ summary }: { summary: FiledReturnsFlowSummary |
   if (!evidence || evidence.length === 0) return null;
 
   const saved = evidence.filter((entry) => entry.outcome === "saved").length;
+  const captured = evidence.filter((entry) => entry.outcome === "captured").length;
   const needsReview = evidence.filter((entry) => entry.outcome === "needs-review").length;
 
   return (
@@ -54,6 +59,9 @@ export function TargetEvidence({ summary }: { summary: FiledReturnsFlowSummary |
         <strong>
           {saved} of {evidence.length} saved
         </strong>
+        {captured > 0 ? (
+          <span className="evidence-captured"> · {captured} captured, ZIP not confirmed</span>
+        ) : null}
         {needsReview > 0 ? (
           <span className="evidence-review"> · {needsReview} needs review</span>
         ) : null}

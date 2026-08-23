@@ -969,7 +969,18 @@ describe("Pack local data clearing", () => {
       now: () => new Date("2026-06-24T00:11:00.000Z"),
     });
 
-    expect(summary).toEqual(sessionSummary);
+    // The retained summary is preserved, and the per-period evidence is rebuilt
+    // from the ledger rather than read from it. Evidence is display-only and
+    // never persisted, so this path -- which returns the durable summary instead
+    // of re-summarising -- would otherwise show no per-period detail in exactly
+    // the state where a reader is deciding whether to retry.
+    expect(summary).toEqual({
+      ...sessionSummary,
+      targetEvidence: expect.arrayContaining([
+        expect.objectContaining({ outcome: expect.any(String), period: expect.any(String) }),
+      ]),
+    });
+    expect(summary?.targetEvidence?.length).toBeGreaterThan(0);
   });
 
   it.each([

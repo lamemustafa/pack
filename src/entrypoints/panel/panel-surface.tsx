@@ -56,6 +56,9 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
 
   const savedRun = pack.lastRunSummary;
   const savedRunBlock = getSavedRunBlock(savedRun, pack.effectiveBusy);
+  // The same test the presets use, so the form and the presets cannot
+  // disagree about whether the saved run is describing this scope.
+  const savedRunIsThisScope = getScopeMatchedFiledReturnsSummary(pack.scope, savedRun) !== null;
 
   /**
    * Which surface owns the body. Mirrors the popup deliberately: a terminal run, a retained
@@ -191,7 +194,12 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
                   // review before it reads the requested scope. Changing the
                   // selection nulls `scopedFlowSummary` and would otherwise
                   // leave the start button enabled for a run that cannot begin.
-                  externalBlock={savedRunBlock}
+                  // Only when the form shows a DIFFERENT scope, matching how
+                  // the presets apply it. A saved run blocked merely because no
+                  // portal tab was available re-enables itself once one is, and
+                  // its own scope must be allowed to act on that rather than
+                  // being disabled by a block describing itself.
+                  externalBlock={savedRunIsThisScope ? null : savedRunBlock}
                   flowSummary={pack.scopedFlowSummary}
                   scope={pack.scope}
                   scopeLockedForReview={pack.scopeLockedForReview}

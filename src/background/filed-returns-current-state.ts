@@ -1,3 +1,4 @@
+import { fullFiscalYearTargetEvidence } from "./filed-returns-full-fiscal-year-summary";
 import { browser } from "wxt/browser";
 import type {
   FiledReturnsFlowSummary,
@@ -41,7 +42,14 @@ export async function readCurrentFiledReturnsFlowSummary(
 
   const ledger = await readLocalValue<unknown>(deps.storageKeys.fullFiscalYearLedger);
   if (isFullFiscalYearLedger(ledger) && isRetainedZipRetrySummary(completionSummary, ledger)) {
-    return completionSummary;
+    // Evidence is display-only and never persisted, so this path -- which
+    // returns the durable summary rather than re-summarising -- has to rebuild
+    // it from the ledger already read above. Otherwise the per-period list is
+    // missing in exactly the state where a reader is deciding whether to retry.
+    return {
+      ...completionSummary,
+      targetEvidence: fullFiscalYearTargetEvidence(ledger, completionSummary.flowStep),
+    };
   }
   if (isFullFiscalYearLedger(ledger) && isActionableFullFiscalYearLedger(ledger)) {
     return summariseFullFiscalYearLedger(ledger, deps.now?.());

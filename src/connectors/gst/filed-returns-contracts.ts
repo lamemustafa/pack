@@ -267,13 +267,20 @@ export interface FiledReturnsFullFiscalYearLedger {
  * and nine words to express four answers invites the reader to guess which ones
  * are the same.
  *
- * `saved` is the only value that asserts correlated download evidence. It maps
- * from `downloaded` alone: `not-filed` is a true outcome but not a saved file,
- * and `manually-observed` is a person's report rather than evidence, which is
- * why it lands in `needs-review` beside the failures.
+ * `saved` is the only value that asserts a file reached the browser. In a
+ * full-year run a `downloaded` target means the period's artifacts were staged
+ * in OPFS -- the browser handoff happens later, once, for the whole ZIP. So
+ * `downloaded` reads as `captured` until that delivery is confirmed and `saved`
+ * after it. Calling a staged period saved asserts a delivery from a state that
+ * has not reached the browser at all, which is the overclaim this list exists
+ * to prevent.
+ *
+ * `not-filed` is a true outcome but not a saved file, and `manually-observed`
+ * is a person's report rather than evidence, which is why it lands in
+ * `needs-review` beside the failures.
  */
 export type FiledReturnsTargetOutcome =
-  "saved" | "not-filed" | "needs-review" | "running" | "pending";
+  "saved" | "captured" | "not-filed" | "needs-review" | "running" | "pending";
 
 export interface FiledReturnsTargetEvidence {
   period: string;
