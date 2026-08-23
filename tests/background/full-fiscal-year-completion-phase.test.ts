@@ -3,6 +3,7 @@ import {
   completeFullFiscalYearLedger,
   createFullFiscalYearLedger,
 } from "../../src/background/filed-returns-full-fiscal-year-ledger";
+import { cleanupPendingPhaseFor } from "../../src/background/filed-returns-full-fiscal-year-staging";
 import {
   FULL_FISCAL_YEAR_PERIOD,
   type FiledReturnsMonth,
@@ -45,6 +46,32 @@ describe("full-fiscal-year completion phase", () => {
 
       expect(completed.zipPhase, pending).toBe(terminal);
       expect(completed.status, pending).toBe("complete");
+    }
+  });
+
+  // Re-cleaning a completed ledger must not promote it. The retry path took the
+  // default cleanup phase, which is the delivery route, so a run that never
+  // exported anything came back through completion as a confirmed delivery --
+  // the overclaim the origin split exists to prevent, reached through the
+  // transition that was meant to preserve it.
+  it("does not upgrade a re-cleaned ledger to the delivery route", () => {
+    const routes = [
+      ["cleaned-legacy", "legacy-cleanup-pending", "cleaned-legacy"],
+      ["cleaned-without-export", "no-artifacts-cleanup-pending", "cleaned-without-export"],
+      ["cleaned-after-download", "downloaded-cleanup-pending", "cleaned-after-download"],
+      // Pre-split, no origin: takes the non-delivery route and stays captured.
+      ["cleaned", "legacy-cleanup-pending", "cleaned-legacy"],
+    ] as const;
+
+    for (const [alreadyCleaned, retryPhase, terminal] of routes) {
+      expect(cleanupPendingPhaseFor(alreadyCleaned), alreadyCleaned).toBe(retryPhase);
+
+      const recompleted = completeFullFiscalYearLedger(
+        completable({ zipPhase: retryPhase }),
+        new Date("2026-08-23T12:00:00.000Z"),
+      );
+
+      expect(recompleted.zipPhase, alreadyCleaned).toBe(terminal);
     }
   });
 
