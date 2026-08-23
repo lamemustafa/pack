@@ -165,7 +165,11 @@ export type PackOffscreenFiledReturnSummaryResult =
       outcomeOnly: boolean;
       parsedPeriodCount: number;
       rowCount: number;
-      workbookOutcome?: "not-applicable";
+      // "not-applicable": no workbook was ever due for this run.
+      // "unavailable": one was attempted and could not be produced, and the
+      // tidy CSV -- already built and already privacy-screened -- is kept
+      // rather than discarded with it.
+      workbookOutcome?: "not-applicable" | "unavailable";
     }
   | { status: "failed"; reasonCategory: PackOffscreenFiledReturnSummaryErrorCategory };
 

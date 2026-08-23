@@ -144,10 +144,13 @@ export function buildFiledReturnsGstr2bWorkbook(
   const identity = collectOwnerIdentity(sources);
   const financialYear = singleFinancialYear(plan);
   const rowsBySection = new Map<SectionKey, Row[]>();
+  const excludedSections = new Set<string>();
   for (const source of sources) {
     const docdata = optionalObject(source.data.docdata, "/data/docdata");
     if (!docdata) continue;
-    validateKeys(docdata, SECTION_ORDER, "/data/docdata");
+    for (const section of screenKeysCollectingUnknown(docdata, SECTION_ORDER, "/data/docdata")) {
+      excludedSections.add(section);
+    }
     for (const section of SECTION_ORDER) {
       const sectionRows = rowsForSection(section, docdata[section], source.period, identity.values);
       if (sectionRows.length === 0) continue;
@@ -157,7 +160,16 @@ export function buildFiledReturnsGstr2bWorkbook(
   const worksheets = SECTION_ORDER.flatMap((section) => {
     const rows = rowsBySection.get(section);
     return rows?.length
-      ? [worksheet(section, rows, identity, financialYear, options.generatedAt)]
+      ? [
+          worksheet(
+            section,
+            rows,
+            identity,
+            financialYear,
+            options.generatedAt,
+            [...excludedSections].sort(),
+          ),
+        ]
       : [];
   });
   return worksheets.length
@@ -389,6 +401,7 @@ function worksheet(
   identity: OwnerIdentity,
   financialYear: string,
   generatedAt: Date,
+  excludedSections: readonly string[],
 ): XlsxWorksheet {
   const columns =
     section === "impg"
@@ -423,7 +436,15 @@ function worksheet(
       [
         { value: "Coverage", style: "bold" },
         {
-          value: `${SECTION_NAMES[section]} invoice-level records present in the captured JSON. Does not include ITC summary figures or unconfirmed portal sections.`,
+          // Naming them matters: a section dropped without saying so cannot be
+          // diagnosed from the artifact, which is the definition of a silent
+          // no-op here.
+          value:
+            `${SECTION_NAMES[section]} invoice-level records present in the captured JSON. ` +
+            `Does not include ITC summary figures or unconfirmed portal sections.` +
+            (excludedSections.length > 0
+              ? ` Sections present in the source but not rendered: ${excludedSections.join(", ")}.`
+              : ""),
         },
       ],
     ],
@@ -495,6 +516,30 @@ function optionalAmount(value: unknown, path: string): number | undefined {
     throw new FiledReturnsGstr2bWorkbookSchemaError(`Expected GSTR-2B amount at ${path}.`);
   }
   return value;
+}
+
+/**
+ * Screens every key for forbidden paths, exactly as validateKeys does, but
+ * returns unknown keys instead of throwing.
+ *
+ * Used only at the `docdata` level. A portal section this build does not render
+ * is not a reason to lose the tidy CSV: the whole-document privacy scan has
+ * already run, the CSV is already built, and the workbook footer states that
+ * unconfirmed portal sections are excluded rather than that they abort the run.
+ * The forbidden-path screen still applies, so a section whose own name is
+ * credential-shaped still fails closed.
+ */
+function screenKeysCollectingUnknown(
+  record: Record<string, unknown>,
+  allowed: readonly string[],
+  path: string,
+): string[] {
+  const unknown: string[] = [];
+  for (const key of Object.keys(record)) {
+    rejectForbiddenPath(`${path}/${key.replace(/~/g, "~0").replace(/\//g, "~1")}`);
+    if (!allowed.includes(key)) unknown.push(key);
+  }
+  return unknown;
 }
 
 function validateKeys(

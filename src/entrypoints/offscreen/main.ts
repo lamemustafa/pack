@@ -28,6 +28,7 @@ import {
   buildFiledReturnsGstr2bWorkbook,
   FiledReturnsGstr2bWorkbookIdentityError,
   FiledReturnsGstr2bWorkbookPrivacyError,
+  FiledReturnsGstr2bWorkbookSchemaError,
 } from "../../connectors/gst/filed-returns-gstr2b-workbook";
 import { XlsxSizeLimitError } from "../../core/xlsx";
 import type { PackOffscreenFiledReturnSummaryResult } from "../../connectors/gst/offscreen-blob-url";
@@ -270,6 +271,27 @@ function createSummaryEntry(
             maxOutputBytes: workbookBudget,
           });
     } catch (error) {
+      // A schema rejection is a statement about the workbook alone: the tidy
+      // CSV beside it was already built and already privacy-screened, and does
+      // not depend on the shape the workbook could not render. Failing the whole
+      // derived-summary path discarded that CSV as well.
+      //
+      // Deliberately only this one. A privacy or identity rejection is a
+      // statement about the source document and still fails closed; size and
+      // unexpected failures keep their existing terminal outcomes, which other
+      // tests pin.
+      if (error instanceof FiledReturnsGstr2bWorkbookSchemaError) {
+        return {
+          entries: [{ path: FILED_RETURNS_SUMMARY_SHEET_PATH, bytes: summary.dataBytes }],
+          result: {
+            status: "included",
+            outcomeOnly: summary.outcomeOnly,
+            parsedPeriodCount: summary.parsedPeriodCount,
+            rowCount: summary.rowCount,
+            workbookOutcome: "unavailable",
+          },
+        };
+      }
       return {
         result: {
           status: "failed",

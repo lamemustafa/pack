@@ -97,6 +97,37 @@ describe("offscreen full-year summary response validation", () => {
     });
   });
 
+  // A GSTR-2B year whose staged JSON carries no supported `docdata` section
+  // produces the tidy CSV and no workbook, and the worker says so with
+  // "not-applicable". The validator used to re-derive the expected outcome from
+  // the return type alone and reject this, which discarded an already
+  // privacy-screened CSV and blocked the whole ZIP.
+  it("accepts a workbook-eligible GSTR-2B receipt that emitted the CSV alone", async () => {
+    mocks.runtime.sendMessage.mockImplementationOnce(async (message?: unknown) => ({
+      ok: true,
+      requestId: requestIdFrom(message),
+      blobUrl: "blob:pack/csv-only",
+      zipEntryCount: 2,
+      artifactEntryCount: 1,
+      summaryEntryCount: 1,
+      summary: {
+        status: "included",
+        outcomeOnly: false,
+        parsedPeriodCount: 1,
+        rowCount: 2,
+        workbookOutcome: "not-applicable",
+      },
+    }));
+
+    await expect(
+      createOffscreenFiledReturnZipUrl("full-fiscal-year-12345678", request()),
+    ).resolves.toMatchObject({
+      status: "created",
+      artifactEntryCount: 1,
+      summary: { status: "included", parsedPeriodCount: 1, rowCount: 2 },
+    });
+  });
+
   it.each([
     "identity-conflict",
     "identity-rejected",

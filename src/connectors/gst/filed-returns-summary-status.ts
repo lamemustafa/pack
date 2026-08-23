@@ -34,9 +34,9 @@ export function filedReturnsSummaryOutcome(
   return {
     safeSignals: [
       "full-fiscal-year-summary-included",
-      ...(result.workbookOutcome === "not-applicable"
-        ? ["full-fiscal-year-workbook-not-applicable"]
-        : []),
+      ...(result.workbookOutcome === undefined
+        ? []
+        : [`full-fiscal-year-workbook-${result.workbookOutcome}`]),
       ...(result.outcomeOnly ? ["full-fiscal-year-summary-outcomes-only"] : []),
       `full-fiscal-year-summary-parsed-period-count:${result.parsedPeriodCount}`,
       `full-fiscal-year-summary-row-count:${result.rowCount}`,

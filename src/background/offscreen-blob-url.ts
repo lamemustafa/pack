@@ -335,7 +335,7 @@ function toZipResult(
         ? response.summary
         : undefined;
     const expectedSummaryEntryCount =
-      summary?.status === "included" ? (summary.workbookOutcome === "not-applicable" ? 1 : 2) : 0;
+      summary?.status === "included" ? (summary.workbookOutcome === undefined ? 2 : 1) : 0;
     const summaryCountMatches = response.summaryEntryCount === expectedSummaryEntryCount;
     if (expected.summaryPlan && (!summary || !summaryCountMatches)) {
       return { status: "failed", errorCategory: "offscreen-response-invalid" };
@@ -379,11 +379,19 @@ function isSummaryResult(
       .map((entry) => entry.period),
   ).size;
   const returnType = plan[0]?.returnType;
-  const expectedWorkbookOutcome =
+  // Eligibility, not an exact expectation. A workbook-eligible plan may
+  // legitimately emit no workbook -- a GSTR-2B year whose staged JSON carries no
+  // supported `docdata` section returns the CSV alone with "not-applicable" --
+  // and requiring `undefined` rejected that valid receipt, which blocked the
+  // whole ZIP. Fail-closed belongs on the artifact's evidence, not on a
+  // re-derivation of what the worker should have decided; the CSV discarded here
+  // had already passed its privacy screen.
+  const workbookEligible =
     (returnType === "GSTR-3B" || returnType === "GSTR-2B") &&
-    plan.every((entry) => entry.returnType === returnType)
-      ? undefined
-      : "not-applicable";
+    plan.every((entry) => entry.returnType === returnType);
+  const permittedWorkbookOutcomes: readonly (string | undefined)[] = workbookEligible
+    ? [undefined, "not-applicable", "unavailable"]
+    : ["not-applicable"];
   return (
     hasOnlyKeys(record, [
       "outcomeOnly",
@@ -393,7 +401,7 @@ function isSummaryResult(
       "workbookOutcome",
     ]) &&
     record.status === "included" &&
-    record.workbookOutcome === expectedWorkbookOutcome &&
+    permittedWorkbookOutcomes.includes(record.workbookOutcome as string | undefined) &&
     typeof record.outcomeOnly === "boolean" &&
     typeof record.parsedPeriodCount === "number" &&
     Number.isInteger(record.parsedPeriodCount) &&

@@ -1208,6 +1208,62 @@ describe("offscreen Blob URL entrypoint", () => {
     expect(JSON.stringify(zip)).not.toContain("Synthetic Other Name");
   });
 
+  // A schema rejection says the workbook could not render this document's
+  // shape. It says nothing about the tidy CSV, which was already built and
+  // already privacy-screened -- and which the taxpayer loses for nothing if the
+  // whole derived-summary path fails with the workbook.
+  it("keeps the derived CSV when the GSTR-2B workbook rejects the document shape", async () => {
+    vi.doMock("../../src/connectors/gst/filed-returns-gstr2b-workbook", async (importOriginal) => {
+      const actual =
+        await importOriginal<
+          typeof import("../../src/connectors/gst/filed-returns-gstr2b-workbook")
+        >();
+      return {
+        ...actual,
+        buildFiledReturnsGstr2bWorkbook: () => {
+          throw new actual.FiledReturnsGstr2bWorkbookSchemaError("synthetic shape rejection");
+        },
+      };
+    });
+    await loadOffscreenEntrypoint();
+    opfsFiles.set(
+      `filed-return-packs/${TEST_FULL_YEAR_LEDGER_ID}/april-data.json`,
+      new Blob([JSON.stringify({ data: { gstin: "27ABCDE1234F1Z0", rtnprd: "042026" } })]),
+    );
+
+    const zip = await sendOffscreenMessage({
+      type: "PACK_OFFSCREEN_CREATE_FILED_RETURN_ZIP",
+      target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+      payload: {
+        requestId: "gstr2b-schema-rejection",
+        generatedAt: "2026-08-19T12:00:00.000Z",
+        ledgerId: TEST_FULL_YEAR_LEDGER_ID,
+        expectedReturnType: "GSTR-2B",
+        expectedEntryCount: 1,
+        expectedEntries: [{ artifactType: "JSON", entryNames: ["april-data.json"] }],
+        summaryPlan: [
+          {
+            artifactType: "JSON",
+            entryNames: ["april-data.json"],
+            financialYear: "2026-27",
+            outcomeCategory: "staged",
+            period: "April",
+            returnType: "GSTR-2B",
+          },
+        ],
+      },
+    });
+
+    expect(zip).toMatchObject({
+      ok: true,
+      summary: { status: "included", workbookOutcome: "unavailable" },
+    });
+    const archivedEntries = await extractStoredZipEntries(createdBlobs[0]!);
+    expect([...archivedEntries.keys()]).toContain("full-year-summary.csv");
+    expect([...archivedEntries.keys()]).not.toContain("full-year-workbook.xlsx");
+    expect(JSON.stringify(zip)).not.toContain("synthetic shape rejection");
+  });
+
   it("keeps the artifact ZIP with a named outcome when workbook generation throws", async () => {
     vi.doMock("../../src/connectors/gst/filed-returns-full-year-workbook", () => ({
       FILED_RETURNS_FULL_YEAR_WORKBOOK_PATH: "full-year-workbook.xlsx",

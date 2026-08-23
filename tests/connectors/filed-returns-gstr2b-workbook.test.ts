@@ -97,6 +97,27 @@ describe("GSTR-2B consolidated workbook", () => {
     expect(sheetNames(text(extractStoredZipEntries(workbook), "xl/workbook.xml"))).toEqual(["B2B"]);
   });
 
+  // The workbook footer already promised that unconfirmed portal sections are
+  // excluded, while the builder rejected the whole run when it met one. That
+  // discarded the tidy CSV too, so a taxpayer whose GSTR-2B carries a section
+  // this build does not render lost the artifact that does not depend on it.
+  it("renders known sections and names an unrendered one instead of refusing", () => {
+    const data = { ...docdata(), isd: [{ ctin: "27ABCDE1000F1ZC" }] } as ReturnType<typeof docdata>;
+    const entries = extractStoredZipEntries(buildWorkbook(data));
+
+    expect(sheetNames(text(entries, "xl/workbook.xml"))).toEqual(["B2B", "B2BA", "CDNR", "IMPG"]);
+    const b2b = text(entries, "xl/worksheets/sheet1.xml");
+    expect(b2b).toContain("Sections present in the source but not rendered: isd.");
+    expect(b2b).toContain("INV-001");
+  });
+
+  // The forbidden-path screen still applies at that level: relaxing the schema
+  // allowlist must not relax privacy.
+  it("still fails closed when an unrendered section name is credential-shaped", () => {
+    const data = { ...docdata(), sessionData: [{}] } as ReturnType<typeof docdata>;
+    expect(() => buildWorkbook(data)).toThrow(FiledReturnsGstr2bWorkbookPrivacyError);
+  });
+
   it("fails closed rather than placing the return owner in a counterparty row", () => {
     const data = docdata();
     data.b2b[0]!.ctin = OWNER_GSTIN;
