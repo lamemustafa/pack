@@ -185,9 +185,9 @@ describe("GSTR-2B consolidated workbook", () => {
   //
   // 1. `inv[]` is FLAT -- txval/igst/cgst/sgst/cess sit on the invoice, and
   //    there is no nested `items` array;
-  // 2. `irn`, `irngendate` and `srctyp` are present on well under half the
-  //    invoices, so they are optional and every fixture above over-specified
-  //    them by always supplying all three;
+  // 2. `irn`, `irngendate` and `srctyp` are optional -- present on some invoice
+  //    records and absent from others in one period -- and every fixture above
+  //    over-specified them by always supplying all three;
   // 3. `docdata` has siblings under `/data` -- `cpsumm`, `itcsumm`, `gendt`,
   //    `version` -- plus a root `chksum`, none of which the builder reads.
   it("renders a captured-shape period whose invoices omit the optional keys", () => {
@@ -267,6 +267,34 @@ describe("GSTR-2B consolidated workbook", () => {
     expect(b2b).not.toContain("cpsumm");
     expect(b2b).not.toContain("itcsumm");
     expect(b2b).not.toContain("Sections present in the source but not rendered");
+  });
+
+  // JSON.parse keeps the last of a duplicate key; the canonical parser the tidy
+  // CSV uses refuses the document outright. Without the same boundary here, a
+  // period the CSV called unparseable could still produce a workbook from tax
+  // values whose duplicates were resolved arbitrarily -- inside a ZIP whose own
+  // message said no parseable portal JSON was available.
+  it("refuses a source the canonical parser rejects for duplicate keys", () => {
+    const plan: FiledReturnsSummaryPlanEntry[] = [planEntry("April", "april-data.json")];
+    const body = JSON.stringify({
+      data: {
+        gstin: OWNER_GSTIN,
+        lglnm: "Synthetic Owner Legal Name",
+        trdnm: "Synthetic Owner Trade Name",
+        rtnprd: "042026",
+        docdata: docdata(),
+      },
+    });
+    const withDuplicate = body.replace('"rtnprd":"042026"', '"rtnprd":"042026","rtnprd":"052026"');
+    expect(withDuplicate).not.toBe(body);
+
+    expect(() =>
+      buildFiledReturnsGstr2bWorkbook(
+        plan,
+        [{ path: "april-data.json", bytes: new TextEncoder().encode(withDuplicate) }],
+        { generatedAt: new Date("2026-08-22T12:00:00.000Z") },
+      ),
+    ).toThrow(/not canonically parseable/);
   });
 
   it("fails closed rather than placing the return owner in a counterparty row", () => {

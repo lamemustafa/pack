@@ -1,3 +1,4 @@
+import { flattenJsonTextScalarLeaves, JsonFlatTableLimitError } from "../../core/json-flat-table";
 import { createXlsx, type XlsxCell, type XlsxWorksheet } from "../../core/xlsx";
 import type { ZipEntry } from "../../core/zip";
 import { exactSpreadsheetNumber } from "./filed-returns-full-year-workbook";
@@ -269,9 +270,26 @@ function gstr2bSources(
     } catch {
       throw new FiledReturnsGstr2bWorkbookSchemaError("GSTR-2B workbook source is not JSON.");
     }
-    // Outside the catch above on purpose: inside it, this refusal was rewritten
-    // as "source is not JSON", which is untrue and undiagnosable. A boundary
-    // that rejects a value must be able to state its own reason.
+    // The same parser boundary the tidy CSV uses. `JSON.parse` accepts duplicate
+    // object keys and silently keeps the last, while the canonical parser
+    // refuses them -- so a document the CSV called unparseable could still have
+    // produced a workbook, from tax values whose duplicates were resolved
+    // arbitrarily, inside a ZIP whose own message said no parseable JSON existed.
+    //
+    // Its leaves are not reused for the number check below: arrays arrive as
+    // counts unless expanded, so the invoice amounts are not among them. The two
+    // checks answer different questions.
+    try {
+      flattenJsonTextScalarLeaves(sourceText);
+    } catch (error) {
+      if (error instanceof JsonFlatTableLimitError) throw error;
+      throw new FiledReturnsGstr2bWorkbookSchemaError(
+        "GSTR-2B workbook source is not canonically parseable.",
+      );
+    }
+    // Outside the JSON.parse catch on purpose: inside it, this refusal was
+    // rewritten as "source is not JSON", which is untrue and undiagnosable. A
+    // boundary that rejects a value must be able to state its own reason.
     rejectInexactNumbers(sourceText);
     const data = requiredObject(requiredObject(parsed, "/").data, "/data");
     sources.push({ data, period: item.period });

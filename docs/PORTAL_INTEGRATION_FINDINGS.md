@@ -170,10 +170,11 @@ This log records live diagnostic findings that constrain Pack's local, target-bo
     breakdown; this capture falsifies it for GSTR-2B. Do not port the GSTR-1 `itms`/`itm_det`
     shape onto GSTR-2B without a capture that shows it.
 
-28. Three GSTR-2B invoice fields are **optional**: `irn`, `irngendate` and `srctyp` were
-    present on well under half the invoice records in a captured period, and absent from the rest.
-    Every fixture written before that capture supplied all three on every invoice, so the majority
-    real case was untested. Treat them as optional in any schema or fixture.
+28. Three GSTR-2B invoice fields are **optional**: `irn`, `irngendate` and `srctyp` are present
+    on some invoice records and absent from others within a single period. Every fixture written
+    before that was observed supplied all three on every invoice, so the absent case was untested.
+    Treat them as optional in any schema or fixture, and do not record how often either case
+    occurs -- a prevalence figure from a real return is a taxpayer-derived metric.
 
 29. `data.docdata` has siblings the workbook does not read: `cpsumm` (counterparty
     summary), `itcsumm` (ITC availability totals), `gendt`, `version`, plus a root `chksum`.

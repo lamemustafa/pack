@@ -280,7 +280,15 @@ function createSummaryEntry(
       // statement about the source document and still fails closed; size and
       // unexpected failures keep their existing terminal outcomes, which other
       // tests pin.
-      if (error instanceof FiledReturnsGstr2bWorkbookSchemaError) {
+      // A TypeError from createXlsx is a cell-validation failure: a text field
+      // past Excel's 32,767-character limit, or an XML-forbidden control
+      // character. That says the workbook cannot hold this document, not that
+      // the run failed -- and README and the privacy QA both promise the CSV
+      // survives exactly that case.
+      if (
+        error instanceof FiledReturnsGstr2bWorkbookSchemaError ||
+        (gstr2bWorkbookApplicable && error instanceof TypeError)
+      ) {
         if (summary.dataBytes.byteLength > remainingZipBudget) {
           return { result: { status: "failed", reasonCategory: "too-large" } };
         }
