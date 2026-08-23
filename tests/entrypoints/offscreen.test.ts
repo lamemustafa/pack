@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { isPackOffscreenBlobUrlMessage } from "../../src/connectors/gst/filed-returns-offscreen-validation";
 import { PACK_OFFSCREEN_BLOB_URL_TARGET } from "../../src/connectors/gst/offscreen-blob-url";
 import { createPortalGstr2bWorkbook } from "../fixtures/gstr2b-workbook";
+import type * as Gstr2bWorkbookModule from "../../src/connectors/gst/filed-returns-gstr2b-workbook";
 
 type RuntimeListener = (
   message: unknown,
@@ -1214,10 +1215,7 @@ describe("offscreen Blob URL entrypoint", () => {
   // whole derived-summary path fails with the workbook.
   it("keeps the derived CSV when the GSTR-2B workbook rejects the document shape", async () => {
     vi.doMock("../../src/connectors/gst/filed-returns-gstr2b-workbook", async (importOriginal) => {
-      const actual =
-        await importOriginal<
-          typeof import("../../src/connectors/gst/filed-returns-gstr2b-workbook")
-        >();
+      const actual = await importOriginal<typeof Gstr2bWorkbookModule>();
       return {
         ...actual,
         buildFiledReturnsGstr2bWorkbook: () => {
