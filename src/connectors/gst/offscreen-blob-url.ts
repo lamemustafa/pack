@@ -169,7 +169,10 @@ export type PackOffscreenFiledReturnSummaryResult =
       // "unavailable": one was attempted and could not be produced, and the
       // tidy CSV -- already built and already privacy-screened -- is kept
       // rather than discarded with it.
-      workbookOutcome?: "not-applicable" | "unavailable";
+      // "not-applicable": this return type never produces a workbook.
+      // "no-records": it does, but this document carried no invoice-level record.
+      // "unavailable": one was attempted and could not be produced.
+      workbookOutcome?: "not-applicable" | "no-records" | "unavailable";
     }
   | { status: "failed"; reasonCategory: PackOffscreenFiledReturnSummaryErrorCategory };
 

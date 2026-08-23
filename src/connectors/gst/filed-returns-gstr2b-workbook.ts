@@ -4,6 +4,7 @@ import { exactSpreadsheetNumber } from "./filed-returns-full-year-workbook";
 import { isFiledReturnsSummaryForbiddenFieldPath } from "./filed-returns-summary-redaction";
 import {
   isCredentialShapedValue,
+  isIdentityShapedSegment,
   isValidGstin,
   type FiledReturnsSummaryPlanEntry,
 } from "./filed-returns-summary-sheet";
@@ -168,7 +169,7 @@ export function buildFiledReturnsGstr2bWorkbook(
             identity,
             financialYear,
             options.generatedAt,
-            [...excludedSections].sort(),
+            renderableSectionNames(excludedSections, identity.values),
           ),
         ]
       : [];
@@ -278,6 +279,39 @@ function gstr2bSources(
   return sources;
 }
 
+/**
+ * Section names are portal-controlled text, so naming them in the footer copies
+ * a key this build never validated into the artifact.
+ *
+ * A GSTIN or PAN can arrive as an ordinary object key -- the tidy-CSV path says
+ * so in as many words and refuses the shape wherever a decoded segment carries
+ * it. The workbook footer had no such screen, so an unrecognised section keyed
+ * by an identity would have been republished in the XLSX after the CSV
+ * deliberately withheld it.
+ *
+ * Anything withheld is still counted, because an omission the artifact cannot
+ * describe is not diagnosable.
+ */
+function renderableSectionNames(
+  excluded: ReadonlySet<string>,
+  ownerValues: ReadonlySet<string>,
+): { named: string[]; withheld: number } {
+  const named: string[] = [];
+  let withheld = 0;
+  for (const section of [...excluded].sort()) {
+    if (
+      /^[A-Za-z0-9_]{1,24}$/.test(section) &&
+      !isIdentityShapedSegment(section) &&
+      !ownerValues.has(normaliseIdentity(section))
+    ) {
+      named.push(section);
+      continue;
+    }
+    withheld += 1;
+  }
+  return { named, withheld };
+}
+
 function collectOwnerIdentity(sources: readonly Gstr2bSource[]): OwnerIdentity {
   let gstin: string | undefined;
   let legalName: string | undefined;
@@ -343,9 +377,16 @@ function invoiceRows(
   const record = requiredObject(value, recordPath);
   const documentKey = section === "cdnr" ? "nt" : "inv";
   validateKeys(record, [...SUPPLIER_KEYS.filter((key) => key !== "inv"), documentKey], recordPath);
-  const ctin = requiredText(record.ctin, `${recordPath}/ctin`);
-  if (!isValidGstin(ctin)) {
-    throw new FiledReturnsGstr2bWorkbookPrivacyError("GSTR-2B counterparty GSTIN is invalid.");
+  // A missing or malformed counterparty GSTIN says the document is not the shape
+  // this build renders. It is not evidence of a taxpayer-identity or credential
+  // leak, and classifying it as one discarded the already privacy-screened CSV.
+  // The owner check below is the one that guards a real leak, and it stays a
+  // privacy rejection.
+  const ctin = optionalText(record.ctin, `${recordPath}/ctin`);
+  if (ctin === undefined || ctin === "" || !isValidGstin(ctin)) {
+    throw new FiledReturnsGstr2bWorkbookSchemaError(
+      "GSTR-2B counterparty GSTIN is missing or not a GSTIN.",
+    );
   }
   assertNotOwnerIdentity(ctin, ownerValues);
   const supplier = {
@@ -359,6 +400,15 @@ function invoiceRows(
   return requiredArray(record[documentKey], `${recordPath}/${documentKey}`).map((document) => {
     const documentRecord = requiredObject(document, `${recordPath}/${documentKey}`);
     validateKeys(documentRecord, invoiceKeys, `${recordPath}/${documentKey}`);
+    // Every document field is optional, so `{}` validated cleanly and produced a
+    // row carrying nothing but the plan period -- which made the workbook
+    // applicable and let its footer claim invoice-level records are present.
+    const numberKey = section === "cdnr" ? "ntnum" : "inum";
+    if (!optionalText(documentRecord[numberKey], `${recordPath}/${documentKey}/${numberKey}`)) {
+      throw new FiledReturnsGstr2bWorkbookSchemaError(
+        `A GSTR-2B ${section.toUpperCase()} record carries no document number.`,
+      );
+    }
     return {
       period,
       ...supplier,
@@ -435,6 +485,11 @@ function importGoodsRow(value: unknown, period: string, ownerValues: ReadonlySet
   const path = "/data/docdata/impg";
   const record = requiredObject(value, path);
   validateKeys(record, IMPG_KEYS, path);
+  if (!optionalText(record.boenum, `${path}/boenum`)) {
+    throw new FiledReturnsGstr2bWorkbookSchemaError(
+      "A GSTR-2B IMPG record carries no bill of entry number.",
+    );
+  }
   return {
     period,
     boenum: safeText(optionalText(record.boenum, `${path}/boenum`), ownerValues),
@@ -456,7 +511,7 @@ function worksheet(
   identity: OwnerIdentity,
   financialYear: string,
   generatedAt: Date,
-  excludedSections: readonly string[],
+  excludedSections: { named: readonly string[]; withheld: number },
 ): XlsxWorksheet {
   const columns =
     section === "impg"
@@ -497,8 +552,11 @@ function worksheet(
           value:
             `${SECTION_NAMES[section]} invoice-level records present in the captured JSON. ` +
             `Does not include ITC summary figures or unconfirmed portal sections.` +
-            (excludedSections.length > 0
-              ? ` Sections present in the source but not rendered: ${excludedSections.join(", ")}.`
+            (excludedSections.named.length > 0
+              ? ` Sections present in the source but not rendered: ${excludedSections.named.join(", ")}.`
+              : "") +
+            (excludedSections.withheld > 0
+              ? ` ${excludedSections.withheld} further section name(s) withheld because the name itself could carry an identity.`
               : ""),
         },
       ],

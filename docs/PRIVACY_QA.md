@@ -56,9 +56,15 @@ For each release candidate:
   GSTIN and trade name appear in the invoice rows -- withholding them would
   empty the column the statement exists to report.
 - Confirm a GSTR-2B assembly with no invoice-level record emits
-  `full-fiscal-year-workbook-not-applicable`, and that one whose document is
-  refused emits `full-fiscal-year-workbook-unavailable`; both must keep the tidy
-  CSV. No assembly may emit a GSTR-3B workbook for another return type. The
+  `full-fiscal-year-workbook-no-records`, and that one refused for its **shape or
+  for a value that cannot be written to a spreadsheet unchanged** emits
+  `full-fiscal-year-workbook-unavailable`; both must keep the tidy CSV.
+- Confirm the opposite for the other two refusals: a **privacy or identity**
+  rejection must fail the whole derived-summary path with no CSV and no
+  workbook. Those say something about the source document, not about the
+  workbook, and must stay fail-closed. Do not read the line above as covering
+  them.
+- No assembly may emit a GSTR-3B workbook for another return type. The
   standalone context CSV must be absent.
   The data CSV must keep
   the fixed tidy columns `period`, `return_type`, `artifact`, `outcome`,

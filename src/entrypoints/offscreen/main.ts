@@ -323,7 +323,10 @@ function createSummaryEntry(
           outcomeOnly: summary.outcomeOnly,
           parsedPeriodCount: summary.parsedPeriodCount,
           rowCount: summary.rowCount,
-          workbookOutcome: "not-applicable",
+          // GSTR-2B does produce workbooks, so "not-applicable" would give the
+          // wrong reason: nothing here is inapplicable to the return type, this
+          // document simply carried no invoice-level record.
+          workbookOutcome: gstr2bWorkbookApplicable ? "no-records" : "not-applicable",
         },
       };
     }

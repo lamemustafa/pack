@@ -392,7 +392,7 @@ function isSummaryResult(
   const homogeneous = plan.every((entry) => entry.returnType === returnType);
   const permittedWorkbookOutcomes: readonly (string | undefined)[] =
     homogeneous && returnType === "GSTR-2B"
-      ? [undefined, "not-applicable", "unavailable"]
+      ? [undefined, "no-records", "unavailable"]
       : homogeneous && returnType === "GSTR-3B"
         ? [undefined]
         : ["not-applicable"];

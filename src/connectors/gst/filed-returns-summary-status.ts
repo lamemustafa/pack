@@ -62,6 +62,8 @@ function summaryInclusionClaim(lifecycle: FiledReturnsSummaryLifecycle, contents
 
 const WORKBOOK_ABSENCE_SENTENCE: Readonly<Record<string, string>> = {
   "not-applicable": " A consolidated workbook is not available for this return type.",
+  "no-records":
+    " The staged portal JSON carried no invoice-level records, so no workbook was produced.",
   unavailable:
     " Pack could not produce the workbook for this document, so the ZIP has the tidy CSV only.",
 };

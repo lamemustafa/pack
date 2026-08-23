@@ -101,6 +101,27 @@ describe("GSTR-2B consolidated workbook", () => {
   // excluded, while the builder rejected the whole run when it met one. That
   // discarded the tidy CSV too, so a taxpayer whose GSTR-2B carries a section
   // this build does not render lost the artifact that does not depend on it.
+
+  // Section names are portal-controlled text. Naming an unrecognised section in
+  // the footer copies a key this build never validated into the artifact, and a
+  // GSTIN or PAN can arrive as an ordinary object key -- which is why the tidy
+  // CSV refuses that shape in a path segment. The footer had no such screen.
+  it.each([
+    ["a GSTIN-keyed section", COUNTERPARTY_GSTIN],
+    ["a PAN-keyed section", "ABCDE1234F"],
+    ["an owner-trade-name-keyed section", "Synthetic Owner Trade Name"],
+  ])("withholds %s from the footer while still counting it", (_label, sectionKey) => {
+    const data = { ...docdata(), [sectionKey]: [{}] } as ReturnType<typeof docdata>;
+    const b2b = text(extractStoredZipEntries(buildWorkbook(data)), "xl/worksheets/sheet1.xml");
+
+    // Asserted on the footer, not the whole sheet: the counterparty GSTIN
+    // belongs in the invoice rows and the owner trade name belongs in the
+    // header, so a whole-sheet assertion would fail on correct output -- and
+    // the sample PAN is a substring of the owner GSTIN besides.
+    expect(b2b).not.toContain("not rendered:");
+    expect(b2b).toContain("1 further section name(s) withheld");
+  });
+
   it("renders known sections and names an unrendered one instead of refusing", () => {
     const data = { ...docdata(), isd: [{ ctin: "27ABCDE1000F1ZC" }] } as ReturnType<typeof docdata>;
     const entries = extractStoredZipEntries(buildWorkbook(data));

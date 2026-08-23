@@ -568,7 +568,7 @@ function isSafeFiledReturnsDiscriminatorValue(key: string, value: string): boole
 // shape is refused wherever a decoded segment carries it.
 const PAN_SHAPE = /^[A-Za-z]{5}[0-9]{4}[A-Za-z]$/;
 
-function isIdentityShapedSegment(segment: string): boolean {
+export function isIdentityShapedSegment(segment: string): boolean {
   return PAN_SHAPE.test(segment) || isValidGstin(segment);
 }
 

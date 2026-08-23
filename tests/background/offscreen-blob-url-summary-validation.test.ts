@@ -102,11 +102,40 @@ describe("offscreen full-year summary response validation", () => {
   // "not-applicable". The validator used to re-derive the expected outcome from
   // the return type alone and reject this, which discarded an already
   // privacy-screened CSV and blocked the whole ZIP.
-  it("accepts a workbook-eligible GSTR-2B receipt that emitted the CSV alone", async () => {
+  it("accepts a GSTR-2B receipt that emitted the CSV alone for want of records", async () => {
     mocks.runtime.sendMessage.mockImplementationOnce(async (message?: unknown) => ({
       ok: true,
       requestId: requestIdFrom(message),
       blobUrl: "blob:pack/csv-only",
+      zipEntryCount: 2,
+      artifactEntryCount: 1,
+      summaryEntryCount: 1,
+      summary: {
+        status: "included",
+        outcomeOnly: false,
+        parsedPeriodCount: 1,
+        rowCount: 2,
+        workbookOutcome: "no-records",
+      },
+    }));
+
+    await expect(
+      createOffscreenFiledReturnZipUrl("full-fiscal-year-12345678", request()),
+    ).resolves.toMatchObject({
+      status: "created",
+      artifactEntryCount: 1,
+      summary: { status: "included", parsedPeriodCount: 1, rowCount: 2 },
+    });
+  });
+
+  // GSTR-2B does produce workbooks, so "not-applicable" is the wrong reason for
+  // it and no longer a legitimate receipt: it would tell the user a workbook is
+  // unavailable for this return type, which is false.
+  it("rejects a GSTR-2B receipt claiming the not-applicable outcome", async () => {
+    mocks.runtime.sendMessage.mockImplementationOnce(async (message?: unknown) => ({
+      ok: true,
+      requestId: requestIdFrom(message),
+      blobUrl: "blob:pack/gstr2b-wrong-reason",
       zipEntryCount: 2,
       artifactEntryCount: 1,
       summaryEntryCount: 1,
@@ -121,11 +150,7 @@ describe("offscreen full-year summary response validation", () => {
 
     await expect(
       createOffscreenFiledReturnZipUrl("full-fiscal-year-12345678", request()),
-    ).resolves.toMatchObject({
-      status: "created",
-      artifactEntryCount: 1,
-      summary: { status: "included", parsedPeriodCount: 1, rowCount: 2 },
-    });
+    ).resolves.toMatchObject({ status: "failed", errorCategory: "offscreen-response-invalid" });
   });
 
   // GSTR-3B can only produce a workbook plus CSV or a failed summary. Accepting
