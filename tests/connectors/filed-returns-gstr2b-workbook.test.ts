@@ -419,6 +419,36 @@ describe("GSTR-2B consolidated workbook", () => {
     ).toThrow(/cannot scan for exact amounts/);
   });
 
+  // Depth alone does not make a token a key. A sibling whose *value* equals the
+  // key name sits at the same depth and matched, and the search for the next
+  // colon then returned the following member's container -- so the guard scanned
+  // an unrelated object while the real amounts went unchecked. No nesting and no
+  // escape needed; an ordinary string value was enough.
+  it("scans the real docdata when a sibling value equals the key name", () => {
+    const plan: FiledReturnsSummaryPlanEntry[] = [planEntry("April", "april-data.json")];
+    const bytes = new TextEncoder().encode(
+      JSON.stringify({
+        data: {
+          gstin: OWNER_GSTIN,
+          rtnprd: "042026",
+          // The decoy value, then an intervening object member. The forward
+          // search lands on that member's colon and returns its container,
+          // which carries no inexact amount, so the scan passes having never
+          // reached the real section.
+          chksum: "docdata",
+          cpsumm: { totcgst: 1, totsgst: 2 },
+          docdata: docdata(),
+        },
+      }).replace('"val":110', '"val":1.11111111111111111'),
+    );
+
+    expect(() =>
+      buildFiledReturnsGstr2bWorkbook(plan, [{ path: "april-data.json", bytes }], {
+        generatedAt: new Date("2026-08-22T12:00:00.000Z"),
+      }),
+    ).toThrow(/cannot be written to a spreadsheet without changing it/);
+  });
+
   // The ITC totals a return preparer works from reached only the tidy CSV,
   // which for GSTR-2B carries no invoice rows -- so the figures a taxpayer
   // files from sat in the artifact least able to show them.
