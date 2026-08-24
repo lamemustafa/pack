@@ -1,4 +1,7 @@
-import { isFlatJsonArrayCountReason } from "../../core/json-flat-table";
+import {
+  isFlatJsonArrayCountReason,
+  jsonNumberTokenToPlainDecimal,
+} from "../../core/json-flat-table";
 import { XLSX_NUMBER_DECIMAL_PLACES } from "../../core/xlsx";
 import {
   createXlsx,
@@ -284,7 +287,18 @@ function exactTotalSpreadsheetValue(
   const exactText = exactDecimalSum(inputs);
   if (exactText === null) return "Exact total unavailable: invalid source decimal";
   const value = exactSpreadsheetNumber(exactText);
-  if (hasUnrepresentableMonth || value === null || String(value) !== exactText) {
+  // `String(value)` is the shortest decimal that round-trips to the same double,
+  // and below `1e-6` JavaScript writes that in exponent form -- so `0.0000001`
+  // stringifies as `1e-7` and the lexical comparison failed for a value the
+  // double represents exactly. The monthly cell displayed it and the total said
+  // it was unavailable at spreadsheet precision, which is the same disagreement
+  // between stored and shown that this change set out to remove, one column
+  // over.
+  //
+  // Compared as plain decimals through the canonical converter rather than as
+  // strings, so two spellings of one value stop giving two answers.
+  const roundTrip = value === null ? null : jsonNumberTokenToPlainDecimal(String(value));
+  if (hasUnrepresentableMonth || value === null || roundTrip !== exactText) {
     const explanatoryTotal = `Exact total ${exactText} unavailable at spreadsheet numeric precision`;
     return explanatoryTotal.length <= MAX_EXCEL_STRING_LENGTH
       ? explanatoryTotal

@@ -317,6 +317,35 @@ describe("filed-return full-year workbook", () => {
     expect(numbers).not.toContain("1");
   });
 
+  // `String(value)` is the shortest decimal that round-trips to the same double,
+  // and below `1e-6` JavaScript writes it in exponent form -- so `0.0000001`
+  // stringified as `1e-7` and the lexical comparison failed for a value the
+  // double holds exactly. The month displayed the figure while the total called
+  // it unavailable at spreadsheet precision: the same stored-versus-shown
+  // disagreement this change removes, one column over.
+  it("totals a small decimal the widened format now displays", () => {
+    const plan = fullYearPlan();
+    const summary = buildFiledReturnsSummarySheet(plan, [
+      {
+        path: "april-data.json",
+        bytes: new TextEncoder().encode(
+          '{"status":1,"data":{"lglnm":"Synthetic Legal Name","r3b":{"gstin":"27ABCDE1234F1Z0","ret_period":"042026","sup_details":{"osup_det":{"txval":0.0000001}}}}}',
+        ),
+      },
+    ]);
+    const workbook = buildFiledReturnsFullYearWorkbook(summary, plan, {
+      generatedAt: new Date("2026-08-19T12:00:00.000Z"),
+    });
+    const rows = parsedRows(text(extractStoredZipEntries(workbook), "xl/worksheets/sheet1.xml"));
+    const cells = [...rows.values()].flatMap((row) => [...row.values()]);
+    const numbers = cells.map((cell) => cell.number ?? "");
+    const texts = cells.map((cell) => cell.text ?? "");
+
+    // The month and its total are the same figure, so they must agree.
+    expect(numbers.filter((number) => Number(number) === 1e-7)).toHaveLength(2);
+    expect(texts.join(" ")).not.toContain("unavailable at spreadsheet numeric precision");
+  });
+
   it("refuses a total when a month is a numeric-looking string", () => {
     const plan = fullYearPlan();
     // "100" parses as a decimal, so it was summed into the total while its own
