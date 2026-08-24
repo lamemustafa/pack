@@ -51,10 +51,7 @@ async function filesIn(directory: string, include: (name: string) => boolean): P
 }
 
 async function sourceFilesIn(directory: string): Promise<string[]> {
-  return filesIn(
-    directory,
-    (name) => SOURCE_EXTENSIONS.has(extname(name)) && !name.endsWith(".d.ts"),
-  );
+  return filesIn(directory, (name) => SOURCE_EXTENSIONS.has(extname(name)));
 }
 
 function typescriptModuleSpecifiers(sourceFile: ts.SourceFile): string[] {
@@ -119,6 +116,41 @@ function compilerOptionsFor(projectRoot: string): ProjectCompilerOptions {
   };
 }
 
+function stylesheetSourcePathForSpecifier(
+  specifierPath: string,
+  importerPath: string,
+  compilerOptions: ProjectCompilerOptions,
+  filesByPath: ReadonlyMap<string, string>,
+): string | undefined {
+  if (extname(specifierPath) !== ".css") return undefined;
+  if (specifierPath.startsWith(".")) {
+    const candidatePath = canonicalPath(resolve(dirname(importerPath), specifierPath));
+    return filesByPath.has(candidatePath) ? candidatePath : undefined;
+  }
+
+  const matchingPathPatterns = Object.entries(compilerOptions.options.paths ?? {})
+    .map(([pattern, substitutions]) => {
+      const [prefix = "", suffix = ""] = pattern.split("*");
+      return { prefix, suffix, substitutions };
+    })
+    .filter(
+      ({ prefix, suffix }) => specifierPath.startsWith(prefix) && specifierPath.endsWith(suffix),
+    )
+    .sort((left, right) => right.prefix.length - left.prefix.length);
+
+  for (const { prefix, suffix, substitutions } of matchingPathPatterns) {
+    const wildcard = specifierPath.slice(prefix.length, specifierPath.length - suffix.length);
+    for (const substitution of substitutions) {
+      const candidatePath = canonicalPath(
+        resolve(compilerOptions.pathsBasePath, substitution.replaceAll("*", wildcard)),
+      );
+      if (filesByPath.has(candidatePath)) return candidatePath;
+    }
+  }
+
+  return undefined;
+}
+
 function sourcePathForSpecifier(
   specifier: string,
   importerPath: string,
@@ -136,25 +168,12 @@ function sourcePathForSpecifier(
     const resolvedPath = canonicalPath(resolvedModule.resolvedFileName);
     if (filesByPath.has(resolvedPath)) return resolvedPath;
   }
-
-  for (const [pattern, substitutions] of Object.entries(compilerOptions.options.paths ?? {})) {
-    const [prefix, suffix = ""] = pattern.split("*");
-    if (!specifierPath.startsWith(prefix ?? "") || !specifierPath.endsWith(suffix)) continue;
-    const wildcard = specifierPath.slice(
-      (prefix ?? "").length,
-      specifierPath.length - suffix.length,
-    );
-    for (const substitution of substitutions) {
-      const candidatePath = canonicalPath(
-        resolve(compilerOptions.pathsBasePath, substitution.replaceAll("*", wildcard)),
-      );
-      if (filesByPath.has(candidatePath)) return candidatePath;
-    }
-  }
-
-  if (!specifierPath.startsWith(".")) return undefined;
-  const candidatePath = canonicalPath(resolve(dirname(importerPath), specifierPath));
-  return filesByPath.has(candidatePath) ? candidatePath : undefined;
+  return stylesheetSourcePathForSpecifier(
+    specifierPath,
+    importerPath,
+    compilerOptions,
+    filesByPath,
+  );
 }
 
 function isSourceSpecifier(specifier: string, compilerOptions: ProjectCompilerOptions): boolean {
@@ -183,7 +202,7 @@ function isWxtEntrypoint(sourceDirectory: string, filePath: string): boolean {
 
 function htmlAttributeValue(attributes: string, name: string): string | undefined {
   const match = attributes.match(
-    new RegExp("\\b" + name + "\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s\"'=<>`]+))", "i"),
+    new RegExp("(?:^|\\s)" + name + "\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s\"'=<>`]+))", "i"),
   );
   return match?.[1] ?? match?.[2] ?? match?.[3];
 }
@@ -247,7 +266,6 @@ async function optionalWxtConfigText(wxtConfigPath: string): Promise<string | un
 }
 
 function wxtSourceDirectory(projectRoot: string, configText: string | undefined): string {
-  // WXT 0.21.4 resolve-config.mjs defaults srcDir to config.root when it is absent.
   if (!configText) return projectRoot;
   const configSource = ts.createSourceFile(
     join(projectRoot, "wxt.config.ts"),
@@ -265,7 +283,10 @@ function wxtSourceDirectory(projectRoot: string, configText: string | undefined)
       const configObject = node.arguments.find(ts.isObjectLiteralExpression);
       const srcDirProperty = configObject?.properties.find(
         (property): property is ts.PropertyAssignment =>
-          ts.isPropertyAssignment(property) && property.name.getText(configSource) === "srcDir",
+          ts.isPropertyAssignment(property) &&
+          (ts.isStringLiteral(property.name)
+            ? property.name.text
+            : property.name.getText(configSource)) === "srcDir",
       );
       srcDirInitializer = srcDirProperty?.initializer;
     }
@@ -277,6 +298,14 @@ function wxtSourceDirectory(projectRoot: string, configText: string | undefined)
     throw new Error("Could not determine static WXT srcDir from wxt.config.ts");
   }
   return resolve(projectRoot, srcDirInitializer.text);
+}
+
+function assertScannableWxtSourceDirectory(projectRoot: string, sourceDirectory: string): void {
+  if (canonicalPath(sourceDirectory) === canonicalPath(projectRoot)) {
+    throw new Error(
+      "WXT config wxt.config.ts must set a static srcDir outside the project root; refusing to scan an unbounded extension source tree",
+    );
+  }
 }
 
 async function rootPathsFor(
@@ -339,7 +368,9 @@ async function assertNoUnreferencedSourceModules(
 ): Promise<void> {
   const wxtConfigText = await optionalWxtConfigText(join(projectRoot, "wxt.config.ts"));
   const sourceDirectory = wxtSourceDirectory(projectRoot, wxtConfigText);
+  assertScannableWxtSourceDirectory(projectRoot, sourceDirectory);
   const sourceFiles = await sourceFilesIn(sourceDirectory);
+  const reportableSourceFiles = sourceFiles.filter((filePath) => !filePath.endsWith(".d.ts"));
   const filesByPath = new Map(sourceFiles.map((filePath) => [canonicalPath(filePath), filePath]));
   const dependenciesByPath = new Map(
     sourceFiles.map((filePath) => [canonicalPath(filePath), new Set<string>()]),
@@ -414,7 +445,7 @@ async function assertNoUnreferencedSourceModules(
     );
   }
 
-  const unreferenced = sourceFiles
+  const unreferenced = reportableSourceFiles
     .filter((filePath) => {
       const canonicalFilePath = canonicalPath(filePath);
       return !allowlistedPaths.has(canonicalFilePath) && !reachedPaths.has(canonicalFilePath);
@@ -608,6 +639,44 @@ describe("unreferenced source module guard", () => {
     await expect(assertNoUnreferencedSourceModules(projectRoot)).resolves.toBeUndefined();
   });
 
+  it("uses the longest matching alias only for stylesheet imports", async () => {
+    const projectRoot = await createTemporaryProject();
+    await writeProjectFile(
+      projectRoot,
+      "tsconfig.json",
+      JSON.stringify({
+        compilerOptions: {
+          baseUrl: ".",
+          paths: {
+            "@/*": ["src/styles/live.css"],
+            "@/styles/*": ["src/generated/styles/*"],
+          },
+        },
+      }),
+    );
+    await writeProjectFile(
+      projectRoot,
+      "src/entrypoints/background.ts",
+      'import "../styles/live.css";\nimport "@/styles/aliased.css";\n',
+    );
+    await writeProjectFile(projectRoot, "src/styles/live.css", ".live {}\n");
+    await writeProjectFile(projectRoot, "src/generated/styles/aliased.css", ".aliased {}\n");
+
+    await expect(assertNoUnreferencedSourceModules(projectRoot)).resolves.toBeUndefined();
+  });
+
+  it("accepts type imports resolved to declaration files without reporting declarations", async () => {
+    const projectRoot = await createTemporaryProject();
+    await writeProjectFile(
+      projectRoot,
+      "src/entrypoints/background.ts",
+      'import type { Value } from "../core/types";\nexport type { Value };\n',
+    );
+    await writeProjectFile(projectRoot, "src/core/types.d.ts", "export type Value = string;\n");
+
+    await expect(assertNoUnreferencedSourceModules(projectRoot)).resolves.toBeUndefined();
+  });
+
   it("treats a named WXT content script as a root", async () => {
     const projectRoot = await createTemporaryProject();
     await writeProjectFile(projectRoot, "src/entrypoints/gst.content.ts", "export {};\n");
@@ -643,6 +712,21 @@ describe("unreferenced source module guard", () => {
 
     await expect(assertNoUnreferencedSourceModules(projectRoot)).rejects.toThrow(
       /^Unreferenced source modules:\n- src\/entrypoints\/options\/main\.ts$/,
+    );
+  });
+
+  it("does not treat data-src as a module root", async () => {
+    const projectRoot = await createTemporaryProject();
+    await writeProjectFile(projectRoot, "src/entrypoints/background.ts", "export {};\n");
+    await writeProjectFile(
+      projectRoot,
+      "src/entrypoints/options/index.html",
+      '<script type="module" data-src="./dead.ts"></script>\n',
+    );
+    await writeProjectFile(projectRoot, "src/entrypoints/options/dead.ts", "export {};\n");
+
+    await expect(assertNoUnreferencedSourceModules(projectRoot)).rejects.toThrow(
+      /^Unreferenced source modules:\n- src\/entrypoints\/options\/dead\.ts$/,
     );
   });
 
@@ -687,7 +771,7 @@ describe("unreferenced source module guard", () => {
     await writeProjectFile(
       projectRoot,
       "wxt.config.ts",
-      'import "./src/extension/missing-manifest-policy";\nexport {};\n',
+      'import { defineConfig } from "wxt";\nimport "./src/extension/missing-manifest-policy";\nexport default defineConfig({ srcDir: "src" });\n',
     );
     await expect(readFile(join(projectRoot, "wxt.config.ts"), "utf8")).resolves.toContain(
       '"./src/extension/missing-manifest-policy"',
@@ -762,12 +846,31 @@ describe("unreferenced source module guard", () => {
     await expect(assertNoUnreferencedSourceModules(projectRoot)).resolves.toBeUndefined();
   });
 
-  it("uses WXT's project-root default when srcDir is absent", async () => {
+  it("refuses WXT's project-root default when srcDir is absent", async () => {
     const projectRoot = await createTemporaryProject();
     const wxtConfigPath = join(projectRoot, "wxt.config.ts");
-    await rm(wxtConfigPath);
-    await expect(readFile(wxtConfigPath, "utf8")).rejects.toThrow();
-    await writeProjectFile(projectRoot, "entrypoints/background.ts", "export {};\n");
+    await writeProjectFile(
+      projectRoot,
+      "wxt.config.ts",
+      'import { defineConfig } from "wxt";\nexport default defineConfig({ modules: [] });\n',
+    );
+    await expect(readFile(wxtConfigPath, "utf8")).resolves.not.toContain("srcDir");
+    await writeProjectFile(projectRoot, "tests/unrelated.ts", "export {};\n");
+
+    await expect(assertNoUnreferencedSourceModules(projectRoot)).rejects.toThrow(
+      "WXT config wxt.config.ts must set a static srcDir outside the project root",
+    );
+  });
+
+  it("reads a quoted static WXT srcDir", async () => {
+    const projectRoot = await createTemporaryProject();
+    await writeProjectFile(
+      projectRoot,
+      "wxt.config.ts",
+      'import { defineConfig } from "wxt";\nexport default defineConfig({ "srcDir": "extension" });\n',
+    );
+    await writeProjectFile(projectRoot, "extension/entrypoints/background.ts", "export {};\n");
+    await writeProjectFile(projectRoot, "src/stale.ts", "export {};\n");
 
     await expect(assertNoUnreferencedSourceModules(projectRoot)).resolves.toBeUndefined();
   });
