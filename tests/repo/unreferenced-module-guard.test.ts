@@ -181,6 +181,13 @@ function isWxtEntrypoint(projectRoot: string, filePath: string): boolean {
   return /^src\/entrypoints\/(?:background|content|[^/]+\.content)\.(?:ts|tsx)$/.test(path);
 }
 
+function htmlAttributeValue(attributes: string, name: string): string | undefined {
+  const match = attributes.match(
+    new RegExp("\\b" + name + "\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s\"'=<>`]+))", "i"),
+  );
+  return match?.[1] ?? match?.[2] ?? match?.[3];
+}
+
 function htmlEntrypointSpecifiers(html: string): string[] {
   const specifiers: string[] = [];
   for (const match of html.matchAll(/<(script|link)\b([^>]*)>/gi)) {
@@ -188,17 +195,41 @@ function htmlEntrypointSpecifiers(html: string): string[] {
     if (!tagName || !attributes) continue;
     const normalizedTagName = tagName.toLowerCase();
     const isModuleScript =
-      normalizedTagName === "script" && /\btype\s*=\s*["']module["']/i.test(attributes);
+      normalizedTagName === "script" &&
+      htmlAttributeValue(attributes, "type")?.trim().toLowerCase() === "module";
     const isStylesheet =
-      normalizedTagName === "link" && /\brel\s*=\s*["']stylesheet["']/i.test(attributes);
-    const reference = attributes.match(
-      normalizedTagName === "script"
-        ? /\bsrc\s*=\s*["']([^"']+)["']/i
-        : /\bhref\s*=\s*["']([^"']+)["']/i,
-    )?.[1];
+      normalizedTagName === "link" &&
+      htmlAttributeValue(attributes, "rel")
+        ?.trim()
+        .split(/\s+/)
+        .some((token) => token.toLowerCase() === "stylesheet");
+    const reference = htmlAttributeValue(
+      attributes,
+      normalizedTagName === "script" ? "src" : "href",
+    );
     if ((isModuleScript || isStylesheet) && reference) specifiers.push(reference);
   }
   return specifiers;
+}
+
+function sourcePathForHtmlReference(
+  reference: string,
+  htmlPath: string,
+  compilerOptions: ProjectCompilerOptions,
+  filesByPath: ReadonlyMap<string, string>,
+): { path: string | undefined; sourceSpecifier: string | undefined } {
+  if (
+    reference.startsWith("/") ||
+    reference.startsWith("#") ||
+    /^[a-z][a-z\d+.-]*:/i.test(reference)
+  ) {
+    return { path: undefined, sourceSpecifier: undefined };
+  }
+  const sourceSpecifier = reference.startsWith(".") ? reference : `./${reference}`;
+  return {
+    path: sourcePathForSpecifier(sourceSpecifier, htmlPath, compilerOptions, filesByPath),
+    sourceSpecifier,
+  };
 }
 
 async function optionalWxtConfigText(wxtConfigPath: string): Promise<string | undefined> {
@@ -226,10 +257,18 @@ async function rootPathsFor(
   for (const htmlPath of htmlEntrypoints) {
     const html = await readFile(htmlPath, "utf8");
     for (const specifier of htmlEntrypointSpecifiers(html)) {
-      const rootPath = sourcePathForSpecifier(specifier, htmlPath, compilerOptions, filesByPath);
-      if (rootPath) rootPaths.add(rootPath);
-      else if (isSourceSpecifier(specifier, compilerOptions)) {
-        throw unresolvedSourceSpecifierError(projectRoot, htmlPath, specifier);
+      const htmlReference = sourcePathForHtmlReference(
+        specifier,
+        htmlPath,
+        compilerOptions,
+        filesByPath,
+      );
+      if (htmlReference.path) rootPaths.add(htmlReference.path);
+      else if (
+        htmlReference.sourceSpecifier &&
+        isSourceSpecifier(htmlReference.sourceSpecifier, compilerOptions)
+      ) {
+        throw unresolvedSourceSpecifierError(projectRoot, htmlPath, htmlReference.sourceSpecifier);
       }
     }
   }
@@ -610,6 +649,83 @@ describe("unreferenced source module guard", () => {
 
     await expect(assertNoUnreferencedSourceModules(projectRoot)).rejects.toThrow(
       'Could not resolve source specifier "./src/extension/missing-manifest-policy" from wxt.config.ts',
+    );
+  });
+
+  it.each(["main.ts", "./main.ts"])("treats HTML %s as document-relative", async (reference) => {
+    const projectRoot = await createTemporaryProject();
+    await writeProjectFile(projectRoot, "src/entrypoints/background.ts", "export {};\n");
+    await writeProjectFile(
+      projectRoot,
+      "src/entrypoints/options/index.html",
+      `<script type="module" src="${reference}"></script>\n`,
+    );
+    await writeProjectFile(projectRoot, "src/entrypoints/options/main.ts", "export {};\n");
+    await expect(
+      readFile(join(projectRoot, "src/entrypoints/options/index.html"), "utf8"),
+    ).resolves.toContain(`src="${reference}"`);
+
+    await expect(assertNoUnreferencedSourceModules(projectRoot)).resolves.toBeUndefined();
+  });
+
+  it("finds valid unquoted, case-insensitive HTML references and multi-token rel values", async () => {
+    const projectRoot = await createTemporaryProject();
+    await writeProjectFile(projectRoot, "src/entrypoints/background.ts", "export {};\n");
+    await writeProjectFile(
+      projectRoot,
+      "src/entrypoints/options/index.html",
+      "<SCRIPT TYPE = 'module' SRC = main.ts></SCRIPT>\n<LINK REL='preload stylesheet' HREF=options.css>\n",
+    );
+    await writeProjectFile(projectRoot, "src/entrypoints/options/main.ts", "export {};\n");
+    await writeProjectFile(projectRoot, "src/entrypoints/options/options.css", ".options {}\n");
+
+    await expect(assertNoUnreferencedSourceModules(projectRoot)).resolves.toBeUndefined();
+  });
+
+  it("does not resolve root-absolute HTML URLs against the source tree", async () => {
+    const projectRoot = await createTemporaryProject();
+    await writeProjectFile(projectRoot, "src/entrypoints/background.ts", "export {};\n");
+    await writeProjectFile(
+      projectRoot,
+      "src/entrypoints/options/index.html",
+      '<link rel="stylesheet" href="/styles/root-absolute.css">\n',
+    );
+    await writeProjectFile(projectRoot, "src/styles/root-absolute.css", ".root-absolute {}\n");
+
+    await expect(assertNoUnreferencedSourceModules(projectRoot)).rejects.toThrow(
+      /^Unreferenced source modules:\n- src\/styles\/root-absolute\.css$/,
+    );
+  });
+
+  it("resolves index imports with and without a trailing slash", async () => {
+    const projectRoot = await createTemporaryProject();
+    await writeProjectFile(
+      projectRoot,
+      "src/entrypoints/background.ts",
+      'import "../core/directory";\nimport "../core/trailing/";\n',
+    );
+    await writeProjectFile(projectRoot, "src/core/directory/index.ts", "export {};\n");
+    await writeProjectFile(projectRoot, "src/core/trailing/index.ts", "export {};\n");
+
+    await expect(assertNoUnreferencedSourceModules(projectRoot)).resolves.toBeUndefined();
+  });
+
+  it("rejects CSS @import regardless of keyword case or import syntax", async () => {
+    const projectRoot = await createTemporaryProject();
+    await writeProjectFile(
+      projectRoot,
+      "src/entrypoints/background.ts",
+      'import "../styles/live.css";\n',
+    );
+    await writeProjectFile(
+      projectRoot,
+      "src/styles/live.css",
+      '@IMPORT url("./dead.css") screen;\n',
+    );
+    await writeProjectFile(projectRoot, "src/styles/dead.css", ".dead {}\n");
+
+    await expect(assertNoUnreferencedSourceModules(projectRoot)).rejects.toThrow(
+      /^Unsupported CSS @import edges:\n- src\/styles\/live\.css$/,
     );
   });
 });
