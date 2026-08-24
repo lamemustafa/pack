@@ -1,7 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { createXlsx, XlsxSizeLimitError } from "../../src/core/xlsx";
+import { createXlsx, XLSX_NUMBER_DECIMAL_PLACES, XlsxSizeLimitError } from "../../src/core/xlsx";
 
 describe("portal-neutral XLSX writer", () => {
+  // The format fixed two decimal places, so a stored `0.001` displayed `0.00`
+  // and a non-zero amount read as zero on a working paper. Two mandatory places
+  // keep the ordinary case looking like currency; the rest render only when the
+  // value has them.
+  it("renders the decimals a value actually has", () => {
+    const entries = extractStoredZipEntries(
+      createXlsx({
+        generatedAt: new Date("2026-08-19T12:00:00.000Z"),
+        worksheets: [{ name: "S", rows: [[{ value: 0.001, style: "number" as const }]] }],
+      }),
+    );
+
+    const format = /formatCode="([^"]*)"/.exec(text(entries, "xl/styles.xml"))?.[1] ?? "";
+
+    expect(format.startsWith("#,##0.00")).toBe(true);
+    // Mandatory places first, then optional ones -- an optional place before a
+    // mandatory one would drop the currency look from the common case.
+    expect(format).toMatch(/^#,##0\.0{2}#*$/);
+    expect(format.length - "#,##0.".length).toBe(XLSX_NUMBER_DECIMAL_PLACES);
+  });
+
   it("writes deterministic named worksheets with numeric, date, style and pane metadata", () => {
     const input = {
       generatedAt: new Date("2026-08-19T12:00:00.000Z"),

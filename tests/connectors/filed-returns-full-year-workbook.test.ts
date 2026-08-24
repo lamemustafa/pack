@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { buildFiledReturnsFullYearWorkbook } from "../../src/connectors/gst/filed-returns-full-year-workbook";
+import {
+  buildFiledReturnsFullYearWorkbook,
+  exactSpreadsheetNumber,
+} from "../../src/connectors/gst/filed-returns-full-year-workbook";
+import { XLSX_NUMBER_DECIMAL_PLACES } from "../../src/core/xlsx";
 import {
   filedReturnsStatementCoverage,
   filedReturnsStatementLineItems,
@@ -426,6 +430,29 @@ describe("filed-return full-year workbook", () => {
     expect(taxableValueRow?.get("N7")).toMatchObject({ number: 11, style: "2" });
   });
 
+  // Significant digits do not bound decimal places: `0.0000000000000001` has one
+  // significant digit and sixteen decimals, so the old rule admitted it. The
+  // cell format cannot render that, and a stored value the sheet displays as
+  // zero is the exact defect the wider format was meant to remove -- surviving
+  // past the new boundary rather than at the old one. It takes the same
+  // `Precision limit` treatment an unrepresentable value already gets.
+  it("refuses a value with more decimals than a cell can display", () => {
+    const withinFormat = `0.${"0".repeat(XLSX_NUMBER_DECIMAL_PLACES - 1)}1`;
+    const beyondFormat = `0.${"0".repeat(XLSX_NUMBER_DECIMAL_PLACES)}1`;
+
+    expect(withinFormat.split(".")[1]).toHaveLength(XLSX_NUMBER_DECIMAL_PLACES);
+    expect(exactSpreadsheetNumber(withinFormat)).not.toBeNull();
+    expect(exactSpreadsheetNumber(beyondFormat)).toBeNull();
+  });
+
+  // The ordinary case must not be caught by the new rule.
+  it("keeps admitting the decimals a portal amount actually carries", () => {
+    expect(exactSpreadsheetNumber("12.50")).toBe(12.5);
+    expect(exactSpreadsheetNumber("0.001")).toBe(0.001);
+    expect(exactSpreadsheetNumber("1.234")).toBe(1.234);
+    expect(exactSpreadsheetNumber("-2650.75")).toBe(-2650.75);
+  });
+
   it("keeps a fully filed workbook byte-identical", () => {
     // The digest is only stable because the suite pins TZ=UTC. ZIP entry headers
     // carry a DOS date built from local-time getters, so this assertion silently
@@ -447,8 +474,15 @@ describe("filed-return full-year workbook", () => {
       generatedAt: new Date("2026-08-20T12:00:00.000Z"),
     });
 
+    // Rolled once, for the number format widening in #167. The regenerated
+    // workbook was unzipped and diffed against the previously validated one
+    // entry by entry: `xl/styles.xml` differed in exactly one attribute,
+    // `formatCode="#,##0.00"` becoming `"#,##0.00#############"`, and every
+    // sheet, cell value and shared string was byte-identical. That diff is the
+    // evidence that totals, the `Precision limit` marker and the exact-decimal
+    // path are untouched -- a rolled digest asserts nothing on its own.
     expect(createHash("sha256").update(workbook).digest("hex")).toBe(
-      "3c7b76fc3cc8fae35f88632c1e08942c1842af6776f24eb056054f3259fbdaf6",
+      "fedc3860070cd4fd3d66190090669b56a70442bb2111a355533c2c597429cf3d",
     );
   });
 
