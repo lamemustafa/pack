@@ -1,4 +1,5 @@
 import { isFlatJsonArrayCountReason } from "../../core/json-flat-table";
+import { XLSX_NUMBER_DECIMAL_PLACES } from "../../core/xlsx";
 import {
   createXlsx,
   MAX_EXCEL_STRING_LENGTH,
@@ -323,6 +324,15 @@ export function exactSpreadsheetNumber(input: string): number | null {
     .replace(/^0+/, "")
     .replace(/0+$/, "").length;
   if (significantDigits > 15) return null;
+  // Significant digits do not bound decimal places: `0.0000000000000001` has one
+  // significant digit and sixteen decimals. The cell format renders
+  // `XLSX_NUMBER_DECIMAL_PLACES` of them, so a value with more cannot be
+  // displayed as what it is, and returning it here would store one number and
+  // show another -- the defect this rule exists to prevent, surviving past a
+  // wider format. It takes the `Precision limit` treatment instead, which is
+  // what an unrepresentable value already gets.
+  const decimalPlaces = /\.(\d+)$/.exec(input)?.[1]?.length ?? 0;
+  if (decimalPlaces > XLSX_NUMBER_DECIMAL_PLACES) return null;
   const value = Number(input);
   if (!Number.isFinite(value)) return null;
   if (value === 0 && !/^-?0+(?:\.0+)?$/.test(input)) return null;

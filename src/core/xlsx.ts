@@ -1,5 +1,27 @@
 import { createZip, type ZipEntry } from "./zip";
 
+/**
+ * How many decimal places a numeric cell renders.
+ *
+ * The format previously fixed two, so a stored `0.001` displayed `0.00` and a
+ * non-zero amount could read as zero on a working paper someone files from.
+ * Displayed and stored disagreeing is the worst class of defect in this
+ * artifact, because nothing on the page says it is happening.
+ *
+ * Two mandatory places keep the ordinary case looking like currency, and the
+ * rest appear only when the value has them -- `#` renders a digit if present
+ * and nothing if not, so `12.50` stays `12.50` while `0.001` shows in full.
+ *
+ * Exported because the writer's format and the caller's acceptance rule have to
+ * mean the same thing. A value with more decimal places than this cannot be
+ * displayed faithfully, so the caller must refuse it rather than let it round
+ * silently; `exactSpreadsheetNumber` reads this constant to decide. Widening the
+ * format alone would only move the boundary and leave the same defect past it.
+ */
+export const XLSX_NUMBER_DECIMAL_PLACES = 15;
+
+const XLSX_NUMBER_FORMAT_CODE = `#,##0.${"0".repeat(2)}${"#".repeat(XLSX_NUMBER_DECIMAL_PLACES - 2)}`;
+
 export type XlsxCellStyle = "bold" | "number" | "date" | "bold-date";
 
 export interface XlsxCell {
@@ -191,7 +213,7 @@ function workbookRelationshipsXml(sheetCount: number): string {
 }
 
 function stylesXml(): string {
-  return `${XML_HEADER}<styleSheet xmlns="${SPREADSHEET_NS}"><numFmts count="2"><numFmt numFmtId="164" formatCode="#,##0.00"/><numFmt numFmtId="165" formatCode="mmm"/></numFmts><fonts count="2"><font><sz val="11"/><name val="Calibri"/><family val="2"/></font><font><b/><sz val="11"/><name val="Calibri"/><family val="2"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="5"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"><alignment horizontal="right"/></xf><xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"><alignment horizontal="center"/></xf><xf numFmtId="165" fontId="1" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1"><alignment horizontal="center"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+  return `${XML_HEADER}<styleSheet xmlns="${SPREADSHEET_NS}"><numFmts count="2"><numFmt numFmtId="164" formatCode="${XLSX_NUMBER_FORMAT_CODE}"/><numFmt numFmtId="165" formatCode="mmm"/></numFmts><fonts count="2"><font><sz val="11"/><name val="Calibri"/><family val="2"/></font><font><b/><sz val="11"/><name val="Calibri"/><family val="2"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="5"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"><alignment horizontal="right"/></xf><xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"><alignment horizontal="center"/></xf><xf numFmtId="165" fontId="1" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1"><alignment horizontal="center"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
 }
 
 function escapeXml(value: string): string {
