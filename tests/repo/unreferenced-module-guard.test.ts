@@ -142,7 +142,7 @@ function sourcePathForSpecifier(
     const wildcard = specifier.slice((prefix ?? "").length, specifier.length - suffix.length);
     for (const substitution of substitutions) {
       const candidatePath = canonicalPath(
-        resolve(compilerOptions.pathsBasePath, substitution.replace("*", wildcard)),
+        resolve(compilerOptions.pathsBasePath, substitution.replaceAll("*", wildcard)),
       );
       if (filesByPath.has(candidatePath)) return candidatePath;
     }
