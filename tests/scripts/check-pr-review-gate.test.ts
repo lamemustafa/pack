@@ -329,6 +329,40 @@ describe("PR review gate", () => {
     ).toThrow(/No review was found for current head/);
   });
 
+  it("does not let another author satisfy strict mode without an explicit author", () => {
+    const fixturePath = writeFixture(
+      "other-author-current-head-review",
+      reviewFixture({
+        headRefOid: "head-sha",
+        reviews: [
+          review({
+            state: "COMMENTED",
+            commit: "head-sha",
+            author: "external-reviewer",
+          }),
+        ],
+      }),
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture",
+        fixturePath,
+        "--strict-head-review",
+      ],
+      { cwd: rootDir, encoding: "utf8" },
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("No review was found for current head");
+  });
+
   it("does not count dismissed current-head reviews as satisfying strict review", () => {
     const fixturePath = writeFixture(
       "dismissed-head-review",
@@ -1149,16 +1183,18 @@ function review({
   state,
   commit,
   submittedAt = "2026-06-24T17:45:40Z",
+  author = "chatgpt-codex-connector",
 }: {
   state: "APPROVED" | "COMMENTED" | "CHANGES_REQUESTED" | "DISMISSED" | "PENDING";
   commit: string | null;
   submittedAt?: string;
+  author?: string;
 }) {
   return {
     state,
     submittedAt,
     url: `https://github.com/lamemustafa/pack/pull/14#${commit}-${state}`,
-    author: { login: "chatgpt-codex-connector" },
+    author: { login: author },
     commit: commit ? { oid: commit } : null,
   };
 }
