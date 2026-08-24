@@ -27,6 +27,31 @@ const syntheticJwt = [
 ].join(".");
 
 describe("filed-return full-year summary sheet", () => {
+  it("emits the single planned financial year in every CSV row", () => {
+    const summary = buildFiledReturnsSummarySheet(
+      [jsonPlan("April", "april-data.json", "GSTR-3B")],
+      [jsonEntry("april-data.json", "GSTR-3B", { sup_details: { osup_det: { txval: 12.5 } } })],
+    );
+
+    expect(new TextDecoder().decode(summary.dataBytes)).toBe(
+      "financial_year,period,return_type,artifact,outcome,field_label,field_path,value_text,value_number\n" +
+        "2026-27,April,GSTR-3B,JSON,parseable-json,,/ret_period,042026,\n" +
+        '2026-27,April,GSTR-3B,JSON,parseable-json,"Table 3.1(a) Outward taxable supplies (other than zero rated, nil rated and exempted) — Taxable value",/sup_details/osup_det/txval,,12.5\n',
+    );
+  });
+
+  it("refuses a mixed-year plan before it can form a CSV", () => {
+    expect(() =>
+      buildFiledReturnsSummarySheet(
+        [
+          jsonPlan("April", "april-data.json", "GSTR-3B"),
+          { ...jsonPlan("May", "may-data.json", "GSTR-3B"), financialYear: "2027-28" },
+        ],
+        [],
+      ),
+    ).toThrow("Filed-return summary plan must have one financial year.");
+  });
+
   it("refuses an identity-shaped array discriminator instead of embedding it in a path", () => {
     const build = (ty: string) =>
       buildFiledReturnsSummarySheet(
