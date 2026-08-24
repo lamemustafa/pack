@@ -330,7 +330,23 @@ interface OwnerIdentity {
  * It was not when this scan was written, which is how a whole-document sweep
  * looked harmless.
  */
-const RENDERED_SUBTREE_KEYS = ["docdata", "itcsumm"] as const;
+/**
+ * What the precision scan covers, and how far into each subtree it descends.
+ *
+ * `null` means the whole subtree is rendered. A key list means only those
+ * children become cells: `docdata` carries one entry per portal section, and a
+ * section this build does not recognise is excluded from the workbook and named
+ * in the coverage footer instead. Its values never become cells, so their
+ * precision cannot change anything displayed, and refusing the workbook over one
+ * would destroy an artifact that is correct in every rendered figure.
+ *
+ * Driven off `SECTION_ORDER`, the same list the sheets are built from, so a
+ * section cannot become renderable without the scan following it.
+ */
+const RENDERED_SUBTREES: Readonly<Record<string, readonly string[] | null>> = {
+  docdata: SECTION_ORDER,
+  itcsumm: null,
+};
 
 /**
  * The value of `key` as a direct child of the object `text` describes.
@@ -462,7 +478,7 @@ function rejectInexactNumbersInRenderedSubtrees(text: string, parsed: unknown): 
       "GSTR-2B workbook source spells a rendered key in a form this build cannot scan for exact amounts.",
     );
   }
-  for (const key of RENDERED_SUBTREE_KEYS) {
+  for (const [key, renderedChildren] of Object.entries(RENDERED_SUBTREES)) {
     const subtree = childValueText(data, key);
     if (subtree === undefined) {
       if (childObject(parsedData, key) === undefined) continue;
@@ -470,7 +486,21 @@ function rejectInexactNumbersInRenderedSubtrees(text: string, parsed: unknown): 
         "GSTR-2B workbook source spells a rendered key in a form this build cannot scan for exact amounts.",
       );
     }
-    rejectInexactNumbers(subtree);
+    if (renderedChildren === null) {
+      rejectInexactNumbers(subtree);
+      continue;
+    }
+    const parsedSubtree = childObject(parsedData, key);
+    for (const child of renderedChildren) {
+      const childText = childValueText(subtree, child);
+      if (childText === undefined) {
+        if (childObject(parsedSubtree, child) === undefined) continue;
+        throw new FiledReturnsGstr2bWorkbookSchemaError(
+          "GSTR-2B workbook source spells a rendered key in a form this build cannot scan for exact amounts.",
+        );
+      }
+      rejectInexactNumbers(childText);
+    }
   }
 }
 
