@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { buildFiledReturnsFullYearWorkbook } from "../../src/connectors/gst/filed-returns-full-year-workbook";
+import {
+  buildFiledReturnsFullYearWorkbook,
+  exactSpreadsheetNumber,
+} from "../../src/connectors/gst/filed-returns-full-year-workbook";
+import { XLSX_NUMBER_DECIMAL_PLACES } from "../../src/core/xlsx";
 import {
   filedReturnsStatementCoverage,
   filedReturnsStatementLineItems,
@@ -313,6 +317,35 @@ describe("filed-return full-year workbook", () => {
     expect(numbers).not.toContain("1");
   });
 
+  // `String(value)` is the shortest decimal that round-trips to the same double,
+  // and below `1e-6` JavaScript writes it in exponent form -- so `0.0000001`
+  // stringified as `1e-7` and the lexical comparison failed for a value the
+  // double holds exactly. The month displayed the figure while the total called
+  // it unavailable at spreadsheet precision: the same stored-versus-shown
+  // disagreement this change removes, one column over.
+  it("totals a small decimal the widened format now displays", () => {
+    const plan = fullYearPlan();
+    const summary = buildFiledReturnsSummarySheet(plan, [
+      {
+        path: "april-data.json",
+        bytes: new TextEncoder().encode(
+          '{"status":1,"data":{"lglnm":"Synthetic Legal Name","r3b":{"gstin":"27ABCDE1234F1Z0","ret_period":"042026","sup_details":{"osup_det":{"txval":0.0000001}}}}}',
+        ),
+      },
+    ]);
+    const workbook = buildFiledReturnsFullYearWorkbook(summary, plan, {
+      generatedAt: new Date("2026-08-19T12:00:00.000Z"),
+    });
+    const rows = parsedRows(text(extractStoredZipEntries(workbook), "xl/worksheets/sheet1.xml"));
+    const cells = [...rows.values()].flatMap((row) => [...row.values()]);
+    const numbers = cells.map((cell) => cell.number ?? "");
+    const texts = cells.map((cell) => cell.text ?? "");
+
+    // The month and its total are the same figure, so they must agree.
+    expect(numbers.filter((number) => Number(number) === 1e-7)).toHaveLength(2);
+    expect(texts.join(" ")).not.toContain("unavailable at spreadsheet numeric precision");
+  });
+
   it("refuses a total when a month is a numeric-looking string", () => {
     const plan = fullYearPlan();
     // "100" parses as a decimal, so it was summed into the total while its own
@@ -426,6 +459,58 @@ describe("filed-return full-year workbook", () => {
     expect(taxableValueRow?.get("N7")).toMatchObject({ number: 11, style: "2" });
   });
 
+  // Significant digits do not bound decimal places: `0.0000000000000001` has one
+  // significant digit and sixteen decimals, so the old rule admitted it. The
+  // cell format cannot render that, and a stored value the sheet displays as
+  // zero is the exact defect the wider format was meant to remove -- surviving
+  // past the new boundary rather than at the old one. It takes the same
+  // `Precision limit` treatment an unrepresentable value already gets.
+  it("refuses a value with more decimals than a cell can display", () => {
+    const withinFormat = `0.${"0".repeat(XLSX_NUMBER_DECIMAL_PLACES - 1)}1`;
+    const beyondFormat = `0.${"0".repeat(XLSX_NUMBER_DECIMAL_PLACES)}1`;
+
+    expect(withinFormat.split(".")[1]).toHaveLength(XLSX_NUMBER_DECIMAL_PLACES);
+    expect(exactSpreadsheetNumber(withinFormat)).not.toBeNull();
+    expect(exactSpreadsheetNumber(beyondFormat)).toBeNull();
+  });
+
+  // The ordinary case must not be caught by the new rule.
+  it("keeps admitting the decimals a portal amount actually carries", () => {
+    expect(exactSpreadsheetNumber("12.50")).toBe(12.5);
+    expect(exactSpreadsheetNumber("0.001")).toBe(0.001);
+    expect(exactSpreadsheetNumber("1.234")).toBe(1.234);
+    expect(exactSpreadsheetNumber("-2650.75")).toBe(-2650.75);
+  });
+
+  // The decimal count reads digits after the point, and an exponent token has
+  // none -- `1.5e-20` counts zero decimals, passes every check, and displays as
+  // `0.000000000000000`. Two spellings of one value must not get two answers.
+  //
+  // Not reachable today: the flattener converts as it parses and the GSTR-2B
+  // scan passes the converted form. Pinned because the precondition is now
+  // stated rather than assumed, and an assumption nothing tests is how the next
+  // caller reintroduces this.
+  it("refuses an exponent token rather than reading zero decimals from it", () => {
+    expect(exactSpreadsheetNumber("1.5e-20")).toBeNull();
+    expect(exactSpreadsheetNumber("1e-16")).toBeNull();
+    expect(exactSpreadsheetNumber("1.5E+3")).toBeNull();
+    // The plain spelling of the same magnitude still answers as before.
+    expect(exactSpreadsheetNumber("1500")).toBe(1500);
+  });
+
+  // A zero past the last significant digit cannot change what is displayed, so
+  // a padded token is the same value as its trimmed form and must reach the same
+  // answer. Counting characters refused it -- and because the GSTR-2B workbook
+  // treats a null here as unrepresentable and throws, one padded token would
+  // have refused an entire year rather than marking one cell.
+  it("ignores trailing zeros that cannot change the displayed value", () => {
+    const padded = `1.23${"0".repeat(XLSX_NUMBER_DECIMAL_PLACES)}`;
+
+    expect(padded.split(".")[1]!.length).toBeGreaterThan(XLSX_NUMBER_DECIMAL_PLACES);
+    expect(exactSpreadsheetNumber(padded)).toBe(1.23);
+    expect(exactSpreadsheetNumber(`0.${"0".repeat(XLSX_NUMBER_DECIMAL_PLACES + 4)}`)).toBe(0);
+  });
+
   it("keeps a fully filed workbook byte-identical", () => {
     // The digest is only stable because the suite pins TZ=UTC. ZIP entry headers
     // carry a DOS date built from local-time getters, so this assertion silently
@@ -447,8 +532,15 @@ describe("filed-return full-year workbook", () => {
       generatedAt: new Date("2026-08-20T12:00:00.000Z"),
     });
 
+    // Rolled once, for the number format widening in #167. The regenerated
+    // workbook was unzipped and diffed against the previously validated one
+    // entry by entry: `xl/styles.xml` differed in exactly one attribute,
+    // `formatCode="#,##0.00"` becoming `"#,##0.00#############"`, and every
+    // sheet, cell value and shared string was byte-identical. That diff is the
+    // evidence that totals, the `Precision limit` marker and the exact-decimal
+    // path are untouched -- a rolled digest asserts nothing on its own.
     expect(createHash("sha256").update(workbook).digest("hex")).toBe(
-      "3c7b76fc3cc8fae35f88632c1e08942c1842af6776f24eb056054f3259fbdaf6",
+      "fedc3860070cd4fd3d66190090669b56a70442bb2111a355533c2c597429cf3d",
     );
   });
 

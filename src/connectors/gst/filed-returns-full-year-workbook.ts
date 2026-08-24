@@ -1,4 +1,8 @@
-import { isFlatJsonArrayCountReason } from "../../core/json-flat-table";
+import {
+  isFlatJsonArrayCountReason,
+  jsonNumberTokenToPlainDecimal,
+} from "../../core/json-flat-table";
+import { XLSX_NUMBER_DECIMAL_PLACES } from "../../core/xlsx";
 import {
   createXlsx,
   MAX_EXCEL_STRING_LENGTH,
@@ -283,7 +287,18 @@ function exactTotalSpreadsheetValue(
   const exactText = exactDecimalSum(inputs);
   if (exactText === null) return "Exact total unavailable: invalid source decimal";
   const value = exactSpreadsheetNumber(exactText);
-  if (hasUnrepresentableMonth || value === null || String(value) !== exactText) {
+  // `String(value)` is the shortest decimal that round-trips to the same double,
+  // and below `1e-6` JavaScript writes that in exponent form -- so `0.0000001`
+  // stringifies as `1e-7` and the lexical comparison failed for a value the
+  // double represents exactly. The monthly cell displayed it and the total said
+  // it was unavailable at spreadsheet precision, which is the same disagreement
+  // between stored and shown that this change set out to remove, one column
+  // over.
+  //
+  // Compared as plain decimals through the canonical converter rather than as
+  // strings, so two spellings of one value stop giving two answers.
+  const roundTrip = value === null ? null : jsonNumberTokenToPlainDecimal(String(value));
+  if (hasUnrepresentableMonth || value === null || roundTrip !== exactText) {
     const explanatoryTotal = `Exact total ${exactText} unavailable at spreadsheet numeric precision`;
     return explanatoryTotal.length <= MAX_EXCEL_STRING_LENGTH
       ? explanatoryTotal
@@ -317,12 +332,40 @@ function exactDecimalSum(inputs: readonly string[]): string | null {
  * already happened.
  */
 export function exactSpreadsheetNumber(input: string): number | null {
+  // Plain decimal only, stated rather than assumed. Every caller already
+  // converts -- the flattener runs `jsonNumberTokenToPlainDecimal` as it parses,
+  // and the GSTR-2B scan passes the converted form -- so this rejects nothing
+  // reachable today. It is here because the decimal count below reads the digits
+  // after the point, and an exponent token has none: `1.5e-20` would count zero
+  // decimals, pass every check, and then display as `0.000000000000000`. That is
+  // the defect this function exists to prevent, waved through by a spelling.
+  //
+  // Refused rather than converted, because converting here would put a second
+  // exponent parser beside the real one and the two would drift.
+  if (!/^-?\d+(?:\.\d+)?$/.test(input)) return null;
   const significantDigits = input
     .replace(/^-/, "")
     .replace(".", "")
     .replace(/^0+/, "")
     .replace(/0+$/, "").length;
   if (significantDigits > 15) return null;
+  // Significant digits do not bound decimal places: `0.0000000000000001` has one
+  // significant digit and sixteen decimals. The cell format renders
+  // `XLSX_NUMBER_DECIMAL_PLACES` of them, so a value with more cannot be
+  // displayed as what it is, and returning it here would store one number and
+  // show another -- the defect this rule exists to prevent, surviving past a
+  // wider format. It takes the `Precision limit` treatment instead, which is
+  // what an unrepresentable value already gets.
+  //
+  // Counted after trailing zeros, like `significantDigits` above it. A zero past
+  // the last significant digit cannot change what is displayed, so `1.23` and
+  // `1.2300000000000000` are the same value and must reach the same answer;
+  // counting characters instead refused the second. The cost of that was not
+  // confined to one cell -- `filed-returns-gstr2b-workbook.ts` treats a null
+  // here as unrepresentable and throws, so a single padded token would have
+  // refused an entire GSTR-2B year.
+  const decimalPlaces = /\.(\d+)$/.exec(input)?.[1]?.replace(/0+$/, "").length ?? 0;
+  if (decimalPlaces > XLSX_NUMBER_DECIMAL_PLACES) return null;
   const value = Number(input);
   if (!Number.isFinite(value)) return null;
   if (value === 0 && !/^-?0+(?:\.0+)?$/.test(input)) return null;

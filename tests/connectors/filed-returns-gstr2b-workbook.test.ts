@@ -400,6 +400,69 @@ describe("GSTR-2B consolidated workbook", () => {
     ).toThrow(/cannot be written to a spreadsheet without changing it/);
   });
 
+  // A section this build does not recognise is excluded from the workbook and
+  // named in the coverage footer, so none of its values become cells. Scanning
+  // it for precision refused the whole artifact over a figure that is never
+  // displayed -- destroying a workbook correct in every rendered number.
+  it("builds when an unrendered section carries an unrepresentable value", () => {
+    const plan: FiledReturnsSummaryPlanEntry[] = [planEntry("April", "april-data.json")];
+    const source = JSON.parse(
+      JSON.stringify({
+        data: { gstin: OWNER_GSTIN, rtnprd: "042026", docdata: docdata() },
+      }),
+    ) as { data: { docdata: Record<string, unknown> } };
+    // A future portal section, alongside the recognised ones.
+    source.data.docdata.futuresection = [{ amount: 0.0000000000000001 }];
+    const bytes = new TextEncoder().encode(JSON.stringify(source));
+
+    const workbook = buildFiledReturnsGstr2bWorkbook(plan, [{ path: "april-data.json", bytes }], {
+      generatedAt: new Date("2026-08-22T12:00:00.000Z"),
+    });
+
+    expect(workbook).not.toBeNull();
+    expect(workbook!.bytes.byteLength).toBeGreaterThan(0);
+  });
+
+  // The rendered sections are still scanned: this is a narrowing of scope, not
+  // of the guarantee.
+  it("still refuses an unrepresentable value inside a rendered section", () => {
+    const plan: FiledReturnsSummaryPlanEntry[] = [planEntry("April", "april-data.json")];
+    const bytes = new TextEncoder().encode(
+      JSON.stringify({
+        data: { gstin: OWNER_GSTIN, rtnprd: "042026", docdata: docdata() },
+      }).replace('"val":110', '"val":0.0000000000000001'),
+    );
+
+    expect(() =>
+      buildFiledReturnsGstr2bWorkbook(plan, [{ path: "april-data.json", bytes }], {
+        generatedAt: new Date("2026-08-22T12:00:00.000Z"),
+      }),
+    ).toThrow(/cannot be written to a spreadsheet without changing it/);
+  });
+
+  // A raw token padded with trailing zeros is the same value as its trimmed
+  // form and displays identically, so it must not be treated as unrepresentable.
+  // This path throws on that judgement rather than marking one cell, so a single
+  // padded amount anywhere in a year would have refused the entire workbook --
+  // the whole artifact lost to a value that was never a problem.
+  it("builds when a raw amount is padded with insignificant trailing zeros", () => {
+    const plan: FiledReturnsSummaryPlanEntry[] = [planEntry("April", "april-data.json")];
+    const bytes = new TextEncoder().encode(
+      JSON.stringify({
+        data: { gstin: OWNER_GSTIN, rtnprd: "042026", docdata: docdata() },
+      }).replace('"val":110', '"val":110.00000000000000000'),
+    );
+
+    const workbook = buildFiledReturnsGstr2bWorkbook(plan, [{ path: "april-data.json", bytes }], {
+      generatedAt: new Date("2026-08-22T12:00:00.000Z"),
+    });
+
+    // Not null is the assertion that matters: the defect refused the workbook
+    // outright rather than producing a smaller one.
+    expect(workbook).not.toBeNull();
+    expect(workbook!.bytes.byteLength).toBeGreaterThan(0);
+  });
+
   // The scan compares raw key spelling; the parser decodes escapes. A canonical
   // source spelling `data` as `d\u0061ta` is therefore reachable by the parser
   // and invisible to the scan, and treating that as "nothing to check" renders
