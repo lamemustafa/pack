@@ -453,6 +453,19 @@ describe("filed-return full-year workbook", () => {
     expect(exactSpreadsheetNumber("-2650.75")).toBe(-2650.75);
   });
 
+  // A zero past the last significant digit cannot change what is displayed, so
+  // a padded token is the same value as its trimmed form and must reach the same
+  // answer. Counting characters refused it -- and because the GSTR-2B workbook
+  // treats a null here as unrepresentable and throws, one padded token would
+  // have refused an entire year rather than marking one cell.
+  it("ignores trailing zeros that cannot change the displayed value", () => {
+    const padded = `1.23${"0".repeat(XLSX_NUMBER_DECIMAL_PLACES)}`;
+
+    expect(padded.split(".")[1]!.length).toBeGreaterThan(XLSX_NUMBER_DECIMAL_PLACES);
+    expect(exactSpreadsheetNumber(padded)).toBe(1.23);
+    expect(exactSpreadsheetNumber(`0.${"0".repeat(XLSX_NUMBER_DECIMAL_PLACES + 4)}`)).toBe(0);
+  });
+
   it("keeps a fully filed workbook byte-identical", () => {
     // The digest is only stable because the suite pins TZ=UTC. ZIP entry headers
     // carry a DOS date built from local-time getters, so this assertion silently

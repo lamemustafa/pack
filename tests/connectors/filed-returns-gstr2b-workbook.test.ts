@@ -400,6 +400,29 @@ describe("GSTR-2B consolidated workbook", () => {
     ).toThrow(/cannot be written to a spreadsheet without changing it/);
   });
 
+  // A raw token padded with trailing zeros is the same value as its trimmed
+  // form and displays identically, so it must not be treated as unrepresentable.
+  // This path throws on that judgement rather than marking one cell, so a single
+  // padded amount anywhere in a year would have refused the entire workbook --
+  // the whole artifact lost to a value that was never a problem.
+  it("builds when a raw amount is padded with insignificant trailing zeros", () => {
+    const plan: FiledReturnsSummaryPlanEntry[] = [planEntry("April", "april-data.json")];
+    const bytes = new TextEncoder().encode(
+      JSON.stringify({
+        data: { gstin: OWNER_GSTIN, rtnprd: "042026", docdata: docdata() },
+      }).replace('"val":110', '"val":110.00000000000000000'),
+    );
+
+    const workbook = buildFiledReturnsGstr2bWorkbook(plan, [{ path: "april-data.json", bytes }], {
+      generatedAt: new Date("2026-08-22T12:00:00.000Z"),
+    });
+
+    // Not null is the assertion that matters: the defect refused the workbook
+    // outright rather than producing a smaller one.
+    expect(workbook).not.toBeNull();
+    expect(workbook!.bytes.byteLength).toBeGreaterThan(0);
+  });
+
   // The scan compares raw key spelling; the parser decodes escapes. A canonical
   // source spelling `data` as `d\u0061ta` is therefore reachable by the parser
   // and invisible to the scan, and treating that as "nothing to check" renders
