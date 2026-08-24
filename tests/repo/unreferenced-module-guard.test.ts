@@ -195,17 +195,18 @@ async function rootPathsFor(
     }
   }
 
-  const manifestPolicyPath = join(sourceDirectory, "extension", "manifest-policy.ts");
-  const canonicalManifestPolicyPath = canonicalPath(manifestPolicyPath);
-  if (filesByPath.has(canonicalManifestPolicyPath)) {
-    const wxtConfigPath = join(projectRoot, "wxt.config.ts");
-    const configText = await readFile(wxtConfigPath, "utf8");
-    const importsManifestPolicy = moduleSpecifiers(wxtConfigPath, configText).some(
-      (specifier) =>
-        sourcePathForSpecifier(specifier, wxtConfigPath, compilerOptions, filesByPath) ===
-        canonicalManifestPolicyPath,
-    );
-    if (importsManifestPolicy) rootPaths.add(canonicalManifestPolicyPath);
+  const wxtConfigPath = join(projectRoot, "wxt.config.ts");
+  const configText = await readFile(wxtConfigPath, "utf8").catch(() => undefined);
+  if (configText) {
+    for (const specifier of moduleSpecifiers(wxtConfigPath, configText)) {
+      const rootPath = sourcePathForSpecifier(
+        specifier,
+        wxtConfigPath,
+        compilerOptions,
+        filesByPath,
+      );
+      if (rootPath) rootPaths.add(rootPath);
+    }
   }
 
   return rootPaths;
@@ -481,6 +482,19 @@ describe("unreferenced source module guard", () => {
   it("treats a named WXT content script as a root", async () => {
     const projectRoot = await createTemporaryProject();
     await writeProjectFile(projectRoot, "src/entrypoints/gst.content.ts", "export {};\n");
+
+    await expect(assertNoUnreferencedSourceModules(projectRoot)).resolves.toBeUndefined();
+  });
+
+  it("treats every source module imported by the WXT config as a root", async () => {
+    const projectRoot = await createTemporaryProject();
+    await writeProjectFile(projectRoot, "src/entrypoints/background.ts", "export {};\n");
+    await writeProjectFile(projectRoot, "src/extension/build-constants.ts", "export {};\n");
+    await writeProjectFile(
+      projectRoot,
+      "wxt.config.ts",
+      'import "./src/extension/build-constants";\nexport {};\n',
+    );
 
     await expect(assertNoUnreferencedSourceModules(projectRoot)).resolves.toBeUndefined();
   });
