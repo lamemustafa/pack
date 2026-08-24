@@ -131,7 +131,7 @@ node scripts/verify-extension-package.mjs .output/chrome-mv3
 pnpm exec wxt zip
 node scripts/verify-extension-zip.mjs
 git diff --check
-pnpm review:gate -- --strict-head-review --required-review-author chatgpt-codex-connector --wait-head-review-ms 180000 --allow-missing-head-review
+pnpm review:gate -- --strict-head-review --wait-head-review-ms 180000
 ```
 
 `node scripts/run-dependency-audit.mjs` runs `pnpm audit --audit-level high`
@@ -141,12 +141,17 @@ there is no PR,
 network access, or authenticated GitHub CLI session, report that as a PR-readiness
 verification gap instead of treating it as a pass.
 
-The `Review gate` workflow is allowed to pass with
-`--allow-missing-head-review` after waiting for Codex because the external bot can
-acknowledge `@codex review` without producing a formal review in a deterministic
-time window. Treat that mode as a findings gate: unresolved review threads and
-current-head requested-changes reviews still fail, but a missing bot review is an
-audit gap to record before merge/release claims.
+For local PR readiness, `--wait-head-review-ms` waits for Codex's review on the
+current head and then fails if none arrives. A timeout does not waive the
+current-head review requirement; otherwise the wait is a timer rather than a
+gate.
+
+The `Review gate` workflow separately uses `--allow-missing-head-review` after
+waiting for Codex because the external bot can acknowledge `@codex review`
+without producing a formal review in a deterministic time window. Treat that
+workflow mode as a findings gate: unresolved review threads and current-head
+requested-changes reviews still fail, but a missing bot review is an audit gap
+to record before merge/release claims. Do not use it as PR-readiness evidence.
 
 For PRs, record the exact local commands or CI run, release ZIP/checksum
 evidence when a ZIP is produced, and the SHA-256 checksum. Treat late Codex/bot
