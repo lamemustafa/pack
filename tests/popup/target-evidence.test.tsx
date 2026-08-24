@@ -86,6 +86,44 @@ describe("per-target evidence", () => {
     expect(renderToStaticMarkup(<TargetEvidence summary={summary} />)).toBe("");
     expect(renderToStaticMarkup(<TargetEvidence summary={null} />)).toBe("");
   });
+
+  it("collapses uniform evidence behind the file-count status", () => {
+    const markup = renderToStaticMarkup(
+      <TargetEvidence
+        summary={summaryWith(
+          Array.from({ length: 12 }, (_, index) => ({
+            period: `Period ${index + 1}`,
+            outcome: "saved" as const,
+          })),
+        )}
+      />,
+    );
+
+    expect(markup).toContain("12 of 12 saved");
+    expect(markup).toContain("<details");
+    expect(markup).toContain("Show per-period results");
+  });
+
+  it("keeps mixed-run exceptions visible while collapsing the repeated outcome", () => {
+    const markup = renderToStaticMarkup(
+      <TargetEvidence
+        summary={summaryWith([
+          ...Array.from({ length: 10 }, (_, index) => ({
+            period: `Saved ${index + 1}`,
+            outcome: "saved" as const,
+          })),
+          { period: "May", outcome: "needs-review" },
+          { period: "June", outcome: "needs-review" },
+        ])}
+      />,
+    );
+    const visibleMarkup = markup.split("<details")[0] ?? "";
+
+    expect(visibleMarkup).toContain("May");
+    expect(visibleMarkup).toContain("June");
+    expect(visibleMarkup).toContain("Needs review");
+    expect(visibleMarkup).not.toContain("Saved 1");
+  });
   // A partly saved period is in none of the other three counts, so without its
   // own clause the header would say "1 of 2 saved" and leave the second period
   // unaccounted for anywhere on the line.

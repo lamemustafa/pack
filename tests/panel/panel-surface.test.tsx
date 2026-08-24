@@ -114,8 +114,8 @@ describe("panel surface", () => {
       <PanelSurface pack={controller({ scopedFlowSummary: completedSummary() })} />,
     );
 
-    expect(markup).toContain("Download complete");
-    expect(markup).toContain("2 periods saved as one ZIP.");
+    expect(markup).toContain("Your pack");
+    expect(markup).toContain("One ZIP · saved by your browser");
   });
 
   it("renders the partly-available outcome of a run that finished with a missing artifact", () => {
@@ -236,6 +236,24 @@ describe("panel surface", () => {
     expect(markup).toContain("Open a signed-in GST Portal tab");
     expect(markup).not.toContain("GST portal · signed in");
     expect(markup).toContain("Sign in on GST Portal");
+  });
+
+  it("names the filed-returns action once when Pack finds a GST tab on the wrong page", () => {
+    const markup = renderToStaticMarkup(
+      <PanelSurface
+        pack={controller({
+          context: { connectorId: "gst", pageKind: "gst-portal", supported: false },
+          scopedFlowSummary: completedSummary(),
+        })}
+      />,
+    );
+    const firstPresetMarkup = presetButton(markup, firstPreset.label);
+
+    expect(
+      markup.match(/Go to Filed Returns in your signed-in GST Portal tab/g) ?? [],
+    ).toHaveLength(1);
+    expect(firstPresetMarkup).toContain('aria-describedby="portal-tab-instruction"');
+    expect(firstPresetMarkup).toContain("periods · one ZIP");
   });
 
   it("disables every preset while a different scope's saved run needs recovery", () => {

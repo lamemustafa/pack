@@ -71,11 +71,7 @@ function fullYearSummary(safeSignals: string[]): FiledReturnsFlowSummary {
 }
 
 describe("full-year completion claim", () => {
-  it("does not claim the ZIP was saved when no download was correlated", () => {
-    // A full-year run completes when every PERIOD is positive. That state cannot
-    // observe the final ZIP, so announcing it saved was a completion claim with
-    // no download evidence behind it -- while the delivery line on the same
-    // screen said the opposite.
+  it("leaves completed-run copy to the pack summary", () => {
     const markup = renderToStaticMarkup(
       <InlineStatus
         busy={null}
@@ -89,51 +85,7 @@ describe("full-year completion claim", () => {
       />,
     );
 
-    expect(markup).not.toContain("saved as one ZIP");
-    expect(markup).toContain("ZIP unconfirmed");
-    expect(markup).toContain("12 periods processed");
-  });
-
-  it("does not send the user to Downloads when no ZIP was ever meant to exist", () => {
-    // Every period positively not-filed produces no ZIP by design. Telling the
-    // user to check Downloads for it is the same contradiction, reversed.
-    const markup = renderToStaticMarkup(
-      <InlineStatus
-        busy={null}
-        portalReady
-        onOpenPortal={vi.fn()}
-        onRestartTarget={vi.fn()}
-        onRetryFullFiscalYearTarget={vi.fn()}
-        onRetryTarget={vi.fn()}
-        presentation={completePresentation}
-        summary={fullYearSummary(["full-fiscal-year-no-zip-artifacts"])}
-      />,
-    );
-
-    expect(markup).not.toContain("ZIP unconfirmed");
-    expect(markup).not.toContain("check browser Downloads");
-    // ...and it must not fall through to the success body either, which would
-    // claim a ZIP that was deliberately never created.
-    expect(markup).not.toContain("saved as one ZIP");
-    expect(markup).toContain("No ZIP created");
-  });
-
-  it("claims the ZIP only once a download is correlated", () => {
-    const markup = renderToStaticMarkup(
-      <InlineStatus
-        busy={null}
-        portalReady
-        onOpenPortal={vi.fn()}
-        onRestartTarget={vi.fn()}
-        onRetryFullFiscalYearTarget={vi.fn()}
-        onRetryTarget={vi.fn()}
-        presentation={completePresentation}
-        summary={fullYearSummary(["full-fiscal-year-zip-downloaded"])}
-      />,
-    );
-
-    expect(markup).toContain("12 periods saved as one ZIP");
-    expect(markup).not.toContain("ZIP unconfirmed");
+    expect(markup).toBe("");
   });
 });
 
@@ -535,7 +487,7 @@ describe("inline filed-return recovery status", () => {
     expect(markup).toContain("Open Returns Dashboard in the GST Portal");
   });
 
-  it("describes a completed full fiscal year as one ZIP", () => {
+  it("does not repeat a completed full fiscal-year ZIP", () => {
     const summary: FiledReturnsFlowSummary = {
       ...blockedSummary,
       scope: { ...blockedSummary.scope, period: FULL_FISCAL_YEAR_PERIOD },
@@ -568,8 +520,7 @@ describe("inline filed-return recovery status", () => {
       />,
     );
 
-    expect(markup).toContain("2 periods saved as one ZIP.");
-    expect(markup).not.toContain("The selected file was saved by your browser.");
+    expect(markup).toBe("");
   });
 
   it("renders a completed filename override message", () => {
