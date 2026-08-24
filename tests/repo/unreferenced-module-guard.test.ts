@@ -176,9 +176,9 @@ function unresolvedSourceSpecifierError(
   );
 }
 
-function isWxtEntrypoint(projectRoot: string, filePath: string): boolean {
-  const path = projectPath(projectRoot, filePath);
-  return /^src\/entrypoints\/(?:background|content|[^/]+\.content)\.(?:ts|tsx)$/.test(path);
+function isWxtEntrypoint(sourceDirectory: string, filePath: string): boolean {
+  const path = projectPath(sourceDirectory, filePath);
+  return /^entrypoints\/(?:background|content|[^/]+\.content)\.(?:ts|tsx)$/.test(path);
 }
 
 function htmlAttributeValue(attributes: string, name: string): string | undefined {
@@ -214,15 +214,19 @@ function htmlEntrypointSpecifiers(html: string): string[] {
 
 function sourcePathForHtmlReference(
   reference: string,
+  projectRoot: string,
   htmlPath: string,
   compilerOptions: ProjectCompilerOptions,
   filesByPath: ReadonlyMap<string, string>,
 ): { path: string | undefined; sourceSpecifier: string | undefined } {
-  if (
-    reference.startsWith("/") ||
-    reference.startsWith("#") ||
-    /^[a-z][a-z\d+.-]*:/i.test(reference)
-  ) {
+  if (reference.startsWith("/")) {
+    const sourcePath = canonicalPath(resolve(projectRoot, `.${reference.split(/[?#]/, 1)[0]}`));
+    return {
+      path: filesByPath.has(sourcePath) ? sourcePath : undefined,
+      sourceSpecifier: undefined,
+    };
+  }
+  if (reference.startsWith("#") || /^[a-z][a-z\d+.-]*:/i.test(reference)) {
     return { path: undefined, sourceSpecifier: undefined };
   }
   const sourceSpecifier = reference.startsWith(".") ? reference : `./${reference}`;
@@ -242,15 +246,49 @@ async function optionalWxtConfigText(wxtConfigPath: string): Promise<string | un
   }
 }
 
+function wxtSourceDirectory(projectRoot: string, configText: string | undefined): string {
+  // WXT 0.21.4 resolve-config.mjs defaults srcDir to config.root when it is absent.
+  if (!configText) return projectRoot;
+  const configSource = ts.createSourceFile(
+    join(projectRoot, "wxt.config.ts"),
+    configText,
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  let srcDirInitializer: ts.Expression | undefined;
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === "defineConfig"
+    ) {
+      const configObject = node.arguments.find(ts.isObjectLiteralExpression);
+      const srcDirProperty = configObject?.properties.find(
+        (property): property is ts.PropertyAssignment =>
+          ts.isPropertyAssignment(property) && property.name.getText(configSource) === "srcDir",
+      );
+      srcDirInitializer = srcDirProperty?.initializer;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(configSource);
+  if (!srcDirInitializer) return projectRoot;
+  if (!ts.isStringLiteralLike(srcDirInitializer)) {
+    throw new Error("Could not determine static WXT srcDir from wxt.config.ts");
+  }
+  return resolve(projectRoot, srcDirInitializer.text);
+}
+
 async function rootPathsFor(
   projectRoot: string,
   sourceDirectory: string,
   sourceFiles: readonly string[],
   compilerOptions: ProjectCompilerOptions,
   filesByPath: ReadonlyMap<string, string>,
+  wxtConfigText: string | undefined,
 ): Promise<Set<string>> {
   const rootPaths = new Set(
-    sourceFiles.filter((filePath) => isWxtEntrypoint(projectRoot, filePath)).map(canonicalPath),
+    sourceFiles.filter((filePath) => isWxtEntrypoint(sourceDirectory, filePath)).map(canonicalPath),
   );
   const entrypointDirectory = join(sourceDirectory, "entrypoints");
   const htmlEntrypoints = await filesIn(entrypointDirectory, (name) => name === "index.html");
@@ -259,6 +297,7 @@ async function rootPathsFor(
     for (const specifier of htmlEntrypointSpecifiers(html)) {
       const htmlReference = sourcePathForHtmlReference(
         specifier,
+        projectRoot,
         htmlPath,
         compilerOptions,
         filesByPath,
@@ -274,9 +313,8 @@ async function rootPathsFor(
   }
 
   const wxtConfigPath = join(projectRoot, "wxt.config.ts");
-  const configText = await optionalWxtConfigText(wxtConfigPath);
-  if (configText) {
-    for (const specifier of moduleSpecifiers(wxtConfigPath, configText)) {
+  if (wxtConfigText) {
+    for (const specifier of moduleSpecifiers(wxtConfigPath, wxtConfigText)) {
       const rootPath = sourcePathForSpecifier(
         specifier,
         wxtConfigPath,
@@ -299,7 +337,8 @@ async function assertNoUnreferencedSourceModules(
     ? UNREFERENCED_SOURCE_MODULE_ALLOWLIST
     : [],
 ): Promise<void> {
-  const sourceDirectory = join(projectRoot, "src");
+  const wxtConfigText = await optionalWxtConfigText(join(projectRoot, "wxt.config.ts"));
+  const sourceDirectory = wxtSourceDirectory(projectRoot, wxtConfigText);
   const sourceFiles = await sourceFilesIn(sourceDirectory);
   const filesByPath = new Map(sourceFiles.map((filePath) => [canonicalPath(filePath), filePath]));
   const dependenciesByPath = new Map(
@@ -342,6 +381,7 @@ async function assertNoUnreferencedSourceModules(
     sourceFiles,
     compilerOptions,
     filesByPath,
+    wxtConfigText,
   );
   const reachedPaths = new Set(rootPaths);
   const pendingPaths = [...rootPaths];
@@ -406,6 +446,11 @@ async function createTemporaryProject(): Promise<string> {
     projectRoot,
     "tsconfig.json",
     JSON.stringify({ compilerOptions: { baseUrl: ".", paths: { "@/*": ["src/*"] } } }),
+  );
+  await writeProjectFile(
+    projectRoot,
+    "wxt.config.ts",
+    'import { defineConfig } from "wxt";\nexport default defineConfig({ srcDir: "src" });\n',
   );
   return projectRoot;
 }
@@ -577,7 +622,7 @@ describe("unreferenced source module guard", () => {
     await writeProjectFile(
       projectRoot,
       "wxt.config.ts",
-      'import "./src/extension/build-constants";\nexport {};\n',
+      'import { defineConfig } from "wxt";\nimport "./src/extension/build-constants";\nexport default defineConfig({ srcDir: "src" });\n',
     );
 
     await expect(assertNoUnreferencedSourceModules(projectRoot)).resolves.toBeUndefined();
@@ -624,6 +669,7 @@ describe("unreferenced source module guard", () => {
     await writeProjectFile(projectRoot, "src/entrypoints/background.ts", "export {};\n");
     await writeProjectFile(projectRoot, "src/extension/manifest-policy.ts", "export {};\n");
     const wxtConfigPath = join(projectRoot, "wxt.config.ts");
+    await rm(wxtConfigPath);
     await mkdir(wxtConfigPath);
     await expect(mkdir(wxtConfigPath)).rejects.toThrow();
 
@@ -682,19 +728,48 @@ describe("unreferenced source module guard", () => {
     await expect(assertNoUnreferencedSourceModules(projectRoot)).resolves.toBeUndefined();
   });
 
-  it("does not resolve root-absolute HTML URLs against the source tree", async () => {
+  it("resolves root-absolute URLs inside source and ignores package-root assets", async () => {
     const projectRoot = await createTemporaryProject();
     await writeProjectFile(projectRoot, "src/entrypoints/background.ts", "export {};\n");
     await writeProjectFile(
       projectRoot,
       "src/entrypoints/options/index.html",
-      '<link rel="stylesheet" href="/styles/root-absolute.css">\n',
+      '<link rel="stylesheet" href="/src/styles/root-absolute.css">\n<link rel="icon" href="/brand/pack-favicon.svg">\n',
     );
     await writeProjectFile(projectRoot, "src/styles/root-absolute.css", ".root-absolute {}\n");
 
-    await expect(assertNoUnreferencedSourceModules(projectRoot)).rejects.toThrow(
-      /^Unreferenced source modules:\n- src\/styles\/root-absolute\.css$/,
+    await expect(assertNoUnreferencedSourceModules(projectRoot)).resolves.toBeUndefined();
+  });
+
+  it("follows the static WXT srcDir instead of a hard-coded source directory", async () => {
+    const projectRoot = await createTemporaryProject();
+    await writeProjectFile(
+      projectRoot,
+      "wxt.config.ts",
+      'import { defineConfig } from "wxt";\nexport default defineConfig({ srcDir: "extension" });\n',
     );
+    await writeProjectFile(
+      projectRoot,
+      "extension/entrypoints/background.ts",
+      'import "../core/live";\n',
+    );
+    await writeProjectFile(projectRoot, "extension/core/live.ts", "export {};\n");
+    await writeProjectFile(projectRoot, "src/stale.ts", "export {};\n");
+    await expect(readFile(join(projectRoot, "wxt.config.ts"), "utf8")).resolves.toContain(
+      'srcDir: "extension"',
+    );
+
+    await expect(assertNoUnreferencedSourceModules(projectRoot)).resolves.toBeUndefined();
+  });
+
+  it("uses WXT's project-root default when srcDir is absent", async () => {
+    const projectRoot = await createTemporaryProject();
+    const wxtConfigPath = join(projectRoot, "wxt.config.ts");
+    await rm(wxtConfigPath);
+    await expect(readFile(wxtConfigPath, "utf8")).rejects.toThrow();
+    await writeProjectFile(projectRoot, "entrypoints/background.ts", "export {};\n");
+
+    await expect(assertNoUnreferencedSourceModules(projectRoot)).resolves.toBeUndefined();
   });
 
   it("resolves index imports with and without a trailing slash", async () => {
