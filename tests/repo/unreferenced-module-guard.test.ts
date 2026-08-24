@@ -1,14 +1,24 @@
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { extname, join, relative, resolve, sep } from "node:path";
+import { dirname, extname, join, relative, resolve, sep } from "node:path";
 import ts from "typescript";
 import { afterEach, describe, expect, it } from "vitest";
 
-const SOURCE_EXTENSIONS = new Set([".ts", ".tsx"]);
+const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".css"]);
 const UNREFERENCED_SOURCE_MODULE_ALLOWLIST: readonly {
   path: string;
   reason: string;
-}[] = [];
+}[] = [
+  {
+    path: "src/entrypoints/popup/run-evidence-panel.tsx",
+    reason:
+      "Unreached from all extension roots; tracked for dedicated product/cleanup review in #218.",
+  },
+  {
+    path: "src/styles/popup-target-summary.css",
+    reason: "Unreached stylesheet; tracked for dedicated cleanup review in #219.",
+  },
+];
 
 const temporaryProjects: string[] = [];
 
@@ -21,21 +31,26 @@ function projectPath(projectRoot: string, filePath: string): string {
   return relative(projectRoot, filePath).split(sep).join("/");
 }
 
-async function sourceFilesIn(directory: string): Promise<string[]> {
+async function filesIn(directory: string, include: (name: string) => boolean): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true });
   const nested = await Promise.all(
     entries.map(async (entry) => {
       const entryPath = join(directory, entry.name);
-      if (entry.isDirectory()) return sourceFilesIn(entryPath);
-      return SOURCE_EXTENSIONS.has(extname(entry.name)) && !entry.name.endsWith(".d.ts")
-        ? [entryPath]
-        : [];
+      if (entry.isDirectory()) return filesIn(entryPath, include);
+      return include(entry.name) ? [entryPath] : [];
     }),
   );
   return nested.flat();
 }
 
-function moduleSpecifiers(sourceFile: ts.SourceFile): string[] {
+async function sourceFilesIn(directory: string): Promise<string[]> {
+  return filesIn(
+    directory,
+    (name) => SOURCE_EXTENSIONS.has(extname(name)) && !name.endsWith(".d.ts"),
+  );
+}
+
+function typescriptModuleSpecifiers(sourceFile: ts.SourceFile): string[] {
   const specifiers: string[] = [];
   const addModuleSpecifier = (node: ts.Expression | ts.TypeNode | undefined) => {
     if (node && ts.isStringLiteralLike(node)) specifiers.push(node.text);
@@ -61,6 +76,20 @@ function moduleSpecifiers(sourceFile: ts.SourceFile): string[] {
   return specifiers;
 }
 
+function cssImportSpecifiers(sourceText: string): string[] {
+  return Array.from(
+    sourceText.matchAll(/@import\s+(?:url\(\s*)?(?:"([^"]+)"|'([^']+)'|([^\s)]+))/g),
+    (match) => match[1] ?? match[2] ?? match[3] ?? "",
+  ).filter(Boolean);
+}
+
+function moduleSpecifiers(filePath: string, sourceText: string): string[] {
+  if (extname(filePath) === ".css") return cssImportSpecifiers(sourceText);
+  return typescriptModuleSpecifiers(
+    ts.createSourceFile(filePath, sourceText, ts.ScriptTarget.Latest, true),
+  );
+}
+
 function compilerOptionsFor(projectRoot: string): ts.CompilerOptions {
   const tsconfigPath = join(projectRoot, "tsconfig.json");
   const config = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
@@ -84,40 +113,125 @@ function compilerOptionsFor(projectRoot: string): ts.CompilerOptions {
   return parsed.options;
 }
 
+function sourcePathForSpecifier(
+  specifier: string,
+  importerPath: string,
+  compilerOptions: ts.CompilerOptions,
+  filesByPath: ReadonlyMap<string, string>,
+): string | undefined {
+  const resolvedModule = ts.resolveModuleName(
+    specifier,
+    importerPath,
+    compilerOptions,
+    ts.sys,
+  ).resolvedModule;
+  if (resolvedModule) {
+    const resolvedPath = canonicalPath(resolvedModule.resolvedFileName);
+    if (filesByPath.has(resolvedPath)) return resolvedPath;
+  }
+
+  const relativeSpecifier = specifier.split(/[?#]/, 1)[0];
+  if (!relativeSpecifier?.startsWith(".")) return undefined;
+  const candidatePath = canonicalPath(resolve(dirname(importerPath), relativeSpecifier));
+  return filesByPath.has(candidatePath) ? candidatePath : undefined;
+}
+
+function isWxtEntrypoint(projectRoot: string, filePath: string): boolean {
+  const path = projectPath(projectRoot, filePath);
+  return (
+    /^src\/entrypoints\/(?:background|content)\.(?:ts|tsx)$/.test(path) ||
+    /^src\/entrypoints\/[^/]+\/main\.(?:ts|tsx)$/.test(path)
+  );
+}
+
+function htmlEntrypointSpecifiers(html: string): string[] {
+  const specifiers: string[] = [];
+  for (const match of html.matchAll(/<(script|link)\b([^>]*)>/gi)) {
+    const [, tagName, attributes] = match;
+    if (!tagName || !attributes) continue;
+    const isModuleScript = tagName === "script" && /\btype\s*=\s*["']module["']/i.test(attributes);
+    const isStylesheet = tagName === "link" && /\brel\s*=\s*["']stylesheet["']/i.test(attributes);
+    const reference = attributes.match(/\b(?:src|href)\s*=\s*["']([^"']+)["']/i)?.[1];
+    if ((isModuleScript || isStylesheet) && reference) specifiers.push(reference);
+  }
+  return specifiers;
+}
+
+async function rootPathsFor(
+  projectRoot: string,
+  sourceDirectory: string,
+  sourceFiles: readonly string[],
+  compilerOptions: ts.CompilerOptions,
+  filesByPath: ReadonlyMap<string, string>,
+): Promise<Set<string>> {
+  const rootPaths = new Set(
+    sourceFiles.filter((filePath) => isWxtEntrypoint(projectRoot, filePath)).map(canonicalPath),
+  );
+  const entrypointDirectory = join(sourceDirectory, "entrypoints");
+  const htmlEntrypoints = await filesIn(entrypointDirectory, (name) => name === "index.html");
+  for (const htmlPath of htmlEntrypoints) {
+    const html = await readFile(htmlPath, "utf8");
+    for (const specifier of htmlEntrypointSpecifiers(html)) {
+      const rootPath = sourcePathForSpecifier(specifier, htmlPath, compilerOptions, filesByPath);
+      if (rootPath) rootPaths.add(rootPath);
+    }
+  }
+
+  const manifestPolicyPath = join(sourceDirectory, "extension", "manifest-policy.ts");
+  const canonicalManifestPolicyPath = canonicalPath(manifestPolicyPath);
+  if (filesByPath.has(canonicalManifestPolicyPath)) {
+    const wxtConfigPath = join(projectRoot, "wxt.config.ts");
+    const configText = await readFile(wxtConfigPath, "utf8");
+    const importsManifestPolicy = moduleSpecifiers(wxtConfigPath, configText).some(
+      (specifier) =>
+        sourcePathForSpecifier(specifier, wxtConfigPath, compilerOptions, filesByPath) ===
+        canonicalManifestPolicyPath,
+    );
+    if (importsManifestPolicy) rootPaths.add(canonicalManifestPolicyPath);
+  }
+
+  return rootPaths;
+}
+
 async function assertNoUnreferencedSourceModules(projectRoot = process.cwd()): Promise<void> {
   const sourceDirectory = join(projectRoot, "src");
   const sourceFiles = await sourceFilesIn(sourceDirectory);
   const filesByPath = new Map(sourceFiles.map((filePath) => [canonicalPath(filePath), filePath]));
-  const importersByPath = new Map(
+  const dependenciesByPath = new Map(
     sourceFiles.map((filePath) => [canonicalPath(filePath), new Set<string>()]),
   );
   const compilerOptions = compilerOptionsFor(projectRoot);
 
   for (const sourcePath of sourceFiles) {
     const sourceText = await readFile(sourcePath, "utf8");
-    const sourceFile = ts.createSourceFile(sourcePath, sourceText, ts.ScriptTarget.Latest, true);
-    for (const specifier of moduleSpecifiers(sourceFile)) {
-      const resolvedModule = ts.resolveModuleName(
+    for (const specifier of moduleSpecifiers(sourcePath, sourceText)) {
+      const targetPath = sourcePathForSpecifier(
         specifier,
         sourcePath,
         compilerOptions,
-        ts.sys,
-      ).resolvedModule;
-      if (!resolvedModule) continue;
-
-      const targetPath = canonicalPath(resolvedModule.resolvedFileName);
-      if (filesByPath.has(targetPath)) importersByPath.get(targetPath)?.add(sourcePath);
+        filesByPath,
+      );
+      if (targetPath) dependenciesByPath.get(canonicalPath(sourcePath))?.add(targetPath);
     }
   }
 
-  const rootPaths = new Set(
-    sourceFiles
-      .filter((filePath) => projectPath(projectRoot, filePath).startsWith("src/entrypoints/"))
-      .map(canonicalPath),
+  const rootPaths = await rootPathsFor(
+    projectRoot,
+    sourceDirectory,
+    sourceFiles,
+    compilerOptions,
+    filesByPath,
   );
-  const manifestPolicyPath = join(sourceDirectory, "extension", "manifest-policy.ts");
-  if (filesByPath.has(canonicalPath(manifestPolicyPath)))
-    rootPaths.add(canonicalPath(manifestPolicyPath));
+  const reachedPaths = new Set(rootPaths);
+  const pendingPaths = [...rootPaths];
+  for (const currentPath of pendingPaths) {
+    for (const dependencyPath of dependenciesByPath.get(currentPath) ?? []) {
+      if (!reachedPaths.has(dependencyPath)) {
+        reachedPaths.add(dependencyPath);
+        pendingPaths.push(dependencyPath);
+      }
+    }
+  }
 
   const allowlistedPaths = new Set<string>();
   for (const entry of UNREFERENCED_SOURCE_MODULE_ALLOWLIST) {
@@ -128,11 +242,7 @@ async function assertNoUnreferencedSourceModules(projectRoot = process.cwd()): P
   const unreferenced = sourceFiles
     .filter((filePath) => {
       const canonicalFilePath = canonicalPath(filePath);
-      return (
-        !rootPaths.has(canonicalFilePath) &&
-        !allowlistedPaths.has(canonicalFilePath) &&
-        importersByPath.get(canonicalFilePath)?.size === 0
-      );
+      return !allowlistedPaths.has(canonicalFilePath) && !reachedPaths.has(canonicalFilePath);
     })
     .map((filePath) => projectPath(projectRoot, filePath))
     .sort();
@@ -154,6 +264,17 @@ async function writeProjectFile(
   await writeFile(filePath, contents);
 }
 
+async function createTemporaryProject(): Promise<string> {
+  const projectRoot = await mkdtemp(join(tmpdir(), "pack-unreferenced-module-"));
+  temporaryProjects.push(projectRoot);
+  await writeProjectFile(
+    projectRoot,
+    "tsconfig.json",
+    JSON.stringify({ compilerOptions: { baseUrl: ".", paths: { "@/*": ["src/*"] } } }),
+  );
+  return projectRoot;
+}
+
 afterEach(async () => {
   await Promise.all(
     temporaryProjects.splice(0).map((projectRoot) => rm(projectRoot, { recursive: true })),
@@ -166,13 +287,7 @@ describe("unreferenced source module guard", () => {
   });
 
   it("fails when a module is imported only by its own test", async () => {
-    const projectRoot = await mkdtemp(join(tmpdir(), "pack-unreferenced-module-"));
-    temporaryProjects.push(projectRoot);
-    await writeProjectFile(
-      projectRoot,
-      "tsconfig.json",
-      JSON.stringify({ compilerOptions: { baseUrl: ".", paths: { "@/*": ["src/*"] } } }),
-    );
+    const projectRoot = await createTemporaryProject();
     await writeProjectFile(
       projectRoot,
       "src/entrypoints/background.ts",
@@ -200,6 +315,36 @@ describe("unreferenced source module guard", () => {
 
     await expect(assertNoUnreferencedSourceModules(projectRoot)).rejects.toThrow(
       /^Unreferenced source modules:\n- src\/core\/test-only\.ts$/,
+    );
+  });
+
+  it("fails when an entrypoints helper is imported only by its own test", async () => {
+    const projectRoot = await createTemporaryProject();
+    await writeProjectFile(projectRoot, "src/entrypoints/background.ts", "export {};\n");
+    await writeProjectFile(
+      projectRoot,
+      "src/entrypoints/popup/test-only-helper.ts",
+      "export const testOnlyHelper = true;\n",
+    );
+    await writeProjectFile(
+      projectRoot,
+      "tests/popup/test-only-helper.test.ts",
+      'import { testOnlyHelper } from "../../src/entrypoints/popup/test-only-helper";\nvoid testOnlyHelper;\n',
+    );
+
+    await expect(assertNoUnreferencedSourceModules(projectRoot)).rejects.toThrow(
+      /^Unreferenced source modules:\n- src\/entrypoints\/popup\/test-only-helper\.ts$/,
+    );
+  });
+
+  it("fails when a disconnected source cycle is unreachable from every root", async () => {
+    const projectRoot = await createTemporaryProject();
+    await writeProjectFile(projectRoot, "src/entrypoints/background.ts", "export {};\n");
+    await writeProjectFile(projectRoot, "src/core/cycle-a.ts", 'import "./cycle-b";\n');
+    await writeProjectFile(projectRoot, "src/core/cycle-b.ts", 'import "./cycle-a";\n');
+
+    await expect(assertNoUnreferencedSourceModules(projectRoot)).rejects.toThrow(
+      /^Unreferenced source modules:\n- src\/core\/cycle-a\.ts\n- src\/core\/cycle-b\.ts$/,
     );
   });
 });
