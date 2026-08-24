@@ -157,6 +157,25 @@ function sourcePathForSpecifier(
   return filesByPath.has(candidatePath) ? candidatePath : undefined;
 }
 
+function isSourceSpecifier(specifier: string, compilerOptions: ProjectCompilerOptions): boolean {
+  const specifierPath = specifier.split(/[?#]/, 1)[0] ?? specifier;
+  if (specifierPath.startsWith(".")) return true;
+  return Object.keys(compilerOptions.options.paths ?? {}).some((pattern) => {
+    const [prefix, suffix = ""] = pattern.split("*");
+    return specifierPath.startsWith(prefix ?? "") && specifierPath.endsWith(suffix);
+  });
+}
+
+function unresolvedSourceSpecifierError(
+  projectRoot: string,
+  importerPath: string,
+  specifier: string,
+): Error {
+  return new Error(
+    `Could not resolve source specifier ${JSON.stringify(specifier)} from ${projectPath(projectRoot, importerPath)}`,
+  );
+}
+
 function isWxtEntrypoint(projectRoot: string, filePath: string): boolean {
   const path = projectPath(projectRoot, filePath);
   return /^src\/entrypoints\/(?:background|content|[^/]+\.content)\.(?:ts|tsx)$/.test(path);
@@ -167,12 +186,29 @@ function htmlEntrypointSpecifiers(html: string): string[] {
   for (const match of html.matchAll(/<(script|link)\b([^>]*)>/gi)) {
     const [, tagName, attributes] = match;
     if (!tagName || !attributes) continue;
-    const isModuleScript = tagName === "script" && /\btype\s*=\s*["']module["']/i.test(attributes);
-    const isStylesheet = tagName === "link" && /\brel\s*=\s*["']stylesheet["']/i.test(attributes);
-    const reference = attributes.match(/\b(?:src|href)\s*=\s*["']([^"']+)["']/i)?.[1];
+    const normalizedTagName = tagName.toLowerCase();
+    const isModuleScript =
+      normalizedTagName === "script" && /\btype\s*=\s*["']module["']/i.test(attributes);
+    const isStylesheet =
+      normalizedTagName === "link" && /\brel\s*=\s*["']stylesheet["']/i.test(attributes);
+    const reference = attributes.match(
+      normalizedTagName === "script"
+        ? /\bsrc\s*=\s*["']([^"']+)["']/i
+        : /\bhref\s*=\s*["']([^"']+)["']/i,
+    )?.[1];
     if ((isModuleScript || isStylesheet) && reference) specifiers.push(reference);
   }
   return specifiers;
+}
+
+async function optionalWxtConfigText(wxtConfigPath: string): Promise<string | undefined> {
+  try {
+    return await readFile(wxtConfigPath, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`Could not read WXT config ${wxtConfigPath}: ${detail}`);
+  }
 }
 
 async function rootPathsFor(
@@ -192,11 +228,14 @@ async function rootPathsFor(
     for (const specifier of htmlEntrypointSpecifiers(html)) {
       const rootPath = sourcePathForSpecifier(specifier, htmlPath, compilerOptions, filesByPath);
       if (rootPath) rootPaths.add(rootPath);
+      else if (isSourceSpecifier(specifier, compilerOptions)) {
+        throw unresolvedSourceSpecifierError(projectRoot, htmlPath, specifier);
+      }
     }
   }
 
   const wxtConfigPath = join(projectRoot, "wxt.config.ts");
-  const configText = await readFile(wxtConfigPath, "utf8").catch(() => undefined);
+  const configText = await optionalWxtConfigText(wxtConfigPath);
   if (configText) {
     for (const specifier of moduleSpecifiers(wxtConfigPath, configText)) {
       const rootPath = sourcePathForSpecifier(
@@ -206,6 +245,9 @@ async function rootPathsFor(
         filesByPath,
       );
       if (rootPath) rootPaths.add(rootPath);
+      else if (isSourceSpecifier(specifier, compilerOptions)) {
+        throw unresolvedSourceSpecifierError(projectRoot, wxtConfigPath, specifier);
+      }
     }
   }
 
@@ -240,6 +282,9 @@ async function assertNoUnreferencedSourceModules(
         filesByPath,
       );
       if (targetPath) dependenciesByPath.get(canonicalPath(sourcePath))?.add(targetPath);
+      else if (isSourceSpecifier(specifier, compilerOptions)) {
+        throw unresolvedSourceSpecifierError(projectRoot, sourcePath, specifier);
+      }
     }
   }
 
@@ -497,5 +542,74 @@ describe("unreferenced source module guard", () => {
     );
 
     await expect(assertNoUnreferencedSourceModules(projectRoot)).resolves.toBeUndefined();
+  });
+
+  it("does not treat a script href as a module root", async () => {
+    const projectRoot = await createTemporaryProject();
+    await writeProjectFile(projectRoot, "src/entrypoints/background.ts", "export {};\n");
+    await writeProjectFile(
+      projectRoot,
+      "src/entrypoints/options/index.html",
+      '<script type="module" href="./main.ts"></script>\n',
+    );
+    await writeProjectFile(projectRoot, "src/entrypoints/options/main.ts", "export {};\n");
+    await expect(
+      readFile(join(projectRoot, "src/entrypoints/options/index.html"), "utf8"),
+    ).resolves.toContain('href="./main.ts"');
+
+    await expect(assertNoUnreferencedSourceModules(projectRoot)).rejects.toThrow(
+      /^Unreferenced source modules:\n- src\/entrypoints\/options\/main\.ts$/,
+    );
+  });
+
+  it("does not treat a stylesheet link src as a stylesheet root", async () => {
+    const projectRoot = await createTemporaryProject();
+    await writeProjectFile(projectRoot, "src/entrypoints/background.ts", "export {};\n");
+    await writeProjectFile(
+      projectRoot,
+      "src/entrypoints/options/index.html",
+      '<link rel="stylesheet" src="./options.css">\n',
+    );
+    await writeProjectFile(projectRoot, "src/entrypoints/options/options.css", ".options {}\n");
+    await expect(
+      readFile(join(projectRoot, "src/entrypoints/options/index.html"), "utf8"),
+    ).resolves.toContain('src="./options.css"');
+
+    await expect(assertNoUnreferencedSourceModules(projectRoot)).rejects.toThrow(
+      /^Unreferenced source modules:\n- src\/entrypoints\/options\/options\.css$/,
+    );
+  });
+
+  it("reports a WXT config read error before calculating roots", async () => {
+    const projectRoot = await createTemporaryProject();
+    await writeProjectFile(projectRoot, "src/entrypoints/background.ts", "export {};\n");
+    await writeProjectFile(projectRoot, "src/extension/manifest-policy.ts", "export {};\n");
+    const wxtConfigPath = join(projectRoot, "wxt.config.ts");
+    await mkdir(wxtConfigPath);
+    await expect(mkdir(wxtConfigPath)).rejects.toThrow();
+
+    await expect(assertNoUnreferencedSourceModules(projectRoot)).rejects.toThrow(
+      new RegExp(
+        `^Could not read WXT config ${wxtConfigPath.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}:`,
+      ),
+    );
+  });
+
+  it("reports an unresolved WXT config source specifier before calculating roots", async () => {
+    const projectRoot = await createTemporaryProject();
+    await writeProjectFile(projectRoot, "src/entrypoints/background.ts", "export {};\n");
+    await writeProjectFile(projectRoot, "src/extension/manifest-policy.ts", "export {};\n");
+    await writeProjectFile(
+      projectRoot,
+      "wxt.config.ts",
+      'import "./src/extension/missing-manifest-policy";\nexport {};\n',
+    );
+    await expect(readFile(join(projectRoot, "wxt.config.ts"), "utf8")).resolves.toContain(
+      '"./src/extension/missing-manifest-policy"',
+    );
+
+    await expect(assertNoUnreferencedSourceModules(projectRoot)).rejects.toThrow(
+      'Could not resolve source specifier "./src/extension/missing-manifest-policy" from wxt.config.ts',
+    );
   });
 });
