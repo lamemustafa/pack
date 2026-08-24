@@ -409,6 +409,22 @@ export function toFullFiscalYearSummary(
   };
 }
 
+/**
+ * The step a re-summarisation builds from the ledger alone.
+ *
+ * It carries the delivery signal when the ledger's cleanup phase records one.
+ * Five places ask "did the ZIP reach the browser" and every one of them asks it
+ * of this step's signals -- the panel banner, the pack summary line, two durable
+ * status derivations, and the per-period evidence. Teaching only the evidence to
+ * read the durable phase made it disagree with the other four: a live run
+ * reported twelve periods `Saved` beneath a banner saying Pack could not confirm
+ * the browser had the ZIP, which is one screen contradicting itself.
+ *
+ * So the fact is restored where it was lost, not patched into each reader. The
+ * signal is the existing canonical one and survives durable parsing, so a step
+ * built after a restart is indistinguishable from the one the observing run
+ * emitted -- which is the point.
+ */
 export function completeFullFiscalYearStep(
   ledger: FiledReturnsFullFiscalYearLedger,
 ): PortalFlowStepResult {
@@ -416,7 +432,10 @@ export function completeFullFiscalYearStep(
     connectorId: "gst",
     scopeId: filedReturnsScopeId(ledger.scope.returnType),
     state: "downloaded",
-    safeSignals: ["full-fiscal-year-complete"],
+    safeSignals: [
+      "full-fiscal-year-complete",
+      ...(zipPhaseProvesDelivery(ledger.zipPhase) ? ["full-fiscal-year-zip-downloaded"] : []),
+    ],
     safeMessage: `Pack completed the local full fiscal year run for FY ${ledger.scope.financialYear}.`,
   };
 }
