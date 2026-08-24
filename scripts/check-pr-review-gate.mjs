@@ -24,8 +24,10 @@ const pollIntervalMs = readNonNegativeIntegerArg("--poll-interval-ms", 10_000);
 const retryAttempts = readPositiveIntegerArg("--retry-attempts", DEFAULT_GH_RETRY_ATTEMPTS);
 const retryBackoffMs = readNonNegativeIntegerArg("--retry-backoff-ms", DEFAULT_GH_RETRY_BACKOFF_MS);
 const fixturePaths = readFixturePaths();
-const requiredReviewAuthor = readArgValue("--required-review-author");
-const prFindingAuthor = requiredReviewAuthor ?? DEFAULT_PR_FINDING_AUTHOR;
+const requestedReviewAuthor = readArgValue("--required-review-author");
+const requiredReviewAuthor =
+  strictHeadReview ? (requestedReviewAuthor ?? DEFAULT_PR_FINDING_AUTHOR) : requestedReviewAuthor;
+const prFindingAuthor = requestedReviewAuthor ?? DEFAULT_PR_FINDING_AUTHOR;
 const expectedHeadOid = readArgValue("--expected-head-oid");
 const explicitRepo = readArgValue("--repo");
 const explicitPr = readArgValue("--pr");
