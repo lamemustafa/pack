@@ -453,6 +453,22 @@ describe("filed-return full-year workbook", () => {
     expect(exactSpreadsheetNumber("-2650.75")).toBe(-2650.75);
   });
 
+  // The decimal count reads digits after the point, and an exponent token has
+  // none -- `1.5e-20` counts zero decimals, passes every check, and displays as
+  // `0.000000000000000`. Two spellings of one value must not get two answers.
+  //
+  // Not reachable today: the flattener converts as it parses and the GSTR-2B
+  // scan passes the converted form. Pinned because the precondition is now
+  // stated rather than assumed, and an assumption nothing tests is how the next
+  // caller reintroduces this.
+  it("refuses an exponent token rather than reading zero decimals from it", () => {
+    expect(exactSpreadsheetNumber("1.5e-20")).toBeNull();
+    expect(exactSpreadsheetNumber("1e-16")).toBeNull();
+    expect(exactSpreadsheetNumber("1.5E+3")).toBeNull();
+    // The plain spelling of the same magnitude still answers as before.
+    expect(exactSpreadsheetNumber("1500")).toBe(1500);
+  });
+
   // A zero past the last significant digit cannot change what is displayed, so
   // a padded token is the same value as its trimmed form and must reach the same
   // answer. Counting characters refused it -- and because the GSTR-2B workbook

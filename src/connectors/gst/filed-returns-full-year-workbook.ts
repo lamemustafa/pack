@@ -318,6 +318,17 @@ function exactDecimalSum(inputs: readonly string[]): string | null {
  * already happened.
  */
 export function exactSpreadsheetNumber(input: string): number | null {
+  // Plain decimal only, stated rather than assumed. Every caller already
+  // converts -- the flattener runs `jsonNumberTokenToPlainDecimal` as it parses,
+  // and the GSTR-2B scan passes the converted form -- so this rejects nothing
+  // reachable today. It is here because the decimal count below reads the digits
+  // after the point, and an exponent token has none: `1.5e-20` would count zero
+  // decimals, pass every check, and then display as `0.000000000000000`. That is
+  // the defect this function exists to prevent, waved through by a spelling.
+  //
+  // Refused rather than converted, because converting here would put a second
+  // exponent parser beside the real one and the two would drift.
+  if (!/^-?\d+(?:\.\d+)?$/.test(input)) return null;
   const significantDigits = input
     .replace(/^-/, "")
     .replace(".", "")
