@@ -86,4 +86,31 @@ describe("per-target evidence", () => {
     expect(renderToStaticMarkup(<TargetEvidence summary={summary} />)).toBe("");
     expect(renderToStaticMarkup(<TargetEvidence summary={null} />)).toBe("");
   });
+  // A partly saved period is in none of the other three counts, so without its
+  // own clause the header would say "1 of 2 saved" and leave the second period
+  // unaccounted for anywhere on the line.
+  it("accounts for a partly saved period in the status line", () => {
+    const markup = renderToStaticMarkup(
+      <TargetEvidence
+        summary={summaryWith([
+          { period: "April", outcome: "saved" },
+          { period: "May", outcome: "partly-saved" },
+        ])}
+      />,
+    );
+
+    expect(markup).toContain("1 of 2 saved");
+    expect(markup).toContain("1 partly saved");
+  });
+
+  // The word carries the meaning, not the hue: the row reads the same to someone
+  // who cannot separate the colours.
+  it("names the partly saved outcome in the row", () => {
+    const markup = renderToStaticMarkup(
+      <TargetEvidence summary={summaryWith([{ period: "April", outcome: "partly-saved" }])} />,
+    );
+
+    expect(markup).toContain("Partly saved");
+    expect(markup).toContain("evidence-partly-saved");
+  });
 });

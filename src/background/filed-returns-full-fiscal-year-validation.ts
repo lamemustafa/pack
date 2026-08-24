@@ -4,6 +4,7 @@ import type {
   FiledReturnsFullFiscalYearTarget,
   FiledReturnsFullFiscalYearTargetStatus,
 } from "../connectors/gst/filed-returns-contracts";
+import { isCleanedZipPhase, CLEANED_ZIP_PHASES } from "../connectors/gst/filed-returns-contracts";
 import {
   isFiledReturnsArtifactType,
   normaliseFiledReturnsArtifactType,
@@ -154,7 +155,7 @@ const VALID_ZIP_PHASES = new Set<NonNullable<FiledReturnsFullFiscalYearLedger["z
   "downloaded-cleanup-pending",
   "no-artifacts-cleanup-pending",
   "legacy-cleanup-pending",
-  "cleaned",
+  ...CLEANED_ZIP_PHASES,
 ]);
 const ZIP_PHASES_REQUIRING_COMPLETED_TARGETS = new Set<
   NonNullable<FiledReturnsFullFiscalYearLedger["zipPhase"]>
@@ -167,7 +168,7 @@ const ZIP_PHASES_REQUIRING_COMPLETED_TARGETS = new Set<
   "downloaded-cleanup-pending",
   "no-artifacts-cleanup-pending",
   "legacy-cleanup-pending",
-  "cleaned",
+  ...CLEANED_ZIP_PHASES,
 ]);
 const COMPLETED_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
   "downloaded",
@@ -237,10 +238,10 @@ export function isFullFiscalYearLedger(input: unknown): input is FiledReturnsFul
     return false;
   }
   if (!isValidZipDownloadAttempt(ledger)) return false;
-  if (ledger.zipPhase === "cleaned" && ledger.status !== "complete") return false;
+  if (isCleanedZipPhase(ledger.zipPhase) && ledger.status !== "complete") return false;
   if (
     ledger.zipPhase !== undefined &&
-    ledger.zipPhase !== "cleaned" &&
+    !isCleanedZipPhase(ledger.zipPhase) &&
     ledger.status !== "blocked"
   ) {
     return false;

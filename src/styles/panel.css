@@ -216,6 +216,13 @@ html[data-pack-surface="panel"] body {
   color: var(--pack-success-fg);
 }
 
+/* The same success hue as `saved`, because nothing is wrong: the portal did not
+   offer the rest of the selection. The glyph and the word carry the difference,
+   so a reader who cannot separate the hues still reads it. */
+.evidence-partly-saved .evidence-glyph {
+  color: var(--pack-success-fg);
+}
+
 .evidence-needs-review .evidence-glyph,
 .evidence-needs-review .evidence-outcome {
   color: var(--pack-warning-fg);

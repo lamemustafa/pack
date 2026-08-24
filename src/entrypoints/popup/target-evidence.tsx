@@ -21,6 +21,7 @@ import type {
 
 const OUTCOME_LABELS: Readonly<Record<FiledReturnsTargetOutcome, string>> = {
   saved: "Saved",
+  "partly-saved": "Partly saved",
   captured: "Captured",
   "not-filed": "Not filed",
   "needs-review": "Needs review",
@@ -33,6 +34,9 @@ const OUTCOME_LABELS: Readonly<Record<FiledReturnsTargetOutcome, string>> = {
 // cannot separate the hues.
 const OUTCOME_GLYPHS: Readonly<Record<FiledReturnsTargetOutcome, string>> = {
   saved: "✓",
+  // Half of a tick: some of the selection arrived. Distinct from the review
+  // mark, because nothing here is wrong -- the portal did not offer the rest.
+  "partly-saved": "◐",
   // A filled mark for a file Pack holds, an outline for one the browser has
   // confirmed. The difference is the whole point of the column.
   captured: "•",
@@ -47,6 +51,7 @@ export function TargetEvidence({ summary }: { summary: FiledReturnsFlowSummary |
   if (!evidence || evidence.length === 0) return null;
 
   const saved = evidence.filter((entry) => entry.outcome === "saved").length;
+  const partlySaved = evidence.filter((entry) => entry.outcome === "partly-saved").length;
   const captured = evidence.filter((entry) => entry.outcome === "captured").length;
   const needsReview = evidence.filter((entry) => entry.outcome === "needs-review").length;
 
@@ -59,6 +64,13 @@ export function TargetEvidence({ summary }: { summary: FiledReturnsFlowSummary |
         <strong>
           {saved} of {evidence.length} saved
         </strong>
+        {/* Counted separately rather than folded into either neighbour. A partly
+            saved period is not in the `saved` total, so without its own clause
+            it would simply disappear from this line and leave the reader
+            unable to account for the difference. */}
+        {partlySaved > 0 ? (
+          <span className="evidence-partly"> · {partlySaved} partly saved</span>
+        ) : null}
         {captured > 0 ? (
           <span className="evidence-captured"> · {captured} captured, ZIP not confirmed</span>
         ) : null}

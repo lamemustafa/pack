@@ -8,6 +8,10 @@ import type {
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
 import {
+  isCleanedZipPhase,
+  zipPhaseProvesDelivery,
+} from "../connectors/gst/filed-returns-contracts";
+import {
   filedReturnsArtifactLabel,
   normaliseFiledReturnsArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
@@ -22,7 +26,7 @@ import {
 export function fullFiscalYearZipPhaseStep(
   ledger: FiledReturnsFullFiscalYearLedger,
 ): PortalFlowStepResult | null {
-  if (ledger.zipPhase === "cleaned") return null;
+  if (isCleanedZipPhase(ledger.zipPhase)) return null;
   const legacyRetained = hasLegacyRetainedStaging(ledger);
   if (ledger.zipPhase === undefined && !legacyRetained) return null;
   if (ledger.zipPhase === "restaging-required") {
@@ -230,6 +234,7 @@ function targetOutcome(
   status: FiledReturnsFullFiscalYearTargetStatus,
   zipDelivered: boolean,
   runInterrupted: boolean,
+  missedAnArtifact: boolean,
 ): FiledReturnsTargetOutcome {
   const outcome = TARGET_OUTCOMES[status];
   // `summariseFullFiscalYearLedger` reports an interrupted run as blocked while
@@ -237,31 +242,42 @@ function targetOutcome(
   // running after an MV3 worker interruption, and reading it as "In progress"
   // both misdescribes it and excludes it from the count of what needs a person.
   if (outcome === "running" && runInterrupted) return "needs-review";
-  return outcome === "saved" && !zipDelivered ? "captured" : outcome;
+  if (outcome !== "saved") return outcome;
+  // Delivery first. Whether the browser has the bytes is a stronger question
+  // than how much of the selection they represent, and a partial claim about a
+  // file Pack has not handed over would assert the handover in passing.
+  if (!zipDelivered) return "captured";
+  return missedAnArtifact ? "partly-saved" : "saved";
 }
 
 /**
  * Whether the ZIP reached the browser.
  *
- * The signal alone, deliberately. `zipPhase: "cleaned"` looked like the durable
- * form of the same fact and is not: three different phases reach it -- a
- * confirmed download, a run that found no artifacts, and a legacy retained
- * staging cleared on upgrade. Only the first is a delivery, and the phase that
- * distinguishes them is overwritten by the transition, so the origin cannot be
- * recovered from the ledger afterwards.
+ * The transient signal, or the durable phase that records the same delivery.
  *
- * Inferring from it reported never-exported files as saved. That is the
- * overclaim this list exists to prevent, so the inference is gone rather than
- * narrowed -- a guard that fails closed states what it can prove and no more.
+ * The signal is emitted by the step that observes the download and is absent
+ * from the step a later re-summarisation builds, so it alone made a delivered
+ * run read as merely captured once the panel was reopened.
  *
- * The cost is real and is the right way round: a delivered run re-summarised
- * after the panel reopens reads `captured` rather than `saved`, because at that
- * point Pack genuinely cannot prove the browser still holds the file. Recording
- * delivery durably would fix that, and is a persistence change to raise rather
- * than make.
+ * The old `zipPhase: "cleaned"` could not stand in for it: three phases reached
+ * that one value -- a confirmed download, a run that produced no ZIP, and a
+ * legacy staging cleared on upgrade -- and an inference built on the collapsed
+ * value reported never-exported files as saved. Cleanup now keeps its origin,
+ * so `cleaned-after-download` is the delivery and its siblings are not. The
+ * fix is to stop discarding the fact, not to guess it back afterwards.
+ *
+ * A ledger written before the split carries the origin-less `cleaned` and stays
+ * indeterminate: those runs still read as captured, which is what they did
+ * before and is the safe direction for a claim about a file.
  */
-function isFullFiscalYearZipDelivered(flowStep: PortalFlowStepResult): boolean {
-  return flowStep.safeSignals.includes("full-fiscal-year-zip-downloaded");
+function isFullFiscalYearZipDelivered(
+  ledger: FiledReturnsFullFiscalYearLedger,
+  flowStep: PortalFlowStepResult,
+): boolean {
+  return (
+    flowStep.safeSignals.includes("full-fiscal-year-zip-downloaded") ||
+    zipPhaseProvesDelivery(ledger.zipPhase)
+  );
 }
 
 /**
@@ -278,7 +294,7 @@ export function fullFiscalYearTargetEvidence(
   ledger: FiledReturnsFullFiscalYearLedger,
   flowStep: PortalFlowStepResult,
 ): FiledReturnsTargetEvidence[] {
-  const zipDelivered = isFullFiscalYearZipDelivered(flowStep);
+  const zipDelivered = isFullFiscalYearZipDelivered(ledger, flowStep);
   // A discarded run: staged files were cleared without a delivery. Their targets
   // still read `downloaded`, and reporting those as captured claims Pack holds
   // files it has just deleted.
@@ -319,8 +335,43 @@ export function fullFiscalYearTargetEvidence(
     RUN_INDETERMINATE_SIGNALS.some((signal) => flowStep.safeSignals.includes(signal));
   return ledger.targets.map((target) => ({
     period: target.period,
-    outcome: targetOutcome(target.status, zipDelivered, runInterrupted),
+    outcome: targetOutcome(
+      target.status,
+      zipDelivered,
+      runInterrupted,
+      targetMissedAnArtifact(target),
+    ),
   }));
+}
+
+/**
+ * Whether the portal gave this period only part of what was selected.
+ *
+ * Read from the target rather than from the run's step. The step carries the
+ * signal for whichever period is in flight, so testing it would mark every
+ * period of the year partial because one of them was -- and the ledger is the
+ * only place the fact is held per period.
+ *
+ * It is there because `filed-return-artifact-unavailable:<TYPE>` survives
+ * `parseDurableFiledReturnsSignals`, so a terminal target keeps it. No new
+ * persisted field was needed: the information was already stored, on the
+ * record that already scopes it correctly, and only the derivation was reading
+ * the wrong one.
+ */
+function targetMissedAnArtifact(target: FiledReturnsFullFiscalYearTarget): boolean {
+  // Dereferenced without a fallback, like `hasLegacyRetainedStaging` above it.
+  // A `?? []` here would read as caution and is the opposite: absent signals
+  // would mean no evidence of a gap, which resolves to the *stronger* claim of a
+  // fully saved period. That is "could not determine" answering "matches", on
+  // the one field that decides the difference.
+  //
+  // The field is required by the type, set by every construction path, and its
+  // absence fails ledger validation, so this cannot be reached with a real
+  // record. A malformed one throwing here is diagnosable; a malformed one
+  // silently reading as saved is not.
+  return target.safeSignals.some((signal) =>
+    signal.startsWith("filed-return-artifact-unavailable:"),
+  );
 }
 
 export function toFullFiscalYearSummary(
@@ -358,6 +409,22 @@ export function toFullFiscalYearSummary(
   };
 }
 
+/**
+ * The step a re-summarisation builds from the ledger alone.
+ *
+ * It carries the delivery signal when the ledger's cleanup phase records one.
+ * Five places ask "did the ZIP reach the browser" and every one of them asks it
+ * of this step's signals -- the panel banner, the pack summary line, two durable
+ * status derivations, and the per-period evidence. Teaching only the evidence to
+ * read the durable phase made it disagree with the other four: a live run
+ * reported twelve periods `Saved` beneath a banner saying Pack could not confirm
+ * the browser had the ZIP, which is one screen contradicting itself.
+ *
+ * So the fact is restored where it was lost, not patched into each reader. The
+ * signal is the existing canonical one and survives durable parsing, so a step
+ * built after a restart is indistinguishable from the one the observing run
+ * emitted -- which is the point.
+ */
 export function completeFullFiscalYearStep(
   ledger: FiledReturnsFullFiscalYearLedger,
 ): PortalFlowStepResult {
@@ -365,7 +432,10 @@ export function completeFullFiscalYearStep(
     connectorId: "gst",
     scopeId: filedReturnsScopeId(ledger.scope.returnType),
     state: "downloaded",
-    safeSignals: ["full-fiscal-year-complete"],
+    safeSignals: [
+      "full-fiscal-year-complete",
+      ...(zipPhaseProvesDelivery(ledger.zipPhase) ? ["full-fiscal-year-zip-downloaded"] : []),
+    ],
     safeMessage: `Pack completed the local full fiscal year run for FY ${ledger.scope.financialYear}.`,
   };
 }

@@ -153,13 +153,34 @@ export function createFullFiscalYearCleanupPendingState(
   };
 }
 
+/**
+ * The cleanup route to retry for a ledger that has already been cleaned once.
+ *
+ * Never upgrades. Re-cleaning a completed ledger must end on the terminal phase
+ * it already had, because that phase is the delivery evidence -- and resetting
+ * it to the delivery route relabelled a run that never exported anything as one
+ * whose ZIP the browser confirmed.
+ *
+ * A pre-split `cleaned` carries no origin, so it takes the non-delivery route
+ * and stays reading as captured, which is what it did before.
+ */
+export function cleanupPendingPhaseFor(
+  cleaned: FiledReturnsFullFiscalYearLedger["zipPhase"],
+): "downloaded-cleanup-pending" | "no-artifacts-cleanup-pending" | "legacy-cleanup-pending" {
+  if (cleaned === "cleaned-after-download") return "downloaded-cleanup-pending";
+  if (cleaned === "cleaned-without-export") return "no-artifacts-cleanup-pending";
+  return "legacy-cleanup-pending";
+}
+
 export function markFullFiscalYearCleanupPending(
   ledger: FiledReturnsFullFiscalYearLedger,
   now: Date,
+  // No default. `downloaded-cleanup-pending` was the default value, and it is
+  // the one phase that asserts the ZIP reached the browser -- so a caller that
+  // simply did not think about the argument claimed a delivery. Every call site
+  // now states which route it is on.
   zipPhase:
-    | "downloaded-cleanup-pending"
-    | "no-artifacts-cleanup-pending"
-    | "legacy-cleanup-pending" = "downloaded-cleanup-pending",
+    "downloaded-cleanup-pending" | "no-artifacts-cleanup-pending" | "legacy-cleanup-pending",
 ): FiledReturnsFullFiscalYearLedger {
   const requestedAt = ledger.zipDownloadAttempt?.requestedAt;
   const cleanupPendingLedger: FiledReturnsFullFiscalYearLedger = {

@@ -40,10 +40,21 @@ function ledgerWith(
     status: "partial",
     createdAt: "2026-08-23T12:00:00.000Z",
     updatedAt: "2026-08-23T12:00:00.000Z",
+    // Faithful targets, not a cast over a partial shape. The previous fixture
+    // omitted every field the outcome does not read, so nothing here exercised
+    // the record the runtime is actually given -- and the first derivation to
+    // read one of those fields threw on every test in the file at once.
     targets: statuses.map((status, index) => ({
       targetId: `t${index}`,
+      financialYear: "2026-27",
       period: periods[index]!,
+      returnType: "GSTR-3B" as const,
+      artifactType: "PDF" as const,
       status,
+      attempts: 1,
+      safeSignals: [] as string[],
+      safeMessage: "",
+      updatedAt: "2026-08-23T12:00:00.000Z",
     })),
   } as FiledReturnsFullFiscalYearLedger;
 }
@@ -147,6 +158,90 @@ describe("per-target evidence in the flow summary", () => {
     const summary = toFullFiscalYearSummary(cleaned, FLOW_STEP);
 
     expect(summary.targetEvidence?.map((entry) => entry.outcome)).toEqual(["captured", "captured"]);
+  });
+
+  // Cleanup now keeps which pending phase it came from, so a delivered run still
+  // reads as saved after the panel is reopened and the transient signal is gone.
+  // This is the whole point of the split: the fact is recorded rather than
+  // inferred back from a value that had already discarded it.
+  it("reads a delivered run as saved from the durable phase alone", () => {
+    const ledger = ledgerWith(["downloaded", "downloaded"]);
+    const delivered = {
+      ...ledger,
+      status: "complete" as const,
+      zipPhase: "cleaned-after-download" as const,
+    };
+
+    const summary = toFullFiscalYearSummary(delivered, FLOW_STEP);
+
+    expect(summary.targetEvidence?.map((entry) => entry.outcome)).toEqual(["saved", "saved"]);
+  });
+
+  // The two siblings are not deliveries and must not become one. `cleaned-legacy`
+  // is the case that previously read as saved while the files had been deleted
+  // without ever being exported.
+  it("does not read the non-delivery cleanup phases as saved", () => {
+    for (const zipPhase of ["cleaned-without-export", "cleaned-legacy"] as const) {
+      const ledger = ledgerWith(["downloaded", "downloaded"]);
+
+      const summary = toFullFiscalYearSummary(
+        { ...ledger, status: "complete" as const, zipPhase },
+        FLOW_STEP,
+      );
+
+      expect(
+        summary.targetEvidence?.map((entry) => entry.outcome),
+        zipPhase,
+      ).toEqual(["captured", "captured"]);
+    }
+  });
+
+  // A multi-artifact period where the portal offered one format and not another
+  // reaches `downloaded`, because an unavailable artifact is a resolved outcome.
+  // Reporting that as "Saved" claimed the whole selection for a period that only
+  // had part of it.
+  it("reads a period that missed one selected artifact as partly saved", () => {
+    const ledger = ledgerWith(["downloaded", "downloaded"]);
+    const partial = {
+      ...ledger,
+      status: "complete" as const,
+      zipPhase: "cleaned-after-download" as const,
+      targets: ledger.targets.map((target, index) =>
+        index === 0
+          ? {
+              ...target,
+              safeSignals: [...target.safeSignals, "filed-return-artifact-unavailable:EXCEL"],
+            }
+          : target,
+      ),
+    };
+
+    const summary = toFullFiscalYearSummary(partial, FLOW_STEP);
+
+    // The second period is untouched: the fact is per target, so one incomplete
+    // period does not defame the rest of the year.
+    expect(summary.targetEvidence?.map((entry) => entry.outcome)).toEqual([
+      "partly-saved",
+      "saved",
+    ]);
+  });
+
+  // Delivery is the stronger question. Before the ZIP reaches the browser there
+  // is nothing to be partly saved, and saying so would assert a handover that
+  // has not happened.
+  it("reports an undelivered partial period as captured, not partly saved", () => {
+    const ledger = ledgerWith(["downloaded"]);
+    const partial = {
+      ...ledger,
+      targets: ledger.targets.map((target) => ({
+        ...target,
+        safeSignals: [...target.safeSignals, "filed-return-artifact-unavailable:EXCEL"],
+      })),
+    };
+
+    const summary = toFullFiscalYearSummary(partial, FLOW_STEP);
+
+    expect(summary.targetEvidence?.map((entry) => entry.outcome)).toEqual(["captured"]);
   });
 
   // A run that found nothing eligible also cleans, having never produced a ZIP.
