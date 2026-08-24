@@ -114,9 +114,10 @@ value this build cannot render without changing it, the run keeps the tidy CSV
 and reports that the workbook is unavailable. A GSTR-1 run adds only the tidy
 CSV. No run emits a blank or mislabelled GSTR-3B workbook, and the former
 standalone context CSV is not emitted. The data CSV has the
-fixed columns `period`, `return_type`, `artifact`, `outcome`, `field_label`,
-`field_path`, `value_text`, and `value_number`, with one row per period and
-flattened field. Periods and artifacts without parseable JSON receive fixed
+fixed columns `financial_year`, `period`, `return_type`, `artifact`, `outcome`,
+`field_label`, `field_path`, `value_text`, and `value_number`; the selected
+financial year is repeated in every row so an extracted CSV identifies its
+scope. Periods and artifacts without parseable JSON receive fixed
 outcome rows instead of fabricated zeroes. The exact shaping rules are recorded
 below for the producing Pack version.
 
@@ -160,7 +161,8 @@ are not assigned to any released Pack version because no release contains this
 format yet. The producing Pack version is available in the installed extension
 manifest. Neither file carries an in-file format marker, so a machine consumer
 cannot identify the CSV format from the CSV alone and must be given the
-producing Pack version.
+producing Pack version. Its `financial_year` column nevertheless identifies the
+selected year in every row.
 
 - **Envelope rule:** Pack classifies identity against the whole JSON document,
   then removes the artifact validator's documented return envelope before
