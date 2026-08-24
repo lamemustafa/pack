@@ -331,7 +331,15 @@ export function exactSpreadsheetNumber(input: string): number | null {
   // show another -- the defect this rule exists to prevent, surviving past a
   // wider format. It takes the `Precision limit` treatment instead, which is
   // what an unrepresentable value already gets.
-  const decimalPlaces = /\.(\d+)$/.exec(input)?.[1]?.length ?? 0;
+  //
+  // Counted after trailing zeros, like `significantDigits` above it. A zero past
+  // the last significant digit cannot change what is displayed, so `1.23` and
+  // `1.2300000000000000` are the same value and must reach the same answer;
+  // counting characters instead refused the second. The cost of that was not
+  // confined to one cell -- `filed-returns-gstr2b-workbook.ts` treats a null
+  // here as unrepresentable and throws, so a single padded token would have
+  // refused an entire GSTR-2B year.
+  const decimalPlaces = /\.(\d+)$/.exec(input)?.[1]?.replace(/0+$/, "").length ?? 0;
   if (decimalPlaces > XLSX_NUMBER_DECIMAL_PLACES) return null;
   const value = Number(input);
   if (!Number.isFinite(value)) return null;
