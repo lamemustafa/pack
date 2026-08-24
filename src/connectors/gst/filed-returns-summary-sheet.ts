@@ -35,6 +35,7 @@ export const MAX_FILED_RETURNS_SUMMARY_ROWS = 100_000;
 export const MAX_FILED_RETURNS_SUMMARY_ARRAY_EXPANSION_ELEMENTS = 64;
 
 export const FILED_RETURNS_SUMMARY_HEADERS = [
+  "financial_year",
   "period",
   "return_type",
   "artifact",
@@ -82,6 +83,7 @@ export interface FiledReturnsSummaryDataRow {
   artifact: FiledReturnsConcreteArtifactType;
   fieldLabel: string;
   fieldPath: string;
+  financialYear: string;
   outcome: string;
   period: FiledReturnsMonth;
   returnType: FiledReturnsReturnType;
@@ -151,6 +153,7 @@ export function buildFiledReturnsSummarySheet(
   maxOutputBytes = Number.POSITIVE_INFINITY,
 ): FiledReturnsSummarySheet {
   const sortedPlan = [...plan].sort(comparePlanEntries);
+  const financialYear = summaryFinancialYear(sortedPlan);
   const entriesByPath = new Map(entries.map((entry) => [entry.path, entry]));
   const parsedPeriods = new Set<FiledReturnsMonth>();
   let remainingFlattenedBytes = maxOutputBytes;
@@ -212,11 +215,12 @@ export function buildFiledReturnsSummarySheet(
         !(leaf.valueKind === "text" && isCredentialShapedValue(leaf.value)),
     );
     if (fieldLeaves.length === 0) {
-      dataRows.push(outcomeRow(parsed.planned, parsed.outcome));
+      dataRows.push(outcomeRow(parsed.planned, financialYear, parsed.outcome));
       continue;
     }
     for (const leaf of fieldLeaves) {
       dataRows.push({
+        financialYear,
         period: parsed.planned.period,
         returnType: parsed.planned.returnType,
         artifact: parsed.planned.artifactType,
@@ -240,7 +244,7 @@ export function buildFiledReturnsSummarySheet(
       maxUtf8Bytes: maxOutputBytes,
     });
     const dataBytes = new TextEncoder().encode(dataCsv);
-    const contextRows = buildContextRows(sortedPlan, identities);
+    const contextRows = buildContextRows(identities);
     return {
       contextRows,
       dataBytes,
@@ -487,9 +491,11 @@ export function isValidGstin(value: string): boolean {
 
 function outcomeRow(
   planned: FiledReturnsSummaryPlanEntry,
+  financialYear: string,
   outcome: string,
 ): FiledReturnsSummaryDataRow {
   return {
+    financialYear,
     period: planned.period,
     returnType: planned.returnType,
     artifact: planned.artifactType,
@@ -500,13 +506,8 @@ function outcomeRow(
 }
 
 function buildContextRows(
-  plan: readonly FiledReturnsSummaryPlanEntry[],
   identityValues: readonly SummaryIdentityValue[],
 ): FiledReturnsSummaryContextRow[] {
-  const financialYears = sortedUnique(plan.map((entry) => entry.financialYear));
-  if (financialYears.length !== 1) {
-    throw new SyntaxError("Filed-return summary plan must have one financial year.");
-  }
   const identities = [...identityValues]
     .sort(
       (left, right) =>
@@ -524,8 +525,17 @@ function buildContextRows(
   return identities;
 }
 
+function summaryFinancialYear(plan: readonly FiledReturnsSummaryPlanEntry[]): string {
+  const financialYears = sortedUnique(plan.map((entry) => entry.financialYear));
+  if (financialYears.length !== 1) {
+    throw new SyntaxError("Filed-return summary plan must have one financial year.");
+  }
+  return financialYears[0]!;
+}
+
 function dataCsvRow(row: FiledReturnsSummaryDataRow): Record<string, CsvCellValue> {
   return {
+    financial_year: row.financialYear,
     period: row.period,
     return_type: row.returnType,
     artifact: row.artifact,

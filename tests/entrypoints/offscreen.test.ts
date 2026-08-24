@@ -597,10 +597,10 @@ describe("offscreen Blob URL entrypoint", () => {
     ]);
     const summary = new TextDecoder().decode(entries.get("full-year-summary.csv"));
     expect(summary.split("\n")[0]).toBe(
-      "period,return_type,artifact,outcome,field_label,field_path,value_text,value_number",
+      "financial_year,period,return_type,artifact,outcome,field_label,field_path,value_text,value_number",
     );
-    expect(summary).toContain("April,GSTR-3B,JSON,parseable-json,,/portal_leaf,,11");
-    expect(summary).toContain("May,GSTR-3B,JSON,parseable-json,,/other_portal_leaf,,22");
+    expect(summary).toContain("2026-27,April,GSTR-3B,JSON,parseable-json,,/portal_leaf,,11");
+    expect(summary).toContain("2026-27,May,GSTR-3B,JSON,parseable-json,,/other_portal_leaf,,22");
     expect(summary).not.toContain("900");
     expect(summary).not.toContain("800");
     expect(summary).not.toContain("700");
@@ -712,7 +712,7 @@ describe("offscreen Blob URL entrypoint", () => {
     });
     const entries = await extractStoredZipEntries(createdBlobs[0]!);
     expect(new TextDecoder().decode(entries.get("full-year-summary.csv"))).toContain(
-      "April,GSTR-3B,PDF,non-json-artifact",
+      "2026-27,April,GSTR-3B,PDF,non-json-artifact",
     );
   });
 
@@ -760,7 +760,7 @@ describe("offscreen Blob URL entrypoint", () => {
     const entries = await extractStoredZipEntries(createdBlobs[0]!);
     expect([...entries.keys()]).toEqual(["april-summary.pdf", "full-year-summary.csv"]);
     expect(new TextDecoder().decode(entries.get("full-year-summary.csv"))).toContain(
-      "April,GSTR-1,PDF,non-json-artifact",
+      "2026-27,April,GSTR-1,PDF,non-json-artifact",
     );
   });
 

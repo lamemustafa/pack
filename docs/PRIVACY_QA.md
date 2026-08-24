@@ -83,8 +83,9 @@ For each release candidate:
 - No assembly may emit a GSTR-3B workbook for another return type. The
   standalone context CSV must be absent.
   The data CSV must keep
-  the fixed tidy columns `period`, `return_type`, `artifact`, `outcome`,
-  `field_label`, `field_path`, `value_text`, and `value_number`; keep canonical
+  the fixed tidy columns `financial_year`, `period`, `return_type`, `artifact`,
+  `outcome`, `field_label`, `field_path`, `value_text`, and `value_number`;
+  repeat the selected financial year in every row and keep canonical
   JSON Pointer paths. Confirm only the configured GSTR-3B summary arrays with
   at most 64 elements may expand, using the first shared discriminator in the
   ordered candidate list `ty`, `pos`, and only when every discriminator is
@@ -146,7 +147,8 @@ For each release candidate:
   the README, not in generated rule rows or a second sheet. The workbook and
   CSV have no in-file format marker; a machine consumer of a separated CSV must
   be given the producing Pack version because it cannot infer that version from
-  the CSV alone.
+  the CSV alone; the `financial_year` column still identifies the selected year
+  in every row.
   Both derived files must remain
   output-only ZIP entries: their bytes
   may be transient in extension-controlled memory before browser handoff and
