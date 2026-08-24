@@ -125,8 +125,9 @@ function sourcePathForSpecifier(
   compilerOptions: ProjectCompilerOptions,
   filesByPath: ReadonlyMap<string, string>,
 ): string | undefined {
+  const specifierPath = specifier.split(/[?#]/, 1)[0] ?? specifier;
   const resolvedModule = ts.resolveModuleName(
-    specifier,
+    specifierPath,
     importerPath,
     compilerOptions.options,
     ts.sys,
@@ -138,8 +139,11 @@ function sourcePathForSpecifier(
 
   for (const [pattern, substitutions] of Object.entries(compilerOptions.options.paths ?? {})) {
     const [prefix, suffix = ""] = pattern.split("*");
-    if (!specifier.startsWith(prefix ?? "") || !specifier.endsWith(suffix)) continue;
-    const wildcard = specifier.slice((prefix ?? "").length, specifier.length - suffix.length);
+    if (!specifierPath.startsWith(prefix ?? "") || !specifierPath.endsWith(suffix)) continue;
+    const wildcard = specifierPath.slice(
+      (prefix ?? "").length,
+      specifierPath.length - suffix.length,
+    );
     for (const substitution of substitutions) {
       const candidatePath = canonicalPath(
         resolve(compilerOptions.pathsBasePath, substitution.replaceAll("*", wildcard)),
@@ -148,9 +152,8 @@ function sourcePathForSpecifier(
     }
   }
 
-  const relativeSpecifier = specifier.split(/[?#]/, 1)[0];
-  if (!relativeSpecifier?.startsWith(".")) return undefined;
-  const candidatePath = canonicalPath(resolve(dirname(importerPath), relativeSpecifier));
+  if (!specifierPath.startsWith(".")) return undefined;
+  const candidatePath = canonicalPath(resolve(dirname(importerPath), specifierPath));
   return filesByPath.has(candidatePath) ? candidatePath : undefined;
 }
 
@@ -468,7 +471,7 @@ describe("unreferenced source module guard", () => {
     await writeProjectFile(
       projectRoot,
       "src/entrypoints/background.ts",
-      'import "@/styles/live.css";\n',
+      'import "@/styles/live.css?inline";\n',
     );
     await writeProjectFile(projectRoot, "src/styles/live.css", ".live {}\n");
 
