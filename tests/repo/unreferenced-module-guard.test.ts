@@ -5,10 +5,12 @@ import ts from "typescript";
 import { afterEach, describe, expect, it } from "vitest";
 
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".css"]);
-const UNREFERENCED_SOURCE_MODULE_ALLOWLIST: readonly {
+type UnreferencedSourceModuleAllowlistEntry = {
   path: string;
   reason: string;
-}[] = [
+};
+
+const UNREFERENCED_SOURCE_MODULE_ALLOWLIST: readonly UnreferencedSourceModuleAllowlistEntry[] = [
   {
     path: "src/entrypoints/popup/run-evidence-panel.tsx",
     reason:
@@ -76,15 +78,8 @@ function typescriptModuleSpecifiers(sourceFile: ts.SourceFile): string[] {
   return specifiers;
 }
 
-function cssImportSpecifiers(sourceText: string): string[] {
-  return Array.from(
-    sourceText.matchAll(/@import\s+(?:url\(\s*)?(?:"([^"]+)"|'([^']+)'|([^\s)]+))/g),
-    (match) => match[1] ?? match[2] ?? match[3] ?? "",
-  ).filter(Boolean);
-}
-
 function moduleSpecifiers(filePath: string, sourceText: string): string[] {
-  if (extname(filePath) === ".css") return cssImportSpecifiers(sourceText);
+  if (extname(filePath) === ".css") return [];
   return typescriptModuleSpecifiers(
     ts.createSourceFile(filePath, sourceText, ts.ScriptTarget.Latest, true),
   );
@@ -138,10 +133,7 @@ function sourcePathForSpecifier(
 
 function isWxtEntrypoint(projectRoot: string, filePath: string): boolean {
   const path = projectPath(projectRoot, filePath);
-  return (
-    /^src\/entrypoints\/(?:background|content)\.(?:ts|tsx)$/.test(path) ||
-    /^src\/entrypoints\/[^/]+\/main\.(?:ts|tsx)$/.test(path)
-  );
+  return /^src\/entrypoints\/(?:background|content)\.(?:ts|tsx)$/.test(path);
 }
 
 function htmlEntrypointSpecifiers(html: string): string[] {
@@ -193,7 +185,12 @@ async function rootPathsFor(
   return rootPaths;
 }
 
-async function assertNoUnreferencedSourceModules(projectRoot = process.cwd()): Promise<void> {
+async function assertNoUnreferencedSourceModules(
+  projectRoot = process.cwd(),
+  allowlist: readonly UnreferencedSourceModuleAllowlistEntry[] = projectRoot === process.cwd()
+    ? UNREFERENCED_SOURCE_MODULE_ALLOWLIST
+    : [],
+): Promise<void> {
   const sourceDirectory = join(projectRoot, "src");
   const sourceFiles = await sourceFilesIn(sourceDirectory);
   const filesByPath = new Map(sourceFiles.map((filePath) => [canonicalPath(filePath), filePath]));
@@ -201,9 +198,13 @@ async function assertNoUnreferencedSourceModules(projectRoot = process.cwd()): P
     sourceFiles.map((filePath) => [canonicalPath(filePath), new Set<string>()]),
   );
   const compilerOptions = compilerOptionsFor(projectRoot);
+  const unsupportedCssImports: string[] = [];
 
   for (const sourcePath of sourceFiles) {
     const sourceText = await readFile(sourcePath, "utf8");
+    if (extname(sourcePath) === ".css" && /@import\b/i.test(sourceText)) {
+      unsupportedCssImports.push(projectPath(projectRoot, sourcePath));
+    }
     for (const specifier of moduleSpecifiers(sourcePath, sourceText)) {
       const targetPath = sourcePathForSpecifier(
         specifier,
@@ -213,6 +214,15 @@ async function assertNoUnreferencedSourceModules(projectRoot = process.cwd()): P
       );
       if (targetPath) dependenciesByPath.get(canonicalPath(sourcePath))?.add(targetPath);
     }
+  }
+
+  if (unsupportedCssImports.length > 0) {
+    throw new Error(
+      `Unsupported CSS @import edges:\n${unsupportedCssImports
+        .sort()
+        .map((path) => `- ${path}`)
+        .join("\n")}`,
+    );
   }
 
   const rootPaths = await rootPathsFor(
@@ -234,9 +244,23 @@ async function assertNoUnreferencedSourceModules(projectRoot = process.cwd()): P
   }
 
   const allowlistedPaths = new Set<string>();
-  for (const entry of UNREFERENCED_SOURCE_MODULE_ALLOWLIST) {
+  const staleAllowlistEntries: string[] = [];
+  for (const entry of allowlist) {
     if (!entry.reason.trim()) throw new Error(`Missing allowlist reason for ${entry.path}`);
-    allowlistedPaths.add(canonicalPath(join(projectRoot, entry.path)));
+    const allowlistedPath = canonicalPath(join(projectRoot, entry.path));
+    if (!filesByPath.has(allowlistedPath)) {
+      staleAllowlistEntries.push(`- ${entry.path}: file no longer exists (${entry.reason})`);
+    } else if (reachedPaths.has(allowlistedPath)) {
+      staleAllowlistEntries.push(`- ${entry.path}: module is now reachable (${entry.reason})`);
+    } else {
+      allowlistedPaths.add(allowlistedPath);
+    }
+  }
+
+  if (staleAllowlistEntries.length > 0) {
+    throw new Error(
+      `Stale unreferenced module allowlist entries:\n${staleAllowlistEntries.join("\n")}`,
+    );
   }
 
   const unreferenced = sourceFiles
@@ -346,5 +370,73 @@ describe("unreferenced source module guard", () => {
     await expect(assertNoUnreferencedSourceModules(projectRoot)).rejects.toThrow(
       /^Unreferenced source modules:\n- src\/core\/cycle-a\.ts\n- src\/core\/cycle-b\.ts$/,
     );
+  });
+
+  it("fails when an HTML entrypoint stops referencing its nested main module", async () => {
+    const projectRoot = await createTemporaryProject();
+    await writeProjectFile(
+      projectRoot,
+      "src/entrypoints/options/index.html",
+      '<script type="module" src="./main.ts"></script>\n',
+    );
+    await writeProjectFile(projectRoot, "src/entrypoints/options/main.ts", "export {};\n");
+    await writeProjectFile(projectRoot, "src/entrypoints/options/index.html", "<body></body>\n");
+    await expect(
+      readFile(join(projectRoot, "src/entrypoints/options/index.html"), "utf8"),
+    ).resolves.not.toContain("main.ts");
+
+    await expect(assertNoUnreferencedSourceModules(projectRoot)).rejects.toThrow(
+      /^Unreferenced source modules:\n- src\/entrypoints\/options\/main\.ts$/,
+    );
+  });
+
+  it("rejects CSS @import even when it appears only in a comment", async () => {
+    const projectRoot = await createTemporaryProject();
+    await writeProjectFile(
+      projectRoot,
+      "src/entrypoints/background.ts",
+      'import "../styles/live.css";\n',
+    );
+    await writeProjectFile(projectRoot, "src/styles/live.css", '/* @import "./dead.css"; */\n');
+    await writeProjectFile(projectRoot, "src/styles/dead.css", ".dead {}\n");
+    await expect(readFile(join(projectRoot, "src/styles/live.css"), "utf8")).resolves.toContain(
+      '/* @import "./dead.css"; */',
+    );
+
+    await expect(assertNoUnreferencedSourceModules(projectRoot)).rejects.toThrow(
+      /^Unsupported CSS @import edges:\n- src\/styles\/live\.css$/,
+    );
+  });
+
+  it("fails when an allowlisted module no longer exists", async () => {
+    const projectRoot = await createTemporaryProject();
+    await writeProjectFile(projectRoot, "src/entrypoints/background.ts", "export {};\n");
+    const allowlistedPath = "src/core/allowlisted.ts";
+    await writeProjectFile(projectRoot, allowlistedPath, "export {};\n");
+    await rm(join(projectRoot, allowlistedPath));
+    await expect(readFile(join(projectRoot, allowlistedPath), "utf8")).rejects.toThrow();
+
+    await expect(
+      assertNoUnreferencedSourceModules(projectRoot, [
+        { path: allowlistedPath, reason: "Dedicated cleanup follow-up." },
+      ]),
+    ).rejects.toThrow(/src\/core\/allowlisted\.ts.*Dedicated cleanup follow-up\./s);
+  });
+
+  it("fails when an allowlisted module becomes reachable", async () => {
+    const projectRoot = await createTemporaryProject();
+    const allowlistedPath = "src/core/allowlisted.ts";
+    await writeProjectFile(
+      projectRoot,
+      "src/entrypoints/background.ts",
+      'import "../core/allowlisted";\n',
+    );
+    await writeProjectFile(projectRoot, allowlistedPath, "export {};\n");
+
+    await expect(
+      assertNoUnreferencedSourceModules(projectRoot, [
+        { path: allowlistedPath, reason: "Dedicated cleanup follow-up." },
+      ]),
+    ).rejects.toThrow(/src\/core\/allowlisted\.ts.*Dedicated cleanup follow-up\./s);
   });
 });
