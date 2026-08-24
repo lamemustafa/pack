@@ -13,7 +13,11 @@ import { InlineStatus } from "../popup/inline-status";
 import { LastRunDiagnostics } from "../popup/last-run-diagnostics";
 import { PackSummary } from "../popup/pack-summary";
 import { TargetEvidence } from "../popup/target-evidence";
-import { getPopupPresentationState, isGstSignInRequired } from "../popup/presentation-state";
+import {
+  getGstPortalTabInstruction,
+  getPopupPresentationState,
+  isGstSignInRequired,
+} from "../popup/presentation-state";
 import { RecoveryActions, hasRecoveryActions } from "../popup/recovery-actions";
 import { getScopeFormStartAction } from "../popup/scope-form-model";
 import type { usePackPopupController } from "../popup/use-pack-popup-controller";
@@ -50,6 +54,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
    * `isGstSignInRequired` is the same test the popup's disabled-reason copy consults.
    */
   const portalSignedIn = portalReady && !isGstSignInRequired(pack.context);
+  const portalInstruction = getGstPortalTabInstruction(pack.context);
   const running = pack.effectiveBusy !== null || summary?.status === "running";
 
   usePortalContextRefresh(pack.refreshPortalContext);
@@ -86,12 +91,15 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
         <span className="panel-name">Pack</span>
         <span className="panel-publisher">ComplyEaze</span>
       </header>
-      <p className={portalSignedIn ? "panel-source panel-source-live" : "panel-source"}>
+      <p
+        id="portal-tab-instruction"
+        className={portalSignedIn ? "panel-source panel-source-live" : "panel-source"}
+      >
         <span
           className={portalSignedIn ? "panel-source-dot" : "panel-source-dot panel-source-dot-off"}
           aria-hidden="true"
         />
-        {portalSignedIn ? "GST portal · signed in" : "Open a signed-in GST Portal tab"}
+        {portalSignedIn ? "GST portal · signed in" : portalInstruction}
       </p>
 
       <div className="panel-body">
@@ -99,6 +107,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
           <>
             <InlineStatus
               busy={pack.effectiveBusy}
+              portalContext={pack.context}
               onOpenPortal={openPortal}
               onRestartTarget={() => void pack.startFiledReturnsFlow()}
               onRetryFullFiscalYearTarget={() => void pack.retryFullFiscalYearTarget()}
@@ -141,17 +150,15 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
                     getScopeMatchedFiledReturnsSummary(preset.scope, savedRun) !== null;
                   const startAction =
                     savedRunBlock && !savedRunIsThisPreset ? savedRunBlock : ownScopeAction;
-                  const blockedReason = startAction.disabled
-                    ? startAction.label
-                    : portalReady
-                      ? null
-                      : "Open a signed-in GST Portal tab";
+                  const blockedByPortal = !startAction.disabled && !portalSignedIn;
+                  const blockedReason = startAction.disabled ? startAction.label : null;
                   return (
                     <button
                       key={preset.id}
                       className="panel-choice"
                       type="button"
-                      disabled={blockedReason !== null}
+                      aria-describedby={blockedByPortal ? "portal-tab-instruction" : undefined}
+                      disabled={blockedReason !== null || blockedByPortal}
                       onClick={() => {
                         // Never submit a scope the button is not showing. The
                         // first version of this recomputed at click time and
@@ -219,6 +226,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
         {hasRecoveryActions(summary ?? null) ? (
           <RecoveryActions
             busy={pack.effectiveBusy}
+            portalContext={pack.context}
             /*
              * Signed-in, not merely supported. The auth landing page is
              * `supported: true` -- that is how Pack offers to act on it -- so

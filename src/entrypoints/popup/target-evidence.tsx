@@ -54,6 +54,13 @@ export function TargetEvidence({ summary }: { summary: FiledReturnsFlowSummary |
   const partlySaved = evidence.filter((entry) => entry.outcome === "partly-saved").length;
   const captured = evidence.filter((entry) => entry.outcome === "captured").length;
   const needsReview = evidence.filter((entry) => entry.outcome === "needs-review").length;
+  const repeatedOutcome = getRepeatedOutcome(evidence);
+  const exceptions = repeatedOutcome
+    ? evidence.filter((entry) => entry.outcome !== repeatedOutcome)
+    : evidence;
+  const repeatedEntries = repeatedOutcome
+    ? evidence.filter((entry) => entry.outcome === repeatedOutcome)
+    : [];
 
   return (
     <section className="evidence" aria-label="Per-period result">
@@ -78,17 +85,43 @@ export function TargetEvidence({ summary }: { summary: FiledReturnsFlowSummary |
           <span className="evidence-review"> · {needsReview} needs review</span>
         ) : null}
       </p>
-      <ul className="evidence-list">
-        {evidence.map((entry) => (
-          <li className={`evidence-row evidence-${entry.outcome}`} key={entry.period}>
-            <span className="evidence-glyph" aria-hidden="true">
-              {OUTCOME_GLYPHS[entry.outcome]}
-            </span>
-            <span className="evidence-period">{entry.period}</span>
-            <span className="evidence-outcome">{OUTCOME_LABELS[entry.outcome]}</span>
-          </li>
-        ))}
-      </ul>
+      {exceptions.length > 0 ? <EvidenceRows entries={exceptions} /> : null}
+      {repeatedEntries.length > 0 ? (
+        <details className="evidence-details">
+          <summary>Show per-period results</summary>
+          <EvidenceRows entries={repeatedEntries} />
+        </details>
+      ) : null}
     </section>
+  );
+}
+
+function getRepeatedOutcome(
+  evidence: readonly { outcome: FiledReturnsTargetOutcome }[],
+): FiledReturnsTargetOutcome | null {
+  const counts = new Map<FiledReturnsTargetOutcome, number>();
+  for (const entry of evidence) counts.set(entry.outcome, (counts.get(entry.outcome) ?? 0) + 1);
+  const [outcome, count] =
+    [...counts.entries()].sort(([, left], [, right]) => right - left)[0] ?? [];
+  return outcome && count && count > 1 ? outcome : null;
+}
+
+function EvidenceRows({
+  entries,
+}: {
+  entries: readonly { period: string; outcome: FiledReturnsTargetOutcome }[];
+}) {
+  return (
+    <ul className="evidence-list">
+      {entries.map((entry) => (
+        <li className={`evidence-row evidence-${entry.outcome}`} key={entry.period}>
+          <span className="evidence-glyph" aria-hidden="true">
+            {OUTCOME_GLYPHS[entry.outcome]}
+          </span>
+          <span className="evidence-period">{entry.period}</span>
+          <span className="evidence-outcome">{OUTCOME_LABELS[entry.outcome]}</span>
+        </li>
+      ))}
+    </ul>
   );
 }

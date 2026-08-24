@@ -1,5 +1,7 @@
+import type { PortalContext } from "../../core/contracts";
 import type { FiledReturnsFlowSummary } from "../../connectors/gst/filed-returns-contracts";
 import { canRetryFiledReturnsTargetWithoutPortal } from "./flow-summary";
+import { getGstPortalActionInstruction } from "./presentation-state";
 import {
   canReconcileFiledReturnsTarget,
   DiagnosticSignals,
@@ -8,6 +10,7 @@ import {
 
 export interface RecoveryActionsProps {
   busy: string | null;
+  portalContext?: PortalContext | null;
   portalReady: boolean;
   summary: FiledReturnsFlowSummary | null;
   onAcknowledgeInterruptedRun: () => void;
@@ -21,6 +24,7 @@ export interface RecoveryActionsProps {
 
 export function RecoveryActions({
   busy,
+  portalContext,
   portalReady,
   summary,
   onAcknowledgeInterruptedRun,
@@ -51,10 +55,14 @@ export function RecoveryActions({
     : retryDisabled;
   const portalDisabledReason =
     !portalReady && showPortalRetryReason
-      ? recoveryPortalDisabledReason(summary, {
-          needsFullFiscalYearReview,
-          needsTargetReview,
-        })
+      ? recoveryPortalDisabledReason(
+          summary,
+          {
+            needsFullFiscalYearReview,
+            needsTargetReview,
+          },
+          portalContext,
+        )
       : null;
   return (
     <details className="recovery-details" open>
@@ -199,8 +207,8 @@ export function RecoveryActions({
  * `canRetryFiledReturnsTargetWithoutPortal` in ./flow-summary), so this reason always refers
  * to starting again.
  */
-export function targetReviewPortalDisabledReason(): string {
-  return "Open a signed-in GST Portal tab before starting again.";
+export function targetReviewPortalDisabledReason(context?: PortalContext | null): string {
+  return getGstPortalActionInstruction(context, "starting again");
 }
 
 export function getSavedFullFiscalYearActionDecision(summary: FiledReturnsFlowSummary): {
@@ -227,11 +235,12 @@ function recoveryPortalDisabledReason(
     needsFullFiscalYearReview: boolean;
     needsTargetReview: boolean;
   },
+  context?: PortalContext | null,
 ): string | null {
-  if (needsTargetReview) return targetReviewPortalDisabledReason();
+  if (needsTargetReview) return targetReviewPortalDisabledReason(context);
   if (!needsFullFiscalYearReview) return null;
   const { gerund } = getSavedFullFiscalYearActionDecision(summary);
-  return `Open a signed-in GST Portal tab before ${gerund} or starting again.`;
+  return getGstPortalActionInstruction(context, `${gerund} or starting again`);
 }
 
 function targetReviewRecoveryMessage(

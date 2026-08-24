@@ -211,6 +211,27 @@ export function isGstSignInRequired(context: PortalContext | null | undefined): 
   return context?.pageKind === "gst-auth-landing" || context?.requiredAction?.type === "LOGIN";
 }
 
+// The portal tab may be absent altogether, or present but on a page where Pack
+// cannot act. Keep those instructions beside the state classifier so terminal
+// surfaces cannot each turn the same context into a different instruction.
+const GST_PORTAL_TAB_INSTRUCTIONS = {
+  unavailable: "Open a signed-in GST Portal tab",
+  wrongPage: "Go to Filed Returns in your signed-in GST Portal tab",
+} as const;
+
+export function getGstPortalTabInstruction(context: PortalContext | null | undefined): string {
+  return context?.connectorId === "gst" && !context.supported
+    ? GST_PORTAL_TAB_INSTRUCTIONS.wrongPage
+    : GST_PORTAL_TAB_INSTRUCTIONS.unavailable;
+}
+
+export function getGstPortalActionInstruction(
+  context: PortalContext | null | undefined,
+  action: string,
+): string {
+  return `${getGstPortalTabInstruction(context)} before ${action}.`;
+}
+
 function isSessionExpired(context: PortalContext | null, summary: FiledReturnsFlowSummary | null) {
   return (
     context?.requiredAction?.type === "LOGIN" ||

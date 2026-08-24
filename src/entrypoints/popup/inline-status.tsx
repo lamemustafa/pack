@@ -1,6 +1,6 @@
+import type { PortalContext } from "../../core/contracts";
 import type { FiledReturnsFlowSummary } from "../../connectors/gst/filed-returns-contracts";
-import { FULL_FISCAL_YEAR_PERIOD } from "../../connectors/gst/filed-returns-scope";
-import type { PopupPresentationState } from "./presentation-state";
+import { getGstPortalActionInstruction, type PopupPresentationState } from "./presentation-state";
 import { canReconcileFiledReturnsTarget, RunProgress } from "./run-summary";
 import {
   hasPersistedFullFiscalYearZipDownloadId,
@@ -10,6 +10,7 @@ import { getSavedFullFiscalYearActionDecision } from "./recovery-actions";
 
 export interface InlineStatusProps {
   busy: string | null;
+  portalContext?: PortalContext | null;
   portalReady: boolean;
   onOpenPortal: () => void;
   onRestartTarget: () => void;
@@ -21,6 +22,7 @@ export interface InlineStatusProps {
 
 export function InlineStatus({
   busy,
+  portalContext,
   portalReady,
   onOpenPortal,
   onRestartTarget,
@@ -33,12 +35,12 @@ export function InlineStatus({
   if (!copy) return null;
 
   const actionBusy = busy !== null;
-  const primaryAction = getInlinePrimaryAction(presentation, summary, {
-    onOpenPortal,
-    onRestartTarget,
-    onRetryFullFiscalYearTarget,
-    onRetryTarget,
-  });
+  const primaryAction = getInlinePrimaryAction(
+    presentation,
+    summary,
+    { onOpenPortal, onRestartTarget, onRetryFullFiscalYearTarget, onRetryTarget },
+    portalContext,
+  );
   const portalDisabledReason = portalReady ? null : (primaryAction?.portalDisabledReason ?? null);
 
   return (
@@ -119,64 +121,22 @@ function getInlineStatusCopy(
     };
   }
   if (presentation.kind === "complete") {
-    const periods = summary?.completedPeriods.length ?? 0;
-    const isFullYear = summary?.scope.period === FULL_FISCAL_YEAR_PERIOD;
     const filenameOverridden =
       summary?.flowStep.safeSignals.includes("download-filename-overridden") ||
       summary?.flowStep.safeSignals.includes("zip-download-filename-overridden");
-    /**
-     * A full-year run carries two separate facts, and `status: "complete"` only
-     * knows the first: every period was fetched. `canCompleteFullFiscalYearLedger`
-     * requires each target to be positive and says nothing about the final ZIP,
-     * so this branch used to announce "12 periods saved as one ZIP" while the
-     * delivery line three rows below read "browser download not confirmed" --
-     * both on screen, from one run. The ZIP claim was the false one: it asserted
-     * a delivery from a state that cannot observe it, and would have said the
-     * same had the ZIP never arrived.
-     */
-    const zipConfirmed = summary?.flowStep.safeSignals.includes("full-fiscal-year-zip-downloaded");
-    // A run where every period was positively not-filed produces no ZIP BY
-    // DESIGN and says so through its own signal. Treating that absence as an
-    // unconfirmed download would send the user hunting in Downloads for a file
-    // Pack deliberately never created -- the same contradiction this branch
-    // exists to remove, pointed the other way.
-    const noZipExpected = summary?.flowStep.safeSignals.includes(
-      "full-fiscal-year-no-zip-artifacts",
-    );
-    // Three distinct full-year outcomes, stated separately. Patching one of them
-    // into an exclusion on another is what produced two rounds of contradiction
-    // here: excluding the no-artifacts case from the warning dropped it into the
-    // success body, which claimed a ZIP that was deliberately never created.
-    if (isFullYear && !filenameOverridden && noZipExpected) {
+    if (filenameOverridden) {
       return {
-        body: `${periods} periods processed. No ZIP was created because no eligible files were found.`,
-        icon: "–",
-        title: "No ZIP created",
-        tone: "neutral",
-      };
-    }
-    if (isFullYear && !filenameOverridden && !zipConfirmed) {
-      return {
-        // `completedPeriods` counts downloaded AND not-filed targets, so these
-        // are periods Pack finished with, not files it fetched. "Fetched" would
-        // claim a download for every period the portal reported nothing for.
-        body: `${periods} periods processed. Pack has not confirmed the browser saved the ZIP -- check browser Downloads.`,
+        body:
+          summary?.flowStep.safeMessage ??
+          "The browser changed the saved filename. Check browser Downloads.",
         icon: "!",
-        title: "Periods processed, ZIP unconfirmed",
+        title: "Browser save needs review",
         tone: "warning",
       };
     }
-    return {
-      body: filenameOverridden
-        ? (summary?.flowStep.safeMessage ??
-          "The browser changed the saved filename. Check browser Downloads.")
-        : isFullYear
-          ? `${periods} periods saved as one ZIP.`
-          : "The selected file was saved by your browser.",
-      icon: "✓",
-      title: "Download complete",
-      tone: "success",
-    };
+    // PackSummary owns the completed run's identity, artifact and browser-download
+    // evidence. Keeping a second version here made those facts contradict each other.
+    return null;
   }
   if (presentation.kind === "unavailable") {
     return {
@@ -287,6 +247,7 @@ export function getInlinePrimaryAction(
     InlineStatusProps,
     "onOpenPortal" | "onRestartTarget" | "onRetryFullFiscalYearTarget" | "onRetryTarget"
   >,
+  portalContext?: PortalContext | null,
 ): InlinePrimaryAction | null {
   if (presentation.kind === "error") {
     // The only action that makes the portal ready, so it is never portal-gated.
@@ -300,7 +261,7 @@ export function getInlinePrimaryAction(
     return {
       label,
       onClick: actions.onRetryFullFiscalYearTarget,
-      portalDisabledReason: `Open a signed-in GST Portal tab before ${gerund}.`,
+      portalDisabledReason: getGstPortalActionInstruction(portalContext, gerund),
     };
   }
   if (signals.has("filed-returns-target-review-required") && summary.currentPeriod) {
@@ -327,7 +288,10 @@ export function getInlinePrimaryAction(
     return {
       label: `Retry ${summary.currentPeriod}`,
       onClick: actions.onRestartTarget,
-      portalDisabledReason: `Open a signed-in GST Portal tab before retrying ${summary.currentPeriod}.`,
+      portalDisabledReason: getGstPortalActionInstruction(
+        portalContext,
+        `retrying ${summary.currentPeriod}`,
+      ),
     };
   }
   return null;
