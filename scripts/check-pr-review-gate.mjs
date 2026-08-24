@@ -25,8 +25,9 @@ const retryAttempts = readPositiveIntegerArg("--retry-attempts", DEFAULT_GH_RETR
 const retryBackoffMs = readNonNegativeIntegerArg("--retry-backoff-ms", DEFAULT_GH_RETRY_BACKOFF_MS);
 const fixturePaths = readFixturePaths();
 const requestedReviewAuthor = readArgValue("--required-review-author");
-const requiredReviewAuthor =
-  strictHeadReview ? (requestedReviewAuthor ?? DEFAULT_PR_FINDING_AUTHOR) : requestedReviewAuthor;
+const requiredReviewAuthor = strictHeadReview
+  ? (requestedReviewAuthor ?? DEFAULT_PR_FINDING_AUTHOR)
+  : requestedReviewAuthor;
 const prFindingAuthor = requestedReviewAuthor ?? DEFAULT_PR_FINDING_AUTHOR;
 const expectedHeadOid = readArgValue("--expected-head-oid");
 const explicitRepo = readArgValue("--repo");
