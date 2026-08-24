@@ -10,6 +10,11 @@ type UnreferencedSourceModuleAllowlistEntry = {
   reason: string;
 };
 
+type ProjectCompilerOptions = {
+  options: ts.CompilerOptions;
+  pathsBasePath: string;
+};
+
 const UNREFERENCED_SOURCE_MODULE_ALLOWLIST: readonly UnreferencedSourceModuleAllowlistEntry[] = [
   {
     path: "src/entrypoints/popup/run-evidence-panel.tsx",
@@ -85,7 +90,7 @@ function moduleSpecifiers(filePath: string, sourceText: string): string[] {
   );
 }
 
-function compilerOptionsFor(projectRoot: string): ts.CompilerOptions {
+function compilerOptionsFor(projectRoot: string): ProjectCompilerOptions {
   const tsconfigPath = join(projectRoot, "tsconfig.json");
   const config = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
   if (config.error)
@@ -105,24 +110,42 @@ function compilerOptionsFor(projectRoot: string): ts.CompilerOptions {
         .join("\n"),
     );
   }
-  return parsed.options;
+  const optionsWithPathsBasePath = parsed.options as ts.CompilerOptions & {
+    pathsBasePath?: string;
+  };
+  return {
+    options: parsed.options,
+    pathsBasePath: optionsWithPathsBasePath.pathsBasePath ?? projectRoot,
+  };
 }
 
 function sourcePathForSpecifier(
   specifier: string,
   importerPath: string,
-  compilerOptions: ts.CompilerOptions,
+  compilerOptions: ProjectCompilerOptions,
   filesByPath: ReadonlyMap<string, string>,
 ): string | undefined {
   const resolvedModule = ts.resolveModuleName(
     specifier,
     importerPath,
-    compilerOptions,
+    compilerOptions.options,
     ts.sys,
   ).resolvedModule;
   if (resolvedModule) {
     const resolvedPath = canonicalPath(resolvedModule.resolvedFileName);
     if (filesByPath.has(resolvedPath)) return resolvedPath;
+  }
+
+  for (const [pattern, substitutions] of Object.entries(compilerOptions.options.paths ?? {})) {
+    const [prefix, suffix = ""] = pattern.split("*");
+    if (!specifier.startsWith(prefix ?? "") || !specifier.endsWith(suffix)) continue;
+    const wildcard = specifier.slice((prefix ?? "").length, specifier.length - suffix.length);
+    for (const substitution of substitutions) {
+      const candidatePath = canonicalPath(
+        resolve(compilerOptions.pathsBasePath, substitution.replace("*", wildcard)),
+      );
+      if (filesByPath.has(candidatePath)) return candidatePath;
+    }
   }
 
   const relativeSpecifier = specifier.split(/[?#]/, 1)[0];
@@ -133,7 +156,7 @@ function sourcePathForSpecifier(
 
 function isWxtEntrypoint(projectRoot: string, filePath: string): boolean {
   const path = projectPath(projectRoot, filePath);
-  return /^src\/entrypoints\/(?:background|content)\.(?:ts|tsx)$/.test(path);
+  return /^src\/entrypoints\/(?:background|content|[^/]+\.content)\.(?:ts|tsx)$/.test(path);
 }
 
 function htmlEntrypointSpecifiers(html: string): string[] {
@@ -153,7 +176,7 @@ async function rootPathsFor(
   projectRoot: string,
   sourceDirectory: string,
   sourceFiles: readonly string[],
-  compilerOptions: ts.CompilerOptions,
+  compilerOptions: ProjectCompilerOptions,
   filesByPath: ReadonlyMap<string, string>,
 ): Promise<Set<string>> {
   const rootPaths = new Set(
@@ -438,5 +461,24 @@ describe("unreferenced source module guard", () => {
         { path: allowlistedPath, reason: "Dedicated cleanup follow-up." },
       ]),
     ).rejects.toThrow(/src\/core\/allowlisted\.ts.*Dedicated cleanup follow-up\./s);
+  });
+
+  it("follows a stylesheet imported through a configured alias", async () => {
+    const projectRoot = await createTemporaryProject();
+    await writeProjectFile(
+      projectRoot,
+      "src/entrypoints/background.ts",
+      'import "@/styles/live.css";\n',
+    );
+    await writeProjectFile(projectRoot, "src/styles/live.css", ".live {}\n");
+
+    await expect(assertNoUnreferencedSourceModules(projectRoot)).resolves.toBeUndefined();
+  });
+
+  it("treats a named WXT content script as a root", async () => {
+    const projectRoot = await createTemporaryProject();
+    await writeProjectFile(projectRoot, "src/entrypoints/gst.content.ts", "export {};\n");
+
+    await expect(assertNoUnreferencedSourceModules(projectRoot)).resolves.toBeUndefined();
   });
 });
