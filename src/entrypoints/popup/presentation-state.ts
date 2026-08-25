@@ -4,6 +4,7 @@ import { canRetryFullFiscalYearZipWithoutPortal } from "./flow-summary";
 
 export type PopupPresentationKind =
   | "loading"
+  | "access-denied"
   | "unsupported"
   | "session-expired"
   | "ready"
@@ -185,7 +186,17 @@ export function getPopupPresentationState(
 }
 
 function getUnsupportedContextState(context: PortalContext): PopupPresentationState {
-  const authRequired = context.pageKind === "gst-auth-landing";
+  if (context.pageKind === "gst-access-denied") {
+    return {
+      badge: "Access blocked",
+      body: "The GST Portal did not allow this page. Return to a GST Portal page you can access, then reopen Pack.",
+      icon: "!",
+      kind: "access-denied",
+      title: "GST Portal access blocked",
+      tone: "warning",
+    };
+  }
+  const authRequired = isGstSignInRequired(context);
   return {
     badge: authRequired ? "Sign-in needed" : "Unsupported tab",
     body: authRequired

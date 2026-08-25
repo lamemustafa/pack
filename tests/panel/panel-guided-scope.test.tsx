@@ -60,6 +60,22 @@ describe("panel guided scope", () => {
     );
   });
 
+  it.each([
+    ["GSTR-3B", "Monthly · available · Filed return (PDF) · Portal data (JSON)"],
+    ["GSTR-1", "Monthly · available · Summary (PDF) · E-invoice details (Excel)"],
+    ["GSTR-2B", "Monthly · available · Summary (PDF) · Details (Excel) · Portal data (JSON)"],
+    ["GSTR-9", "Annual · not available in Pack"],
+    ["GSTR-9C", "Annual · not available in Pack"],
+    ["GSTR-4", "Quarterly · not available in Pack"],
+    ["GSTR-4A", "Quarterly · not available in Pack"],
+    ["IFF", "Monthly · not available in Pack"],
+    ["Ledgers", "None · not available in Pack"],
+  ])("renders the declared %s catalogue decision", (label, decision) => {
+    const markup = renderGuide();
+
+    expect(markup).toContain(`<span>${label}</span><span>${decision}</span>`);
+  });
+
   it("derives four exact scope steps from the selected catalogue row", () => {
     const steps = panelGuidedSteps(PANEL_TEST_SCOPE, new Date("2026-08-21T00:00:00.000Z"));
 

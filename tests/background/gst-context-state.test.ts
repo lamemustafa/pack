@@ -103,6 +103,26 @@ describe("canonical GST portal context state", () => {
       ),
     ).not.toHaveProperty("safeTitle");
   });
+
+  it("accepts only the unsupported form of the neutral access-denied context", () => {
+    expect(
+      parseCanonicalGstPortalContext(
+        baseContext({ pageKind: "gst-access-denied", supported: false }),
+        TAB_URL,
+      ),
+    ).toEqual({
+      connectorId: "gst",
+      origin: "https://services.gst.gov.in",
+      pageKind: "gst-access-denied",
+      supported: false,
+    });
+    expect(
+      parseCanonicalGstPortalContext(
+        baseContext({ pageKind: "gst-access-denied", supported: true }),
+        TAB_URL,
+      ),
+    ).toBeNull();
+  });
 });
 
 function baseContext(overrides: Record<string, unknown> = {}) {

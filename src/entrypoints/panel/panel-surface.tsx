@@ -41,6 +41,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
    * `isGstSignInRequired` is the same test the popup's disabled-reason copy consults.
    */
   const portalSignedIn = portalReady && !isGstSignInRequired(pack.context);
+  const portalAccessDenied = pack.context?.pageKind === "gst-access-denied";
   const running = pack.effectiveBusy !== null || summary?.status === "running";
 
   usePortalContextRefresh(pack.refreshPortalContext);
@@ -63,7 +64,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
   );
   const showFlow =
     (portalReady || canRetryFullFiscalYearZipWithoutPortal(summary) || terminalSummary) &&
-    !["loading", "unsupported", "session-expired"].includes(presentation.kind);
+    !["access-denied", "loading", "unsupported", "session-expired"].includes(presentation.kind);
 
   const openPortal = () => void browser.tabs.create({ url: "https://www.gst.gov.in" });
 
@@ -82,7 +83,11 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
           className={portalSignedIn ? "panel-source-dot" : "panel-source-dot panel-source-dot-off"}
           aria-hidden="true"
         />
-        {portalSignedIn ? "GST portal · signed in" : "Open a signed-in GST Portal tab"}
+        {portalSignedIn
+          ? "GST portal · signed in"
+          : portalAccessDenied
+            ? "GST Portal · access blocked"
+            : "Open a signed-in GST Portal tab"}
       </p>
 
       <div className="panel-body">

@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { FiledReturnsFlowSummary } from "../../src/connectors/gst/filed-returns-contracts";
 import {
   PACK_EXTENSION_PERMISSIONS,
   PACK_GST_HOST_PERMISSIONS,
@@ -19,6 +20,22 @@ const read = (relative: string) => readFileSync(path.join(root, relative), "utf-
 
 const controller = panelController;
 const completedSummary = completedPanelSummary;
+
+function activePanelSummary(status: "running" | "partial" | "blocked"): FiledReturnsFlowSummary {
+  return {
+    ...completedSummary(),
+    status,
+    completedPeriods: status === "partial" ? ["April"] : [],
+    currentPeriod: "May",
+    flowStep: {
+      connectorId: "gst",
+      scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+      state: status === "running" ? "user-action-required" : "blocked",
+      safeSignals: status === "running" ? ["filed-returns-run-active"] : [],
+      safeMessage: `Synthetic ${status} state.`,
+    },
+  };
+}
 
 describe("panel surface", () => {
   afterEach(() => {
@@ -94,6 +111,34 @@ describe("panel surface", () => {
     expect(markup).toContain("2 periods saved as one ZIP.");
   });
 
+  it.each([
+    [
+      "downloading",
+      activePanelSummary("running"),
+      "Packing your files",
+      "Keep the GST Portal tab open while Pack prepares the files.",
+    ],
+    [
+      "partial",
+      activePanelSummary("partial"),
+      "Download partly complete",
+      "Synthetic partial state.",
+    ],
+    [
+      "blocked",
+      activePanelSummary("blocked"),
+      "May needs a quick check",
+      "Synthetic blocked state.",
+    ],
+  ])("renders the %s run family with an honest visible status", (_name, summary, title, body) => {
+    const markup = renderToStaticMarkup(
+      <PanelSurface pack={controller({ scopedFlowSummary: summary })} />,
+    );
+
+    expect(markup).toContain(title);
+    expect(markup).toContain(body);
+  });
+
   it("renders the partly-available outcome of a run that finished with a missing artifact", () => {
     const summary = completedSummary({
       flowStep: {
@@ -138,6 +183,14 @@ describe("panel surface", () => {
     expect(markup).toContain("Open GST Portal");
   });
 
+  it("renders a checking state while portal context is still empty", () => {
+    const markup = renderToStaticMarkup(<PanelSurface pack={controller({ context: null })} />);
+
+    expect(markup).toContain("Checking this tab");
+    expect(markup).toContain("Checking for a supported GST Portal page in this browser.");
+    expect(markup).not.toContain("Which return?");
+  });
+
   it("renders the guided single-scope chooser from the catalogue", () => {
     const markup = renderToStaticMarkup(<PanelSurface pack={controller()} />);
     expect(markup).toContain("Step 1 of 4");
@@ -169,5 +222,48 @@ describe("panel surface", () => {
     expect(markup).toContain("Open a signed-in GST Portal tab");
     expect(markup).not.toContain("GST portal · signed in");
     expect(markup).toContain("Sign in on GST Portal");
+  });
+
+  it("renders access denial without guessing whether sign-in or authorization caused it", () => {
+    const markup = renderToStaticMarkup(
+      <PanelSurface
+        pack={controller({
+          context: {
+            connectorId: "gst",
+            pageKind: "gst-access-denied",
+            supported: false,
+          },
+        })}
+      />,
+    );
+
+    expect(markup).toContain("GST Portal access blocked");
+    expect(markup).toContain("Return to a GST Portal page you can access");
+    expect(markup).toContain(">Open GST Portal</button>");
+    expect(markup).not.toContain("Sign in on GST Portal");
+    expect(markup).not.toContain("signed-in");
+    expect(markup).not.toContain("navigate to filed returns");
+  });
+
+  it("keeps a cancelled-run confirmation visible above the fresh chooser", () => {
+    const cancelledSummary = completedSummary({
+      status: "cancelled",
+      completedPeriods: [],
+      currentPeriod: "May",
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "blocked",
+        safeSignals: ["filed-returns-target-cancelled"],
+        safeMessage: "The saved target was cancelled.",
+      },
+    });
+    const markup = renderToStaticMarkup(
+      <PanelSurface pack={controller({ scopedFlowSummary: cancelledSummary })} />,
+    );
+
+    expect(markup).toContain("Ready for a new download");
+    expect(markup).toContain("The previous recovery state was cleared");
+    expect(markup).toContain("Which return?");
   });
 });

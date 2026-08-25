@@ -118,6 +118,14 @@ function getInlineStatusCopy(
       tone: "neutral",
     };
   }
+  if (presentation.kind === "ready" && summary?.status === "cancelled") {
+    return {
+      body: presentation.body,
+      icon: "✓",
+      title: presentation.title,
+      tone: "success",
+    };
+  }
   if (presentation.kind === "complete") {
     const periods = summary?.completedPeriods.length ?? 0;
     const isFullYear = summary?.scope.period === FULL_FISCAL_YEAR_PERIOD;
