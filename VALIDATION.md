@@ -811,3 +811,49 @@ retrying.` The focused test failed 1 of 115 session-boundary cases before the fi
 
 - Evidence level: static review and synthetic persistence/reopen gates only. No authenticated GST
   run, portal capture, sensitive input observation, permission change or release-readiness claim.
+
+### Cycle 13 — legacy full-year delivery ambiguity and fragment composition
+
+- Before: full-year terminal aggregate validation intentionally accepted the compatibility vector
+  `status: complete` plus `full-fiscal-year-complete`, but canonical copy treated that vector as a
+  proved local download. Current producers add `full-fiscal-year-zip-downloaded` or
+  `full-fiscal-year-no-zip-artifacts`; absence of both is indeterminate rather than delivery proof.
+- Contract: preserve the compatible summary but render a fixed caution: the saved fiscal-year run
+  completed, while the final ZIP download was not confirmed. The classifier requires canonical
+  `FULL_FISCAL_YEAR` scope and complete status. Explicit no-artifacts and confirmed ZIP branches
+  retain precedence; the change adds no signal or persisted field.
+- Fragment rule: filename outcome is diagnostic, not delivery authority. The canonical composer
+  omits filename fragments when its base key is legacy delivery ambiguity or explicit no-artifacts.
+  Every other path retains the existing overridden/unavailable filename sentences.
+- Failure evidence:
+  - Base legacy row: 1 selected failure; expected cautious copy, received generic completed local
+    download copy.
+  - Legacy plus overridden filename: 1 selected failure; cautious copy was followed by
+    `Pack completed the download`.
+  - Cross-scope March completion: 1 selected failure; an extra allowlisted full-year token relabelled
+    it as a fiscal-year ambiguity and removed its confirmed-download filename warning.
+  - No-artifacts mutation: 2 selected failures; overridden and unavailable rows each appended a
+    completed-download sentence after explicit `No ZIP was created` copy. Both passed after restore.
+- Exact line counts:
+
+  | File                                                      | Before | After |
+  | --------------------------------------------------------- | -----: | ----: |
+  | `gst/filed-returns-durable-status.ts`                     |    606 |   625 |
+  | `background/filed-returns-session-write-boundary.test.ts` |  1,281 | 1,378 |
+
+- Review disposition: privacy CLEAN/PASS after closing one Medium mixed-claim finding; security
+  PASS after closing one cross-scope WARN. Both are bound to exact source head
+  `bcc86f6da8ffd6fc0443ceb163314d38762a2344`. Fixed copy contains no sensitive values. No runtime
+  status, state, user action, persistence shape, completion evidence, retry authority, downloads
+  API, background, permission, host or CSP behavior changed.
+- Complete final gate: build and package verification passed at 1.01 MB; TypeScript, zero-warning
+  ESLint and repo-wide Prettier passed. Full Vitest exact final three lines:
+
+  ```text
+       Tests  2228 passed (2228)
+    Start at  04:41:23
+    Duration  151.32s (transform 2.55s, setup 0ms, import 11.50s, tests 124.68s, environment 7ms)
+  ```
+
+- Evidence level: static review and synthetic persistence/reopen gates only. No authenticated GST
+  run, portal capture, sensitive input observation, permission change or release-readiness claim.

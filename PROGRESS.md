@@ -534,3 +534,57 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
 - Learned / plan change: retaining a specific reason is unsafe unless stronger coexisting recovery
   evidence is ordered first. The next cycle audits other reason projections not just for missing
   copy, but for contradictory valid signal combinations that can suppress a stricter instruction.
+
+## Cycle 13 — qualify legacy full-year delivery copy
+
+- Window: 2026-08-26 04:32–04:45 IST.
+- Picked: audit the three independently composed canonical fragments: base durable state, derived
+  summary output and filename outcome. A legacy-compatible complete full-year summary may retain
+  only `full-fiscal-year-complete`; without either confirmed ZIP delivery or explicit no-artifacts
+  evidence, the generic renderer still claimed the local download completed.
+- Measured before: the existing terminal-aggregate persistence row accepted the legacy summary,
+  then the new copy assertion failed 1 selected test because it received
+  `Pack completed the local filed-return download for the saved fiscal-year run.` The compatibility
+  state remained valid; only its claim exceeded its evidence.
+- Changed: a full-year-scope-only complete ambiguity key now says the run completed but the final
+  ZIP download was not confirmed. It preserves the summary, status, state and signals and grants no
+  retry. Confirmed ZIP and explicit no-artifacts outcomes remain more specific.
+- Composition rectification: the first implementation still allowed a filename-outcome fragment to
+  append `Pack completed the download` to both legacy ambiguity and explicit no-artifacts copy.
+  Filename detail is now omitted for those two non-delivery keys only. Confirmed direct, selected
+  ZIP and fiscal-year ZIP outcomes retain their warnings.
+- Scope rectification: security review found the first ambiguity classifier trusted an allowlisted
+  full-year token without checking scope. The final classifier receives canonical scope; both
+  legacy ambiguity and no-artifacts branches require `FULL_FISCAL_YEAR`. A valid March completion
+  carrying an extra full-year token remains March copy and retains its filename warning.
+- Discrimination evidence:
+  - Without the ambiguity key, 1 selected test received the generic completed-download claim.
+  - Before filename suppression, a legacy ambiguity row produced two contradictory sentences:
+    unconfirmed final ZIP followed by completed download.
+  - Before scope binding, 1 selected valid March completion reopened as a saved fiscal-year run and
+    lost its filename warning.
+  - Removing no-artifacts filename suppression failed both overridden and unavailable rows; each
+    appended completed-download language after `No ZIP was created`. Restoring it passed both.
+- Production line accounting: durable status 606→625; session persistence/reopen tests
+  1,281→1,378.
+- Review: privacy CLEAN/PASS after one Medium rectification and security PASS after one WARN
+  rectification, both exact-commit bound to
+  `bcc86f6da8ffd6fc0443ceb163314d38762a2344`. No sensitive data, storage widening, state/action,
+  retry/completion authority, background/download behavior, manifest, permission, host, CSP or
+  dependency change was found.
+- Complete final gate: build passed at 1.01 MB; package verification passed; TypeScript passed;
+  ESLint passed with zero warnings; Prettier passed repo-wide; full Vitest passed 125 files and
+  2,228 tests. The known missing TypeScript source-map warning remained non-failing. Exact Vitest
+  footer:
+
+  ```text
+   Test Files  125 passed (125)
+        Tests  2228 passed (2228)
+     Start at  04:41:23
+     Duration  151.32s (transform 2.55s, setup 0ms, import 11.50s, tests 124.68s, environment 7ms)
+  ```
+
+- Checkpoint: `bcc86f6 fix(recovery): qualify legacy full-year delivery`.
+- Learned / plan change: signal allowlisting is not scope binding, and later diagnostic fragments
+  cannot be allowed to supply evidence the base status lacks. The next cycle audits other
+  full-year-only summary keys for cross-scope canonical injection.
