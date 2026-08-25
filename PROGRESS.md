@@ -484,3 +484,53 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
 - Learned / plan change: status alone is not sufficient canonical copy authority; a terminal
   absence signal can materially narrow what “complete” means. The next cycle audits other generic
   terminal branches for exact positive or absence signals that are retained but not rendered.
+
+## Cycle 12 — retain fixed portal failure causes through full-year reopen
+
+- Window: 2026-08-26 04:19–04:32 IST.
+- Picked: compare the target-level canonical cause with the session-level full-year renderer. Live
+  ledger summarisation already reconstructed fixed system-error, scheduled-downtime and
+  access-denied/expired-session copy, but persistence saw `full-fiscal-year-run-needs-action` first
+  and replaced every cause with generic recovery prose on reopen.
+- Measured before: the three new persistence rows all failed while 116 existing session-boundary
+  cases passed. Each retained its exact portal signal but received
+  `Pack needs an explicit recovery action before continuing the saved fiscal-year run.` instead of
+  the fixed portal sentence.
+- Changed: one shared closed mapping now owns the three existing portal-cause message keys for
+  target and summary rendering. Only blocked/partial full-year `run-needs-action` summaries consult
+  it; complete and cancelled outcomes cannot be relabelled. No new copy, signal, state, user action,
+  field or runtime authority was introduced.
+- Review rectification: privacy review found that an allowlisted mixed vector could also carry
+  cleanup failure, final-ZIP uncertainty or target review, and the first implementation would hide
+  those stronger instructions behind the portal cause. The final classifier centralizes the
+  existing cleanup/ZIP projection, then gives cleanup/ZIP and target review precedence inside the
+  mixed `run-needs-action` path while preserving the prior order for every non-mixed path.
+- Discrimination evidence:
+  - Without portal-cause projection, 3 of 119 session-boundary rows failed with generic recovery
+    copy replacing the three exact causes.
+  - Moving portal projection ahead of stronger recovery after rectification failed all three mixed
+    rows: cleanup, unconfirmed ZIP and target review each reopened with the system-error sentence.
+    Restoring the committed order passed all three.
+- Production line accounting: durable status 586→606; session persistence/reopen tests
+  1,191→1,281. The production increase is the shared cause/recovery classification; the larger test
+  increase is the six-state isolated-plus-mixed durable matrix.
+- Review: privacy CLEAN/PASS after rectification and security PASS, both exact-commit bound to
+  `0817a1081ec3fdb8f94fc830514dd17100b7830a`. No sensitive data, portal payload, storage widening,
+  completion/retry authority, background/download behavior, manifest, permission, host, CSP or
+  dependency change was found.
+- Complete final gate: build passed at 1.01 MB; package verification passed; TypeScript passed;
+  ESLint passed with zero warnings; Prettier passed repo-wide; full Vitest passed 125 files and
+  2,224 tests. The known missing TypeScript source-map warning remained non-failing. Exact Vitest
+  footer:
+
+  ```text
+   Test Files  125 passed (125)
+        Tests  2224 passed (2224)
+     Start at  04:27:30
+     Duration  150.18s (transform 2.57s, setup 0ms, import 10.91s, tests 125.60s, environment 7ms)
+  ```
+
+- Checkpoint: `0817a10 fix(recovery): retain portal failure cause`.
+- Learned / plan change: retaining a specific reason is unsafe unless stronger coexisting recovery
+  evidence is ordered first. The next cycle audits other reason projections not just for missing
+  copy, but for contradictory valid signal combinations that can suppress a stricter instruction.

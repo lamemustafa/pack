@@ -765,3 +765,49 @@ retrying.` The focused test failed 1 of 115 session-boundary cases before the fi
 
 - Evidence level: static review and synthetic persistence/reopen gates only. No authenticated GST
   run, portal capture, sensitive input observation, permission change or release-readiness claim.
+
+### Cycle 12 — portal-cause durability with fail-closed mixed precedence
+
+- Before: a full-year blocked target was canonicalized to fixed portal-cause copy during ledger
+  summarisation, but session persistence reclassified the same signals as generic
+  `full-year-needs-action`. System error, scheduled downtime and access-denied/expired-session all
+  lost their distinct fixed reason on reopen even though the exact durable signal remained.
+- Isolated regression: all 3 new cause rows failed and 116 existing session-boundary rows passed.
+  The expected fixed portal sentence was replaced by
+  `Pack needs an explicit recovery action before continuing the saved fiscal-year run.`
+- Contract: target and summary renderers share one exact three-signal portal-availability mapping.
+  Summary projection requires `full-fiscal-year-run-needs-action` plus blocked/partial status;
+  complete and cancelled statuses remain excluded. The mapping returns existing fixed message keys
+  and cannot interpolate stored values.
+- Review finding and rectification: the initial projection preceded cleanup, final-ZIP review and
+  target review. Because non-complete durable summaries admit contradictory but individually valid
+  signals, that could hide a stronger download or cleanup instruction. A centralized blocking
+  recovery projection now wins first, followed by target review, then portal cause, then generic
+  needs-action. Outside the mixed branch, the previous active/cleanup/ZIP/not-filed/target-review
+  ordering is unchanged.
+- Mutation proof: moving portal projection before the rectified precedence failed 3 of 3 selected
+  rows (119 unrelated rows skipped). Each expected stronger sentence was replaced by the fixed
+  system-error sentence. Restoring the committed order passed all 3.
+- Exact line counts:
+
+  | File                                                      | Before | After |
+  | --------------------------------------------------------- | -----: | ----: |
+  | `gst/filed-returns-durable-status.ts`                     |    586 |   606 |
+  | `background/filed-returns-session-write-boundary.test.ts` |  1,191 | 1,281 |
+
+- Review disposition: privacy CLEAN/PASS and security PASS on exact source head
+  `0817a1081ec3fdb8f94fc830514dd17100b7830a`. The privacy review's initial Medium is closed by
+  three mixed-signal persistence/reopen cases. Fixed copy contains no credentials, session data,
+  taxpayer value, raw portal data, path, filename or exception. No storage, state, action,
+  completion, retry, downloads API, background, permission, host or CSP behavior changed.
+- Complete final gate: build and package verification passed at 1.01 MB; TypeScript, zero-warning
+  ESLint and repo-wide Prettier passed. Full Vitest exact final three lines:
+
+  ```text
+       Tests  2224 passed (2224)
+    Start at  04:27:30
+    Duration  150.18s (transform 2.57s, setup 0ms, import 10.91s, tests 125.60s, environment 7ms)
+  ```
+
+- Evidence level: static review and synthetic persistence/reopen gates only. No authenticated GST
+  run, portal capture, sensitive input observation, permission change or release-readiness claim.
