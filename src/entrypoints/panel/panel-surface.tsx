@@ -47,8 +47,8 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
 
   const savedRun = pack.lastRunSummary;
   const savedRunBlock = getSavedRunBlock(savedRun, pack.effectiveBusy);
-  // The same test the presets use, so the form and the presets cannot
-  // disagree about whether the saved run is describing this scope.
+  // Use the canonical scope matcher so the guide and the start guard cannot
+  // disagree about whether the saved run describes the visible target.
   const savedRunIsThisScope = getScopeMatchedFiledReturnsSummary(pack.scope, savedRun) !== null;
 
   /**
@@ -188,10 +188,9 @@ function usePortalContextRefresh(refresh: () => Promise<void>) {
 }
 
 /**
- * Calls back when the user returns to this page, and only then. Both things the
- * panel must not answer from a mount-time reading -- the portal context and the
- * presets' "now" -- go stale for the same reason and are woken by the same
- * signals, so there is one listener pair rather than two.
+ * Calls back when the user returns to this page, and only then. Portal context
+ * must not be answered from a mount-time reading, so it is woken by the browser's
+ * own focus and visibility signals rather than a polling timer.
  */
 function useReturnToPage(onReturn: () => void) {
   React.useEffect(() => {
@@ -209,31 +208,16 @@ function useReturnToPage(onReturn: () => void) {
 }
 
 /**
- * Presets are normalised against "now". In April the new financial year has no
- * completed period, so `normaliseFiledReturnsScope` answers with the preceding
- * one -- and every string a preset shows is read back off that scope, so a
- * stale basis produces a label that reads correct while the click downloads the
- * wrong year.
- *
- * Computing once at mount was right for the popup, which dies on outside focus.
- * The panel outlives the boundary: one mounted on 30 April would still offer
- * April's answer in May. Recomputed on the browser's own return signals, so no
- * timer polls and no permission is added.
- *
- * The array is kept when the recomputed answer matches, which is every return
- * but the one that crosses a boundary. Handing back a new array each time would
- * re-render the list for nothing.
- */
-/**
  * What the one saved run says about starting anything at all, asked in the only scope where
  * its signals are visible: its own.
  *
  * `getScopeFormStartAction` filters a saved run's signals through `isSameScope`, which is
- * right for the popup — it only ever offers the scope on screen. The panel offers several at
- * once, and the background does not scope its refusal: `startFiledReturnsDownloadFlow`
+ * right for the popup — it only ever offers the scope on screen. The panel lets the user change
+ * that scope while a saved run remains, and the background does not scope its refusal:
+ * `startFiledReturnsDownloadFlow`
  * returns the outstanding target review before it reads the requested scope, and refuses a
  * mismatched fiscal-year ledger immediately after. So a saved run that blocks itself blocks
- * every other preset too, and the reason it gives is the reason they must show.
+ * every other selected scope too, and the reason it gives is the reason they must show.
  *
  * `null` while an action is in flight: every control is already disabled by its own guard
  * then, and the saved run's label would name the wrong scope.

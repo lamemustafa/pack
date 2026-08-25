@@ -181,25 +181,16 @@ export function usePackPopupController() {
     [showActionError],
   );
 
-  /**
-   * `override` lets a caller start a scope it has just chosen, without waiting a render for
-   * the state update to land. The panel's presets need this; the popup calls it with no
-   * argument and is unaffected.
-   */
-  const startFiledReturnsFlow = React.useCallback(
-    async (override?: FiledReturnsDownloadScope) => {
-      const target = normaliseFiledReturnsScope(override ?? scope);
-      if (override) setScopeState(target);
-      await withBusy("start-filed-returns-flow", async () => {
-        const response = await sendPackMessage({
-          type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",
-          payload: target,
-        });
-        applyFlowResponse(response);
+  const startFiledReturnsFlow = React.useCallback(async () => {
+    const target = normaliseFiledReturnsScope(scope);
+    await withBusy("start-filed-returns-flow", async () => {
+      const response = await sendPackMessage({
+        type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",
+        payload: target,
       });
-    },
-    [applyFlowResponse, scope, withBusy],
-  );
+      applyFlowResponse(response);
+    });
+  }, [applyFlowResponse, scope, withBusy]);
 
   const acknowledgeInterruptedRun = React.useCallback(async () => {
     await withBusy("acknowledge-interrupted-run", async () => {
