@@ -13,6 +13,10 @@ import {
   SINGLE_PERIOD_CLEANUP_CHECKPOINT_FAILURE_STAGES,
   singlePeriodCleanupCheckpointFailureSignal,
 } from "./single-period-cleanup-checkpoint";
+import {
+  FILED_RETURNS_TARGET_REVIEW_CLEAR_FAILURE_STAGES,
+  filedReturnsTargetReviewClearFailureSignal,
+} from "./filed-returns-target-review-clear";
 
 const MAX_DURABLE_SIGNAL_COUNT = 32;
 
@@ -196,6 +200,9 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "filed-returns-target-manually-observed",
   "filed-returns-target-bound-candidate-window-interrupted",
   "filed-returns-target-review-clear-failed",
+  ...FILED_RETURNS_TARGET_REVIEW_CLEAR_FAILURE_STAGES.map(
+    filedReturnsTargetReviewClearFailureSignal,
+  ),
   "filed-returns-target-review-required",
   "financial-year-selected",
   "flow-step-limit-reached",

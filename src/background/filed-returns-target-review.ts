@@ -49,6 +49,11 @@ import {
   sameSinglePeriodBundleScope,
   type SinglePeriodBundleLedger,
 } from "./filed-returns-single-period-bundle-ledger";
+import {
+  FiledReturnsTargetReviewClearError,
+  type FiledReturnsTargetReviewClearFailureStage,
+  type FiledReturnsTargetReviewClearResult,
+} from "../connectors/gst/filed-returns-target-review-clear";
 
 export interface FiledReturnsTargetReviewDeps {
   storageKeys: {
@@ -251,24 +256,82 @@ export async function clearFiledReturnsTargetReview(
   deps: FiledReturnsTargetReviewDeps,
   expectedRevision?: number,
 ): Promise<boolean> {
+  return (
+    await clearFiledReturnsTargetReviewAttempt(
+      scope,
+      deps,
+      expectedRevision,
+      "throw-storage-errors",
+    )
+  ).ok;
+}
+
+/**
+ * The diagnostic form used where the caller can safely persist a reason. It
+ * preserves the boolean export's storage-error behaviour for every existing
+ * caller while preventing this recovery boundary from replacing a specific
+ * failed exit with `false`.
+ */
+export function clearFiledReturnsTargetReviewWithReason(
+  scope: FiledReturnsDownloadScope,
+  deps: FiledReturnsTargetReviewDeps,
+  expectedRevision?: number,
+): Promise<FiledReturnsTargetReviewClearResult> {
+  return clearFiledReturnsTargetReviewAttempt(scope, deps, expectedRevision, "name-storage-errors");
+}
+
+async function clearFiledReturnsTargetReviewAttempt(
+  scope: FiledReturnsDownloadScope,
+  deps: FiledReturnsTargetReviewDeps,
+  expectedRevision: number | undefined,
+  storageErrorMode: "name-storage-errors" | "throw-storage-errors",
+): Promise<FiledReturnsTargetReviewClearResult> {
   const key = deps.storageKeys.targetReview;
-  if (!key) return false;
+  if (!key) return targetReviewClearFailure("storage-key-missing");
   if (
     expectedRevision !== undefined &&
     (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1 || expectedRevision > 10_000)
   ) {
-    return false;
+    return targetReviewClearFailure("expected-revision-invalid");
   }
 
   return runTargetReviewMutationCriticalSection(async () => {
-    const state = await readTargetReviewStorageStateByKey(key);
-    if (state.state !== "valid" || !sameFiledReturnsScope(state.review.scope, scope)) return false;
-    if (expectedRevision !== undefined && targetReviewRevision(state.review) !== expectedRevision) {
-      return false;
+    let state: FiledReturnsTargetReviewStorageState;
+    try {
+      state = await readTargetReviewStorageStateByKey(
+        key,
+        storageErrorMode === "name-storage-errors" ? "tag-write-error" : "throw-storage-error",
+      );
+    } catch (error) {
+      if (storageErrorMode === "throw-storage-errors") throw error;
+      return targetReviewClearFailure(
+        error instanceof TargetReviewStorageWriteError
+          ? "storage-write-failed"
+          : "storage-read-failed",
+      );
     }
-    await browser.storage.local.remove(key);
-    return true;
+    if (state.state === "missing") return targetReviewClearFailure("review-missing");
+    if (state.state === "malformed") return targetReviewClearFailure("review-malformed");
+    if (!sameFiledReturnsScope(state.review.scope, scope)) {
+      return targetReviewClearFailure("scope-mismatch");
+    }
+    if (expectedRevision !== undefined && targetReviewRevision(state.review) !== expectedRevision) {
+      return targetReviewClearFailure("revision-mismatch");
+    }
+    try {
+      await browser.storage.local.remove(key);
+    } catch (error) {
+      if (storageErrorMode === "throw-storage-errors") throw error;
+      return targetReviewClearFailure("storage-remove-failed");
+    }
+    return { ok: true };
   });
+}
+
+function targetReviewClearFailure(
+  stage: FiledReturnsTargetReviewClearFailureStage,
+): FiledReturnsTargetReviewClearResult {
+  return { error: new FiledReturnsTargetReviewClearError(stage), ok: false };
 }
 
 /**
@@ -1311,6 +1374,7 @@ function uniqueSafeSignals(safeSignals: readonly string[]): string[] {
 
 async function readTargetReviewStorageStateByKey(
   key: string,
+  writeErrorMode: "tag-write-error" | "throw-storage-error" = "throw-storage-error",
 ): Promise<FiledReturnsTargetReviewStorageState> {
   const values = await browser.storage.local.get(key);
   const stored = values[key];
@@ -1320,8 +1384,20 @@ async function readTargetReviewStorageStateByKey(
   if (review) return { review, state: "valid" };
   // Do not retain unvalidated recovery metadata. The sentinel preserves the
   // fail-closed state until the user explicitly clears local Pack data.
-  await browser.storage.local.set({ [key]: MALFORMED_TARGET_REVIEW_SENTINEL });
+  try {
+    await browser.storage.local.set({ [key]: MALFORMED_TARGET_REVIEW_SENTINEL });
+  } catch (error) {
+    if (writeErrorMode === "tag-write-error") throw new TargetReviewStorageWriteError();
+    throw error;
+  }
   return { state: "malformed" };
+}
+
+class TargetReviewStorageWriteError extends Error {
+  constructor() {
+    super("Target review storage write failed.");
+    this.name = "TargetReviewStorageWriteError";
+  }
 }
 
 async function readCanonicalTargetReviewStorageStateByKey(
