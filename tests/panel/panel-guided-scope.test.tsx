@@ -50,6 +50,16 @@ describe("panel guided scope", () => {
     expect(markup).toContain("None · not available in Pack");
   });
 
+  it("shows concrete artifact availability for every supported catalogue row", () => {
+    const markup = renderGuide();
+
+    expect(markup).toContain("Monthly · available · Filed return (PDF) · Portal data (JSON)");
+    expect(markup).toContain("Monthly · available · Summary (PDF) · E-invoice details (Excel)");
+    expect(markup).toContain(
+      "Monthly · available · Summary (PDF) · Details (Excel) · Portal data (JSON)",
+    );
+  });
+
   it("derives four exact scope steps from the selected catalogue row", () => {
     const steps = panelGuidedSteps(PANEL_TEST_SCOPE, new Date("2026-08-21T00:00:00.000Z"));
 

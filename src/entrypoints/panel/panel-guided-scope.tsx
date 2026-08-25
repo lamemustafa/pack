@@ -161,15 +161,22 @@ function CatalogueLimits() {
       </summary>
       <p>Only supported rows can be selected.</p>
       <ul>
-        {entries.map(({ returnType, capability }) => (
-          <li key={returnType}>
-            <span>{capability.label}</span>
-            <span>
-              {sentenceCase(capability.periodicity)} ·{" "}
-              {capability.supportStatus === "supported" ? "available" : "not available in Pack"}
-            </span>
-          </li>
-        ))}
+        {entries.map(({ returnType, capability }) => {
+          const artifactLabels = Object.values(capability.artifacts).map(
+            (artifact) => artifact.label,
+          );
+          return (
+            <li key={returnType}>
+              <span>{capability.label}</span>
+              <span>
+                {sentenceCase(capability.periodicity)} ·{" "}
+                {capability.supportStatus === "supported"
+                  ? ["available", ...artifactLabels].join(" · ")
+                  : "not available in Pack"}
+              </span>
+            </li>
+          );
+        })}
       </ul>
     </details>
   );
