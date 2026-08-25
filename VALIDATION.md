@@ -656,3 +656,48 @@ reviewed persistence and failure contracts.
 
 - Evidence level: static review and synthetic storage/unit/integration gates only. No authenticated
   GST run, portal capture, sensitive input observation, permission change or release claim.
+
+### Cycle 9 — filename-outcome durability and canonical copy
+
+- Before: post-completion filename comparison treated an absent browser filename as a match, and
+  the selected-ZIP post-check treated rejected search, missing exact item and missing filename as
+  no warning. The completed download evidence was still exact-ID, safe and non-empty, but the
+  result could imply the requested saved name was confirmed when it was not.
+- Contract: filename evidence is a three-state projection: `matched`, `overridden` or `unavailable`.
+  Completion remains positive because filename inspection occurs only after the existing exact-ID,
+  completed, safe, non-empty proof. Uncertainty changes diagnostic copy only; it does not create or
+  revoke download evidence and does not authorize a retry.
+- Durable vocabulary: one connector-owned source defines four unavailable reasons and two override
+  reasons. The exact allowlist and canonical renderer consume that source. Browser exceptions,
+  filenames and paths are discarded; only a fixed category is persisted.
+- Reopen agreement:
+  - direct unavailable and direct override completion persist and reopen with exact fixed warning;
+  - ZIP missing item, search unavailable, filename unavailable and override all persist and reopen;
+  - canonical per-target copy appends the same category-owned warning;
+  - partial selected ZIPs retain both their paired missing-artifact explanation and filename
+    warning rather than returning before warning reconstruction;
+  - an exact previous canonical target message is accepted only as migration input, while the
+    current derived copy includes the warning.
+- Failure evidence:
+  - Initial implementation tests: 4 failures out of 48 focused tests.
+  - Missing-as-matched mutation: 2 failures out of 48.
+  - Constant ZIP-reason mutation: 2 failures out of 28.
+  - Removed allowlist entries: 4 failures out of 110 session-boundary tests.
+  - Missing canonical copy/direct override allowlist: 13 failures across 227 focused tests.
+  - Partial-summary early return: 2 failures out of 114 session-boundary tests.
+- Review disposition: the security allowlist/reopen finding and both privacy canonical-copy
+  findings were fixed and re-reviewed. Privacy is CLEAN/PASS and security is PASS on exact
+  committed source head `94b45dcaca3d926a5433e9a700a578bbe15a072c`.
+  Fixed copy contains no raw filename, path, browser error, portal value or taxpayer value.
+- Complete gate: build and package verification passed at 1.01 MB; TypeScript, zero-warning ESLint
+  and repo-wide Prettier passed. Full Vitest exact final three lines:
+
+  ```text
+       Tests  2216 passed (2216)
+    Start at  04:00:44
+    Duration  155.40s (transform 2.84s, setup 0ms, import 13.34s, tests 126.71s, environment 8ms)
+  ```
+
+- Evidence level: static review and synthetic storage/unit/integration gates only. No authenticated
+  GST run, browser download fixture, portal capture, sensitive input observation, permission
+  change or release-readiness claim.

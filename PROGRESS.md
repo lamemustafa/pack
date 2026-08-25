@@ -352,3 +352,58 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
   is replaced atomically by an existing canonical record. The next cycle continues the reader
   audit and asks whether any other malformed durable record is deleted before a safe replacement
   or explicit user-visible disposition exists.
+
+## Cycle 9 — retain filename uncertainty through canonical reopen
+
+- Window: 2026-08-26 03:39–04:04 IST.
+- Picked: continue the duplicate/error-boundary audit at the post-completion filename check. A
+  rejected browser query, a missing exact item and a completed item without a filename all became
+  the same no-warning result as an exact requested-name match. The already-proven download stayed
+  complete, but the user-facing result overstated what Pack knew about its saved name.
+- Disproved candidate: the durable terminal-download reconciler also catches browser search
+  failures. That path retains its exact-ID `download-observing` review and retries reconciliation
+  on later popup reads; it neither marks completion nor grants a fresh download action, so no
+  action-safety change was made there.
+- Changed: the canonical filename comparison now distinguishes `matched`, `overridden` and
+  `unavailable`. Direct artifacts and selected ZIPs retain exact-ID, safe, non-empty completion
+  while emitting closed reasons for missing filename, missing exact item or browser-query failure.
+  Filename warnings are also preserved when ZIP staging cleanup needs attention.
+- Review rectification: security review found the four new reasons were initially absent from the
+  durable allowlist, which could remove a valid completion on persistence. Privacy review then
+  found that canonical reopen retained the signal but dropped its warning, first for completed
+  summaries and targets and then for the partial selected-ZIP early-return branch. The final
+  version centralizes six fixed filename-outcome signals, allows the pre-existing direct override,
+  reconstructs fixed warning copy for complete, partial and target states, and accepts only the
+  exact previous canonical target message as migration input. No filename, path or caught error is
+  persisted or interpolated.
+- Discrimination evidence:
+  - The initial observable tests failed four cases: direct missing filename plus ZIP missing item,
+    missing filename and search rejection.
+  - Mutating missing filename back to `matched` failed two direct/ZIP cases. Collapsing all three
+    ZIP reasons to one token failed the other two parameter rows.
+  - Removing the four initial allowlist entries failed exactly four persistence/reopen cases with
+    `expected null not to be null`.
+  - Before canonical-copy reconstruction, 13 tests failed: six reopened summaries lost warnings,
+    six target messages lost warnings and direct override was rejected. The remaining partial-path
+    early return then failed exactly two partial ZIP reopen cases.
+- Production line accounting: artifact download 224→235; filename comparison 38→42; staged ZIP
+  507→537; durable signals 722→734; durable status 540→580. The added code is a bounded diagnostic
+  and canonical-copy contract; download completion and retry authority are unchanged.
+- Review: privacy CLEAN/PASS and security PASS, both exact-commit bound to
+  `94b45dcaca3d926a5433e9a700a578bbe15a072c`. No manifest, permission, host, CSP, dependency,
+  telemetry, sensitive-data, target-binding or completion-evidence change was found.
+- Complete gate: build passed at 1.01 MB; package verification passed; TypeScript passed; ESLint
+  passed with zero warnings; Prettier passed repo-wide; full Vitest passed 125 files and 2,216
+  tests. The known missing TypeScript source-map warning remained non-failing. Exact Vitest footer:
+
+  ```text
+   Test Files  125 passed (125)
+        Tests  2216 passed (2216)
+     Start at  04:00:44
+     Duration  155.40s (transform 2.84s, setup 0ms, import 13.34s, tests 126.71s, environment 8ms)
+  ```
+
+- Checkpoint: `94b45dc fix(downloads): retain filename uncertainty`.
+- Learned / plan change: a fixed durable signal is incomplete unless every canonical renderer that
+  can reopen it preserves the same actionable caution, including special-case early returns. The
+  next cycle audits other post-completion diagnostic families for allowlist-plus-renderer agreement.
