@@ -212,3 +212,41 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
 - Learned / plan change: a type that expands from configuration needs runtime dispatch to remain
   explicitly fail closed. The next cycle returns to the measured 1,018.70px expanded catalogue and
   asks whether grouping can improve scanning without hiding any unsupported decision.
+
+## Cycle 6 — group catalogue decisions at the 320px floor
+
+- Window: 2026-08-26 02:33–02:45 IST.
+- Picked: reduce the measured 1,018.70px expanded catalogue without removing a declared row,
+  periodicity, artifact label or unsupported decision.
+- Without-fix proof: the grouping assertion failed because the surface exposed only `9 rows` and
+  repeated `not available in Pack` on every unsupported row. The failing expectation was
+  `expected … to contain '3 available · 6 unavailable'`.
+- Changed: the summary now reports 3 available and 6 unavailable. Two heading-separated lists show
+  exact available artifacts and unavailable periodicities. The unsupported decision appears once
+  as the group heading; its six rows remain reference-only list items and are arranged in two
+  columns at the 320px floor. The catalogue still renders zero row controls.
+- Real Chromium at 320 × 900 with production component code and CSS: expanded panel height measured
+  810.83px versus the retained 1,018.70px baseline, a 207.87px (20.4%) reduction. The catalogue
+  itself measured 428.95px; the document remained exactly 320px wide with no clipped descendant.
+  Chromium exposed headings `Available 3` and `Not available in Pack 6`, lists of 3 and 6 items,
+  all exact artifact/periodicity text, two 137px unsupported columns and zero links, buttons or
+  selects inside the catalogue.
+- Impeccable detector: two advisory font-size findings at unchanged `panel.css` lines 39 and 85;
+  neither intersects this diff. The added heading reuses the existing documented 0.75rem step.
+- Privacy review: CLEAN; grouping preserves the explicit Pack limitation and introduces no claim,
+  identifier, logging, storage or session-data change. Security review found no affected security
+  surface: selection, messages, background/content behavior and downloads are unchanged.
+- Complete gate: build passed at 998.69 kB; package verification passed; TypeScript passed; ESLint
+  passed with zero warnings; Prettier passed repo-wide; full Vitest passed 125 files and 2,132 tests.
+  The known missing TypeScript source-map warning remained non-failing. Exact Vitest footer:
+
+  ```text
+       Tests  2132 passed (2132)
+    Start at  02:40:54
+    Duration  212.43s (transform 6.79s, setup 0ms, import 26.21s, tests 162.33s, environment 10ms)
+  ```
+
+- Checkpoint: `8e51754 feat(panel): group catalogue availability`.
+- Learned / plan change: grouped limitation copy can be both more explicit and materially shorter
+  when list semantics retain every individual decision. The next cycle resumes the generic-reason
+  audit rather than compressing the default guide further.

@@ -505,3 +505,46 @@ reviewed persistence and failure contracts.
 
 - Evidence level: source, static typing, synthetic DOM and unit/integration gates only. No
   authenticated GST run, new portal capture, permissions change or release-readiness claim.
+
+### Cycle 6 — catalogue density and scanning
+
+- Preserved contract: all nine canonical catalogue entries render; supported return selection
+  remains exactly GSTR-3B, GSTR-1 and GSTR-2B; every available artifact label and every unavailable
+  periodicity remains visible; unavailable rows contain no control.
+- Discrimination evidence: before implementation, the focused grouping test failed with:
+
+  ```text
+  AssertionError: expected '<section class="panel-guide" aria-lab…' to contain '3 available · 6 unavailable'
+  ```
+
+- Real Chromium measurement at 320 × 900:
+
+  | Measure                        |   Before |   After |
+  | ------------------------------ | -------: | ------: |
+  | Expanded panel height          | 1,018.70 |  810.83 |
+  | Height reduction               |        — |  207.87 |
+  | Catalogue details height       |        — |  428.95 |
+  | Document width                 |      320 |     320 |
+  | Clipped descendants            |        0 |       0 |
+  | Catalogue list items           |        9 |       9 |
+  | Catalogue child controls       |        0 |       0 |
+  | Unsupported-list column widths |        — | 137/137 |
+
+- Chromium accessibility tree exposed a level-three `Available 3` heading followed by three list
+  items, then a level-three `Not available in Pack 6` heading followed by six list items. No text
+  was visually truncated. The temporary loopback harness, browser logs, snapshot and screenshot
+  were deleted and its server/browser stopped before commit.
+- Impeccable deterministic detector reported two advisory font sizes at unchanged lines outside
+  this diff. Privacy review was CLEAN; security review found no changed action, message, storage,
+  permission, content/background or download boundary.
+- Complete gate: build and package verification passed at 998.69 kB; TypeScript, zero-warning
+  ESLint and repo-wide Prettier passed. Full Vitest exact final three lines:
+
+  ```text
+       Tests  2132 passed (2132)
+    Start at  02:40:54
+    Duration  212.43s (transform 6.79s, setup 0ms, import 26.21s, tests 162.33s, environment 10ms)
+  ```
+
+- Evidence level: real Chromium layout/accessibility-tree evidence plus synthetic component and
+  repository gates; no authenticated GST run, assistive-technology transcript or release claim.
