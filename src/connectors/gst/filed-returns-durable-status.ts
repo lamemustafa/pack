@@ -45,6 +45,7 @@ type DurableMessageKey =
   | "full-year-downloaded-cleanup-blocked"
   | "full-year-interrupted"
   | "full-year-needs-action"
+  | "full-year-no-artifacts"
   | "full-year-resume"
   | "full-year-zip-review"
   | "not-filed"
@@ -460,6 +461,9 @@ function messageKeyForSummary(
   }
   if (signals.includes("filed-return-positively-not-filed")) return "not-filed";
   if (signals.includes("filed-returns-target-review-required")) return "target-review";
+  if (status === "complete" && signals.includes("full-fiscal-year-no-zip-artifacts")) {
+    return "full-year-no-artifacts";
+  }
   if (status === "complete") return "complete";
   if (status === "partial") return "partial";
   if (status === "cancelled") return "target-cancelled";
@@ -478,6 +482,8 @@ function renderDurableMessage(key: DurableMessageKey, scope: FiledReturnsDownloa
       "Pack confirmed the final fiscal-year ZIP download; only retained local staging remains to be cleared.",
     "full-year-interrupted": `Pack stopped before it could confirm ${period}. Check Downloads before retrying.`,
     "full-year-needs-action": `Pack needs an explicit recovery action before continuing ${period}.`,
+    "full-year-no-artifacts":
+      "Pack completed the saved fiscal-year run. No ZIP was created because no filed-return artifacts were available for export.",
     "full-year-resume":
       "Pack cannot verify which GST account owns this saved run. Resume only with the same account open; otherwise discard it.",
     "full-year-zip-review":

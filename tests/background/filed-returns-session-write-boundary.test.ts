@@ -880,6 +880,35 @@ describe("filed-return session write boundary", () => {
     });
   });
 
+  it("reopens a completed no-artifacts fiscal-year run without claiming a ZIP download", async () => {
+    const base = completeFullFiscalYearSummary();
+    const summary = completeFullFiscalYearSummary({
+      flowStep: {
+        safeSignals: [
+          ...base.flowStep.safeSignals,
+          "full-fiscal-year-no-zip-artifacts",
+          "full-fiscal-year-opfs-cleared",
+        ],
+      },
+    });
+
+    await expect(
+      persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, summary),
+    ).resolves.not.toBeNull();
+    await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+      status: "complete",
+      flowStep: {
+        state: "downloaded",
+        safeMessage:
+          "Pack completed the saved fiscal-year run. No ZIP was created because no filed-return artifacts were available for export.",
+        safeSignals: expect.arrayContaining([
+          "full-fiscal-year-complete",
+          "full-fiscal-year-no-zip-artifacts",
+        ]),
+      },
+    });
+  });
+
   it("canonicalizes observations persisted from flow responses", async () => {
     await persistFlowResponse(
       {
