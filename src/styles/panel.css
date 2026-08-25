@@ -270,6 +270,15 @@ html[data-pack-surface="panel"] body {
   line-height: 1.4;
 }
 
+.panel-catalogue h3 {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 10px 0 4px;
+  color: var(--pack-ink-secondary);
+  font-size: 0.75rem;
+}
+
 .panel-catalogue ul {
   display: grid;
   gap: 0;
@@ -289,6 +298,11 @@ html[data-pack-surface="panel"] body {
 
 .panel-catalogue li span:last-child {
   color: var(--pack-ink-muted);
+}
+
+.panel-catalogue-unavailable ul {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 12px;
 }
 
 .panel-foot {

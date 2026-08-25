@@ -7,6 +7,7 @@ import type {
 import {
   filedReturnsCapability,
   filedReturnsCatalogueEntries,
+  type FiledReturnsCatalogueEntry,
 } from "../../connectors/gst/filed-returns-capabilities";
 import { ScopeFormAction } from "../popup/components";
 import { panelGuidedSteps, updatePanelGuidedScope } from "./panel-guided-scope-model";
@@ -155,12 +156,41 @@ function ActiveScope({ scope }: { scope: FiledReturnsDownloadScope }) {
 
 function CatalogueLimits() {
   const entries = filedReturnsCatalogueEntries();
+  const available = entries.filter((entry) => entry.capability.supportStatus === "supported");
+  const unavailable = entries.filter((entry) => entry.capability.supportStatus === "unsupported");
   return (
     <details className="panel-catalogue">
       <summary>
-        Catalogue &amp; limits <span>{entries.length} rows</span>
+        Catalogue &amp; limits
+        <span>
+          {available.length} available · {unavailable.length} unavailable
+        </span>
       </summary>
-      <p>Only supported rows can be selected.</p>
+      <p>Available rows show selectable files. Other rows are reference only.</p>
+      <CatalogueGroup heading="Available" entries={available} />
+      <CatalogueGroup
+        className="panel-catalogue-unavailable"
+        heading="Not available in Pack"
+        entries={unavailable}
+      />
+    </details>
+  );
+}
+
+function CatalogueGroup({
+  className,
+  entries,
+  heading,
+}: {
+  className?: string;
+  entries: FiledReturnsCatalogueEntry[];
+  heading: string;
+}) {
+  return (
+    <section className={className}>
+      <h3>
+        {heading} <span>{entries.length}</span>
+      </h3>
       <ul>
         {entries.map(({ returnType, capability }) => {
           const artifactLabels = Object.values(capability.artifacts).map(
@@ -170,16 +200,16 @@ function CatalogueLimits() {
             <li key={returnType}>
               <span>{capability.label}</span>
               <span>
-                {sentenceCase(capability.periodicity)} ·{" "}
+                {sentenceCase(capability.periodicity)}
                 {capability.supportStatus === "supported"
-                  ? ["available", ...artifactLabels].join(" · ")
-                  : "not available in Pack"}
+                  ? ` · ${artifactLabels.join(" · ")}`
+                  : null}
               </span>
             </li>
           );
         })}
       </ul>
-    </details>
+    </section>
   );
 }
 

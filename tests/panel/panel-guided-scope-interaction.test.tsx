@@ -213,7 +213,17 @@ describe("panel guided scope interaction", () => {
     expect(optionValues).not.toEqual(
       expect.arrayContaining(["GSTR-9", "GSTR-4", "IFF", "LEDGERS"]),
     );
-    expect(container.querySelectorAll(".panel-catalogue li")).toHaveLength(9);
+    expect(
+      Array.from(container.querySelectorAll(".panel-catalogue h3"), (heading) =>
+        heading.textContent?.trim(),
+      ),
+    ).toEqual(["Available 3", "Not available in Pack 6"]);
+    expect(
+      Array.from(
+        container.querySelectorAll(".panel-catalogue ul"),
+        (list) => list.querySelectorAll(":scope > li").length,
+      ),
+    ).toEqual([3, 6]);
     expect(
       container.querySelectorAll(".panel-catalogue button, .panel-catalogue select"),
     ).toHaveLength(0);

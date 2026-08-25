@@ -46,30 +46,38 @@ describe("panel guided scope", () => {
     expect(returnOptions).not.toContain("Ledgers");
     expect(markup).toContain("GSTR-9");
     expect(markup).toContain("Ledgers");
-    expect(markup).toContain("Annual · not available in Pack");
-    expect(markup).toContain("None · not available in Pack");
+    expect(markup).toContain("Not available in Pack <span>6</span>");
+    expect(markup).toContain("<span>GSTR-9</span><span>Annual</span>");
+    expect(markup).toContain("<span>Ledgers</span><span>None</span>");
   });
 
   it("shows concrete artifact availability for every supported catalogue row", () => {
     const markup = renderGuide();
 
-    expect(markup).toContain("Monthly · available · Filed return (PDF) · Portal data (JSON)");
-    expect(markup).toContain("Monthly · available · Summary (PDF) · E-invoice details (Excel)");
-    expect(markup).toContain(
-      "Monthly · available · Summary (PDF) · Details (Excel) · Portal data (JSON)",
-    );
+    expect(markup).toContain("Monthly · Filed return (PDF) · Portal data (JSON)");
+    expect(markup).toContain("Monthly · Summary (PDF) · E-invoice details (Excel)");
+    expect(markup).toContain("Monthly · Summary (PDF) · Details (Excel) · Portal data (JSON)");
+  });
+
+  it("groups availability once instead of repeating the same decision on every row", () => {
+    const markup = renderGuide();
+
+    expect(markup).toContain("3 available · 6 unavailable");
+    expect(markup).toContain("Available <span>3</span>");
+    expect(markup).toContain("Not available in Pack <span>6</span>");
+    expect(markup.match(/not available in Pack/gi)).toHaveLength(1);
   });
 
   it.each([
-    ["GSTR-3B", "Monthly · available · Filed return (PDF) · Portal data (JSON)"],
-    ["GSTR-1", "Monthly · available · Summary (PDF) · E-invoice details (Excel)"],
-    ["GSTR-2B", "Monthly · available · Summary (PDF) · Details (Excel) · Portal data (JSON)"],
-    ["GSTR-9", "Annual · not available in Pack"],
-    ["GSTR-9C", "Annual · not available in Pack"],
-    ["GSTR-4", "Quarterly · not available in Pack"],
-    ["GSTR-4A", "Quarterly · not available in Pack"],
-    ["IFF", "Monthly · not available in Pack"],
-    ["Ledgers", "None · not available in Pack"],
+    ["GSTR-3B", "Monthly · Filed return (PDF) · Portal data (JSON)"],
+    ["GSTR-1", "Monthly · Summary (PDF) · E-invoice details (Excel)"],
+    ["GSTR-2B", "Monthly · Summary (PDF) · Details (Excel) · Portal data (JSON)"],
+    ["GSTR-9", "Annual"],
+    ["GSTR-9C", "Annual"],
+    ["GSTR-4", "Quarterly"],
+    ["GSTR-4A", "Quarterly"],
+    ["IFF", "Monthly"],
+    ["Ledgers", "None"],
   ])("renders the declared %s catalogue decision", (label, decision) => {
     const markup = renderGuide();
 
