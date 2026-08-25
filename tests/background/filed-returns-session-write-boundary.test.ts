@@ -22,6 +22,11 @@ import {
   GSTR2B_ARTIFACT_DISPATCH_FAILURE_MESSAGES,
   Gstr2bArtifactDispatchFailureReason,
 } from "../../src/background/filed-returns-download-trigger";
+import {
+  FILED_RETURNS_PORTAL_BLOCKED_OR_SESSION_EXPIRED_MESSAGE,
+  FILED_RETURNS_PORTAL_SCHEDULED_DOWNTIME_MESSAGE,
+  FILED_RETURNS_PORTAL_SYSTEM_ERROR_MESSAGE,
+} from "../../src/connectors/gst/filed-returns-portal-availability";
 
 const storage = vi.hoisted(() => ({ session: {} as Record<string, unknown> }));
 
@@ -908,6 +913,91 @@ describe("filed-return session write boundary", () => {
       },
     });
   });
+
+  it.each([
+    ["portal-system-error", FILED_RETURNS_PORTAL_SYSTEM_ERROR_MESSAGE],
+    ["portal-scheduled-downtime", FILED_RETURNS_PORTAL_SCHEDULED_DOWNTIME_MESSAGE],
+    ["portal-blocked-or-session-expired", FILED_RETURNS_PORTAL_BLOCKED_OR_SESSION_EXPIRED_MESSAGE],
+  ])("reopens a full-year %s with its fixed portal cause", async (signal, safeMessage) => {
+    const summary = completeFullFiscalYearSummary({
+      completedAt: undefined,
+      status: "partial",
+      updatedAt: "2026-07-24T00:00:00.000Z",
+      flowStep: {
+        state: "blocked",
+        safeSignals: ["full-fiscal-year-run-needs-action", signal],
+        userAction: {
+          type: "WAIT_FOR_PORTAL_AVAILABILITY",
+          message: "Synthetic supplied portal instruction.",
+          canResume: true,
+        },
+      },
+    });
+
+    await expect(
+      persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, summary),
+    ).resolves.not.toBeNull();
+    await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+      status: "partial",
+      flowStep: {
+        state: "blocked",
+        safeMessage,
+        safeSignals: expect.arrayContaining(["full-fiscal-year-run-needs-action", signal]),
+      },
+    });
+  });
+
+  it.each([
+    [
+      "cleanup failure",
+      "full-fiscal-year-opfs-clear-failed",
+      "Pack cannot complete this review while temporary selected-file staging remains uncleared.",
+    ],
+    [
+      "unconfirmed ZIP download",
+      "full-fiscal-year-zip-download-unconfirmed",
+      "Pack could not confirm the final fiscal-year ZIP. Check the exact browser download before retrying.",
+    ],
+    [
+      "target review",
+      "filed-returns-target-review-required",
+      "Pack could not verify the browser download for the saved fiscal-year run. Check Downloads before retrying or cancelling this target.",
+    ],
+  ])(
+    "keeps %s ahead of a retained portal cause after full-year reopen",
+    async (_case, strongerSignal, safeMessage) => {
+      const summary = completeFullFiscalYearSummary({
+        completedAt: undefined,
+        status: "partial",
+        updatedAt: "2026-07-24T00:00:00.000Z",
+        flowStep: {
+          state: "blocked",
+          safeSignals: ["full-fiscal-year-run-needs-action", "portal-system-error", strongerSignal],
+          userAction: {
+            type: "RETRY_PORTAL_GENERATION",
+            message: "Synthetic supplied recovery instruction.",
+            canResume: true,
+          },
+        },
+      });
+
+      await expect(
+        persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, summary),
+      ).resolves.not.toBeNull();
+      await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+        status: "partial",
+        flowStep: {
+          state: "blocked",
+          safeMessage,
+          safeSignals: expect.arrayContaining([
+            "full-fiscal-year-run-needs-action",
+            "portal-system-error",
+            strongerSignal,
+          ]),
+        },
+      });
+    },
+  );
 
   it("canonicalizes observations persisted from flow responses", async () => {
     await persistFlowResponse(

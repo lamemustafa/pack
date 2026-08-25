@@ -391,14 +391,20 @@ function messageKeyForTarget(
   if (status === "downloaded") return "target-downloaded";
   if (status === "cancelled") return "target-cancelled";
   if (status === "blocked" || status === "failed") {
-    if (signals.includes("portal-system-error")) return "target-system-error";
-    if (signals.includes("portal-scheduled-downtime")) return "target-scheduled-downtime";
-    if (signals.includes("portal-blocked-or-session-expired")) {
-      return "target-blocked-or-session-expired";
-    }
+    const portalAvailabilityKey = portalAvailabilityMessageKey(signals);
+    if (portalAvailabilityKey) return portalAvailabilityKey;
     return status === "failed" ? "target-failed" : "target-blocked";
   }
   return "target-review";
+}
+
+function portalAvailabilityMessageKey(signals: readonly string[]): DurableMessageKey | null {
+  if (signals.includes("portal-system-error")) return "target-system-error";
+  if (signals.includes("portal-scheduled-downtime")) return "target-scheduled-downtime";
+  if (signals.includes("portal-blocked-or-session-expired")) {
+    return "target-blocked-or-session-expired";
+  }
+  return null;
 }
 
 export function visibleGstr1MismatchPeriod(
@@ -446,8 +452,30 @@ function messageKeyForSummary(
   if (signals.includes("filed-return-durable-status-rejected")) return "durable-status-rejected";
   if (signals.includes("full-fiscal-year-resume-confirmation-required")) return "full-year-resume";
   if (signals.includes("full-fiscal-year-run-interrupted")) return "full-year-interrupted";
-  if (signals.includes("full-fiscal-year-run-needs-action")) return "full-year-needs-action";
+  const blockingRecoveryKey = blockingSummaryRecoveryMessageKey(signals);
+  if (signals.includes("full-fiscal-year-run-needs-action")) {
+    if (blockingRecoveryKey) return blockingRecoveryKey;
+    if (signals.includes("filed-returns-target-review-required")) return "target-review";
+    if (status === "blocked" || status === "partial") {
+      const portalAvailabilityKey = portalAvailabilityMessageKey(signals);
+      if (portalAvailabilityKey) return portalAvailabilityKey;
+    }
+    return "full-year-needs-action";
+  }
   if (signals.includes("full-fiscal-year-run-active")) return "full-year-active";
+  if (blockingRecoveryKey) return blockingRecoveryKey;
+  if (signals.includes("filed-return-positively-not-filed")) return "not-filed";
+  if (signals.includes("filed-returns-target-review-required")) return "target-review";
+  if (status === "complete" && signals.includes("full-fiscal-year-no-zip-artifacts")) {
+    return "full-year-no-artifacts";
+  }
+  if (status === "complete") return "complete";
+  if (status === "partial") return "partial";
+  if (status === "cancelled") return "target-cancelled";
+  return "full-year-needs-action";
+}
+
+function blockingSummaryRecoveryMessageKey(signals: readonly string[]): DurableMessageKey | null {
   if (hasCleanupFailureSignal(signals)) {
     if (signals.includes("full-fiscal-year-zip-downloaded")) {
       return "full-year-downloaded-cleanup-blocked";
@@ -459,15 +487,7 @@ function messageKeyForSummary(
   if (signals.some((signal) => signal.startsWith("full-fiscal-year-zip-download-"))) {
     return "full-year-zip-review";
   }
-  if (signals.includes("filed-return-positively-not-filed")) return "not-filed";
-  if (signals.includes("filed-returns-target-review-required")) return "target-review";
-  if (status === "complete" && signals.includes("full-fiscal-year-no-zip-artifacts")) {
-    return "full-year-no-artifacts";
-  }
-  if (status === "complete") return "complete";
-  if (status === "partial") return "partial";
-  if (status === "cancelled") return "target-cancelled";
-  return "full-year-needs-action";
+  return null;
 }
 
 function renderDurableMessage(key: DurableMessageKey, scope: FiledReturnsDownloadScope): string {
