@@ -381,3 +381,48 @@ reviewed persistence and failure contracts.
   unjudged execution path to save clicks rather than complete this structural overhaul.
 - 2026-08-25T12:47:00+05:30 — Deleted the test-only evidence panel only after tracing and testing its
   live replacements; the fixed-point importer scan then reported no further orphan.
+
+### Cycle 3 — complete presentation-state and catalogue matrix
+
+- Exact state inventory: loading, empty/ready, unsupported, access denied, downloading, partial,
+  complete, unavailable, blocked, error and cancelled. Permanent component assertions now cover
+  each family; cancelled confirmation no longer disappears when presentation returns to `ready`.
+- Exact catalogue inventory: supported monthly GSTR-3B, GSTR-1 and GSTR-2B; unsupported annual
+  GSTR-9 and GSTR-9C; unsupported quarterly GSTR-4 and GSTR-4A; unsupported monthly IFF; and
+  unsupported non-periodic Ledgers. Every row's decision is pinned. Unsupported rows render zero
+  controls and cannot enter runtime selection.
+- Access-denied boundary: the captured error route wins over a stale filed-returns page title, but
+  remains neutral about cause. It persists only reduced origin/page-kind context. The reporting tab
+  is exact-GST-origin trusted but remains non-actionable: it cannot replace the remembered
+  navigation/download tab and operational selection still excludes portal error pages.
+- Without-fix evidence:
+  - Detector expected an access decision but received generic navigation-required context; panel
+    presentation expected access handling but received `unsupported`.
+  - Cancelled-run status expected `Ready for a new download`; inline markup was empty and panel
+    markup omitted both the title and reset confirmation.
+  - A stale `View Filed Returns` title initially overrode the access-denied path until route
+    precedence was made explicit.
+- Synthetic Chromium at exactly 320 × 900 measured every presentation family with 320px document
+  width and zero clipped descendants. Final neutral access denial: 426.66px tall, one action. Open
+  catalogue: 1,018.70px tall, 9 rows, 6 unsupported decisions, 0 row controls, zero clipping.
+- Financial/performance boundary: a single validated canonical decimal already classified as
+  unrepresentable and longer than `MAX_EXCEL_STRING_LENGTH` now takes the same bounded nonnumeric
+  total fallback without a discarded huge-integer conversion. Multiple inputs still sum exactly,
+  preserving cancellation semantics. The focused workbook and offscreen cases passed together;
+  the full changed-file set passed 223 tests.
+- Privacy review: CLEAN on committed head `dfc6112`; neutral copy, reduced storage and bounded
+  financial fallback introduced no sensitive-data, telemetry, persistence-widening or claim issue.
+- Security review: PASS; trusted observation and actionable automation remain separate, exact host
+  and permission policy is unchanged, and handler tests close the earlier reachability/stale-state
+  warning. No live GST qualification was performed.
+- Complete gate: build and package verification passed at 998.39 kB; TypeScript, zero-warning
+  ESLint and repo-wide Prettier passed. Full Vitest exact final three lines:
+
+  ```text
+       Tests  2128 passed (2128)
+    Start at  01:56:41
+    Duration  187.68s (transform 5.53s, setup 0ms, import 21.44s, tests 143.43s, environment 20ms)
+  ```
+
+- This evidence is source/synthetic only. It does not prove live portal cause, authenticated portal
+  behavior, assistive-technology announcements, browser zoom, translated copy or release readiness.
