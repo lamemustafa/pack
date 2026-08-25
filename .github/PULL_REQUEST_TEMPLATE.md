@@ -103,7 +103,3 @@ Examples:
 ## Screenshots
 
 Use synthetic data only.
-
-## DCO
-
-- [ ] Commits include `Signed-off-by:` trailers.
