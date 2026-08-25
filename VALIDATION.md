@@ -277,6 +277,34 @@ reviewed persistence and failure contracts.
   telemetry absence, manifest reach, redaction, unsupported-capability copy, government disclaimer,
   commit-message safety and synthetic/live evidence labeling.
 
+## Sustained-cycle evidence — 2026-08-26
+
+### Cycle 1 — emitted staged-signal discrimination
+
+- Before: the two staged-signal allowlist tests proved every generated token was accepted, but no
+  test proved that the generated suffix still named the input stage.
+- Added exact parameterised output assertions for all 9 target-review-clear stages and all 10
+  single-period cleanup-checkpoint stages. No production behavior changed.
+- Mutation 1: made the target-review builder return the valid constant
+  `filed-returns-target-review-clear-failed:storage-key-missing`. Result: 8 failed and 36 passed;
+  each non-constant case reported its expected stage and the received `storage-key-missing` stage.
+- Mutation 2: made the cleanup builder return the valid constant
+  `single-period-cleanup-checkpoint-failed:bundle-missing`. Result: 9 failed and 35 passed; each
+  non-constant case reported its expected stage and the received `bundle-missing` stage.
+- Both production mutations were restored. The focused file then passed 44 tests.
+- Complete gate: build passed at 997.37 kB; TypeScript, zero-warning ESLint, repo-wide Prettier and
+  package verification passed. Full Vitest exact final three lines:
+
+  ```text
+       Tests  2106 passed (2106)
+    Start at  01:09:53
+    Duration  157.30s (transform 3.03s, setup 0ms, import 12.75s, tests 130.44s, environment 7ms)
+  ```
+
+- Scope audit: exact type/symbol search found only these two typed staged-error/signal families.
+  Dynamic artifact, OPFS, navigation and capture signals remain candidates for later duplicate-fact
+  and test-quality cycles; this result does not declare every dynamic signal constructor clean.
+
 ## Owner decision
 
 - Decide separately whether failure to delete Pack's own durable bookkeeping record should keep
