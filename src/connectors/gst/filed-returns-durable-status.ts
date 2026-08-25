@@ -175,7 +175,8 @@ export function canonicalDurableSummaryMessage(
   );
   const filenameMessage =
     durableMessageKey === "full-year-complete-download-unconfirmed" ||
-    durableMessageKey === "full-year-no-artifacts"
+    durableMessageKey === "full-year-no-artifacts" ||
+    durableMessageKey === "not-filed"
       ? ""
       : filenameOutcomeMessage(signals);
   return [durableMessage, summaryMessage, filenameMessage].filter(Boolean).join(" ");

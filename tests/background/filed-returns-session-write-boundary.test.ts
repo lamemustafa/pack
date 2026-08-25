@@ -840,6 +840,37 @@ describe("filed-return session write boundary", () => {
     ).resolves.toBeNull();
   });
 
+  it.each([
+    "download-filename-overridden",
+    "download-filename-unavailable",
+    "zip-download-filename-overridden",
+    "zip-download-filename-unavailable",
+    "zip-download-filename-item-unavailable",
+    "zip-download-filename-search-unavailable",
+  ])("does not let filename signal %s claim a not-filed download", async (signal) => {
+    const base = completeNotFiledSummary();
+    const summary = {
+      ...base,
+      flowStep: {
+        ...base.flowStep,
+        safeSignals: [...base.flowStep.safeSignals, signal],
+      },
+    };
+
+    await expect(
+      persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, summary),
+    ).resolves.not.toBeNull();
+    await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+      status: "complete",
+      completedPeriods: ["March"],
+      flowStep: {
+        state: "candidate-not-found",
+        safeSignals: expect.arrayContaining(["filed-return-positively-not-filed", signal]),
+        safeMessage: "The GST Portal reported no filed return for the selected period.",
+      },
+    });
+  });
+
   it("accepts full-year completion only as a terminal aggregate", async () => {
     await expect(
       persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, completeFullFiscalYearSummary()),
