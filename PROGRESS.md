@@ -445,3 +445,42 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
 - Learned / plan change: prefix families need delimiter-aware matching; a positive terminal token
   can otherwise be swallowed by its negative sibling. The next cycle checks other broad
   `includes`/`startsWith` renderer predicates against their positive terminal siblings.
+
+## Cycle 11 — preserve no-artifacts fiscal-year copy after reopen
+
+- Window: 2026-08-26 04:12–04:18 IST.
+- Picked: continue the canonical producer/allowlist/renderer audit at the positive absence branch.
+  A completed fiscal-year run can intentionally create no ZIP when no filed-return artifacts are
+  available, but canonical reopen discarded that fact and selected the generic completed-download
+  sentence.
+- Measured before: the new persistence/reopen test failed 1 of 116 session-boundary cases. It
+  retained `status: complete`, `flowStep.state: downloaded` and
+  `full-fiscal-year-no-zip-artifacts`, but received
+  `Pack completed the local filed-return download for the saved fiscal-year run.` instead of copy
+  saying that no ZIP was created.
+- Changed: the canonical renderer now selects a fixed `full-year-no-artifacts` message only when
+  the summary is complete and carries the exact no-artifacts signal. Interrupted, active,
+  needs-action, cleanup-failed, ZIP-review, positively-not-filed and target-review branches remain
+  earlier and therefore fail closed. No state, signal, user action, persistence, cleanup, retry or
+  completion authority changed.
+- Production line accounting: durable status 580→586. The session persistence/reopen regression
+  test is 1,162→1,191 lines.
+- Review: privacy CLEAN/PASS and security PASS, both exact-commit bound to
+  `6f05ed0be4f8021b72e67b9cdfa05d28764181b9`. Reviewers confirmed the fixed copy contains no
+  taxpayer, portal, session, path, filename or exception value, and that every blocked recovery
+  class retains precedence.
+- Complete gate: build passed at 1.01 MB; package verification passed; TypeScript passed; ESLint
+  passed with zero warnings; Prettier passed repo-wide; full Vitest passed 125 files and 2,218
+  tests. The known missing TypeScript source-map warning remained non-failing. Exact Vitest footer:
+
+  ```text
+   Test Files  125 passed (125)
+        Tests  2218 passed (2218)
+     Start at  04:14:22
+     Duration  149.25s (transform 2.43s, setup 0ms, import 10.91s, tests 124.67s, environment 7ms)
+  ```
+
+- Checkpoint: `6f05ed0 fix(recovery): preserve no-artifacts copy`.
+- Learned / plan change: status alone is not sufficient canonical copy authority; a terminal
+  absence signal can materially narrow what “complete” means. The next cycle audits other generic
+  terminal branches for exact positive or absence signals that are retained but not rendered.

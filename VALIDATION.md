@@ -729,3 +729,39 @@ retrying.` The focused test failed 1 of 115 session-boundary cases before the fi
 
 - Evidence level: static review and synthetic persistence/reopen gates only. No authenticated GST
   run, portal capture, sensitive input observation, permission change or release-readiness claim.
+
+### Cycle 11 — completed full-year no-artifacts copy
+
+- Before: canonical persistence retained the exact `full-fiscal-year-no-zip-artifacts` signal, but
+  `messageKeyForSummary` selected generic `complete` copy. A reopened run therefore claimed Pack
+  completed a local filed-return download even though its durable outcome said no ZIP was created.
+- Regression: the new persistence/reopen case failed 1 of 116 session-boundary tests before the
+  fix. Expected the fixed no-artifacts sentence; received
+  `Pack completed the local filed-return download for the saved fiscal-year run.` while the
+  complete state and no-artifacts signal both remained present.
+- Fix: a complete-only, exact-signal branch selects fixed no-artifacts copy. All existing
+  interrupted, active, explicit-action, cleanup-failure, unconfirmed-download, positively-not-filed
+  and target-review classifiers precede it. This changes only canonical rendering; status, flow
+  state, signals, storage shape, user action and runtime authority are unchanged.
+- Exact line counts:
+
+  | File                                                      | Before | After |
+  | --------------------------------------------------------- | -----: | ----: |
+  | `gst/filed-returns-durable-status.ts`                     |    580 |   586 |
+  | `background/filed-returns-session-write-boundary.test.ts` |  1,162 | 1,191 |
+
+- Review disposition: privacy CLEAN/PASS and security PASS on exact committed source head
+  `6f05ed0be4f8021b72e67b9cdfa05d28764181b9`. Privacy found no sensitive data or capability
+  overclaim; security confirmed fail-closed branch precedence and no completion, retry, cleanup,
+  persistence, background, downloads-API, permission, host or CSP change.
+- Complete gate: build and package verification passed at 1.01 MB; TypeScript, zero-warning ESLint
+  and repo-wide Prettier passed. Full Vitest exact final three lines:
+
+  ```text
+       Tests  2218 passed (2218)
+    Start at  04:14:22
+    Duration  149.25s (transform 2.43s, setup 0ms, import 10.91s, tests 124.67s, environment 7ms)
+  ```
+
+- Evidence level: static review and synthetic persistence/reopen gates only. No authenticated GST
+  run, portal capture, sensitive input observation, permission change or release-readiness claim.
