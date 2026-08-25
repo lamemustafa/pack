@@ -525,6 +525,22 @@ describe("full fiscal year ledger", () => {
       "download-filename-unavailable",
       "Pack could not confirm the saved filename for this unresolved target. Check browser Downloads before using a file.",
     ],
+    [
+      "zip-download-filename-overridden",
+      "The browser may have used a different saved name, but Pack could not verify that any file belongs to this unresolved target. Check browser Downloads before using a file.",
+    ],
+    [
+      "zip-download-filename-unavailable",
+      "Pack could not confirm the saved filename for this unresolved target. Check browser Downloads before using a file.",
+    ],
+    [
+      "zip-download-filename-item-unavailable",
+      "Pack could not confirm the saved filename for this unresolved target. Check browser Downloads before using a file.",
+    ],
+    [
+      "zip-download-filename-search-unavailable",
+      "Pack could not confirm the saved filename for this unresolved target. Check browser Downloads before using a file.",
+    ],
   ])("keeps target-review filename outcome %s neutral", (signal, warning) => {
     const durable = canonicalDurableTargetStatus(
       { financialYear: "2026-27", period: "April", returnType: "GSTR-3B" },
@@ -537,6 +553,22 @@ describe("full fiscal year ledger", () => {
     );
     expect(durable.safeMessage).not.toContain("Pack completed the download");
   });
+
+  it.each(["downloaded", "target-review"] as const)(
+    "keeps filename override precedence for %s copy",
+    (status) => {
+      const scope = { financialYear: "2026-27", period: "April", returnType: "GSTR-3B" } as const;
+      const overridden = canonicalDurableTargetStatus(scope, status, [
+        "zip-download-filename-overridden",
+      ]);
+      const mixed = canonicalDurableTargetStatus(scope, status, [
+        "download-filename-unavailable",
+        "zip-download-filename-overridden",
+      ]);
+
+      expect(mixed.safeMessage).toBe(overridden.safeMessage);
+    },
+  );
 
   it.each([
     "filed-return-download-target-mismatch",

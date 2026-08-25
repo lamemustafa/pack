@@ -125,7 +125,10 @@ export function isHistoricalDurableTargetMessage(
   // newly distinct blocked/failed message keys. The exact-match guard otherwise rejects
   // stale or arbitrary text; remove this once no persisted ledger can carry that cache.
   const messageKey = messageKeyForTarget(status, signals);
-  if (filenameOutcomeMessage(signals) && safeMessage === renderDurableMessage(messageKey, scope)) {
+  if (
+    filenameOutcomeMessage(signals, "download") &&
+    safeMessage === renderDurableMessage(messageKey, scope)
+  ) {
     return true;
   }
   if (
@@ -178,7 +181,7 @@ export function canonicalDurableSummaryMessage(
     durableMessageKey === "full-year-no-artifacts" ||
     durableMessageKey === "not-filed"
       ? ""
-      : filenameOutcomeMessage(signals);
+      : filenameOutcomeMessage(signals, "download");
   return [durableMessage, summaryMessage, filenameMessage].filter(Boolean).join(" ");
 }
 
@@ -187,47 +190,27 @@ function canonicalDurableTargetMessage(
   status: FiledReturnsFullFiscalYearTargetStatus | "target-review",
   signals: readonly string[],
 ): string {
-  const filenameMessage =
-    status === "downloaded"
-      ? filenameOutcomeMessage(signals)
-      : unresolvedTargetFilenameOutcomeMessage(signals);
-  return [renderDurableMessage(messageKeyForTarget(status, signals), scope), filenameMessage]
+  return [
+    renderDurableMessage(messageKeyForTarget(status, signals), scope),
+    filenameOutcomeMessage(signals, status === "downloaded" ? "download" : "unresolved-target"),
+  ]
     .filter(Boolean)
     .join(" ");
 }
 
-function filenameOutcomeMessage(signals: readonly string[]): string {
-  if (
-    signals.some((signal) =>
-      FILED_RETURNS_FILENAME_OVERRIDDEN_SIGNALS.some((value) => value === signal),
-    )
-  ) {
-    return "Pack completed the download, but the browser saved it under a different name. Check browser Downloads before using the file.";
+function filenameOutcomeMessage(
+  signals: readonly string[],
+  context: "download" | "unresolved-target",
+): string {
+  if (FILED_RETURNS_FILENAME_OVERRIDDEN_SIGNALS.some((signal) => signals.includes(signal))) {
+    return context === "download"
+      ? "Pack completed the download, but the browser saved it under a different name. Check browser Downloads before using the file."
+      : "The browser may have used a different saved name, but Pack could not verify that any file belongs to this unresolved target. Check browser Downloads before using a file.";
   }
-  if (
-    signals.some((signal) =>
-      FILED_RETURNS_FILENAME_UNAVAILABLE_SIGNALS.some((value) => value === signal),
-    )
-  ) {
-    return "Pack completed the download, but could not confirm its saved filename. Check browser Downloads before using the file.";
-  }
-  return "";
-}
-
-function unresolvedTargetFilenameOutcomeMessage(signals: readonly string[]): string {
-  if (
-    signals.some((signal) =>
-      FILED_RETURNS_FILENAME_OVERRIDDEN_SIGNALS.some((value) => value === signal),
-    )
-  ) {
-    return "The browser may have used a different saved name, but Pack could not verify that any file belongs to this unresolved target. Check browser Downloads before using a file.";
-  }
-  if (
-    signals.some((signal) =>
-      FILED_RETURNS_FILENAME_UNAVAILABLE_SIGNALS.some((value) => value === signal),
-    )
-  ) {
-    return "Pack could not confirm the saved filename for this unresolved target. Check browser Downloads before using a file.";
+  if (FILED_RETURNS_FILENAME_UNAVAILABLE_SIGNALS.some((signal) => signals.includes(signal))) {
+    return context === "download"
+      ? "Pack completed the download, but could not confirm its saved filename. Check browser Downloads before using the file."
+      : "Pack could not confirm the saved filename for this unresolved target. Check browser Downloads before using a file.";
   }
   return "";
 }
