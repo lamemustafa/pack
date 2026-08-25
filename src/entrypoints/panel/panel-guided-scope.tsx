@@ -49,6 +49,9 @@ export function PanelGuidedScope({
     <section className="panel-guide" aria-labelledby="panel-guide-title">
       <div
         className="panel-guide-progress"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
         aria-label={`Step ${activeStep + 1} of ${steps.length}`}
       >
         <span>
@@ -86,6 +89,7 @@ export function PanelGuidedScope({
           ))}
         </select>
       </label>
+      <ActiveScope scope={scope} />
       <div className="panel-guide-actions">
         {activeStep > 0 ? (
           <button className="panel-guide-back secondary" type="button" onClick={() => move(-1)}>
@@ -107,7 +111,6 @@ export function PanelGuidedScope({
           />
         )}
       </div>
-      <ActiveScope scope={scope} />
       {scopeLockedForReview && flowSummary?.currentPeriod ? (
         <p className="scope-note scope-note-warning" role="status">
           A saved run is paused at {flowSummary.currentPeriod}. Resume or discard it before starting
@@ -126,7 +129,7 @@ function ActiveScope({ scope }: { scope: FiledReturnsDownloadScope }) {
   const artifact = steps[3]?.options.find((option) => option.value === steps[3]?.value)?.label;
   return (
     <div className="panel-guide-scope" aria-label="One active scope">
-      <h3>One active scope</h3>
+      <h3>Review target</h3>
       <dl>
         <div>
           <dt>Return</dt>
@@ -162,11 +165,16 @@ function CatalogueLimits() {
           <li key={returnType}>
             <span>{capability.label}</span>
             <span>
-              {capability.periodicity} · {capability.supportStatus}
+              {sentenceCase(capability.periodicity)} ·{" "}
+              {capability.supportStatus === "supported" ? "available" : "not available in Pack"}
             </span>
           </li>
         ))}
       </ul>
     </details>
   );
+}
+
+function sentenceCase(value: string): string {
+  return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
 }

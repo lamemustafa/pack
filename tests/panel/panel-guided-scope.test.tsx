@@ -46,8 +46,8 @@ describe("panel guided scope", () => {
     expect(returnOptions).not.toContain("Ledgers");
     expect(markup).toContain("GSTR-9");
     expect(markup).toContain("Ledgers");
-    expect(markup).toContain("annual · unsupported");
-    expect(markup).toContain("none · unsupported");
+    expect(markup).toContain("Annual · not available in Pack");
+    expect(markup).toContain("None · not available in Pack");
   });
 
   it("derives four exact scope steps from the selected catalogue row", () => {

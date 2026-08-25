@@ -44,7 +44,7 @@ html[data-pack-surface="panel"] body {
 .panel-publisher {
   margin-left: auto;
   color: var(--pack-ink-muted);
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   letter-spacing: 0.04em;
 }
 
@@ -97,7 +97,7 @@ html[data-pack-surface="panel"] body {
   display: grid;
   gap: 6px;
   color: var(--pack-ink-muted);
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 750;
 }
 
@@ -140,7 +140,7 @@ html[data-pack-surface="panel"] body {
 .panel-guide-select select {
   width: 100%;
   min-width: 0;
-  min-height: 42px;
+  min-height: 44px;
   border: 1px solid var(--pack-border-subtle);
   border-radius: 8px;
   background: var(--pack-surface);
@@ -169,7 +169,7 @@ html[data-pack-surface="panel"] body {
 }
 
 .panel-guide-actions button {
-  min-height: 42px;
+  min-height: 44px;
   border-radius: 8px;
   font: inherit;
   font-size: 0.8125rem;
@@ -190,15 +190,23 @@ html[data-pack-surface="panel"] body {
 }
 
 .panel-guide-actions .popup-action-area {
-  position: static;
-  min-width: 0;
-  border: 0;
-  background: transparent;
-  padding: 0;
+  display: contents;
 }
 
 .panel-guide-actions .run-action-copy {
-  margin-bottom: 6px;
+  grid-row: 1;
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.panel-guide-actions .panel-guide-back {
+  grid-row: 2;
+  grid-column: 1;
+}
+
+.panel-guide-actions .primary-action {
+  grid-row: 2;
+  grid-column: 2;
 }
 
 .panel-guide-scope {
@@ -226,7 +234,7 @@ html[data-pack-surface="panel"] body {
 
 .panel-guide-scope dt {
   color: var(--pack-ink-muted);
-  font-size: 0.625rem;
+  font-size: 0.75rem;
 }
 
 .panel-guide-scope dd {
@@ -244,12 +252,16 @@ html[data-pack-surface="panel"] body {
 }
 
 .panel-catalogue summary {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
+  display: list-item;
+  min-height: 44px;
   cursor: pointer;
   color: var(--pack-ink-primary);
   font-weight: 750;
+  line-height: 44px;
+}
+
+.panel-catalogue summary span {
+  float: right;
 }
 
 .panel-catalogue p {
