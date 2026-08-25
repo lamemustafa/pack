@@ -74,11 +74,11 @@ describe("panel guided scope", () => {
 
   it("derives every axis shape from periodicity rather than a return-name branch", () => {
     expect(hasCompletePeriodicityModel()).toBe(true);
-    expect(cataloguePeriodOptions("quarterly", "2025-26")).toHaveLength(4);
-    expect(cataloguePeriodOptions("annual", "2025-26")).toEqual([
+    expect(cataloguePeriodOptions("quarterly", "2025-26", "GSTR-3B")).toHaveLength(4);
+    expect(cataloguePeriodOptions("annual", "2025-26", "GSTR-3B")).toEqual([
       { value: "FULL_FISCAL_YEAR", label: "Annual · 2025-26" },
     ]);
-    expect(cataloguePeriodOptions("none", "2025-26")).toEqual([
+    expect(cataloguePeriodOptions("none", "2025-26", "GSTR-3B")).toEqual([
       { value: "NOT_PERIOD_BASED", label: "Not period-based" },
     ]);
   });

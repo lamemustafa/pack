@@ -74,8 +74,8 @@ const PERIOD_OPTIONS_BY_PERIODICITY = {
 export function cataloguePeriodOptions(
   periodicity: FiledReturnsPeriodicity,
   financialYear: string,
+  returnType: FiledReturnsReturnType,
   asOf = new Date(),
-  returnType: FiledReturnsReturnType = "GSTR-3B",
 ): readonly GuidedOption[] {
   return PERIOD_OPTIONS_BY_PERIODICITY[periodicity](financialYear, asOf, returnType);
 }
@@ -113,8 +113,8 @@ export function panelGuidedSteps(
       options: cataloguePeriodOptions(
         capability.periodicity,
         scope.financialYear,
-        asOf,
         scope.returnType,
+        asOf,
       ),
     },
     {

@@ -9,8 +9,9 @@
   background diagnostic files, catalogue/capability model, side-panel scope UI and tests, the new
   `design-lab/10-catalogue-overhaul` directory, `DESIGN.md` and this record.
 - No live GST Portal session, portal navigation, real taxpayer data, manifest/permission/CSP change,
-  dependency change, persistence widening, target-binding weakening, public capability claim,
-  push, PR or deployment was used.
+  dependency change, new persisted field, sensitive or unbounded persisted value, target-binding
+  weakening, public capability claim, push, PR or deployment was used. Task 0 expands only the
+  fixed, allowlisted durable diagnostic-signal vocabulary described below.
 
 ## Outcome
 
@@ -235,13 +236,13 @@ reviewed persistence and failure contracts.
 
 ### Final exact gate sequence
 
-- `pnpm exec wxt build`: passed; verified package size 997.38 kB.
+- `pnpm exec wxt build`: passed; verified package size 997.37 kB.
 - `pnpm exec vitest run`: passed. Exact final three lines:
 
   ```text
        Tests  2087 passed (2087)
-    Start at  12:23:50
-    Duration  152.46s (transform 2.29s, setup 0ms, import 10.62s, tests 128.43s, environment 7ms)
+    Start at  12:36:33
+    Duration  156.57s (transform 2.56s, setup 0ms, import 11.90s, tests 130.60s, environment 7ms)
   ```
 
   The total is seven above the 2,080-test baseline. It is four below the integrated checkpoint
@@ -258,6 +259,23 @@ reviewed persistence and failure contracts.
   69,794,252 KiB (+7,748 KiB); the directories' 307,168 KiB logical size was removed, while APFS
   sharing/caches mean logical size is not expected to equal immediately reclaimed blocks. The
   worktree's 32 KiB `.wxt` directory was retained.
+
+## Final reviewer disposition
+
+- Security review of `8fa3510`: clean, with no Block or Warn finding. The reviewer confirmed no
+  manifest, permission, host, CSP, content-script, remote-code or dependency drift; cleanup signals
+  remain closed vocabulary; review deletion remains scope/revision guarded; and unknown, failed,
+  zero-byte or ambiguous download evidence remains blocked. Its only residual limitation is the
+  deliberately unqualified authenticated service-worker termination case.
+- Privacy Medium — a default `"GSTR-3B"` argument in the generic panel model duplicated
+  connector-owned GST knowledge. Fixed by requiring the caller's already-canonical return type;
+  focused verification passed 4 files and 25 tests plus TypeScript and formatting.
+- Privacy Low — the boundary summary said no persistence widening even though Task 0 adds bounded
+  values to an existing durable signal field. Fixed by stating the precise contract: no new field,
+  sensitive value or unbounded value, and an explicit fixed allowlisted vocabulary expansion.
+- The privacy review otherwise passed credential/session handling, taxpayer-data non-transmission,
+  telemetry absence, manifest reach, redaction, unsupported-capability copy, government disclaimer,
+  commit-message safety and synthetic/live evidence labeling.
 
 ## Owner decision
 
