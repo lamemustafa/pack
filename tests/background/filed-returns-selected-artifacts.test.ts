@@ -9,6 +9,7 @@ import {
   type FiledReturnsConcreteArtifactType,
 } from "../../src/connectors/gst/filed-returns-artifacts";
 import type { PackMessageResponse } from "../../src/connectors/gst/messages";
+import type * as FiledReturnsArtifactProgressModule from "../../src/background/filed-returns-artifact-progress";
 
 type SyntheticBundleArtifact = {
   artifactType: FiledReturnsConcreteArtifactType;
@@ -42,10 +43,18 @@ const mocks = vi.hoisted(() => ({
       ) => Promise<FiledReturnsFlowSummary>
     >(),
   readPersistedArtifactProgress: vi.fn<
-    (...args: unknown[]) => Promise<{
-      completedArtifactTypes: Array<"PDF" | "JSON" | "EXCEL">;
-      flowStep: PortalFlowStepResult;
-    } | null>
+    (...args: unknown[]) => Promise<
+      | {
+          completedArtifactTypes: Array<"PDF" | "JSON" | "EXCEL">;
+          flowStep: PortalFlowStepResult;
+          state: "ready";
+        }
+      | {
+          reason: "malformed-summary" | "storage-read-failed" | "storage-write-failed";
+          state: "blocked";
+        }
+      | null
+    >
   >(),
   selectedArtifactsSafeMessage: vi.fn(() => "Selected artifacts downloaded."),
   toOptionalArtifactUnavailableFlowStep: vi.fn(() => null),
@@ -161,7 +170,10 @@ const bundleMocks = vi.hoisted(() => {
 });
 
 vi.mock("wxt/browser", () => ({ browser: { storage: { local: {}, session: {} } } }));
-vi.mock("../../src/background/filed-returns-artifact-progress", () => mocks);
+vi.mock("../../src/background/filed-returns-artifact-progress", async (importOriginal) => ({
+  ...(await importOriginal<typeof FiledReturnsArtifactProgressModule>()),
+  ...mocks,
+}));
 vi.mock("../../src/background/filed-returns-download-trigger", () => ({
   gstr1VisibleScopeMismatchResponse: mocks.gstr1VisibleScopeMismatchResponse,
   triggerAndObserveFiledReturnDownload: mocks.triggerAndObserveFiledReturnDownload,
@@ -195,6 +207,76 @@ describe("GSTR-2B all-format selection", () => {
       flowStep,
     }));
   });
+
+  it.each([
+    [
+      "read failure",
+      () =>
+        mocks.readPersistedArtifactProgress.mockResolvedValueOnce({
+          reason: "storage-read-failed",
+          state: "blocked",
+        }),
+      "filed-return-artifact-progress-storage-read-failed",
+      "Pack could not read retained selected-file progress, so it did not inspect or act on the GST Portal tab.",
+    ],
+    [
+      "malformed state",
+      () =>
+        mocks.readPersistedArtifactProgress.mockResolvedValueOnce({
+          reason: "malformed-summary",
+          state: "blocked",
+        }),
+      "filed-return-artifact-progress-malformed-summary",
+      "Pack found retained selected-file progress it could not validate, so it did not inspect or act on the GST Portal tab.",
+    ],
+    [
+      "canonical write failure",
+      () =>
+        mocks.readPersistedArtifactProgress.mockResolvedValueOnce({
+          reason: "storage-write-failed",
+          state: "blocked",
+        }),
+      "filed-return-artifact-progress-storage-write-failed",
+      "Pack could not verify retained selected-file progress in session storage, so it did not inspect or act on the GST Portal tab.",
+    ],
+  ] as const)(
+    "blocks before a portal action when retained progress has a %s",
+    async (_label, arrange, safeSignal, safeMessage) => {
+      arrange();
+      const scope = {
+        artifactType: "PDF_AND_EXCEL" as const,
+        financialYear: "2026-27",
+        period: "June",
+        returnType: "GSTR-1" as const,
+      };
+
+      const response = await triggerSelectedArtifacts({
+        activeFinancialYear: scope.financialYear,
+        activePeriod: scope.period,
+        deps: {
+          stageCapturedDownloads: { ledgerId: "full-year-synthetic" },
+          storageKeys: {
+            completion: "completion",
+            fullFiscalYearLedger: "ledger",
+            observation: "observation",
+          },
+        } as never,
+        scope,
+        tabId: 17,
+      });
+
+      expect(response).toMatchObject({
+        flowStep: {
+          safeMessage,
+          safeSignals: [safeSignal],
+          state: "blocked",
+          userAction: { canResume: false },
+        },
+      });
+      expect(mocks.triggerAndObserveFiledReturnDownload).not.toHaveBeenCalled();
+      expect(mocks.gstr1VisibleScopeMismatchResponse).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     ["GSTR-1 PDF", { artifactType: "PDF", returnType: "GSTR-1" }],

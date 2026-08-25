@@ -22,6 +22,10 @@ import {
   ARTIFACT_ACQUISITION_CHECKPOINT_CLEAR_FAILURE_REASONS,
   artifactAcquisitionCheckpointClearFailureSignal,
 } from "../../src/connectors/gst/artifact-acquisition-checkpoint-clear";
+import {
+  FILED_RETURNS_ARTIFACT_PROGRESS_FAILURE_REASONS,
+  filedReturnsArtifactProgressFailureSignal,
+} from "../../src/connectors/gst/filed-returns-artifact-progress-recovery";
 import { scoreFiledReturnDownloadCandidate } from "../../src/connectors/gst/filed-returns-download-candidates";
 import { scoreFiledReturnsSummaryModalDismissalCandidate } from "../../src/connectors/gst/filed-returns-navigation-candidates";
 import { detectSafeSignals } from "../../src/connectors/gst/filed-returns-observer-signals";
@@ -194,6 +198,25 @@ describe("filed-return durable signal contract", () => {
     (reason) => {
       expect(artifactAcquisitionCheckpointClearFailureSignal(reason)).toBe(
         `artifact-acquisition-checkpoint-clear-failed:${reason}`,
+      );
+    },
+  );
+
+  it("retains only the fixed selected-artifact progress failure signals", () => {
+    const signals = FILED_RETURNS_ARTIFACT_PROGRESS_FAILURE_REASONS.map(
+      filedReturnsArtifactProgressFailureSignal,
+    );
+
+    expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);
+    expect(signals.every(isDurableFiledReturnsSignal)).toBe(true);
+    expect(isDurableFiledReturnsSignal("filed-return-artifact-progress-private-value")).toBe(false);
+  });
+
+  it.each(FILED_RETURNS_ARTIFACT_PROGRESS_FAILURE_REASONS)(
+    "emits the %s selected-artifact progress reason in its durable signal",
+    (reason) => {
+      expect(filedReturnsArtifactProgressFailureSignal(reason)).toBe(
+        `filed-return-artifact-progress-${reason}`,
       );
     },
   );

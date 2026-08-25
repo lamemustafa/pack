@@ -6,6 +6,10 @@ import {
   ARTIFACT_ACQUISITION_CHECKPOINT_CLEAR_FAILURE_REASONS,
   artifactAcquisitionCheckpointClearFailureSignal,
 } from "./artifact-acquisition-checkpoint-clear";
+import {
+  FILED_RETURNS_ARTIFACT_PROGRESS_FAILURE_REASONS,
+  filedReturnsArtifactProgressFailureSignal,
+} from "./filed-returns-artifact-progress-recovery";
 import { isSafeDashboardSelectedValue } from "./dashboard-selected-signal-values";
 import { FILED_RETURNS_OBSERVATION_SIGNALS } from "./filed-returns-observer-signals";
 import {
@@ -550,6 +554,7 @@ const ARTIFACT_FAILURE_SIGNALS = new Set([
   ...ARTIFACT_ACQUISITION_CHECKPOINT_CLEAR_FAILURE_REASONS.map(
     artifactAcquisitionCheckpointClearFailureSignal,
   ),
+  ...FILED_RETURNS_ARTIFACT_PROGRESS_FAILURE_REASONS.map(filedReturnsArtifactProgressFailureSignal),
   // Marks a completion rebuilt from the review's own durable marker after the
   // browser session ended between persisting the summary and removing the
   // review. The exact download IDs lived in the cleared session checkpoints, so

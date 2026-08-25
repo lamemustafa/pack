@@ -9,6 +9,7 @@ import {
   normaliseFiledReturnsArtifactType,
   supportsFiledReturnsArtifactType,
 } from "./filed-returns-artifacts";
+import { filedReturnsArtifactProgressFailureReasonFromSignal } from "./filed-returns-artifact-progress-recovery";
 import {
   isFiledReturnsReturnType,
   type FiledReturnsReturnType,
@@ -58,6 +59,9 @@ type DurableMessageKey =
   | "target-checkpoint-clear-storage-read"
   | "target-checkpoint-clear-storage-remove"
   | "target-checkpoint-clear-target"
+  | "target-artifact-progress-malformed-summary"
+  | "target-artifact-progress-storage-read-failed"
+  | "target-artifact-progress-storage-write-failed"
   | "target-completion-pending-summary"
   | "target-cleanup-blocked"
   | "target-downloaded"
@@ -277,6 +281,18 @@ function messageKeyForTarget(
   signals: readonly string[],
 ): DurableMessageKey {
   if (signals.includes("filed-return-durable-status-rejected")) return "durable-status-rejected";
+  const artifactProgressReason = signals
+    .map(filedReturnsArtifactProgressFailureReasonFromSignal)
+    .find((reason) => reason !== null);
+  if (artifactProgressReason === "malformed-summary") {
+    return "target-artifact-progress-malformed-summary";
+  }
+  if (artifactProgressReason === "storage-read-failed") {
+    return "target-artifact-progress-storage-read-failed";
+  }
+  if (artifactProgressReason === "storage-write-failed") {
+    return "target-artifact-progress-storage-write-failed";
+  }
   const checkpointClearReason = signals
     .map((signal) => /^artifact-acquisition-checkpoint-clear-failed:(.+)$/.exec(signal)?.[1])
     .find((reason): reason is string => Boolean(reason));
@@ -449,6 +465,12 @@ function renderDurableMessage(key: DurableMessageKey, scope: FiledReturnsDownloa
       "Pack verified retained artifact recovery but could not remove it, so it will not start another portal action.",
     "target-checkpoint-clear-target":
       "The retained browser download no longer matches its exact artifact target, so Pack did not clear or retry it.",
+    "target-artifact-progress-malformed-summary":
+      "Pack found retained selected-file progress it could not validate, so it did not inspect or act on the GST Portal tab.",
+    "target-artifact-progress-storage-read-failed":
+      "Pack could not read retained selected-file progress, so it did not inspect or act on the GST Portal tab.",
+    "target-artifact-progress-storage-write-failed":
+      "Pack could not verify retained selected-file progress in session storage, so it did not inspect or act on the GST Portal tab.",
     "target-completion-pending-summary":
       "Pack proved this browser download and is safely finishing its local recovery record.",
     "target-cleanup-blocked":
