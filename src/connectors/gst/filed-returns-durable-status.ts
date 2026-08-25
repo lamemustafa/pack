@@ -42,6 +42,7 @@ type DurableMessageKey =
   | "complete"
   | "durable-status-rejected"
   | "full-year-active"
+  | "full-year-complete-download-unconfirmed"
   | "full-year-downloaded-cleanup-blocked"
   | "full-year-interrupted"
   | "full-year-needs-action"
@@ -166,15 +167,18 @@ export function canonicalDurableSummaryMessage(
         .join(", ")}.`;
     }
   }
-  const durableMessage =
-    partialMessage ?? renderDurableMessage(messageKeyForSummary(status, signals), scope);
+  const durableMessageKey = messageKeyForSummary(scope, status, signals);
+  const durableMessage = partialMessage ?? renderDurableMessage(durableMessageKey, scope);
   const summaryMessage = filedReturnsSummaryStatusMessage(
     signals,
     summaryLifecycleForDurableSignals(signals),
   );
-  return [durableMessage, summaryMessage, filenameOutcomeMessage(signals)]
-    .filter(Boolean)
-    .join(" ");
+  const filenameMessage =
+    durableMessageKey === "full-year-complete-download-unconfirmed" ||
+    durableMessageKey === "full-year-no-artifacts"
+      ? ""
+      : filenameOutcomeMessage(signals);
+  return [durableMessage, summaryMessage, filenameMessage].filter(Boolean).join(" ");
 }
 
 function canonicalDurableTargetMessage(
@@ -446,6 +450,7 @@ function visibleReturnTypeMismatch(
 }
 
 function messageKeyForSummary(
+  scope: FiledReturnsDownloadScope,
   status: FiledReturnsFlowSummary["status"],
   signals: readonly string[],
 ): DurableMessageKey {
@@ -466,8 +471,20 @@ function messageKeyForSummary(
   if (blockingRecoveryKey) return blockingRecoveryKey;
   if (signals.includes("filed-return-positively-not-filed")) return "not-filed";
   if (signals.includes("filed-returns-target-review-required")) return "target-review";
-  if (status === "complete" && signals.includes("full-fiscal-year-no-zip-artifacts")) {
+  if (
+    scope.period === FULL_FISCAL_YEAR_PERIOD &&
+    status === "complete" &&
+    signals.includes("full-fiscal-year-no-zip-artifacts")
+  ) {
     return "full-year-no-artifacts";
+  }
+  if (
+    scope.period === FULL_FISCAL_YEAR_PERIOD &&
+    status === "complete" &&
+    signals.includes("full-fiscal-year-complete") &&
+    !signals.includes("full-fiscal-year-zip-downloaded")
+  ) {
+    return "full-year-complete-download-unconfirmed";
   }
   if (status === "complete") return "complete";
   if (status === "partial") return "partial";
@@ -498,6 +515,8 @@ function renderDurableMessage(key: DurableMessageKey, scope: FiledReturnsDownloa
     "durable-status-rejected":
       "Pack rejected non-canonical recovery metadata and will not continue automatically.",
     "full-year-active": `The saved FY ${scope.financialYear} run is still active.`,
+    "full-year-complete-download-unconfirmed":
+      "Pack completed the saved fiscal-year run, but could not confirm a final ZIP download. Check browser Downloads before relying on a file.",
     "full-year-downloaded-cleanup-blocked":
       "Pack confirmed the final fiscal-year ZIP download; only retained local staging remains to be cleared.",
     "full-year-interrupted": `Pack stopped before it could confirm ${period}. Check Downloads before retrying.`,

@@ -844,6 +844,15 @@ describe("filed-return session write boundary", () => {
     await expect(
       persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, completeFullFiscalYearSummary()),
     ).resolves.not.toBeNull();
+    await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+      status: "complete",
+      flowStep: {
+        state: "downloaded",
+        safeMessage:
+          "Pack completed the saved fiscal-year run, but could not confirm a final ZIP download. Check browser Downloads before relying on a file.",
+        safeSignals: ["full-fiscal-year-complete"],
+      },
+    });
 
     for (const summary of [
       completeFullFiscalYearSummary({ currentPeriod: "May" }),
@@ -854,6 +863,60 @@ describe("filed-return session write boundary", () => {
         persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, summary),
       ).resolves.toBeNull();
     }
+  });
+
+  it("does not let a filename outcome supply missing full-year delivery proof", async () => {
+    const base = completeFullFiscalYearSummary();
+    const summary = completeFullFiscalYearSummary({
+      flowStep: {
+        safeSignals: [...base.flowStep.safeSignals, "zip-download-filename-overridden"],
+      },
+    });
+
+    await expect(
+      persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, summary),
+    ).resolves.not.toBeNull();
+    await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+      status: "complete",
+      flowStep: {
+        state: "downloaded",
+        safeMessage:
+          "Pack completed the saved fiscal-year run, but could not confirm a final ZIP download. Check browser Downloads before relying on a file.",
+        safeSignals: expect.arrayContaining([
+          "full-fiscal-year-complete",
+          "zip-download-filename-overridden",
+        ]),
+      },
+    });
+  });
+
+  it("does not let a full-year signal relabel a completed single-period download", async () => {
+    const base = completeSinglePeriodSummary();
+    const summary = completeSinglePeriodSummary({
+      flowStep: {
+        safeSignals: [
+          ...base.flowStep.safeSignals,
+          "full-fiscal-year-complete",
+          "download-filename-overridden",
+        ],
+      },
+    });
+
+    await expect(
+      persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, summary),
+    ).resolves.not.toBeNull();
+    await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+      status: "complete",
+      flowStep: {
+        state: "downloaded",
+        safeMessage:
+          "Pack completed the local filed-return download for March. Pack completed the download, but the browser saved it under a different name. Check browser Downloads before using the file.",
+        safeSignals: expect.arrayContaining([
+          "full-fiscal-year-complete",
+          "download-filename-overridden",
+        ]),
+      },
+    });
   });
 
   it("reopens a confirmed fiscal-year ZIP as complete instead of download-unconfirmed", async () => {
@@ -913,6 +976,40 @@ describe("filed-return session write boundary", () => {
       },
     });
   });
+
+  it.each(["zip-download-filename-overridden", "zip-download-filename-unavailable"])(
+    "does not let no-artifacts plus %s claim a download",
+    async (filenameSignal) => {
+      const base = completeFullFiscalYearSummary();
+      const summary = completeFullFiscalYearSummary({
+        flowStep: {
+          safeSignals: [
+            ...base.flowStep.safeSignals,
+            "full-fiscal-year-no-zip-artifacts",
+            "full-fiscal-year-opfs-cleared",
+            filenameSignal,
+          ],
+        },
+      });
+
+      await expect(
+        persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, summary),
+      ).resolves.not.toBeNull();
+      await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+        status: "complete",
+        flowStep: {
+          state: "downloaded",
+          safeMessage:
+            "Pack completed the saved fiscal-year run. No ZIP was created because no filed-return artifacts were available for export.",
+          safeSignals: expect.arrayContaining([
+            "full-fiscal-year-complete",
+            "full-fiscal-year-no-zip-artifacts",
+            filenameSignal,
+          ]),
+        },
+      });
+    },
+  );
 
   it.each([
     ["portal-system-error", FILED_RETURNS_PORTAL_SYSTEM_ERROR_MESSAGE],
