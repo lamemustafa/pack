@@ -4,7 +4,18 @@ import { dirname, extname, join, relative, resolve, sep } from "node:path";
 import ts from "typescript";
 import { afterEach, describe, expect, it } from "vitest";
 
-const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".css"]);
+const SOURCE_EXTENSIONS = new Set([
+  ".ts",
+  ".tsx",
+  ".mts",
+  ".cts",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".cjs",
+  ".css",
+]);
+const WXT_ENTRYPOINT_EXTENSION_PATTERN = "(?:js|jsx|ts|tsx)";
 type UnreferencedSourceModuleAllowlistEntry = {
   path: string;
   reason: string;
@@ -52,6 +63,10 @@ async function filesIn(directory: string, include: (name: string) => boolean): P
 
 async function sourceFilesIn(directory: string): Promise<string[]> {
   return filesIn(directory, (name) => SOURCE_EXTENSIONS.has(extname(name)));
+}
+
+function isDeclarationFile(filePath: string): boolean {
+  return /\.d\.(?:ts|mts|cts)$/.test(filePath);
 }
 
 function typescriptModuleSpecifiers(sourceFile: ts.SourceFile): string[] {
@@ -197,7 +212,9 @@ function unresolvedSourceSpecifierError(
 
 function isWxtEntrypoint(sourceDirectory: string, filePath: string): boolean {
   const path = projectPath(sourceDirectory, filePath);
-  return /^entrypoints\/(?:background|content|[^/]+\.content)\.(?:ts|tsx)$/.test(path);
+  return new RegExp(
+    `^entrypoints/(?:background|content|[^/]+\\.content)\\.${WXT_ENTRYPOINT_EXTENSION_PATTERN}$`,
+  ).test(path);
 }
 
 function htmlAttributeValue(attributes: string, name: string): string | undefined {
@@ -370,7 +387,7 @@ async function assertNoUnreferencedSourceModules(
   const sourceDirectory = wxtSourceDirectory(projectRoot, wxtConfigText);
   assertScannableWxtSourceDirectory(projectRoot, sourceDirectory);
   const sourceFiles = await sourceFilesIn(sourceDirectory);
-  const reportableSourceFiles = sourceFiles.filter((filePath) => !filePath.endsWith(".d.ts"));
+  const reportableSourceFiles = sourceFiles.filter((filePath) => !isDeclarationFile(filePath));
   const filesByPath = new Map(sourceFiles.map((filePath) => [canonicalPath(filePath), filePath]));
   const dependenciesByPath = new Map(
     sourceFiles.map((filePath) => [canonicalPath(filePath), new Set<string>()]),
@@ -673,6 +690,92 @@ describe("unreferenced source module guard", () => {
       'import type { Value } from "../core/types";\nexport type { Value };\n',
     );
     await writeProjectFile(projectRoot, "src/core/types.d.ts", "export type Value = string;\n");
+
+    await expect(assertNoUnreferencedSourceModules(projectRoot)).resolves.toBeUndefined();
+  });
+
+  it("does not report ECMAScript declaration files", async () => {
+    const projectRoot = await createTemporaryProject();
+    await writeProjectFile(projectRoot, "src/entrypoints/background.ts", "export {};\n");
+    await writeProjectFile(projectRoot, "src/core/globals.d.mts", "export {};\n");
+    await writeProjectFile(projectRoot, "src/core/globals.d.cts", "export {};\n");
+
+    await expect(assertNoUnreferencedSourceModules(projectRoot)).resolves.toBeUndefined();
+  });
+
+  it("fails when an orphaned JavaScript module is in the source tree", async () => {
+    const projectRoot = await createTemporaryProject();
+    await writeProjectFile(projectRoot, "src/entrypoints/background.ts", "export {};\n");
+    await writeProjectFile(projectRoot, "src/core/zz-orphan.js", "export {};\n");
+    await expect(readFile(join(projectRoot, "src/core/zz-orphan.js"), "utf8")).resolves.toBe(
+      "export {};\n",
+    );
+
+    await expect(assertNoUnreferencedSourceModules(projectRoot)).rejects.toThrow(
+      /^Unreferenced source modules:\n- src\/core\/zz-orphan\.js$/,
+    );
+  });
+
+  it("fails when an orphaned JSX module is in the source tree", async () => {
+    const projectRoot = await createTemporaryProject();
+    await writeProjectFile(projectRoot, "src/entrypoints/background.ts", "export {};\n");
+    await writeProjectFile(
+      projectRoot,
+      "src/entrypoints/popup/zz-orphan.jsx",
+      "export const orphan = null;\n",
+    );
+    await expect(
+      readFile(join(projectRoot, "src/entrypoints/popup/zz-orphan.jsx"), "utf8"),
+    ).resolves.toContain("orphan");
+
+    await expect(assertNoUnreferencedSourceModules(projectRoot)).rejects.toThrow(
+      /^Unreferenced source modules:\n- src\/entrypoints\/popup\/zz-orphan\.jsx$/,
+    );
+  });
+
+  it.each(["mjs", "cjs", "mts", "cts"])(
+    "fails when an orphaned %s module is in the source tree",
+    async (extension) => {
+      const projectRoot = await createTemporaryProject();
+      const orphanPath = `src/core/zz-orphan.${extension}`;
+      await writeProjectFile(projectRoot, "src/entrypoints/background.ts", "export {};\n");
+      await writeProjectFile(projectRoot, orphanPath, "export {};\n");
+
+      await expect(assertNoUnreferencedSourceModules(projectRoot)).rejects.toThrow(
+        new RegExp(`^Unreferenced source modules:\\n- ${orphanPath.replace(".", "\\.")}$`),
+      );
+    },
+  );
+
+  it("follows a JavaScript helper imported by a reachable TypeScript module", async () => {
+    const projectRoot = await createTemporaryProject();
+    await writeProjectFile(
+      projectRoot,
+      "src/entrypoints/background.ts",
+      'import "../core/live.js";\n',
+    );
+    await writeProjectFile(projectRoot, "src/core/live.js", "export const live = true;\n");
+    await expect(readFile(join(projectRoot, "src/core/live.js"), "utf8")).resolves.toContain(
+      "live",
+    );
+
+    await expect(assertNoUnreferencedSourceModules(projectRoot)).resolves.toBeUndefined();
+  });
+
+  it("treats a WXT JavaScript entrypoint as a root", async () => {
+    const projectRoot = await createTemporaryProject();
+    await writeProjectFile(projectRoot, "src/entrypoints/background.js", "export {};\n");
+
+    await expect(assertNoUnreferencedSourceModules(projectRoot)).resolves.toBeUndefined();
+  });
+
+  it("does not report JavaScript tooling outside the configured source directory", async () => {
+    const projectRoot = await createTemporaryProject();
+    await writeProjectFile(projectRoot, "src/entrypoints/background.ts", "export {};\n");
+    await writeProjectFile(projectRoot, "scripts/check.mjs", "export {};\n");
+    await expect(readFile(join(projectRoot, "scripts/check.mjs"), "utf8")).resolves.toBe(
+      "export {};\n",
+    );
 
     await expect(assertNoUnreferencedSourceModules(projectRoot)).resolves.toBeUndefined();
   });
