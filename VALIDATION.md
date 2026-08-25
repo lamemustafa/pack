@@ -426,3 +426,42 @@ reviewed persistence and failure contracts.
 
 - This evidence is source/synthetic only. It does not prove live portal cause, authenticated portal
   behavior, assistive-technology announcements, browser zoom, translated copy or release readiness.
+
+### Cycle 4 — keyboard and accessibility-tree qualification
+
+- Without-fix proof: after Continue, the second step reused the first step's select node. The new
+  test expected a newly mounted field and failed on DOM identity; no fresh select focus event was
+  available for the changed field name/hint.
+- Fix: `key={step.key}` remounts the native select for each canonical guided step. The existing
+  focus effect then moves focus to the new control. Permanent tests bind all four steps to exact
+  progress status, label, hint and described-by relationships.
+- Chromium at 320 × 900 exposed this exact accessibility-tree sequence:
+
+  | Step | Status      | Focused combobox | Accessible description                                 |
+  | ---: | ----------- | ---------------- | ------------------------------------------------------ |
+  |    1 | Step 1 of 4 | Return           | Choose one supported return for this run.              |
+  |    2 | Step 2 of 4 | Financial year   | Pack keeps each run within one financial year.         |
+  |    3 | Step 3 of 4 | Filed period     | Choose one month or the full fiscal year.              |
+  |    4 | Step 4 of 4 | File             | Choose one artifact selection offered for this return. |
+
+- Keyboard path: Tab/Enter advanced, Back returned and refocused Step 2, Space expanded the
+  catalogue, Shift+Tab returned to the final action and Enter submitted the exact visible synthetic
+  scope. Both select and action focus rings computed to 2px solid with 2px offset. The open
+  disclosure remained 320px wide with zero clipping, 9 rows, 6 unsupported decisions and 0 row
+  controls.
+- Native-select limitation: ArrowDown reached the enabled focused select and was not prevented by
+  Pack, but Playwright on macOS could not observe selection inside the OS-owned popup. This is not
+  claimed as verified option movement. No custom listbox or keyboard handler was introduced.
+- Impeccable deterministic detector returned `[]`. This was a temporary local harness; all harness,
+  browser snapshot and console files were deleted before commit.
+- Complete gate: build and package verification passed at 998.40 kB; TypeScript, zero-warning
+  ESLint and repo-wide Prettier passed. Full Vitest exact final three lines:
+
+  ```text
+       Tests  2130 passed (2130)
+    Start at  02:14:04
+    Duration  153.06s (transform 2.61s, setup 0ms, import 11.78s, tests 126.20s, environment 7ms)
+  ```
+
+- Evidence level: real Chromium DOM, keyboard and accessibility-tree evidence for app-owned
+  behavior; not an authenticated GST run and not a VoiceOver, NVDA or OS-native select transcript.

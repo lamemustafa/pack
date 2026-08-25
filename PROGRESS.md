@@ -127,3 +127,48 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
 - Learned / plan change: a context may be safe to observe without being safe to act on. The next
   accessibility cycle must qualify keyboard and screen-reader semantics on the actual panel and
   preserve this reporting/action separation; source ARIA alone is not assistive-technology proof.
+
+## Cycle 4 — remount and announce each guided field
+
+- Window: 2026-08-26 02:01–02:16 IST.
+- Picked: keyboard and screen-reader sanity for the actual four-step guide at 320px.
+- Measured before: every step reused one `<select>` node. Advancing changed its visible label and
+  hint while the node remained focused; calling `.focus()` on that already-focused node produced no
+  new focus event. The new boundary test failed because the second field was the same DOM element as
+  the first.
+- Changed: keyed the native select by the canonical step key. Each step now mounts a new field and
+  the existing effect focuses it, producing a fresh focus event. Added permanent assertions for all
+  four step announcements, labels, described-by hints, atomic polite status and focused field.
+- Real Chromium keyboard/AX evidence at 320 × 900, using production component code and styles in a
+  temporary local harness:
+  - Tab and Enter advanced through all four steps; Back returned from Step 3 to Step 2 and focused a
+    newly mounted Financial year field; six select-focus events were observed across forward/back
+    navigation.
+  - Chromium's accessibility tree exposed `Step 1 of 4` through `Step 4 of 4` as status nodes. The
+    focused comboboxes were named Return, Financial year, Filed period and File, with their exact
+    visible hints as accessible descriptions.
+  - Select and final-action focus rings computed to 2px solid with a 2px offset.
+  - Space opened Catalogue & limits; it exposed 9 list items, 6 explicit unsupported decisions and
+    0 row controls, with 320px document width and no clipped descendant.
+  - Shift+Tab returned to the final action and Enter submitted exactly FY 2025-26, full fiscal year,
+    GSTR-3B, PDF. The synthetic live status confirmed receipt.
+- Arrow-key boundary: Playwright delivered ArrowDown to the enabled focused native select with
+  `defaultPrevented: false`, but macOS owns the native select popup and Playwright could not observe
+  an option change inside that OS surface. Arrow option movement therefore remains unqualified; no
+  custom keyboard interception was added and the control remains a native select.
+- Impeccable detector: `[]`. Focused panel suite: 4 files and 41 tests before the final semantic
+  assertion; the final interaction file passed all 8 tests.
+- Complete gate: build passed at 998.40 kB; package verification passed; TypeScript passed; ESLint
+  passed with zero warnings; Prettier passed repo-wide; full Vitest passed 125 files and 2,130 tests.
+  The known missing TypeScript source-map warning remained non-failing. Exact Vitest footer:
+
+  ```text
+       Tests  2130 passed (2130)
+    Start at  02:14:04
+    Duration  153.06s (transform 2.61s, setup 0ms, import 11.78s, tests 126.20s, environment 7ms)
+  ```
+
+- Checkpoint: `5f96e16 fix(panel): remount fields between guided steps`.
+- Learned / plan change: browser AX evidence can qualify names, descriptions, roles and focus, but
+  it is not a VoiceOver/NVDA announcement transcript. The next cycle moves to duplicate-fact and
+  density review while retaining native-select Arrow movement as an explicit external uncertainty.
