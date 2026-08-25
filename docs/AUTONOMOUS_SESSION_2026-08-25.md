@@ -183,21 +183,31 @@ expect_blocked_review 230 "$validation_head"
 
 assert_pr_state() {
   pr=$1
-  expected=$(printf '%s\t%s\t%s' "$2" "$3" "$4")
-  observed=$(gh pr view "$pr" --repo lamemustafa/pack --json state,mergeable,mergeStateStatus --jq '[.state,.mergeable,.mergeStateStatus] | @tsv')
+  expected=$(printf '%s\t%s\t%s\t%s' "$2" "$3" "$4" "$5")
+  observed=$(gh pr view "$pr" --repo lamemustafa/pack --json headRefOid,state,mergeable,mergeStateStatus --jq '[.headRefOid,.state,.mergeable,.mergeStateStatus] | @tsv')
   test "$observed" = "$expected"
 }
 
-assert_pr_state 217 OPEN MERGEABLE CLEAN
-assert_pr_state 223 OPEN MERGEABLE CLEAN
-assert_pr_state 224 OPEN MERGEABLE BLOCKED
-assert_pr_state 228 OPEN MERGEABLE CLEAN
-assert_pr_state 229 OPEN MERGEABLE BLOCKED
-assert_pr_state 230 OPEN MERGEABLE BLOCKED
+assert_pr_state 217 bcf9de63959e8bc704b825f102976b6908a460ec OPEN MERGEABLE CLEAN
+assert_pr_state 223 ec1ee585884a49fada954d7a13d112374eb1fa68 OPEN MERGEABLE CLEAN
+assert_pr_state 224 f06eee4d6aa521750b86214a907b0fdd48d52a98 OPEN MERGEABLE BLOCKED
+assert_pr_state 228 b84eb09ee14d08e54c10b67d5756455c08cd38d5 OPEN MERGEABLE CLEAN
+assert_pr_state 229 a654ee56ee7fe68fc0d18f808474e2430569b738 OPEN MERGEABLE BLOCKED
+assert_pr_state 230 "$validation_head" OPEN MERGEABLE BLOCKED
 
-for pr in 217 223 224 228 229 230; do
+verify_pr_checks() {
+  pr=$1
+  expected_head=$2
   gh pr checks "$pr" --repo lamemustafa/pack --required
-done
+  test "$(gh pr view "$pr" --repo lamemustafa/pack --json headRefOid --jq .headRefOid)" = "$expected_head"
+}
+
+verify_pr_checks 217 bcf9de63959e8bc704b825f102976b6908a460ec
+verify_pr_checks 223 ec1ee585884a49fada954d7a13d112374eb1fa68
+verify_pr_checks 224 f06eee4d6aa521750b86214a907b0fdd48d52a98
+verify_pr_checks 228 b84eb09ee14d08e54c10b67d5756455c08cd38d5
+verify_pr_checks 229 a654ee56ee7fe68fc0d18f808474e2430569b738
+verify_pr_checks 230 "$validation_head"
 ```
 
 Expected state at document creation: #217 strict gate exits 0; #223/#224/#228/#229/#230 strict gates exit 1 for missing formal exact-head review; all required GitHub checks already present are green; no pull request is merged by this script.
