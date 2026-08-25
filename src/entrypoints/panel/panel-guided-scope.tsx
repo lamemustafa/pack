@@ -73,6 +73,7 @@ export function PanelGuidedScope({
       <label className="panel-guide-select" htmlFor="panel-guide-field">
         <span>{step.label}</span>
         <select
+          key={step.key}
           ref={selectRef}
           id="panel-guide-field"
           value={step.value}

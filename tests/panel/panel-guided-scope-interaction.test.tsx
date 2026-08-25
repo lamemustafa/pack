@@ -118,6 +118,51 @@ describe("panel guided scope interaction", () => {
     }
   });
 
+  it("moves focus to a newly mounted field when the announced step changes", async () => {
+    await mount();
+    const firstField = container.querySelector(".panel-guide select");
+    let focusEvents = 0;
+    container.addEventListener("focusin", () => {
+      focusEvents += 1;
+    });
+
+    await clickButton("Continue");
+
+    const secondField = container.querySelector(".panel-guide select");
+    expect(secondField).not.toBe(firstField);
+    expect(dom.window.document.activeElement).toBe(secondField);
+    expect(focusEvents).toBe(1);
+  });
+
+  it("binds every focused field to the announced step label and hint", async () => {
+    const expectedSteps = [
+      ["Return", "Choose one supported return for this run."],
+      ["Financial year", "Pack keeps each run within one financial year."],
+      ["Filed period", "Choose one month or the full fiscal year."],
+      ["File", "Choose one artifact selection offered for this return."],
+    ] as const;
+    await mount();
+
+    for (const [index, [label, hint]] of expectedSteps.entries()) {
+      const progress = container.querySelector(".panel-guide-progress");
+      const field = container.querySelector(".panel-guide select") as HTMLSelectElement | null;
+      const fieldLabel = container.querySelector(".panel-guide-select");
+      const hintElement = container.querySelector("#panel-guide-hint");
+
+      expect(progress?.getAttribute("role")).toBe("status");
+      expect(progress?.getAttribute("aria-live")).toBe("polite");
+      expect(progress?.getAttribute("aria-atomic")).toBe("true");
+      expect(progress?.getAttribute("aria-label")).toBe(`Step ${index + 1} of 4`);
+      expect(fieldLabel?.textContent).toContain(label);
+      expect(fieldLabel?.getAttribute("for")).toBe(field?.id);
+      expect(field?.getAttribute("aria-describedby")).toBe(hintElement?.id);
+      expect(hintElement?.textContent).toBe(hint);
+      expect(dom.window.document.activeElement).toBe(field);
+
+      if (index < expectedSteps.length - 1) await clickButton("Continue");
+    }
+  });
+
   it("returns to the preceding field without creating another scope", async () => {
     await mount();
     await clickButton("Continue");
