@@ -170,7 +170,7 @@ expect_blocked_review() {
   printf '%s\n' "$review_output"
   test "$actual" -eq 1
   printf '%s\n' "$review_output" | grep -F "No review was found for current head $2."
-  if printf '%s\n' "$review_output" | grep -Eq 'Unresolved review threads|Requested-changes reviews|PR body workflow/template issues|PR head changed while evaluating'; then
+  if printf '%s\n' "$review_output" | grep -Eq 'Unresolved review threads|Unresolved PR-level review findings|Requested-changes reviews|PR body workflow/template issues|PR head changed while evaluating'; then
     return 1
   fi
 }
