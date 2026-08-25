@@ -14,6 +14,10 @@ import {
   SINGLE_PERIOD_CLEANUP_CHECKPOINT_FAILURE_STAGES,
   singlePeriodCleanupCheckpointFailureSignal,
 } from "../../src/connectors/gst/single-period-cleanup-checkpoint";
+import {
+  FILED_RETURNS_TARGET_REVIEW_CLEAR_FAILURE_STAGES,
+  filedReturnsTargetReviewClearFailureSignal,
+} from "../../src/connectors/gst/filed-returns-target-review-clear";
 import { scoreFiledReturnDownloadCandidate } from "../../src/connectors/gst/filed-returns-download-candidates";
 import { scoreFiledReturnsSummaryModalDismissalCandidate } from "../../src/connectors/gst/filed-returns-navigation-candidates";
 import { detectSafeSignals } from "../../src/connectors/gst/filed-returns-observer-signals";
@@ -267,6 +271,17 @@ describe("filed-return durable signal contract", () => {
     }
     expect(
       isDurableFiledReturnsSignal("single-period-cleanup-checkpoint-failed:private-value"),
+    ).toBe(false);
+  });
+
+  it("accepts only the closed target-review clear failure stages", () => {
+    for (const stage of FILED_RETURNS_TARGET_REVIEW_CLEAR_FAILURE_STAGES) {
+      expect(isDurableFiledReturnsSignal(filedReturnsTargetReviewClearFailureSignal(stage))).toBe(
+        true,
+      );
+    }
+    expect(
+      isDurableFiledReturnsSignal("filed-returns-target-review-clear-failed:private-value"),
     ).toBe(false);
   });
 

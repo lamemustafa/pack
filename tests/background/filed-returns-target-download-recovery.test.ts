@@ -838,7 +838,11 @@ describe("filed returns target download recovery", () => {
     const first = await reconcileFiledReturnsTargetDownload(review, deps);
 
     expect(mocks.state.local[REVIEW_KEY]).toMatchObject({
-      safeSignals: expect.arrayContaining(["filed-returns-target-review-clear-failed"]),
+      safeSignals: expect.arrayContaining([
+        "filed-returns-target-review-clear-failed",
+        "filed-returns-target-review-clear-failed:storage-remove-failed",
+        "single-period-cleanup-checkpoint-failed:target-review-clear-failed",
+      ]),
     });
     expect(first).toMatchObject({
       state: "handled",
