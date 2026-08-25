@@ -857,3 +857,46 @@ retrying.` The focused test failed 1 of 115 session-boundary cases before the fi
 
 - Evidence level: static review and synthetic persistence/reopen gates only. No authenticated GST
   run, portal capture, sensitive input observation, permission change or release-readiness claim.
+
+### Cycle 14 — full-year key scope binding and portal-cause independence
+
+- Before: `messageKeyForSummary` received canonical scope but most full-year signal branches still
+  trusted their token alone. A valid single-period durable summary with a foreign full-year token
+  could therefore reopen as a saved fiscal-year run, interrupted fiscal-year run, final fiscal-year
+  ZIP review or final-ZIP-delivered cleanup.
+- Scope contract: derive `isFullFiscalYear` from canonical scope once and require it for every
+  full-year-only summary key. The blocking-recovery classifier receives that scope fact: generic
+  cleanup stays active for any scope, while final-fiscal-year delivery and ZIP-review claims require
+  full-year scope.
+- Portal-cause contract: fixed system-error, scheduled-downtime and access-denied/expired-session
+  copy is scope-neutral. Blocked/partial summaries reconstruct it after cleanup, positive-not-filed
+  and target-review checks. Full-year `run-needs-action` retains the same stronger mixed precedence.
+- Failure evidence:
+  - Cross-scope table: 4 failures for resume, interrupted, active and unconfirmed final ZIP; each
+    expected generic March recovery and received full-year-specific copy.
+  - Cleanup vector: 1 failure; expected generic target cleanup, received confirmed final-fiscal-year
+    ZIP cleanup because a foreign delivery token was present.
+  - Independent portal table: 3 failures; each exact portal signal reopened with generic March
+    recovery instead of its fixed cause.
+- Exact line counts:
+
+  | File                                                      | Before | After |
+  | --------------------------------------------------------- | -----: | ----: |
+  | `gst/filed-returns-durable-status.ts`                     |    625 |   642 |
+  | `background/filed-returns-session-write-boundary.test.ts` |  1,378 | 1,438 |
+
+- Review disposition: privacy CLEAN/PASS and security PASS on exact source head
+  `880a6b73ac9da025bca135847039ad67fc019823`. No fixed sentence interpolates durable data. No
+  status, state, user action, persistence shape, completion evidence, retry authority, downloads
+  API, background, permission, host or CSP behavior changed.
+- Complete gate: build and package verification passed at 1.01 MB; TypeScript, zero-warning ESLint
+  and repo-wide Prettier passed. Full Vitest exact final three lines:
+
+  ```text
+       Tests  2236 passed (2236)
+    Start at  04:48:54
+    Duration  156.21s (transform 2.87s, setup 0ms, import 13.90s, tests 126.55s, environment 8ms)
+  ```
+
+- Evidence level: static review and synthetic persistence/reopen gates only. No authenticated GST
+  run, portal capture, sensitive input observation, permission change or release-readiness claim.

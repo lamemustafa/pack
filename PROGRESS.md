@@ -588,3 +588,49 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
 - Learned / plan change: signal allowlisting is not scope binding, and later diagnostic fragments
   cannot be allowed to supply evidence the base status lacks. The next cycle audits other
   full-year-only summary keys for cross-scope canonical injection.
+
+## Cycle 14 — scope all full-year canonical status copy
+
+- Window: 2026-08-26 04:46–04:53 IST.
+- Picked: follow Cycle 13's scope-binding finding through the remaining full-year-only summary keys.
+  Durable parsing allowlists each signal but does not reject every cross-scope combination, so a
+  single-period summary could carry a foreign full-year token without becoming malformed.
+- Measured before: all five selected cross-scope rows failed. Resume confirmation, interrupted run,
+  active run and final-ZIP review each replaced March recovery copy with full-year-specific copy;
+  a foreign `full-fiscal-year-zip-downloaded` token changed ordinary single-period cleanup into
+  confirmed final-fiscal-year-ZIP cleanup.
+- Changed: canonical scope is derived once. Resume, interrupted, run-needs-action, active,
+  no-artifacts, legacy delivery ambiguity, final-ZIP review and final-ZIP-delivered cleanup now use
+  their full-year key only when the canonical period is `FULL_FISCAL_YEAR`. Scope-neutral cleanup
+  continues to classify single-period staging safely.
+- Dependency removed: summary-level portal-cause copy previously lived only inside the
+  full-year-run-needs-action branch. Portal system error, scheduled downtime and
+  access-denied/expired-session are now reconstructed independently for any blocked/partial
+  summary, after cleanup, not-filed and target-review precedence.
+- Discrimination evidence:
+  - Before scope binding, 5 selected rows failed with full-year resume/interrupted/active/ZIP-review
+    or ZIP-delivered-cleanup copy replacing the expected single-period sentence.
+  - Before independent portal projection, 3 selected single-period rows retained their exact portal
+    signal but received generic March recovery copy instead of the fixed cause.
+- Production line accounting: durable status 625→642; session persistence/reopen tests
+  1,378→1,438.
+- Review: privacy CLEAN/PASS and security PASS, both exact-commit bound to
+  `880a6b73ac9da025bca135847039ad67fc019823`. Reviewers confirmed canonical-scope authority,
+  fail-closed cleanup/not-filed/target-review precedence and no sensitive data, storage, runtime,
+  download, manifest, permission, host, CSP or dependency drift.
+- Complete gate: build passed at 1.01 MB; package verification passed; TypeScript passed; ESLint
+  passed with zero warnings; Prettier passed repo-wide; full Vitest passed 125 files and 2,236
+  tests. The known missing TypeScript source-map warning remained non-failing. Exact Vitest footer:
+
+  ```text
+   Test Files  125 passed (125)
+        Tests  2236 passed (2236)
+     Start at  04:48:54
+     Duration  156.21s (transform 2.87s, setup 0ms, import 13.90s, tests 126.55s, environment 8ms)
+  ```
+
+- Checkpoint: `880a6b7 fix(recovery): scope full-year status copy`.
+- Learned / plan change: canonical signal vocabularies still need scope-aware consumers; validation
+  cannot enumerate every individually valid but cross-domain combination. The next cycle audits
+  target-level status rendering for the inverse problem: scope-neutral reasons hidden behind an
+  overly specific target status.
