@@ -919,6 +919,66 @@ describe("filed-return session write boundary", () => {
     });
   });
 
+  it.each([
+    "full-fiscal-year-resume-confirmation-required",
+    "full-fiscal-year-run-interrupted",
+    "full-fiscal-year-run-active",
+    "full-fiscal-year-zip-download-unconfirmed",
+  ])("does not let cross-scope %s relabel a blocked single-period summary", async (signal) => {
+    const summary = singlePeriodSummary({ safeSignals: [signal] });
+
+    await expect(
+      persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, summary),
+    ).resolves.not.toBeNull();
+    await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+      status: "blocked",
+      flowStep: {
+        state: "blocked",
+        safeMessage: "Pack needs an explicit recovery action before continuing March.",
+        safeSignals: [signal],
+      },
+    });
+  });
+
+  it("does not let cross-scope ZIP delivery relabel single-period cleanup", async () => {
+    const summary = singlePeriodSummary({
+      safeSignals: ["single-period-opfs-clear-failed", "full-fiscal-year-zip-downloaded"],
+    });
+
+    await expect(
+      persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, summary),
+    ).resolves.not.toBeNull();
+    await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+      status: "blocked",
+      flowStep: {
+        state: "blocked",
+        safeMessage:
+          "Pack cannot complete this review while temporary selected-file staging remains uncleared.",
+        safeSignals: ["single-period-opfs-clear-failed", "full-fiscal-year-zip-downloaded"],
+      },
+    });
+  });
+
+  it.each([
+    ["portal-system-error", FILED_RETURNS_PORTAL_SYSTEM_ERROR_MESSAGE],
+    ["portal-scheduled-downtime", FILED_RETURNS_PORTAL_SCHEDULED_DOWNTIME_MESSAGE],
+    ["portal-blocked-or-session-expired", FILED_RETURNS_PORTAL_BLOCKED_OR_SESSION_EXPIRED_MESSAGE],
+  ])("reopens a single-period %s with its fixed portal cause", async (signal, safeMessage) => {
+    const summary = singlePeriodSummary({ safeSignals: [signal] });
+
+    await expect(
+      persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, summary),
+    ).resolves.not.toBeNull();
+    await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+      status: "blocked",
+      flowStep: {
+        state: "blocked",
+        safeMessage,
+        safeSignals: [signal],
+      },
+    });
+  });
+
   it("reopens a confirmed fiscal-year ZIP as complete instead of download-unconfirmed", async () => {
     const base = completeFullFiscalYearSummary();
     const summary = completeFullFiscalYearSummary({

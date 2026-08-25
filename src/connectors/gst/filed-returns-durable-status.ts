@@ -454,11 +454,16 @@ function messageKeyForSummary(
   status: FiledReturnsFlowSummary["status"],
   signals: readonly string[],
 ): DurableMessageKey {
+  const isFullFiscalYear = scope.period === FULL_FISCAL_YEAR_PERIOD;
   if (signals.includes("filed-return-durable-status-rejected")) return "durable-status-rejected";
-  if (signals.includes("full-fiscal-year-resume-confirmation-required")) return "full-year-resume";
-  if (signals.includes("full-fiscal-year-run-interrupted")) return "full-year-interrupted";
-  const blockingRecoveryKey = blockingSummaryRecoveryMessageKey(signals);
-  if (signals.includes("full-fiscal-year-run-needs-action")) {
+  if (isFullFiscalYear && signals.includes("full-fiscal-year-resume-confirmation-required")) {
+    return "full-year-resume";
+  }
+  if (isFullFiscalYear && signals.includes("full-fiscal-year-run-interrupted")) {
+    return "full-year-interrupted";
+  }
+  const blockingRecoveryKey = blockingSummaryRecoveryMessageKey(signals, isFullFiscalYear);
+  if (isFullFiscalYear && signals.includes("full-fiscal-year-run-needs-action")) {
     if (blockingRecoveryKey) return blockingRecoveryKey;
     if (signals.includes("filed-returns-target-review-required")) return "target-review";
     if (status === "blocked" || status === "partial") {
@@ -467,19 +472,25 @@ function messageKeyForSummary(
     }
     return "full-year-needs-action";
   }
-  if (signals.includes("full-fiscal-year-run-active")) return "full-year-active";
+  if (isFullFiscalYear && signals.includes("full-fiscal-year-run-active")) {
+    return "full-year-active";
+  }
   if (blockingRecoveryKey) return blockingRecoveryKey;
   if (signals.includes("filed-return-positively-not-filed")) return "not-filed";
   if (signals.includes("filed-returns-target-review-required")) return "target-review";
+  if (status === "blocked" || status === "partial") {
+    const portalAvailabilityKey = portalAvailabilityMessageKey(signals);
+    if (portalAvailabilityKey) return portalAvailabilityKey;
+  }
   if (
-    scope.period === FULL_FISCAL_YEAR_PERIOD &&
+    isFullFiscalYear &&
     status === "complete" &&
     signals.includes("full-fiscal-year-no-zip-artifacts")
   ) {
     return "full-year-no-artifacts";
   }
   if (
-    scope.period === FULL_FISCAL_YEAR_PERIOD &&
+    isFullFiscalYear &&
     status === "complete" &&
     signals.includes("full-fiscal-year-complete") &&
     !signals.includes("full-fiscal-year-zip-downloaded")
@@ -492,16 +503,22 @@ function messageKeyForSummary(
   return "full-year-needs-action";
 }
 
-function blockingSummaryRecoveryMessageKey(signals: readonly string[]): DurableMessageKey | null {
+function blockingSummaryRecoveryMessageKey(
+  signals: readonly string[],
+  isFullFiscalYear: boolean,
+): DurableMessageKey | null {
   if (hasCleanupFailureSignal(signals)) {
-    if (signals.includes("full-fiscal-year-zip-downloaded")) {
+    if (isFullFiscalYear && signals.includes("full-fiscal-year-zip-downloaded")) {
       return "full-year-downloaded-cleanup-blocked";
     }
     return hasConfirmedSinglePeriodZipDownloadEvidence(signals)
       ? "target-downloaded-cleanup-blocked"
       : "target-cleanup-blocked";
   }
-  if (signals.some((signal) => signal.startsWith("full-fiscal-year-zip-download-"))) {
+  if (
+    isFullFiscalYear &&
+    signals.some((signal) => signal.startsWith("full-fiscal-year-zip-download-"))
+  ) {
     return "full-year-zip-review";
   }
   return null;
