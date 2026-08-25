@@ -981,3 +981,47 @@ retrying.` The focused test failed 1 of 115 session-boundary cases before the fi
 
 - Evidence level: static review and synthetic persistence/reopen tests only. No authenticated GST
   run, portal capture, sensitive input observation, permission change or release-readiness claim.
+
+### Cycle 17 — filename classifier reduction and equivalence
+
+- Before: confirmed and unresolved filename helpers independently scanned the same two canonical
+  signal families with the same precedence. The difference was exclusively their returned copy.
+- Reduction: one helper owns the classifier and accepts explicit presentation context. No evidence
+  decision moved into it. Target status, summary suppression and migration truthiness retain their
+  previous call-site decisions; all four message strings are unchanged.
+- Baseline proof: all 19 filename-focused tests passed before the refactor. Four additional ZIP
+  variants pin neutral target-review copy, and two mixed-signal rows pin overridden-name precedence
+  in both presentation contexts. Focused post-refactor coverage passed 198 tests.
+- Discrimination proof: a temporary reversed-precedence mutation failed both mixed-signal rows.
+  The downloaded row received the unavailable-name completion warning instead of the different-name
+  warning; the unresolved row received the unavailable-name caution instead of the explicit
+  ownership disclaimer. Exact restoration passed both.
+- Exact line counts:
+
+  | File                                         | Before | After |
+  | -------------------------------------------- | -----: | ----: |
+  | `gst/filed-returns-durable-status.ts`        |    662 |   645 |
+  | `background/full-fiscal-year-ledger.test.ts` |  1,274 | 1,306 |
+
+- Deletion safety: only a duplicate local helper was removed; no module or import was deleted.
+  The production-import scan included source modules, `wxt.config.ts`, HTML script roots and WXT
+  background/content roots. It reached a fixed point immediately: 177 source modules, zero
+  zero-importer candidates.
+- Review disposition: privacy CLEAN/PASS and security PASS on exact source head
+  `ab82c8a9c09f27e7bca2062f6a0943ff42ca8995`. No sensitive data, storage, target binding,
+  status/state, recovery, completion/retry authority, download API or MV3 behavior changed.
+- Complete gate: build and package verification passed at 1.01 MB; TypeScript, zero-warning ESLint
+  and repo-wide Prettier passed. Full Vitest exact final three lines:
+
+  ```text
+       Tests  2255 passed (2255)
+    Start at  05:21:58
+    Duration  169.84s (transform 3.74s, setup 0ms, import 18.09s, tests 133.72s, environment 9ms)
+  ```
+
+- Evidence level: static equivalence review, source-import scan and synthetic canonical-output
+  tests. No authenticated GST run, portal capture, sensitive input observation, permission change
+  or release-readiness claim.
+- Process limitation: rounds 15–17 were short, fully gated checkpoints, not the requested
+  45–75-minute cadence. Actual times are retained in `PROGRESS.md`; the next audit is deliberately
+  deeper and end-to-end rather than relabelling elapsed time.

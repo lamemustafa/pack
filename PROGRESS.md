@@ -714,3 +714,48 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
 - Learned / plan change: terminal selection completion is not always file delivery. With those
   claims separated, the next cycle consolidates the duplicated filename-family classifier while
   preserving the confirmed/unresolved wording and override precedence exactly.
+
+## Cycle 17 — consolidate filename classification without changing copy
+
+- Window: 2026-08-26 05:17–05:26 IST.
+- Picked: the confirmed and unresolved filename helpers repeated the same overridden/unavailable
+  family checks. Their safety difference belongs in the selected sentence, not in two classifiers
+  that can drift independently.
+- Measured before: all 19 filename-focused cases passed on the pre-refactor source, including four
+  newly covered ZIP-neutral variants and two mixed-signal precedence cases. The production file
+  had 662 lines and two classifiers with the same overridden-first ordering.
+- Changed: one local helper accepts an explicit `download` or `unresolved-target` presentation
+  context. Canonical target status still selects that context; summary non-delivery suppression
+  remains outside the helper. All four sentences are byte-for-byte unchanged. Canonical signal
+  arrays now test membership directly instead of nesting two equivalent `some` calls.
+- Integration correction: TypeScript found the migration-only third caller after the initial
+  signature change. It now supplies the same download presentation context explicitly and still
+  consumes only truthiness before its unchanged exact-message comparison.
+- Equivalence/discrimination evidence: focused ledger/session coverage passed 198 tests after
+  reduction. A mutation making unavailable-name win over overridden-name failed both mixed-signal
+  rows: expected the different-name warning, received the unavailable-name warning. Restoring the
+  original precedence passed both.
+- Production line accounting: durable status 662→645 (17 lines removed); full-year ledger tests
+  1,274→1,306. No module was deleted or import edge changed. The source-module scan, including
+  WXT/config and HTML entry roots, found 177 source modules and zero zero-importer candidates.
+- Review: privacy CLEAN/PASS and security PASS on exact source head
+  `ab82c8a9c09f27e7bca2062f6a0943ff42ca8995`. Both confirmed sentence, precedence, target-mode,
+  summary-suppression and historical-migration equivalence; no authority or MV3 drift.
+- Complete gate: build passed at 1.01 MB; package verification passed; TypeScript passed; ESLint
+  passed with zero warnings; Prettier passed repo-wide; full Vitest passed 125 files and 2,255
+  tests. The known missing TypeScript source-map warning remained non-failing. Exact footer:
+
+  ```text
+   Test Files  125 passed (125)
+        Tests  2255 passed (2255)
+     Start at  05:21:58
+     Duration  169.84s (transform 3.74s, setup 0ms, import 18.09s, tests 133.72s, environment 9ms)
+  ```
+
+- Checkpoint: `ab82c8a refactor(recovery): share filename classification`.
+- Learned / plan change: cached-message validation is another consumer of these strings. The next
+  end-to-end audit follows historical ledger copy through validation, storage reads and summary
+  reconstruction, without weakening identity or download-evidence checks.
+- Pacing correction: checkpoint rounds 15–17 were shorter than the requested 45–75-minute cycles.
+  Their real timestamps remain recorded; they are not evidence that the requested cadence was
+  met. The next cycle is a deeper bounded compatibility audit rather than another short copy edit.
