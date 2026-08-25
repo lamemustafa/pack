@@ -299,3 +299,56 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
 - Learned / plan change: diagnostic enrichment itself is a durable-state mutation and must be
   tested at the storage cap across repeated user actions. The next cycle continues the duplicate
   and generic-reason audit on an untouched boundary, starting from readers of durable state.
+
+## Cycle 8 — distinguish unavailable selected-artifact progress from missing
+
+- Window: 2026-08-26 03:07–03:38 IST.
+- Picked: audit an untouched durable-state reader. `readPersistedArtifactProgress` caught every
+  session-summary failure as `null`; the canonical reader also removed malformed progress and
+  returned `null`. The selected-artifact runner interpreted both as no prior artifacts and could
+  continue toward another portal action.
+- Measured before: the new read-failure case rejected with `synthetic session read failure` instead
+  of a blocked response. The malformed-result case progressed until it failed with
+  `TypeError: Cannot read properties of undefined (reading 'ok')`; neither path produced an
+  actionable, durable reason.
+- Changed: one connector-owned vocabulary distinguishes `malformed-summary`,
+  `storage-read-failed` and `storage-write-failed`. The session boundary returns missing only when
+  the key is genuinely absent. All other states become fixed canonical signals/messages with
+  `canResume: false`, and the selected-artifact runner returns before page preparation, visible
+  scope checks or download triggering.
+- Privacy rectification: the first fail-closed version retained the unknown malformed object so it
+  could remain a guard. Privacy review correctly found that unconstrained input could contain
+  sensitive values. The final version atomically overwrites the same key with a parser-validated,
+  canonical blocked `FiledReturnsFlowSummary`; it adds no key, sentinel or field. The raw input is
+  gone, and a second read recognizes the fixed signal and stays blocked. If redaction cannot be
+  written, the caller reports `storage-write-failed` and still performs no portal action.
+- Discrimination evidence:
+  - Collapsing malformed/read/write back to `null` caused three tests to receive `null`; the
+    separate genuinely missing row remained green.
+  - Collapsing the signal builder to the read reason caused five failures: malformed and write
+    boundary rows, two emitted-signal rows and the durable-vector uniqueness check.
+  - Removing the canonical malformed replacement failed the redaction test because the stored
+    value remained `{ unknown: "synthetic noncanonical value" }` instead of a blocked summary.
+- Production line accounting: artifact progress 278→338; selected-artifact runner 928→940; session
+  summary boundary 72→113; new canonical reason vocabulary 0→28; durable signals 717→722; durable
+  status 518→540. The added code makes the prior implicit missing/error distinction explicit and
+  keeps user copy derived from canonical signals.
+- Privacy review: CLEAN after rectification and exact-head bound to
+  `259163a61c138648497a9d3fe47c8b7c671f1ca0`. Security review: PASS on the stable source snapshot;
+  exact-head binding recorded in `VALIDATION.md`. No dependency, manifest, permission, CSP,
+  target-binding or download-completion behavior changed.
+- Complete gate: build passed at 1.00 MB; package verification passed; TypeScript passed; ESLint
+  passed with zero warnings; Prettier passed repo-wide; full Vitest passed 125 files and 2,193
+  tests. The known missing TypeScript source-map warning remained non-failing. Exact Vitest footer:
+
+  ```text
+       Tests  2193 passed (2193)
+    Start at  03:33:10
+    Duration  148.44s (transform 2.43s, setup 0ms, import 10.84s, tests 124.04s, environment 7ms)
+  ```
+
+- Checkpoint: `259163a fix(recovery): block unavailable artifact progress`.
+- Learned / plan change: redaction and durable blocking are not competing goals when unknown input
+  is replaced atomically by an existing canonical record. The next cycle continues the reader
+  audit and asks whether any other malformed durable record is deleted before a safe replacement
+  or explicit user-visible disposition exists.

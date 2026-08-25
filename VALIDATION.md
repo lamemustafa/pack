@@ -599,3 +599,60 @@ reviewed persistence and failure contracts.
 
 - Evidence level: static review and synthetic unit/integration gates only. No authenticated GST
   run, portal capture, persistence widening, user-data observation or release-readiness claim.
+
+### Cycle 8 — selected-artifact progress storage state
+
+- Before: selected-artifact progress read every session-summary exception as `null`; malformed
+  progress was deleted and also returned as `null`. The caller used `null` as “no completed
+  artifacts” and could proceed toward page preparation and a repeated artifact action.
+- Contract: `missing` is now the only retryable absence. `malformed-summary`,
+  `storage-read-failed` and `storage-write-failed` are one closed connector-owned vocabulary. Each
+  becomes an exact allowlisted durable signal and fixed canonical message; arbitrary suffixes are
+  rejected. The caller sets `canResume: false` and returns before page preparation, visible-scope
+  matching or download triggering.
+- Redaction and durability: unknown malformed session input is atomically overwritten at the same
+  key with an existing parser-validated blocked summary containing canonical scope plus fixed
+  signal/message only. No key, sentinel or field was added. A second read recognizes that signal
+  and remains blocked. If overwrite fails, the result is `storage-write-failed`; no action resumes.
+- Observable tests:
+  - genuine missing returns `null` without a remove or write;
+  - malformed input is absent from serialized storage after canonical replacement;
+  - repeated read of the replacement returns `malformed-summary` again;
+  - storage get, valid-summary canonical write and malformed redaction write are separately tested;
+  - all three caller responses have exact signal/copy, `canResume: false`, no mismatch preparation
+    and no download trigger.
+- Discrimination evidence:
+  - The initial read-failure case threw its synthetic exception; malformed state progressed to a
+    later `undefined.ok` error instead of returning the expected blocked response.
+  - A missing/error collapse made three result tests receive `null` while genuine missing passed.
+  - A constant signal builder produced five failures across result propagation, exact emitted
+    strings and durable-vector uniqueness.
+  - Removing redaction made the permanent test receive the raw unknown object where it expected a
+    canonical blocked summary.
+- Exact production line counts:
+
+  | File                                              | Before | After |
+  | ------------------------------------------------- | -----: | ----: |
+  | `background/filed-returns-artifact-progress.ts`   |    278 |   338 |
+  | `background/filed-returns-selected-artifacts.ts`  |    928 |   940 |
+  | `background/filed-returns-session-summary.ts`     |     72 |   113 |
+  | `gst/filed-returns-artifact-progress-recovery.ts` |      0 |    28 |
+  | `gst/filed-returns-durable-signals.ts`            |    717 |   722 |
+  | `gst/filed-returns-durable-status.ts`             |    518 |   540 |
+
+- Review disposition: privacy CLEAN and security PASS on the committed source head
+  `259163a61c138648497a9d3fe47c8b7c671f1ca0`. Privacy confirmed raw unknown input is replaced by
+  existing canonical fields only. Security confirmed serialized mutation, repeated-read guard,
+  exact scope, no-action return and no manifest, permission, CSP, dependency, target-binding or
+  download-evidence drift.
+- Complete gate: build and package verification passed at 1.00 MB; TypeScript, zero-warning ESLint
+  and repo-wide Prettier passed. Full Vitest exact final three lines:
+
+  ```text
+       Tests  2193 passed (2193)
+    Start at  03:33:10
+    Duration  148.44s (transform 2.43s, setup 0ms, import 10.84s, tests 124.04s, environment 7ms)
+  ```
+
+- Evidence level: static review and synthetic storage/unit/integration gates only. No authenticated
+  GST run, portal capture, sensitive input observation, permission change or release claim.
