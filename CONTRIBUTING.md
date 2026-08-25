@@ -72,16 +72,13 @@ A good pull request includes:
 - permission and data-flow impact;
 - security considerations;
 - documentation and changelog updates;
-- signed-off commits.
+- commits the contributor is authorised to submit.
 
-Use DCO sign-off:
-
-```text
-Signed-off-by: Your Name <you@example.com>
-```
-
-By contributing, you agree that your contribution is licensed under Apache
-License 2.0 and certify the DCO sign-off.
+Pack does not require `Signed-off-by:` trailers. They are not mechanically
+enforced for every contribution path, so their presence is not treated as
+compliance evidence and existing commits must not be rewritten to add them.
+Contributions remain governed by the repository's Apache License 2.0; submit
+only work you are authorised to contribute.
 
 ## Review Requirements
 
