@@ -108,6 +108,7 @@ Files deliberately skipped because another lane owned them:
 8. While creating the validation worktree, I forgot to switch the shell working directory before `pnpm install` and `wxt prepare`. Those generated-state commands ran in the protected primary checkout. A before/after tracked-status comparison stayed at the same 34 pre-existing paths, with no `package.json`/lockfile delta; only ignored `.wxt`/`node_modules` state was touched. I did not reset, clean, stage, or alter its HEAD.
 9. I drafted this document before the required final prune sweep instead of after it. I ran the sweep before formatting, verification, commit, or publication; it found zero eligible removals. The final count and disk measurements above are from that corrected ordering, not from the earlier draft.
 10. I again copied an incorrect full commit SHA into the unpublished validation PR-body draft. `git rev-parse HEAD` exposed the mismatch before PR creation, and I corrected the draft to the observed SHA.
+11. A zsh verification probe used the reserved `path` array and then assumed unquoted scalar word-splitting. That temporarily hid commands from that probe and produced empty lane matches. I discarded its output and reran the branch-to-worktree checks with `lane_path` and one branch argument per iteration; all three retained lane heads matched their recorded SHAs.
 
 ## Re-verification Script
 
@@ -117,8 +118,9 @@ Run from any Pack worktree with GitHub CLI authentication. It discovers existing
 set -euo pipefail
 
 PACK_ROOT=$(git rev-parse --show-toplevel)
+BASELINE_SHA=78b74d117e63cdaf4aba1d70a1431ba546e21bf0
 git -C "$PACK_ROOT" fetch origin master
-test "$(git -C "$PACK_ROOT" rev-parse origin/master)" = "78b74d117e63cdaf4aba1d70a1431ba546e21bf0"
+git -C "$PACK_ROOT" cat-file -e "$BASELINE_SHA^{commit}"
 
 worktree_for_branch() {
   branch=$1
@@ -131,9 +133,11 @@ worktree_for_branch() {
 
 run_local_gates() {
   branch=$1
+  expected_head=$2
   lane=$(worktree_for_branch "$branch")
   test -n "$lane"
   test -z "$(git -C "$lane" status --porcelain)"
+  test "$(git -C "$lane" rev-parse HEAD)" = "$expected_head"
   (
     cd "$lane"
     pnpm install --frozen-lockfile
@@ -150,27 +154,46 @@ run_local_gates() {
   )
 }
 
-run_local_gates tapish-codex/dead-module-check
-run_local_gates tapish-codex/remove-unused-summary-context-headers
-run_local_gates tapish-codex/drop-unenforced-dco-claim
-run_local_gates tapish-codex/autonomous-session-2026-08-25
+run_local_gates tapish-codex/dead-module-check bcf9de63959e8bc704b825f102976b6908a460ec
+run_local_gates tapish-codex/remove-unused-summary-context-headers b84eb09ee14d08e54c10b67d5756455c08cd38d5
+run_local_gates tapish-codex/drop-unenforced-dco-claim a654ee56ee7fe68fc0d18f808474e2430569b738
+validation_head=$(gh pr view 230 --repo lamemustafa/pack --json headRefOid --jq .headRefOid)
+run_local_gates tapish-codex/autonomous-session-2026-08-25 "$validation_head"
 
 pnpm review:gate -- --repo lamemustafa/pack --pr 217 --strict-head-review --required-review-author chatgpt-codex-connector --wait-head-review-ms 0 --expected-head-oid bcf9de63959e8bc704b825f102976b6908a460ec
 
 expect_blocked_review() {
   set +e
-  pnpm review:gate -- --repo lamemustafa/pack --pr "$1" --strict-head-review --required-review-author chatgpt-codex-connector --wait-head-review-ms 0 --expected-head-oid "$2"
+  review_output=$(pnpm review:gate -- --repo lamemustafa/pack --pr "$1" --strict-head-review --required-review-author chatgpt-codex-connector --wait-head-review-ms 0 --expected-head-oid "$2" 2>&1)
   actual=$?
   set -e
+  printf '%s\n' "$review_output"
   test "$actual" -eq 1
+  printf '%s\n' "$review_output" | grep -F "No review was found for current head $2."
+  if printf '%s\n' "$review_output" | grep -Eq 'Unresolved review threads|Requested-changes reviews|PR body workflow/template issues|PR head changed while evaluating'; then
+    return 1
+  fi
 }
 
 expect_blocked_review 223 ec1ee585884a49fada954d7a13d112374eb1fa68
 expect_blocked_review 224 f06eee4d6aa521750b86214a907b0fdd48d52a98
 expect_blocked_review 228 b84eb09ee14d08e54c10b67d5756455c08cd38d5
 expect_blocked_review 229 a654ee56ee7fe68fc0d18f808474e2430569b738
-validation_head=$(gh pr view 230 --repo lamemustafa/pack --json headRefOid --jq .headRefOid)
 expect_blocked_review 230 "$validation_head"
+
+assert_pr_state() {
+  pr=$1
+  expected=$(printf '%s\t%s\t%s' "$2" "$3" "$4")
+  observed=$(gh pr view "$pr" --repo lamemustafa/pack --json state,mergeable,mergeStateStatus --jq '[.state,.mergeable,.mergeStateStatus] | @tsv')
+  test "$observed" = "$expected"
+}
+
+assert_pr_state 217 OPEN MERGEABLE CLEAN
+assert_pr_state 223 OPEN MERGEABLE CLEAN
+assert_pr_state 224 OPEN MERGEABLE BLOCKED
+assert_pr_state 228 OPEN MERGEABLE CLEAN
+assert_pr_state 229 OPEN MERGEABLE BLOCKED
+assert_pr_state 230 OPEN MERGEABLE BLOCKED
 
 for pr in 217 223 224 228 229 230; do
   gh pr checks "$pr" --repo lamemustafa/pack --required
