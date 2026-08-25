@@ -87,63 +87,196 @@ html[data-pack-surface="panel"] body {
   letter-spacing: -0.012em;
 }
 
-.panel-choice {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 6px;
-  border: 1px solid var(--pack-border-subtle);
-  border-radius: 6px;
-  background: var(--pack-surface);
-  color: var(--pack-ink-primary);
-  cursor: pointer;
-  font: inherit;
-  font-size: 0.875rem;
-  padding: 11px 13px;
-  text-align: left;
-  transition:
-    border-color 140ms ease,
-    background-color 140ms ease;
+.panel-guide {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
 }
 
-.panel-choice:hover:not([disabled]) {
-  border-color: var(--pack-border-strong);
-  background: var(--pack-surface-muted);
+.panel-guide-progress {
+  display: grid;
+  gap: 6px;
+  color: var(--pack-ink-muted);
+  font-size: 0.6875rem;
+  font-weight: 750;
 }
 
-.panel-choice[disabled] {
-  cursor: default;
-  opacity: 0.55;
+.panel-guide-progress-track {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
 }
 
-.panel-choice-detail {
+.panel-guide-progress-track > span {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--pack-border-subtle);
+}
+
+.panel-guide-progress-track > .panel-guide-progress-on {
+  background: var(--pack-border-accent);
+}
+
+.panel-guide h2 {
+  margin-bottom: -8px;
+}
+
+.panel-guide-hint {
+  margin: 0;
   color: var(--pack-ink-muted);
   font-size: 0.75rem;
-  white-space: nowrap;
+  line-height: 1.4;
 }
 
-.panel-link {
-  border: 0;
-  background: none;
-  color: var(--pack-ink-link);
-  cursor: pointer;
+.panel-guide-select {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  color: var(--pack-ink-secondary);
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+
+.panel-guide-select select {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  border: 1px solid var(--pack-border-subtle);
+  border-radius: 8px;
+  background: var(--pack-surface);
+  color: var(--pack-ink-primary);
   font: inherit;
   font-size: 0.8125rem;
-  padding: 4px 10px 0 0;
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  padding: 0 10px;
 }
 
-/* `.panel-link` declares no hover of its own, so the global
-   `button:hover:not(:disabled)` rule takes over entirely and paints the dark
-   action background behind dark link text. Its 0,2,1 specificity also outranks a
-   bare `.panel-link:hover`, so the override matches its pseudo-class count. */
-.panel-link:hover:not(:disabled) {
-  background: none;
+.panel-guide-select select:focus-visible,
+.panel-guide-actions button:focus-visible,
+.panel-catalogue summary:focus-visible {
+  outline: 2px solid var(--pack-border-accent);
+  outline-offset: 2px;
+}
+
+.panel-guide-actions {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: end;
+  gap: 8px;
+}
+
+.panel-guide-actions > :only-child {
+  grid-column: 2;
+}
+
+.panel-guide-actions button {
+  min-height: 42px;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 750;
+  padding: 0 14px;
+}
+
+.panel-guide-back {
+  border: 1px solid var(--pack-border-subtle);
+  background: var(--pack-surface);
+  color: var(--pack-ink-secondary);
+}
+
+.panel-guide-next {
+  border: 1px solid var(--pack-action);
+  background: var(--pack-action);
+  color: var(--pack-ink-inverse);
+}
+
+.panel-guide-actions .popup-action-area {
+  position: static;
+  min-width: 0;
   border: 0;
-  text-decoration: underline;
+  background: transparent;
+  padding: 0;
+}
+
+.panel-guide-actions .run-action-copy {
+  margin-bottom: 6px;
+}
+
+.panel-guide-scope {
+  border-top: 1px solid var(--pack-border-subtle);
+  padding-top: 10px;
+}
+
+.panel-guide-scope h3 {
+  margin: 0 0 7px;
+  color: var(--pack-ink-secondary);
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+
+.panel-guide-scope dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+  margin: 0;
+}
+
+.panel-guide-scope dl > div {
+  min-width: 0;
+}
+
+.panel-guide-scope dt {
+  color: var(--pack-ink-muted);
+  font-size: 0.625rem;
+}
+
+.panel-guide-scope dd {
+  margin: 1px 0 0;
+  color: var(--pack-ink-primary);
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.panel-catalogue {
+  border-top: 1px solid var(--pack-border-subtle);
+  padding-top: 9px;
+  color: var(--pack-ink-secondary);
+  font-size: 0.75rem;
+}
+
+.panel-catalogue summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+  color: var(--pack-ink-primary);
+  font-weight: 750;
+}
+
+.panel-catalogue p {
+  margin: 8px 0;
+  color: var(--pack-ink-muted);
+  line-height: 1.4;
+}
+
+.panel-catalogue ul {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.panel-catalogue li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 3px 8px;
+  border-top: 1px solid var(--pack-border-subtle);
+  padding: 6px 0;
+}
+
+.panel-catalogue li span:last-child {
+  color: var(--pack-ink-muted);
 }
 
 .panel-foot {

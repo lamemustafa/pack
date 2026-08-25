@@ -16,13 +16,13 @@ import {
   FULL_FISCAL_YEAR_PERIOD,
   isFullFiscalYearScope,
 } from "../../connectors/gst/filed-returns-scope";
-import { FILED_RETURNS_RETURN_TYPES } from "../../connectors/gst/filed-returns-return-types";
 import {
   filedReturnsCapabilityArtifactDescription,
   filedReturnsCapabilityArtifactLabel,
   filedReturnsCapabilityRunNotes,
   filedReturnsCapabilitySentenceSubject,
   filedReturnsCapabilitySummary,
+  supportedFiledReturnsCatalogueEntries,
 } from "../../connectors/gst/filed-returns-capabilities";
 import {
   canRetryFullFiscalYearZipWithoutPortal,
@@ -60,10 +60,11 @@ export function createScopeFormModel(scope: FiledReturnsDownloadScope) {
 }
 
 export function returnTypeOptions() {
-  return FILED_RETURNS_RETURN_TYPES.map((returnType) => ({
+  return supportedFiledReturnsCatalogueEntries().map(({ returnType, capability }) => ({
     value: returnType,
-    label: returnType,
+    label: capability.label,
     description: filedReturnsCapabilitySummary(returnType),
+    periodicity: capability.periodicity,
   }));
 }
 
