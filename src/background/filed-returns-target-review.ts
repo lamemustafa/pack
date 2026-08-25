@@ -54,6 +54,10 @@ import {
   type FiledReturnsTargetReviewClearFailureStage,
   type FiledReturnsTargetReviewClearResult,
 } from "../connectors/gst/filed-returns-target-review-clear";
+import {
+  artifactAcquisitionCheckpointClearFailureSignal,
+  type ArtifactAcquisitionCheckpointClearFailureReason,
+} from "../connectors/gst/artifact-acquisition-checkpoint-clear";
 
 export interface FiledReturnsTargetReviewDeps {
   storageKeys: {
@@ -502,7 +506,14 @@ export async function resolveUnconfirmedFiledReturnsDownload(
       // service-worker stop can leave the local review behind after checkpoint
       // cleanup; never replace that completed target with a cancellation.
       const cancellation = await clearArtifactAcquisitionCheckpoints(review.scope);
-      if (cancellation.state === "blocked") return responseForFiledReturnsTargetReview(review);
+      if (cancellation.state === "blocked") {
+        return persistArtifactCheckpointClearFailureReview(
+          key,
+          review,
+          cancellation.reason,
+          deps.now?.() ?? new Date(),
+        );
+      }
       if (cancellation.state === "completed") {
         await clearArtifactAcquisitionCheckpointsAfterPersistedSummary(
           review.scope,
@@ -623,21 +634,12 @@ export async function resolveUnconfirmedFiledReturnsDownload(
         discardMissing: true,
       });
       if (cancellation.state === "blocked") {
-        const clearFailureReview: FiledReturnsTargetReview = {
-          ...review,
-          revision: targetReviewRevision(review) + 1,
-          safeSignals: uniqueSafeSignals([
-            ...review.safeSignals,
-            "artifact-acquisition-checkpoint-clear-failed",
-          ]),
-          safeMessage:
-            "Pack could not clear retained artifact recovery state. It will not start another portal action automatically.",
-          updatedAt: (deps.now?.() ?? new Date()).toISOString(),
-        };
-        const parsedReview = parseFiledReturnsTargetReview(clearFailureReview);
-        if (!parsedReview) return malformedTargetReviewResponse(scope);
-        await browser.storage.local.set({ [key]: parsedReview });
-        return responseForFiledReturnsTargetReview(parsedReview);
+        return persistArtifactCheckpointClearFailureReview(
+          key,
+          review,
+          cancellation.reason,
+          deps.now?.() ?? new Date(),
+        );
       }
     }
 
@@ -662,6 +664,40 @@ export async function resolveUnconfirmedFiledReturnsDownload(
     await persistResolvedTargetReviewSummary(flowSummary, deps);
     return { ok: true, flowStep, flowSummary };
   });
+}
+
+async function persistArtifactCheckpointClearFailureReview(
+  key: string,
+  review: FiledReturnsTargetReview,
+  reason: ArtifactAcquisitionCheckpointClearFailureReason,
+  now: Date,
+): Promise<PackMessageResponse> {
+  const durableStatus = parseDurableTargetStatus(
+    review.scope,
+    "target-review",
+    uniqueSafeSignals([
+      ...review.safeSignals.filter(
+        (signal) => !signal.startsWith("artifact-acquisition-checkpoint-clear-failed:"),
+      ),
+      "artifact-acquisition-checkpoint-clear-failed",
+      artifactAcquisitionCheckpointClearFailureSignal(reason),
+    ]),
+  );
+  // The original review is the durable recovery guard. If diagnostic enrichment
+  // would exceed or otherwise violate the closed signal contract, retain that
+  // guard unchanged instead of replacing it with a generic rejection record.
+  if (!durableStatus) return responseForFiledReturnsTargetReview(review);
+  const clearFailureReview: FiledReturnsTargetReview = {
+    ...review,
+    revision: targetReviewRevision(review) + 1,
+    safeSignals: durableStatus.safeSignals,
+    safeMessage: durableStatus.safeMessage,
+    updatedAt: now.toISOString(),
+  };
+  const parsedReview = parseFiledReturnsTargetReview(clearFailureReview);
+  if (!parsedReview) return responseForFiledReturnsTargetReview(review);
+  await browser.storage.local.set({ [key]: parsedReview });
+  return responseForFiledReturnsTargetReview(parsedReview);
 }
 
 export async function retryCompletedSinglePeriodZipCleanup(

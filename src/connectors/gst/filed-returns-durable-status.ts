@@ -49,6 +49,15 @@ type DurableMessageKey =
   | "target-cancelled"
   | "target-blocked"
   | "target-blocked-or-session-expired"
+  | "target-checkpoint-clear-cancel"
+  | "target-checkpoint-clear-checkpoint"
+  | "target-checkpoint-clear-danger"
+  | "target-checkpoint-clear-download"
+  | "target-checkpoint-clear-size"
+  | "target-checkpoint-clear-state"
+  | "target-checkpoint-clear-storage-read"
+  | "target-checkpoint-clear-storage-remove"
+  | "target-checkpoint-clear-target"
   | "target-completion-pending-summary"
   | "target-cleanup-blocked"
   | "target-downloaded"
@@ -268,6 +277,46 @@ function messageKeyForTarget(
   signals: readonly string[],
 ): DurableMessageKey {
   if (signals.includes("filed-return-durable-status-rejected")) return "durable-status-rejected";
+  const checkpointClearReason = signals
+    .map((signal) => /^artifact-acquisition-checkpoint-clear-failed:(.+)$/.exec(signal)?.[1])
+    .find((reason): reason is string => Boolean(reason));
+  if (checkpointClearReason === "storage-read-failed") {
+    return "target-checkpoint-clear-storage-read";
+  }
+  if (checkpointClearReason === "storage-remove-failed") {
+    return "target-checkpoint-clear-storage-remove";
+  }
+  if (
+    checkpointClearReason === "download-search-failed" ||
+    checkpointClearReason === "download-missing"
+  ) {
+    return "target-checkpoint-clear-download";
+  }
+  if (
+    checkpointClearReason === "download-cancel-failed" ||
+    checkpointClearReason === "download-cancel-unconfirmed"
+  ) {
+    return "target-checkpoint-clear-cancel";
+  }
+  if (
+    checkpointClearReason === "checkpoint-invalid" ||
+    checkpointClearReason === "intent-discard-not-approved"
+  ) {
+    return "target-checkpoint-clear-checkpoint";
+  }
+  if (checkpointClearReason === "download-target-mismatch") {
+    return "target-checkpoint-clear-target";
+  }
+  if (checkpointClearReason?.startsWith("download-danger-")) {
+    return "target-checkpoint-clear-danger";
+  }
+  if (
+    checkpointClearReason === "download-size-unknown" ||
+    checkpointClearReason === "download-empty"
+  ) {
+    return "target-checkpoint-clear-size";
+  }
+  if (checkpointClearReason) return "target-checkpoint-clear-state";
   if (signals.includes("artifact-acquisition-completion-pending-summary")) {
     return "target-completion-pending-summary";
   }
@@ -382,6 +431,24 @@ function renderDurableMessage(key: DurableMessageKey, scope: FiledReturnsDownloa
     "target-cancelled": `Pack cancelled the unresolved filed-return target for ${period}.`,
     "target-blocked": `Pack paused the saved full-year run at ${period}. Resolve the GST Portal page before retrying this period.`,
     "target-blocked-or-session-expired": FILED_RETURNS_PORTAL_BLOCKED_OR_SESSION_EXPIRED_MESSAGE,
+    "target-checkpoint-clear-cancel":
+      "Pack could not confirm cancellation of the exact browser download, so it retained artifact recovery and did not retry.",
+    "target-checkpoint-clear-checkpoint":
+      "Pack found retained artifact recovery that is not safe to discard, so it did not clear or retry it.",
+    "target-checkpoint-clear-danger":
+      "The browser has not classified the retained download as safe, so Pack did not clear or retry its recovery state.",
+    "target-checkpoint-clear-download":
+      "Pack could not find the exact browser download owned by retained artifact recovery, so it did not clear or retry it.",
+    "target-checkpoint-clear-size":
+      "Pack could not verify a non-empty retained browser download, so it did not clear or retry its recovery state.",
+    "target-checkpoint-clear-state":
+      "Pack could not verify the retained browser download state, so it did not clear or retry its recovery state.",
+    "target-checkpoint-clear-storage-read":
+      "Pack could not read retained artifact recovery state, so it did not clear or retry it.",
+    "target-checkpoint-clear-storage-remove":
+      "Pack verified retained artifact recovery but could not remove it, so it will not start another portal action.",
+    "target-checkpoint-clear-target":
+      "The retained browser download no longer matches its exact artifact target, so Pack did not clear or retry it.",
     "target-completion-pending-summary":
       "Pack proved this browser download and is safely finishing its local recovery record.",
     "target-cleanup-blocked":

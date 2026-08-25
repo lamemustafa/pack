@@ -64,10 +64,50 @@ function actionId(index: number): string {
   return `00000000-0000-4000-8000-${index.toString().padStart(12, "0")}`;
 }
 
+async function persistCancellationDownload(requestId: string): Promise<void> {
+  await persistArtifactAcquisitionDownloadId({
+    ...MAY_PDF,
+    downloadId: 9,
+    requestId,
+    state: "download-observing",
+  });
+}
+
+function completedCancellationDownload(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    danger: "safe",
+    fileSize: 2048,
+    id: 9,
+    mime: "application/pdf",
+    startTime: new Date(Date.now() + 1_000).toISOString(),
+    state: "complete",
+    ...overrides,
+  };
+}
+
 describe("artifact acquisition checkpoint", () => {
   beforeEach(() => {
     for (const key of Object.keys(mocks.session)) delete mocks.session[key];
     vi.clearAllMocks();
+    mocks.browser.downloads.cancel.mockReset();
+    mocks.browser.downloads.search.mockReset();
+    mocks.browser.storage.session.get.mockReset();
+    mocks.browser.storage.session.remove.mockReset();
+    mocks.browser.storage.session.set.mockReset();
+    mocks.browser.storage.session.get.mockImplementation(async (keys?: string | string[]) => {
+      if (keys === undefined) return { ...mocks.session };
+      return Object.fromEntries(
+        (Array.isArray(keys) ? keys : [keys]).map((key) => [key, mocks.session[key]]),
+      );
+    });
+    mocks.browser.storage.session.remove.mockImplementation(async (keys: string | string[]) => {
+      for (const key of Array.isArray(keys) ? keys : [keys]) delete mocks.session[key];
+    });
+    mocks.browser.storage.session.set.mockImplementation(async (values: Record<string, unknown>) =>
+      Object.assign(mocks.session, values),
+    );
   });
 
   it("does not block June PDF or May JSON behind a stale May PDF download", async () => {
@@ -199,6 +239,142 @@ describe("artifact acquisition checkpoint", () => {
     expect(mocks.browser.downloads.cancel).not.toHaveBeenCalled();
   });
 
+  it("names a session-storage read failure during cancellation", async () => {
+    mocks.browser.storage.session.get.mockRejectedValueOnce(new Error("synthetic read failure"));
+
+    await expect(clearArtifactAcquisitionCheckpoints(MAY_PDF)).resolves.toEqual({
+      reason: "storage-read-failed",
+      state: "blocked",
+    });
+  });
+
+  it.each([
+    [
+      "intent-discard-not-approved",
+      async () => persistArtifactAcquisitionIntent({ ...MAY_PDF, requestId: actionId(82) }),
+    ],
+    [
+      "checkpoint-invalid",
+      async () => {
+        mocks.session[artifactAcquisitionCheckpointKey(MAY_PDF)] = { invalid: true };
+      },
+    ],
+    [
+      "download-missing",
+      async () => {
+        await persistCancellationDownload(actionId(83));
+        mocks.browser.downloads.search.mockResolvedValue([]);
+      },
+    ],
+    [
+      "download-state-missing",
+      async () => {
+        await persistCancellationDownload(actionId(84));
+        mocks.browser.downloads.search.mockResolvedValue([{ id: 9 }]);
+      },
+    ],
+    [
+      "download-target-mismatch",
+      async () => {
+        await persistCancellationDownload(actionId(85));
+        mocks.browser.downloads.search.mockResolvedValue([
+          completedCancellationDownload({ mime: "application/json" }),
+        ]);
+      },
+    ],
+    [
+      "download-danger-unknown",
+      async () => {
+        await persistCancellationDownload(actionId(86));
+        mocks.browser.downloads.search.mockResolvedValue([
+          completedCancellationDownload({ danger: undefined }),
+        ]);
+      },
+    ],
+    [
+      "download-danger-pending",
+      async () => {
+        await persistCancellationDownload(actionId(87));
+        mocks.browser.downloads.search.mockResolvedValue([
+          completedCancellationDownload({ danger: "asyncScanning" }),
+        ]);
+      },
+    ],
+    [
+      "download-danger-rejected",
+      async () => {
+        await persistCancellationDownload(actionId(88));
+        mocks.browser.downloads.search.mockResolvedValue([
+          completedCancellationDownload({ danger: "uncommon" }),
+        ]);
+      },
+    ],
+    [
+      "download-size-unknown",
+      async () => {
+        await persistCancellationDownload(actionId(89));
+        mocks.browser.downloads.search.mockResolvedValue([
+          completedCancellationDownload({ fileSize: undefined }),
+        ]);
+      },
+    ],
+    [
+      "download-empty",
+      async () => {
+        await persistCancellationDownload(actionId(90));
+        mocks.browser.downloads.search.mockResolvedValue([
+          completedCancellationDownload({ fileSize: 0 }),
+        ]);
+      },
+    ],
+    [
+      "download-cancel-unconfirmed",
+      async () => {
+        await persistCancellationDownload(actionId(91));
+        mocks.browser.downloads.search
+          .mockResolvedValueOnce([{ id: 9, state: "in_progress" }])
+          .mockResolvedValueOnce([]);
+      },
+    ],
+    [
+      "download-state-unsupported",
+      async () => {
+        await persistCancellationDownload(actionId(92));
+        mocks.browser.downloads.search.mockResolvedValue([{ id: 9, state: "paused" }]);
+      },
+    ],
+    [
+      "download-search-failed",
+      async () => {
+        await persistCancellationDownload(actionId(93));
+        mocks.browser.downloads.search.mockRejectedValue(new Error("synthetic search failure"));
+      },
+    ],
+    [
+      "download-cancel-failed",
+      async () => {
+        await persistCancellationDownload(actionId(94));
+        mocks.browser.downloads.search.mockResolvedValue([{ id: 9, state: "in_progress" }]);
+        mocks.browser.downloads.cancel.mockRejectedValue(new Error("synthetic cancel failure"));
+      },
+    ],
+    [
+      "storage-remove-failed",
+      async () => {
+        mocks.browser.storage.session.remove.mockRejectedValue(
+          new Error("synthetic remove failure"),
+        );
+      },
+    ],
+  ] as const)("names the %s cancellation exit", async (reason, arrange) => {
+    await arrange();
+
+    await expect(clearArtifactAcquisitionCheckpoints(MAY_PDF)).resolves.toEqual({
+      reason,
+      state: "blocked",
+    });
+  });
+
   it("discards a missing exact download only during explicit cancellation", async () => {
     const key = artifactAcquisitionCheckpointKey(MAY_PDF);
     await persistArtifactAcquisitionDownloadId({
@@ -210,6 +386,7 @@ describe("artifact acquisition checkpoint", () => {
     mocks.browser.downloads.search.mockResolvedValue([]);
 
     await expect(clearArtifactAcquisitionCheckpoints(MAY_PDF)).resolves.toEqual({
+      reason: "download-missing",
       state: "blocked",
     });
     expect(mocks.session[key]).toEqual(expect.objectContaining({ downloadId: 9 }));
@@ -256,6 +433,7 @@ describe("artifact acquisition checkpoint", () => {
     };
 
     await expect(clearArtifactAcquisitionCheckpoints(MAY_PDF)).resolves.toEqual({
+      reason: "checkpoint-invalid",
       state: "blocked",
     });
 
@@ -634,6 +812,7 @@ describe("artifact acquisition checkpoint", () => {
     ]);
 
     await expect(clearArtifactAcquisitionCheckpoints(MAY_PDF)).resolves.toEqual({
+      reason: "download-danger-rejected",
       state: "blocked",
     });
     expect(mocks.session[artifactAcquisitionCheckpointKey(MAY_PDF)]).toEqual(
@@ -672,6 +851,7 @@ describe("artifact acquisition checkpoint", () => {
     ]);
 
     await expect(clearArtifactAcquisitionCheckpoints(MAY_PDF)).resolves.toEqual({
+      reason: "download-target-mismatch",
       state: "blocked",
     });
   });
@@ -695,6 +875,7 @@ describe("artifact acquisition checkpoint", () => {
     ]);
 
     await expect(clearArtifactAcquisitionCheckpoints(MAY_PDF)).resolves.toEqual({
+      reason: "download-target-mismatch",
       state: "blocked",
     });
   });
@@ -728,6 +909,7 @@ describe("artifact acquisition checkpoint", () => {
     mocks.browser.downloads.search.mockResolvedValue([{ state: "in_progress" }]);
 
     await expect(clearArtifactAcquisitionCheckpoints(MAY_COMPOSITE)).resolves.toEqual({
+      reason: "checkpoint-invalid",
       state: "blocked",
     });
     expect(mocks.browser.downloads.cancel).not.toHaveBeenCalled();
@@ -752,6 +934,7 @@ describe("artifact acquisition checkpoint", () => {
     mocks.browser.downloads.search.mockResolvedValue([{ state: "complete" }]);
 
     await expect(clearArtifactAcquisitionCheckpoints(MAY_COMPOSITE)).resolves.toEqual({
+      reason: "checkpoint-invalid",
       state: "blocked",
     });
 

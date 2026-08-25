@@ -2,6 +2,10 @@ import { FILED_RETURNS_WORKBOOK_ABSENCE_OUTCOMES } from "./offscreen-blob-url";
 import { FILED_RETURNS_MONTHS } from "./filed-returns-scope";
 import type { FiledReturnsReturnType } from "./filed-returns-return-types";
 import { ARTIFACT_FAILURE_MESSAGES } from "./artifact-source";
+import {
+  ARTIFACT_ACQUISITION_CHECKPOINT_CLEAR_FAILURE_REASONS,
+  artifactAcquisitionCheckpointClearFailureSignal,
+} from "./artifact-acquisition-checkpoint-clear";
 import { isSafeDashboardSelectedValue } from "./dashboard-selected-signal-values";
 import { FILED_RETURNS_OBSERVATION_SIGNALS } from "./filed-returns-observer-signals";
 import {
@@ -543,6 +547,9 @@ const ARTIFACT_FAILURE_SIGNALS = new Set([
   // recovery path exists to handle.
   "artifact-acquisition-checkpoint-malformed",
   "artifact-acquisition-checkpoint-clear-failed",
+  ...ARTIFACT_ACQUISITION_CHECKPOINT_CLEAR_FAILURE_REASONS.map(
+    artifactAcquisitionCheckpointClearFailureSignal,
+  ),
   // Marks a completion rebuilt from the review's own durable marker after the
   // browser session ended between persisting the summary and removing the
   // review. The exact download IDs lived in the cleared session checkpoints, so
