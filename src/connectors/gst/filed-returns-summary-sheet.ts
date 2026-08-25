@@ -46,14 +46,6 @@ export const FILED_RETURNS_SUMMARY_HEADERS = [
   "value_number",
 ] as const;
 
-export const FILED_RETURNS_SUMMARY_CONTEXT_HEADERS = [
-  "context_type",
-  "context_key",
-  "field_label",
-  "field_path",
-  "value_text",
-] as const;
-
 export type FiledReturnsSummaryOutcomeCategory = "staged" | "not-filed" | "artifact-unavailable";
 
 export interface FiledReturnsSummaryPlanEntry {
