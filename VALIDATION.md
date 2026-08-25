@@ -465,3 +465,43 @@ reviewed persistence and failure contracts.
 
 - Evidence level: real Chromium DOM, keyboard and accessibility-tree evidence for app-owned
   behavior; not an authenticated GST run and not a VoiceOver, NVDA or OS-native select transcript.
+
+### Cycle 5 — supported-return identity reduction
+
+- Canonical-source trace: `filed-returns-catalogue.ts` owns supported status, label and scope ID;
+  `filed-returns-return-types.ts` derives its runtime union and slug. The descriptor table now owns
+  only portal route, heading, control and reselection mechanics. Callers retain the same descriptor
+  label and signal interface.
+- Exact production line counts:
+
+  | File                                  | Before | After | Reason                                        |
+  | ------------------------------------- | -----: | ----: | --------------------------------------------- |
+  | `filed-returns-return-descriptors.ts` |     74 |    67 | Removed repeated identity fields              |
+  | `artifact-source.ts`                  |    348 |   357 | Added canonical type and fail-closed dispatch |
+  | `artifact-validation.ts`              |     97 |    97 | Replaced a literal union with canonical type  |
+  | `filed-returns-download-trigger.ts`   |  1,041 | 1,042 | Imported canonical type for response boundary |
+
+- Discrimination evidence: the synthetic future return `GSTR-FUTURE` must resolve to
+  `unsupported-target` with no fetch and no click. Removing the explicit switch produced this
+  failure instead:
+
+  ```text
+  AssertionError: promise rejected "TypeError: Cannot read properties of unde…" instead of resolving
+  Caused by: TypeError: Cannot read properties of undefined (reading 'label')
+  ```
+
+- Review disposition: the security review's future fail-open WARN was fixed with explicit
+  GSTR-2B/GSTR-1/GSTR-3B dispatch and a fail-closed default, then re-reviewed PASS. Privacy review
+  was CLEAN before and after rectification. There was no change to target/action/download guards,
+  storage, logging, sensitive data, permissions or public capability copy.
+- Complete gate: build and package verification passed at 998.00 kB; TypeScript, zero-warning
+  ESLint and repo-wide Prettier passed. Full Vitest exact final three lines:
+
+  ```text
+       Tests  2131 passed (2131)
+    Start at  02:28:16
+    Duration  192.64s (transform 4.49s, setup 0ms, import 23.31s, tests 147.09s, environment 12ms)
+  ```
+
+- Evidence level: source, static typing, synthetic DOM and unit/integration gates only. No
+  authenticated GST run, new portal capture, permissions change or release-readiness claim.

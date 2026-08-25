@@ -172,3 +172,43 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
 - Learned / plan change: browser AX evidence can qualify names, descriptions, roles and focus, but
   it is not a VoiceOver/NVDA announcement transcript. The next cycle moves to duplicate-fact and
   density review while retaining native-select Arrow movement as an explicit external uncertainty.
+
+## Cycle 5 — make supported-return identity single-source and fail closed
+
+- Window: 2026-08-26 02:17–02:32 IST.
+- Picked: trace every runtime representation of supported-return identity back to the declarative
+  catalogue before changing catalogue density.
+- Duplicate removed: the portal-mechanics descriptor table repeated each supported return as its
+  key, `returnType`, label, scope ID and signal slug. It now stores only portal mechanics; labels,
+  scope IDs and slugs derive from the catalogue-backed functions. The descriptor file measured 74
+  lines before and 67 after. Three other hand-written supported-return unions now use the
+  catalogue-derived `FiledReturnsReturnType`.
+- Security rectification: review found that broadening `ArtifactRequest.returnType` could make a
+  future supported row fall through to the GSTR-3B acquisition path. Dispatch now names GSTR-2B,
+  GSTR-1 and GSTR-3B explicitly and fails any forward-unknown runtime value as
+  `unsupported-target` before portal inspection or action.
+- Without-fix proof: with the explicit dispatch temporarily removed, the forward-unknown test
+  failed with `TypeError: Cannot read properties of undefined (reading 'label')` instead of a
+  blocked result. Restored code passed all 32 artifact-source tests and proved zero fetch and zero
+  click for the unknown value.
+- Line accounting: descriptor 74→67; artifact source 348→357 for the explicit fail-closed switch
+  and type import; artifact validation 97→97; background trigger 1,041→1,042; regression test
+  680→699. The safety boundary is intentionally explicit even though it offsets the net production
+  line reduction.
+- Privacy review: CLEAN. No logging, storage, identifiers, session material or capability claim
+  changed. Security review: PASS after rectification; target binding, action identity, download
+  evidence and background boundaries remain unchanged.
+- Complete gate: build passed at 998.00 kB; package verification passed; TypeScript passed; ESLint
+  passed with zero warnings; Prettier passed repo-wide; full Vitest passed 125 files and 2,131 tests.
+  The known missing TypeScript source-map warning remained non-failing. Exact Vitest footer:
+
+  ```text
+       Tests  2131 passed (2131)
+    Start at  02:28:16
+    Duration  192.64s (transform 4.49s, setup 0ms, import 23.31s, tests 147.09s, environment 12ms)
+  ```
+
+- Checkpoint: `1cfb6b9 refactor(connectors): derive supported return identity`.
+- Learned / plan change: a type that expands from configuration needs runtime dispatch to remain
+  explicitly fail closed. The next cycle returns to the measured 1,018.70px expanded catalogue and
+  asks whether grouping can improve scanning without hiding any unsupported decision.
