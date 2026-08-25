@@ -34,3 +34,45 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
   ten-stage cleanup family had the same false assurance. No third typed `FailureStage`/staged-error
   builder exists in current source. Other dynamic safe-signal constructors are not claimed clean;
   they remain inputs to the later duplicate-fact and test-quality cycles.
+
+## Cycle 2 — close Direction B product parity
+
+- Window: 2026-08-26 01:15–01:29 IST.
+- Picked: compare every explicit Direction B behavior with the packaged product and close or
+  disposition every divergence.
+- Measured before: prototype and product both had four steps, one select, one active scope, a 3→4
+  control budget, focus restoration, nine rows, six non-interactive unsupported rows and zero 320px
+  overflow. The prototype listed concrete artifact availability; the product disclosure reduced all
+  supported rows to `available`. Direct Playwright input disproved a suspected keyboard difference:
+  Enter on the prototype's focused select did not advance it either.
+- Changed: supported rows now derive and display their concrete artifact labels from the same
+  catalogue object. Bundle selections remain in the final file step because they are combinations,
+  not additional portal artifacts. Removed the unused optional start-scope override and 25 lines of
+  stale preset-era comments left after preset deletion. Added the full parity ledger in
+  `design-lab/10-catalogue-overhaul/05-direction-b-parity.md`.
+- Without-fix proof: the new render assertion failed once against the old disclosure, reporting
+  expected `Monthly · available · Filed return (PDF) · Portal data (JSON)` and received the
+  nine-row markup containing only `Monthly · available`.
+- Packaged synthetic measurement after the change: step heights 624.76 / 693.55 / 676.76 /
+  681.95px; 3 / 4 / 4 / 4 controls; select focused at every step; catalogue-open height 1,092.70px;
+  zero overflow or clipped descendants; zero unsupported controls. The prototype's open catalogue
+  was 1,405.84px. No portal action ran.
+- Impeccable audit: deterministic detector returned `[]`; technical score 19/20. No P0/P1/P2
+  finding remained in this cycle; assistive-technology qualification stays open for its dedicated
+  cycle.
+- Gate: build and package verification passed at 997.44 kB; full Vitest passed 125 files and 2,107
+  tests; TypeScript passed; ESLint passed with zero warnings; Prettier passed repo-wide. Exact
+  Vitest footer:
+
+  ```text
+       Tests  2107 passed (2107)
+    Start at  01:26:03
+    Duration  167.97s (transform 3.09s, setup 0ms, import 13.44s, tests 138.45s, environment 8ms)
+  ```
+
+- Checkpoints: `7382070 feat(panel): show catalogue artifact availability` and
+  `afdb6aa refactor(panel): remove preset-era residue`.
+- Learned / plan change: the prototype is a direction, not a specification to copy literally.
+  Dynamic FY/month availability, real guarded run states, exact action copy and concrete-artifact
+  semantics are intentional product improvements. The next cycle must enumerate product-only
+  loading, empty, error and permission states rather than pretending the prototype covers them.

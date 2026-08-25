@@ -305,6 +305,49 @@ reviewed persistence and failure contracts.
   Dynamic artifact, OPFS, navigation and capture signals remain candidates for later duplicate-fact
   and test-quality cycles; this result does not declare every dynamic signal constructor clean.
 
+### Cycle 2 — Direction B implementation completeness
+
+- A behavior-by-behavior product/prototype ledger now lives in
+  `design-lab/10-catalogue-overhaul/05-direction-b-parity.md`. Every explicit behavior is classified
+  equivalent, intentionally product-specific or closed; no difference is left implicit.
+- Without-fix evidence: the new supported-artifact render assertion failed once. Expected the
+  GSTR-3B row to contain `Monthly · available · Filed return (PDF) · Portal data (JSON)`; received a
+  nine-row disclosure whose supported rows stopped at `Monthly · available`.
+- The product now renders canonical concrete artifact labels for all three supported rows.
+  Unsupported rows remain `not available in Pack` and contribute zero controls. Combined file
+  selections remain in the guided file step rather than being mislabelled as portal artifacts.
+- Removed one unused optional start-scope branch and stale preset comments. Production searches
+  showed no caller supplied the removed argument.
+- Prototype measurement at 320 × 900: Enter on the focused select did not advance, catalogue-open
+  height 1,405.84px, 3 controls, 9 rows and zero overflow. This disproved the suspected Enter-key
+  parity gap.
+- Packaged synthetic measurement at 320 × 900 after rectification:
+
+  | State          | Controls | Shell height | Focus                | Overflow |
+  | -------------- | -------: | -----------: | -------------------- | -------: |
+  | Return         |        3 |     624.76px | select               |      0px |
+  | FY             |        4 |     693.55px | select               |      0px |
+  | Period         |        4 |     676.76px | select               |      0px |
+  | File           |        4 |     681.95px | select               |      0px |
+  | Catalogue open |        4 |   1,092.70px | summary after toggle |      0px |
+
+- The final action named the exact synthetic scope; the open catalogue had 9 rows, canonical
+  artifact labels, 6 unsupported rows, 0 unsupported controls and no clipped descendant.
+- Impeccable detector: empty finding set. Technical audit: 19/20; the one withheld point records
+  unqualified external assistive-technology behavior rather than treating source semantics as
+  proof.
+- Complete gate: build and package verification passed at 997.44 kB; TypeScript, zero-warning
+  ESLint and repo-wide Prettier passed. Full Vitest exact final three lines:
+
+  ```text
+       Tests  2107 passed (2107)
+    Start at  01:26:03
+    Duration  167.97s (transform 3.09s, setup 0ms, import 13.44s, tests 138.45s, environment 8ms)
+  ```
+
+- This is synthetic product evidence. It does not qualify portal behavior, screen readers, browser
+  zoom or translated copy.
+
 ## Owner decision
 
 - Decide separately whether failure to delete Pack's own durable bookkeeping record should keep
