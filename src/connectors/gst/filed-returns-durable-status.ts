@@ -455,7 +455,7 @@ function messageKeyForSummary(
       ? "target-downloaded-cleanup-blocked"
       : "target-cleanup-blocked";
   }
-  if (signals.some((signal) => signal.includes("full-fiscal-year-zip-download"))) {
+  if (signals.some((signal) => signal.startsWith("full-fiscal-year-zip-download-"))) {
     return "full-year-zip-review";
   }
   if (signals.includes("filed-return-positively-not-filed")) return "not-filed";

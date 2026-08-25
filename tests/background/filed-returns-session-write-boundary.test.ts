@@ -851,6 +851,35 @@ describe("filed-return session write boundary", () => {
     }
   });
 
+  it("reopens a confirmed fiscal-year ZIP as complete instead of download-unconfirmed", async () => {
+    const base = completeFullFiscalYearSummary();
+    const summary = completeFullFiscalYearSummary({
+      flowStep: {
+        safeSignals: [
+          ...base.flowStep.safeSignals,
+          "full-fiscal-year-zip-downloaded",
+          "full-fiscal-year-opfs-cleared",
+        ],
+      },
+    });
+
+    await expect(
+      persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, summary),
+    ).resolves.not.toBeNull();
+    await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+      status: "complete",
+      flowStep: {
+        state: "downloaded",
+        safeMessage:
+          "Pack completed the local filed-return download for the saved fiscal-year run.",
+        safeSignals: expect.arrayContaining([
+          "full-fiscal-year-complete",
+          "full-fiscal-year-zip-downloaded",
+        ]),
+      },
+    });
+  });
+
   it("canonicalizes observations persisted from flow responses", async () => {
     await persistFlowResponse(
       {
