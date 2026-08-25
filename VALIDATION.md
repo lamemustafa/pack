@@ -900,3 +900,45 @@ retrying.` The focused test failed 1 of 115 session-boundary cases before the fi
 
 - Evidence level: static review and synthetic persistence/reopen gates only. No authenticated GST
   run, portal capture, sensitive input observation, permission change or release-readiness claim.
+
+### Cycle 15 — unresolved target filename claims
+
+- Before: `canonicalDurableTargetMessage` appended completion-form filename prose to every target
+  status. A target-review sentence could therefore say both that Pack could not verify its browser
+  download and that Pack completed the download.
+- Contract: the canonical `downloaded` status alone retains the existing completion-form filename
+  caution. Unresolved targets keep a neutral caution for unavailable filenames; overridden-name
+  copy explicitly disclaims target ownership and does not imply that an actual name was stored.
+- Review-driven rejection: one browser ID plus completed/non-empty tokens is not enough for this
+  renderer to assert target-bound completion. It has no validated scope/action diagnostic, and
+  individually allowed target/action/start/diagnostic rejection signals can coexist with those
+  tokens. The attempted browser-only helper was removed; the existing single-period ZIP evidence
+  helper and its authority are unchanged.
+- Failure evidence: restoring the old completion-form branch failed all 7 selected tests. The two
+  filename-family rows and five connector contradiction rows expected the neutral caution but
+  received `Pack completed the download` following unverified-download copy. Exact restoration
+  passed all 7. The contradiction rows also reject the intermediate claim that Pack recorded a
+  different saved name.
+- Exact line counts:
+
+  | File                                         | Before | After |
+  | -------------------------------------------- | -----: | ----: |
+  | `gst/filed-returns-durable-status.ts`        |    642 |   661 |
+  | `background/full-fiscal-year-ledger.test.ts` |  1,226 | 1,274 |
+
+- Review disposition: privacy CLEAN/PASS after closing two Medium claim findings; security PASS
+  after closing the browser-only-evidence WARN. Both are bound to exact source head
+  `2aa4324eb6f13b88d40f20f2e9380d4c7a87e8d0`. No sensitive data, new stored field, status,
+  state, user action, completion/retry authority, cleanup, downloads API, background, permission,
+  host or CSP behavior changed.
+- Complete final gate: build and package verification passed at 1.01 MB; TypeScript, zero-warning
+  ESLint and repo-wide Prettier passed. Full Vitest exact final three lines:
+
+  ```text
+       Tests  2243 passed (2243)
+    Start at  05:05:31
+    Duration  148.97s (transform 2.44s, setup 0ms, import 11.30s, tests 124.24s, environment 7ms)
+  ```
+
+- Evidence level: static review and synthetic canonical-output tests only. No authenticated GST
+  run, portal capture, sensitive input observation, permission change or release-readiness claim.

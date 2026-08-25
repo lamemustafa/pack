@@ -634,3 +634,45 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
   cannot enumerate every individually valid but cross-domain combination. The next cycle audits
   target-level status rendering for the inverse problem: scope-neutral reasons hidden behind an
   overly specific target status.
+
+## Cycle 15 — keep unresolved target filename copy neutral
+
+- Window: 2026-08-26 04:54–05:10 IST.
+- Picked: canonical target copy appended the completed-download filename sentence even when the
+  target remained in review. A filename-outcome token describes a browser observation, not proof
+  that a completed file belongs to this target.
+- Measured before: the initial unconfirmed target-review regression failed because its cautious
+  base sentence was followed by `Pack completed the download`. A first implementation attempted
+  to use one browser ID plus completed/non-empty tokens as permission for that sentence.
+- Review rectification: security correctly rejected the browser-only shortcut because the renderer
+  lacks validated scope/action-bound diagnostics. Privacy identified target/action/start/diagnostic
+  contradiction vectors that also passed it. The final rule uses completion wording only for the
+  canonical `downloaded` target status; all unresolved statuses retain neutral filename cautions.
+- Claim rectification: the first neutral override sentence still said Pack recorded a different
+  name for the target. Privacy identified both implied ownership and implied filename retention.
+  The final sentence explicitly says Pack could not verify that any file belongs to the target;
+  it records no raw filename and does not claim one was retained.
+- Discrimination evidence: temporarily restoring completion-form copy for unresolved targets failed
+  all 7 selected regressions: overridden/unavailable filename outcomes and five connector
+  target/action/start/diagnostic contradictions. Each received a completed-download sentence after
+  an unverified-download base sentence. Restoring the fix passed all 7.
+- Production line accounting: durable status 642→661; full-year ledger tests 1,226→1,274.
+- Review: privacy CLEAN/PASS after two Medium rectifications and security PASS after one WARN,
+  both exact-commit bound to `2aa4324eb6f13b88d40f20f2e9380d4c7a87e8d0`. No status, state,
+  action, target binding, retry, cleanup, persistence, download API, permission, host, CSP or
+  dependency behavior changed.
+- Complete final gate: build passed at 1.01 MB; package verification passed; TypeScript passed;
+  ESLint passed with zero warnings; Prettier passed repo-wide; full Vitest passed 125 files and
+  2,243 tests. The known missing TypeScript source-map warning remained non-failing. Exact footer:
+
+  ```text
+   Test Files  125 passed (125)
+        Tests  2243 passed (2243)
+     Start at  05:05:31
+     Duration  148.97s (transform 2.44s, setup 0ms, import 11.30s, tests 124.24s, environment 7ms)
+  ```
+
+- Checkpoint: `2aa4324 fix(recovery): qualify target filename copy`.
+- Learned / plan change: a completion-looking diagnostic fragment must not bypass the canonical
+  target status. The next cycle audits summary-level composition where a positive not-filed result
+  can coexist with an individually allowed filename signal.
