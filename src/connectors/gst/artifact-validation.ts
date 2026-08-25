@@ -40,7 +40,7 @@ export function validateArtifactBytes(
   bytes: Uint8Array,
   artifactType: "PDF" | "JSON" | "EXCEL",
   expectedReturnPeriod: string,
-  returnType: "GSTR-3B" | "GSTR-2B" | "GSTR-1" = "GSTR-3B",
+  returnType: FiledReturnsReturnType = "GSTR-3B",
 ): ArtifactValidationResult {
   if (bytes.byteLength === 0) return { ok: false, reason: "empty" };
   if (bytes.byteLength > MAX_ARTIFACT_BYTES) return { ok: false, reason: "too-large" };

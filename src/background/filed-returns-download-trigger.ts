@@ -13,6 +13,7 @@ import { FULL_FISCAL_YEAR_PERIOD } from "../connectors/gst/filed-returns-scope";
 import { type FiledReturnsConcreteArtifactType } from "../connectors/gst/filed-returns-artifacts";
 import { matchesAcceptedText } from "../connectors/gst/filed-returns-dom";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
+import type { FiledReturnsReturnType } from "../connectors/gst/filed-returns-return-types";
 import type { FiledReturnsFlowMessagingDeps } from "./filed-returns-flow-messaging";
 import { acquireGstr3bPdfAfterPreflight } from "./gstr3b-artifact-acquisition";
 import { acquirePageGeneratedArtifact } from "./gstr2b-artifact-acquisition";
@@ -1000,7 +1001,7 @@ function pageGeneratedArtifactDispatchFailure(
 function artifactFailureResponse(
   reason: ArtifactFailureReason,
   safeSignals: readonly string[],
-  returnType: "GSTR-1" | "GSTR-3B" | "GSTR-2B" = "GSTR-3B",
+  returnType: FiledReturnsReturnType = "GSTR-3B",
 ): FlowStepResponse {
   return {
     ok: true,
