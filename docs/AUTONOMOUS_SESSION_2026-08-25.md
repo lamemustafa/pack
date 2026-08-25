@@ -22,6 +22,7 @@ Re-run pointer: `git fetch origin master && git rev-parse origin/master && pnpm 
 | Item                                                   | Outcome       | Evidence                                                                                                                                                                                                                                                                                                                                           |
 | ------------------------------------------------------ | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Initial worktree prune                                 | DONE          | Session-observed, irreversible before-state: 24 explicit `git worktree remove` calls exited 0 after per-path clean, merged-PR, and process-CWD checks; Pack worktrees fell from 32 to 8. Current after-state is rerunnable with the commands under Concurrency and Hygiene.                                                                        |
+| Validation document                                    | BLOCKED       | PR #230; `docs/AUTONOMOUS_SESSION_2026-08-25.md`; local full suite passed 124/2,080; Pack CI run 32816328678 and exact ephemeral ZIP verification passed at pre-ledger head `edc0c650d358549171eca09a34b5e9be2030df56`; the final head still requires exact-head CI/review, and the strict formal-review gate remains the blocking criterion.      |
 | PR #217 unreferenced-module guard                      | DONE          | Head `bcf9de63959e8bc704b825f102976b6908a460ec`; issues #226/#227; unresolved threads 0; `pnpm review:gate -- --repo lamemustafa/pack --pr 217 --strict-head-review --required-review-author chatgpt-codex-connector --wait-head-review-ms 0 --expected-head-oid bcf9de63959e8bc704b825f102976b6908a460ec` exited 0; GitHub `MERGEABLE/CLEAN`.     |
 | PR #223 `@types/chrome` bump                           | BLOCKED       | Head `ec1ee585884a49fada954d7a13d112374eb1fa68`; Pack CI run 32793520196 passed 124/2,080; threads 0; GitHub `MERGEABLE/CLEAN`; strict exact-head review gate exited 1: no formal connector review found.                                                                                                                                          |
 | PR #224 Vitest bump                                    | BLOCKED       | Head `f06eee4d6aa521750b86214a907b0fdd48d52a98`; Pack CI run 32793567544 passed 124/2,080; threads 0; ordinary gate run 32814776151 and scheduled check passed; strict gate exited 1; GitHub `MERGEABLE/BLOCKED`, formal reviews 0, owner review requested.                                                                                        |
@@ -168,10 +169,12 @@ expect_blocked_review 223 ec1ee585884a49fada954d7a13d112374eb1fa68
 expect_blocked_review 224 f06eee4d6aa521750b86214a907b0fdd48d52a98
 expect_blocked_review 228 b84eb09ee14d08e54c10b67d5756455c08cd38d5
 expect_blocked_review 229 a654ee56ee7fe68fc0d18f808474e2430569b738
+validation_head=$(gh pr view 230 --repo lamemustafa/pack --json headRefOid --jq .headRefOid)
+expect_blocked_review 230 "$validation_head"
 
-for pr in 217 223 224 228 229; do
+for pr in 217 223 224 228 229 230; do
   gh pr checks "$pr" --repo lamemustafa/pack --required
 done
 ```
 
-Expected state at document creation: #217 strict gate exits 0; #223/#224/#228/#229 strict gates exit 1 for missing formal exact-head review; all required GitHub checks already present are green; no pull request is merged by this script.
+Expected state at document creation: #217 strict gate exits 0; #223/#224/#228/#229/#230 strict gates exit 1 for missing formal exact-head review; all required GitHub checks already present are green; no pull request is merged by this script.
