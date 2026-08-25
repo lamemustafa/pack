@@ -1,0 +1,199 @@
+import React, { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { JSDOM } from "jsdom";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type {
+  FiledReturnsDownloadScope,
+  FiledReturnsFlowSummary,
+} from "../../src/connectors/gst/filed-returns-contracts";
+
+vi.mock("wxt/browser", () => ({
+  browser: { tabs: { create: vi.fn() } },
+}));
+
+import { PanelSurface, type PackPanelController } from "../../src/entrypoints/panel/panel-surface";
+import {
+  PANEL_TEST_SCOPE,
+  completedPanelSummary,
+  panelController,
+} from "./panel-controller.test-helpers";
+
+let dom: JSDOM;
+let root: Root | null = null;
+let container: Element;
+
+function realmEvent(type: string): Event {
+  const { Event: RealmEvent } = dom.window as unknown as {
+    Event: new (eventType: string, init?: { bubbles?: boolean }) => Event;
+  };
+  return new RealmEvent(type, { bubbles: true });
+}
+
+function Harness({
+  onStart = () => undefined,
+  overrides = {},
+}: {
+  onStart?: (scope: FiledReturnsDownloadScope) => void;
+  overrides?: Partial<PackPanelController>;
+}) {
+  const [scope, setScope] = React.useState<FiledReturnsDownloadScope>(PANEL_TEST_SCOPE);
+  return (
+    <PanelSurface
+      pack={panelController({
+        scope,
+        setScope,
+        startFiledReturnsFlow: async () => onStart(scope),
+        ...overrides,
+      })}
+    />
+  );
+}
+
+async function mount(props: React.ComponentProps<typeof Harness> = {}) {
+  root = createRoot(container);
+  await act(async () => {
+    root?.render(<Harness {...props} />);
+    await Promise.resolve();
+  });
+}
+
+async function clickButton(label: string) {
+  const button = Array.from(container.querySelectorAll("button")).find(
+    (candidate) => candidate.textContent?.trim() === label,
+  );
+  expect(button, `no button named ${label}`).toBeDefined();
+  await act(async () => {
+    button?.dispatchEvent(realmEvent("click"));
+    await Promise.resolve();
+  });
+}
+
+async function choose(value: string) {
+  const select = container.querySelector(".panel-guide select") as HTMLSelectElement | null;
+  expect(select).not.toBeNull();
+  if (!select) return;
+  select.value = value;
+  await act(async () => {
+    select.dispatchEvent(realmEvent("change"));
+    await Promise.resolve();
+  });
+}
+
+function guideControlCount(): number {
+  const guide = container.querySelector(".panel-guide");
+  return (
+    (guide?.querySelectorAll("select").length ?? 0) +
+    (guide?.querySelectorAll("button").length ?? 0) +
+    (guide?.querySelectorAll("summary").length ?? 0)
+  );
+}
+
+describe("panel guided scope interaction", () => {
+  beforeEach(() => {
+    dom = new JSDOM("<div id='root'></div>", {
+      pretendToBeVisual: true,
+      url: "https://extension.test",
+    });
+    Object.assign(globalThis, { document: dom.window.document, window: dom.window });
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    container = dom.window.document.getElementById("root") as Element;
+  });
+
+  afterEach(async () => {
+    if (root) await act(async () => root?.unmount());
+    root = null;
+  });
+
+  it("never exceeds four controls while advancing and focuses the active field", async () => {
+    await mount();
+    expect(guideControlCount()).toBe(3);
+
+    for (let step = 2; step <= 4; step += 1) {
+      await clickButton("Continue");
+      expect(container.textContent).toContain(`Step ${step} of 4`);
+      expect(guideControlCount()).toBe(4);
+      expect(dom.window.document.activeElement).toBe(
+        container.querySelector(".panel-guide select"),
+      );
+    }
+  });
+
+  it("returns to the preceding field without creating another scope", async () => {
+    await mount();
+    await clickButton("Continue");
+    await clickButton("Back");
+
+    expect(container.textContent).toContain("Step 1 of 4");
+    expect(container.querySelectorAll(".panel-guide-scope")).toHaveLength(1);
+    expect(guideControlCount()).toBe(3);
+  });
+
+  it("reconciles artifact availability when the return changes", async () => {
+    await mount();
+    await choose("GSTR-1");
+
+    const scope = container.querySelector(".panel-guide-scope")?.textContent ?? "";
+    expect(scope).toContain("GSTR-1");
+    expect(scope).toContain("Summary (PDF)");
+    expect(scope).not.toContain("Portal data (JSON)");
+  });
+
+  it("starts exactly the one visible FY, period, return and artifact", async () => {
+    const started: FiledReturnsDownloadScope[] = [];
+    await mount({ onStart: (scope) => started.push(scope) });
+
+    await choose("GSTR-1");
+    await clickButton("Continue");
+    await choose("2024-25");
+    await clickButton("Continue");
+    await choose("April");
+    await clickButton("Continue");
+    await choose("EXCEL");
+    await clickButton("Download April 2024-25 E-invoice details (Excel)");
+
+    expect(started).toEqual([
+      {
+        financialYear: "2024-25",
+        period: "April",
+        returnType: "GSTR-1",
+        artifactType: "EXCEL",
+      },
+    ]);
+  });
+
+  it("keeps all unsupported declarations out of every interactive option", async () => {
+    await mount();
+    const optionValues = Array.from(container.querySelectorAll("option"), (option) => option.value);
+
+    expect(optionValues).not.toEqual(
+      expect.arrayContaining(["GSTR-9", "GSTR-4", "IFF", "LEDGERS"]),
+    );
+    expect(container.querySelectorAll(".panel-catalogue li")).toHaveLength(9);
+    expect(
+      container.querySelectorAll(".panel-catalogue button, .panel-catalogue select"),
+    ).toHaveLength(0);
+  });
+
+  it("carries a scope-matched review refusal into the final action", async () => {
+    const interrupted: FiledReturnsFlowSummary = completedPanelSummary({
+      status: "blocked",
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "user-action-required",
+        safeSignals: ["filed-returns-run-needs-review"],
+        safeMessage: "A previous run was interrupted. Reset it before starting another.",
+      },
+    });
+    await mount({ overrides: { lastRunSummary: interrupted, scopedFlowSummary: interrupted } });
+    await clickButton("Continue");
+    await clickButton("Continue");
+    await clickButton("Continue");
+
+    const action = Array.from(container.querySelectorAll(".panel-guide button")).find((button) =>
+      button.textContent?.includes("Reset interrupted run"),
+    );
+    expect(action).toBeDefined();
+    expect((action as HTMLButtonElement | undefined)?.disabled).toBe(true);
+  });
+});
