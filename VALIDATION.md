@@ -942,3 +942,42 @@ retrying.` The focused test failed 1 of 115 session-boundary cases before the fi
 
 - Evidence level: static review and synthetic canonical-output tests only. No authenticated GST
   run, portal capture, sensitive input observation, permission change or release-readiness claim.
+
+### Cycle 16 — positive not-filed filename-fragment suppression
+
+- Before: a valid complete not-filed summary retained `candidate-not-found`, no download
+  diagnostics and the positive-not-filed signal, yet a filename token could append a second
+  sentence claiming that Pack completed a download.
+- Contract: filename metadata cannot override an explicit non-delivery result. The existing
+  summary suppression recognizes the canonical `not-filed` key alongside legacy-unconfirmed and
+  full-year no-artifacts keys. Status, flow state, periods, safe signals, recovery precedence and
+  all confirmed-download filename sentences are unchanged.
+- Failure evidence: all 6 direct/ZIP filename variants failed before the source change. Each
+  persisted successfully, then reopened with the not-filed sentence followed by
+  `Pack completed the download` and a filename caution. All 6 passed after the one-line fix;
+  focused session/ledger coverage passed 192 tests.
+- Clarity assessment: Impeccable's clarify guidance and Pack's design contract support removing
+  contradictory copy rather than adding another explanation. This was a canonical text-output
+  check, not a new visual-layout or browser-interaction qualification.
+- Exact line counts:
+
+  | File                                                      | Before | After |
+  | --------------------------------------------------------- | -----: | ----: |
+  | `gst/filed-returns-durable-status.ts`                     |    661 |   662 |
+  | `background/filed-returns-session-write-boundary.test.ts` |  1,438 | 1,469 |
+
+- Review disposition: privacy CLEAN/PASS and security PASS on exact source head
+  `96127043786637410a326c44fbd4b80e02d1f6a0`. No sensitive data, persisted field, scope,
+  state, user action, completion/retry authority, cleanup, download API, background, permission,
+  host or CSP behavior changed.
+- Complete gate: build and package verification passed at 1.01 MB; TypeScript, zero-warning ESLint
+  and repo-wide Prettier passed. Full Vitest exact final three lines:
+
+  ```text
+       Tests  2249 passed (2249)
+    Start at  05:12:41
+    Duration  211.84s (transform 8.30s, setup 0ms, import 29.96s, tests 148.86s, environment 15ms)
+  ```
+
+- Evidence level: static review and synthetic persistence/reopen tests only. No authenticated GST
+  run, portal capture, sensitive input observation, permission change or release-readiness claim.

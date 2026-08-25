@@ -676,3 +676,41 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
 - Learned / plan change: a completion-looking diagnostic fragment must not bypass the canonical
   target status. The next cycle audits summary-level composition where a positive not-filed result
   can coexist with an individually allowed filename signal.
+
+## Cycle 16 — remove filename completion claims from not-filed summaries
+
+- Window: 2026-08-26 05:10–05:16 IST.
+- Picked: a positively not-filed single-period result is a valid completed selection with
+  `candidate-not-found` state and no download diagnostic. Allowlisted filename tokens could still
+  append completed-download prose to that explicit absence result.
+- Measured before: all 6 direct/ZIP filename variants passed persistence but failed the reopened
+  message assertion. The received value began with the exact not-filed sentence and then appended
+  `Pack completed the download`, followed by the overridden/unavailable filename caution.
+- Changed: the existing non-delivery filename suppression also recognizes the canonical
+  `not-filed` message key. It adds no new copy and preserves status, state, completed periods and
+  safe signals. Confirmed direct/ZIP filename warnings and partial-ZIP warnings remain unchanged.
+- Clarity review: Impeccable's clarify guidance and the local design contract favor the existing
+  precise portal-reported absence sentence. Removing contradictory prose is sufficient; no new
+  control, instruction, visual treatment or recovery action was introduced.
+- Discrimination evidence: the six selected persistence/reopen rows failed before the one-line
+  classifier addition and passed after it. Focused coverage passed 2 files / 192 tests.
+- Production line accounting: durable status 661→662; session persistence/reopen tests
+  1,438→1,469.
+- Review: privacy CLEAN/PASS and security PASS, both exact-commit bound to
+  `96127043786637410a326c44fbd4b80e02d1f6a0`. No storage shape, target binding, status/state,
+  retry/completion authority, download API, manifest, permission, host, CSP or dependency drift.
+- Complete gate: build passed at 1.01 MB; package verification passed; TypeScript passed; ESLint
+  passed with zero warnings; Prettier passed repo-wide; full Vitest passed 125 files and 2,249
+  tests. The known missing TypeScript source-map warning remained non-failing. Exact footer:
+
+  ```text
+   Test Files  125 passed (125)
+        Tests  2249 passed (2249)
+     Start at  05:12:41
+     Duration  211.84s (transform 8.30s, setup 0ms, import 29.96s, tests 148.86s, environment 15ms)
+  ```
+
+- Checkpoint: `9612704 fix(recovery): suppress not-filed filename claims`.
+- Learned / plan change: terminal selection completion is not always file delivery. With those
+  claims separated, the next cycle consolidates the duplicated filename-family classifier while
+  preserving the confirmed/unresolved wording and override precedence exactly.
