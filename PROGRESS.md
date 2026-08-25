@@ -407,3 +407,41 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
 - Learned / plan change: a fixed durable signal is incomplete unless every canonical renderer that
   can reopen it preserves the same actionable caution, including special-case early returns. The
   next cycle audits other post-completion diagnostic families for allowlist-plus-renderer agreement.
+
+## Cycle 10 — preserve confirmed fiscal-year ZIP copy after reopen
+
+- Window: 2026-08-26 04:05–04:11 IST.
+- Picked: apply Cycle 9's producer/allowlist/renderer agreement check to the full-fiscal-year ZIP
+  signal family.
+- Measured before: the canonical summary renderer used
+  `includes("full-fiscal-year-zip-download")` to select review copy. The positive
+  `full-fiscal-year-zip-downloaded` token also contains that substring, so a validated complete run
+  reopened with `Pack could not confirm the final fiscal-year ZIP` despite retaining its confirmed
+  delivery signal. Existing agreement tests stopped before canonical persistence and did not catch
+  the copy inversion.
+- Without-fix proof: the new persistence/reopen test failed one case. Expected complete copy was
+  replaced by the final-ZIP review sentence while `status: complete` and
+  `full-fiscal-year-zip-downloaded` both remained present.
+- Changed: the review matcher now uses the actual negative/observing family prefix
+  `full-fiscal-year-zip-download-`. It still covers ID missing/not found, search unavailable,
+  started, state unknown and unconfirmed signals; it excludes only the positive
+  `full-fiscal-year-zip-downloaded` token. No state, signal, user action, retry or completion guard
+  changed. Production line count remains 580→580.
+- Review: privacy CLEAN/PASS and security PASS, both exact-commit bound to
+  `4979c69f25090b083019b11096a9fe041f649d92`. Reviewers confirmed closed durable parsing precedes
+  copy selection and every current negative signal still maps to review.
+- Complete gate: build passed at 1.01 MB; package verification passed; TypeScript passed; ESLint
+  passed with zero warnings; Prettier passed repo-wide; full Vitest passed 125 files and 2,217
+  tests. The known missing TypeScript source-map warning remained non-failing. Exact Vitest footer:
+
+  ```text
+   Test Files  125 passed (125)
+        Tests  2217 passed (2217)
+     Start at  04:08:06
+     Duration  156.13s (transform 2.86s, setup 0ms, import 13.54s, tests 127.21s, environment 8ms)
+  ```
+
+- Checkpoint: `4979c69 fix(recovery): preserve confirmed zip copy`.
+- Learned / plan change: prefix families need delimiter-aware matching; a positive terminal token
+  can otherwise be swallowed by its negative sibling. The next cycle checks other broad
+  `includes`/`startsWith` renderer predicates against their positive terminal siblings.

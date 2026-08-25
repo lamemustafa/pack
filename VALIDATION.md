@@ -701,3 +701,31 @@ reviewed persistence and failure contracts.
 - Evidence level: static review and synthetic storage/unit/integration gates only. No authenticated
   GST run, browser download fixture, portal capture, sensitive input observation, permission
   change or release-readiness claim.
+
+### Cycle 10 — full-year ZIP positive/negative prefix agreement
+
+- Before: `messageKeyForSummary` selected final-ZIP review copy for any signal containing
+  `full-fiscal-year-zip-download`. The positive terminal signal
+  `full-fiscal-year-zip-downloaded` matched that substring and therefore reopened a complete run
+  with unconfirmed-download copy.
+- Regression: canonical persistence accepted the complete full-year summary and retained both
+  `full-fiscal-year-complete` and `full-fiscal-year-zip-downloaded`, but the reopened message was
+  `Pack could not confirm the final fiscal-year ZIP. Check the exact browser download before
+retrying.` The focused test failed 1 of 115 session-boundary cases before the fix.
+- Fix: delimiter-aware prefix `full-fiscal-year-zip-download-` retains review handling for every
+  current negative/observing signal and excludes the positive `...-downloaded` sibling. The
+  canonical status, flow state, signals and positive evidence are unchanged.
+- Review disposition: privacy CLEAN/PASS and security PASS on exact source head
+  `4979c69f25090b083019b11096a9fe041f649d92`. No sensitive data, storage shape, permissions,
+  background action, downloads API, completion evidence or retry authority changed.
+- Complete gate: build and package verification passed at 1.01 MB; TypeScript, zero-warning ESLint
+  and repo-wide Prettier passed. Full Vitest exact final three lines:
+
+  ```text
+       Tests  2217 passed (2217)
+    Start at  04:08:06
+    Duration  156.13s (transform 2.86s, setup 0ms, import 13.54s, tests 127.21s, environment 8ms)
+  ```
+
+- Evidence level: static review and synthetic persistence/reopen gates only. No authenticated GST
+  run, portal capture, sensitive input observation, permission change or release-readiness claim.
