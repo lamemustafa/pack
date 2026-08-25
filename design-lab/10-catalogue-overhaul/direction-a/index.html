@@ -1,0 +1,835 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="data:," />
+    <title>Pack catalogue direction A — outcome first</title>
+    <style>
+      :root {
+        --pack-surface: #ffffff;
+        --pack-surface-raised: #fbfcfe;
+        --pack-surface-muted: #f7f9fb;
+        --pack-canvas: #f5f7fa;
+        --pack-surface-inset: #eef3f8;
+        --pack-surface-accent-soft: #e9f1f8;
+        --pack-ink-primary: #172033;
+        --pack-ink-secondary: #334155;
+        --pack-ink-tertiary: #43566b;
+        --pack-ink-muted: #526477;
+        --pack-ink-link: #244d7c;
+        --pack-ink-inverse: #ffffff;
+        --pack-border-subtle: #d8e1ec;
+        --pack-border-default: #c8d3de;
+        --pack-border-strong: #9fb0c1;
+        --pack-border-accent: #245b91;
+        --pack-action: #173a63;
+        --pack-action-hover: #0f2a49;
+        --pack-success-fg: #115d38;
+        --pack-success-bg: #e8f8ef;
+        --pack-success-border: #9cc7b1;
+        --pack-warning-fg: #75420b;
+        --pack-warning-bg: #fff7e8;
+        --pack-warning-border: #ddc58b;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        background: var(--pack-canvas);
+      }
+
+      body {
+        min-width: 0;
+        margin: 0;
+        color: var(--pack-ink-primary);
+        background: var(--pack-canvas);
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        font-size: 15px;
+        line-height: 1.5;
+      }
+
+      button,
+      select,
+      summary {
+        font: inherit;
+      }
+
+      button,
+      select,
+      summary {
+        touch-action: manipulation;
+      }
+
+      button:focus-visible,
+      select:focus-visible,
+      summary:focus-visible {
+        outline: 2px solid var(--pack-border-accent);
+        outline-offset: 2px;
+      }
+
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.72;
+      }
+
+      .prototype {
+        width: 320px;
+        max-width: 100vw;
+        min-height: 100vh;
+        margin: 0 auto;
+        overflow-x: clip;
+        border-inline: 1px solid var(--pack-border-default);
+        background: var(--pack-surface);
+      }
+
+      .masthead {
+        display: flex;
+        align-items: center;
+        min-width: 0;
+        gap: 8px;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--pack-border-subtle);
+      }
+
+      .mark {
+        display: grid;
+        width: 24px;
+        height: 24px;
+        flex: 0 0 auto;
+        place-items: center;
+        border-radius: 4px;
+        color: var(--pack-ink-inverse);
+        background: var(--pack-action);
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .product-name {
+        min-width: 0;
+        font-size: 15px;
+        font-weight: 600;
+      }
+
+      .connection {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        margin-left: auto;
+        color: var(--pack-success-fg);
+        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+        font-size: 12px;
+        white-space: nowrap;
+      }
+
+      .connection::before {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: currentColor;
+        content: "";
+      }
+
+      .band {
+        min-width: 0;
+        padding: 16px;
+        border-bottom: 1px solid var(--pack-border-subtle);
+      }
+
+      .band-muted {
+        background: var(--pack-surface-muted);
+      }
+
+      h1,
+      h2,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        margin-bottom: 4px;
+        font-size: 20px;
+        font-weight: 600;
+        line-height: 1.2;
+        letter-spacing: -0.02em;
+        text-wrap: balance;
+      }
+
+      h2 {
+        margin-bottom: 8px;
+        font-size: 15px;
+        font-weight: 600;
+        line-height: 1.3;
+      }
+
+      .lede,
+      .scope-limit,
+      .disclaimer {
+        color: var(--pack-ink-muted);
+      }
+
+      .lede {
+        margin-bottom: 14px;
+        font-size: 13px;
+        text-wrap: pretty;
+      }
+
+      .recipe-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .recipe {
+        display: grid;
+        width: 100%;
+        min-width: 0;
+        min-height: 48px;
+        cursor: pointer;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 4px 10px;
+        align-items: center;
+        padding: 8px 10px;
+        border: 1px solid var(--pack-border-default);
+        border-radius: 6px;
+        color: var(--pack-ink-primary);
+        background: var(--pack-surface);
+        text-align: left;
+      }
+
+      .recipe:hover {
+        border-color: var(--pack-border-strong);
+        background: var(--pack-surface-muted);
+      }
+
+      .recipe[aria-pressed="true"] {
+        border-color: var(--pack-border-accent);
+        background: var(--pack-surface-accent-soft);
+      }
+
+      .recipe-title {
+        min-width: 0;
+        font-size: 13px;
+        font-weight: 600;
+        overflow-wrap: anywhere;
+      }
+
+      .recipe-result,
+      .recipe-periodicity {
+        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+        font-size: 12px;
+      }
+
+      .recipe-result {
+        color: var(--pack-ink-secondary);
+      }
+
+      .recipe-periodicity {
+        grid-row: 1 / span 2;
+        grid-column: 2;
+        color: var(--pack-ink-muted);
+        white-space: nowrap;
+      }
+
+      details.catalogue-door {
+        margin-top: 12px;
+        border-top: 1px solid var(--pack-border-subtle);
+      }
+
+      .catalogue-door > summary {
+        min-height: 40px;
+        cursor: pointer;
+        color: var(--pack-ink-link);
+        font-size: 13px;
+        font-weight: 600;
+        list-style-position: inside;
+        padding-top: 10px;
+      }
+
+      .catalogue-intro {
+        margin: 0 0 8px;
+        color: var(--pack-ink-muted);
+        font-size: 12px;
+      }
+
+      .catalogue-list {
+        border-top: 1px solid var(--pack-border-subtle);
+      }
+
+      .catalogue-row {
+        display: grid;
+        min-width: 0;
+        min-height: 44px;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 2px 8px;
+        align-items: center;
+        padding: 7px 0;
+        border-bottom: 1px solid var(--pack-border-subtle);
+      }
+
+      button.catalogue-row {
+        width: 100%;
+        cursor: pointer;
+        border-top: 0;
+        border-right: 0;
+        border-left: 0;
+        color: var(--pack-ink-primary);
+        background: transparent;
+        text-align: left;
+      }
+
+      button.catalogue-row:hover {
+        background: var(--pack-surface-muted);
+      }
+
+      .catalogue-label {
+        min-width: 0;
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .catalogue-meta {
+        color: var(--pack-ink-muted);
+        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+        font-size: 12px;
+        overflow-wrap: anywhere;
+      }
+
+      .support-status {
+        grid-row: 1 / span 2;
+        grid-column: 2;
+        border: 1px solid var(--pack-border-default);
+        border-radius: 2px;
+        padding: 2px 5px;
+        color: var(--pack-ink-secondary);
+        background: var(--pack-surface-muted);
+        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+        font-size: 12px;
+        white-space: nowrap;
+      }
+
+      .catalogue-row[data-supported="true"] .support-status {
+        border-color: var(--pack-success-border);
+        color: var(--pack-success-fg);
+        background: var(--pack-success-bg);
+      }
+
+      .catalogue-row[data-supported="false"] {
+        color: var(--pack-ink-secondary);
+        background: var(--pack-surface-muted);
+      }
+
+      .scope-band[hidden],
+      .prototype-notice[hidden] {
+        display: none;
+      }
+
+      .scope-heading {
+        display: flex;
+        min-width: 0;
+        align-items: start;
+        gap: 8px;
+      }
+
+      .scope-heading > div {
+        min-width: 0;
+      }
+
+      .change-button {
+        flex: 0 0 auto;
+        min-height: 32px;
+        margin-left: auto;
+        cursor: pointer;
+        border: 1px solid var(--pack-border-default);
+        border-radius: 4px;
+        padding: 4px 8px;
+        color: var(--pack-ink-link);
+        background: var(--pack-surface);
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .change-button:hover {
+        border-color: var(--pack-border-strong);
+        background: var(--pack-surface-muted);
+      }
+
+      .scope-artifact {
+        margin: 0;
+        color: var(--pack-ink-secondary);
+        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+        font-size: 12px;
+        overflow-wrap: anywhere;
+      }
+
+      .scope-form {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px 8px;
+        margin-top: 12px;
+      }
+
+      label {
+        display: grid;
+        min-width: 0;
+        gap: 4px;
+        color: var(--pack-ink-secondary);
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      select {
+        width: 100%;
+        min-width: 0;
+        min-height: 38px;
+        border: 1px solid var(--pack-border-default);
+        border-radius: 4px;
+        padding: 0 28px 0 8px;
+        color: var(--pack-ink-primary);
+        background: var(--pack-surface);
+        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+        font-size: 13px;
+      }
+
+      .run-button {
+        width: 100%;
+        min-height: 42px;
+        margin-top: 12px;
+        cursor: pointer;
+        border: 1px solid var(--pack-action);
+        border-radius: 6px;
+        color: var(--pack-ink-inverse);
+        background: var(--pack-action);
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      .run-button:hover {
+        border-color: var(--pack-action-hover);
+        background: var(--pack-action-hover);
+      }
+
+      .scope-limit {
+        margin: 8px 0 0;
+        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+        font-size: 12px;
+        text-align: center;
+      }
+
+      .prototype-notice {
+        margin: 12px 0 0;
+        border: 1px solid var(--pack-warning-border);
+        border-radius: 4px;
+        padding: 8px;
+        color: var(--pack-warning-fg);
+        background: var(--pack-warning-bg);
+        font-size: 12px;
+      }
+
+      .measurements {
+        background: var(--pack-surface-inset);
+      }
+
+      .measurement-title {
+        margin-bottom: 8px;
+        color: var(--pack-ink-secondary);
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .measurement-list {
+        display: grid;
+        margin: 0;
+      }
+
+      .measurement-row {
+        display: grid;
+        min-width: 0;
+        grid-template-columns: 112px minmax(0, 1fr);
+        gap: 8px;
+        padding: 5px 0;
+        border-top: 1px solid var(--pack-border-default);
+      }
+
+      .measurement-row dt,
+      .measurement-row dd {
+        min-width: 0;
+        margin: 0;
+        font-size: 12px;
+      }
+
+      .measurement-row dt {
+        color: var(--pack-ink-muted);
+      }
+
+      .measurement-row dd {
+        color: var(--pack-ink-primary);
+        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+        overflow-wrap: anywhere;
+      }
+
+      .disclaimer {
+        margin: 0;
+        padding: 12px 16px 16px;
+        background: var(--pack-surface-muted);
+        font-size: 12px;
+        text-wrap: pretty;
+      }
+
+      @media (max-width: 319px) {
+        .prototype {
+          width: 100%;
+          border-inline: 0;
+        }
+
+        .band,
+        .masthead {
+          padding-inline: 12px;
+        }
+
+        .scope-form {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="prototype" id="prototype">
+      <header class="masthead">
+        <span class="mark" aria-hidden="true">P</span>
+        <span class="product-name">Pack</span>
+        <span class="connection">GST tab ready</span>
+      </header>
+
+      <section class="band" id="recipe-step" aria-labelledby="outcome-title">
+        <h1 id="outcome-title">Which file do you need?</h1>
+        <p class="lede">Choose the outcome. Pack will show one exact target before it acts.</p>
+        <div class="recipe-list" id="recipe-list" aria-label="Common outcomes"></div>
+
+        <details class="catalogue-door" id="catalogue-door" data-default-control>
+          <summary>Browse all return types</summary>
+          <p class="catalogue-intro">
+            Supported outcomes are selectable. Other rows explain catalogue shape only.
+          </p>
+          <div class="catalogue-list" id="catalogue-list"></div>
+        </details>
+      </section>
+
+      <section
+        class="band band-muted scope-band"
+        id="scope-band"
+        aria-labelledby="scope-title"
+        hidden
+      >
+        <div class="scope-heading">
+          <div>
+            <h2 id="scope-title">Confirm one target</h2>
+            <p class="scope-artifact" id="scope-artifact"></p>
+          </div>
+          <button class="change-button" id="change-button" type="button">Change</button>
+        </div>
+
+        <div class="scope-form">
+          <label>
+            Financial year
+            <select id="financial-year" aria-label="Financial year">
+              <option>2025–26</option>
+              <option>2024–25</option>
+            </select>
+          </label>
+          <label>
+            Period
+            <select id="period" aria-label="Period"></select>
+          </label>
+        </div>
+
+        <button class="run-button" id="run-button" type="button">Prepare this file</button>
+        <p class="scope-limit">1 FY · 1 period · 1 return · 1 artifact</p>
+        <p class="prototype-notice" id="prototype-notice" role="status" aria-live="polite" hidden>
+          Prototype stopped before portal action. No file was requested or saved.
+        </p>
+      </section>
+
+      <aside class="band measurements" aria-labelledby="measurement-title">
+        <h2 class="measurement-title" id="measurement-title">Prototype measurements</h2>
+        <dl class="measurement-list">
+          <div class="measurement-row">
+            <dt>Default controls</dt>
+            <dd id="measure-controls">—</dd>
+          </div>
+          <div class="measurement-row">
+            <dt>Active selection</dt>
+            <dd id="measure-selection">None</dd>
+          </div>
+          <div class="measurement-row">
+            <dt>Common case</dt>
+            <dd id="measure-clicks">2 clicks · choose + prepare</dd>
+          </div>
+          <div class="measurement-row">
+            <dt>Catalogue render</dt>
+            <dd id="measure-catalogue">—</dd>
+          </div>
+          <div class="measurement-row">
+            <dt>Viewport width</dt>
+            <dd id="measure-width">—</dd>
+          </div>
+          <div class="measurement-row">
+            <dt>Horizontal overflow</dt>
+            <dd id="measure-overflow">Checking…</dd>
+          </div>
+        </dl>
+      </aside>
+
+      <p class="disclaimer">
+        Independent tool. Not affiliated with, endorsed by or operated by GSTN, CBIC or the
+        Government of India. Synthetic prototype content only.
+      </p>
+    </main>
+
+    <script>
+      const catalogue = Object.freeze([
+        {
+          id: "gstr-3b",
+          label: "GSTR-3B",
+          periodicity: "monthly",
+          supported: true,
+          outcome: "Filed GSTR-3B copy",
+          artifact: "Filed return (PDF)",
+          artifactScope: "PDF",
+        },
+        {
+          id: "gstr-1",
+          label: "GSTR-1",
+          periodicity: "monthly",
+          supported: true,
+          outcome: "GSTR-1 e-invoice workbook",
+          artifact: "E-invoice details (Excel)",
+          artifactScope: "EXCEL",
+        },
+        {
+          id: "gstr-2b",
+          label: "GSTR-2B",
+          periodicity: "monthly",
+          supported: true,
+          outcome: "GSTR-2B ITC workbook",
+          artifact: "Details (Excel)",
+          artifactScope: "EXCEL",
+        },
+        {
+          id: "gstr-9",
+          label: "GSTR-9",
+          periodicity: "annual",
+          supported: false,
+          reason: "Declared only · annual flow is not supported",
+        },
+        {
+          id: "gstr-9c",
+          label: "GSTR-9C",
+          periodicity: "annual",
+          supported: false,
+          reason: "Declared only · annual flow is not supported",
+        },
+        {
+          id: "gstr-4",
+          label: "GSTR-4",
+          periodicity: "quarterly",
+          supported: false,
+          reason: "Declared only · quarterly flow is not supported",
+        },
+        {
+          id: "gstr-4a",
+          label: "GSTR-4A",
+          periodicity: "quarterly",
+          supported: false,
+          reason: "Declared only · quarterly flow is not supported",
+        },
+        {
+          id: "iff",
+          label: "IFF",
+          periodicity: "monthly",
+          supported: false,
+          reason: "Declared only · IFF is not supported",
+        },
+        {
+          id: "ledgers",
+          label: "Ledgers",
+          periodicity: "none",
+          supported: false,
+          reason: "Declared only · no period axis or supported flow",
+        },
+      ]);
+
+      const periods = Object.freeze({
+        monthly: ["July", "June", "May", "April"],
+        quarterly: ["Apr–Jun", "Jul–Sep", "Oct–Dec", "Jan–Mar"],
+        annual: ["Full financial year"],
+        none: ["Not period-based"],
+      });
+
+      const recipeList = document.querySelector("#recipe-list");
+      const catalogueList = document.querySelector("#catalogue-list");
+      const catalogueDoor = document.querySelector("#catalogue-door");
+      const scopeBand = document.querySelector("#scope-band");
+      const scopeArtifact = document.querySelector("#scope-artifact");
+      const financialYear = document.querySelector("#financial-year");
+      const period = document.querySelector("#period");
+      const runButton = document.querySelector("#run-button");
+      const changeButton = document.querySelector("#change-button");
+      const prototypeNotice = document.querySelector("#prototype-notice");
+      const prototype = document.querySelector("#prototype");
+
+      let selected = null;
+      let commonCaseClicks = 0;
+
+      function recipeMarkup(item) {
+        return `
+          <span class="recipe-title">${item.outcome}</span>
+          <span class="recipe-result">${item.artifact}</span>
+          <span class="recipe-periodicity">${item.periodicity}</span>
+        `;
+      }
+
+      function renderRecipe(item) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "recipe";
+        button.dataset.catalogueId = item.id;
+        button.dataset.defaultControl = "";
+        button.setAttribute("aria-pressed", "false");
+        button.innerHTML = recipeMarkup(item);
+        button.addEventListener("click", () => chooseOutcome(item));
+        return button;
+      }
+
+      function catalogueRowMarkup(item) {
+        const detail = item.supported ? item.artifact : item.reason;
+        const status = item.supported ? "Choose" : "Not supported";
+        return `
+          <span class="catalogue-label">${item.label}</span>
+          <span class="catalogue-meta">${item.periodicity} · ${detail}</span>
+          <span class="support-status">${status}</span>
+        `;
+      }
+
+      function renderCatalogueRow(item) {
+        const row = document.createElement(item.supported ? "button" : "div");
+        row.className = "catalogue-row";
+        row.dataset.supported = String(item.supported);
+        row.dataset.catalogueId = item.id;
+        row.innerHTML = catalogueRowMarkup(item);
+        if (item.supported) {
+          row.type = "button";
+          row.addEventListener("click", () => chooseOutcome(item));
+        }
+        return row;
+      }
+
+      function setPeriodOptions(periodicity) {
+        period.replaceChildren(...periods[periodicity].map((label) => new Option(label, label)));
+      }
+
+      function chooseOutcome(item) {
+        selected = item;
+        commonCaseClicks = 1;
+        setPeriodOptions(item.periodicity);
+        scopeArtifact.textContent = `${item.label} · ${item.artifact}`;
+        scopeBand.hidden = false;
+        prototypeNotice.hidden = true;
+        runButton.disabled = false;
+        runButton.textContent = "Prepare this file";
+        catalogueDoor.open = false;
+        document.querySelectorAll(".recipe").forEach((button) => {
+          button.setAttribute("aria-pressed", String(button.dataset.catalogueId === item.id));
+        });
+        updateMeasurements();
+        scopeBand.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+
+      function clearOutcome() {
+        selected = null;
+        commonCaseClicks = 0;
+        scopeBand.hidden = true;
+        prototypeNotice.hidden = true;
+        document.querySelectorAll(".recipe").forEach((button) => {
+          button.setAttribute("aria-pressed", "false");
+        });
+        updateMeasurements();
+        document.querySelector("#outcome-title").focus({ preventScroll: true });
+      }
+
+      function activeScope() {
+        if (!selected) return "None";
+        return `${financialYear.value} · ${period.value} · ${selected.label} · ${selected.artifactScope}`;
+      }
+
+      function updateMeasurements() {
+        const defaultControls = document.querySelectorAll("[data-default-control]").length;
+        const hasOverflow =
+          prototype.scrollWidth > prototype.clientWidth ||
+          document.documentElement.scrollWidth > window.innerWidth;
+        document.querySelector("#measure-controls").textContent = `${defaultControls} visible`;
+        document.querySelector("#measure-selection").textContent = activeScope();
+        document.querySelector("#measure-clicks").textContent =
+          commonCaseClicks === 0
+            ? "2 clicks · choose + prepare"
+            : `${Math.min(commonCaseClicks, 2)} of 2 clicks`;
+        document.querySelector("#measure-catalogue").textContent =
+          `${catalogueList.children.length} rows · one renderer`;
+        document.querySelector("#measure-width").textContent =
+          `${Math.round(prototype.getBoundingClientRect().width)}px`;
+        document.querySelector("#measure-overflow").textContent = hasOverflow ? "Detected" : "None";
+      }
+
+      if (catalogue.length !== 9) {
+        throw new Error(`Catalogue must render exactly nine rows; received ${catalogue.length}.`);
+      }
+
+      catalogue
+        .filter((item) => item.supported)
+        .forEach((item) => {
+          recipeList.append(renderRecipe(item));
+        });
+      catalogue.forEach((item) => catalogueList.append(renderCatalogueRow(item)));
+
+      runButton.addEventListener("click", () => {
+        if (!selected) return;
+        commonCaseClicks = 2;
+        prototypeNotice.hidden = false;
+        runButton.disabled = true;
+        runButton.textContent = "Prototype boundary reached";
+        updateMeasurements();
+      });
+
+      changeButton.addEventListener("click", clearOutcome);
+      financialYear.addEventListener("change", updateMeasurements);
+      period.addEventListener("change", updateMeasurements);
+      catalogueDoor.addEventListener("toggle", updateMeasurements);
+      window.addEventListener("resize", updateMeasurements);
+
+      if ("ResizeObserver" in window) {
+        new ResizeObserver(updateMeasurements).observe(prototype);
+      }
+
+      updateMeasurements();
+    </script>
+  </body>
+</html>
