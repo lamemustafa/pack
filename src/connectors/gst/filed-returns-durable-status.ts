@@ -186,10 +186,11 @@ function canonicalDurableTargetMessage(
   status: FiledReturnsFullFiscalYearTargetStatus | "target-review",
   signals: readonly string[],
 ): string {
-  return [
-    renderDurableMessage(messageKeyForTarget(status, signals), scope),
-    filenameOutcomeMessage(signals),
-  ]
+  const filenameMessage =
+    status === "downloaded"
+      ? filenameOutcomeMessage(signals)
+      : unresolvedTargetFilenameOutcomeMessage(signals);
+  return [renderDurableMessage(messageKeyForTarget(status, signals), scope), filenameMessage]
     .filter(Boolean)
     .join(" ");
 }
@@ -208,6 +209,24 @@ function filenameOutcomeMessage(signals: readonly string[]): string {
     )
   ) {
     return "Pack completed the download, but could not confirm its saved filename. Check browser Downloads before using the file.";
+  }
+  return "";
+}
+
+function unresolvedTargetFilenameOutcomeMessage(signals: readonly string[]): string {
+  if (
+    signals.some((signal) =>
+      FILED_RETURNS_FILENAME_OVERRIDDEN_SIGNALS.some((value) => value === signal),
+    )
+  ) {
+    return "The browser may have used a different saved name, but Pack could not verify that any file belongs to this unresolved target. Check browser Downloads before using a file.";
+  }
+  if (
+    signals.some((signal) =>
+      FILED_RETURNS_FILENAME_UNAVAILABLE_SIGNALS.some((value) => value === signal),
+    )
+  ) {
+    return "Pack could not confirm the saved filename for this unresolved target. Check browser Downloads before using a file.";
   }
   return "";
 }

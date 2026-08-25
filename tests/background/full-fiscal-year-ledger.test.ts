@@ -516,6 +516,54 @@ describe("full fiscal year ledger", () => {
     );
   });
 
+  it.each([
+    [
+      "download-filename-overridden",
+      "The browser may have used a different saved name, but Pack could not verify that any file belongs to this unresolved target. Check browser Downloads before using a file.",
+    ],
+    [
+      "download-filename-unavailable",
+      "Pack could not confirm the saved filename for this unresolved target. Check browser Downloads before using a file.",
+    ],
+  ])("keeps target-review filename outcome %s neutral", (signal, warning) => {
+    const durable = canonicalDurableTargetStatus(
+      { financialYear: "2026-27", period: "April", returnType: "GSTR-3B" },
+      "target-review",
+      ["portal-system-error", signal],
+    );
+
+    expect(durable.safeMessage).toBe(
+      `Pack could not verify the browser download for April. Check Downloads before retrying or cancelling this target. ${warning}`,
+    );
+    expect(durable.safeMessage).not.toContain("Pack completed the download");
+  });
+
+  it.each([
+    "filed-return-download-target-mismatch",
+    "filed-gstr3b-direct-download-action-mismatch",
+    "filed-gstr3b-direct-download-start-rejected",
+    "filed-gstr3b-direct-download-target-rejected",
+    "filed-return-download-diagnostics-rejected",
+  ])("keeps target-review filename copy neutral with %s", (contradiction) => {
+    const durable = canonicalDurableTargetStatus(
+      { financialYear: "2026-27", period: "April", returnType: "GSTR-3B" },
+      "target-review",
+      [
+        "browser-download-completed",
+        "browser-download-id:81",
+        "browser-download-non-empty",
+        "download-filename-overridden",
+        contradiction,
+      ],
+    );
+
+    expect(durable.safeMessage).toBe(
+      "Pack could not verify the browser download for April. Check Downloads before retrying or cancelling this target. The browser may have used a different saved name, but Pack could not verify that any file belongs to this unresolved target. Check browser Downloads before using a file.",
+    );
+    expect(durable.safeMessage).not.toContain("Pack completed the download");
+    expect(durable.safeMessage).not.toContain("Pack recorded a different saved name");
+  });
+
   it("maps only positive not-filed evidence to a terminal not-filed target", () => {
     expect(
       targetStatusFromFlowStep({
