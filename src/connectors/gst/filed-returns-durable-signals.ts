@@ -67,6 +67,17 @@ export const FILED_RETURN_ROUTE_MISMATCH_SIGNALS = {
   "GSTR-3B": "gstr3b-route-mismatched-return",
 } as const satisfies Record<FiledReturnsReturnType, string>;
 
+export const FILED_RETURNS_FILENAME_UNAVAILABLE_SIGNALS = [
+  "download-filename-unavailable",
+  "zip-download-filename-item-unavailable",
+  "zip-download-filename-search-unavailable",
+  "zip-download-filename-unavailable",
+] as const;
+export const FILED_RETURNS_FILENAME_OVERRIDDEN_SIGNALS = [
+  "download-filename-overridden",
+  "zip-download-filename-overridden",
+] as const;
+
 const EXACT_DURABLE_SIGNALS = new Set([
   ...FILED_RETURNS_OBSERVATION_SIGNALS,
   "browser-download-completed",
@@ -96,6 +107,8 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "detail-ready-step-limit-reached",
   "download-excel-gstr1-visible",
   "download-excel-gstr2b-visible",
+  ...FILED_RETURNS_FILENAME_UNAVAILABLE_SIGNALS,
+  ...FILED_RETURNS_FILENAME_OVERRIDDEN_SIGNALS,
   "download-filed-gstr1-visible",
   "download-filed-gstr2b-visible",
   "download-filed-gstr3b-visible",
@@ -201,7 +214,6 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "filed-returns-page-settling",
   "filed-returns-route",
   "filed-returns-run-acknowledged",
-  "zip-download-filename-overridden",
   "filed-returns-run-active",
   "filed-returns-run-needs-review",
   "filed-returns-target-cancelled",

@@ -161,6 +161,25 @@ describe("downloadAcquiredArtifact", () => {
     expect(result).toMatchObject({ ok: true, safeSignals: [] });
   });
 
+  it("keeps completed artifact evidence but names an unavailable saved filename", async () => {
+    const result = await downloadAcquiredArtifact(
+      input(),
+      deps({
+        downloads: {
+          ...downloads,
+          search: vi.fn(async () => [{ ...matchingItem(), filename: undefined }]),
+        } as never,
+      }),
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      safeSignals: ["download-filename-unavailable"],
+      safeMessage:
+        "Pack completed the download, but could not confirm its saved filename. Check browser Downloads before using the file.",
+    });
+  });
+
   it("keeps a completed target complete when the browser saved it under a different base name", async () => {
     const observedFilename = "/synthetic/Downloads/download.pdf";
     const result = await downloadAcquiredArtifact(

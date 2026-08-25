@@ -716,6 +716,110 @@ describe("filed-return session write boundary", () => {
     ).resolves.toBeNull();
   });
 
+  it.each([
+    [
+      "download-filename-unavailable",
+      "Pack completed the download, but could not confirm its saved filename. Check browser Downloads before using the file.",
+    ],
+    [
+      "download-filename-overridden",
+      "Pack completed the download, but the browser saved it under a different name. Check browser Downloads before using the file.",
+    ],
+  ])(
+    "retains direct-download filename outcome %s through canonical persistence and reopen",
+    async (signal, warning) => {
+      const base = completeSinglePeriodSummary();
+      const summary = completeSinglePeriodSummary({
+        flowStep: {
+          safeSignals: [...base.flowStep.safeSignals, signal],
+        },
+      });
+
+      await expect(
+        persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, summary),
+      ).resolves.not.toBeNull();
+      await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+        status: "complete",
+        flowStep: {
+          state: "downloaded",
+          safeSignals: expect.arrayContaining([signal]),
+          safeMessage: `Pack completed the local filed-return download for March. ${warning}`,
+        },
+      });
+    },
+  );
+
+  it.each([
+    [
+      "zip-download-filename-unavailable",
+      "Pack completed the download, but could not confirm its saved filename. Check browser Downloads before using the file.",
+    ],
+    [
+      "zip-download-filename-overridden",
+      "Pack completed the download, but the browser saved it under a different name. Check browser Downloads before using the file.",
+    ],
+  ])(
+    "retains partial ZIP reason %s and its warning through canonical persistence and reopen",
+    async (signal, warning) => {
+      const summary = partialSelectedArtifactBundleSummary(signal);
+
+      await expect(
+        persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, summary),
+      ).resolves.not.toBeNull();
+      await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+        status: "partial",
+        flowStep: {
+          state: "partial",
+          safeSignals: expect.arrayContaining([signal]),
+          safeMessage: `Pack prepared a partial ZIP; missing EXCEL (artifact-generation-timeout). ${warning}`,
+        },
+      });
+    },
+  );
+
+  it.each([
+    [
+      "zip-download-filename-item-unavailable",
+      "Pack completed the download, but could not confirm its saved filename. Check browser Downloads before using the file.",
+    ],
+    [
+      "zip-download-filename-search-unavailable",
+      "Pack completed the download, but could not confirm its saved filename. Check browser Downloads before using the file.",
+    ],
+    [
+      "zip-download-filename-unavailable",
+      "Pack completed the download, but could not confirm its saved filename. Check browser Downloads before using the file.",
+    ],
+    [
+      "zip-download-filename-overridden",
+      "Pack completed the download, but the browser saved it under a different name. Check browser Downloads before using the file.",
+    ],
+  ])(
+    "retains completed ZIP reason %s and its warning through canonical persistence and reopen",
+    async (signal, warning) => {
+      const base = completeSelectedArtifactBundleSummary(true);
+      const summary = {
+        ...base,
+        flowStep: {
+          ...base.flowStep,
+          safeSignals: [...base.flowStep.safeSignals, signal],
+        },
+      };
+
+      await expect(
+        persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, summary),
+      ).resolves.not.toBeNull();
+      await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+        status: "complete",
+        flowStep: {
+          state: "downloaded",
+          safeSignals: expect.arrayContaining([signal]),
+          safeMessage: `Pack completed the local filed-return download for May. ${warning}`,
+        },
+      });
+    },
+  );
+
   it("accepts positive not-filed completion only without download diagnostics", async () => {
     await expect(
       persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, completeNotFiledSummary()),
@@ -944,6 +1048,44 @@ function completeSelectedArtifactBundleSummary(includeZipSignal: boolean) {
         "filed-return-artifact-downloaded:JSON",
         "single-period-opfs-staged:JSON",
         ...(includeZipSignal ? ["single-period-zip-downloaded"] : []),
+      ],
+      safeMessage: "Synthetic supplied portal prose.",
+      downloadDiagnostic: diagnostics.at(-1),
+      downloadDiagnostics: diagnostics,
+    },
+  };
+}
+
+function partialSelectedArtifactBundleSummary(filenameSignal: string) {
+  const diagnostics = [
+    selectedArtifactDiagnostic("PDF", "action-12345678-pdf"),
+    selectedArtifactDiagnostic("JSON", "action-12345678-json"),
+  ];
+  return {
+    scope: {
+      artifactType: "PDF_AND_EXCEL" as const,
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-2B" as const,
+    },
+    status: "partial" as const,
+    updatedAt: "2026-07-24T00:00:00.000Z",
+    completedPeriods: [],
+    currentPeriod: "May",
+    totalPeriods: 1,
+    flowStep: {
+      connectorId: "gst" as const,
+      scopeId: "gst-gstr2b-private-v0",
+      state: "partial" as const,
+      safeSignals: [
+        "filed-return-artifact-downloaded:PDF",
+        "single-period-opfs-staged:PDF",
+        "filed-return-artifact-downloaded:JSON",
+        "single-period-opfs-staged:JSON",
+        "filed-return-artifact-unavailable:EXCEL",
+        "artifact-generation-timeout",
+        "single-period-zip-downloaded",
+        filenameSignal,
       ],
       safeMessage: "Synthetic supplied portal prose.",
       downloadDiagnostic: diagnostics.at(-1),

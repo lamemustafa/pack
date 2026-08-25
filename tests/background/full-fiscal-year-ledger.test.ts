@@ -479,6 +479,43 @@ describe("full fiscal year ledger", () => {
     expect(durable.safeMessage).toContain("verify the browser download");
   });
 
+  it.each([
+    [
+      "download-filename-unavailable",
+      "Pack completed the download, but could not confirm its saved filename. Check browser Downloads before using the file.",
+    ],
+    [
+      "zip-download-filename-item-unavailable",
+      "Pack completed the download, but could not confirm its saved filename. Check browser Downloads before using the file.",
+    ],
+    [
+      "zip-download-filename-search-unavailable",
+      "Pack completed the download, but could not confirm its saved filename. Check browser Downloads before using the file.",
+    ],
+    [
+      "zip-download-filename-unavailable",
+      "Pack completed the download, but could not confirm its saved filename. Check browser Downloads before using the file.",
+    ],
+    [
+      "download-filename-overridden",
+      "Pack completed the download, but the browser saved it under a different name. Check browser Downloads before using the file.",
+    ],
+    [
+      "zip-download-filename-overridden",
+      "Pack completed the download, but the browser saved it under a different name. Check browser Downloads before using the file.",
+    ],
+  ])("retains filename outcome %s in canonical target copy", (signal, warning) => {
+    const durable = canonicalDurableTargetStatus(
+      { financialYear: "2026-27", period: "April", returnType: "GSTR-3B" },
+      "downloaded",
+      ["browser-download-completed", "browser-download-non-empty", signal],
+    );
+
+    expect(durable.safeMessage).toBe(
+      `Pack confirmed the filed-return download for April. ${warning}`,
+    );
+  });
+
   it("maps only positive not-filed evidence to a terminal not-filed target", () => {
     expect(
       targetStatusFromFlowStep({

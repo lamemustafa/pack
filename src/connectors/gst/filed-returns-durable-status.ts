@@ -20,6 +20,8 @@ import {
   isFiledReturnsFinancialYear,
 } from "./filed-returns-scope";
 import {
+  FILED_RETURNS_FILENAME_OVERRIDDEN_SIGNALS,
+  FILED_RETURNS_FILENAME_UNAVAILABLE_SIGNALS,
   FILED_RETURN_ROUTE_MISMATCH_SIGNALS,
   RETURN_TYPE_MISMATCH_RECOVERY_STOPPED_SIGNAL,
   durableFiledReturnsSignalRejectionReason,
@@ -94,7 +96,7 @@ export function canonicalDurableTargetStatus(
   }
   return {
     safeSignals,
-    safeMessage: renderDurableMessage(messageKeyForTarget(status, safeSignals), scope),
+    safeMessage: canonicalDurableTargetMessage(scope, status, safeSignals),
   };
 }
 
@@ -107,7 +109,7 @@ export function parseDurableTargetStatus(
   if (!safeSignals) return null;
   return {
     safeSignals,
-    safeMessage: renderDurableMessage(messageKeyForTarget(status, safeSignals), scope),
+    safeMessage: canonicalDurableTargetMessage(scope, status, safeSignals),
   };
 }
 
@@ -121,6 +123,9 @@ export function isHistoricalDurableTargetMessage(
   // newly distinct blocked/failed message keys. The exact-match guard otherwise rejects
   // stale or arbitrary text; remove this once no persisted ledger can carry that cache.
   const messageKey = messageKeyForTarget(status, signals);
+  if (filenameOutcomeMessage(signals) && safeMessage === renderDurableMessage(messageKey, scope)) {
+    return true;
+  }
   if (
     ![
       "target-blocked",
@@ -148,23 +153,58 @@ export function canonicalDurableSummaryMessage(
   if (mismatchedGstr1Period) {
     return incompleteGstr1PeriodMismatchRecoveryMessage(scope, mismatchedGstr1Period);
   }
+  let partialMessage: string | null = null;
   if (status === "partial") {
     const missingArtifacts = signals
       .map((signal) => /^filed-return-artifact-unavailable:(PDF|JSON|EXCEL)$/.exec(signal)?.[1])
       .filter((artifactType): artifactType is string => Boolean(artifactType));
     const missingReasons = signals.filter((signal) => /^artifact-[a-z0-9-]+$/.test(signal));
     if (missingArtifacts.length > 0 && missingArtifacts.length === missingReasons.length) {
-      return `Pack prepared a partial ZIP; missing ${missingArtifacts
+      partialMessage = `Pack prepared a partial ZIP; missing ${missingArtifacts
         .map((artifactType, index) => `${artifactType} (${missingReasons[index]})`)
         .join(", ")}.`;
     }
   }
-  const durableMessage = renderDurableMessage(messageKeyForSummary(status, signals), scope);
+  const durableMessage =
+    partialMessage ?? renderDurableMessage(messageKeyForSummary(status, signals), scope);
   const summaryMessage = filedReturnsSummaryStatusMessage(
     signals,
     summaryLifecycleForDurableSignals(signals),
   );
-  return [durableMessage, summaryMessage].filter(Boolean).join(" ");
+  return [durableMessage, summaryMessage, filenameOutcomeMessage(signals)]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function canonicalDurableTargetMessage(
+  scope: FiledReturnsDownloadScope,
+  status: FiledReturnsFullFiscalYearTargetStatus | "target-review",
+  signals: readonly string[],
+): string {
+  return [
+    renderDurableMessage(messageKeyForTarget(status, signals), scope),
+    filenameOutcomeMessage(signals),
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function filenameOutcomeMessage(signals: readonly string[]): string {
+  if (
+    signals.some((signal) =>
+      FILED_RETURNS_FILENAME_OVERRIDDEN_SIGNALS.some((value) => value === signal),
+    )
+  ) {
+    return "Pack completed the download, but the browser saved it under a different name. Check browser Downloads before using the file.";
+  }
+  if (
+    signals.some((signal) =>
+      FILED_RETURNS_FILENAME_UNAVAILABLE_SIGNALS.some((value) => value === signal),
+    )
+  ) {
+    return "Pack completed the download, but could not confirm its saved filename. Check browser Downloads before using the file.";
+  }
+  return "";
 }
 
 function summaryLifecycleForDurableSignals(

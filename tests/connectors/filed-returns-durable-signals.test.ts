@@ -139,11 +139,16 @@ describe("filed-return durable signal contract", () => {
     }
   });
 
-  it("retains the filename-free ZIP override marker", () => {
-    expect(isDurableFiledReturnsSignal("zip-download-filename-overridden")).toBe(true);
-    expect(parseDurableFiledReturnsSignals(["zip-download-filename-overridden"])).toEqual([
-      "zip-download-filename-overridden",
-    ]);
+  it.each([
+    "download-filename-unavailable",
+    "download-filename-overridden",
+    "zip-download-filename-item-unavailable",
+    "zip-download-filename-overridden",
+    "zip-download-filename-search-unavailable",
+    "zip-download-filename-unavailable",
+  ])("retains the fixed filename outcome %s", (signal) => {
+    expect(isDurableFiledReturnsSignal(signal)).toBe(true);
+    expect(parseDurableFiledReturnsSignals([signal])).toEqual([signal]);
   });
 
   it("admits every bounded ZIP-export error category for durable recovery", () => {
