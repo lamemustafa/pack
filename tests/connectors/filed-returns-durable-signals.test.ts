@@ -274,6 +274,15 @@ describe("filed-return durable signal contract", () => {
     ).toBe(false);
   });
 
+  it.each(SINGLE_PERIOD_CLEANUP_CHECKPOINT_FAILURE_STAGES)(
+    "emits the %s cleanup-checkpoint stage in its durable signal",
+    (stage) => {
+      expect(singlePeriodCleanupCheckpointFailureSignal(stage)).toBe(
+        `single-period-cleanup-checkpoint-failed:${stage}`,
+      );
+    },
+  );
+
   it("accepts only the closed target-review clear failure stages", () => {
     for (const stage of FILED_RETURNS_TARGET_REVIEW_CLEAR_FAILURE_STAGES) {
       expect(isDurableFiledReturnsSignal(filedReturnsTargetReviewClearFailureSignal(stage))).toBe(
@@ -284,6 +293,15 @@ describe("filed-return durable signal contract", () => {
       isDurableFiledReturnsSignal("filed-returns-target-review-clear-failed:private-value"),
     ).toBe(false);
   });
+
+  it.each(FILED_RETURNS_TARGET_REVIEW_CLEAR_FAILURE_STAGES)(
+    "emits the %s target-review clear stage in its durable signal",
+    (stage) => {
+      expect(filedReturnsTargetReviewClearFailureSignal(stage)).toBe(
+        `filed-returns-target-review-clear-failed:${stage}`,
+      );
+    },
+  );
 
   it("continues to reject unknown, interpolated, duplicate, and over-cap signal vectors", () => {
     for (const suffix of [
