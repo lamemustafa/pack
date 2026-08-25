@@ -106,6 +106,7 @@ Files deliberately skipped because another lane owned them:
 7. #109's first full suite ended 2,079/2,080 on an unrelated 5-second workbook timeout. The complete file then passed 24/24, and one fresh uncontended full cycle passed 2,080/2,080. The red run remains recorded; no timeout, retry setting, test, or product code was changed.
 8. While creating the validation worktree, I forgot to switch the shell working directory before `pnpm install` and `wxt prepare`. Those generated-state commands ran in the protected primary checkout. A before/after tracked-status comparison stayed at the same 34 pre-existing paths, with no `package.json`/lockfile delta; only ignored `.wxt`/`node_modules` state was touched. I did not reset, clean, stage, or alter its HEAD.
 9. I drafted this document before the required final prune sweep instead of after it. I ran the sweep before formatting, verification, commit, or publication; it found zero eligible removals. The final count and disk measurements above are from that corrected ordering, not from the earlier draft.
+10. I again copied an incorrect full commit SHA into the unpublished validation PR-body draft. `git rev-parse HEAD` exposed the mismatch before PR creation, and I corrected the draft to the observed SHA.
 
 ## Re-verification Script
 
