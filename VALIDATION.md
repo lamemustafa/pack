@@ -548,3 +548,54 @@ reviewed persistence and failure contracts.
 
 - Evidence level: real Chromium layout/accessibility-tree evidence plus synthetic component and
   repository gates; no authenticated GST run, assistive-technology transcript or release claim.
+
+### Cycle 7 — artifact-checkpoint clear diagnostics
+
+- Before: every blocked exit from artifact-checkpoint cancellation returned the same state-only
+  result. The target-review boundary therefore knew that clearing failed but not whether the cause
+  was intent policy, malformed recovery, download lookup, exact-target mismatch, danger, size,
+  cancellation confirmation, download state or session storage.
+- Fix: a closed 16-value connector vocabulary is returned by the producer, transformed into an
+  exact durable signal and rendered through canonical fixed copy. No caught exception text,
+  browser object, filename, URL, portal value or taxpayer value is retained or rendered. Existing
+  generic signal compatibility remains while the latest specific reason replaces any prior reason.
+- Fail-closed cap behavior: adding diagnostics to an already dense review is attempted only through
+  strict durable parsing. If the result is invalid or exceeds 32 signals, the original valid review
+  and its artifact-ownership marker remain unchanged. The code does not persist a generic fallback
+  that a later cancellation could mistake for permission to remove recovery.
+- Two-call cap regression: a valid 31-signal review containing an artifact recovery marker receives
+  two blocked cancellation attempts. Both call exact checkpoint clearing, neither calls local
+  review removal or persistence, and the original artifact marker remains after both calls.
+- Discrimination evidence:
+  - Initial storage-read test failed because received `{ state: "blocked" }` omitted expected reason
+    `storage-read-failed`.
+  - A constant producer reason caused 15 failures, one for every non-storage-read exit.
+  - A constant signal builder caused 31 failures: 15 observable review signals, 15 explicit emitted
+    strings and one durable-vector uniqueness assertion.
+  - Reintroducing generic canonical fallback at the 32-signal boundary changed the first response
+    from expected `user-action-required` to received `blocked` and failed the two-call test.
+- Exact production line counts:
+
+  | File                                           | Before | After |
+  | ---------------------------------------------- | -----: | ----: |
+  | `background/artifact-acquisition-state.ts`     |    651 |   669 |
+  | `background/filed-returns-target-review.ts`    |  1,534 | 1,570 |
+  | `gst/artifact-acquisition-checkpoint-clear.ts` |      0 |    27 |
+  | `gst/filed-returns-durable-signals.ts`         |    710 |   717 |
+  | `gst/filed-returns-durable-status.ts`          |    451 |   518 |
+
+- Review disposition: privacy CLEAN and security PASS, both bound to exact committed head
+  `7f974fc34a89cf371630d53192caba3a00fadb1b`. The reviewers confirmed fixed categorical data only,
+  unchanged exact target/action/download-ID guards, unchanged danger/size completion evidence, and
+  no manifest, permission, host, CSP, content, dependency, logging or remote-code drift.
+- Complete gate: build and package verification passed at 1.00 MB; TypeScript, zero-warning ESLint
+  and repo-wide Prettier passed. Full Vitest exact final three lines:
+
+  ```text
+       Tests  2181 passed (2181)
+    Start at  03:02:10
+    Duration  153.83s (transform 2.55s, setup 0ms, import 11.33s, tests 128.81s, environment 7ms)
+  ```
+
+- Evidence level: static review and synthetic unit/integration gates only. No authenticated GST
+  run, portal capture, persistence widening, user-data observation or release-readiness claim.

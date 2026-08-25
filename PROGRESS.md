@@ -250,3 +250,52 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
 - Learned / plan change: grouped limitation copy can be both more explicit and materially shorter
   when list semantics retain every individual decision. The next cycle resumes the generic-reason
   audit rather than compressing the default guide further.
+
+## Cycle 7 — retain exact artifact-checkpoint clear reasons
+
+- Window: 2026-08-26 02:46–03:06 IST.
+- Picked: continue the generic-reason audit at `clearArtifactAcquisitionCheckpoints`, whose 16
+  fail-closed exits and caught operations all returned the same `{ state: "blocked" }` result. The
+  target-review boundary consequently persisted one generic clear-failure signal and message.
+- Measured before: a storage-read discrimination test failed with
+  `expected { state: 'blocked' } to deeply equal { reason: 'storage-read-failed', state: 'blocked' }`.
+  The same missing reason shape covered intent, checkpoint validity, browser-download lookup,
+  target correlation, danger, size, cancellation, download state and session-storage removal.
+- Changed: a closed 16-value GST connector vocabulary now travels through the discriminated
+  cancellation result, a fixed durable signal, canonical user-visible copy and the retained target
+  review. Exception text and browser or portal values never enter the signal or message. Previous
+  reason tokens are replaced rather than accumulated.
+- Security rectification: the first persistence form could add two signals to an otherwise valid
+  31-signal review, cross the 32-signal cap and replace its artifact-ownership marker with a generic
+  rejection record. A second cancellation could then skip checkpoint clearing and remove the
+  durable guard. Enrichment now uses strict parsing and retains the original valid review unchanged
+  if the diagnostic cannot fit. A two-call regression proves both attempts re-enter clearing,
+  neither removes or overwrites the review, and the artifact marker remains.
+- Discrimination evidence:
+  - Collapsing the producer result to `storage-read-failed` caused 15 named exit tests to fail; only
+    the genuine storage-read row stayed green.
+  - Collapsing the signal builder to `storage-read-failed` caused 31 failures: 15 boundary
+    propagation rows, 15 explicit builder-string rows and the closed-contract uniqueness check.
+  - Restoring the unsafe over-cap canonical fallback made the first two-call response `blocked`
+    where the retained review test expected `user-action-required`.
+- Production line accounting: artifact acquisition state 651→669; target review 1,534→1,570; new
+  clear-reason vocabulary 0→27; durable signals 710→717; durable status 451→518. The added lines are
+  the bounded diagnostic contract, canonical messages and fail-closed cap handling; clearing and
+  completion permissions are unchanged.
+- Privacy review: CLEAN. Security review: PASS. Both are hash-bound to
+  `7f974fc34a89cf371630d53192caba3a00fadb1b`. No sensitive values, logging, public capability claim,
+  permission, CSP, content, dependency, target-binding or download-completion behavior changed.
+- Complete gate: build passed at 1.00 MB; package verification passed; TypeScript passed; ESLint
+  passed with zero warnings; Prettier passed repo-wide; full Vitest passed 125 files and 2,181
+  tests. The known missing TypeScript source-map warning remained non-failing. Exact Vitest footer:
+
+  ```text
+       Tests  2181 passed (2181)
+    Start at  03:02:10
+    Duration  153.83s (transform 2.55s, setup 0ms, import 11.33s, tests 128.81s, environment 7ms)
+  ```
+
+- Checkpoint: `7f974fc fix(recovery): retain checkpoint clear reasons`.
+- Learned / plan change: diagnostic enrichment itself is a durable-state mutation and must be
+  tested at the storage cap across repeated user actions. The next cycle continues the duplicate
+  and generic-reason audit on an untouched boundary, starting from readers of durable state.
