@@ -48,6 +48,13 @@ const PDF_RUNNING_AT = new Date("2026-07-24T00:00:01.000Z");
 const PDF_STAGED_AT = new Date("2026-07-24T00:00:02.000Z");
 const EXCEL_RUNNING_AT = new Date("2026-07-24T00:00:03.000Z");
 const EXCEL_STAGED_AT = new Date("2026-07-24T00:00:04.000Z");
+const SINGLE_ARTIFACT_SCOPES = [
+  { ...GSTR1_SCOPE, artifactType: "PDF" },
+  { ...GSTR1_SCOPE, artifactType: "EXCEL" },
+  { ...GSTR1_SCOPE, artifactType: "PDF", returnType: "GSTR-2B" },
+  { ...GSTR1_SCOPE, artifactType: "EXCEL", returnType: "GSTR-2B" },
+  { ...GSTR1_SCOPE, artifactType: "JSON", returnType: "GSTR-2B" },
+] as const satisfies readonly FiledReturnsDownloadScope[];
 
 let localValues: Record<string, unknown>;
 
@@ -140,6 +147,90 @@ describe("single-period bundle ledger", () => {
       artifactTypes: ["PDF", "EXCEL", "JSON"],
       unavailableArtifactTypes: [],
     });
+  });
+
+  it("rejects single-artifact scopes before creating a bundle plan", () => {
+    for (const scope of SINGLE_ARTIFACT_SCOPES) {
+      expect(
+        createSinglePeriodBundleLedger(scope, "single-period:12345678-single", CREATED_AT),
+      ).toBeNull();
+    }
+  });
+
+  it("rejects single-artifact reservations before reading or replacing an existing bundle", async () => {
+    const existing = requiredLedger();
+    localValues[STORAGE_KEY] = existing;
+
+    for (const scope of SINGLE_ARTIFACT_SCOPES) {
+      await expect(reserveSinglePeriodBundleLedger(scope, CREATED_AT)).resolves.toBeNull();
+    }
+    expect(browserMocks.storage.local.get).not.toHaveBeenCalled();
+    expect(browserMocks.storage.local.set).not.toHaveBeenCalled();
+    expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
+    expect(localValues[STORAGE_KEY]).toBe(existing);
+  });
+
+  it("keeps stored single-artifact plans malformed without deleting or rewriting them", async () => {
+    const ledger = requiredLedger();
+    for (const scope of SINGLE_ARTIFACT_SCOPES) {
+      const stored = {
+        ...ledger,
+        scope,
+        artifactPlan: [scope.artifactType],
+        artifacts: [{ ...ledger.artifacts[0], artifactType: scope.artifactType }],
+      };
+      localValues[STORAGE_KEY] = stored;
+
+      await expect(readSinglePeriodBundleLedgerStorageState()).resolves.toEqual({
+        recoverableLedgerId: ledger.ledgerId,
+        state: "malformed",
+      });
+      expect(localValues[STORAGE_KEY]).toBe(stored);
+    }
+    expect(browserMocks.storage.local.set).not.toHaveBeenCalled();
+    expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
+  });
+
+  it("persists and restores the canonical composite plans without changing their order", async () => {
+    for (const [returnType, artifactPlan] of [
+      ["GSTR-1", ["PDF", "EXCEL"]],
+      ["GSTR-2B", ["PDF", "EXCEL", "JSON"]],
+    ] as const) {
+      localValues = {};
+      const scope = { ...GSTR1_SCOPE, returnType };
+      const reservation = await reserveSinglePeriodBundleLedger(scope, CREATED_AT);
+      expect(reservation).toMatchObject({ state: "created", ledger: { artifactPlan } });
+      expect(localValues[STORAGE_KEY]).toMatchObject({ artifactPlan, scope });
+      const restored = await readSinglePeriodBundleLedgerStorageState();
+      expect(restored).toMatchObject({
+        state: "valid",
+        ledger: {
+          artifactPlan,
+          scope,
+          artifacts: artifactPlan.map((artifactType) => ({ artifactType, status: "pending" })),
+        },
+      });
+    }
+  });
+
+  it("restores a legacy GSTR-2B composite pair without adding a pending JSON artifact", async () => {
+    const legacy = {
+      ...requiredLedger(),
+      scope: { ...GSTR1_SCOPE, returnType: "GSTR-2B" as const },
+    };
+    localValues[STORAGE_KEY] = legacy;
+
+    await expect(readSinglePeriodBundleLedgerStorageState()).resolves.toEqual({
+      state: "valid",
+      ledger: legacy,
+    });
+    await expect(reserveSinglePeriodBundleLedger(legacy.scope, CREATED_AT)).resolves.toEqual({
+      state: "existing",
+      ledger: legacy,
+    });
+    expect(browserMocks.storage.local.set).not.toHaveBeenCalled();
+    expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
+    expect(localValues[STORAGE_KEY]).toBe(legacy);
   });
 
   it("returns the saved ledger for a duplicate reservation without replacing its identity", async () => {
