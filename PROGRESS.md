@@ -1,5 +1,36 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 42 — derive navigation defaults from the canonical scope descriptor
+
+- Window: 2026-08-27 04:34–04:40 IST. This is a short duplicate-fact checkpoint; its actual
+  duration is recorded without an idle hold.
+- Picked: the portal-availability detector and DOM-only navigator each retained the same raw GSTR-3B
+  default scope ID despite the canonical return descriptor owning it.
+- Measured before: non-GSTR-3B flows pass an explicit scope ID to these boundaries; the default
+  serves only the established GSTR-3B entry point. Existing navigation coverage asserted the click
+  and no-network behavior but did not directly lock its default scope ID.
+- Changed: both defaults now call `filedReturnScopeId("GSTR-3B")`; the existing navigation test
+  asserts the preserved exact result. No click candidate, constructed URL, request, timing,
+  safe signal, safe message, availability classification, persistence, target binding, or download
+  behavior changed.
+- Focused evidence: navigator, flow-navigation routing, and session-write-boundary suites passed
+  3 files and 237 tests. This is a structural duplicate removal with output-preserving assertions,
+  so no behavioral red-proof mutation was appropriate.
+- Required review: GST privacy review PASS found no portal-action expansion, session/taxpayer data,
+  storage, telemetry, logging, public claim, manifest, host, CSP, or reach change.
+- Final gate: build, TypeScript, zero-warning ESLint, repo-wide Prettier, package verification and
+  `git diff --check` passed. Exact Vitest footer:
+
+  ```text
+       Tests  2803 passed (2803)
+    Start at  04:36:23
+    Duration  153.77s (transform 2.49s, setup 0ms, import 12.31s, tests 125.33s, environment 8ms)
+  ```
+
+- Checkpoints: `ceebd8b refactor(gst): derive default navigation scope`; the progress record
+  follows in a separate documentation checkpoint. No live/authenticated GST qualification, release
+  claim, push or PR action was made.
+
 ## Cycle 41 — derive observer scope IDs from the return descriptor
 
 - Window: 2026-08-27 04:27–04:34 IST. This is a short duplicate-fact checkpoint; its actual
