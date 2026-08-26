@@ -118,10 +118,10 @@ set -e
 test "$(git rev-parse edad122e61914e8a88e93c00e50f4449bbc8a2c5^{commit})" = \
   "edad122e61914e8a88e93c00e50f4449bbc8a2c5"
 pnpm exec vitest run tests/repo/unreferenced-module-guard.test.ts
-gh pr view 231 --repo lamemustafa/pack --json headRefOid,mergeStateStatus,statusCheckRollup || \
+gh pr view 231 --repo github.com/lamemustafa/pack --json headRefOid,mergeStateStatus,statusCheckRollup || \
   printf '%s\n' 'PR #231 observation unavailable'
-gh pr view 234 --repo lamemustafa/pack --json headRefOid,mergeStateStatus,statusCheckRollup || \
+gh pr view 234 --repo github.com/lamemustafa/pack --json headRefOid,mergeStateStatus,statusCheckRollup || \
   printf '%s\n' 'PR #234 observation unavailable'
-gh issue list --repo lamemustafa/pack --state open --limit 100 --json number,title || \
+gh issue list --repo github.com/lamemustafa/pack --state open --limit 100 --json number,title || \
   printf '%s\n' 'Open-issue observation unavailable'
 ```
