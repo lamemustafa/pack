@@ -145,17 +145,28 @@ export function usePackPopupController() {
       ) {
         return;
       }
-      void sendPackMessage({ type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" }).then((response) => {
-        if (!response.ok || !("flowSummary" in response)) return;
-        setFiledReturnsFlowSummary(response.flowSummary ?? null);
-        // The scope is the user's own selection, so it is only adopted from a
-        // summary that exists; a clear must not silently reset what they chose.
-        if (response.flowSummary) setScopeState(response.flowSummary.scope);
-      });
+      void sendPackMessage({ type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" })
+        .then((response) => {
+          if (!response.ok) {
+            showActionError(
+              response.safeMessage ?? "Pack could not read saved local recovery state. Try again.",
+            );
+            return;
+          }
+          if (!("flowSummary" in response)) {
+            showActionError("Unexpected Pack response.");
+            return;
+          }
+          setFiledReturnsFlowSummary(response.flowSummary ?? null);
+          // The scope is the user's own selection, so it is only adopted from a
+          // summary that exists; a clear must not silently reset what they chose.
+          if (response.flowSummary) setScopeState(response.flowSummary.scope);
+        })
+        .catch(() => showActionError("Pack could not read saved local recovery state. Try again."));
     };
     browser.storage.onChanged.addListener(onChanged);
     return () => browser.storage.onChanged.removeListener(onChanged);
-  }, []);
+  }, [showActionError]);
 
   const applyFlowResponse = React.useCallback(
     (response: PackMessageResponse) => {

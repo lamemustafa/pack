@@ -236,6 +236,34 @@ describe("popup background failure presentation", () => {
     );
   });
 
+  it("keeps a summary-change safe error visible", async () => {
+    mocks.sendMessage.mockImplementation((message: PackMessage) => {
+      if (message.type === "PACK_GET_FILED_RETURNS_FLOW_SUMMARY") {
+        return Promise.resolve({
+          ok: false,
+          error: "BACKGROUND_MESSAGE_HANDLER_FAILED",
+          safeMessage: "Pack stopped while handling saved local recovery state. Try again.",
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
+      });
+    });
+
+    await act(async () => {
+      mocks.changeListeners.forEach((listener) =>
+        listener({ "pack:last-filed-returns-flow-summary": { newValue: {} } }, "session"),
+      );
+      await Promise.resolve();
+    });
+
+    const renderedController = controller as ReturnType<typeof usePackPopupController> | null;
+    expect(renderedController?.actionError).toBe(
+      "Pack stopped while handling saved local recovery state. Try again.",
+    );
+  });
+
   it("refreshes the visible summary when durable ZIP reconciliation completes", async () => {
     const completedSummary = {
       scope: {
