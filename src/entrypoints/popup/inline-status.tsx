@@ -256,6 +256,14 @@ function getInlineStatusCopy(
       tone: "warning",
     };
   }
+  if (presentation.kind === "blocked" && summary) {
+    return {
+      body: summary.flowStep.safeMessage,
+      icon: "!",
+      title: presentation.title,
+      tone: "warning",
+    };
+  }
   if (presentation.kind === "error") {
     return {
       body: presentation.body,
@@ -303,7 +311,7 @@ export function getInlinePrimaryAction(
   if (!summary) return null;
 
   const signals = new Set(summary.flowStep.safeSignals);
-  if (presentation.kind === "blocked" && summary.fullFiscalYearRecovery) {
+  if (presentation.kind === "blocked" && summary.currentPeriod && summary.fullFiscalYearRecovery) {
     const { gerund, label } = getSavedFullFiscalYearActionDecision(summary);
     return {
       label,

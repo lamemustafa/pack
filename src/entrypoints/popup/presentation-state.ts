@@ -58,7 +58,7 @@ export function getPopupPresentationState(
       body: summary?.flowStep.safeMessage ?? "Retry the retained fiscal-year ZIP.",
       icon: "!",
       kind: "blocked",
-      title: "Finish the saved fiscal-year ZIP",
+      title: "Saved run needs attention",
       tone: "warning",
     };
   }

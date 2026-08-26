@@ -144,12 +144,10 @@ function retainedStagingScopeConflictStep(
       "full-fiscal-year-opfs-retained",
       ...(finalZipRetry ? ["full-fiscal-year-final-zip-retry"] : []),
     ],
-    safeMessage: finalZipRetry
-      ? `Pack retained the prepared FY ${ledger.scope.financialYear} files. Retry that final ZIP before starting another full-year selection.`
-      : `Pack retained staged files for FY ${ledger.scope.financialYear}. Resolve or discard that saved run before starting another full-year selection.`,
+    safeMessage: `Pack retained the FY ${ledger.scope.financialYear} run. Return to that saved selection and resolve it before starting another full-year selection.`,
     userAction: {
       type: "RETRY_PORTAL_GENERATION",
-      message: "Return to the saved full-year selection and finish or discard it first.",
+      message: "Return to the saved full-year selection and resolve it first.",
       canResume: true,
     },
   };
