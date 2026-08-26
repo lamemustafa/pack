@@ -21,12 +21,27 @@ describe("background runtime module graph", () => {
     }
 
     const background = files.filter((file) => file.startsWith(path.join(sourceRoot, "background")));
-    expect(findCycle(graph, background)).toBeNull();
+    expect(repoRelativeCycle(findCycle(graph, background))).toBeNull();
   });
 
   it("keeps the shared ownership leaf free of runtime imports", async () => {
     const file = path.join(sourceRoot, "background", "download-observation-ownership.ts");
     expect(runtimeSpecifiers(await readFile(file, "utf8"), file)).toEqual([]);
+  });
+
+  it("keeps cycle diagnostics repository-relative", () => {
+    const observer = path.join(sourceRoot, "background", "observer.ts");
+    const reconciler = path.join(sourceRoot, "background", "reconciler.ts");
+    const graph = new Map([
+      [observer, [reconciler]],
+      [reconciler, [observer]],
+    ]);
+    expect(repoRelativeCycle(findCycle(graph, [observer]))).toEqual([
+      path.join("src", "background", "observer.ts"),
+      path.join("src", "background", "reconciler.ts"),
+      path.join("src", "background", "observer.ts"),
+    ]);
+    expect(repoRelativeCycle(null)).toBeNull();
   });
 
   it("uses syntax nodes to distinguish runtime imports and re-exports from types and text", () => {
@@ -127,6 +142,10 @@ function resolveModule(from: string, specifier: string, files: readonly string[]
       path.join(base, "index.tsx"),
     ].find((candidate) => files.includes(candidate)) ?? null
   );
+}
+
+function repoRelativeCycle(cycle: readonly string[] | null): string[] | null {
+  return cycle?.map((file) => path.relative(process.cwd(), file)) ?? null;
 }
 
 function findCycle(
