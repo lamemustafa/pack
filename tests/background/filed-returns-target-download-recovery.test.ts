@@ -1018,7 +1018,12 @@ describe("filed returns target download recovery", () => {
       flowSummary: { status: "blocked" },
     });
     expect(mocks.discardSinglePeriodFiledReturnsZip).not.toHaveBeenCalled();
-    expect(mocks.state.local[REVIEW_KEY]).toEqual(review);
+    expect(mocks.state.local[REVIEW_KEY]).toMatchObject({
+      safeSignals: expect.arrayContaining([
+        "single-period-opfs-clear-failed",
+        "single-period-zip-recovery-checkpoint-missing",
+      ]),
+    });
   });
 });
 

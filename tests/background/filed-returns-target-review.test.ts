@@ -1574,6 +1574,224 @@ describe("filed returns target review", () => {
     expect(localValues["completion"]).toBeUndefined();
   });
 
+  it.each([
+    {
+      cause: "single-period-bundle-state-read-failed",
+      prepare(scope: {
+        artifactType: "PDF_AND_EXCEL";
+        financialYear: string;
+        period: string;
+        returnType: "GSTR-2B";
+      }) {
+        const review = {
+          ...intentOnlyZipReview(scope),
+          safeSignals: ["single-period-opfs-clear-failed"],
+        };
+        return {
+          read(key: unknown) {
+            if (key === "target-review") return { "target-review": review };
+            if (key === "pack:single-period-staging") {
+              throw new Error("synthetic staging read failure");
+            }
+            return {};
+          },
+          review,
+        };
+      },
+    },
+    {
+      cause: "single-period-bundle-scope-conflict",
+      prepare(scope: {
+        artifactType: "PDF_AND_EXCEL";
+        financialYear: string;
+        period: string;
+        returnType: "GSTR-2B";
+      }) {
+        const review = {
+          ...intentOnlyZipReview(scope),
+          safeSignals: ["single-period-opfs-clear-failed"],
+        };
+        return {
+          read(key: unknown) {
+            if (key === "target-review") return { "target-review": review };
+            if (key === "pack:single-period-staging") {
+              return {
+                "pack:single-period-staging": {
+                  ledgerId: "single-period:dddddddddddddddddddd",
+                  schemaVersion: "1.0",
+                },
+              };
+            }
+            return {};
+          },
+          review,
+        };
+      },
+    },
+    {
+      cause: "single-period-zip-recovery-checkpoint-missing",
+      prepare(scope: {
+        artifactType: "PDF_AND_EXCEL";
+        financialYear: string;
+        period: string;
+        returnType: "GSTR-2B";
+      }) {
+        const { downloadAttempt: _downloadAttempt, ...review } = {
+          ...intentOnlyZipReview(scope),
+          safeSignals: ["single-period-opfs-clear-failed"],
+        };
+        void _downloadAttempt;
+        return {
+          read(key: unknown) {
+            return key === "target-review" ? { "target-review": review } : {};
+          },
+          review,
+        };
+      },
+    },
+    {
+      cause: "single-period-bundle-ledger-malformed",
+      prepare(scope: {
+        artifactType: "PDF_AND_EXCEL";
+        financialYear: string;
+        period: string;
+        returnType: "GSTR-2B";
+      }) {
+        const { downloadAttempt: _downloadAttempt, ...review } = {
+          ...intentOnlyZipReview(scope),
+          safeSignals: ["single-period-opfs-clear-failed"],
+        };
+        void _downloadAttempt;
+        return {
+          read(key: unknown) {
+            if (key === "target-review") return { "target-review": review };
+            if (key === "pack:single-period-staging") {
+              return { "pack:single-period-staging": { malformed: true } };
+            }
+            return {};
+          },
+          review,
+        };
+      },
+    },
+    {
+      cause: "single-period-bundle-scope-conflict",
+      prepare(scope: {
+        artifactType: "PDF_AND_EXCEL";
+        financialYear: string;
+        period: string;
+        returnType: "GSTR-2B";
+      }) {
+        const { downloadAttempt: _downloadAttempt, ...review } = {
+          ...intentOnlyZipReview(scope),
+          safeSignals: ["single-period-opfs-clear-failed"],
+        };
+        void _downloadAttempt;
+        const mismatchedScope = { ...scope, period: "April" };
+        return {
+          read(key: unknown) {
+            if (key === "target-review") return { "target-review": review };
+            if (key === "pack:single-period-staging") {
+              return { "pack:single-period-staging": intentBundleLedger(mismatchedScope) };
+            }
+            return {};
+          },
+          review,
+        };
+      },
+    },
+    {
+      cause: "single-period-bundle-revision-conflict",
+      prepare(scope: {
+        artifactType: "PDF_AND_EXCEL";
+        financialYear: string;
+        period: string;
+        returnType: "GSTR-2B";
+      }) {
+        const review = {
+          ...interruptedBundleReview(scope),
+          safeSignals: [
+            "single-period-bundle-artifact-review-required",
+            "single-period-bundle-running-ambiguous",
+            "single-period-opfs-clear-failed",
+          ],
+        };
+        review.singlePeriodBundleCheckpoint.revision -= 1;
+        const ledger = runningBundleLedger(scope);
+        return {
+          read(key: unknown) {
+            if (key === "target-review") return { "target-review": review };
+            if (key === "pack:single-period-staging") {
+              return { "pack:single-period-staging": ledger };
+            }
+            return {};
+          },
+          review,
+        };
+      },
+    },
+  ])(
+    "retains retry-cleanup cause $cause in the stored review and response",
+    async ({ cause, prepare }) => {
+      const scope = {
+        artifactType: "PDF_AND_EXCEL" as const,
+        financialYear: "2025-26",
+        period: "March",
+        returnType: "GSTR-2B" as const,
+      };
+      const fixture = prepare(scope);
+      let storedReview = fixture.review;
+      browserMocks.storage.local.get.mockImplementation(async (key: unknown) => fixture.read(key));
+      browserMocks.storage.local.set.mockImplementation(async (values: Record<string, unknown>) => {
+        storedReview = values["target-review"] as typeof storedReview;
+      });
+
+      const response = await retryCompletedSinglePeriodZipCleanup(scope, {
+        now: () => new Date("2026-08-27T00:00:00.000Z"),
+        storageKeys: { completion: "completion", targetReview: "target-review" },
+      });
+
+      expect(storedReview.safeSignals).toContain(cause);
+      expect(response).toMatchObject({
+        flowStep: { safeSignals: expect.arrayContaining([cause]) },
+      });
+    },
+  );
+
+  it("surfaces a retry-cleanup cause and its failed local retention", async () => {
+    const scope = {
+      artifactType: "PDF_AND_EXCEL" as const,
+      financialYear: "2025-26",
+      period: "March",
+      returnType: "GSTR-2B" as const,
+    };
+    const review = {
+      ...intentOnlyZipReview(scope),
+      safeSignals: ["single-period-opfs-clear-failed"],
+    };
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) => {
+      if (key === "target-review") return { "target-review": review };
+      if (key === "pack:single-period-staging") {
+        throw new Error("synthetic staging read failure");
+      }
+      return {};
+    });
+    browserMocks.storage.local.set.mockRejectedValue(new Error("synthetic storage write failure"));
+
+    const response = await retryCompletedSinglePeriodZipCleanup(scope, {
+      storageKeys: { completion: "completion", targetReview: "target-review" },
+    });
+
+    expect(response).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining([
+          "single-period-bundle-state-persist-failed",
+          "single-period-bundle-state-read-failed",
+        ]),
+      },
+    });
+  });
+
   it("does not treat completed cleanup checkpoints as a cleanup failure", () => {
     expect(
       canonicalDurableSummaryMessage(
