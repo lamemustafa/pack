@@ -1,5 +1,19 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 37 — audit typed selected-artifact storage failures
+
+- Window: 2026-08-27 04:06–04:08 IST.
+- Picked: the typed session-summary read/write state consumed by selected-artifact recovery.
+- Disposition: no source change. The storage boundary returns distinct unavailable reasons; the
+  consumer retains them as separate blocked recovery states, and durable-status maps them to
+  distinct stable signals. Malformed state is also separately redacted and retained.
+- Focused evidence: existing regression cases cover malformed data, failed replacement write, and
+  failed read. The state tests prove unavailable storage never becomes retryable missing progress.
+  This is a quiet audit, not portal qualification or a complete-gate claim.
+- Learned / plan change: the critical distinction is present at both the storage and durable-status
+  boundaries. The next audit moves to the requested 320px panel state matrix, where honest visible
+  treatment matters more than another storage-path pass.
+
 ## Cycle 36 — audit ambiguous trigger transport failure
 
 - Window: 2026-08-27 04:05–04:06 IST.
