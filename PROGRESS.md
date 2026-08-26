@@ -1,5 +1,39 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 46 — bind disabled final-action reasons for assistive technology
+
+- Window: 2026-08-27 04:55–05:04 IST. This is a short accessibility corrective checkpoint; its
+  actual duration is recorded without an idle hold.
+- Picked: the shared final-action component showed disabled-state reason text, but its disabled
+  button had no programmatic association with that explanation.
+- Measured before: guided-flow coverage verified that a final action was disabled during retained
+  recovery, but neither the panel nor the popup markup asserted a resolvable description. The
+  visible reason alone is insufficient screen-reader evidence.
+- Changed: a disabled shared action now gives its existing reason paragraph a stable ID and applies
+  `aria-describedby` to the disabled button. Enabled actions remain unchanged. Panel and popup
+  coverage assert the relationship and a non-empty reason; no copy, action authority, scope,
+  portal behavior, persistence, or download behavior changed.
+- Discrimination: temporarily removing the button relationship made the panel test fail with
+  `expected null to be 'scope-action-reason'`. The source was restored before final gates.
+- Gate rectification: the initial full run correctly failed one popup static-markup assertion that
+  expected the old disabled-button tag. The assertion now requires the reason ID and relationship;
+  the rerun passed. The unrelated review-gate warnings and missing TypeScript source-map warning in
+  that first log did not determine test success; the concrete failure was the old markup assertion.
+- UI review: the Impeccable product-UI accessibility guidance required a programmatic association
+  for a disabled control's explanation, not merely visible adjacent prose.
+- Final gate: build, TypeScript, zero-warning ESLint, repo-wide Prettier, package verification and
+  `git diff --check` passed. Exact Vitest footer:
+
+  ```text
+       Tests  2807 passed (2807)
+    Start at  05:01:05
+    Duration  153.20s (transform 2.45s, setup 0ms, import 12.30s, tests 124.83s, environment 8ms)
+  ```
+
+- Checkpoints: `d6fa544 fix(a11y): describe disabled scope actions`; the progress record follows
+  in a separate documentation checkpoint. No live/authenticated GST qualification, release claim,
+  push or PR action was made.
+
 ## Cycle 45 — prove disabled preset reasons resolve for assistive technology
 
 - Window: 2026-08-27 04:48–04:55 IST. This is a short accessibility test-quality checkpoint; its
