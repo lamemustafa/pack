@@ -1,5 +1,21 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 52 — mutate-check last-run diagnostic privacy boundary
+
+- Window: 2026-08-27 05:22–05:23 IST. This is a quiet test-quality checkpoint, not a
+  cadence-qualifying 45–75-minute cycle; its actual duration is recorded without an idle hold.
+- Picked: the compact last-run diagnostic surface intentionally shows terminal state and safe signal
+  IDs without rendering the flow-step message or selected scope values.
+- Measured: temporarily adding the flow-step message to that diagnostic view made its focused test
+  fail at the message-exclusion assertion. The same test also protects financial year and period
+  from rendering in this compact surface.
+- Result: no source change. The diagnostic view was restored before the focused rerun; its suite
+  passed 1 file and 2 tests, with `git diff --check` and worktree status clean. No sensitive value
+  was copied into this record.
+- Learned / next: this is a discriminating privacy test for the diagnostic projection. Continue the
+  lossy-surface audit where a user-facing safe message is intentionally projected, not into a view
+  designed to expose only stable safe-signal IDs.
+
 ## Cycle 51 — mutate-check retained cleanup eligibility
 
 - Window: 2026-08-27 05:21–05:23 IST. This is a quiet test-quality checkpoint, not a
