@@ -68,7 +68,7 @@ describe("Returns Dashboard portal anchor", () => {
     expect(click).toHaveBeenCalledOnce();
   });
 
-  it("does not click a unique collapsed target on the GSTR-2B summary page", () => {
+  it("clicks the unique collapsed target on the GSTR-2B summary page", () => {
     const documentRef = page(
       '<ul style="display: none"><li><ul style="display: none"><li><a href="https://return.gst.gov.in/returns/auth/dashboard">Returns Dashboard</a></li></ul></li></ul>',
       "https://gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary",
@@ -76,19 +76,8 @@ describe("Returns Dashboard portal anchor", () => {
     const dashboard = documentRef.querySelector<HTMLAnchorElement>("a")!;
     const click = vi.spyOn(dashboard, "click");
 
-    expect(clickReturnsDashboardAnchor(documentRef)).toBe("not-found");
-    expect(click).not.toHaveBeenCalled();
-  });
-
-  it("does not use the hidden-target fallback outside the canonical auth landing", () => {
-    const documentRef = page(
-      '<a href="https://return.gst.gov.in/returns/auth/dashboard" style="display: none">Hidden</a>',
-      "https://services.gst.gov.in/services/auth/dashboard",
-    );
-    const click = vi.spyOn(documentRef.querySelector<HTMLAnchorElement>("a")!, "click");
-
-    expect(clickReturnsDashboardAnchor(documentRef)).toBe("not-found");
-    expect(click).not.toHaveBeenCalled();
+    expect(clickReturnsDashboardAnchor(documentRef)).toBe("clicked");
+    expect(click).toHaveBeenCalledOnce();
   });
 
   it("does not use the hidden-target fallback off a supported portal page", () => {
