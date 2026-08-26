@@ -754,33 +754,139 @@ describe("filed-return session write boundary", () => {
     },
   );
 
-  it.each([
+  const confirmedPartialZipSignals = [
+    "single-period-zip-downloaded",
+    "browser-download-completed",
+    "browser-download-non-empty",
+    "browser-download-id:81",
+  ];
+  describe.each([
+    ["confirmed", confirmedPartialZipSignals, true],
+    ["legacy ZIP signal only", ["single-period-zip-downloaded"], false],
+    ["no ZIP evidence", [], false],
+    ["missing ZIP signal", confirmedPartialZipSignals.slice(1), false],
     [
-      "zip-download-filename-unavailable",
-      "Pack completed the download, but could not confirm its saved filename. Check browser Downloads before using the file.",
+      "missing ID",
+      confirmedPartialZipSignals.filter((signal) => !signal.startsWith("browser-download-id:")),
+      false,
     ],
     [
-      "zip-download-filename-overridden",
-      "Pack completed the download, but the browser saved it under a different name. Check browser Downloads before using the file.",
+      "missing completion",
+      confirmedPartialZipSignals.filter((signal) => signal !== "browser-download-completed"),
+      false,
     ],
-  ])(
-    "retains partial ZIP reason %s and its warning through canonical persistence and reopen",
-    async (signal, warning) => {
-      const summary = partialSelectedArtifactBundleSummary(signal);
+    [
+      "missing non-empty proof",
+      confirmedPartialZipSignals.filter((signal) => signal !== "browser-download-non-empty"),
+      false,
+    ],
+    ["multiple IDs", [...confirmedPartialZipSignals, "browser-download-id:82"], false],
+    [
+      "contradictory evidence",
+      [...confirmedPartialZipSignals, "browser-download-correlation-rejected"],
+      false,
+    ],
+  ] as const)("partial ZIP filename evidence: %s", (_name, evidence, confirmed) => {
+    it.each([
+      [
+        "zip-download-filename-unavailable",
+        "Pack completed the download, but could not confirm its saved filename. Check browser Downloads before using the file.",
+        "Pack could not confirm the saved filename for this unresolved target. Check browser Downloads before using a file.",
+      ],
+      [
+        "zip-download-filename-overridden",
+        "Pack completed the download, but the browser saved it under a different name. Check browser Downloads before using the file.",
+        "The browser may have used a different saved name, but Pack could not verify that any file belongs to this unresolved target. Check browser Downloads before using a file.",
+      ],
+    ])(
+      "retains partial ZIP reason and %s after reopen",
+      async (signal, confirmedCopy, neutralCopy) => {
+        const base = partialSelectedArtifactBundleSummary(signal);
+        const summary = {
+          ...base,
+          flowStep: {
+            ...base.flowStep,
+            safeSignals: [
+              ...base.flowStep.safeSignals.filter(
+                (value) => value !== "single-period-zip-downloaded",
+              ),
+              ...evidence,
+            ],
+          },
+        };
+
+        await expect(
+          persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, summary),
+        ).resolves.not.toBeNull();
+        await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+          status: "partial",
+          completedPeriods: [],
+          flowStep: {
+            state: "partial",
+            safeSignals: summary.flowStep.safeSignals,
+            safeMessage: `Pack prepared a partial ZIP; missing EXCEL (artifact-generation-timeout). ${confirmed ? confirmedCopy : neutralCopy}`,
+            downloadDiagnostics: summary.flowStep.downloadDiagnostics,
+          },
+        });
+      },
+    );
+  });
+
+  describe.each([
+    [
+      "single-period status alone",
+      "March",
+      [],
+      "Pack retained verified artifact progress for March; the selection is not complete.",
+    ],
+    [
+      "full-year status alone",
+      "FULL_FISCAL_YEAR",
+      [],
+      "Pack retained verified artifact progress for the saved fiscal-year run; the selection is not complete.",
+    ],
+    [
+      "full-year scope with foreign single-period evidence",
+      "FULL_FISCAL_YEAR",
+      confirmedPartialZipSignals,
+      "Pack retained verified artifact progress for the saved fiscal-year run; the selection is not complete.",
+    ],
+    [
+      "single-period unresolved portal key with delivery signals",
+      "March",
+      [...confirmedPartialZipSignals, "portal-system-error"],
+      "The GST portal returned a system-error page. Return to an authenticated GST page and retry this period.",
+    ],
+  ] as const)("unresolved partial filename context: %s", (_name, period, signals, baseCopy) => {
+    it.each([
+      [
+        "download-filename-overridden",
+        "The browser may have used a different saved name, but Pack could not verify that any file belongs to this unresolved target. Check browser Downloads before using a file.",
+      ],
+      [
+        "download-filename-unavailable",
+        "Pack could not confirm the saved filename for this unresolved target. Check browser Downloads before using a file.",
+      ],
+    ])("keeps %s neutral after reopen", async (filenameSignal, neutralCopy) => {
+      const safeSignals = [...signals, filenameSignal];
+      const base = singlePeriodSummary({ safeSignals, state: "partial" });
+      const summary = { ...base, status: "partial", scope: { ...base.scope, period } };
 
       await expect(
         persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, summary),
       ).resolves.not.toBeNull();
       await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+        scope: summary.scope,
         status: "partial",
+        completedPeriods: [],
         flowStep: {
           state: "partial",
-          safeSignals: expect.arrayContaining([signal]),
-          safeMessage: `Pack prepared a partial ZIP; missing EXCEL (artifact-generation-timeout). ${warning}`,
+          safeSignals,
+          safeMessage: `${baseCopy} ${neutralCopy}`,
         },
       });
-    },
-  );
+    });
+  });
 
   it.each([
     [
@@ -969,6 +1075,112 @@ describe("filed-return session write boundary", () => {
         safeSignals: [signal],
       },
     });
+  });
+
+  const confirmedSinglePeriodCleanupSignals = [
+    "single-period-opfs-clear-failed",
+    "single-period-zip-downloaded",
+    "browser-download-completed",
+    "browser-download-non-empty",
+    "browser-download-id:81",
+  ];
+  describe.each([
+    [
+      "full-year delivered",
+      "FULL_FISCAL_YEAR",
+      ["full-fiscal-year-opfs-clear-failed", "full-fiscal-year-zip-downloaded"],
+      "full-year",
+    ],
+    ["full-year unconfirmed", "FULL_FISCAL_YEAR", ["full-fiscal-year-opfs-clear-failed"], "none"],
+    ["single-period delivered", "March", confirmedSinglePeriodCleanupSignals, "single-period"],
+    [
+      "missing ID",
+      "March",
+      confirmedSinglePeriodCleanupSignals.filter(
+        (signal) => !signal.startsWith("browser-download-id:"),
+      ),
+      "none",
+    ],
+    [
+      "missing completion",
+      "March",
+      confirmedSinglePeriodCleanupSignals.filter(
+        (signal) => signal !== "browser-download-completed",
+      ),
+      "none",
+    ],
+    [
+      "missing non-empty proof",
+      "March",
+      confirmedSinglePeriodCleanupSignals.filter(
+        (signal) => signal !== "browser-download-non-empty",
+      ),
+      "none",
+    ],
+    [
+      "multiple IDs",
+      "March",
+      [...confirmedSinglePeriodCleanupSignals, "browser-download-id:82"],
+      "none",
+    ],
+    [
+      "contradictory evidence",
+      "March",
+      [...confirmedSinglePeriodCleanupSignals, "browser-download-correlation-rejected"],
+      "none",
+    ],
+    [
+      "foreign full-year delivery",
+      "March",
+      ["single-period-opfs-clear-failed", "full-fiscal-year-zip-downloaded"],
+      "none",
+    ],
+  ] as const)("blocked cleanup filename context: %s", (_name, period, signals, confirmed) => {
+    it.each([
+      [
+        "download-filename-overridden",
+        "Pack completed the download, but the browser saved it under a different name. Check browser Downloads before using the file.",
+        "The browser may have used a different saved name, but Pack could not verify that any file belongs to this unresolved target. Check browser Downloads before using a file.",
+      ],
+      [
+        "download-filename-unavailable",
+        "Pack completed the download, but could not confirm its saved filename. Check browser Downloads before using the file.",
+        "Pack could not confirm the saved filename for this unresolved target. Check browser Downloads before using a file.",
+      ],
+    ])(
+      "preserves %s according to canonical delivery classification",
+      async (filenameSignal, confirmedCopy, neutralCopy) => {
+        const safeSignals = [...signals, filenameSignal];
+        const base = singlePeriodSummary({ safeSignals });
+        const summary = { ...base, scope: { ...base.scope, period } };
+        const baseCopy =
+          confirmed === "full-year"
+            ? "Pack confirmed the final fiscal-year ZIP download; only retained local staging remains to be cleared."
+            : confirmed === "single-period"
+              ? "Pack confirmed the selected ZIP download for March; only temporary local staging remains to be cleared."
+              : "Pack cannot complete this review while temporary selected-file staging remains uncleared.";
+
+        await expect(
+          persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, summary),
+        ).resolves.not.toBeNull();
+        await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+          scope: summary.scope,
+          status: "blocked",
+          currentPeriod: "March",
+          completedPeriods: [],
+          flowStep: {
+            state: "blocked",
+            safeSignals,
+            safeMessage: `${baseCopy} ${confirmed === "none" ? neutralCopy : confirmedCopy}`,
+            userAction: {
+              type: "LOGIN",
+              message: "Sign in to the GST Portal, then retry.",
+              canResume: false,
+            },
+          },
+        });
+      },
+    );
   });
 
   it("does not let cross-scope ZIP delivery relabel single-period cleanup", async () => {

@@ -6,7 +6,10 @@ import type {
 import { FULL_FISCAL_YEAR_PERIOD } from "../../src/connectors/gst/filed-returns-scope";
 import { getFiledReturnsFullFiscalYearPeriods } from "../../src/connectors/gst/filed-returns-scope";
 import { createFullFiscalYearLedger } from "../../src/background/filed-returns-full-fiscal-year-ledger";
-import { isFullFiscalYearLedger } from "../../src/background/filed-returns-full-fiscal-year-validation";
+import {
+  FULL_FISCAL_YEAR_PLAN_VERSION,
+  isFullFiscalYearLedger,
+} from "../../src/background/filed-returns-full-fiscal-year-validation";
 import {
   reconcilePendingFullFiscalYearZipDownload,
   reconcilePersistedFullFiscalYearZipDownload,
@@ -19,14 +22,20 @@ import {
   resolveFullFiscalYearTarget,
 } from "../../src/background/filed-returns-full-fiscal-year-recovery";
 import { browser } from "wxt/browser";
-import { canonicalDurableTargetStatus } from "../../src/connectors/gst/filed-returns-durable-status";
+import {
+  canonicalDurableTargetStatus,
+  isHistoricalDurableTargetMessage,
+} from "../../src/connectors/gst/filed-returns-durable-status";
 import {
   createFullFiscalYearCleanupPendingState,
   finishFullFiscalYearCleanup,
   markFullFiscalYearZipDownloadIntent,
   markFullFiscalYearZipDownloadObserving,
 } from "../../src/background/filed-returns-full-fiscal-year-staging";
-import { persistCanonicalFiledReturnsFlowSummary } from "../../src/background/filed-returns-session-summary";
+import {
+  persistCanonicalFiledReturnsFlowSummary,
+  readCanonicalFiledReturnsFlowSummary,
+} from "../../src/background/filed-returns-session-summary";
 import { parseDurableFiledReturnsSignals } from "../../src/connectors/gst/filed-returns-durable-signals";
 import type { FiledReturnsSummaryStatus } from "../../src/connectors/gst/filed-returns-summary-status";
 import { filedReturnsScopeId } from "../../src/connectors/gst/filed-returns-return-types";
@@ -165,6 +174,502 @@ describe("full fiscal-year recovery", () => {
     expect(summariseFullFiscalYearLedger(ledger!).flowStep.safeMessage).toBe(
       "The GST portal returned a system-error page. Return to an authenticated GST page and retry this period.",
     );
+  });
+
+  describe.each(["blocked", "partial", "running", "cancelled", "complete"] as const)(
+    "historical filename recovery with %s aggregate status",
+    (ledgerStatus) => {
+      it.each([
+        [
+          "download-filename-overridden",
+          "Pack completed the download, but the browser saved it under a different name. Check browser Downloads before using the file.",
+          "The browser may have used a different saved name, but Pack could not verify that any file belongs to this unresolved target. Check browser Downloads before using a file.",
+        ],
+        [
+          "download-filename-unavailable",
+          "Pack completed the download, but could not confirm its saved filename. Check browser Downloads before using the file.",
+          "Pack could not confirm the saved filename for this unresolved target. Check browser Downloads before using a file.",
+        ],
+        [
+          "zip-download-filename-overridden",
+          "Pack completed the download, but the browser saved it under a different name. Check browser Downloads before using the file.",
+          "The browser may have used a different saved name, but Pack could not verify that any file belongs to this unresolved target. Check browser Downloads before using a file.",
+        ],
+        [
+          "zip-download-filename-unavailable",
+          "Pack completed the download, but could not confirm its saved filename. Check browser Downloads before using the file.",
+          "Pack could not confirm the saved filename for this unresolved target. Check browser Downloads before using a file.",
+        ],
+        [
+          "zip-download-filename-item-unavailable",
+          "Pack completed the download, but could not confirm its saved filename. Check browser Downloads before using the file.",
+          "Pack could not confirm the saved filename for this unresolved target. Check browser Downloads before using a file.",
+        ],
+        [
+          "zip-download-filename-search-unavailable",
+          "Pack completed the download, but could not confirm its saved filename. Check browser Downloads before using the file.",
+          "Pack could not confirm the saved filename for this unresolved target. Check browser Downloads before using a file.",
+        ],
+      ])(
+        "reads the exact historical unresolved filename cache for %s",
+        async (signal, oldCopy, newCopy) => {
+          const historicalLedger = createRecoveryLedger({
+            revision: 2,
+            targetStatus: "blocked",
+            safeSignals: ["portal-system-error", signal],
+          });
+          historicalLedger.status = ledgerStatus;
+          if (ledgerStatus === "complete") {
+            historicalLedger.planVersion = FULL_FISCAL_YEAR_PLAN_VERSION;
+            historicalLedger.eligibleThrough = "April";
+          }
+          const portalCause =
+            "The GST portal returned a system-error page. Return to an authenticated GST page and retry this period.";
+          historicalLedger.targets[0] = {
+            ...historicalLedger.targets[0]!,
+            safeMessage: `${portalCause} ${oldCopy}`,
+          };
+          mockLocalStorageGet({ "full-year-ledger": historicalLedger });
+
+          const ledger = await readLedger("full-year-ledger");
+
+          expect(ledger).not.toBeNull();
+          expect(ledger).toMatchObject({
+            ledgerId: LEDGER_ID,
+            revision: 2,
+            status: ledgerStatus,
+            targets: [expect.objectContaining({ status: "blocked", attempts: 1 })],
+          });
+          const summary = summariseFullFiscalYearLedger(ledger!);
+          expect(summary.flowStep.safeMessage).toBe(`${portalCause} ${newCopy}`);
+          expect(summary.fullFiscalYearRecovery).toMatchObject({
+            ledgerId: LEDGER_ID,
+            targetId: "GSTR-3B:2026-27:April",
+            targetStatus: "blocked",
+          });
+          const reopened = await readLedger("full-year-ledger");
+          expect(reopened).toEqual(ledger);
+          expect(summariseFullFiscalYearLedger(reopened!).flowStep.safeMessage).toBe(
+            `${portalCause} ${newCopy}`,
+          );
+          const persisted = await persistCanonicalFiledReturnsFlowSummary("completion", summary);
+          if (ledgerStatus === "complete") {
+            // The canonical plan permits this ledger read, but summary completion
+            // consistency must still reject its unresolved recovery target.
+            expect(persisted).toBeNull();
+            await expect(readCanonicalFiledReturnsFlowSummary("completion")).resolves.toBeNull();
+          } else {
+            expect(persisted).not.toBeNull();
+            const reopenedCause =
+              ledgerStatus === "blocked" || ledgerStatus === "partial"
+                ? portalCause
+                : "Pack needs an explicit recovery action before continuing the saved fiscal-year run.";
+            await expect(readCanonicalFiledReturnsFlowSummary("completion")).resolves.toMatchObject(
+              {
+                status: ledgerStatus,
+                fullFiscalYearRecovery: { targetStatus: "blocked", expectedRevision: 2 },
+                flowStep: { safeMessage: `${reopenedCause} ${newCopy}` },
+              },
+            );
+          }
+          expect(browser.storage.local.set).not.toHaveBeenCalled();
+          expect(browser.storage.local.remove).not.toHaveBeenCalled();
+          expect(zipMocks.exportFullFiscalYearZip).not.toHaveBeenCalled();
+          expect(zipMocks.discardFullFiscalYearFiledReturnsZip).not.toHaveBeenCalled();
+        },
+      );
+    },
+  );
+
+  it.each<[string, (ledger: FiledReturnsFullFiscalYearLedger) => void]>([
+    [
+      "edited wording",
+      (ledger) => {
+        ledger.targets[0]!.safeMessage = ledger.targets[0]!.safeMessage.replace(
+          "completed",
+          "finished",
+        );
+      },
+    ],
+    [
+      "prefixed wording",
+      (ledger) => {
+        ledger.targets[0]!.safeMessage = `Earlier: ${ledger.targets[0]!.safeMessage}`;
+      },
+    ],
+    [
+      "appended wording",
+      (ledger) => {
+        ledger.targets[0]!.safeMessage += " Extra instruction.";
+      },
+    ],
+    [
+      "extra whitespace",
+      (ledger) => {
+        ledger.targets[0]!.safeMessage += " ";
+      },
+    ],
+    [
+      "wrong period wording",
+      (ledger) => {
+        ledger.targets[0]!.safeMessage = ledger.targets[0]!.safeMessage.replace("April", "May");
+      },
+    ],
+    [
+      "wrong filename family",
+      (ledger) => {
+        ledger.targets[0]!.safeSignals = ["download-filename-unavailable"];
+      },
+    ],
+    [
+      "absent filename signal",
+      (ledger) => {
+        ledger.targets[0]!.safeSignals = [];
+      },
+    ],
+    [
+      "unknown signal",
+      (ledger) => {
+        ledger.targets[0]!.safeSignals.push("synthetic-unrecognised-signal");
+      },
+    ],
+    [
+      "duplicate signal",
+      (ledger) => {
+        ledger.targets[0]!.safeSignals.push("download-filename-overridden");
+      },
+    ],
+    [
+      "over-cap signals",
+      (ledger) => {
+        ledger.targets[0]!.safeSignals.push(
+          ...Array.from({ length: 32 }, (_, index) => `browser-download-id:${index}`),
+        );
+      },
+    ],
+    [
+      "wrong target identity",
+      (ledger) => {
+        ledger.targets[0]!.targetId = "GSTR-3B:2026-27:May";
+      },
+    ],
+    [
+      "wrong scope binding",
+      (ledger) => {
+        ledger.targets[0]!.financialYear = "2025-26";
+      },
+    ],
+    [
+      "incomplete canonical plan",
+      (ledger) => {
+        ledger.planVersion = FULL_FISCAL_YEAR_PLAN_VERSION;
+        ledger.eligibleThrough = "May";
+      },
+    ],
+  ])("rejects historical filename cache with %s", async (_reason, corrupt) => {
+    const ledger = createHistoricalBlockedFilenameLedger();
+    expect(isFullFiscalYearLedger(ledger)).toBe(true);
+    corrupt(ledger);
+    mockLocalStorageGet({ "full-year-ledger": ledger });
+
+    await expect(readLedger("full-year-ledger")).resolves.toBeNull();
+    expect(browser.storage.local.set).not.toHaveBeenCalled();
+    expect(browser.storage.local.remove).not.toHaveBeenCalled();
+    expect(zipMocks.exportFullFiscalYearZip).not.toHaveBeenCalled();
+    expect(zipMocks.discardFullFiscalYearFiledReturnsZip).not.toHaveBeenCalled();
+  });
+
+  it("keeps target-bound diagnostics required for an exact historical filename cache", async () => {
+    const ledger = createHistoricalBlockedFilenameLedger();
+    ledger.targets[0]!.downloadDiagnostic = {
+      actionId: "00000000-0000-4000-8000-000000000081",
+      artifactType: "PDF",
+      byteCountClass: "non-empty",
+      downloadPathClass: "captured-portal-request-data",
+      endpointClass: "gstr3b-portal-blob-captured-download",
+      eventType: "filed-return-download-path",
+      financialYear: "2026-27",
+      mimeClass: "pdf",
+      period: "April",
+      returnType: "GSTR-3B",
+      schemaVersion: "1.0",
+      status: "downloaded",
+    };
+    expect(isFullFiscalYearLedger(ledger)).toBe(true);
+    ledger.targets[0]!.downloadDiagnostic.period = "May";
+    mockLocalStorageGet({ "full-year-ledger": ledger });
+
+    await expect(readLedger("full-year-ledger")).resolves.toBeNull();
+    expect(browser.storage.local.set).not.toHaveBeenCalled();
+    expect(browser.storage.local.remove).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["downloaded", "Pack confirmed the filed-return download for April."],
+    ["not-filed", "The GST Portal reported no filed return for the selected period."],
+  ] as const)(
+    "does not let historical filename copy prove a %s target",
+    async (status, baseCopy) => {
+      const ledger = createHistoricalBlockedFilenameLedger();
+      const target = ledger.targets[0]!;
+      target.status = status;
+      target.safeMessage = `${baseCopy} Pack completed the download, but the browser saved it under a different name. Check browser Downloads before using the file.`;
+      if (status === "not-filed") {
+        expect(
+          isHistoricalDurableTargetMessage(target, status, target.safeSignals, target.safeMessage),
+        ).toBe(true);
+      } else {
+        expect(canonicalDurableTargetStatus(target, status, target.safeSignals).safeMessage).toBe(
+          target.safeMessage,
+        );
+      }
+      mockLocalStorageGet({ "full-year-ledger": ledger });
+
+      await expect(readLedger("full-year-ledger")).resolves.toBeNull();
+      expect(browser.storage.local.set).not.toHaveBeenCalled();
+      expect(browser.storage.local.remove).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ["wrong ledger", { ledgerId: "full-fiscal-year-87654321" }, "full-fiscal-year-ledger-mismatch"],
+    ["wrong target", { targetId: "GSTR-3B:2026-27:May" }, "full-fiscal-year-target-not-found"],
+    ["stale revision", { expectedRevision: 1 }, "full-fiscal-year-recovery-stale"],
+  ] as const)(
+    "keeps historical-cache retry guarded against %s",
+    async (_reason, overrides, signal) => {
+      const ledger = createHistoricalBlockedFilenameLedger();
+      mockLocalStorageGet({ "full-year-ledger": ledger });
+
+      const result = await prepareFullFiscalYearTargetRetry(
+        {
+          ledgerId: LEDGER_ID,
+          targetId: "GSTR-3B:2026-27:April",
+          expectedRevision: 2,
+          ...overrides,
+        },
+        recoveryDeps(),
+      );
+
+      expect(result).toMatchObject({
+        ok: false,
+        response: { flowStep: { safeSignals: [signal] } },
+      });
+      expect(browser.storage.local.set).not.toHaveBeenCalled();
+      expect(browser.storage.local.remove).not.toHaveBeenCalled();
+      expect(zipMocks.exportFullFiscalYearZip).not.toHaveBeenCalled();
+      expect(zipMocks.discardFullFiscalYearFiledReturnsZip).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["overridden", "unavailable"] as const)(
+    "requires historical mixed-signal copy to preserve override precedence (%s)",
+    async (oldFamily) => {
+      const ledger = createHistoricalBlockedFilenameLedger();
+      ledger.targets[0]!.safeSignals.push("download-filename-unavailable");
+      if (oldFamily === "unavailable") {
+        ledger.targets[0]!.safeMessage = ledger.targets[0]!.safeMessage.replace(
+          "the browser saved it under a different name",
+          "could not confirm its saved filename",
+        );
+      }
+      mockLocalStorageGet({ "full-year-ledger": ledger });
+
+      const read = await readLedger("full-year-ledger");
+
+      if (oldFamily === "overridden") {
+        expect(read).not.toBeNull();
+        expect(summariseFullFiscalYearLedger(read!).flowStep.safeMessage).toContain(
+          "Pack could not verify that any file belongs to this unresolved target",
+        );
+      } else {
+        expect(read).toBeNull();
+      }
+      expect(browser.storage.local.set).not.toHaveBeenCalled();
+      expect(browser.storage.local.remove).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    "filed-return-download-target-mismatch",
+    "filed-gstr3b-direct-download-action-mismatch",
+    "filed-gstr3b-direct-download-start-rejected",
+    "filed-gstr3b-direct-download-target-rejected",
+    "filed-return-download-diagnostics-rejected",
+  ])("keeps historical filename cache blocked with %s", async (contradiction) => {
+    const ledger = createHistoricalBlockedFilenameLedger();
+    ledger.targets[0]!.safeSignals.push(
+      "browser-download-completed",
+      "browser-download-id:81",
+      "browser-download-non-empty",
+      contradiction,
+    );
+    mockLocalStorageGet({ "full-year-ledger": ledger });
+
+    const read = await readLedger("full-year-ledger");
+
+    expect(read).not.toBeNull();
+    expect(read?.targets[0]?.status).toBe("blocked");
+    const summary = summariseFullFiscalYearLedger(read!);
+    expect(summary).toMatchObject({
+      status: "blocked",
+      fullFiscalYearRecovery: { targetStatus: "blocked", expectedRevision: 2 },
+      flowStep: { state: "blocked", safeSignals: expect.arrayContaining([contradiction]) },
+    });
+    expect(summary.flowStep.safeMessage).not.toContain("Pack completed the download");
+    expect(summary.flowStep.safeMessage).toContain(
+      "Pack could not verify that any file belongs to this unresolved target",
+    );
+    expect(browser.storage.local.set).not.toHaveBeenCalled();
+    expect(browser.storage.local.remove).not.toHaveBeenCalled();
+    expect(zipMocks.exportFullFiscalYearZip).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      "failed",
+      [],
+      "Pack stopped while processing April. Retry this period, or discard the saved run and start again.",
+    ],
+    [
+      "blocked",
+      ["single-period-opfs-clear-failed"],
+      "Pack cannot complete this review while temporary selected-file staging remains uncleared.",
+    ],
+  ] as const)(
+    "preserves historical %s recovery and its specific cause",
+    async (status, signals, baseCopy) => {
+      const ledger = createRecoveryLedger({
+        revision: 2,
+        targetStatus: status,
+        safeSignals: ["download-filename-unavailable", ...signals],
+      });
+      ledger.targets[0]!.safeMessage = `${baseCopy} Pack completed the download, but could not confirm its saved filename. Check browser Downloads before using the file.`;
+      mockLocalStorageGet({ "full-year-ledger": ledger });
+
+      const read = await readLedger("full-year-ledger");
+
+      expect(read).not.toBeNull();
+      expect(read?.targets[0]?.status).toBe(status);
+      const summary = summariseFullFiscalYearLedger(read!);
+      expect(summary.fullFiscalYearRecovery?.targetStatus).toBe(status);
+      expect(summary.flowStep.safeMessage).toBe(
+        `${baseCopy} Pack could not confirm the saved filename for this unresolved target. Check browser Downloads before using a file.`,
+      );
+      expect(browser.storage.local.set).not.toHaveBeenCalled();
+      expect(browser.storage.local.remove).not.toHaveBeenCalled();
+      expect(zipMocks.discardFullFiscalYearFiledReturnsZip).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps historical completion wording from supplying final-click evidence", async () => {
+    const ledger = createHistoricalBlockedFilenameLedger();
+    mockLocalStorageGet({ "full-year-ledger": ledger });
+
+    const response = await resolveFullFiscalYearTarget(
+      {
+        ledgerId: LEDGER_ID,
+        targetId: "GSTR-3B:2026-27:April",
+        expectedRevision: 2,
+      },
+      "manually-observed",
+      recoveryDeps(),
+    );
+
+    expect(response).toMatchObject({
+      flowStep: { safeSignals: ["full-fiscal-year-manual-observation-unavailable"] },
+    });
+    expect(browser.storage.local.set).not.toHaveBeenCalled();
+    expect(browser.storage.local.remove).not.toHaveBeenCalled();
+    expect(zipMocks.exportFullFiscalYearZip).not.toHaveBeenCalled();
+  });
+
+  it("still rejects a complete legacy ledger with a historical filename cache", async () => {
+    const ledger = createHistoricalBlockedFilenameLedger();
+    expect(isFullFiscalYearLedger(ledger)).toBe(true);
+    ledger.status = "complete";
+    mockLocalStorageGet({ "full-year-ledger": ledger });
+
+    await expect(readLedger("full-year-ledger")).resolves.toBeNull();
+    expect(browser.storage.local.set).not.toHaveBeenCalled();
+    expect(browser.storage.local.remove).not.toHaveBeenCalled();
+    expect(zipMocks.exportFullFiscalYearZip).not.toHaveBeenCalled();
+    expect(zipMocks.discardFullFiscalYearFiledReturnsZip).not.toHaveBeenCalled();
+  });
+
+  it("keeps interrupted running historical targets non-retryable", async () => {
+    const ledger = createRecoveryLedger({
+      revision: 2,
+      targetStatus: "running",
+      safeSignals: ["download-filename-overridden"],
+    });
+    ledger.targets[0]!.safeMessage =
+      "Checking April. Pack completed the download, but the browser saved it under a different name. Check browser Downloads before using the file.";
+    mockLocalStorageGet({ "full-year-ledger": ledger });
+
+    const result = await prepareFullFiscalYearTargetRetry(
+      {
+        ledgerId: LEDGER_ID,
+        targetId: "GSTR-3B:2026-27:April",
+        expectedRevision: 2,
+      },
+      recoveryDeps(),
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      response: { flowStep: { safeSignals: ["full-fiscal-year-run-interrupted"] } },
+    });
+    expect(browser.storage.local.set).not.toHaveBeenCalled();
+    expect(browser.storage.local.remove).not.toHaveBeenCalled();
+    expect(zipMocks.exportFullFiscalYearZip).not.toHaveBeenCalled();
+  });
+
+  it("uses the existing explicit retry transition for a historical filename cache", async () => {
+    const ledger = createHistoricalBlockedFilenameLedger();
+    mockLocalStorageGet({ "full-year-ledger": ledger });
+
+    const result = await prepareFullFiscalYearTargetRetry(
+      {
+        ledgerId: LEDGER_ID,
+        targetId: "GSTR-3B:2026-27:April",
+        expectedRevision: 2,
+      },
+      recoveryDeps(),
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      ledger: {
+        ledgerId: LEDGER_ID,
+        revision: 3,
+        targets: [expect.objectContaining({ status: "pending", attempts: 1 })],
+      },
+    });
+    expect(browser.storage.local.set).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(vi.mocked(browser.storage.local.set).mock.calls)).not.toContain(
+      "Pack completed the download",
+    );
+    expect(zipMocks.exportFullFiscalYearZip).not.toHaveBeenCalled();
+    expect(zipMocks.discardFullFiscalYearFiledReturnsZip).not.toHaveBeenCalled();
+  });
+
+  it("does not treat a historically valid filename cache as malformed fresh-start data", async () => {
+    const ledger = createHistoricalBlockedFilenameLedger();
+    mockLocalStorageGet({ "full-year-ledger": ledger });
+
+    const result = await discardMalformedFullFiscalYearRunForFreshStart(
+      {
+        ledgerId: LEDGER_ID,
+        scope: ledger.scope,
+      },
+      recoveryDeps(),
+    );
+
+    expect(result).toEqual({ state: "unavailable" });
+    expect(browser.storage.local.set).not.toHaveBeenCalled();
+    expect(browser.storage.local.remove).not.toHaveBeenCalled();
+    expect(zipMocks.discardFullFiscalYearFiledReturnsZip).not.toHaveBeenCalled();
   });
 
   it("discards only the matching malformed ledger for an explicit fresh start", async () => {
@@ -1622,6 +2127,17 @@ function mockLocalStorageGet(values: Record<string, unknown>) {
     if (typeof key === "string") return { [key]: values[key] };
     return values;
   });
+}
+
+function createHistoricalBlockedFilenameLedger(): FiledReturnsFullFiscalYearLedger {
+  const ledger = createRecoveryLedger({
+    revision: 2,
+    targetStatus: "blocked",
+    safeSignals: ["download-filename-overridden"],
+  });
+  ledger.targets[0]!.safeMessage =
+    "Pack paused the saved full-year run at April. Resolve the GST Portal page before retrying this period. Pack completed the download, but the browser saved it under a different name. Check browser Downloads before using the file.";
+  return ledger;
 }
 
 function createRecoveryLedger({

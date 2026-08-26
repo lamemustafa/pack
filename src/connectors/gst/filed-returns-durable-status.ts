@@ -121,13 +121,15 @@ export function isHistoricalDurableTargetMessage(
   signals: readonly string[],
   safeMessage: string,
 ): boolean {
-  // This one-way migration admits only the old derived target-review cache for the
-  // newly distinct blocked/failed message keys. The exact-match guard otherwise rejects
-  // stale or arbitrary text; remove this once no persisted ledger can carry that cache.
+  // Admit only exact former derived caches. Target identity and evidence checks
+  // still apply, and outward recovery copy is reconstructed canonically.
   const messageKey = messageKeyForTarget(status, signals);
+  const baseMessage = renderDurableMessage(messageKey, scope);
+  const historicalFilenameMessage = filenameOutcomeMessage(signals, "download");
   if (
-    filenameOutcomeMessage(signals, "download") &&
-    safeMessage === renderDurableMessage(messageKey, scope)
+    historicalFilenameMessage &&
+    (safeMessage === baseMessage ||
+      (status !== "downloaded" && safeMessage === `${baseMessage} ${historicalFilenameMessage}`))
   ) {
     return true;
   }
@@ -176,12 +178,21 @@ export function canonicalDurableSummaryMessage(
     signals,
     summaryLifecycleForDurableSignals(signals),
   );
+  const filenameContext =
+    durableMessageKey === "complete" ||
+    durableMessageKey === "full-year-downloaded-cleanup-blocked" ||
+    durableMessageKey === "target-downloaded-cleanup-blocked" ||
+    (durableMessageKey === "partial" &&
+      scope.period !== FULL_FISCAL_YEAR_PERIOD &&
+      hasConfirmedSinglePeriodZipDownloadEvidence(signals))
+      ? "download"
+      : "unresolved-target";
   const filenameMessage =
     durableMessageKey === "full-year-complete-download-unconfirmed" ||
     durableMessageKey === "full-year-no-artifacts" ||
     durableMessageKey === "not-filed"
       ? ""
-      : filenameOutcomeMessage(signals, "download");
+      : filenameOutcomeMessage(signals, filenameContext);
   return [durableMessage, summaryMessage, filenameMessage].filter(Boolean).join(" ");
 }
 
