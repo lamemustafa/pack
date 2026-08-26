@@ -8,8 +8,12 @@ import type {
 import { acquireFiledReturnsRun } from "../../src/background/filed-returns-active-run";
 import { readCurrentFiledReturnsFlowSummary } from "../../src/background/filed-returns-current-state";
 import { clearPackLocalDataWithRecoveryGuard } from "../../src/background/local-data";
-import { FULL_FISCAL_YEAR_PLAN_VERSION } from "../../src/background/filed-returns-full-fiscal-year-validation";
+import {
+  FULL_FISCAL_YEAR_PLAN_VERSION,
+  isFullFiscalYearLedger,
+} from "../../src/background/filed-returns-full-fiscal-year-validation";
 import { canonicalDurableTargetStatus } from "../../src/connectors/gst/filed-returns-durable-status";
+import { readPlanLedgersStorageState } from "../../src/background/filed-returns-full-fiscal-year-run-state";
 
 const filedReturnsCurrentStateStorageKeys = {
   activeRun: "pack:active-filed-returns-run",
@@ -138,6 +142,94 @@ describe("Pack local data clearing", () => {
     );
   });
 
+  it("clears each indexed plan's staged files before deleting dynamic plan records", async () => {
+    const ledger = createDurableZipPhaseLedger("cleaned");
+    expect(isFullFiscalYearLedger(ledger)).toBe(true);
+    const indexKey = "pack:full-fiscal-year-ledger-index";
+    const planKey = `pack:filed-returns-plan:${ledger.ledgerId}`;
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) => {
+      if (key === indexKey) {
+        return {
+          [indexKey]: {
+            schemaVersion: "1.0",
+            ledgerIdsByScope: { "GSTR-3B:2026-27:PDF": ledger.ledgerId },
+          },
+        };
+      }
+      if (key === planKey) return { [planKey]: ledger };
+      if (key == null) {
+        return {
+          [indexKey]: {
+            schemaVersion: "1.0",
+            ledgerIdsByScope: { "GSTR-3B:2026-27:PDF": ledger.ledgerId },
+          },
+          [planKey]: ledger,
+        };
+      }
+      return {};
+    });
+    const background = await import("../../src/entrypoints/background");
+
+    await expect(
+      readPlanLedgersStorageState({
+        storageKeys: {
+          fullFiscalYearLedger: "pack:full-fiscal-year-ledger",
+          fullFiscalYearLedgerIndex: indexKey,
+        },
+      }),
+    ).resolves.toEqual({ state: "valid", ledgers: [ledger] });
+
+    await expect(background.clearPackLocalData()).resolves.toEqual({ ok: true, cleared: true });
+    expect(zipMocks.discardAllFiledReturnsStaging).not.toHaveBeenCalled();
+    expect(zipMocks.discardFullFiscalYearFiledReturnsZip).toHaveBeenCalledWith(ledger.ledgerId);
+    expect(browserMocks.storage.local.remove).toHaveBeenCalledWith([planKey, indexKey]);
+  });
+
+  it("broad-clears OPFS before deleting an orphaned dynamic plan record", async () => {
+    const ledger = createDurableZipPhaseLedger("cleaned");
+    const planKey = `pack:filed-returns-plan:${ledger.ledgerId}`;
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) => {
+      if (key === null) return { [planKey]: ledger };
+      return {};
+    });
+    const background = await import("../../src/entrypoints/background");
+
+    await expect(background.clearPackLocalData()).resolves.toEqual({ ok: true, cleared: true });
+    expect(zipMocks.discardAllFiledReturnsStaging).toHaveBeenCalledOnce();
+    expect(zipMocks.discardFullFiscalYearFiledReturnsZip).not.toHaveBeenCalled();
+    expect(browserMocks.storage.local.remove).toHaveBeenCalledWith([
+      planKey,
+      "pack:full-fiscal-year-ledger-index",
+    ]);
+  });
+
+  it("broad-clears OPFS when an index leaves an extra dynamic plan record unowned", async () => {
+    const ledger = createDurableZipPhaseLedger("cleaned");
+    const orphan = { ...ledger, ledgerId: "full-fiscal-year-00000006" };
+    const indexKey = "pack:full-fiscal-year-ledger-index";
+    const planKey = `pack:filed-returns-plan:${ledger.ledgerId}`;
+    const orphanKey = `pack:filed-returns-plan:${orphan.ledgerId}`;
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) => {
+      if (key === null) {
+        return {
+          [indexKey]: {
+            schemaVersion: "1.0",
+            ledgerIdsByScope: { "GSTR-3B:2026-27:PDF": ledger.ledgerId },
+          },
+          [planKey]: ledger,
+          [orphanKey]: orphan,
+        };
+      }
+      return {};
+    });
+    const background = await import("../../src/entrypoints/background");
+
+    await expect(background.clearPackLocalData()).resolves.toEqual({ ok: true, cleared: true });
+    expect(zipMocks.discardAllFiledReturnsStaging).toHaveBeenCalledOnce();
+    expect(zipMocks.discardFullFiscalYearFiledReturnsZip).not.toHaveBeenCalled();
+    expect(browserMocks.storage.local.remove).toHaveBeenCalledWith([planKey, orphanKey, indexKey]);
+  });
+
   it("refuses local-data clearing while a direct artifact checkpoint still owns recovery", async () => {
     browserMocks.storage.session.get.mockResolvedValue({
       "pack.artifact-acquisition.v2.GSTR-3B.2025-26.May.PDF": {
@@ -164,6 +256,7 @@ describe("Pack local data clearing", () => {
         ? {
             [key]: {
               schemaVersion: "1.0",
+              planVersion: FULL_FISCAL_YEAR_PLAN_VERSION,
               ledgerId: fullFiscalYearLedgerIds.existing,
               revision: 2,
               status: "blocked",
@@ -175,6 +268,15 @@ describe("Pack local data clearing", () => {
               currentTargetId: "GSTR-3B:2026-27:April",
               createdAt: "2026-06-24T00:00:00.000Z",
               updatedAt: "2026-06-24T00:00:00.000Z",
+              eligibleThrough: "April",
+              targetPlan: [
+                {
+                  targetId: "GSTR-3B:2026-27:April",
+                  financialYear: "2026-27",
+                  period: "April",
+                  returnType: "GSTR-3B",
+                },
+              ],
               targets: [
                 {
                   targetId: "GSTR-3B:2026-27:April",
@@ -255,6 +357,14 @@ describe("Pack local data clearing", () => {
               },
               createdAt: "2026-06-24T00:00:00.000Z",
               updatedAt: "2026-06-24T00:01:00.000Z",
+              targetPlan: [
+                {
+                  targetId: "GSTR-3B:2026-27:April",
+                  financialYear: "2026-27",
+                  period: "April",
+                  returnType: "GSTR-3B",
+                },
+              ],
               targets: [
                 {
                   targetId: "GSTR-3B:2026-27:April",
@@ -936,12 +1046,22 @@ describe("Pack local data clearing", () => {
         ? {
             [key]: {
               schemaVersion: "1.0",
+              planVersion: FULL_FISCAL_YEAR_PLAN_VERSION,
               ledgerId: fullFiscalYearLedgerIds.readyForZipRetry,
               revision: 3,
               status: "blocked",
               scope: sessionSummary.scope,
               createdAt: "2026-06-24T00:00:00.000Z",
               updatedAt,
+              eligibleThrough: "April",
+              targetPlan: [
+                {
+                  targetId: "GSTR-3B:2026-27:April",
+                  financialYear: "2026-27",
+                  period: "April",
+                  returnType: "GSTR-3B",
+                },
+              ],
               targets: [
                 {
                   targetId: "GSTR-3B:2026-27:April",
@@ -1145,6 +1265,7 @@ describe("Pack local data clearing", () => {
         ? {
             [key]: {
               schemaVersion: "1.0",
+              planVersion: FULL_FISCAL_YEAR_PLAN_VERSION,
               ledgerId: fullFiscalYearLedgerIds.existing,
               revision: 2,
               status: "running",
@@ -1156,6 +1277,15 @@ describe("Pack local data clearing", () => {
               currentTargetId: "GSTR-3B:2026-27:April",
               createdAt: "2026-06-24T00:00:00.000Z",
               updatedAt: "2026-06-24T00:00:00.000Z",
+              eligibleThrough: "April",
+              targetPlan: [
+                {
+                  targetId: "GSTR-3B:2026-27:April",
+                  financialYear: "2026-27",
+                  period: "April",
+                  returnType: "GSTR-3B",
+                },
+              ],
               targets: [
                 {
                   targetId: "GSTR-3B:2026-27:April",
@@ -1275,6 +1405,12 @@ function createDurableZipPhaseLedger(
     },
     createdAt: "2026-06-24T00:00:00.000Z",
     updatedAt,
+    targetPlan: (["April", "May"] as const).map((period) => ({
+      targetId: `GSTR-3B:2026-27:${period}`,
+      financialYear: "2026-27",
+      period,
+      returnType: "GSTR-3B" as const,
+    })),
     targets: (["April", "May"] as const).map((period) => ({
       targetId: `GSTR-3B:2026-27:${period}`,
       financialYear: "2026-27",

@@ -989,6 +989,51 @@ describe("inline filed-return recovery status", () => {
     expect(markup).toContain("summary overlay opened before Pack found a recognized Close control");
   });
 
+  it("renders the remedy the flow computed instead of only the reason", () => {
+    // The wrong-origin block a GSTR-3B run hits after a GSTR-2B run: Pack knows
+    // the page is wrong and knows which portal control fixes it. Before this,
+    // the panel showed a generic "resolve the GST Portal page" and dropped the
+    // instruction, leaving the reader with nothing to act on.
+    const fullYearSummary: FiledReturnsFlowSummary = {
+      ...blockedSummary,
+      scope: { ...blockedSummary.scope, period: "ALL" },
+      currentPeriod: "April",
+      fullFiscalYearRecovery: {
+        ledgerId: "full-fiscal-year-00000001",
+        targetId: "GSTR-3B:2026-27:April",
+        expectedRevision: 2,
+        targetStatus: "blocked",
+      },
+      flowStep: {
+        ...blockedSummary.flowStep,
+        safeSignals: ["wrong-origin-open-returns-dashboard", "returns-dashboard-anchor-not-found"],
+        safeMessage:
+          "Pack needs the GST Portal Returns Dashboard before it can acquire filed GSTR-3B.",
+        userAction: {
+          type: "NAVIGATE_TO_SUPPORTED_PAGE",
+          message:
+            "Open Services > Returns > Returns Dashboard in the GST Portal, then press Start again.",
+          canResume: true,
+        },
+      },
+    };
+
+    const markup = renderToStaticMarkup(
+      <InlineStatus
+        busy={null}
+        portalReady
+        onOpenPortal={vi.fn()}
+        onRestartTarget={vi.fn()}
+        onRetryFullFiscalYearTarget={vi.fn()}
+        onRetryTarget={vi.fn()}
+        presentation={blockedPresentation}
+        summary={fullYearSummary}
+      />,
+    );
+
+    expect(markup).toContain("Returns Dashboard in the GST Portal, then press Start again");
+  });
+
   it("explains when the portal keeps its overlay open after the recognized Close click", () => {
     const fullYearSummary: FiledReturnsFlowSummary = {
       ...blockedSummary,

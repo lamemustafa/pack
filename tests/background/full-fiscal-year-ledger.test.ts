@@ -20,6 +20,7 @@ import {
   markFullFiscalYearTargetTerminal,
   nextRunnableFullFiscalYearTarget,
   reconcileFullFiscalYearLedgerTargets,
+  resumeFullFiscalYearLedger,
 } from "../../src/background/filed-returns-full-fiscal-year-ledger";
 import { FULL_FISCAL_YEAR_PLAN_VERSION } from "../../src/background/filed-returns-full-fiscal-year-validation";
 import { canonicalDurableTargetStatus } from "../../src/connectors/gst/filed-returns-durable-status";
@@ -27,6 +28,7 @@ import {
   summariseFullFiscalYearLedger,
   targetStatusFromFlowStep,
 } from "../../src/background/filed-returns-full-fiscal-year";
+import { completeFullFiscalYearStep } from "../../src/background/filed-returns-full-fiscal-year-summary";
 import { responseForExistingLedger } from "../../src/background/filed-returns-full-fiscal-year-run-state";
 import {
   requireFullFiscalYearArtifactsStaged,
@@ -523,7 +525,7 @@ describe("full fiscal year ledger", () => {
     ).toBe("download-unconfirmed");
   });
 
-  it("requires the exact canonical current-year prefix before completion", () => {
+  it("requires the exact recorded target plan before completion", () => {
     const planned = markEveryTargetDownloaded(
       createFullFiscalYearLedger(
         {
@@ -556,9 +558,10 @@ describe("full fiscal year ledger", () => {
     expect(
       isFullFiscalYearLedger({
         ...planned,
-        eligibleThrough: "May",
+        targetPlan: planned.targetPlan?.slice(0, 2),
       }),
     ).toBe(false);
+    expect(isFullFiscalYearLedger({ ...planned, eligibleThrough: "May" })).toBe(true);
   });
 
   it("refuses to create a ledger from a noncanonical target list", () => {
@@ -596,35 +599,70 @@ describe("full fiscal year ledger", () => {
     expect(isFullFiscalYearLedger(planned)).toBe(true);
   });
 
-  it("normalises only a canonical legacy non-ZIP prefix and blocks legacy completion", () => {
-    const planned = createLedger([
-      ["April", "downloaded"],
-      ["May", "pending"],
+  it("states how far short of the year a fixed plan now falls", () => {
+    const scope = {
+      artifactType: "PDF" as const,
+      financialYear: "2026-27",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-3B" as const,
+    };
+    // Created in June, when April and May were the whole eligible year.
+    const planned = createFullFiscalYearLedger(scope, new Date("2026-06-24T00:00:00.000Z"), [
+      "April",
+      "May",
     ]);
-    const legacy = { ...planned };
-    delete legacy.eligibleThrough;
-    delete legacy.planVersion;
+    const complete = { ...planned, status: "complete" as const };
 
-    expect(isFullFiscalYearLedger(legacy)).toBe(true);
-    const reconciled = reconcileFullFiscalYearLedgerTargets(
-      legacy,
-      new Date("2026-07-24T00:00:00.000Z"),
-      ["April", "May", "June"],
+    // Finished the same day it was planned: the plan is the year, so the
+    // completion message must not invent a shortfall.
+    const sameDay = completeFullFiscalYearStep(complete, new Date("2026-06-24T00:00:00.000Z"));
+    expect(sameDay.safeSignals).not.toContain("full-fiscal-year-plan-narrower-than-eligible");
+    expect(sameDay.safeMessage).toBe(
+      "Pack completed the local full fiscal year run for FY 2026-27.",
     );
-    expect(reconciled).toMatchObject({
-      planVersion: FULL_FISCAL_YEAR_PLAN_VERSION,
-      eligibleThrough: "June",
-      status: "running",
-      targets: [{ period: "April" }, { period: "May" }, { period: "June", status: "pending" }],
-    });
-    expect(hasCanonicalFullFiscalYearTargetPlan(reconciled)).toBe(true);
-    expect(isFullFiscalYearLedger({ ...legacy, status: "complete" })).toBe(false);
-    expect(
-      isFullFiscalYearLedger({ ...legacy, status: "blocked", zipPhase: "export-pending" }),
-    ).toBe(false);
+
+    // Resumed and finished in September, by which time June, July and August
+    // have become eligible. The plan does not grow, so the outcome has to say so
+    // where the outcome is stated.
+    const later = completeFullFiscalYearStep(complete, new Date("2026-09-24T00:00:00.000Z"));
+    expect(later.safeSignals).toContain("full-fiscal-year-plan-narrower-than-eligible");
+    expect(later.safeMessage).toContain("covers the 2 periods planned when it started");
+    expect(later.safeMessage).toContain("3 more are eligible now, starting with June");
+    expect(later.safeMessage).toContain("Start this year again to include them");
   });
 
-  it("expands a stale final plan before action and never shrinks a persisted plan", () => {
+  it("claims no shortfall for a past year whose plan is the whole year", () => {
+    const scope = {
+      artifactType: "PDF" as const,
+      financialYear: "2025-26",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-3B" as const,
+    };
+    const planned = createFullFiscalYearLedger(
+      scope,
+      new Date("2026-09-24T00:00:00.000Z"),
+      FILED_RETURNS_MONTHS,
+    );
+    expect(planned.targets).toHaveLength(12);
+
+    const step = completeFullFiscalYearStep(
+      { ...planned, status: "complete" },
+      new Date("2026-09-24T00:00:00.000Z"),
+    );
+
+    expect(step.safeSignals).not.toContain("full-fiscal-year-plan-narrower-than-eligible");
+    expect(step.safeMessage).toBe("Pack completed the local full fiscal year run for FY 2025-26.");
+  });
+
+  it("retains the recorded plan unchanged when a plan resumes", () => {
+    const ledger = createLedger([["April", "running"]]);
+    const resumed = resumeFullFiscalYearLedger(ledger, new Date("2026-06-24T01:00:00.000Z"));
+
+    expect(resumed.targetPlan).toEqual(ledger.targetPlan);
+    expect(resumed.targets[0]?.status).toBe("pending");
+  });
+
+  it("never expands or shrinks a persisted target plan", () => {
     const completedApril = markEveryTargetDownloaded(createLedger([["April", "downloaded"]]));
     const staleFinal: FiledReturnsFullFiscalYearLedger = {
       ...completedApril,
@@ -638,22 +676,44 @@ describe("full fiscal year ledger", () => {
     );
 
     expect(expanded).toMatchObject({
-      eligibleThrough: "June",
-      status: "running",
-      targets: [
-        { period: "April", status: "downloaded" },
-        { period: "May", status: "pending" },
-        { period: "June", status: "pending" },
-      ],
+      eligibleThrough: "April",
+      status: "blocked",
+      targets: [{ period: "April", status: "downloaded" }],
     });
-    expect(expanded.zipPhase).toBeUndefined();
+    expect(expanded.targetPlan).toEqual(completedApril.targetPlan);
+    expect(expanded.zipPhase).toBe("downloaded-cleanup-pending");
     const notShrunk = reconcileFullFiscalYearLedgerTargets(
       expanded,
       new Date("2026-05-24T00:00:00.000Z"),
       ["April"],
     );
-    expect(notShrunk.targets.map((target) => target.period)).toEqual(["April", "May", "June"]);
-    expect(notShrunk.eligibleThrough).toBe("June");
+    expect(notShrunk.targets.map((target) => target.period)).toEqual(["April"]);
+    expect(notShrunk.eligibleThrough).toBe("April");
+  });
+
+  it("completes only when the targets still match the recorded plan in order", () => {
+    // The plan is the authority a run answers to, so target order is part of the
+    // record, not an incidental array. A reordered target list is a different
+    // record and must not satisfy completion.
+    const planned = createLedger([
+      ["April", "not-filed"],
+      ["May", "not-filed"],
+    ]);
+
+    expect(isFullFiscalYearLedger(planned)).toBe(true);
+    expect(canCompleteFullFiscalYearLedger(planned)).toBe(true);
+    expect(
+      canCompleteFullFiscalYearLedger({ ...planned, targets: [...planned.targets].reverse() }),
+    ).toBe(false);
+  });
+
+  it("rejects a target that does not belong to its ledger's scope", () => {
+    // A plan record is filed under one returnType:financialYear:artifactType, so
+    // a target from a different one could never have been stored under it.
+    const planned = createLedger([["April", "not-filed"]]);
+    const foreign = { ...planned.targets[0]!, financialYear: "2025-26" };
+
+    expect(isFullFiscalYearLedger({ ...planned, targets: [foreign] })).toBe(false);
   });
 
   it("rejects malformed or inconsistent persisted ledgers", () => {
@@ -872,6 +932,34 @@ describe("full fiscal year ledger", () => {
     expect(canCompleteFullFiscalYearLedger(blocked)).toBe(false);
   });
 
+  // Equality between the immediate and persisted copies cannot catch the shared
+  // text losing its remedy -- both derive from one source, so both drift
+  // together and still agree. Every state that names a remedy needs a row here.
+  it.each([
+    ["full-fiscal-year-pinned-gst-tab-unavailable", "Clear local Pack data"],
+    ["full-fiscal-year-gst-tab-session-unavailable", "open in the foreground"],
+  ])("persists the specific remedy for %s", (signal, remedy) => {
+    const ledger = createLedger([["April", "pending"]]);
+    const targetId = ledger.targets[0]!.targetId;
+    const persisted = markFullFiscalYearTargetTerminal(
+      ledger,
+      targetId,
+      "blocked",
+      {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "blocked",
+        safeSignals: [signal],
+        safeMessage: "Pack stopped safely.",
+      },
+      new Date("2026-06-24T00:01:00.000Z"),
+    );
+
+    expect(persisted.targets[0]!).toMatchObject({ safeSignals: [signal] });
+    expect(persisted.targets[0]!.safeMessage).toContain(remedy);
+    expect(isFullFiscalYearLedger(persisted)).toBe(true);
+  });
+
   it("retains fixed GSTR-3B observation signals when a full-year target stops before acquisition", () => {
     const ledger = createLedger([["April", "pending"]]);
     const targetId = ledger.targets[0]!.targetId;
@@ -988,12 +1076,22 @@ function createLedger(
     ([period], index) => period === FILED_RETURNS_MONTHS[index],
   );
   const eligibleThrough = hasCanonicalTargetPrefix ? targets.at(-1)?.[0] : undefined;
+  const createdTargets = targets.map(([period, status]) =>
+    createTarget(period, status, { artifactType, returnType }),
+  );
   return {
     schemaVersion: "1.0",
     ...(eligibleThrough
       ? {
           planVersion: FULL_FISCAL_YEAR_PLAN_VERSION,
           eligibleThrough,
+          targetPlan: createdTargets.map((target) => ({
+            targetId: target.targetId,
+            financialYear: target.financialYear,
+            period: target.period,
+            returnType: target.returnType,
+            ...(target.artifactType ? { artifactType: target.artifactType } : {}),
+          })),
         }
       : {}),
     ledgerId: "11111111111111111111",
@@ -1016,9 +1114,7 @@ function createLedger(
       : {}),
     createdAt: now,
     updatedAt: now,
-    targets: targets.map(([period, status]) =>
-      createTarget(period, status, { artifactType, returnType }),
-    ),
+    targets: createdTargets,
   };
 }
 
