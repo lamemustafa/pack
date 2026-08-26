@@ -79,7 +79,11 @@ export function usePackPopupController() {
               : "Pack is dormant until you start an action.",
           );
         } else {
-          showActionError(contextResponse.ok ? "Unexpected Pack response." : contextResponse.error);
+          showActionError(
+            contextResponse.ok
+              ? "Unexpected Pack response."
+              : (contextResponse.safeMessage ?? contextResponse.error),
+          );
         }
       })
       .catch(() => showActionError("Pack could not read the current GST Portal state. Try again."));
@@ -117,7 +121,10 @@ export function usePackPopupController() {
         );
         return;
       }
-      showActionError(response.ok ? "Unexpected Pack response." : response.error, "context");
+      showActionError(
+        response.ok ? "Unexpected Pack response." : (response.safeMessage ?? response.error),
+        "context",
+      );
     } catch {
       showActionError("Pack could not read the current GST Portal state. Try again.", "context");
     }

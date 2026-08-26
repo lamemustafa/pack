@@ -173,6 +173,8 @@ function backgroundMessageSource(message: unknown): string {
       return "the download prompt probe";
     case "PACK_GET_LAST_MANIFEST":
       return "the local manifest request";
+    case "PACK_GET_CONTEXT":
+      return "the current GST Portal state";
     case "PACK_GET_FILED_RETURNS_FLOW_SUMMARY":
       return "saved local recovery state";
     case "PACK_CLEAR_LOCAL_DATA":
@@ -201,6 +203,8 @@ function backgroundMessageHandlerSite(message: unknown): `background-message-han
       return "background-message-handler:download-prompt-probe";
     case "PACK_GET_LAST_MANIFEST":
       return "background-message-handler:last-manifest";
+    case "PACK_GET_CONTEXT":
+      return "background-message-handler:gst-context";
     case "PACK_GET_FILED_RETURNS_FLOW_SUMMARY":
       return "background-message-handler:filed-returns-summary";
     case "PACK_CLEAR_LOCAL_DATA":

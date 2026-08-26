@@ -191,6 +191,51 @@ describe("popup background failure presentation", () => {
     );
   });
 
+  it("keeps a context read safe error visible after the other mount reads succeed", async () => {
+    await act(async () => root?.unmount());
+    controller = null;
+    mocks.sendMessage.mockImplementation((message: PackMessage) => {
+      if (message.type === "PACK_GET_CONTEXT") {
+        return Promise.resolve({
+          ok: false,
+          error: "BACKGROUND_MESSAGE_HANDLER_FAILED",
+          safeMessage: "Pack stopped while handling the current GST Portal state. Try again.",
+        });
+      }
+      return Promise.resolve({ ok: true, flowSummary: null });
+    });
+    root = createRoot(document.getElementById("root") as Element);
+    await act(async () => {
+      root?.render(<Harness onChange={(next) => (controller = next)} />);
+      await Promise.resolve();
+    });
+
+    const renderedController = controller as ReturnType<typeof usePackPopupController> | null;
+    expect(renderedController?.actionError).toBe(
+      "Pack stopped while handling the current GST Portal state. Try again.",
+    );
+  });
+
+  it("keeps a context refresh safe error visible", async () => {
+    mocks.sendMessage.mockImplementation((message: PackMessage) =>
+      message.type === "PACK_GET_CONTEXT"
+        ? Promise.resolve({
+            ok: false,
+            error: "BACKGROUND_MESSAGE_HANDLER_FAILED",
+            safeMessage: "Pack stopped while handling the current GST Portal state. Try again.",
+          })
+        : Promise.resolve({ ok: true }),
+    );
+
+    await act(async () => {
+      await controller?.refreshPortalContext();
+    });
+
+    expect(controller?.actionError).toBe(
+      "Pack stopped while handling the current GST Portal state. Try again.",
+    );
+  });
+
   it("refreshes the visible summary when durable ZIP reconciliation completes", async () => {
     const completedSummary = {
       scope: {

@@ -437,6 +437,28 @@ describe("Pack GST tab selection", () => {
     expect(browserMocks.tabs.sendMessage).not.toHaveBeenCalled();
   });
 
+  it("names a failed context refresh without exposing the rejected browser detail", async () => {
+    browserMocks.tabs.query.mockRejectedValueOnce(
+      new Error("sensitive portal detail must not be exposed"),
+    );
+    await import("../../src/entrypoints/background");
+
+    const listener = browserMocks.getMessageListener();
+    expect(listener).not.toBeNull();
+    const response = await new Promise((resolve) => {
+      listener?.({ type: "PACK_GET_CONTEXT" }, { id: "pack-test-extension" }, resolve);
+    });
+
+    expect(response).toEqual({
+      ok: false,
+      error: "BACKGROUND_MESSAGE_HANDLER_FAILED",
+      safeMessage:
+        "Pack stopped while handling the current GST Portal state. Try the action again.",
+      safeSite: "background-message-handler:gst-context",
+    });
+    expect(JSON.stringify(response)).not.toContain("sensitive portal detail");
+  });
+
   it("infers a GSTR-2B observation from the active summary route instead of returning stale wrong-page", async () => {
     const { PACK_CONTENT_SCRIPT_PROTOCOL_VERSION } =
       await import("../../src/connectors/gst/messages");
