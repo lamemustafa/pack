@@ -759,3 +759,87 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
 - Pacing correction: checkpoint rounds 15–17 were shorter than the requested 45–75-minute cycles.
   Their real timestamps remain recorded; they are not evidence that the requested cadence was
   met. The next cycle is a deeper bounded compatibility audit rather than another short copy edit.
+
+## Cycle 18 — historical filename recovery across durable boundaries
+
+- Window: 2026-08-26 05:27–06:12 IST; source checkpoint at 05:56 IST, followed by independent
+  evidence review, synthetic narrow-surface checks and read-only next-cycle sizing.
+- Picked: follow the filename-copy change through exact ledger validation, current-state reads,
+  canonical session persistence/reopen, explicit recovery and local-data clearing.
+- Measured before: exact pre-Cycle-15 unresolved filename caches made otherwise-valid ledger reads
+  return null. With the ledger as the only recovery record, current-state recovery disappeared and
+  broad local clearing returned success instead of the existing unresolved-recovery refusal.
+  After restoring cache admission, session reconstruction independently reintroduced completion
+  wording. A blocked-only copy fix still missed partial/running/cancelled aggregate states.
+- Changed: one exact historical derived-message allowance, without rewriting the stored ledger;
+  outward copy remains reconstructed from canonical fields. Filename presentation now uses the
+  existing canonical message key, not aggregate status. Confirmed cleanup keys and complete keys
+  retain completion-form copy; a single-period partial key additionally requires the existing
+  confirmed ZIP evidence predicate. Explicit no-delivery suppression is unchanged.
+- Review/rectify: privacy found the aggregate-status bypass, measured by 18 failing non-blocked
+  rows. Security found that a partial key alone was not delivery proof; 16 negative partial-ZIP
+  rows failed before the predicate was required. The original marker-only partial fixture is
+  retained with neutral copy, alongside separately evidenced positive controls. Neither fix
+  changes status, scope, target binding, retry/manual authority or the evidence predicate itself.
+- Guard coverage: literal historical messages, all six filename variants, mixed-family precedence,
+  edited/prefixed/appended text, whitespace, wrong period/family, absent/unknown/duplicate/over-cap
+  signals, wrong target/scope/plan, mismatched diagnostics, unsupported positive status claims,
+  stale/wrong recovery identity, final-click absence, interrupted targets and explicit retry.
+  Current-state and clear tests assert storage, ZIP and portal-action non-effects.
+- Final discrimination: removing exact cache admission failed 34 selected read/current-state/clear
+  cases; restoring unconditional completion filename copy failed 62 cases, with 12 controls
+  passing. Forcing neutral copy for every outcome failed 12 proven-delivery controls while 30
+  unconfirmed controls passed. All mutations were restored byte-for-byte to the gated source;
+  the restored four-file focused run passed 382 tests and the later session-only run passed 182.
+- Historical scope: distinct blocked/failed keys preceded the filename suffix introduction, so
+  no generic-base-plus-suffix compatibility was invented for those statuses. An in-memory
+  source-module comparison across nine prior revisions accepted all 1,944 derived-cache input
+  combinations per revision. This is a cache-message check using current dependencies, not a
+  historical-build or whole-ledger qualification.
+- Measured line accounting: durable status 645→656; recovery tests 1,665→2,181; session boundary
+  tests 1,469→1,681; local-data tests 1,334→1,442. This is a safety fix with 11 added production
+  lines, not a reduction claim. No module or import edge changed.
+- Review: privacy CLEAN/PASS and security PASS on exact source checkpoint
+  `fbfb8964aeb27a8232f1f9cf0fd46894eb00ed6c`. A pre-existing aggregate/target consistency
+  limitation remains explicitly separate from those approvals.
+- Gate: the first full run was intentionally stopped with exit 130 when review found the
+  aggregate bypass; it is not counted as a pass. The final build, TypeScript, zero-warning ESLint,
+  repo-wide Prettier and package verification passed at 1.01 MB. Full Vitest passed 125 files and
+  2,364 tests, 109 more than the prior checkpoint. Known synthetic workflow/review-gate stderr
+  and the missing TypeScript source-map warning remained non-failing. Exact footer:
+
+  ```text
+   Test Files  125 passed (125)
+        Tests  2364 passed (2364)
+     Start at  05:52:21
+     Duration  159.46s (transform 2.87s, setup 0ms, import 14.26s, tests 130.41s, environment 7ms)
+  ```
+
+- Preflight recheck: refused the in-progress dirty tree. All five changed paths were inspected
+  and lane-owned; no unrelated edit was staged. This recheck is not recorded as a preflight pass.
+- Checkpoint: `fbfb896 fix(recovery): retain exact historical filename recovery`.
+- Learned / next audit: aggregate completion and unresolved target state are not uniformly
+  classified at every read boundary. The corrected tests distinguish legacy-plan read rejection,
+  canonical-plan read admission and later session-summary rejection. Next-cycle sizing asks
+  whether current producers can create that inconsistency before proposing a recovery-safe fix.
+  Running/cancelled session summaries also retain their pre-existing generic recovery base copy;
+  this cycle changes filename context only. No live or release qualification is claimed.
+- Producer sizing result: the read-only audit found no current transition from a coherent ledger
+  that produces a complete aggregate with an unresolved target. Target updates/completion checks
+  derive completion from terminal targets; restaging/retry/reconciliation move the aggregate back
+  to blocked/running. Some readers can preserve already-inconsistent input. Treat the follow-up as
+  boundary-invariant hardening, not an established normal-workflow corruption incident; historical
+  provenance and arbitrary concurrency remain unproven.
+- Narrow-surface check: used the existing Playwright library in an isolated packaged Chromium
+  session, with all page network requests blocked and only synthetic message responses. No new
+  package was installed. At 320×900 the old override sentence measured 117.58px high; the new
+  override caution measured 134.38px, adding one 16.80px line. The unavailable-name caution was
+  100.78px. All four old/new/dense fixtures kept document width 320px and had zero measured clipped
+  regions. Foreground, settled screenshots confirmed readability after scrolling. Saved-run,
+  diagnostic and catalogue disclosures opened and closed with keyboard input; no recovery action
+  was executed. The temporary browser/profile was closed and removed.
+- Plan change from visual evidence: the twelve-period fixture showed `12 needs review` in the pack
+  card but `1 needs review` plus eleven waiting periods in the detailed list. This normal-shaped
+  presentation contradiction is a higher-value next cycle than the unproven aggregate producer
+  path. Inspect whether the card can derive its count from the existing per-period evidence;
+  retain the boundary-invariant hardening item as a separately named follow-up.

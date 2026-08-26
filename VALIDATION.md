@@ -8,6 +8,13 @@
 - Collision check: no other `/tmp/pack-lanes` claim existed at lane creation. This lane owns the
   background diagnostic files, catalogue/capability model, side-panel scope UI and tests, the new
   `design-lab/10-catalogue-overhaul` directory, `DESIGN.md` and this record.
+- Continued recovery-audit ownership: `src/connectors/gst/filed-returns-durable-status.ts`,
+  `tests/background/full-fiscal-year-ledger.test.ts`,
+  `tests/background/filed-returns-full-fiscal-year-recovery.test.ts`,
+  `tests/background/filed-returns-session-write-boundary.test.ts`,
+  `tests/background/local-data.test.ts` and `PROGRESS.md`. The lane
+  register was rechecked before Cycle 18; no competing claim existed. No production storage or
+  recovery module is claimed for modification in that cycle.
 - No live GST Portal session, portal navigation, real taxpayer data, manifest/permission/CSP change,
   dependency change, new persisted field, sensitive or unbounded persisted value, target-binding
   weakening, public capability claim, push, PR or deployment was used. Task 0 expands only the
@@ -360,6 +367,9 @@ reviewed persistence and failure contracts.
 - The catalogued annual, quarterly and non-period returns remain unsupported. Their data shapes and
   explanations are present so absence does not masquerade as support.
 - This lane is not a Chrome Web Store, legal, broad-GST-support or release-readiness claim.
+- Cycle 18 does not certify general aggregate/target completion consistency. Its controls separate
+  ledger-read acceptance from session-summary rejection; the cross-reader consistency audit is a
+  named follow-up, not hidden inside the filename-copy approval.
 
 ## Decision log
 
@@ -1025,3 +1035,115 @@ retrying.` The focused test failed 1 of 115 session-boundary cases before the fi
 - Process limitation: rounds 15–17 were short, fully gated checkpoints, not the requested
   45–75-minute cadence. Actual times are retained in `PROGRESS.md`; the next audit is deliberately
   deeper and end-to-end rather than relabelling elapsed time.
+
+### Cycle 18 — exact historical cache admission and evidence-qualified filename copy
+
+- Before: Cycle 15 correctly narrowed unresolved target copy but left the exact cached-message
+  validator rejecting its former derived sentence. `readLedger` returned null; current-state
+  recovery could disappear and local clearing could bypass its unresolved-ledger refusal when no
+  independent guard existed. These are measured synthetic storage outcomes, not a live incident.
+- Contract: admit only the exact former canonical base plus the exact former filename fragment,
+  when the canonical filename family is present. No trimming, substring matching, arbitrary prose,
+  schema version, persisted field or write-on-read migration was added. Identity, scope, canonical
+  plan, timestamp, signal, diagnostic and positive-status checks remain in their existing order.
+  The stored cache stays untouched; current readers reconstruct outward messages.
+- Second boundary: after ledger admission was repaired, canonical session persistence/reopen could
+  add completion wording again. The final presentation context follows the canonical message key.
+  Existing complete and confirmed-cleanup keys retain their filename caution. A partial key gets
+  that form only for single-period scope with the existing confirmed ZIP evidence predicate;
+  partial status, missing-artifact reasons and user actions remain partial and unchanged. Explicit
+  not-filed/no-artifacts/unconfirmed-completion suppression remains intact.
+- Review rounds and dispositions:
+  - Privacy's non-blocked aggregate finding was fixed and measured: the first blocked-only policy
+    failed 18 partial/running/cancelled rows. All 24 non-complete aggregate/filename combinations
+    now survive ledger read, re-summary, canonical persistence and reopen without a completion
+    filename claim.
+  - Security's partial-key finding was fixed and measured: the marker-only historical partial ZIP
+    fixture was not final browser proof. It remains a neutral negative control, with a separate
+    confirmed tuple control. Missing ZIP/ID/completion/non-empty evidence, multiple IDs and
+    contradictory evidence are neutral; scope/key controls prevent borrowing that exception.
+  - Security's test-quality finding was corrected: the legacy complete-ledger test proves legacy
+    plan rejection only. Six additional canonical-plan controls show read admission followed by
+    session-summary consistency rejection. This is not general ledger coherence approval.
+- Final mutation discrimination:
+
+  | Temporary mutation                               |            Selected failures | Observed failure                                                                                                               |
+  | ------------------------------------------------ | ---------------------------: | ------------------------------------------------------------------------------------------------------------------------------ |
+  | Remove exact old composed-cache admission        |                           34 | `expected null not to be null`; current state null; clear returned `{ ok: true, cleared: true }` instead of unresolved refusal |
+  | Always use completion-form summary filename copy | 62, with 12 controls passing | Reopened unresolved/partial copy contained `Pack completed the download` instead of the neutral caution                        |
+  | Always use neutral summary filename copy         | 12, with 30 controls passing | Confirmed direct/ZIP, evidenced partial ZIP and delivered-cleanup copy lost its exact completion-form caution                  |
+
+  The restored source matched blob `772fcdfd760adf3b16cfec512228f4a26d069cf8` and the committed
+  source exactly. Restored focused coverage passed 4 files / 382 tests; the final session-only
+  restoration check passed 182 tests. Guard negatives additionally pin wrong identities/scopes,
+  invalid signal families, cache near-matches, diagnostics, manual observation and stale retries.
+
+- History check: commit `e72438b` introduced distinct blocked/failed keys before `94b45dc` added
+  filename fragments. The combination of an obsolete generic base plus a new suffix therefore
+  was not invented as an accepted blocked/failed cache. Nine earlier source snapshots each matched
+  1,944 cache-level combinations against the current exact reader. That in-memory check used
+  current imported dependencies and does not prove old builds, full ledger validity or runtime
+  reachability of every generated combination.
+- Exact line counts:
+
+  | File                                                         | Before | After |
+  | ------------------------------------------------------------ | -----: | ----: |
+  | `gst/filed-returns-durable-status.ts`                        |    645 |   656 |
+  | `background/filed-returns-full-fiscal-year-recovery.test.ts` |  1,665 | 2,181 |
+  | `background/filed-returns-session-write-boundary.test.ts`    |  1,469 | 1,681 |
+  | `background/local-data.test.ts`                              |  1,334 | 1,442 |
+
+  No module or import edge changed. Production grew by 11 lines; this is not counted as reduction.
+
+- Review binding: privacy CLEAN/PASS and security PASS on
+  `fbfb8964aeb27a8232f1f9cf0fd46894eb00ed6c`, with the aggregate-consistency limitation explicitly
+  excluded. No new storage fields, source permissions, hosts, CSP, dependency, portal action,
+  completion/retry authority or evidence predicate was introduced.
+- Complete gate: build and package verification passed at 1.01 MB; TypeScript, zero-warning ESLint
+  and repo-wide Prettier passed. The earlier full-suite invocation was deliberately cancelled after
+  a review finding and is not a pass. The final full suite passed 125 files. Exact final three lines:
+
+  ```text
+        Tests  2364 passed (2364)
+     Start at  05:52:21
+     Duration  159.46s (transform 2.87s, setup 0ms, import 14.26s, tests 130.41s, environment 7ms)
+  ```
+
+- Workflow preflight was rechecked during the dirty edit and refused it as designed. The five
+  changed files were all inspected and lane-owned; that result is not a preflight pass. No PR,
+  hosted review, release or live authenticated run was attempted.
+- Next audit: classify the existing aggregate/target consistency difference across producer and
+  reader boundaries before choosing a recovery-safe repair. Running/cancelled session summaries'
+  generic recovery base copy is also pre-existing and unchanged here. These remain explicit
+  follow-ups, not evidence that the filename fix established general recovery correctness.
+- Read-only producer sizing found no inspected current transition that creates the aggregate
+  inconsistency from coherent state. Completion derives from terminal targets; restaging, retry
+  and reconciliation update aggregate state alongside targets. Existing inconsistent input can
+  propagate, so boundary hardening remains useful, but no normal-workflow corruption incident is
+  established. Historical versions and arbitrary concurrent execution were not qualified.
+- Packaged visual check: the Playwright CLI was unavailable; the interactive workflow used the
+  repo's already-installed browser library, with no dependency installation. A fresh isolated
+  profile loaded the real built panel, stubbed runtime responses before load and blocked all page
+  network traffic. No GST page was opened and no network requests were observed by the route
+  monitor. These are synthetic UI observations, not service-worker restart or portal qualification.
+
+  | 320×900 fixture                              | Caution height | Panel shell height | Document width | Clipped regions |
+  | -------------------------------------------- | -------------: | -----------------: | -------------: | --------------: |
+  | Previous override sentence on current bundle |       117.58px |         1,506.20px |          320px |               0 |
+  | Current override caution                     |       134.38px |         1,522.99px |          320px |               0 |
+  | Current unavailable-name caution             |       100.78px |         1,489.40px |          320px |               0 |
+  | Current override, twelve-period fixture      |       134.38px |         1,789.14px |          320px |               0 |
+
+  The longer caution adds 16.80px, one line at the rendered font metrics. Screenshots of the initial
+  viewport and scrolled recovery region were inspected in-session; no image/profile artifact is
+  committed. Early background-tab captures were unsettled and excluded; foreground recaptures
+  after paint matched the DOM bounds. The surface still scrolls, and the caution is below the
+  initial viewport: this is a readability/no-clipping check, not density or above-the-fold approval.
+  Saved-run options, Details and the catalogue completed keyboard open/close cycles. Irreversible
+  recovery controls, native-window layout, zoom and assistive technology were not qualified. The
+  isolated browser was closed and its task-generated profile removed; no source file changed.
+
+- New measured follow-up: the dense fixture's pack card counted all twelve unfinished periods as
+  needing review, while the detailed evidence counted one needing review and eleven waiting. This
+  visible contradiction moves the next duplicate-fact audit to summary-count derivation. It is not
+  a filename-copy regression or a claim that the wider panel is fully audited.
