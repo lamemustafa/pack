@@ -80,6 +80,9 @@ status --porcelain | wc -l` produced `0`) and was not edited by this session.
 
 - Before this incremental update, `pnpm workflow:preflight` passed for the
   task-owned branch.
+- Before this bot-feedback edit, no fresh pre-edit preflight was run. The
+  immediate post-edit preflight correctly failed because this documentation
+  file was uncommitted; that is a second verification gap, not a passing gate.
 
 - UI-owned paths are not claimed by this task.
 
@@ -105,15 +108,20 @@ status --porcelain | wc -l` produced `0`) and was not edited by this session.
 
 ## Re-verification script
 
-The immutable source baseline can be checked directly. Remote states are printed
-as observations only.
+The immutable source baseline's commit object can be checked directly. The
+focused guard test below is a mutable current-tree observation, not a replay of
+the observed result at the pinned baseline. Remote states are printed as
+best-effort observations only and do not determine the script status.
 
 ```sh
 set -e
 test "$(git rev-parse edad122e61914e8a88e93c00e50f4449bbc8a2c5^{commit})" = \
   "edad122e61914e8a88e93c00e50f4449bbc8a2c5"
 pnpm exec vitest run tests/repo/unreferenced-module-guard.test.ts
-gh pr view 231 --json headRefOid,mergeStateStatus,statusCheckRollup
-gh pr view 234 --json headRefOid,mergeStateStatus,statusCheckRollup
-gh issue list --state open --limit 100 --json number,title
+gh pr view 231 --json headRefOid,mergeStateStatus,statusCheckRollup || \
+  printf '%s\n' 'PR #231 observation unavailable'
+gh pr view 234 --json headRefOid,mergeStateStatus,statusCheckRollup || \
+  printf '%s\n' 'PR #234 observation unavailable'
+gh issue list --state open --limit 100 --json number,title || \
+  printf '%s\n' 'Open-issue observation unavailable'
 ```
