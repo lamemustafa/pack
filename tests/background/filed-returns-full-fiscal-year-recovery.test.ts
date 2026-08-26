@@ -252,26 +252,28 @@ describe("full fiscal-year recovery", () => {
           expect(summariseFullFiscalYearLedger(reopened!).flowStep.safeMessage).toBe(
             `${portalCause} ${newCopy}`,
           );
-          const persisted = await persistCanonicalFiledReturnsFlowSummary("completion", summary);
           if (ledgerStatus === "complete") {
-            // The canonical plan permits this ledger read, but summary completion
-            // consistency must still reject its unresolved recovery target.
-            expect(persisted).toBeNull();
-            await expect(readCanonicalFiledReturnsFlowSummary("completion")).resolves.toBeNull();
-          } else {
-            expect(persisted).not.toBeNull();
-            const reopenedCause =
-              ledgerStatus === "blocked" || ledgerStatus === "partial"
-                ? portalCause
-                : "Pack needs an explicit recovery action before continuing the saved fiscal-year run.";
-            await expect(readCanonicalFiledReturnsFlowSummary("completion")).resolves.toMatchObject(
-              {
-                status: ledgerStatus,
-                fullFiscalYearRecovery: { targetStatus: "blocked", expectedRevision: 2 },
-                flowStep: { safeMessage: `${reopenedCause} ${newCopy}` },
-              },
-            );
+            // Reconstruction preserves recovery; it does not relax the complete-summary guard.
+            expect(summary.status).toBe("blocked");
+            await expect(
+              persistCanonicalFiledReturnsFlowSummary("rejected-completion", {
+                ...summary,
+                status: "complete",
+              }),
+            ).resolves.toBeNull();
           }
+          const persisted = await persistCanonicalFiledReturnsFlowSummary("completion", summary);
+          expect(persisted).not.toBeNull();
+          const projectedStatus = ledgerStatus === "complete" ? "blocked" : ledgerStatus;
+          const reopenedCause =
+            projectedStatus === "blocked" || projectedStatus === "partial"
+              ? portalCause
+              : "Pack needs an explicit recovery action before continuing the saved fiscal-year run.";
+          await expect(readCanonicalFiledReturnsFlowSummary("completion")).resolves.toMatchObject({
+            status: projectedStatus,
+            fullFiscalYearRecovery: { targetStatus: "blocked", expectedRevision: 2 },
+            flowStep: { safeMessage: `${reopenedCause} ${newCopy}` },
+          });
           expect(browser.storage.local.set).not.toHaveBeenCalled();
           expect(browser.storage.local.remove).not.toHaveBeenCalled();
           expect(zipMocks.exportFullFiscalYearZip).not.toHaveBeenCalled();
