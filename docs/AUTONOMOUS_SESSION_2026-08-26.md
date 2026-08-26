@@ -209,6 +209,11 @@ df -h /
 - This report initially overstated downloadable CI artifact availability and
   nested Git status inside a test that could hide a command failure. Review
   corrected the artifact claim and separated checked command assignments.
+- Final review caught that the replay omitted the report PR's own strict gate;
+  it now checks that gate too. A review refresh launched through login Bash
+  selected an older Corepack and failed signature verification before reaching
+  the gate. That launcher error is not review evidence; the established pnpm
+  environment was used again without disabling signature checks.
 - At 08:00 IST, gh api repos/lamemustafa/pack/branches/master/protection reported
   strict Review gate and Review gate (scheduled) checks. Ruleset 18044636
   separately required Verify extension and Review gate, zero ordinary approvals,
@@ -275,6 +280,7 @@ run pnpm review:gate -- --repo lamemustafa/pack --pr 231 --strict-head-review --
 run pnpm review:gate -- --repo lamemustafa/pack --pr 233 --strict-head-review --required-review-author chatgpt-codex-connector --expected-head-oid d94686ecc2173f38fbc3224e64da59ec62ec2b23 --wait-head-review-ms 0 || review_result=1
 run pnpm review:gate -- --repo lamemustafa/pack --pr 232 --strict-head-review --required-review-author chatgpt-codex-connector --expected-head-oid 63aa9a18d16966bdda1d01aec05b80e586ab4ba6 --wait-head-review-ms 0 || review_result=1
 run pnpm review:gate -- --repo lamemustafa/pack --pr 234 --strict-head-review --required-review-author chatgpt-codex-connector --expected-head-oid 11ccc05785f69e61cf7cd734fe59d24b9de472fc --wait-head-review-ms 0 || review_result=1
+run pnpm review:gate -- --repo lamemustafa/pack --pr 235 --strict-head-review --required-review-author chatgpt-codex-connector --expected-head-oid "$report_head" --wait-head-review-ms 0 || review_result=1
 exit "$review_result"
 ```
 
