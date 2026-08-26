@@ -1202,3 +1202,38 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
 - Learned / next: a durable signal alone is insufficient when the primary recovery surface replaces
   its meaning. Continue the lossy-surface audit at one bounded catch boundary, preserving the
   distinction between unavailable local state and malformed local state.
+
+## Cycle 25 — retain canonical completion write failure
+
+- Window: 2026-08-27 02:47–02:54 IST (7 minutes). This is a short corrective checkpoint, not a
+  cadence-qualifying 45–75-minute cycle; the actual duration is recorded without an idle hold.
+- Picked: exact-ID ZIP reconciliation caught a canonical completion storage write failure, but routed
+  it through the generic durable-status rejection. The existing allowlisted
+  `canonical-completion-persist-failed` stage was not retained, making this storage failure
+  indistinguishable from rejected or unreconstructable completion evidence.
+- Measured before: the new recovery assertion failed because the returned durable target-review
+  surface omitted `single-period-cleanup-checkpoint-failed:canonical-completion-persist-failed`.
+  The direct surface test also failed, proving the generic renderer discarded that stage.
+- Changed: only a thrown canonical-completion persistence write on the verified single-period ZIP
+  path now retains the existing specific cleanup stage. The target-review projection preserves it
+  and says that Pack could not save the confirmed ZIP completion after temporary staging cleared.
+  The exact download ID, positive download evidence, blocked state, review retention, retry action,
+  and no-new-download authority are unchanged. A missing completion key remains on the old generic
+  fail-closed path rather than being mislabeled as a write failure.
+- Discrimination and review: mutating the emitted stage to `completion-persist-failed` made the
+  recovery test fail at the absent canonical-completion stage; the mutation was restored. Required
+  background security review PASS found no manifest, network, CSP, target-binding, download-evidence
+  or completion-safety regression.
+- Gate: focused recovery and surface suites passed 50 tests. Build, TypeScript, zero-warning ESLint,
+  repo-wide Prettier, package verification and diff checks passed. The final isolated serial Vitest
+  run passed 2,797 tests. Exact footer:
+
+  ```text
+        Tests  2797 passed (2797)
+     Start at  02:51:04
+     Duration  153.59s (transform 2.47s, setup 0ms, import 12.61s, tests 124.90s, environment 8ms)
+  ```
+
+- Checkpoints: runtime and test commits follow this record; the progress record is committed
+  separately after this append. No live/authenticated GST qualification, release claim, push or PR
+  action was made.
