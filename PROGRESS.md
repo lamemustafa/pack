@@ -1,5 +1,24 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 35 — audit terminal-download reconciliation before summary reads
+
+- Window: 2026-08-27 04:04–04:05 IST.
+- Picked: the summary handler's ignored result from terminal-download reconciliation.
+- Measured before: a summary read awaits reconciliation and intentionally discards its boolean.
+  At first glance that resembles the lossy catches fixed in Cycles 33–34.
+- Disposition: no source change. A failed download lookup returns `false` before reconciliation,
+  so it cannot promote a target without completed browser evidence. The following summary read uses
+  durable state, which remains `download-observing` rather than claiming success or retrying
+  blindly. Listener and startup reconciliation retain later opportunities to observe terminal
+  evidence. Surfacing a raw browser lookup rejection would be neither a specific safe reason nor a
+  safer state transition.
+- Focused evidence: durable-download-reconciler and durable-acquisition-recovery suites passed 2
+  files and 19 tests; `git diff --check` passed. This is a quiet audit, not a portal qualification
+  or a complete-gate claim.
+- Learned / plan change: do not equate every `catch(() => false)` with silent loss. The decisive
+  distinction is whether the returned durable state remains honest and recoverable. Continue with
+  only catches that replace an already-available safe reason or erase a terminal state.
+
 ## Cycle 34 — surface durable-summary refresh failures
 
 - Window: 2026-08-27 03:59–04:04 IST.
