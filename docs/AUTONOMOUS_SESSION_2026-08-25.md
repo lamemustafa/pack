@@ -125,6 +125,7 @@ Files deliberately skipped because another lane owned them:
 17. I checked that each referenced PR number existed without proving it contained the recorded commit. The replay now verifies each historical PR commit through GitHub's immutable PR commit list.
 18. I omitted the pre-ledger commit recorded for #230 from the same commit-membership checks used for the historical pull requests. The replay now fetches that commit and requires #230's GitHub commit list to contain it.
 19. I initially ran the mutable dependency-audit observation from the caller's worktree, which could describe a different lockfile than the replayed baseline. The observation now runs in the detached baseline tree and identifies that tree's commit.
+20. I added #230's commit-membership assertion without fetching its pull ref. The replay now requests #230 alongside the other historical pull refs, so a fresh clone can verify the recorded commit before checking GitHub membership.
 
 ## Re-verification Script
 
@@ -148,7 +149,8 @@ git -C "$PACK_ROOT" fetch --no-tags origin master \
   refs/pull/223/head \
   refs/pull/224/head \
   refs/pull/228/head \
-  refs/pull/229/head
+  refs/pull/229/head \
+  refs/pull/230/head
 
 require_commit() {
   git -C "$PACK_ROOT" rev-parse --verify --quiet "$1^{commit}" >/dev/null
