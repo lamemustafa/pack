@@ -1114,3 +1114,10 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
 - Final source/security/privacy reviews are clean. Design follow-ups remain the buried cleanup
   route (P2) and existing 11px metadata (P3); no unrelated UI change was included. Remaining owner
   boundaries and real-runtime evidence gaps are preserved in VALIDATION rather than marked done.
+- Final evidence checkpoint: `e99a36e`; boundary-review checkpoint: `66dba97`. The complete critique
+  snapshot remains local under the existing ignore rule; no force-add or ignore-policy change.
+- At 09:16 IST, removed only this lane's dependencies/build output after gates. Measured footprint
+  309,648 KiB; both directories absent, source/worktree preserved. Shared-disk available space rose
+  by 11,292 KiB across the immediate readings; that change is not attributed solely to this lane.
+  All browser profiles/servers are closed and removed. The remaining interval is a disclosed idle
+  handoff hold, with no implementation or test work attributed to it.

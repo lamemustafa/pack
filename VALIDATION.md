@@ -1956,3 +1956,23 @@ Six additional mutation groups were run serially and restored with matching file
   ordinary stage was refused; no force-add or ignore-rule change was made. It remains a local
   worktree artifact. The scored findings, limits and follow-ups are also recorded in this tracked
   validation document; the archive itself is not claimed as part of the Git checkpoint.
+
+### Final disk cleanup and reproducibility
+
+- At 09:16 IST, deleted only this lane's `node_modules` and `.output` after all local gates and
+  browser work. Immediately before deletion, their measured footprints were 308,572 KiB and
+  1,076 KiB (309,648 KiB combined). Both are confirmed absent; source, tests, worktree, branch,
+  tracked evidence and the local ignored critique archive remain. Generated `.wxt` types occupy
+  32 KiB; no browser profile remains there. Other worktrees and their dependencies were untouched.
+- Filesystem available space measured 68,502,896 KiB immediately before and 68,514,188 KiB after
+  cleanup, a difference of 11,292 KiB. This shared filesystem was changing independently, and pnpm
+  links can share storage; the directory footprint is not claimed as physically reclaimed space.
+- Recreate this lane's dependencies with `pnpm install --frozen-lockfile`, then prepare/build WXT
+  before type/test checks. No dependency or manifest changed. Final source/test diffs against their
+  checkpoints are empty. Gates were run before generated dependencies/output were removed.
+- The final two Markdown records are checked with the same already-loaded Prettier standalone
+  parser/config after cleanup; this requires no reinstall or new dependency. This is a formatting
+  check, not a claim that the full suite ran without dependencies.
+- Final handoff will close the current wall-clock cycle near the requested 09:30 IST window.
+  Any intervening hold after evidence and cleanup is explicitly idle, not additional implementation
+  or test execution. No new cycle, feature, release or PR operation is started during that hold.
