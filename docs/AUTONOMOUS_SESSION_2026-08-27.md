@@ -64,10 +64,19 @@ status --porcelain | wc -l` produced `0`) and was not edited by this session.
 - The required full suite later passed with 126 files and 2,122 tests. Its own
   start command observed four matching Vitest processes and a one-minute load
   average of `10.06`; its duration is therefore not used as a performance
-  measurement. Typecheck, lint, formatting, production build, and package
-  verification also passed. The first workflow-preflight attempt correctly
-  failed because this new documentation was uncommitted; it must be rerun after
-  the scoped commit.
+  measurement. Its required final three lines were:
+
+  ```text
+        Tests  2122 passed (2122)
+     Start at  02:16:14
+     Duration  180.67s (transform 2.04s, setup 0ms, import 14.60s, tests 146.74s, environment 10ms)
+  ```
+
+  Typecheck, lint, formatting, production build, and package verification also
+  passed. I did not run workflow preflight before the initial document edit.
+  That is a verification gap: the post-commit passing preflight confirms only
+  the clean committed branch and does not repair the missed pre-edit check.
+
 - UI-owned paths are not claimed by this task.
 
 ## Claims I could NOT verify
@@ -93,7 +102,8 @@ The immutable source baseline can be checked directly. Remote states are printed
 as observations only.
 
 ```sh
-git rev-parse origin/master
+test "$(git rev-parse edad122e61914e8a88e93c00e50f4449bbc8a2c5^{commit})" = \
+  "edad122e61914e8a88e93c00e50f4449bbc8a2c5"
 pnpm exec vitest run tests/repo/unreferenced-module-guard.test.ts
 gh pr view 231 --json headRefOid,mergeStateStatus,statusCheckRollup
 gh pr view 234 --json headRefOid,mergeStateStatus,statusCheckRollup
