@@ -1,5 +1,36 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 47 — bind portal-gated inline-action reasons for assistive technology
+
+- Window: 2026-08-27 05:05–05:10 IST. This is a short accessibility corrective checkpoint; its
+  actual duration is recorded without an idle hold.
+- Picked: portal-gated inline primary actions visibly stated why they were disabled, but the button
+  had no programmatic association with that existing explanation.
+- Measured before: the inline-status test asserted that every portal-gated action was disabled and
+  printed its reason, but did not assert an accessible description target. A visible sibling
+  paragraph alone does not reliably describe a disabled control to screen-reader users.
+- Changed: the existing portal-disabled reason paragraph now has a stable ID, and only the matching
+  portal-gated action receives `aria-describedby`. Enabled and busy actions remain unchanged. The
+  parameterized recovery test requires both the relation and its resolved markup ID; no copy,
+  action authority, scope, portal behavior, persistence, or download behavior changed.
+- Discrimination: temporarily removing the button relationship made the targeted suite fail with
+  `expected ... to contain 'aria-describedby="inline-status-portal-disabled-reason"'`. The source
+  was restored before final gates.
+- UI review: the Impeccable product-UI accessibility guidance required the disabled control to be
+  programmatically connected to its explanation while retaining the established component and copy.
+- Final gate: build, TypeScript, zero-warning ESLint, repo-wide Prettier, package verification and
+  `git diff --check` passed. Exact Vitest footer:
+
+  ```text
+       Tests  2807 passed (2807)
+    Start at  05:07:30
+    Duration  153.79s (transform 2.46s, setup 0ms, import 12.33s, tests 125.30s, environment 8ms)
+  ```
+
+- Checkpoints: `b641921 fix(a11y): describe portal-gated actions`; the progress record follows in
+  a separate documentation checkpoint. No live/authenticated GST qualification, release claim,
+  push or PR action was made.
+
 ## Cycle 46 — bind disabled final-action reasons for assistive technology
 
 - Window: 2026-08-27 04:55–05:04 IST. This is a short accessibility corrective checkpoint; its
