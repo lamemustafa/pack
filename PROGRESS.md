@@ -1,5 +1,40 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 33 — preserve named context-read failures
+
+- Window: 2026-08-27 03:49–03:58 IST.
+- Picked: the context-read branch of the lossy-surface audit.
+- Measured before: the background protocol may return a static `safeMessage` for an unexpected
+  context-refresh failure, but the initial panel read and the on-demand refresh rendered only the
+  internal error code. The handler also called that request an undifferentiated extension request.
+- Without-fix proof: the new mount regression failed with expected
+  `Pack stopped while handling the current GST Portal state. Try again.` and received
+  `BACKGROUND_MESSAGE_HANDLER_FAILED`.
+- Changed: both context presentation paths now prefer `safeMessage`; the background names
+  `PACK_GET_CONTEXT` as the current GST Portal state and assigns it a stable handler site. Added
+  tests for initial load, refresh, and a rejected browser query. The last proves the static safe
+  response omits the rejected detail. No portal action, persisted field, download evidence, or
+  target-binding behavior changed.
+- Focused evidence: popup-controller and GST-tab-selection suites passed 2 files and 58 tests.
+  The first complete gate exposed only a test TypeScript narrowing error; the assertion was given
+  the harness's explicit controller type, then the focused and full gates were repeated. No source
+  behavior was changed in that correction.
+- Required review: MV3 security review PASS. No manifest, permission, CSP, content-script,
+  persistence, download-correlation, or sensitive-data exposure regression was found.
+- Final gate: build passed at 1.04 MB; TypeScript passed; ESLint passed with zero warnings;
+  Prettier passed repo-wide; package verification passed; `git diff --check` passed. Exact Vitest
+  footer:
+
+  ```text
+       Tests  2803 passed (2803)
+    Start at  03:55:26
+    Duration  156.19s (transform 2.81s, setup 0ms, import 13.26s, tests 126.48s, environment 8ms)
+  ```
+
+- Learned / plan change: a safe message is only safe if each consumer displays it. Continue the
+  lossy-surface audit at storage-change summary refreshes and fire-and-forget reconciliation paths,
+  separating intentionally advisory work from terminal user-visible failures.
+
 ## Cycle 32 — make all-formats expansion return-type-aware everywhere
 
 - Window: 2026-08-27 03:43–03:48 IST.
