@@ -478,6 +478,10 @@ describe("panel guided scope interaction", () => {
     const finalAction = container.querySelector<HTMLButtonElement>(".panel-guide .primary-action");
     expect(finalAction).not.toBeNull();
     expect(finalAction?.disabled).toBe(true);
+    expect(finalAction?.getAttribute("aria-describedby")).toBe("scope-action-reason");
+    const reason = dom.window.document.getElementById("scope-action-reason");
+    expect(reason).not.toBeNull();
+    expect(reason?.textContent?.trim()).not.toBe("");
     await act(async () => finalAction?.dispatchEvent(realmEvent("click")));
     expect(onStart).not.toHaveBeenCalled();
   });

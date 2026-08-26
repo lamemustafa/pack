@@ -711,7 +711,9 @@ describe("popup full-year recovery actions", () => {
     );
 
     expect(markup).toContain("Open GST Portal to continue.");
-    expect(markup).toContain('<button class="primary-action" type="button" disabled="">');
+    expect(markup).toContain('id="scope-action-reason"');
+    expect(markup).toContain('aria-describedby="scope-action-reason"');
+    expect(markup).toContain('<button class="primary-action" type="button" disabled=""');
     expect(markup).not.toContain("Open GST Portal tab");
   });
 });
