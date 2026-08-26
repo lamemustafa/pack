@@ -1068,3 +1068,49 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
   the next cleanup-copy cycle, then a disclosed cadence pause beginning at 08:22. No implementation
   or test execution is attributed to that pause. The next cycle's baseline browser is closed and
   its synthetic pending requests were resolved. The overnight goal remains active.
+
+## Cycle 22 — 2026-08-26 08:27 IST (cadence interval still open)
+
+- Picked the measured cleanup action/busy contradiction, ahead of unrelated wrapper deletion.
+  Three cleanup states at 320px advertise a final ZIP and foreground portal use; pending Start
+  says files are being packed and shows 12/12 period progress. The existing action routes to
+  retained-run reconciliation and, for unchanged canonical cleanup state, local staging cleanup.
+- Initial plan was presentation only. No new message, eligibility, persisted value or guard change.
+  A 78-case baseline and an expanded 2,340-case normalized-scope matrix are retained for comparison;
+  55 and 1,572 cases respectively are disabled. Independent security/privacy preflight agrees with
+  conservative marker-based classification and checking-before-cleanup wording.
+- Preflight passed. The independent UI agent owns only new observable tests; root owns production
+  and evidence. At the baseline checkpoint, synthetic browser pages were closed and no actual
+  cleanup had run yet; the later synthetic run and reconstruction correction are recorded below.
+- Browser review expanded the initially presentation-only scope within the same cleanup outcome:
+  focus the replacement pending status after Start, clarify its local-only header, and restore the
+  already-supported no-export signal when reconstructing a positively completed no-export ledger.
+  The actual synthetic empty-staging cleanup ran once; a helper timeout required read-only recovery,
+  not a second Start. That recovery exposed the reconstruction bug the first green suite missed.
+- Independent short-panel recheck now places pending feedback at y=120.80–196.44 at 320×600,
+  preserving initial focus and Tab order. Actual rebuilt-worker reopen renders No ZIP created with
+  unchanged ledger and zero read-side storage changes. No live/authenticated qualification.
+- Handoff accounting check: entries 1–17 are shorter checkpoint rounds, not compliant 45–75-minute
+  cycles. Their actual windows remain unchanged; the earlier pacing note named only rounds 15–17
+  and was incomplete. Cycles 18–21 each span 45 minutes. This cycle remains open for final gates,
+  evidence review, checkpointing and cleanup; no claim of an unbroken overnight cadence is made.
+- Final code/test checkpoints: `d5fe4bd` and `f34689f`. Final full suite passes 137 files / 2,593
+  tests, with all other required local gates green and no removed tests. Exact footer:
+
+  ```text
+       Tests  2593 passed (2593)
+    Start at  09:04:03
+    Duration  159.59s (transform 3.04s, setup 0ms, import 14.22s, tests 129.11s, environment 9ms)
+  ```
+
+- The final read-only evidence review led to a deeper isolated generated-byte cleanup probe.
+  One normal Start removed only the seeded active staging directory, preserving sibling and root
+  canaries byte-for-byte. No browser download occurred; the seeded delivery phase is synthetic
+  provenance, not evidence that Chrome downloaded a file. Legacy uncertainty is checked separately.
+- The legacy generated-byte control also preserved both canaries and ended cleaned-legacy with
+  ZIP-unconfirmed wording, no new saved/no-export signal and no download. Both exact profiles were
+  removed after the checks. Independent 16→32px root-font stress passed at 320×600 for all three
+  cleanup variants; this is not browser zoom or screen-reader qualification.
+- Final source/security/privacy reviews are clean. Design follow-ups remain the buried cleanup
+  route (P2) and existing 11px metadata (P3); no unrelated UI change was included. Remaining owner
+  boundaries and real-runtime evidence gaps are preserved in VALIDATION rather than marked done.

@@ -1674,3 +1674,272 @@ no recovery or download action was executed.
 - Intentional keyboard tradeoff: entering the first field now takes one explicit Tab instead of
   receiving automatic focus on open. Mouse click count and guide navigation are unchanged. This
   preserves the warning and existing focus position before the user chooses to enter the guide.
+
+# Cycle 22 — cleanup action and pending copy (2026-08-26 08:27 IST)
+
+- Ownership added after rechecking the lane registry (no other lane files): popup
+  `flow-summary.ts`, `components.tsx`, `scope-action-panel.tsx`, and new cleanup-action tests in
+  `tests/panel` and `tests/popup` plus their synthetic fixture helper. Existing owned popup model,
+  presentation and inline-status files remain in scope. Root owns production; the UI test agent
+  owns only the three named new test/helper files. No other checkout is touched.
+- Acceptance: cleanup intent is truthful in idle and pending UI; disabled states, callbacks,
+  message payload, exact-ID/ambiguous precedence and separate delivery evidence remain unchanged.
+  No persistence, portal behavior, eligibility, permission or dependency change is authorized.
+- Pre-change measurements made during the preceding cycle's read-only scoping: three direct
+  cleanup fixtures at guide step four all read “Retry final ZIP” and ask for foreground portal
+  visibility. At 320px, shell heights are 1,317.77px for downloaded/no-artifacts and 1,335.95px for
+  legacy cleanup; five whole-page controls, none disabled, no horizontal overflow. Three deferred
+  synthetic Start responses all show “Packing your files”, portal instructions and 12/12 progress;
+  heights are 801.84px / 801.84px / 820.03px, with the guide hidden. Each click sends exactly the
+  existing Start message with the selected single-scope payload. No actual cleanup was executed.
+- An independent 78-case model baseline covers 13 summary inputs, matched/mismatched scopes and
+  three busy states; 55 cases are disabled. The first custom-loader attempt failed because it
+  resolved only `.ts`; the successful baseline uses a TSX-aware resolver. Browser baseline has
+  six pages and zero observed page-network requests. All deferred responses were resolved and the
+  browser closed. These are synthetic observations, not authenticated or browser-wide evidence.
+- Preflight passed before edits. Source baseline: flow-summary 146, scope-form-model 191,
+  scope-action-panel 31, components 268, presentation-state 231 and inline-status 350 lines
+  (1,217 total). Latest full baseline remains 134 files / 2,533 tests from Cycle 21.
+- Decision: use the explicit retained cleanup marker only for copy. Exclude unresolved target
+  metadata and ambiguous handoffs; preserve all existing authorization helpers. Pending copy says
+  the saved run is being checked before retrying cleanup, not that cleanup has succeeded or that
+  stale state cannot redirect/refuse execution. Legacy complete-with-retained-staging and summary
+  parser allowlist gaps remain separate boundary items.
+
+## Cycle 22 — implementation and discrimination
+
+- Six presentation files changed. One shared cleanup-copy classifier consumes existing categorical
+  signals; it is not an authorization predicate. Scope action copy uses the canonical scope
+  matcher, replacing the identical private comparison. Disabled calculation, portal eligibility,
+  external refusal precedence, callbacks and message payload are unchanged. The pending view keeps
+  its existing presentation kind but does not display period progress as cleanup progress.
+- The first 23 popup cases failed nine expected label assertions against unchanged source. After
+  the action fix, the first panel baseline had eight expected pending-copy failures and one
+  incorrect ordinary-download fixture: unsupported context selects ContextState, not InlineStatus.
+  Correcting that fixture before changing pending presentation yielded eight failures / 39 passes
+  across the final 47 new cases. No assertion was weakened to accommodate changed runtime behavior.
+- The new tests cover four cleanup sources (three real checkpoint producers plus the accepted
+  legacy parser result), actual React guide interaction, one unchanged Start callback/scope,
+  deferred blocked response, unchanged delivery and period evidence, ordinary/export controls,
+  scope mismatch, external refusal, unrelated busy states and contradictory recovery props.
+  The two existing parser rejection cases remain explicit in the earlier status test.
+- Focused verification passed 162 tests across nine files. The first TypeScript pass found three
+  optional-property errors in test construction; explicit null/default handling and a checked
+  canonical recovery fixture fixed them. TypeScript then passed. These are fixture corrections,
+  not changes to production validation or stored data.
+- The 2,340-case before/after matrix has zero changed disabled decisions (1,572 remain disabled).
+  Exactly 32 labels change, all matching cleanup selections under idle or Start-busy state,
+  including inputs normalized to the default PDF. The smaller 78-case baseline is a subset-style
+  check, not additional independent coverage or a test-suite count.
+
+Each mutation below ran serially against the 47 new cases, then was restored before the next one.
+All twelve exited with failure. The six final source hashes exactly match the pre-mutation hashes.
+
+| Mutation                                                        | Failed cases | Representative failure                                                   |
+| --------------------------------------------------------------- | -----------: | ------------------------------------------------------------------------ |
+| Bypass existing retry eligibility in copy classifier            |            3 | Expected `Downloading...`; received `Checking saved run`                 |
+| Ignore current period                                           |            2 | Expected `Retry final ZIP`; received `Retry local cleanup`               |
+| Ignore target recovery/review                                   |            3 | Expected `Retry final ZIP`; received `Retry local cleanup`               |
+| Ignore ambiguous handoff                                        |            6 | Markup unexpectedly contains `Retry cleanup for this saved run.`         |
+| Ignore explicit cleanup marker                                  |            4 | Expected `Retry final ZIP`; received `Retry local cleanup`               |
+| Borrow copy despite external refusal                            |            1 | Markup unexpectedly contains `Retry cleanup for this saved run.`         |
+| Restore period progress during cleanup check                    |            8 | Expected the progress element to be null; received an HTMLDivElement     |
+| Replace canonical inline pending reason with portal instruction |            8 | Expected `Pack is checking the saved run before retrying local cleanup.` |
+| Remove cleanup pending presentation                             |            8 | Expected `Checking saved run`; received `Packing your files`             |
+| Restore standalone “Waiting for Chrome” pending reason          |            4 | Expected `Pack is checking the saved run before retrying local cleanup.` |
+| Bypass scope matching for helper copy                           |            2 | Cross-scope markup unexpectedly contains cleanup instructions            |
+| Bypass scope matching for action label                          |            2 | Cross-scope markup unexpectedly contains `Retry local cleanup`           |
+
+- Independent privacy and security source reviews passed on the restored six-file snapshot.
+  No live or release qualification is inferred from those reviews. The module audit reaches a
+  fixed point immediately: 177 source modules, 777 unique internal edges, six WXT/HTML/config
+  roots, no orphan or unreachable modules, no unresolved local code imports and no nonliteral
+  dynamic imports. The config-to-manifest edge adds one external root edge. Type imports count;
+  export-level liveness is not established. No production module was added or deleted.
+- Line accounting: flow-summary 146→166, scope-form-model 191→188, scope-action-panel 31→33,
+  components 268→272, presentation-state 231→246, inline-status 350→358; total 1,217→1,263 (+46).
+  This is a truthful-state repair with one duplicate removed, not a net reduction. New tests/helper
+  total 574 lines before any later gate-driven fixture correction. No historical tests removed.
+
+### Cycle 22 — browser-review rectification scope
+
+- Ownership adds `tests/background/full-year-no-export-reopen.test.tsx`; the already-claimed
+  panel surface and full-year summary reader are included in this cycle's rectification.
+  No other active lane claims these paths. The test was delegated and frozen for root's red run.
+- Decision at 08:58 IST: retain the single truthful-cleanup improvement, including the actual
+  reopen path that lost the existing no-export explanation. Independent security review confirmed
+  this can restore an existing signal without a new field, signal value, allowlist or write-on-read.
+  The signal has a cleanup-phase consumer, so this is not described as globally display-only.
+  Require the exact cleaned-without-export phase plus nonempty, positively not-filed targets.
+  Existing completion/ledger validation and ambiguous-delivery behavior remain unchanged.
+
+- Independent Impeccable Assessment A found pending feedback above the visible 320×600 viewport
+  after the guide unmounted: downloaded/no-artifacts y=-108.70 to -33.06; legacy -127.20 to -51.56.
+  Focus fell to BODY. The status now receives focus only on the user-triggered false→true cleanup
+  transition, not initial mount, using tabindex=-1. The neutral local-cleanup header removes the
+  contradictory portal prerequisite while preserving signed-in/access-blocked precedence.
+- Assessment A's rebuilt-browser recheck passes all three canonical states: pending status
+  y=120.80 to 196.44, scrollY=0, focus on status, next Tab reaches Details. Initial idle mount
+  remains on BODY and first Tab reaches the guide. No new sequential stop, overflow, duplicate ID
+  or broken ARIA reference. Each flow emits one stubbed Start with unchanged scope; no recovery
+  message. Initial busy mount is unit-tested, not browser-tested; screen-reader speech is untested.
+- Before the focus/header follow-up, the three rebuilt 320px idle heights were 1,285.39 / 1,285.39 /
+  1,303.58px, each 32.38px shorter than baseline; pending 781.45 / 781.45 / 799.64px, each 20.39px
+  shorter. Idle retains five whole-page controls; pending has one (Details), no guide/progress.
+  A fourth accepted legacy-parser case measured 947.95px idle / 444.02px pending and intentionally
+  has no per-period evidence. These are stubbed presentation observations, not cleanup proof.
+- The initial browser measurement helper referenced an obsolete message-counter name, then an
+  undefined page binding. Both failed before Start; the failed page was closed and the corrected
+  helper completed all four cases. Deferred responses were resolved and that browser closed.
+
+### Cycle 22 — actual synthetic cleanup and reconstruction
+
+- A separate fresh extension profile had only installation metadata, no downloads or remote tabs.
+  Seeded one canonical no-artifacts-cleanup-pending ledger with twelve positively not-filed targets,
+  no current target or download attempt, and an empty OPFS root. The existing user-facing guide
+  issued Start once, without response stubs. A combined observation timed out and reset the helper;
+  the precise failing wait was not established. Start was never repeated.
+- Read-only recovery found the durable ledger complete / cleaned-without-export, twelve not-filed
+  targets, zero downloads and zero remote tabs. The reopened summary lost the existing no-export
+  signal and incorrectly rendered “Periods processed, ZIP unconfirmed.” This proves the empty
+  synthetic cleanup path completed, not that real staged files were removed or a live run qualified.
+- Two canonical completion→JSON reopen→summary→panel tests failed the old reader at
+  `expected markup to contain aria-label="No ZIP created"`; eight controls passed. The reader
+  restores the existing no-export signal only for exact cleaned-without-export plus nonempty all
+  not-filed targets. Direct and accepted durable-parser results now agree. Parser evidence omission
+  stays intentional. Empty targets and validator-accepted contradictory downloaded targets remain
+  negative controls. No new persisted field, value, allowlist, eligibility or schema was introduced.
+- Initial rebuilt-profile reopen still used cached worker code although fetched bundle bytes matched
+  disk. Explicit extension reload temporarily blocked its page in headless Chromium; closing and
+  reopening the same profile loaded the new worker. The final actual GET summary and panel both
+  report “No ZIP created · no eligible files.” Ledger bytes/revision remained unchanged across
+  rebuild/reopen; only installation metadata changed on launch. A separate subsequent GET changed
+  neither local nor session storage and emitted zero storage-change events. Zero downloads and
+  remote tabs remained. Panel height 1,244.41px at 320px, without horizontal overflow.
+- A reconnect attempt using the default headless shell timed out because it did not load the
+  extension; full Chromium restored the worker. Only successful read-only reopen page intervals
+  observed zero network requests; the lost pre-timeout counter is not browser-wide network proof.
+  Screenshots were inspected, not committed. No authenticated portal session was used.
+
+Six additional mutation groups were run serially and restored with matching file hashes:
+
+| Mutation                               | Failed cases | Representative failure                                            |
+| -------------------------------------- | -----------: | ----------------------------------------------------------------- |
+| Remove cleanup-triggered focus         |            4 | Expected status HTMLElement; received HTMLBodyElement             |
+| Autofocus an initially busy mount      |            1 | Expected existing HTMLButtonElement; received status HTMLElement  |
+| Restore portal-prerequisite header     |            4 | Expected `Saved run · local cleanup`; received portal instruction |
+| Allow empty target evidence            |            1 | Signals unexpectedly include `full-fiscal-year-no-zip-artifacts`  |
+| Ignore contradictory downloaded target |            2 | Signals unexpectedly include `full-fiscal-year-no-zip-artifacts`  |
+| Infer no-export without exact phase    |            4 | Signals unexpectedly include `full-fiscal-year-no-zip-artifacts`  |
+
+- Full suite before these final rectifications: 136 files / 2,580 tests, start 08:42:32, duration
+  154.38s. This is historical evidence, not the final-source gate. Latest focused result before the
+  empty-target control: 59/59; the final reader file alone passes 11/11. Final full gates follow.
+- Final source line counts: flow-summary 146→167, scope-form-model 191→188, scope-action-panel
+  31→33, components 268→272, presentation-state 231→246, inline-status 350→370; panel-surface
+  245→247; full-year-summary 609→616. Total 2,071→2,139 (+68). The existing oversized status and
+  summary modules remain a documented refactoring opportunity; no unrelated split was attempted.
+  New tests/helper: 178 + 283 + 213 + 107 = 781 lines, sixty new tests, zero removed tests.
+
+### Cycle 22 — independent design and technical assessment
+
+- Impeccable Assessment A completed before any detector output entered synthesis. Its initial
+  25/40 design score rose to 27/40 after the two focused fixes; the retained P2 is discoverability:
+  cleanup still requires scrolling past twelve evidence rows and navigating three selection steps.
+  Changing recovery workflow or adding another action is a separate cycle, not silently included.
+- Independent Assessment B ran the bundled local detector against the inline-status markup:
+  exit 0, JSON `[]`, zero findings and zero false positives. It separately verified three actual
+  packaged-panel views with synthetic deferred responses, normal clicks, unchanged single-scope
+  Start messages, and blocked-response restoration. It did not inspect Assessment A's report.
+- Mutable browser preflight succeeded, but the unchanged extension CSP blocked the localhost
+  detector script. No in-page detector result or user-visible overlay is claimed. DOM inspection
+  and screenshots were the fallback. Its temporary server stopped and browser closed. The
+  deterministic scan did not identify the rendered small-type issue found by the browser check.
+- P3 follow-up outside the changed inline-status component: Your pack and delivery metadata
+  render at 11px, below DESIGN's 12px floor. This is a design-contract/readability finding, not a
+  claim that font size alone violates WCAG. Scope a later typesetting change to the owning shared
+  typography rules (`.section-label` and `.pack-summary-meta` in `src/styles/popup.css`) and
+  remeasure density; no global style change was added to this cleanup cycle.
+- Scoped technical audit: accessibility 3/4 (keyboard/ARIA/contrast inspected, actual speech not
+  qualified); performance 3/4 (no new dependency, animation or repeated layout read; no performance
+  trace); responsive 3/4 (320×600 and wider-to-narrower checks pass, small metadata remains);
+  theming 3/4 (existing light-theme tokens retained, no new theme claims); anti-patterns 4/4
+  (no new decorative template or redundant action). Total 16/20, Good within this limited surface.
+  These scores are reviewer judgments, not certification or measured performance benchmarks.
+- Positive evidence: exact delivery uncertainty survives, status feedback is visible after action,
+  controls retain meaningful names and a 44px primary target, and disclosures contain secondary
+  detail. Remaining uncertainties include real screen-reader speech, zoom/system-font variation,
+  actual populated staging cleanup and authenticated runtime qualification.
+- Questions are skipped under the owner's explicit away/autonomous instructions. The bounded
+  next actions are clarify the saved-cleanup route, then typeset the 11px metadata and polish.
+  No unsupported return control, multi-select or stronger capability claim is proposed.
+
+### Cycle 22 — final gated checkpoint
+
+- Final source checkpoint `d5fe4bd`; tests/helper checkpoint `f34689f`. Eight production-file
+  hashes match the final security review. Privacy review closed both low wording findings after
+  historical baseline labels and the ledger-transition test name were corrected. No source
+  changes followed either approval.
+- Build passed (1.01 MB); TypeScript, zero-warning ESLint, repo-wide Prettier, package verification
+  and diff checks passed. Full suite: 137 files, 2,593 tests, sixty more than Cycle 21 and none
+  removed. The synthetic review/preflight diagnostics and missing TypeScript source-map warning
+  remain non-failing test output, not evidence of live PR or branch failures. Exact final footer:
+
+  ```text
+       Tests  2593 passed (2593)
+    Start at  09:04:03
+    Duration  159.59s (transform 3.04s, setup 0ms, import 14.22s, tests 129.11s, environment 9ms)
+  ```
+
+- The preceding final-source run also passed 137 files / 2,593 tests at 09:00:54 in 161.95s;
+  the second run followed a test-description-only wording correction. Never two full suites at once.
+- All root baseline/reopen profiles and independent A/B browser profiles are closed and deleted.
+  A separate final generated-byte canary probe is in progress; it is not a live portal run and does
+  not retroactively strengthen the earlier empty-staging evidence.
+
+### Cycle 22 — generated-byte cleanup isolation controls
+
+- At 09:08–09:10 IST, two additional fresh disposable profiles exercised the actual packaged Start
+  handler, one each for canonical downloaded-cleanup-pending and legacy-cleanup-pending. The ledger
+  fixture was built by the existing completion fixture and cleanup checkpoint producer, validated
+  before seeding, and had no current target or download attempt. No response stubs were installed;
+  the message wrapper only counted calls while forwarding them unchanged.
+- Each profile began with installation metadata only and an empty OPFS root. Three generated files
+  were written: 22 bytes under the active staging directory, a 14-byte sibling-directory canary and
+  an 11-byte root canary. These bytes are not valid portal artifacts and carry no taxpayer data.
+  The normal three Continue clicks followed by Retry local cleanup sent exactly one Start.
+- Both active staging directories were absent afterward; both canaries retained their exact text.
+  The downloaded fixture ended complete / cleaned-after-download and retained its saved wording;
+  the legacy fixture ended complete / cleaned-legacy and retained “ZIP unconfirmed,” with neither
+  delivery nor no-export signal added. Each had zero browser downloads and remote tabs. Observed
+  context HTTP(S) requests were zero, not a claim about all worker network activity.
+- The saved wording in the first fixture derives from the seeded synthetic delivery phase, not
+  an observed browser download. This checks cleanup isolation and phase-preserving presentation,
+  not target identity, artifact validity, real download correlation or authenticated behavior.
+  All three cleanup-phase variants now have a bounded actual synthetic handler observation:
+  no-artifacts with empty staging; downloaded and legacy with generated active-directory bytes.
+- Both browsers were closed and their exact disposable profiles deleted; canaries were disposable
+  test data removed with those profiles, not user files. No source/test change or gate rerun was
+  needed for these additional observations.
+- Byte sizes above are UTF-8 lengths of the exact written strings. The first setup helper printed
+  a hard-coded 21-byte active payload count; recomputation corrected it to 22. File metadata was not
+  separately sampled before deletion. Canary contents and directory absence were actually read.
+
+### Cycle 22 — final responsive stress and handoff boundaries
+
+- Independent follow-up doubled the root font from 16px to 32px at 320×600 for all three cleanup
+  phases: status body 12→24px, heading 13→26px. Idle warning remained fully visible at
+  y=194.78–481.17 with BODY focus; after normal activation, pending status was y=189.28–410.88,
+  focused, scrollY=5.5. Document width stayed 320px, with no observed clipping in inspected status,
+  evidence, summary, helper and action elements. Each Start was stubbed, exactly once.
+- This is root-font stress, not actual browser zoom or screen-reader qualification. The packaged
+  harness cannot mount initially busy without an action because the controller initializes busy to
+  null; that case remains unit-tested only. The independent browser/profile were closed/deleted.
+- The pending-cleanup serializer/allowlist gap remains an owner boundary; the new completed
+  no-export reconstruction does not fix or authorize it. Selection changes can still hide a
+  cleanup-only summary. The shared action component still has its pre-existing unscoped portal
+  independence calculation; this cycle changed its copy matcher, not that eligibility calculation.
+  A later bounded review should trace real callers before changing it, preserving refusal priority.
+- The bookkeeping-delete policy decision remains open. No live portal, real download, Chrome Web
+  Store, release, hosted CI, current-head PR review or general durability qualification is claimed.
+  Manifest policy, WXT configuration, dependency manifest and lockfile match the lane's base.
