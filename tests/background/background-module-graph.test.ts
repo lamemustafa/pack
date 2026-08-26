@@ -4,6 +4,8 @@ import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 const sourceRoot = path.join(process.cwd(), "src");
+const backgroundRoot = path.join(sourceRoot, "background");
+const compilerOptions = compilerOptionsFor(process.cwd());
 
 describe("background runtime module graph", () => {
   it("has no static runtime import cycle reachable from background modules", async () => {
@@ -90,6 +92,26 @@ describe("background runtime module graph", () => {
     expect(findCycle(graph, [entry])).toEqual([entry, dependency, entry]);
   });
 
+  it("reports a cycle routed through a configured background alias", async () => {
+    const files = await sourceFiles(sourceRoot);
+    const entry = path.join(sourceRoot, "background", "download-observer.ts");
+    const dependency = resolveModule(entry, "@/background/download-observation-ownership", files);
+    expect(dependency).toBe(
+      path.join(sourceRoot, "background", "download-observation-ownership.ts"),
+    );
+    const graph = new Map([
+      [entry, dependency ? [dependency] : []],
+      [path.join(sourceRoot, "background", "download-observation-ownership.ts"), [entry]],
+    ]);
+    expect(findCycle(graph, [entry])).toEqual([entry, dependency, entry]);
+  });
+
+  it("excludes aliases that resolve outside the background runtime", async () => {
+    const files = await sourceFiles(sourceRoot);
+    const entry = path.join(sourceRoot, "background", "download-observer.ts");
+    expect(resolveModule(entry, "@/core/time", files)).toBeNull();
+  });
+
   it("reports the complete cycle and accepts a one-way leaf dependency", () => {
     const graph = new Map([
       ["observer", ["reconciler"]],
@@ -118,6 +140,29 @@ async function sourceFiles(directory: string): Promise<string[]> {
     }),
   );
   return nested.flat().sort();
+}
+
+function compilerOptionsFor(projectRoot: string): ts.CompilerOptions {
+  const tsconfigPath = path.join(projectRoot, "tsconfig.json");
+  const config = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
+  if (config.error) {
+    throw new Error(ts.flattenDiagnosticMessageText(config.error.messageText, "\n"));
+  }
+  const parsed = ts.parseJsonConfigFileContent(
+    config.config,
+    ts.sys,
+    projectRoot,
+    undefined,
+    tsconfigPath,
+  );
+  if (parsed.errors.length > 0) {
+    throw new Error(
+      parsed.errors
+        .map((error) => ts.flattenDiagnosticMessageText(error.messageText, "\n"))
+        .join("\n"),
+    );
+  }
+  return parsed.options;
 }
 
 function runtimeSpecifiers(source: string, filename = "module.ts"): string[] {
@@ -153,17 +198,13 @@ function runtimeSpecifiers(source: string, filename = "module.ts"): string[] {
 }
 
 function resolveModule(from: string, specifier: string, files: readonly string[]): string | null {
-  if (!specifier.startsWith(".")) return null;
-  const base = path.resolve(path.dirname(from), specifier);
-  return (
-    [
-      base,
-      `${base}.ts`,
-      `${base}.tsx`,
-      path.join(base, "index.ts"),
-      path.join(base, "index.tsx"),
-    ].find((candidate) => files.includes(candidate)) ?? null
-  );
+  const resolved = ts.resolveModuleName(specifier, from, compilerOptions, ts.sys).resolvedModule;
+  if (!resolved) return null;
+  const resolvedPath = path.resolve(resolved.resolvedFileName);
+  const relativePath = path.relative(backgroundRoot, resolvedPath);
+  if (relativePath === "" || relativePath.startsWith("..") || path.isAbsolute(relativePath))
+    return null;
+  return files.includes(resolvedPath) ? resolvedPath : null;
 }
 
 function repoRelativeCycle(cycle: readonly string[] | null): string[] | null {
