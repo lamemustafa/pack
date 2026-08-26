@@ -1,5 +1,38 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 53 — require canonical artifact-label context
+
+- Window: 2026-08-27 05:23–05:28 IST. This is a short duplicate-fact corrective checkpoint; its
+  actual duration is recorded without an idle hold.
+- Picked: `filedReturnsArtifactLabel` had an optional return-type argument with a context-free
+  `All formats` fallback, although both production importers already supply the canonical return
+  type and the catalogue owns return-specific artifact vocabulary.
+- Measured before: importer tracing found only the popup summary and fiscal-year summary callers,
+  both passing their scope return type. Connector tests covered selection expansion but not direct
+  label derivation. The initial GSTR-1 fixture expected an assumed label; the catalogue correctly
+  supplied `Summary (PDF)`, and the test was aligned to that canonical output.
+- Changed: the label helper now requires the return type and delegates every label to the capability
+  catalogue. New focused tests cover all-formats and single-format labels; no portal behavior,
+  persistence, download action, artifact selection, or public copy changed.
+- Discrimination: temporarily returning the wire artifact value made the new test fail with
+  `PDF_AND_EXCEL` rather than the catalogue label `All formats`. The source was restored before
+  final gates.
+- Required review: Pack privacy review PASS found no credential/session, taxpayer-data, storage,
+  network, telemetry, permission, or public-claim change. It confirmed that the required context
+  preserves the portal-specific boundary and prevents context-free labeling.
+- Final gate: build, TypeScript, zero-warning ESLint, repo-wide Prettier, package verification and
+  `git diff --check` passed. Exact Vitest footer:
+
+  ```text
+       Tests  2808 passed (2808)
+    Start at  05:25:01
+    Duration  154.05s (transform 2.54s, setup 0ms, import 12.45s, tests 125.42s, environment 8ms)
+  ```
+
+- Checkpoints: `ea4d663 refactor(gst): require artifact label context`; the progress record follows
+  in a separate documentation checkpoint. No live/authenticated GST qualification, release claim,
+  push or PR action was made.
+
 ## Cycle 52 — mutate-check last-run diagnostic privacy boundary
 
 - Window: 2026-08-27 05:22–05:23 IST. This is a quiet test-quality checkpoint, not a
