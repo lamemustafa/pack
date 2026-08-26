@@ -123,6 +123,8 @@ Files deliberately skipped because another lane owned them:
 15. I reintroduced zsh's reserved `path` parameter in the portable replay helpers despite recording the same shell hazard earlier. The review caught it before publication; all helper parameters now use `file_path`.
 16. I initially left the registry-backed dependency audit inside the fatal baseline block. The audit is current external information, so a registry failure or later advisory cannot invalidate immutable history; it is now timestamped and informational.
 17. I checked that each referenced PR number existed without proving it contained the recorded commit. The replay now verifies each historical PR commit through GitHub's immutable PR commit list.
+18. I omitted the pre-ledger commit recorded for #230 from the same commit-membership checks used for the historical pull requests. The replay now fetches that commit and requires #230's GitHub commit list to contain it.
+19. I initially ran the mutable dependency-audit observation from the caller's worktree, which could describe a different lockfile than the replayed baseline. The observation now runs in the detached baseline tree and identifies that tree's commit.
 
 ## Re-verification Script
 
@@ -220,7 +222,8 @@ for commit in \
   f06eee4d6aa521750b86214a907b0fdd48d52a98 \
   b84eb09ee14d08e54c10b67d5756455c08cd38d5 \
   a654ee56ee7fe68fc0d18f808474e2430569b738 \
-  214aabdf77dd3884a44db62878bab4345a2da970; do
+  214aabdf77dd3884a44db62878bab4345a2da970 \
+  edc0c650d358549171eca09a34b5e9be2030df56; do
   require_commit "$commit"
 done
 
@@ -235,7 +238,7 @@ require_pr_commit 223 ec1ee585884a49fada954d7a13d112374eb1fa68
 require_pr_commit 224 f06eee4d6aa521750b86214a907b0fdd48d52a98
 require_pr_commit 228 b84eb09ee14d08e54c10b67d5756455c08cd38d5
 require_pr_commit 229 a654ee56ee7fe68fc0d18f808474e2430569b738
-require_pr_number 230
+require_pr_commit 230 edc0c650d358549171eca09a34b5e9be2030df56
 for issue in 108 109 215 218 219 171 226 227; do require_issue_number "$issue"; done
 
 baseline_parent=$(mktemp -d)
@@ -271,10 +274,10 @@ test -z "$baseline_status"
 
 observe_dependency_audit() {
   observed_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-  if audit_output=$(node scripts/run-dependency-audit.mjs 2>&1); then
-    printf 'Observed at %s: dependency audit %s\n' "$observed_at" "$audit_output"
+  if audit_output=$(cd "$baseline_tree" && node scripts/run-dependency-audit.mjs 2>&1); then
+    printf 'Observed at %s: dependency audit for baseline %s: %s\n' "$observed_at" "$BASELINE_SHA" "$audit_output"
   else
-    printf 'Observed at %s: dependency audit unavailable: %s\n' "$observed_at" "$audit_output"
+    printf 'Observed at %s: dependency audit unavailable for baseline %s: %s\n' "$observed_at" "$BASELINE_SHA" "$audit_output"
   fi
 }
 
