@@ -1011,7 +1011,8 @@ describe("PR review gate", () => {
         `${firstFixture},${secondFixture}`,
         "--strict-head-review",
         "--wait-head-review-ms",
-        "5",
+        // Real process scheduling and fixture reads can consume a 5ms deadline (#200).
+        "1000",
         "--poll-interval-ms",
         "1",
         "--required-review-author",
