@@ -49,10 +49,18 @@ function Harness({
   );
 }
 
-async function mount(props: React.ComponentProps<typeof Harness> = {}) {
+async function mount(props: React.ComponentProps<typeof Harness> = {}, strict = false) {
   root = createRoot(container);
   await act(async () => {
-    root?.render(<Harness {...props} />);
+    root?.render(
+      strict ? (
+        <React.StrictMode>
+          <Harness {...props} />
+        </React.StrictMode>
+      ) : (
+        <Harness {...props} />
+      ),
+    );
     await Promise.resolve();
   });
 }
@@ -104,6 +112,21 @@ describe("panel guided scope interaction", () => {
     root = null;
   });
 
+  it.each([false, true])("preserves existing focus on mount (StrictMode: %s)", async (strict) => {
+    const previousControl = dom.window.document.createElement("button");
+    previousControl.textContent = "Existing focus";
+    dom.window.document.body.append(previousControl);
+    previousControl.focus();
+
+    await mount({}, strict);
+
+    expect(dom.window.document.activeElement).toBe(previousControl);
+    await clickButton("Continue");
+    expect(dom.window.document.activeElement).toBe(container.querySelector(".panel-guide select"));
+    await clickButton("Back");
+    expect(dom.window.document.activeElement).toBe(container.querySelector(".panel-guide select"));
+  });
+
   it("never exceeds four controls while advancing and focuses the active field", async () => {
     await mount();
     expect(guideControlCount()).toBe(3);
@@ -134,7 +157,7 @@ describe("panel guided scope interaction", () => {
     expect(focusEvents).toBe(1);
   });
 
-  it("binds every focused field to the announced step label and hint", async () => {
+  it("binds every field to the announced step label and hint", async () => {
     const expectedSteps = [
       ["Return", "Choose one supported return for this run."],
       ["Financial year", "Pack keeps each run within one financial year."],
@@ -157,7 +180,9 @@ describe("panel guided scope interaction", () => {
       expect(fieldLabel?.getAttribute("for")).toBe(field?.id);
       expect(field?.getAttribute("aria-describedby")).toBe(hintElement?.id);
       expect(hintElement?.textContent).toBe(hint);
-      expect(dom.window.document.activeElement).toBe(field);
+      expect(dom.window.document.activeElement).toBe(
+        index === 0 ? dom.window.document.body : field,
+      );
 
       if (index < expectedSteps.length - 1) await clickButton("Continue");
     }
@@ -171,6 +196,7 @@ describe("panel guided scope interaction", () => {
     expect(container.textContent).toContain("Step 1 of 4");
     expect(container.querySelectorAll(".panel-guide-scope")).toHaveLength(1);
     expect(guideControlCount()).toBe(3);
+    expect(dom.window.document.activeElement).toBe(container.querySelector(".panel-guide select"));
   });
 
   it("reconciles artifact availability when the return changes", async () => {
