@@ -1,5 +1,36 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 41 — derive observer scope IDs from the return descriptor
+
+- Window: 2026-08-27 04:27–04:34 IST. This is a short duplicate-fact checkpoint; its actual
+  duration is recorded without an idle hold.
+- Picked: the GST page observer and its visible-return helper manually restated all three supported
+  scope IDs, while the catalogue is the canonical owner of those values.
+- Measured before: importer tracing showed the helper is live in both the observer and the
+  observation-state validation path. Existing observer coverage asserted GSTR-1 and GSTR-2B scope
+  IDs but did not directly assert the GSTR-3B ready path.
+- Changed: `scopeIdForVisibleReturnLabel` now resolves through the existing return descriptor; the
+  observer derives its GSTR-3B default and its GSTR-1/GSTR-2B ready responses through that helper.
+  A focused GSTR-3B regression asserts the preserved scope ID. No observer state, safe signal,
+  safe message, portal action, navigation, storage, target binding, or download behavior changed.
+- Focused evidence: observer and observation-state suites passed 2 files and 29 tests. This is a
+  structural duplicate removal with output-preserving assertions, so no behavioral red-proof
+  mutation was appropriate.
+- Required review: GST privacy review PASS found no taxpayer/session data, logging, persistence,
+  transmission, portal interaction, public claim, manifest, host, CSP, or reach change.
+- Final gate: build, TypeScript, zero-warning ESLint, repo-wide Prettier, package verification and
+  `git diff --check` passed. Exact Vitest footer:
+
+  ```text
+       Tests  2803 passed (2803)
+    Start at  04:30:21
+    Duration  153.90s (transform 2.49s, setup 0ms, import 12.28s, tests 125.52s, environment 8ms)
+  ```
+
+- Checkpoints: `6076ad3 refactor(gst): derive observer scope IDs`; the progress record follows in
+  a separate documentation checkpoint. No live/authenticated GST qualification, release claim, push
+  or PR action was made.
+
 ## Cycle 40 — derive the no-run acknowledgement scope from the return descriptor
 
 - Window: 2026-08-27 04:20–04:27 IST. This is a short duplicate-fact checkpoint; its actual
