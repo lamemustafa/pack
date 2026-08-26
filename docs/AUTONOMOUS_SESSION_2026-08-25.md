@@ -120,17 +120,21 @@ Files deliberately skipped because another lane owned them:
 12. The original replay treated retained worktrees and current PR state as durable evidence. Once the maintainer merged the blocked PRs, two worktrees were gone and the script stopped before its stale state assertions. The replay below now fails only on immutable history and reports mutable state as an observation.
 13. The first follow-up replay ran workflow preflight in a detached baseline checkout. Preflight correctly rejected that checkout because it has no Pack branch. The script now reserves its detached tree for immutable history and suite evidence; branch preflight is run separately on this PR branch.
 14. I first asserted that #217 added its longstanding allowlist identifier. The replay correctly rejected that false patch predicate; the recorded commit instead adds JavaScript-family entrypoint handling. I replaced it with that exact added line before rerunning the replay.
+15. I reintroduced zsh's reserved `path` parameter in the portable replay helpers despite recording the same shell hazard earlier. The review caught it before publication; all helper parameters now use `file_path`.
+16. I initially left the registry-backed dependency audit inside the fatal baseline block. The audit is current external information, so a registry failure or later advisory cannot invalidate immutable history; it is now timestamped and informational.
+17. I checked that each referenced PR number existed without proving it contained the recorded commit. The replay now verifies each historical PR commit through GitHub's immutable PR commit list.
 
 ## Re-verification Script
 
 Run from any Pack worktree with GitHub CLI authentication. It does not embed
 workstation paths.
 
-Immutable history checks below are fatal: named commits, their recorded source
-changes, referenced issue/PR numbers, and the baseline suite count must remain
-verifiable. PR state, mergeability, CI, and review state are mutable external
+Immutable history checks below are fatal: named commits, their exact recorded
+source changes, referenced issue/PR numbers and commit membership, and the
+baseline suite count must remain verifiable. PR state, mergeability, CI, review
+state, and registry-backed dependency-audit results are mutable external
 observations. They are printed with a timestamp and never determine the exit
-status: a later merge is news, not failed historical evidence.
+status: a later merge or registry change is news, not failed historical evidence.
 
 ```sh
 set -euo pipefail
@@ -158,43 +162,53 @@ require_issue_number() {
 
 require_added_content() {
   commit=$1
-  path=$2
+  file_path=$2
   expected=$3
-  if ! git -C "$PACK_ROOT" diff "$commit^" "$commit" -- "$path" | grep -F "+$expected" >/dev/null; then
-    printf 'Expected added content is absent: %s at %s\n' "$path" "$commit" >&2
+  if ! git -C "$PACK_ROOT" diff "$commit^" "$commit" -- "$file_path" | grep -F "+$expected" >/dev/null; then
+    printf 'Expected added content is absent: %s at %s\n' "$file_path" "$commit" >&2
     return 1
   fi
 }
 
 require_replaced_content() {
   commit=$1
-  path=$2
+  file_path=$2
   removed=$3
   added=$4
-  if ! git -C "$PACK_ROOT" show "$commit^:$path" | grep -F "$removed" >/dev/null; then
-    printf 'Expected prior content is absent: %s at %s\n' "$path" "$commit" >&2
+  if ! git -C "$PACK_ROOT" show "$commit^:$file_path" | grep -F "$removed" >/dev/null; then
+    printf 'Expected prior content is absent: %s at %s\n' "$file_path" "$commit" >&2
     return 1
   fi
-  if git -C "$PACK_ROOT" show "$commit:$path" | grep -F "$removed" >/dev/null; then
-    printf 'Expected removed content remains: %s at %s\n' "$path" "$commit" >&2
+  if git -C "$PACK_ROOT" show "$commit:$file_path" | grep -F "$removed" >/dev/null; then
+    printf 'Expected removed content remains: %s at %s\n' "$file_path" "$commit" >&2
     return 1
   fi
-  if ! git -C "$PACK_ROOT" show "$commit:$path" | grep -F "$added" >/dev/null; then
-    printf 'Expected replacement content is absent: %s at %s\n' "$path" "$commit" >&2
+  if ! git -C "$PACK_ROOT" show "$commit:$file_path" | grep -F "$added" >/dev/null; then
+    printf 'Expected replacement content is absent: %s at %s\n' "$file_path" "$commit" >&2
     return 1
   fi
 }
 
 require_removed_content() {
   commit=$1
-  path=$2
+  file_path=$2
   removed=$3
-  if ! git -C "$PACK_ROOT" show "$commit^:$path" | grep -F "$removed" >/dev/null; then
-    printf 'Expected prior content is absent: %s at %s\n' "$path" "$commit" >&2
+  if ! git -C "$PACK_ROOT" show "$commit^:$file_path" | grep -F "$removed" >/dev/null; then
+    printf 'Expected prior content is absent: %s at %s\n' "$file_path" "$commit" >&2
     return 1
   fi
-  if git -C "$PACK_ROOT" show "$commit:$path" | grep -F "$removed" >/dev/null; then
-    printf 'Expected removed content remains: %s at %s\n' "$path" "$commit" >&2
+  if git -C "$PACK_ROOT" show "$commit:$file_path" | grep -F "$removed" >/dev/null; then
+    printf 'Expected removed content remains: %s at %s\n' "$file_path" "$commit" >&2
+    return 1
+  fi
+}
+
+require_pr_commit() {
+  pr=$1
+  expected_commit=$2
+  require_pr_number "$pr"
+  if ! gh pr view "$pr" --repo lamemustafa/pack --json commits --jq '.commits[].oid' | grep -Fx "$expected_commit" >/dev/null; then
+    printf 'Expected PR commit is absent: PR #%s at %s\n' "$pr" "$expected_commit" >&2
     return 1
   fi
 }
@@ -216,7 +230,12 @@ require_replaced_content f06eee4d6aa521750b86214a907b0fdd48d52a98 package.json '
 require_removed_content b84eb09ee14d08e54c10b67d5756455c08cd38d5 src/connectors/gst/filed-returns-summary-sheet.ts 'export const FILED_RETURNS_SUMMARY_CONTEXT_HEADERS'
 require_replaced_content a654ee56ee7fe68fc0d18f808474e2430569b738 CONTRIBUTING.md 'Use DCO sign-off:' 'Pack does not require `Signed-off-by:` trailers.'
 
-for pr in 217 223 224 228 229 230; do require_pr_number "$pr"; done
+require_pr_commit 217 bcf9de63959e8bc704b825f102976b6908a460ec
+require_pr_commit 223 ec1ee585884a49fada954d7a13d112374eb1fa68
+require_pr_commit 224 f06eee4d6aa521750b86214a907b0fdd48d52a98
+require_pr_commit 228 b84eb09ee14d08e54c10b67d5756455c08cd38d5
+require_pr_commit 229 a654ee56ee7fe68fc0d18f808474e2430569b738
+require_pr_number 230
 for issue in 108 109 215 218 219 171 226 227; do require_issue_number "$issue"; done
 
 baseline_parent=$(mktemp -d)
@@ -247,9 +266,17 @@ test -z "$baseline_status"
   pnpm exec prettier --check .
   pnpm exec wxt build
   node scripts/verify-extension-package.mjs .output/chrome-mv3
-  node scripts/run-dependency-audit.mjs
   git diff --check
 )
+
+observe_dependency_audit() {
+  observed_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+  if audit_output=$(node scripts/run-dependency-audit.mjs 2>&1); then
+    printf 'Observed at %s: dependency audit %s\n' "$observed_at" "$audit_output"
+  else
+    printf 'Observed at %s: dependency audit unavailable: %s\n' "$observed_at" "$audit_output"
+  fi
+}
 
 observe_pr() {
   pr=$1
@@ -261,6 +288,7 @@ observe_pr() {
   fi
 }
 
+observe_dependency_audit
 for pr in 217 223 224 228 229 230; do observe_pr "$pr"; done
 ```
 
