@@ -215,6 +215,34 @@ describe("panel guided scope interaction", () => {
     expect(container.textContent).not.toContain("Step 1 of 4");
   });
 
+  it("gives every disabled preset a resolvable reason", async () => {
+    const retained = completedPanelSummary({
+      scope: { ...PANEL_TEST_SCOPE, financialYear: "2024-25" },
+      status: "blocked",
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "blocked",
+        safeSignals: ["full-fiscal-year-opfs-retained", "full-fiscal-year-run-needs-action"],
+        safeMessage: "A different saved plan needs recovery.",
+      },
+    });
+    await mount({ overrides: { lastRunSummary: retained, scopedFlowSummary: null } }, false, false);
+
+    const presets = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".panel-preset-list button"),
+    );
+    expect(presets.length).toBeGreaterThan(0);
+    for (const preset of presets) {
+      expect(preset.disabled).toBe(true);
+      const reasonId = preset.getAttribute("aria-describedby");
+      expect(reasonId).not.toBeNull();
+      const reason = reasonId ? dom.window.document.getElementById(reasonId) : null;
+      expect(reason).not.toBeNull();
+      expect(reason?.textContent?.trim()).not.toBe("");
+    }
+  });
+
   it("advertises the same planned period count that a preset starts", async () => {
     const started: FiledReturnsDownloadScope[] = [];
     await mount({ onStart: (scope) => started.push(scope) }, false, false);
