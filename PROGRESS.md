@@ -1,5 +1,24 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 50 — audit scope-form lock explanations
+
+- Window: 2026-08-27 05:20–05:22 IST. This is a quiet keyboard/screen-reader audit, not a
+  cadence-qualifying 45–75-minute cycle; its actual duration is recorded without an idle hold.
+- Picked: the wider download scope form disables its controls during an active operation or retained
+  final-ZIP retry, so it was the next candidate after the discrete recovery actions.
+- Measured: the primary action already uses the shared `scope-action-reason` relationship whenever
+  disabled. Its exact reason is derived by the same action model as the control state. The field
+  lock only occurs while the run/action status or retained local retry state is already visibly
+  represented; a target review deliberately keeps the scope controls usable and explains the
+  explicit recovery choice instead.
+- Result: no source change. Adding a generic second explanation to the disabled selects/radios
+  would duplicate the canonical action/status surface and could contradict a state-specific retry
+  label. Focused components and recovery suites passed 2 files and 40 tests; `git diff --check` and
+  worktree status were clean.
+- Learned / next: distinguish a disabled button that needs its adjacent reason bound from a form
+  lock whose canonical explanation is already bound to the decision action. Continue with a separate
+  test-quality sample rather than widening this settled contract.
+
 ## Cycle 49 — bind active recovery-state explanation for assistive technology
 
 - Window: 2026-08-27 05:16–05:21 IST. This is a short accessibility corrective checkpoint; its
