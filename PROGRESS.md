@@ -1309,3 +1309,21 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
 
 - Checkpoints: test and progress commits follow this record. No live/authenticated GST
   qualification, release claim, push or PR action was made.
+
+## Cycle 28 — audit guided-field accessibility coverage
+
+- Window: 2026-08-27 03:25–03:29 IST (4 minutes). This is a quiet test-quality audit, not a
+  cadence-qualifying 45–75-minute cycle; its actual duration is recorded without an idle hold.
+- Picked: the keyboard and screen-reader backlog requires that every guided field has a resolvable
+  `aria-describedby` hint, not just matching attribute strings.
+- Measured before: the existing interaction test advances through all four steps, queries the
+  concrete `#panel-guide-hint` element, and asserts the field's `aria-describedby` equals that
+  element's ID. It also checks the hint text, label association, live progress state and focus.
+- Disproved change: adding an explicit non-empty/query-resolves assertion was redundant. A wrong
+  reference failed the existing equality assertion; an empty ID/reference pair failed because the
+  existing concrete hint query returned no element. Both temporary source mutations were restored.
+- Gate: the restored focused interaction suite passed 16 tests. No product or test source change
+  was retained, so the previous full-gate checkpoint remains the applicable behavioural evidence.
+- Learned / next: do not count a second assertion as stronger coverage when the current test already
+  exercises the same DOM resolution path. Continue with a different test-quality sample or a
+  lossy-surface boundary rather than duplicating this check.
