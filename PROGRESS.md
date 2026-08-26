@@ -1,5 +1,25 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 44 — audit artifact-acquisition exception preservation
+
+- Window: 2026-08-27 04:45–04:47 IST. This is a quiet lossy-surface audit, not a
+  cadence-qualifying 45–75-minute cycle; its actual duration is recorded without an idle hold.
+- Picked: the first bounded exception family from the goal's lossy-surface backlog: GSTR-3B PDF,
+  GSTR-1/GSTR-2B page-generated, and GSTR-3B/GSTR-2B JSON acquisition paths.
+- Measured: every relevant `catch` returns a named `ArtifactFailureReason` rather than a generic
+  success/failure flag. The trigger retains that reason as `artifact-<reason>` and resolves the
+  matching canonical user-safe message. Checkpoint retention also distinguishes externally visible
+  action uncertainty from pre-action failures.
+- Result: no source change. Replacing a named reason with an undifferentiated fallback would weaken
+  the existing fail-closed recovery contract; the current boundary already preserves the specific
+  fact to the human-facing flow step.
+- Gate: focused acquisition and checkpoint suites passed 3 files and 76 tests; `git diff --check`
+  and worktree status were clean. The Cycle 43 full gate remains the applicable repository-wide
+  evidence because this audit retained no product or test source change.
+- Learned / next: exception catch syntax alone is not evidence of loss. Continue with a boundary
+  where a specific reason crosses a projection or persistence surface, rather than duplicating this
+  already-preserving acquisition audit.
+
 ## Cycle 43 — derive persisted observation scope IDs without widening acceptance
 
 - Window: 2026-08-27 04:40–04:47 IST. This is a short duplicate-fact checkpoint; its actual
