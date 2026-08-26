@@ -200,6 +200,7 @@ async function completeReconciledDownload(
   }
 
   let durableSummary = null;
+  let canonicalCompletionPersistFailed = false;
   try {
     durableSummary = await persistCanonicalSinglePeriodCompletion(
       deps.storageKeys.completion,
@@ -208,6 +209,7 @@ async function completeReconciledDownload(
       deps.now?.() ?? new Date(),
     );
   } catch {
+    canonicalCompletionPersistFailed = true;
     durableSummary = null;
   }
   if (!durableSummary) {
@@ -217,6 +219,7 @@ async function completeReconciledDownload(
       zipEvidence,
       cleanup,
       deps,
+      canonicalCompletionPersistFailed,
     );
   }
 
@@ -513,6 +516,7 @@ async function persistCompletedEvidenceFailure(
   zipEvidence: ReconciledZipStagingEvidence | null,
   cleanup: Awaited<ReturnType<typeof cleanupSinglePeriodBundleStaging>> | null,
   deps: FiledReturnsTargetReviewDeps,
+  canonicalCompletionPersistFailed = false,
 ): Promise<PackMessageResponse> {
   const step: PortalFlowStepResult = {
     connectorId: "gst",
@@ -522,6 +526,9 @@ async function persistCompletedEvidenceFailure(
       new Set([
         "filed-returns-download-reconciled-by-id",
         "filed-return-durable-status-rejected",
+        ...(canonicalCompletionPersistFailed && review.downloadAttempt?.kind === "single-period-zip"
+          ? [singlePeriodCleanupCheckpointFailureSignal("canonical-completion-persist-failed")]
+          : []),
         ...review.safeSignals,
         ...(zipEvidence?.flowStep.safeSignals ?? []),
         ...(cleanup?.safeSignals ?? []),

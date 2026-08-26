@@ -1215,6 +1215,9 @@ function toTargetReviewSummary(
 function targetReviewStep(review: FiledReturnsTargetReview): PortalFlowStepResult {
   if (review.safeSignals.includes("filed-return-durable-status-rejected")) {
     const hasExactDownloadId = review.downloadAttempt?.phase === "download-observing";
+    const canonicalZipCompletionPersistFailed = review.safeSignals.includes(
+      "single-period-cleanup-checkpoint-failed:canonical-completion-persist-failed",
+    );
     return {
       connectorId: "gst",
       scopeId: filedReturnScopeId(review.scope.returnType),
@@ -1228,10 +1231,15 @@ function targetReviewStep(review: FiledReturnsTargetReview): PortalFlowStepResul
         ...(review.safeSignals.includes("single-period-opfs-cleared")
           ? ["single-period-opfs-cleared"]
           : []),
+        ...(canonicalZipCompletionPersistFailed
+          ? ["single-period-cleanup-checkpoint-failed:canonical-completion-persist-failed"]
+          : []),
       ],
-      safeMessage: hasExactDownloadId
-        ? "Pack confirmed the exact browser download but could not save canonical target completion. It will not start another download automatically."
-        : "Pack rejected non-canonical recovery state and cannot verify whether a download started. It will not continue automatically.",
+      safeMessage: canonicalZipCompletionPersistFailed
+        ? "Pack confirmed the exact browser download but could not save the confirmed ZIP completion after temporary staging was cleared. It will not start another download automatically."
+        : hasExactDownloadId
+          ? "Pack confirmed the exact browser download but could not save canonical target completion. It will not start another download automatically."
+          : "Pack rejected non-canonical recovery state and cannot verify whether a download started. It will not continue automatically.",
       userAction: {
         type: "RETRY_PORTAL_GENERATION",
         message: hasExactDownloadId
