@@ -1,5 +1,35 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 49 — bind active recovery-state explanation for assistive technology
+
+- Window: 2026-08-27 05:16–05:21 IST. This is a short accessibility corrective checkpoint; its
+  actual duration is recorded without an idle hold.
+- Picked: the recovery menu used a disabled `Run in progress` control alongside a precise note that
+  retry controls will appear only if progress stops, but it had no programmatic connection to that
+  explanatory note.
+- Measured before: active-run coverage asserted both visible strings and rejected an invented pause
+  control, but it did not prove that the disabled status control received its existing explanation.
+- Changed: the active-run note now has a stable ID and the sole disabled active-run control uses
+  `aria-describedby` to reference it. This changes no run state, retry policy, portal behavior,
+  persistence, download behavior, or user-visible copy.
+- Discrimination: temporarily removing the relationship made the active-run test fail with the
+  missing `aria-describedby="recovery-run-active-reason"` markup. The source was restored before
+  final gates.
+- UI review: the Impeccable product-UI accessibility guidance preserves the compact existing
+  recovery surface while giving its disabled status control a resolvable explanation.
+- Final gate: build, TypeScript, zero-warning ESLint, repo-wide Prettier, package verification and
+  `git diff --check` passed. Exact Vitest footer:
+
+  ```text
+       Tests  2807 passed (2807)
+    Start at  05:16:57
+    Duration  153.58s (transform 2.49s, setup 0ms, import 12.34s, tests 125.13s, environment 8ms)
+  ```
+
+- Checkpoints: `bf7d539 fix(a11y): describe active recovery state`; the progress record follows in
+  a separate documentation checkpoint. No live/authenticated GST qualification, release claim,
+  push or PR action was made.
+
 ## Cycle 48 — bind portal-gated recovery-action reasons for assistive technology
 
 - Window: 2026-08-27 05:10–05:16 IST. This is a short accessibility corrective checkpoint; its
