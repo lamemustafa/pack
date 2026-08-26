@@ -70,6 +70,26 @@ describe("background runtime module graph", () => {
     ]);
   });
 
+  it("reports a cycle routed through an empty named import", () => {
+    const entry = "entry";
+    const dependency = "./dependency";
+    const graph = new Map([
+      [entry, runtimeSpecifiers(`import {} from "${dependency}";`)],
+      [dependency, [entry]],
+    ]);
+    expect(findCycle(graph, [entry])).toEqual([entry, dependency, entry]);
+  });
+
+  it("reports a cycle routed through an empty named re-export", () => {
+    const entry = "entry";
+    const dependency = "./dependency";
+    const graph = new Map([
+      [entry, runtimeSpecifiers(`export {} from "${dependency}";`)],
+      [dependency, [entry]],
+    ]);
+    expect(findCycle(graph, [entry])).toEqual([entry, dependency, entry]);
+  });
+
   it("reports the complete cycle and accepts a one-way leaf dependency", () => {
     const graph = new Map([
       ["observer", ["reconciler"]],
@@ -114,6 +134,7 @@ function runtimeSpecifiers(source: string, filename = "module.ts"): string[] {
         !clause.name &&
         clause.namedBindings &&
         ts.isNamedImports(clause.namedBindings) &&
+        clause.namedBindings.elements.length > 0 &&
         clause.namedBindings.elements.every((element) => element.isTypeOnly)
       ) {
         return [];
@@ -122,6 +143,7 @@ function runtimeSpecifiers(source: string, filename = "module.ts"): string[] {
       statement.isTypeOnly ||
       (statement.exportClause &&
         ts.isNamedExports(statement.exportClause) &&
+        statement.exportClause.elements.length > 0 &&
         statement.exportClause.elements.every((element) => element.isTypeOnly))
     ) {
       return [];
