@@ -5,6 +5,7 @@ import { isFullFiscalYearScope } from "../../connectors/gst/filed-returns-scope"
 import { ContextState } from "../popup/context-state";
 import {
   canRetryFullFiscalYearZipWithoutPortal,
+  getFullFiscalYearCleanupCopy,
   getScopeMatchedFiledReturnsSummary,
   hasUnresolvedFiledReturnsRecovery,
 } from "../popup/flow-summary";
@@ -42,6 +43,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
    */
   const portalSignedIn = portalReady && !isGstSignInRequired(pack.context);
   const portalAccessDenied = pack.context?.pageKind === "gst-access-denied";
+  const cleanupCopy = getFullFiscalYearCleanupCopy(summary);
   const running = pack.effectiveBusy !== null || summary?.status === "running";
 
   usePortalContextRefresh(pack.refreshPortalContext);
@@ -87,7 +89,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
           ? "GST portal · signed in"
           : portalAccessDenied
             ? "GST Portal · access blocked"
-            : "Open a signed-in GST Portal tab"}
+            : (cleanupCopy?.contextLabel ?? "Open a signed-in GST Portal tab")}
       </p>
 
       <div className="panel-body">

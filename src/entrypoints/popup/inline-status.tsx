@@ -1,8 +1,10 @@
+import React from "react";
 import type { FiledReturnsFlowSummary } from "../../connectors/gst/filed-returns-contracts";
 import { FULL_FISCAL_YEAR_PERIOD } from "../../connectors/gst/filed-returns-scope";
 import type { PopupPresentationState } from "./presentation-state";
 import { canReconcileFiledReturnsTarget, RunProgress } from "./run-summary";
 import {
+  getFullFiscalYearCleanupCopy,
   hasPersistedFullFiscalYearZipDownloadId,
   isAmbiguousFullFiscalYearZipHandoff,
 } from "./flow-summary";
@@ -29,6 +31,15 @@ export function InlineStatus({
   presentation,
   summary,
 }: InlineStatusProps) {
+  const checkingCleanup =
+    busy === "start-filed-returns-flow" && Boolean(getFullFiscalYearCleanupCopy(summary));
+  const statusRef = React.useRef<HTMLElement>(null);
+  const wasCheckingCleanup = React.useRef(checkingCleanup);
+  React.useEffect(() => {
+    // The clicked guide disappears; bring its replacement feedback into view.
+    if (checkingCleanup && !wasCheckingCleanup.current) statusRef.current?.focus();
+    wasCheckingCleanup.current = checkingCleanup;
+  }, [checkingCleanup]);
   const copy = getInlineStatusCopy(presentation, summary);
   if (!copy) return null;
 
@@ -43,6 +54,8 @@ export function InlineStatus({
 
   return (
     <section
+      ref={statusRef}
+      tabIndex={checkingCleanup ? -1 : undefined}
       className={`inline-status inline-status-${copy.tone}`}
       aria-live="polite"
       aria-label={copy.title}
@@ -53,7 +66,11 @@ export function InlineStatus({
       <div className="inline-status-content">
         <strong>{copy.title}</strong>
         <p>{copy.body}</p>
-        {presentation.kind === "downloading" && summary ? <RunProgress summary={summary} /> : null}
+        {presentation.kind === "downloading" &&
+        summary &&
+        !getFullFiscalYearCleanupCopy(summary) ? (
+          <RunProgress summary={summary} />
+        ) : null}
         {primaryAction ? (
           <button
             className="inline-status-primary"
@@ -111,10 +128,13 @@ function getInlineStatusCopy(
   summary: FiledReturnsFlowSummary | null,
 ): { body: string; icon: string; title: string; tone: "warning" | "success" | "neutral" } | null {
   if (presentation.kind === "downloading") {
+    const cleanupCopy = getFullFiscalYearCleanupCopy(summary);
     return {
-      body: "Keep the GST Portal tab open while Pack prepares the files.",
-      icon: "↓",
-      title: "Packing your files",
+      body: cleanupCopy
+        ? presentation.body
+        : "Keep the GST Portal tab open while Pack prepares the files.",
+      icon: presentation.icon,
+      title: presentation.title,
       tone: "neutral",
     };
   }

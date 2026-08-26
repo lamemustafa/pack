@@ -425,7 +425,9 @@ export function toFullFiscalYearSummary(
  * So the fact is restored where it was lost, not patched into each reader. The
  * signal is the existing canonical one and survives durable parsing, so a step
  * built after a restart is indistinguishable from the one the observing run
- * emitted -- which is the point.
+ * emitted -- which is the point. The existing no-export signal likewise needs
+ * its explicit cleaned phase and positively not-filed targets; counts alone
+ * cannot establish that no ZIP was created.
  */
 export function completeFullFiscalYearStep(
   ledger: FiledReturnsFullFiscalYearLedger,
@@ -437,6 +439,11 @@ export function completeFullFiscalYearStep(
     safeSignals: [
       "full-fiscal-year-complete",
       ...(zipPhaseProvesDelivery(ledger.zipPhase) ? ["full-fiscal-year-zip-downloaded"] : []),
+      ...(ledger.zipPhase === "cleaned-without-export" &&
+      ledger.targets.length > 0 &&
+      ledger.targets.every((target) => target.status === "not-filed")
+        ? ["full-fiscal-year-no-zip-artifacts"]
+        : []),
     ],
     safeMessage: `Pack completed the local full fiscal year run for FY ${ledger.scope.financialYear}.`,
   };

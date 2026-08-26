@@ -208,7 +208,11 @@ export function ScopeFormAction({
   // The external block wins: it describes a refusal the background will apply
   // whatever this form asks for.
   const startAction = externalBlock ?? ownAction;
-  const actionCopy = getScopeActionCopy(scope, formModel.fullFiscalYear);
+  const actionCopy = getScopeActionCopy(
+    scope,
+    formModel.fullFiscalYear,
+    externalBlock ? null : flowSummary,
+  );
   const portalSupported = context?.supported === true;
   const portalIndependentRetry = canRetryFullFiscalYearZipWithoutPortal(flowSummary);
   const portalReady = portalSupported || portalIndependentRetry;
