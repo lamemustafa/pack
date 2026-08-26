@@ -1,5 +1,37 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 45 — prove disabled preset reasons resolve for assistive technology
+
+- Window: 2026-08-27 04:48–04:55 IST. This is a short accessibility test-quality checkpoint; its
+  actual duration is recorded without an idle hold.
+- Picked: disabled preset buttons already use `aria-describedby`, but coverage did not prove that
+  the ID points to a real, non-empty human-readable reason.
+- Measured before: the first fixture used no portal context and correctly rendered the panel's
+  context surface rather than presets. A supported context plus a retained different-scope recovery
+  reaches the actual disabled-preset branch. The displayed reason is the existing canonical action
+  label, not the raw saved-run prose.
+- Changed: added one interaction regression that checks every disabled preset has an ID, that the
+  ID resolves in the DOM, and that the resolved reason has non-empty text. No production markup,
+  action authority, scope selection, portal behavior, or persistence changed.
+- Discrimination: temporarily changing the production `aria-describedby` to an unbound ID made the
+  new test fail with `expected null not to be null` at the description target. The production markup
+  was restored before final gates. An earlier optional-chaining assertion mistakenly passed a missing
+  target; the retained test requires the target element explicitly.
+- UI review: the Impeccable product-UI accessibility guidance was applied to make the test assert a
+  resolvable disabled-control explanation rather than visual appearance or duplicated copy.
+- Final gate: build, TypeScript, zero-warning ESLint, repo-wide Prettier, package verification and
+  `git diff --check` passed. Exact Vitest footer:
+
+  ```text
+       Tests  2807 passed (2807)
+    Start at  04:51:53
+    Duration  154.50s (transform 2.46s, setup 0ms, import 12.35s, tests 126.03s, environment 8ms)
+  ```
+
+- Checkpoints: `9899a8c test(panel): verify disabled preset reasons`; the progress record follows
+  in a separate documentation checkpoint. No live/authenticated GST qualification, release claim,
+  push or PR action was made.
+
 ## Cycle 44 — audit artifact-acquisition exception preservation
 
 - Window: 2026-08-27 04:45–04:47 IST. This is a quiet lossy-surface audit, not a
