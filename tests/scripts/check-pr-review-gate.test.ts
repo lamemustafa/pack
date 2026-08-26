@@ -1026,6 +1026,56 @@ describe("PR review gate", () => {
 
     expect(output).toContain("PR review gate passed");
   });
+
+  it("fails closed when no current-head review arrives before the wait expires", () => {
+    const firstFixture = writeFixture(
+      "no-current-head-review-first",
+      reviewFixture({
+        headRefOid: "head-sha",
+        reviews: [review({ state: "COMMENTED", commit: "old-sha" })],
+      }),
+    );
+    const secondFixture = writeFixture(
+      "no-current-head-review-second",
+      reviewFixture({
+        headRefOid: "head-sha",
+        reviews: [review({ state: "COMMENTED", commit: "old-sha" })],
+      }),
+    );
+
+    let failure: { status?: number | null; stderr?: string } | undefined;
+    try {
+      execFileSync(
+        process.execPath,
+        [
+          scriptPath,
+          "--repo",
+          "lamemustafa/pack",
+          "--pr",
+          "14",
+          "--fixture-sequence",
+          `${firstFixture},${secondFixture}`,
+          "--strict-head-review",
+          "--wait-head-review-ms",
+          // Keep the per-test wait realistic under shared CPU load (#200).
+          "1000",
+          "--poll-interval-ms",
+          "1",
+          "--required-review-author",
+          "chatgpt-codex-connector",
+        ],
+        {
+          cwd: rootDir,
+          encoding: "utf8",
+        },
+      );
+    } catch (error) {
+      failure = error as { status?: number | null; stderr?: string };
+    }
+
+    expect(failure?.status).toBe(1);
+    expect(failure?.stderr).toContain("No review was found for current head");
+  });
 });
 
 function writeFixture(name: string, value: unknown): string {
