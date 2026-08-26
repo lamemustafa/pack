@@ -119,6 +119,7 @@ Files deliberately skipped because another lane owned them:
 11. A zsh verification probe used the reserved `path` array and then assumed unquoted scalar word-splitting. That temporarily hid commands from that probe and produced empty lane matches. I discarded its output and reran the branch-to-worktree checks with `lane_path` and one branch argument per iteration; all three retained lane heads matched their recorded SHAs.
 12. The original replay treated retained worktrees and current PR state as durable evidence. Once the maintainer merged the blocked PRs, two worktrees were gone and the script stopped before its stale state assertions. The replay below now fails only on immutable history and reports mutable state as an observation.
 13. The first follow-up replay ran workflow preflight in a detached baseline checkout. Preflight correctly rejected that checkout because it has no Pack branch. The script now reserves its detached tree for immutable history and suite evidence; branch preflight is run separately on this PR branch.
+14. I first asserted that #217 added its longstanding allowlist identifier. The replay correctly rejected that false patch predicate; the recorded commit instead adds JavaScript-family entrypoint handling. I replaced it with that exact added line before rerunning the replay.
 
 ## Re-verification Script
 
@@ -155,12 +156,45 @@ require_issue_number() {
   test "$(gh issue view "$1" --repo lamemustafa/pack --json number --jq .number)" = "$1"
 }
 
-require_recorded_change() {
+require_added_content() {
   commit=$1
   path=$2
-  git -C "$PACK_ROOT" cat-file -e "$commit:$path"
-  if git -C "$PACK_ROOT" diff --quiet "$BASELINE_SHA" "$commit" -- "$path"; then
-    printf 'Expected recorded change is absent: %s at %s\n' "$path" "$commit" >&2
+  expected=$3
+  if ! git -C "$PACK_ROOT" diff "$commit^" "$commit" -- "$path" | grep -F "+$expected" >/dev/null; then
+    printf 'Expected added content is absent: %s at %s\n' "$path" "$commit" >&2
+    return 1
+  fi
+}
+
+require_replaced_content() {
+  commit=$1
+  path=$2
+  removed=$3
+  added=$4
+  if ! git -C "$PACK_ROOT" show "$commit^:$path" | grep -F "$removed" >/dev/null; then
+    printf 'Expected prior content is absent: %s at %s\n' "$path" "$commit" >&2
+    return 1
+  fi
+  if git -C "$PACK_ROOT" show "$commit:$path" | grep -F "$removed" >/dev/null; then
+    printf 'Expected removed content remains: %s at %s\n' "$path" "$commit" >&2
+    return 1
+  fi
+  if ! git -C "$PACK_ROOT" show "$commit:$path" | grep -F "$added" >/dev/null; then
+    printf 'Expected replacement content is absent: %s at %s\n' "$path" "$commit" >&2
+    return 1
+  fi
+}
+
+require_removed_content() {
+  commit=$1
+  path=$2
+  removed=$3
+  if ! git -C "$PACK_ROOT" show "$commit^:$path" | grep -F "$removed" >/dev/null; then
+    printf 'Expected prior content is absent: %s at %s\n' "$path" "$commit" >&2
+    return 1
+  fi
+  if git -C "$PACK_ROOT" show "$commit:$path" | grep -F "$removed" >/dev/null; then
+    printf 'Expected removed content remains: %s at %s\n' "$path" "$commit" >&2
     return 1
   fi
 }
@@ -176,11 +210,11 @@ for commit in \
   require_commit "$commit"
 done
 
-require_recorded_change bcf9de63959e8bc704b825f102976b6908a460ec tests/repo/unreferenced-module-guard.test.ts
-require_recorded_change ec1ee585884a49fada954d7a13d112374eb1fa68 package.json
-require_recorded_change f06eee4d6aa521750b86214a907b0fdd48d52a98 package.json
-require_recorded_change b84eb09ee14d08e54c10b67d5756455c08cd38d5 src/connectors/gst/filed-returns-summary-sheet.ts
-require_recorded_change a654ee56ee7fe68fc0d18f808474e2430569b738 CONTRIBUTING.md
+require_added_content bcf9de63959e8bc704b825f102976b6908a460ec tests/repo/unreferenced-module-guard.test.ts 'const WXT_ENTRYPOINT_EXTENSION_PATTERN'
+require_replaced_content ec1ee585884a49fada954d7a13d112374eb1fa68 package.json '"@types/chrome": "^0.2.6"' '"@types/chrome": "^0.2.7"'
+require_replaced_content f06eee4d6aa521750b86214a907b0fdd48d52a98 package.json '"vitest": "^4.1.10"' '"vitest": "^4.1.11"'
+require_removed_content b84eb09ee14d08e54c10b67d5756455c08cd38d5 src/connectors/gst/filed-returns-summary-sheet.ts 'export const FILED_RETURNS_SUMMARY_CONTEXT_HEADERS'
+require_replaced_content a654ee56ee7fe68fc0d18f808474e2430569b738 CONTRIBUTING.md 'Use DCO sign-off:' 'Pack does not require `Signed-off-by:` trailers.'
 
 for pr in 217 223 224 228 229 230; do require_pr_number "$pr"; done
 for issue in 108 109 215 218 219 171 226 227; do require_issue_number "$issue"; done
@@ -220,7 +254,7 @@ test -z "$baseline_status"
 observe_pr() {
   pr=$1
   observed_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-  if observed=$(gh pr view "$pr" --repo lamemustafa/pack --json state,mergeStateStatus,headRefOid,statusCheckRollup --jq '{state,mergeStateStatus,headRefOid,checks:[.statusCheckRollup[] | {name,status,conclusion}]}'); then
+  if observed=$(gh pr view "$pr" --repo lamemustafa/pack --json state,mergeable,mergeStateStatus,reviewDecision,latestReviews,headRefOid,statusCheckRollup --jq '{state,mergeable,mergeStateStatus,reviewDecision,latestReviews:[(.latestReviews // [])[] | {author:.author.login,state,submittedAt}],headRefOid,checks:[.statusCheckRollup[] | {name,status,conclusion}]}'); then
     printf 'Observed at %s: PR #%s %s\n' "$observed_at" "$pr" "$observed"
   else
     printf 'Observed at %s: PR #%s state unavailable\n' "$observed_at" "$pr"
