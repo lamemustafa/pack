@@ -332,7 +332,12 @@ git -C "$PACK_ROOT" worktree add --detach "$baseline_tree" "$MASTER_SHA" >/dev/n
   test -z "$(run git status --porcelain)"
   run pnpm install --frozen-lockfile
   run pnpm exec wxt prepare
-  pgrep -f vitest || true
+  active_vitest=$(pgrep -f '[v]itest' || true)
+  if test -n "$active_vitest"; then
+    printf 'Refusing contested current-master suite; active Vitest PID(s): %s\n' "$active_vitest" >&2
+    exit 1
+  fi
+  printf 'Vitest occupancy before current-master suite: 0\n'
   if ! vitest_output=$(run pnpm exec vitest run 2>&1); then
     printf '%s\n' "$vitest_output"
     exit 1
