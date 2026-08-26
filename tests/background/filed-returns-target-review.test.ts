@@ -95,77 +95,77 @@ describe("filed returns target review", () => {
     acquisitionMocks.clearMalformedArtifactAcquisitionCheckpoint.mockResolvedValue(true);
   });
 
-  it.each(FILED_RETURNS_TARGET_REVIEW_CLEAR_FAILURE_STAGES)(
-    "names the %s target-review clear exit",
-    async (stage) => {
-      const scope = {
-        financialYear: "2025-26",
-        period: "March",
-        returnType: "GSTR-3B" as const,
-      };
-      const review = {
-        revision: 1,
-        safeMessage: "Synthetic target review.",
-        safeSignals: ["browser-download-not-observed"],
-        schemaVersion: "1.0" as const,
-        scope,
-        status: "download-unconfirmed" as const,
-        targetId: "GSTR-3B:2025-26:March",
-        updatedAt: "2026-06-24T00:00:00.000Z",
-      };
-      const deps = { storageKeys: { targetReview: "target-review" } };
-      let expectedRevision: number | undefined = 1;
+  // `review-missing` is deliberately absent: clearing a review that is already
+  // gone is the post-condition, not a failure, and is covered by
+  // filed-returns-target-review-clear-idempotent.test.ts. Treating absence as an
+  // error blocked a live download that had already been proven by exact
+  // browser-download ID.
+  it.each(
+    FILED_RETURNS_TARGET_REVIEW_CLEAR_FAILURE_STAGES.filter((stage) => stage !== "review-missing"),
+  )("names the %s target-review clear exit", async (stage) => {
+    const scope = {
+      financialYear: "2025-26",
+      period: "March",
+      returnType: "GSTR-3B" as const,
+    };
+    const review = {
+      revision: 1,
+      safeMessage: "Synthetic target review.",
+      safeSignals: ["browser-download-not-observed"],
+      schemaVersion: "1.0" as const,
+      scope,
+      status: "download-unconfirmed" as const,
+      targetId: "GSTR-3B:2025-26:March",
+      updatedAt: "2026-06-24T00:00:00.000Z",
+    };
+    const deps = { storageKeys: { targetReview: "target-review" } };
+    let expectedRevision: number | undefined = 1;
 
-      switch (stage) {
-        case "storage-key-missing":
-          deps.storageKeys.targetReview = "";
-          break;
-        case "expected-revision-invalid":
-          expectedRevision = 0;
-          break;
-        case "review-missing":
-          break;
-        case "review-malformed":
-          browserMocks.storage.local.get.mockResolvedValue({
-            "target-review": { schemaVersion: "1.0", unsafe: true },
-          });
-          break;
-        case "scope-mismatch":
-          browserMocks.storage.local.get.mockResolvedValue({
-            "target-review": {
-              ...review,
-              scope: { ...scope, period: "April" },
-              targetId: "GSTR-3B:2025-26:April",
-            },
-          });
-          break;
-        case "revision-mismatch":
-          browserMocks.storage.local.get.mockResolvedValue({
-            "target-review": { ...review, revision: 2 },
-          });
-          break;
-        case "storage-read-failed":
-          browserMocks.storage.local.get.mockRejectedValue(new Error("synthetic read failure"));
-          break;
-        case "storage-write-failed":
-          browserMocks.storage.local.get.mockResolvedValue({
-            "target-review": { schemaVersion: "1.0", unsafe: true },
-          });
-          browserMocks.storage.local.set.mockRejectedValue(new Error("synthetic write failure"));
-          break;
-        case "storage-remove-failed":
-          browserMocks.storage.local.get.mockResolvedValue({ "target-review": review });
-          browserMocks.storage.local.remove.mockRejectedValue(
-            new Error("synthetic remove failure"),
-          );
-          break;
-      }
+    switch (stage) {
+      case "storage-key-missing":
+        deps.storageKeys.targetReview = "";
+        break;
+      case "expected-revision-invalid":
+        expectedRevision = 0;
+        break;
+      case "review-malformed":
+        browserMocks.storage.local.get.mockResolvedValue({
+          "target-review": { schemaVersion: "1.0", unsafe: true },
+        });
+        break;
+      case "scope-mismatch":
+        browserMocks.storage.local.get.mockResolvedValue({
+          "target-review": {
+            ...review,
+            scope: { ...scope, period: "April" },
+            targetId: "GSTR-3B:2025-26:April",
+          },
+        });
+        break;
+      case "revision-mismatch":
+        browserMocks.storage.local.get.mockResolvedValue({
+          "target-review": { ...review, revision: 2 },
+        });
+        break;
+      case "storage-read-failed":
+        browserMocks.storage.local.get.mockRejectedValue(new Error("synthetic read failure"));
+        break;
+      case "storage-write-failed":
+        browserMocks.storage.local.get.mockResolvedValue({
+          "target-review": { schemaVersion: "1.0", unsafe: true },
+        });
+        browserMocks.storage.local.set.mockRejectedValue(new Error("synthetic write failure"));
+        break;
+      case "storage-remove-failed":
+        browserMocks.storage.local.get.mockResolvedValue({ "target-review": review });
+        browserMocks.storage.local.remove.mockRejectedValue(new Error("synthetic remove failure"));
+        break;
+    }
 
-      const result = await clearFiledReturnsTargetReviewWithReason(scope, deps, expectedRevision);
+    const result = await clearFiledReturnsTargetReviewWithReason(scope, deps, expectedRevision);
 
-      expect(result).toMatchObject({ error: { stage }, ok: false });
-    },
-  );
+    expect(result).toMatchObject({ error: { stage }, ok: false });
+  });
 
   it.each(["read", "write", "remove"] as const)(
     "preserves the boolean clear API's thrown storage %s failure",
