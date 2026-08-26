@@ -388,7 +388,10 @@ export async function restorePersistedFullFiscalYearSummaryOutcome(
       (ledger.zipPhase === "download-intent-persisted" ? ledger.updatedAt : requestedAt);
   const observingCheckpointMatches =
     ledger.zipPhase === "download-observing" &&
-    persistedSignals.includes("full-fiscal-year-zip-reconciled-by-id") &&
+    // The initial observation is persisted before any exact-ID reconciliation.
+    // Both producers bind their summary to this ledger's observing timestamp.
+    (persistedSignals.includes("full-fiscal-year-zip-phase:download-observing") ||
+      persistedSignals.includes("full-fiscal-year-zip-reconciled-by-id")) &&
     persistedSummary?.updatedAt === ledger.updatedAt;
   if (
     !persistedSummary ||
