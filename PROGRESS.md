@@ -1005,3 +1005,39 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
 - Closed at 07:42 IST. Source/tests were checkpointed at 07:22 and the reviewed evidence at 07:35.
   The final interval included a disclosed cadence pause and read-only next-cycle scoping, not
   additional implementation or test execution. The overall overnight goal remains active.
+
+## Cycle 21 — 2026-08-26 07:42 IST (cadence interval still open)
+
+- Picked cleanup-only saved-run visibility: the packaged baseline showed delivery evidence but
+  omitted the warning when no period remained. Added a canonical-reason fallback after existing
+  specific instructions, a neutral heading and a missing-period action guard. Retained-scope copy
+  now names the saved run without promising files, another ZIP or a discard control.
+- Corrected the fixture assumption before counting discrimination: two direct cleanup summaries
+  fail the existing durable parser. Those rejections remain explicit, not silently bypassed.
+  Corrected baseline was 14 failures / four passes across 18 new cases. Ten additional export and
+  ambiguity precedence cases raised the new-test total to 28. Seven targeted mutation groups failed
+  as intended; sources were restored and hashes verified after every sequence.
+- Final focused result: 82 cases across five files. Repeated full gate passed: build, 134 Vitest
+  files / 2,531 tests, TypeScript, zero-warning ESLint, repo-wide formatting, package and diff checks.
+
+  ```text
+        Tests  2531 passed (2531)
+     Start at  07:59:17
+     Duration  191.65s (transform 4.93s, setup 0ms, import 23.98s, tests 140.95s, environment 12ms)
+  ```
+
+- Source `dc9dbb4` and tests `e0cabc0` are checkpointed. Production lines: 814→820 (+6); three new
+  test files: 396 lines. This is a visibility fix, not net reduction. No production module added
+  or removed, and no authority, persistence, manifest, dependency or download guard changed.
+- Browser evidence: sixteen stubbed packaged pages plus six separate real-handler reconstruction
+  checks. Three cleanup warnings survived whole isolated-browser restarts with unchanged source
+  ledgers. At 320px the new warning adds 91.81px; control counts stayed four, with no inline button.
+  Specific ambiguous/exact-ID headings and delivery evidence remained intact. Keyboard guide and
+  disclosure checks passed without submitting a recovery action. The exact 14 MB synthetic profile
+  was removed. Details and limits are in `VALIDATION.md`; no authenticated behavior is claimed.
+- Learned / next: the actual guide still labels local cleanup as final-ZIP retry and tells the user
+  to keep the portal foregrounded. That visible contradiction outranks the unused-wrapper cleanup.
+  The next cycle will trace and correct idle/busy action copy without changing eligibility or
+  execution. Summary-parser widening and selection retention remain outside that copy task.
+- Implementation, verification and evidence review were completed by approximately 08:05 IST.
+  The cycle is not closed early; its remaining cadence/review interval will be recorded explicitly.

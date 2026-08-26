@@ -28,6 +28,11 @@
   current-state and local-data readers, plus the new `full-year-completion-*` tests/helpers in
   `tests/background` and `tests/panel`. The existing historical recovery test is included.
   No competing lane claim existed; clean workflow preflight passed before edits.
+- Cycle 21 owns `popup/inline-status.tsx`, `popup/presentation-state.ts`, the existing full-year
+  run-state copy, and their focused tests: `popup/full-year-recovery-copy.test.tsx`,
+  `panel/full-year-cleanup-status.test.tsx`, `background/full-year-retained-scope-copy.test.ts`,
+  plus existing inline/presentation assertions if the intended copy change requires adjustment.
+  The lane register had no competing claim; clean workflow preflight passed at cycle start.
 
 ## Outcome
 
@@ -1467,3 +1472,149 @@ no recovery or download action was executed.
 - Cycle closed at 07:42 IST, 45 minutes after its 06:57 start. The reviewed evidence checkpoint was
   `3417003`; its final interval included a disclosed cadence pause and read-only next-cycle scoping.
   No additional implementation, gate run or live evidence is attributed to that pause.
+
+## Cycle 21 — cleanup-only saved-run warnings
+
+- Started 2026-08-26 07:42 IST. This cycle applies Impeccable's clarify guidance to an absent
+  status message, not a redesign or a new recovery workflow. Canonical cleanup ledgers have no
+  current target. The old panel displayed their delivery evidence and guide, but no inline warning.
+- Three validator-accepted fixtures use the real cleanup checkpoint builder and summary producer:
+  downloaded cleanup, no-artifacts cleanup and legacy cleanup. At 320px with no detected portal
+  context, baseline shell heights were respectively 1,152.59, 1,152.59 and 1,170.78px. Each had four
+  controls, no disabled controls and no inline button. These are synthetic packaged pages, not
+  live portal captures or evidence of the normal workflow origin of every fixture.
+- The inline renderer now falls back to the summary's canonical reason after the existing
+  ambiguous-ZIP and current-period branches. Its heading is `Saved run needs attention`, which
+  does not promise another ZIP for a cleanup-only state. The canonical delivery evidence and
+  specific current-period/overlay instructions are unchanged.
+- The existing full-year inline action additionally requires a current period. This prevents
+  malformed direct props from gaining a new button when the fallback makes their warning visible.
+  The canonical parser already rejects that malformed recovery/period pairing; valid recovery
+  identities continue to route to the same callback. No new action or target identity is created.
+- Retained-scope conflict copy now tells the user to return to the saved selection and resolve
+  it, without promising files, a final-ZIP retry or an available discard control. Its rejection,
+  signals, action type, resumability and ledger identity/revision remain unchanged.
+- Initial test construction incorrectly assumed every cleanup summary passed the durable parser:
+  eight cases stopped at that assumption before checking visibility. Those failures are not
+  counted as warning discrimination. The corrected matrix has eight whole-panel render cases,
+  two explicit existing-parser boundary cases, four inline-action cases and four scope-copy cases.
+  Corrected baseline: 14 failures and four passes across 18 new cases. With the fix and neighbouring
+  regressions, 72 focused cases passed across five files. The first TypeScript check found missing
+  response-union narrowing in the new scope-copy tests; explicit property checks corrected it.
+- Each temporary production mutation was allowed to finish before restoring its source:
+
+  | Mutation                                            | Focused failures | Observed discriminator                                                                           |
+  | --------------------------------------------------- | ---------------: | ------------------------------------------------------------------------------------------------ |
+  | Remove fallback warning                             |                8 | `expected undefined to be defined`                                                               |
+  | Restore final-ZIP heading                           |                8 | warning did not contain `aria-label="Saved run needs attention"`                                 |
+  | Remove current-period action guard                  |                2 | `expected { label: 'Retry this period', …(2) } to be null`                                       |
+  | Restore both retained-scope copy branches           |                4 | expected retained-run wording; received prepared-files/final-ZIP or staged-files/discard wording |
+  | Replace canonical reason with generic portal advice |                8 | warning did not contain the canonical summary paragraph                                          |
+
+  Source hashes were identical before and after the mutation sequence: inline status `695cd4f`,
+  presentation `a6845df`, run state `c6250cf`. No mutation was left in the working tree.
+
+### Boundary and deliberately excluded follow-ups
+
+- The producer emits cleanup-phase signals for downloaded and no-artifacts cleanup that the
+  existing durable signal allowlist does not accept. The canonical summary parser rejects those
+  summaries as `unknown`; legacy cleanup is accepted. The tests record this rather than removing
+  signals or manufacturing a successful round-trip. Adding those persisted values is outside the
+  no-widening boundary. Owner decision: authorize a separate allowlist/serializer review with
+  reconstruction, redaction and lifecycle tests, or retain the present rejection. Risk: silently
+  treating this UI fix as durable-summary qualification would overstate the evidence.
+- Direct and parsed legacy messages differ because the parser reconstructs canonical copy. Each
+  rendering assertion checks its actual input message; it does not claim those bodies are equal.
+- Selection changes can still hide a cleanup-only summary, and the guide's existing cleanup start
+  label can still refer to a final ZIP. Those are separate selection/action-label work, not fixed
+  by the status-only fallback. No successful cleanup or retry is claimed in this cycle.
+- The broader proposal to substitute every full-year body with the target's message was rejected:
+  a retained running target can still carry active-checking wording, and the inline helper owns two
+  specific overlay remedies. Removing it without tracing those contracts would lose information.
+- No persistence schema, allowlist, stored field, authority, download evidence, portal navigation,
+  manifest, dependency or release claim changed in this cycle. The primary checkout is untouched.
+
+### Review extension and packaged evidence
+
+- The fallback also affects export-pending states without a period. Ten additional cases use the
+  actual export, intent and observing checkpoint builders, then test both direct and parsed
+  summaries. Removing the fallback failed exactly four export cases (`expected '' to contain`
+  the neutral warning label); moving it before ambiguity handling failed all six download-check
+  cases, which expected `Check Browser Downloads` or `Check final ZIP status`. Both mutations
+  finished before restoration; the three production hashes still matched the values above.
+- The first full gate passed 134 files / 2,521 tests. A second complete gate is required after the
+  ten-case review extension; the earlier pass is not represented as covering those added tests.
+- Packaged browser matrix: three baseline pages and eight updated pages. Updated pages cover
+  three direct cleanup states with both absent and unsupported portal contexts, plus accepted
+  parsed legacy state in both contexts. These pages stub only runtime responses with synthetic
+  producer output; they do not establish an authenticated portal context.
+
+  | Direct cleanup state | Baseline shell at 320px | Updated shell at 320px |
+  | -------------------- | ----------------------: | ---------------------: |
+  | Downloaded           |              1,152.59px |             1,244.41px |
+  | No artifacts         |              1,152.59px |             1,244.41px |
+  | Legacy               |              1,170.78px |             1,262.59px |
+
+  The new warning is 91.81px high. Both context variants have equal heights. Parsed legacy is
+  906.97px because its canonical parser omits per-period display evidence; that is not a claimed
+  density improvement. All eight updated pages retained four controls, zero disabled controls,
+  zero inline buttons, their existing delivery text, and a 320px document width.
+
+- Screenshot review covered the initial warning, delivery card, per-period evidence and parsed
+  legacy state. The no-artifacts page measured 1,167.42px at 400px width; returning to 320px restored
+  1,244.41px. The pages intentionally scroll; status is visible initially, while the later guide
+  may remain below the fold. No native side-panel resize, browser zoom or screen reader is claimed.
+- Normal click/keyboard input advanced the unchanged guide through all four steps and returned
+  through Back to Step 1, without changing the scope or submitting the final action. The catalogue
+  disclosure opened and closed using Enter. The warning remained visible at the same scope. The
+  Step 4 screenshot confirmed the separate `Retry final ZIP` label and portal-foreground helper
+  contradiction for no-artifacts cleanup; those are queued for the next bounded copy cycle.
+- Across the eleven stubbed pages there were no action messages. Page-scoped network blocking
+  observed zero requests. This is not a browser-wide network audit.
+- The isolated browser was then restarted without response stubs. The real packaged background
+  reconstructed each of the three generated cleanup ledgers as a structurally identical summary,
+  with its warning visible and no inline button. Each stored ledger remained unchanged. Repeating
+  all three after closing and relaunching the entire isolated browser created new worker objects
+  and again preserved both summaries and source ledgers. No cleanup, retry or download action was
+  submitted. These six real-handler checks are synthetic reconstruction evidence, not live portal,
+  staging-byte, cleanup-effect or in-flight worker-termination qualification.
+- In particular, reconstruction from the source ledger succeeded for the two phase summaries the
+  durable-summary parser rejects. That does not turn their failed summary round-trip into a pass.
+- Independent privacy and security reviews passed the three production blobs. Final review also
+  checks the expanded precedence tests and this evidence record; no release readiness is claimed.
+- Five further stubbed packaged pages covered export pending, export retry, download started,
+  persisted intent and exact-ID observing. All preserved their producer body, had no inline button
+  and no action message, and measured 320px document width. Their headings respectively remained
+  the neutral warning, neutral warning, Browser Downloads check, Browser Downloads check and exact
+  ZIP-status check. The first extra probe used a stale browser helper after restart and loaded no
+  page; passing the current context explicitly corrected the harness before these measurements.
+- The sixteen total stubbed pages and the separate six real-handler checks observed zero page
+  network requests in their monitored contexts. The isolated browser was closed, and its exact
+  task-generated 14 MB profile was removed. No downloaded file or user profile was involved.
+- Line accounting: `inline-status.tsx` 342→350, `presentation-state.ts` 231→231, run-state
+  241→239; production total 814→820 (+6). The three new test files contain 175, 131 and 90 lines
+  (396 total), and one existing expected heading changed without adding/removing a test. This is
+  a visibility/copy fix, not a net code reduction. No production module was added or removed.
+- After the precedence extension, all 82 focused cases passed across five files, and the repeated
+  full suite passed 134 files / 2,531 tests: 28 additional tests since Cycle 20, with none removed.
+  Its exact last three lines are:
+
+  ```text
+        Tests  2531 passed (2531)
+     Start at  07:59:17
+     Duration  191.65s (transform 4.93s, setup 0ms, import 23.98s, tests 140.95s, environment 12ms)
+  ```
+
+  The same known synthetic workflow/review stderr and TypeScript source-map warning were
+  non-failing. The production package remains 1.01 MB. No authenticated or release gate is claimed.
+
+- The repeated build, full suite, TypeScript, zero-warning ESLint, repo-wide Prettier, package
+  verifier and diff check all passed. Source checkpoint: `dc9dbb4`; test checkpoint: `e0cabc0`.
+  Independent final privacy review reconciled the new test counts, line counts and evidence
+  boundaries with no actionable finding. The three rounds were fixture/baseline correction,
+  independent source review, and expanded precedence/runtime/evidence review.
+- Next-cycle priority changed on observed evidence: cleanup action/helper/busy wording now comes
+  before unused-wrapper deletion. The background trace supports the local-cleanup intent for a
+  matching, unchanged ledger, but a stale summary is not execution authority. Do not promise zero
+  downloads-API calls or unconditional cleanup-only execution from UI signals. Selection retention
+  and the two summary-parser rejections remain separately bounded.
