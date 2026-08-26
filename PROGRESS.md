@@ -937,7 +937,7 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
   action-label and selection-retention work remains queued separately. A display-only recovery
   predicate must not be substituted for the existing start-fresh authorization predicate.
 
-## Cycle 20 — 2026-08-26, 06:57 IST start (review window open)
+## Cycle 20 — 2026-08-26, 06:57–07:42 IST (45 minutes)
 
 - Picked: full-year recovery consistency across readers, elevated by Cycle 19's independent
   triage. Kept cleanup presentation and selection retention separate. Clean preflight passed and
@@ -1002,3 +1002,6 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
   qualification. The browser was closed and its exact 9.7 MB profile removed; no retry, download
   or portal action was performed. Network monitoring was page-scoped and covered the restart/Clear
   interval only. No source or test file changed after the recorded gate.
+- Closed at 07:42 IST. Source/tests were checkpointed at 07:22 and the reviewed evidence at 07:35.
+  The final interval included a disclosed cadence pause and read-only next-cycle scoping, not
+  additional implementation or test execution. The overall overnight goal remains active.
