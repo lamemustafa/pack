@@ -350,8 +350,9 @@ describe("popup full-year recovery actions", () => {
     );
 
     expect(markup).toContain(
-      '<button type="button" class="secondary" disabled="">Discard saved state and start selected download</button>',
+      '<button type="button" class="secondary" disabled="" aria-describedby="recovery-portal-disabled-reason">Discard saved state and start selected download</button>',
     );
+    expect(markup).toContain('id="recovery-portal-disabled-reason"');
     expect(markup).toContain("Record manual observation");
     expect(markup).toContain("Cancel and reset");
   });
@@ -394,6 +395,10 @@ describe("popup full-year recovery actions", () => {
     expect(markup).toContain(
       "Open a signed-in GST Portal tab before retrying this period or starting again.",
     );
+    expect(markup.match(/aria-describedby="recovery-portal-disabled-reason"/g) ?? []).toHaveLength(
+      2,
+    );
+    expect(markup).toContain('id="recovery-portal-disabled-reason"');
   });
 
   it("uses retry-first copy for a blocked full-year period", () => {
@@ -689,7 +694,9 @@ describe("popup full-year recovery actions", () => {
     expect(markup).toContain(
       "Open a signed-in GST Portal tab before retrying this period or starting again.",
     );
-    expect(markup).toContain('<button type="button" disabled="">Retry this period</button>');
+    expect(markup).toContain(
+      '<button type="button" disabled="" aria-describedby="recovery-portal-disabled-reason">Retry this period</button>',
+    );
     expect(markup).toContain("Cancel and reset");
   });
 

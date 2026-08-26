@@ -120,6 +120,9 @@ export function RecoveryActions({
                 type="button"
                 className="secondary"
                 disabled={retryDisabled}
+                aria-describedby={
+                  portalDisabledReason ? "recovery-portal-disabled-reason" : undefined
+                }
                 onClick={onStartFresh}
               >
                 {busy === "start-fresh-filed-returns-flow"
@@ -166,6 +169,9 @@ export function RecoveryActions({
                 type="button"
                 className={collapsed ? "secondary" : undefined}
                 disabled={retryDisabled}
+                aria-describedby={
+                  portalDisabledReason ? "recovery-portal-disabled-reason" : undefined
+                }
                 onClick={onRetryFullFiscalYearTarget}
               >
                 {busy === "retry-full-fiscal-year-target"
@@ -176,6 +182,9 @@ export function RecoveryActions({
                 type="button"
                 className="secondary"
                 disabled={retryDisabled}
+                aria-describedby={
+                  portalDisabledReason ? "recovery-portal-disabled-reason" : undefined
+                }
                 onClick={onStartFresh}
               >
                 {busy === "start-fresh-filed-returns-flow"
@@ -206,7 +215,11 @@ export function RecoveryActions({
               </button>
             </>
           ) : null}
-          {portalDisabledReason ? <p className="muted">{portalDisabledReason}</p> : null}
+          {portalDisabledReason ? (
+            <p className="muted" id="recovery-portal-disabled-reason">
+              {portalDisabledReason}
+            </p>
+          ) : null}
         </div>
       ) : null}
     </details>
