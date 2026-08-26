@@ -1069,7 +1069,7 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
   or test execution is attributed to that pause. The next cycle's baseline browser is closed and
   its synthetic pending requests were resolved. The overnight goal remains active.
 
-## Cycle 22 — 2026-08-26 08:27 IST (cadence interval still open)
+## Cycle 22 — 2026-08-26 08:27–09:29 IST (62 minutes)
 
 - Picked the measured cleanup action/busy contradiction, ahead of unrelated wrapper deletion.
   Three cleanup states at 320px advertise a final ZIP and foreground portal use; pending Start
@@ -1121,3 +1121,8 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
   by 11,292 KiB across the immediate readings; that change is not attributed solely to this lane.
   All browser profiles/servers are closed and removed. The remaining interval is a disclosed idle
   handoff hold, with no implementation or test work attributed to it.
+- Closed at 09:29 IST, within the requested roughly-09:30 handoff window. The idle hold ran from
+  approximately 09:17 to 09:29; it is included only in wall-clock duration. Source/tests remain at
+  their verified checkpoints. Final documentation formatting and diff checks passed after cleanup.
+  No new cycle, push, PR, release operation or live session was started. The goal was not marked
+  complete; this is the requested time-bounded handoff, with owner decisions still open.

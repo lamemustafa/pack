@@ -1976,3 +1976,7 @@ Six additional mutation groups were run serially and restored with matching file
 - Final handoff will close the current wall-clock cycle near the requested 09:30 IST window.
   Any intervening hold after evidence and cleanup is explicitly idle, not additional implementation
   or test execution. No new cycle, feature, release or PR operation is started during that hold.
+- Handoff closed at 09:29 IST. Cycle 22 spans 08:27–09:29 (62 minutes), including a disclosed
+  approximately 09:17–09:29 idle hold. Earlier checkpoint rounds 1–17 did not meet the requested
+  cycle duration; their real timestamps remain visible. This record does not claim an unbroken
+  compliant overnight cadence. The goal is not marked complete and the open owner boundaries remain.
