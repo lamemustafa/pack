@@ -62,4 +62,20 @@ describe("single-period cleanup cause reaches the surface", () => {
     expect(response.flowStep.safeSignals).toContain("filed-returns-target-review-required");
     expect(response.flowStep.safeSignals).toContain("filed-returns-target-local-cleanup-required");
   });
+
+  it("names unavailable local recovery state without calling it malformed", () => {
+    const review = reviewWith("single-period-bundle-state-read-failed");
+    review.safeSignals = [
+      ...review.safeSignals.filter((signal) => signal !== "single-period-opfs-cleared"),
+      "single-period-opfs-retained",
+    ];
+    const response = responseForFiledReturnsTargetReview(review);
+
+    if (!("flowStep" in response)) throw new Error("expected a filed-returns flow response");
+    expect(response.flowStep.safeMessage).toContain(
+      "could not read temporary selected-file recovery state",
+    );
+    expect(response.flowStep.safeMessage).not.toContain("missing or mismatched");
+    expect(response.flowStep.userAction?.message).toContain("will not clear or replace it");
+  });
 });

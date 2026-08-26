@@ -855,6 +855,41 @@ describe("filed returns target download recovery", () => {
     expect(mocks.state.session[COMPLETION_KEY]).toBeUndefined();
   });
 
+  it("retains a staging-storage read failure instead of relabelling it as malformed", async () => {
+    const review = reviewFor(ZIP_SCOPE, observingZipAttempt(73));
+    mocks.state.local[REVIEW_KEY] = review;
+    mocks.browser.storage.local.get.mockImplementation(async (key: string) => {
+      if (key === "pack:single-period-staging") {
+        throw new Error("synthetic staging storage read failure");
+      }
+      return key === REVIEW_KEY ? { [REVIEW_KEY]: mocks.state.local[REVIEW_KEY] } : {};
+    });
+    mocks.browser.downloads.search.mockResolvedValue([
+      { danger: "safe", exists: true, fileSize: 2048, id: 73, state: "complete" },
+    ]);
+    mocks.observeBrowserDownloadById.mockResolvedValue(completedObservation(73, "generic-binary"));
+
+    const result = await reconcileFiledReturnsTargetDownload(review, deps);
+
+    expect(result).toMatchObject({
+      state: "handled",
+      response: {
+        flowStep: {
+          safeSignals: expect.arrayContaining(["single-period-bundle-state-read-failed"]),
+          state: "blocked",
+        },
+      },
+    });
+    expect(mocks.discardSinglePeriodFiledReturnsZip).not.toHaveBeenCalled();
+    expect(mocks.state.local[REVIEW_KEY]).toMatchObject({
+      safeSignals: expect.arrayContaining(["single-period-bundle-state-read-failed"]),
+    });
+    expect((mocks.state.local[REVIEW_KEY] as FiledReturnsTargetReview).safeSignals).not.toContain(
+      "single-period-bundle-ledger-malformed",
+    );
+    expect(mocks.state.session[COMPLETION_KEY]).toBeUndefined();
+  });
+
   it("repairs the ZIP ledger after restart between the review and bundle download-ID writes", async () => {
     const review = reviewFor(ZIP_SCOPE, observingZipAttempt(73));
     mocks.state.local[REVIEW_KEY] = review;
