@@ -398,6 +398,9 @@ reviewed persistence and failure contracts.
 - Cycle 20 repairs the measured target-disagreement cases across readers and recovery selection.
   Its synthetic sweep still leaves 48 all-positive legacy-cleanup projections rejected by the
   summary parser. It does not certify general cleanup consistency or normal-workflow provenance.
+- Cycle 29 proves only the local extension message path: a failed saved-summary read now remains
+  visible with its safe error copy after portal context succeeds. It does not qualify session-storage
+  failure frequency, browser restart behavior, authenticated portal behavior, or any recovery action.
 
 ## Decision log
 
