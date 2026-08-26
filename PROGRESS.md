@@ -1327,3 +1327,31 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
 - Learned / next: do not count a second assertion as stronger coverage when the current test already
   exercises the same DOM resolution path. Continue with a different test-quality sample or a
   lossy-surface boundary rather than duplicating this check.
+
+## Cycle 29 — surface saved-summary read failures
+
+- Window: 2026-08-27 03:29–03:39 IST (10 minutes). This is a short corrective checkpoint, not a
+  cadence-qualifying 45–75-minute cycle; its actual duration is recorded without an idle hold.
+- Picked: a session-storage failure while reading the saved filed-returns summary reached the
+  background handler as an error response, but the panel controller ignored that response and
+  rendered otherwise healthy context with no visible recovery-read failure.
+- Measured before: the new controller regression failed with `expected null to be ... saved local
+  recovery state`, proving the response was silently discarded after context succeeded.
+- Changed: the generic handler now names this request as saved local recovery state, and the shared
+  controller renders its existing safe message (with a local-only fallback) as an action error.
+  Context remains usable; no saved summary, action authority, permission, target binding, download
+  evidence, persistence field or portal interaction changed.
+- Review: required background security review PASS found no MV3, permission, CSP, network,
+  persistence, downloads or trust-boundary regression.
+- Gate: focused controller tests passed 5 tests. Build, TypeScript, zero-warning ESLint, repo-wide
+  Prettier, package verification and diff checks passed. Final serial Vitest footer:
+
+  ```text
+   Test Files  151 passed (151)
+        Tests  2799 passed (2799)
+     Start at  03:35:36
+     Duration  153.31s (transform 2.51s, setup 0ms, import 12.33s, tests 124.90s, environment 8ms)
+  ```
+
+- Checkpoints: runtime, test and progress commits follow. No live/authenticated GST qualification,
+  release claim, push or PR action was made.
