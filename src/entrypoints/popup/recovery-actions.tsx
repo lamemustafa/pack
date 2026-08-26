@@ -71,10 +71,10 @@ export function RecoveryActions({
         <div className="recovery-details-content" aria-label="Filed return recovery actions">
           {runActive ? (
             <>
-              <button type="button" disabled>
+              <button type="button" disabled aria-describedby="recovery-run-active-reason">
                 Run in progress
               </button>
-              <p className="muted">
+              <p className="muted" id="recovery-run-active-reason">
                 Retry controls appear automatically if the run stops making progress.
               </p>
             </>

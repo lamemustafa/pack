@@ -456,7 +456,10 @@ describe("popup full-year recovery actions", () => {
       }),
     );
 
-    expect(markup).toContain("Run in progress");
+    expect(markup).toContain(
+      '<button type="button" disabled="" aria-describedby="recovery-run-active-reason">Run in progress</button>',
+    );
+    expect(markup).toContain('id="recovery-run-active-reason"');
     expect(markup).toContain(
       "Retry controls appear automatically if the run stops making progress.",
     );
