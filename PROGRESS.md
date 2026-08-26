@@ -1166,3 +1166,39 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
 - Learned / next: the retry boundary had two distinct storage outcomes: a retained diagnostic and a
   visible-but-unretained diagnostic. The next lossy-surface pass should trace another bounded
   rejection boundary rather than widening signal vocabulary or recovery authority.
+
+## Cycle 24 — name unreadable ZIP staging
+
+- Window: 2026-08-27 02:32–02:46 IST (14 minutes). This is a short corrective checkpoint, not a
+  cadence-qualifying cycle; the time is recorded without an idle hold.
+- Picked: the ZIP reconciliation boundary that caught a local staging-record read failure, returned
+  `null`, and then recorded the different malformed-ledger reason.
+- Measured before: the new exact-ID ZIP reconstruction case failed because a thrown local read was
+  stored and returned as `single-period-bundle-ledger-malformed`. No staging clear, browser replay,
+  or session completion happened in that baseline.
+- Changed: the read boundary now returns the existing typed state-read failure, the blocked recovery
+  projection retains that signal instead of the malformed signal, and the target-review surface tells
+  the user it could not read local recovery state and will not clear or replace staging. The exact
+  browser-download ID, positive-evidence requirements, blocked status, retained staging and no-new
+  action authority are unchanged.
+- Review and discrimination: the initial security review caught that the typed signal was hidden by
+  generic recovery copy. The copy branch was added and independently reviewed PASS. Changing the
+  condition to the write-failure signal made the copy test fail with the generic staging message;
+  it was restored before gates. A briefly launched duplicate suite was terminated before completion
+  after detecting an earlier detached suite; no result was used from it.
+- Gate: build, TypeScript, zero-warning ESLint, repo-wide Prettier, package verification and diff
+  checks passed. Focused recovery and surface tests passed 49 tests. The final isolated serial Vitest
+  run passed 2,796 tests. Exact footer:
+
+  ```text
+        Tests  2796 passed (2796)
+     Start at  02:42:13
+     Duration  178.29s (transform 3.57s, setup 0ms, import 19.42s, tests 136.50s, environment 13ms)
+  ```
+
+- Checkpoints: `5a9135e fix(recovery): name unreadable ZIP staging` and
+  `12c6a5e test(recovery): cover unreadable ZIP staging`. The progress record is committed
+  separately after this append.
+- Learned / next: a durable signal alone is insufficient when the primary recovery surface replaces
+  its meaning. Continue the lossy-surface audit at one bounded catch boundary, preserving the
+  distinction between unavailable local state and malformed local state.
