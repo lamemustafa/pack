@@ -64,6 +64,11 @@ export function usePackPopupController() {
           const flowSummary = summaryResponse.flowSummary;
           setFiledReturnsFlowSummary(flowSummary);
           if (flowSummary) setScopeState(flowSummary.scope);
+        } else if (!summaryResponse.ok) {
+          showActionError(
+            summaryResponse.safeMessage ??
+              "Pack could not read saved local recovery state. Try again.",
+          );
         }
 
         if (contextResponse.ok && "context" in contextResponse) {
