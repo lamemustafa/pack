@@ -1006,7 +1006,7 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
   The final interval included a disclosed cadence pause and read-only next-cycle scoping, not
   additional implementation or test execution. The overall overnight goal remains active.
 
-## Cycle 21 — 2026-08-26 07:42 IST (cadence interval still open)
+## Cycle 21 — 2026-08-26 07:42–08:27 IST (45 minutes)
 
 - Picked cleanup-only saved-run visibility: the packaged baseline showed delivery evidence but
   omitted the warning when no period remained. Added a canonical-reason fallback after existing
@@ -1064,3 +1064,7 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
   also passed. Focus source `07b34d5` and tests `517fb4c` are checkpointed; independent UI/privacy
   review found no actionable issue. Initial keyboard entry now requires an explicit Tab, preserving
   the warning before entering the guide; click count and subsequent navigation are unchanged.
+- Closed at 08:27 IST. The final interval included read-only scoping and baseline measurement for
+  the next cleanup-copy cycle, then a disclosed cadence pause beginning at 08:22. No implementation
+  or test execution is attributed to that pause. The next cycle's baseline browser is closed and
+  its synthetic pending requests were resolved. The overnight goal remains active.
