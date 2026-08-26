@@ -1,4 +1,4 @@
-import { isGstAuthLandingRoute } from "./detect";
+import { isActionableGstPortalTabUrl } from "./hosts";
 import { isActionablePortalControl, isSemanticallyEnabledPortalControl } from "./filed-returns-dom";
 
 export type ReturnsDashboardAnchorNavigation = "clicked" | "not-found" | "ambiguous";
@@ -28,8 +28,7 @@ export function clickReturnsDashboardAnchor(
     if (
       matches.length === 1 &&
       uniqueMatch &&
-      location &&
-      isGstAuthLandingRoute(location) &&
+      isActionableGstPortalTabUrl(location?.href) &&
       isSemanticallyEnabledPortalControl(uniqueMatch)
     ) {
       uniqueMatch.click();

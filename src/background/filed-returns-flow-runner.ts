@@ -103,6 +103,7 @@ export interface FiledReturnsFlowRunnerDeps {
   timings?: {
     contentMessageTimeoutMs?: number;
     detailSummaryModalSettleMs?: number;
+    flowStepDeadlineMs?: number;
     flowStepSettleMs?: number;
     portalNavigationSettleMs?: number;
     returnsDashboardNavigationTimeoutMs?: number;

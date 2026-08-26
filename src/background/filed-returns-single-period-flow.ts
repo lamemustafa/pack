@@ -18,6 +18,7 @@ import { runDownloadStepWithRetry } from "./filed-returns-flow-messaging";
 import {
   extractActiveFinancialYear,
   extractActivePeriod,
+  flowStepDeadlineMs,
   getFlowStepSettleMs,
   getResultRowNavigationSettleMs,
   isFiledReturnDownloadReady,
@@ -314,7 +315,17 @@ async function runSinglePeriodSteps(
   let mainWorldFilterAttempted = false;
   let mismatchRecovery: Gstr1PeriodMismatchRecovery | null = null;
   let returnTypeMismatchRecovery: ReturnTypeMismatchRecovery | null = null;
-  for (let attempt = 0; attempt < maxFlowStepsFor(scope); attempt += 1) {
+  // Wall clock is the real bound; the step count is only a runaway backstop.
+  // Pack observed `filed-returns-page-settling` -- its own word for a page still
+  // rendering -- and stopped anyway, because twelve steps at a 150ms settle is
+  // under two seconds of patience.
+  const stepStartedAt = (deps.now?.() ?? new Date()).getTime();
+  const stepDeadlineAt = stepStartedAt + flowStepDeadlineMs(deps);
+  for (
+    let attempt = 0;
+    attempt < maxFlowStepsFor(scope) && (deps.now?.() ?? new Date()).getTime() < stepDeadlineAt;
+    attempt += 1
+  ) {
     const response = await runScopedDownloadStepWithRetry(deps, tabId, scope);
     if (!response.ok || !("flowStep" in response)) {
       return response;
@@ -471,7 +482,10 @@ async function runSinglePeriodSteps(
     ok: true,
     flowStep: toStepLimitReachedFlowStep(scope, lastStep, {
       safeSignal: "flow-step-limit-reached",
-      safeMessage: searchStepLimitReachedMessage(scope),
+      safeMessage: searchStepLimitReachedMessage(
+        scope,
+        (deps.now?.() ?? new Date()).getTime() - stepStartedAt,
+      ),
       userActionMessage:
         "Wait for the GST Portal result page to finish loading, then click Start download again.",
     }),
@@ -522,7 +536,17 @@ async function waitForDetailReadyThenTrigger({
   let mismatchRecovery = initialMismatchRecovery;
   let returnTypeMismatchRecovery = initialReturnTypeMismatchRecovery;
 
-  for (let attempt = 0; attempt < maxFlowStepsFor(scope); attempt += 1) {
+  // Wall clock is the real bound; the step count is only a runaway backstop.
+  // Pack observed `filed-returns-page-settling` -- its own word for a page still
+  // rendering -- and stopped anyway, because twelve steps at a 150ms settle is
+  // under two seconds of patience.
+  const stepStartedAt = (deps.now?.() ?? new Date()).getTime();
+  const stepDeadlineAt = stepStartedAt + flowStepDeadlineMs(deps);
+  for (
+    let attempt = 0;
+    attempt < maxFlowStepsFor(scope) && (deps.now?.() ?? new Date()).getTime() < stepDeadlineAt;
+    attempt += 1
+  ) {
     const response = await runScopedDownloadStepWithRetry(deps, tabId, scope);
     if (!response.ok || !("flowStep" in response)) {
       return response;
@@ -605,7 +629,10 @@ async function waitForDetailReadyThenTrigger({
     ok: true,
     flowStep: toStepLimitReachedFlowStep(scope, lastStep, {
       safeSignal: "detail-ready-step-limit-reached",
-      safeMessage: detailStepLimitReachedMessage(scope),
+      safeMessage: detailStepLimitReachedMessage(
+        scope,
+        (deps.now?.() ?? new Date()).getTime() - stepStartedAt,
+      ),
       userActionMessage:
         "Wait for the filed-return detail page to finish loading, then click Start download again.",
     }),
