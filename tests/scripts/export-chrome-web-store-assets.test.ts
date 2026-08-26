@@ -20,6 +20,7 @@ describe("Chrome Web Store asset exporter", () => {
     );
   });
 
+  // Real Chromium rasterizes seven assets; keep this integration check in the suite (#200).
   it("exports store PNGs with required dimensions and SHA-256 evidence", async () => {
     const exportDir = await mkTempExportDir();
     const result = await runExporter(exportDir);
@@ -97,7 +98,7 @@ describe("Chrome Web Store asset exporter", () => {
       );
       expect(asset.sourceSha256).toBe(createHash("sha256").update(source).digest("hex"));
     }
-  });
+  }, 15_000);
 
   it("binds every checked-in export to its current SVG source", async () => {
     const manifest = JSON.parse(
