@@ -5,6 +5,7 @@ import type {
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
 import {
+  concreteFiledReturnsArtifactTypesForSelection,
   normaliseFiledReturnsArtifactType,
   type FiledReturnsConcreteArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
@@ -109,9 +110,13 @@ export function createSinglePeriodBundleLedger(
   } catch {
     return null;
   }
+  const artifactPlan = concreteFiledReturnsArtifactTypesForSelection(
+    scope.returnType,
+    scope.artifactType,
+  );
   return {
-    artifactPlan: artifactPlanForScope(scope),
-    artifacts: artifactPlanForScope(scope).map((artifactType) => ({
+    artifactPlan,
+    artifacts: artifactPlan.map((artifactType) => ({
       artifactType,
       safeSignals: ["single-period-bundle-artifact-pending"],
       status: "pending",
@@ -834,17 +839,14 @@ function isSupportedBundleScope(input: unknown): input is FiledReturnsDownloadSc
   );
 }
 
-function artifactPlanForScope(
-  scope: FiledReturnsDownloadScope,
-): FiledReturnsConcreteArtifactType[] {
-  return scope.returnType === "GSTR-2B" ? ["PDF", "EXCEL", "JSON"] : ["PDF", "EXCEL"];
-}
-
 function parsedArtifactPlan(
   scope: FiledReturnsDownloadScope,
   plan: unknown,
 ): FiledReturnsConcreteArtifactType[] | null {
-  const current = artifactPlanForScope(scope);
+  const current = concreteFiledReturnsArtifactTypesForSelection(
+    scope.returnType,
+    scope.artifactType,
+  );
   if (sameStrings(plan, current)) return current;
   return scope.returnType === "GSTR-2B" && sameStrings(plan, ["PDF", "EXCEL"])
     ? ["PDF", "EXCEL"]
