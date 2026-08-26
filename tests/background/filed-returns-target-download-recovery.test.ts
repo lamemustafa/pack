@@ -588,6 +588,7 @@ describe("filed returns target download recovery", () => {
           safeSignals: expect.arrayContaining([
             "filed-return-durable-status-rejected",
             "single-period-opfs-cleared",
+            singlePeriodCleanupCheckpointFailureSignal("canonical-completion-persist-failed"),
           ]),
         },
       },

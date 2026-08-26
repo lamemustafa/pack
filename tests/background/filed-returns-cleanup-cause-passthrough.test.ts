@@ -78,4 +78,19 @@ describe("single-period cleanup cause reaches the surface", () => {
     expect(response.flowStep.safeMessage).not.toContain("missing or mismatched");
     expect(response.flowStep.userAction?.message).toContain("will not clear or replace it");
   });
+
+  it("names a canonical completion write failure after the ZIP was confirmed", () => {
+    const review = reviewWith(
+      "single-period-cleanup-checkpoint-failed:canonical-completion-persist-failed",
+    );
+    review.safeSignals.push("filed-return-durable-status-rejected");
+
+    const response = responseForFiledReturnsTargetReview(review);
+
+    if (!("flowStep" in response)) throw new Error("expected a filed-returns flow response");
+    expect(response.flowStep.safeSignals).toContain(
+      "single-period-cleanup-checkpoint-failed:canonical-completion-persist-failed",
+    );
+    expect(response.flowStep.safeMessage).toContain("could not save the confirmed ZIP completion");
+  });
 });
