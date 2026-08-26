@@ -15,36 +15,37 @@ status --porcelain | wc -l` produced `0`) and was not edited by this session.
 
 ## Ledger
 
-| Item       | Outcome       | Evidence                                                                                                                                                              |
-| ---------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| PR #231    | BLOCKED       | Observed behind at head `45b61a67f252419a39935814544473649968b841`; it awaits the #234 merge loop before a current-head review and clean merge state can be observed. |
-| PR #234    | PARTIAL       | Observed at head `7ae790a2c477b0636a5dc58bd9b5329677f867f3`; a cancelled required Review gate run was rerun. Its resulting state has not yet been observed.           |
-| Issue #115 | NOT ATTEMPTED | Requires re-evaluation after PR #231.                                                                                                                                 |
-| Issue #166 | BLOCKED       | PR #233 is merged and its synthetic restart-ordering test passed 4 registered tests; authenticated runtime qualification remains deliberately unattempted.            |
-| Issue #172 | NOT ATTEMPTED | Requires confirmation after PR #234.                                                                                                                                  |
-| Issue #225 | CLOSED        | Direct AST probe found exactly one `defineConfig` call, directly exported; 37 focused guard tests passed.                                                             |
-| Issue #226 | CLOSED        | Direct enumeration found zero runtime JavaScript-family source files; 37 focused guard tests passed.                                                                  |
-| Issue #227 | CLOSED        | Direct enumeration found zero runtime JavaScript-family source files; 37 focused guard tests passed.                                                                  |
-| Issue #220 | CLOSED        | Direct enumeration found no unrecognised WXT entrypoint convention; 37 focused guard tests passed.                                                                    |
-| Issue #221 | CLOSED        | Direct search found zero `import.meta.glob` occurrences; 37 focused guard tests passed.                                                                               |
-| Issue #102 | BLOCKED       | Its own acceptance boundary is authenticated full-year observation; that is an explicit session non-goal.                                                             |
-| Issue #118 | BLOCKED       | Current checkpoints lack a version discriminator; adding one widens persisted state and is ask-first.                                                                 |
-| Issue #122 | NOT ATTEMPTED | It remains a multi-path runtime change whose completion requires authenticated qualification; no code was changed without that evidence plan.                         |
-| Issue #148 | BLOCKED       | The required durable record and trusted writer are an unresolved persistence/governance design, not safe speculative workflow code.                                   |
-| Issue #156 | BLOCKED       | A live controlled pacing experiment is required to establish causation; no live run is allowed this session.                                                          |
-| Issue #218 | NOT ATTEMPTED | Reserved for the concurrent UI/UX lane.                                                                                                                               |
-| Issue #219 | NOT ATTEMPTED | Reserved for the concurrent UI/UX lane.                                                                                                                               |
-| Issue #171 | NOT ATTEMPTED | Reserved for the concurrent UI/UX lane.                                                                                                                               |
-| Issue #180 | NOT ATTEMPTED | Reserved for the concurrent UI/UX lane.                                                                                                                               |
-| Issue #191 | NOT ATTEMPTED | Reserved for the concurrent UI/UX lane.                                                                                                                               |
-| Issue #197 | BLOCKED       | A parser dependency is an explicit ask-first decision.                                                                                                                |
-| Issue #163 | BLOCKED       | Its activation boundary is a future form change.                                                                                                                      |
-| Issue #164 | BLOCKED       | Its activation boundary is a future form change.                                                                                                                      |
-| Issue #121 | BLOCKED       | It needs a new durable-proof design, persisted-state authorization, and authenticated restart/update qualification.                                                   |
-| Issue #59  | BLOCKED       | Maintainer must configure the authorized read-only store-status credential.                                                                                           |
-| Issue #62  | BLOCKED       | Maintainer must complete the store-dashboard closeout.                                                                                                                |
-| Issue #187 | BLOCKED       | Maintainer must run the authorized authenticated browser qualification.                                                                                               |
-| Issue #194 | BLOCKED       | Maintainer must perform the toolbar-action-to-side-panel browser check.                                                                                               |
+| Item       | Outcome       | Evidence                                                                                                                                                                                                                                             |
+| ---------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PR #231    | BLOCKED       | Observed behind at head `45b61a67f252419a39935814544473649968b841`; it awaits the #234 merge loop before a current-head review and clean merge state can be observed.                                                                                |
+| PR #234    | BLOCKED       | Observed at head `7ae790a2c477b0636a5dc58bd9b5329677f867f3`; its rerun required Review gate remains queued with no jobs, while the PR remains `BLOCKED`.                                                                                             |
+| PR #236    | PARTIAL       | Before this ledger update, all GitHub checks at `d19db587275d8f7f1e88836c8345522783248121` were successful and GitHub reported `CLEAN`; the local strict gate failed because no formal current-head `chatgpt-codex-connector` review object existed. |
+| Issue #115 | NOT ATTEMPTED | Requires re-evaluation after PR #231.                                                                                                                                                                                                                |
+| Issue #166 | BLOCKED       | PR #233 is merged and its synthetic restart-ordering test passed 4 registered tests; authenticated runtime qualification remains deliberately unattempted.                                                                                           |
+| Issue #172 | NOT ATTEMPTED | Requires confirmation after PR #234.                                                                                                                                                                                                                 |
+| Issue #225 | CLOSED        | Direct AST probe found exactly one `defineConfig` call, directly exported; 37 focused guard tests passed.                                                                                                                                            |
+| Issue #226 | CLOSED        | Direct enumeration found zero runtime JavaScript-family source files; 37 focused guard tests passed.                                                                                                                                                 |
+| Issue #227 | CLOSED        | Direct enumeration found zero runtime JavaScript-family source files; 37 focused guard tests passed.                                                                                                                                                 |
+| Issue #220 | CLOSED        | Direct enumeration found no unrecognised WXT entrypoint convention; 37 focused guard tests passed.                                                                                                                                                   |
+| Issue #221 | CLOSED        | Direct search found zero `import.meta.glob` occurrences; 37 focused guard tests passed.                                                                                                                                                              |
+| Issue #102 | BLOCKED       | Its own acceptance boundary is authenticated full-year observation; that is an explicit session non-goal.                                                                                                                                            |
+| Issue #118 | BLOCKED       | Current checkpoints lack a version discriminator; adding one widens persisted state and is ask-first.                                                                                                                                                |
+| Issue #122 | NOT ATTEMPTED | It remains a multi-path runtime change whose completion requires authenticated qualification; no code was changed without that evidence plan.                                                                                                        |
+| Issue #148 | BLOCKED       | The required durable record and trusted writer are an unresolved persistence/governance design, not safe speculative workflow code.                                                                                                                  |
+| Issue #156 | BLOCKED       | A live controlled pacing experiment is required to establish causation; no live run is allowed this session.                                                                                                                                         |
+| Issue #218 | NOT ATTEMPTED | Reserved for the concurrent UI/UX lane.                                                                                                                                                                                                              |
+| Issue #219 | NOT ATTEMPTED | Reserved for the concurrent UI/UX lane.                                                                                                                                                                                                              |
+| Issue #171 | NOT ATTEMPTED | Reserved for the concurrent UI/UX lane.                                                                                                                                                                                                              |
+| Issue #180 | NOT ATTEMPTED | Reserved for the concurrent UI/UX lane.                                                                                                                                                                                                              |
+| Issue #191 | NOT ATTEMPTED | Reserved for the concurrent UI/UX lane.                                                                                                                                                                                                              |
+| Issue #197 | BLOCKED       | A parser dependency is an explicit ask-first decision.                                                                                                                                                                                               |
+| Issue #163 | BLOCKED       | Its activation boundary is a future form change.                                                                                                                                                                                                     |
+| Issue #164 | BLOCKED       | Its activation boundary is a future form change.                                                                                                                                                                                                     |
+| Issue #121 | BLOCKED       | It needs a new durable-proof design, persisted-state authorization, and authenticated restart/update qualification.                                                                                                                                  |
+| Issue #59  | BLOCKED       | Maintainer must configure the authorized read-only store-status credential.                                                                                                                                                                          |
+| Issue #62  | BLOCKED       | Maintainer must complete the store-dashboard closeout.                                                                                                                                                                                               |
+| Issue #187 | BLOCKED       | Maintainer must run the authorized authenticated browser qualification.                                                                                                                                                                              |
+| Issue #194 | BLOCKED       | Maintainer must perform the toolbar-action-to-side-panel browser check.                                                                                                                                                                              |
 
 ## Decisions I made without you
 
@@ -77,12 +78,18 @@ status --porcelain | wc -l` produced `0`) and was not edited by this session.
   That is a verification gap: the post-commit passing preflight confirms only
   the clean committed branch and does not repair the missed pre-edit check.
 
+- Before this incremental update, `pnpm workflow:preflight` passed for the
+  task-owned branch.
+
 - UI-owned paths are not claimed by this task.
 
 ## Claims I could NOT verify
 
-- The eventual result of the rerun Review gate for PR #234.
-- Whether either open PR will obtain a formal current-head review before merge.
+- Whether the queued rerun Review gate for PR #234 will ever begin; it has no
+  observed job and continues to block that PR.
+- Whether PR #236 will obtain a formal current-head review. Its strict local
+  gate failed at the observed head even though GitHub required checks were
+  successful; this is an audit gap, not a strict-gate pass.
 - Authenticated portal behavior and browser release-gate behavior; neither is
   attempted in this session.
 - Whether the synthetic restart recovery proved by PR #233 occurs against an
