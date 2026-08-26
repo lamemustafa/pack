@@ -1,5 +1,20 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 51 — mutate-check retained cleanup eligibility
+
+- Window: 2026-08-27 05:21–05:23 IST. This is a quiet test-quality checkpoint, not a
+  cadence-qualifying 45–75-minute cycle; its actual duration is recorded without an idle hold.
+- Picked: the full-year cleanup-action suite claims that portal-independent cleanup is unavailable
+  without retained local-file proof, a fail-closed financial recovery boundary.
+- Measured: temporarily removing the `full-fiscal-year-opfs-retained` guard from
+  `canRetryFullFiscalYearZipWithoutPortal` made the focused suite fail: the missing-retained-marker
+  case incorrectly rendered `Retry local cleanup` and `Retry cleanup for this saved run.`
+- Result: no source change. The guard was restored before the final focused rerun; cleanup-action
+  and flow-summary suites passed 2 files and 41 tests, with `git diff --check` and worktree status
+  clean. This is a behavioural discrimination audit, not a relaxation of retained-evidence policy.
+- Learned / next: the fixture’s missing-retained-marker variant catches the exact unsafe eligibility
+  broadening it names. Continue sampling a distinct boundary rather than adding redundant coverage.
+
 ## Cycle 50 — audit scope-form lock explanations
 
 - Window: 2026-08-27 05:20–05:22 IST. This is a quiet keyboard/screen-reader audit, not a
