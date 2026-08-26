@@ -1,5 +1,21 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 54 — bound the 320px rendered-panel verification gap
+
+- Window: 2026-08-27 05:28–05:30 IST. This is a quiet panel-state audit, not a
+  cadence-qualifying 45–75-minute cycle; its actual duration is recorded without an idle hold.
+- Picked: the next backlog item requires verifying every declared panel state at 320px without
+  horizontal scrolling, clipped controls, or undersized targets.
+- Measured: the repository already has a packaged-extension 320px verifier that checks preset and
+  expanded-catalogue controls. It obtains the supported panel context by injecting synthetic GST
+  page content. That is a portal simulation, which this overnight objective explicitly forbids.
+- Result: no browser verifier was run and no source changed. The static package-verifier and panel
+  surface suites passed 2 files and 44 tests; `git diff --check` and worktree status were clean.
+- Owner decision needed: authorize the existing synthetic browser verifier for this local layout
+  proof, or defer rendered 320px qualification. The current prohibition prevents extending it to
+  the remaining loading, empty, error, permission-denied, and catalogue states; static tests alone
+  are not equivalent layout evidence.
+
 ## Cycle 53 — require canonical artifact-label context
 
 - Window: 2026-08-27 05:23–05:28 IST. This is a short duplicate-fact corrective checkpoint; its
