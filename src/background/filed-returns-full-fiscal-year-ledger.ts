@@ -192,6 +192,16 @@ export function canCompleteFullFiscalYearLedger(ledger: FiledReturnsFullFiscalYe
   );
 }
 
+/** Target disagreement only; plan validity and ZIP delivery remain separate guards. */
+export function hasInconsistentFullFiscalYearCompletion(
+  ledger: FiledReturnsFullFiscalYearLedger,
+): boolean {
+  return (
+    ledger.status === "complete" &&
+    ledger.targets.some((target) => !POSITIVE_TARGET_STATUSES.has(target.status))
+  );
+}
+
 export function hasActionRequiredFullFiscalYearTarget(
   ledger: FiledReturnsFullFiscalYearLedger,
 ): boolean {

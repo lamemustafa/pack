@@ -7,6 +7,7 @@ import {
   runFiledReturnsOperationCriticalSection,
 } from "./filed-returns-active-run";
 import {
+  hasInconsistentFullFiscalYearCompletion,
   isFullFiscalYearLedger,
   recoverableFullFiscalYearLedgerId,
 } from "./filed-returns-full-fiscal-year-ledger";
@@ -132,6 +133,7 @@ function hasUnresolvedZipState(ledger: FiledReturnsFullFiscalYearLedger): boolea
 }
 
 function isUnresolvedFullFiscalYearLedger(ledger: FiledReturnsFullFiscalYearLedger): boolean {
+  if (hasInconsistentFullFiscalYearCompletion(ledger)) return true;
   if (ledger.status === "complete" || ledger.status === "cancelled") return false;
   return ledger.targets.some((target) =>
     ["pending", "running", "download-unconfirmed", "blocked", "failed"].includes(target.status),

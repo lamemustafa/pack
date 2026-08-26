@@ -14,6 +14,7 @@ import {
   canCompleteFullFiscalYearLedger,
   createFullFiscalYearLedger,
   hasCanonicalFullFiscalYearTargetPlan,
+  hasInconsistentFullFiscalYearCompletion,
   markFullFiscalYearTargetRunning,
   markFullFiscalYearTargetTerminal,
   nextRunnableFullFiscalYearTarget,
@@ -128,6 +129,10 @@ export async function startFullFiscalYearDownloadFlow(
   const now = deps.now?.() ?? new Date();
   const plannedPeriods = getFiledReturnsFullFiscalYearPeriods(scope.financialYear, now);
   let existingLedger = await readLedger(deps.storageKeys.fullFiscalYearLedger);
+  if (existingLedger && hasInconsistentFullFiscalYearCompletion(existingLedger)) {
+    const summary = summariseFullFiscalYearLedger(existingLedger, now);
+    return { ok: true, flowStep: summary.flowStep, flowSummary: summary };
+  }
   let sameScopeExistingLedger =
     existingLedger && sameFiledReturnsScope(existingLedger.scope, scope) ? existingLedger : null;
   if (sameScopeExistingLedger && plannedPeriods.length > 0) {

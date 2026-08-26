@@ -11,6 +11,7 @@ import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
 import {
   canCompleteFullFiscalYearLedger,
   hasActionRequiredFullFiscalYearTarget,
+  hasInconsistentFullFiscalYearCompletion,
   isFullFiscalYearLedger,
   isFullFiscalYearLedgerStale,
   recoverableFullFiscalYearLedgerId,
@@ -57,6 +58,10 @@ export function responseForExistingLedger(
   now: Date,
   options: { allowExistingLedgerResume?: boolean; blockRetainedStaging?: boolean } = {},
 ): PackMessageResponse | null {
+  if (hasInconsistentFullFiscalYearCompletion(ledger)) {
+    const summary = summariseFullFiscalYearLedger(ledger, now);
+    return { ok: true, flowStep: summary.flowStep, flowSummary: summary };
+  }
   if (options.blockRetainedStaging && hasRetainedFullFiscalYearStaging(ledger)) {
     const step = retainedStagingScopeConflictStep(ledger);
     return { ok: true, flowStep: step, flowSummary: toFullFiscalYearSummary(ledger, step) };
@@ -110,8 +115,7 @@ export function responseForExistingLedger(
         target.safeSignals.includes("full-fiscal-year-target-retry-approved"),
     );
   if (hasActionRequiredFullFiscalYearTarget(ledger) && !hasApprovedPendingRetry) {
-    const displayLedger = coerceInconsistentCompleteLedger(ledger, now);
-    const summary = summariseFullFiscalYearLedger(displayLedger, now);
+    const summary = summariseFullFiscalYearLedger(ledger, now);
     return { ok: true, flowStep: summary.flowStep, flowSummary: summary };
   }
 
@@ -234,12 +238,4 @@ export function fullFiscalYearErrorStep(
     safeSignals: ["full-fiscal-year-target-error", "pack-error:CONTENT_SCRIPT_UNAVAILABLE"],
     safeMessage: `Pack stopped while checking ${target.period}. The GST tab could not be reached safely.`,
   };
-}
-
-function coerceInconsistentCompleteLedger(
-  ledger: FiledReturnsFullFiscalYearLedger,
-  now: Date,
-): FiledReturnsFullFiscalYearLedger {
-  if (ledger.status !== "complete") return ledger;
-  return { ...ledger, status: "blocked", updatedAt: now.toISOString() };
 }

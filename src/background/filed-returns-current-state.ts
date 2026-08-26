@@ -9,6 +9,7 @@ import { readActiveFiledReturnsRunSummary } from "./filed-returns-active-run";
 import { readCanonicalFiledReturnsFlowSummary } from "./filed-returns-session-summary";
 import { summariseFullFiscalYearLedger } from "./filed-returns-full-fiscal-year";
 import {
+  hasInconsistentFullFiscalYearCompletion,
   isFullFiscalYearLedger,
   sameFiledReturnsScope,
 } from "./filed-returns-full-fiscal-year-ledger";
@@ -60,6 +61,9 @@ export async function readCurrentFiledReturnsFlowSummary(
   if (targetReviewSummary) return targetReviewSummary;
 
   const ledger = await readLocalValue<unknown>(deps.storageKeys.fullFiscalYearLedger);
+  if (isFullFiscalYearLedger(ledger) && hasInconsistentFullFiscalYearCompletion(ledger)) {
+    return summariseFullFiscalYearLedger(ledger, deps.now?.());
+  }
   if (isFullFiscalYearLedger(ledger) && isRetainedZipRetrySummary(completionSummary, ledger)) {
     // Evidence is display-only and never persisted, so this path -- which
     // returns the durable summary rather than re-summarising -- has to rebuild
