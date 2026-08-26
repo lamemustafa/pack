@@ -1,5 +1,38 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 48 — bind portal-gated recovery-action reasons for assistive technology
+
+- Window: 2026-08-27 05:10–05:16 IST. This is a short accessibility corrective checkpoint; its
+  actual duration is recorded without an idle hold.
+- Picked: the recovery menu rendered a specific portal-needed reason for disabled portal actions,
+  but neither its target-review start-again action nor its full-year retry/start-again actions
+  referenced that explanation programmatically.
+- Measured before: the recovery tests proved that the reason appeared and that the actions were
+  disabled. They did not prove that a screen reader could associate the one reason with exactly the
+  portal-gated controls. Local download reconciliation/cleanup and cancel controls intentionally
+  remain available without the portal and are not described by the portal-only reason.
+- Changed: the existing recovery reason receives a stable ID. Only the portal-gated restart action
+  in target review and the two portal-gated actions in full-year review reference it. Tests assert
+  the target-review button relation and exactly two full-year references; no copy, action authority,
+  scope, portal behavior, persistence, or download behavior changed.
+- Discrimination: temporarily removing the relationships made the focused recovery suite fail in
+  three branches: missing target-review restart association, zero rather than two full-year
+  associations, and missing full-year retry association. The source was restored before final gates.
+- UI review: the Impeccable product-UI accessibility guidance preserves established recovery copy
+  and component vocabulary while making the actual disabled portal controls describable.
+- Final gate: build, TypeScript, zero-warning ESLint, repo-wide Prettier, package verification and
+  `git diff --check` passed. Exact Vitest footer:
+
+  ```text
+       Tests  2807 passed (2807)
+    Start at  05:12:36
+    Duration  154.06s (transform 2.50s, setup 0ms, import 12.33s, tests 125.59s, environment 8ms)
+  ```
+
+- Checkpoints: `4a2081b fix(a11y): describe portal-gated recovery actions`; the progress record
+  follows in a separate documentation checkpoint. No live/authenticated GST qualification, release
+  claim, push or PR action was made.
+
 ## Cycle 47 — bind portal-gated inline-action reasons for assistive technology
 
 - Window: 2026-08-27 05:05–05:10 IST. This is a short accessibility corrective checkpoint; its
