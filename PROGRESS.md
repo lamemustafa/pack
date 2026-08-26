@@ -1237,3 +1237,38 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
 - Checkpoints: runtime and test commits follow this record; the progress record is committed
   separately after this append. No live/authenticated GST qualification, release claim, push or PR
   action was made.
+
+## Cycle 26 — distinguish rejected ZIP target binding from checkpoint persistence
+
+- Window: 2026-08-27 02:58–03:07 IST (9 minutes). This is a short corrective checkpoint, not a
+  cadence-qualifying 45–75-minute cycle; the actual duration is recorded without an idle hold.
+- Picked: staged ZIP export caught both an unavailable extension-Blob fingerprint and a rejected
+  pre-download checkpoint callback, then labeled both as a local checkpoint persistence failure.
+  The first case is a target-binding diagnostic rejection; no checkpoint callback has run yet.
+- Measured before: a synthetic unavailable fingerprint returned
+  `single-period-zip-download-state-persist-failed`, despite no checkpoint write or browser download.
+  The first new regression failed at the absent `filed-return-download-diagnostics-rejected` signal.
+- Changed: the existing durable target-diagnostic rejection signal now describes only the unavailable
+  fingerprint branch. It blocks before the callback and browser download, revokes the Blob URL, runs
+  the existing not-downloaded staging cleanup, and gives a matching retry instruction. Thrown
+  pre-download checkpoint callbacks retain the existing state-persist-failed signal and recovery
+  message. No permission, dependency, persisted field, portal action, download completion rule or
+  target-binding requirement changed.
+- Discrimination and review: replacing the fingerprint branch signal with the old persistence signal
+  made the regression fail at the missing diagnostic signal; adding the remedy assertion first also
+  failed against the old checkpoint-write instruction. Both mutations were restored. Required
+  background security review PASS, including re-review after the remedy adjustment, found no manifest,
+  network, CSP, staging-cleanup, target-binding or download-evidence regression.
+- Gate: focused ZIP tests passed 29 tests. Build, TypeScript, zero-warning ESLint, repo-wide
+  Prettier, package verification and diff checks passed. The final isolated serial Vitest run passed
+  2,798 tests. Exact footer:
+
+  ```text
+        Tests  2798 passed (2798)
+     Start at  03:04:24
+     Duration  153.17s (transform 2.51s, setup 0ms, import 12.28s, tests 124.90s, environment 8ms)
+  ```
+
+- Checkpoints: runtime and test commits follow this record; the progress record is committed
+  separately after this append. No live/authenticated GST qualification, release claim, push or PR
+  action was made.
