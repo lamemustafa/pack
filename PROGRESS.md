@@ -1,5 +1,36 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 32 — make all-formats expansion return-type-aware everywhere
+
+- Window: 2026-08-27 03:43–03:48 IST.
+- Picked: the remaining generic all-formats expansion helper after the prior duplicate-fact audit.
+- Measured before: acquisition and durable-review paths use the return-type-aware catalogue selector,
+  but the scope copy used a generic artifact list for its multi-file decision and the filename helper
+  used that same generic list for its default artifact. Its legacy bundle expansion was always
+  `PDF, EXCEL`, while the supported catalogue may offer a different concrete set.
+- Changed: removed the generic expansion helper. Both callers now use the canonical selection
+  selector with `returnType`; non-bundle selections are normalized singletons and a bundle derives
+  the supported concrete formats from the catalogue. Added a regression assertion that the default
+  bundled GSTR-3B filename remains the canonical PDF artifact. This is a structural
+  single-source-of-truth correction; it does not change portal acquisition or download completion.
+- Focused evidence: selector, all-formats, filename, and scope-model suites passed 4 files and 23
+  tests. The existing all-formats tests already mutate-protect return-specific expansion, including
+  GSTR-3B's PDF/data bundle; the new filename test proves its default consumes that selector.
+- Required reviews: privacy review PASS; MV3 security review PASS. Neither found a changed
+  permission, host, CSP, storage, portal boundary, target-binding, or download-evidence path.
+- Gate: build passed at 1.04 MB; TypeScript passed; ESLint passed with zero warnings; Prettier
+  passed repo-wide; package verification passed; `git diff --check` passed. Exact Vitest footer:
+
+  ```text
+       Tests  2800 passed (2800)
+    Start at  03:44:55
+    Duration  153.98s (transform 2.56s, setup 0ms, import 12.32s, tests 125.48s, environment 8ms)
+  ```
+
+- Learned / plan change: a type-level bundle name is not a safe source for concrete artifacts.
+  Any user-visible or durable interpretation must take the selected return type into account. The
+  next audit returns to lossy catches where a specific reason may be dropped before the user sees it.
+
 This is the append-only cycle log for the continued catalogue-overhaul lane. Each cycle records
 measured current state, one coherent improvement, its complete gate, and any evidence that changed
 the next plan. Synthetic evidence is labelled; no entry implies an authenticated GST Portal run.
