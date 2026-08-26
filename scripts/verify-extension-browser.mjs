@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* global chrome, document */
+/* global chrome, document, window */
 import { spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { readFile } from "node:fs/promises";
@@ -93,6 +93,7 @@ try {
   await assertOptionsPageLoads(context, extensionId);
   await assertPanelPageLoads(context, extensionId);
   await assertApprovedContentScript(context, serviceWorker);
+  await assertPanelCompactFlow(context, extensionId);
   await assertHostilePageCannotMessageExtension(context);
   assertDeniedUnexpectedNetwork();
   assertSanitizedBrowserLogs();
@@ -420,6 +421,91 @@ async function assertPanelPageLoads(browserContext, extensionId) {
     );
   }
   await panelPage.close();
+}
+
+/**
+ * The side panel's narrowest supported width is 320px. Exercise the actual
+ * packaged page after the synthetic GST content script has supplied its
+ * supported context, so both the preset choices and the expanded declared
+ * catalogue must fit without a clipped control or horizontal scroll.
+ */
+async function assertPanelCompactFlow(browserContext, extensionId) {
+  const gstPage = await browserContext.newPage();
+  attachPageLogging(gstPage);
+  const panelPage = await browserContext.newPage();
+  attachPageLogging(panelPage);
+  try {
+    await gstPage.goto("https://return.gst.gov.in/returns/auth/efiledreturns", {
+      waitUntil: "domcontentloaded",
+    });
+    const serviceWorker = await waitForServiceWorker(browserContext, extensionId);
+    await waitForStoredContext(serviceWorker, {
+      supported: true,
+      pageKind: "gst-filed-returns",
+      origin: "https://return.gst.gov.in",
+    });
+
+    await panelPage.setViewportSize({ width: 320, height: 900 });
+    await panelPage.goto(`chrome-extension://${extensionId}/panel.html`);
+    await panelPage.waitForSelector(".panel-presets", { timeout: 5_000 });
+    await assertPanelControlsFitViewport(panelPage, "preset choices");
+
+    await panelPage.getByRole("button", { name: "Choose return, year and period" }).click();
+    await panelPage.waitForSelector(".panel-guide", { timeout: 5_000 });
+    const catalogueSummary = panelPage.locator(".panel-catalogue summary");
+    await catalogueSummary.press("Space");
+    await panelPage.waitForSelector(".panel-catalogue[open]", { timeout: 5_000 });
+    await assertPanelControlsFitViewport(panelPage, "expanded catalogue");
+  } finally {
+    await panelPage.close();
+    await gstPage.close();
+  }
+}
+
+async function assertPanelControlsFitViewport(panelPage, state) {
+  const geometry = await panelPage.evaluate(() => {
+    const shell = document.querySelector(".panel-shell")?.getBoundingClientRect();
+    const controls = [
+      ...document.querySelectorAll(
+        ".panel-shell button, .panel-shell select, .panel-shell summary",
+      ),
+    ].map((control) => {
+      const rect = control.getBoundingClientRect();
+      return {
+        label: control.textContent?.trim() || control.getAttribute("aria-label") || control.tagName,
+        height: rect.height,
+        left: rect.left,
+        right: rect.right,
+      };
+    });
+    return {
+      documentWidth: document.documentElement.scrollWidth,
+      viewportWidth: window.innerWidth,
+      shell: shell?.toJSON() ?? null,
+      controls,
+    };
+  });
+  if (!geometry.shell) throw new Error(`Pack panel shell is absent at 320px during ${state}.`);
+  if (geometry.documentWidth > geometry.viewportWidth) {
+    throw new Error(
+      `Pack panel introduced horizontal document scrolling at 320px during ${state}: ${geometry.documentWidth}px > ${geometry.viewportWidth}px.`,
+    );
+  }
+  const clippedControl = geometry.controls.find(
+    (control) =>
+      control.left < geometry.shell.x || control.right > geometry.shell.x + geometry.shell.width,
+  );
+  if (clippedControl) {
+    throw new Error(
+      `Pack panel clipped a control at 320px during ${state}: ${clippedControl.label}.`,
+    );
+  }
+  const undersizedControl = geometry.controls.find((control) => control.height < 44);
+  if (undersizedControl) {
+    throw new Error(
+      `Pack panel rendered a control shorter than 44px at 320px during ${state}: ${undersizedControl.label}.`,
+    );
+  }
 }
 
 async function assertApprovedContentScript(browserContext, serviceWorker) {
