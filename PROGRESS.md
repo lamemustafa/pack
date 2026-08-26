@@ -1,5 +1,34 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 34 — surface durable-summary refresh failures
+
+- Window: 2026-08-27 03:59–04:04 IST.
+- Picked: the storage-change branch of the saved-summary read path.
+- Measured before: when durable recovery state changed, the open panel re-read its summary but
+  returned early for every failed response. A safe failure therefore left no visible action error
+  and could leave stale recovery presentation on screen.
+- Without-fix proof: the new storage-change regression expected
+  `Pack stopped while handling saved local recovery state. Try again.` and received `null`.
+- Changed: the listener now displays its safe response, displays an honest unexpected-response
+  failure, and catches rejected reads with the existing local-recovery fallback. Successful clears
+  still preserve the user-selected scope. No background, portal, persistence-schema, download, or
+  target-binding behavior changed.
+- Focused evidence: popup-controller suite passed 1 file and 8 tests; TypeScript, focused lint,
+  focused formatting, and `git diff --check` passed before the complete gate.
+- Final gate: build passed at 1.04 MB; TypeScript passed; ESLint passed with zero warnings;
+  Prettier passed repo-wide; package verification passed; `git diff --check` passed. Exact Vitest
+  footer:
+
+  ```text
+       Tests  2804 passed (2804)
+    Start at  04:00:38
+    Duration  154.01s (transform 2.49s, setup 0ms, import 12.39s, tests 125.57s, environment 8ms)
+  ```
+
+- Learned / plan change: a durable-state listener is a user-facing read boundary, not a best-effort
+  cache update. Continue auditing only fire-and-forget paths where failure has a terminal effect;
+  intentionally advisory reconciliation must remain explicitly distinguished.
+
 ## Cycle 33 — preserve named context-read failures
 
 - Window: 2026-08-27 03:49–03:58 IST.
