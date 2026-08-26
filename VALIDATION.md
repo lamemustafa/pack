@@ -19,6 +19,10 @@
   dependency change, new persisted field, sensitive or unbounded persisted value, target-binding
   weakening, public capability claim, push, PR or deployment was used. Task 0 expands only the
   fixed, allowlisted durable diagnostic-signal vocabulary described below.
+- Cycle 19 additionally owns `src/entrypoints/popup/pack-summary.tsx`,
+  `tests/popup/pack-summary.test.tsx`, `tests/panel/panel-evidence-counts.test.tsx` and
+  `tests/panel/panel-ledger-evidence-counts.test.tsx`.
+  The lane register had no competing claim, and the clean workflow preflight passed before edits.
 
 ## Outcome
 
@@ -370,6 +374,14 @@ reviewed persistence and failure contracts.
 - Cycle 18 does not certify general aggregate/target completion consistency. Its controls separate
   ledger-read acceptance from session-summary rejection; the cross-reader consistency audit is a
   named follow-up, not hidden inside the filename-copy approval.
+- Cycle 19 does not resolve the full-year cleanup status gap: current synthetic producer output
+  can reach a panel with no inline status or recovery details. The count removal does not alter
+  those shapes. Cleanup action labels and retention after changing the selection also need their
+  own bounded audit; no new action authority is approved here.
+- End-of-Cycle-19 triage prioritized recovery-preserving agreement between stored-state readers.
+  Independent source review and isolated dependency-stubbed probes support that follow-up;
+  its normal-workflow origin and live behavior remain unqualified. It is not part of the
+  count-removal checkpoint or its approval.
 
 ## Decision log
 
@@ -1147,3 +1159,128 @@ retrying.` The focused test failed 1 of 115 session-boundary cases before the fi
   needing review, while the detailed evidence counted one needing review and eleven waiting. This
   visible contradiction moves the next duplicate-fact audit to summary-count derivation. It is not
   a filename-copy regression or a claim that the wider panel is fully audited.
+
+## Cycle 19: remove the duplicate outcome aggregate
+
+- Decision: the card owns selected-pack/delivery metadata; the existing per-period evidence owns
+  outcome counts. Its only production consumer renders both. Removing the card's
+  `totalPeriods - completedPeriods` interpretation avoids labeling waiting/running periods as
+  review and avoids relabeling completed-but-not-filed periods as ready. No replacement counter,
+  abstraction, status branch, persisted field, action or capability claim was introduced.
+- Scope: `PanelSurface`, `TargetEvidence`, delivery predicates and recovery controls were not
+  edited. Their intentional distinction between selected scope and retained recovery scope stays
+  intact. The change does not claim their remaining behavior is universally correct.
+- Fifteen new whole-panel cases pin the observable composition. Missing and empty evidence do not
+  become zero-review or saved claims; canonical outcome rows remain distinct. Single-period
+  cleanup keeps its warning and enabled local-only retry with and without target evidence. The
+  fixture uses the catalogue-supported GSTR-2B multi-format selection after browser review caught
+  the original unsupported combination. `All formats` is explicitly asserted.
+- Fixture limits: the seven-outcome table is a renderer taxonomy, not a captured producer snapshot.
+  The static scope-mismatch test supplies controller fields directly. A separate packaged-browser
+  check exercised the real controller with a synthetic retained-recovery payload and ordinary
+  select input; no backend recovery action was attempted.
+- Mutation evidence against the initial fifteen-case renderer matrix:
+
+  | Temporary mutation                 | Failures | Discriminating observation                                                                          |
+  | ---------------------------------- | -------: | --------------------------------------------------------------------------------------------------- |
+  | Restore exact original card source | 12 of 15 | Review-count array contained both `12 needs review` and `1 needs review` instead of only the latter |
+  | Restore only numeric ready copy    | 15 of 15 | Rendered panel unexpectedly matched the numeric `ready` pattern                                     |
+
+  Three original-source controls passed because complete or unmatched-scope summaries already
+  suppressed that suffix. Both mutations were removed; source hash returned to
+  `b9dfaa913860da1391bbe3e6c905965902bd13e1`. Four focused files then passed 53 tests.
+
+- Line accounting: `popup/pack-summary.tsx` 116→110; `popup/pack-summary.test.tsx` 319→320;
+  `panel/panel-evidence-counts.test.tsx` 0→236. The six-line production reduction includes the
+  formatter's collapse of the remaining JSX. No source module or import edge changed.
+- Read-only graph scan: TypeScript AST/module resolution found 177 source modules and 778 edges;
+  WXT/config/background/content/HTML roots reached every module. Zero zero-importer candidates,
+  zero unresolved local specifiers and zero nonliteral dynamic imports; one pass was the fixed
+  point. The scan includes type edges and does not establish every export's runtime use.
+- Source-checkpoint gate passed: build, TypeScript, ESLint with zero warnings, repo-wide Prettier, package
+  verifier and diff checks. The first full invocation passed tests but failed its later formatter
+  check, so it is not counted as a complete gate. The corrected final package remained 1.01 MB;
+  126 files passed before the three later producer-backed tests. Known synthetic workflow/review-gate
+  stderr and the TypeScript source-map warning remained non-failing. Exact final three lines of that run:
+
+  ```text
+        Tests  2379 passed (2379)
+     Start at  06:21:59
+     Duration  151.66s (transform 2.50s, setup 0ms, import 11.27s, tests 126.04s, environment 8ms)
+  ```
+
+- Privacy PASS binds the final production blob above. Independent UX and module/security reviews
+  found no blocking issue; the final formatter-only delta changed no semantics. Source checkpoint:
+  `7a012e28560734721429948b444c533c7eeb6cd3`.
+- Browser method: existing Playwright library, actual packaged panel, fresh task-owned profile,
+  synthetic runtime responses and blocked page network traffic. No dependency, server, real
+  account, portal page or live download was used. The baseline was the preceding built card, not
+  a simulated DOM replacement. An initial incorrectly spelled period fixture was discarded before
+  either recorded comparison. The corrected before/after fixtures were identical.
+
+  | Fixture / viewport                       | Card height | Panel shell height | Document width | Clipped regions |
+  | ---------------------------------------- | ----------: | -----------------: | -------------: | --------------: |
+  | Dense, original card, 320×900            |    124.27px |         1,286.21px |          320px |               0 |
+  | Dense, reduced card, 320×900             |    109.43px |         1,271.37px |          320px |               0 |
+  | Running, 320×900                         |    109.43px |           764.99px |          320px |               0 |
+  | Cancelled, 320×900                       |    109.43px |         1,244.56px |          320px |               0 |
+  | Evidence omitted, 320×900                |    109.43px |           933.83px |          320px |               0 |
+  | Supported single-period cleanup, 320×900 |    109.43px |         1,408.38px |          320px |               0 |
+  | Dense, reduced card, 400×900             |    109.43px |         1,210.57px |          400px |               0 |
+
+  The dense card loses exactly one 14.84px line, not a control: five operable controls before and
+  after. Returning from 400px to 320px restored the measured 320px bounds. Foreground screenshots
+  were inspected; the evidence and relevant warning remained readable. Long recovery/guide pages
+  still scroll, so this is not approval of every state's density or above-the-fold actions.
+
+- Normal-input checks: return selection changed and restored while the retained recovery evidence
+  stayed at one review/eleven waiting. Saved-run and catalogue disclosures opened and closed by
+  keyboard. The evidence accessibility snapshot contained one review count and all twelve named
+  rows; this is not a screen-reader test. Tabbing reached Continue, catalogue, Details and the
+  existing retry/select controls with visible focus; focus leaving the page for browser chrome was
+  not treated as a trap. No action message beyond `PACK_GET_*` was sent by these checks, and the
+  route monitor observed zero page network requests. Native Chrome side-panel resizing, zoom,
+  assistive technology, live portal execution and recovery action effects remain unqualified.
+- Follow-up regression probe: current factory/canonical-status helpers built synthetic ledgers
+  for delivered, no-artifacts and legacy cleanup. Each passed the actual ledger validator and
+  completion eligibility check. The actual summary producer returned blocked, 12/12 completed,
+  no current period and no recovery target. The packaged panel had zero inline-status regions and
+  zero recovery-details regions, with Continue as its initial button. The old numeric suffix was
+  also absent because the unfinished count was zero. This separately reachable presentation gap
+  is not repaired or approved by Cycle 19; source/runtime provenance beyond the synthetic
+  producer boundary remains unqualified. It is the next bounded audit.
+- The follow-up's old/current card render comparison covered all three cleanup phases with
+  present, empty and omitted target evidence. All nine HTML results were identical and none had
+  the old numeric review suffix. This isolates the pre-existing gap from the removed calculation;
+  it does not certify the rest of the recovery workflow.
+- Producer-backed count proof was added in `panel/panel-ledger-evidence-counts.test.tsx` (0→77
+  lines): factory-created canonical ledgers, canonical target status text/signals, actual ledger
+  validation, real summary derivation and full panel render. The three states are blocked first
+  period, blocked after two not-filed periods and an active target after the current stale cutoff.
+  Each asserts one review, the exact waiting/not-filed row counts, zero saved files and no numeric
+  readiness/delivery claim. Restoring the old card failed all three: the extra review count was
+  twelve or ten rather than one. The combined eighteen-case run failed fifteen and retained three
+  negative controls; after source restoration all eighteen passed. This is synthetic producer-to-UI
+  proof, not an authenticated workflow or service-worker termination test.
+- A separate in-memory card comparison used the old source at `13f6269` and current source with
+  current dependencies. Axes: nine catalogue-supported return/format pairs, two scope kinds, five
+  aggregate statuses, three completed-period counts, four optional/explicit totals and eight signal
+  sets. Of 8,640 renderer inputs, 2,880 changed only by the intended suffix and zero had any other
+  HTML difference. Some combinations deliberately violate runtime invariants; this comparison
+  certifies only the narrow render delta, not validity or correctness of those inputs.
+- The browser session and its exact task-generated profile were closed and removed. Ten synthetic
+  panel pages had produced only `PACK_GET_*` messages, with no action message and no observed page
+  network request. No screenshot or profile artifact is committed.
+- Final producer-backed gate: build, full Vitest, TypeScript, zero-warning ESLint, repo-wide
+  Prettier, package verification and diff checks all passed after adding the three ledger-derived
+  cases. Package size remains 1.01 MB; final count is 127 files and 2,382 tests. The three added
+  tests were independently privacy-reviewed at blob `9d06ea5a6c6e96afddde9e307883ec95bbbd2642`;
+  source remains unchanged from `7a012e2`. Exact final three Vitest lines:
+
+  ```text
+        Tests  2382 passed (2382)
+     Start at  06:31:15
+     Duration  166.70s (transform 4.02s, setup 0ms, import 16.74s, tests 130.86s, environment 10ms)
+  ```
+
+  Test-only checkpoint: `979b02c17f710d48ef646fc877bbaf9f63166bb1`.

@@ -843,3 +843,96 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
   presentation contradiction is a higher-value next cycle than the unproven aggregate producer
   path. Inspect whether the card can derive its count from the existing per-period evidence;
   retain the boundary-invariant hardening item as a separately named follow-up.
+
+## Cycle 19 — one owner for per-period outcome counts
+
+- Window: 2026-08-26 06:12–06:57 IST; source checkpoint at 06:25 IST and test checkpoint at
+  06:35 IST. Later work covered evidence review and bounded follow-up sizing; the reviewed
+  checkpoint was held briefly at the end to retain the 45-minute cycle cadence.
+- Picked: the measured contradiction between the pack card's unfinished-period calculation and
+  the adjacent per-period evidence. The card called one review target plus eleven waiting targets
+  `12 needs review`; it also called completed periods `ready`, despite their mixed outcome meaning.
+- Decision: delete the duplicate calculation and suffix rather than introduce another counter or
+  a new classification helper. `TargetEvidence` already owns the explicit outcome counts, and the
+  panel is the card's only production consumer. Delivery metadata, warning/recovery components,
+  scope routing and all runtime guards remain unchanged. Impeccable's clarification lens favored
+  one consistent outcome vocabulary over repeated aggregates.
+- Tests: fifteen whole-panel cases cover one review plus eleven waiting, all seven outcomes,
+  running/cancelled states, omitted/empty evidence, complete delivery/no-artifacts controls,
+  supported single-period cleanup with/without evidence, and recovery/selection scope mismatch.
+  The cleanup warning assertion moved from the isolated card to the actual panel composition,
+  where it additionally pins an enabled local retry without a portal context.
+- Test-quality correction: browser inspection exposed an unsupported return/format combination in
+  the new cleanup fixture. It was corrected to the supported GSTR-2B multi-format scope and now
+  asserts `All formats`. The mixed-outcome case remains renderer-taxonomy coverage, not a producer
+  snapshot. The scope-mismatch unit case is a renderer-input contract, not controller proof.
+- Discrimination: restoring the exact original card source failed 12 of 15 cases, including
+  `expected [ '12 needs review', '1 needs review' ] to deeply equal [ '1 needs review' ]`.
+  Restoring only a numeric `ready` suffix failed all 15 cases. Restoring the final source passed
+  four focused files / 53 tests. Source restoration was checked by its exact blob hash.
+- Measured reduction: card 116→110 lines; existing card tests 319→320; new panel tests 0→236.
+  The source-module scan found 177 modules, 778 resolved edges, zero zero-importer candidates and
+  zero unreachable modules from WXT/config/HTML roots. One pass reached the fixed point; no
+  module/import edge was removed. Type-only reachability is not executable-export coverage.
+- Gate: the first full suite passed but its later formatter check failed; that invocation is not
+  a complete gate pass. After formatting and the fixture correction, build, TypeScript,
+  zero-warning ESLint, repo-wide Prettier, package verification and diff checks passed. Package
+  size remained 1.01 MB. Source-checkpoint suite: 126 files, 2,379 tests, fifteen more than Cycle 18.
+  The later producer-backed test addition has its own gate below. Exact source-checkpoint footer:
+
+  ```text
+   Test Files  126 passed (126)
+        Tests  2379 passed (2379)
+     Start at  06:21:59
+     Duration  151.66s (transform 2.50s, setup 0ms, import 11.27s, tests 126.04s, environment 8ms)
+  ```
+
+- Review: privacy PASS on final source blob `b9dfaa913860da1391bbe3e6c905965902bd13e1`;
+  independent UX and module/security reviews found no blocking issue. Those reviews do not
+  approve the separately identified full-year cleanup visibility gap.
+- Packaged UI: identical dense fixtures at 320×900 measured the card at 124.27→109.43px and
+  the panel shell at 1,286.21→1,271.37px. One 14.84px line was removed; five operable controls
+  remained five. Running, cancelled, absent-evidence and supported cleanup fixtures retained
+  honest copy with zero measured clipping. A 400px pass and return to 320px preserved the counts.
+- Controller check: with a synthetic retained-recovery payload, changing the return and changing
+  it back retained one review and eleven waiting outcomes. Saved-run and catalogue disclosures
+  completed keyboard open/close cycles. Accessible evidence text matched the visible count;
+  keyboard focus reached the existing controls without a page trap. No recovery/download action
+  was executed, and the page network monitor observed zero requests. This is not live, native
+  side-panel, zoom or assistive-technology qualification.
+- Checkpoint: `7a012e2 fix(panel): remove duplicate review counts`.
+- Learned / next cycle: three current, validator-accepted synthetic cleanup ledgers projected to
+  blocked summaries with twelve completed periods, no current period and no recovery target. The
+  packaged panel rendered neither an inline status nor recovery details. The old count was already
+  zero for those shapes; this is a pre-existing visibility defect, not a count-removal regression.
+  Investigate a canonical blocked-status fallback separately, without expanding action authority.
+- Deeper proof: three additional tests construct canonical ledgers, require the actual ledger
+  validator to accept them, call the real summary producer and render the panel. They cover a
+  blocked first target, a blocked target after two not-filed periods and an interrupted active
+  target. Restoring the original card failed all three (`12` or `10` plus the real `1 needs review`).
+  Combined with the renderer matrix, that restoration failed 15 of 18 cases; all 18 passed after
+  restoring the checkpoint source. This adds no production behavior.
+- Read-only comparison: old/current card modules, using current dependencies, differed only by the
+  intended suffix across 8,640 generated renderer inputs; 2,880 inputs lost that suffix and zero
+  had another difference. These are render comparisons, not added tests or valid-run qualification.
+  All nine cleanup-phase/evidence-presence combinations produced identical old/current card HTML.
+  The isolated browser and its task-generated profile were closed and removed; all observed
+  messages were read-only `PACK_GET_*` requests.
+- Producer-backed gate: all six required commands and the diff check passed after the additional
+  three cases. Final Cycle 19 suite: 127 files, 2,382 tests, eighteen more than Cycle 18; package
+  remained 1.01 MB. The same known synthetic warnings were non-failing. Exact final three lines:
+
+  ```text
+        Tests  2382 passed (2382)
+     Start at  06:31:15
+     Duration  166.70s (transform 4.02s, setup 0ms, import 16.74s, tests 130.86s, environment 10ms)
+  ```
+
+- Test checkpoint: `979b02c test(panel): trace review counts from canonical ledgers`.
+- Follow-up triage: independent review and isolated, in-memory reader probes elevated the
+  existing cross-reader consistency item ahead of cleanup presentation. The next cycle will
+  preserve unresolved recovery across readers, without changing structural acceptance or adding
+  stored fields. These probes used stubbed boundaries, not live storage or portal actions; they
+  do not establish that a normal workflow produces the inconsistent input. Cleanup status,
+  action-label and selection-retention work remains queued separately. A display-only recovery
+  predicate must not be substituted for the existing start-fresh authorization predicate.
