@@ -1,5 +1,39 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 43 — derive persisted observation scope IDs without widening acceptance
+
+- Window: 2026-08-27 04:40–04:47 IST. This is a short duplicate-fact checkpoint; its actual
+  duration is recorded without an idle hold.
+- Picked: persisted observer-state validation manually restated the three supported scope IDs in its
+  acceptance set, ready-state resolver, message selection, and GSTR-3B default.
+- Measured before: the parser is a security boundary: it accepts only known keys, canonical
+  connector/page/state/signal/action values, clears invalid session input, and must not begin to
+  accept a future runnable return merely because the catalogue changes.
+- Changed: an explicit typed three-return observation allowlist now resolves through the canonical
+  scope helper. Ready-state and message selection use the same resolver. The allowlist deliberately
+  remains fixed rather than deriving from every supported return, so future return support is still
+  rejected until this canonicalization surface is updated intentionally.
+- Focused evidence: observation-state, observer, and tab-selection suites passed 3 files and 83
+  tests. New parameterized coverage accepts and retains the exact canonical ready scope for GSTR-3B,
+  GSTR-1, and GSTR-2B; existing mismatched-scope and extra-field cases still clear state. This is a
+  structural duplicate removal with output-preserving assertions, so no behavioral red-proof
+  mutation was appropriate.
+- Required review: background/MV3 security review PASS confirmed strict parsing, session-only
+  canonicalization, invalid-input clearing, no persisted-field widening, and future-return
+  fail-closed behavior. No permissions, CSP, download, target, or external-code change occurred.
+- Final gate: build, TypeScript, zero-warning ESLint, repo-wide Prettier, package verification and
+  `git diff --check` passed. Exact Vitest footer:
+
+  ```text
+       Tests  2806 passed (2806)
+    Start at  04:42:30
+    Duration  153.67s (transform 2.56s, setup 0ms, import 12.29s, tests 125.32s, environment 8ms)
+  ```
+
+- Checkpoints: `57d2780 refactor(background): derive observation scope IDs`; the progress record
+  follows in a separate documentation checkpoint. No live/authenticated GST qualification, release
+  claim, push or PR action was made.
+
 ## Cycle 42 — derive navigation defaults from the canonical scope descriptor
 
 - Window: 2026-08-27 04:34–04:40 IST. This is a short duplicate-fact checkpoint; its actual
