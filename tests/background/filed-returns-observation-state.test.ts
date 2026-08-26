@@ -72,6 +72,26 @@ describe("canonical filed-return observation state", () => {
   });
 
   it.each([
+    ["GSTR-3B", readyObservation()],
+    [
+      "GSTR-1",
+      {
+        ...readyObservation({ scopeId: "gst-filed-returns-gstr1-pdf-private-v0" }),
+        safeSignals: ["filed-returns-heading", "gstr-1", "download-filed-gstr-1"],
+      },
+    ],
+    [
+      "GSTR-2B",
+      {
+        ...readyObservation({ scopeId: "gst-gstr2b-private-v0" }),
+        safeSignals: ["filed-returns-heading", "gstr-2b", "download-gstr2b-summary-pdf"],
+      },
+    ],
+  ])("retains canonical $returnType ready observations", (_returnType, observation) => {
+    expect(parseCanonicalFiledReturnsObservation(observation)?.scopeId).toBe(observation.scopeId);
+  });
+
+  it.each([
     {
       label: "unknown signal",
       observation: readyObservation({ safeSignals: ["synthetic-taxpayer-signal"] }),
