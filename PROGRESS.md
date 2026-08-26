@@ -1,5 +1,41 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 39 — remove a self-only ambiguity path and its orphaned guard
+
+- Window: 2026-08-27 04:09–04:20 IST.
+- Picked: a hardcoded GSTR-3B scope ID in the ambiguity-trigger helper during the duplicate-fact
+  audit.
+- Measured before: the helper accepted any return target but emitted the GSTR-3B scope ID. Importer
+  tracing showed `runDownloadTriggerOnce` had no production caller; its only caller was its own test.
+  The ambiguity guard module had no other importer. Live selected-artifact and single-period flows
+  use the retained `runDownloadStepWithRetry` validator instead.
+- Changed: deleted the test-only trigger helper, its self-only test, and the orphaned guard module.
+  The remaining module validates connector, canonical scope, state, bounded signals, and safe message
+  before live callers proceed. This removes a dormant generic target path; it does not alter portal
+  clicks, target binding, persistence, or download completion evidence.
+- Gate rectification: the first full suite correctly failed the public-copy scanner because `git
+ls-files` includes a file deleted but not yet staged. The scanner now ignores only tracked entries
+  absent from the working tree; present files retain full claim scanning. That full-suite failure is
+  the red proof for the test-infrastructure correction.
+- Focused evidence: messaging and public-copy suites passed 2 files and 23 tests; exact searches
+  found zero remaining references to the deleted symbols. The repository has no separately named
+  unreferenced-module command, so fixed-point evidence is exact importer search plus TypeScript.
+- Required reviews: MV3 security review PASS; privacy review PASS. Both found no permission, host,
+  CSP, storage, target-evidence, public-copy, taxpayer-data, or reach regression.
+- Final gate: build passed at 1.04 MB; TypeScript passed; ESLint passed with zero warnings;
+  Prettier passed repo-wide; package verification passed; `git diff --check` passed. Exact Vitest
+  footer:
+
+  ```text
+       Tests  2803 passed (2803)
+    Start at  04:17:38
+    Duration  153.07s (transform 2.50s, setup 0ms, import 12.27s, tests 124.71s, environment 8ms)
+  ```
+
+- Learned / plan change: an exported function in a live module can still be dead. Importer tracing
+  must precede a duplicate-fact repair; deleting the unreachable behavior is safer than widening its
+  contract to make the duplicated fact accurate.
+
 ## Cycle 38 — audit 320px panel-state coverage
 
 - Window: 2026-08-27 04:08–04:12 IST.
