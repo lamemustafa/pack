@@ -1,5 +1,37 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 40 — derive the no-run acknowledgement scope from the return descriptor
+
+- Window: 2026-08-27 04:20–04:27 IST. This is a short duplicate-fact checkpoint; its actual
+  duration is recorded without an idle hold.
+- Picked: the no-active-run acknowledgement response retained its own GSTR-3B scope-ID literal
+  while active runs already derived their scope IDs from the canonical return descriptor.
+- Measured before: an interrupted active run correctly used its recorded return type, but the
+  no-run fallback duplicated the exact GSTR-3B descriptor value. With no persisted run there is no
+  selected return type to recover, so GSTR-3B is the established canonical acknowledgement default.
+- Changed: the response now passes `run?.scope.returnType ?? "GSTR-3B"` to the existing
+  `filedReturnScopeId` resolver. The default still resolves to
+  `gst-filed-returns-gstr3b-pdf-private-v0`; active-run output remains derived from its stored
+  return type. No persistence, portal action, target binding, download evidence, or user-visible
+  acknowledgement semantics changed.
+- Focused evidence: `tests/background/filed-returns-active-run.test.ts` and
+  `tests/background/filed-returns-current-state.test.ts` passed 2 files and 14 tests. This is a
+  structural duplicate removal, so no behavioral red-proof mutation was appropriate.
+- Required review: background/MV3 security review PASS found no permissions, host, CSP, content
+  script, download, persistence, or target-evidence change.
+- Final gate: build, TypeScript, zero-warning ESLint, repo-wide Prettier, package verification and
+  `git diff --check` passed. Exact Vitest footer:
+
+  ```text
+       Tests  2803 passed (2803)
+    Start at  04:23:44
+    Duration  153.77s (transform 2.54s, setup 0ms, import 12.39s, tests 125.17s, environment 8ms)
+  ```
+
+- Checkpoints: `d78f92c refactor(background): derive acknowledgement scope ID`; the progress
+  record follows in a separate documentation checkpoint. No live/authenticated GST qualification,
+  release claim, push or PR action was made.
+
 ## Cycle 39 — remove a self-only ambiguity path and its orphaned guard
 
 - Window: 2026-08-27 04:09–04:20 IST.
