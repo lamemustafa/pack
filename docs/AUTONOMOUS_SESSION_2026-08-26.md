@@ -273,7 +273,9 @@ require_replaced_content() {
 }
 wait_for_vitest_slot() {
   pgrep -f vitest || true
-  while active_vitest=$(pgrep -f vitest | grep -vx "$$" || true); do
+  while true; do
+    active_vitest=$(pgrep -f vitest | grep -vx "$$" || true)
+    test -n "$active_vitest" || break
     printf 'Waiting for active Vitest run(s): %s\n' "$active_vitest" >&2
     sleep 5
   done
