@@ -1,5 +1,20 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 36 — audit ambiguous trigger transport failure
+
+- Window: 2026-08-27 04:05–04:06 IST.
+- Picked: the one-shot, side-effectful download-trigger transport catch.
+- Disposition: no source change. Its generic ambiguity response is intentionally more specific than
+  an untrusted transport exception: it says Pack cannot confirm whether the portal received the
+  click, forbids an automatic retry, and directs the user to check browser downloads before a manual
+  retry. No typed safe reason exists inside the caught failure to preserve.
+- Focused evidence: the existing fake-timer test holds the trigger message unresolved, asserts the
+  user-action-required state and exact ambiguity signal, and proves exactly one send. This is a
+  quiet audit, not portal qualification or a complete-gate claim.
+- Learned / plan change: preserve a supplied safe reason, but never manufacture one from a failed
+  side-effectful transport. Continue looking for places that already have a typed reason and discard
+  it before durable or visible output.
+
 ## Cycle 35 — audit terminal-download reconciliation before summary reads
 
 - Window: 2026-08-27 04:04–04:05 IST.
